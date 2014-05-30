@@ -1,0 +1,351 @@
+---
+- hosts: all
+  user: adrien
+  vars:
+    - vfio_devices: 0000:07:00.0 0000:07:00.1 0000:01:00.0 0000:02:00.0
+    - grub_cmdline: "iommu=1 intel_iommu=on nomodeset"
+  tasks:
+
+  - name: Set up locales
+    locale_gen: name={{item}} state=present
+    sudo: true
+    with_items:
+      - fr_FR.UTF-8
+      - en_US.UTF-8
+
+  - name: Update APT package cache
+    action: apt update_cache=yes cache_valid_time=3600
+    sudo: true
+
+  - name: Upgrade APT to the lastest packages
+    action: apt upgrade=full
+    sudo: true
+
+  - name: Check if reboot is required
+    stat: path=/var/run/reboot-required
+    register: should_reboot
+
+  - name: Reboot the system
+    command: reboot
+    sudo: true
+    when: should_reboot.stat.exists == True
+    register: rebooting
+
+  - name: Wait for ssh to come back up
+    local_action: wait_for port=22 delay=20 host=10.0.0.11
+    when: rebooting|changed
+
+  - name: Blacklist the radeon module
+    kernel_blacklist: name=radeon state=present
+    sudo: true
+
+  - name: Load pci_stub module on startup
+    lineinfile: dest=/etc/modules line="pci_stub" state=present
+    sudo: true
+
+  - name: Install lsgroup binary
+    copy: src=files/lsgroup dest=/usr/bin/lsgroup owner=root group=root mode=0755
+    sudo: true
+
+  - name: Install vfio-bind binary
+    copy: src=files/vfio-bind dest=/usr/bin/vfio-bind owner=root group=root mode=0755
+    sudo: true
+
+  - name: Install vfio-bind service
+    copy: src=files/vfio-bind.conf dest=/etc/init/vfio-bind.conf owner=root group=root mode=0644
+    sudo: true
+
+  - name: Install vfio-bind configuration
+    template: src=files/vfio-bind.j2 dest=/etc/vfio-bind.cfg owner=root group=root mode=0644
+    sudo: true
+
+  - name: Download kernel 3.15-rc2
+    get_url: url={{ item.url }} dest=/home/adrien/{{ item.name }} owner=adrien group=adrien mode=0755
+    with_items:
+      - { name: 'linux-headers-3.15.0-rc2_all.deb', url: 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v3.15-rc2-trusty/linux-headers-3.15.0-031500rc2_3.15.0-031500rc2.201404201435_all.deb'}
+      - { name: 'linux-headers-3.15.0-rc2-generic_amd64.deb', url: 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v3.15-rc2-trusty/linux-headers-3.15.0-031500rc2-generic_3.15.0-031500rc2.201404201435_amd64.deb'}
+      - { name: 'linux-image-3.15.0-rc2-generic_amd64.deb', url: 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v3.15-rc2-trusty/linux-image-3.15.0-031500rc2-generic_3.15.0-031500rc2.201404201435_amd64.deb'}
+
+  - name: Install kernel image 3.15-rc2-generic_amd64
+    apt: deb=/home/adrien/linux-image-3.15.0-rc2-generic_amd64.deb
+    sudo: true
+
+  - name: Install kernel headers 3.15-rc2_all
+    apt: deb=/home/adrien/linux-headers-3.15.0-rc2_all.deb
+    sudo: true
+
+  - name: Install kernel headers 3.15-rc2-generic_amd64
+    apt: deb=/home/adrien/linux-headers-3.15.0-rc2-generic_amd64.deb
+    sudo: true
+
+  - name: Check if reboot is required
+    stat: path=/var/run/reboot-required
+    register: should_reboot
+
+  - name: Reboot the system
+    command: reboot
+    sudo: true
+    when: should_reboot.stat.exists == True
+    register: rebooting
+
+  - name: Wait for ssh to come back up
+    local_action: wait_for port=22 delay=20 host=10.0.0.11
+    when: rebooting|changed
+
+  - name: Install kernel-package
+    apt: pkg=kernel-package state=installed
+    sudo: true
+
+  - name: Download kernel 3.15-rc7 source
+    get_url: url=https://www.kernel.org/pub/linux/kernel/v3.x/testing/linux-3.15-rc7.tar.gz dest=/home/adrien/linux-3.15-rc7.tar.gz owner=adrien group=adrien mode=0755
+    register: downloaded_kernel
+
+  - name: Extract the kernel source
+    command: tar -xzf linux-3.15-rc7.tar.gz
+    when: downloaded_kernel|changed
+
+  - name: Copy the current configuration
+    command: cp /boot/config-3.15.0-031500rc2-generic linux-3.15-rc7/.config
+    when: downloaded_kernel|changed
+
+  - name: Update configuration with new kernel
+    shell: yes '' | make oldconfig chdir=linux-3.15-rc7
+    when: downloaded_kernel|changed
+
+  - name: Customize configuration
+    lineinfile: dest=linux-3.15-rc7/.config regexp="^(?:# )?{{ item.regexp }}(=| is not set)" line="{{ item.line }}" state=present
+    register: kernel_config
+    with_items:
+      - { regexp: 'CONFIG_VIRTUALIZATION', line: 'CONFIG_VIRTUALIZATION=y'}
+      - { regexp: 'CONFIG_KVM', line: 'CONFIG_KVM=y'}
+      - { regexp: 'CONFIG_KVM_INTEL', line: 'CONFIG_KVM_INTEL=y'}
+      - { regexp: 'CONFIG_KVM_AMD', line: '# CONFIG_KVM_AMD is not set'}
+      - { regexp: 'CONFIG_PCI_STUB', line: 'CONFIG_PCI_STUB=y'}
+      - { regexp: 'CONFIG_VFIO_IOMMU_TYPE1', line: 'CONFIG_VFIO_IOMMU_TYPE1=y'}
+      - { regexp: 'CONFIG_VFIO', line: 'CONFIG_VFIO=y'}
+      - { regexp: 'CONFIG_VFIO_PCI', line: 'CONFIG_VFIO_PCI=y'}
+      - { regexp: 'CONFIG_VFIO_PCI_VGA', line: 'CONFIG_VFIO_PCI_VGA=y'}
+      - { regexp: 'CONFIG_VHOST_NET', line: 'CONFIG_VHOST_NET=m'}
+      - { regexp: 'CONFIG_VIRTIO_PCI', line: 'CONFIG_VIRTIO_PCI=y'}
+      - { regexp: 'CONFIG_VIRTIO_BALLOON', line: 'CONFIG_VIRTIO_BALLOON=y'}
+      - { regexp: 'CONFIG_PREEMPT', line: 'CONFIG_PREEMPT=y'}
+      - { regexp: 'CONFIG_HZ_1000', line: 'CONFIG_HZ_1000=y'}
+      - { regexp: 'CONFIG_HZ_250', line: '# CONFIG_HZ_250 is not set'}
+      - { regexp: 'CONFIG_HZ', line: 'CONFIG_HZ=1000'}
+
+  - name: Update configuration with new values
+    shell: yes '' | make oldconfig chdir=linux-3.15-rc7
+    when: kernel_config|changed
+
+  # See https://bugs.launchpad.net/ubuntu/+source/kernel-package/+bug/1308183
+  - name: Download updated kernel-package for fix on requiring root to compile
+    get_url: url="https://launchpad.net/ubuntu/+source/kernel-package/13.003/+build/5980712/+files/kernel-package_13.003_all.deb" dest=/home/adrien/kernel-package_13.003_all.deb owner=adrien group=adrien mode=0755
+
+  - name: Install it
+    apt: deb=kernel-package_13.003_all.deb
+    sudo: true
+
+  - name: Check if kernel is compiled
+    stat: path=/home/adrien/linux-image-3.15.0-rc7-passthrough.1_3.15.0-rc7-passthrough.1-10.00.Custom_amd64.deb
+    register: should_compile
+
+  - name: Compile the kernel
+    shell: CONCURRENCY_LEVEL=9 fakeroot make-kpkg --initrd --append-to-version=-passthrough.1 kernel-image kernel-headers chdir=linux-3.15-rc7
+    when: kernel_config|changed or should_compile.stat.exists == False
+
+  - name: Install the kernel
+    apt: deb=linux-image-3.15.0-rc7-passthrough.1_3.15.0-rc7-passthrough.1-10.00.Custom_amd64.deb
+    sudo: true
+
+  - name: Install the headers
+    apt: deb=linux-headers-3.15.0-rc7-passthrough.1_3.15.0-rc7-passthrough.1-10.00.Custom_amd64.deb
+    sudo: true
+
+  - name: Install virt-manager and kvm
+    apt: pkg={{item}} state=installed
+    sudo: true
+    with_items:
+      - virt-manager
+      - qemu-kvm
+
+  - name: Configure GRUB
+    lineinfile: "dest=/etc/default/grub regexp='{{ item.regexp }}' line='{{ item.line }}' state=present"
+    sudo: true
+    with_items:
+      - { regexp: '^GRUB_CMDLINE_LINUX=', line: 'GRUB_CMDLINE_LINUX="{{grub_cmdline}}"'}
+      - { regexp: '^GRUB_DEFAULT=', line: 'GRUB_DEFAULT="1>2"'} # kernel rc2 takes the first spot due to the "031500rc2" version
+    register: grub_config
+
+  - name: update GRUB
+    command: update-grub
+    sudo: true
+    when: grub_config|changed
+
+  - name: Check if reboot is required
+    stat: path=/var/run/reboot-required
+    register: should_reboot
+
+  - name: Reboot the system
+    command: reboot
+    sudo: true
+    when: should_reboot.stat.exists == True or grub_config|changed
+    register: rebooting
+
+  - name: Wait for ssh to come back up
+    local_action: wait_for port=22 delay=20 host=10.0.0.11
+    when: rebooting|changed
+
+  - name: Copy domain xmls
+    copy: src=files/{{item}} dest=/home/adrien/{{item}} owner=adrien group=adrien mode=0755
+    register: domains
+    with_items:
+      - HTPC.xml
+      - NAS.xml
+
+  - name: Define domains
+    command: virsh define {{item}}
+    when: domains|changed
+    with_items:
+      - HTPC.xml
+      - NAS.xml
+
+  - name: Disable apparmor for libvirt
+    command: test -f {{ item }} || ln -s {{item}} /etc/apparmor.d/disable/ && apparmor_parser -R {{ item }}
+    sudo: true
+    with_items:
+      - /etc/apparmor.d/usr.sbin.libvirtd
+      - /etc/apparmor.d/usr.lib.libvirt.virt-aa-helper
+
+  - name: Reboot the system
+    command: reboot
+    sudo: true
+    register: rebooting
+
+  - name: Wait for ssh to come back up
+    local_action: wait_for port=22 delay=20 host=10.0.0.11
+    when: rebooting|changed
+
+
+ # http://tad-do.net/2013/02/18/faq-libvirtkvm/
+ # Disable apparmor for libvirt:
+
+ # ln -s /etc/apparmor.d/usr.sbin.libvirtd /etc/apparmor.d/disable/
+ # ln -s /etc/apparmor.d/usr.lib.libvirt.virt-aa-helper /etc/apparmor.d/disable/
+ # apparmor_parser -R /etc/apparmor.d/usr.sbin.libvirtd
+ # apparmor_parser -R /etc/apparmor.d/usr.lib.libvirt.virt-aa-helper
+ # reboot
+
+
+# dmesg | grep -e DMAR -e IOMMU
+# # as root
+
+# apt-get install virt-manager qemu-kvm
+# usermod -a -G libvirtd adrien
+
+# echo "blacklist radeon" >> /etc/modprobe.d/blacklist.conf
+
+# add intel_iommu=on in /etc/default/grub
+# modprobe pci_stub
+# #echo 1 > /sys/module/kvm/parameters/allow_unsafe_assigned_interrupts
+# echo "options kvm allow_unsafe_assigned_interrupts=1" > /etc/modprobe.d/kvm.conf
+
+# # 07:00.0 0300: 1002:6819
+# # 07:00.1 0403: 1002:aab0
+# # 00:01.0 0604: 8086:0c01
+
+# echo "1002 6819" > /sys/bus/pci/drivers/pci-stub/new_id
+# echo 0000:07:00.0 > /sys/bus/pci/devices/0000:07:00.0/driver/unbind
+# echo 0000:07:00.0 > /sys/bus/pci/drivers/pci-stub/bind
+
+# echo "1002 aab0" > /sys/bus/pci/drivers/pci-stub/new_id
+# echo 0000:07:00.1 > /sys/bus/pci/devices/0000:07:00.1/driver/unbind
+# echo 0000:07:00.1 > /sys/bus/pci/drivers/pci-stub/bind
+
+# echo "8086 0c01" > /sys/bus/pci/drivers/pci-stub/new_id
+# echo 0000:01:00.0 > /sys/bus/pci/devices/0000:01:00.0/driver/unbind
+# echo 0000:01:00.0 > /sys/bus/pci/drivers/pci-stub/bind
+
+# wget https://www.kernel.org/pub/linux/kernel/v3.x/testing/linux-3.15-rc7.tar.gz
+# tar -xzf linux-3.15-rc7.tar.gz
+# cd linux-3.15-rc7/
+# sudo apt-get build-dep linux-image-$(uname -r)
+# cp /boot/config-$(uname -r) .config
+# sudo apt-get install kernel-package
+# export CONCURRENCY_LEVEL=9
+# make-kpkg --initrd --append-to-version=kvm.1 kernel_image kernel_headers
+
+
+
+# iommu=1 intel_iommu=on kvm.ignore_msrs=1 nomodeset pci-stub.ids=1002:6819,1002:aab0,1912:0015,1000:0086 vfio_iommu_type1.allow_unsafe_interrupts=1 pcie_acs_override=downstream
+
+# #LSGROUP
+
+# #!/bin/sh
+# BASE="/sys/kernel/iommu_groups"
+# for i in $(find $BASE -maxdepth 1 -mindepth 1 -type d); do
+# GROUP=$(basename $i)
+# echo "### Group $GROUP ###"
+# for j in $(find $i/devices -type l); do
+#  DEV=$(basename $j)
+#  echo -n "    "
+#  lspci -s $DEV
+# done
+# done
+
+
+
+# sudo vfio-bind 0000:07:00.0 0000:07:00.1 0000:01:00.0 0000:02:00.0
+# sudo qemu-system-x86_64 -enable-kvm -M q35 -m 1024 -cpu host \
+# -smp 6,sockets=1,cores=6,threads=1 \
+# -boot menu=on \
+# -serial null \
+# -parallel null \
+# -display none \
+# -monitor none \
+# -bios /usr/share/qemu/bios.bin -vga none \
+# -device ioh3420,bus=pcie.0,addr=1c.0,multifunction=on,port=1,chassis=1,id=root.1 \
+# -device vfio-pci,host=07:00.0,bus=root.1,addr=00.0,multifunction=on,x-vga=on \
+# -device vfio-pci,host=07:00.1,bus=root.1,addr=00.1 \
+# -device virtio-scsi-pci,id=scsi \
+# -drive file=/var/lib/libvirt/images/HTPC-2-clone.img,id=disk,format=raw -device scsi-hd,drive=disk \
+# -drive file=/home/adrien/virtio-win-0.1-74.iso,id=virtiocd -device ide-cd,bus=ide.1,drive=virtiocd \
+# -drive file=/home/adrien/Windows\ 7\ Professional\ SP1\ x64\ EN.iso,id=windowscd -device ide-cd,bus=ide.2,drive=windowscd \
+# -net nic,model=virtio -net user \
+# -device ahci,bus=pcie.0,id=ahci \
+# -device vfio-pci,host=01:00.0,bus=pcie.0 \
+# -usb -usbdevice host:046d:c52b
+
+
+
+
+
+sudo qemu-system-x86_64 -enable-kvm -M q35 -m 1024 -cpu host \
+-smp 6,sockets=1,cores=6,threads=1 \
+-boot menu=on \
+-serial null \
+-parallel null \
+-display none \
+-monitor none \
+-bios /usr/share/qemu/bios.bin -vga none \
+-device ioh3420,bus=pcie.0,addr=1c.0,multifunction=on,port=1,chassis=1,id=root.1 \
+-device vfio-pci,host=07:00.0,bus=root.1,addr=00.0,multifunction=on,x-vga=on \
+-device vfio-pci,host=07:00.1,bus=root.1,addr=00.1 \
+-net nic,model=virtio -net user \
+-device vfio-pci,host=01:00.0,bus=pcie.0
+
+
+
+# I'd guess you need to change a few things in /etc/libvirt/qemu.conf
+# user & group should probably be root
+# clear_emulator_capabilities should probably be 0
+# + cgroup_acl /dev/vfio/13 /dev/vfio/1
+
+
+
+# sudo qemu-system-x86_64 -enable-kvm -M q35 -m 4096 -cpu host \
+# -smp 2,sockets=1,cores=6,threads=1 \
+# -boot menu=on \
+# -serial null \
+# -parallel null \
+# -bios /usr/share/qemu/bios.bin -vga none \
+# -device vfio-pci,host=02:00.0,bus=pcie.0

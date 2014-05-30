@@ -1,0 +1,3078 @@
+{
+	"auto_complete":
+	{
+		"selected_items":
+		[
+			[
+				"response_",
+				"response_in_cache"
+			],
+			[
+				"manual",
+				"manual_entry"
+			],
+			[
+				"integer",
+				"integer_price_range"
+			],
+			[
+				"update",
+				"update_geopoint"
+			],
+			[
+				"scrape_",
+				"scrape_entry"
+			],
+			[
+				"addi",
+				"additionnal_data"
+			],
+			[
+				"sub",
+				"subcategory_id"
+			],
+			[
+				"base",
+				"base_category_id"
+			],
+			[
+				"fe",
+				"few"
+			],
+			[
+				"form",
+				"formatted_entry_id"
+			],
+			[
+				"kernel",
+				"kernel_config"
+			],
+			[
+				"reboo",
+				"reboot_required"
+			],
+			[
+				"scrap",
+				"scrape_entry"
+			],
+			[
+				"scrape",
+				"scrape_entry"
+			],
+			[
+				"for",
+				"formatted_entries"
+			],
+			[
+				"KIND",
+				"KIND_WEBSITE"
+			],
+			[
+				"BASE_",
+				"BASE_CATEGORY_FOOD"
+			],
+			[
+				"scra",
+				"scrape_entry"
+			],
+			[
+				"extra",
+				"extracted_data"
+			],
+			[
+				"recue",
+				"recursive_unescape"
+			],
+			[
+				"data",
+				"datasheet"
+			],
+			[
+				"scr",
+				"scrape_entry"
+			],
+			[
+				"extr",
+				"extracted_data"
+			],
+			[
+				"ext",
+				"extracted_data"
+			],
+			[
+				"partic",
+				"particular_athmosphere"
+			],
+			[
+				"parti",
+				"particular_athmosphere"
+			],
+			[
+				"street",
+				"street_address"
+			],
+			[
+				"fetch",
+				"fetching"
+			],
+			[
+				"respon",
+				"response_body"
+			],
+			[
+				"response",
+				"response_in_cache"
+			],
+			[
+				"norma",
+				"normalized_uri"
+			],
+			[
+				"postgr",
+				"postgresql_data"
+			],
+			[
+				"amin",
+				"admin_manual_entry_url"
+			],
+			[
+				"admin_m",
+				"admin_manual_entries_url"
+			],
+			[
+				"embe",
+				"embedding_layout"
+			],
+			[
+				"conta",
+				"container_current"
+			],
+			[
+				"logw",
+				"logwatch_email"
+			],
+			[
+				"denominati",
+				"denomination_events"
+			],
+			[
+				"products_den",
+				"products_denominations_events"
+			],
+			[
+				"request",
+				"requested_internal_review"
+			],
+			[
+				"current_",
+				"current_admin_user"
+			],
+			[
+				"office",
+				"office_bootstrap_fluid"
+			],
+			[
+				"receipt_",
+				"receipt_show"
+			],
+			[
+				"prori",
+				"prioritized_created_at"
+			],
+			[
+				"turk",
+				"turkee_tasks"
+			],
+			[
+				"prioiti",
+				"prioritized_created_at"
+			],
+			[
+				"not_yet_re",
+				"not_yet_reviewed_by_admin_for_loyalty"
+			],
+			[
+				"pending_for",
+				"pending_for_admin_fidmarques_validation"
+			],
+			[
+				"enc",
+				"encrypted_password"
+			],
+			[
+				"ActiveRe",
+				"ActiveRecord::Base"
+			],
+			[
+				"Active",
+				"ActiveRecord::Base"
+			],
+			[
+				"priority",
+				"priority_boosted_for_in_progress_mturk"
+			],
+			[
+				"is_out",
+				"is_outsourcing_in_progress"
+			],
+			[
+				"submitted_lin",
+				"submitted_line_instances_ids"
+			],
+			[
+				"Mturk",
+				"MturkLineReadingOutput"
+			],
+			[
+				"denomination",
+				"denomination_to_program_suggestions"
+			],
+			[
+				"Purche",
+				"PurcheaseAccounts"
+			],
+			[
+				"find_",
+				"find_by_name"
+			],
+			[
+				"genero",
+				"global_generosite_convertie"
+			],
+			[
+				"generos",
+				"generosite_convertie"
+			],
+			[
+				"loyalty_",
+				"loyalty_programs_ids"
+			],
+			[
+				"receivable",
+				"receivable_generosity"
+			],
+			[
+				"dist",
+				"distributed_generosity"
+			],
+			[
+				"revei",
+				"receivable_generosity"
+			],
+			[
+				"denpm",
+				"denomtoprogram"
+			],
+			[
+				"denom",
+				"denomtoprogram"
+			],
+			[
+				"purche",
+				"purchease_accounts"
+			],
+			[
+				"purchease",
+				"purchease_amount"
+			],
+			[
+				"availa",
+				"available_generosity"
+			],
+			[
+				"tra",
+				"trademark"
+			],
+			[
+				"receiv",
+				"receivable_generosity"
+			],
+			[
+				"receiba",
+				"receivable_account"
+			],
+			[
+				"credit",
+				"credited_generosity"
+			],
+			[
+				"avail",
+				"available_generosity"
+			],
+			[
+				"purch",
+				"purchease_percentage"
+			],
+			[
+				"air",
+				"airbrake_apikey"
+			],
+			[
+				"airbrake_",
+				"airbrake_project_id"
+			],
+			[
+				"trade",
+				"trademark_composition_id"
+			],
+			[
+				"brand_identi",
+				"brand_identity_id"
+			],
+			[
+				"Trademark",
+				"TrademarkComposition"
+			],
+			[
+				"deno",
+				"denomtoprogram_id"
+			],
+			[
+				"Denom",
+				"DenominationToProgramSuggestion"
+			],
+			[
+				"tradema",
+				"trademark_composition"
+			],
+			[
+				"tradem",
+				"trademark_compositions"
+			],
+			[
+				"Deno",
+				"DenominatinoToProgramSuggestion"
+			],
+			[
+				"trad",
+				"trademark_compositions"
+			],
+			[
+				"results",
+				"results_json"
+			],
+			[
+				"redis",
+				"redis_provider"
+			],
+			[
+				"Brand",
+				"BrandIdentityLink"
+			],
+			[
+				"Produ",
+				"Product"
+			],
+			[
+				"Product",
+				"ProductsDenominations"
+			],
+			[
+				"loyalt",
+				"loyalty_program_id"
+			],
+			[
+				"Class",
+				"ClassifierTools"
+			],
+			[
+				"dat",
+				"database_url"
+			],
+			[
+				"brand_",
+				"brand_identity_link"
+			],
+			[
+				"brand",
+				"brand_identity_type"
+			],
+			[
+				"Boole",
+				"BooleanField"
+			],
+			[
+				"Date",
+				"DateTimeField"
+			],
+			[
+				"Int",
+				"IntegerField"
+			],
+			[
+				"ban_",
+				"ban_yellow_card"
+			],
+			[
+				"BAN_",
+				"BAN_RED_CARD"
+			],
+			[
+				"ids_",
+				"ids_to_put_to_false"
+			],
+			[
+				"can",
+				"can_be_absent"
+			],
+			[
+				"dest",
+				"destination_file"
+			],
+			[
+				"current",
+				"current_file"
+			],
+			[
+				"subp",
+				"subpicture_uuid"
+			],
+			[
+				"files",
+				"files_to_archive"
+			],
+			[
+				"wor",
+				"workspace_path"
+			],
+			[
+				"Nice",
+				"NiceJobWithoutActiveRecord"
+			],
+			[
+				"loyalty_pro",
+				"loyalty_program_user"
+			],
+			[
+				"pla",
+				"placeholder_by"
+			],
+			[
+				"plac",
+				"placeholder"
+			],
+			[
+				"proces",
+				"processing_time"
+			],
+			[
+				"place",
+				"placeholders"
+			],
+			[
+				"exp",
+				"expanded_domains"
+			],
+			[
+				"pushe",
+				"pushed_after_ocr"
+			],
+			[
+				"post_",
+				"post_outsourcing"
+			],
+			[
+				"retaile",
+				"retailer_key"
+			],
+			[
+				"thres",
+				"thresh_edges_blacks"
+			],
+			[
+				"total",
+				"total_values"
+			],
+			[
+				"cont",
+				"contours_fp"
+			],
+			[
+				"contou",
+				"contours_fn"
+			],
+			[
+				"max_",
+				"max_key"
+			],
+			[
+				"con",
+				"contours_fp"
+			],
+			[
+				"fals",
+				"false_positive"
+			],
+			[
+				"contours",
+				"contours_correc"
+			],
+			[
+				"count",
+				"countNonZero"
+			],
+			[
+				"cou",
+				"contours_reference"
+			]
+		]
+	},
+	"buffers":
+	[
+		{
+			"file": "bootstrap.yml",
+			"settings":
+			{
+				"buffer_size": 12643,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "ubuntu_vm.yml",
+			"settings":
+			{
+				"buffer_size": 5739,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "config/sasl_passwd.j2",
+			"settings":
+			{
+				"buffer_size": 74,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "config/postfix_selections",
+			"settings":
+			{
+				"buffer_size": 82,
+				"line_ending": "Unix"
+			}
+		},
+		{
+			"file": "hosts.ini",
+			"settings":
+			{
+				"buffer_size": 38,
+				"line_ending": "Unix"
+			}
+		}
+	],
+	"build_system": "",
+	"command_palette":
+	{
+		"height": 375.0,
+		"selected_items":
+		[
+			[
+				"ins",
+				"Package Control: Install Package"
+			],
+			[
+				"las",
+				"Rails Latest Migration: Open latest Rails migration"
+			],
+			[
+				"last",
+				"Rails Latest Migration: Open latest Rails migration"
+			],
+			[
+				"m",
+				"Rails Latest Migration: Open latest Rails migration"
+			],
+			[
+				"pack",
+				"Package Control: List Packages"
+			],
+			[
+				"packa",
+				"Package Control: Remove Package"
+			],
+			[
+				"mig",
+				"Rails Latest Migration: Open latest Rails migration"
+			],
+			[
+				"instal",
+				"Package Control: Install Package"
+			],
+			[
+				"inst",
+				"Package Control: Install Package"
+			]
+		],
+		"width": 588.0
+	},
+	"console":
+	{
+		"height": 125.0
+	},
+	"distraction_free":
+	{
+		"menu_visible": true,
+		"show_minimap": false,
+		"show_open_files": false,
+		"show_tabs": false,
+		"side_bar_visible": false,
+		"status_bar_visible": false
+	},
+	"file_history":
+	[
+		"/Users/adrien/Desktop/bim/infrastructure/postgres/Dockerfile",
+		"/Users/adrien/Desktop/bim/mobile/www/js/controllers.js",
+		"/Users/adrien/Desktop/bim/infrastructure/config/postfix_selections",
+		"/Users/adrien/Desktop/bim/infrastructure/bootstrap.yml",
+		"/Users/adrien/Desktop/bim/infrastructure/config/sasl_passwd.j2",
+		"/Users/adrien/Desktop/bim/infrastructure/backend.yml",
+		"/Users/adrien/Desktop/bim/infrastructure/base/Dockerfile",
+		"/Users/adrien/Desktop/bim/infrastructure/postgres/postgresql.sh",
+		"/Users/adrien/Desktop/bim/backend/app/views/admin/manual_entries/show.html.haml",
+		"/Users/adrien/Desktop/bim/backend/app/controllers/admin/manual_entries_controller.rb",
+		"/Users/adrien/Desktop/bim/backend/app/lib/time_range.rb",
+		"/Users/adrien/Desktop/bim/backend/spec/scrapers/michelin/restaurant_spec.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/michelin/venue.rb",
+		"/Users/adrien/Desktop/bim/backend/app/views/admin/manual_entries/new_embedded.html.haml",
+		"/Users/adrien/Desktop/bim/backend/app/views/admin/manual_entries/new.html.haml",
+		"/Users/adrien/Desktop/bim/backend/app/views/admin/manual_entries/_hours.html.haml",
+		"/Users/adrien/Desktop/bim/backend/app/views/admin/manual_entries/edit.html.haml",
+		"/Users/adrien/Desktop/bim/backend/app/models/manual_entry.rb",
+		"/Users/adrien/Desktop/bim/backend/d",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140528173527_remove_address_column_from_manual_entries.rb",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140528173651_integer_price_range.rb",
+		"/Users/adrien/Desktop/bim/backend/toolbelt",
+		"/Users/adrien/Desktop/bim/backend/Gemfile",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140528174634_add_versions_to_entries.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/michelin/throttled_venue_task.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/base/venue_task.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/base/list_task.rb",
+		"/Users/adrien/Desktop/bim/backend/app/models/scrape_entry.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/timeout/scraper.rb",
+		"/Users/adrien/Desktop/bim/backend/db/seeds.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/timeout/list.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/timeout/formatter.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/timeout/throttled_list_task.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/timeout/venue.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/timeout/throttled_venue_task.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/michelin/list.rb",
+		"/Users/adrien/Desktop/bim/backend/spec/scrapers/timeout/venue_spec.rb",
+		"/Users/adrien/Desktop/bim/backend/spec/scrapers/timeout/venue_task_spec.rb",
+		"/Users/adrien/Desktop/bim/backend/app/lib/http_cache.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/michelin/throttled_list_task.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/michelin/scraper.rb",
+		"/Users/adrien/Desktop/bim/backend/Procfile",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/michelin/restaurant.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/michelin/list_task.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/timeout/list_task.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/michelin/restaurant_task.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/timeout/venue_task.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/timeout/vneue.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/timeout/restaurant.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/timeout/restaurant_task.rb",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140528173650_integer_price_range.rb",
+		"/Users/adrien/Desktop/hypervisor/bootstrap.yml",
+		"/Users/adrien/Desktop/hypervisor/files/lsgroup",
+		"/Users/adrien/Desktop/hypervisor/files/vfio-bind.conf",
+		"/Users/adrien/Desktop/hypervisor/files/vfio-bind.j2",
+		"/Users/adrien/Desktop/hypervisor/files/vfio-bind",
+		"/Users/adrien/Desktop/hypervisor/notes.sh",
+		"/Users/adrien/Desktop/hypervisor/Vagrantfile",
+		"/Users/adrien/Desktop/hypervisor/hosts.ini",
+		"/Users/adrien/Desktop/bim/mobile/config.xml",
+		"/Users/adrien/Desktop/bim/mobile/www/templates/friend-detail.html",
+		"/Users/adrien/Desktop/bim/mobile/www/templates/home.html",
+		"/Users/adrien/Desktop/bim/mobile/www/js/app.js",
+		"/Users/adrien/Desktop/bim/mobile/www/js/services.js",
+		"/Users/adrien/Desktop/bim/mobile/www/index.html",
+		"/Users/adrien/Desktop/bim/mobile/scss/ionic.app.scss",
+		"/Users/adrien/Desktop/bim/backend/config/routes.rb",
+		"/Users/adrien/Desktop/bim/backend/app/api/bim/api.rb",
+		"/Users/adrien/Desktop/bim/backend/app/api/entities/place.rb",
+		"/Users/adrien/Desktop/bim/backend/app/api/entities/picture.rb",
+		"/Users/adrien/Desktop/bim/backend/app/api/entities/review.rb",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140526182627_add_places.rb",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140526182642_create_places.rb",
+		"/Users/adrien/Desktop/bim/backend/app/asynctasks/copy_entries_to_places.rb",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140526180154_enable_uuid.rb",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140526190327_add_place_id_to_formatted_entry.rb",
+		"/Users/adrien/Desktop/bim/backend/app/models/formatted_entry.rb",
+		"/Users/adrien/Desktop/bim/backend/app/models/place.rb",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140526190512_add_formatted_id_to_scrape_entry.rb",
+		"/Users/adrien/Desktop/bim/backend/app/scrapers/michelin/formatter.rb",
+		"/Users/adrien/Desktop/bim/backend/app/models/review.rb",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140526193848_create_reviews.rb",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140526193952_create_pictures.rb",
+		"/Users/adrien/Desktop/bim/backend/app/models/picture.rb",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140526225134_enable_post_gis.rb",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140526225825_add_geo_point_to_places.rb",
+		"/Users/adrien/Desktop/bim/backend/app/api",
+		"/Users/adrien/Desktop/hypervisor/files/vfio-bind.cfg",
+		"/Users/adrien/Desktop/bim/backend/spec/formatters/phone_spec.rb",
+		"/Users/adrien/Desktop/bim/mobile/toolbelt",
+		"/Users/adrien/Desktop/bim/backend/app/lib/formatters/tags.rb",
+		"/Users/adrien/Desktop/bim/backend/app/lib/formatters/pictures.rb",
+		"/Users/adrien/Desktop/bim/backend/spec/formatters/pictures_spec.rb",
+		"/Users/adrien/Desktop/bim/backend/spec/formatters/tags_spec.rb",
+		"/Users/adrien/Desktop/bim/backend/app/lib/formatters/price_range.rb",
+		"/Users/adrien/Desktop/bim/backend/app/lib/formatters/website.rb",
+		"/Users/adrien/Desktop/bim/backend/app/lib/formatters/phone.rb",
+		"/Users/adrien/Desktop/bim/backend/spec/formatters/website_spec.rb",
+		"/Users/adrien/Desktop/bim/backend/spec/formatters/price_range_spec.rb",
+		"/Users/adrien/Desktop/bim/backend/lib/place/hours.rb",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140522183706_create_sources.rb",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140522183920_create_categories.rb",
+		"/Users/adrien/Desktop/bim/backend/app/models/source.rb",
+		"/Users/adrien/Desktop/bim/backend/app/models/category.rb",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140522185559_create_formatted_entries.rb",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140522190546_rename_source_id_to_external_id.rb",
+		"/Users/adrien/Desktop/bim/backend/spec/scrapers/michelin/restaurant_task_spec.rb",
+		"/Users/adrien/Desktop/bim/backend/spec/spec_helper.rb",
+		"/Users/adrien/Desktop/bim/backend/config/environments/test.rb",
+		"/Users/adrien/Desktop/bim/backend/.rubocop_todo.yml",
+		"/Users/adrien/Desktop/bim/backend/.rubocop.yml",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140522204148_add_indexes.rb",
+		"/Users/adrien/Desktop/bim/backend/.reek",
+		"/Users/adrien/Desktop/bim/backend/config/rails_best_practices.yml",
+		"/Users/adrien/Desktop/bim/backend/.env",
+		"/Users/adrien/Desktop/bim/backend/.env.production",
+		"/Users/adrien/Desktop/bim/backend/.env.template",
+		"/Users/adrien/Desktop/bim/backend/config/gems.rb",
+		"/Users/adrien/Desktop/bim/backend/app/views/layouts/application.html.haml",
+		"/Users/adrien/Desktop/bim/backend/app/views/admin/scrape_entries/index.html.haml",
+		"/Users/adrien/Desktop/bim/backend/app/views/admin/scrape_entries/show.html.haml",
+		"/Users/adrien/Desktop/bim/backend/app/controllers/admin/scrape_entries_controller.rb",
+		"/Users/adrien/Desktop/bim/backend/app/assets/javascripts/admin/manual_entries.js",
+		"/Users/adrien/Desktop/bim/backend/db/migrate/20140523112053_c_hange_manual_entry_hours_to_json.rb",
+		"/Users/adrien/Desktop/bim/backend/config/initializers/rollbar.rb",
+		"/Users/adrien/Desktop/bim/mobile/.gitignore",
+		"/Users/adrien/Desktop/bim/bim.sublime-workspace",
+		"/Users/adrien/Desktop/bim/mobile/ionic.project"
+	],
+	"find":
+	{
+		"height": 56.0
+	},
+	"find_in_files":
+	{
+		"height": 0.0,
+		"where_history":
+		[
+			"/Users/adrien/Desktop/bim/backend",
+			"/Users/adrien/Desktop/bim/mobile",
+			"",
+			"/Users/adrien/Desktop/adrienkohlbecker.com/wp-content/themes/flatcv/",
+			"/Users/adrien/Desktop/adrienkohlbecker.com/wp-content/themes/flatcv/css",
+			"",
+			"/Users/adrien/Desktop/purchease/purchease/",
+			"/Users/adrien/Desktop/purchease/purchease/engines/backoffice/app/assets",
+			"/Users/adrien/Desktop/purchease/purchease/engine/backoffice/app/assets",
+			"/Users/adrien/Desktop/purchease/purchease/app/assets",
+			"/Users/adrien/Desktop/purchease/purchease/",
+			"/Users/adrien/Desktop/purchease/purchease/app/mutations",
+			"/Users/adrien/Desktop/purchease/purchease/engines/compta/app/mutations",
+			"/Users/adrien/Desktop/purchease/purchease",
+			"",
+			"/Users/adrien/Desktop/purchease/nltk2/models",
+			"",
+			"/Users/adrien/Desktop/purchease/champollion/worker",
+			"/Users/adrien/Desktop/purchease/purchease-kit-android/PurcheaseKitManager",
+			"",
+			"time.shooting",
+			"/Users/adrien/Desktop/babatrip",
+			"/Users/adrien/Desktop/babatrip/app/views",
+			"<project>",
+			"/Users/adrien/GitHub/dotfiles",
+			"/Users/adrien/Desktop/Skerou/pm/",
+			"/Users/adrien/Desktop/Skerou/pm/app/models",
+			"/Users/adrien/Desktop/Skerou/",
+			"/Users/adrien/Desktop/Skerou/pm/",
+			"/Users/adrien/Desktop/Skerou/pm/app/",
+			"/Users/adrien/Desktop/Skerou/pm/app/asynctasks",
+			"/Users/adrien/Desktop/Skerou/pm/app/",
+			"/Users/adrien/Desktop/Skerou/pm/db/migrate",
+			"/Users/adrien/Desktop/Skerou/pm/",
+			"/Users/adrien/Desktop/Skerou/pm/config",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou/purchease-toolbelt/lib",
+			"/Users/adrien/Desktop/Skerou/purchease-toolbelt/lib/purchease_toolbelt",
+			"/Users/adrien/Desktop/Skerou/purchease-toolbelt",
+			"/Users/adrien/Desktop/Skerou/purchease-toolbelt/lib",
+			"/Users/adrien/Desktop/Skerou/purchease-toolbelt",
+			"/Users/adrien/Desktop/Skerou/purchease-toolbelt/lib/purchease_toolbelt",
+			"/Users/adrien/Desktop/Skerou/purchease-toolbelt",
+			"/Users/adrien/Desktop/Skerou/purchease_models/db/migrate",
+			"/Users/adrien/Desktop/Skerou/",
+			"/Users/adrien/Desktop/Skerou/backoffice/app/views/admin",
+			"/Users/adrien/Desktop/Skerou",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou/",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou/",
+			"/Users/adrien/Desktop/Skerou/purchease_models/app/models",
+			"/Users/adrien/Desktop/Skerou/",
+			"/Users/adrien/Desktop/Skerou/purchease_models/db/migrate",
+			"/Users/adrien/Desktop/Skerou",
+			"/Users/adrien/Desktop/Skerou/skerou",
+			"/Users/adrien/Desktop/Skerou/purchease_models/app/models",
+			"/Users/adrien/Desktop/Skerou/",
+			"/Users/adrien/Desktop/Skerou/backoffice",
+			"/Users/adrien/Desktop/Skerou/backoffice/app/views/admin/receipts",
+			"/Users/adrien/Desktop/Skerou",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou/",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou/backoffice",
+			"/Users/adrien/Desktop/Skerou/workers",
+			"/Users/adrien/Desktop/Skerou/purchease_models/lib/tasks",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou/",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou/",
+			"/Users/adrien/Desktop/Skerou/workers",
+			"/Users/adrien/Desktop/Skerou/backoffice",
+			"/Users/adrien/Desktop/Skerou/skerou",
+			"/Users/adrien/Desktop/Skerou/backoffice",
+			"/Users/adrien/Desktop/Skerou/workers",
+			"/Users/adrien/Desktop/Skerou/api",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou/workers",
+			"/Users/adrien/Desktop/Skerou/api",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou/workers",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou/workers",
+			"/Users/adrien/Desktop/Skerou/backoffice",
+			"/Users/adrien/Desktop/Skerou/skerou",
+			"/Users/adrien/Desktop/Skerou/api",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou",
+			"<open files>",
+			"/Users/adrien/Desktop/Skerou/purchease_models/app",
+			"/Users/adrien/Desktop/Skerou/purchease_models/app/backend",
+			"/Users/adrien/Desktop/Skerou/purchease_models/app/asynctasks",
+			"/Users/adrien/Desktop/Skerou/",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou/purchease_models/app/models",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou/backoffice",
+			"/Users/adrien/Desktop/Skerou/purchease_models/app",
+			"<open files>",
+			"",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"<open files>",
+			"/Users/adrien/Desktop/Skerou/purchease_models/",
+			"/Users/adrien/Desktop/Skerou/api/",
+			"/Users/adrien/Desktop/Skerou/purchease_models/",
+			"/Users/adrien/Desktop/Skerou/purchease_models/db/migrate",
+			"/Users/adrien/Desktop/Skerou/purchease_models/",
+			"/Users/adrien/Desktop/Skerou/purchease_models/db/migrate",
+			"/Users/adrien/Desktop/Skerou/prototyping_denominations",
+			"/Users/adrien/Desktop/Skerou/purchease_models/app/models",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou/purchease_models/app",
+			"/Users/adrien/Desktop/Skerou/purchease_models",
+			"/Users/adrien/Desktop/Skerou/purchease_models/app",
+			"<project>",
+			"/Users/adrien/Desktop/Skerou/purchease_models/",
+			"/Users/adrien/Desktop/Skerou/purchease_models/app/backend",
+			"/Users/adrien/Desktop/Skerou/purchease_models/app/backend/concerns",
+			"/Users/adrien/Desktop/Skerou/purchease_models/app/backend/analysers"
+		]
+	},
+	"find_state":
+	{
+		"case_sensitive": true,
+		"find_history":
+		[
+			"deploy",
+			"bim",
+			"TimeRange",
+			"template",
+			" +",
+			"\"(.*)\"",
+			"icon src=\"",
+			"splash src=\"",
+			"icon src=\"",
+			"icon.png",
+			"thebim",
+			", ",
+			"replace",
+			"topic \"",
+			"lunch",
+			"datasheet['poi']",
+			"manual",
+			"'')",
+			"\n\n# Add VOLUMEs to allow backup of config, logs and databases\nVOLUME  [\"/etc/postgresql\", \"/var/log/postgresql\", \"/var/lib/postgresql\"]",
+			", placeholder: \"(.*)\"",
+			"placeholder: \"(.*)\", ",
+			"\n",
+			"??",
+			"should_embed?",
+			"&& \\\\\\n  ",
+			"sshd_c",
+			"echo",
+			"icmp",
+			"syn",
+			"echo",
+			"$",
+			"sh",
+			"#profile_name",
+			"300",
+			"date",
+			"birth",
+			".resume_post .resume_header .post_title",
+			"title",
+			"sendgrid",
+			"\"",
+			"\\n",
+			"define\\('(.*)',\\W+'(.*)'\\);",
+			"float_credit",
+			"points_to_euros",
+			"internal",
+			"validator_id",
+			"scan_to_review",
+			"event",
+			"admin_user_events",
+			"ban_yellow_card",
+			"@partner",
+			"AdminUser.is_external?(current_admin_user.id)",
+			"AdminUser.is_external?",
+			"AdminUser::EXTERNAL.include?",
+			"Backoffice::EXTERNAL_ADMIN_USERS",
+			"EXTERNAL_ADMIN_USERS",
+			"submit",
+			"submit(",
+			"#modal",
+			"first_or_create",
+			"first_or_",
+			"first_or_create",
+			"devise",
+			"..where",
+			"create",
+			"EXTERNAL_ADMIN_USERS",
+			"hash_for_key",
+			"fidmarques-receipt-form",
+			"EXTERNAL_ADMIN_USERS",
+			"receipt_show",
+			"@products_for_orphan_claims",
+			"products_for_orphan_claims",
+			"chare",
+			"@back",
+			"@expressions",
+			"readDenomMatchTestNew",
+			"update_O2_char_table",
+			"count_whiteOnBlack",
+			"is_there_whiteOnBlack",
+			"then",
+			"@@expressions",
+			"@@parsing_regexp",
+			"@@",
+			"@@backdrops",
+			"--auto-correct",
+			"protected",
+			"perform_without_callbacks",
+			"metrics",
+			"opened",
+			"metrics",
+			"user_scan",
+			"metrics",
+			"Metrics",
+			"opted_in_users",
+			"skip_admin_processing",
+			"method_missing",
+			"router",
+			"accept_up_to_n_coupons",
+			"router",
+			"ruote",
+			"VipUserDetection",
+			"UserScanReporting",
+			"UserDataCheckout",
+			"UpdateReadDenominationsAndPromoteDenomination",
+			"TransferPaymentsExport",
+			"ToggleMturkPanicStrategy",
+			"SynthesizeLineReadingSessions",
+			"SuggestionGeneration",
+			"SendTransferPaymentUserMailConfirmationAndCreateEvent",
+			"SendContestationToZendesk",
+			"ScrappingQueueing",
+			"ScrapedProductInsertion",
+			"ScrapedProductDenominationInsertion",
+			"ScrapedDenomInsertion",
+			"RotateAndCopyImageForAdminOnlyProcessing",
+			"ReviewInstanceReading",
+			"RefreshProductDescriptionsNormalization",
+			"ReceiptRecovery",
+			"ReceiptOpening",
+			"ReceiptDuplicateFinder",
+			"ReceiptCheckingConditionalCancellation",
+			"ReceiptCheckingCallback",
+			"NotifyFidmarquesReferralConfirmation",
+			"MturkWorkerReviewSession",
+			"MturkReceiptCheckingQualificationPull",
+			"MturkReceiptCheckingQualificationProcessing",
+			"MturkQualificationProcessResult",
+			"MturkReceiptCheckingQualificationProcessing"
+		],
+		"highlight": true,
+		"in_selection": false,
+		"preserve_case": false,
+		"regex": true,
+		"replace_history":
+		[
+			" ",
+			":\\1",
+			"icon src=\"www/",
+			"splash src=\"www/",
+			"icon src=\"www/",
+			",\\n",
+			"gsub",
+			"echo \"-----> ",
+			"dinner",
+			"scrape",
+			"",
+			"?",
+			"embedded?",
+			"\\n RUN ",
+			"'",
+			"",
+			"\\1=\"\\2\" ",
+			"receipt",
+			"admin_user_receipts",
+			"current_admin_user.is_external?",
+			"AdminUser.is_external?",
+			"AdminUser::EXTERNAL",
+			"Backoffice::EXTERNAL_ADMIN_USERS",
+			"first_or_initialize",
+			".where",
+			".where(id: 11).first_or_create",
+			"char",
+			"read_denom_match_test_new",
+			"update_o2_chare_table",
+			"count_white_on_black",
+			"is_there_white_on_black",
+			")",
+			")\\nAdminUser",
+			"create(",
+			"before(:each)",
+			"  ",
+			"",
+			"\\n",
+			"",
+			"AdminUser.create {",
+			"",
+			"\\1@skerou.test",
+			"client",
+			"amount=",
+			"Plutus::Transaction",
+			"big_decimal",
+			"",
+			"class Meta:\n    db_table = '\\1'",
+			"import peewee\nfrom . import PurcheaseModel",
+			"peewee.FloatField()",
+			"id = peewee.IntegerField(primary_key=True)",
+			"peewee.CharField()",
+			"peewee.DateTimeField()",
+			"peewee.BooleanField()",
+			"PurcheaseModel",
+			"peewee.IntegerField()",
+			"PurcheaseModel",
+			"peewee.IntegerField()",
+			"  \\n",
+			"    ",
+			"\\1fakeR.getId(\"\\2\", \"\\3\")",
+			"destination_path",
+			"receipt.retailer.normalized_name",
+			"sobel",
+			"laplacian",
+			"prewitt",
+			"array",
+			"hippie",
+			"image-url",
+			"TravelMeet::",
+			"",
+			"is_redundant?",
+			"overlap_couples",
+			"overlap_zones",
+			"lower_subpicture",
+			"upper_subpicture",
+			"gem_name",
+			"\n            with_chdir($config.apps.purchease_models.working_copy) {",
+			"          production-\\1: staging-\\1",
+			"          staging-\\1: staging-\\1",
+			"        - staging-\\1: staging-\\1",
+			".environments",
+			".apps",
+			"$user_settings",
+			"app",
+			"PurcheaseToolbelt",
+			"PurchaseToolbelt",
+			"$config",
+			"/\n",
+			"sh",
+			"has_known_denomination",
+			", ",
+			"'\\1'",
+			"\\'",
+			", ",
+			"lower_",
+			"upper_",
+			"@line_extraction",
+			"interpretation",
+			"line_instance_ids",
+			"line_ids",
+			"line_instance_ids",
+			"@master_key",
+			", ",
+			"legacy_deleted_admin",
+			"legacy_untracked_admin",
+			"self.perform\\1\\n\\n    PurcheaseModel.transaction do\\n",
+			"self.perform\\1\\n\\n    PurcheaseModel.transaction do\\n\\n",
+			"self.perform\\1\\n\\n    PurcheaseModel.transaction do",
+			"",
+			", ",
+			"\\1# puts\\2",
+			", ",
+			"production",
+			", ",
+			":production",
+			":staging",
+			"score_to_s",
+			"\\1li",
+			"(\\1)li",
+			"",
+			"Proto",
+			"LineInterpretation::SCORE_MTURK",
+			"LineInterpretation::SCORE_ADMIN",
+			"LineInterpretation::SCORE_MTURK_CONCORDANTE",
+			"LineInterpretation::SCORE_MTURK",
+			"LineInterpretation::SCORE_OCR",
+			"ProtoLineInterpretation::SCORE_OCR"
+		],
+		"reverse": false,
+		"show_context": true,
+		"use_buffer2": true,
+		"whole_word": false,
+		"wrap": true
+	},
+	"groups":
+	[
+		{
+			"selected": 1,
+			"sheets":
+			[
+				{
+					"buffer": 0,
+					"file": "bootstrap.yml",
+					"settings":
+					{
+						"buffer_size": 12643,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								12643,
+								12643
+							]
+						],
+						"settings":
+						{
+							"BracketHighlighterBusy": false,
+							"annotations":
+							[
+								"TODO",
+								"README",
+								"FIXME"
+							],
+							"bh_regions":
+							[
+								"bh_regex",
+								"bh_regex_center",
+								"bh_regex_open",
+								"bh_regex_close",
+								"bh_double_quote",
+								"bh_double_quote_center",
+								"bh_double_quote_open",
+								"bh_double_quote_close",
+								"bh_square",
+								"bh_square_center",
+								"bh_square_open",
+								"bh_square_close",
+								"bh_angle",
+								"bh_angle_center",
+								"bh_angle_open",
+								"bh_angle_close",
+								"bh_curly",
+								"bh_curly_center",
+								"bh_curly_open",
+								"bh_curly_close",
+								"bh_default",
+								"bh_default_center",
+								"bh_default_open",
+								"bh_default_close",
+								"bh_unmatched",
+								"bh_unmatched_center",
+								"bh_unmatched_open",
+								"bh_unmatched_close",
+								"bh_round",
+								"bh_round_center",
+								"bh_round_open",
+								"bh_round_close",
+								"bh_tag",
+								"bh_tag_center",
+								"bh_tag_open",
+								"bh_tag_close",
+								"bh_single_quote",
+								"bh_single_quote_center",
+								"bh_single_quote_open",
+								"bh_single_quote_close"
+							],
+							"codeintel": true,
+							"codeintel_config":
+							{
+								"JavaScript":
+								{
+									"codeintel_max_recursive_dir_depth": 2.0,
+									"codeintel_scan_files_in_project": false,
+									"javascriptExtraPaths":
+									[
+									]
+								},
+								"PHP":
+								{
+									"codeintel_max_recursive_dir_depth": 5.0,
+									"codeintel_scan_files_in_project": false,
+									"phpExtraPaths":
+									[
+									]
+								},
+								"Python":
+								{
+									"env":
+									{
+									}
+								}
+							},
+							"codeintel_enabled_languages":
+							[
+								"JavaScript",
+								"Mason",
+								"XBL",
+								"XUL",
+								"RHTML",
+								"SCSS",
+								"Python",
+								"HTML",
+								"Ruby",
+								"Python3",
+								"XML",
+								"Sass",
+								"XSLT",
+								"Django",
+								"HTML5",
+								"Perl",
+								"CSS",
+								"Twig",
+								"Less",
+								"Smarty",
+								"Node.js",
+								"Tcl",
+								"TemplateToolkit",
+								"PHP"
+							],
+							"codeintel_live": true,
+							"codeintel_live_enabled_languages":
+							[
+								"JavaScript",
+								"Mason",
+								"XBL",
+								"XUL",
+								"RHTML",
+								"SCSS",
+								"Python",
+								"HTML",
+								"Ruby",
+								"Python3",
+								"XML",
+								"Sass",
+								"XSLT",
+								"Django",
+								"HTML5",
+								"Perl",
+								"CSS",
+								"Twig",
+								"Less",
+								"Smarty",
+								"Node.js",
+								"Tcl",
+								"TemplateToolkit",
+								"PHP"
+							],
+							"codeintel_max_recursive_dir_depth": 10.0,
+							"codeintel_scan_exclude_dir":
+							{
+								"JavaScript":
+								[
+									"/build/",
+									"/min/"
+								]
+							},
+							"codeintel_scan_files_in_project": true,
+							"codeintel_selected_catalogs":
+							[
+								"PyWin32",
+								"jQuery",
+								"Rails"
+							],
+							"codeintel_snippets": true,
+							"codeintel_syntax_map":
+							{
+								"Python Django": "Python"
+							},
+							"codeintel_tooltips": "popup",
+							"csslint_options":
+							{
+								"adjoining-classes": "warning",
+								"box-model": true,
+								"box-sizing": "warning",
+								"compatible-vendor-prefixes": "warning",
+								"display-property-grouping": true,
+								"duplicate-background-images": "warning",
+								"duplicate-properties": true,
+								"empty-rules": true,
+								"errors": true,
+								"fallback-colors": "warning",
+								"floats": "warning",
+								"font-faces": "warning",
+								"font-sizes": "warning",
+								"gradients": "warning",
+								"ids": "warning",
+								"import": "warning",
+								"important": "warning",
+								"known-properties": true,
+								"outline-none": "warning",
+								"overqualified-elements": "warning",
+								"qualified-headings": "warning",
+								"regex-selectors": "warning",
+								"rules-count": "warning",
+								"shorthand": "warning",
+								"star-property-hack": "warning",
+								"text-indent": "warning",
+								"underscore-property-hack": "warning",
+								"unique-headings": "warning",
+								"universal-selector": "warning",
+								"vendor-prefix": true,
+								"zero-units": "warning"
+							},
+							"gjslint_ignore":
+							[
+								110.0
+							],
+							"gjslint_options":
+							[
+							],
+							"javascript_linter": "jshint",
+							"jshint_options":
+							{
+								"browser": true,
+								"evil": true,
+								"regexdash": true,
+								"sub": true,
+								"trailing": true,
+								"wsh": true
+							},
+							"pep8": true,
+							"pep8_ignore":
+							[
+								"E501"
+							],
+							"perl_linter": "perlcritic",
+							"pyflakes_ignore":
+							[
+							],
+							"pyflakes_ignore_import_*": true,
+							"sublime_auto_complete": true,
+							"sublimelinter": true,
+							"sublimelinter_delay": 2.0,
+							"sublimelinter_disable":
+							[
+								"JavaScript"
+							],
+							"sublimelinter_executable_map":
+							{
+								"ruby": "rvm-auto-ruby"
+							},
+							"sublimelinter_fill_outlines": false,
+							"sublimelinter_gutter_marks": true,
+							"sublimelinter_gutter_marks_theme": "simple",
+							"sublimelinter_mark_style": "fill",
+							"sublimelinter_notes": false,
+							"sublimelinter_objj_check_ascii": false,
+							"sublimelinter_popup_errors_on_save": false,
+							"sublimelinter_syntax_map":
+							{
+								"C++": "c",
+								"Python Django": "python",
+								"Ruby on Rails": "ruby"
+							},
+							"sublimelinter_wrap_find": true,
+							"syntax": "Packages/YAML/YAML.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 1,
+					"file": "ubuntu_vm.yml",
+					"settings":
+					{
+						"buffer_size": 5739,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								462,
+								462
+							]
+						],
+						"settings":
+						{
+							"BracketHighlighterBusy": false,
+							"annotations":
+							[
+								"TODO",
+								"README",
+								"FIXME"
+							],
+							"bh_regions":
+							[
+								"bh_regex",
+								"bh_regex_center",
+								"bh_regex_open",
+								"bh_regex_close",
+								"bh_double_quote",
+								"bh_double_quote_center",
+								"bh_double_quote_open",
+								"bh_double_quote_close",
+								"bh_square",
+								"bh_square_center",
+								"bh_square_open",
+								"bh_square_close",
+								"bh_angle",
+								"bh_angle_center",
+								"bh_angle_open",
+								"bh_angle_close",
+								"bh_curly",
+								"bh_curly_center",
+								"bh_curly_open",
+								"bh_curly_close",
+								"bh_default",
+								"bh_default_center",
+								"bh_default_open",
+								"bh_default_close",
+								"bh_unmatched",
+								"bh_unmatched_center",
+								"bh_unmatched_open",
+								"bh_unmatched_close",
+								"bh_round",
+								"bh_round_center",
+								"bh_round_open",
+								"bh_round_close",
+								"bh_tag",
+								"bh_tag_center",
+								"bh_tag_open",
+								"bh_tag_close",
+								"bh_single_quote",
+								"bh_single_quote_center",
+								"bh_single_quote_open",
+								"bh_single_quote_close"
+							],
+							"codeintel": true,
+							"codeintel_config":
+							{
+								"JavaScript":
+								{
+									"codeintel_max_recursive_dir_depth": 2.0,
+									"codeintel_scan_files_in_project": false,
+									"javascriptExtraPaths":
+									[
+									]
+								},
+								"PHP":
+								{
+									"codeintel_max_recursive_dir_depth": 5.0,
+									"codeintel_scan_files_in_project": false,
+									"phpExtraPaths":
+									[
+									]
+								},
+								"Python":
+								{
+									"env":
+									{
+									}
+								}
+							},
+							"codeintel_enabled_languages":
+							[
+								"JavaScript",
+								"Mason",
+								"XBL",
+								"XUL",
+								"RHTML",
+								"SCSS",
+								"Python",
+								"HTML",
+								"Ruby",
+								"Python3",
+								"XML",
+								"Sass",
+								"XSLT",
+								"Django",
+								"HTML5",
+								"Perl",
+								"CSS",
+								"Twig",
+								"Less",
+								"Smarty",
+								"Node.js",
+								"Tcl",
+								"TemplateToolkit",
+								"PHP"
+							],
+							"codeintel_live": true,
+							"codeintel_live_enabled_languages":
+							[
+								"JavaScript",
+								"Mason",
+								"XBL",
+								"XUL",
+								"RHTML",
+								"SCSS",
+								"Python",
+								"HTML",
+								"Ruby",
+								"Python3",
+								"XML",
+								"Sass",
+								"XSLT",
+								"Django",
+								"HTML5",
+								"Perl",
+								"CSS",
+								"Twig",
+								"Less",
+								"Smarty",
+								"Node.js",
+								"Tcl",
+								"TemplateToolkit",
+								"PHP"
+							],
+							"codeintel_max_recursive_dir_depth": 10.0,
+							"codeintel_scan_exclude_dir":
+							{
+								"JavaScript":
+								[
+									"/build/",
+									"/min/"
+								]
+							},
+							"codeintel_scan_files_in_project": true,
+							"codeintel_selected_catalogs":
+							[
+								"PyWin32",
+								"jQuery",
+								"Rails"
+							],
+							"codeintel_snippets": true,
+							"codeintel_syntax_map":
+							{
+								"Python Django": "Python"
+							},
+							"codeintel_tooltips": "popup",
+							"csslint_options":
+							{
+								"adjoining-classes": "warning",
+								"box-model": true,
+								"box-sizing": "warning",
+								"compatible-vendor-prefixes": "warning",
+								"display-property-grouping": true,
+								"duplicate-background-images": "warning",
+								"duplicate-properties": true,
+								"empty-rules": true,
+								"errors": true,
+								"fallback-colors": "warning",
+								"floats": "warning",
+								"font-faces": "warning",
+								"font-sizes": "warning",
+								"gradients": "warning",
+								"ids": "warning",
+								"import": "warning",
+								"important": "warning",
+								"known-properties": true,
+								"outline-none": "warning",
+								"overqualified-elements": "warning",
+								"qualified-headings": "warning",
+								"regex-selectors": "warning",
+								"rules-count": "warning",
+								"shorthand": "warning",
+								"star-property-hack": "warning",
+								"text-indent": "warning",
+								"underscore-property-hack": "warning",
+								"unique-headings": "warning",
+								"universal-selector": "warning",
+								"vendor-prefix": true,
+								"zero-units": "warning"
+							},
+							"gjslint_ignore":
+							[
+								110.0
+							],
+							"gjslint_options":
+							[
+							],
+							"javascript_linter": "jshint",
+							"jshint_options":
+							{
+								"browser": true,
+								"evil": true,
+								"regexdash": true,
+								"sub": true,
+								"trailing": true,
+								"wsh": true
+							},
+							"pep8": true,
+							"pep8_ignore":
+							[
+								"E501"
+							],
+							"perl_linter": "perlcritic",
+							"pyflakes_ignore":
+							[
+							],
+							"pyflakes_ignore_import_*": true,
+							"sublime_auto_complete": true,
+							"sublimelinter": true,
+							"sublimelinter_delay": 2.0,
+							"sublimelinter_disable":
+							[
+								"JavaScript"
+							],
+							"sublimelinter_executable_map":
+							{
+								"ruby": "rvm-auto-ruby"
+							},
+							"sublimelinter_fill_outlines": false,
+							"sublimelinter_gutter_marks": true,
+							"sublimelinter_gutter_marks_theme": "simple",
+							"sublimelinter_mark_style": "fill",
+							"sublimelinter_notes": false,
+							"sublimelinter_objj_check_ascii": false,
+							"sublimelinter_popup_errors_on_save": false,
+							"sublimelinter_syntax_map":
+							{
+								"C++": "c",
+								"Python Django": "python",
+								"Ruby on Rails": "ruby"
+							},
+							"sublimelinter_wrap_find": true,
+							"syntax": "Packages/YAML/YAML.tmLanguage",
+							"tab_size": 2,
+							"translate_tabs_to_spaces": true
+						},
+						"translation.x": 0.0,
+						"translation.y": 1341.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 2,
+					"file": "config/sasl_passwd.j2",
+					"settings":
+					{
+						"buffer_size": 74,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								50,
+								50
+							]
+						],
+						"settings":
+						{
+							"BracketHighlighterBusy": false,
+							"annotations":
+							[
+								"TODO",
+								"README",
+								"FIXME"
+							],
+							"bh_regions":
+							[
+								"bh_regex",
+								"bh_regex_center",
+								"bh_regex_open",
+								"bh_regex_close",
+								"bh_double_quote",
+								"bh_double_quote_center",
+								"bh_double_quote_open",
+								"bh_double_quote_close",
+								"bh_square",
+								"bh_square_center",
+								"bh_square_open",
+								"bh_square_close",
+								"bh_angle",
+								"bh_angle_center",
+								"bh_angle_open",
+								"bh_angle_close",
+								"bh_curly",
+								"bh_curly_center",
+								"bh_curly_open",
+								"bh_curly_close",
+								"bh_default",
+								"bh_default_center",
+								"bh_default_open",
+								"bh_default_close",
+								"bh_unmatched",
+								"bh_unmatched_center",
+								"bh_unmatched_open",
+								"bh_unmatched_close",
+								"bh_round",
+								"bh_round_center",
+								"bh_round_open",
+								"bh_round_close",
+								"bh_tag",
+								"bh_tag_center",
+								"bh_tag_open",
+								"bh_tag_close",
+								"bh_single_quote",
+								"bh_single_quote_center",
+								"bh_single_quote_open",
+								"bh_single_quote_close"
+							],
+							"codeintel": true,
+							"codeintel_config":
+							{
+								"JavaScript":
+								{
+									"codeintel_max_recursive_dir_depth": 2.0,
+									"codeintel_scan_files_in_project": false,
+									"javascriptExtraPaths":
+									[
+									]
+								},
+								"PHP":
+								{
+									"codeintel_max_recursive_dir_depth": 5.0,
+									"codeintel_scan_files_in_project": false,
+									"phpExtraPaths":
+									[
+									]
+								},
+								"Python":
+								{
+									"env":
+									{
+									}
+								}
+							},
+							"codeintel_enabled_languages":
+							[
+								"JavaScript",
+								"Mason",
+								"XBL",
+								"XUL",
+								"RHTML",
+								"SCSS",
+								"Python",
+								"HTML",
+								"Ruby",
+								"Python3",
+								"XML",
+								"Sass",
+								"XSLT",
+								"Django",
+								"HTML5",
+								"Perl",
+								"CSS",
+								"Twig",
+								"Less",
+								"Smarty",
+								"Node.js",
+								"Tcl",
+								"TemplateToolkit",
+								"PHP"
+							],
+							"codeintel_live": true,
+							"codeintel_live_enabled_languages":
+							[
+								"JavaScript",
+								"Mason",
+								"XBL",
+								"XUL",
+								"RHTML",
+								"SCSS",
+								"Python",
+								"HTML",
+								"Ruby",
+								"Python3",
+								"XML",
+								"Sass",
+								"XSLT",
+								"Django",
+								"HTML5",
+								"Perl",
+								"CSS",
+								"Twig",
+								"Less",
+								"Smarty",
+								"Node.js",
+								"Tcl",
+								"TemplateToolkit",
+								"PHP"
+							],
+							"codeintel_max_recursive_dir_depth": 10.0,
+							"codeintel_scan_exclude_dir":
+							{
+								"JavaScript":
+								[
+									"/build/",
+									"/min/"
+								]
+							},
+							"codeintel_scan_files_in_project": true,
+							"codeintel_selected_catalogs":
+							[
+								"PyWin32",
+								"jQuery",
+								"Rails"
+							],
+							"codeintel_snippets": true,
+							"codeintel_syntax_map":
+							{
+								"Python Django": "Python"
+							},
+							"codeintel_tooltips": "popup",
+							"csslint_options":
+							{
+								"adjoining-classes": "warning",
+								"box-model": true,
+								"box-sizing": "warning",
+								"compatible-vendor-prefixes": "warning",
+								"display-property-grouping": true,
+								"duplicate-background-images": "warning",
+								"duplicate-properties": true,
+								"empty-rules": true,
+								"errors": true,
+								"fallback-colors": "warning",
+								"floats": "warning",
+								"font-faces": "warning",
+								"font-sizes": "warning",
+								"gradients": "warning",
+								"ids": "warning",
+								"import": "warning",
+								"important": "warning",
+								"known-properties": true,
+								"outline-none": "warning",
+								"overqualified-elements": "warning",
+								"qualified-headings": "warning",
+								"regex-selectors": "warning",
+								"rules-count": "warning",
+								"shorthand": "warning",
+								"star-property-hack": "warning",
+								"text-indent": "warning",
+								"underscore-property-hack": "warning",
+								"unique-headings": "warning",
+								"universal-selector": "warning",
+								"vendor-prefix": true,
+								"zero-units": "warning"
+							},
+							"gjslint_ignore":
+							[
+								110.0
+							],
+							"gjslint_options":
+							[
+							],
+							"javascript_linter": "jshint",
+							"jshint_options":
+							{
+								"browser": true,
+								"evil": true,
+								"regexdash": true,
+								"sub": true,
+								"trailing": true,
+								"wsh": true
+							},
+							"pep8": true,
+							"pep8_ignore":
+							[
+								"E501"
+							],
+							"perl_linter": "perlcritic",
+							"pyflakes_ignore":
+							[
+							],
+							"pyflakes_ignore_import_*": true,
+							"sublime_auto_complete": true,
+							"sublimelinter": true,
+							"sublimelinter_delay": 2.0,
+							"sublimelinter_disable":
+							[
+								"JavaScript"
+							],
+							"sublimelinter_executable_map":
+							{
+								"ruby": "rvm-auto-ruby"
+							},
+							"sublimelinter_fill_outlines": false,
+							"sublimelinter_gutter_marks": true,
+							"sublimelinter_gutter_marks_theme": "simple",
+							"sublimelinter_mark_style": "fill",
+							"sublimelinter_notes": false,
+							"sublimelinter_objj_check_ascii": false,
+							"sublimelinter_popup_errors_on_save": false,
+							"sublimelinter_syntax_map":
+							{
+								"C++": "c",
+								"Python Django": "python",
+								"Ruby on Rails": "ruby"
+							},
+							"sublimelinter_wrap_find": true,
+							"syntax": "Packages/Text/Plain text.tmLanguage"
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 3,
+					"file": "config/postfix_selections",
+					"settings":
+					{
+						"buffer_size": 82,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								33,
+								33
+							]
+						],
+						"settings":
+						{
+							"BracketHighlighterBusy": false,
+							"annotations":
+							[
+								"TODO",
+								"README",
+								"FIXME"
+							],
+							"bh_regions":
+							[
+								"bh_regex",
+								"bh_regex_center",
+								"bh_regex_open",
+								"bh_regex_close",
+								"bh_double_quote",
+								"bh_double_quote_center",
+								"bh_double_quote_open",
+								"bh_double_quote_close",
+								"bh_square",
+								"bh_square_center",
+								"bh_square_open",
+								"bh_square_close",
+								"bh_angle",
+								"bh_angle_center",
+								"bh_angle_open",
+								"bh_angle_close",
+								"bh_curly",
+								"bh_curly_center",
+								"bh_curly_open",
+								"bh_curly_close",
+								"bh_default",
+								"bh_default_center",
+								"bh_default_open",
+								"bh_default_close",
+								"bh_unmatched",
+								"bh_unmatched_center",
+								"bh_unmatched_open",
+								"bh_unmatched_close",
+								"bh_round",
+								"bh_round_center",
+								"bh_round_open",
+								"bh_round_close",
+								"bh_tag",
+								"bh_tag_center",
+								"bh_tag_open",
+								"bh_tag_close",
+								"bh_single_quote",
+								"bh_single_quote_center",
+								"bh_single_quote_open",
+								"bh_single_quote_close"
+							],
+							"codeintel": true,
+							"codeintel_config":
+							{
+								"JavaScript":
+								{
+									"codeintel_max_recursive_dir_depth": 2.0,
+									"codeintel_scan_files_in_project": false,
+									"javascriptExtraPaths":
+									[
+									]
+								},
+								"PHP":
+								{
+									"codeintel_max_recursive_dir_depth": 5.0,
+									"codeintel_scan_files_in_project": false,
+									"phpExtraPaths":
+									[
+									]
+								},
+								"Python":
+								{
+									"env":
+									{
+									}
+								}
+							},
+							"codeintel_enabled_languages":
+							[
+								"JavaScript",
+								"Mason",
+								"XBL",
+								"XUL",
+								"RHTML",
+								"SCSS",
+								"Python",
+								"HTML",
+								"Ruby",
+								"Python3",
+								"XML",
+								"Sass",
+								"XSLT",
+								"Django",
+								"HTML5",
+								"Perl",
+								"CSS",
+								"Twig",
+								"Less",
+								"Smarty",
+								"Node.js",
+								"Tcl",
+								"TemplateToolkit",
+								"PHP"
+							],
+							"codeintel_live": true,
+							"codeintel_live_enabled_languages":
+							[
+								"JavaScript",
+								"Mason",
+								"XBL",
+								"XUL",
+								"RHTML",
+								"SCSS",
+								"Python",
+								"HTML",
+								"Ruby",
+								"Python3",
+								"XML",
+								"Sass",
+								"XSLT",
+								"Django",
+								"HTML5",
+								"Perl",
+								"CSS",
+								"Twig",
+								"Less",
+								"Smarty",
+								"Node.js",
+								"Tcl",
+								"TemplateToolkit",
+								"PHP"
+							],
+							"codeintel_max_recursive_dir_depth": 10.0,
+							"codeintel_scan_exclude_dir":
+							{
+								"JavaScript":
+								[
+									"/build/",
+									"/min/"
+								]
+							},
+							"codeintel_scan_files_in_project": true,
+							"codeintel_selected_catalogs":
+							[
+								"PyWin32",
+								"jQuery",
+								"Rails"
+							],
+							"codeintel_snippets": true,
+							"codeintel_syntax_map":
+							{
+								"Python Django": "Python"
+							},
+							"codeintel_tooltips": "popup",
+							"csslint_options":
+							{
+								"adjoining-classes": "warning",
+								"box-model": true,
+								"box-sizing": "warning",
+								"compatible-vendor-prefixes": "warning",
+								"display-property-grouping": true,
+								"duplicate-background-images": "warning",
+								"duplicate-properties": true,
+								"empty-rules": true,
+								"errors": true,
+								"fallback-colors": "warning",
+								"floats": "warning",
+								"font-faces": "warning",
+								"font-sizes": "warning",
+								"gradients": "warning",
+								"ids": "warning",
+								"import": "warning",
+								"important": "warning",
+								"known-properties": true,
+								"outline-none": "warning",
+								"overqualified-elements": "warning",
+								"qualified-headings": "warning",
+								"regex-selectors": "warning",
+								"rules-count": "warning",
+								"shorthand": "warning",
+								"star-property-hack": "warning",
+								"text-indent": "warning",
+								"underscore-property-hack": "warning",
+								"unique-headings": "warning",
+								"universal-selector": "warning",
+								"vendor-prefix": true,
+								"zero-units": "warning"
+							},
+							"gjslint_ignore":
+							[
+								110.0
+							],
+							"gjslint_options":
+							[
+							],
+							"javascript_linter": "jshint",
+							"jshint_options":
+							{
+								"browser": true,
+								"evil": true,
+								"regexdash": true,
+								"sub": true,
+								"trailing": true,
+								"wsh": true
+							},
+							"pep8": true,
+							"pep8_ignore":
+							[
+								"E501"
+							],
+							"perl_linter": "perlcritic",
+							"pyflakes_ignore":
+							[
+							],
+							"pyflakes_ignore_import_*": true,
+							"sublime_auto_complete": true,
+							"sublimelinter": true,
+							"sublimelinter_delay": 2.0,
+							"sublimelinter_disable":
+							[
+								"JavaScript"
+							],
+							"sublimelinter_executable_map":
+							{
+								"ruby": "rvm-auto-ruby"
+							},
+							"sublimelinter_fill_outlines": false,
+							"sublimelinter_gutter_marks": true,
+							"sublimelinter_gutter_marks_theme": "simple",
+							"sublimelinter_mark_style": "fill",
+							"sublimelinter_notes": false,
+							"sublimelinter_objj_check_ascii": false,
+							"sublimelinter_popup_errors_on_save": false,
+							"sublimelinter_syntax_map":
+							{
+								"C++": "c",
+								"Python Django": "python",
+								"Ruby on Rails": "ruby"
+							},
+							"sublimelinter_wrap_find": true,
+							"syntax": "Packages/Text/Plain text.tmLanguage"
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				},
+				{
+					"buffer": 4,
+					"file": "hosts.ini",
+					"settings":
+					{
+						"buffer_size": 38,
+						"regions":
+						{
+						},
+						"selection":
+						[
+							[
+								38,
+								38
+							]
+						],
+						"settings":
+						{
+							"BracketHighlighterBusy": false,
+							"annotations":
+							[
+								"TODO",
+								"README",
+								"FIXME"
+							],
+							"bh_regions":
+							[
+								"bh_regex",
+								"bh_regex_center",
+								"bh_regex_open",
+								"bh_regex_close",
+								"bh_double_quote",
+								"bh_double_quote_center",
+								"bh_double_quote_open",
+								"bh_double_quote_close",
+								"bh_square",
+								"bh_square_center",
+								"bh_square_open",
+								"bh_square_close",
+								"bh_angle",
+								"bh_angle_center",
+								"bh_angle_open",
+								"bh_angle_close",
+								"bh_curly",
+								"bh_curly_center",
+								"bh_curly_open",
+								"bh_curly_close",
+								"bh_default",
+								"bh_default_center",
+								"bh_default_open",
+								"bh_default_close",
+								"bh_unmatched",
+								"bh_unmatched_center",
+								"bh_unmatched_open",
+								"bh_unmatched_close",
+								"bh_round",
+								"bh_round_center",
+								"bh_round_open",
+								"bh_round_close",
+								"bh_tag",
+								"bh_tag_center",
+								"bh_tag_open",
+								"bh_tag_close",
+								"bh_single_quote",
+								"bh_single_quote_center",
+								"bh_single_quote_open",
+								"bh_single_quote_close"
+							],
+							"codeintel": true,
+							"codeintel_config":
+							{
+								"JavaScript":
+								{
+									"codeintel_max_recursive_dir_depth": 2.0,
+									"codeintel_scan_files_in_project": false,
+									"javascriptExtraPaths":
+									[
+									]
+								},
+								"PHP":
+								{
+									"codeintel_max_recursive_dir_depth": 5.0,
+									"codeintel_scan_files_in_project": false,
+									"phpExtraPaths":
+									[
+									]
+								},
+								"Python":
+								{
+									"env":
+									{
+									}
+								}
+							},
+							"codeintel_enabled_languages":
+							[
+								"JavaScript",
+								"Mason",
+								"XBL",
+								"XUL",
+								"RHTML",
+								"SCSS",
+								"Python",
+								"HTML",
+								"Ruby",
+								"Python3",
+								"XML",
+								"Sass",
+								"XSLT",
+								"Django",
+								"HTML5",
+								"Perl",
+								"CSS",
+								"Twig",
+								"Less",
+								"Smarty",
+								"Node.js",
+								"Tcl",
+								"TemplateToolkit",
+								"PHP"
+							],
+							"codeintel_live": true,
+							"codeintel_live_enabled_languages":
+							[
+								"JavaScript",
+								"Mason",
+								"XBL",
+								"XUL",
+								"RHTML",
+								"SCSS",
+								"Python",
+								"HTML",
+								"Ruby",
+								"Python3",
+								"XML",
+								"Sass",
+								"XSLT",
+								"Django",
+								"HTML5",
+								"Perl",
+								"CSS",
+								"Twig",
+								"Less",
+								"Smarty",
+								"Node.js",
+								"Tcl",
+								"TemplateToolkit",
+								"PHP"
+							],
+							"codeintel_max_recursive_dir_depth": 10.0,
+							"codeintel_scan_exclude_dir":
+							{
+								"JavaScript":
+								[
+									"/build/",
+									"/min/"
+								]
+							},
+							"codeintel_scan_files_in_project": true,
+							"codeintel_selected_catalogs":
+							[
+								"PyWin32",
+								"jQuery",
+								"Rails"
+							],
+							"codeintel_snippets": true,
+							"codeintel_syntax_map":
+							{
+								"Python Django": "Python"
+							},
+							"codeintel_tooltips": "popup",
+							"csslint_options":
+							{
+								"adjoining-classes": "warning",
+								"box-model": true,
+								"box-sizing": "warning",
+								"compatible-vendor-prefixes": "warning",
+								"display-property-grouping": true,
+								"duplicate-background-images": "warning",
+								"duplicate-properties": true,
+								"empty-rules": true,
+								"errors": true,
+								"fallback-colors": "warning",
+								"floats": "warning",
+								"font-faces": "warning",
+								"font-sizes": "warning",
+								"gradients": "warning",
+								"ids": "warning",
+								"import": "warning",
+								"important": "warning",
+								"known-properties": true,
+								"outline-none": "warning",
+								"overqualified-elements": "warning",
+								"qualified-headings": "warning",
+								"regex-selectors": "warning",
+								"rules-count": "warning",
+								"shorthand": "warning",
+								"star-property-hack": "warning",
+								"text-indent": "warning",
+								"underscore-property-hack": "warning",
+								"unique-headings": "warning",
+								"universal-selector": "warning",
+								"vendor-prefix": true,
+								"zero-units": "warning"
+							},
+							"gjslint_ignore":
+							[
+								110.0
+							],
+							"gjslint_options":
+							[
+							],
+							"javascript_linter": "jshint",
+							"jshint_options":
+							{
+								"browser": true,
+								"evil": true,
+								"regexdash": true,
+								"sub": true,
+								"trailing": true,
+								"wsh": true
+							},
+							"pep8": true,
+							"pep8_ignore":
+							[
+								"E501"
+							],
+							"perl_linter": "perlcritic",
+							"pyflakes_ignore":
+							[
+							],
+							"pyflakes_ignore_import_*": true,
+							"sublime_auto_complete": true,
+							"sublimelinter": true,
+							"sublimelinter_delay": 2.0,
+							"sublimelinter_disable":
+							[
+								"JavaScript"
+							],
+							"sublimelinter_executable_map":
+							{
+								"ruby": "rvm-auto-ruby"
+							},
+							"sublimelinter_fill_outlines": false,
+							"sublimelinter_gutter_marks": true,
+							"sublimelinter_gutter_marks_theme": "simple",
+							"sublimelinter_mark_style": "fill",
+							"sublimelinter_notes": false,
+							"sublimelinter_objj_check_ascii": false,
+							"sublimelinter_popup_errors_on_save": false,
+							"sublimelinter_syntax_map":
+							{
+								"C++": "c",
+								"Python Django": "python",
+								"Ruby on Rails": "ruby"
+							},
+							"sublimelinter_wrap_find": true,
+							"syntax": "Packages/Text/Plain text.tmLanguage"
+						},
+						"translation.x": 0.0,
+						"translation.y": 0.0,
+						"zoom_level": 1.0
+					},
+					"type": "text"
+				}
+			]
+		}
+	],
+	"incremental_find":
+	{
+		"height": 0.0
+	},
+	"input":
+	{
+		"height": 33.0
+	},
+	"layout":
+	{
+		"cells":
+		[
+			[
+				0,
+				0,
+				1,
+				1
+			]
+		],
+		"cols":
+		[
+			0.0,
+			1.0
+		],
+		"rows":
+		[
+			0.0,
+			1.0
+		]
+	},
+	"menu_visible": true,
+	"output.exec":
+	{
+		"height": 90.0
+	},
+	"replace":
+	{
+		"height": 95.0
+	},
+	"save_all_on_build": true,
+	"select_file":
+	{
+		"height": 0.0,
+		"selected_items":
+		[
+			[
+				"http_",
+				"bim/backend/app/lib/http_cache.rb"
+			],
+			[
+				"external",
+				"purchease/engines/backoffice/app/views/admin/pending_receipts/external_show.html.haml"
+			],
+			[
+				"loyalty",
+				"purchease/app/models/loyalty_program.rb"
+			],
+			[
+				"coupo",
+				"purchease/app/models/coupon.rb"
+			],
+			[
+				"coupon_usa",
+				"purchease/app/models/coupon_usage.rb"
+			],
+			[
+				"redeemed",
+				"purchease/app/models/redeemed_loyalty_point.rb"
+			],
+			[
+				"loyalty_reward",
+				"purchease/app/models/loyalty_reward_usage.rb"
+			],
+			[
+				"subsc",
+				"purchease/lib/metrics/subscription_description.rb"
+			],
+			[
+				"digest",
+				"purchease/lib/metrics/client_digest.rb"
+			],
+			[
+				"compta",
+				"purchease/app/asynctasks/compta_daily.rb"
+			],
+			[
+				"user",
+				"purchease/app/models/user.rb"
+			],
+			[
+				"purchease_acc",
+				"purchease/lib/purchease_accounts.rb"
+			],
+			[
+				"client",
+				"purchease/app/models/client.rb"
+			],
+			[
+				"receipts.rb",
+				"purchease/engines/backoffice/admin/receipts.rb"
+			],
+			[
+				"scans.rb",
+				"purchease/engines/backoffice/admin/scans.rb"
+			],
+			[
+				"receipt.rb",
+				"purchease/app/models/receipt.rb"
+			],
+			[
+				"external_du",
+				"purchease/engines/backoffice/app/views/admin/pending_receipts/external_dupes.html.haml"
+			],
+			[
+				"pendingreceipt",
+				"purchease/engines/backoffice/app/views/admin/pending_receipts/external_show.html.haml"
+			],
+			[
+				"admi",
+				"purchease/engines/backoffice/admin/admin_users.rb"
+			],
+			[
+				"timeo",
+				"purchease/config/initializers/timeout.rb"
+			],
+			[
+				"nltk",
+				"purchease/app/asynctasks/nltk_results.rb"
+			],
+			[
+				"seman",
+				"purchease/app/workflow_agent/fidmarques_control/semantic_analysis_trigger.rb"
+			],
+			[
+				"setting",
+				"purchease/app/models/setting.rb"
+			],
+			[
+				"gather",
+				"purchease/app/asynctasks/gather_loyalty_program_metrics.rb"
+			],
+			[
+				"client_",
+				"purchease/lib/metrics/client_digest.rb"
+			],
+			[
+				"base.rb",
+				"purchease/app/models/loyalty_program_metric/base.rb"
+			],
+			[
+				"receipt_ce",
+				"purchease/app/models/bundle/receipt_checking.rb"
+			],
+			[
+				"receipt_check",
+				"purchease/app/models/receipt_checking.rb"
+			],
+			[
+				"turkee_worker",
+				"purchease/app/models/turkee_worker.rb"
+			],
+			[
+				"product_denomination_enb",
+				"purchease/app/models/products_denominations_event.rb"
+			],
+			[
+				"settings",
+				"purchease/db/seeds/settings.yml"
+			],
+			[
+				"admin_",
+				"purchease/engines/backoffice/admin/admin_users.rb"
+			],
+			[
+				"admin",
+				"purchease/db/seeds/admin_users.rb"
+			],
+			[
+				"admin_user",
+				"purchease/app/models/admin_user.rb"
+			],
+			[
+				"resque_",
+				"purchease/lib/purchease_workflow/resque_interface.rb"
+			],
+			[
+				"admin_u",
+				"purchease/app/models/admin_user.rb"
+			],
+			[
+				"engine",
+				"purchease/engines/backoffice/lib/backoffice/engine.rb"
+			],
+			[
+				"gene",
+				"purchease/labs/generate_costs.rb"
+			],
+			[
+				"unit",
+				"purchease/lib/fuzzy_match_helpers/unit_converter.rb"
+			],
+			[
+				"labs/clus",
+				"purchease/labs/clustering.rb"
+			],
+			[
+				"generat",
+				"purchease/labs/generate_costs.rb"
+			],
+			[
+				"",
+				"purchease/engines/backoffice/admin/turkee_bundles.rb"
+			],
+			[
+				"mechanical",
+				"purchease/app/backend/concerns/receipt/outsourcing/mechanical_turk.rb"
+			],
+			[
+				"turkee_bund",
+				"purchease/app/models/turkee_bundle.rb"
+			],
+			[
+				"turkee_bu",
+				"purchease/engines/backoffice/admin/turkee_bundles.rb"
+			],
+			[
+				"turk",
+				"purchease/app/models/turkee_bundle.rb"
+			],
+			[
+				"get_de",
+				"purchease/app/mutations/analysis/get_denomination.rb"
+			],
+			[
+				"cluster",
+				"purchease/labs/clustering.rb"
+			],
+			[
+				"grammar_ma",
+				"purchease/lib/analysis/grammar_matcher.rb"
+			],
+			[
+				"getrea",
+				"purchease/spec/mutations/analysis/get_retailer_from_address_spec.rb"
+			],
+			[
+				"get_rea",
+				"purchease/app/mutations/analysis/get_retailer_from_address.rb"
+			],
+			[
+				"property_spe",
+				"purchease/spec/models/retailer_property_spec.rb"
+			],
+			[
+				"stats.",
+				"purchease/lib/stats.rb"
+			],
+			[
+				"ultimate.r",
+				"purchease/lib/extractors/ultimate/parser.rb"
+			],
+			[
+				"picardparser",
+				"purchease/lib/extractors/picard/parser.rb"
+			],
+			[
+				"monoprixparser",
+				"purchease/lib/extractors/monoprix/parser.rb"
+			],
+			[
+				"intermarcheparser",
+				"purchease/lib/extractors/intermarche/parser.rb"
+			],
+			[
+				"carrefourparser",
+				"purchease/lib/extractors/carrefour2/parser.rb"
+			],
+			[
+				"base_parser",
+				"purchease/lib/extractors/base_parser.rb"
+			],
+			[
+				"auchanparser",
+				"purchease/lib/extractors/auchan/parser.rb"
+			],
+			[
+				"app/mutations/outsourcing/mturk_line_reading_tasks_booking.rb",
+				"purchease/app/mutations/outsourcing/mturk_line_reading_tasks_booking.rb"
+			],
+			[
+				"parser.rb",
+				"purchease/lib/extractors/ultimate/parser.rb"
+			],
+			[
+				"buck",
+				"purchease/labs/bucket_migration.rb"
+			],
+			[
+				"bay",
+				"purchease/labs/bayesian_coefficients/bayesian_coefficients.rb"
+			],
+			[
+				"bayesia",
+				"purchease/labs/bayesian_coefficients/bayesian_coefficients.rake"
+			],
+			[
+				"denomination.",
+				"purchease/app/models/denomination.rb"
+			],
+			[
+				"receipt.",
+				"purchease/app/models/receipt.rb"
+			],
+			[
+				"parslet_",
+				"purchease/spec/parslet_helper.rb"
+			],
+			[
+				"category_no",
+				"purchease/engines/backoffice/admin/category_nodes.rb"
+			],
+			[
+				"stats.rb",
+				"purchease/lib/stats.rb"
+			],
+			[
+				"newrelic",
+				"purchease/labs/newrelic.rb"
+			],
+			[
+				"clust",
+				"purchease/labs/clustering.rb"
+			],
+			[
+				"category_nodes",
+				"purchease/engines/backoffice/admin/category_nodes.rb"
+			],
+			[
+				"add_is_pu",
+				"purchease/db/migrate/20130402134324_add_is_public_to_coupons.rb"
+			],
+			[
+				"refresh_re",
+				"purchease/app/mutations/analysis/refresh_receipt.rb"
+			],
+			[
+				"extract_receip",
+				"purchease/app/mutations/analysis/extract_receipt_with_parslet.rb"
+			],
+			[
+				"overlap_",
+				"purchease/app/models/overlap_output.rb"
+			],
+			[
+				"modelsdenomination.r",
+				"purchease/app/models/denomination.rb"
+			],
+			[
+				"deploy",
+				"toolbelt/lib/purchease_toolbelt/tasks/deploy.rb"
+			],
+			[
+				"deploy.r",
+				"champollion/config/deploy.rb"
+			],
+			[
+				"nltkrb",
+				"purchease/app/asynctasks/nltk_results.rb"
+			],
+			[
+				"clock",
+				"purchease/engines/workers/lib/scheduling/clock.rb"
+			],
+			[
+				"mturklinere",
+				"purchease/app/models/mturk_line_reading_task.rb"
+			],
+			[
+				"line_reading",
+				"purchease/app/models/mturk_line_reading_task.rb"
+			],
+			[
+				"booking",
+				"purchease/app/mutations/outsourcing/mturk_line_reading_tasks_booking.rb"
+			],
+			[
+				"mturkgame",
+				"purchease/app/models/mturk_game_session.rb"
+			],
+			[
+				"mturkpool",
+				"purchease/app/asynctasks/mturk_line_reading_sessions_pool_manager.rb"
+			],
+			[
+				"mturksession",
+				"purchease/app/models/mturk_game_session.rb"
+			],
+			[
+				"scan_comp",
+				"purchease/engines/backoffice/app/assets/javascripts/backoffice/manifests/scans_components.js.coffee"
+			],
+			[
+				"review",
+				"purchease/app/asynctasks/review_instance_reading.rb"
+			],
+			[
+				"grammar",
+				"purchease/spec/lib/analysis/grammar_matcher_spec.rb"
+			],
+			[
+				"partner_set",
+				"purchease/app/models/partner_setting.rb"
+			],
+			[
+				"partner_settings",
+				"purchease/db/seeds/partner_settings.rb"
+			],
+			[
+				"parner",
+				"purchease/app/models/partner.rb"
+			],
+			[
+				"settings.",
+				"purchease/db/seeds/settings.yml"
+			],
+			[
+				"authori",
+				"purchease/app/mutations/api/users/authorize_user.rb"
+			],
+			[
+				"compta_",
+				"purchease/app/asynctasks/compta_daily.rb"
+			],
+			[
+				"libdatespec",
+				"purchease/spec/lib/date_spec.rb"
+			],
+			[
+				"loyalty_prog",
+				"purchease/app/models/loyalty_program.rb"
+			],
+			[
+				"mturk_line_readingman",
+				"purchease/app/asynctasks/mturk_line_reading_tasks_pool_manager.rb"
+			],
+			[
+				"nice_j",
+				"purchease/lib/nice_job.rb"
+			],
+			[
+				"refreshline",
+				"purchease/app/mutations/analysis/refresh_line_after_instance_reading.rb"
+			],
+			[
+				"line_instance",
+				"purchease/app/models/line_instance.rb"
+			],
+			[
+				"user.rb",
+				"purchease/app/models/user.rb"
+			],
+			[
+				"denominationprogram",
+				"purchease/engines/backoffice/admin/denomination_to_program_suggestion.rb"
+			],
+			[
+				"receipt",
+				"purchease/app/models/receipt.rb"
+			],
+			[
+				"mturkmanager",
+				"purchease/app/asynctasks/mturk_line_reading_tasks_pool_manager.rb"
+			],
+			[
+				"digestshow",
+				"purchease/engines/backoffice/app/views/admin/loyalty_program_digests/show.haml"
+			],
+			[
+				"denomination.rb",
+				"purchease/app/models/denomination.rb"
+			],
+			[
+				"denomtoprogra",
+				"purchease/engines/backoffice/admin/denomination_to_program_suggestion.rb"
+			],
+			[
+				"brand_iden",
+				"purchease/app/models/brand_identity_link.rb"
+			],
+			[
+				"brand_ide",
+				"nltk/models/brand_identity_link.py"
+			],
+			[
+				"structu",
+				"purchease/db/structure.sql"
+			],
+			[
+				"routes",
+				"purchease/engines/backoffice/config/routes.rb"
+			],
+			[
+				"purche",
+				"purchease/lib/purchease_accounts.rb"
+			],
+			[
+				"loyalty_program",
+				"purchease/app/models/loyalty_program.rb"
+			],
+			[
+				"loyalty_program.rb",
+				"purchease/app/models/loyalty_program.rb"
+			],
+			[
+				"loyalty_progr",
+				"purchease/app/models/loyalty_program.rb"
+			],
+			[
+				"client.",
+				"purchease/app/models/client.rb"
+			],
+			[
+				"loyalty_programr",
+				"purchease/app/models/loyalty_program.rb"
+			],
+			[
+				"loyalty_pro",
+				"nltk/models/loyalty_program.py"
+			],
+			[
+				"loyalty_st",
+				"purchease/app/backend/concerns/purchase/loyalty_status.rb"
+			],
+			[
+				"nltk_",
+				"purchease/app/asynctasks/nltk_results.rb"
+			],
+			[
+				"trademark_",
+				"purchease/app/models/trademark_composition.rb"
+			],
+			[
+				"denomination_to",
+				"purchease/engines/backoffice/admin/denomination_to_program_suggestion.rb"
+			],
+			[
+				"denom",
+				"purchease/app/models/denomination_to_program_suggestion.rb"
+			],
+			[
+				"sem",
+				"purchease/app/workflow_agent/fidmarques_control/semantic_analysis_trigger.rb"
+			],
+			[
+				"receipts_cont",
+				"purchease/engines/api/app/controllers/api/v2/receipts_controller.rb"
+			]
+		],
+		"width": 0.0
+	},
+	"select_project":
+	{
+		"height": 0.0,
+		"selected_items":
+		[
+		],
+		"width": 0.0
+	},
+	"show_minimap": true,
+	"show_open_files": true,
+	"show_tabs": true,
+	"side_bar_visible": true,
+	"side_bar_width": 365.0,
+	"status_bar_visible": true
+}
