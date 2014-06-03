@@ -1,5 +1,5 @@
 ---
-- hosts: all
+- hosts: hypervisors
   user: adrien
   vars:
     - vfio_devices: 0000:07:00.0 0000:07:00.1 0000:01:00.0 0000:02:00.0
@@ -195,19 +195,19 @@
     local_action: wait_for port=22 delay=20 host=10.0.0.11
     when: rebooting|changed
 
-  - name: Copy domain xmls
-    copy: src=files/{{item}} dest=/home/adrien/{{item}} owner=adrien group=adrien mode=0755
-    register: domains
-    with_items:
-      - HTPC.xml
-      - NAS.xml
+  # - name: Copy domain xmls
+  #   copy: src=files/{{item}} dest=/home/adrien/{{item}} owner=adrien group=adrien mode=0755
+  #   register: domains
+  #   with_items:
+  #     - HTPC.xml
+  #     - NAS.xml
 
-  - name: Define domains
-    command: virsh define {{item}}
-    when: domains|changed
-    with_items:
-      - HTPC.xml
-      - NAS.xml
+  # - name: Define domains
+  #   command: virsh define {{item}}
+  #   when: domains|changed
+  #   with_items:
+  #     - HTPC.xml
+  #     - NAS.xml
 
   - name: Disable apparmor for libvirt
     command: test -f {{ item }} || ln -s {{item}} /etc/apparmor.d/disable/ && apparmor_parser -R {{ item }}
@@ -319,19 +319,19 @@
 
 
 
-sudo qemu-system-x86_64 -enable-kvm -M q35 -m 1024 -cpu host \
--smp 6,sockets=1,cores=6,threads=1 \
--boot menu=on \
--serial null \
--parallel null \
--display none \
--monitor none \
--bios /usr/share/qemu/bios.bin -vga none \
--device ioh3420,bus=pcie.0,addr=1c.0,multifunction=on,port=1,chassis=1,id=root.1 \
--device vfio-pci,host=07:00.0,bus=root.1,addr=00.0,multifunction=on,x-vga=on \
--device vfio-pci,host=07:00.1,bus=root.1,addr=00.1 \
--net nic,model=virtio -net user \
--device vfio-pci,host=01:00.0,bus=pcie.0
+# sudo qemu-system-x86_64 -enable-kvm -M q35 -m 1024 -cpu host \
+# -smp 6,sockets=1,cores=6,threads=1 \
+# -boot menu=on \
+# -serial null \
+# -parallel null \
+# -display none \
+# -monitor none \
+# -bios /usr/share/qemu/bios.bin -vga none \
+# -device ioh3420,bus=pcie.0,addr=1c.0,multifunction=on,port=1,chassis=1,id=root.1 \
+# -device vfio-pci,host=07:00.0,bus=root.1,addr=00.0,multifunction=on,x-vga=on \
+# -device vfio-pci,host=07:00.1,bus=root.1,addr=00.1 \
+# -net nic,model=virtio -net user \
+# -device vfio-pci,host=01:00.0,bus=pcie.0
 
 
 
