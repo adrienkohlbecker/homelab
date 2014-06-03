@@ -4,6 +4,8 @@
   vars:
     - vfio_devices: 0000:07:00.0 0000:07:00.1 0000:01:00.0 0000:02:00.0
     - grub_cmdline: "iommu=1 intel_iommu=on nomodeset"
+    - kernel_version: 3.15-rc8
+    - kernel_version_package: 3.15.0-rc8
   tasks:
 
   - name: Set up locales
@@ -96,24 +98,24 @@
     apt: pkg=kernel-package state=installed
     sudo: true
 
-  - name: Download kernel 3.15-rc7 source
-    get_url: url=https://www.kernel.org/pub/linux/kernel/v3.x/testing/linux-3.15-rc7.tar.gz dest=/home/adrien/linux-3.15-rc7.tar.gz owner=adrien group=adrien mode=0755
+  - name: Download kernel {{kernel_version}} source
+    get_url: url=https://www.kernel.org/pub/linux/kernel/v3.x/testing/linux-{{kernel_version}}.tar.gz dest=/home/adrien/linux-{{kernel_version}}.tar.gz owner=adrien group=adrien mode=0755
     register: downloaded_kernel
 
   - name: Extract the kernel source
-    command: tar -xzf linux-3.15-rc7.tar.gz
+    command: tar -xzf linux-{{kernel_version}}.tar.gz
     when: downloaded_kernel|changed
 
   - name: Copy the current configuration
-    command: cp /boot/config-3.15.0-031500rc2-generic linux-3.15-rc7/.config
+    command: cp /boot/config-3.15.0-031500rc2-generic linux-{{kernel_version}}/.config
     when: downloaded_kernel|changed
 
   - name: Update configuration with new kernel
-    shell: yes '' | make oldconfig chdir=linux-3.15-rc7
+    shell: yes '' | make oldconfig chdir=linux-{{kernel_version}}
     when: downloaded_kernel|changed
 
   - name: Customize configuration
-    lineinfile: dest=linux-3.15-rc7/.config regexp="^(?:# )?{{ item.regexp }}(=| is not set)" line="{{ item.line }}" state=present
+    lineinfile: dest=linux-{{kernel_version}}/.config regexp="^(?:# )?{{ item.regexp }}(=| is not set)" line="{{ item.line }}" state=present
     register: kernel_config
     with_items:
       - { regexp: 'CONFIG_VIRTUALIZATION', line: 'CONFIG_VIRTUALIZATION=y'}
@@ -134,7 +136,7 @@
       - { regexp: 'CONFIG_HZ', line: 'CONFIG_HZ=1000'}
 
   - name: Update configuration with new values
-    shell: yes '' | make oldconfig chdir=linux-3.15-rc7
+    shell: yes '' | make oldconfig chdir=linux-{{kernel_version}}
     when: kernel_config|changed
 
   # See https://bugs.launchpad.net/ubuntu/+source/kernel-package/+bug/1308183
@@ -146,19 +148,19 @@
     sudo: true
 
   - name: Check if kernel is compiled
-    stat: path=/home/adrien/linux-image-3.15.0-rc7-passthrough.1_3.15.0-rc7-passthrough.1-10.00.Custom_amd64.deb
+    stat: path=/home/adrien/linux-image-{{kernel_version_package}}-passthrough.1_{{kernel_version_package}}-passthrough.1-10.00.Custom_amd64.deb
     register: should_compile
 
   - name: Compile the kernel
-    shell: CONCURRENCY_LEVEL=9 fakeroot make-kpkg --initrd --append-to-version=-passthrough.1 kernel-image kernel-headers chdir=linux-3.15-rc7
+    shell: CONCURRENCY_LEVEL=9 fakeroot make-kpkg --initrd --append-to-version=-passthrough.1 kernel-image kernel-headers chdir=linux-{{kernel_version}}
     when: kernel_config|changed or should_compile.stat.exists == False
 
   - name: Install the kernel
-    apt: deb=linux-image-3.15.0-rc7-passthrough.1_3.15.0-rc7-passthrough.1-10.00.Custom_amd64.deb
+    apt: deb=linux-image-{{kernel_version_package}}-passthrough.1_{{kernel_version_package}}-passthrough.1-10.00.Custom_amd64.deb
     sudo: true
 
   - name: Install the headers
-    apt: deb=linux-headers-3.15.0-rc7-passthrough.1_3.15.0-rc7-passthrough.1-10.00.Custom_amd64.deb
+    apt: deb=linux-headers-{{kernel_version_package}}-passthrough.1_{{kernel_version_package}}-passthrough.1-10.00.Custom_amd64.deb
     sudo: true
 
   - name: Install virt-manager and kvm
