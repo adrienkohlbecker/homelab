@@ -23,6 +23,10 @@
   lineinfile: 'dest=/etc/hosts regexp="^127.0.1.1" line="127.0.1.1  {{inventory_hostname}}"'
   sudo: true
 
-- name: Install vim
-  apt: pkg=vim state=installed
+- name: 'Install vim, ntp, ntpdate'
+  apt: pkg={{item}} state=installed
   sudo: true
+  with_items:
+    - vim
+    - ntp
+    - ntpdate
