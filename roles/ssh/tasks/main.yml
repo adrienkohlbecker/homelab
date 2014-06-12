@@ -3,16 +3,16 @@
 - name: Add admin group
   action: group name=ssh state=present
 
-- name: Add ssh users ssh groups
-  action: user name={{item}} groups=ssh append=yes
-  with_items: ssh_users
+- name: Add users to ssh groups
+  action: user name={{item.name}} groups=ssh append=yes
+  with_items: users
   sudo: true
 
 - name: Add authorized keys
-  authorized_key: user={{ item }}
-    key="{{ lookup('file', '../../../files/'+item+'_rsa.pub') }}"
+  authorized_key: user={{ item.name }}
+    key="{{ lookup('file', '../../../files/'+item.name+'_rsa.pub') }}"
     state=present
-  with_items: ssh_users
+  with_items: users
   sudo: true
 
 # - name: Disable writing to authorized keys
