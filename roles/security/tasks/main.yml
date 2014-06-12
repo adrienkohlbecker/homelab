@@ -1,0 +1,97 @@
+---
+
+- name: Install fail2ban and apparmor
+  apt: pkg={{item}} state=installed
+  sudo: true
+  with_items:
+    - fail2ban
+    - apparmor
+    - apparmor-profiles
+
+- name: Create admin group (can sudo)
+  group: name=admin state=present
+  sudo: true
+
+- name: Add users to admin group
+  action: 'user name={{item.name}} groups=admin,ssh append=yes'
+  with_items: users
+  sudo: true
+
+- name: Check if dpkg-statoverride is present
+  shell: dpkg-statoverride --list /bin/su
+  register: dpkg_statoverride
+  failed_when: False
+  changed_when: "dpkg_statoverride.rc != 0"
+
+- name: Disable su for non-admin users
+  shell: dpkg-statoverride --update --add root admin 4750 /bin/su
+  sudo: true
+  when: dpkg_statoverride|changed
+
+- name: Install unattended-upgrades
+  apt: pkg=unattended-upgrades state=present
+  sudo: true
+
+- name: Adjust APT update intervals
+  copy: src=apt_periodic dest=/etc/apt/apt.conf.d/10periodic
+  sudo: true
+
+- name: Allow SSH through ufw
+  ufw: rule=allow name=OpenSSH
+  sudo: true
+
+- name: Enable ufw
+  ufw: state=enabled policy=deny
+  sudo: true
+
+- name: Secure shared memory
+  lineinfile: 'dest=/etc/fstab line="none     /run/shm     tmpfs     defaults,ro     0     0" state=present'
+  sudo: true
+
+- name: Configure sysctl
+  sysctl: name={{item.name}} value={{item.value}} state=present reload=yes
+  sudo: true
+  with_items:
+
+    # IP Spoofing protection
+    - {name: "net.ipv4.conf.all.rp_filter", value: "1"}
+    - {name: "net.ipv4.conf.default.rp_filter", value: "1"}
+
+    # Ignore ICMP broadcast requests
+    - {name: "net.ipv4.icmp_echo_ignore_broadcasts", value: "1"}
+
+    # Disable source packet routing
+    - {name: "net.ipv4.conf.all.accept_source_route", value: "0"}
+    - {name: "net.ipv6.conf.all.accept_source_route", value: "0"}
+    - {name: "net.ipv4.conf.default.accept_source_route", value: "0"}
+    - {name: "net.ipv6.conf.default.accept_source_route", value: "0"}
+
+    # Ignore send redirects
+    - {name: "net.ipv4.conf.all.send_redirects", value: "0"}
+    - {name: "net.ipv4.conf.default.send_redirects", value: "0"}
+
+    # Block SYN attacks
+    - {name: "net.ipv4.tcp_syncookies", value: "1"}
+    - {name: "net.ipv4.tcp_max_syn_backlog", value: "2048"}
+    - {name: "net.ipv4.tcp_synack_retries", value: "2"}
+    - {name: "net.ipv4.tcp_syn_retries", value: "5"}
+
+    # Log Martians
+    - {name: "net.ipv4.conf.all.log_martians", value: "1"}
+    - {name: "net.ipv4.icmp_ignore_bogus_error_responses", value: "1"}
+
+    # Ignore ICMP redirects
+    - {name: "net.ipv4.conf.all.accept_redirects", value: "0"}
+    - {name: "net.ipv6.conf.all.accept_redirects", value: "0"}
+    - {name: "net.ipv4.conf.default.accept_redirects", value: "0"}
+    - {name: "net.ipv6.conf.default.accept_redirects", value: "0"}
+
+    # Ignore Directed pings
+    - {name: "net.ipv4.icmp_echo_ignore_all", value: "1"}
+
+- name: Prevent ip spoofing
+  lineinfile: 'dest=/etc/host.conf regexp="{{item.regexp}}" line="{{item.line}}" state=present'
+  sudo: true
+  with_items:
+    - {regexp: "^order", line: "order bind,hosts"}
+    - {regexp: "^nospoof", line: "nospoof on"}
