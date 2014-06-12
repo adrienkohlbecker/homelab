@@ -1,3 +1,9 @@
 ---
 
 ansible_user: ansibleremote
+
+users:
+  - name: deploy
+    password: "$6$mx6H3eISNT$BPCU188a3hHcihcbQgIuReH3/XcoREKyFlLRpZ8BCFgaSAeZwkECQnfzOFQqMy.Qq74CvTXusn5WHEQd0LHFG."
+  - name: adrien
+    password: "$6$G5wujQo.yz$J8Wv4iRfjlo.VKT0suwDqq.UpZRejQulWAdBYXRUWK.xh5zq75NkU0NH1IBTMmhgkhR.iRF.udaW/1oQ44MwA/"
