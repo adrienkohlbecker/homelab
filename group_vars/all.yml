@@ -2,6 +2,10 @@
 
 ansible_user: ansibleremote
 
+ssh_users:
+  - deploy
+  - adrien
+
 users:
   - name: deploy
     password: "$6$mx6H3eISNT$BPCU188a3hHcihcbQgIuReH3/XcoREKyFlLRpZ8BCFgaSAeZwkECQnfzOFQqMy.Qq74CvTXusn5WHEQd0LHFG."

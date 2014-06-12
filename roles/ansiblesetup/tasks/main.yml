@@ -1,7 +1,7 @@
 ---
 
 - name: Create user {{ ansible_user }}
-  user: name={{ ansible_user }} createhome=yes
+  user: name={{ ansible_user }} createhome=yes groups=ssh
   sudo: true
 
 - name: Add authorized_key
