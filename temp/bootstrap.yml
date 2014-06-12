@@ -4,8 +4,8 @@
   vars:
     - vfio_devices: 0000:07:00.0 0000:07:00.1 0000:01:00.0 0000:02:00.0
     - grub_cmdline: "iommu=1 intel_iommu=on nomodeset"
-    - kernel_version: 3.15-rc8
-    - kernel_version_package: 3.15.0-rc8
+    - kernel_version: '3.15'
+    - kernel_version_package: '3.15.0'
   tasks:
 
   - name: Set up locales
@@ -99,7 +99,7 @@
     sudo: true
 
   - name: Download kernel {{kernel_version}} source
-    get_url: url=https://www.kernel.org/pub/linux/kernel/v3.x/testing/linux-{{kernel_version}}.tar.gz dest=/home/adrien/linux-{{kernel_version}}.tar.gz owner=adrien group=adrien mode=0755
+    get_url: url=https://www.kernel.org/pub/linux/kernel/v3.x/linux-{{kernel_version}}.tar.gz dest=/home/adrien/linux-{{kernel_version}}.tar.gz owner=adrien group=adrien mode=0755
     register: downloaded_kernel
 
   - name: Extract the kernel source

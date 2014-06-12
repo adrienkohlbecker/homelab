@@ -1,0 +1,23 @@
+#!/bin/sh -e
+#
+# rc.local
+#
+# This script is executed at the end of each multiuser runlevel.
+# Make sure that the script will "exit 0" on success or any other
+# value on error.
+#
+# In order to enable or disable this script just change the execution
+# bits.
+#
+# By default this script does nothing.
+
+IP=$(/sbin/ifconfig | grep "inet addr" | grep -v "127.0.0.1" | awk '{ print $2 }' | awk -F: '{ print $2 }')
+if ! grep -q 'IP' "/etc/issue" ; then
+  sed -i '$ d' /etc/issue # remove empty line
+  echo "IP: $IP" >> /etc/issue
+  echo "" >> /etc/issue
+else
+  sed -i "s/^IP.*/IP: $IP/" /etc/issue
+fi
+
+exit 0
