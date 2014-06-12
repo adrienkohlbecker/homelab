@@ -8,7 +8,6 @@
   authorized_key: user={{ ansible_user }}
     key="{{ lookup('file', '../../../files/ansible_rsa.pub') }}"
     path='/home/{{ ansible_user }}/.ssh/authorized_keys'
-    manage_dir=no
   sudo: true
 
 - name: Sudo without password
