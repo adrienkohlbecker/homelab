@@ -1,0 +1,4 @@
+---
+- hosts: hypervisors
+  roles:
+    - common

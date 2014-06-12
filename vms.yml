@@ -1,0 +1,6 @@
+---
+- hosts: vms
+  roles:
+    - common
+    - users
+    - ssh
