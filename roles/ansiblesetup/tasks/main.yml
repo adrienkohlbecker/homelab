@@ -1,0 +1,20 @@
+---
+
+- name: Create user {{ ansible_user }}
+  user: name={{ ansible_user }} createhome=yes
+  sudo: true
+
+- name: Add authorized_key
+  authorized_key: user={{ ansible_user }}
+    key="{{ lookup('file', '../../../files/ansible_rsa.pub') }}"
+    path='/home/{{ ansible_user }}/.ssh/authorized_keys'
+    manage_dir=no
+  sudo: true
+
+- name: Sudo without password
+  lineinfile: "dest=/etc/sudoers
+    insertafter=EOF
+    line='{{ ansible_user }} ALL=(ALL) NOPASSWD: ALL'
+    regexp='{{ ansible_user }}'
+    state=present"
+  sudo: true
