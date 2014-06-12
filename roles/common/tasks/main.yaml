@@ -1,0 +1,24 @@
+---
+
+- name: Set up locales
+  locale_gen: name={{item}} state=present
+  sudo: true
+  with_items:
+    - fr_FR.UTF-8
+    - en_US.UTF-8
+
+- name: apt-get update
+  apt: update_cache=yes cache_valid_time=3600
+  sudo: true
+
+- name: apt-get upgrade
+  apt: upgrade=full
+  sudo: true
+
+- name: Set hostname
+  hostname: name={{inventory_hostname}}
+  sudo: true
+
+- name: Install vim
+  apt: pkg=vim state=installed
+  sudo: true
