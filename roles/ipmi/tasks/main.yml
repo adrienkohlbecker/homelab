@@ -1,0 +1,21 @@
+---
+
+- name: Install libgcrypt
+  apt: package=libgcrypt11-dev state=installed
+  sudo: true
+
+- name: Download FreeIPMI
+  get_url: url=http://ftp.gnu.org/gnu/freeipmi/freeipmi-1.4.3.tar.gz dest=/usr/src/freeipmi-1.4.3.tar.gz
+  register: downloaded_ipmi
+  sudo: true
+
+- name: Extract FreeIPMI
+  shell: tar -xzf freeipmi-1.4.3.tar.gz chdir=/usr/src
+  when: downloaded_ipmi|changed
+  sudo: true
+
+- name: Compile and install FreeIPMI
+  shell: './configure && make && make install chdir=/usr/src/freeipmi-1.4.3'
+  when: downloaded_ipmi|changed
+  sudo: true
+
