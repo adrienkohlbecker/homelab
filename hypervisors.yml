@@ -2,3 +2,9 @@
 - hosts: hypervisors
   roles:
     - common
+    - users
+    - ssh
+    - security
+    - mailer
+    - monitoring
+    - ups
