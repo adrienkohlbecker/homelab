@@ -2,10 +2,10 @@
 - hosts: hypervisors
   user: adrien
   vars:
-    - vfio_devices: 0000:07:00.0 0000:07:00.1 0000:01:00.0 0000:02:00.0
+    - vfio_devices: 0000:07:00.0 0000:07:00.1
     - grub_cmdline: "iommu=1 intel_iommu=on nomodeset"
-    - kernel_version: '3.15'
-    - kernel_version_package: '3.15.0'
+    - kernel_version: '3.15.1'
+    - kernel_version_package: '3.15.1'
   tasks:
 
   - name: Set up locales
