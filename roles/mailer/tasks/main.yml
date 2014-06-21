@@ -42,7 +42,7 @@
   when: sasl_auth|changed
 
 - name: Setup user email aliases
-  lineinfile: 'dest=/etc/aliases regexp="^{{item.key}}:" line="{{item.key}}:{{ item.value }}" state=present create=yes'
+  lineinfile: 'dest=/etc/aliases regexp="^{{item.key}}:" line="{{item.key}}:{{ item.value }}" state=present create=yes owner=root group=root mode=0644'
   with_dict: email_aliases
   sudo: true
   register: aliases
