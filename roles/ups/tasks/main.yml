@@ -1,0 +1,23 @@
+---
+
+- name: 'Install apcupsd & mailutils (for email notifications)'
+  apt: pkg={{item}} state=installed
+  sudo: true
+  with_items:
+    - apcupsd
+    - mailutils
+
+- name: Configure apcupsd
+  lineinfile: 'dest=/etc/apcupsd/apcupsd.conf regexp="^#?{{item.regexp}}" line="{{item.line}}" state=present'
+  sudo: true
+  notify: Restart apcupsd
+  with_items:
+    - {regexp: 'UPSNAME', line: 'UPSNAME smartups'}
+    - {regexp: 'UPSCABLE', line: 'UPSCABLE usb'}
+    - {regexp: 'UPSTYPE', line: 'UPSTYPE usb'}
+    - {regexp: 'DEVICE', line: '#DEVICE /dev/ttyS0'}
+
+- name: Configure apcupsd
+  lineinfile: dest=/etc/default/apcupsd regexp=^ISCONFIGURED line="ISCONFIGURED=yes"
+  sudo: true
+  notify: Restart apcupsd
