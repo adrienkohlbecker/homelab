@@ -10,3 +10,4 @@
     - ups
     - ipmi
     - virtualization
+    - pci_passthrough

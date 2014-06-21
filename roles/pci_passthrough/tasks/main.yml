@@ -1,0 +1,93 @@
+---
+
+- name: Gather PCI ID of VFIO passthrough devices
+  shell: "lspci | grep '{{ item }}' | awk '{ print $1 }' | sed 's/^/0000:/' | tr '\n' ' ' | sed 's/ $//'"
+  register: vfio_device_ids_list
+  with_items: vfio_device_names
+  changed_when: false
+
+- name: Set vfio ids fact
+  set_fact: "vfio_device_ids=\"{{ vfio_device_ids_list.results | join(' ', attribute='stdout') }}\""
+
+- name: Blacklist the driver modules
+  kernel_blacklist: name={{item}} state=present
+  sudo: true
+  with_items: driver_modules_blacklist
+
+- name: Install lsgroup binary
+  copy: src=lsgroup dest=/usr/bin/lsgroup owner=root group=root mode=0755
+  sudo: true
+
+- name: Install vfio-bind binary
+  copy: src=vfio-bind dest=/usr/bin/vfio-bind owner=root group=root mode=0755
+  sudo: true
+
+- name: Install vfio-bind service
+  copy: src=vfio-bind.conf dest=/etc/init/vfio-bind.conf owner=root group=root mode=0644
+  sudo: true
+
+- name: Install vfio-bind configuration
+  template: src=vfio-bind.j2 dest=/etc/vfio-bind.cfg owner=root group=root mode=0644
+  sudo: true
+
+- name: Install kernel-package
+  apt: pkg=kernel-package state=installed
+  sudo: true
+
+- name: Download kernel {{kernel_version}} source
+  get_url: url=https://www.kernel.org/pub/linux/kernel/v3.x/linux-{{kernel_version}}.tar.gz dest=/usr/src/linux-{{kernel_version}}.tar.gz
+  register: downloaded_kernel
+  sudo: true
+
+- name: Create /usr/src/{{ kernel_src_directory }} directory
+  file: dest=/usr/src/{{ kernel_src_directory }} state=directory owner=root group=root mode=755
+  sudo: true
+
+- name: Extract the kernel source
+  shell: tar -xzf linux-{{kernel_version}}.tar.gz --strip-components=1 --directory /usr/src/{{ kernel_src_directory }} chdir=/usr/src
+  when: downloaded_kernel|changed
+  sudo: true
+
+- name: Copy the configuration of 3.15.0-rc2 packaged for trusty as base
+  copy: src=config-3.15.0-031500rc2-generic dest=/usr/src/{{ kernel_src_directory }}/.config
+  when: downloaded_kernel|changed
+  sudo: true
+
+- name: Update configuration with new kernel
+  shell: yes '' | make oldconfig chdir=/usr/src/{{ kernel_src_directory }}
+  when: downloaded_kernel|changed
+  sudo: true
+
+- name: Customize configuration
+  lineinfile: 'dest=/usr/src/{{ kernel_src_directory }}/.config regexp="^(?:# )?{{ item.regexp }}(=| is not set)" line="{{ item.line }}" state=present'
+  register: kernel_config_customization
+  with_items: kernel_config
+  sudo: true
+
+- name: Update configuration with new values
+  shell: yes '' | make oldconfig chdir=/usr/src/{{ kernel_src_directory }}
+  when: kernel_config_customization|changed
+  sudo: true
+
+- name: Check if kernel is compiled
+  stat: path=/usr/src/{{ kernel_image_deb }}
+  register: should_compile
+
+- name: Compile the kernel
+  shell: CONCURRENCY_LEVEL={{ ansible_processor_vcpus + 1 }} make-kpkg --initrd --append-to-version=-{{ kernel_append_to_version }} kernel-image kernel-headers chdir=/usr/src/{{ kernel_src_directory }}
+  when: kernel_config_customization|changed or should_compile.stat.exists == False
+  sudo: true
+
+- name: Install the kernel
+  apt: deb=/usr/src/{{ kernel_image_deb }}
+  sudo: true
+
+- name: Install the headers
+  apt: deb=/usr/src/{{ kernel_headers_deb }}
+  sudo: true
+
+- name: Configure GRUB
+  lineinfile: "dest=/etc/default/grub regexp='{{ item.regexp }}' line='{{ item.line }}' state=present"
+  sudo: true
+  with_items: grub_config
+  notify: update grub
