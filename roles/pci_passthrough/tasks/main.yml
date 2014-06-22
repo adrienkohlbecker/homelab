@@ -86,6 +86,10 @@
   apt: deb=/usr/src/{{ kernel_headers_deb }}
   sudo: true
 
+- name: Symlink the kernel
+  file: src=/usr/src/{{ kernel_src_directory }} dest=/usr/src/linux state=link
+  sudo: true
+
 - name: Configure GRUB
   lineinfile: "dest=/etc/default/grub regexp='{{ item.regexp }}' line='{{ item.line }}' state=present"
   sudo: true
