@@ -51,8 +51,8 @@
   when: should_extract.stat.exists == False
   sudo: true
 
-- name: Copy the configuration of 3.15.0-rc2 packaged for trusty as base
-  copy: src=config-3.15.0-031500rc2-generic dest=/usr/src/{{ kernel_src_directory }}/.config
+- name: Copy the configuration of 3.15.1 packaged for utopic as base
+  copy: src=config-3.15.1-031501-generic dest=/usr/src/{{ kernel_src_directory }}/.config
   when: should_extract.stat.exists == False
   sudo: true
 
