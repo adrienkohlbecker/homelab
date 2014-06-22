@@ -52,6 +52,20 @@
   when: should_extract.stat.exists == False
   sudo: true
 
+- name: Download Ubuntu patches
+  get_url: url={{item}} dest=/usr/src/{{ kernel_src_directory }}
+  with_items:
+    - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v3.15.1-utopic/0001-base-packaging.patch'
+    - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v3.15.1-utopic/0002-debian-changelog.patch'
+    - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v3.15.1-utopic/0003-configs-based-on-Ubuntu-3.15.0-6.11.patch'
+  when: should_extract.stat.exists == False
+  sudo: true
+
+- name: Apply ubuntu patches
+  shell: cat *.patch | patch -p1 chdir=/usr/src/{{ kernel_src_directory }}
+  when: should_extract.stat.exists == False
+  sudo: true
+
 - name: Copy the configuration of 3.15.1 packaged for utopic as base
   copy: src=config-3.15.1-031501-generic dest=/usr/src/{{ kernel_src_directory }}/.config
   when: should_extract.stat.exists == False
