@@ -1,0 +1,15 @@
+---
+
+- name: add ZoL repository
+  apt_repository: repo='ppa:zfs-native/stable'
+  sudo: true
+  register: ppa_added
+
+- name: Update apt
+  apt: update_cache=yes
+  sudo: true
+  when: ppa_added|changed
+
+- name: Install ZoL
+  apt: package=ubuntu-zfs state=installed
+  sudo: true
