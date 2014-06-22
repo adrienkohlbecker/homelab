@@ -38,13 +38,14 @@
   get_url: url=https://www.kernel.org/pub/linux/kernel/v3.x/linux-{{kernel_version}}.tar.gz dest=/usr/src/linux-{{kernel_version}}.tar.gz
   sudo: true
 
-- name: Create /usr/src/{{ kernel_src_directory }} directory
-  file: dest=/usr/src/{{ kernel_src_directory }} state=directory owner=root group=root mode=755
-  sudo: true
-
 - name: Check if kernel is extracted
   stat: path=/usr/src/{{ kernel_src_directory }}
   register: should_extract
+
+- name: Create /usr/src/{{ kernel_src_directory }} directory
+  file: dest=/usr/src/{{ kernel_src_directory }} state=directory owner=root group=root mode=755
+  when: should_extract.stat.exists == False
+  sudo: true
 
 - name: Extract the kernel source
   shell: tar -xzf linux-{{kernel_version}}.tar.gz --strip-components=1 --directory /usr/src/{{ kernel_src_directory }} chdir=/usr/src
