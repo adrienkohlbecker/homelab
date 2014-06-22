@@ -7,8 +7,13 @@
     - security
     - mailer
     - monitoring
+    - virtualization
+    - pci_passthrough
+    - ipmi
+    - ups
+    - zfs
 
-  tasks:
+  post_tasks:
 
     - name: Check if reboot is required
       stat: path=/var/run/reboot-required

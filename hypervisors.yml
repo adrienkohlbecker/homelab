@@ -13,7 +13,7 @@
     - pci_passthrough
     - zfs
 
-  tasks:
+  post_tasks:
 
     - name: Check if reboot is required
       stat: path=/var/run/reboot-required
