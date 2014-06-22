@@ -7,3 +7,19 @@
     - security
     - mailer
     - monitoring
+
+  tasks:
+
+    - name: Check if reboot is required
+      stat: path=/var/run/reboot-required
+      register: should_reboot
+
+    - name: Reboot the system
+      command: reboot
+      sudo: true
+      when: should_reboot.stat.exists == True
+      register: rebooting
+
+    - name: Wait for ssh to come back up
+      local_action: wait_for port=22 delay=20 host=10.0.0.11
+      when: rebooting|changed
