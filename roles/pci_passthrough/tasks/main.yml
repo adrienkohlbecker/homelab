@@ -36,26 +36,29 @@
 
 - name: Download kernel {{kernel_version}} source
   get_url: url=https://www.kernel.org/pub/linux/kernel/v3.x/linux-{{kernel_version}}.tar.gz dest=/usr/src/linux-{{kernel_version}}.tar.gz
-  register: downloaded_kernel
   sudo: true
 
 - name: Create /usr/src/{{ kernel_src_directory }} directory
   file: dest=/usr/src/{{ kernel_src_directory }} state=directory owner=root group=root mode=755
   sudo: true
 
+- name: Check if kernel is extracted
+  stat: path=/usr/src/{{ kernel_src_directory }}
+  register: should_extract
+
 - name: Extract the kernel source
   shell: tar -xzf linux-{{kernel_version}}.tar.gz --strip-components=1 --directory /usr/src/{{ kernel_src_directory }} chdir=/usr/src
-  when: downloaded_kernel|changed
+  when: should_extract.stat.exists == False
   sudo: true
 
 - name: Copy the configuration of 3.15.0-rc2 packaged for trusty as base
   copy: src=config-3.15.0-031500rc2-generic dest=/usr/src/{{ kernel_src_directory }}/.config
-  when: downloaded_kernel|changed
+  when: should_extract.stat.exists == False
   sudo: true
 
 - name: Update configuration with new kernel
   shell: yes '' | make oldconfig chdir=/usr/src/{{ kernel_src_directory }}
-  when: downloaded_kernel|changed
+  when: should_extract.stat.exists == False
   sudo: true
 
 - name: Customize configuration
