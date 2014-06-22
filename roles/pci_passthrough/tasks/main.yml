@@ -74,7 +74,7 @@
   register: should_compile
 
 - name: Compile the kernel
-  shell: CONCURRENCY_LEVEL={{ ansible_processor_vcpus + 1 }} make-kpkg --initrd --append-to-version=-{{ kernel_append_to_version }} kernel-image kernel-headers chdir=/usr/src/{{ kernel_src_directory }}
+  shell: make-kpkg --initrd --append-to-version=-{{ kernel_append_to_version }} kernel-image kernel-headers chdir=/usr/src/{{ kernel_src_directory }}
   when: kernel_config_customization|changed or should_compile.stat.exists == False
   sudo: true
 

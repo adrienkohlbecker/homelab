@@ -30,3 +30,14 @@
     - vim
     - ntp
     - ntpdate
+
+- name: Configure concurrency level
+  lineinfile: "dest=/etc/environment regexp='{{item.regexp}}' line='{{item.line}}'"
+  sudo: true
+  with_items:
+    - { regexp: '^CONCURRENCY_LEVEL=', line: 'CONCURRENCY_LEVEL="{{ ansible_processor_vcpus + 1 }}"' }
+    - { regexp: '^MAKE_FLAGS=', line: 'MAKE_FLAGS="-j{{ ansible_processor_vcpus + 1 }}"' }
+
+- name: Keep these vars when running sudo
+  lineinfile: dest=/etc/sudoers regexp='^Defaults        env_keep' line='Defaults        env_keep="CONCURRENCY_LEVEL MAKE_FLAGS"'
+  sudo: true
