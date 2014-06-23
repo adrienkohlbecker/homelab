@@ -23,13 +23,14 @@
   lineinfile: 'dest=/etc/hosts regexp="^127.0.1.1" line="127.0.1.1  {{inventory_hostname}}"'
   sudo: true
 
-- name: 'Install vim, ntp, ntpdate'
+- name: 'Install vim, ntp, ntpdate, build-essential'
   apt: pkg={{item}} state=installed
   sudo: true
   with_items:
     - vim
     - ntp
     - ntpdate
+    - build-essential
 
 - name: Configure concurrency level
   lineinfile: "dest=/etc/environment regexp='{{item.regexp}}' line='{{item.line}}'"
