@@ -1,8 +1,11 @@
 ---
 
-- name: Install libgcrypt
-  apt: package=libgcrypt11-dev state=installed
+- name: 'Install libgcrypt, build-essential'
+  apt: package={{ item }} state=installed
   sudo: true
+  with_items:
+    - libgcrypt11-dev
+    - build-essential
 
 - name: Download FreeIPMI
   get_url: url=http://ftp.gnu.org/gnu/freeipmi/freeipmi-1.4.3.tar.gz dest=/usr/src/freeipmi-1.4.3.tar.gz
