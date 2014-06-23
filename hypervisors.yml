@@ -13,6 +13,58 @@
     - pci_passthrough
     - zfs
 
+  tasks:
+
+    - name: Add mediaaccess group
+      group: name=mediaaccess state=present
+      sudo: true
+
+    - name: Add adrien to mediaaccess
+      user: name=adrien groups=mediaaccess append=yes
+      sudo: true
+
+    - name: Create snapraid user
+      user: name=snapraid
+      sudo: true
+
+    - name: Add adrien to snapraid group
+      user: name=adrien groups=snapraid append=yes
+      sudo: true
+
+    - name: Add adrien to kvm group
+      user: name=adrien groups=kvm append=yes
+      sudo: true
+
+    - name: Create mount points
+      file: dest={{item.path}} state=directory owner={{item.owner}} group={{item.group}} mode={{item.mode}}
+      sudo: true
+      with_items:
+        - {path: '/mnt/media',       owner: 'adrien',       group: 'mediaaccess', mode: '0770'}
+        - {path: '/mnt/snapraid_d1', owner: 'adrien',       group: 'mediaaccess', mode: '0770'}
+        - {path: '/mnt/snapraid_d2', owner: 'adrien',       group: 'mediaaccess', mode: '0770'}
+        - {path: '/mnt/snapraid_d3', owner: 'adrien',       group: 'mediaaccess', mode: '0770'}
+        - {path: '/mnt/snapraid_p1', owner: 'snapraid',     group: 'snapraid',    mode: '0750'}
+        - {path: '/mnt/vms',         owner: 'libvirt-qemu', group: 'kvm',         mode: '0770'}
+        - {path: '/mnt/tank',        owner: 'adrien',       group: 'adrien',      mode: '0770'}
+
+    - name: Mount btrfs partitons
+      mount: "name={{item.mountpoint}} src='LABEL={{item.label}}' state=present fstype=btrfs opts='{{item.opts}}'"
+      sudo: true
+      with_items:
+        - {mountpoint: '/mnt/snapraid_d1', label: 'snapraid_d1', opts: 'defaults,noatime,nodiratime'}
+        - {mountpoint: '/mnt/snapraid_d2', label: 'snapraid_d2', opts: 'defaults,noatime,nodiratime'}
+        - {mountpoint: '/mnt/snapraid_d3', label: 'snapraid_d3', opts: 'defaults,noatime,nodiratime'}
+        - {mountpoint: '/mnt/snapraid_p1', label: 'snapraid_p1', opts: 'defaults,noatime,nodiratime'}
+        - {mountpoint: '/mnt/vms', label: 'vms', opts: 'defaults,noatime,nodiratime,compress'}
+
+    - name: Install mhddfs
+      apt: package=mhddfs state=installed
+      sudo: true
+
+    - name: Mount mhddfs partition
+      sudo: true
+      mount: 'name=/mnt/media src=mhddfs#/mnt/snapraid_d1/media,/mnt/snapraid_d2/media,/mnt/snapraid_d3/media fstype=fuse opts=defaults,noatime,allow_other state=present'
+
   post_tasks:
 
     - name: Check if reboot is required
