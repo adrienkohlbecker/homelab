@@ -8,7 +8,22 @@
     - qemu-kvm
 
 - name: Download virtio drivers for windows
-  get_url: url=http://alt.fedoraproject.org/pub/alt/virtio-win/latest/virtio-win-0.1-81.iso dest=/var/lib/libvirt/images/virtio-win-0.1-81.iso
+  get_url: url=http://alt.fedoraproject.org/pub/alt/virtio-win/latest/virtio-win-0.1-81.iso dest=/var/lib/libvirt/images/virtio-win-0.1-81.iso owner=libvirt-qemu group=kvm
+  sudo: true
+
+- name: Configure directory permissions
+  file: dest=/var/lib/libvirt/images owner=libvirt-qemu group=kvm mode=0770
+  sudo: true
+
+- name: Configure libvirt/QEMU
+  lineinfile: "dest=/etc/libvirt/qemu.conf regexp='#?{{item.regexp}}' line='{{item.line}}' state=present"
+  sudo: true
+  with_items:
+    - {regexp: 'user =', line: 'user = "libvirt-qemu"'}
+    - {regexp: 'group =', line: 'group = "kvm"'}
+
+- name: Add ansibleremote to libvirtd group
+  user: name=ansibleremote groups=libvirtd append=yes
   sudo: true
 
 # TODO :
