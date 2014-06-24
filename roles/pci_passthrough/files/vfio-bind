@@ -3,6 +3,10 @@
 modprobe vfio-pci
 
 for dev in "$@"; do
+  if lspci -k -s $dev | grep -lq vfio-pci ; then
+    echo "$dev already bound, skipping..."
+    continue
+  fi
   vendor=$(cat /sys/bus/pci/devices/$dev/vendor)
   device=$(cat /sys/bus/pci/devices/$dev/device)
   if [ -e /sys/bus/pci/devices/$dev/driver ]; then
