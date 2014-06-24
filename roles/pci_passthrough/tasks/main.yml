@@ -18,6 +18,10 @@
   copy: src=lsgroup dest=/usr/bin/lsgroup owner=root group=root mode=0755
   sudo: true
 
+- name: Install iommu_group_for_device binary
+  copy: src=iommu_group_for_device dest=/usr/bin/iommu_group_for_device owner=root group=root mode=0755
+  sudo: true
+
 - name: Install vfio-bind binary
   copy: src=vfio-bind dest=/usr/bin/vfio-bind owner=root group=root mode=0755
   sudo: true

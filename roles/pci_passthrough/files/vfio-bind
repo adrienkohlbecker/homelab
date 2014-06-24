@@ -9,4 +9,6 @@ for dev in "$@"; do
     echo $dev > /sys/bus/pci/devices/$dev/driver/unbind
   fi
   echo $vendor $device > /sys/bus/pci/drivers/vfio-pci/new_id
+  group=$(iommu_group_for_device $dev)
+  chown libvirt-qemu:kvm /dev/vfio/$group
 done
