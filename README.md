@@ -18,3 +18,16 @@ Default VM config (`ubuntu_base`)
 - User deploy with authorized key
 - Usual password
 - Displays ip in login prompt
+
+To build zfs modules manually (as root)
+
+```
+# dkms remove -m zfs -v 0.6.3 --all
+# dkms remove -m spl -v 0.6.3 --all
+# dkms add -m spl -v 0.6.3
+# dkms add -m zfs -v 0.6.3
+# dkms install -m spl -v 0.6.3
+# dkms install -m zfs -v 0.6.3
+```
+
+Add to fstab for root btrfs volumes : noatime,nodiratime,compress,ssd
