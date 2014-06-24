@@ -25,7 +25,3 @@
 - name: Add ansibleremote to libvirtd group
   user: name=ansibleremote groups=libvirtd append=yes
   sudo: true
-
-# TODO :
-# apparmor
-# qemu config
