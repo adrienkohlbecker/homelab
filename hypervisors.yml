@@ -12,6 +12,7 @@
     - virtualization
     - pci_passthrough
     - zfs
+    - samba
 
   tasks:
 
