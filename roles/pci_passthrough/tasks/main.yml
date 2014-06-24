@@ -163,5 +163,5 @@
   notify: Restart networking
 
 - name: Allow forwarding traffic through ufw
-  lineinfile: dest=/etc/ufw/default regexp='DEFAULT_FORWARD_POLICY=' state=present line='DEFAULT_FORWARD_POLICY="ACCEPT"'
+  lineinfile: dest=/etc/default/ufw regexp='DEFAULT_FORWARD_POLICY=' state=present line='DEFAULT_FORWARD_POLICY="ACCEPT"'
   sudo: true
