@@ -36,7 +36,7 @@ kernel_config:
   - { regexp: 'CONFIG_GENERIC_CPU', line: '# CONFIG_GENERIC_CPU is not set'}
 
 # In normal & recovery mode
-grub_cmdline: nomodeset vga=786
+grub_cmdline: nomodeset
 
 # Only in normal mode (non-recovery)
 grub_cmdline_default: iommu=1 intel_iommu=on
