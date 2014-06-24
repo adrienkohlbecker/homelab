@@ -1,0 +1,27 @@
+# This file describes the network interfaces available on your system
+# and how to activate them. For more information, see interfaces(5).
+
+# The loopback network interface
+auto lo
+iface lo inet loopback
+
+auto p2p1
+iface p2p1 inet static
+    address 10.0.0.11
+    netmask 255.255.255.0
+    gateway 10.0.0.1
+    dns-nameservers 8.8.8.8 8.8.4.4
+
+auto p3p1
+iface p3p1 inet manual
+
+auto br1
+iface br1 inet static
+    address 10.0.0.12
+    netmask 255.255.255.0
+    gateway 10.0.0.1
+    bridge_ports p3p1
+    bridge_stp off
+    bridge_fd 0
+    bridge_maxwait 0
+    dns-nameservers 8.8.8.8 8.8.4.4

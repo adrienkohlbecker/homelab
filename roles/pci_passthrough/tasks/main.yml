@@ -131,3 +131,32 @@
   sudo: true
   with_items: grub_config
   notify: update grub
+
+- name: Configure libvirt/QEMU
+  lineinfile: "dest=/etc/libvirt/qemu.conf regexp='#?{{item.regexp}}' line='{{item.line}}' state=present"
+  sudo: true
+  with_items:
+    - {regexp: 'user =', line: 'user = "root"'}
+    - {regexp: 'group =', line: 'group = "root"'}
+    - {regexp: 'clear_emulator_capabilities =', line: 'clear_emulator_capabilities = 0'}
+
+- name: Define vms
+  virt: name={{item}} command=define xml="{{ lookup('file', item+'.xml') }}"
+  with_items:
+    - Ubuntu_base
+    - Tretflix
+    - HTPC
+
+- name: Disable apparmor for HTPC (due to vfio passthrough, should be fixed in Utopic)
+  shell: aa-complain /etc/apparmor.d/libvirt/libvirt-dda812ca-3de2-adac-a6c3-0914760ca54a
+  sudo: true
+  changed_when: False
+
+- name: Configure networking
+  copy: src=interfaces dest=/etc/network/interfaces owner=root group=root mode=0644
+  sudo: true
+  notify: Restart networking
+
+- name: Allow forwarding traffic through ufw
+  lineinfile: dest=/etc/ufw/default regexp='DEFAULT_FORWARD_POLICY=' state=present line='DEFAULT_FORWARD_POLICY="ACCEPT"'
+  sudo: true
