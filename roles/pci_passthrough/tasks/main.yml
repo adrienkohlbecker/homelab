@@ -137,12 +137,13 @@
   notify: update grub
 
 - name: Configure libvirt/QEMU
-  lineinfile: "dest=/etc/libvirt/qemu.conf regexp='#?{{item.regexp}}' line='{{item.line}}' state=present"
+  lineinfile: "dest=/etc/libvirt/qemu.conf regexp='^(# )?{{item.regexp}}' line='{{item.line}}' state=present"
   sudo: true
   with_items:
     - {regexp: 'user =', line: 'user = "root"'}
     - {regexp: 'group =', line: 'group = "root"'}
-    - {regexp: 'clear_emulator_capabilities =', line: 'clear_emulator_capabilities = 0'}
+    # add /dev/vfio/13 to default acls
+    - {regexp: 'cgroup_device_acl = ', line: 'cgroup_device_acl = [ "/dev/null", "/dev/full", "/dev/zero", "/dev/random", "/dev/urandom", "/dev/ptmx", "/dev/kvm", "/dev/kqemu", "/dev/rtc","/dev/hpet", "/dev/vfio/vfio", "/dev/vfio/13" ]'}
 
 - name: Define vms
   virt: name={{item}} command=define xml="{{ lookup('file', item+'.xml') }}"
