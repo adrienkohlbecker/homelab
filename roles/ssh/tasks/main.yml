@@ -4,8 +4,8 @@
   action: group name=ssh state=present
 
 - name: Add users to ssh groups
-  action: user name={{item.name}} groups=ssh append=yes
-  with_items: users
+  action: user name={{item}} groups=ssh append=yes
+  with_items: user_groups.ssh
   sudo: true
 
 - name: Add authorized keys

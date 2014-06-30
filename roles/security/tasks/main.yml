@@ -13,8 +13,8 @@
   sudo: true
 
 - name: Add users to admin group
-  action: 'user name={{item.name}} groups=admin,ssh append=yes'
-  with_items: users
+  action: 'user name={{item}} groups=admin,ssh append=yes'
+  with_items: user_groups.admin
   sudo: true
 
 - name: Check if dpkg-statoverride is present

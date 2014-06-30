@@ -8,8 +8,22 @@ users:
   - name: adrien
     password: "$6$G5wujQo.yz$J8Wv4iRfjlo.VKT0suwDqq.UpZRejQulWAdBYXRUWK.xh5zq75NkU0NH1IBTMmhgkhR.iRF.udaW/1oQ44MwA/"
 
+user_groups:
+  ssh:
+    - deploy
+    - adrien
+  admin:
+    - adrien
+    - deploy
+  mediaaccess:
+    - adrien
+  snapraid:
+    - adrien
+
 email_aliases:
   root: adrien.kohlbecker@gmail.com
   deploy: adrien.kohlbecker@gmail.com
   adrien: adrien.kohlbecker@gmail.com
   ansibleremote: adrien.kohlbecker@gmail.com
+  coline: delmcol@gmail.com
+  tretflix: adrien.kohlbecker@gmail.com

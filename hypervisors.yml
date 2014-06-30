@@ -20,17 +20,19 @@
       group: name=mediaaccess state=present
       sudo: true
 
-    - name: Add adrien to mediaaccess
-      user: name=adrien groups=mediaaccess append=yes
+    - name: Add users to mediaaccess group
+      user: name={{item}} groups=mediaaccess append=yes
       sudo: true
+      with_items: user_groups.mediaaccess
 
     - name: Create snapraid user
       user: name=snapraid
       sudo: true
 
-    - name: Add adrien to snapraid group
-      user: name=adrien groups=snapraid append=yes
+    - name: Add users to snapraid group
+      user: name={{item}} groups=snapraid append=yes
       sudo: true
+      with_items: user_groups.snapraid
 
     - name: Add adrien to kvm group
       user: name=adrien groups=kvm append=yes
