@@ -161,7 +161,7 @@
     - Tretflix
     - HTPC
 
-- name: Disable apparmor for HTPC (due to vfio passthrough, should be fixed in Utopic)
+- name: Disable apparmor for HTPC (custom binary)
   shell: aa-complain /etc/apparmor.d/libvirt/libvirt-dda812ca-3de2-adac-a6c3-0914760ca54a
   sudo: true
   changed_when: False
