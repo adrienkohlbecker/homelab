@@ -130,6 +130,12 @@
   file: src=/usr/src/{{ kernel_src_directory }} dest=/usr/src/linux state=link
   sudo: true
 
+- name: Configure GRUB
+  lineinfile: "dest=/etc/default/grub regexp='{{ item.regexp }}' line='{{ item.line }}' state=present"
+  sudo: true
+  with_items: grub_config
+  notify: update grub
+
 - name: Check if reboot is required
   stat: path=/var/run/reboot-required
   register: should_reboot
@@ -143,12 +149,6 @@
 - name: Wait for ssh to come back up
   local_action: wait_for port=22 delay=20 host=10.0.0.11
   when: rebooting|changed
-
-- name: Configure GRUB
-  lineinfile: "dest=/etc/default/grub regexp='{{ item.regexp }}' line='{{ item.line }}' state=present"
-  sudo: true
-  with_items: grub_config
-  notify: update grub
 
 - name: Install custom qemu wrapper for HTPC binary
   copy: src=qemu-system-x86_64.x-vga dest=/usr/bin/qemu-system-x86_64.x-vga owner=root group=root mode=0755
