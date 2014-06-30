@@ -42,13 +42,13 @@
       file: dest={{item.path}} state=directory owner={{item.owner}} group={{item.group}} mode={{item.mode}}
       sudo: true
       with_items:
-        - {path: '/mnt/media',       owner: 'adrien',       group: 'mediaaccess', mode: '0770'}
-        - {path: '/mnt/snapraid_d1', owner: 'adrien',       group: 'mediaaccess', mode: '0770'}
-        - {path: '/mnt/snapraid_d2', owner: 'adrien',       group: 'mediaaccess', mode: '0770'}
-        - {path: '/mnt/snapraid_d3', owner: 'adrien',       group: 'mediaaccess', mode: '0770'}
-        - {path: '/mnt/snapraid_p1', owner: 'snapraid',     group: 'snapraid',    mode: '0750'}
-        - {path: '/mnt/vms',         owner: 'libvirt-qemu', group: 'kvm',         mode: '0770'}
-        - {path: '/mnt/tank',        owner: 'adrien',       group: 'adrien',      mode: '0770'}
+        - {path: '/mnt/media',       owner: 'adrien',       group: 'mediaaccess', mode: '2770'}
+        - {path: '/mnt/snapraid_d1', owner: 'adrien',       group: 'mediaaccess', mode: '2770'}
+        - {path: '/mnt/snapraid_d2', owner: 'adrien',       group: 'mediaaccess', mode: '2770'}
+        - {path: '/mnt/snapraid_d3', owner: 'adrien',       group: 'mediaaccess', mode: '2770'}
+        - {path: '/mnt/snapraid_p1', owner: 'snapraid',     group: 'snapraid',    mode: '2750'}
+        - {path: '/mnt/vms',         owner: 'libvirt-qemu', group: 'kvm',         mode: '2770'}
+        - {path: '/mnt/tank',        owner: 'adrien',       group: 'adrien',      mode: '2770'}
 
     - name: Mount btrfs partitons
       mount: "name={{item.mountpoint}} src='LABEL={{item.label}}' state=present fstype=btrfs opts='{{item.opts}}'"
