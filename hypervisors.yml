@@ -13,6 +13,7 @@
     - pci_passthrough
     - zfs
     - samba
+    - snapraid
 
   tasks:
 
