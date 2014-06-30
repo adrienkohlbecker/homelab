@@ -17,3 +17,7 @@
     regexp='{{ ansible_user }}'
     state=present"
   sudo: true
+
+- name: Copy rc.local to announce IP on issue
+  copy: src=rc.local dest=/etc/rc.local
+  sudo: true

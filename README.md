@@ -31,3 +31,7 @@ To build zfs modules manually (as root)
 ```
 
 Add to fstab for root btrfs volumes : noatime,nodiratime,compress,ssd
+
+Check if VT-d is activated
+
+`dmesg | grep -e DMAR -e IOMMU`
