@@ -2,3 +2,4 @@
 *.sublime-project
 
 ansible_rsa
+ansible.log
