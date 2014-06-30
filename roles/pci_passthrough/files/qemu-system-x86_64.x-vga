@@ -1,0 +1,3 @@
+#!/bin/sh
+ARGS=`echo "$@" | sed 's|-device vfio-pci,host=07:00.0[^ ]*||' | sed 's|-device vfio-pci,host=07:00.1[^ ]*||'`
+exec /usr/bin/qemu-system-x86_64 `echo "$ARGS"`
