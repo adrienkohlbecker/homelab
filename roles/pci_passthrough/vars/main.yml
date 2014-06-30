@@ -4,6 +4,9 @@
 vfio_device_names:
   - Radeon HD
 
+pci_stub_device_names:
+  - Renesas
+
 driver_modules_blacklist:
   - radeon
 
@@ -39,7 +42,7 @@ kernel_config:
 grub_cmdline: nomodeset
 
 # Only in normal mode (non-recovery)
-grub_cmdline_default: iommu=1 intel_iommu=on
+grub_cmdline_default: iommu=1 intel_iommu=on pci_stub.ids={{pci_stub_device_ids}}
 
 grub_config:
 - { regexp: '^(#?)GRUB_CMDLINE_LINUX=', line: 'GRUB_CMDLINE_LINUX="{{grub_cmdline}}"'}
