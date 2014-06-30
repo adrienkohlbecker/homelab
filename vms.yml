@@ -7,11 +7,6 @@
     - security
     - mailer
     - monitoring
-    - virtualization
-    - pci_passthrough
-    - ipmi
-    - ups
-    - zfs
 
   post_tasks:
 
