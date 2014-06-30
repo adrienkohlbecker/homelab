@@ -79,8 +79,13 @@
   sudo: true
 
 - name: Apply patches
-  shell: cat *.patch | patch -p1 chdir=/usr/src/{{ kernel_src_directory }}
+  shell: cat {{ item }} | patch -p1 chdir=/usr/src/{{ kernel_src_directory }}
   when: should_extract.stat.exists == False
+  with_items:
+   - 0001-base-packaging.patch
+   - 0002-debian-changelog.patch
+   - 0003-configs-based-on-Ubuntu-3.15.0-6.11.patch
+   - enable_additional_cpu_optimizations_for_gcc_kernel_v3.15+.patch
   sudo: true
 
 - name: Copy the configuration of 3.15.2 packaged for utopic as base
