@@ -145,14 +145,9 @@
   with_items: grub_config
   notify: update grub
 
-- name: Configure libvirt/QEMU
-  lineinfile: "dest=/etc/libvirt/qemu.conf regexp='^(# )?{{item.regexp}}' line='{{item.line}}' state=present"
+- name: Install custom qemu wrapper for HTPC binary
+  copy: src=qemu-system-x86_64.x-vga dest=/usr/bin/qemu-system-x86_64.x-vga owner=root group=root mode=0755
   sudo: true
-  with_items:
-    - {regexp: 'user =', line: 'user = "root"'}
-    - {regexp: 'group =', line: 'group = "root"'}
-    # add /dev/vfio/13 to default acls
-    - {regexp: 'cgroup_device_acl = ', line: 'cgroup_device_acl = [ "/dev/null", "/dev/full", "/dev/zero", "/dev/random", "/dev/urandom", "/dev/ptmx", "/dev/kvm", "/dev/kqemu", "/dev/rtc","/dev/hpet", "/dev/vfio/vfio", "/dev/vfio/13" ]'}
 
 - name: Define vms
   virt: name={{item}} command=define xml="{{ lookup('file', item+'.xml') }}"
