@@ -7,16 +7,23 @@ users:
     password: "$6$mx6H3eISNT$BPCU188a3hHcihcbQgIuReH3/XcoREKyFlLRpZ8BCFgaSAeZwkECQnfzOFQqMy.Qq74CvTXusn5WHEQd0LHFG."
   - name: adrien
     password: "$6$G5wujQo.yz$J8Wv4iRfjlo.VKT0suwDqq.UpZRejQulWAdBYXRUWK.xh5zq75NkU0NH1IBTMmhgkhR.iRF.udaW/1oQ44MwA/"
+  - name: coline
+    password: "$6$F5wcgs7Y/zq7i.$bkeGh/G0yaRPcjgghTCVy4KmEODy0BQfuPGyfPPNmWtVnihLAewefLOiwWBHriTgb2Mhz5qfYDY4xH/Ybp7CU1"
+  - name: tretflix
+    password: "$6$vdgTTn7fqGqt$dnBxjzvcP4LKAymRIFS.NCdC2V99B5pe6nIidNCT97BwC3JOt.JFxUmdsjF5.QwZ.y1jTVEdWjp.SiOhtdaUF1"
 
 user_groups:
   ssh:
     - deploy
     - adrien
+    - coline
   admin:
     - adrien
     - deploy
   mediaaccess:
     - adrien
+    - coline
+    - tretflix
   snapraid:
     - adrien
 
