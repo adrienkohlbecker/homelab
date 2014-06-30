@@ -35,3 +35,10 @@ Add to fstab for root btrfs volumes : noatime,nodiratime,compress,ssd
 Check if VT-d is activated
 
 `dmesg | grep -e DMAR -e IOMMU`
+
+Configure zfs snapshots
+
+```
+sudo zfs set com.sun:auto-snapshot:frequent=false tank
+sudo zfs set com.sun:auto-snapshot:hourly=false tank
+```

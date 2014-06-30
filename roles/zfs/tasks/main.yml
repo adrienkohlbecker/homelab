@@ -11,5 +11,8 @@
   when: ppa_added|changed
 
 - name: Install ZoL
-  apt: package=ubuntu-zfs state=installed
+  apt: package={{item}} state=installed
   sudo: true
+  with_items:
+    - ubuntu-zfs
+    - zfs-auto-snapshot
