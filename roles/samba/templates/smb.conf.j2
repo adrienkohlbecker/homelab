@@ -267,8 +267,12 @@ socket options = TCP_NODELAY IPTOS_LOWDELAY SO_RCVBUF=65536 SO_SNDBUF=65536
    writeable = yes
    valid users = @mediaaccess
    browseable = yes
+   force group = mediaaccess
+   read only = No
    create mask = 0770
-   directory mask = 0770
+   force create mode = 0770
+   directory mask = 02770
+   force directory mode = 02770
 
 [tank]
    path = /mnt/tank
