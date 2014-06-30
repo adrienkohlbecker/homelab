@@ -1,0 +1,26 @@
+---
+
+- name: 'Install build-essential'
+  apt: package={{ item }} state=installed
+  sudo: true
+  with_items:
+    - build-essential
+
+- name: Download Snapraid
+  get_url: url=http://sourceforge.net/projects/snapraid/files/snapraid-6.2.tar.gz/download dest=/usr/src/snapraid-6.2.tar.gz
+  register: downloaded_snapraid
+  sudo: true
+
+- name: Extract Snapraid
+  shell: tar -xzf snapraid-6.2.tar.gz chdir=/usr/src
+  when: downloaded_snapraid|changed
+  sudo: true
+
+- name: Compile and install Snapraid
+  shell: './configure && make && make install chdir=/usr/src/snapraid-6.2'
+  when: downloaded_snapraid|changed
+  sudo: true
+
+- name: Copy the configuration
+  copy: src=snapraid.conf dest=/etc/snapraid.conf
+  sudo: true
