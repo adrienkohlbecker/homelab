@@ -10,8 +10,8 @@ vfio_device_names:
 driver_modules_blacklist:
   - radeon
 
-kernel_version: 3.15.2
-kernel_version_package: 3.15.2
+kernel_version: 3.15.3
+kernel_version_package: 3.15.3
 kernel_append_to_version: passthrough.1
 kernel_src_directory: linux-{{kernel_version}}-{{ kernel_append_to_version }}
 kernel_image_deb: linux-image-{{kernel_version_package}}-{{ kernel_append_to_version }}_{{kernel_version_package}}-{{ kernel_append_to_version }}-10.00.Custom_amd64.deb

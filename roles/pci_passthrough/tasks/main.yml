@@ -68,9 +68,9 @@
 - name: Download Ubuntu patches
   get_url: url={{item}} dest=/usr/src/{{ kernel_src_directory }}
   with_items:
-    - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v3.15.2-utopic/0001-base-packaging.patch'
-    - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v3.15.2-utopic/0002-debian-changelog.patch'
-    - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v3.15.2-utopic/0003-configs-based-on-Ubuntu-3.15.0-6.11.patch'
+    - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v{{kernel_version}}-utopic/0001-base-packaging.patch'
+    - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v{{kernel_version}}-utopic/0002-debian-changelog.patch'
+    - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v{{kernel_version}}-utopic/0003-configs-based-on-Ubuntu-3.15.0-6.11.patch'
   when: should_extract.stat.exists == False
   sudo: true
 
