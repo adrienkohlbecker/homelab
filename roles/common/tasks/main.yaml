@@ -40,5 +40,5 @@
     - { regexp: '^MAKE_FLAGS=', line: 'MAKE_FLAGS="-j{{ ansible_processor_vcpus + 1 }}"' }
 
 - name: Keep these vars when running sudo
-  lineinfile: dest=/etc/sudoers regexp='^Defaults        env_keep' line='Defaults        env_keep="CONCURRENCY_LEVEL MAKE_FLAGS"'
+  lineinfile: dest=/etc/sudoers line='Defaults        env_keep="CONCURRENCY_LEVEL MAKE_FLAGS"'
   sudo: true
