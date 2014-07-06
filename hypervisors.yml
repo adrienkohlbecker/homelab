@@ -70,6 +70,10 @@
       sudo: true
       mount: 'name=/mnt/media src=mhddfs#/mnt/snapraid_d1/media,/mnt/snapraid_d2/media,/mnt/snapraid_d3/media fstype=fuse opts=defaults,noatime,allow_other state=present'
 
+    - name: Install gparted
+      apt: pkg=gparted state=installed
+      sudo: true
+
   post_tasks:
 
     - name: Check if reboot is required
