@@ -105,13 +105,6 @@
       </source>
     </hostdev>
     <hostdev mode='subsystem' type='pci' managed='yes'>
-      <driver name='kvm'/>
-      <source>
-        <address domain='0x0000' bus='0x01' slot='0x00' function='0x0'/>
-      </source>
-      <address type='pci' domain='0x0000' bus='0x02' slot='0x05' function='0x0'/>
-    </hostdev>
-    <hostdev mode='subsystem' type='pci' managed='yes'>
       <driver name='vfio'/>
       <source>
         <address domain='0x0000' bus='0x07' slot='0x00' function='0x0'/>
@@ -132,11 +125,5 @@
   <qemu:commandline>
     <qemu:arg value='-display'/>
     <qemu:arg value='none'/>
-    <qemu:arg value='-device'/>
-    <qemu:arg value='ioh3420,bus=pcie.0,addr=1c.0,multifunction=on,port=1,chassis=1,id=root.1'/>
-    <qemu:arg value='-device'/>
-    <qemu:arg value='vfio-pci,host=07:00.0,bus=root.1,addr=00.0,multifunction=on,x-vga=on'/>
-    <qemu:arg value='-device'/>
-    <qemu:arg value='vfio-pci,host=07:00.1,bus=root.1,addr=00.1'/>
   </qemu:commandline>
 </domain>

@@ -6,17 +6,17 @@
   with_items: vfio_device_names
   changed_when: false
 
-- name: Gather vendor:device ids for pci stubs
-  shell: "lspci -n | grep $(lspci | grep '{{ item }}' | awk '{ print $1 }') | awk '{ print $3 }'"
-  register: pci_stub_device_ids_list
-  with_items: pci_stub_device_names
-  changed_when: false
+# - name: Gather vendor:device ids for pci stubs
+#   shell: "lspci -n | grep $(lspci | grep '{{ item }}' | awk '{ print $1 }') | awk '{ print $3 }'"
+#   register: pci_stub_device_ids_list
+#   with_items: pci_stub_device_names
+#   changed_when: false
 
 - name: Set vfio ids fact
   set_fact: "vfio_device_ids=\"{{ vfio_device_ids_list.results | join(' ', attribute='stdout') }}\""
 
-- name: Set pci stub ids fact
-  set_fact: "pci_stub_device_ids=\"{{ pci_stub_device_ids_list.results | join(',', attribute='stdout') }}\""
+# - name: Set pci stub ids fact
+#   set_fact: "pci_stub_device_ids=\"{{ pci_stub_device_ids_list.results | join(',', attribute='stdout') }}\""
 
 - name: Blacklist the driver modules
   kernel_blacklist: name={{item}} state=present
