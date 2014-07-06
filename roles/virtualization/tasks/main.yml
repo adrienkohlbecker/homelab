@@ -9,15 +9,18 @@
 
 - name: Download the latest libvirt
   get_url: url={{item.url}} dest=/usr/src/{{item.file}}
+  sudo: true
   with_items:
     - {url: 'http://ppa.launchpad.net/jacob/virtualisation/ubuntu/pool/main/libv/libvirt/libvirt0_1.2.5-0ubuntu4~ppa0_i386.deb', file: 'libvirt0_1.2.5-0ubuntu4~ppa0_i386.deb'}
     - {url: 'http://ppa.launchpad.net/jacob/virtualisation/ubuntu/pool/main/libv/libvirt/libvirt-bin_1.2.5-0ubuntu4~ppa0_i386.deb', file: 'libvirt-bin_1.2.5-0ubuntu4~ppa0_i386.deb'}
 
-- name: Install the latest libvirt
-  apt: deb={{ item }}
-  with_items:
-    - libvirt0_1.2.5-0ubuntu4~ppa0_i386.deb
-    - libvirt-bin_1.2.5-0ubuntu4~ppa0_i386.deb
+- name: Install the latest libvirt (1)
+  apt: deb=/usr/src/libvirt0_1.2.5-0ubuntu4~ppa0_i386.deb
+  sudo: true
+
+- name: Install the latest libvirt (2)
+  apt: deb=/usr/src/libvirt-bin_1.2.5-0ubuntu4~ppa0_i386.deb
+  sudo: true
 
 - name: Download virtio drivers for windows
   get_url: url=http://alt.fedoraproject.org/pub/alt/virtio-win/latest/virtio-win-0.1-81.iso dest=/var/lib/libvirt/images/virtio-win-0.1-81.iso owner=libvirt-qemu group=kvm
