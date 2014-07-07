@@ -15,6 +15,7 @@
     - samba
     - snapraid
     - hdparm
+    - dotfiles
 
   tasks:
 

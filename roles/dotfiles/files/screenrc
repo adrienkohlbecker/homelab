@@ -1,0 +1,27 @@
+# Disable the startup message
+startup_message off
+
+# Set a large scrollback buffer
+defscrollback 32000
+
+# Always start `screen` with UTF-8 enabled (`screen -U`)
+defutf8 on
+
+# Window list at the bottom. hostname, centered tabs and redmarked active windows:
+hardstatus alwayslastline
+hardstatus string '%{= kG}[ %{G}%H %{g}][%= %{= kw}%?%-Lw%?%{r}(%{W}%n*%f%t%?(%u)%?%{r})%{w}%?%+Lw%?%?%= %{g}][%{B} %d/%m %{W}%c %{g}]'
+
+# I use control+a for beginning-of-line, this remaps it to the tick/tilda key
+escape ``
+
+# Autodetach session on hangup instead of terminating screen completely
+autodetach on
+
+# Fix vim remains in scrollback buffer
+altscreen on
+
+# Load profile
+shell -$SHELL
+
+# Set messages timeout to one second
+msgwait 1
