@@ -7,3 +7,23 @@
 - name: Make logwatch mail root daily
   lineinfile: dest=/etc/cron.daily/00logwatch regexp="^/usr/sbin/logwatch" line="/usr/sbin/logwatch --output mail --mailto root --detail high" state=present create=yes
   sudo: true
+
+- name: Download datadog apt key
+  apt_key: id=C7A7DA52 keyserver=keyserver.ubuntu.com state=present
+  sudo: true
+
+- name: Add datadog repository
+  apt_repository: repo='deb http://apt.datadoghq.com/ unstable main' state=present
+  sudo: true
+  register: added_datadog_repo
+
+- name: Install datadog agent
+  apt: pkg=datadog-agent state=installed
+  sudo: true
+  notify: Restart datadog
+
+- name: Copy datadog configuration
+  template: src=datadog.conf.j2 dest=/etc/dd-agent/datadog.conf owner=root group=root mode=0644
+  sudo: true
+  notify: Restart datadog
+
