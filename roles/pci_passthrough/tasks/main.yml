@@ -78,6 +78,10 @@
   get_url: url=https://raw.githubusercontent.com/graysky2/kernel_gcc_patch/master/outdated_versions/linux-3.15+/gcc-4.2+/enable_additional_cpu_optimizations_for_gcc_kernel_v3.15+.patch dest=/usr/src/{{ kernel_src_directory }}
   sudo: true
 
+- name: Copy ACS override patch
+  copy: src=override_for_missing_acs_capabilities.patch dest=/usr/src/{{ kernel_src_directory}}/override_for_missing_acs_capabilities.patch
+  sudo: true
+
 - name: Apply patches
   shell: cat {{ item }} | patch -p1 chdir=/usr/src/{{ kernel_src_directory }}
   when: should_extract.stat.exists == False
@@ -86,6 +90,7 @@
    - 0002-debian-changelog.patch
    - 0003-configs-based-on-Ubuntu-3.15.0-6.11.patch
    - enable_additional_cpu_optimizations_for_gcc_kernel_v3.15+.patch
+   - override_for_missing_acs_capabilities.patch
   sudo: true
 
 - name: Copy the configuration of 3.15.2 packaged for utopic as base
