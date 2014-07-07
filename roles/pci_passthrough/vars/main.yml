@@ -9,6 +9,8 @@ vfio_device_names:
 
 driver_modules_blacklist:
   - radeon
+  - snd_usb_audio # C-Media soundcard
+  - uvcvideo # Logitech webcam
 
 kernel_version: 3.15.3
 kernel_version_package: 3.15.3
