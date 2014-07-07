@@ -1,6 +1,9 @@
 #!/bin/bash
 ARGS=$@
 
+# echo `date` >> /tmp/test.log
+# echo "$ARGS" >> /tmp/test.log
+
 if [[ $ARGS = *HTPC* ]]; then
   ARGS=`echo "$ARGS" | sed 's|-device vfio-pci[^ ]*||g' | sed 's|-device pci-assign[^ ]*||g'`
 
@@ -9,6 +12,5 @@ if [[ $ARGS = *HTPC* ]]; then
   ARGS="$ARGS -device vfio-pci,host=07:00.1,bus=root.1,addr=00.1"
 fi
 
-# echo `date` >> /tmp/test.log
 # echo "$ARGS" >> /tmp/test.log
 exec /usr/bin/qemu-system-x86_64 `echo "$ARGS"`
