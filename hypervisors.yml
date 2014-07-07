@@ -1,5 +1,7 @@
 ---
 - hosts: hypervisors
+  vars_files:
+    - vars/credentials.yml
   roles:
     - common
     - users

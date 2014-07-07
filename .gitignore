@@ -3,3 +3,5 @@
 
 ansible_rsa
 ansible.log
+
+vars/credentials.yml

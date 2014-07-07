@@ -1,5 +1,7 @@
 ---
 - hosts: vms
+  vars_files:
+    - /vars/credentials.yml
   roles:
     - common
     - users
