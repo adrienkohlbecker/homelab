@@ -27,3 +27,14 @@
   sudo: true
   notify: Restart datadog
 
+- name: Install pip for dogapi
+  apt: pkg=python-pip state=installed
+  sudo: true
+
+- name: Instal dogapi
+  pip: name=dogapi
+  sudo: true
+
+- name: Install dogevent
+  template: src=dogevent.py.j2 dest=/usr/local/bin/dogevent owner=root group=root mode=0755
+  sudo: true
