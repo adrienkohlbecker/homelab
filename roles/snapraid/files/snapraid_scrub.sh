@@ -13,17 +13,17 @@ DEL_THRESHOLD=50
 EMAIL_TO="root"
 
 # Email subject prefix
-EMAIL_SUBJECT_PREFIX="[$(hostname -s)] $NAME - "
+EMAIL_SUBJECT_PREFIX="[$(hostname -s)] $NAME"
 
 ################################
 #          ACTUAL JOB          #
 ###############################@
 
-function pushover() {
+function pushover_log() {
 
   local PRIORITY=${2:-"0"}
 
-  pushover_log --token aALyPPoeQ8g1uKApyJgKLYYAMaPPmx --user uzCHDLuNLNwnhFRGE4Cpn6goDsrDKo \
+  pushover --token aALyPPoeQ8g1uKApyJgKLYYAMaPPmx --user uzCHDLuNLNwnhFRGE4Cpn6goDsrDKo \
     --message "$1" --priority "$PRIORITY" --title "Snapraid scrub"
 
 }
@@ -32,14 +32,15 @@ must_run_as_root
 
 br
 log "Snapraid scrub started."
+br
 
-run "snapraid scrub -p1 2>&1"
+run "snapraid scrub 2>&1"
 
-if [ grep -q "Everything OK" $TMP_OUTPUT ]; then
+if grep -q "Everything OK" $TMP_OUTPUT; then
   log "Everything looks good"
   pushover_log "OK :: Scrub finished sucessfully" "-1"
   exit 0
-elif [ grep -q "WARNING! There are errors" $TMP_OUTPUT]; then
+elif grep -q "WARNING! There are errors" $TMP_OUTPUT; then
   READ_COUNT=$(grep '[0-9]\{1,\} read errors$' "$TMP_OUTPUT" | sed 's/ \+/ /g' | cut -d ' ' -f2)
   DATA_COUNT=$(grep '[0-9]\{1,\} data errors$' "$TMP_OUTPUT" | sed 's/ \+/ /g' | cut -d ' ' -f2)
 

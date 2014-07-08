@@ -13,7 +13,7 @@ DEL_THRESHOLD=50
 EMAIL_TO="root"
 
 # Email subject prefix
-EMAIL_SUBJECT_PREFIX="[$(hostname -s)] $NAME - "
+EMAIL_SUBJECT_PREFIX="[$(hostname -s)] $NAME"
 
 ################################
 #          ACTUAL JOB          #
@@ -32,6 +32,7 @@ must_run_as_root
 
 br
 log "Snapraid sync started."
+br
 
 run "snapraid diff 2>&1"
 
@@ -57,6 +58,7 @@ if [ "$DEL_COUNT" -gt 0 -o "$ADD_COUNT" -gt 0 -o "$MOVE_COUNT" -gt 0 -o "$UPDATE
   else
     # NO, delete threshold not reached, lets run the sync job
     log "Deleted files ($DEL_COUNT) did not exceed threshold ($DEL_THRESHOLD), proceeding with sync job."
+    br
     run "snapraid sync 2>&1"
     pushover_log "OK :: Sync has finished" "-1"
     log "Done."
