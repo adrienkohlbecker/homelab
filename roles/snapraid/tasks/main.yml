@@ -24,3 +24,11 @@
 - name: Copy the configuration
   copy: src=snapraid.conf dest=/etc/snapraid.conf
   sudo: true
+
+- name: Copy the sync script
+  copy: src=snapraid_sync.sh dest=/usr/local/bin/snapraid_sync mode=755
+  sudo: true
+
+- name: Schedule the sync script
+  cron: name="snapraid sync" minute=0 hour=4 job="/usr/local/bin/snapraid_sync >> /var/log/myscript.log 2>&1" user=root cron_file=ansible_snapraid_sync
+  sudo: true
