@@ -16,3 +16,11 @@
   with_items:
     - ubuntu-zfs
     - zfs-auto-snapshot
+
+- name: Copy the health script
+  copy: src=zfs_health.sh dest=/usr/local/bin/zfs_health mode=755
+  sudo: true
+
+- name: Schedule the health script
+  cron: name="zfs health" minute=0 job="/usr/local/bin/zfs_health" user=root cron_file=ansible_zfs_health
+  sudo: true
