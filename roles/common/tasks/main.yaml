@@ -42,3 +42,7 @@
 - name: Keep these vars when running sudo
   lineinfile: dest=/etc/sudoers line='Defaults        env_keep="CONCURRENCY_LEVEL MAKE_FLAGS"'
   sudo: true
+
+- name: Download bash framework
+  get_url: url=https://raw.githubusercontent.com/adrienkohlbecker/bash-framework/master/main.sh dest=/usr/local/lib/bash-framework mode=755 force=yes
+  sudo: true
