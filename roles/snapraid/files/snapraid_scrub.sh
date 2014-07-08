@@ -19,15 +19,14 @@ EMAIL_SUBJECT_PREFIX="[$(hostname -s)] $NAME - "
 #          ACTUAL JOB          #
 ###############################@
 
-function dogevent_log()
-{
-  dogevent --title "$NAME - $1" \
-    --file "$TMP_OUTPUT" \
-    --alert_type "${2:-info}" \
-    --priority "${3:-normal}" \
-    --tag "application:$NAME" \
-    --host "$(hostname)" \
-    --aggregation_key "$NAME - $1"
+function pushover() {
+
+  local MSG=$1
+  local PRIORITY=${2:-"0"}
+
+  pushover --token aALyPPoeQ8g1uKApyJgKLYYAMaPPmx --user uzCHDLuNLNwnhFRGE4Cpn6goDsrDKo \
+    --message "$1" --priority "$PRIORITY"
+
 }
 
 must_run_as_root
@@ -39,7 +38,7 @@ run "snapraid scrub -p1 2>&1"
 
 if [ grep -q "Everything OK" $TMP_OUTPUT ]; then
   log "Everything looks good"
-  dogevent_log "Scrub finished sucessfully" "success" "low"
+  pushover "OK :: Scrub finished sucessfully" "-1"
   exit 0
 elif [ grep -q "WARNING! There are errors" $TMP_OUTPUT]; then
   READ_COUNT=$(grep '[0-9]\{1,\} read errors$' "$TMP_OUTPUT" | sed 's/ \+/ /g' | cut -d ' ' -f2)
@@ -47,11 +46,11 @@ elif [ grep -q "WARNING! There are errors" $TMP_OUTPUT]; then
 
   log "Scrub errors summary: Read [$READ_COUNT] - Data [$DATA_COUNT]"
   mail -s "$EMAIL_SUBJECT_PREFIX - Errors found during scrub" "$EMAIL_TO" < $TMP_OUTPUT
-  dogevent_log "Errors found during scrub" "error"
+  pushover "ERROR :: Errors found during scrub" "1"
   exit 1
 else
   log "An unexpected error has happened."
   mail -s "$EMAIL_SUBJECT_PREFIX ERROR - An unexpected error has happended during scrub" "$EMAIL_TO" < $TMP_OUTPUT
-  dogevent_log "Unexpected error during scrub" "error"
+  pushover "ERROR :: Unexpected error during scrub" "1"
   exit 1
 fi
