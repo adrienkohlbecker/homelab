@@ -19,15 +19,14 @@ EMAIL_SUBJECT_PREFIX="[$(hostname -s)] $NAME - "
 #          ACTUAL JOB          #
 ###############################@
 
-function dogevent_log()
-{
-  dogevent --title "$NAME - $1" \
-    --file "$TMP_OUTPUT" \
-    --alert_type "${2:-info}" \
-    --priority "${3:-normal}" \
-    --tag "application:$NAME" \
-    --host "$(hostname)" \
-    --aggregation_key "$NAME - $1"
+function pushover() {
+
+  local MSG=$1
+  local PRIORITY=${2:-"0"}
+
+  pushover --token aALyPPoeQ8g1uKApyJgKLYYAMaPPmx --user uzCHDLuNLNwnhFRGE4Cpn6goDsrDKo \
+    --message "$1" --priority "$PRIORITY"
+
 }
 
 must_run_as_root
@@ -54,19 +53,19 @@ if [ "$DEL_COUNT" -gt 0 -o "$ADD_COUNT" -gt 0 -o "$MOVE_COUNT" -gt 0 -o "$UPDATE
     log "Number of deleted files ($DEL_COUNT) exceeded threshold ($DEL_THRESHOLD)."
     log "NOT proceeding with sync job. Please run sync manually if this is not an error condition."
     mail -s "$EMAIL_SUBJECT_PREFIX WARNING - Number of deleted files ($DEL_COUNT) exceeded threshold ($DEL_THRESHOLD)" "$EMAIL_TO" < "$TMP_OUTPUT"
-    dogevent_log "Number of deleted files exceeded threshold" "error"
+    pushover "ERROR :: Number of deleted files exceeded threshold" "1"
     exit 1
   else
     # NO, delete threshold not reached, lets run the sync job
     log "Deleted files ($DEL_COUNT) did not exceed threshold ($DEL_THRESHOLD), proceeding with sync job."
     run "snapraid sync 2>&1"
-    dogevent_log "Sync has finished" "success" "low"
+    pushover "OK :: Sync has finished" "-1"
     log "Done."
     exit 0
   fi
 else
   # NO, so lets log it and exit
   log "No change detected. Nothing to do"
-  dogevent_log "Nothing to do" "success" "low"
+  pushover "INFO :: Nothing to do" "-2"
   exit 0
 fi
