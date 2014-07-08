@@ -21,24 +21,23 @@ EMAIL_SUBJECT_PREFIX="[$(hostname -s)] $NAME - "
 
 function pushover() {
 
-  local MSG=$1
   local PRIORITY=${2:-"0"}
 
-  pushover --token aALyPPoeQ8g1uKApyJgKLYYAMaPPmx --user uzCHDLuNLNwnhFRGE4Cpn6goDsrDKo \
-    --message "$1" --priority "$PRIORITY"
+  pushover_log --token aALyPPoeQ8g1uKApyJgKLYYAMaPPmx --user uzCHDLuNLNwnhFRGE4Cpn6goDsrDKo \
+    --message "$1" --priority "$PRIORITY" --title "Snapraid scrub"
 
 }
 
 must_run_as_root
 
 br
-log "snapraid scrub started."
+log "Snapraid scrub started."
 
 run "snapraid scrub -p1 2>&1"
 
 if [ grep -q "Everything OK" $TMP_OUTPUT ]; then
   log "Everything looks good"
-  pushover "OK :: Scrub finished sucessfully" "-1"
+  pushover_log "OK :: Scrub finished sucessfully" "-1"
   exit 0
 elif [ grep -q "WARNING! There are errors" $TMP_OUTPUT]; then
   READ_COUNT=$(grep '[0-9]\{1,\} read errors$' "$TMP_OUTPUT" | sed 's/ \+/ /g' | cut -d ' ' -f2)
@@ -46,11 +45,11 @@ elif [ grep -q "WARNING! There are errors" $TMP_OUTPUT]; then
 
   log "Scrub errors summary: Read [$READ_COUNT] - Data [$DATA_COUNT]"
   mail -s "$EMAIL_SUBJECT_PREFIX - Errors found during scrub" "$EMAIL_TO" < $TMP_OUTPUT
-  pushover "ERROR :: Errors found during scrub" "1"
+  pushover_log "ERROR :: Errors found during scrub" "1"
   exit 1
 else
   log "An unexpected error has happened."
   mail -s "$EMAIL_SUBJECT_PREFIX ERROR - An unexpected error has happended during scrub" "$EMAIL_TO" < $TMP_OUTPUT
-  pushover "ERROR :: Unexpected error during scrub" "1"
+  pushover_log "ERROR :: Unexpected error during scrub" "1"
   exit 1
 fi
