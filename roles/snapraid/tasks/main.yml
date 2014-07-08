@@ -30,5 +30,5 @@
   sudo: true
 
 - name: Schedule the sync script
-  cron: name="snapraid sync" minute=0 hour=4 job="/usr/local/bin/snapraid_sync >> /var/log/myscript.log 2>&1" user=root cron_file=ansible_snapraid_sync
+  cron: name="snapraid sync" minute=0 hour=0 job="/usr/local/bin/snapraid_sync" user=root cron_file=ansible_snapraid_sync
   sudo: true

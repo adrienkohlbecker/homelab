@@ -33,7 +33,7 @@ function dogevent_log()
 must_run_as_root
 
 br
-log "SnapRAID Job started."
+log "snapraid sync started."
 
 run "snapraid diff 2>&1"
 
