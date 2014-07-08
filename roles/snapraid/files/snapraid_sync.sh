@@ -1,5 +1,5 @@
 #!/bin/bash
-(test -e /usr/local/lib/bash-framework && source /usr/local/lib/bash-framework) || (echo "Could not load bash-framework" 1>&2; exit 1)
+test -e /usr/local/lib/bash-framework && source /usr/local/lib/bash-framework || (echo "Could not load bash-framework" 1>&2; exit 1)
 
 ################################
 #        SCRIPT CONFIG         #
