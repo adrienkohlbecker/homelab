@@ -41,7 +41,7 @@ run "zfs list -r 2>&1"
 # Health - Check if all zfs volumes are in good condition. We are looking for
 # any keyword signifying a degraded or broken array.
 log "Checking pool health condition..."
-if echo $(zpool status) | grep -q -e 'DEGRADED\|FAULTED\|OFFLINE\|UNAVAIL\|REMOVED\|FAIL\|DESTROYED\|corrupt\|cannot\|unrecover'; then
+if zpool status | grep -q -e 'DEGRADED\|FAULTED\|OFFLINE\|UNAVAIL\|REMOVED\|FAIL\|DESTROYED\|corrupt\|cannot\|unrecover'; then
 
   log "ERROR :: Detected pool health fault"
   mail -s "$EMAIL_SUBJECT_PREFIX - Health fault" "$EMAIL_TO" < "$TMP_OUTPUT"
@@ -54,7 +54,7 @@ fi
 # are reported an email will be sent out. You should then look to replace the
 # faulty drive and run "zpool scrub" on the affected volume after resilvering.
 log "Checking drive errors..."
-if echo $(zpool status) | grep ONLINE | grep -v state | awk '{print $4 $5 $6}' | grep -qv 000; then
+if zpool status | grep ONLINE | grep -v state | awk '{print $4 $5 $6}' | grep -qv 000; then
   log "ERROR :: Detected drive errors"
   mail -s "$EMAIL_SUBJECT_PREFIX - Drive errors" "$EMAIL_TO" < "$TMP_OUTPUT"
   pushover_log "ERROR :: Detected drive errors" "1"
@@ -79,25 +79,25 @@ CURRENT_DATE=$(date +"%s")
 ZFS_VOLUMES=$(zpool list -H -o name)
 
 for volume in $ZFS_VOLUMES; do
-  if zpool status $volume | grep -q "none requested"; then
+  if zpool status "$volume" | grep -q "none requested"; then
     log "ERROR :: No scrub requested on $volume"
     mail -s "$EMAIL_SUBJECT_PREFIX - No scrub requested on $volume" "$EMAIL_TO" < "$TMP_OUTPUT"
     pushover_log "ERROR :: No scrub requested on $volume" "1"
     exit 1
-  elif zpool status $volume | grep -q -e "scrub canceled"; then
+  elif zpool status "$volume" | grep -q -e "scrub canceled"; then
     log "ERROR :: Last scrub canceled on $volume"
     mail -s "$EMAIL_SUBJECT_PREFIX - Last scrub canceled on $volume" "$EMAIL_TO" < "$TMP_OUTPUT"
     pushover_log "ERROR :: Last scrub canceled on $volume" "1"
     exit 1
-  elif zpool status $volume | grep -q -e "scrub in progress\|resilver"; then
+  elif zpool status "$volume" | grep -q -e "scrub in progress\|resilver"; then
     log "Scrub in progress for $volume, skipping."
     break
   fi
 
-  SCRUB_RAW_DATE=$(zpool status $volume | grep scrub | awk '{print $11" "$12" " $13" " $14" "$15}')
+  SCRUB_RAW_DATE=$(zpool status "$volume" | grep scrub | awk '{print $11" "$12" " $13" " $14" "$15}')
   SCRUB_DATE=$(date -d "$SCRUB_RAW_DATE" +"%s")
 
-  if [ $(($CURRENT_DATE - $SCRUB_DATE)) -ge $SCRUB_EXPIRE ]; then
+  if [ $((CURRENT_DATE - SCRUB_DATE)) -ge $SCRUB_EXPIRE ]; then
     log "ERROR :: Scrub expired on $volume"
     mail -s "$EMAIL_SUBJECT_PREFIX - Scrub expired on $volume" "$EMAIL_TO" < "$TMP_OUTPUT"
     pushover_log "ERROR :: Scrub expired on $volume" "1"
