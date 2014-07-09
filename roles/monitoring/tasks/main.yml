@@ -34,3 +34,36 @@
 - name: Instal pushover-cli
   pip: name=pushover-cli
   sudo: true
+
+- name: Install smartctl
+  apt: pkg=smartmontools state=installed
+  sudo: true
+
+  # -d removable : Do not fail if the drive goes missing
+  # -n standby,24 : Skip checking if the drive is in standby mode, except when 24 checks have already been skipped
+  # -m root : Email root on error
+  # -M exec /usr/share/smartmontools/smartd-runner : Default runner for emails
+  # -a : Load some common parameters
+  #       '-H' to check the SMART health status
+  #       '-f' to report failures of Usage (rather than Prefail) Attributes
+  #       '-t' to track changes in both Prefailure and Usage Attributes
+  #       '-l error' to report increases in the number of ATA errors
+  #       '-l selftest' to report increases in the number of Self-Test Log errors
+  #       '-l selfteststs' to report changes of Self-Test execution status
+  #       '-C 197' to report nonzero values of the current pending sector count
+  #       '-U 198' to report nonzero values of the offline pending sector count
+  # -W 0,38,42 : Do not log temp changes, log when temp is > 38, alert when temp is > 42
+  # -I 194 : Do not log Temperature_Celsius changes
+  # -I 190 : Do not log Airflow_Temperature_Cel changes
+  # -I 231 : Do not log Temperature changes
+  # -I 9 : Do not log Power_On_Hours changes
+  # -s (S/../.././02|L/../../6/03) : Test schedule = short every day at 2, long every sunday at 3
+- name: Configure smartd
+  lineinfile: dest=/etc/smartd.conf regexp="^DEVICESCAN" line="DEVICESCAN -d removable -n standby,24 -m root -M exec /usr/share/smartmontools/smartd-runner -a -W 0,38,42 -I 194 -I 190 -I 231 -I 9 -s (S/../.././02|L/../../6/03)"
+  sudo: true
+  notify: Restart smartmontools
+
+- name: Start smartd on boot
+  lineinfile: 'dest=/etc/default/smartmontools regexp="^#?start_smartd" line="start_smartd=yes"'
+  sudo: true
+  notify: Restart smartmontools
