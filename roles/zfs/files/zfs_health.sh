@@ -54,7 +54,7 @@ fi
 # are reported an email will be sent out. You should then look to replace the
 # faulty drive and run "zpool scrub" on the affected volume after resilvering.
 log "Checking drive errors..."
-if zpool status | grep ONLINE | grep -v state | awk '{print $4 $5 $6}' | grep -qv 000; then
+if zpool status | grep ONLINE | grep -v state | awk '{print $3 $4 $5}' | grep -qv 000; then
   log "ERROR :: Detected drive errors"
   mail -s "$EMAIL_SUBJECT_PREFIX - Drive errors" "$EMAIL_TO" < "$TMP_OUTPUT"
   pushover_log "ERROR :: Detected drive errors" "1"
