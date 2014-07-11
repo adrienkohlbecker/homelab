@@ -19,15 +19,6 @@ EMAIL_SUBJECT_PREFIX="[$(hostname -s)] $NAME"
 #          ACTUAL JOB          #
 ###############################@
 
-function pushover_log() {
-
-  local PRIORITY=${2:-"0"}
-
-  pushover --token aALyPPoeQ8g1uKApyJgKLYYAMaPPmx --user uzCHDLuNLNwnhFRGE4Cpn6goDsrDKo \
-    --message "$1" --priority "$PRIORITY" --title "Snapraid Sync"
-
-}
-
 must_run_as_root
 
 br
@@ -53,21 +44,19 @@ if [ "$DEL_COUNT" -gt 0 -o "$ADD_COUNT" -gt 0 -o "$MOVE_COUNT" -gt 0 -o "$UPDATE
     log "Number of deleted files ($DEL_COUNT) exceeded threshold ($DEL_THRESHOLD)."
     log "NOT proceeding with sync job. Please run sync manually if this is not an error condition."
     mail -s "$EMAIL_SUBJECT_PREFIX WARNING - Number of deleted files ($DEL_COUNT) exceeded threshold ($DEL_THRESHOLD)" "$EMAIL_TO" < "$TMP_OUTPUT"
-    pushover_log "ERROR :: Number of deleted files exceeded threshold" "1"
+    pushover_error "Number of deleted files exceeded threshold"
     exit 1
   else
     # NO, delete threshold not reached, lets run the sync job
     log "Deleted files ($DEL_COUNT) did not exceed threshold ($DEL_THRESHOLD), proceeding with sync job."
     br
     run "snapraid sync 2>&1"
-    pushover_log "OK :: Sync has finished" "-1"
   fi
 else
   # NO, so lets log it and exit
   log "No change detected. Nothing to do"
 fi
 
-curl https://nosnch.in/cebc7586ba
-
+deadmansnitch "cebc7586ba"
 log "Done"
 exit 0

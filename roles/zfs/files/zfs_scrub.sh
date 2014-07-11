@@ -19,15 +19,6 @@ SCRUB_EXPIRE=691200
 #          ACTUAL JOB          #
 ###############################@
 
-function pushover_log() {
-
-  local PRIORITY=${2:-"0"}
-
-  pushover --token ab8o6HMdRRVhNCeUHsTaAKovTxcJxC --user uzCHDLuNLNwnhFRGE4Cpn6goDsrDKo \
-    --message "$1" --priority "$PRIORITY" --title "ZFS Health"
-
-}
-
 must_run_as_root
 
 br
@@ -66,8 +57,6 @@ for pool in $POOLS; do
   done
 done
 
-pushover_log "OK :: ZFS scrub has finished" "-1"
-curl https://nosnch.in/ac9e9c5a77
-
+deadmansnitch "ac9e9c5a77"
 log "Done"
 exit 0
