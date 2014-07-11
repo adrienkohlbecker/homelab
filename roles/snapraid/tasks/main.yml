@@ -30,7 +30,7 @@
   sudo: true
 
 - name: Schedule the sync script
-  cron: name="snapraid sync" minute=0 hour=0 job="/usr/local/bin/snapraid_sync" user=root cron_file=ansible_snapraid_sync
+  cron: name="snapraid sync" minute=5 hour=23 job="/usr/local/bin/snapraid_sync" user=root cron_file=ansible_snapraid_sync
   sudo: true
 
 - name: Copy the scrub script
