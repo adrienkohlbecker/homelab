@@ -57,9 +57,8 @@
   # -I 190 : Do not log Airflow_Temperature_Cel changes
   # -I 231 : Do not log Temperature changes
   # -I 9 : Do not log Power_On_Hours changes
-  # -s (S/../.././02|L/../../5/03) : Test schedule = short every day at 2, long every saturday at 3
 - name: Configure smartd
-  lineinfile: dest=/etc/smartd.conf regexp="^DEVICESCAN" line="DEVICESCAN -d removable -n standby,24 -m root -M exec /usr/share/smartmontools/smartd-runner -a -W 0,38,42 -I 194 -I 190 -I 231 -I 9 -s (S/../.././02|L/../../5/03)"
+  lineinfile: dest=/etc/smartd.conf regexp="^DEVICESCAN" line="DEVICESCAN -d removable -n standby,24 -m root -M exec /usr/share/smartmontools/smartd-runner -a -W 0,38,42 -I 194 -I 190 -I 231 -I 9"
   sudo: true
   notify: Restart smartmontools
 
@@ -67,3 +66,19 @@
   lineinfile: 'dest=/etc/default/smartmontools regexp="^#?start_smartd" line="start_smartd=yes"'
   sudo: true
   notify: Restart smartmontools
+
+- name: Copy the short test script
+  copy: src=smart_short_test.sh dest=/usr/local/bin/smart_short_test mode=755
+  sudo: true
+
+- name: Schedule the short test script
+  cron: name="smart short test" hour=2 minute=0 job="/usr/local/bin/smart_short_test" user=root cron_file=ansible_smart_short_test
+  sudo: true
+
+- name: Copy the long test script
+  copy: src=smart_long_test.sh dest=/usr/local/bin/smart_long_test mode=755
+  sudo: true
+
+- name: Schedule the long test script
+  cron: name="smart_long_test" hour=2 minute=30 job="/usr/local/bin/smart_long_test" user=root cron_file=ansible_smart_long_test
+  sudo: true
