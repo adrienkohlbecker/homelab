@@ -105,5 +105,7 @@ for volume in $ZFS_VOLUMES; do
   fi
 done
 
+curl https://nosnch.in/b1de25d002
+
 log "Done"
 exit 0
