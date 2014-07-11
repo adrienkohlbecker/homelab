@@ -165,6 +165,7 @@
     - Ubuntu_base
     - Tretflix
     - HTPC
+    - TimeCapsule
 
 - name: Disable apparmor for HTPC (custom binary)
   shell: aa-complain /etc/apparmor.d/libvirt/libvirt-dda812ca-3de2-adac-a6c3-0914760ca54a
