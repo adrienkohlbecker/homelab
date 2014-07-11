@@ -61,11 +61,13 @@ if [ "$DEL_COUNT" -gt 0 -o "$ADD_COUNT" -gt 0 -o "$MOVE_COUNT" -gt 0 -o "$UPDATE
     br
     run "snapraid sync 2>&1"
     pushover_log "OK :: Sync has finished" "-1"
-    log "Done."
-    exit 0
   fi
 else
   # NO, so lets log it and exit
   log "No change detected. Nothing to do"
-  exit 0
 fi
+
+curl https://nosnch.in/cebc7586ba
+
+log "Done"
+exit 0

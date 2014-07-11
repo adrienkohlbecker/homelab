@@ -67,6 +67,7 @@ for pool in $POOLS; do
 done
 
 pushover_log "OK :: ZFS scrub has finished" "-1"
+curl https://nosnch.in/ac9e9c5a77
 
 log "Done"
 exit 0

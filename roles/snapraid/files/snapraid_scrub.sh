@@ -35,7 +35,6 @@ run "snapraid scrub 2>&1"
 if grep -q "Everything OK" "$TMP_OUTPUT"; then
   log "Everything looks good"
   pushover_log "OK :: Scrub finished sucessfully" "-1"
-  exit 0
 elif grep -q "WARNING! There are errors" "$TMP_OUTPUT"; then
   READ_COUNT=$(grep '[0-9]\{1,\} read errors$' "$TMP_OUTPUT" | sed 's/ \+/ /g' | cut -d ' ' -f2)
   DATA_COUNT=$(grep '[0-9]\{1,\} data errors$' "$TMP_OUTPUT" | sed 's/ \+/ /g' | cut -d ' ' -f2)
@@ -50,3 +49,7 @@ else
   pushover_log "ERROR :: Unexpected error during scrub" "1"
   exit 1
 fi
+
+log "Done"
+curl https://nosnch.in/150c9a2135
+exit 0
