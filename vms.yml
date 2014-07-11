@@ -1,14 +1,13 @@
 ---
 - hosts: vms
   vars_files:
-    - /vars/credentials.yml
+    - vars/credentials.yml
   roles:
     - common
     - users
     - ssh
     - security
     - mailer
-    - monitoring
     - dotfiles
 
   post_tasks:
