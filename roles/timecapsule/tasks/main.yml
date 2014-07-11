@@ -1,0 +1,84 @@
+---
+
+- name: Install avahi-daemon
+  apt: pkg=avahi-daemon state=installed
+  sudo: true
+
+- name: Install netatalk dependencies
+  apt: pkg={{item}} state=installed
+  sudo: true
+  with_items:
+    - build-essential
+    - libssl-dev # (DHX auth aka DHCAST128)
+    - libgcrypt11-dev # (DHX2 auth)
+    - libkrb5-dev # (Kerberos V auth)
+    - libpam0g-dev # (PAM)
+    - libwrap0-dev # (TCP Wrapper)
+    - libdb-dev # (dbd CNID backend)
+    - libmysqlclient-dev # (mysql CNID backend)
+    - libavahi-client-dev # (Bonjour support)
+    - libacl1-dev # (ACL support)
+    - libldap2-dev # (enhanced ACL support)
+    - libcrack2-dev # (password ckeck)
+    - systemtap-sdt-dev # (DTrace-compatible)
+    - libdbus-1-dev # (used by afpstats command)
+    - libdbus-glib-1-dev # (used by afpstats command)
+    - libglib2.0-dev # (used by afpstats command)
+    - tracker # (used for spotlight indexing)
+    - libtracker-sparql-0.16-dev # (used for spotlight indexing) (version number may differ)
+    - libtracker-miner-0.16-dev # (used for spotlight indexing) (version number may differ)
+
+- name: Download netatalk
+  get_url: url=http://sourceforge.net/projects/netatalk/files/netatalk/3.1.3/netatalk-3.1.3.tar.gz/download dest=/usr/src/netatalk-3.1.3.tar.gz
+  register: downloaded_netatalk
+  sudo: true
+
+- name: Extract netatalk
+  shell: tar -xzf netatalk-3.1.3.tar.gz chdir=/usr/src
+  when: downloaded_netatalk|changed
+  sudo: true
+
+- name: Compile and install netatalk
+  shell: './configure --with-init-style=debian --with-cracklib --enable-krbV-uam --with-pam-confdir=/etc/pam.d --with-dbus-sysconf-dir=/etc/dbus-1/system.d --with-tracker-pkgconfig-version=0.16 && make && make install chdir=/usr/src/netatalk-3.1.3'
+  when: downloaded_netatalk|changed
+  sudo: true
+
+- name: Create mount points
+  file: dest={{item.path}} state=directory owner={{item.owner}} group={{item.group}} mode={{item.mode}}
+  sudo: true
+  with_items:
+    - {path: '/mnt/timemachine_adrien', owner: 'adrien', group: 'adrien', mode: '2770'}
+    - {path: '/mnt/timemachine_coline', owner: 'coline', group: 'coline', mode: '2770'}
+
+- name: Mount partitons
+  mount: "name={{item.mountpoint}} src='LABEL={{item.label}}' state=present fstype=ext4 opts='{{item.opts}}'"
+  sudo: true
+  with_items:
+    - {mountpoint: '/mnt/timemachine_adrien', label: 'tm_adrien', opts: 'defaults,noatime,nodiratime,user_xattr,acl'}
+    - {mountpoint: '/mnt/timemachine_coline', label: 'tm_coline', opts: 'defaults,noatime,nodiratime,user_xattr,acl'}
+
+- name: Copy afp.conf
+  copy: src=afp.conf dest=/usr/local/etc/afp.conf owner=root group=root mode=0755
+  sudo: true
+  notify: Restart netatalk
+
+- name: Copy afp.service
+  copy: src=afpd.service dest=/etc/avahi/services/afpd.service owner=root group=root mode=0755
+  sudo: true
+  notify: Restart avahi
+
+- name: Allow netatalk through firewall
+  ufw: rule=allow port=548
+  sudo: true
+
+- name: Allow avahi through firewall
+  ufw: rule=allow port=5353
+  sudo: true
+
+- name: Start netatalk
+  service: name=avahi-daemon state=started
+  sudo: true
+
+- name: Start netatalk
+  service: name=netatalk state=started
+  sudo: true

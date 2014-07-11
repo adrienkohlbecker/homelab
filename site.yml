@@ -1,3 +1,4 @@
 ---
 - include: hypervisors.yml
 - include: vms.yml
+- include: timecapsules.yml
