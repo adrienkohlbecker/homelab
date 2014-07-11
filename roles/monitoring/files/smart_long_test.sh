@@ -41,6 +41,6 @@ else
   done
 fi
 
-curl https://nosnch.in/39a52f20f7
+deadmansnitch "39a52f20f7"
 log "Done"
 exit 0

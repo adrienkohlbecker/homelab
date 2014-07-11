@@ -24,6 +24,6 @@ for device in "${DEVICES[@]}"; do
 
 done
 
-curl https://nosnch.in/4e614313f5
+deadmansnitch "4e614313f5"
 log "Done"
 exit 0
