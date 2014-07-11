@@ -75,10 +75,10 @@
   ufw: rule=allow port=5353
   sudo: true
 
-- name: Start netatalk
-  service: name=avahi-daemon state=started
+- name: Start avahi
+  service: name=avahi-daemon state=started enabled=yes
   sudo: true
 
 - name: Start netatalk
-  service: name=netatalk state=started
+  service: name=netatalk state=started enabled=yes
   sudo: true
