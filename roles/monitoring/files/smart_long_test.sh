@@ -37,7 +37,7 @@ else
 
   for device in "${DEVICES[@]}"; do
     echo "..."
-    run "smartctl -t long $device"
+    run "smartctl -t long $device 2>&1"
   done
 fi
 

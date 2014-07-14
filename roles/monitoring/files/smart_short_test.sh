@@ -17,7 +17,7 @@ shopt -u nullglob
 
 for device in "${DEVICES[@]}"; do
 
-  run "smartctl -t short $device"
+  run "smartctl -t short $device 2>&1"
   log "Waiting 2 minutes for test on $device ..."
   sleep 120
   log "$device done"
