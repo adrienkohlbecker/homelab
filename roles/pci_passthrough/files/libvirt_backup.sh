@@ -81,7 +81,7 @@ for DOMAIN in $DOMAINS; do
   done
 
   log "Dumping domain xml"
-  virsh dumpxml --inactive > "$BACKUP_DEST/$DOMAIN.xml"
+  virsh dumpxml --inactive "$DOMAIN" > "$BACKUP_DEST/$DOMAIN.xml"
 
   if [ $WAS_RUNNING -eq 1 ]; then
     log "Restarting $DOMAIN"
