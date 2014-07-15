@@ -48,25 +48,25 @@
   sudo: true
 
 - name: Download kernel {{kernel_version}} source
-  get_url: url=https://www.kernel.org/pub/linux/kernel/v3.x/linux-{{kernel_version}}.tar.gz dest=/usr/src/linux-{{kernel_version}}.tar.gz
+  get_url: url=https://www.kernel.org/pub/linux/kernel/v3.x/linux-{{kernel_version}}.tar.gz dest=/usr/local/src/linux-{{kernel_version}}.tar.gz
   sudo: true
 
 - name: Check if kernel is extracted
-  stat: path=/usr/src/{{ kernel_src_directory }}
+  stat: path=/usr/local/src/{{ kernel_src_directory }}
   register: should_extract
 
-- name: Create /usr/src/{{ kernel_src_directory }} directory
-  file: dest=/usr/src/{{ kernel_src_directory }} state=directory owner=root group=root mode=755
+- name: Create /usr/local/src/{{ kernel_src_directory }} directory
+  file: dest=/usr/local/src/{{ kernel_src_directory }} state=directory owner=root group=root mode=755
   when: should_extract.stat.exists == False
   sudo: true
 
 - name: Extract the kernel source
-  shell: tar -xzf linux-{{kernel_version}}.tar.gz --strip-components=1 --directory /usr/src/{{ kernel_src_directory }} chdir=/usr/src
+  shell: tar -xzf linux-{{kernel_version}}.tar.gz --strip-components=1 --directory /usr/local/src/{{ kernel_src_directory }} chdir=/usr/local/src
   when: should_extract.stat.exists == False
   sudo: true
 
 - name: Download Ubuntu patches
-  get_url: url={{item}} dest=/usr/src/{{ kernel_src_directory }}
+  get_url: url={{item}} dest=/usr/local/src/{{ kernel_src_directory }}
   with_items:
     - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v{{kernel_version}}-utopic/0001-base-packaging.patch'
     - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v{{kernel_version}}-utopic/0002-debian-changelog.patch'
@@ -75,15 +75,15 @@
   sudo: true
 
 - name: Download GCC microarch patch
-  get_url: url=https://raw.githubusercontent.com/graysky2/kernel_gcc_patch/master/outdated_versions/linux-3.15+/gcc-4.2+/enable_additional_cpu_optimizations_for_gcc_kernel_v3.15+.patch dest=/usr/src/{{ kernel_src_directory }}
+  get_url: url=https://raw.githubusercontent.com/graysky2/kernel_gcc_patch/master/outdated_versions/linux-3.15+/gcc-4.2+/enable_additional_cpu_optimizations_for_gcc_kernel_v3.15+.patch dest=/usr/local/src/{{ kernel_src_directory }}
   sudo: true
 
 - name: Copy ACS override patch
-  copy: src=override_for_missing_acs_capabilities.patch dest=/usr/src/{{ kernel_src_directory}}/override_for_missing_acs_capabilities.patch
+  copy: src=override_for_missing_acs_capabilities.patch dest=/usr/local/src/{{ kernel_src_directory}}/override_for_missing_acs_capabilities.patch
   sudo: true
 
 - name: Apply patches
-  shell: cat {{ item }} | patch -p1 chdir=/usr/src/{{ kernel_src_directory }}
+  shell: cat {{ item }} | patch -p1 chdir=/usr/local/src/{{ kernel_src_directory }}
   when: should_extract.stat.exists == False
   with_items:
    - 0001-base-packaging.patch
@@ -94,45 +94,45 @@
   sudo: true
 
 - name: Copy the configuration of 3.15.2 packaged for utopic as base
-  copy: src=config-3.15.2-031502-generic dest=/usr/src/{{ kernel_src_directory }}/.config
+  copy: src=config-3.15.2-031502-generic dest=/usr/local/src/{{ kernel_src_directory }}/.config
   when: should_extract.stat.exists == False
   sudo: true
 
 - name: Update configuration with new kernel
-  shell: yes '' | make oldconfig chdir=/usr/src/{{ kernel_src_directory }}
+  shell: yes '' | make oldconfig chdir=/usr/local/src/{{ kernel_src_directory }}
   when: should_extract.stat.exists == False
   sudo: true
 
 - name: Customize configuration
-  lineinfile: 'dest=/usr/src/{{ kernel_src_directory }}/.config regexp="^(?:# )?{{ item.regexp }}(=| is not set)" line="{{ item.line }}" state=present'
+  lineinfile: 'dest=/usr/local/src/{{ kernel_src_directory }}/.config regexp="^(?:# )?{{ item.regexp }}(=| is not set)" line="{{ item.line }}" state=present'
   register: kernel_config_customization
   with_items: kernel_config
   sudo: true
 
 - name: Update configuration with new values
-  shell: yes '' | make oldconfig chdir=/usr/src/{{ kernel_src_directory }}
+  shell: yes '' | make oldconfig chdir=/usr/local/src/{{ kernel_src_directory }}
   when: kernel_config_customization|changed
   sudo: true
 
 - name: Check if kernel is compiled
-  stat: path=/usr/src/{{ kernel_image_deb }}
+  stat: path=/usr/local/src/{{ kernel_image_deb }}
   register: should_compile
 
 - name: Compile the kernel
-  shell: make-kpkg --initrd --append-to-version=-{{ kernel_append_to_version }} kernel-image kernel-headers chdir=/usr/src/{{ kernel_src_directory }}
+  shell: make-kpkg --initrd --append-to-version=-{{ kernel_append_to_version }} kernel-image kernel-headers chdir=/usr/local/src/{{ kernel_src_directory }}
   when: kernel_config_customization|changed or should_compile.stat.exists == False
   sudo: true
 
 - name: Install the kernel
-  apt: deb=/usr/src/{{ kernel_image_deb }}
+  apt: deb=/usr/local/src/{{ kernel_image_deb }}
   sudo: true
 
 - name: Install the headers
-  apt: deb=/usr/src/{{ kernel_headers_deb }}
+  apt: deb=/usr/local/src/{{ kernel_headers_deb }}
   sudo: true
 
 - name: Symlink the kernel
-  file: src=/usr/src/{{ kernel_src_directory }} dest=/usr/src/linux state=link
+  file: src=/usr/local/src/{{ kernel_src_directory }} dest=/usr/src/linux state=link
   sudo: true
 
 - name: Configure GRUB
