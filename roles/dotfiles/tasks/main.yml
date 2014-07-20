@@ -44,7 +44,7 @@
     - /home/adrien/.vim/colors
     - /home/adrien/.vim/swaps
     - /home/adrien/.vim/syntax
-    - /home/adrien/.vim/undo$
+    - /home/adrien/.vim/undo
 
 - name: Copy vim theme
   copy: src=molokai.vim dest=/home/adrien/.vim/colors/molokai.vim
