@@ -20,7 +20,7 @@
   sudo: true
 
 - name: Setup new hostname to loopback in /etc/hosts
-  lineinfile: 'dest=/etc/hosts regexp="^127.0.1.1" line="127.0.1.1  {{inventory_hostname}}"'
+  lineinfile: 'dest=/etc/hosts regexp="^127.0.0.1" line="127.0.0.1 localhost {{inventory_hostname}}"'
   sudo: true
 
 - name: 'Install vim, ntp, ntpdate, build-essential'
