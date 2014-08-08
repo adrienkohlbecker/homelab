@@ -42,8 +42,7 @@ Configure zfs snapshots
 sudo zfs set com.sun:auto-snapshot:frequent=false tank
 sudo zfs set com.sun:auto-snapshot:hourly=false tank
 
-
-sudo zfs set com.sun:auto-snapshot=false backup
+sudo zfs set com.sun:auto-snapshot:daily=false tank/backup
 ```
 
 Create datasets :
