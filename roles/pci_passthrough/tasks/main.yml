@@ -70,7 +70,7 @@
   with_items:
     - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v{{kernel_version}}-utopic/0001-base-packaging.patch'
     - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v{{kernel_version}}-utopic/0002-debian-changelog.patch'
-    - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v{{kernel_version}}-utopic/0003-configs-based-on-Ubuntu-3.15.0-6.11.patch'
+    - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v{{kernel_version}}-utopic/0003-configs-based-on-Ubuntu-3.16.0-7.12.patch'
   when: should_extract.stat.exists == False
   sudo: true
 
@@ -88,13 +88,13 @@
   with_items:
    - 0001-base-packaging.patch
    - 0002-debian-changelog.patch
-   - 0003-configs-based-on-Ubuntu-3.15.0-6.11.patch
+   - 0003-configs-based-on-Ubuntu-3.16.0-7.12.patch
    - enable_additional_cpu_optimizations_for_gcc_kernel_v3.15+.patch
    - override_for_missing_acs_capabilities.patch
   sudo: true
 
-- name: Copy the configuration of 3.15.2 packaged for utopic as base
-  copy: src=config-3.15.2-031502-generic dest=/usr/local/src/{{ kernel_src_directory }}/.config
+- name: Copy the configuration of 3.16.0 packaged for utopic as base
+  copy: src=config-3.16.0-031600-generic dest=/usr/local/src/{{ kernel_src_directory }}/.config
   when: should_extract.stat.exists == False
   sudo: true
 
