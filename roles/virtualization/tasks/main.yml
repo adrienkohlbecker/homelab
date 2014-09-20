@@ -1,26 +1,22 @@
 ---
 
-- name: Install virt-manager and kvm
+- name: Download required seabios from debian
+  get_url: url=http://http.us.debian.org/debian/pool/main/s/seabios/seabios_1.7.5-1_all.deb dest=/home/{{deploy_user}}/seabios_1.7.5-1_all.deb
+  sudo: true
+
+- name: Install required seabios
+  apt: deb=/home/{{deploy_user}}/seabios_1.7.5-1_all.deb
+  sudo: true
+
+- name: Add virtualisation ppa
+  apt_repository: repo='ppa:jacob/virtualisation' state=present
+  sudo: true
+
+- name: Install qemu-kvm
   apt: pkg={{item}} state=installed
   sudo: true
-  with_items:
-    - virt-manager
     - qemu-kvm
-
-- name: Download the latest libvirt
-  get_url: url={{item.url}} dest=/usr/local/src/{{item.file}}
-  sudo: true
-  with_items:
-    - {url: 'http://ppa.launchpad.net/jacob/virtualisation/ubuntu/pool/main/libv/libvirt/libvirt0_1.2.6-0~14.04~ppa1_amd64.deb', file: 'libvirt0_1.2.6-0~14.04~ppa1_amd64.deb'}
-    - {url: 'http://ppa.launchpad.net/jacob/virtualisation/ubuntu/pool/main/libv/libvirt/libvirt-bin_1.2.6-0~14.04~ppa1_amd64.deb', file: 'libvirt-bin_1.2.6-0~14.04~ppa1_amd64.deb'}
-
-- name: Install the latest libvirt (1)
-  apt: deb=/usr/local/src/libvirt0_1.2.6-0~14.04~ppa1_amd64.deb
-  sudo: true
-
-- name: Install the latest libvirt (2)
-  apt: deb=/usr/local/src/libvirt-bin_1.2.6-0~14.04~ppa1_amd64.deb
-  sudo: true
+    - virt-manager
 
 - name: Download virtio drivers for windows
   get_url: url=http://alt.fedoraproject.org/pub/alt/virtio-win/latest/virtio-win-0.1-81.iso dest=/var/lib/libvirt/images/virtio-win-0.1-81.iso owner=libvirt-qemu group=kvm
