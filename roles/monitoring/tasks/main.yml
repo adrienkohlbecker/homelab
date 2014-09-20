@@ -58,7 +58,7 @@
   # -I 231 : Do not log Temperature changes
   # -I 9 : Do not log Power_On_Hours changes
 - name: Configure smartd
-  lineinfile: dest=/etc/smartd.conf regexp="^DEVICESCAN" line="DEVICESCAN -d removable -n standby,24 -m root -M exec /usr/share/smartmontools/smartd-runner -a -W 0,38,42 -I 194 -I 190 -I 231 -I 9"
+  lineinfile: dest=/etc/smartd.conf regexp="^DEVICESCAN" line="DEVICESCAN -d removable -n standby,24 -m root -M exec /usr/share/smartmontools/smartd-runner -a -W 0,40,45 -I 194 -I 190 -I 231 -I 9"
   sudo: true
   notify: Restart smartmontools
 
