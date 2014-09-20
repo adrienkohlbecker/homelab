@@ -7,8 +7,23 @@
     - fr_FR.UTF-8
     - en_US.UTF-8
 
+- name: Install source.list
+  copy: src=sources.list dest=/etc/apt/sources.list
+  sudo: true
+
 - name: apt-get update
   apt: update_cache=yes cache_valid_time=3600
+  sudo: true
+
+- name: Install base packages
+  apt: pkg={{item}} state=installed
+  with_items:
+    - aptitude
+    - ubuntu-standard
+  sudo: true
+
+- name: Create symlink for grub-probe
+  file: src=/dev/disk/by-id/ata-Crucial_CT240M500SSD1_14230C42B78B-part2 dest=/dev/ata-Crucial_CT240M500SSD1_14230C42B78B-part2 state=link
   sudo: true
 
 - name: apt-get upgrade
