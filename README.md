@@ -39,11 +39,21 @@ Check if VT-d is activated
 Configure zfs snapshots
 
 ```
-sudo zfs set com.sun:auto-snapshot:frequent=false tank
-sudo zfs set com.sun:auto-snapshot:hourly=false tank
+zfs set com.sun:auto-snapshot=false tank
+zfs set com.sun:auto-snapshot=true tank/legacy
+zfs set com.sun:auto-snapshot:frequent=false tank
+zfs set com.sun:auto-snapshot:hourly=false tank
 
-sudo zfs set com.sun:auto-snapshot:daily=false tank/backup
+zfs set com.sun:auto-snapshot=false backup
+zfs set com.sun:auto-snapshot=false vms
 ```
 
 Create datasets :
 sudo zpool create -f -o ashift=12 -O compression=lz4 -O casesensitivity=insensitive -O normalization=formD ...
+
+
+Config ZFS
+
+https://github.com/zfsonlinux/grub/issues/12
+http://blog.ls-al.com/ubuntu-on-a-zfs-root-file-system-for-ubuntu-14-04/
+https://github.com/zfsonlinux/pkg-zfs/wiki/HOWTO-install-Ubuntu-to-a-Native-ZFS-Root-Filesystem
