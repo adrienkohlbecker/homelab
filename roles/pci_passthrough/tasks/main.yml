@@ -70,7 +70,7 @@
   with_items:
     - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v{{kernel_version}}-utopic/0001-base-packaging.patch'
     - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v{{kernel_version}}-utopic/0002-debian-changelog.patch'
-    - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v{{kernel_version}}-utopic/0003-configs-based-on-Ubuntu-3.16.0-7.12.patch'
+    - 'http://kernel.ubuntu.com/~kernel-ppa/mainline/v{{kernel_version}}-utopic/0003-configs-based-on-Ubuntu-3.16.0-16.22.patch'
   when: should_extract.stat.exists == False
   sudo: true
 
@@ -88,7 +88,7 @@
   with_items:
    - 0001-base-packaging.patch
    - 0002-debian-changelog.patch
-   - 0003-configs-based-on-Ubuntu-3.16.0-7.12.patch
+   - 0003-configs-based-on-Ubuntu-3.16.0-16.22.patch
    - enable_additional_cpu_optimizations_for_gcc_kernel_v3.15+.patch
    - override_for_missing_acs_capabilities.patch
   sudo: true
