@@ -46,6 +46,10 @@
     - ntp
     - ntpdate
     - build-essential
+    - update-notifier-common
+    - htop
+    - tree
+    - curl
 
 - name: Configure concurrency level
   lineinfile: "dest=/etc/environment regexp='{{item.regexp}}' line='{{item.line}}'"

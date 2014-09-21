@@ -6,6 +6,7 @@
   with_items:
     - zsh
     - git
+    - screen
 
 - name: Install oh-my-zsh
   git: repo=git://github.com/robbyrussell/oh-my-zsh.git dest=/home/adrien/.oh-my-zsh

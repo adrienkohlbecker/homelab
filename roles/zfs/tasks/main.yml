@@ -15,7 +15,7 @@
   sudo: true
   with_items:
     - ubuntu-zfs
-    - zfs-auto-snapshot
+    # - zfs-auto-snapshot
 
 - name: Copy the health script
   copy: src=zfs_health.sh dest=/usr/local/bin/zfs_health mode=755
