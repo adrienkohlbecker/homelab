@@ -44,8 +44,11 @@
   sudo: true
 
 - name: Install kernel-package
-  apt: pkg=kernel-package state=installed
+  apt: pkg={{item}} state=installed
   sudo: true
+  with_items:
+    - kernel-package
+    - bc
 
 - name: Download kernel {{kernel_version}} source
   get_url: url=https://www.kernel.org/pub/linux/kernel/v3.x/linux-{{kernel_version}}.tar.gz dest=/usr/local/src/linux-{{kernel_version}}.tar.gz
