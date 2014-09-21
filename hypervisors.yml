@@ -7,17 +7,17 @@
     - users
     - ssh
     - security
+    - dotfiles
     - mailer
     - monitoring
     - ups
     - ipmi
     - virtualization
-    - pci_passthrough
     - zfs
     - samba
     - snapraid
     - hdparm
-    - dotfiles
+    - pci_passthrough
 
   tasks:
 
@@ -63,7 +63,6 @@
         - {mountpoint: '/mnt/snapraid_d2', label: 'snapraid_d2', opts: 'defaults,noatime,nodiratime'}
         - {mountpoint: '/mnt/snapraid_d3', label: 'snapraid_d3', opts: 'defaults,noatime,nodiratime'}
         - {mountpoint: '/mnt/snapraid_p1', label: 'snapraid_p1', opts: 'defaults,noatime,nodiratime'}
-        - {mountpoint: '/mnt/vms', label: 'vms', opts: 'defaults,noatime,nodiratime,compress'}
 
     - name: Install mhddfs
       apt: package=mhddfs state=installed

@@ -13,7 +13,7 @@
   sudo: true
 
 - name: Extract FreeIPMI
-  shell: tar -xzf freeipmi-1.453.tar.gz chdir=/usr/local/src
+  shell: tar -xzf freeipmi-1.4.5.tar.gz chdir=/usr/local/src
   when: downloaded_ipmi|changed
   sudo: true
 
