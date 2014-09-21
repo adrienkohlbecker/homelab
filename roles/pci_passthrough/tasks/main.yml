@@ -96,8 +96,8 @@
    - override_for_missing_acs_capabilities.patch
   sudo: true
 
-- name: Copy the configuration of 3.16.0 packaged for utopic as base
-  copy: src=config-3.16.0-031600-generic dest=/usr/local/src/{{ kernel_src_directory }}/.config
+- name: Copy the configuration of 3.16.3 packaged for utopic as base
+  copy: src=config-3.16.3-031603-generic dest=/usr/local/src/{{ kernel_src_directory }}/.config
   when: should_extract.stat.exists == False
   sudo: true
 

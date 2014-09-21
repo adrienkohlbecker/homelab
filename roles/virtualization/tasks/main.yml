@@ -1,11 +1,11 @@
 ---
 
 - name: Download required seabios from debian
-  get_url: url=http://http.us.debian.org/debian/pool/main/s/seabios/seabios_1.7.5-1_all.deb dest=/home/{{deploy_user}}/seabios_1.7.5-1_all.deb
+  get_url: url=http://http.us.debian.org/debian/pool/main/s/seabios/seabios_1.7.5-1_all.deb dest=/home/{{ansible_user}}/seabios_1.7.5-1_all.deb
   sudo: true
 
 - name: Install required seabios
-  apt: deb=/home/{{deploy_user}}/seabios_1.7.5-1_all.deb
+  apt: deb=/home/{{ansible_user}}/seabios_1.7.5-1_all.deb
   sudo: true
 
 - name: Add virtualisation ppa
@@ -15,6 +15,7 @@
 - name: Install qemu-kvm
   apt: pkg={{item}} state=installed
   sudo: true
+  with_items:
     - qemu-kvm
     - virt-manager
 
