@@ -1,97 +1,89 @@
-<domain type='kvm' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+<domain type='kvm'>
   <name>HTPC</name>
-  <uuid>dda812ca-3de2-adac-a6c3-0914760ca54a</uuid>
+  <uuid>c6bb2432-1b8c-4a82-9a54-35c88a0c40ae</uuid>
   <memory unit='KiB'>2097152</memory>
   <currentMemory unit='KiB'>2097152</currentMemory>
-  <vcpu placement='static'>4</vcpu>
+  <vcpu placement='static'>2</vcpu>
   <os>
-    <type arch='x86_64' machine='pc-q35-2.0'>hvm</type>
-    <boot dev='cdrom'/>
+    <type arch='x86_64' machine='pc-i440fx-trusty'>hvm</type>
     <boot dev='hd'/>
-    <bootmenu enable='yes'/>
   </os>
   <features>
     <acpi/>
     <apic/>
+    <pae/>
+    <hyperv>
+      <relaxed state='on'/>
+      <vapic state='on'/>
+      <spinlocks state='on' retries='8191'/>
+    </hyperv>
   </features>
-  <cpu mode='custom' match='exact'>
-    <model fallback='allow'>Haswell</model>
-    <vendor>Intel</vendor>
-    <topology sockets='1' cores='4' threads='1'/>
-    <feature policy='require' name='tm2'/>
-    <feature policy='require' name='est'/>
-    <feature policy='require' name='vmx'/>
-    <feature policy='require' name='osxsave'/>
-    <feature policy='require' name='smx'/>
-    <feature policy='require' name='ss'/>
-    <feature policy='require' name='ds'/>
-    <feature policy='require' name='vme'/>
-    <feature policy='require' name='dtes64'/>
-    <feature policy='require' name='abm'/>
-    <feature policy='require' name='ht'/>
-    <feature policy='require' name='acpi'/>
-    <feature policy='require' name='pbe'/>
-    <feature policy='require' name='tm'/>
-    <feature policy='require' name='pdcm'/>
-    <feature policy='require' name='pdpe1gb'/>
-    <feature policy='require' name='ds_cpl'/>
-    <feature policy='require' name='rdrand'/>
-    <feature policy='require' name='f16c'/>
-    <feature policy='require' name='xtpr'/>
-    <feature policy='require' name='monitor'/>
+  <cpu>
+    <topology sockets='1' cores='2' threads='1'/>
   </cpu>
-  <clock offset='localtime'/>
+  <clock offset='localtime'>
+    <timer name='rtc' tickpolicy='catchup'/>
+    <timer name='pit' tickpolicy='delay'/>
+    <timer name='hpet' present='no'/>
+    <timer name='hypervclock' present='yes'/>
+  </clock>
   <on_poweroff>destroy</on_poweroff>
   <on_reboot>restart</on_reboot>
-  <on_crash>destroy</on_crash>
+  <on_crash>restart</on_crash>
+  <pm>
+    <suspend-to-mem enabled='no'/>
+    <suspend-to-disk enabled='no'/>
+  </pm>
   <devices>
-    <emulator>/usr/bin/qemu-system-x86_64.x-vga</emulator>
+    <emulator>/usr/bin/kvm-spice</emulator>
     <disk type='file' device='disk'>
       <driver name='qemu' type='raw'/>
       <source file='/var/lib/libvirt/images/HTPC.img'/>
       <target dev='vda' bus='virtio'/>
-      <address type='pci' domain='0x0000' bus='0x02' slot='0x04' function='0x0'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x05' function='0x0'/>
     </disk>
     <disk type='file' device='disk'>
       <driver name='qemu' type='raw'/>
       <source file='/mnt/vms/HTPC_1.img'/>
       <target dev='vdb' bus='virtio'/>
-      <address type='pci' domain='0x0000' bus='0x02' slot='0x06' function='0x0'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x06' function='0x0'/>
     </disk>
-    <controller type='usb' index='0'>
-      <address type='pci' domain='0x0000' bus='0x02' slot='0x02' function='0x0'/>
+    <controller type='usb' index='0' model='ich9-ehci1'>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x04' function='0x7'/>
     </controller>
-    <controller type='pci' index='0' model='pcie-root'/>
-    <controller type='pci' index='1' model='dmi-to-pci-bridge'>
-      <address type='pci' domain='0x0000' bus='0x00' slot='0x1e' function='0x0'/>
+    <controller type='usb' index='0' model='ich9-uhci1'>
+      <master startport='0'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x04' function='0x0' multifunction='on'/>
     </controller>
-    <controller type='pci' index='2' model='pci-bridge'>
-      <address type='pci' domain='0x0000' bus='0x01' slot='0x01' function='0x0'/>
+    <controller type='usb' index='0' model='ich9-uhci2'>
+      <master startport='2'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x04' function='0x1'/>
     </controller>
-    <controller type='pci' index='3' model='pci-bridge'>
-      <address type='pci' domain='0x0000' bus='0x01' slot='0x02' function='0x0'/>
+    <controller type='usb' index='0' model='ich9-uhci3'>
+      <master startport='4'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x04' function='0x2'/>
     </controller>
-    <controller type='sata' index='0'>
-      <address type='pci' domain='0x0000' bus='0x00' slot='0x1f' function='0x2'/>
-    </controller>
+    <controller type='pci' index='0' model='pci-root'/>
     <interface type='bridge'>
-      <mac address='52:54:00:55:1d:18'/>
+      <mac address='52:54:00:66:f7:00'/>
       <source bridge='br1'/>
       <model type='virtio'/>
-      <address type='pci' domain='0x0000' bus='0x02' slot='0x01' function='0x0'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x03' function='0x0'/>
     </interface>
-    <hostdev mode='subsystem' type='usb' managed='yes'>
-      <source>
-        <vendor id='0x045e'/>
-        <product id='0x0719'/>
-      </source>
-    </hostdev>
-    <hostdev mode='subsystem' type='usb' managed='yes'>
-      <source>
-        <vendor id='0x046d'/>
-        <product id='0xc52b'/>
-      </source>
-    </hostdev>
+    <serial type='pty'>
+      <target port='0'/>
+    </serial>
+    <console type='pty'>
+      <target type='serial' port='0'/>
+    </console>
+    <input type='tablet' bus='usb'/>
+    <input type='mouse' bus='ps2'/>
+    <input type='keyboard' bus='ps2'/>
+    <graphics type='vnc' port='-1' autoport='yes' keymap='fr'/>
+    <video>
+      <model type='vga' vram='9216' heads='1'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x0'/>
+    </video>
     <hostdev mode='subsystem' type='usb' managed='yes'>
       <source>
         <vendor id='0x046d'/>
@@ -104,26 +96,32 @@
         <product id='0x0102'/>
       </source>
     </hostdev>
+    <hostdev mode='subsystem' type='usb' managed='yes'>
+      <source>
+        <vendor id='0x046d'/>
+        <product id='0xc52b'/>
+      </source>
+    </hostdev>
+    <hostdev mode='subsystem' type='usb' managed='yes'>
+      <source>
+        <vendor id='0x045e'/>
+        <product id='0x0719'/>
+      </source>
+    </hostdev>
     <hostdev mode='subsystem' type='pci' managed='yes'>
-      <driver name='vfio'/>
       <source>
         <address domain='0x0000' bus='0x07' slot='0x00' function='0x0'/>
       </source>
-      <address type='pci' domain='0x0000' bus='0x03' slot='0x01' function='0x0' multifunction='on'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x07' function='0x0'/>
     </hostdev>
     <hostdev mode='subsystem' type='pci' managed='yes'>
-      <driver name='vfio'/>
       <source>
         <address domain='0x0000' bus='0x07' slot='0x00' function='0x1'/>
       </source>
-      <address type='pci' domain='0x0000' bus='0x03' slot='0x01' function='0x1'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x08' function='0x0'/>
     </hostdev>
     <memballoon model='virtio'>
-      <address type='pci' domain='0x0000' bus='0x02' slot='0x03' function='0x0'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x09' function='0x0'/>
     </memballoon>
   </devices>
-  <qemu:commandline>
-    <qemu:arg value='-display'/>
-    <qemu:arg value='none'/>
-  </qemu:commandline>
 </domain>
