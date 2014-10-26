@@ -158,18 +158,6 @@
   local_action: wait_for port=22 delay=20 host=10.0.0.11
   when: rebooting|changed
 
-- name: Install custom qemu wrapper for HTPC binary
-  copy: src=qemu-system-x86_64.x-vga dest=/usr/bin/qemu-system-x86_64.x-vga owner=root group=root mode=0755
-  sudo: true
-
-- name: Copy apparmor config for custom wrapper
-  copy: src=qemu-custom-wrapper.apparmor dest=/etc/apparmor.d/abstractions/libvirt-qemu-custom-wrapper owner=root group=root mode=0644
-  sudo: true
-
-- name: Allow custom qemu wrapper in apparmor
-  lineinfile: 'dest=/etc/apparmor.d/abstractions/libvirt-qemu line="  #include <abstractions/libvirt-qemu-custom-wrapper>"'
-  sudo: true
-
 - name: Define vms
   virt: name={{item}} command=define xml="{{ lookup('file', item+'.xml') }}"
   with_items:
