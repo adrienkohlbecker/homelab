@@ -13,8 +13,8 @@ driver_modules_blacklist:
   - snd_usb_audio # C-Media soundcard
   - uvcvideo # Logitech webcam
 
-kernel_version: '3.16.6'
-kernel_version_package: 3.16.6
+kernel_version: '3.16.7'
+kernel_version_package: 3.16.7
 kernel_append_to_version: passthrough.1
 kernel_src_directory: linux-{{kernel_version}}-{{ kernel_append_to_version }}
 kernel_image_deb: linux-image-{{kernel_version_package}}-{{ kernel_append_to_version }}_{{kernel_version_package}}-{{ kernel_append_to_version }}-10.00.Custom_amd64.deb
@@ -38,7 +38,7 @@ kernel_config:
   - { regexp: 'CONFIG_HZ_250', line: '# CONFIG_HZ_250 is not set'}
   - { regexp: 'CONFIG_HZ', line: 'CONFIG_HZ=1000'}
   # Microarch patch
-  - { regexp: 'CONFIG_MCOREAVX2', line: 'CONFIG_MCOREAVX2=y'}
+  - { regexp: 'CONFIG_MHASWELL', line: 'CONFIG_MHASWELL=y'}
   - { regexp: 'CONFIG_GENERIC_CPU', line: '# CONFIG_GENERIC_CPU is not set'}
 
 # In normal & recovery mode
