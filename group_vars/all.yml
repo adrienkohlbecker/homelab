@@ -11,6 +11,8 @@ users:
     password: "$6$F5wcgs7Y/zq7i.$bkeGh/G0yaRPcjgghTCVy4KmEODy0BQfuPGyfPPNmWtVnihLAewefLOiwWBHriTgb2Mhz5qfYDY4xH/Ybp7CU1"
   - name: tretflix
     password: "$6$vdgTTn7fqGqt$dnBxjzvcP4LKAymRIFS.NCdC2V99B5pe6nIidNCT97BwC3JOt.JFxUmdsjF5.QwZ.y1jTVEdWjp.SiOhtdaUF1"
+  - name: sonos
+    password: "$6$lSq3gviA$0aunnX7r8JYDRAgWJ3LS2W.O1ImSHrR3inSt2jRHyzrMX4cd4sNPC.VEcD724sgQQy64FrhD8a9XoEvdMpKgG0"
 
 user_groups:
   ssh:
@@ -24,6 +26,7 @@ user_groups:
     - adrien
     - coline
     - tretflix
+    - sonos
   snapraid:
     - adrien
 
@@ -34,3 +37,4 @@ email_aliases:
   ansibleremote: adrien.kohlbecker@gmail.com
   coline: delmcol@gmail.com
   tretflix: adrien.kohlbecker@gmail.com
+  sonos: adrien.kohlbecker@gmail.com
