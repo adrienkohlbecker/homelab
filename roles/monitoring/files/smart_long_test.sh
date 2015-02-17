@@ -7,13 +7,13 @@ test -e /usr/local/lib/bash-framework && source /usr/local/lib/bash-framework ||
 
 # Testing schedule (index is the day, Monday=0, Sunday=6)
 declare -a SCHEDULE=(
-  "/dev/sda /dev/sdg"
-  "/dev/sdb /dev/sdh"
-  "/dev/sdc /dev/sdi"
-  "/dev/sdd /dev/sdj"
-  "/dev/sde /dev/sdk"
-  "/dev/sdf"
-  ""
+  "/dev/sda /dev/sde"
+  "/dev/sdb /dev/sdi"
+  "/dev/sdc /dev/sdj"
+  "/dev/sdf /dev/sdk"
+  "/dev/sdg /dev/sdl"
+  "/dev/sdh /dev/sdm"
+  "/dev/sdd /dev/sdn"
 )
 
 ################################
