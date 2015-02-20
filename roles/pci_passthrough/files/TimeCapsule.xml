@@ -1,9 +1,12 @@
-<domain type='kvm' id='6'>
+<domain type='kvm' id='5'>
   <name>TimeCapsule</name>
   <uuid>2c31314e-7ac9-9e0e-9eba-90c17da485e0</uuid>
   <memory unit='KiB'>1048576</memory>
   <currentMemory unit='KiB'>1048576</currentMemory>
   <vcpu placement='static'>2</vcpu>
+  <resource>
+    <partition>/machine</partition>
+  </resource>
   <os>
     <type arch='x86_64' machine='pc-q35-2.0'>hvm</type>
     <boot dev='cdrom'/>
@@ -107,7 +110,7 @@
     <interface type='bridge'>
       <mac address='52:54:00:f4:d6:49'/>
       <source bridge='br1'/>
-      <target dev='vnet2'/>
+      <target dev='vnet1'/>
       <model type='virtio'/>
       <alias name='net0'/>
       <address type='pci' domain='0x0000' bus='0x02' slot='0x01' function='0x0'/>
@@ -118,7 +121,7 @@
       <listen type='address' address='127.0.0.1'/>
     </graphics>
     <video>
-      <model type='cirrus' vram='9216' heads='1'/>
+      <model type='cirrus' vram='16384' heads='1'/>
       <alias name='video0'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x01' function='0x0'/>
     </video>
@@ -127,4 +130,8 @@
       <address type='pci' domain='0x0000' bus='0x02' slot='0x03' function='0x0'/>
     </memballoon>
   </devices>
+  <seclabel type='dynamic' model='apparmor' relabel='yes'>
+    <label>libvirt-2c31314e-7ac9-9e0e-9eba-90c17da485e0</label>
+    <imagelabel>libvirt-2c31314e-7ac9-9e0e-9eba-90c17da485e0</imagelabel>
+  </seclabel>
 </domain>
