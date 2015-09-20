@@ -9,7 +9,7 @@
     - screen
 
 - name: Install oh-my-zsh
-  git: repo=git://github.com/robbyrussell/oh-my-zsh.git dest=/home/adrien/.oh-my-zsh
+  git: repo=git://github.com/robbyrussell/oh-my-zsh.git dest=/home/adrien/.oh-my-zsh accept_hostkey=True
   sudo: true
 
 - name: Copy dotfiles
