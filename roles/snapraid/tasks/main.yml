@@ -7,17 +7,17 @@
     - build-essential
 
 - name: Download Snapraid
-  get_url: url=http://sourceforge.net/projects/snapraid/files/snapraid-6.3.tar.gz/download dest=/usr/local/src/snapraid-6.3.tar.gz
+  get_url: url=http://sourceforge.net/projects/snapraid/files/snapraid-8.1.tar.gz/download dest=/usr/local/src/snapraid-8.1.tar.gz
   register: downloaded_snapraid
   sudo: true
 
 - name: Extract Snapraid
-  shell: tar -xzf snapraid-6.3.tar.gz chdir=/usr/local/src
+  shell: tar -xzf snapraid-8.1.tar.gz chdir=/usr/local/src
   when: downloaded_snapraid|changed
   sudo: true
 
 - name: Compile and install Snapraid
-  shell: './configure && make && make install chdir=/usr/local/src/snapraid-6.3'
+  shell: './configure && make && make install chdir=/usr/local/src/snapraid-8.1'
   when: downloaded_snapraid|changed
   sudo: true
 
