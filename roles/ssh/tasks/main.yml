@@ -9,10 +9,10 @@
   sudo: true
 
 - name: Add authorized keys
-  authorized_key: user={{ item.name }}
-    key="{{ lookup('file', '../../../files/'+item.name+'_rsa.pub') }}"
+  authorized_key: user={{ item }}
+    key="{{ lookup('file', '../../../files/'+item+'_rsa.pub') }}"
     state=present
-  with_items: users
+  with_items: user_groups.ssh
   sudo: true
 
 # - name: Disable writing to authorized keys

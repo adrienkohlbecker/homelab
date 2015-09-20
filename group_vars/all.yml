@@ -18,7 +18,6 @@ user_groups:
   ssh:
     - deploy
     - adrien
-    - girlfriend
   admin:
     - adrien
     - deploy
