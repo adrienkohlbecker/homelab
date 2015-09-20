@@ -13,39 +13,11 @@ driver_modules_blacklist:
   - snd_usb_audio # C-Media soundcard
   - uvcvideo # Logitech webcam
 
-kernel_version: '3.16.7'
-kernel_version_package: 3.16.7
-kernel_append_to_version: passthrough.1
-kernel_src_directory: linux-{{kernel_version}}-{{ kernel_append_to_version }}
-kernel_image_deb: linux-image-{{kernel_version_package}}-{{ kernel_append_to_version }}_{{kernel_version_package}}-{{ kernel_append_to_version }}-10.00.Custom_amd64.deb
-kernel_headers_deb: linux-headers-{{kernel_version_package}}-{{ kernel_append_to_version }}_{{kernel_version_package}}-{{ kernel_append_to_version }}-10.00.Custom_amd64.deb
-
-kernel_config:
-  - { regexp: 'CONFIG_VIRTUALIZATION', line: 'CONFIG_VIRTUALIZATION=y'}
-  - { regexp: 'CONFIG_KVM', line: 'CONFIG_KVM=y'}
-  - { regexp: 'CONFIG_KVM_INTEL', line: 'CONFIG_KVM_INTEL=y'}
-  - { regexp: 'CONFIG_KVM_AMD', line: '# CONFIG_KVM_AMD is not set'}
-  - { regexp: 'CONFIG_PCI_STUB', line: 'CONFIG_PCI_STUB=y'}
-  - { regexp: 'CONFIG_VFIO_IOMMU_TYPE1', line: 'CONFIG_VFIO_IOMMU_TYPE1=y'}
-  - { regexp: 'CONFIG_VFIO', line: 'CONFIG_VFIO=y'}
-  - { regexp: 'CONFIG_VFIO_PCI', line: 'CONFIG_VFIO_PCI=y'}
-  - { regexp: 'CONFIG_VFIO_PCI_VGA', line: 'CONFIG_VFIO_PCI_VGA=y'}
-  - { regexp: 'CONFIG_VHOST_NET', line: 'CONFIG_VHOST_NET=m'}
-  - { regexp: 'CONFIG_VIRTIO_PCI', line: 'CONFIG_VIRTIO_PCI=y'}
-  - { regexp: 'CONFIG_VIRTIO_BALLOON', line: 'CONFIG_VIRTIO_BALLOON=y'}
-  - { regexp: 'CONFIG_PREEMPT', line: 'CONFIG_PREEMPT=y'}
-  - { regexp: 'CONFIG_HZ_1000', line: 'CONFIG_HZ_1000=y'}
-  - { regexp: 'CONFIG_HZ_250', line: '# CONFIG_HZ_250 is not set'}
-  - { regexp: 'CONFIG_HZ', line: 'CONFIG_HZ=1000'}
-  # Microarch patch
-  - { regexp: 'CONFIG_MHASWELL', line: 'CONFIG_MHASWELL=y'}
-  - { regexp: 'CONFIG_GENERIC_CPU', line: '# CONFIG_GENERIC_CPU is not set'}
-
 # In normal & recovery mode
 grub_cmdline: boot=zfs rpool=rpool bootfs=rpool/ROOT/ubuntu-1 nomodeset
 
 # Only in normal mode (non-recovery)
-grub_cmdline_default: iommu=1 intel_iommu=on pcie_acs_override=downstram pci_stub.ids={{pci_stub_device_ids}}
+grub_cmdline_default: iommu=1 intel_iommu=on pci_stub.ids={{pci_stub_device_ids}}
 
 grub_config:
 - { regexp: '^(#?)GRUB_CMDLINE_LINUX=', line: 'GRUB_CMDLINE_LINUX="{{grub_cmdline}}"'}
