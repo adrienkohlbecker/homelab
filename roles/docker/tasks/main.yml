@@ -1,0 +1,111 @@
+---
+
+- name: Add docker repository key
+  apt_key:
+    keyserver: p80.pool.sks-keyservers.net
+    id: 58118E89F3A912897C070ADBF76221572C52609D
+    state: present
+  sudo: true
+  tags:
+    - webserver
+    - docker
+
+- name: Add docker repository
+  apt_repository:
+    repo: deb https://apt.dockerproject.org/repo ubuntu-vivid main
+    state: present
+    update_cache: yes
+  sudo: true
+  tags:
+    - webserver
+    - docker
+
+- name: Install docker
+  apt:
+    pkg: docker-engine
+  sudo: true
+  tags:
+    - webserver
+    - docker
+
+- name: Hold docker version
+  command: apt-mark hold docker-engine
+  sudo: true
+  tags:
+    - webserver
+    - docker
+
+- name: Load docker
+  service:
+    name: docker
+    enabled: yes
+  sudo: true
+  tags:
+    - webserver
+    - docker
+
+- name: Create docker systemd conf directory
+  file:
+    dest: /etc/systemd/system/docker.service.d
+    state: directory
+    recurse: true
+    owner: root
+    group: root
+    mode: 700
+  sudo: true
+  tags:
+    - webserver
+    - docker
+
+- name: Add default options to systemd service
+  copy:
+    src: docker.conf
+    dest: /etc/systemd/system/docker.service.d/ubuntu.conf
+  sudo: true
+  tags:
+    - webserver
+    - docker
+
+- name: Create docker conf directory
+  file:
+    dest: /root/.docker
+    state: directory
+    recurse: true
+    owner: root
+    group: root
+    mode: 700
+  sudo: true
+  tags:
+    - webserver
+    - docker
+
+- name: Set-up dockercfg
+  template:
+    src: dockercfg
+    dest: /root/.docker/config.json
+  sudo: true
+  tags:
+    - webserver
+    - docker
+
+- name: Create ejson keys directory
+  file:
+    dest: /opt/ejson/keys
+    state: directory
+    recurse: true
+    owner: root
+    group: root
+    mode: 700
+  sudo: true
+  tags:
+    - webserver
+    - docker
+
+- name: Set-up ejson keys
+  template:
+    src: key
+    dest: "/opt/ejson/keys/{{ credentials.ejson.public_key }}"
+  sudo: true
+  tags:
+    - webserver
+    - docker
