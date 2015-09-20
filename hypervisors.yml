@@ -18,6 +18,7 @@
     - snapraid
     - hdparm
     - pci_passthrough
+    - docker
 
   tasks:
 

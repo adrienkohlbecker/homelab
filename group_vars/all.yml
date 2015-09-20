@@ -15,6 +15,9 @@ users:
     password: "$6$lSq3gviA$0aunnX7r8JYDRAgWJ3LS2W.O1ImSHrR3inSt2jRHyzrMX4cd4sNPC.VEcD724sgQQy64FrhD8a9XoEvdMpKgG0"
 
 user_groups:
+  docker:
+    - deploy
+    - adrien
   ssh:
     - deploy
     - adrien
