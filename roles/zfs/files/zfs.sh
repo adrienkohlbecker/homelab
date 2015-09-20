@@ -23,7 +23,7 @@ case "$COMMAND" in
 
     zfs snapshot "rpool/ROOT/ubuntu-1@$NAME"
     zfs snapshot "rpool/vms@$NAME"
-    zfs snapshot "vms@$NAME"
+    zfs snapshot "tank/vms@$NAME"
     zfs snapshot "tank/legacy@$NAME"
     zfs snapshot "tank/pictures@$NAME"
 
