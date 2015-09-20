@@ -18,7 +18,6 @@ user_groups:
   ssh:
     - deploy
     - adrien
-    - coline
   admin:
     - adrien
     - deploy
