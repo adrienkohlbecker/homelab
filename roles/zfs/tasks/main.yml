@@ -32,3 +32,7 @@
 - name: Schedule the scrub script
   cron: name="zfs scrub" minute=0 hour=3 weekday=0 job="/usr/local/bin/zfs_scrub" user=root cron_file=ansible_zfs_scrub
   sudo: true
+
+- name: Copy the zfs tool
+  copy: src=zfs.sh dest=/home/adrien/zfs.sh mode=755
+  sudo: true
