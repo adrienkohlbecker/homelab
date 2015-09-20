@@ -47,14 +47,13 @@
       file: dest={{item.path}} state=directory owner={{item.owner}} group={{item.group}} mode={{item.mode}}
       sudo: true
       with_items:
-        - {path: '/mnt/media',       owner: 'tretflix',       group: 'mediaaccess', mode: '2770'}
-        - {path: '/mnt/snapraid_d1', owner: 'adrien',       group: 'mediaaccess', mode: '2770'}
-        - {path: '/mnt/snapraid_d2', owner: 'adrien',       group: 'mediaaccess', mode: '2770'}
-        - {path: '/mnt/snapraid_d3', owner: 'adrien',       group: 'mediaaccess', mode: '2770'}
-        - {path: '/mnt/snapraid_d4', owner: 'adrien',       group: 'mediaaccess', mode: '2770'}
-        - {path: '/mnt/snapraid_p1', owner: 'snapraid',     group: 'snapraid',    mode: '2750'}
-        - {path: '/mnt/vms',         owner: 'libvirt-qemu', group: 'kvm',         mode: '2770'}
-        - {path: '/mnt/tank',        owner: 'adrien',       group: 'adrien',      mode: '2770'}
+        - {path: '/mnt/media',       owner: 'tretflix',     group: 'mediaaccess', mode: '2774'}
+        - {path: '/mnt/snapraid_d1', owner: 'adrien',       group: 'mediaaccess', mode: '2774'}
+        - {path: '/mnt/snapraid_d2', owner: 'adrien',       group: 'mediaaccess', mode: '2774'}
+        - {path: '/mnt/snapraid_d3', owner: 'adrien',       group: 'mediaaccess', mode: '2774'}
+        - {path: '/mnt/snapraid_p1', owner: 'snapraid',     group: 'snapraid',    mode: '2754'}
+        - {path: '/mnt/vms',         owner: 'libvirt-qemu', group: 'kvm',         mode: '2774'}
+        - {path: '/mnt/tank',        owner: 'adrien',       group: 'adrien',      mode: '2774'}
 
     - name: Mount btrfs partitons
       mount: "name={{item.mountpoint}} src='LABEL={{item.label}}' state=present fstype=btrfs opts='{{item.opts}}'"
@@ -63,7 +62,6 @@
         - {mountpoint: '/mnt/snapraid_d1', label: 'snapraid_d1', opts: 'defaults,noatime,nodiratime'}
         - {mountpoint: '/mnt/snapraid_d2', label: 'snapraid_d2', opts: 'defaults,noatime,nodiratime'}
         - {mountpoint: '/mnt/snapraid_d3', label: 'snapraid_d3', opts: 'defaults,noatime,nodiratime'}
-        - {mountpoint: '/mnt/snapraid_d4', label: 'snapraid_d4', opts: 'defaults,noatime,nodiratime'}
         - {mountpoint: '/mnt/snapraid_p1', label: 'snapraid_p1', opts: 'defaults,noatime,nodiratime'}
 
     - name: Install mhddfs
@@ -72,7 +70,7 @@
 
     - name: Mount mhddfs partition
       sudo: true
-      mount: 'name=/mnt/media src=mhddfs#/mnt/snapraid_d1/media,/mnt/snapraid_d2/media,/mnt/snapraid_d3/media,/mnt/snapraid_d4/media fstype=fuse opts="mlimit=32G,defaults,noatime,allow_other" state=present'
+      mount: 'name=/mnt/media src=mhddfs#/mnt/snapraid_d1/media,/mnt/snapraid_d2/media,/mnt/snapraid_d3/media fstype=fuse opts="mlimit=32G,defaults,noatime,allow_other" state=present'
 
     - name: Install gparted
       apt: pkg=gparted state=installed
