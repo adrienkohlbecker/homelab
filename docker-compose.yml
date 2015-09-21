@@ -7,6 +7,9 @@ sabnzbd:
     - /opt/ejson/keys:/opt/ejson/keys:ro
     - /mnt/docker/sabnzbd:/data
     - /mnt/media:/media
+  log_driver: "syslog"
+  log_opt:
+    syslog-tag: compose.sabnzbd
   cap_add:
     - SYS_ADMIN
   user: root
@@ -20,6 +23,9 @@ sickrage:
     - /opt/ejson/keys:/opt/ejson/keys:ro
     - /mnt/docker/sickrage:/data
     - /mnt/media:/media
+  log_driver: "syslog"
+  log_opt:
+    syslog-tag: compose.sickrage
   cap_add:
     - SYS_ADMIN
   user: root
@@ -33,6 +39,9 @@ couchpotato:
     - /opt/ejson/keys:/opt/ejson/keys:ro
     - /mnt/docker/couchpotato:/data
     - /mnt/media:/media
+  log_driver: "syslog"
+  log_opt:
+    syslog-tag: compose.couchpotato
   cap_add:
     - SYS_ADMIN
   user: root
@@ -47,6 +56,9 @@ plex:
     - /opt/ejson/keys:/opt/ejson/keys:ro
     - /mnt/docker/plex:/data
     - /mnt/media:/media
+  log_driver: "syslog"
+  log_opt:
+    syslog-tag: compose.plex
   cap_add:
     - SYS_ADMIN
   user: root
@@ -56,6 +68,9 @@ nginx:
   image: kohlby/nginx
   hostname: www
   domainname: kohlby.fr
+  log_driver: "syslog"
+  log_opt:
+    syslog-tag: compose.nginx
   user: root
   stdin_open: true
   tty: true
