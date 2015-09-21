@@ -13,8 +13,6 @@ sabnzbd:
   cap_add:
     - SYS_ADMIN
   user: root
-  stdin_open: true
-  tty: true
 sickrage:
   image: kohlby/sickrage
   hostname: sickrage
@@ -29,8 +27,6 @@ sickrage:
   cap_add:
     - SYS_ADMIN
   user: root
-  stdin_open: true
-  tty: true
 couchpotato:
   image: kohlby/couchpotato
   hostname: couchpotato
@@ -45,8 +41,6 @@ couchpotato:
   cap_add:
     - SYS_ADMIN
   user: root
-  stdin_open: true
-  tty: true
 plex:
   image: kohlby/plex
   net: host
@@ -62,8 +56,6 @@ plex:
   cap_add:
     - SYS_ADMIN
   user: root
-  stdin_open: true
-  tty: true
 nginx:
   image: kohlby/nginx
   hostname: www
@@ -72,8 +64,6 @@ nginx:
   log_opt:
     syslog-tag: compose.nginx
   user: root
-  stdin_open: true
-  tty: true
   links:
     - sabnzbd
     - sickrage
