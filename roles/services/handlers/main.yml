@@ -1,0 +1,9 @@
+---
+
+- name: Reload unit
+  command: systemctl daemon-reload
+  sudo: true
+
+- name: Restart compose
+  command: systemctl restart compose
+  sudo: true
