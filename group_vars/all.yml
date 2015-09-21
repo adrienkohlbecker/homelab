@@ -24,7 +24,7 @@ user_groups:
   admin:
     - adrien
     - deploy
-  mediaaccess:
+  media:
     - adrien
     - coline
     - tretflix
