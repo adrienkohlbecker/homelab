@@ -8,6 +8,7 @@ TimeoutStartSec=0
 Restart=always
 ExecStartPre=/usr/local/bin/docker-compose stop
 ExecStart=/usr/local/bin/docker-compose up
+ExecStop=/usr/local/bin/docker-compose stop
 WorkingDirectory=/opt/services
 
 [Install]
