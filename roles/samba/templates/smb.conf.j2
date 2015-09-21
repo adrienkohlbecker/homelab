@@ -274,8 +274,16 @@ socket options = TCP_NODELAY IPTOS_LOWDELAY SO_RCVBUF=65536 SO_SNDBUF=65536
    directory mask = 02770
    force directory mode = 02770
 
-[tank]
-   path = /mnt/tank
+[legacy]
+   path = /mnt/legacy
+   writeable = yes
+   valid users = adrien
+   browseable = yes
+   create mask = 0770
+   directory mask = 0770
+
+[pictures]
+   path = /mnt/pictures
    writeable = yes
    valid users = adrien
    browseable = yes

@@ -23,14 +23,10 @@
 
   tasks:
 
-    - name: Add mediaaccess group
-      group: name=mediaaccess state=present
+    - name: Add users to media group
+      user: name={{item}} groups=media append=yes
       sudo: true
-
-    - name: Add users to mediaaccess group
-      user: name={{item}} groups=mediaaccess append=yes
-      sudo: true
-      with_items: user_groups.mediaaccess
+      with_items: user_groups.media
 
     - name: Create snapraid user
       user: name=snapraid
@@ -49,13 +45,15 @@
       file: dest={{item.path}} state=directory owner={{item.owner}} group={{item.group}} mode={{item.mode}}
       sudo: true
       with_items:
-        - {path: '/mnt/media',       owner: 'tretflix',     group: 'mediaaccess', mode: '2774'}
-        - {path: '/mnt/snapraid_d1', owner: 'adrien',       group: 'mediaaccess', mode: '2774'}
-        - {path: '/mnt/snapraid_d2', owner: 'adrien',       group: 'mediaaccess', mode: '2774'}
-        - {path: '/mnt/snapraid_d3', owner: 'adrien',       group: 'mediaaccess', mode: '2774'}
+        - {path: '/mnt/media',       owner: 'media',        group: 'media',       mode: '2774'}
+        - {path: '/mnt/snapraid_d1', owner: 'adrien',       group: 'media',       mode: '2774'}
+        - {path: '/mnt/snapraid_d2', owner: 'adrien',       group: 'media',       mode: '2774'}
+        - {path: '/mnt/snapraid_d3', owner: 'adrien',       group: 'media',       mode: '2774'}
         - {path: '/mnt/snapraid_p1', owner: 'snapraid',     group: 'snapraid',    mode: '2754'}
         - {path: '/mnt/vms',         owner: 'libvirt-qemu', group: 'kvm',         mode: '2774'}
-        - {path: '/mnt/tank',        owner: 'adrien',       group: 'adrien',      mode: '2774'}
+        - {path: '/mnt/legacy',      owner: 'adrien',       group: 'adrien',      mode: '2774'}
+        - {path: '/mnt/pictures',    owner: 'adrien',       group: 'adrien',      mode: '2774'}
+        - {path: '/mnt/docker',      owner: 'root',         group: 'media',       mode: '2774'}
 
     - name: Mount btrfs partitons
       mount: "name={{item.mountpoint}} src='LABEL={{item.label}}' state=present fstype=btrfs opts='{{item.opts}}'"
