@@ -109,3 +109,17 @@
   tags:
     - webserver
     - docker
+
+- name: Copy the clean script
+  copy: src=docker_clean.sh dest=/usr/local/bin/docker_clean mode=755
+  sudo: true
+  tags:
+    - webserver
+    - docker
+
+- name: Schedule the clean script
+  cron: name="zfs clean" minute=0 hour=6 weekday=0 job="/usr/local/bin/docker_clean" user=root cron_file=ansible_docker_clean
+  sudo: true
+  tags:
+    - webserver
+    - docker
