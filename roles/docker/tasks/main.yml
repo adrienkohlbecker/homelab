@@ -110,6 +110,15 @@
     - webserver
     - docker
 
+- name: Install docker compose
+  pip:
+    name: docker-compose
+    version: 1.4.1
+  sudo: true
+  tags:
+    - webserver
+    - docker
+
 - name: Copy the clean script
   copy: src=docker_clean.sh dest=/usr/local/bin/docker_clean mode=755
   sudo: true

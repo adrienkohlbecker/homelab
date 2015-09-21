@@ -19,6 +19,7 @@
     - hdparm
     - pci_passthrough
     - docker
+    - services
 
   tasks:
 
