@@ -1,0 +1,67 @@
+---
+sabnzbd:
+  image: kohlby/sabnzbd
+  hostname: sabnzbd
+  domainname: kohlby.fr
+  volumes:
+    - /opt/ejson/keys:/opt/ejson/keys:ro
+    - /mnt/docker/sabnzbd:/data
+    - /mnt/media:/media
+  cap_add:
+    - SYS_ADMIN
+  user: root
+  stdin_open: true
+  tty: true
+sickrage:
+  image: kohlby/sickrage
+  hostname: sickrage
+  domainname: kohlby.fr
+  volumes:
+    - /opt/ejson/keys:/opt/ejson/keys:ro
+    - /mnt/docker/sickrage:/data
+    - /mnt/media:/media
+  cap_add:
+    - SYS_ADMIN
+  user: root
+  stdin_open: true
+  tty: true
+couchpotato:
+  image: kohlby/couchpotato
+  hostname: couchpotato
+  domainname: kohlby.fr
+  volumes:
+    - /opt/ejson/keys:/opt/ejson/keys:ro
+    - /mnt/docker/couchpotato:/data
+    - /mnt/media:/media
+  cap_add:
+    - SYS_ADMIN
+  user: root
+  stdin_open: true
+  tty: true
+plex:
+  image: kohlby/plex
+  net: host
+  hostname: plex
+  domainname: kohlby.fr
+  volumes:
+    - /opt/ejson/keys:/opt/ejson/keys:ro
+    - /mnt/docker/plex:/data
+    - /mnt/media:/media
+  cap_add:
+    - SYS_ADMIN
+  user: root
+  stdin_open: true
+  tty: true
+nginx:
+  image: kohlby/nginx
+  hostname: www
+  domainname: kohlby.fr
+  user: root
+  stdin_open: true
+  tty: true
+  links:
+    - sabnzbd
+    - sickrage
+    - couchpotato
+  ports:
+    - 80:80
