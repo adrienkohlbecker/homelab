@@ -70,3 +70,19 @@ nginx:
     - couchpotato
   ports:
     - 80:80
+timemachine:
+  image: kohlby/timemachine
+  hostname: timemachine
+  domainname: kohlby.fr
+  volumes:
+    - /opt/ejson/keys:/opt/ejson/keys:ro
+    - /mnt/timemachine_adrien:/timemachine/adrien
+    - /mnt/timemachine_coline:/timemachine/coline
+  cap_add:
+    # shr exec
+    - SYS_ADMIN
+    # netatalk
+    - SYS_RESOURCE
+  user: root
+  ports:
+    - 548:548
