@@ -74,6 +74,9 @@ timemachine:
   image: kohlby/timemachine
   hostname: timemachine
   domainname: kohlby.fr
+  log_driver: "syslog"
+  log_opt:
+    syslog-tag: compose.timemachine
   volumes:
     - /opt/ejson/keys:/opt/ejson/keys:ro
     - /mnt/timemachine_adrien:/timemachine/adrien
