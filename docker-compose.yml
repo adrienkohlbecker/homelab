@@ -92,7 +92,6 @@ timemachine:
 avahi:
   image: kohlby/avahi
   net: host
-  container_name: avahi
   log_driver: "syslog"
   log_opt:
     syslog-tag: compose.avahi
