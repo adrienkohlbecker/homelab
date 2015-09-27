@@ -79,8 +79,11 @@ timemachine:
     syslog-tag: compose.timemachine
   volumes:
     - /opt/ejson/keys:/opt/ejson/keys:ro
-    - /mnt/timemachine_adrien:/timemachine/adrien
-    - /mnt/timemachine_girlfriend:/timemachine/girlfriend
+    - /mnt/timemachine_adrien:/mnt/timemachine/adrien
+    - /mnt/timemachine_girlfriend:/mnt/timemachine/girlfriend
+    - /mnt/media:/mnt/media
+    - /mnt/legacy:/mnt/legacy
+    - /mnt/pictures:/mnt/pictures
   cap_add:
     # shr exec
     - SYS_ADMIN
