@@ -89,3 +89,13 @@ timemachine:
   user: root
   ports:
     - 548:548
+avahi:
+  image: kohlby/avahi
+  net: host
+  container_name: avahi
+  log_driver: "syslog"
+  log_opt:
+    syslog-tag: compose.avahi
+  user: root
+  stdin_open: true
+  tty: true
