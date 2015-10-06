@@ -63,6 +63,11 @@ nginx:
   log_driver: "syslog"
   log_opt:
     syslog-tag: compose.nginx
+  volumes:
+    - /opt/ejson/keys:/opt/ejson/keys:ro
+  cap_add:
+    # shr exec
+    - SYS_ADMIN
   user: root
   links:
     - sabnzbd
@@ -70,6 +75,7 @@ nginx:
     - couchpotato
   ports:
     - 80:80
+    - 443:443
 timemachine:
   image: kohlby/timemachine
   hostname: timemachine
