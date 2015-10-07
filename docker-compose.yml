@@ -13,6 +13,8 @@ sabnzbd:
   cap_add:
     - SYS_ADMIN
   user: root
+  ports:
+    - 8080:8080
 sickrage:
   image: kohlby/sickrage
   hostname: sickrage
@@ -27,6 +29,8 @@ sickrage:
   cap_add:
     - SYS_ADMIN
   user: root
+  ports:
+    - 8081:8081
 couchpotato:
   image: kohlby/couchpotato
   hostname: couchpotato
@@ -41,6 +45,8 @@ couchpotato:
   cap_add:
     - SYS_ADMIN
   user: root
+  ports:
+    - 5050:5050
 plex:
   image: kohlby/plex
   net: host
@@ -56,6 +62,8 @@ plex:
   cap_add:
     - SYS_ADMIN
   user: root
+  ports:
+    - 32400:32400
 nginx:
   image: kohlby/nginx
   hostname: www
@@ -69,10 +77,6 @@ nginx:
     # shr exec
     - SYS_ADMIN
   user: root
-  links:
-    - sabnzbd
-    - sickrage
-    - couchpotato
   ports:
     - 80:80
     - 443:443
