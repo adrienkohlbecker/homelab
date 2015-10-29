@@ -22,10 +22,12 @@ case "$COMMAND" in
     echo "Snapshotting with name=$NAME"
 
     zfs snapshot "rpool/ROOT/ubuntu-1@$NAME"
+    zfs snapshot "rpool/docker@$NAME"
     zfs snapshot "rpool/vms@$NAME"
     zfs snapshot "tank/vms@$NAME"
     zfs snapshot "tank/legacy@$NAME"
     zfs snapshot "tank/pictures@$NAME"
+    zfs snapshot "tank/timemachine@$NAME"
 
     ;;
 
@@ -37,18 +39,22 @@ case "$COMMAND" in
     echo "Rolling back backup to: $FROM"
 
     zfs rollback "backup/ubuntu@$FROM"
+    zfs rollback "backup/docker@$FROM"
     zfs rollback "backup/vms_ssd@$FROM"
     zfs rollback "backup/vms_hdd@$FROM"
     zfs rollback "backup/legacy@$FROM"
     zfs rollback "backup/pictures@$FROM"
+    zfs rollback "backup/timemachine@$FROM"
 
     echo "Incremental sync to backup: $FROM -> $TO"
 
     zfs send -pv -I "rpool/ROOT/ubuntu-1@$FROM" "rpool/ROOT/ubuntu-1@$TO" | zfs receive -v backup/ubuntu
+    zfs send -pv -I "rpool/docker@$FROM" "rpool/docker@$TO" | zfs receive -v backup/docker
     zfs send -pv -I "rpool/vms@$FROM" "rpool/vms@$TO" | zfs receive -v backup/vms_ssd
     zfs send -pv -I "tank/vms@$FROM" "tank/vms@$TO" | zfs receive -v backup/vms_hdd
     zfs send -pv -I "tank/legacy@$FROM" "tank/legacy@$TO" | zfs receive -v backup/legacy
     zfs send -pv -I "tank/pictures@$FROM" "tank/pictures@$TO" | zfs receive -v backup/pictures
+    zfs send -pv -I "tank/timemachine@$FROM" "tank/timemachine@$TO" | zfs receive -v backup/timemachine
 
     ;;
 
@@ -59,10 +65,12 @@ case "$COMMAND" in
     echo "Destroying snapshots: $SNAPSHOT"
 
     zfs destroy "rpool/ROOT/ubuntu-1@$SNAPSHOT"
+    zfs destroy "rpool/docker@$SNAPSHOT"
     zfs destroy "rpool/vms@$SNAPSHOT"
     zfs destroy "tank/vms@$SNAPSHOT"
     zfs destroy "tank/legacy@$SNAPSHOT"
     zfs destroy "tank/pictures@$SNAPSHOT"
+    zfs destroy "tank/timemachine@$SNAPSHOT"
 
     ;;
 
