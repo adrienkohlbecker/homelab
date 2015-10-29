@@ -47,15 +47,13 @@
   file: dest={{item.path}} state=directory owner={{item.owner}} group={{item.group}} mode={{item.mode}}
   sudo: true
   with_items:
-    - {path: '/mnt/timemachine_adrien', owner: 'adrien', group: 'adrien', mode: '2770'}
-    - {path: '/mnt/timemachine_coline', owner: 'coline', group: 'coline', mode: '2770'}
+    - {path: '/mnt/timemachine', owner: 'adrien', group: 'adrien', mode: '2770'}
 
 - name: Mount partitons
   mount: "name={{item.mountpoint}} src='LABEL={{item.label}}' state=present fstype=ext4 opts='{{item.opts}}'"
   sudo: true
   with_items:
-    - {mountpoint: '/mnt/timemachine_adrien', label: 'tm_adrien', opts: 'defaults,noatime,nodiratime,user_xattr,acl'}
-    - {mountpoint: '/mnt/timemachine_coline', label: 'tm_coline', opts: 'defaults,noatime,nodiratime,user_xattr,acl'}
+    - {mountpoint: '/mnt/timemachine', label: 'tm_adrien', opts: 'defaults,noatime,nodiratime,user_xattr,acl'}
 
 - name: Copy afp.conf
   copy: src=afp.conf dest=/usr/local/etc/afp.conf owner=root group=root mode=0755

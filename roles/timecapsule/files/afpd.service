@@ -16,6 +16,5 @@
     <port>9</port>
     <txt-record>sys=waMA=52:54:00:f4:d6:49,adVF=0x100</txt-record>
     <txt-record>dk1=adVF=0x83,adVN=Adrien</txt-record>
-    <txt-record>dk2=adVF=0x83,adVN=Coline</txt-record>
   </service>
 </service-group>
