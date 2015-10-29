@@ -1,9 +1,0 @@
----
-
-- name: Restart samba
-  service: name=smbd state=restarted
-  sudo: true
-
-- name: Restart avahi
-  service: name=avahi-daemon state=restarted
-  sudo: true
