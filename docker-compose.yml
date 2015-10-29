@@ -89,8 +89,7 @@ timemachine:
     syslog-tag: compose.timemachine
   volumes:
     - /opt/ejson/keys:/opt/ejson/keys:ro
-    - /mnt/timemachine_adrien:/mnt/timemachine/adrien
-    - /mnt/timemachine_coline:/mnt/timemachine/coline
+    - /mnt/timemachine:/mnt/timemachine
     - /mnt/media:/mnt/media
     - /mnt/legacy:/mnt/legacy
     - /mnt/pictures:/mnt/pictures
