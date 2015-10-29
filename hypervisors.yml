@@ -70,7 +70,7 @@
 
     - name: Mount mhddfs partition
       sudo: true
-      mount: 'name=/mnt/media src=mhddfs#/mnt/snapraid_d1/media,/mnt/snapraid_d2/media,/mnt/snapraid_d3/media fstype=fuse opts="mlimit=32G,defaults,noatime,allow_other" state=present'
+      mount: 'name=/mnt/media src=mhddfs#/mnt/snapraid_d1/media,/mnt/snapraid_d2/media,/mnt/snapraid_d3/media fstype=fuse opts="mlimit=32G,defaults,noatime,allow_other,nonempty,big_writes,direct_io,fsname=media" state=present'
 
     - name: Install gparted
       apt: pkg=gparted state=installed
