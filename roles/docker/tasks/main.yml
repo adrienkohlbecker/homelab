@@ -127,7 +127,7 @@
     - docker
 
 - name: Schedule the clean script
-  cron: name="zfs clean" minute=0 hour=6 weekday=0 job="/usr/local/bin/docker_clean" user=root cron_file=ansible_docker_clean
+  cron: name="zfs clean" minute=0 hour=6 job="/usr/local/bin/docker_clean" user=root cron_file=ansible_docker_clean
   sudo: true
   tags:
     - webserver
