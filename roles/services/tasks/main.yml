@@ -59,6 +59,15 @@
   tags:
     - services
 
+- name: Add adrientm user
+  user:
+    name: adrientm
+    uid: 2100
+    state: present
+  sudo: true
+  tags:
+    - services
+
 - name: Create mount points
   file:
     dest: "{{item.path}}"
@@ -70,19 +79,20 @@
   tags:
     - services
   with_items:
-    - {path: '/mnt/media',                  owner: 'media',       group: 'media', mode: '2774'}
-    - {path: '/mnt/media/Movies',           owner: 'media',       group: 'media', mode: '2774'}
-    - {path: '/mnt/media/TV',               owner: 'media',       group: 'media', mode: '2774'}
-    - {path: '/mnt/media/Music',            owner: 'media',       group: 'media', mode: '2774'}
-    - {path: '/mnt/media/Pictures',         owner: 'media',       group: 'media', mode: '2774'}
-    - {path: '/mnt/media/Other',            owner: 'media',       group: 'media', mode: '2774'}
-    - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'sabnzbd',     group: 'media', mode: '2774'}
-    - {path: '/mnt/media/.tmp/couchpotato', owner: 'couchpotato', group: 'media', mode: '2774'}
-    - {path: '/mnt/media/.tmp/sickrage',    owner: 'sickrage',    group: 'media', mode: '2774'}
-    - {path: '/mnt/docker/sabnzbd',         owner: 'sabnzbd',     group: 'media', mode: '2774'}
-    - {path: '/mnt/docker/sickrage',        owner: 'sickrage',    group: 'media', mode: '2774'}
-    - {path: '/mnt/docker/couchpotato',     owner: 'couchpotato', group: 'media', mode: '2774'}
-    - {path: '/mnt/docker/plex',            owner: 'plex',        group: 'media', mode: '2774'}
+    - {path: '/mnt/media',                  owner: 'media',       group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/Movies',           owner: 'media',       group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/TV',               owner: 'media',       group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/Music',            owner: 'media',       group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/Pictures',         owner: 'media',       group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/Other',            owner: 'media',       group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'sabnzbd',     group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/.tmp/couchpotato', owner: 'couchpotato', group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/.tmp/sickrage',    owner: 'sickrage',    group: 'media',    mode: '2774'}
+    - {path: '/mnt/docker/sabnzbd',         owner: 'sabnzbd',     group: 'media',    mode: '2774'}
+    - {path: '/mnt/docker/sickrage',        owner: 'sickrage',    group: 'media',    mode: '2774'}
+    - {path: '/mnt/docker/couchpotato',     owner: 'couchpotato', group: 'media',    mode: '2774'}
+    - {path: '/mnt/docker/plex',            owner: 'plex',        group: 'media',    mode: '2774'}
+    - {path: '/mnt/timemachine',            owner: 'adrientm',    group: 'adrientm', mode: '2774'}
 
 - name: Install docker-compose.yml
   git:
