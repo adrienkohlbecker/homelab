@@ -130,7 +130,7 @@
     - services
 
 - name: Schedule the update script
-  cron: name="zfs update" minute=0 hour=5 job="/usr/local/bin/services_update" user=root cron_file=ansible_services_update
+  cron: name="services update" minute=0 hour=5 job="/usr/local/bin/services_update" user=root cron_file=ansible_services_update
   sudo: true
   tags:
     - services

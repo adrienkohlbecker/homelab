@@ -67,9 +67,8 @@
   virt: name={{item}} command=define xml="{{ lookup('file', item+'.xml') }}"
   with_items:
     - Ubuntu_base
-    - Tretflix
     - HTPC
-    - TimeCapsule
+    - OSX
 
 - name: Configure networking
   copy: src=interfaces dest=/etc/network/interfaces owner=root group=root mode=0644
