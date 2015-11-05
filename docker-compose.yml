@@ -110,3 +110,16 @@ avahi:
   user: root
   stdin_open: true
   tty: true
+resume:
+  image: kohlby/resume
+  hostname: resume
+  domainname: kohlby.fr
+  log_driver: "syslog"
+  log_opt:
+    syslog-tag: compose.resume
+  cap_add:
+    # shr exec
+    - SYS_ADMIN
+  user: root
+  ports:
+    - 4000:4000
