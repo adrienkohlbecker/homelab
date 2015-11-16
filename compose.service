@@ -1,7 +1,7 @@
 [Unit]
 Description=Docker Compose Services
-After=docker.service
-Requires=docker.service
+After=docker.service zfs-mount.service
+Requires=docker.service zfs-mount.service
 
 [Service]
 TimeoutStartSec=0
