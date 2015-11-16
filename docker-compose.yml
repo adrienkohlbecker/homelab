@@ -50,7 +50,6 @@ couchpotato:
 plex:
   image: kohlby/plex
   net: host
-  hostname: plex
   domainname: kohlby.fr
   volumes:
     - /opt/ejson/keys:/opt/ejson/keys:ro
