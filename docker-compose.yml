@@ -122,3 +122,12 @@ resume:
   user: root
   ports:
     - 4000:4000
+airsonos:
+  image: kohlby/airsonos
+  net: host
+  log_driver: "syslog"
+  log_opt:
+    syslog-tag: compose.airsonos
+  user: root
+  stdin_open: true
+  tty: true
