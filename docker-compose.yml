@@ -133,7 +133,6 @@ airsonos:
   tty: true
 vpn:
   image: kohlby/vpn
-  hostname: vpn
   domainname: kohlby.fr
   volumes:
     - /opt/ejson/keys:/opt/ejson/keys:ro
@@ -145,5 +144,6 @@ vpn:
   user: root
   stdin_open: true
   tty: true
+  net: host
   ports:
     - 1194:1194/udp
