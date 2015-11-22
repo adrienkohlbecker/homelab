@@ -131,3 +131,19 @@ airsonos:
   user: root
   stdin_open: true
   tty: true
+vpn:
+  image: kohlby/vpn
+  hostname: vpn
+  domainname: kohlby.fr
+  volumes:
+    - /opt/ejson/keys:/opt/ejson/keys:ro
+  cap_add:
+    # shr exec
+    - SYS_ADMIN
+    # openvpn
+    - NET_ADMIN
+  user: root
+  stdin_open: true
+  tty: true
+  ports:
+    - 1194:1194/udp
