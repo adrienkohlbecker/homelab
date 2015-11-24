@@ -148,13 +148,18 @@ vpn:
   ports:
     - 1194:1194/udp
 gitlab:
-  image: gitlab/gitlab-ce
+  image: kohlby/gitlab
   hostname: gitlab
   domainname: kohlby.fr
   volumes:
-    - /mnt/docker/gitlab/config:/etc/gitlab
-    - /mnt/docker/gitlab/logs:/var/log/gitlab
-    - /mnt/docker/gitlab/data:/var/opt/gitlab
+    - /opt/ejson/keys:/opt/ejson/keys:ro
+    - /mnt/docker/gitlab:/var/opt/gitlab
+  cap_add:
+    # shr exec
+    - SYS_ADMIN
+  user: root
+  stdin_open: true
+  tty: true
   ports:
     - '8443:443'
     - '8090:80'
