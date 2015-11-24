@@ -4,10 +4,12 @@
 vfio_device_names:
   - Radeon HD
   - Pitcairn HDMI Audio
+  - 'USB EHCI #1'
 
 pci_stub_device_names:
   - Radeon HD
   - Pitcairn HDMI Audio
+  - 'USB EHCI #1'
   # - Renesas
 
 driver_modules_blacklist:
