@@ -16,6 +16,9 @@ cd /opt/services
 log "Stopping service."
 run "systemctl stop compose 2>&1"
 
+log "Pulling compose repository"
+run "git pull 2>&1"
+
 log "Pulling images."
 run "/usr/local/bin/docker-compose pull 2>&1"
 
