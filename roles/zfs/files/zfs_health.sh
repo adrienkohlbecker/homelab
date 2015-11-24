@@ -26,8 +26,6 @@ log "Zfs health check started."
 br
 
 run "zpool status 2>&1"
-run "zpool list 2>&1"
-run "zfs list -r 2>&1"
 
 # Health - Check if all zfs volumes are in good condition. We are looking for
 # any keyword signifying a degraded or broken array.
