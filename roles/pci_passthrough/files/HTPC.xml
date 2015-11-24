@@ -98,28 +98,12 @@
       <alias name='video0'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x02' function='0x0'/>
     </video>
-    <hostdev mode='subsystem' type='usb' managed='yes'>
-      <source>
-        <vendor id='0x046d'/>
-        <product id='0xc52b'/>
-        <address bus='4' device='5'/>
-      </source>
-      <alias name='hostdev0'/>
-    </hostdev>
-    <hostdev mode='subsystem' type='usb' managed='yes'>
-      <source>
-        <vendor id='0x045e'/>
-        <product id='0x0719'/>
-        <address bus='4' device='4'/>
-      </source>
-      <alias name='hostdev1'/>
-    </hostdev>
     <hostdev mode='subsystem' type='pci' managed='yes'>
       <driver name='vfio'/>
       <source>
         <address domain='0x0000' bus='0x07' slot='0x00' function='0x0'/>
       </source>
-      <alias name='hostdev2'/>
+      <alias name='hostdev0'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x07' function='0x0'/>
     </hostdev>
     <hostdev mode='subsystem' type='pci' managed='yes'>
@@ -127,8 +111,16 @@
       <source>
         <address domain='0x0000' bus='0x07' slot='0x00' function='0x1'/>
       </source>
-      <alias name='hostdev3'/>
+      <alias name='hostdev1'/>
       <address type='pci' domain='0x0000' bus='0x00' slot='0x08' function='0x0'/>
+    </hostdev>
+    <hostdev mode='subsystem' type='pci' managed='yes'>
+      <driver name='vfio'/>
+      <source>
+        <address domain='0x0000' bus='0x00' slot='0x1d' function='0x0'/>
+      </source>
+      <alias name='hostdev2'/>
+      <address type='pci' domain='0x0000' bus='0x00' slot='0x0a' function='0x0'/>
     </hostdev>
     <memballoon model='virtio'>
       <alias name='balloon0'/>
