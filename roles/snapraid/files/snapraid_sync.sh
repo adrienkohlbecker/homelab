@@ -25,7 +25,14 @@ br
 log "Snapraid sync started."
 br
 
+set +e
 run "snapraid diff 2>&1"
+DIFF_RETVAL=$?
+set -e
+
+if [ $DIFF_RETVAL -ne 0 -a $DIFF_RETVAL -ne 2 ]; then
+  exit 1
+fi
 
 DEL_COUNT=$(grep '[0-9]\{1,\} removed$' "$TMP_OUTPUT" | sed 's/ \+/ /g' | cut -d ' ' -f2)
 ADD_COUNT=$(grep '[0-9]\{1,\} added$' "$TMP_OUTPUT" | sed 's/ \+/ /g' | cut -d ' ' -f2)
@@ -37,7 +44,7 @@ RESTORE_COUNT=$(grep '[0-9]\{1,\} restored$' "$TMP_OUTPUT" | sed 's/ \+/ /g' | c
 log "SUMMARY of changes - Added [$ADD_COUNT] - Deleted [$DEL_COUNT] - Moved [$MOVE_COUNT] - Copied [$COPY_COUNT] - Updated [$UPDATE_COUNT] - Restored [$RESTORE_COUNT]"
 
 # Check if files have changed
-if [ "$DEL_COUNT" -gt 0 -o "$ADD_COUNT" -gt 0 -o "$MOVE_COUNT" -gt 0 -o "$UPDATE_COUNT" -gt 0 -o "$RESTORE_COUNT" -gt 0 ]; then
+if [ $DIFF_RETVAL -eq 2 ]; then
   # YES, check if number of deleted files exceed DEL_THRESHOLD
   if [ "$DEL_COUNT" -gt $DEL_THRESHOLD ]; then
     # YES, lets inform user and not proceed with the sync just in case
