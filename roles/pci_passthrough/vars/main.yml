@@ -16,6 +16,8 @@ driver_modules_blacklist:
   - radeon
   - snd_usb_audio # C-Media soundcard
   - uvcvideo # Logitech webcam
+  - hid_logitech_hidpp # Logitech unifying
+  - hid_logitech_dj # Logitech unifying
 
 # In normal & recovery mode
 grub_cmdline: boot=zfs rpool=rpool bootfs=rpool/ROOT/ubuntu-1 nomodeset
