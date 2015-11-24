@@ -147,3 +147,15 @@ vpn:
   tty: true
   ports:
     - 1194:1194/udp
+gitlab:
+  image: gitlab/gitlab-ce
+  hostname: gitlab
+  domainname: kohlby.fr
+  volumes:
+    - /mnt/docker/gitlab/config:/etc/gitlab
+    - /mnt/docker/gitlab/logs:/var/log/gitlab
+    - /mnt/docker/gitlab/data:/var/opt/gitlab
+  ports:
+    - '8443:443'
+    - '8090:80'
+    - '2222:22'
