@@ -3,9 +3,11 @@
 # Used to grep ids from lspci
 vfio_device_names:
   - Radeon HD
+  - Pitcairn HDMI Audio
 
 pci_stub_device_names:
   - Radeon HD
+  - Pitcairn HDMI Audio
   # - Renesas
 
 driver_modules_blacklist:
