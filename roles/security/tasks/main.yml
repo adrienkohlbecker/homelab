@@ -86,8 +86,8 @@
     - {name: "net.ipv4.conf.default.accept_redirects", value: "0"}
     - {name: "net.ipv6.conf.default.accept_redirects", value: "0"}
 
-    # Ignore Directed pings
-    - {name: "net.ipv4.icmp_echo_ignore_all", value: "1"}
+    # Don't ignore directed pings
+    - {name: "net.ipv4.icmp_echo_ignore_all", value: "0"}
 
 - name: Prevent ip spoofing
   lineinfile: 'dest=/etc/host.conf regexp="{{item.regexp}}" line="{{item.line}}" state=present'
