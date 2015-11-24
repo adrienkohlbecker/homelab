@@ -1,4 +1,4 @@
-<domain type='kvm' id='2'>
+<domain type='kvm' id='1'>
   <name>HTPC</name>
   <uuid>c6bb2432-1b8c-4a82-9a54-35c88a0c40ae</uuid>
   <memory unit='KiB'>4194304</memory>
