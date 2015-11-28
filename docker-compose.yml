@@ -133,6 +133,9 @@ airsonos:
   tty: true
 vpn:
   image: kohlby/vpn
+  log_driver: "syslog"
+  log_opt:
+    syslog-tag: compose.vpn
   hostname: vpn
   domainname: kohlby.fr
   volumes:
@@ -149,6 +152,9 @@ vpn:
     - 1194:1194/udp
 gitlab:
   image: kohlby/gitlab
+  log_driver: "syslog"
+  log_opt:
+    syslog-tag: compose.gitlab
   hostname: gitlab
   domainname: kohlby.fr
   volumes:
