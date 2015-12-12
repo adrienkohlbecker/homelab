@@ -89,9 +89,6 @@ timemachine:
   volumes:
     - /opt/ejson/keys:/opt/ejson/keys:ro
     - /mnt/timemachine:/mnt/timemachine
-    - /mnt/media:/mnt/media
-    - /mnt/legacy:/mnt/legacy
-    - /mnt/pictures:/mnt/pictures
   cap_add:
     # shr exec
     - SYS_ADMIN
@@ -170,3 +167,26 @@ gitlab:
     - '8443:443'
     - '8090:80'
     - '2222:22'
+samba:
+  image: kohlby/samba
+  log_driver: "syslog"
+  log_opt:
+    syslog-tag: compose.samba
+  hostname: samba
+  domainname: kohlby.fr
+  volumes:
+    - /opt/ejson/keys:/opt/ejson/keys:ro
+    - /mnt/media:/mnt/media
+    - /mnt/legacy:/mnt/legacy
+    - /mnt/pictures:/mnt/pictures
+  cap_add:
+    # shr exec
+    - SYS_ADMIN
+  user: root
+  stdin_open: true
+  tty: true
+  ports:
+    - 137:137/udp
+    - 138:138/udp
+    - 139:139
+    - 445:445
