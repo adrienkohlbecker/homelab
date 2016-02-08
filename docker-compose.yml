@@ -167,6 +167,21 @@ gitlab:
     - '8443:443'
     - '8090:80'
     - '2222:22'
+gitlab-runner:
+  image: kohlby/gitlab-runner
+  log_driver: "syslog"
+  log_opt:
+    syslog-tag: compose.gitlab-runner
+  hostname: gitlab-runner
+  domainname: kohlby.fr
+  volumes:
+    - /opt/ejson/keys:/opt/ejson/keys:ro
+  cap_add:
+    # shr exec
+    - SYS_ADMIN
+  user: root
+  stdin_open: true
+  tty: true
 samba:
   image: kohlby/samba
   log_driver: "syslog"
