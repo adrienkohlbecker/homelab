@@ -157,6 +157,7 @@ gitlab:
   volumes:
     - /opt/ejson/keys:/opt/ejson/keys:ro
     - /mnt/docker/gitlab:/var/opt/gitlab
+    - /mnt/docker/gitlab-storage:/mnt/storage
   cap_add:
     # shr exec
     - SYS_ADMIN
