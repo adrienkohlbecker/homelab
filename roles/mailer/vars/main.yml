@@ -1,6 +1,6 @@
 ---
 
 mailer_domain: kohlby.fr
-smtp_host: smtp.mandrillapp.com
-smtp_user: "{{ credentials['mandrill']['user'] }}"
-smtp_password: "{{ credentials['mandrill']['password'] }}"
+smtp_host: smtp.sendgrid.net
+smtp_user: "{{ credentials['sendgrid']['user'] }}"
+smtp_password: "{{ credentials['sendgrid']['password'] }}"
