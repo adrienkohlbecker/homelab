@@ -12,6 +12,8 @@ sabnzbd:
     syslog-tag: compose.sabnzbd
   cap_add:
     - SYS_ADMIN
+  security_opt:
+    - seccomp:unconfined
   user: root
   ports:
     - 8080:8080
@@ -28,6 +30,8 @@ sickrage:
     syslog-tag: compose.sickrage
   cap_add:
     - SYS_ADMIN
+  security_opt:
+    - seccomp:unconfined
   user: root
   ports:
     - 8081:8081
@@ -44,6 +48,8 @@ couchpotato:
     syslog-tag: compose.couchpotato
   cap_add:
     - SYS_ADMIN
+  security_opt:
+    - seccomp:unconfined
   user: root
   ports:
     - 5050:5050
@@ -60,6 +66,8 @@ plex:
     syslog-tag: compose.plex
   cap_add:
     - SYS_ADMIN
+  security_opt:
+    - seccomp:unconfined
   user: root
   ports:
     - 32400:32400
@@ -75,6 +83,8 @@ nginx:
   cap_add:
     # shr exec
     - SYS_ADMIN
+  security_opt:
+    - seccomp:unconfined
   user: root
   ports:
     - 80:80
@@ -94,6 +104,8 @@ timemachine:
     - SYS_ADMIN
     # netatalk
     - SYS_RESOURCE
+  security_opt:
+    - seccomp:unconfined
   user: root
   ports:
     - 548:548
@@ -113,10 +125,6 @@ resume:
   log_driver: "syslog"
   log_opt:
     syslog-tag: compose.resume
-  cap_add:
-    # shr exec
-    - SYS_ADMIN
-  user: root
   ports:
     - 4000:4000
 airsonos:
@@ -142,6 +150,8 @@ vpn:
     - SYS_ADMIN
     # openvpn
     - NET_ADMIN
+  security_opt:
+    - seccomp:unconfined
   user: root
   stdin_open: true
   tty: true
@@ -161,6 +171,8 @@ gitlab:
   cap_add:
     # shr exec
     - SYS_ADMIN
+  security_opt:
+    - seccomp:unconfined
   user: root
   stdin_open: true
   tty: true
@@ -180,6 +192,8 @@ gitlab-runner:
   cap_add:
     # shr exec
     - SYS_ADMIN
+  security_opt:
+    - seccomp:unconfined
   user: root
   stdin_open: true
   tty: true
@@ -198,6 +212,8 @@ samba:
   cap_add:
     # shr exec
     - SYS_ADMIN
+  security_opt:
+    - seccomp:unconfined
   user: root
   stdin_open: true
   tty: true
