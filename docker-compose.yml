@@ -209,6 +209,7 @@ samba:
     - /mnt/media:/mnt/media
     - /mnt/legacy:/mnt/legacy
     - /mnt/pictures:/mnt/pictures
+    - /mnt/videos:/mnt/videos
   cap_add:
     # shr exec
     - SYS_ADMIN
