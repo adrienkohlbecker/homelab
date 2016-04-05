@@ -115,6 +115,8 @@ avahi:
   log_driver: "syslog"
   log_opt:
     syslog-tag: compose.avahi
+  security_opt:
+    - seccomp:unconfined
   user: root
   stdin_open: true
   tty: true
