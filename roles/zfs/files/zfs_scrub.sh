@@ -26,7 +26,7 @@ log "Zfs scrub started."
 br
 
 # find all pools
-POOLS=$(zpool list -H -o name)
+POOLS=$(zpool list -H -o name | grep -v backup-A | grep -v backup-B)
 POOL_LIST=$(echo $POOLS | tr "\\n" ", " | sed 's/,$//')
 log "Pool list: $POOL_LIST"
 br
