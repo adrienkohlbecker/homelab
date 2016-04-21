@@ -67,7 +67,6 @@
   become: yes
   with_items:
     - acpid
-    - build-essential
     - fail2ban
     - logrotate
     - ntp
