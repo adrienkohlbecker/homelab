@@ -19,4 +19,4 @@ fi
 #
 # umount /mnt/parallels
 #
-# rm -rf /home/vagrant/prl-tools.iso
+rm -rf /home/vagrant/prl-tools.iso
