@@ -21,6 +21,7 @@
     - docker
     - services
     - user
+    - dotfiles
 
   post_tasks:
 

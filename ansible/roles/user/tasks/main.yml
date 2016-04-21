@@ -40,28 +40,6 @@
   tags:
     - user
 
-- name: Install oh-my-zsh
-  git:
-    repo: git://github.com/robbyrussell/oh-my-zsh.git
-    dest: "/home/{{ deploy_user }}/.oh-my-zsh"
-    accept_hostkey: yes
-    version: master
-    update: no # oh-my-zsh has auto-update
-  become: yes
-  tags:
-    - user
-
-- name: Fix oh-my-zsh perms
-  file:
-    path: "/home/{{ deploy_user }}/.oh-my-zsh"
-    state: directory
-    recurse: yes
-    owner: "{{ deploy_user }}"
-    group: users
-  become: yes
-  tags:
-    - user
-
 - name: Sudo without password
   lineinfile:
     dest: /etc/sudoers.d/ansible

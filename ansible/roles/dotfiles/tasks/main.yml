@@ -1,0 +1,28 @@
+---
+
+- name: Install oh-my-zsh
+  command: "su {{ deploy_user }} -c 'git clone git://github.com/robbyrussell/oh-my-zsh.git .oh-my-zsh'"
+  args:
+    chdir: "/home/{{ deploy_user }}"
+    creates: "/home/{{ deploy_user }}/.oh-my-zsh"
+  become: yes
+  tags:
+    - dotfiles
+
+- name: Install dotfiles repo
+  command: "su {{ deploy_user }} -c 'git clone --bare https://gitlab.kohlby.fr/adrienkohlbecker/dotfiles.git .dotfiles'"
+  args:
+    chdir: "/home/{{ deploy_user }}"
+    creates: "/home/{{ deploy_user }}/.dotfiles"
+  become: yes
+  tags:
+    - dotfiles
+
+- name: Install dotfiles
+  command: "su {{ deploy_user }} -c 'git --git-dir=/home/{{ deploy_user }}/.dotfiles --work-tree=/home/{{ deploy_user }} reset --hard'"
+  args:
+    chdir: "/home/{{ deploy_user }}"
+    creates: "/home/{{ deploy_user }}/.zshrc"
+  become: yes
+  tags:
+    - dotfiles
