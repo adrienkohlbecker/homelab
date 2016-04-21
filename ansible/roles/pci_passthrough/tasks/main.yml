@@ -39,7 +39,7 @@
     name: "{{ item }}"
     state: present
   become: yes
-  notify: Request reboot
+  notify: Ask to reboot
   with_items: "{{ driver_modules_blacklist }}"
   tags:
     - pci_passthrough
@@ -63,7 +63,7 @@
     group: root
     mode: 0755
   become: yes
-  notify: Request reboot
+  notify: Ask to reboot
   tags:
     - pci_passthrough
 
@@ -75,7 +75,7 @@
     group: root
     mode: 0755
   become: yes
-  notify: Request reboot
+  notify: Ask to reboot
   tags:
     - pci_passthrough
 
@@ -87,7 +87,7 @@
     group: root
     mode: 0644
   become: yes
-  notify: Request reboot
+  notify: Ask to reboot
   tags:
     - pci_passthrough
 
@@ -99,7 +99,7 @@
     group: root
     mode: 0644
   become: yes
-  notify: Request reboot
+  notify: Ask to reboot
   tags:
     - pci_passthrough
 
@@ -111,6 +111,8 @@
     state: present
   become: yes
   with_items: "{{ grub_config }}"
-  notify: update grub
+  notify:
+    - Update grub
+    - Ask to reboot
   tags:
     - pci_passthrough
