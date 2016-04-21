@@ -4,10 +4,6 @@
   command: update-grub
   become: yes
 
-- name: Restart networking
-  shell: 'ifdown --exclude=lo -a && sudo ifup --exclude=lo -a'
-  become: yes
-
 - name: Ask to reboot
   file:
     path: /var/run/reboot-required
