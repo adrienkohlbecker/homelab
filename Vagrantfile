@@ -1,6 +1,15 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+[
+  'vagrant-cachier',
+  'vagrant-fsnotify'
+].each do |plugin|
+  unless Vagrant.has_plugin?(plugin)
+    raise "Please install #{plugin} using 'vagrant plugin install #{plugin}'"
+  end
+end
+
 AVAILABLE_MEMORY = `hostinfo`.match(/memory available: (\d+\.\d+)/)[1].to_f
 AVAILABLE_CPU    = `hostinfo`.match(/(\d+) processors are logically available./)[1].to_i
 VM_MEMORY        = (AVAILABLE_MEMORY * 0.2 * 1024).to_i
