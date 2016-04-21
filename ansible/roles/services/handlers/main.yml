@@ -2,8 +2,10 @@
 
 - name: Reload unit
   command: systemctl daemon-reload
-  sudo: true
+  become: yes
 
 - name: Restart compose
-  command: systemctl restart compose
-  sudo: true
+  service:
+    name: compose
+    state: restarted
+  become: yes

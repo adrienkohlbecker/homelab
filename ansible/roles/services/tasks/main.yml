@@ -1,11 +1,31 @@
 ---
 
+- name: Create ejson keys directory
+  file:
+    dest: /opt/ejson/keys
+    state: directory
+    recurse: true
+    owner: root
+    group: root
+    mode: 700
+  become: yes
+  tags:
+    - services
+
+- name: Set-up ejson keys
+  template:
+    src: key
+    dest: "/opt/ejson/keys/{{ ejson_public_key }}"
+  become: yes
+  tags:
+    - services
+
 - name: Add media user
   user:
     name: media
     uid: 2000
     state: present
-  sudo: true
+  become: yes
   tags:
     - services
 
@@ -15,7 +35,7 @@
     group: media
     uid: 2001
     state: present
-  sudo: true
+  become: yes
   tags:
     - services
 
@@ -25,7 +45,7 @@
     group: media
     uid: 2002
     state: present
-  sudo: true
+  become: yes
   tags:
     - services
 
@@ -35,7 +55,7 @@
     group: media
     uid: 2003
     state: present
-  sudo: true
+  become: yes
   tags:
     - services
 
@@ -45,7 +65,7 @@
     group: media
     uid: 2004
     state: present
-  sudo: true
+  become: yes
   tags:
     - services
 
@@ -55,7 +75,7 @@
     group: media
     uid: 2005
     state: present
-  sudo: true
+  become: yes
   tags:
     - services
 
@@ -64,7 +84,7 @@
     name: adrientm
     uid: 2100
     state: present
-  sudo: true
+  become: yes
   tags:
     - services
 
@@ -75,7 +95,7 @@
     owner: "{{item.owner}}"
     group: "{{item.group}}"
     mode: "{{item.mode}}"
-  sudo: true
+  become: yes
   tags:
     - services
   with_items:
@@ -100,7 +120,7 @@
     dest: /opt/services
     accept_hostkey: True
     update: yes
-  sudo: true
+  become: yes
   notify:
     - Reload unit
     - Restart compose
@@ -111,7 +131,7 @@
   command: docker-compose pull
   args:
     chdir: /opt/services
-  sudo: true
+  become: yes
   tags:
     - services
 
@@ -119,18 +139,27 @@
   service:
     name: /opt/services/compose.service
     enabled: true
-  sudo: true
+  become: yes
   tags:
     - services
 
 - name: Copy the update script
-  copy: src=services_update.sh dest=/usr/local/bin/services_update mode=755
-  sudo: true
+  copy:
+    src: services_update.sh
+    dest: /usr/local/bin/services_update
+    mode: 755
+  become: yes
   tags:
     - services
 
 - name: Schedule the update script
-  cron: name="services update" minute=0 hour=5 job="/usr/local/bin/services_update" user=root cron_file=ansible_services_update
-  sudo: true
+  cron:
+    name: services_update
+    minute: 0
+    hour: 5
+    job: /usr/local/bin/services_update
+    user: root
+    cron_file: ansible_services_update
+  become: yes
   tags:
     - services
