@@ -9,6 +9,7 @@
     - ssh
     - mailer
     - smart
+    - hdparm
     - ups
     - datadog
     - user
