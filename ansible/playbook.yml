@@ -17,6 +17,7 @@
     - snapraid
     - virtualization
     - docker
+    - services
     - user
 
   post_tasks:
