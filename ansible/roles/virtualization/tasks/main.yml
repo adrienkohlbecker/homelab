@@ -23,7 +23,7 @@
 
 - name: Define vms # TODO: Make indepotent
   virt:
-    name: "{{ item }} "
+    name: "{{ item }}"
     command: define
     xml: "{{ lookup('file', item+'.xml') }}"
   with_items:
@@ -31,6 +31,7 @@
     - HTPC
     - OSX
   become: yes
+  changed_when: false
   tags:
     - virtualization
 
