@@ -12,11 +12,11 @@ fi
 
 # Install the Parallels Tools
 
-mkdir -p /mnt/parallels
-mount -o loop /home/vagrant/prl-tools.iso /mnt/parallels
-
-/mnt/parallels/install --install-unattended-with-deps --progress
-
-umount /mnt/parallels
-
-rm -rf /home/vagrant/prl-tools.iso
+# mkdir -p /mnt/parallels
+# mount -o loop /home/vagrant/prl-tools.iso /mnt/parallels
+#
+# /mnt/parallels/install --install-unattended-with-deps --progress
+#
+# umount /mnt/parallels
+#
+# rm -rf /home/vagrant/prl-tools.iso
