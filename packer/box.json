@@ -71,7 +71,8 @@
                 ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
                 ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
                 ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
-                ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"]
+                ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
+                ["set", "{{.Name}}", "--nested-virt", "on"]
             ]
         }
     ],
