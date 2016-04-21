@@ -69,8 +69,6 @@
     - acpid
     - fail2ban
     - logrotate
-    - ntp
-    - ntpdate
     - unattended-upgrades
     - update-notifier-common
   tags:
