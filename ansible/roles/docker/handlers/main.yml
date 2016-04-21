@@ -4,4 +4,4 @@
   service:
     name: docker
     state: restarted
-  sudo: true
+  become: yes

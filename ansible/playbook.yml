@@ -16,6 +16,7 @@
     - datadog
     - snapraid
     - virtualization
+    - docker
     - user
 
   post_tasks:
