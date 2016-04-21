@@ -68,18 +68,12 @@
   with_items:
     - acpid
     - build-essential
-    - curl
     - fail2ban
-    - htop
-    - jq
     - logrotate
     - ntp
     - ntpdate
-    - socat
-    - tree
     - unattended-upgrades
     - update-notifier-common
-    - vim
   tags:
     - base
 
