@@ -5,6 +5,8 @@ set -eu
 set -o pipefail
 IFS=$'\n\t'
 
+export DEBIAN_FRONTEND=noninteractive
+
 # Update the box
 apt-get -y update >/dev/null
 apt-get -y install facter "linux-headers-$(uname -r)" build-essential zlib1g-dev libssl-dev libreadline-gplv2-dev curl unzip >/dev/null
@@ -35,7 +37,7 @@ date > /etc/vagrant_box_build_time
 
 # Installing vagrant keys
 mkdir -pm 700 /home/vagrant/.ssh
-wget --no-check-certificate 'https://raw.github.com/mitchellh/vagrant/master/keys/vagrant.pub' -O /home/vagrant/.ssh/authorized_keys
+wget --no-check-certificate 'https://raw.githubusercontent.com/mitchellh/vagrant/master/keys/vagrant.pub' -O /home/vagrant/.ssh/authorized_keys
 chmod 0600 /home/vagrant/.ssh/authorized_keys
 chown -R vagrant /home/vagrant/.ssh
 
