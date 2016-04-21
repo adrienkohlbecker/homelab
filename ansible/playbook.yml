@@ -6,3 +6,30 @@
     - ntp
     - ssh
     - user
+
+  post_tasks:
+
+    - name: Check if a reboot is required
+      shell: "[ -f /var/run/reboot-required ]"
+      failed_when: false
+      register: reboot_required
+      changed_when: reboot_required.rc == 0
+      tags:
+        - always
+
+    - name: restart machine
+      command: shutdown -r now "Ansible updates triggered"
+      async: 0
+      poll: 0
+      become: true
+      ignore_errors: true
+      when: reboot_required | changed
+      tags:
+        - always
+
+    - name: waiting for server to come back
+      local_action: wait_for port=22 host="{{ ansible_ssh_host }}" search_regex=OpenSSH delay=10
+      become: false
+      when: reboot_required | changed
+      tags:
+        - always
