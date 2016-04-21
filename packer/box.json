@@ -5,7 +5,6 @@
             "scripts": [
                 "{{ template_dir }}/scripts/vagrant.sh",
                 "{{ template_dir }}/scripts/parallels.sh",
-                "{{ template_dir }}/scripts/ansible.sh",
                 "{{ template_dir }}/scripts/volume.sh",
                 "{{ template_dir }}/scripts/cleanup.sh",
                 "{{ template_dir }}/scripts/zerodisk.sh"

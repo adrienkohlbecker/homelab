@@ -7,13 +7,6 @@ IFS=$'\n\t'
 
 export DEBIAN_FRONTEND=noninteractive
 
-# Removing leftover leases and persistent rules
-echo "cleaning up dhcp leases"
-rm /var/lib/dhcp/*
-
-echo "Adding a 2 sec delay to the interface up, to make the dhclient happy"
-echo "pre-up sleep 2" >> /etc/network/interfaces
-
 echo 'Cleanup bash history'
 unset HISTFILE
 [ -f /root/.bash_history ] && rm /root/.bash_history
@@ -22,6 +15,7 @@ unset HISTFILE
 echo 'Cleanup log files'
 find /var/log -type f | while read f; do echo -ne '' > "$f"; done;
 
+apt-get -y remove facter
 apt-get -y autoremove
 
 # Remove APT cache
