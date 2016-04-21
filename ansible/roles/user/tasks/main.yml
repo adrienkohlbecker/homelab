@@ -34,7 +34,7 @@
     shell: /bin/zsh
     uid: "{{ deploy_user_uid }}"
     group: "{{ deploy_user_group }}"
-    groups: ssh,libvirtd
+    groups: ssh,libvirtd,docker
   become: yes
   tags:
     - user
