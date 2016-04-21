@@ -1,4 +1,0 @@
----
-
-datadog_api_key: "{{ credentials['datadog']['api_key'] }}"
-datadog_application_key: "{{ credentials['datadog']['application_key'] }}"

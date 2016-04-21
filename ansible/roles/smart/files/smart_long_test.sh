@@ -36,7 +36,7 @@ else
   log "Devices for today ($(date '+%A')): ${SCHEDULE[$DAY]}"
 
   for device in "${DEVICES[@]}"; do
-    echo "..."
+    log "..."
     run "smartctl -t long $device 2>&1"
   done
 fi
