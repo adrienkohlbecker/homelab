@@ -1,0 +1,41 @@
+---
+
+- name: Install virtualization tools
+  apt:
+    pkg: "{{item}}"
+    state: installed
+  become: yes
+  tags:
+    - virtualization
+  with_items:
+    - qemu-kvm
+    - virt-manager
+
+- name: Download virtio drivers for windows
+  get_url:
+    url: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.117-1/virtio-win-0.1.117.iso
+    dest: /var/lib/libvirt/images/virtio-win-0.1.117.iso
+    owner: root
+    group: root
+  become: yes
+  tags:
+    - virtualization
+
+# - name: Configure directory permissions
+#   file:
+#     dest: /var/lib/libvirt/images
+#     owner: libvirt-qemu
+#     group: kvm
+#     mode: 0770
+#   become: yes
+#   tags:
+#     - virtualization
+
+# - name: Add ansibleremote to libvirtd group
+#   user:
+#     name: ansibleremote
+#     groups: libvirtd
+#     append: yes
+#   become: yes
+#   tags:
+#     - virtualization
