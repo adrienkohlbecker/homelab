@@ -6,6 +6,7 @@
                 "{{ template_dir }}/scripts/vagrant.sh",
                 "{{ template_dir }}/scripts/parallels.sh",
                 "{{ template_dir }}/scripts/ansible.sh",
+                "{{ template_dir }}/scripts/volume.sh",
                 "{{ template_dir }}/scripts/cleanup.sh",
                 "{{ template_dir }}/scripts/zerodisk.sh"
             ],
@@ -59,7 +60,19 @@
             "parallels_tools_flavor": "lin",
             "prlctl": [
                 ["set", "{{.Name}}", "--memsize", "1536"],
-                ["set", "{{.Name}}", "--cpus", "2"]
+                ["set", "{{.Name}}", "--cpus", "2"],
+                ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
+                ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
+                ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
+                ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
+                ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
+                ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
+                ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
+                ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
+                ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
+                ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
+                ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
+                ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"]
             ]
         }
     ],
