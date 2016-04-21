@@ -11,6 +11,7 @@
     - smart
     - hdparm
     - ups
+    - ipmi
     - datadog
     - user
 
