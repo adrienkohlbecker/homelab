@@ -1,0 +1,12 @@
+---
+
+- name: Install ntp
+  apt:
+    pkg: "{{ item }}"
+    state: installed
+  with_items:
+    - ntp
+    - ntpdate
+  become: yes
+  tags:
+    - ntp
