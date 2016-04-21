@@ -1,9 +1,0 @@
----
-
-- name: Restart datadog
-  service: name=datadog-agent state=restarted
-  sudo: true
-
-- name: Restart smartmontools
-  service: name=smartmontools state=restarted
-  sudo: true
