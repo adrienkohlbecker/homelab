@@ -91,6 +91,9 @@ Vagrant.configure(2) do |config|
   # SHELL
   config.vm.provision 'ansible' do |ansible|
     ansible.playbook = 'ansible/playbook.yml'
+    ansible.extra_vars = {
+      is_vagrant: true
+    }
   end
 
   if Vagrant.has_plugin?('vagrant-cachier')
