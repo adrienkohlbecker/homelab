@@ -15,6 +15,7 @@
     - ipmi
     - datadog
     - snapraid
+    - pci_passthrough
     - virtualization
     - docker
     - services
