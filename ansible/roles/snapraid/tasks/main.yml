@@ -81,7 +81,7 @@
 
 - name: Create mount points
   file:
-    dest: "{{item.path}}"
+    dest: "{{ item }}"
     state: directory
     owner: root
     group: root
