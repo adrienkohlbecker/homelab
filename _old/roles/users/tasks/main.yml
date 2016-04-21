@@ -1,6 +1,0 @@
----
-
-- name: Add user
-  user: name={{item.name}} password={{item.password}} state=present
-  with_items: users
-  sudo: true

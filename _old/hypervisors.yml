@@ -22,24 +22,6 @@
 
   tasks:
 
-    - name: Add users to media group
-      user: name={{item}} groups=media append=yes
-      sudo: true
-      with_items: user_groups.media
-
-    - name: Create snapraid user
-      user: name=snapraid
-      sudo: true
-
-    - name: Add users to snapraid group
-      user: name={{item}} groups=snapraid append=yes
-      sudo: true
-      with_items: user_groups.snapraid
-
-    - name: Add adrien to kvm group
-      user: name=adrien groups=kvm append=yes
-      sudo: true
-
     - name: Mount btrfs partitons
       mount: "name={{item.mountpoint}} src='LABEL={{item.label}}' state=present fstype=btrfs opts='{{item.opts}}'"
       sudo: true
@@ -56,10 +38,6 @@
     - name: Mount mhddfs partition
       sudo: true
       mount: 'name=/mnt/media src=mhddfs#/mnt/snapraid_d1/media,/mnt/snapraid_d2/media,/mnt/snapraid_d3/media fstype=fuse opts="mlimit=32G,defaults,noatime,allow_other,nonempty,big_writes,direct_io,fsname=media" state=present'
-
-    - name: Install gparted
-      apt: pkg=gparted state=installed
-      sudo: true
 
   post_tasks:
 
