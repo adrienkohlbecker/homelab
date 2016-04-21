@@ -1,6 +1,0 @@
----
-
-mailer_domain: kohlby.fr
-smtp_host: smtp.sendgrid.net
-smtp_user: "{{ credentials['sendgrid']['user'] }}"
-smtp_password: "{{ credentials['sendgrid']['password'] }}"
