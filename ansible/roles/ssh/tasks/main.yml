@@ -50,9 +50,9 @@
     - ssh
 
 # vagrant
-- name: Add vagrant user to ssh group
+- name: Add provisioning user to ssh group
   user:
-    name: vagrant
+    name: "{{ provisioning_user }}"
     groups: ssh
     append: yes
   when: is_vagrant

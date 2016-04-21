@@ -1,5 +1,6 @@
 ---
 
+provisioning_user: vagrant
 deploy_user: adrien
 deploy_user_group: adrien
 deploy_user_uid: 1002
