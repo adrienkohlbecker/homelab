@@ -1,0 +1,80 @@
+---
+
+- name: Install build-essential
+  apt:
+    package: build-essential
+    state: installed
+  become: yes
+  tags:
+    - snapraid
+
+- name: Download Snapraid
+  unarchive:
+    dest: /usr/local/src
+    src: https://github.com/amadvance/snapraid/releases/download/v10.0/snapraid-10.0.tar.gz
+    creates: /usr/local/src/snapraid-10.0
+    copy: no
+  register: downloaded_snapraid
+  become: yes
+  tags:
+    - snapraid
+
+- name: Compile and install Snapraid
+  shell: ./configure && make && make install
+  args:
+    chdir: /usr/local/src/snapraid-10.0
+  when: downloaded_snapraid|changed
+  become: yes
+  tags:
+    - snapraid
+
+- name: Copy the configuration
+  copy:
+    src: snapraid.conf
+    dest: /etc/snapraid.conf
+  become: yes
+  tags:
+    - snapraid
+
+- name: Copy the sync script
+  copy:
+    src: snapraid_sync.sh
+    dest: /usr/local/bin/snapraid_sync
+    mode: 755
+  become: yes
+  tags:
+    - snapraid
+
+- name: Schedule the sync script
+  cron:
+    name: snapraid_sync
+    minute: 5
+    hour: 23
+    job: /usr/local/bin/snapraid_sync
+    user: root
+    cron_file: ansible_snapraid_sync
+  become: yes
+  tags:
+    - snapraid
+
+- name: Copy the scrub script
+  copy:
+    src: snapraid_scrub.sh
+    dest: /usr/local/bin/snapraid_scrub
+    mode: 755
+  become: yes
+  tags:
+    - snapraid
+
+- name: Schedule the scrub script
+  cron:
+    name: snapraid_scrub
+    minute: 0
+    hour: 1
+    weekday: 0
+    job: /usr/local/bin/snapraid_scrub
+    user: root
+    cron_file: ansible_snapraid_scrub
+  become: yes
+  tags:
+    - snapraid

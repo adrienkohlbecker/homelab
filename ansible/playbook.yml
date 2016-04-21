@@ -13,6 +13,7 @@
     - ups
     - ipmi
     - datadog
+    - snapraid
     - virtualization
     - user
 
