@@ -30,6 +30,7 @@
     - Ubuntu_base
     - HTPC
     - OSX
+  become: yes
   tags:
     - virtualization
 
