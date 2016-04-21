@@ -2,8 +2,8 @@
 
 - name: update grub
   command: update-grub
-  sudo: true
+  become: yes
 
 - name: Restart networking
   shell: 'ifdown --exclude=lo -a && sudo ifup --exclude=lo -a'
-  sudo: true
+  become: yes

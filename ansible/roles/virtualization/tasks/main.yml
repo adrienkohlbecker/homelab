@@ -21,21 +21,35 @@
   tags:
     - virtualization
 
-# - name: Configure directory permissions
-#   file:
-#     dest: /var/lib/libvirt/images
-#     owner: libvirt-qemu
-#     group: kvm
-#     mode: 0770
-#   become: yes
-#   tags:
-#     - virtualization
+- name: Add ansible user to libvirtd group
+  user:
+    name: "{{ provisioning_user }}"
+    groups: libvirtd
+    append: yes
+  become: yes
+  tags:
+    - virtualization
 
-# - name: Add ansibleremote to libvirtd group
-#   user:
-#     name: ansibleremote
-#     groups: libvirtd
-#     append: yes
-#   become: yes
-#   tags:
-#     - virtualization
+- name: Define vms # TODO: Make indepotent
+  virt:
+    name: "{{ item }} "
+    command: define
+    xml: "{{ lookup('file', item+'.xml') }}"
+  with_items:
+    - Ubuntu_base
+    - HTPC
+    - OSX
+  tags:
+    - virtualization
+
+- name: Configure networking
+  copy:
+    src: interfaces
+    dest: /etc/network/interfaces
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  notify: Restart networking
+  tags:
+    - virtualization
