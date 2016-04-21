@@ -16,6 +16,7 @@
     - vim
     - zsh
     - gparted
+    - tig
   tags:
     - user
 
