@@ -8,6 +8,7 @@
     - ntp
     - ssh
     - mailer
+    - ups
     - datadog
     - user
 
