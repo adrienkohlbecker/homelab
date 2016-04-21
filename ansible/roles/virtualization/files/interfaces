@@ -1,18 +1,21 @@
 # This file describes the network interfaces available on your system
 # and how to activate them. For more information, see interfaces(5).
 
+source /etc/network/interfaces.d/*
+
+# The loopback network interface
 auto lo
 iface lo inet loopback
 
-auto eth0
-iface eth0 inet manual
+# The primary network interface
+auto enp0s5
+iface enp0s5 inet dhcp
+# This is an autoconfigured IPv6 interface
+iface enp0s5 inet6 auto
 
-auto eth1
-iface eth1 inet dhcp
-
-auto br1
-iface br1 inet dhcp
-    bridge_ports eth0
-    bridge_stp off
-    bridge_fd 0
-    bridge_maxwait 0
+# auto br1
+# iface br1 inet dhcp
+#     bridge_ports enp0s5
+#     bridge_stp off
+#     bridge_fd 0
+#     bridge_maxwait 0
