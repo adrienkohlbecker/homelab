@@ -21,15 +21,6 @@
   tags:
     - virtualization
 
-- name: Add ansible user to libvirtd group
-  user:
-    name: "{{ provisioning_user }}"
-    groups: libvirtd
-    append: yes
-  become: yes
-  tags:
-    - virtualization
-
 - name: Define vms # TODO: Make indepotent
   virt:
     name: "{{ item }} "

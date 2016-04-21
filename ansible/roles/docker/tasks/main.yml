@@ -51,12 +51,3 @@
   become: yes
   tags:
     - docker
-
-- name: Add ansible user to docker group
-  user:
-    name: "{{ provisioning_user }}"
-    groups: docker
-    append: yes
-  become: yes
-  tags:
-    - docker
