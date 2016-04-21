@@ -1,10 +1,13 @@
 ---
 
 - hosts: all
+  vars_files:
+    - vars/credentials.yml
   roles:
     - base
     - ntp
     - ssh
+    - datadog
     - user
 
   post_tasks:
