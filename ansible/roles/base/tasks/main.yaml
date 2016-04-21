@@ -1,0 +1,130 @@
+---
+
+- name: Set up locales
+  locale_gen:
+    name: "{{item}}"
+    state: present
+  become: yes
+  with_items:
+    - fr_FR.UTF-8
+    - en_US.UTF-8
+  tags:
+    - base
+
+- name: apt-get update
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - base
+
+- name: Install aptitude
+  apt:
+    pkg: aptitude
+    state: installed
+  become: yes
+  tags:
+    - base
+
+- name: apt-get upgrade
+  apt:
+    upgrade: full
+  become: yes
+  tags:
+    - base
+
+- name: Set hostname
+  hostname:
+    name: "{{inventory_hostname}}"
+  become: yes
+  tags:
+    - base
+
+- name: Setup new hostname to loopback in /etc/hosts (short)
+  lineinfile:
+    dest: /etc/hosts
+    regexp: ^127.0.1.1
+    line: "127.0.1.1 {{inventory_hostname_short}}"
+  become: yes
+  tags:
+    - base
+
+- name: Setup new hostname to loopback in /etc/hosts (long)
+  lineinfile:
+    dest: /etc/hosts
+    regexp: ^127.0.2.1
+    line: "127.0.2.1 {{inventory_hostname}}"
+  become: yes
+  when: inventory_hostname != inventory_hostname_short
+  tags:
+    - base
+
+- name: Install base packages
+  apt:
+    pkg: "{{item}}"
+    state: installed
+  become: yes
+  with_items:
+    - acpid
+    - build-essential
+    - curl
+    - fail2ban
+    - htop
+    - jq
+    - logrotate
+    - ntp
+    - ntpdate
+    - socat
+    - tree
+    - unattended-upgrades
+    - update-notifier-common
+    - vim
+  tags:
+    - base
+
+- name: Configure concurrency level
+  lineinfile:
+    dest: /etc/environment
+    regexp: "{{item.regexp}}"
+    line: "{{item.line}}"
+  become: yes
+  with_items:
+    - regexp: ^CONCURRENCY_LEVEL=
+      line: 'CONCURRENCY_LEVEL="{{ ansible_processor_vcpus + 1 }}"'
+    - regexp: ^MAKE_FLAGS=
+      line: 'MAKE_FLAGS="-j{{ ansible_processor_vcpus + 1 }}"'
+  tags:
+    - base
+
+- name: Keep these vars when running sudo
+  lineinfile:
+    dest: /etc/sudoers.d/ansible
+    insertafter: EOF
+    line: 'Defaults        env_keep="CONCURRENCY_LEVEL MAKE_FLAGS"'
+    state: present
+    create: yes
+    validate: visudo -cf %s
+  become: yes
+  tags:
+    - base
+
+- name: Setup unattended-upgrades
+  copy:
+    src: "{{ item }}"
+    dest: "/etc/apt/apt.conf.d/{{ item }}"
+    owner: root
+    group: root
+    mode: 644
+  become: yes
+  with_items:
+    - 20auto-upgrades
+    - 50unattended-upgrades
+  tags:
+    - base
+
+- name: Download bash framework
+  get_url: url=https://raw.githubusercontent.com/adrienkohlbecker/bash-framework/master/main.sh dest=/usr/local/lib/bash-framework mode=755 force=yes
+  become: yes
+  tags:
+    - base
