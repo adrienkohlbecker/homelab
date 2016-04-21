@@ -56,8 +56,8 @@
 
 - name: Copy the zfs tool
   copy:
-    src: zfs.sh
-    dest: "/home/{{ deploy_user }}/zfs.sh"
+    src: zfs_snaps.sh
+    dest: /usr/local/bin/zfs_snaps
     mode: 755
   become: yes
   tags:
