@@ -99,7 +99,7 @@
   mount:
     name: "{{ item.mountpoint }}"
     src: "LABEL={{ item.label }}"
-    state: present
+    state: mounted
     fstype: ext4
     opts: defaults,noatime,nodiratime
   with_items:
