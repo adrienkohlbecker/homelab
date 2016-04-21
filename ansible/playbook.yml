@@ -24,8 +24,8 @@
         - always
 
     - name: restart machine
-      command: shutdown -r now "Ansible updates triggered"
-      async: 0
+      shell: sleep 2 && shutdown -r now "Ansible updates triggered"
+      async: 1
       poll: 0
       become: true
       ignore_errors: true
@@ -34,7 +34,12 @@
         - always
 
     - name: waiting for server to come back
-      local_action: wait_for port=22 host="{{ ansible_ssh_host }}" search_regex=OpenSSH delay=10
+      wait_for:
+        port: 22
+        host: "{{ ansible_ssh_host }}"
+        search_regex: OpenSSH
+        delay: 10
+      delegate_to: 127.0.0.1
       become: false
       when: reboot_required | changed
       tags:
