@@ -68,11 +68,11 @@ Vagrant.configure(2) do |config|
   #
   # View the documentation for the provider you are using for more
   # information on available options.
-  config.vm.provider 'parallels' do |vb|
-    vb.name = 'hypervisor_box'
-    vb.update_guest_tools = true
-    vb.memory = VM_MEMORY
-    vb.cpus = VM_CPU
+  config.vm.provider 'parallels' do |prl|
+    prl.name = 'hypervisor_box'
+    prl.memory = VM_MEMORY
+    prl.cpus = VM_CPU
+    prl.check_guest_tools = false
   end
 
   # Define a Vagrant Push strategy for pushing to Atlas. Other push strategies
