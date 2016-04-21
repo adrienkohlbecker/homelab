@@ -1,6 +1,11 @@
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
+AVAILABLE_MEMORY = `hostinfo`.match(/memory available: (\d+\.\d+)/)[1].to_f
+AVAILABLE_CPU    = `hostinfo`.match(/(\d+) processors are logically available./)[1].to_i
+VM_MEMORY        = (AVAILABLE_MEMORY * 0.2 * 1024).to_i
+VM_CPU           = AVAILABLE_CPU / 2
+
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
 # configures the configuration version (we support older styles for
 # backwards compatibility). Please don't change it unless you know what
@@ -54,6 +59,12 @@ Vagrant.configure(2) do |config|
   #
   # View the documentation for the provider you are using for more
   # information on available options.
+  config.vm.provider 'parallels' do |vb|
+    vb.name = 'hypervisor_box'
+    vb.update_guest_tools = true
+    vb.memory = VM_MEMORY
+    vb.cpus = VM_CPU
+  end
 
   # Define a Vagrant Push strategy for pushing to Atlas. Other push strategies
   # such as FTP and Heroku are also available. See the documentation at
