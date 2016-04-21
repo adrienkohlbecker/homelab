@@ -1,5 +1,27 @@
 ---
 
+- name: Install fuse
+  apt:
+    pkg: fuse
+    state: installed
+  become: yes
+  tags:
+    - mergerfs
+
+- name: Install mergerfs deps
+  apt:
+    pkg: "{{item}}"
+    state: installed
+  become: yes
+  tags:
+    - mergerfs
+  with_items:
+    - libc6
+    - libfuse2
+    - libgcc1
+    - libstdc++6
+    - fuse
+
 - name: Download mergerfs
   get_url:
     url: https://github.com/trapexit/mergerfs/releases/download/2.12.3/mergerfs_2.12.3.ubuntu-xenial_amd64.deb
@@ -31,6 +53,7 @@
     - /mnt/snapraid_d1/media
     - /mnt/snapraid_d2/media
     - /mnt/snapraid_d3/media
+    - /mnt/media
 
 - name: Mount mergerfs partition
   mount:
@@ -38,7 +61,7 @@
     src: /mnt/snapraid_d1/media:/mnt/snapraid_d2/media:/mnt/snapraid_d2/media
     fstype: fuse.mergerfs
     opts: defaults,allow_other,fsname=media
-    state: present
+    state: mounted
   become: yes
   tags:
     - mergerfs
