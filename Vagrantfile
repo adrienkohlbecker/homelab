@@ -89,6 +89,9 @@ Vagrant.configure(2) do |config|
   #   sudo apt-get update
   #   sudo apt-get install -y apache2
   # SHELL
+  config.vm.provision 'ansible' do |ansible|
+    ansible.playbook = 'ansible/playbook.yml'
+  end
 
   if Vagrant.has_plugin?('vagrant-cachier')
     config.cache.scope = :box
