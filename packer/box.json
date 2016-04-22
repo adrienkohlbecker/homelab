@@ -9,8 +9,25 @@
                 "{{ template_dir }}/scripts/cleanup.sh",
                 "{{ template_dir }}/scripts/zerodisk.sh"
             ],
+            "only": [
+              "hypervisor"
+            ],
             "override": {
                 "hypervisor": {
+                    "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
+                }
+            }
+        },
+        {
+            "type": "shell",
+            "scripts": [
+                "{{ template_dir }}/scripts/zfsroot.sh"
+            ],
+            "only": [
+              "hypervisor-zfs"
+            ],
+            "override": {
+                "hypervisor-zfs": {
                     "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
                 }
             }
@@ -74,12 +91,30 @@
                 ["set", "{{.Name}}", "--device-add", "hdd", "--size", "5000"],
                 ["set", "{{.Name}}", "--nested-virt", "on"]
             ]
+        },
+        {
+            "type": "parallels-pvm",
+            "name": "hypervisor-zfs",
+            "source_path": "output-hypervisor/packer-hypervisor.pvm",
+            "boot_wait": "10s",
+            "ssh_username": "vagrant",
+            "ssh_password": "vagrant",
+            "ssh_port": 22,
+            "ssh_wait_timeout": "10000s",
+            "shutdown_command": "echo '/sbin/halt -h -p' > /tmp/shutdown.sh; echo 'vagrant'|sudo -S bash '/tmp/shutdown.sh'",
+            "parallels_tools_mode": "upload",
+            "parallels_tools_guest_path": "prl-tools.iso",
+            "parallels_tools_flavor": "lin"
         }
     ],
     "post-processors": [
         {
           "type": "vagrant",
-          "output": "{{.Provider}}.box"
+          "only": [
+            "hypervisor-zfs"
+          ],
+          "output": "{{.Provider}}.box",
+          "keep_input_artifact": true
         }
     ]
 }
