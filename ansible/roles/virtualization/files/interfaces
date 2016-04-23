@@ -9,13 +9,19 @@ iface lo inet loopback
 
 # The primary network interface
 auto enp0s5
-iface enp0s5 inet dhcp
+iface enp0s5 inet manual
 # This is an autoconfigured IPv6 interface
-iface enp0s5 inet6 auto
+iface enp0s5 inet6 manual
 
-# auto br1
-# iface br1 inet dhcp
-#     bridge_ports enp0s5
-#     bridge_stp off
-#     bridge_fd 0
-#     bridge_maxwait 0
+# The secondary network interface
+auto enp0s6
+iface enp0s6 inet dhcp
+# This is an autoconfigured IPv6 interface
+iface enp0s6 inet6 auto
+
+auto br1
+iface br1 inet dhcp
+    bridge_ports enp0s5
+    bridge_stp off
+    bridge_fd 0
+    bridge_maxwait 0
