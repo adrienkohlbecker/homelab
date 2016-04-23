@@ -49,7 +49,7 @@ Vagrant.configure(2) do |config|
   # config.vm.network "public_network"
 
   # auto_config is needed due to : https://github.com/mitchellh/vagrant/issues/7155
-  config.vm.network "private_network", type: "dhcp", auto_config: false
+  config.vm.network 'private_network', type: 'dhcp', auto_config: false
 
   # Share an additional folder to the guest VM. The first argument is
   # the path on the host to the actual folder. The second argument is
