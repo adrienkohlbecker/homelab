@@ -34,7 +34,7 @@ driver_modules_blacklist:
   - hid_logitech_dj # Logitech unifying
 
 # In normal & recovery mode
-grub_cmdline: boot=zfs rpool=rpool bootfs=rpool/ROOT/ubuntu-1 nomodeset
+grub_cmdline: root=ZFS=rpool/ROOT/ubuntu-1 boot=zfs rpool=rpool bootfs=rpool/ROOT/ubuntu-1 nomodeset
 
 # Only in normal mode (non-recovery)
 grub_cmdline_default: iommu=1 intel_iommu=on pci_stub.ids={{pci_stub_device_ids}} cgroup_enable=memory swapaccount=1
