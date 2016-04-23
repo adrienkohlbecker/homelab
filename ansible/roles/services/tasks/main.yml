@@ -125,14 +125,6 @@
   tags:
     - services
 
-- name: Pull images
-  command: docker-compose pull
-  args:
-    chdir: /opt/services
-  become: yes
-  tags:
-    - services
-
 - name: Enable service
   service:
     name: /opt/services/compose.service
