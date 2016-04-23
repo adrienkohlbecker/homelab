@@ -75,9 +75,6 @@ Vagrant.configure(2) do |config|
     prl.check_guest_tools = false
   end
 
-  config.ssh.username = 'adrien'
-  config.ssh.private_key_path = '~/.ssh/hypervisor_rsa'
-
   # Define a Vagrant Push strategy for pushing to Atlas. Other push strategies
   # such as FTP and Heroku are also available. See the documentation at
   # https://docs.vagrantup.com/v2/push/atlas.html for more information.
@@ -95,11 +92,8 @@ Vagrant.configure(2) do |config|
   config.vm.provision 'ansible' do |ansible|
     ansible.playbook = 'ansible/playbook.yml'
     ansible.extra_vars = {
-      ansible_ssh_user: 'vagrant',
       is_vagrant: true
     }
-    ansible.force_remote_user = false
-    ansible.raw_ssh_args = ['-o \'IdentityFile="/Users/adrien/Desktop/hypervisor/.vagrant/machines/default/parallels/private_key"\'']
   end
 
   if Vagrant.has_plugin?('vagrant-cachier')
