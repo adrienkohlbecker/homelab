@@ -7,16 +7,43 @@ IFS=$'\n\t'
 
 export DEBIAN_FRONTEND=noninteractive
 
-apt-get -y update >/dev/null
-apt-get -y install zfsutils-linux parted rsync >/dev/null
+apt-get -y update
+apt-get -y install zfsutils-linux zfs-initramfs parted rsync
+modprobe zfs
+
+# SSDs
+parted -a optimal -s /dev/sdb -- mklabel msdos
+parted -a optimal -s /dev/sdb -- mkpart primary zfs 1MB -512MB
+parted -a optimal -s /dev/sdb -- mkpart primary ext2 -512MB 100%
+parted -a optimal -s /dev/sdb -- set 2 boot on
+parted -a optimal -s /dev/sdb -- print
+sleep 2
+
+parted -a optimal -s /dev/sdc -- mklabel msdos
+parted -a optimal -s /dev/sdc -- mkpart primary zfs 1MB -512MB
+parted -a optimal -s /dev/sdc -- mkpart primary ext2 -512MB 100%
+parted -a optimal -s /dev/sdc -- set 2 boot on
+parted -a optimal -s /dev/sdc -- print
+sleep 2
+
+mkfs.ext2 -L boot /dev/sdb2
+mkfs.ext2 -L boot2 /dev/sdc2
+
+zpool create -f -o ashift=12 -O compression=lz4 -O mountpoint=none \
+  rpool mirror /dev/sdb1 /dev/sdc1
 
 zpool export rpool
-zpool import -d /dev rpool
+zpool import -o altroot=/mirror -d /dev/disk/by-id rpool
 
-mkdir /tmp/oldroot
-mount --bind / /tmp/oldroot
+zfs create -o mountpoint=none rpool/ROOT
+zfs create -o mountpoint=/ rpool/ROOT/ubuntu-1
 
-rsync -aPX /tmp/oldroot/. /mirror/.
+sed -i 's|^GRUB_CMDLINE_LINUX=""|GRUB_CMDLINE_LINUX="root=ZFS=rpool/ROOT/ubuntu-1 boot=zfs rpool=rpool bootfs=rpool/ROOT/ubuntu-1"|' /etc/default/grub
+
+rsync --one-file-system -aAXHW / /mirror/
+
+rm -rf /mirror/boot
+mkdir /mirror/boot
 
 cat <<EOF > /mirror/etc/fstab
 # /etc/fstab: static file system information.
@@ -26,15 +53,19 @@ cat <<EOF > /mirror/etc/fstab
 # that works even if disks are added and removed. See fstab(5).
 #
 # <file system> <mount point>   <type>  <options>       <dump>  <pass>
-
-LABEL=boot /boot ext4 defaults 0 1
+LABEL=boot /boot ext2 defaults 0 0
 EOF
 
-sed -i 's|^GRUB_CMDLINE_LINUX=""|GRUB_CMDLINE_LINUX="root=ZFS=rpool/ROOT/ubuntu-1"|' /mirror/etc/default/grub
+mount /dev/sdb2 /mirror/boot
+rsync --one-file-system -aAXHW /boot/ /mirror/boot/
+umount /boot
+umount /mirror/boot
+mount /dev/sdb2 /boot
 
-mount /dev/sda1 /mirror/boot
+update-grub
+grub-install /dev/sdb
 
-for d in proc sys dev; do mount --bind /$d /mirror/$d; done
+blkid
+cat /boot/grub/grub.cfg
 
-chroot /mirror/ grub-install /dev/sda
-chroot /mirror/ update-grub
+apt-get -y remove parted rsync
