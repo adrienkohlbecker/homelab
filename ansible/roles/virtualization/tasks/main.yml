@@ -10,6 +10,7 @@
   with_items:
     - qemu-kvm
     - virt-manager
+    - libgl1-mesa-glx # https://bugs.launchpad.net/ubuntu/+source/virt-manager/+bug/1550983
 
 - name: Download virtio drivers for windows
   get_url:
@@ -35,6 +36,9 @@
   tags:
     - virtualization
 
+# TODO: Restarting network fails with
+#   run-parts: /etc/network/if-up.d/ubuntu-fan exited with return code 1
+#   Failed to bring up enp0s5.
 - name: Configure networking
   copy:
     src: interfaces
@@ -43,6 +47,8 @@
     group: root
     mode: 0644
   become: yes
-  notify: Restart networking
+  notify:
+    # - Restart networking
+    - Ask to reboot
   tags:
     - virtualization

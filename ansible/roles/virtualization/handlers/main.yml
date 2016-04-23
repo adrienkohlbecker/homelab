@@ -1,5 +1,13 @@
 ---
 
 - name: Restart networking
-  shell: 'ifdown --exclude=lo -a && sudo ifup --exclude=lo -a'
+  service:
+    name: networking
+    state: restarted
+  become: yes
+
+- name: Ask to reboot
+  file:
+    path: /var/run/reboot-required
+    state: touch
   become: yes
