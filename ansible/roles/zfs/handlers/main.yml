@@ -1,0 +1,5 @@
+---
+
+- name: Trigger udev
+  command: udevadm trigger
+  become: yes
