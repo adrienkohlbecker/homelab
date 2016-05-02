@@ -12,6 +12,16 @@
   tags:
     - zfs
 
+- name: Copy the udev rules for grub
+  copy:
+    src: 90-zfs.rules
+    dest: /etc/udev/rules.d/90-zfs.rules
+    mode: 644
+  become: yes
+  notify: Trigger udev
+  tags:
+    - zfs
+
 - name: Copy the health script
   copy:
     src: zfs_health.sh
