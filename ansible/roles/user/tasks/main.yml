@@ -17,6 +17,7 @@
     - zsh
     - gparted
     - tig
+    - man-db
   tags:
     - user
 
