@@ -240,7 +240,10 @@ sftp:
   domainname: kohlby.fr
   volumes:
     - /mnt/sftp/arq:/home/arq/sftp
-    - /mnt/sftp/lgg4:/home/lgg4/sftp
+    - /mnt/sftp/lgg4/DCIM:/home/lgg4/sftp/DCIM
+    - /mnt/sftp/lgg4/DCIM_SD:/home/lgg4/sftp/DCIM_SD
+    - /mnt/sftp/lgg4/TitaniumBackup:/home/lgg4/sftp/TitaniumBackup
+    - /mnt/media/Music:/home/lgg4/sftp/Music
     - /mnt/sftp/ssh:/etc/ssh/host_keys
   user: root
   stdin_open: true
