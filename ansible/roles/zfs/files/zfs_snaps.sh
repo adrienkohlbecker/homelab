@@ -1,4 +1,4 @@
-#!/bin/bash
+brumath#!/bin/bash
 
 # Unofficial bash strict mode http://redsymbol.net/articles/unofficial-bash-strict-mode/
 set -eu
@@ -28,7 +28,7 @@ case "$COMMAND" in
     zfs snapshot "tank/legacy@$NAME"
     zfs snapshot "tank/pictures@$NAME"
     zfs snapshot "tank/sftp@$NAME"
-    zfs snapshot "tank/timemachine@$NAME"
+    zfs snapshot "tank/brumath@$NAME"
     zfs snapshot "tank/videos@$NAME"
 
     ;;
@@ -47,7 +47,7 @@ case "$COMMAND" in
     zfs destroy -f "tank/legacy@backup-disk-$DISK"
     zfs destroy -f "tank/pictures@backup-disk-$DISK"
     zfs destroy -f "tank/sftp@backup-disk-$DISK"
-    zfs destroy -f "tank/timemachine@backup-disk-$DISK"
+    zfs destroy -f "tank/brumath@backup-disk-$DISK"
     zfs destroy -f "tank/videos@backup-disk-$DISK"
 
     zfs destroy -f "backup-$DISK/ubuntu@backup-disk-$DISK"
@@ -57,7 +57,7 @@ case "$COMMAND" in
     zfs destroy -f "backup-$DISK/legacy@backup-disk-$DISK"
     zfs destroy -f "backup-$DISK/pictures@backup-disk-$DISK"
     zfs destroy -f "backup-$DISK/sftp@backup-disk-$DISK"
-    zfs destroy -f "backup-$DISK/timemachine@backup-disk-$DISK"
+    zfs destroy -f "backup-$DISK/brumath@backup-disk-$DISK"
     zfs destroy -f "backup-$DISK/videos@backup-disk-$DISK"
 
     echo "Rolling back backup to: $FROM"
@@ -69,7 +69,7 @@ case "$COMMAND" in
     zfs rollback "backup-$DISK/legacy@$FROM"
     zfs rollback "backup-$DISK/pictures@$FROM"
     zfs rollback "backup-$DISK/sftp@$FROM"
-    zfs rollback "backup-$DISK/timemachine@$FROM"
+    zfs rollback "backup-$DISK/brumath@$FROM"
     zfs rollback "backup-$DISK/videos@$FROM"
 
     echo "Snapshotting with name=backup-disk-$DISK"
@@ -81,7 +81,7 @@ case "$COMMAND" in
     zfs snapshot "tank/legacy@backup-disk-$DISK"
     zfs snapshot "tank/pictures@backup-disk-$DISK"
     zfs snapshot "tank/sftp@backup-disk-$DISK"
-    zfs snapshot "tank/timemachine@backup-disk-$DISK"
+    zfs snapshot "tank/brumath@backup-disk-$DISK"
     zfs snapshot "tank/videos@backup-disk-$DISK"
 
     echo "Incremental sync to backup: $FROM -> backup-disk-$DISK"
@@ -93,7 +93,7 @@ case "$COMMAND" in
     zfs send -pv -I "tank/legacy@$FROM" "tank/legacy@backup-disk-$DISK" | zfs receive -v "backup-$DISK/legacy"
     zfs send -pv -I "tank/pictures@$FROM" "tank/pictures@backup-disk-$DISK" | zfs receive -v "backup-$DISK/pictures"
     zfs send -pv -I "tank/sftp@$FROM" "tank/sftp@backup-disk-$DISK" | zfs receive -v "backup-$DISK/sftp"
-    zfs send -pv -I "tank/timemachine@$FROM" "tank/timemachine@backup-disk-$DISK" | zfs receive -v "backup-$DISK/timemachine"
+    zfs send -pv -I "tank/brumath@$FROM" "tank/brumath@backup-disk-$DISK" | zfs receive -v "backup-$DISK/brumath"
     zfs send -pv -I "tank/videos@$FROM" "tank/videos@backup-disk-$DISK" | zfs receive -v "backup-$DISK/videos"
 
     ;;
@@ -111,7 +111,7 @@ case "$COMMAND" in
     zfs destroy "tank/legacy@$SNAPSHOT"
     zfs destroy "tank/pictures@$SNAPSHOT"
     zfs destroy "tank/sftp@$SNAPSHOT"
-    zfs destroy "tank/timemachine@$SNAPSHOT"
+    zfs destroy "tank/brumath@$SNAPSHOT"
     zfs destroy "tank/videos@$SNAPSHOT"
 
     ;;
