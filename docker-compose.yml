@@ -138,6 +138,12 @@ airsonos:
   user: root
   stdin_open: true
   tty: true
+  security_opt:
+    - seccomp:unconfined
+  cap_add:
+    - SYS_ADMIN
+  volumes:
+    - /opt/ejson/keys:/opt/ejson/keys:ro
 vpn:
   image: kohlby/vpn
   log_driver: "syslog"
