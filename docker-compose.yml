@@ -225,3 +225,19 @@ samba:
     - 138:138/udp
     - 139:139
     - 445:445
+sftp:
+  image: kohlby/sftp
+  log_driver: "syslog"
+  log_opt:
+    syslog-tag: compose.sftp
+  hostname: sftp
+  domainname: kohlby.fr
+  volumes:
+    - /mnt/sftp/arq:/home/arq/sftp
+    - /mnt/sftp/lgg4:/home/lgg4/sftp
+    - /mnt/sftp/ssh:/etc/ssh/host_keys
+  user: root
+  stdin_open: true
+  tty: true
+  ports:
+    - 2223:22
