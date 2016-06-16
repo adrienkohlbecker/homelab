@@ -17,6 +17,15 @@
   tags:
     - services
 
+- name: Add sftpaccess group
+  group:
+    name: sftpaccess
+    gid: 2200
+    state: present
+  become: yes
+  tags:
+    - services
+
 - name: Add media user
   user:
     name: media
@@ -81,6 +90,26 @@
     name: sonos
     group: media
     uid: 2006
+    state: present
+  become: yes
+  tags:
+    - services
+
+- name: Add arq user
+  user:
+    name: arq
+    group: sftpaccess
+    uid: 2201
+    state: present
+  become: yes
+  tags:
+    - services
+
+- name: Add lgg4 user
+  user:
+    name: lgg4
+    group: sftpaccess
+    uid: 2202
     state: present
   become: yes
   tags:

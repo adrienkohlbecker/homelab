@@ -23,6 +23,7 @@ zpool create -f -o ashift=12 -O compression=lz4 -O casesensitivity=insensitive -
   tank raidz2 /dev/sda /dev/sdb /dev/sdc /dev/sdd /dev/sde /dev/sdf
 zfs create -o mountpoint=/mnt/legacy tank/legacy
 zfs create -o mountpoint=/mnt/pictures tank/pictures
+zfs create -o mountpoint=/mnt/sftp tank/sftp
 zfs create -o mountpoint=/mnt/timemachine tank/timemachine
 zfs create -o mountpoint=/mnt/videos tank/videos
 zfs create -o mountpoint=/mnt/vms tank/vms
