@@ -16,7 +16,7 @@ sabnzbd:
     - seccomp:unconfined
   user: root
   ports:
-    - 8080:8080
+    - "8080:8080"
 sickrage:
   image: kohlby/sickrage
   hostname: sickrage
@@ -34,7 +34,7 @@ sickrage:
     - seccomp:unconfined
   user: root
   ports:
-    - 8081:8081
+    - "8081:8081"
 couchpotato:
   image: kohlby/couchpotato
   hostname: couchpotato
@@ -52,7 +52,7 @@ couchpotato:
     - seccomp:unconfined
   user: root
   ports:
-    - 5050:5050
+    - "5050:5050"
 plex:
   image: kohlby/plex
   net: host
@@ -70,7 +70,7 @@ plex:
     - seccomp:unconfined
   user: root
   ports:
-    - 32400:32400
+    - "32400:32400"
 nginx:
   image: kohlby/nginx
   hostname: www
@@ -87,8 +87,8 @@ nginx:
     - seccomp:unconfined
   user: root
   ports:
-    - 80:80
-    - 443:443
+    - "80:80"
+    - "443:443"
 timemachine:
   image: kohlby/timemachine
   hostname: timemachine
@@ -108,7 +108,7 @@ timemachine:
     - seccomp:unconfined
   user: root
   ports:
-    - 548:548
+    - "548:548"
 avahi:
   image: kohlby/avahi
   net: host
@@ -128,7 +128,7 @@ resume:
   log_opt:
     syslog-tag: compose.resume
   ports:
-    - 4000:4000
+    - "4000:4000"
 airsonos:
   image: kohlby/airsonos
   net: host
@@ -164,7 +164,7 @@ vpn:
   stdin_open: true
   tty: true
   ports:
-    - 1194:1194/udp
+    - "1194:1194/udp"
 gitlab:
   image: kohlby/gitlab
   log_driver: "syslog"
@@ -227,10 +227,10 @@ samba:
   stdin_open: true
   tty: true
   ports:
-    - 137:137/udp
-    - 138:138/udp
-    - 139:139
-    - 445:445
+    - "137:137/udp"
+    - "138:138/udp"
+    - "139:139"
+    - "445:445"
 sftp:
   image: kohlby/sftp
   log_driver: "syslog"
@@ -246,4 +246,4 @@ sftp:
   stdin_open: true
   tty: true
   ports:
-    - 2223:22
+    - "2223:22"
