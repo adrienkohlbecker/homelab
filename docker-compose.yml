@@ -1,8 +1,6 @@
 ---
 sabnzbd:
   image: kohlby/sabnzbd
-  hostname: sabnzbd
-  domainname: kohlby.fr
   volumes:
     - /opt/ejson/keys:/opt/ejson/keys:ro
     - /mnt/docker/sabnzbd:/data
@@ -19,8 +17,6 @@ sabnzbd:
     - "8080:8080"
 sickrage:
   image: kohlby/sickrage
-  hostname: sickrage
-  domainname: kohlby.fr
   volumes:
     - /opt/ejson/keys:/opt/ejson/keys:ro
     - /mnt/docker/sickrage:/data
@@ -37,8 +33,6 @@ sickrage:
     - "8081:8081"
 couchpotato:
   image: kohlby/couchpotato
-  hostname: couchpotato
-  domainname: kohlby.fr
   volumes:
     - /opt/ejson/keys:/opt/ejson/keys:ro
     - /mnt/docker/couchpotato:/data
@@ -56,7 +50,6 @@ couchpotato:
 plex:
   image: kohlby/plex
   net: host
-  domainname: kohlby.fr
   volumes:
     - /opt/ejson/keys:/opt/ejson/keys:ro
     - /mnt/docker/plex:/data
@@ -73,8 +66,6 @@ plex:
     - "32400:32400"
 nginx:
   image: kohlby/nginx
-  hostname: www
-  domainname: kohlby.fr
   log_driver: "syslog"
   log_opt:
     syslog-tag: compose.nginx
@@ -98,12 +89,8 @@ avahi:
   security_opt:
     - seccomp:unconfined
   user: root
-  stdin_open: true
-  tty: true
 resume:
   image: kohlby/resume
-  hostname: resume
-  domainname: kohlby.fr
   log_driver: "syslog"
   log_opt:
     syslog-tag: compose.resume
@@ -116,8 +103,6 @@ airsonos:
   log_opt:
     syslog-tag: compose.airsonos
   user: root
-  stdin_open: true
-  tty: true
   security_opt:
     - seccomp:unconfined
   cap_add:
@@ -141,8 +126,6 @@ vpn:
   security_opt:
     - seccomp:unconfined
   user: root
-  stdin_open: true
-  tty: true
   ports:
     - "1194:1194/udp"
 gitlab:
@@ -162,8 +145,6 @@ gitlab:
   security_opt:
     - seccomp:unconfined
   user: root
-  stdin_open: true
-  tty: true
   ports:
     - '8443:443'
     - '8090:80'
@@ -183,8 +164,6 @@ gitlab-runner:
   security_opt:
     - seccomp:unconfined
   user: root
-  stdin_open: true
-  tty: true
 samba:
   image: kohlby/samba
   log_driver: "syslog"
@@ -204,8 +183,6 @@ samba:
   security_opt:
     - seccomp:unconfined
   user: root
-  stdin_open: true
-  tty: true
   ports:
     - "137:137/udp"
     - "138:138/udp"
@@ -226,7 +203,5 @@ sftp:
     - /mnt/media/Music:/home/lgg4/sftp/Music
     - /mnt/sftp/ssh:/etc/ssh/host_keys
   user: root
-  stdin_open: true
-  tty: true
   ports:
     - "2223:22"
