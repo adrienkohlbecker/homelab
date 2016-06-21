@@ -89,26 +89,6 @@ nginx:
   ports:
     - "80:80"
     - "443:443"
-timemachine:
-  image: kohlby/timemachine
-  hostname: timemachine
-  domainname: kohlby.fr
-  log_driver: "syslog"
-  log_opt:
-    syslog-tag: compose.timemachine
-  volumes:
-    - /opt/ejson/keys:/opt/ejson/keys:ro
-    - /mnt/timemachine:/mnt/timemachine
-  cap_add:
-    # shr exec
-    - SYS_ADMIN
-    # netatalk
-    - SYS_RESOURCE
-  security_opt:
-    - seccomp:unconfined
-  user: root
-  ports:
-    - "548:548"
 avahi:
   image: kohlby/avahi
   net: host
