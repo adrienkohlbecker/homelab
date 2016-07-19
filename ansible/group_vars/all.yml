@@ -34,7 +34,7 @@ driver_modules_blacklist:
   - hid_logitech_dj # Logitech unifying
 
 # In normal & recovery mode
-grub_cmdline: root=ZFS=rpool/ROOT/ubuntu-1 boot=zfs rpool=rpool bootfs=rpool/ROOT/ubuntu-1 nomodeset
+grub_cmdline: nomodeset
 
 # Only in normal mode (non-recovery)
 grub_cmdline_default: iommu=1 intel_iommu=on pci_stub.ids={{pci_stub_device_ids}} cgroup_enable=memory swapaccount=1
@@ -45,6 +45,10 @@ grub_config:
 - regexp: ^(#?)GRUB_CMDLINE_LINUX_DEFAULT=
   line: GRUB_CMDLINE_LINUX_DEFAULT="{{grub_cmdline_default}}"
 - regexp: ^(#?)GRUB_GFXMODE
-  line: GRUB_GFXMODE=640x480
+  line: GRUB_GFXMODE=1024x768x32
+- regexp: ^(#?)GRUB_GFXPAYLOAD_LINUX
+  line: GRUB_GFXPAYLOAD_LINUX=keep
 - regexp: ^(#?)GRUB_TERMINAL
-  line: GRUB_TERMINAL=console
+  line: "#GRUB_TERMINAL=console"
+- regexp: ^(#?)GRUB_HIDDEN_TIMEOUT=
+  line: "#GRUB_HIDDEN_TIMEOUT=0"
