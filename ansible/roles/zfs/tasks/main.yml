@@ -5,20 +5,11 @@
     package: "{{ item }}"
     state: installed
   with_items:
+    - linux-image-generic
     - zfsutils-linux
     - zfs-initramfs
     - zfs-zed
   become: yes
-  tags:
-    - zfs
-
-- name: Copy the udev rules for grub
-  copy:
-    src: 90-zfs.rules
-    dest: /etc/udev/rules.d/90-zfs.rules
-    mode: 644
-  become: yes
-  notify: Trigger udev
   tags:
     - zfs
 
@@ -69,6 +60,23 @@
     src: zfs_snaps.sh
     dest: /usr/local/bin/zfs_snaps
     mode: 755
+  become: yes
+  tags:
+    - zfs
+
+- name: Set-up swap
+  lineinfile:
+    dest: /etc/fstab
+    regexp: swap
+    line: /dev/zvol/rpool/swap none swap defaults,discard 0 0
+  become: yes
+  register: swap_fstab
+  tags:
+    - zfs
+
+- name: Enable swap
+  command: swapon -av
+  when: "{{ swap_fstab | changed }}"
   become: yes
   tags:
     - zfs

@@ -1,2 +1,0 @@
-KERNEL=="sd*[!0-9]", IMPORT{parent}=="ID_*", SYMLINK+="$env{ID_BUS}-$env{ID_SERIAL}"
-KERNEL=="sd*[0-9]", IMPORT{parent}=="ID_*", SYMLINK+="$env{ID_BUS}-$env{ID_SERIAL}-part%n"
