@@ -57,3 +57,17 @@
   become: yes
   tags:
     - virtualization
+
+- name: Create mount points
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0711
+  become: yes
+  tags:
+    - snapraid
+  with_items:
+    - /mnt/vms
+    - /var/lib/libvirt/images
