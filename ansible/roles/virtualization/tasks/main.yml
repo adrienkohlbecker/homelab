@@ -48,3 +48,12 @@
     - Restart networking
   tags:
     - virtualization
+
+- name: Add deploy user to libvirtd group
+  user:
+    name: "{{ deploy_user }}"
+    groups: libvirtd
+    append: yes
+  become: yes
+  tags:
+    - virtualization
