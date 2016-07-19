@@ -37,7 +37,7 @@
     shell: /bin/zsh
     uid: "{{ deploy_user_uid }}"
     group: "{{ deploy_user_group }}"
-    groups: ssh,libvirtd,docker,media
+    groups: "{{ deploy_user_additional_groups | join(',') }}"
   become: yes
   tags:
     - user
@@ -51,15 +51,6 @@
     state: present
     create: yes
     validate: visudo -cf %s
-  become: yes
-  tags:
-    - user
-
-- name: Add authorized keys
-  authorized_key:
-    user: "{{ deploy_user }}"
-    key: "{{ deploy_user_ssh_public_key }}"
-    state: present
   become: yes
   tags:
     - user
