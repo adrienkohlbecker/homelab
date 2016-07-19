@@ -68,10 +68,9 @@
   mount:
     name: none
     src: /dev/zvol/rpool/swap
-    state: mounted
+    state: present
     fstype: swap
     opts: defaults,discard
-    with_items:
   become: yes
   register: swap_fstab
   tags:

@@ -140,7 +140,7 @@
     - {path: '/mnt/media/Music',            owner: 'media',       group: 'media',    mode: '2774'}
     - {path: '/mnt/media/Pictures',         owner: 'media',       group: 'media',    mode: '2774'}
     - {path: '/mnt/media/Other',            owner: 'media',       group: 'media',    mode: '2774'}
-    - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'sabnzbd',     group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'sabnzbd',     group: 'media',    mode: '0775'}
     - {path: '/mnt/media/.tmp/couchpotato', owner: 'couchpotato', group: 'media',    mode: '2774'}
     - {path: '/mnt/media/.tmp/sickrage',    owner: 'sickrage',    group: 'media',    mode: '2774'}
     - {path: '/mnt/docker/sabnzbd',         owner: 'sabnzbd',     group: 'media',    mode: '2774'}
