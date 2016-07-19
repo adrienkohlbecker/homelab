@@ -1,0 +1,31 @@
+# plex.service #######################################################################
+[Unit]
+Description=Plex
+After=docker.service mnt-media.mount zfs-mount.service
+Requires=docker.service mnt-media.mount zfs-mount.service
+Wants=nginx.service
+PartOf=compose.service
+
+[Service]
+Restart=always
+ExecStartPre=-/usr/bin/docker kill services_plex
+ExecStartPre=-/usr/bin/docker rm services_plex
+ExecStartPre=/usr/bin/docker pull kohlby/plex
+ExecStart=/usr/bin/docker run \
+    --name services_plex \
+    --publish 32400:32400 \
+    --net host \
+    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
+    --volume /mnt/docker/plex:/data \
+    --volume /mnt/media:/media \
+    --log-driver=syslog \
+    --log-opt tag=compose.plex \
+    --cap-add SYS_ADMIN \
+    --security-opt seccomp=unconfined \
+    --user root \
+    kohlby/plex
+ExecStop=/usr/bin/docker stop services_plex
+TimeoutSec=60
+
+[Install]
+WantedBy=compose.service

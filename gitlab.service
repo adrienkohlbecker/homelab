@@ -1,0 +1,31 @@
+# gitlab.service #######################################################################
+[Unit]
+Description=Gitlab
+After=docker.service zfs-mount.service
+Requires=docker.service zfs-mount.service
+Wants=nginx.service
+PartOf=compose.service
+
+[Service]
+Restart=always
+ExecStartPre=-/usr/bin/docker kill services_gitlab
+ExecStartPre=-/usr/bin/docker rm services_gitlab
+ExecStartPre=/usr/bin/docker pull kohlby/gitlab
+ExecStart=/usr/bin/docker run \
+    --name services_gitlab \
+    --publish 8443:443 \
+    --publish 2222:22 \
+    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
+    --volume /mnt/docker/gitlab:/var/opt/gitlab \
+    --volume /mnt/docker/gitlab-storage:/mnt/storage \
+    --log-driver=syslog \
+    --log-opt tag=compose.gitlab \
+    --cap-add SYS_ADMIN \
+    --security-opt seccomp=unconfined \
+    --user root \
+    kohlby/gitlab
+ExecStop=/usr/bin/docker stop services_gitlab
+TimeoutSec=60
+
+[Install]
+WantedBy=compose.service

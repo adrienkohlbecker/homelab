@@ -1,15 +1,10 @@
 [Unit]
 Description=Docker Compose Services
-After=docker.service zfs-mount.service
-Requires=docker.service zfs-mount.service
 
 [Service]
-TimeoutStartSec=0
-Restart=always
-ExecStartPre=/usr/bin/env docker-compose stop
-ExecStart=/usr/bin/env docker-compose up
-ExecStop=/usr/bin/env docker-compose stop
-WorkingDirectory=/opt/services
+Type=oneshot
+ExecStart=/bin/echo "started"
+RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target

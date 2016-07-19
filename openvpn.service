@@ -1,0 +1,29 @@
+# openvpn.service #######################################################################
+[Unit]
+Description=OpenVPN
+After=docker.service
+Requires=docker.service
+PartOf=compose.service
+
+[Service]
+Restart=always
+ExecStartPre=-/usr/bin/docker kill services_openvpn
+ExecStartPre=-/usr/bin/docker rm services_openvpn
+ExecStartPre=/usr/bin/docker pull kohlby/vpn
+ExecStart=/usr/bin/docker run \
+    --name services_openvpn \
+    --publish "1194:1194/udp" \
+    --net host \
+    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
+    --log-driver=syslog \
+    --log-opt tag=compose.openvpn \
+    --cap-add SYS_ADMIN \
+    --cap-add NET_ADMIN \
+    --security-opt seccomp=unconfined \
+    --user root \
+    kohlby/vpn
+ExecStop=/usr/bin/docker stop services_openvpn
+TimeoutSec=60
+
+[Install]
+WantedBy=compose.service

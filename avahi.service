@@ -1,0 +1,25 @@
+# avahi.service #######################################################################
+[Unit]
+Description=Avahi
+After=docker.service
+Requires=docker.service
+PartOf=compose.service
+
+[Service]
+Restart=always
+ExecStartPre=-/usr/bin/docker kill services_avahi
+ExecStartPre=-/usr/bin/docker rm services_avahi
+ExecStartPre=/usr/bin/docker pull kohlby/avahi
+ExecStart=/usr/bin/docker run \
+    --name services_avahi \
+    --net host \
+    --log-driver=syslog \
+    --log-opt tag=compose.avahi \
+    --security-opt seccomp=unconfined \
+    --user root \
+    kohlby/avahi
+ExecStop=/usr/bin/docker stop services_avahi
+TimeoutSec=60
+
+[Install]
+WantedBy=compose.service

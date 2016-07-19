@@ -1,0 +1,30 @@
+# sabnzbd.service #######################################################################
+[Unit]
+Description=Sabnzbd
+After=docker.service mnt-media.mount zfs-mount.service
+Requires=docker.service mnt-media.mount zfs-mount.service
+Wants=nginx.service
+PartOf=compose.service
+
+[Service]
+Restart=always
+ExecStartPre=-/usr/bin/docker kill services_sabnzbd
+ExecStartPre=-/usr/bin/docker rm services_sabnzbd
+ExecStartPre=/usr/bin/docker pull kohlby/sabnzbd
+ExecStart=/usr/bin/docker run \
+    --name services_sabnzbd \
+    --publish 8080:8080 \
+    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
+    --volume /mnt/docker/sabnzbd:/data \
+    --volume /mnt/media:/media \
+    --log-driver=syslog \
+    --log-opt tag=compose.sabnzbd \
+    --cap-add SYS_ADMIN \
+    --security-opt seccomp=unconfined \
+    --user root \
+    kohlby/sabnzbd
+ExecStop=/usr/bin/docker stop services_sabnzbd
+TimeoutSec=60
+
+[Install]
+WantedBy=compose.service
