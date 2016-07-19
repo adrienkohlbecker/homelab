@@ -82,7 +82,6 @@
     - ubuntu-server
     - ubuntu-minimal
     - grub-pc
-    - man-db
     - console-data # keymaps
     - python # ansible dep
     - python-simplejson # ansible dep
