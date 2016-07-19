@@ -1,0 +1,86 @@
+---
+
+- name: Install ssh server
+  apt:
+    pkg: openssh-server
+  become: yes
+  tags:
+    - ssh
+
+- name: Ensure ssh group is present
+  group:
+    name: ssh
+    state: present
+  become: yes
+  tags:
+    - ssh
+
+- name: Configure sshd
+  copy:
+    src: sshd_config
+    dest: /etc/ssh/sshd_config
+    owner: root
+    group: root
+    mode: 0644
+  notify: Restart ssh
+  become: yes
+  tags:
+    - ssh
+
+# Fixes warning sshd:  error: Could not load host key: /etc/ssh/ssh_host_ed25519_key
+- name: Generate missing host keys
+  shell: ssh-keygen -A
+  args:
+    creates: /etc/ssh/ssh_host_ed25519_key
+  become: yes
+  tags:
+    - ssh
+
+- name: Add deploy user to ssh group
+  user:
+    name: "{{ deploy_user }}"
+    groups: ssh
+    append: yes
+  become: yes
+  tags:
+    - ssh
+
+- name: Add authorized keys
+  authorized_key:
+    user: "{{ deploy_user }}"
+    key: "{{ deploy_user_ssh_public_key }}"
+    state: present
+  become: yes
+  tags:
+    - user
+
+- name: "Ensure permissions on .ssh directory"
+  file:
+    path: "/home/{{deploy_user}}/.ssh"
+    owner: "{{deploy_user}}"
+    group: "{{deploy_user}}"
+    mode: 0700
+  become: yes
+  tags:
+    - user
+
+- name: "Ensure permissions on authorized_keys file"
+  file:
+    path: "/home/{{deploy_user}}/.ssh/authorized_keys"
+    owner: "{{deploy_user}}"
+    group: "{{deploy_user}}"
+    mode: 0600
+  become: yes
+  tags:
+    - user
+
+# vagrant
+- name: Add provisioning user to ssh group
+  user:
+    name: "{{ provisioning_user }}"
+    groups: ssh
+    append: yes
+  when: is_vagrant
+  become: yes
+  tags:
+    - ssh

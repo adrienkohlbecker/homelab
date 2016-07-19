@@ -1,0 +1,7 @@
+---
+
+- name: Ask to reboot
+  file:
+    path: /var/run/reboot-required
+    state: touch
+  become: yes

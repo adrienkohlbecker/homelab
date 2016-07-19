@@ -1,0 +1,5 @@
+packer_cache/
+output-hypervisor-base/
+output-hypervisor-zfs/
+output-hypervisor-final/
+*.box

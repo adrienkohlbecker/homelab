@@ -1,5 +1,0 @@
----
-- hosts: tosetup
-  user: deploy
-  roles:
-    - ansiblesetup

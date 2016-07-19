@@ -1,0 +1,70 @@
+---
+
+provisioning_user: vagrant
+deploy_user: adrien
+deploy_user_group: adrien
+deploy_user_additional_groups:
+  # default groups for admin
+  - adm
+  - cdrom
+  - dip
+  - lpadmin
+  - plugdev
+  - sambashare
+  - sudo
+  - lxd
+  # additional groups for services
+  - ssh
+  - libvirtd
+  - docker
+  - media
+deploy_user_uid: 1000
+deploy_user_gid: 1000
+deploy_user_password: $6$9WL6ah8B.K/Kk$x6tt2LKJxKYyXxBRIO1bkKzKvZ.eyysAMI4M60nfYIWk6nihR8W8g/bIdp9siG.X47wfQ2i9wraY1ZGH.UKrK.
+deploy_user_ssh_public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCfaBgkl46ItMXwLhlGxeDLAu8nz5zAi1Ez5hOOO49HKXLZLKgRFrZSLCAwNQ4nik2NgNx6Vrt2gYYOtDJTa6Lay8yFzi2ciDEdXbXYuRHEDafK2vKIAo85alKDUOUZsxQ2t2ObTTcZdk9UUwsxOLR9KtAXJAEtj7Y5IyCGoebNP5edD2VBzX4p3ttW0Ht8uhqUHKKN1aNJuDvGZroNBz/3HXv+iirKUr9jN30kOw8YWRRijmzLVzw/Et5qO61fRoo0oWDYPDnzbcKgutwKkVhXsmcSPogQcdBO9M/P+z6Uy0C8U808Vk6zJPpm5EavaBho7gbA5bXnhsJhEIifOfGb
+
+mailer_domain: kohlby.fr
+smtp_host: smtp.sendgrid.net
+smtp_user: "{{ sendgrid_user }}"
+smtp_password: "{{ sendgrid_password }}"
+root_email: adrien.kohlbecker@gmail.com
+
+# Used to grep ids from lspci
+vfio_device_names:
+  - Radeon HD
+  - Pitcairn HDMI Audio
+  - 'USB EHCI #1'
+
+pci_stub_device_names:
+  - Radeon HD
+  - Pitcairn HDMI Audio
+  - 'USB EHCI #1'
+  # - Renesas
+
+driver_modules_blacklist:
+  - radeon
+  - snd_usb_audio # C-Media soundcard
+  - uvcvideo # Logitech webcam
+  - hid_logitech_hidpp # Logitech unifying
+  - hid_logitech_dj # Logitech unifying
+  - xpad # recepteur Xbox
+
+# In normal & recovery mode
+grub_cmdline: nomodeset
+
+# Only in normal mode (non-recovery)
+grub_cmdline_default: iommu=1 intel_iommu=on pci_stub.ids={{pci_stub_device_ids}} cgroup_enable=memory swapaccount=1
+
+grub_config:
+- regexp: ^(#?)GRUB_CMDLINE_LINUX=
+  line: GRUB_CMDLINE_LINUX="{{grub_cmdline}}"
+- regexp: ^(#?)GRUB_CMDLINE_LINUX_DEFAULT=
+  line: GRUB_CMDLINE_LINUX_DEFAULT="{{grub_cmdline_default}}"
+- regexp: ^(#?)GRUB_GFXMODE
+  line: GRUB_GFXMODE=1024x768x32
+- regexp: ^(#?)GRUB_GFXPAYLOAD_LINUX
+  line: GRUB_GFXPAYLOAD_LINUX=keep
+- regexp: ^(#?)GRUB_TERMINAL
+  line: "#GRUB_TERMINAL=console"
+- regexp: ^(#?)GRUB_HIDDEN_TIMEOUT=
+  line: "#GRUB_HIDDEN_TIMEOUT=0"

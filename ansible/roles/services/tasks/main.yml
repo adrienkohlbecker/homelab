@@ -1,0 +1,194 @@
+---
+
+- name: Create ejson keys directory
+  file:
+    dest: /opt/ejson/keys
+    state: directory
+    recurse: true
+  become: yes
+  tags:
+    - services
+
+- name: Set-up ejson keys
+  template:
+    src: key
+    dest: "/opt/ejson/keys/{{ ejson_public_key }}"
+  become: yes
+  tags:
+    - services
+
+- name: Add sftpaccess group
+  group:
+    name: sftpaccess
+    gid: 2200
+    state: present
+  become: yes
+  tags:
+    - services
+
+- name: Add media user
+  user:
+    name: media
+    uid: 2000
+    state: present
+  become: yes
+  tags:
+    - services
+
+- name: Add sabnzbd user
+  user:
+    name: sabnzbd
+    group: media
+    uid: 2001
+    state: present
+  become: yes
+  tags:
+    - services
+
+- name: Add sickrage user
+  user:
+    name: sickrage
+    group: media
+    uid: 2002
+    state: present
+  become: yes
+  tags:
+    - services
+
+- name: Add nginx user
+  user:
+    name: nginx
+    group: media
+    uid: 2003
+    state: present
+  become: yes
+  tags:
+    - services
+
+- name: Add couchpotato user
+  user:
+    name: couchpotato
+    group: media
+    uid: 2004
+    state: present
+  become: yes
+  tags:
+    - services
+
+- name: Add plex user
+  user:
+    name: plex
+    group: media
+    uid: 2005
+    state: present
+  become: yes
+  tags:
+    - services
+
+- name: Add sonos user
+  user:
+    name: sonos
+    group: media
+    uid: 2006
+    state: present
+  become: yes
+  tags:
+    - services
+
+- name: Add arq user
+  user:
+    name: arq
+    group: sftpaccess
+    uid: 2201
+    state: present
+  become: yes
+  tags:
+    - services
+
+- name: Add mobile user
+  user:
+    name: mobile
+    group: sftpaccess
+    uid: 2202
+    state: present
+  become: yes
+  tags:
+    - services
+
+- name: Add deploy user to media group
+  user:
+    name: "{{ deploy_user }}"
+    groups: media
+    append: yes
+  become: yes
+  tags:
+    - services
+
+- name: Create mount points
+  file:
+    dest: "{{item.path}}"
+    state: directory
+    owner: "{{item.owner}}"
+    group: "{{item.group}}"
+    mode: "{{item.mode}}"
+  become: yes
+  tags:
+    - services
+  with_items:
+    - {path: '/mnt/media/Movies',           owner: 'media',       group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/TV',               owner: 'media',       group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/Music',            owner: 'media',       group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/Pictures',         owner: 'media',       group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/Other',            owner: 'media',       group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'sabnzbd',     group: 'media',    mode: '0775'}
+    - {path: '/mnt/media/.tmp/couchpotato', owner: 'couchpotato', group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/.tmp/sickrage',    owner: 'sickrage',    group: 'media',    mode: '2774'}
+    - {path: '/mnt/docker/sabnzbd',         owner: 'sabnzbd',     group: 'media',    mode: '2774'}
+    - {path: '/mnt/docker/sickrage',        owner: 'sickrage',    group: 'media',    mode: '2774'}
+    - {path: '/mnt/docker/couchpotato',     owner: 'couchpotato', group: 'media',    mode: '2774'}
+    - {path: '/mnt/docker/gitlab',          owner: 'root',        group: 'root',     mode: '0755'}
+    - {path: '/mnt/docker/gitlab-storage',  owner: 'root',        group: 'root',     mode: '2755'}
+    - {path: '/mnt/docker/plex',            owner: 'plex',        group: 'media',    mode: '2774'}
+    - {path: '/mnt/brumath',                owner: 'adrien',      group: 'adrien',   mode: '2774'}
+
+- name: Install docker-compose.yml
+  git:
+    repo: https://github.com/kohlby/compose.git
+    dest: /opt/services
+    accept_hostkey: True
+    update: yes
+  become: yes
+  notify:
+    - Reload unit
+    - Restart compose
+  tags:
+    - services
+
+- name: Enable service
+  service:
+    name: /opt/services/compose.service
+    enabled: true
+  become: yes
+  tags:
+    - services
+
+- name: Copy the update script
+  copy:
+    src: services_update.sh
+    dest: /usr/local/bin/services_update
+    mode: 755
+  become: yes
+  tags:
+    - services
+
+- name: Schedule the update script
+  cron:
+    name: services_update
+    minute: 0
+    hour: 5
+    job: /usr/local/bin/services_update
+    user: root
+    cron_file: ansible_services_update
+  become: yes
+  tags:
+    - services

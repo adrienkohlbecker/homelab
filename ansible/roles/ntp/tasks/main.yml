@@ -1,0 +1,9 @@
+---
+
+- name: Install ntp
+  apt:
+    pkg: ntp
+    state: installed
+  become: yes
+  tags:
+    - ntp

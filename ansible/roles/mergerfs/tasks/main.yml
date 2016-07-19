@@ -1,0 +1,67 @@
+---
+
+- name: Install fuse
+  apt:
+    pkg: fuse
+    state: installed
+  become: yes
+  tags:
+    - mergerfs
+
+- name: Install mergerfs deps
+  apt:
+    pkg: "{{item}}"
+    state: installed
+  become: yes
+  tags:
+    - mergerfs
+  with_items:
+    - libc6
+    - libfuse2
+    - libgcc1
+    - libstdc++6
+    - fuse
+
+- name: Download mergerfs
+  get_url:
+    url: https://github.com/trapexit/mergerfs/releases/download/2.14.0/mergerfs_2.14.0.ubuntu-xenial_amd64.deb
+    dest: /usr/local/src/mergerfs_2.14.0.ubuntu-xenial_amd64.deb
+  become: yes
+  register: downloaded_mergerfs
+  tags:
+    - mergerfs
+
+- name: Install mergerfs
+  apt:
+    deb: /usr/local/src/mergerfs_2.14.0.ubuntu-xenial_amd64.deb
+  become: yes
+  when: downloaded_mergerfs|changed
+  tags:
+    - mergerfs
+
+- name: Create media directories
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  become: yes
+  tags:
+    - snapraid
+  with_items:
+    - /mnt/snapraid_d1/media
+    - /mnt/snapraid_d2/media
+    - /mnt/snapraid_d3/media
+    - /mnt/media
+
+- name: Mount mergerfs partition
+  mount:
+    name: /mnt/media
+    src: /mnt/snapraid_d1/media:/mnt/snapraid_d2/media:/mnt/snapraid_d2/media
+    fstype: fuse.mergerfs
+    opts: defaults,allow_other,fsname=media
+    state: mounted
+  become: yes
+  tags:
+    - mergerfs

@@ -1,0 +1,118 @@
+---
+
+- name: Gather PCI ID of VFIO passthrough devices
+  shell: "lspci | grep '{{ item }}' | awk '{ print $1 }' | sed 's/^/0000:/' | tr '\n' ' ' | sed 's/ $//'"
+  register: vfio_pci_ids_list
+  with_items: "{{ vfio_device_names }}"
+  changed_when: false
+  tags:
+    - pci_passthrough
+
+- name: Gather PCI ID of pci stubs
+  shell: "lspci | grep '{{ item }}' | awk '{ print $1 }' | sed 's/^/0000:/' | tr '\n' ' ' | sed 's/ $//'"
+  register: pci_stub_pci_ids_list
+  with_items: "{{ pci_stub_device_names }}"
+  changed_when: false
+  tags:
+    - pci_passthrough
+
+- name: Gather vendor:device ids for pci stubs
+  shell: "lspci -n | grep '{{ item }}' | cut -d' ' -f 3"
+  register: pci_stub_device_ids_list
+  with_items: "{{ pci_stub_pci_ids_list }}"
+  changed_when: false
+  tags:
+    - pci_passthrough
+
+- name: Set vfio ids fact
+  set_fact: "vfio_device_ids=\"{{ vfio_pci_ids_list.results | rejectattr('stdout_lines', 'equalto', []) | join(' ', attribute='stdout') }}\""
+  tags:
+    - pci_passthrough
+
+- name: Set pci stub ids fact
+  set_fact: "pci_stub_device_ids=\"{{ pci_stub_device_ids_list.results | rejectattr('stdout_lines', 'equalto', []) | join(',', attribute='stdout') }}\""
+  tags:
+    - pci_passthrough
+
+- name: Blacklist the driver modules
+  kernel_blacklist:
+    name: "{{ item }}"
+    state: present
+  become: yes
+  notify: Ask to reboot
+  with_items: "{{ driver_modules_blacklist }}"
+  tags:
+    - pci_passthrough
+
+- name: Install lsgroup binary
+  copy:
+    src: lsgroup
+    dest: /usr/bin/lsgroup
+    owner: root
+    group: root
+    mode: 0755
+  become: yes
+  tags:
+    - pci_passthrough
+
+- name: Install iommu_group_for_device binary
+  copy:
+    src: iommu_group_for_device
+    dest: /usr/bin/iommu_group_for_device
+    owner: root
+    group: root
+    mode: 0755
+  become: yes
+  notify: Ask to reboot
+  tags:
+    - pci_passthrough
+
+- name: Install vfio-bind binary
+  copy:
+    src: vfio-bind
+    dest: /usr/bin/vfio-bind
+    owner: root
+    group: root
+    mode: 0755
+  become: yes
+  notify: Ask to reboot
+  tags:
+    - pci_passthrough
+
+- name: Install vfio-bind service
+  copy:
+    src: vfio-bind.conf
+    dest: /etc/init/vfio-bind.conf
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  notify: Ask to reboot
+  tags:
+    - pci_passthrough
+
+- name: Install vfio-bind configuration
+  template:
+    src: vfio-bind.j2
+    dest: /etc/vfio-bind.cfg
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  notify: Ask to reboot
+  tags:
+    - pci_passthrough
+
+- name: Configure GRUB
+  lineinfile:
+    dest: /etc/default/grub
+    regexp: '{{ item.regexp }}'
+    line: '{{ item.line }}'
+    state: present
+  become: yes
+  with_items: "{{ grub_config }}"
+  notify:
+    - Update grub
+    - Ask to reboot
+  tags:
+    - pci_passthrough
