@@ -151,7 +151,7 @@
     - {path: '/mnt/docker/plex',            owner: 'plex',        group: 'media',    mode: '2774'}
     - {path: '/mnt/brumath',                owner: 'adrien',      group: 'adrien',   mode: '2774'}
 
-- name: Install docker-compose.yml
+- name: Install configuration
   git:
     repo: https://github.com/kohlby/compose.git
     dest: /opt/services
@@ -163,14 +163,32 @@
     - Restart compose
   tags:
     - services
+    - temp
 
 - name: Enable service
   service:
-    name: /opt/services/compose.service
+    name: "/opt/services/{{ item }}"
     enabled: true
+    state: reloaded
+  with_items:
+    - airsonos.service
+    - avahi.service
+    - compose.service
+    - couchpotato.service
+    - gitlab-runner.service
+    - gitlab.service
+    - nginx.service
+    - openvpn.service
+    - plex.service
+    - resume.service
+    - sabnzbd.service
+    - samba.service
+    - sftp.service
+    - sickrage.service
   become: yes
   tags:
     - services
+    - temp
 
 - name: Copy the update script
   copy:

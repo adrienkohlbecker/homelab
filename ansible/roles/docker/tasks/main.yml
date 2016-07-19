@@ -25,15 +25,6 @@
   tags:
     - docker
 
-- name: Install docker-compose
-  get_url:
-    dest: /usr/local/bin/docker-compose
-    url: https://github.com/docker/compose/releases/download/1.7.1/docker-compose-Linux-x86_64
-    mode: 0755
-  become: yes
-  tags:
-    - docker
-
 - name: Create docker conf directory
   file:
     dest: /root/.docker
