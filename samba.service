@@ -1,0 +1,35 @@
+# samba.service #######################################################################
+[Unit]
+Description=Samba
+After=docker.service mnt-media.mount zfs-mount.service
+Requires=docker.service mnt-media.mount zfs-mount.service
+PartOf=compose.service
+
+[Service]
+Restart=always
+ExecStartPre=-/usr/bin/docker kill services_samba
+ExecStartPre=-/usr/bin/docker rm services_samba
+ExecStartPre=/usr/bin/docker pull kohlby/samba
+ExecStart=/usr/bin/docker run \
+    --name services_samba \
+    --publish "137:137/udp" \
+    --publish "138:138/udp" \
+    --publish 139:139 \
+    --publish 445:445 \
+    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
+    --volume /mnt/media:/mnt/media \
+    --volume /mnt/legacy:/mnt/legacy \
+    --volume /mnt/pictures:/mnt/pictures \
+    --volume /mnt/videos:/mnt/videos \
+    --log-driver=syslog \
+    --log-opt tag=compose.samba \
+    --cap-add SYS_ADMIN \
+    --security-opt seccomp=unconfined \
+    --user root \
+    --tty \
+    kohlby/samba
+ExecStop=/usr/bin/docker stop services_samba
+TimeoutSec=60
+
+[Install]
+WantedBy=compose.service

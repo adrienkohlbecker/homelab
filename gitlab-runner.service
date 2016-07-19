@@ -1,0 +1,26 @@
+# gitlab-runner.service #######################################################################
+[Unit]
+Description=Airsonos
+After=docker.service gitlab.service
+Requires=docker.service gitlab.service
+PartOf=compose.service
+
+[Service]
+Restart=always
+ExecStartPre=-/usr/bin/docker kill services_gitlab_runner
+ExecStartPre=-/usr/bin/docker rm services_gitlab_runner
+ExecStartPre=/usr/bin/docker pull kohlby/gitlab-runner
+ExecStart=/usr/bin/docker run \
+    --name services_gitlab_runner \
+    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
+    --log-driver=syslog \
+    --log-opt tag=compose.gitlab-runner \
+    --cap-add SYS_ADMIN \
+    --security-opt seccomp=unconfined \
+    --user root \
+    kohlby/gitlab-runner
+ExecStop=/usr/bin/docker stop services_gitlab_runner
+TimeoutSec=60
+
+[Install]
+WantedBy=compose.service

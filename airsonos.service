@@ -1,0 +1,26 @@
+# airsonos.service #######################################################################
+[Unit]
+Description=Airsonos
+After=docker.service
+Requires=docker.service
+PartOf=compose.service
+
+[Service]
+Restart=always
+ExecStartPre=-/usr/bin/docker kill services_airsonos
+ExecStartPre=-/usr/bin/docker rm services_airsonos
+ExecStartPre=/usr/bin/docker pull kohlby/airsonos
+ExecStart=/usr/bin/docker run \
+    --name services_airsonos \
+    --net host \
+    --log-driver=syslog \
+    --log-opt tag=compose.airsonos \
+    --cap-add SYS_ADMIN \
+    --security-opt seccomp=unconfined \
+    --user root \
+    kohlby/airsonos
+ExecStop=/usr/bin/docker stop services_airsonos
+TimeoutSec=60
+
+[Install]
+WantedBy=compose.service

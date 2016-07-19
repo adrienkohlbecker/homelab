@@ -1,0 +1,24 @@
+# resume.service ######################################################################e
+[Unit]
+Description=Resume
+After=docker.service
+Requires=docker.service
+Wants=nginx.service
+PartOf=compose.service
+
+[Service]
+Restart=always
+ExecStartPre=-/usr/bin/docker kill services_resume
+ExecStartPre=-/usr/bin/docker rm services_resume
+ExecStartPre=/usr/bin/docker pull kohlby/resume
+ExecStart=/usr/bin/docker run \
+    --name services_resume \
+    --publish 4000:4000 \
+    --log-driver=syslog \
+    --log-opt tag=compose.resume \
+    kohlby/resume
+ExecStop=/usr/bin/docker stop services_resume
+TimeoutSec=60
+
+[Install]
+WantedBy=compose.service

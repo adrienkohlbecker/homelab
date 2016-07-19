@@ -1,0 +1,33 @@
+# sftp.service #######################################################################
+[Unit]
+Description=SFTP
+After=docker.service mnt-media.mount zfs-mount.service
+Requires=docker.service mnt-media.mount zfs-mount.service
+Wants=nginx.service
+PartOf=compose.service
+
+[Service]
+Restart=always
+ExecStartPre=-/usr/bin/docker kill services_sftp
+ExecStartPre=-/usr/bin/docker rm services_sftp
+ExecStartPre=/usr/bin/docker pull kohlby/sftp
+ExecStart=/usr/bin/docker run \
+    --name services_sftp \
+    --publish 2223:22 \
+    --volume /mnt/sftp/arq:/home/arq/sftp \
+    --volume /mnt/sftp/lgg4/DCIM:/home/lgg4/sftp/DCIM \
+    --volume /mnt/sftp/lgg4/DCIM_SD:/home/lgg4/sftp/DCIM_SD \
+    --volume /mnt/sftp/lgg4/TitaniumBackup:/home/lgg4/sftp/TitaniumBackup \
+    --volume /mnt/media/Music:/home/lgg4/sftp/Music \
+    --volume /mnt/sftp/ssh:/etc/ssh/host_keys \
+    --log-driver=syslog \
+    --log-opt tag=compose.sftp \
+    --cap-add SYS_ADMIN \
+    --security-opt seccomp=unconfined \
+    --user root \
+    kohlby/sftp
+ExecStop=/usr/bin/docker stop services_sftp
+TimeoutSec=60
+
+[Install]
+WantedBy=compose.service
