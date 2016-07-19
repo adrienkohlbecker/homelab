@@ -1,0 +1,56 @@
+---
+
+- name: Install packages
+  apt:
+    pkg: "{{item}}"
+    state: installed
+  become: yes
+  with_items:
+    - curl
+    - git
+    - htop
+    - jq
+    - screen
+    - socat
+    - tree
+    - vim
+    - zsh
+    - gparted
+    - tig
+    - man-db
+  tags:
+    - user
+
+- name: Add deploy group
+  group:
+    name: "{{ deploy_user_group }}"
+    gid: "{{ deploy_user_gid }}"
+  become: yes
+  tags:
+    - user
+
+- name: Add deploy user
+  user:
+    name: "{{ deploy_user }}"
+    password: "{{ deploy_user_password}}"
+    createhome: yes
+    shell: /bin/zsh
+    uid: "{{ deploy_user_uid }}"
+    group: "{{ deploy_user_group }}"
+    groups: "{{ deploy_user_additional_groups | join(',') }}"
+  become: yes
+  tags:
+    - user
+
+- name: Sudo without password
+  lineinfile:
+    dest: /etc/sudoers.d/ansible
+    insertafter: EOF
+    line: '{{ deploy_user }} ALL=(ALL) NOPASSWD: ALL'
+    regexp: '{{ deploy_user }}'
+    state: present
+    create: yes
+    validate: visudo -cf %s
+  become: yes
+  tags:
+    - user

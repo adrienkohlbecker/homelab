@@ -1,0 +1,49 @@
+---
+
+- name: Download datadog apt key
+  apt_key:
+    id: C7A7DA52
+    keyserver: keyserver.ubuntu.com
+    state: present
+  become: yes
+  tags:
+    - datadog
+
+- name: Add datadog repository
+  apt_repository:
+    repo: deb http://apt.datadoghq.com/ stable main
+    state: present
+  become: yes
+  tags:
+    - datadog
+
+- name: Install datadog agent
+  apt:
+    pkg: datadog-agent
+    state: installed
+  become: yes
+  tags:
+    - datadog
+
+- name: Install default config
+  shell: cp /etc/dd-agent/datadog.conf.example /etc/dd-agent/datadog.conf
+  args:
+    creates: /etc/dd-agent/datadog.conf
+  notify: Restart datadog
+  become: yes
+  tags:
+    - datatog
+
+- name: Configure the agent
+  lineinfile:
+    dest: /etc/dd-agent/datadog.conf
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  with_items:
+    - regexp: ^#? ?api_key
+      line: "api_key: {{ datadog_api_key }}"
+  notify: Restart datadog
+  become: yes
+  tags:
+    - datadog

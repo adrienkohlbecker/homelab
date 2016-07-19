@@ -1,0 +1,84 @@
+---
+
+- name: Install ZoL
+  apt:
+    package: "{{ item }}"
+    state: installed
+  with_items:
+    - linux-image-generic
+    - zfsutils-linux
+    - zfs-initramfs
+    - zfs-zed
+  become: yes
+  tags:
+    - zfs
+
+- name: Copy the health script
+  copy:
+    src: zfs_health.sh
+    dest: /usr/local/bin/zfs_health
+    mode: 755
+  become: yes
+  tags:
+    - zfs
+
+- name: Schedule the health script
+  cron:
+    name: zfs_health
+    minute: 55
+    job: /usr/local/bin/zfs_health
+    user: root
+    cron_file: ansible_zfs_health
+  become: yes
+  tags:
+    - zfs
+
+- name: Copy the scrub script
+  copy:
+    src: zfs_scrub.sh
+    dest: /usr/local/bin/zfs_scrub
+    mode: 755
+  become: yes
+  tags:
+    - zfs
+
+- name: Schedule the scrub script
+  cron:
+    name: zfs_scrub
+    minute: 0
+    hour: 3
+    weekday: 0
+    job: /usr/local/bin/zfs_scrub
+    user: root
+    cron_file: ansible_zfs_scrub
+  become: yes
+  tags:
+    - zfs
+
+- name: Copy the zfs tool
+  copy:
+    src: zfs_snaps.sh
+    dest: /usr/local/bin/zfs_snaps
+    mode: 755
+  become: yes
+  tags:
+    - zfs
+
+- name: Mount swap
+  mount:
+    name: none
+    src: /dev/zvol/rpool/swap
+    state: present
+    fstype: swap
+    opts: defaults,discard
+  become: yes
+  register: swap_fstab
+  tags:
+    - zfs
+
+- name: Enable swap
+  command: swapon -av
+  when: "{{ swap_fstab | changed }}"
+  become: yes
+  tags:
+    - zfs

@@ -1,0 +1,21 @@
+---
+
+- name: Install hdparm
+  apt:
+    pkg: hdparm
+    state: installed
+  become: yes
+  tags:
+    - hdparm
+
+- name: Copy hdparm.conf
+  copy:
+    src: hdparm.conf
+    dest: /etc/hdparm.conf
+    owner: root
+    group: root
+    mode: 0755
+  become: yes
+  notify: Ask to reboot
+  tags:
+    - hdparm

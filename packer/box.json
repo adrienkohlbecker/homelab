@@ -1,0 +1,185 @@
+{
+    "provisioners": [
+        {
+            "type": "shell",
+            "scripts": [
+                "{{ template_dir }}/scripts/vagrant.sh",
+                "{{ template_dir }}/scripts/parallels.sh",
+                "{{ template_dir }}/scripts/cleanup.sh",
+                "{{ template_dir }}/scripts/zerodisk.sh"
+            ],
+            "only": [
+              "hypervisor-base"
+            ],
+            "override": {
+                "hypervisor-base": {
+                    "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
+                }
+            }
+        },
+        {
+            "type": "shell",
+            "scripts": [
+                "{{ template_dir }}/scripts/zfsroot.sh"
+            ],
+            "only": [
+              "hypervisor-zfs"
+            ],
+            "override": {
+                "hypervisor-zfs": {
+                    "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
+                }
+            }
+        },
+        {
+            "type": "shell",
+            "scripts": [
+                "{{ template_dir }}/scripts/volume.sh"
+            ],
+            "only": [
+              "hypervisor-final"
+            ],
+            "override": {
+                "hypervisor-final": {
+                    "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
+                }
+            }
+        },
+        {
+            "type": "shell",
+            "scripts": [
+                "{{ template_dir }}/scripts/cleanup.sh"
+            ],
+            "override": {
+                "hypervisor-base": {
+                    "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
+                },
+                "hypervisor-zfs": {
+                    "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
+                },
+                "hypervisor-final": {
+                    "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
+                }
+            }
+        },
+        {
+            "type": "shell",
+            "scripts": [
+                "{{ template_dir }}/scripts/zerodisk.sh"
+            ],
+            "only": [
+              "hypervisor-base"
+            ],
+            "override": {
+                "hypervisor-base": {
+                    "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
+                }
+            }
+        }
+    ],
+    "builders": [
+        {
+            "type": "parallels-iso",
+            "name": "hypervisor-base",
+            "boot_command": [
+              "<esc><f6><esc>",
+              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+              "<bs><bs><bs>",
+              "initrd=/install/initrd.gz ",
+              "auto=true ",
+              "url=http://{{.HTTPIP}}:{{.HTTPPort}}/preseed.cfg ",
+              "language=en ",
+              "country=US ",
+              "locale=en_US.UTF-8 ",
+              "hostname={{ .Name }} ",
+              "console-setup/ask_detect=false ",
+              "keyboard-configuration/layoutcode=us ",
+              "vga=788 noprompt quiet -- <enter>"
+            ],
+            "boot_wait": "10s",
+            "disk_size": 8192,
+            "guest_os_type": "ubuntu",
+            "http_directory": "{{template_dir}}/http",
+            "iso_checksum": "b8b172cbdf04f5ff8adc8c2c1b4007ccf66f00fc6a324a6da6eba67de71746f6",
+            "iso_checksum_type": "sha256",
+            "iso_url": "http://releases.ubuntu.com/16.04/ubuntu-16.04-desktop-amd64.iso",
+            "ssh_username": "vagrant",
+            "ssh_password": "vagrant",
+            "ssh_port": 22,
+            "ssh_wait_timeout": "10000s",
+            "shutdown_command": "echo '/sbin/halt -h -p' > /tmp/shutdown.sh; echo 'vagrant'|sudo -S bash '/tmp/shutdown.sh'",
+            "parallels_tools_mode": "upload",
+            "parallels_tools_guest_path": "prl-tools.iso",
+            "parallels_tools_flavor": "lin",
+            "prlctl": [
+                ["set", "{{.Name}}", "--memsize", "1536"],
+                ["set", "{{.Name}}", "--cpus", "2"]
+            ]
+        },
+        {
+            "type": "parallels-pvm",
+            "name": "hypervisor-zfs",
+            "source_path": "output-hypervisor-base/packer-hypervisor-base.pvm",
+            "boot_wait": "10s",
+            "ssh_username": "vagrant",
+            "ssh_password": "vagrant",
+            "ssh_port": 22,
+            "ssh_wait_timeout": "10000s",
+            "shutdown_command": "echo '/sbin/halt -h -p' > /tmp/shutdown.sh; echo 'vagrant'|sudo -S bash '/tmp/shutdown.sh'",
+            "parallels_tools_mode": "disable",
+            "vm_name": "packer-hypervisor-zfs",
+            "prlctl": [
+              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "10000"],
+              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "10000"]
+            ],
+            "prlctl_post": [
+                ["set", "packer-hypervisor-zfs", "--device-del", "hdd0", "--destroy-image"],
+                ["set", "packer-hypervisor-zfs", "--device-bootorder", "hdd1"]
+            ]
+        },
+        {
+            "type": "parallels-pvm",
+            "name": "hypervisor-final",
+            "source_path": "output-hypervisor-zfs/packer-hypervisor-zfs.pvm",
+            "boot_wait": "10s",
+            "ssh_username": "vagrant",
+            "ssh_password": "vagrant",
+            "ssh_port": 22,
+            "ssh_wait_timeout": "10000s",
+            "shutdown_command": "echo '/sbin/halt -h -p' > /tmp/shutdown.sh; echo 'vagrant'|sudo -S bash '/tmp/shutdown.sh'",
+            "parallels_tools_mode": "disable",
+            "vm_name": "packer-hypervisor-final",
+            "prlctl": [
+              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
+              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
+              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
+              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
+              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
+              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
+              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
+              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
+              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
+              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
+              ["set", "{{.Name}}", "--device-add", "net", "--type", "shared"],
+              ["set", "{{.Name}}", "--nested-virt", "on"]
+            ]
+        }
+    ],
+    "post-processors": [
+        {
+          "type": "vagrant",
+          "only": [
+            "hypervisor-final"
+          ],
+          "output": "{{.Provider}}.box",
+          "keep_input_artifact": true
+        }
+    ]
+}
