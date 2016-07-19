@@ -14,8 +14,8 @@
 
 - name: Download virtio drivers for windows
   get_url:
-    url: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.117-1/virtio-win-0.1.117.iso
-    dest: /var/lib/libvirt/images/virtio-win-0.1.117.iso
+    url: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.118-2/virtio-win-0.1.118.iso
+    dest: /var/lib/libvirt/images/virtio-win-0.1.118.iso
     owner: root
     group: root
   become: yes
@@ -36,9 +36,6 @@
   tags:
     - virtualization
 
-# TODO: Restarting network fails with
-#   run-parts: /etc/network/if-up.d/ubuntu-fan exited with return code 1
-#   Failed to bring up enp0s5.
 - name: Configure networking
   copy:
     src: interfaces
@@ -48,7 +45,6 @@
     mode: 0644
   become: yes
   notify:
-    # - Restart networking
-    - Ask to reboot
+    - Restart networking
   tags:
     - virtualization

@@ -6,22 +6,23 @@ source /etc/network/interfaces.d/*
 # The loopback network interface
 auto lo
 iface lo inet loopback
+iface lo inet6 loopback
 
 # The primary network interface
-auto enp0s5
-iface enp0s5 inet manual
+auto enp5s0
+iface enp5s0 inet manual
 # This is an autoconfigured IPv6 interface
-iface enp0s5 inet6 manual
+# iface enp5s0 inet6 auto
 
 # The secondary network interface
-auto enp0s6
-iface enp0s6 inet dhcp
+auto enp6s0
+iface enp6s0 inet dhcp
 # This is an autoconfigured IPv6 interface
-iface enp0s6 inet6 auto
+# iface enp6s0 inet6 auto
 
 auto br1
 iface br1 inet dhcp
-    bridge_ports enp0s5
+    bridge_ports enp5s0
     bridge_stp off
     bridge_fd 0
     bridge_maxwait 0
