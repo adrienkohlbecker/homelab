@@ -16,29 +16,16 @@
     - ssh
 
 - name: Configure sshd
-  lineinfile:
+  copy:
+    src: sshd_config
     dest: /etc/ssh/sshd_config
-    regexp: "{{ item.regexp }}"
-    line: "{{ item.line }}"
-    insertafter: ^# Authentication
-    state: present
+    owner: root
+    group: root
+    mode: 0644
   notify: Restart ssh
   become: yes
   tags:
     - ssh
-  with_items:
-    # disable password auth
-    - regexp: ^PasswordAuthentication
-      line: PasswordAuthentication no
-    # Only users in the ssh group can login
-    - regexp: ^(# ?)?AllowGroups
-      line: AllowGroups ssh
-    # Reduce grace time to protect against ddos
-    - regexp: ^LoginGraceTime
-      line: LoginGraceTime 10
-    # Disable root login
-    - regexp: ^PermitRootLogin
-      line: PermitRootLogin no
 
 # Fixes warning sshd:  error: Could not load host key: /etc/ssh/ssh_host_ed25519_key
 - name: Generate missing host keys
@@ -48,6 +35,44 @@
   become: yes
   tags:
     - ssh
+
+- name: Add deploy user to ssh group
+  user:
+    name: "{{ deploy_user }}"
+    groups: ssh
+    append: yes
+  become: yes
+  tags:
+    - ssh
+
+- name: Add authorized keys
+  authorized_key:
+    user: "{{ deploy_user }}"
+    key: "{{ deploy_user_ssh_public_key }}"
+    state: present
+  become: yes
+  tags:
+    - user
+
+- name: "Ensure permissions on .ssh directory"
+  file:
+    path: "/home/{{deploy_user}}/.ssh"
+    owner: "{{deploy_user}}"
+    group: "{{deploy_user}}"
+    mode: 0700
+  become: yes
+  tags:
+    - user
+
+- name: "Ensure permissions on authorized_keys file"
+  file:
+    path: "/home/{{deploy_user}}/.ssh/authorized_keys"
+    owner: "{{deploy_user}}"
+    group: "{{deploy_user}}"
+    mode: 0600
+  become: yes
+  tags:
+    - user
 
 # vagrant
 - name: Add provisioning user to ssh group
