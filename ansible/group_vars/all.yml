@@ -47,6 +47,7 @@ driver_modules_blacklist:
   - uvcvideo # Logitech webcam
   - hid_logitech_hidpp # Logitech unifying
   - hid_logitech_dj # Logitech unifying
+  - xpad # recepteur Xbox
 
 # In normal & recovery mode
 grub_cmdline: nomodeset
