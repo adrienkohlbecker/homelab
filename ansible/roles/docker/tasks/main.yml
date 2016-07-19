@@ -1,12 +1,35 @@
 ---
 
+- name: Add docker repository key
+  apt_key:
+    keyserver: p80.pool.sks-keyservers.net
+    id: 58118E89F3A912897C070ADBF76221572C52609D
+    state: present
+  become: yes
+  tags:
+    - docker
+
+- name: Add docker repository
+  apt_repository:
+    repo: deb https://apt.dockerproject.org/repo ubuntu-xenial main
+    state: present
+    update_cache: yes
+  become: yes
+  tags:
+    - docker
+
 - name: Install docker
   apt:
-    pkg: "{{ item }}"
-    state: installed
-  with_items:
-    - docker.io
-    - docker-compose
+    pkg: docker-engine
+  become: yes
+  tags:
+    - docker
+
+- name: Install docker-compose
+  get_url:
+    dest: /usr/local/bin/docker-compose
+    url: https://github.com/docker/compose/releases/download/1.7.1/docker-compose-Linux-x86_64
+    mode: 0755
   become: yes
   tags:
     - docker
@@ -23,6 +46,31 @@
   template:
     src: dockercfg
     dest: /root/.docker/config.json
+  become: yes
+  tags:
+    - docker
+
+- name: Create docker conf directory
+  file:
+    dest: "/{{ deploy_user }}/.docker"
+    state: directory
+  become: yes
+  tags:
+    - docker
+
+- name: Set-up dockercfg
+  template:
+    src: dockercfg
+    dest: "/{{ deploy_user }}/.docker/config.json"
+  become: yes
+  tags:
+    - docker
+
+- name: Add deploy user to docker group
+  user:
+    name: "{{ deploy_user }}"
+    groups: docker
+    append: yes
   become: yes
   tags:
     - docker
