@@ -105,9 +105,9 @@
   tags:
     - services
 
-- name: Add lgg4 user
+- name: Add mobile user
   user:
-    name: lgg4
+    name: mobile
     group: sftpaccess
     uid: 2202
     state: present
@@ -115,11 +115,11 @@
   tags:
     - services
 
-- name: Add adrientm user
+- name: Add deploy user to media group
   user:
-    name: adrientm
-    uid: 2100
-    state: present
+    name: "{{ deploy_user }}"
+    groups: media
+    append: yes
   become: yes
   tags:
     - services
@@ -149,7 +149,7 @@
     - {path: '/mnt/docker/gitlab',          owner: 'root',        group: 'root',     mode: '0755'}
     - {path: '/mnt/docker/gitlab-storage',  owner: 'root',        group: 'root',     mode: '2755'}
     - {path: '/mnt/docker/plex',            owner: 'plex',        group: 'media',    mode: '2774'}
-    - {path: '/mnt/timemachine',            owner: 'adrientm',    group: 'adrientm', mode: '2774'}
+    - {path: '/mnt/brumath',                owner: 'adrien',      group: 'adrien',   mode: '2774'}
 
 - name: Install docker-compose.yml
   git:
