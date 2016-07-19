@@ -11,6 +11,14 @@
   tags:
     - base
 
+- name: Set default locale
+  copy:
+    content: "{{ 'LANG=\"en_US.UTF-8\"\n' }}"
+    dest: /etc/default/locale
+  become: yes
+  tags:
+    - base
+
 - name: apt-get update
   apt:
     update_cache: yes
@@ -45,7 +53,7 @@
   lineinfile:
     dest: /etc/hosts
     regexp: ^127.0.1.1
-    line: "127.0.1.1 {{inventory_hostname_short}}"
+    line: "127.0.1.1\t{{inventory_hostname_short}}"
   become: yes
   tags:
     - base
@@ -54,9 +62,9 @@
   lineinfile:
     dest: /etc/hosts
     regexp: ^127.0.2.1
-    line: "127.0.2.1 {{inventory_hostname}}"
+    line: "127.0.2.1\t{{inventory_hostname}}"
+    state: '{{ "absent" if inventory_hostname == inventory_hostname_short else "present" }}'
   become: yes
-  when: inventory_hostname != inventory_hostname_short
   tags:
     - base
 
@@ -71,6 +79,31 @@
     - logrotate
     - unattended-upgrades
     - update-notifier-common
+    - ubuntu-server
+    - ubuntu-minimal
+    - grub-pc
+    - man-db
+    - console-data # keymaps
+    - python # ansible dep
+    - python-simplejson # ansible dep
+  tags:
+    - base
+
+- name: Configure keyboard
+  lineinfile:
+    dest: /etc/default/keyboard
+    regexp: "{{item.regexp}}"
+    line: "{{item.line}}"
+  become: yes
+  with_items:
+    - regexp: ^XKBMODEL=
+      line: 'XKBMODEL="pc105"'
+    - regexp: ^XKBLAYOUT=
+      line: 'XKBLAYOUT="fr"'
+    - regexp: ^XKBVARIANT=
+      line: 'XKBVARIANT="latin9"'
+    - regexp: ^XKBOPTIONS=
+      line: 'XKBOPTIONS="lv3:ralt_switch"'
   tags:
     - base
 
