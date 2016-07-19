@@ -24,8 +24,8 @@
 
 - name: Download mergerfs
   get_url:
-    url: https://github.com/trapexit/mergerfs/releases/download/2.12.3/mergerfs_2.12.3.ubuntu-xenial_amd64.deb
-    dest: /usr/local/src/mergerfs_2.12.3.ubuntu-xenial_amd64.deb
+    url: https://github.com/trapexit/mergerfs/releases/download/2.14.0/mergerfs_2.14.0.ubuntu-xenial_amd64.deb
+    dest: /usr/local/src/mergerfs_2.14.0.ubuntu-xenial_amd64.deb
   become: yes
   register: downloaded_mergerfs
   tags:
@@ -33,7 +33,7 @@
 
 - name: Install mergerfs
   apt:
-    deb: /usr/local/src/mergerfs_2.12.3.ubuntu-xenial_amd64.deb
+    deb: /usr/local/src/mergerfs_2.14.0.ubuntu-xenial_amd64.deb
   become: yes
   when: downloaded_mergerfs|changed
   tags:
