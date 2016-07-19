@@ -64,11 +64,14 @@
   tags:
     - zfs
 
-- name: Set-up swap
-  lineinfile:
-    dest: /etc/fstab
-    regexp: swap
-    line: /dev/zvol/rpool/swap none swap defaults,discard 0 0
+- name: Mount swap
+  mount:
+    name: none
+    src: /dev/zvol/rpool/swap
+    state: mounted
+    fstype: swap
+    opts: defaults,discard
+    with_items:
   become: yes
   register: swap_fstab
   tags:
