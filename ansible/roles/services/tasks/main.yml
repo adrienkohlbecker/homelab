@@ -168,7 +168,6 @@
   service:
     name: "/opt/services/{{ item }}"
     enabled: true
-    state: reloaded
   with_items:
     - airsonos.service
     - avahi.service
