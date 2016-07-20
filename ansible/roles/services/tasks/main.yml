@@ -165,25 +165,15 @@
     - services
 
 - name: Enable service
-  service:
-    name: "/opt/services/{{ item }}"
-    enabled: true
-  with_items:
-    - airsonos.service
-    - avahi.service
-    - compose.service
-    - couchpotato.service
-    - gitlab-runner.service
-    - gitlab.service
-    - nginx.service
-    - openvpn.service
-    - plex.service
-    - resume.service
-    - sabnzbd.service
-    - samba.service
-    - sftp.service
-    - sickrage.service
+  command: /opt/services/install.sh
+  args:
+    chdir: /opt/services
+  register: command_result
+  changed_when: '"Created symlink from" in command_result.stderr'
   become: yes
+  notify:
+    - Reload unit
+    - Restart compose
   tags:
     - services
 
