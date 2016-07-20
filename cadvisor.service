@@ -1,0 +1,30 @@
+# cadvisor.service ######################################################################e
+[Unit]
+Description=cAdvisor
+After=docker.service
+Requires=docker.service
+Wants=nginx.service
+PartOf=compose.service
+
+[Service]
+Restart=always
+ExecStartPre=-/usr/bin/docker kill services_cadvisor
+ExecStartPre=-/usr/bin/docker rm services_cadvisor
+ExecStartPre=/usr/bin/docker pull google/cadvisor
+ExecStart=/usr/bin/docker run \
+  --name services_cadvisor \
+  --volume=/:/rootfs:ro \
+  --volume=/var/run:/var/run:rw \
+  --volume=/sys:/sys:ro \
+  --volume=/var/lib/docker/:/var/lib/docker:ro \
+  --volume=/dev/zfs:/dev/zfs:ro \
+  --publish=8083:8080 \
+  --log-driver=syslog \
+  --log-opt tag=compose.cadvisor \
+  --privileged \
+  google/cadvisor:latest
+ExecStop=/usr/bin/docker stop services_cadvisor
+TimeoutSec=60
+
+[Install]
+WantedBy=compose.service
