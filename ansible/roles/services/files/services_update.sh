@@ -19,8 +19,8 @@ run "systemctl stop compose 2>&1"
 log "Pulling compose repository"
 run "git pull 2>&1"
 
-log "Pulling images."
-run "/usr/local/bin/docker-compose pull 2>&1"
+log "Refresh units."
+run "systemctl daemon-reload 2>&1"
 
 log "Starting service."
 run "systemctl start compose 2>&1"

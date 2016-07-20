@@ -163,7 +163,6 @@
     - Restart compose
   tags:
     - services
-    - temp
 
 - name: Enable service
   service:
@@ -188,7 +187,6 @@
   become: yes
   tags:
     - services
-    - temp
 
 - name: Copy the update script
   copy:
