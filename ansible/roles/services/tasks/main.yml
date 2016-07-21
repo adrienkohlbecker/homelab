@@ -26,15 +26,6 @@
   tags:
     - services
 
-- name: Add media user
-  user:
-    name: media
-    uid: 2000
-    state: present
-  become: yes
-  tags:
-    - services
-
 - name: Add sabnzbd user
   user:
     name: sabnzbd
