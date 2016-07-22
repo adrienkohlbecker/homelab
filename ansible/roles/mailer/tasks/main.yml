@@ -36,7 +36,7 @@
     state: present
   with_items:
     - regexp: ^myorigin
-      line: "myorigin = {{ mailer_domain }}'"
+      line: "myorigin = {{ mailer_domain }}"
     - regexp: ^myhostname
       line: "myhostname = {{ mailer_domain }}"
     - regexp: ^relayhost
