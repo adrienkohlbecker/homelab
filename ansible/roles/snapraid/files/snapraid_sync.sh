@@ -51,7 +51,6 @@ if [ $DIFF_RETVAL -eq 2 ]; then
     log "Number of deleted files ($DEL_COUNT) exceeded threshold ($DEL_THRESHOLD)."
     log "NOT proceeding with sync job. Please run sync manually if this is not an error condition."
     mail -s "$EMAIL_SUBJECT_PREFIX WARNING - Number of deleted files ($DEL_COUNT) exceeded threshold ($DEL_THRESHOLD)" "$EMAIL_TO" < "$TMP_OUTPUT"
-    pushover_error "Number of deleted files exceeded threshold"
     exit 1
   else
     # NO, delete threshold not reached, lets run the sync job
