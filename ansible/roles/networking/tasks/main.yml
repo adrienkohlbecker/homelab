@@ -1,0 +1,22 @@
+---
+
+- name: Enable bonding
+  modprobe:
+    name: bonding
+    state: present
+  become: yes
+  tags:
+    - networking
+
+- name: Configure networking
+  copy:
+    src: interfaces
+    dest: /etc/network/interfaces
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  notify:
+    - Restart networking
+  tags:
+    - networking

@@ -36,19 +36,6 @@
   tags:
     - virtualization
 
-- name: Configure networking
-  copy:
-    src: interfaces
-    dest: /etc/network/interfaces
-    owner: root
-    group: root
-    mode: 0644
-  become: yes
-  notify:
-    - Restart networking
-  tags:
-    - virtualization
-
 - name: Add deploy user to libvirtd group
   user:
     name: "{{ deploy_user }}"
