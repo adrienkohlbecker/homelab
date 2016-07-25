@@ -5,6 +5,7 @@
     - vars/credentials.yml
   roles:
     - base
+    - networking
     - ntp
     - ssh
     - mailer
