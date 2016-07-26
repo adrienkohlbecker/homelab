@@ -50,7 +50,7 @@ case "$COMMAND" in
     zfs destroy -f "tank/videos@backup-disk-$DISK"
     zfs destroy -f "tank/sftp@backup-disk-$DISK"
 
-    zfs destroy -f "backup-$DISK/ubuntu@backup-disk-$DISK"
+    zfs destroy -f "backup-$DISK/xenial@backup-disk-$DISK"
     zfs destroy -f "backup-$DISK/docker@backup-disk-$DISK"
     zfs destroy -f "backup-$DISK/vms_ssd@backup-disk-$DISK"
     zfs destroy -f "backup-$DISK/vms_hdd@backup-disk-$DISK"
@@ -62,7 +62,7 @@ case "$COMMAND" in
 
     echo "Rolling back backup to: $FROM"
 
-    zfs rollback "backup-$DISK/ubuntu@$FROM"
+    zfs rollback "backup-$DISK/xenial@$FROM"
     zfs rollback "backup-$DISK/docker@$FROM"
     zfs rollback "backup-$DISK/vms_ssd@$FROM"
     zfs rollback "backup-$DISK/vms_hdd@$FROM"
@@ -86,7 +86,7 @@ case "$COMMAND" in
 
     echo "Incremental sync to backup: $FROM -> backup-disk-$DISK"
 
-    zfs send -pv -I "rpool/ROOT/xenial@$FROM" "rpool/ROOT/xenial@backup-disk-$DISK" | zfs receive -v "backup-$DISK/ubuntu"
+    zfs send -pv -I "rpool/ROOT/xenial@$FROM" "rpool/ROOT/xenial@backup-disk-$DISK" | zfs receive -v "backup-$DISK/xenial"
     zfs send -pv -I "rpool/docker@$FROM" "rpool/docker@backup-disk-$DISK" | zfs receive -v "backup-$DISK/docker"
     zfs send -pv -I "rpool/vms@$FROM" "rpool/vms@backup-disk-$DISK" | zfs receive -v "backup-$DISK/vms_ssd"
     zfs send -pv -I "tank/vms@$FROM" "tank/vms@backup-disk-$DISK" | zfs receive -v "backup-$DISK/vms_hdd"
