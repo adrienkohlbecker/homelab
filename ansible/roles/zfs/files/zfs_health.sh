@@ -34,6 +34,7 @@ if zpool status | grep -q -e 'DEGRADED\|FAULTED\|OFFLINE\|UNAVAIL\|REMOVED\|FAIL
 
   log "ERROR :: Detected pool health fault"
   mail -s "$EMAIL_SUBJECT_PREFIX - Health fault" "$EMAIL_TO" < "$TMP_OUTPUT"
+  deadmansnitch "b1de25d002"
   exit 1
 fi
 
@@ -45,6 +46,7 @@ log "Checking drive errors..."
 if zpool status | grep ONLINE | grep -v state | awk '{print $3 $4 $5}' | grep -qv 000; then
   log "ERROR :: Detected drive errors"
   mail -s "$EMAIL_SUBJECT_PREFIX - Drive errors" "$EMAIL_TO" < "$TMP_OUTPUT"
+  deadmansnitch "b1de25d002"
   exit 1
 fi
 
@@ -69,10 +71,12 @@ for volume in $ZFS_VOLUMES; do
   if zpool status "$volume" | grep -q "none requested"; then
     log "ERROR :: No scrub requested on $volume"
     mail -s "$EMAIL_SUBJECT_PREFIX - No scrub requested on $volume" "$EMAIL_TO" < "$TMP_OUTPUT"
+    deadmansnitch "b1de25d002"
     exit 1
   elif zpool status "$volume" | grep -q -e "scrub canceled"; then
     log "ERROR :: Last scrub canceled on $volume"
     mail -s "$EMAIL_SUBJECT_PREFIX - Last scrub canceled on $volume" "$EMAIL_TO" < "$TMP_OUTPUT"
+    deadmansnitch "b1de25d002"
     exit 1
   elif zpool status "$volume" | grep -q -e "scrub in progress\|resilver"; then
     log "Scrub in progress for $volume, skipping."
@@ -85,6 +89,7 @@ for volume in $ZFS_VOLUMES; do
   if [ $((CURRENT_DATE - SCRUB_DATE)) -ge $SCRUB_EXPIRE ]; then
     log "ERROR :: Scrub expired on $volume"
     mail -s "$EMAIL_SUBJECT_PREFIX - Scrub expired on $volume" "$EMAIL_TO" < "$TMP_OUTPUT"
+    deadmansnitch "b1de25d002"
     exit 1
   fi
 done
