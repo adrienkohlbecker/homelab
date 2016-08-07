@@ -31,10 +31,12 @@ elif grep -q "WARNING! There are errors" "$TMP_OUTPUT"; then
 
   log "Scrub errors summary: Read [$READ_COUNT] - Data [$DATA_COUNT]"
   mail -s "$EMAIL_SUBJECT_PREFIX - Errors found during scrub" "$EMAIL_TO" < "$TMP_OUTPUT"
+  deadmansnitch "150c9a2135"
   exit 1
 else
   log "An unexpected error has happened."
   mail -s "$EMAIL_SUBJECT_PREFIX ERROR - An unexpected error has happended during scrub" "$EMAIL_TO" < "$TMP_OUTPUT"
+  deadmansnitch "150c9a2135"
   exit 1
 fi
 
