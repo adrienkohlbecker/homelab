@@ -5,7 +5,7 @@
     dest: /opt/ejson/keys
     state: directory
     recurse: true
-    user: root
+    owner: root
     group: root
     mode: 0755
   become: yes
@@ -134,7 +134,7 @@
     - {path: '/mnt/media/Music',            owner: 'media',       group: 'media',    mode: '2774'}
     - {path: '/mnt/media/Pictures',         owner: 'media',       group: 'media',    mode: '2774'}
     - {path: '/mnt/media/Other',            owner: 'media',       group: 'media',    mode: '2774'}
-    - {path: '/mnt/media/.tmp',             owner: 'media',       group: 'media',    mode: '2755'}
+    - {path: '/mnt/media/.tmp',             owner: 'media',       group: 'media',    mode: '2775'}
     - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'sabnzbd',     group: 'media',    mode: '0775'}
     - {path: '/mnt/media/.tmp/couchpotato', owner: 'couchpotato', group: 'media',    mode: '2774'}
     - {path: '/mnt/media/.tmp/sickrage',    owner: 'sickrage',    group: 'media',    mode: '2774'}

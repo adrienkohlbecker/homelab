@@ -52,7 +52,7 @@
     mode: 0711
   become: yes
   tags:
-    - snapraid
+    - virtualization
   with_items:
     - /mnt/vms
     - /var/lib/libvirt/images
