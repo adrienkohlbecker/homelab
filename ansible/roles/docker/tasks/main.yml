@@ -43,7 +43,7 @@
 
 - name: Create docker conf directory
   file:
-    dest: "/{{ deploy_user }}/.docker"
+    dest: "/home/{{ deploy_user }}/.docker"
     state: directory
   become: yes
   tags:
