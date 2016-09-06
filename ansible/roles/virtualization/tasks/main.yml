@@ -28,9 +28,7 @@
     command: define
     xml: "{{ lookup('file', item+'.xml') }}"
   with_items:
-    - Ubuntu_base
     - HTPC
-    - OSX
   become: yes
   changed_when: false
   tags:
