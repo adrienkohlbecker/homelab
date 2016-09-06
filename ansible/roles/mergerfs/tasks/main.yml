@@ -67,7 +67,7 @@
     mode: 0775
   become: yes
   tags:
-    - snapraid
+    - mergerfs
   with_items:
     - /mnt/snapraid_d1/media
     - /mnt/snapraid_d2/media

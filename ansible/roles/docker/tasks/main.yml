@@ -29,7 +29,7 @@
   file:
     dest: /root/.docker
     state: directory
-    user: root
+    owner: root
     group: root
     mode: 0755
   become: yes
@@ -48,7 +48,7 @@
   file:
     dest: "/home/{{ deploy_user }}/.docker"
     state: directory
-    user: "{{ deploy_user }}"
+    owner: "{{ deploy_user }}"
     group: "{{ deploy_user }}"
     mode: 0755
   become: yes
@@ -58,7 +58,7 @@
 - name: Set-up dockercfg
   template:
     src: dockercfg
-    dest: "/{{ deploy_user }}/.docker/config.json"
+    dest: "/home/{{ deploy_user }}/.docker/config.json"
   become: yes
   tags:
     - docker
