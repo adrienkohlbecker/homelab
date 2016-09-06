@@ -29,6 +29,9 @@
   file:
     dest: /root/.docker
     state: directory
+    user: root
+    group: root
+    mode: 0755
   become: yes
   tags:
     - docker
@@ -45,6 +48,9 @@
   file:
     dest: "/home/{{ deploy_user }}/.docker"
     state: directory
+    user: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: 0755
   become: yes
   tags:
     - docker
