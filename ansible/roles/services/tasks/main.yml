@@ -129,25 +129,25 @@
   tags:
     - services
   with_items:
-    - {path: '/mnt/media/Movies',           owner: 'media',       group: 'media',    mode: '2774'}
-    - {path: '/mnt/media/TV',               owner: 'media',       group: 'media',    mode: '2774'}
-    - {path: '/mnt/media/Music',            owner: 'media',       group: 'media',    mode: '2774'}
-    - {path: '/mnt/media/Pictures',         owner: 'media',       group: 'media',    mode: '2774'}
-    - {path: '/mnt/media/Other',            owner: 'media',       group: 'media',    mode: '2774'}
-    - {path: '/mnt/media/.tmp',             owner: 'media',       group: 'media',    mode: '2775'}
+    - {path: '/mnt/media/Movies',           owner: 'media',       group: 'media',    mode: '0774'}
+    - {path: '/mnt/media/TV',               owner: 'media',       group: 'media',    mode: '0774'}
+    - {path: '/mnt/media/Music',            owner: 'media',       group: 'media',    mode: '0774'}
+    - {path: '/mnt/media/Pictures',         owner: 'media',       group: 'media',    mode: '0774'}
+    - {path: '/mnt/media/Other',            owner: 'media',       group: 'media',    mode: '0774'}
+    - {path: '/mnt/media/.tmp',             owner: 'media',       group: 'media',    mode: '0775'}
     - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'sabnzbd',     group: 'media',    mode: '0775'}
-    - {path: '/mnt/media/.tmp/couchpotato', owner: 'couchpotato', group: 'media',    mode: '2774'}
-    - {path: '/mnt/media/.tmp/sickrage',    owner: 'sickrage',    group: 'media',    mode: '2774'}
-    - {path: '/mnt/docker',                 owner: 'root',        group: 'media',    mode: '2774'}
-    - {path: '/mnt/docker/sabnzbd',         owner: 'sabnzbd',     group: 'media',    mode: '2774'}
-    - {path: '/mnt/docker/sickrage',        owner: 'sickrage',    group: 'media',    mode: '2774'}
-    - {path: '/mnt/docker/couchpotato',     owner: 'couchpotato', group: 'media',    mode: '2774'}
+    - {path: '/mnt/media/.tmp/couchpotato', owner: 'couchpotato', group: 'media',    mode: '0774'}
+    - {path: '/mnt/media/.tmp/sickrage',    owner: 'sickrage',    group: 'media',    mode: '0774'}
+    - {path: '/mnt/docker',                 owner: 'root',        group: 'media',    mode: '0774'}
+    - {path: '/mnt/docker/sabnzbd',         owner: 'sabnzbd',     group: 'media',    mode: '0774'}
+    - {path: '/mnt/docker/sickrage',        owner: 'sickrage',    group: 'media',    mode: '0774'}
+    - {path: '/mnt/docker/couchpotato',     owner: 'couchpotato', group: 'media',    mode: '0774'}
     - {path: '/mnt/docker/gitlab',          owner: 'root',        group: 'root',     mode: '0755'}
-    - {path: '/mnt/docker/gitlab-storage',  owner: 'root',        group: 'root',     mode: '2755'}
-    - {path: '/mnt/docker/plex',            owner: 'plex',        group: 'media',    mode: '2774'}
-    - {path: '/mnt/brumath',                owner: 'adrien',      group: 'adrien',   mode: '2774'}
-    - {path: '/mnt/legacy',                 owner: 'adrien',      group: 'adrien',   mode: '2774'}
-    - {path: '/mnt/pictures',               owner: 'adrien',      group: 'adrien',   mode: '2774'}
+    - {path: '/mnt/docker/gitlab-storage',  owner: 'root',        group: 'root',     mode: '0755'}
+    - {path: '/mnt/docker/plex',            owner: 'plex',        group: 'media',    mode: '0774'}
+    - {path: '/mnt/brumath',                owner: 'adrien',      group: 'adrien',   mode: '0774'}
+    - {path: '/mnt/legacy',                 owner: 'adrien',      group: 'adrien',   mode: '0774'}
+    - {path: '/mnt/pictures',               owner: 'adrien',      group: 'adrien',   mode: '0774'}
     - {path: '/mnt/sftp',                   owner: 'root',        group: 'root',     mode: '0755'}
     - {path: '/mnt/videos',                 owner: 'adrien',      group: 'adrien',   mode: '0774'}
 
