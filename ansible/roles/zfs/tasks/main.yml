@@ -13,6 +13,16 @@
   tags:
     - zfs
 
+- name: Configure ARC
+  copy:
+    src: zfs.conf
+    dest: /etc/modprobe.d/zfs.conf
+    mode: 755
+  become: yes
+  notify: Ask to reboot
+  tags:
+    - zfs
+
 - name: Copy the health script
   copy:
     src: zfs_health.sh
