@@ -18,6 +18,8 @@
     - gparted
     - tig
     - man-db
+    - sysstat
+    - nmon
   tags:
     - user
 
