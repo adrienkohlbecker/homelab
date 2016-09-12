@@ -11,9 +11,9 @@ EMAIL_TO="root"
 # Email subject prefix
 EMAIL_SUBJECT_PREFIX="[$(hostname -s)] $NAME"
 
-# Scrub expiration time in seconds. So for 8 days we calculate 8 days
-# times 24 hours times 3600 seconds to equal 691200 seconds.
-SCRUB_EXPIRE=691200
+# Scrub expiration time in seconds. So for 30 days we calculate 30 days
+# times 24 hours times 3600 seconds to equal 2592000 seconds.
+SCRUB_EXPIRE=2592000
 
 ################################
 #          ACTUAL JOB          #
