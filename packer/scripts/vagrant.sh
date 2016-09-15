@@ -13,11 +13,11 @@ apt-get -y install facter
 apt-get -y upgrade >/dev/null
 
 # change user id for vagrant as 1000 is the default and is used in the playbook
-usermod -u 999 vagrant
-groupmod -g 999 vagrant
-find / -user 1000 -exec chown -h 999 {} \;
-find / -group 1000 -exec chgrp -h 999 {} \;
-usermod -g 999 vagrant
+# usermod -u 999 vagrant
+# groupmod -g 999 vagrant
+# find / -user 1000 -exec chown -h 999 {} \;
+# find / -group 1000 -exec chgrp -h 999 {} \;
+# usermod -g 999 vagrant
 
 # Set up sudo
 echo 'vagrant ALL=NOPASSWD:ALL' > /etc/sudoers.d/vagrant
