@@ -21,6 +21,8 @@
     - sysstat
     - nmon
     - hddtemp
+    - lsof
+    - telnet
   tags:
     - user
 
