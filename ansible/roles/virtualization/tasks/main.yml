@@ -18,7 +18,7 @@
     dest: /var/lib/libvirt/images/virtio-win-0.1.118.iso
     owner: libvirt-qemu
     group: kvm
-    mode: 0644
+    mode: 0600
   become: yes
   tags:
     - virtualization
