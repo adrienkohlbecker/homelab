@@ -10,7 +10,7 @@
     - dotfiles
 
 - name: Install dotfiles repo
-  command: "su {{ deploy_user }} -c 'git clone --bare https://gitlab.kohlby.fr/adrienkohlbecker/dotfiles.git .dotfiles'"
+  command: "su {{ deploy_user }} -c 'git clone --bare https://github.com/adrienkohlbecker/dotfiles.git .dotfiles'"
   args:
     chdir: "/home/{{ deploy_user }}"
     creates: "/home/{{ deploy_user }}/.dotfiles"
