@@ -5,6 +5,10 @@ After=docker.service
 Requires=docker.service
 PartOf=compose.service
 
+# boot fail results in 2 seconds between starts. so roughly 5 times per 20 seconds
+StartLimitInterval=30
+StartLimitBurst=5
+
 [Service]
 Restart=always
 ExecStartPre=-/usr/bin/docker kill services_nginx
