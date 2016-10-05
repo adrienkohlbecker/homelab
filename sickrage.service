@@ -27,7 +27,7 @@ ExecStart=/usr/bin/docker run \
     --user root \
     kohlby/sickrage
 ExecStop=/usr/bin/docker stop services_sickrage
-TimeoutSec=60
+TimeoutSec=120
 
 [Install]
 WantedBy=compose.service

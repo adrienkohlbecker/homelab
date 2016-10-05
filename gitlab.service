@@ -28,7 +28,7 @@ ExecStart=/usr/bin/docker run \
     --user root \
     akohlbecker/gitlab
 ExecStop=/usr/bin/docker stop services_gitlab
-TimeoutSec=60
+TimeoutSec=120
 
 [Install]
 WantedBy=compose.service

@@ -23,7 +23,7 @@ ExecStart=/usr/bin/docker run \
     --user root \
     kohlby/gitlab-runner
 ExecStop=/usr/bin/docker stop services_gitlab_runner
-TimeoutSec=60
+TimeoutSec=120
 
 [Install]
 WantedBy=compose.service

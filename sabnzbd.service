@@ -27,7 +27,7 @@ ExecStart=/usr/bin/docker run \
     --user root \
     kohlby/sabnzbd
 ExecStop=/usr/bin/docker stop services_sabnzbd
-TimeoutSec=60
+TimeoutSec=120
 
 [Install]
 WantedBy=compose.service
