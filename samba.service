@@ -32,7 +32,7 @@ ExecStart=/usr/bin/docker run \
     --tty \
     kohlby/samba
 ExecStop=/usr/bin/docker stop services_samba
-TimeoutSec=60
+TimeoutSec=120
 
 [Install]
 WantedBy=compose.service
