@@ -6,6 +6,9 @@ Requires=docker.service mnt-media.mount zfs-mount.service sabnzbd.service
 Wants=nginx.service
 PartOf=compose.service
 
+StartLimitInterval=300
+StartLimitBurst=5
+
 [Service]
 Restart=always
 ExecStartPre=-/usr/bin/docker kill services_couchpotato
