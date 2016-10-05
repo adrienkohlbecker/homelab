@@ -5,6 +5,9 @@ After=docker.service
 Requires=docker.service
 PartOf=compose.service
 
+StartLimitInterval=300
+StartLimitBurst=5
+
 [Service]
 Restart=always
 ExecStartPre=-/usr/bin/docker kill services_openvpn
