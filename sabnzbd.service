@@ -16,7 +16,7 @@ ExecStartPre=-/usr/bin/docker rm services_sabnzbd
 ExecStartPre=/usr/bin/docker pull kohlby/sabnzbd
 ExecStart=/usr/bin/docker run \
     --name services_sabnzbd \
-    --publish 8080:8080 \
+    --publish-service=sabnzbd.docker \
     --volume /opt/ejson/keys:/opt/ejson/keys:ro \
     --volume /mnt/docker/sabnzbd:/data \
     --volume /mnt/media:/media \

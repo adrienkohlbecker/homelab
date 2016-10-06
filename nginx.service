@@ -22,6 +22,7 @@ ExecStart=/usr/local/bin/assume_role "arn:aws:iam::000390721279:role/credentials
     --name services_nginx \
     --publish 80:80 \
     --publish 443:443 \
+    --publish-service=nginx.docker \
     --volume /etc/letsencrypt:/etc/letsencrypt:ro \
     --volume /var/www/letsencrypt:/var/www/letsencrypt:ro \
     --log-driver=syslog \
