@@ -19,7 +19,7 @@ ExecStart=/usr/bin/docker run \
     --log-driver syslog \
     --log-opt tag="{{.Name}}" \
     --name airsonos.service \
-    --net host \
+    --publish 5000-5050:5000-5050/tcp \
     --volume /var/run/dbus:/var/run/dbus \
     akohlbecker/airsonos
 ExecStop=/usr/bin/docker stop airsonos.service
