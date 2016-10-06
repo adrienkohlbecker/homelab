@@ -11,22 +11,22 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
-ExecStartPre=-/usr/bin/docker kill services_sabnzbd
-ExecStartPre=-/usr/bin/docker rm services_sabnzbd
+ExecStartPre=-/usr/bin/docker kill sabnzbd.service
+ExecStartPre=-/usr/bin/docker rm sabnzbd.service
 ExecStartPre=/usr/bin/docker pull kohlby/sabnzbd
 ExecStart=/usr/bin/docker run \
-    --name services_sabnzbd \
-    --publish-service=sabnzbd.docker \
-    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
-    --volume /mnt/docker/sabnzbd:/data \
-    --volume /mnt/media:/media \
-    --log-driver=syslog \
-    --log-opt tag=compose.sabnzbd \
     --cap-add SYS_ADMIN \
+    --log-driver=syslog \
+    --log-opt tag=sabnzbd.service \
+    --name sabnzbd.service \
+    --network=services \
     --security-opt seccomp=unconfined \
     --user root \
+    --volume /mnt/docker/sabnzbd:/data \
+    --volume /mnt/media:/media \
+    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
     kohlby/sabnzbd
-ExecStop=/usr/bin/docker stop services_sabnzbd
+ExecStop=/usr/bin/docker stop sabnzbd.service
 TimeoutSec=120
 
 [Install]

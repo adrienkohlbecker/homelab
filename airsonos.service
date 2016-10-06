@@ -10,19 +10,19 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
-ExecStartPre=-/usr/bin/docker kill services_airsonos
-ExecStartPre=-/usr/bin/docker rm services_airsonos
+ExecStartPre=-/usr/bin/docker kill airsonos.service
+ExecStartPre=-/usr/bin/docker rm airsonos.service
 ExecStartPre=/usr/bin/docker pull kohlby/airsonos
 ExecStart=/usr/bin/docker run \
-    --name services_airsonos \
-    --net host \
-    --log-driver=syslog \
-    --log-opt tag=compose.airsonos \
     --cap-add SYS_ADMIN \
+    --log-driver=syslog \
+    --log-opt tag=airsonos.service \
+    --name airsonos.service \
+    --net host \
     --security-opt seccomp=unconfined \
     --user root \
     kohlby/airsonos
-ExecStop=/usr/bin/docker stop services_airsonos
+ExecStop=/usr/bin/docker stop airsonos.service
 TimeoutSec=120
 
 [Install]

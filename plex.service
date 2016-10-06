@@ -11,23 +11,23 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
-ExecStartPre=-/usr/bin/docker kill services_plex
-ExecStartPre=-/usr/bin/docker rm services_plex
+ExecStartPre=-/usr/bin/docker kill plex.service
+ExecStartPre=-/usr/bin/docker rm plex.service
 ExecStartPre=/usr/bin/docker pull kohlby/plex
 ExecStart=/usr/bin/docker run \
-    --name services_plex \
-    --publish-service=plex.docker \
-    --net host \
-    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
-    --volume /mnt/docker/plex:/data \
-    --volume /mnt/media:/media \
-    --log-driver=syslog \
-    --log-opt tag=compose.plex \
     --cap-add SYS_ADMIN \
+    --log-driver=syslog \
+    --log-opt tag=plex.service \
+    --name plex.service \
+    --net host \
+    --network=services \
     --security-opt seccomp=unconfined \
     --user root \
+    --volume /mnt/docker/plex:/data \
+    --volume /mnt/media:/media \
+    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
     kohlby/plex
-ExecStop=/usr/bin/docker stop services_plex
+ExecStop=/usr/bin/docker stop plex.service
 TimeoutSec=120
 
 [Install]

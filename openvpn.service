@@ -10,22 +10,22 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
-ExecStartPre=-/usr/bin/docker kill services_openvpn
-ExecStartPre=-/usr/bin/docker rm services_openvpn
+ExecStartPre=-/usr/bin/docker kill plex.service
+ExecStartPre=-/usr/bin/docker rm plex.service
 ExecStartPre=/usr/bin/docker pull kohlby/vpn
 ExecStart=/usr/bin/docker run \
-    --name services_openvpn \
-    --publish "1194:1194/udp" \
-    --net host \
-    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
-    --log-driver=syslog \
-    --log-opt tag=compose.openvpn \
-    --cap-add SYS_ADMIN \
     --cap-add NET_ADMIN \
+    --cap-add SYS_ADMIN \
+    --log-driver=syslog \
+    --log-opt tag=plex.service \
+    --name plex.service \
+    --net host \
+    --publish "1194:1194/udp" \
     --security-opt seccomp=unconfined \
     --user root \
+    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
     kohlby/vpn
-ExecStop=/usr/bin/docker stop services_openvpn
+ExecStop=/usr/bin/docker stop plex.service
 TimeoutSec=120
 
 [Install]
