@@ -10,6 +10,8 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
+TimeoutSec=120
+
 ExecStartPre=-/usr/bin/docker kill cadvisor.service
 ExecStartPre=-/usr/bin/docker rm cadvisor.service
 ExecStartPre=/usr/bin/docker pull google/cadvisor
@@ -26,7 +28,6 @@ ExecStart=/usr/bin/docker run \
   --volume /var/run:/var/run:rw \
   google/cadvisor:latest
 ExecStop=/usr/bin/docker stop cadvisor.service
-TimeoutSec=120
 
 [Install]
 WantedBy=compose.service
