@@ -16,8 +16,7 @@ ExecStartPre=-/usr/bin/docker rm services_plex
 ExecStartPre=/usr/bin/docker pull kohlby/plex
 ExecStart=/usr/bin/docker run \
     --name services_plex \
-    --publish 32400:32400 \
-    --publish 33400:33400 \
+    --publish-service=plex.docker \
     --net host \
     --volume /opt/ejson/keys:/opt/ejson/keys:ro \
     --volume /mnt/docker/plex:/data \

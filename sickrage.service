@@ -16,7 +16,7 @@ ExecStartPre=-/usr/bin/docker rm services_sickrage
 ExecStartPre=/usr/bin/docker pull kohlby/sickrage
 ExecStart=/usr/bin/docker run \
     --name services_sickrage \
-    --publish 8081:8081 \
+    --publish-service=sickrage.docker \
     --volume /opt/ejson/keys:/opt/ejson/keys:ro \
     --volume /mnt/docker/sickrage:/data \
     --volume /mnt/media:/media \

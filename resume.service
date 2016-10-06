@@ -16,7 +16,7 @@ ExecStartPre=-/usr/bin/docker rm services_resume
 ExecStartPre=/usr/bin/docker pull kohlby/resume
 ExecStart=/usr/bin/docker run \
     --name services_resume \
-    --publish 4000:4000 \
+    --publish-service=resume.docker \
     --log-driver=syslog \
     --log-opt tag=compose.resume \
     kohlby/resume

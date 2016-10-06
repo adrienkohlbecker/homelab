@@ -16,7 +16,7 @@ ExecStartPre=-/usr/bin/docker rm services_couchpotato
 ExecStartPre=/usr/bin/docker pull kohlby/couchpotato
 ExecStart=/usr/bin/docker run \
     --name services_couchpotato \
-    --publish 5050:5050 \
+    --publish-service=couchpotato.docker \
     --volume /opt/ejson/keys:/opt/ejson/keys:ro \
     --volume /mnt/docker/couchpotato:/data \
     --volume /mnt/media:/media \

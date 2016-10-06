@@ -16,8 +16,8 @@ ExecStartPre=-/usr/bin/docker rm services_gitlab
 ExecStartPre=/usr/bin/docker pull akohlbecker/gitlab
 ExecStart=/usr/bin/docker run \
     --name services_gitlab \
-    --publish 8443:80 \
     --publish 2222:22 \
+    --publish-service=gitlab.docker \
     --volume /opt/ejson/keys:/opt/ejson/keys:ro \
     --volume /mnt/docker/gitlab:/var/opt/gitlab \
     --volume /mnt/docker/gitlab-storage:/mnt/storage \
