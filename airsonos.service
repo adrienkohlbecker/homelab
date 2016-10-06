@@ -14,12 +14,13 @@ TimeoutSec=120
 
 ExecStartPre=-/usr/bin/docker kill airsonos.service
 ExecStartPre=-/usr/bin/docker rm airsonos.service
-ExecStartPre=/usr/bin/docker pull kohlby/airsonos
+ExecStartPre=/usr/bin/docker pull akohlbecker/airsonos
 ExecStart=/usr/bin/docker run \
     --log-driver syslog \
     --log-opt tag="{{.Name}}" \
     --name airsonos.service \
     --net host \
+    --security-opt apparmor=docker-dbus \
     --volume /var/run/dbus:/var/run/dbus \
     akohlbecker/airsonos
 ExecStop=/usr/bin/docker stop airsonos.service
