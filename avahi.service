@@ -10,6 +10,8 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
+TimeoutSec=120
+
 ExecStartPre=-/usr/bin/docker kill avahi.service
 ExecStartPre=-/usr/bin/docker rm avahi.service
 ExecStartPre=/usr/bin/docker pull kohlby/avahi
@@ -18,11 +20,8 @@ ExecStart=/usr/bin/docker run \
     --log-opt tag="{{.Name}}" \
     --name avahi.service \
     --net host \
-    --security-opt seccomp=unconfined \
-    --user root \
     kohlby/avahi
 ExecStop=/usr/bin/docker stop avahi.service
-TimeoutSec=120
 
 [Install]
 WantedBy=compose.service
