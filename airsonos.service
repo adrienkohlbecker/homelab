@@ -10,20 +10,18 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
+TimeoutSec=120
+
 ExecStartPre=-/usr/bin/docker kill airsonos.service
 ExecStartPre=-/usr/bin/docker rm airsonos.service
 ExecStartPre=/usr/bin/docker pull kohlby/airsonos
 ExecStart=/usr/bin/docker run \
-    --cap-add SYS_ADMIN \
     --log-driver syslog \
     --log-opt tag="{{.Name}}" \
     --name airsonos.service \
     --net host \
-    --security-opt seccomp=unconfined \
-    --user root \
     kohlby/airsonos
 ExecStop=/usr/bin/docker stop airsonos.service
-TimeoutSec=120
 
 [Install]
 WantedBy=compose.service
