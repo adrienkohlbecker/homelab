@@ -11,22 +11,22 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
-ExecStartPre=-/usr/bin/docker kill services_couchpotato
-ExecStartPre=-/usr/bin/docker rm services_couchpotato
+ExecStartPre=-/usr/bin/docker kill couchpotato.service
+ExecStartPre=-/usr/bin/docker rm couchpotato.service
 ExecStartPre=/usr/bin/docker pull kohlby/couchpotato
 ExecStart=/usr/bin/docker run \
-    --name services_couchpotato \
-    --publish-service=couchpotato.docker \
-    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
-    --volume /mnt/docker/couchpotato:/data \
-    --volume /mnt/media:/media \
-    --log-driver=syslog \
-    --log-opt tag=compose.couchpotato \
     --cap-add SYS_ADMIN \
+    --log-driver=syslog \
+    --log-opt tag=couchpotato.service \
+    --name couchpotato.service \
+    --network=services \
     --security-opt seccomp=unconfined \
     --user root \
+    --volume /mnt/docker/couchpotato:/data \
+    --volume /mnt/media:/media \
+    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
     kohlby/couchpotato
-ExecStop=/usr/bin/docker stop services_couchpotato
+ExecStop=/usr/bin/docker stop couchpotato.service
 TimeoutSec=120
 
 [Install]

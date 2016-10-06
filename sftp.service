@@ -11,25 +11,25 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
-ExecStartPre=-/usr/bin/docker kill services_sftp
-ExecStartPre=-/usr/bin/docker rm services_sftp
+ExecStartPre=-/usr/bin/docker kill sftp.service
+ExecStartPre=-/usr/bin/docker rm sftp.service
 ExecStartPre=/usr/bin/docker pull kohlby/sftp
 ExecStart=/usr/bin/docker run \
-    --name services_sftp \
-    --publish 2223:22 \
-    --volume /mnt/sftp/arq:/home/arq/sftp \
-    --volume /mnt/sftp/lgg4/DCIM:/home/lgg4/sftp/DCIM \
-    --volume /mnt/sftp/lgg4/DCIM_SD:/home/lgg4/sftp/DCIM_SD \
-    --volume /mnt/sftp/lgg4/TitaniumBackup:/home/lgg4/sftp/TitaniumBackup \
-    --volume /mnt/media/Music:/home/lgg4/sftp/Music \
-    --volume /mnt/sftp/ssh:/etc/ssh/host_keys \
-    --log-driver=syslog \
-    --log-opt tag=compose.sftp \
     --cap-add SYS_ADMIN \
+    --log-driver=syslog \
+    --log-opt tag=sftp.service \
+    --name sftp.service \
+    --publish 2223:22 \
     --security-opt seccomp=unconfined \
     --user root \
+    --volume /mnt/media/Music:/home/lgg4/sftp/Music \
+    --volume /mnt/sftp/arq:/home/arq/sftp \
+    --volume /mnt/sftp/lgg4/DCIM_SD:/home/lgg4/sftp/DCIM_SD \
+    --volume /mnt/sftp/lgg4/DCIM:/home/lgg4/sftp/DCIM \
+    --volume /mnt/sftp/lgg4/TitaniumBackup:/home/lgg4/sftp/TitaniumBackup \
+    --volume /mnt/sftp/ssh:/etc/ssh/host_keys \
     kohlby/sftp
-ExecStop=/usr/bin/docker stop services_sftp
+ExecStop=/usr/bin/docker stop sftp.service
 TimeoutSec=120
 
 [Install]

@@ -11,16 +11,16 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
-ExecStartPre=-/usr/bin/docker kill services_resume
-ExecStartPre=-/usr/bin/docker rm services_resume
+ExecStartPre=-/usr/bin/docker kill resume.service
+ExecStartPre=-/usr/bin/docker rm resume.service
 ExecStartPre=/usr/bin/docker pull kohlby/resume
 ExecStart=/usr/bin/docker run \
-    --name services_resume \
-    --publish-service=resume.docker \
     --log-driver=syslog \
-    --log-opt tag=compose.resume \
+    --log-opt tag=resume.service \
+    --name resume.service \
+    --network=services \
     kohlby/resume
-ExecStop=/usr/bin/docker stop services_resume
+ExecStop=/usr/bin/docker stop resume.service
 TimeoutSec=120
 
 [Install]

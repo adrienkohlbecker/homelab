@@ -11,22 +11,22 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
-ExecStartPre=-/usr/bin/docker kill services_sickrage
-ExecStartPre=-/usr/bin/docker rm services_sickrage
+ExecStartPre=-/usr/bin/docker kill sickrage.service
+ExecStartPre=-/usr/bin/docker rm sickrage.service
 ExecStartPre=/usr/bin/docker pull kohlby/sickrage
 ExecStart=/usr/bin/docker run \
-    --name services_sickrage \
-    --publish-service=sickrage.docker \
-    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
-    --volume /mnt/docker/sickrage:/data \
-    --volume /mnt/media:/media \
-    --log-driver=syslog \
-    --log-opt tag=compose.sickrage \
     --cap-add SYS_ADMIN \
+    --log-driver=syslog \
+    --log-opt tag=sickrage.service \
+    --name sickrage.service \
+    --network=services \
     --security-opt seccomp=unconfined \
     --user root \
+    --volume /mnt/docker/sickrage:/data \
+    --volume /mnt/media:/media \
+    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
     kohlby/sickrage
-ExecStop=/usr/bin/docker stop services_sickrage
+ExecStop=/usr/bin/docker stop sickrage.service
 TimeoutSec=120
 
 [Install]

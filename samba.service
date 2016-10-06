@@ -10,28 +10,28 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
-ExecStartPre=-/usr/bin/docker kill services_samba
-ExecStartPre=-/usr/bin/docker rm services_samba
+ExecStartPre=-/usr/bin/docker kill samba.service
+ExecStartPre=-/usr/bin/docker rm samba.service
 ExecStartPre=/usr/bin/docker pull kohlby/samba
 ExecStart=/usr/bin/docker run \
-    --name services_samba \
+    --cap-add SYS_ADMIN \
+    --log-driver=syslog \
+    --log-opt tag=samba.service \
+    --name samba.service \
     --publish "137:137/udp" \
     --publish "138:138/udp" \
     --publish 139:139 \
     --publish 445:445 \
-    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
-    --volume /mnt/media:/mnt/media \
+    --security-opt seccomp=unconfined \
+    --tty \
+    --user root \
     --volume /mnt/legacy:/mnt/legacy \
+    --volume /mnt/media:/mnt/media \
     --volume /mnt/pictures:/mnt/pictures \
     --volume /mnt/videos:/mnt/videos \
-    --log-driver=syslog \
-    --log-opt tag=compose.samba \
-    --cap-add SYS_ADMIN \
-    --security-opt seccomp=unconfined \
-    --user root \
-    --tty \
+    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
     kohlby/samba
-ExecStop=/usr/bin/docker stop services_samba
+ExecStop=/usr/bin/docker stop samba.service
 TimeoutSec=120
 
 [Install]

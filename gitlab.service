@@ -11,23 +11,23 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
-ExecStartPre=-/usr/bin/docker kill services_gitlab
-ExecStartPre=-/usr/bin/docker rm services_gitlab
+ExecStartPre=-/usr/bin/docker kill gitlab.service
+ExecStartPre=-/usr/bin/docker rm gitlab.service
 ExecStartPre=/usr/bin/docker pull akohlbecker/gitlab
 ExecStart=/usr/bin/docker run \
-    --name services_gitlab \
-    --publish 2222:22 \
-    --publish-service=gitlab.docker \
-    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
-    --volume /mnt/docker/gitlab:/var/opt/gitlab \
-    --volume /mnt/docker/gitlab-storage:/mnt/storage \
-    --log-driver=syslog \
-    --log-opt tag=compose.gitlab \
     --cap-add SYS_ADMIN \
+    --log-driver=syslog \
+    --log-opt tag=gitlab.service \
+    --name gitlab.service \
+    --network=services \
+    --publish 2222:22 \
     --security-opt seccomp=unconfined \
     --user root \
+    --volume /mnt/docker/gitlab-storage:/mnt/storage \
+    --volume /mnt/docker/gitlab:/var/opt/gitlab \
+    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
     akohlbecker/gitlab
-ExecStop=/usr/bin/docker stop services_gitlab
+ExecStop=/usr/bin/docker stop gitlab.service
 TimeoutSec=120
 
 [Install]
