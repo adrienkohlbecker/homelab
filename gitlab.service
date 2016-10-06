@@ -15,10 +15,10 @@ ExecStartPre=-/usr/bin/docker rm gitlab.service
 ExecStartPre=/usr/bin/docker pull akohlbecker/gitlab
 ExecStart=/usr/bin/docker run \
     --cap-add SYS_ADMIN \
-    --log-driver=syslog \
-    --log-opt tag=gitlab.service \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
     --name gitlab.service \
-    --network=services \
+    --network services \
     --publish 2222:22 \
     --security-opt seccomp=unconfined \
     --user root \

@@ -15,8 +15,8 @@ ExecStartPre=-/usr/bin/docker rm gitlab-runner.service
 ExecStartPre=/usr/bin/docker pull kohlby/gitlab-runner
 ExecStart=/usr/bin/docker run \
     --cap-add SYS_ADMIN \
-    --log-driver=syslog \
-    --log-opt tag=gitlab-runner.service \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
     --name gitlab-runner.service \
     --security-opt seccomp=unconfined \
     --user root \

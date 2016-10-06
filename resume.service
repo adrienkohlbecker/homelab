@@ -14,10 +14,10 @@ ExecStartPre=-/usr/bin/docker kill resume.service
 ExecStartPre=-/usr/bin/docker rm resume.service
 ExecStartPre=/usr/bin/docker pull kohlby/resume
 ExecStart=/usr/bin/docker run \
-    --log-driver=syslog \
-    --log-opt tag=resume.service \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
     --name resume.service \
-    --network=services \
+    --network services \
     kohlby/resume
 ExecStop=/usr/bin/docker stop resume.service
 TimeoutSec=120

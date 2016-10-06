@@ -14,8 +14,8 @@ ExecStartPre=-/usr/bin/docker kill avahi.service
 ExecStartPre=-/usr/bin/docker rm avahi.service
 ExecStartPre=/usr/bin/docker pull kohlby/avahi
 ExecStart=/usr/bin/docker run \
-    --log-driver=syslog \
-    --log-opt tag=avahi.service \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
     --name avahi.service \
     --net host \
     --security-opt seccomp=unconfined \

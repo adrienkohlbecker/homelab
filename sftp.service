@@ -15,8 +15,8 @@ ExecStartPre=-/usr/bin/docker rm sftp.service
 ExecStartPre=/usr/bin/docker pull kohlby/sftp
 ExecStart=/usr/bin/docker run \
     --cap-add SYS_ADMIN \
-    --log-driver=syslog \
-    --log-opt tag=sftp.service \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
     --name sftp.service \
     --publish 2223:22 \
     --security-opt seccomp=unconfined \

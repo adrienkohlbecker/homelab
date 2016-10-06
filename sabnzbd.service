@@ -15,10 +15,10 @@ ExecStartPre=-/usr/bin/docker rm sabnzbd.service
 ExecStartPre=/usr/bin/docker pull kohlby/sabnzbd
 ExecStart=/usr/bin/docker run \
     --cap-add SYS_ADMIN \
-    --log-driver=syslog \
-    --log-opt tag=sabnzbd.service \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
     --name sabnzbd.service \
-    --network=services \
+    --network services \
     --security-opt seccomp=unconfined \
     --user root \
     --volume /mnt/docker/sabnzbd:/data \

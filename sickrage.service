@@ -15,10 +15,10 @@ ExecStartPre=-/usr/bin/docker rm sickrage.service
 ExecStartPre=/usr/bin/docker pull kohlby/sickrage
 ExecStart=/usr/bin/docker run \
     --cap-add SYS_ADMIN \
-    --log-driver=syslog \
-    --log-opt tag=sickrage.service \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
     --name sickrage.service \
-    --network=services \
+    --network services \
     --security-opt seccomp=unconfined \
     --user root \
     --volume /mnt/docker/sickrage:/data \

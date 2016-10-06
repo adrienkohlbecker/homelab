@@ -15,8 +15,8 @@ ExecStartPre=-/usr/bin/docker rm samba.service
 ExecStartPre=/usr/bin/docker pull kohlby/samba
 ExecStart=/usr/bin/docker run \
     --cap-add SYS_ADMIN \
-    --log-driver=syslog \
-    --log-opt tag=samba.service \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
     --name samba.service \
     --publish "137:137/udp" \
     --publish "138:138/udp" \

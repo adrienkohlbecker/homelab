@@ -15,11 +15,11 @@ ExecStartPre=-/usr/bin/docker rm plex.service
 ExecStartPre=/usr/bin/docker pull kohlby/plex
 ExecStart=/usr/bin/docker run \
     --cap-add SYS_ADMIN \
-    --log-driver=syslog \
-    --log-opt tag=plex.service \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
     --name plex.service \
     --net host \
-    --network=services \
+    --network services \
     --security-opt seccomp=unconfined \
     --user root \
     --volume /mnt/docker/plex:/data \

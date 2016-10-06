@@ -16,8 +16,8 @@ ExecStartPre=/usr/bin/docker pull kohlby/vpn
 ExecStart=/usr/bin/docker run \
     --cap-add NET_ADMIN \
     --cap-add SYS_ADMIN \
-    --log-driver=syslog \
-    --log-opt tag=plex.service \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
     --name plex.service \
     --net host \
     --publish "1194:1194/udp" \

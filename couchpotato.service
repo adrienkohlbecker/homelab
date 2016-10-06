@@ -15,10 +15,10 @@ ExecStartPre=-/usr/bin/docker rm couchpotato.service
 ExecStartPre=/usr/bin/docker pull kohlby/couchpotato
 ExecStart=/usr/bin/docker run \
     --cap-add SYS_ADMIN \
-    --log-driver=syslog \
-    --log-opt tag=couchpotato.service \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
     --name couchpotato.service \
-    --network=services \
+    --network services \
     --security-opt seccomp=unconfined \
     --user root \
     --volume /mnt/docker/couchpotato:/data \
