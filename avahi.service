@@ -14,7 +14,7 @@ TimeoutSec=120
 
 ExecStartPre=-/usr/bin/docker kill avahi.service
 ExecStartPre=-/usr/bin/docker rm avahi.service
-ExecStartPre=/usr/bin/docker pull kohlby/avahi
+ExecStartPre=/usr/bin/docker pull akohlbecker/avahi
 ExecStart=/usr/bin/docker run \
     --log-driver syslog \
     --log-opt tag="{{.Name}}" \
