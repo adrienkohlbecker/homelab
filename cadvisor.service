@@ -3,7 +3,6 @@
 Description=cAdvisor
 After=docker.service
 Requires=docker.service
-Wants=nginx.service
 PartOf=compose.service
 
 StartLimitInterval=300
