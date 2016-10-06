@@ -3,7 +3,6 @@
 Description=Gitlab
 After=docker.service zfs-mount.service
 Requires=docker.service zfs-mount.service
-Wants=nginx.service
 PartOf=compose.service
 
 StartLimitInterval=300

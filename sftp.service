@@ -3,7 +3,6 @@
 Description=SFTP
 After=docker.service mnt-media.mount zfs-mount.service
 Requires=docker.service mnt-media.mount zfs-mount.service
-Wants=nginx.service
 PartOf=compose.service
 
 StartLimitInterval=300
