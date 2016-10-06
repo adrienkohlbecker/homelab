@@ -15,8 +15,8 @@ ExecStartPre=-/usr/bin/docker rm airsonos.service
 ExecStartPre=/usr/bin/docker pull kohlby/airsonos
 ExecStart=/usr/bin/docker run \
     --cap-add SYS_ADMIN \
-    --log-driver=syslog \
-    --log-opt tag=airsonos.service \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
     --name airsonos.service \
     --net host \
     --security-opt seccomp=unconfined \

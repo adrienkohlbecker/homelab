@@ -10,19 +10,17 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
-PrivateTmp=true
 TimeoutSec=120
 
-# Kill and remove existing containers, update image
 ExecStartPre=-/usr/bin/docker kill nginx.service
 ExecStartPre=-/usr/bin/docker rm nginx.service
 ExecStartPre=/usr/bin/docker pull akohlbecker/nginx
 ExecStart=/usr/local/bin/assume_role "arn:aws:iam::000390721279:role/credentials@docker-nginx" "nginx.service" \
   /usr/bin/docker run \
-    --log-driver=syslog \
-    --log-opt tag=nginx.service \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
     --name nginx.service \
-    --network=services \
+    --network services \
     --publish 443:443 \
     --publish 80:80 \
     --volume /etc/letsencrypt:/etc/letsencrypt:ro \
