@@ -10,6 +10,9 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
+TimeoutSec=120
+RestartSec=15
+
 ExecStartPre=-/usr/bin/docker kill sickrage.service
 ExecStartPre=-/usr/bin/docker rm sickrage.service
 ExecStartPre=/usr/bin/docker pull kohlby/sickrage
@@ -26,7 +29,6 @@ ExecStart=/usr/bin/docker run \
     --volume /opt/ejson/keys:/opt/ejson/keys:ro \
     kohlby/sickrage
 ExecStop=/usr/bin/docker stop sickrage.service
-TimeoutSec=120
 
 [Install]
 WantedBy=compose.service

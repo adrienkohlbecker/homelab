@@ -10,6 +10,9 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
+TimeoutSec=120
+RestartSec=15
+
 ExecStartPre=-/usr/bin/docker kill gitlab.service
 ExecStartPre=-/usr/bin/docker rm gitlab.service
 ExecStartPre=/usr/bin/docker pull akohlbecker/gitlab
@@ -27,7 +30,6 @@ ExecStart=/usr/bin/docker run \
     --volume /opt/ejson/keys:/opt/ejson/keys:ro \
     akohlbecker/gitlab
 ExecStop=/usr/bin/docker stop gitlab.service
-TimeoutSec=120
 
 [Install]
 WantedBy=compose.service
