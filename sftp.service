@@ -10,6 +10,9 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
+TimeoutSec=120
+RestartSec=15
+
 ExecStartPre=-/usr/bin/docker kill sftp.service
 ExecStartPre=-/usr/bin/docker rm sftp.service
 ExecStartPre=/usr/bin/docker pull kohlby/sftp
@@ -29,7 +32,6 @@ ExecStart=/usr/bin/docker run \
     --volume /mnt/sftp/ssh:/etc/ssh/host_keys \
     kohlby/sftp
 ExecStop=/usr/bin/docker stop sftp.service
-TimeoutSec=120
 
 [Install]
 WantedBy=compose.service

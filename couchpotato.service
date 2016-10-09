@@ -10,6 +10,9 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
+TimeoutSec=120
+RestartSec=15
+
 ExecStartPre=-/usr/bin/docker kill couchpotato.service
 ExecStartPre=-/usr/bin/docker rm couchpotato.service
 ExecStartPre=/usr/bin/docker pull kohlby/couchpotato
@@ -26,7 +29,6 @@ ExecStart=/usr/bin/docker run \
     --volume /opt/ejson/keys:/opt/ejson/keys:ro \
     kohlby/couchpotato
 ExecStop=/usr/bin/docker stop couchpotato.service
-TimeoutSec=120
 
 [Install]
 WantedBy=compose.service
