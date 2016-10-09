@@ -18,6 +18,10 @@ ExecStartPre=-/usr/bin/docker rm nginx.service
 ExecStartPre=/usr/bin/docker pull akohlbecker/nginx
 ExecStart=/usr/local/bin/assume_role "arn:aws:iam::000390721279:role/credentials@docker-nginx" "nginx.service" \
   /usr/bin/docker run \
+    --env AWS_ACCESS_KEY_ID \
+    --env AWS_REGION \
+    --env AWS_SECRET_ACCESS_KEY \
+    --env AWS_SESSION_TOKEN \
     --log-driver syslog \
     --log-opt tag="{{.Name}}" \
     --name nginx.service \
@@ -26,10 +30,6 @@ ExecStart=/usr/local/bin/assume_role "arn:aws:iam::000390721279:role/credentials
     --publish 80:80 \
     --volume /etc/letsencrypt:/etc/letsencrypt:ro \
     --volume /var/www/letsencrypt:/var/www/letsencrypt:ro \
-    -e AWS_ACCESS_KEY_ID \
-    -e AWS_REGION \
-    -e AWS_SECRET_ACCESS_KEY \
-    -e AWS_SESSION_TOKEN \
     akohlbecker/nginx
 ExecStop=/usr/bin/docker stop nginx.service
 
