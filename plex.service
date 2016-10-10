@@ -30,10 +30,8 @@ ExecStart=/usr/bin/docker run \
     --publish 32414:32414/udp \
     --publish 32469:32469/tcp \
     --publish 8324:8324/tcp \
-    --security-opt apparmor=docker-dbus \
     --volume /mnt/docker/plex:/data \
     --volume /mnt/media:/media \
-    --volume /var/run/dbus:/var/run/dbus \
     akohlbecker/plex
     # --publish 5353:5353/udp \ # used by avahi container
 ExecStop=/usr/bin/docker stop plex.service
