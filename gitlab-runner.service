@@ -1,6 +1,6 @@
 # gitlab-runner.service #######################################################################
 [Unit]
-Description=Airsonos
+Description=Gitlab Runner
 After=docker.service gitlab.service
 Requires=docker.service gitlab.service
 PartOf=compose.service
