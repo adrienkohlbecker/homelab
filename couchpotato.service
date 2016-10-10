@@ -15,19 +15,20 @@ RestartSec=15
 
 ExecStartPre=-/usr/bin/docker kill couchpotato.service
 ExecStartPre=-/usr/bin/docker rm couchpotato.service
-ExecStartPre=/usr/bin/docker pull kohlby/couchpotato
-ExecStart=/usr/bin/docker run \
-    --cap-add SYS_ADMIN \
+ExecStartPre=/usr/bin/docker pull akohlbecker/couchpotato
+ExecStart=/usr/local/bin/assume_role "arn:aws:iam::000390721279:role/credentials@docker-couchpotato" "couchpotato.service" \
+  /usr/bin/docker run \
+    --env AWS_ACCESS_KEY_ID \
+    --env AWS_REGION \
+    --env AWS_SECRET_ACCESS_KEY \
+    --env AWS_SESSION_TOKEN \
     --log-driver syslog \
     --log-opt tag="{{.Name}}" \
     --name couchpotato.service \
     --network services \
-    --security-opt seccomp=unconfined \
-    --user root \
     --volume /mnt/docker/couchpotato:/data \
     --volume /mnt/media:/media \
-    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
-    kohlby/couchpotato
+    akohlbecker/couchpotato
 ExecStop=/usr/bin/docker stop couchpotato.service
 
 [Install]
