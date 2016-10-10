@@ -10,20 +10,21 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
+TimeoutSec=120
+RestartSec=15
+
 ExecStartPre=-/usr/bin/docker kill gitlab-runner.service
 ExecStartPre=-/usr/bin/docker rm gitlab-runner.service
-ExecStartPre=/usr/bin/docker pull kohlby/gitlab-runner
+ExecStartPre=/usr/bin/docker pull akohlbecker/gitlab-runner
 ExecStart=/usr/bin/docker run \
-    --cap-add SYS_ADMIN \
     --log-driver syslog \
     --log-opt tag="{{.Name}}" \
     --name gitlab-runner.service \
-    --security-opt seccomp=unconfined \
-    --user root \
-    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
-    kohlby/gitlab-runner
+    --network services \
+    --volume /mnt/docker/gitlab-runner:/etc/gitlab-runner \
+    --volume /var/run/docker.sock:/var/run/docker.sock \
+    akohlbecker/gitlab-runner
 ExecStop=/usr/bin/docker stop gitlab-runner.service
-TimeoutSec=120
 
 [Install]
 WantedBy=compose.service
