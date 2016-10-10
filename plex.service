@@ -21,16 +21,16 @@ ExecStart=/usr/bin/docker run \
     --log-opt tag="{{.Name}}" \
     --name plex.service \
     --network services \
-    --publish 1900:1900/udp
-    --publish 3005:3005/tcp
-    --publish 32400:32400/tcp
-    --publish 32410:32410/udp
-    --publish 32412:32412/udp
-    --publish 32413:32413/udp
-    --publish 32414:32414/udp
-    --publish 32469:32469/tcp
-    --publish 5353:5353/udp
-    --publish 8324:8324/tcp
+    --publish 1900:1900/udp \
+    --publish 3005:3005/tcp \
+    --publish 32400:32400/tcp \
+    --publish 32410:32410/udp \
+    --publish 32412:32412/udp \
+    --publish 32413:32413/udp \
+    --publish 32414:32414/udp \
+    --publish 32469:32469/tcp \
+    --publish 5353:5353/udp \
+    --publish 8324:8324/tcp \
     --volume /mnt/docker/plex:/data \
     --volume /mnt/media:/media \
     akohlbecker/plex
