@@ -52,21 +52,21 @@
   tags:
     - zfs
 
-- name: Mount swap
-  mount:
-    name: none
-    src: /dev/zvol/rpool/swap
-    state: present
-    fstype: swap
-    opts: defaults,discard
-  become: yes
-  register: swap_fstab
-  tags:
-    - zfs
-
-- name: Enable swap
-  command: swapon -av
-  when: "{{ swap_fstab | changed }}"
-  become: yes
-  tags:
-    - zfs
+# - name: Mount swap
+#   mount:
+#     name: none
+#     src: /dev/zvol/rpool/swap
+#     state: present
+#     fstype: swap
+#     opts: defaults,discard
+#   become: yes
+#   register: swap_fstab
+#   tags:
+#     - zfs
+#
+# - name: Enable swap
+#   command: swapon -av
+#   when: "{{ swap_fstab | changed }}"
+#   become: yes
+#   tags:
+#     - zfs
