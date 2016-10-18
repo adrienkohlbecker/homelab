@@ -15,9 +15,9 @@ RestartSec=15
 
 ExecStartPre=-/usr/bin/docker kill samba.service
 ExecStartPre=-/usr/bin/docker rm samba.service
-ExecStartPre=/usr/bin/docker pull kohlby/samba
-ExecStart=/usr/bin/docker run \
-    --cap-add SYS_ADMIN \
+ExecStartPre=/usr/bin/docker pull akohlbecker/samba
+ExecStart=/usr/local/bin/assume_role "arn:aws:iam::000390721279:role/credentials@docker-samba" "samba.service" \
+  /usr/bin/docker run \
     --log-driver syslog \
     --log-opt tag="{{.Name}}" \
     --name samba.service \
@@ -25,15 +25,12 @@ ExecStart=/usr/bin/docker run \
     --publish "138:138/udp" \
     --publish 139:139 \
     --publish 445:445 \
-    --security-opt seccomp=unconfined \
     --tty \
-    --user root \
     --volume /mnt/legacy:/mnt/legacy \
     --volume /mnt/media:/mnt/media \
     --volume /mnt/pictures:/mnt/pictures \
     --volume /mnt/videos:/mnt/videos \
-    --volume /opt/ejson/keys:/opt/ejson/keys:ro \
-    kohlby/samba
+    akohlbecker/samba
 ExecStop=/usr/bin/docker stop samba.service
 
 [Install]
