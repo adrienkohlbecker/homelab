@@ -15,14 +15,12 @@ RestartSec=15
 
 ExecStartPre=-/usr/bin/docker kill sftp.service
 ExecStartPre=-/usr/bin/docker rm sftp.service
-ExecStartPre=/usr/bin/docker pull kohlby/sftp
+ExecStartPre=/usr/bin/docker pull akohlbecker/sftp
 ExecStart=/usr/bin/docker run \
-    --cap-add SYS_ADMIN \
     --log-driver syslog \
     --log-opt tag="{{.Name}}" \
     --name sftp.service \
     --publish 2223:22 \
-    --security-opt seccomp=unconfined \
     --user root \
     --volume /mnt/media/Music:/home/lgg4/sftp/Music \
     --volume /mnt/sftp/arq:/home/arq/sftp \
@@ -30,7 +28,7 @@ ExecStart=/usr/bin/docker run \
     --volume /mnt/sftp/lgg4/DCIM:/home/lgg4/sftp/DCIM \
     --volume /mnt/sftp/lgg4/TitaniumBackup:/home/lgg4/sftp/TitaniumBackup \
     --volume /mnt/sftp/ssh:/etc/ssh/host_keys \
-    kohlby/sftp
+    akohlbecker/sftp
 ExecStop=/usr/bin/docker stop sftp.service
 
 [Install]
