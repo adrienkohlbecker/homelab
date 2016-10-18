@@ -155,7 +155,6 @@
     - {path: '/mnt/media/Movies',           owner: 'media',       group: 'media',    mode: '0774'}
     - {path: '/mnt/media/TV',               owner: 'media',       group: 'media',    mode: '0774'}
     - {path: '/mnt/media/Music',            owner: 'media',       group: 'media',    mode: '0774'}
-    - {path: '/mnt/media/Pictures',         owner: 'media',       group: 'media',    mode: '0774'}
     - {path: '/mnt/media/Other',            owner: 'media',       group: 'media',    mode: '0774'}
     - {path: '/mnt/media/.tmp',             owner: 'media',       group: 'media',    mode: '0775'}
     - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'sabnzbd',     group: 'media',    mode: '0775'}
@@ -174,11 +173,13 @@
     - {path: '/mnt/sftp',                   owner: 'root',        group: 'root',     mode: '0755'}
     - {path: '/mnt/videos',                 owner: 'adrien',      group: 'adrien',   mode: '0774'}
 
-- name: Copy the assume_rome script
+- name: Copy the assume_role script
   copy:
     src: assume_role.sh
     dest: /usr/local/bin/assume_role
     mode: 755
+    owner: root
+    group: root
   become: yes
   tags:
     - services
