@@ -31,7 +31,7 @@
     state: directory
     owner: root
     group: root
-    mode: 0755
+    mode: 0700
   become: yes
   tags:
     - docker
@@ -40,6 +40,9 @@
   template:
     src: dockercfg
     dest: /root/.docker/config.json
+    owner: root
+    group: root
+    mode: 0600
   become: yes
   tags:
     - docker
@@ -50,7 +53,7 @@
     state: directory
     owner: "{{ deploy_user }}"
     group: "{{ deploy_user }}"
-    mode: 0755
+    mode: 0700
   become: yes
   tags:
     - docker
@@ -59,6 +62,9 @@
   template:
     src: dockercfg
     dest: "/home/{{ deploy_user }}/.docker/config.json"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: 0600
   become: yes
   tags:
     - docker
