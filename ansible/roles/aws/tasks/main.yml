@@ -1,0 +1,75 @@
+---
+
+- name: Install aws cli
+  apt:
+    pkg: awscli
+    state: installed
+  become: yes
+  tags:
+    - aws
+
+- name: Create aws config directory (root)
+  file:
+    dest: "/root/.aws"
+    state: directory
+    owner: root
+    group: root
+    mode: 0700
+  become: yes
+  tags:
+    - aws
+
+- name: Create aws config directory (user)
+  file:
+    dest: "/home/{{ deploy_user }}/.aws"
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: 0700
+  become: yes
+  tags:
+    - aws
+
+- name: Install config (root)
+  template:
+    src: config.j2
+    dest: "/root/.aws/config"
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - aws
+
+- name: Install config (user)
+  template:
+    src: config.j2
+    dest: "/home/{{ deploy_user }}/.aws/config"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: 0600
+  become: yes
+  tags:
+    - aws
+
+- name: Install credentials (root)
+  template:
+    src: credentials.j2
+    dest: "/root/.aws/credentials"
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - aws
+
+- name: Install credentials (user)
+  template:
+    src: credentials.j2
+    dest: "/home/{{ deploy_user }}/.aws/credentials"
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: 0600
+  become: yes
+  tags:
+    - aws

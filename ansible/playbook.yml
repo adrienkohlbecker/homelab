@@ -20,6 +20,7 @@
     - pci_passthrough
     - virtualization
     - docker
+    - aws
     - services
     - user
     - dotfiles
