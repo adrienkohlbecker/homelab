@@ -35,6 +35,7 @@
     name: avahi
     group: avahi
     uid: 125
+    createhome: no
     comment: Avahi mDNS daemon,,,
     home: /var/run/avahi-daemon
     shell: /bin/false
@@ -58,6 +59,7 @@
     name: sabnzbd
     group: media
     uid: 2001
+    createhome: no
     state: present
   become: yes
   tags:
@@ -68,16 +70,7 @@
     name: sickrage
     group: media
     uid: 2002
-    state: present
-  become: yes
-  tags:
-    - services
-
-- name: Add nginx user
-  user:
-    name: nginx
-    group: media
-    uid: 2003
+    createhome: no
     state: present
   become: yes
   tags:
@@ -88,6 +81,7 @@
     name: couchpotato
     group: media
     uid: 2004
+    createhome: no
     state: present
   become: yes
   tags:
@@ -98,6 +92,7 @@
     name: plex
     group: media
     uid: 2005
+    createhome: no
     state: present
   become: yes
   tags:
@@ -108,6 +103,7 @@
     name: sonos
     group: media
     uid: 2006
+    createhome: no
     state: present
   become: yes
   tags:
@@ -118,6 +114,7 @@
     name: arq
     group: sftpaccess
     uid: 2201
+    createhome: no
     state: present
   become: yes
   tags:
@@ -128,6 +125,7 @@
     name: mobile
     group: sftpaccess
     uid: 2202
+    createhome: no
     state: present
   become: yes
   tags:
@@ -138,6 +136,7 @@
     name: "{{ deploy_user }}"
     groups: media
     append: yes
+    createhome: no
   become: yes
   tags:
     - services
