@@ -72,12 +72,13 @@
     - /mnt/snapraid_d1/media
     - /mnt/snapraid_d2/media
     - /mnt/snapraid_d3/media
+    - /mnt/snapraid_d4/media
     - /mnt/media
 
 - name: Mount mergerfs partition
   mount:
     name: /mnt/media
-    src: /mnt/snapraid_d1/media:/mnt/snapraid_d2/media:/mnt/snapraid_d3/media
+    src: /mnt/snapraid_d1/media:/mnt/snapraid_d2/media:/mnt/snapraid_d3/media:/mnt/snapraid_d4/media
     fstype: fuse.mergerfs
     opts: defaults,allow_other,fsname=media
     state: mounted
