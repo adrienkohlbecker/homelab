@@ -20,6 +20,30 @@
   tags:
     - services
 
+- name: Add avahi group
+  group:
+    name: avahi
+    gid: 125
+    system: yes
+    state: present
+  become: yes
+  tags:
+    - services
+
+- name: Add avahi user
+  user:
+    name: avahi
+    group: avahi
+    uid: 125
+    comment: Avahi mDNS daemon,,,
+    home: /var/run/avahi-daemon
+    shell: /bin/false
+    system: yes
+    state: present
+  become: yes
+  tags:
+    - services
+
 - name: Add sftpaccess group
   group:
     name: sftpaccess
@@ -150,6 +174,36 @@
     - {path: '/mnt/pictures',               owner: 'adrien',      group: 'adrien',   mode: '0774'}
     - {path: '/mnt/sftp',                   owner: 'root',        group: 'root',     mode: '0755'}
     - {path: '/mnt/videos',                 owner: 'adrien',      group: 'adrien',   mode: '0774'}
+
+- name: Copy docker-dbus apparmor profile
+  copy:
+    src: docker-dbus.apparmor
+    dest: /etc/apparmor.d/docker-dbus
+    mode: 0644
+    owner: root
+    group: root
+  become: yes
+  register: docker_dbus
+  tags:
+    - services
+
+- name: Register new apparmor profile
+  shell: apparmor_parser -r -W /etc/apparmor.d/docker-dbus
+  when: docker_dbus|changed
+  become: yes
+  tags:
+    - services
+
+- name: Copy avahi dbus config
+  copy:
+    src: avahi-dbus.conf
+    dest: /etc/dbus-1/system.d/avahi-dbus.conf
+    mode: 0644
+    owner: root
+    group: root
+  become: yes
+  tags:
+    - services
 
 - name: Install configuration
   git:
