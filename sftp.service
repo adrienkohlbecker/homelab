@@ -22,11 +22,8 @@ ExecStart=/usr/bin/docker run \
     --name sftp.service \
     --publish 2223:22 \
     --user root \
-    --volume /mnt/media/Music:/home/lgg4/sftp/Music \
     --volume /mnt/sftp/arq:/home/arq/sftp \
-    --volume /mnt/sftp/lgg4/DCIM_SD:/home/lgg4/sftp/DCIM_SD \
-    --volume /mnt/sftp/lgg4/DCIM:/home/lgg4/sftp/DCIM \
-    --volume /mnt/sftp/lgg4/TitaniumBackup:/home/lgg4/sftp/TitaniumBackup \
+    --volume /mnt/brumath:/home/adrien/brumath \
     --volume /mnt/sftp/ssh:/etc/ssh/host_keys \
     akohlbecker/sftp
 ExecStop=/usr/bin/docker stop sftp.service
