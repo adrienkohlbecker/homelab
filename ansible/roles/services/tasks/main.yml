@@ -54,39 +54,6 @@
   tags:
     - services
 
-- name: Add sabnzbd user
-  user:
-    name: sabnzbd
-    group: media
-    uid: 2001
-    createhome: no
-    state: present
-  become: yes
-  tags:
-    - services
-
-- name: Add sickrage user
-  user:
-    name: sickrage
-    group: media
-    uid: 2002
-    createhome: no
-    state: present
-  become: yes
-  tags:
-    - services
-
-- name: Add couchpotato user
-  user:
-    name: couchpotato
-    group: media
-    uid: 2004
-    createhome: no
-    state: present
-  become: yes
-  tags:
-    - services
-
 - name: Add plex user
   user:
     name: plex
@@ -120,17 +87,6 @@
   tags:
     - services
 
-- name: Add mobile user
-  user:
-    name: mobile
-    group: sftpaccess
-    uid: 2202
-    createhome: no
-    state: present
-  become: yes
-  tags:
-    - services
-
 - name: Add deploy user to media group
   user:
     name: "{{ deploy_user }}"
@@ -157,13 +113,13 @@
     - {path: '/mnt/media/Music',            owner: 'media',       group: 'media',    mode: '0774'}
     - {path: '/mnt/media/Other',            owner: 'media',       group: 'media',    mode: '0774'}
     - {path: '/mnt/media/.tmp',             owner: 'media',       group: 'media',    mode: '0775'}
-    - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'sabnzbd',     group: 'media',    mode: '0775'}
-    - {path: '/mnt/media/.tmp/couchpotato', owner: 'couchpotato', group: 'media',    mode: '0774'}
-    - {path: '/mnt/media/.tmp/sickrage',    owner: 'sickrage',    group: 'media',    mode: '0774'}
+    - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'media',       group: 'media',    mode: '0775'}
+    - {path: '/mnt/media/.tmp/couchpotato', owner: 'media',       group: 'media',    mode: '0774'}
+    - {path: '/mnt/media/.tmp/sickrage',    owner: 'media',       group: 'media',    mode: '0774'}
     - {path: '/mnt/docker',                 owner: 'root',        group: 'media',    mode: '0774'}
-    - {path: '/mnt/docker/sabnzbd',         owner: 'sabnzbd',     group: 'media',    mode: '0774'}
-    - {path: '/mnt/docker/sickrage',        owner: 'sickrage',    group: 'media',    mode: '0774'}
-    - {path: '/mnt/docker/couchpotato',     owner: 'couchpotato', group: 'media',    mode: '0774'}
+    - {path: '/mnt/docker/sabnzbd',         owner: 'media',       group: 'media',    mode: '0774'}
+    - {path: '/mnt/docker/sickrage',        owner: 'media',       group: 'media',    mode: '0774'}
+    - {path: '/mnt/docker/couchpotato',     owner: 'media',       group: 'media',    mode: '0774'}
     - {path: '/mnt/docker/gitlab',          owner: 'root',        group: 'root',     mode: '0755'}
     - {path: '/mnt/docker/gitlab-storage',  owner: 'root',        group: 'root',     mode: '0755'}
     - {path: '/mnt/docker/plex',            owner: 'plex',        group: 'media',    mode: '0774'}
