@@ -98,3 +98,24 @@
   become: yes
   tags:
     - docker
+
+- name: Add datadog agent to docker group
+  user:
+    name: dd-agent
+    groups: docker
+    append: yes
+  become: yes
+  tags:
+    - docker
+
+- name: Copy the datadog config
+  copy:
+    src: docker_daemon.yaml
+    dest: /etc/dd-agent/conf.d/docker_daemon.yaml
+    mode: 0644
+    owner: dd-agent
+    group: root
+  become: yes
+  notify: Restart datadog
+  tags:
+    - docker
