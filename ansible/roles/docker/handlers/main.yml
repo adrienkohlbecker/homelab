@@ -5,3 +5,9 @@
     name: docker
     state: restarted
   become: yes
+
+- name: Restart datadog
+  service:
+    name: datadog-agent
+    state: restarted
+  become: yes
