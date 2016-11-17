@@ -10,7 +10,7 @@ StartLimitBurst=5
 
 [Service]
 Restart=always
-TimeoutSec=120
+TimeoutSec=300
 RestartSec=15
 
 ExecStartPre=-/usr/bin/docker kill couchpotato.service
