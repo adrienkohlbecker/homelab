@@ -20,6 +20,8 @@ VM_CPU           = AVAILABLE_CPU / 2
 # backwards compatibility). Please don't change it unless you know what
 # you're doing.
 Vagrant.configure(2) do |config|
+  config.vm.define 'box'
+
   # The most common configuration options are documented and commented below.
   # For a complete reference, please see the online documentation at
   # https://docs.vagrantup.com.
@@ -55,7 +57,7 @@ Vagrant.configure(2) do |config|
   # the path on the host to the actual folder. The second argument is
   # the path on the guest to mount the folder. And the optional third
   # argument is a set of non-required options.
-  config.vm.synced_folder '.', '/vagrant', nfs: true
+  # config.vm.synced_folder '.', '/vagrant'
 
   # Provider-specific configuration so you can fine-tune various
   # backing providers for Vagrant. These expose provider-specific options.
@@ -75,7 +77,6 @@ Vagrant.configure(2) do |config|
     prl.name = 'hypervisor_box'
     prl.memory = VM_MEMORY
     prl.cpus = VM_CPU
-    prl.check_guest_tools = false
   end
 
   # Define a Vagrant Push strategy for pushing to Atlas. Other push strategies
@@ -94,11 +95,8 @@ Vagrant.configure(2) do |config|
   # SHELL
   config.vm.provision 'ansible' do |ansible|
     ansible.playbook = 'ansible/playbook.yml'
-    ansible.extra_vars = {
-      is_vagrant: true
-    }
   end
-  #
+
   # if Vagrant.has_plugin?('vagrant-cachier')
   #   config.cache.scope = :box
   #   config.cache.synced_folder_opts = {

@@ -73,14 +73,3 @@
   become: yes
   tags:
     - user
-
-# vagrant
-- name: Add provisioning user to ssh group
-  user:
-    name: "{{ provisioning_user }}"
-    groups: ssh
-    append: yes
-  when: is_vagrant
-  become: yes
-  tags:
-    - ssh
