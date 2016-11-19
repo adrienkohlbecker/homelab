@@ -1,5 +1,13 @@
 ---
 
+- name: Install bridge-utils
+  apt:
+    pkg: bridge-utils
+    state: installed
+  become: yes
+  tags:
+    - networking
+
 - name: Enable bonding
   modprobe:
     name: bonding
@@ -9,8 +17,8 @@
     - networking
 
 - name: Configure networking
-  copy:
-    src: interfaces
+  template:
+    src: "interfaces.{{ inventory_hostname_short }}.j2"
     dest: /etc/network/interfaces
     owner: root
     group: root
