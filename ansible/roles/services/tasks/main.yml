@@ -108,26 +108,26 @@
   tags:
     - services
   with_items:
-    - {path: '/mnt/media/Movies',           owner: 'media',       group: 'media',    mode: '0774'}
-    - {path: '/mnt/media/TV',               owner: 'media',       group: 'media',    mode: '0774'}
-    - {path: '/mnt/media/Music',            owner: 'media',       group: 'media',    mode: '0774'}
-    - {path: '/mnt/media/Other',            owner: 'media',       group: 'media',    mode: '0774'}
-    - {path: '/mnt/media/.tmp',             owner: 'media',       group: 'media',    mode: '0775'}
-    - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'media',       group: 'media',    mode: '0775'}
-    - {path: '/mnt/media/.tmp/couchpotato', owner: 'media',       group: 'media',    mode: '0774'}
-    - {path: '/mnt/media/.tmp/sickrage',    owner: 'media',       group: 'media',    mode: '0774'}
-    - {path: '/mnt/docker',                 owner: 'root',        group: 'media',    mode: '0774'}
-    - {path: '/mnt/docker/sabnzbd',         owner: 'media',       group: 'media',    mode: '0774'}
-    - {path: '/mnt/docker/sickrage',        owner: 'media',       group: 'media',    mode: '0774'}
-    - {path: '/mnt/docker/couchpotato',     owner: 'media',       group: 'media',    mode: '0774'}
-    - {path: '/mnt/docker/gitlab',          owner: 'root',        group: 'root',     mode: '0755'}
-    - {path: '/mnt/docker/gitlab-storage',  owner: 'root',        group: 'root',     mode: '0755'}
-    - {path: '/mnt/docker/plex',            owner: 'plex',        group: 'media',    mode: '0774'}
-    - {path: '/mnt/brumath',                owner: 'adrien',      group: 'adrien',   mode: '0774'}
-    - {path: '/mnt/legacy',                 owner: 'adrien',      group: 'adrien',   mode: '0774'}
-    - {path: '/mnt/pictures',               owner: 'adrien',      group: 'adrien',   mode: '0774'}
-    - {path: '/mnt/sftp',                   owner: 'root',        group: 'root',     mode: '0755'}
-    - {path: '/mnt/videos',                 owner: 'adrien',      group: 'adrien',   mode: '0774'}
+    - {path: '/mnt/media/Movies',           owner: 'media',             group: 'media',             mode: '0774'}
+    - {path: '/mnt/media/TV',               owner: 'media',             group: 'media',             mode: '0774'}
+    - {path: '/mnt/media/Music',            owner: 'media',             group: 'media',             mode: '0774'}
+    - {path: '/mnt/media/Other',            owner: 'media',             group: 'media',             mode: '0774'}
+    - {path: '/mnt/media/.tmp',             owner: 'media',             group: 'media',             mode: '0775'}
+    - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'media',             group: 'media',             mode: '0775'}
+    - {path: '/mnt/media/.tmp/couchpotato', owner: 'media',             group: 'media',             mode: '0774'}
+    - {path: '/mnt/media/.tmp/sickrage',    owner: 'media',             group: 'media',             mode: '0774'}
+    - {path: '/mnt/docker',                 owner: 'root',              group: 'media',             mode: '0774'}
+    - {path: '/mnt/docker/sabnzbd',         owner: 'media',             group: 'media',             mode: '0774'}
+    - {path: '/mnt/docker/sickrage',        owner: 'media',             group: 'media',             mode: '0774'}
+    - {path: '/mnt/docker/couchpotato',     owner: 'media',             group: 'media',             mode: '0774'}
+    - {path: '/mnt/docker/gitlab',          owner: 'root',              group: 'root',              mode: '0755'}
+    - {path: '/mnt/docker/gitlab-storage',  owner: 'root',              group: 'root',              mode: '0755'}
+    - {path: '/mnt/docker/plex',            owner: 'plex',              group: 'media',             mode: '0774'}
+    - {path: '/mnt/brumath',                owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0774'}
+    - {path: '/mnt/legacy',                 owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0774'}
+    - {path: '/mnt/pictures',               owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0774'}
+    - {path: '/mnt/sftp',                   owner: 'root',              group: 'root',              mode: '0755'}
+    - {path: '/mnt/videos',                 owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0774'}
 
 - name: Copy the assume_role script
   copy:

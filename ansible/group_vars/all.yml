@@ -1,8 +1,5 @@
 ---
 
-provisioning_user: vagrant
-deploy_user: adrien
-deploy_user_group: adrien
 deploy_user_additional_groups:
   # default groups for admin
   - adm
