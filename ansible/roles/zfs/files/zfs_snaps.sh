@@ -22,7 +22,7 @@ case "$COMMAND" in
     echo "Snapshotting with name=$NAME"
 
     zfs snapshot "rpool/ROOT/xenial@$NAME"
-    zfs snapshot "rpool/docker@$NAME"
+    zfs snapshot "rpool/services@$NAME"
     zfs snapshot "rpool/vms@$NAME"
     zfs snapshot "tank/vms@$NAME"
     zfs snapshot "tank/legacy@$NAME"
@@ -41,7 +41,7 @@ case "$COMMAND" in
     echo "Destroying snapshots: backup-disk-$DISK"
 
     zfs destroy -f "rpool/ROOT/xenial@backup-disk-$DISK"
-    zfs destroy -f "rpool/docker@backup-disk-$DISK"
+    zfs destroy -f "rpool/services@backup-disk-$DISK"
     zfs destroy -f "rpool/vms@backup-disk-$DISK"
     zfs destroy -f "tank/vms@backup-disk-$DISK"
     zfs destroy -f "tank/legacy@backup-disk-$DISK"
@@ -51,7 +51,7 @@ case "$COMMAND" in
     zfs destroy -f "tank/sftp@backup-disk-$DISK"
 
     zfs destroy -f "backup-$DISK/xenial@backup-disk-$DISK"
-    zfs destroy -f "backup-$DISK/docker@backup-disk-$DISK"
+    zfs destroy -f "backup-$DISK/services@backup-disk-$DISK"
     zfs destroy -f "backup-$DISK/vms_ssd@backup-disk-$DISK"
     zfs destroy -f "backup-$DISK/vms_hdd@backup-disk-$DISK"
     zfs destroy -f "backup-$DISK/legacy@backup-disk-$DISK"
@@ -63,7 +63,7 @@ case "$COMMAND" in
     echo "Rolling back backup to: $FROM"
 
     zfs rollback "backup-$DISK/xenial@$FROM"
-    zfs rollback "backup-$DISK/docker@$FROM"
+    zfs rollback "backup-$DISK/services@$FROM"
     zfs rollback "backup-$DISK/vms_ssd@$FROM"
     zfs rollback "backup-$DISK/vms_hdd@$FROM"
     zfs rollback "backup-$DISK/legacy@$FROM"
@@ -75,7 +75,7 @@ case "$COMMAND" in
     echo "Snapshotting with name=backup-disk-$DISK"
 
     zfs snapshot "rpool/ROOT/xenial@backup-disk-$DISK"
-    zfs snapshot "rpool/docker@backup-disk-$DISK"
+    zfs snapshot "rpool/services@backup-disk-$DISK"
     zfs snapshot "rpool/vms@backup-disk-$DISK"
     zfs snapshot "tank/vms@backup-disk-$DISK"
     zfs snapshot "tank/legacy@backup-disk-$DISK"
@@ -87,7 +87,7 @@ case "$COMMAND" in
     echo "Incremental sync to backup: $FROM -> backup-disk-$DISK"
 
     zfs send -pv -I "rpool/ROOT/xenial@$FROM" "rpool/ROOT/xenial@backup-disk-$DISK" | zfs receive -v "backup-$DISK/xenial"
-    zfs send -pv -I "rpool/docker@$FROM" "rpool/docker@backup-disk-$DISK" | zfs receive -v "backup-$DISK/docker"
+    zfs send -pv -I "rpool/services@$FROM" "rpool/services@backup-disk-$DISK" | zfs receive -v "backup-$DISK/services"
     zfs send -pv -I "rpool/vms@$FROM" "rpool/vms@backup-disk-$DISK" | zfs receive -v "backup-$DISK/vms_ssd"
     zfs send -pv -I "tank/vms@$FROM" "tank/vms@backup-disk-$DISK" | zfs receive -v "backup-$DISK/vms_hdd"
     zfs send -pv -I "tank/legacy@$FROM" "tank/legacy@backup-disk-$DISK" | zfs receive -v "backup-$DISK/legacy"
@@ -105,7 +105,7 @@ case "$COMMAND" in
     echo "Destroying snapshots: $SNAPSHOT"
 
     zfs destroy "rpool/ROOT/xenial@$SNAPSHOT"
-    zfs destroy "rpool/docker@$SNAPSHOT"
+    zfs destroy "rpool/services@$SNAPSHOT"
     zfs destroy "rpool/vms@$SNAPSHOT"
     zfs destroy "tank/vms@$SNAPSHOT"
     zfs destroy "tank/legacy@$SNAPSHOT"
