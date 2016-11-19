@@ -15,7 +15,8 @@ apt-get -y install zfsutils-linux parted >/dev/null
 ls -al /dev/disk/by-id
 
 # ssds
-zfs create -o mountpoint=/mnt/docker rpool/docker
+zfs create -o mountpoint=/mnt/services rpool/services
+zfs create -o mountpoint=/var/lib/docker rpool/docker
 zfs create -o mountpoint=/var/lib/libvirt/images rpool/vms
 
 # Tank
@@ -24,7 +25,7 @@ zpool create -f -o ashift=12 -O compression=lz4 -O casesensitivity=insensitive -
 zfs create -o mountpoint=/mnt/legacy tank/legacy
 zfs create -o mountpoint=/mnt/pictures tank/pictures
 zfs create -o mountpoint=/mnt/sftp tank/sftp
-zfs create -o mountpoint=/mnt/timemachine tank/timemachine
+zfs create -o mountpoint=/mnt/brumath tank/brumath
 zfs create -o mountpoint=/mnt/videos tank/videos
 zfs create -o mountpoint=/mnt/vms tank/vms
 
