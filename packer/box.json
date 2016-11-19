@@ -167,6 +167,7 @@
               ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
               ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
               ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
+              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
               ["set", "{{.Name}}", "--device-add", "net", "--type", "shared"],
               ["set", "{{.Name}}", "--nested-virt", "on"]
             ]

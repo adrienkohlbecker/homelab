@@ -51,6 +51,11 @@ mkfs.ext4 -L snapraid_d3 /dev/sdk1
 parted -s /dev/sdl -- mklabel gpt
 parted -s /dev/sdl -- mkpart primary 0% 100%
 sleep 2
-mkfs.ext4 -L snapraid_p1 /dev/sdl1
+mkfs.ext4 -L snapraid_d4 /dev/sdl1
+
+parted -s /dev/sdm -- mklabel gpt
+parted -s /dev/sdm -- mkpart primary 0% 100%
+sleep 2
+mkfs.ext4 -L snapraid_p1 /dev/sdm1
 
 apt-get -y remove parted >/dev/null
