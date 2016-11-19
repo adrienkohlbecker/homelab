@@ -35,9 +35,10 @@ zpool create -f -o ashift=12 -O compression=lz4 -O mountpoint=none \
 zpool export rpool
 zpool import -o altroot=/mirror -d /dev/disk/by-id rpool
 
-zfs create -o mountpoint=/ rpool/xenial
+zfs create -o mountpoint=none rpool/ROOT
+zfs create -o mountpoint=/ rpool/ROOT/xenial
 
-sed -i 's|^GRUB_CMDLINE_LINUX=""|GRUB_CMDLINE_LINUX="root=ZFS=rpool/xenial boot=zfs rpool=rpool bootfs=rpool/xenial"|' /etc/default/grub
+sed -i 's|^GRUB_CMDLINE_LINUX=""|GRUB_CMDLINE_LINUX="root=ZFS=rpool/ROOT/xenial boot=zfs rpool=rpool bootfs=rpool/ROOT/xenial"|' /etc/default/grub
 
 rsync --one-file-system -aAXHW / /mirror/
 

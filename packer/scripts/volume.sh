@@ -10,7 +10,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get -y update >/dev/null
 apt-get -y install zfsutils-linux parted >/dev/null
 
-# /dev/sdi and /dev/sdj are the first disk on the sata controller => the install is done there
+# /dev/sdj and /dev/sdk are the first disk on the sata controller => the install is done there
 
 ls -al /dev/disk/by-id
 
@@ -43,10 +43,10 @@ parted -s /dev/sdh -- mkpart primary 0% 100%
 sleep 2
 mkfs.ext4 -L snapraid_d2 /dev/sdh1
 
-parted -s /dev/sdk -- mklabel gpt
-parted -s /dev/sdk -- mkpart primary 0% 100%
+parted -s /dev/sdi -- mklabel gpt
+parted -s /dev/sdi -- mkpart primary 0% 100%
 sleep 2
-mkfs.ext4 -L snapraid_d3 /dev/sdk1
+mkfs.ext4 -L snapraid_d3 /dev/sdi1
 
 parted -s /dev/sdl -- mklabel gpt
 parted -s /dev/sdl -- mkpart primary 0% 100%
