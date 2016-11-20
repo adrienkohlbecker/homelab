@@ -32,8 +32,8 @@ iface bond0 inet manual
 
 auto br0
 iface br0 inet dhcp
-  pre-up ifup enp5s0 enp6s0
   bridge_ports bond0
   bridge_stp off
   bridge_fd 0
   bridge_maxwait 0
+  pre-up ifup enp5s0 enp6s0
