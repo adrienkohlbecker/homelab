@@ -1,0 +1,22 @@
+---
+
+- name: Copy the renew script
+  copy:
+    src: letsencrypt_renew.sh
+    dest: /usr/local/bin/letsencrypt_renew
+    mode: 755
+  become: yes
+  tags:
+    - letsencrypt
+
+- name: Schedule the renew script
+  cron:
+    name: letsencrypt_renew
+    minute: 46
+    hour: 10
+    job: /usr/local/bin/letsencrypt_renew
+    user: root
+    cron_file: ansible_letsencrypt_renew
+  become: yes
+  tags:
+    - letsencrypt
