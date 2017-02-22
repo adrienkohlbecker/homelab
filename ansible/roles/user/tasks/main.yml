@@ -23,6 +23,7 @@
     - hddtemp
     - lsof
     - telnet
+    - mosh
   tags:
     - user
 
