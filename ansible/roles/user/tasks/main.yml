@@ -24,6 +24,7 @@
     - lsof
     - telnet
     - mosh
+    - tmux
   tags:
     - user
 
