@@ -5,9 +5,7 @@ deploy_user_additional_groups:
   - adm
   - cdrom
   - dip
-  - lpadmin
   - plugdev
-  - sambashare
   - sudo
   - lxd
   # additional groups for services
