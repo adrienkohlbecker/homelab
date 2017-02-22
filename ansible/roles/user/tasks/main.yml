@@ -61,3 +61,12 @@
   become: yes
   tags:
     - user
+
+- name: Configure git
+  copy:
+    src: gitconfig
+    dest: /home/{{ deploy_user }}/.gitconfig.local
+    mode: 0644
+  become: yes
+  tags:
+    - user
