@@ -52,7 +52,7 @@
     state: present
   become: yes
   tags:
-    - user
+    - ssh
 
 - name: "Ensure permissions on .ssh directory"
   file:
@@ -62,7 +62,7 @@
     mode: 0700
   become: yes
   tags:
-    - user
+    - ssh
 
 - name: "Ensure permissions on authorized_keys file"
   file:
@@ -72,4 +72,4 @@
     mode: 0600
   become: yes
   tags:
-    - user
+    - ssh
