@@ -1,0 +1,49 @@
+---
+
+- name: Install ufw
+  apt:
+    pkg: ufw
+    state: installed
+  become: yes
+  tags:
+    - ufw
+
+- name: Enable IPv6
+  lineinfile:
+    dest: /etc/default/ufw
+    regexp: IPV6=
+    line: IPV6=yes
+  become: yes
+  tags:
+    - ufw
+
+- name: Enable outgoing traffic
+  ufw:
+    direction: outgoing
+    policy: allow
+  become: yes
+  tags:
+    - ufw
+  
+- name: Reject incoming traffic
+  ufw:
+    direction: incoming
+    policy: reject
+  become: yes
+  tags:
+    - ufw
+  
+- name: Allow SSH
+  ufw:
+    rule: allow
+    name: OpenSSH
+  become: yes
+  tags:
+    - ufw
+
+- name:
+  ufw:
+    state: enabled
+  become: yes
+  tags:
+    - ufw
