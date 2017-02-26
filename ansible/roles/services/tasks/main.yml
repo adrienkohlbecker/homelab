@@ -12,14 +12,6 @@
   tags:
     - services
 
-- name: Set-up ejson keys
-  template:
-    src: key
-    dest: "/opt/ejson/keys/{{ ejson_public_key }}"
-  become: yes
-  tags:
-    - services
-
 - name: Add avahi group
   group:
     name: avahi
