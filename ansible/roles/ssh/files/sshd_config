@@ -22,7 +22,8 @@ Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.
 MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,umac-128-etm@openssh.com,hmac-sha2-512,hmac-sha2-256,umac-128@openssh.com
 
 # Password based logins are disabled - only public key based logins are allowed.
-AuthenticationMethods publickey
+# Keyboard interactive added for duo
+AuthenticationMethods publickey,keyboard-interactive
 
 AllowGroups ssh
 
@@ -64,7 +65,8 @@ PermitEmptyPasswords no
 
 # Change to yes to enable challenge-response passwords (beware issues with
 # some PAM modules and threads)
-ChallengeResponseAuthentication no
+# Enabled for duo
+ChallengeResponseAuthentication yes
 
 # Change to no to disable tunnelled clear text passwords
 PasswordAuthentication no
@@ -85,6 +87,7 @@ PrintMotd no
 PrintLastLog yes
 TCPKeepAlive yes
 #UseLogin no
+UseDNS no
 
 #MaxStartups 10:30:60
 #Banner /etc/issue.net
