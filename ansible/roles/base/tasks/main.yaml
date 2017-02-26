@@ -79,7 +79,6 @@
     - logrotate
     - unattended-upgrades
     - update-notifier-common
-    - ubuntu-server
     - ubuntu-minimal
     - grub-pc
     - console-data # keymaps
