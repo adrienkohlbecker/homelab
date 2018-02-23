@@ -1,9 +1,17 @@
 ---
 
-deploy_user: adrien
-deploy_user_group: adrien
-deploy_user_ssh_public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCfaBgkl46ItMXwLhlGxeDLAu8nz5zAi1Ez5hOOO49HKXLZLKgRFrZSLCAwNQ4nik2NgNx6Vrt2gYYOtDJTa6Lay8yFzi2ciDEdXbXYuRHEDafK2vKIAo85alKDUOUZsxQ2t2ObTTcZdk9UUwsxOLR9KtAXJAEtj7Y5IyCGoebNP5edD2VBzX4p3ttW0Ht8uhqUHKKN1aNJuDvGZroNBz/3HXv+iirKUr9jN30kOw8YWRRijmzLVzw/Et5qO61fRoo0oWDYPDnzbcKgutwKkVhXsmcSPogQcdBO9M/P+z6Uy0C8U808Vk6zJPpm5EavaBho7gbA5bXnhsJhEIifOfGb
-
-duo_integration_key: "{{ duo['linode']['duo_integration_key'] }}"
-duo_secret_key: "{{ duo['linode']['duo_secret_key'] }}"
-duo_api_host: "{{ duo['linode']['duo_api_host'] }}"
+deploy_user: vagrant
+deploy_user_group: vagrant
+deploy_user_additional_groups:
+  # default groups for admin
+  - adm
+  - cdrom
+  - dip
+  - plugdev
+  - sudo
+  - lxd
+  # additional groups for services
+  - ssh
+  - libvirtd
+  - docker
+  - media
