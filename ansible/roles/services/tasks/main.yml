@@ -1,17 +1,5 @@
 ---
 
-- name: Create ejson keys directory
-  file:
-    dest: /opt/ejson/keys
-    state: directory
-    recurse: true
-    owner: root
-    group: root
-    mode: 0755
-  become: yes
-  tags:
-    - services
-
 - name: Add avahi group
   group:
     name: avahi

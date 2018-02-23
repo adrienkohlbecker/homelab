@@ -36,7 +36,7 @@ SyslogFacility AUTH
 LogLevel INFO
 
 # Authentication:
-LoginGraceTime 10
+LoginGraceTime 60
 StrictModes yes
 
 # Root login is not allowed for auditing reasons. This is because it's difficult to track which process belongs to which root user:

@@ -13,24 +13,24 @@ modprobe zfs
 
 # SSDs
 parted -a optimal -s /dev/sdb -- mklabel msdos
-parted -a optimal -s /dev/sdb -- mkpart primary zfs 1MB -512MB
-parted -a optimal -s /dev/sdb -- mkpart primary ext2 -512MB 100%
-parted -a optimal -s /dev/sdb -- set 2 boot on
+parted -a optimal -s /dev/sdb -- mkpart primary ext3 1MB 267MB
+parted -a optimal -s /dev/sdb -- mkpart primary zfs 267MB 100%
+parted -a optimal -s /dev/sdb -- set 1 boot on
 parted -a optimal -s /dev/sdb -- print
 sleep 2
 
 parted -a optimal -s /dev/sdc -- mklabel msdos
-parted -a optimal -s /dev/sdc -- mkpart primary zfs 1MB -512MB
-parted -a optimal -s /dev/sdc -- mkpart primary ext2 -512MB 100%
-parted -a optimal -s /dev/sdc -- set 2 boot on
+parted -a optimal -s /dev/sdc -- mkpart primary ext3 1MB 267MB
+parted -a optimal -s /dev/sdc -- mkpart primary zfs 267MB 100%
+parted -a optimal -s /dev/sdc -- set 1 boot on
 parted -a optimal -s /dev/sdc -- print
 sleep 2
 
-mkfs.ext2 -L boot /dev/sdb2
-mkfs.ext2 -L boot2 /dev/sdc2
+mkfs.ext3 -L boot /dev/sdb1
+mkfs.ext3 -L boot2 /dev/sdc1
 
 zpool create -f -o ashift=12 -O compression=lz4 -O mountpoint=none \
-  rpool mirror /dev/sdb1 /dev/sdc1
+  rpool mirror /dev/sdb2 /dev/sdc2
 
 zpool export rpool
 zpool import -o altroot=/mirror -d /dev/disk/by-id rpool
@@ -53,14 +53,14 @@ cat <<EOF > /mirror/etc/fstab
 # that works even if disks are added and removed. See fstab(5).
 #
 # <file system> <mount point>   <type>  <options>       <dump>  <pass>
-LABEL=boot /boot ext2 defaults 0 0
+LABEL=boot /boot ext3 defaults 0 0
 EOF
 
-mount /dev/sdb2 /mirror/boot
+mount /dev/sdb1 /mirror/boot
 rsync --one-file-system -aAXHW /boot/ /mirror/boot/
 umount /boot
 umount /mirror/boot
-mount /dev/sdb2 /boot
+mount /dev/sdb1 /boot
 
 update-grub
 grub-install /dev/sdb

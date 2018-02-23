@@ -57,3 +57,41 @@ Config ZFS
 https://github.com/zfsonlinux/grub/issues/12
 http://blog.ls-al.com/ubuntu-on-a-zfs-root-file-system-for-ubuntu-14-04/
 https://github.com/zfsonlinux/pkg-zfs/wiki/HOWTO-install-Ubuntu-to-a-Native-ZFS-Root-Filesystem
+
+# New user
+
+groupadd -g 1000 adrien
+useradd -g 1000 -u 1000 -s /bin/bash -m adrien
+echo "adrien ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/ansible
+mkdir /home/adrien/.ssh
+echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIINvXcGX/AGw8m0BQeQENMxsYbDMKpfCqcZZv5k5mVGf" > /home/adrien/.ssh/authorized_keys
+chown -R adrien:adrien /home/adrien/.ssh
+chmod 0600 /home/adrien/.ssh/authorized_keys
+chmod 0700 /home/adrien/.ssh
+
+# https://github.com/scaleway/kernel-tools#how-to-build-a-custom-kernel-module
+
+# Determine versions
+arch="$(uname -m)"
+release="$(uname -r)"
+upstream="${release%%-*}"
+local="${release#*-}"
+
+# Get kernel sources
+mkdir -p /usr/src
+wget -O "/usr/src/linux-${upstream}.tar.xz" "https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-${upstream}.tar.xz"
+tar xf "/usr/src/linux-${upstream}.tar.xz" -C /usr/src/
+ln -fns "/usr/src/linux-${upstream}" /usr/src/linux
+ln -fns "/usr/src/linux-${upstream}" "/lib/modules/${release}/build"
+
+# Prepare kernel
+zcat /proc/config.gz > /usr/src/linux/.config
+printf 'CONFIG_LOCALVERSION="%s"\nCONFIG_CROSS_COMPILE=""\n' "${local:+-$local}" >> /usr/src/linux/.config
+wget -O /usr/src/linux/Module.symvers "http://mirror.scaleway.com/kernel/${arch}/${release}/Module.symvers"
+apt-get install -y libssl-dev # adapt to your package manager
+make -C /usr/src/linux prepare modules_prepare
+
+apt-get update
+apt-get install -y zfsutils-linux
+zpool create -f -o ashift=12 -O compression=lz4 -O casesensitivity=insensitive -O normalization=formD -O mountpoint=none tank /dev/nbd1 /dev/nbd2
+zfs create -o mountpoint=/var/lib/docker tank/docker
