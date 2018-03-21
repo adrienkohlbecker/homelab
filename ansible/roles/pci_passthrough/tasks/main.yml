@@ -5,6 +5,7 @@
   register: vfio_pci_ids_list
   with_items: "{{ vfio_device_names }}"
   changed_when: false
+  check_mode: no
   tags:
     - pci_passthrough
 
@@ -13,6 +14,7 @@
   register: pci_stub_pci_ids_list
   with_items: "{{ pci_stub_device_names }}"
   changed_when: false
+  check_mode: no
   tags:
     - pci_passthrough
 
@@ -21,6 +23,7 @@
   register: pci_stub_device_ids_list
   with_items: "{{ pci_stub_pci_ids_list }}"
   changed_when: false
+  check_mode: no
   tags:
     - pci_passthrough
 

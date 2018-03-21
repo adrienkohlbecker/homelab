@@ -132,17 +132,25 @@
   tags:
     - base
 
-- name: Setup unattended-upgrades
+- name: Setup unattended-upgrades (20auto-upgrades)
   copy:
-    src: "{{ item }}"
-    dest: "/etc/apt/apt.conf.d/{{ item }}"
+    src: 20auto-upgrades
+    dest: "/etc/apt/apt.conf.d/20auto-upgrades"
     owner: root
     group: root
-    mode: 644
+    mode: 01204
   become: yes
-  with_items:
-    - 20auto-upgrades
-    - 50unattended-upgrades
+  tags:
+    - base
+
+- name: Setup unattended-upgrades (50unattended-upgrades)
+  copy:
+    src: 50unattended-upgrades
+    dest: "/etc/apt/apt.conf.d/50unattended-upgrades"
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
   tags:
     - base
 

@@ -146,7 +146,7 @@
     dest: /etc/dd-agent/conf.d/docker_daemon.yaml
     mode: 0644
     owner: dd-agent
-    group: root
+    group: dd-agent
   become: yes
   notify: Restart datadog
   tags:
