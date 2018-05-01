@@ -76,7 +76,7 @@
   shell: postmap /etc/postfix/sasl_passwd
   notify: Restart postfix
   become: yes
-  when: sasl_auth|changed
+  when: sasl_auth is changed
   tags:
     - mailer
 
@@ -98,6 +98,6 @@
 - name: Rebuild aliases database
   shell: newaliases
   become: yes
-  when: aliases|changed
+  when: aliases is changed
   tags:
     - mailer

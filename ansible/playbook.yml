@@ -42,7 +42,7 @@
       poll: 0
       become: true
       ignore_errors: true
-      when: reboot_required | changed
+      when: reboot_required is changed
       tags:
         - always
 
@@ -54,6 +54,6 @@
         delay: 10
       delegate_to: 127.0.0.1
       become: false
-      when: reboot_required | changed
+      when: reboot_required is changed
       tags:
         - always
