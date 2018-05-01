@@ -20,7 +20,7 @@
 - name: Install postfix and libsasl2 (for postfix TLS authentication)
   apt:
     pkg: "{{item}}"
-    state: installed
+    state: present
   with_items:
     - postfix
     - libsasl2-modules

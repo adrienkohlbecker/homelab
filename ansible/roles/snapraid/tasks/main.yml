@@ -3,7 +3,7 @@
 - name: Install build-essential
   apt:
     package: build-essential
-    state: installed
+    state: present
   become: yes
   tags:
     - snapraid

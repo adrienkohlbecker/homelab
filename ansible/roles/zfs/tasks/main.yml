@@ -3,7 +3,7 @@
 - name: Install ZoL
   apt:
     package: "{{ item }}"
-    state: installed
+    state: present
   with_items:
     - linux-image-generic
     - zfsutils-linux

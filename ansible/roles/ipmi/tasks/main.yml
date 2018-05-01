@@ -3,7 +3,7 @@
 - name: Install freeipmi
   apt:
     pkg: "{{ item }}"
-    state: installed
+    state: present
   with_items:
     - freeipmi-tools
     - freeipmi-bmc-watchdog

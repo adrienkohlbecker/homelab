@@ -3,7 +3,7 @@
 - name: Install hdparm
   apt:
     pkg: hdparm
-    state: installed
+    state: present
   become: yes
   tags:
     - hdparm

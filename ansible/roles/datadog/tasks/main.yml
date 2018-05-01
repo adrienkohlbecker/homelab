@@ -20,7 +20,7 @@
 - name: Install datadog agent
   apt:
     pkg: datadog-agent
-    state: installed
+    state: present
   become: yes
   tags:
     - datadog

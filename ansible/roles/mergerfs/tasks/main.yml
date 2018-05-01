@@ -3,7 +3,7 @@
 - name: Install fuse
   apt:
     pkg: fuse
-    state: installed
+    state: present
   become: yes
   tags:
     - mergerfs
@@ -11,7 +11,7 @@
 - name: Install mergerfs deps
   apt:
     pkg: "{{item}}"
-    state: installed
+    state: present
   become: yes
   tags:
     - mergerfs

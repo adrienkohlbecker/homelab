@@ -3,7 +3,7 @@
 - name: Install ufw
   apt:
     pkg: ufw
-    state: installed
+    state: present
   become: yes
   tags:
     - ufw
@@ -24,7 +24,7 @@
   become: yes
   tags:
     - ufw
-  
+
 - name: Reject incoming traffic
   ufw:
     direction: incoming
@@ -32,7 +32,7 @@
   become: yes
   tags:
     - ufw
-  
+
 - name: Allow SSH
   ufw:
     rule: allow
