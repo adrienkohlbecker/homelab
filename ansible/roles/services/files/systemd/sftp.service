@@ -1,0 +1,32 @@
+# sftp.service #######################################################################
+[Unit]
+Description=SFTP
+After=docker.service mnt-media.mount zfs-mount.service
+Requires=docker.service mnt-media.mount zfs-mount.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+ExecStartPre=-/usr/bin/docker kill sftp.service
+ExecStartPre=-/usr/bin/docker rm sftp.service
+ExecStartPre=/usr/bin/docker pull akohlbecker/sftp
+ExecStart=/usr/bin/docker run \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
+    --name sftp.service \
+    --publish 2223:22 \
+    --user root \
+    --volume /mnt/sftp/arq:/home/arq/sftp \
+    --volume /mnt/brumath:/home/adrien/brumath \
+    --volume /mnt/sftp/ssh:/etc/ssh/host_keys \
+    akohlbecker/sftp
+ExecStop=/usr/bin/docker stop sftp.service
+
+[Install]
+WantedBy=compose.service

@@ -1,0 +1,31 @@
+# plex.service #######################################################################
+[Unit]
+Description=Plex
+After=docker.service mnt-media.mount zfs-mount.service
+Requires=docker.service mnt-media.mount zfs-mount.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+ExecStartPre=-/usr/bin/docker kill plex.service
+ExecStartPre=-/usr/bin/docker rm plex.service
+ExecStartPre=/usr/bin/docker pull akohlbecker/plex
+ExecStart=/usr/bin/docker run \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
+    --name plex.service \
+    --network services \
+    --publish 32400:32400/tcp \
+    --volume /mnt/docker/plex:/data \
+    --volume /mnt/media:/media \
+    akohlbecker/plex
+ExecStop=/usr/bin/docker stop plex.service
+
+[Install]
+WantedBy=compose.service

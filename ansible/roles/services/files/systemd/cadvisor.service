@@ -1,0 +1,34 @@
+# cadvisor.service ######################################################################e
+[Unit]
+Description=cAdvisor
+After=docker.service
+Requires=docker.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+ExecStartPre=-/usr/bin/docker kill cadvisor.service
+ExecStartPre=-/usr/bin/docker rm cadvisor.service
+ExecStartPre=/usr/bin/docker pull google/cadvisor
+ExecStart=/usr/bin/docker run \
+  --log-driver syslog \
+  --log-opt tag="{{.Name}}" \
+  --name cadvisor.service \
+  --network services \
+  --privileged \
+  --volume /:/rootfs:ro \
+  --volume /dev/zfs:/dev/zfs:ro \
+  --volume /sys:/sys:ro \
+  --volume /var/lib/docker/:/var/lib/docker:ro \
+  --volume /var/run:/var/run:rw \
+  google/cadvisor:latest
+ExecStop=/usr/bin/docker stop cadvisor.service
+
+[Install]
+WantedBy=compose.service

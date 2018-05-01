@@ -1,0 +1,36 @@
+# gitlab.service #######################################################################
+[Unit]
+Description=Gitlab
+After=docker.service zfs-mount.service
+Requires=docker.service zfs-mount.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+ExecStartPre=-/usr/bin/docker kill gitlab.service
+ExecStartPre=-/usr/bin/docker rm gitlab.service
+ExecStartPre=/usr/bin/docker pull akohlbecker/gitlab
+ExecStart=/usr/local/bin/assume_role "arn:aws:iam::000390721279:role/credentials@docker-gitlab" "gitlab.service" \
+  /usr/bin/docker run \
+    --env AWS_ACCESS_KEY_ID \
+    --env AWS_REGION \
+    --env AWS_SECRET_ACCESS_KEY \
+    --env AWS_SESSION_TOKEN \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
+    --name gitlab.service \
+    --network services \
+    --publish 2222:22 \
+    --volume /mnt/docker/gitlab-storage:/mnt/storage \
+    --volume /mnt/docker/gitlab:/var/opt/gitlab \
+    akohlbecker/gitlab
+ExecStop=/usr/bin/docker stop gitlab.service
+
+[Install]
+WantedBy=compose.service
