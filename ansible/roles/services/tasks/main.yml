@@ -148,49 +148,53 @@
   tags:
     - services
 
-- name: Install configuration
-  git:
-    repo: https://github.com/kohlby/compose.git
+- name: Create services directory
+  file:
     dest: /opt/services
-    accept_hostkey: True
-    update: yes
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
   become: yes
-  notify:
-    - Reload unit
-    - Restart compose
   tags:
     - services
 
-- name: Enable service
-  command: /opt/services/install.sh
-  args:
-    chdir: /opt/services
-  register: command_result
-  changed_when: '"Created symlink from" in command_result.stderr'
-  become: yes
-  notify:
-    - Reload unit
-    - Restart compose
-  tags:
-    - services
-
-- name: Copy the update script
+- name: Copy the unit files
   copy:
-    src: services_update.sh
-    dest: /usr/local/bin/services_update
-    mode: 755
+    src: systemd/{{ item }}.service
+    dest: /etc/systemd/system/{{ item }}.service
+    mode: 0644
   become: yes
   tags:
     - services
+  notify:
+    - Restart compose
+  with_items:
+    - avahi
+    - compose
+    - couchpotato
+    - nginx
+    - plex
+    - sabnzbd
+    - samba
+    - sftp
+    - sickrage
 
-- name: Schedule the update script
-  cron:
-    name: services_update
-    minute: 0
-    hour: 5
-    job: /usr/local/bin/services_update
-    user: root
-    cron_file: ansible_services_update
+- name: Enable the services
+  systemd:
+    name: "{{ item }}"
+    enabled: yes
+    daemon_reload: yes
   become: yes
   tags:
     - services
+  with_items:
+    - avahi
+    - compose
+    - couchpotato
+    - nginx
+    - plex
+    - sabnzbd
+    - samba
+    - sftp
+    - sickrage
