@@ -18,7 +18,6 @@
     - pci_passthrough
     - virtualization
     - docker
-    - aws
     - services
     - letsencrypt
     - user
