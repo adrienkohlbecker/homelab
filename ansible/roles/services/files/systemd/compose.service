@@ -1,0 +1,10 @@
+[Unit]
+Description=Docker Compose Services
+
+[Service]
+Type=oneshot
+ExecStart=/bin/echo "started"
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
