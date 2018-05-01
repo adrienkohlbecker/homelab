@@ -1,0 +1,12 @@
+SENDGRID_USERNAME={{ lookup('aws_ssm', 'sabnzbd.sendgrid_username' ) }}
+SENDGRID_PASSWORD={{ lookup('aws_ssm', 'sabnzbd.sendgrid_password' ) }}
+EMAIL_FROM={{ lookup('aws_ssm', 'sabnzbd.email_from' ) }}
+EMAIL_TO={{ lookup('aws_ssm', 'sabnzbd.email_to' ) }}
+NEWSGROUPDIRECT_USERNAME={{ lookup('aws_ssm', 'sabnzbd.newsgroupdirect_username' ) }}
+NEWSGROUPDIRECT_PASSWORD={{ lookup('aws_ssm', 'sabnzbd.newsgroupdirect_password' ) }}
+NZB_KEY={{ lookup('aws_ssm', 'sabnzbd.nzb_key' ) }}
+USENETFARM_USERNAME={{ lookup('aws_ssm', 'sabnzbd.usenetfarm_username' ) }}
+USENETFARM_PASSWORD={{ lookup('aws_ssm', 'sabnzbd.usenetfarm_password' ) }}
+PLEX_TOKEN={{ lookup('aws_ssm', 'plex.token' ) }}
+COUCHPOTATO_API_KEY={{ lookup('aws_ssm', 'couchpotato.api_key' ) }}
+SABNZBD_API_KEY={{ lookup('aws_ssm', 'sabnzbd.api_key' ) }}

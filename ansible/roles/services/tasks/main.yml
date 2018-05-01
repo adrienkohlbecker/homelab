@@ -107,17 +107,6 @@
     - {path: '/mnt/sftp',                   owner: 'root',              group: 'root',              mode: '0755'}
     - {path: '/mnt/videos',                 owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0774'}
 
-- name: Copy the assume_role script
-  copy:
-    src: assume_role.sh
-    dest: /usr/local/bin/assume_role
-    mode: 755
-    owner: root
-    group: root
-  become: yes
-  tags:
-    - services
-
 - name: Copy docker-dbus apparmor profile
   copy:
     src: docker-dbus.apparmor
@@ -148,21 +137,42 @@
   tags:
     - services
 
-- name: Create services directory
+- name: Create env.d directory
   file:
-    dest: /opt/services
+    dest: /etc/env.d
     state: directory
     owner: root
     group: root
-    mode: 0755
+    mode: 0700
   become: yes
   tags:
     - services
+
+- name: Copy the credentials
+  template:
+    src: environment/{{ item }}.j2
+    dest: /etc/env.d/{{ item }}
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+  notify:
+    - Restart compose
+  with_items:
+    - couchpotato
+    - nginx
+    - sabnzbd
+    - samba
+    - sickrage
 
 - name: Copy the unit files
   copy:
     src: systemd/{{ item }}.service
     dest: /etc/systemd/system/{{ item }}.service
+    owner: root
+    group: root
     mode: 0644
   become: yes
   tags:
