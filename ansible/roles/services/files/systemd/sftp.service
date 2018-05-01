@@ -17,6 +17,7 @@ ExecStartPre=-/usr/bin/docker kill sftp.service
 ExecStartPre=-/usr/bin/docker rm sftp.service
 ExecStartPre=/usr/bin/docker pull akohlbecker/sftp
 ExecStart=/usr/bin/docker run \
+    --init \
     --log-driver syslog \
     --log-opt tag="{{.Name}}" \
     --name sftp.service \

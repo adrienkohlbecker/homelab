@@ -18,6 +18,7 @@ ExecStartPre=-/usr/bin/docker rm sickrage.service
 ExecStartPre=/usr/bin/docker pull akohlbecker/sickrage
 ExecStart=/usr/local/bin/assume_role "arn:aws:iam::000390721279:role/credentials@docker-sickrage" "sickrage.service" \
   /usr/bin/docker run \
+    --init \
     --env AWS_ACCESS_KEY_ID \
     --env AWS_REGION \
     --env AWS_SECRET_ACCESS_KEY \

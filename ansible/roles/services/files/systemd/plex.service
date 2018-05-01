@@ -17,6 +17,7 @@ ExecStartPre=-/usr/bin/docker kill plex.service
 ExecStartPre=-/usr/bin/docker rm plex.service
 ExecStartPre=/usr/bin/docker pull akohlbecker/plex
 ExecStart=/usr/bin/docker run \
+    --init \
     --log-driver syslog \
     --log-opt tag="{{.Name}}" \
     --name plex.service \
