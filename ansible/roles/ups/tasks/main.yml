@@ -3,7 +3,7 @@
 - name: Install apcupsd & mailutils (for email notifications)
   apt:
     pkg: "{{item}}"
-    state: installed
+    state: present
   with_items:
     - apcupsd
     - mailutils

@@ -3,7 +3,7 @@
 - name: Install smartctl
   apt:
     pkg: smartmontools
-    state: installed
+    state: present
   become: yes
   tags:
     - smart

@@ -3,7 +3,7 @@
 - name: Install virtualization tools
   apt:
     pkg: "{{item}}"
-    state: installed
+    state: present
   become: yes
   tags:
     - virtualization

@@ -3,7 +3,7 @@
 - name: Install aws cli
   apt:
     pkg: awscli
-    state: installed
+    state: present
   become: yes
   tags:
     - aws
