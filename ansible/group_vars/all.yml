@@ -1,9 +1,24 @@
 ---
 
+deploy_user: adrien
+deploy_user_group: adrien
 deploy_user_uid: 1000
 deploy_user_gid: 1000
 deploy_user_password: $6$9WL6ah8B.K/Kk$x6tt2LKJxKYyXxBRIO1bkKzKvZ.eyysAMI4M60nfYIWk6nihR8W8g/bIdp9siG.X47wfQ2i9wraY1ZGH.UKrK.
 deploy_user_ssh_public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCzyRYuG4aVkDtDNNBmTxPlMsobC3VJ5Z8W0FX1TgTzy3/bROCcdIoDLMoiOqjWyoc3fsVpVL/j7ye+vh2tHJtNnkCXltI1SmdOuS+o0v1qrMA+H8AqjF+i/aHqCyEjtvMnRycefUJCsa2q6tHEnCkZdMhGnKhzi119DOf+GODeuwWAt18MYKs0490i+ejBVsDzFS0rvjFLmkB3crI4QYxn9hA4K6tYrsHopKfim3pVH9eFen+Y7PyZcsw91JWHE/lFG6mgfjpLXyZMR6k4hDfIVC626kXRVerS8X2ixOWhkkdk4NO0vf8pumVdwt6+HAxI5nbPOxD8uwxQJAQ3BQfAFUJKu0riTCG77di4UBVTtiYfPLE6iuYONLsYrdviS3MO8jh/V2OQlTtZpAiJnlXYE6lkxfQHbupejjYCkOl8X9L83+Ifb2grYK9hNKafmARtoQ4Y10EWYCOuGl7KDSqOiBETn86MjMKdWVRwiCs4zqKlD3eTLJysZugosd8vTS3gSZDjddKA7bETDKyf9724OXAR8Ce+LCJ6xK2lquaIqZOT9sB357jGq16goXUkkB+HZppVNpdS5P4acqZ7NjiY0GgswIVz9x1/OFXxtJU3YbXNHbD/af42fT2WEuY9GIKFIMNtoZvp4LN7GCQWugKvUZyG4zHN3b7nm2jr1DGDMQ==
+deploy_user_additional_groups:
+  # default groups for admin
+  - adm
+  - cdrom
+  - dip
+  - plugdev
+  - sudo
+  - lxd
+  # additional groups for services
+  - ssh
+  - libvirtd
+  - docker
+  - media
 
 mailer_domain: kohlby.fr
 smtp_host: smtp.sendgrid.net
