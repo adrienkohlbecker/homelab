@@ -155,7 +155,12 @@
     - base
 
 - name: Download bash framework
-  get_url: url=https://raw.githubusercontent.com/adrienkohlbecker/bash-framework/master/main.sh dest=/usr/local/lib/bash-framework mode=755 force=yes
+  copy:
+    src: bash-framework.sh
+    dest: /usr/local/lib/bash-framework
+    owner: root
+    group: root
+    mode: 0755
   become: yes
   tags:
     - base
