@@ -72,37 +72,12 @@
     - ssh
 
 - name: Configure PAM
-  lineinfile:
+  copy:
+    src: pam_sshd
     dest: /etc/pam.d/sshd
-    regexp: '^#? ?@include common-auth'
-    line: '# @include common-auth'
-  become: yes
-  tags:
-    - ssh
-
-- name: Configure PAM
-  lineinfile:
-    dest: /etc/pam.d/sshd
-    line: auth  [success=1 default=ignore] /lib64/security/pam_duo.so
-    insertafter: '^#? ?@include common-auth'
-  become: yes
-  tags:
-    - ssh
-
-- name: Configure PAM
-  lineinfile:
-    dest: /etc/pam.d/sshd
-    line: auth  requisite pam_deny.so
-    insertafter: auth  [success=1 default=ignore] /lib64/security/pam_duo.so
-  become: yes
-  tags:
-    - ssh
-
-- name: Configure PAM
-  lineinfile:
-    dest: /etc/pam.d/sshd
-    line: auth  required pam_permit.so
-    insertafter: auth  requisite pam_deny.so
+    owner: root
+    group: root
+    mode: 0644
   become: yes
   tags:
     - ssh

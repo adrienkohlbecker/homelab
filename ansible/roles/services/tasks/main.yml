@@ -90,8 +90,6 @@
   with_items:
     - {path: '/mnt/media/Movies',           owner: 'media',             group: 'media',             mode: '0774'}
     - {path: '/mnt/media/TV',               owner: 'media',             group: 'media',             mode: '0774'}
-    - {path: '/mnt/media/Music',            owner: 'media',             group: 'media',             mode: '0774'}
-    - {path: '/mnt/media/Other',            owner: 'media',             group: 'media',             mode: '0774'}
     - {path: '/mnt/media/.tmp',             owner: 'media',             group: 'media',             mode: '0775'}
     - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'media',             group: 'media',             mode: '0775'}
     - {path: '/mnt/media/.tmp/couchpotato', owner: 'media',             group: 'media',             mode: '0774'}
@@ -134,7 +132,7 @@
 
 - name: Register new apparmor profile
   shell: apparmor_parser -r -W /etc/apparmor.d/docker-dbus
-  when: docker_dbus|changed
+  when: docker_dbus is changed
   become: yes
   tags:
     - services
