@@ -15,7 +15,3 @@ deploy_user_additional_groups:
   - libvirtd
   - docker
   - media
-
-duo_integration_key: "{{ duo['hypervisor']['duo_integration_key'] }}"
-duo_secret_key: "{{ duo['hypervisor']['duo_secret_key'] }}"
-duo_api_host: "{{ duo['hypervisor']['duo_api_host'] }}"

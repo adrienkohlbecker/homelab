@@ -30,7 +30,7 @@
 - name: Install aptitude
   apt:
     pkg: aptitude
-    state: installed
+    state: present
   become: yes
   tags:
     - base
@@ -71,7 +71,7 @@
 - name: Install base packages
   apt:
     pkg: "{{item}}"
-    state: installed
+    state: present
   become: yes
   with_items:
     - acpid
