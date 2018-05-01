@@ -1,0 +1,2 @@
+NGINX_DHPARAM={{ lookup('aws_ssm', 'nginx.nginx_dhparam' ) }}
+ADRIEN_HTPASSWD={{ lookup('aws_ssm', 'nginx.adrien_htpasswd' ) }}
