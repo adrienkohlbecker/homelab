@@ -10,7 +10,7 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get -y update >/dev/null
 apt-get -y install zfsutils-linux parted >/dev/null
 
-# /dev/sdj and /dev/sdk are the first disk on the sata controller => the install is done there
+# /dev/sda and /dev/sdb are the first disk on the sata controller => the install is done there
 
 ls -al /dev/disk/by-id
 
@@ -21,7 +21,7 @@ zfs create -o mountpoint=/var/lib/libvirt/images rpool/vms
 
 # Tank
 zpool create -f -o ashift=12 -O compression=lz4 -O casesensitivity=insensitive -O normalization=formD -O mountpoint=none \
-  tank raidz2 /dev/sda /dev/sdb /dev/sdc /dev/sdd /dev/sde /dev/sdf
+  tank raidz2 /dev/sdc /dev/sdd /dev/sde /dev/sdf /dev/sdg /dev/sdh
 zfs create -o mountpoint=/mnt/legacy tank/legacy
 zfs create -o mountpoint=/mnt/pictures tank/pictures
 zfs create -o mountpoint=/mnt/sftp tank/sftp
@@ -33,20 +33,20 @@ zpool export tank
 zpool import -d /dev/disk/by-id tank
 
 # Media
-parted -s /dev/sdg -- mklabel gpt
-parted -s /dev/sdg -- mkpart primary 0% 100%
-sleep 2
-mkfs.ext4 -L snapraid_d1 /dev/sdg1
-
-parted -s /dev/sdh -- mklabel gpt
-parted -s /dev/sdh -- mkpart primary 0% 100%
-sleep 2
-mkfs.ext4 -L snapraid_d2 /dev/sdh1
-
 parted -s /dev/sdi -- mklabel gpt
 parted -s /dev/sdi -- mkpart primary 0% 100%
 sleep 2
-mkfs.ext4 -L snapraid_d3 /dev/sdi1
+mkfs.ext4 -L snapraid_d1 /dev/sdi1
+
+parted -s /dev/sdj -- mklabel gpt
+parted -s /dev/sdj -- mkpart primary 0% 100%
+sleep 2
+mkfs.ext4 -L snapraid_d2 /dev/sdj1
+
+parted -s /dev/sdk -- mklabel gpt
+parted -s /dev/sdk -- mkpart primary 0% 100%
+sleep 2
+mkfs.ext4 -L snapraid_d3 /dev/sdk1
 
 parted -s /dev/sdl -- mklabel gpt
 parted -s /dev/sdl -- mkpart primary 0% 100%

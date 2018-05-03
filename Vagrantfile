@@ -29,7 +29,7 @@ Vagrant.configure(2) do |config|
   # Every Vagrant development environment requires a box. You can search for
   # boxes at https://atlas.hashicorp.com/search.
   config.vm.box = 'hypervisor'
-  config.vm.box_url = 'file://parallels.box'
+  config.vm.box_url = 'file://vmware.box'
 
   # Disable automatic box update checking. If you disable this, then
   # boxes will only be checked for updates when the user runs
@@ -49,9 +49,6 @@ Vagrant.configure(2) do |config|
   # Bridged networks make the machine appear as another physical device on
   # your network.
   # config.vm.network "public_network"
-
-  # auto_config is needed due to : https://github.com/mitchellh/vagrant/issues/7155
-  config.vm.network 'private_network', type: 'dhcp', auto_config: false
 
   # Share an additional folder to the guest VM. The first argument is
   # the path on the host to the actual folder. The second argument is
@@ -73,10 +70,14 @@ Vagrant.configure(2) do |config|
   #
   # View the documentation for the provider you are using for more
   # information on available options.
-  config.vm.provider 'parallels' do |prl|
-    prl.name = 'hypervisor_box'
-    prl.memory = VM_MEMORY
-    prl.cpus = VM_CPU
+  config.vm.provider 'vmware_desktop' do |vmw|
+    vmw.gui = true
+    vmw.vmx["memsize"] = VM_MEMORY
+    vmw.vmx["numvcpus"] = VM_CPU
+    vmw.vmx["ethernet0.virtualdev"] = "vmxnet3"
+
+    # https://www.vagrantup.com/docs/vmware/boxes.html#vmx-whitelisting
+    vmw.vmx["ethernet0.pcislotnumber"] = "192"
   end
 
   # Define a Vagrant Push strategy for pushing to Atlas. Other push strategies

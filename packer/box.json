@@ -6,6 +6,7 @@
                 "{{ template_dir }}/scripts/vagrant.sh",
                 "{{ template_dir }}/scripts/vmware.sh"
             ],
+            "expect_disconnect": true,
             "only": [
               "hypervisor-base"
             ],
@@ -115,57 +116,37 @@
             "shutdown_command": "echo '/sbin/halt -h -p' > /tmp/shutdown.sh; echo 'vagrant'|sudo -S bash '/tmp/shutdown.sh'",
             "vmx_data": {
                 "memsize": 1536,
-                "numvcpus": 2
+                "numvcpus": 2,
+                "ethernet0.virtualdev" : "vmxnet3",
+                "scsi0.virtualdev" : "pvscsi",
+                "virtualhw.version" : "14"
             }
         },
         {
-            "type": "parallels-pvm",
+            "type": "vmware-vmx",
             "name": "hypervisor-zfs",
-            "source_path": "output-hypervisor-base/packer-hypervisor-base.pvm",
+            "source_path": "output-hypervisor-base-with-disks/packer-hypervisor-base.vmx",
             "boot_wait": "10s",
             "ssh_username": "vagrant",
             "ssh_password": "vagrant",
             "ssh_port": 22,
             "ssh_wait_timeout": "10000s",
             "shutdown_command": "echo '/sbin/halt -h -p' > /tmp/shutdown.sh; echo 'vagrant'|sudo -S bash '/tmp/shutdown.sh'",
-            "parallels_tools_mode": "disable",
             "vm_name": "packer-hypervisor-zfs",
-            "prlctl": [
-              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "10000"],
-              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "10000"]
-            ],
-            "prlctl_post": [
-                ["set", "packer-hypervisor-zfs", "--device-del", "hdd0", "--destroy-image"],
-                ["set", "packer-hypervisor-zfs", "--device-bootorder", "hdd1"]
-            ]
+            "vmx_data": {
+            }
         },
         {
-            "type": "parallels-pvm",
+            "type": "vmware-vmx",
             "name": "hypervisor-final",
-            "source_path": "output-hypervisor-zfs/packer-hypervisor-zfs.pvm",
+            "source_path": "output-hypervisor-zfs-without-root/packer-hypervisor-zfs.vmx",
             "boot_wait": "10s",
             "ssh_username": "vagrant",
             "ssh_password": "vagrant",
             "ssh_port": 22,
             "ssh_wait_timeout": "10000s",
             "shutdown_command": "echo '/sbin/halt -h -p' > /tmp/shutdown.sh; echo 'vagrant'|sudo -S bash '/tmp/shutdown.sh'",
-            "parallels_tools_mode": "disable",
-            "vm_name": "packer-hypervisor-final",
-            "prlctl": [
-              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
-              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
-              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
-              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
-              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
-              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
-              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
-              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
-              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
-              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
-              ["set", "{{.Name}}", "--device-add", "hdd", "--size", "1000"],
-              ["set", "{{.Name}}", "--device-add", "net", "--type", "shared"],
-              ["set", "{{.Name}}", "--nested-virt", "on"]
-            ]
+            "vm_name": "packer-hypervisor-final"
         }
     ],
     "post-processors": [
