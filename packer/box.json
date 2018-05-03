@@ -97,7 +97,7 @@
               "language=en ",
               "country=US ",
               "locale=en_US.UTF-8 ",
-              "hostname={{ .Name }} ",
+              "hostname=box ",
               "console-setup/ask_detect=false ",
               "keyboard-configuration/layoutcode=us ",
               "vga=788 noprompt quiet -- <enter>"
@@ -119,7 +119,8 @@
                 "numvcpus": 2,
                 "ethernet0.virtualdev" : "vmxnet3",
                 "scsi0.virtualdev" : "pvscsi",
-                "virtualhw.version" : "14"
+                "virtualhw.version" : "14",
+                "disk.EnableUUID": true
             }
         },
         {
