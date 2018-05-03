@@ -3,6 +3,8 @@
 deploy_user: vagrant
 deploy_user_group: vagrant
 
+duo_enabled: false
+
 aws_ssm_couchpotato_api_key: changeme
 aws_ssm_datadog_api_key: changeme
 aws_ssm_duo_api_host: changeme
