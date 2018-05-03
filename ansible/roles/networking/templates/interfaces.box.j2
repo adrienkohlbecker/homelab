@@ -6,24 +6,14 @@ source /etc/network/interfaces.d/*
 # The loopback network interface
 auto lo
 iface lo inet loopback
-# iface lo inet6 loopback
 
 # The primary network interface
-auto enp0s5
-iface enp0s5 inet manual
-# This is an autoconfigured IPv6 interface
-# iface enp0s5 inet6 auto
-
-# The secondary network interface
-auto enp0s6
-iface enp0s6 inet dhcp
-# This is an autoconfigured IPv6 interface
-# iface enp0s6 inet6 auto
+auto ens192
+iface ens192 inet dhcp
 
 auto br0
 iface br0 inet dhcp
-  hwaddress 00:1c:42:53:f8:f7 # fix the MAC to enp0s5 for DHCP
-  bridge_ports enp0s5
+  bridge_ports ens192
   bridge_stp off
   bridge_fd 0
   bridge_maxwait 0

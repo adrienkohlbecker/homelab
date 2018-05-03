@@ -1,14 +1,14 @@
 
-SABNZBD_API_KEY={{ lookup('aws_ssm', 'sabnzbd.api_key' ) }}
-SICKRAGE_API_KEY={{ lookup('aws_ssm', 'sickrage.sickrage_api_key' ) }}
-ENCRYPTION_SECRET={{ lookup('aws_ssm', 'sickrage.encryption_secret' ) }}
-WEB_COOKIE_SECRET={{ lookup('aws_ssm', 'sickrage.web_cookie_secret' ) }}
-NZBGEEK_API_KEY={{ lookup('aws_ssm', 'sickrage.nzbgeek_api_key' ) }}
-DOGNZB_API_KEY={{ lookup('aws_ssm', 'sickrage.dognzb_api_key' ) }}
-PLEX_TOKEN={{ lookup('aws_ssm', 'plex.token' ) }}
-ANIDB_USERNAME={{ lookup('aws_ssm', 'sickrage.anidb_username' ) }}
-ANIDB_PASSWORD={{ lookup('aws_ssm', 'sickrage.anidb_password' ) }}
-OPENSUBTITLES_USERNAME={{ lookup('aws_ssm', 'sickrage.opensubtitles_username' ) }}
-OPENSUBTITLES_PASSWORD={{ lookup('aws_ssm', 'sickrage.opensubtitles_password' ) }}
-ADDIC7ED_USERNAME={{ lookup('aws_ssm', 'sickrage.addic7ed_username' ) }}
-ADDIC7ED_PASSWORD={{ lookup('aws_ssm', 'sickrage.addic7ed_password' ) }}
+SABNZBD_API_KEY={{ aws_ssm_sabnzbd_api_key }}
+SICKRAGE_API_KEY={{ aws_ssm_sickrage_sickrage_api_key }}
+ENCRYPTION_SECRET={{ aws_ssm_sickrage_encryption_secret }}
+WEB_COOKIE_SECRET={{ aws_ssm_sickrage_web_cookie_secret }}
+NZBGEEK_API_KEY={{ aws_ssm_sickrage_nzbgeek_api_key }}
+DOGNZB_API_KEY={{ aws_ssm_sickrage_dognzb_api_key }}
+PLEX_TOKEN={{ aws_ssm_plex_token }}
+ANIDB_USERNAME={{ aws_ssm_sickrage_anidb_username }}
+ANIDB_PASSWORD={{ aws_ssm_sickrage_anidb_password }}
+OPENSUBTITLES_USERNAME={{ aws_ssm_sickrage_opensubtitles_username }}
+OPENSUBTITLES_PASSWORD={{ aws_ssm_sickrage_opensubtitles_password }}
+ADDIC7ED_USERNAME={{ aws_ssm_sickrage_addic7ed_username }}
+ADDIC7ED_PASSWORD={{ aws_ssm_sickrage_addic7ed_password }}

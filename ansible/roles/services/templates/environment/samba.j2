@@ -1,2 +1,2 @@
-PASSWORD_ADRIEN={{ lookup('aws_ssm', 'samba.password_adrien' ) }}
-PASSWORD_SONOS={{ lookup('aws_ssm', 'samba.password_sonos' ) }}
+PASSWORD_ADRIEN={{ aws_ssm_samba_password_adrien }}
+PASSWORD_SONOS={{ aws_ssm_samba_password_sonos }}
