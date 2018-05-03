@@ -4,7 +4,7 @@
             "type": "shell",
             "scripts": [
                 "{{ template_dir }}/scripts/vagrant.sh",
-                "{{ template_dir }}/scripts/parallels.sh",
+                "{{ template_dir }}/scripts/vmware.sh"
             ],
             "only": [
               "hypervisor-base"
@@ -77,7 +77,7 @@
     ],
     "builders": [
         {
-            "type": "parallels-iso",
+            "type": "vmware-iso",
             "name": "hypervisor-base",
             "boot_command": [
               "<esc><f6><esc>",
@@ -113,13 +113,10 @@
             "ssh_port": 22,
             "ssh_wait_timeout": "10000s",
             "shutdown_command": "echo '/sbin/halt -h -p' > /tmp/shutdown.sh; echo 'vagrant'|sudo -S bash '/tmp/shutdown.sh'",
-            "parallels_tools_mode": "upload",
-            "parallels_tools_guest_path": "prl-tools.iso",
-            "parallels_tools_flavor": "lin",
-            "prlctl": [
-                ["set", "{{.Name}}", "--memsize", "1536"],
-                ["set", "{{.Name}}", "--cpus", "2"]
-            ]
+            "vmx_data": {
+                "memsize": 1536,
+                "numvcpus": 2
+            }
         },
         {
             "type": "parallels-pvm",

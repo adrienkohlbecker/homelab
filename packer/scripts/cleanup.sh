@@ -15,7 +15,6 @@ unset HISTFILE
 echo 'Cleanup log files'
 find /var/log -type f | while read f; do echo -ne '' > "$f"; done;
 
-apt-get -y remove facter
 apt-get -y autoremove
 
 # Remove APT cache
