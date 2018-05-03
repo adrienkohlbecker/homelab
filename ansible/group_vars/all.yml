@@ -1,7 +1,5 @@
 ---
 
-deploy_user: adrien
-deploy_user_group: adrien
 deploy_user_uid: 1000
 deploy_user_gid: 1000
 deploy_user_password: $6$9WL6ah8B.K/Kk$x6tt2LKJxKYyXxBRIO1bkKzKvZ.eyysAMI4M60nfYIWk6nihR8W8g/bIdp9siG.X47wfQ2i9wraY1ZGH.UKrK.
@@ -13,7 +11,8 @@ deploy_user_additional_groups:
   - dip
   - plugdev
   - sudo
-  - lxd
+  - lpadmin
+  - sambashare
   # additional groups for services
   - ssh
   - libvirtd
@@ -22,15 +21,15 @@ deploy_user_additional_groups:
 
 mailer_domain: kohlby.fr
 smtp_host: smtp.sendgrid.net
-smtp_user: "{{ lookup('aws_ssm', 'sendgrid.user' ) }}"
-smtp_password: "{{ lookup('aws_ssm', 'sendgrid.password' ) }}"
+smtp_user: "{{ aws_ssm_sendgrid_user }}"
+smtp_password: "{{ aws_ssm_sendgrid_password }}"
 root_email: adrien.kohlbecker@gmail.com
 
-datadog_api_key: "{{ lookup('aws_ssm', 'datadog.api_key' ) }}"
+datadog_api_key: "{{ aws_ssm_datadog_api_key }}"
 
-duo_integration_key: "{{ lookup('aws_ssm', 'duo.integration_key' ) }}"
-duo_secret_key: "{{ lookup('aws_ssm', 'duo.secret_key' ) }}"
-duo_api_host: "{{ lookup('aws_ssm', 'duo.api_host' ) }}"
+duo_integration_key: "{{ aws_ssm_duo_integration_key }}"
+duo_secret_key: "{{ aws_ssm_duo_secret_key }}"
+duo_api_host: "{{ aws_ssm_duo_api_host }}"
 
 # Used to grep ids from lspci
 vfio_device_names:

@@ -1,2 +1,2 @@
-NGINX_DHPARAM={{ lookup('aws_ssm', 'nginx.nginx_dhparam' ) | b64encode }}
-ADRIEN_HTPASSWD={{ lookup('aws_ssm', 'nginx.adrien_htpasswd' ) }}
+NGINX_DHPARAM={{ aws_ssm_nginx_nginx_dhparam | b64encode }}
+ADRIEN_HTPASSWD={{ aws_ssm_nginx_adrien_htpasswd }}

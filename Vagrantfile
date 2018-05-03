@@ -75,6 +75,7 @@ Vagrant.configure(2) do |config|
     vmw.vmx["memsize"] = VM_MEMORY
     vmw.vmx["numvcpus"] = VM_CPU
     vmw.vmx["ethernet0.virtualdev"] = "vmxnet3"
+    vmw.vmx["vhv.enable"] = true # nested virtualization
 
     # https://www.vagrantup.com/docs/vmware/boxes.html#vmx-whitelisting
     vmw.vmx["ethernet0.pcislotnumber"] = "192"

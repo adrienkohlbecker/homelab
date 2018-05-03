@@ -1,4 +1,4 @@
-SABNZBD_API_KEY={{ lookup('aws_ssm', 'sabnzbd.api_key' ) }}
-COUCHPOTATO_API_KEY={{ lookup('aws_ssm', 'couchpotato.api_key' ) }}
-NZBGEEK_API_KEY={{ lookup('aws_ssm', 'nzbgeek.api_key' ) }}
-PLEX_TOKEN={{ lookup('aws_ssm', 'plex.token' ) }}
+SABNZBD_API_KEY={{ aws_ssm_sabnzbd_api_key }}
+COUCHPOTATO_API_KEY={{ aws_ssm_couchpotato_api_key }}
+NZBGEEK_API_KEY={{ aws_ssm_nzbgeek_api_key }}
+PLEX_TOKEN={{ aws_ssm_plex_token }}
