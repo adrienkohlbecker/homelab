@@ -5,8 +5,6 @@
             "scripts": [
                 "{{ template_dir }}/scripts/vagrant.sh",
                 "{{ template_dir }}/scripts/parallels.sh",
-                "{{ template_dir }}/scripts/cleanup.sh",
-                "{{ template_dir }}/scripts/zerodisk.sh"
             ],
             "only": [
               "hypervisor-base"
