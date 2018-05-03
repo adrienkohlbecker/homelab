@@ -11,7 +11,7 @@
 
 - name: Add datadog repository
   apt_repository:
-    repo: deb http://apt.datadoghq.com/ stable main
+    repo: deb http://apt.datadoghq.com/ stable 6
     state: present
   become: yes
   tags:
@@ -26,9 +26,9 @@
     - datadog
 
 - name: Install default config
-  shell: cp /etc/dd-agent/datadog.conf.example /etc/dd-agent/datadog.conf
+  shell: cp /etc/datadog-agent/datadog.yaml.example /etc/datadog-agent/datadog.yaml
   args:
-    creates: /etc/dd-agent/datadog.conf
+    creates: /etc/datadog-agent/datadog.yaml
   notify: Restart datadog
   become: yes
   tags:
@@ -36,7 +36,7 @@
 
 - name: Configure the agent
   lineinfile:
-    dest: /etc/dd-agent/datadog.conf
+    dest: /etc/datadog-agent/datadog.yaml
     regexp: "{{ item.regexp }}"
     line: "{{ item.line }}"
     state: present

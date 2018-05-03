@@ -24,8 +24,8 @@
 
 - name: Download mergerfs
   get_url:
-    url: https://github.com/trapexit/mergerfs/releases/download/2.14.0/mergerfs_2.14.0.ubuntu-xenial_amd64.deb
-    dest: /usr/local/src/mergerfs_2.14.0.ubuntu-xenial_amd64.deb
+    url: https://github.com/trapexit/mergerfs/releases/download/2.24.2/mergerfs_2.24.2.ubuntu-xenial_amd64.deb
+    dest: /usr/local/src/mergerfs_2.24.2.ubuntu-xenial_amd64.deb
   become: yes
   register: downloaded_mergerfs
   tags:
@@ -33,7 +33,7 @@
 
 - name: Install mergerfs
   apt:
-    deb: /usr/local/src/mergerfs_2.14.0.ubuntu-xenial_amd64.deb
+    deb: /usr/local/src/mergerfs_2.24.2.ubuntu-xenial_amd64.deb
   become: yes
   when: downloaded_mergerfs is changed
   tags:
@@ -80,7 +80,7 @@
     name: /mnt/media
     src: /mnt/snapraid_d1/media:/mnt/snapraid_d2/media:/mnt/snapraid_d3/media:/mnt/snapraid_d4/media
     fstype: fuse.mergerfs
-    opts: defaults,allow_other,fsname=media
+    opts: defaults,allow_other,direct_io,use_ino,hard_remove,fsname=media
     state: mounted
   become: yes
   tags:
