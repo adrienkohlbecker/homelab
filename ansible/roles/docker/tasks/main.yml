@@ -25,29 +25,6 @@
   tags:
     - docker
 
-- name: Create docker systemd conf directory
-  file:
-    dest: /etc/systemd/system/docker.service.d
-    state: directory
-    owner: root
-    group: root
-    mode: 0755
-  become: yes
-  tags:
-    - docker
-
-- name: Set-up docker systemd overrides
-  copy:
-    src: docker.conf
-    dest: /etc/systemd/system/docker.service.d/docker.conf
-    owner: root
-    group: root
-    mode: 0644
-  become: yes
-  notify: Restart docker
-  tags:
-    - docker
-
 - name: Add deploy user to docker group
   user:
     name: "{{ deploy_user }}"
