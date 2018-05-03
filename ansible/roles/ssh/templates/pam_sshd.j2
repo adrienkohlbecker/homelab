@@ -1,10 +1,14 @@
 # PAM configuration for the Secure Shell service
 
 # Standard Un*x authentication.
+{% if duo_enabled %}
 # @include common-auth
 auth  [success=1 default=ignore] /lib64/security/pam_duo.so
 auth  requisite pam_deny.so
 auth  required pam_permit.so
+{% else %}
+@include common-auth
+{% endif %}
 
 # Disallow non-root logins when /etc/nologin exists.
 account    required     pam_nologin.so

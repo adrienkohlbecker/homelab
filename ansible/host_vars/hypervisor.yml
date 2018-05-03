@@ -3,6 +3,8 @@
 deploy_user: adrien
 deploy_user_group: adrien
 
+duo_enabled: true
+
 aws_ssm_couchpotato_api_key: "{{ lookup('aws_ssm', 'couchpotato.api_key' ) }}"
 aws_ssm_datadog_api_key: "{{ lookup('aws_ssm', 'datadog.api_key' ) }}"
 aws_ssm_duo_api_host: "{{ lookup('aws_ssm', 'duo.api_host' ) }}"
