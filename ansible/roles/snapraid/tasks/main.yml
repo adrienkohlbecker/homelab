@@ -11,8 +11,8 @@
 - name: Download Snapraid
   unarchive:
     dest: /usr/local/src
-    src: https://github.com/amadvance/snapraid/releases/download/v10.0/snapraid-10.0.tar.gz
-    creates: /usr/local/src/snapraid-10.0
+    src: https://github.com/amadvance/snapraid/releases/download/v11.2/snapraid-11.2.tar.gz
+    creates: /usr/local/src/snapraid-11.2
     copy: no
   register: downloaded_snapraid
   become: yes
@@ -22,7 +22,7 @@
 - name: Compile and install Snapraid
   shell: ./configure && make && make install
   args:
-    chdir: /usr/local/src/snapraid-10.0
+    chdir: /usr/local/src/snapraid-11.2
   when: downloaded_snapraid is changed
   become: yes
   tags:
