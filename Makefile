@@ -1,3 +1,9 @@
+ansible-apply:
+	(cd ansible; aws-vault exec home -- env OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook --inventory hosts.ini --limit hypervisor --diff ${ANSIBLE_OPTS} playbook.yml)
+
+ansible-check:
+	(cd ansible; aws-vault exec home -- env OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook --inventory hosts.ini --limit hypervisor --diff --check ${ANSIBLE_OPTS} playbook.yml)
+
 packer-base:
 	rm -rf output-hypervisor-base
 	packer build -only hypervisor-base packer/box.json
