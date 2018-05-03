@@ -25,24 +25,13 @@
   tags:
     - datadog
 
-- name: Install default config
-  shell: cp /etc/datadog-agent/datadog.yaml.example /etc/datadog-agent/datadog.yaml
-  args:
-    creates: /etc/datadog-agent/datadog.yaml
-  notify: Restart datadog
-  become: yes
-  tags:
-    - datatog
-
 - name: Configure the agent
-  lineinfile:
+  template:
+    src: datadog.yaml
     dest: /etc/datadog-agent/datadog.yaml
-    regexp: "{{ item.regexp }}"
-    line: "{{ item.line }}"
-    state: present
-  with_items:
-    - regexp: ^#? ?api_key
-      line: "api_key: {{ datadog_api_key }}"
+    owner: root
+    group: root
+    mode: 0644
   notify: Restart datadog
   become: yes
   tags:
