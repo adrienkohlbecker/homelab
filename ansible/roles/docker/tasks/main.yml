@@ -89,7 +89,7 @@
 
 - name: Copy the datadog config
   copy:
-    src: docker_daemon.yaml
+    src: docker.yaml
     dest: /etc/datadog-agent/conf.d/docker.d/conf.yaml
     mode: 0644
     owner: dd-agent
