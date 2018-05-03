@@ -25,15 +25,6 @@
   tags:
     - docker
 
-- name: Install docker-compose
-  get_url:
-    url: https://github.com/docker/compose/releases/download/1.11.2/run.sh
-    dest: /usr/local/bin/docker-compose
-    mode: 0775
-  become: yes
-  tags:
-    - docker
-
 - name: Create docker systemd conf directory
   file:
     dest: /etc/systemd/system/docker.service.d
@@ -99,7 +90,7 @@
 - name: Copy the datadog config
   copy:
     src: docker_daemon.yaml
-    dest: /etc/dd-agent/conf.d/docker_daemon.yaml
+    dest: /etc/datadog-agent/conf.d/docker.d/conf.yaml
     mode: 0644
     owner: dd-agent
     group: dd-agent

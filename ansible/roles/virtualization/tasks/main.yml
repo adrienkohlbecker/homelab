@@ -14,8 +14,8 @@
 
 - name: Download virtio drivers for windows
   get_url:
-    url: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.118-2/virtio-win-0.1.118.iso
-    dest: /var/lib/libvirt/images/virtio-win-0.1.118.iso
+    url: https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/archive-virtio/virtio-win-0.1.149-2/virtio-win-0.1.149.iso
+    dest: /var/lib/libvirt/images/virtio-win-0.1.149.iso
     owner: libvirt-qemu
     group: kvm
     mode: 0600

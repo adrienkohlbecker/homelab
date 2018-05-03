@@ -30,7 +30,7 @@
   lineinfile:
     dest: /etc/smartd.conf
     regexp: ^DEVICESCAN
-    line: DEVICESCAN -d removable -n standby,24 -m root -M exec /usr/share/smartmontools/smartd-runner -a -W 0,40,45 -I 194 -I 190 -I 231 -I 9
+    line: DEVICESCAN -d removable -n standby,24 -m root -M exec /usr/share/smartmontools/smartd-runner -a -W 0,40,60 -I 194 -I 190 -I 231 -I 9
   become: yes
   notify: Restart smartmontools
   tags:
