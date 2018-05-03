@@ -74,8 +74,8 @@ Vagrant.configure(2) do |config|
     vmw.gui = true
     vmw.vmx["memsize"] = VM_MEMORY
     vmw.vmx["numvcpus"] = VM_CPU
-    vmw.vmx["ethernet0.virtualdev"] = "vmxnet3"
-    vmw.vmx["vhv.enable"] = true # nested virtualization
+    vmw.vmx["ethernet0.virtualdev"] = "vmxnet3" # vagrant overrides this
+    vmw.vmx["vhv.enable"] = true # nested virtualization, will ask for root password on the host
 
     # https://www.vagrantup.com/docs/vmware/boxes.html#vmx-whitelisting
     vmw.vmx["ethernet0.pcislotnumber"] = "192"
@@ -97,6 +97,8 @@ Vagrant.configure(2) do |config|
   # SHELL
   config.vm.provision 'ansible' do |ansible|
     ansible.playbook = 'ansible/playbook.yml'
+    ansible.compatibility_mode = '2.0'
+    ansible.raw_arguments = ['--diff']
   end
 
   if Vagrant.has_plugin?('vagrant-cachier')

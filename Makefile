@@ -11,11 +11,10 @@ packer-base-with-disks:
 	echo 'scsi0:1.present = "TRUE"'           >> output-hypervisor-base-with-disks/packer-hypervisor-base.vmx
 	echo 'scsi0:2.fileName = "mirror-2.vmdk"' >> output-hypervisor-base-with-disks/packer-hypervisor-base.vmx
 	echo 'scsi0:2.present = "TRUE"'           >> output-hypervisor-base-with-disks/packer-hypervisor-base.vmx
-	echo 'disk.EnableUUID = "TRUE"'           >> output-hypervisor-base-with-disks/packer-hypervisor-base.vmx
 
 packer-zfs: packer-base-with-disks
 	rm -rf output-hypervisor-zfs
-	packer build -debug -only hypervisor-zfs packer/box.json
+	packer build -only hypervisor-zfs packer/box.json
 
 packer-zfs-without-root:
 	rm -rf output-hypervisor-zfs-without-root
@@ -67,4 +66,4 @@ packer-zfs-without-root:
 
 packer-final: packer-zfs-without-root
 	rm -rf output-hypervisor-final
-	packer build -debug -only hypervisor-final packer/box.json
+	packer build -only hypervisor-final packer/box.json
