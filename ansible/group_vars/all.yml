@@ -15,7 +15,6 @@ deploy_user_additional_groups:
   - sambashare
   # additional groups for services
   - ssh
-  - libvirtd
   - docker
   - media
 
@@ -31,31 +30,11 @@ duo_integration_key: "{{ aws_ssm_duo_integration_key }}"
 duo_secret_key: "{{ aws_ssm_duo_secret_key }}"
 duo_api_host: "{{ aws_ssm_duo_api_host }}"
 
-# Used to grep ids from lspci
-vfio_device_names:
-  - Radeon HD
-  - Pitcairn HDMI Audio
-  - 'USB EHCI #1'
-
-pci_stub_device_names:
-  - Radeon HD
-  - Pitcairn HDMI Audio
-  - 'USB EHCI #1'
-  # - Renesas
-
-driver_modules_blacklist:
-  - radeon
-  - snd_usb_audio # C-Media soundcard
-  - uvcvideo # Logitech webcam
-  - hid_logitech_hidpp # Logitech unifying
-  - hid_logitech_dj # Logitech unifying
-  - xpad # recepteur Xbox
-
 # In normal & recovery mode
 grub_cmdline: nomodeset
 
 # Only in normal mode (non-recovery)
-grub_cmdline_default: iommu=1 intel_iommu=on pci_stub.ids={{pci_stub_device_ids}} cgroup_enable=memory swapaccount=1
+grub_cmdline_default: cgroup_enable=memory swapaccount=1
 
 grub_config:
 - regexp: ^(#?)GRUB_CMDLINE_LINUX=
