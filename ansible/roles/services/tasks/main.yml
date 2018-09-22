@@ -89,6 +89,7 @@
     - services
   with_items:
     - {path: '/mnt/media/Movies',           owner: 'media',             group: 'media',             mode: '0774'}
+    - {path: '/mnt/media/Music',            owner: 'media',             group: 'media',             mode: '0774'}
     - {path: '/mnt/media/TV',               owner: 'media',             group: 'media',             mode: '0774'}
     - {path: '/mnt/media/.tmp',             owner: 'media',             group: 'media',             mode: '0775'}
     - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'media',             group: 'media',             mode: '0775'}
