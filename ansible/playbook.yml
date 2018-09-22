@@ -15,8 +15,6 @@
     - datadog
     - snapraid
     - mergerfs
-    - pci_passthrough
-    - virtualization
     - docker
     - services
     - letsencrypt

@@ -17,7 +17,6 @@ ls -al /dev/disk/by-id
 # ssds
 zfs create -o mountpoint=/mnt/services rpool/services
 zfs create -o mountpoint=/var/lib/docker rpool/docker
-zfs create -o mountpoint=/var/lib/libvirt/images rpool/vms
 
 # Tank
 zpool create -f -o ashift=12 -O compression=lz4 -O casesensitivity=insensitive -O normalization=formD -O mountpoint=none \
@@ -27,7 +26,6 @@ zfs create -o mountpoint=/mnt/pictures tank/pictures
 zfs create -o mountpoint=/mnt/sftp tank/sftp
 zfs create -o mountpoint=/mnt/brumath tank/brumath
 zfs create -o mountpoint=/mnt/videos tank/videos
-zfs create -o mountpoint=/mnt/vms tank/vms
 
 zpool export tank
 zpool import -d /dev/disk/by-id tank
