@@ -1,0 +1,15 @@
+---
+
+- name: Configure GRUB
+  lineinfile:
+    dest: /etc/default/grub
+    regexp: '{{ item.regexp }}'
+    line: '{{ item.line }}'
+    state: present
+  become: yes
+  with_items: "{{ grub_config }}"
+  notify:
+    - Update grub
+    - Ask to reboot
+  tags:
+    - base
