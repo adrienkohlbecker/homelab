@@ -84,6 +84,7 @@
     - console-data # keymaps
     - python # ansible dep
     - python-simplejson # ansible dep
+    - python-apt # ansible dep (for check mode)
     - apt-transport-https
   tags:
     - base
