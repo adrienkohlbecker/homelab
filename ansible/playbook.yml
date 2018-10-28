@@ -1,6 +1,16 @@
 ---
 
-- hosts: all
+- hosts: unifi
+  roles:
+    - base
+    - ntp
+    - ssh
+    - mailer
+    - datadog
+    - user
+    - dotfiles
+
+- hosts: hypervisor
   roles:
     - base
     - grub
