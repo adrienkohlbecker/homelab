@@ -6,6 +6,7 @@
     - networking
     - ntp
     - ssh
+    - duo
     - mailer
     - zfs
     - smart
