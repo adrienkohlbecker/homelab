@@ -79,13 +79,25 @@
     - logrotate
     - unattended-upgrades
     - update-notifier-common
-    - ubuntu-minimal
-    - grub-pc
+    # - ubuntu-minimal
+    # - grub-pc
     - console-data # keymaps
     - python # ansible dep
     - python-simplejson # ansible dep
     - python-apt # ansible dep (for check mode)
     - apt-transport-https
+  tags:
+    - base
+
+- name: Install ubuntu base packages
+  apt:
+    pkg: "{{item}}"
+    state: present
+  become: yes
+  when: ansible_distribution == 'Ubuntu'
+  with_items:
+    - ubuntu-minimal
+    - grub-pc
   tags:
     - base
 

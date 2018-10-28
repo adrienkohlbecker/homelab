@@ -1,0 +1,41 @@
+---
+
+deploy_user: pi
+deploy_user_group: pi
+
+duo_enabled: false
+
+aws_ssm_couchpotato_api_key: changeme
+aws_ssm_datadog_api_key: "{{ lookup('aws_ssm', 'datadog.api_key', region='eu-west-1' ) }}"
+aws_ssm_duo_api_host: changeme
+aws_ssm_duo_integration_key: changeme
+aws_ssm_duo_secret_key: changeme
+aws_ssm_nginx_adrien_htpasswd: changeme
+aws_ssm_nginx_nginx_dhparam: changeme
+aws_ssm_nzbgeek_api_key: changeme
+aws_ssm_plex_token: changeme
+aws_ssm_sabnzbd_api_key: changeme
+aws_ssm_sabnzbd_email_from: changeme
+aws_ssm_sabnzbd_email_to: changeme
+aws_ssm_sabnzbd_newsgroupdirect_password: changeme
+aws_ssm_sabnzbd_newsgroupdirect_username: changeme
+aws_ssm_sabnzbd_nzb_key: changeme
+aws_ssm_sabnzbd_sendgrid_password: changeme
+aws_ssm_sabnzbd_sendgrid_username: changeme
+aws_ssm_sabnzbd_usenetfarm_password: changeme
+aws_ssm_sabnzbd_usenetfarm_username: changeme
+aws_ssm_samba_password_adrien: changeme
+aws_ssm_samba_password_sonos: changeme
+aws_ssm_sendgrid_password: "{{ lookup('aws_ssm', 'sendgrid.password', region='eu-west-1' ) }}"
+aws_ssm_sendgrid_user: "{{ lookup('aws_ssm', 'sendgrid.user', region='eu-west-1' ) }}"
+aws_ssm_sickrage_addic7ed_password: changeme
+aws_ssm_sickrage_addic7ed_username: changeme
+aws_ssm_sickrage_anidb_password: changeme
+aws_ssm_sickrage_anidb_username: changeme
+aws_ssm_sickrage_dognzb_api_key: changeme
+aws_ssm_sickrage_encryption_secret: changeme
+aws_ssm_sickrage_nzbgeek_api_key: changeme
+aws_ssm_sickrage_opensubtitles_password: changeme
+aws_ssm_sickrage_opensubtitles_username: changeme
+aws_ssm_sickrage_sickrage_api_key: changeme
+aws_ssm_sickrage_web_cookie_secret: changeme
