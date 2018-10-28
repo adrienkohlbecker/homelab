@@ -1,0 +1,3 @@
+logs:
+  - type: journald
+    path: /run/log/journal
