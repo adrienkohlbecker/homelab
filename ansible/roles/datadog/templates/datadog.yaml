@@ -7,34 +7,59 @@ dd_url: https://app.datadoghq.com
 api_key: "{{ datadog_api_key }}"
 
 # If you need a proxy to connect to the Internet, provide it here (default:
-# disabled). You can use the 'no_proxy' list to specify hosts that should bypass the
-# proxy. These settings might impact your checks requests, please refer to the
-# specific check documentation for more details.
+# disabled). You can use the 'no_proxy' list to specify hosts that should
+# bypass the proxy. These settings might impact your checks requests, please
+# refer to the specific check documentation for more details. Environment
+# variables DD_PROXY_HTTP, DD_PROXY_HTTPS and DD_PROXY_NO_PROXY (space-separated string)
+# will override the values set here. See https://docs.datadoghq.com/agent/proxy/.
 #
 # proxy:
-#   http: http(s)://user:password@proxy_for_http:port
-#   https: http(s)://user:password@proxy_for_https:port
+#   http: http://user:password@proxy_for_http:port
+#   https: http://user:password@proxy_for_https:port
 #   no_proxy:
 #     - host1
 #     - host2
 
-# Setting this option to "yes" will tell the agent to skip validation of SSL/TLS certificates.
+# Setting this option to "true" will tell the agent to skip validation of SSL/TLS certificates.
 # This may be necessary if the agent is running behind a proxy. See this page for details:
 # https://github.com/DataDog/dd-agent/wiki/Proxy-Configuration#using-haproxy-as-a-proxy
-# skip_ssl_validation: no
+# skip_ssl_validation: false
 
-# Setting this option to "yes" will force the agent to only use TLS 1.2 when
+# Setting this option to "true" will force the agent to only use TLS 1.2 when
 # pushing data to the url specified in "dd_url".
-# force_tls_12: no
+# force_tls_12: false
 
 # Force the hostname to whatever you want. (default: auto-detected)
 # hostname: mymachine.mydomain
+
+# Make the agent use "hostname -f" on unix-based systems as a last resort
+# way of determining the hostname instead of Golang "os.Hostname()"
+# This will be enabled by default in version 6.6
+# More information at  https://dtdg.co/flag-hostname-fqdn
+# hostname_fqdn: false
 
 # Set the host's tags (optional)
 # tags:
 #   - mytag
 #   - env:prod
 #   - role:database
+
+# Split tag values according to a given separator.
+# Only applies to host tags, tags coming from container integrations.
+# Does not apply to tags on dogstatsd metrics, and tags collected by other
+# integrations.
+# This option is useful when the native tags do not support repeating multiple
+# tags with the same name and different values.
+#
+# Example use-case:
+#
+#  With a raw collected tag "foo:1;2;3"
+#  Using the following configuration:
+#
+#    tag_value_split_separator:
+#      foo: ;
+#
+#  will result in the raw tag being transformed into "foo:1", "foo:2", "foo:3" tags
 
 # Histogram and Historate configuration
 #
@@ -48,6 +73,13 @@ api_key: "{{ datadog_api_key }}"
 # Warning: percentiles must be specified as yaml strings
 #
 # histogram_percentiles: ["0.95"]
+#
+# Copy histogram values to distributions for true global distributions (in beta)
+# This will increase the number of custom metrics created
+# histogram_copy_to_distribution: false
+#
+# A prefix to add to distribution metrics created when histogram_copy_to_distributions is true
+# histogram_copy_to_distribution_prefix: ""
 
 # Forwarder timeout in seconds
 # forwarder_timeout: 20
@@ -62,11 +94,11 @@ api_key: "{{ datadog_api_key }}"
 # flush.
 # forwarder_num_workers: 1
 
-# Set this option to "yes" to output logs in JSON format
-# log_format_json: no
-
 # Collect AWS EC2 custom tags as agent tags
 # collect_ec2_tags: false
+
+# Collect Google Cloud Engine metadata as agent tags
+# collect_gce_tags: true
 
 # The path containing check configuration files
 # By default, uses the conf.d folder located in the agent configuration folder.
@@ -87,11 +119,29 @@ api_key: "{{ datadog_api_key }}"
 # Default is '5002' on Windows and macOS ; turned off on Linux
 # GUI_port: -1
 
-# The Agent runs workers in parallel to execute checks. By default the number
-# of workers is set to 1. If set to 0 the agent will automatically determine
-# the best number of runners needed based on the number of checks running. This
-# would optimize the check collection time but may produce CPU spikes.
-# check_runners: 1
+# The `check_runners` refers to the number of concurrent check runners available
+# for check instance execution. The scheduler will attempt to spread the
+# instances over the collection interval and will _at most_ be running the
+# number of check runners instances concurrently. Setting the value to 1
+# would result in checks running sequentially.
+#
+# NOTE: due to the nature of the python interpreter and its global interpreter
+# lock (GIL) only one native thread may be running on the python interpreter at
+# a time. Concurrent check runners imply concurrently executing checks must contend
+# for the GIL. This has the side-effect of increasing wall-time execution times for
+# the checks. The aggregate system/user-time for all checks however, should be
+# decreased. Concurrency works particularly well with I/O bound tasks (or at least
+# IO intensive) as the GIL will typically be released while waiting for IO, allowing
+# for other checks to grab a hold of the GIL and continue execution. For CPU-bound
+# checks with a low activity, it's likely that the check instances will contend for
+# the GIL, which will cause a CPU overhead compared to running these check instances
+# sequentially (i.e. on one check runner).
+#
+# This is a sensitive setting and we do NOT recommend changing the default number
+# of check runners in the general case. The level of concurrency has effects on
+# the agent's: RSS memory, CPU load, resource contention overhead, etc.
+#
+# check_runners: 4
 
 # Metadata collection should always be enabled, except if you are running several
 # agents/dsd instances per host. In that case, only one agent should have it on.
@@ -104,6 +154,45 @@ api_key: "{{ datadog_api_key }}"
 # IPC api server timeout in seconds
 # server_timeout: 15
 
+# Some environments may have the procfs file system mounted in a miscellaneous
+# location. The procfs_path configuration parameter provides a mechanism to
+# override the standard default location: '/proc' - this setting will trickle
+# down to integrations and affect their behavior if they rely on the psutil
+# python package.
+# procfs_path: /proc
+
+
+# BETA: Encrypted Secrets (Linux only)
+#
+# This feature is in beta and its options or behaviour might break between
+# minor or bugfix releases of the Agent.
+#
+# The agent can call an external command to fetch secrets. The command will be
+# executed maximum once per instance containing an encrypted password.
+# Secrets are cached by the agent, this will avoid executing again the
+# secret_backend_command to fetch an already known secret (useful when combine
+# with Autodiscovery). This feature is still in beta.
+#
+# For more information see: https://github.com/DataDog/datadog-agent/blob/master/docs/agent/secrets.md
+#
+# Path to the script to execute. The script must belong to the same user used
+# to run the agent. Executable right must be given to the agent and no rights
+# for 'group' or 'other'.
+# secret_backend_command: /path/to/command
+#
+# A list of arguments to give to the command at each run (optional)
+# secret_backend_arguments:
+#   - argument1
+#   - argument2
+#
+# The size in bytes of the buffer used to store the command answer (apply to
+# both stdout and stderr)
+# secret_backend_output_max_size: 1024
+#
+# The timeout to execute the command in second
+# secret_backend_timeout: 5
+
+
 # Metadata providers, add or remove from the list to enable or disable collection.
 # Intervals are expressed in seconds. You can also set a provider's interval to 0
 # to disable it.
@@ -113,8 +202,8 @@ api_key: "{{ datadog_api_key }}"
 
 # DogStatsd
 #
-# If you don't want to enable the DogStatsd server, set this option to no
-# use_dogstatsd: yes
+# If you don't want to enable the DogStatsd server, set this option to false
+# use_dogstatsd: true
 #
 # Make sure your client is sending to the same UDP port
 # dogstatsd_port: 8125
@@ -124,29 +213,35 @@ api_key: "{{ datadog_api_key }}"
 # 'dogstatsd_non_local_traffic' is set to true
 # bind_host: localhost
 #
-# Whether dogstatsd should listen to a Unix Socket instead of UDP (*nix only).
-# Set to a valid filesystem path to enable
-# dogstatsd_socket:
+# Dogstatsd can also listen for metrics on a Unix Socket (*nix only).
+# Set to a valid filesystem path to enable.
+# dogstatsd_socket: /var/run/dogstatsd/dsd.sock
 #
-# Whether origin detection and container tagging should be enabled for Unix
-# Socket incoming metrics. This feature is experimental for now.
-#
+# When using Unix Socket, dogstatsd can tag metrics with container metadata.
+# If running dogstatsd in a container, host PID mode (e.g. with --pid=host) is required.
 # dogstatsd_origin_detection: false
 #
 # The buffer size use to receive statsd packet, in bytes
 # dogstatsd_buffer_size: 1024
 #
 # Whether dogstatsd should listen to non local UDP traffic
-# dogstatsd_non_local_traffic: no
+# dogstatsd_non_local_traffic: false
 #
-# Publish dogstatsd's internal stats as Go epxvars
-# dogstatsd_stats_enable: no
+# Publish dogstatsd's internal stats as Go expvars
+# dogstatsd_stats_enable: false
 #
 # How many items in the dogstatsd's stats circular buffer
 # dogstatsd_stats_buffer: 10
 #
 # The port for the go_expvar server
 # dogstatsd_stats_port: 5000
+#
+# The number of bytes allocated to dogstatsd's socket receive buffer (POSIX
+# system only). By default, this value is set by the system. If you need to
+# increase the size of this buffer but keep the OS default value the same, you
+# can set dogstatsd's receive buffer size here. The maximum accepted value
+# might change depending on the OS.
+# dogstatsd_so_rcvbuf:
 #
 # If you want to forward every packet received by the dogstatsd server
 # to another statsd server, uncomment these lines.
@@ -163,7 +258,12 @@ api_key: "{{ datadog_api_key }}"
 # Logs agent
 #
 # Logs agent is disabled by default
-# logs_enabled: false
+logs_enabled: true
+
+# Enable logs collection for all containers, disabled by default
+# logs_config:
+#   container_collect_all: false
+#
 
 # JMX
 #
@@ -212,7 +312,7 @@ api_key: "{{ datadog_api_key }}"
 
 #   - name: consul
 #     polling: true
-#     template_dir: /datadog/check_configs
+#     template_dir: datadog/check_configs
 #     template_url: http://127.0.0.1
 #     ca_file:
 #     ca_path:
@@ -234,18 +334,52 @@ api_key: "{{ datadog_api_key }}"
 # log_level: info
 # log_file: /var/log/datadog/agent.log
 
+# Set to 'true' to output logs in JSON format
+# log_format_json: false
+
+# Set to 'false' to disable logging to stdout
+# log_to_console: true
+
+# Set to 'true' to disable logging to the log file
+# disable_file_logging: false
+
+# Set to 'true' to enable logging to syslog.
+#
+# log_to_syslog: false
+#
+# If 'syslog_uri' is left undefined/empty, a local domain socket connection will be attempted
+#
+# syslog_uri:
+#
+# Set to 'true' to output in an RFC 5424-compliant format
+#
+# syslog_rfc: false
+#
+# If TLS enabled, you must specify a path to a PEM certificate here
+#
+# syslog_pem: /path/to/certificate.pem
+#
+# If TLS enabled, you must specify a path to a private key here
+#
+# syslog_key: /path/to/key.pem
+#
+# If TLS enabled, you may enforce TLS verification here (defaults to true)
+#
+# syslog_tls_verify: true
+#
+
 # Autodiscovery
 #
 # Change the root directory to look at to get cgroup statistics. Useful when running inside a
 # container with host directories mounted on a different folder.
-# Default if environment variable "DOCKER_DD_AGENT" is set to "yes"
+# Default if environment variable "DOCKER_DD_AGENT" is set
 # "/host/sys/fs/cgroup" and "/sys/fs/cgroup" if not.
 #
 # container_cgroup_root: /host/sys/fs/cgroup/
 #
 # Change the root directory to look at to get proc statistics. Useful when running inside a
 # container with host directories mounted on a different folder.
-# Default if environment variable "DOCKER_DD_AGENT" is set to "yes"
+# Default if environment variable "DOCKER_DD_AGENT" is set
 # "/host/proc" and "/proc" if not.
 #
 # container_proc_root: /host/proc
@@ -303,7 +437,11 @@ api_key: "{{ datadog_api_key }}"
 # You can also use the regex to ignore them all:
 # ac_exclude: ["image:dockercloud/*"]
 # ac_include: []
-
+#
+# The default timeout value when connecting to the docker daemon
+# is 5 seconds. It can be configured with this option.
+# docker_query_timeout: 5
+#
 
 # Docker tag extraction
 #
@@ -377,9 +515,9 @@ api_key: "{{ datadog_api_key }}"
 # [docker readme](https://github.com/DataDog/datadog-agent/blob/master/Dockerfiles/agent/README.md#kubernetes)).
 # You can disable this option or set how often (in seconds) the agent refreshes the internal mapping of services to
 # ContainerIDs with the following options:
-# kubernetes_collect_service_tags: true
-# kubernetes_service_tag_update_freq: 300
-#
+# kubernetes_collect_metadata_tags: true
+# kubernetes_metadata_tag_update_freq: 60
+# kubernetes_apiserver_client_timeout: 10
 #
 # To collect Kubernetes events, leader election must be enabled and collect_kubernetes_events set to true.
 # Only the leader will collect events. More details about events [here](https://github.com/DataDog/datadog-agent/blob/master/Dockerfilesagent/README.md#event-collection).
@@ -399,12 +537,18 @@ api_key: "{{ datadog_api_key }}"
 # kubernetes_node_labels_as_tags:
 #   kubernetes.io/hostname: nodename
 #   beta.kubernetes.io/os: os
+#
+# Kubernetes cluster identifier used to avoid host alias collisions. Empty by default.
+# clustername: cluster_identifier
 
 # Process agent specific settings
 #
-# process_config:
-#   Note: the Process Agent expects this to be a string
-#   enabled: "true"
+process_config:
+#   A string indicating the enabled state of the Process Agent.
+#   If "false" (the default) it will only collect containers.
+#   If "true" it will collect containers and processes.
+#   If "disabled" it will be disabled altogether and won't start.
+    enabled: "true"
 #   The full path to the file where process-agent logs will be written.
 #   log_file:
 #   The interval, in seconds, at which we will run each check. If you want consistent
@@ -432,9 +576,9 @@ api_key: "{{ datadog_api_key }}"
 
 # Trace Agent Specific Settings
 #
-# apm_config:
+apm_config:
 #   Whether or not the APM Agent should run
-#   enabled: true
+    enabled: false
 #   The environment tag that Traces should be tagged with
 #   Will inherit from "env" tag if none is applied here
 #   env: none
