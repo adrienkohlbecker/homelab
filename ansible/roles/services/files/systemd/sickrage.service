@@ -31,6 +31,7 @@ ExecStart=/usr/bin/docker run \
     --label "traefik.frontend.rule=Host:sickrage.kohlby.fr" \
     --label "traefik.port=8081" \
     --label "traefik.protocol=http" \
+    --label "traefik.frontend.auth.forward.address=http://traefik-auth-cloudflare/auth/287d2f4e699f1d692d2449c29775aff93424b1face49e0ba185956e74f014f51Copy" \
     akohlbecker/sickrage
 ExecStop=/usr/bin/docker stop sickrage.service
 

@@ -29,6 +29,7 @@ ExecStart=/usr/bin/docker run \
     --label "traefik.frontend.rule=Host:portainer.kohlby.fr" \
     --label "traefik.port=9000" \
     --label "traefik.protocol=http" \
+    --label "traefik.frontend.auth.forward.address=http://traefik-auth-cloudflare/auth/5e1fe5b47ca159f90126270dd84f1c10fd646e8a384c1564c612a43d772d7fddCopy" \
     portainer/portainer:1.19.2
 ExecStop=/usr/bin/docker stop portainer.service
 
