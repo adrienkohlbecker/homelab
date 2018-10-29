@@ -85,7 +85,15 @@
     - python # ansible dep
     - python-simplejson # ansible dep
     - python-apt # ansible dep (for check mode)
+    - python-pip
     - apt-transport-https
+  tags:
+    - base
+
+- name: Install pip deps
+  pip:
+    name: docker-py # ansible dep for docker module
+  become: yes
   tags:
     - base
 
