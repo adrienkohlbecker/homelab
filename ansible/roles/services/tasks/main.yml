@@ -1,5 +1,12 @@
 ---
 
+- name: Create a network
+  docker_network:
+    name: traefik
+  become: yes
+  tags:
+    - services
+
 - name: Add avahi group
   group:
     name: avahi
@@ -96,6 +103,7 @@
     - {path: '/mnt/media/.tmp/couchpotato', owner: 'media',             group: 'media',             mode: '0774'}
     - {path: '/mnt/media/.tmp/sickrage',    owner: 'media',             group: 'media',             mode: '0774'}
     - {path: '/mnt/docker',                 owner: 'root',              group: 'media',             mode: '0774'}
+    - {path: '/mnt/docker/traefik',         owner: 'root',              group: 'root',              mode: '0755'}
     - {path: '/mnt/docker/sabnzbd',         owner: 'media',             group: 'media',             mode: '0774'}
     - {path: '/mnt/docker/sickrage',        owner: 'media',             group: 'media',             mode: '0774'}
     - {path: '/mnt/docker/couchpotato',     owner: 'media',             group: 'media',             mode: '0774'}
@@ -138,6 +146,32 @@
   tags:
     - services
 
+- name: Configure traefik
+  template:
+    src: traefik.toml.j2
+    dest: /mnt/docker/traefik/traefik.toml
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+  notify:
+    - Restart traefik
+
+- name: Create acme.json
+  file:
+    dest: /mnt/docker/traefik/acme.json
+    state: file
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+  notify:
+    - Restart traefik
+
 - name: Create env.d directory
   file:
     dest: /etc/env.d
@@ -163,7 +197,6 @@
     - Restart compose
   with_items:
     - couchpotato
-    - nginx
     - sabnzbd
     - samba
     - sickrage
@@ -184,7 +217,7 @@
     - avahi
     - compose
     - couchpotato
-    - nginx
+    - traefik
     - plex
     - sabnzbd
     - samba
@@ -203,7 +236,7 @@
     - avahi
     - compose
     - couchpotato
-    - nginx
+    - traefik
     - plex
     - sabnzbd
     - samba

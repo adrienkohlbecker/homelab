@@ -10,8 +10,7 @@ aws_ssm_datadog_api_key: changeme
 aws_ssm_duo_api_host: changeme
 aws_ssm_duo_integration_key: changeme
 aws_ssm_duo_secret_key: changeme
-aws_ssm_nginx_adrien_htpasswd: changeme
-aws_ssm_nginx_nginx_dhparam: changeme
+aws_ssm_traefik_adrien_htdigest: changeme
 aws_ssm_nzbgeek_api_key: changeme
 aws_ssm_plex_token: changeme
 aws_ssm_sabnzbd_api_key: changeme
