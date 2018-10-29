@@ -1,6 +1,6 @@
 ---
 
-- hosts: unifi
+- hosts: all
   roles:
     - base
     - ntp
@@ -10,28 +10,24 @@
     - user
     - dotfiles
 
+- hosts: unifi
+  roles: []
+
 - hosts: hypervisor
   roles:
-    - base
     - grub
     - networking
-    - ntp
-    - ssh
     - duo
-    - mailer
     - zfs
     - smart
     - hdparm
     - ups
     - ipmi
-    - datadog
     - snapraid
     - mergerfs
     - docker
     - services
     - letsencrypt
-    - user
-    - dotfiles
 
   post_tasks:
 
