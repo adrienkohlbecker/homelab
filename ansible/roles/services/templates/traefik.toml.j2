@@ -15,14 +15,18 @@ defaultEntryPoints = ["https","http"]
 
   [entryPoints.https]
   address = ":443"
+  compress = true
 
-    [entryPoints.https.tls]
+    # require traffic to go through cloudflare
+    [entryPoints.https.tls.ClientCA]
+    files = ["/cloudflare-origin-pull-ca.pem"]
+    optional = false
 
-  [entryPoints.traefik]
-  address = ":8080"
-
-    [entryPoints.traefik.auth.digest]
+    [entryPoints.https.auth.digest]
     users = ["{{ aws_ssm_traefik_adrien_htdigest }}"]
+
+    [entryPoints.https.forwardedHeaders]
+    trustedIPs = ["{{ (lookup('url', 'https://www.cloudflare.com/ips-v6', wantlist=True) + lookup('url', 'https://www.cloudflare.com/ips-v4', wantlist=True)) | join('\", \"') }}"]
 
 [retry]
 
