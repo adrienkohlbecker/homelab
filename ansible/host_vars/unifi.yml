@@ -23,6 +23,8 @@ deploy_user_additional_groups:
 
 duo_enabled: false
 
+aws_ssm_cloudflare_email: changeme
+aws_ssm_cloudflare_api_key: changeme
 aws_ssm_couchpotato_api_key: changeme
 aws_ssm_datadog_api_key: "{{ lookup('aws_ssm', 'datadog.api_key', region='eu-west-1' ) }}"
 aws_ssm_duo_api_host: changeme
