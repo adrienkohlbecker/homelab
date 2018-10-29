@@ -5,6 +5,8 @@ deploy_user_group: vagrant
 
 duo_enabled: false
 
+docker_host: false
+
 aws_ssm_cloudflare_email: changeme
 aws_ssm_cloudflare_api_key: changeme
 aws_ssm_couchpotato_api_key: changeme
