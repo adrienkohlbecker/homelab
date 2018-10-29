@@ -5,3 +5,9 @@
     name: compose
     state: restarted
   become: yes
+
+- name: Restart traefik
+  service:
+    name: traefik
+    state: restarted
+  become: yes

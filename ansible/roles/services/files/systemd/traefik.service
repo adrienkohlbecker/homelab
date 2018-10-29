@@ -1,0 +1,39 @@
+# traefik.service #######################################################################
+[Unit]
+Description=Traefik
+After=docker.service
+Requires=docker.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+ExecStartPre=-/usr/bin/docker kill traefik.service
+ExecStartPre=-/usr/bin/docker rm traefik.service
+ExecStartPre=/usr/bin/docker pull akohlbecker/traefik
+ExecStart=/usr/bin/docker run \
+    --init \
+    --env-file /etc/env.d/traefik \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
+    --name traefik.service \
+    --network traefik \
+    --publish 443:443 \
+    --publish 80:80 \
+    --volume /var/run/docker.sock:/var/run/docker.sock \
+    --volume /mnt/docker/traefik/traefik.toml:/traefik.toml \
+    --volume /mnt/docker/traefik/acme.json:/acme.json \
+    --label "traefik.port=8080" \
+    --label "traefik.backend=traefikception" \
+    --label "traefik.frontend.rule=Host:traefik.kohlby.fr" \
+    --label "traefik.enable=true" \
+    traefik:1.7.3
+ExecStop=/usr/bin/docker stop traefik.service
+
+[Install]
+WantedBy=compose.service

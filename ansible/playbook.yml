@@ -27,7 +27,6 @@
     - mergerfs
     - docker
     - services
-    - letsencrypt
 
   post_tasks:
 
