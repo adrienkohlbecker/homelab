@@ -72,3 +72,8 @@ instances:
     # Example: ["extra_tag", "env:testing"]
     #
     # tags: []
+
+logs:
+  - type: docker
+    service: docker
+    source: docker

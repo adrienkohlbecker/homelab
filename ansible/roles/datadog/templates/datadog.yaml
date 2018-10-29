@@ -291,7 +291,7 @@ logs_enabled: true
 # The providers the Agent should call to collect checks configurations.
 # Please note the File Configuration Provider is enabled by default and cannot
 # be configured.
-# config_providers:
+config_providers:
 
 ## The kubelet provider handles templates embedded in pod annotations, see
 ## https://docs.datadoghq.com/guides/autodiscovery/#template-source-kubernetes-pod-annotations
@@ -300,8 +300,13 @@ logs_enabled: true
 
 ## The docker provider handles templates embedded in container labels, see
 ## https://docs.datadoghq.com/guides/autodiscovery/#template-source-docker-label-annotations
+{% if docker_host %}
+    - name: docker
+      polling: true
+{% else %}
 #   - name: docker
 #     polling: true
+{% endif %}
 
 #   - name: etcd
 #     polling: true
@@ -387,10 +392,14 @@ logs_enabled: true
 # Choose "auto" if you want to let the agent find any relevant listener on your host
 # At the moment, the only auto listener supported is docker
 # If you have already set docker anywhere in the listeners, the auto listener is ignored
-# listeners:
+listeners:
 #   - name: auto
+{% if docker_host %}
+    - name: docker
+{% else %}
 #   - name: docker
-#
+{% endif %}
+
 # Exclude containers from metrics and AD based on their name or image:
 # An excluded container will not get any individual container metric reported for it.
 # Please note that the `docker.containers.running`, `.stopped`, `.running.total` and
