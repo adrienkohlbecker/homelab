@@ -31,6 +31,7 @@ ExecStart=/usr/bin/docker run \
     --label "traefik.frontend.rule=Host:couchpotato.kohlby.fr" \
     --label "traefik.port=5050" \
     --label "traefik.protocol=http" \
+    --label "traefik.frontend.auth.forward.address=http://traefik-auth-cloudflare/auth/5e02944c3d8ef0cc0d9f2eb0906557b75ecf47ac3bdcd94aa964cd5431d35996" \
     akohlbecker/couchpotato
 ExecStop=/usr/bin/docker stop couchpotato.service
 

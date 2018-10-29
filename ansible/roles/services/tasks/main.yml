@@ -7,6 +7,13 @@
   tags:
     - services
 
+- name: Create a network
+  docker_network:
+    name: traefik-auth
+  become: yes
+  tags:
+    - services
+
 - name: Add avahi group
   group:
     name: avahi
@@ -230,6 +237,7 @@
     - compose
     - couchpotato
     - traefik
+    - traefik-auth-cloudflare
     - plex
     - sabnzbd
     - samba
@@ -251,6 +259,7 @@
     - compose
     - couchpotato
     - traefik
+    - traefik-auth-cloudflare
     - plex
     - sabnzbd
     - samba
