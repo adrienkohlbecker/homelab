@@ -13,18 +13,16 @@ Restart=always
 TimeoutSec=300
 RestartSec=15
 
-ExecStartPre=-/usr/bin/docker kill speedtest.service
-ExecStartPre=-/usr/bin/docker rm speedtest.service
+ExecStartPre=-/usr/bin/docker kill speedtest
+ExecStartPre=-/usr/bin/docker rm speedtest
 ExecStartPre=/usr/bin/docker pull adolfintel/speedtest:latest
 ExecStart=/usr/bin/docker run \
     --init \
-    --log-driver syslog \
-    --log-opt tag="{{.Name}}" \
-    --name speedtest.service \
     --network traefik \
+    --name speedtest \
     --publish 8080:80 \
     adolfintel/speedtest:latest
-ExecStop=/usr/bin/docker stop speedtest.service
+ExecStop=/usr/bin/docker stop speedtest
 
 [Install]
 WantedBy=compose.service

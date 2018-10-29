@@ -13,21 +13,19 @@ Restart=always
 TimeoutSec=300
 RestartSec=15
 
-ExecStartPre=-/usr/bin/docker kill sftp.service
-ExecStartPre=-/usr/bin/docker rm sftp.service
+ExecStartPre=-/usr/bin/docker kill sftp
+ExecStartPre=-/usr/bin/docker rm sftp
 ExecStartPre=/usr/bin/docker pull akohlbecker/sftp
 ExecStart=/usr/bin/docker run \
     --init \
-    --log-driver syslog \
-    --log-opt tag="{{.Name}}" \
-    --name sftp.service \
+    --name sftp \
     --publish 2223:22 \
     --user root \
     --volume /mnt/sftp/arq:/home/arq/sftp \
     --volume /mnt/brumath:/home/adrien/brumath \
     --volume /mnt/sftp/ssh:/etc/ssh/host_keys \
     akohlbecker/sftp
-ExecStop=/usr/bin/docker stop sftp.service
+ExecStop=/usr/bin/docker stop sftp
 
 [Install]
 WantedBy=compose.service

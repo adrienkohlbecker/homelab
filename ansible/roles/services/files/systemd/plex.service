@@ -13,19 +13,17 @@ Restart=always
 TimeoutSec=300
 RestartSec=15
 
-ExecStartPre=-/usr/bin/docker kill plex.service
-ExecStartPre=-/usr/bin/docker rm plex.service
+ExecStartPre=-/usr/bin/docker kill plex
+ExecStartPre=-/usr/bin/docker rm plex
 ExecStartPre=/usr/bin/docker pull akohlbecker/plex
 ExecStart=/usr/bin/docker run \
     --init \
-    --log-driver syslog \
-    --log-opt tag="{{.Name}}" \
-    --name plex.service \
+    --name plex \
     --net host \
     --volume /mnt/docker/plex:/data \
     --volume /mnt/media:/media \
     akohlbecker/plex
-ExecStop=/usr/bin/docker stop plex.service
+ExecStop=/usr/bin/docker stop plex
 
 [Install]
 WantedBy=compose.service

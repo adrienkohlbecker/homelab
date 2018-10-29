@@ -13,17 +13,15 @@ Restart=always
 TimeoutSec=300
 RestartSec=15
 
-ExecStartPre=-/usr/bin/docker kill sabnzbd.service
-ExecStartPre=-/usr/bin/docker rm sabnzbd.service
+ExecStartPre=-/usr/bin/docker kill sabnzbd
+ExecStartPre=-/usr/bin/docker rm sabnzbd
 ExecStartPre=/usr/bin/docker pull akohlbecker/sabnzbd
 ExecStart=/usr/bin/docker run \
     --init \
     --env-file /etc/env.d/sabnzbd \
-    --log-driver syslog \
-    --log-opt tag="{{.Name}}" \
-    --name sabnzbd.service \
     --network services \
     --network traefik \
+    --name sabnzbd \
     --volume /mnt/docker/sabnzbd:/data \
     --volume /mnt/media:/media \
     --label "traefik.docker.network=traefik" \
@@ -33,7 +31,7 @@ ExecStart=/usr/bin/docker run \
     --label "traefik.protocol=http" \
     --label "traefik.frontend.auth.forward.address=http://traefik-auth-cloudflare/auth/8ebfd6e8d5a55b002f147e77689a586e0a114cb1e1d1adc3d9c63a041c1af643" \
     akohlbecker/sabnzbd
-ExecStop=/usr/bin/docker stop sabnzbd.service
+ExecStop=/usr/bin/docker stop sabnzbd
 
 [Install]
 WantedBy=compose.service
