@@ -104,6 +104,7 @@
     - {path: '/mnt/media/.tmp/sickrage',    owner: 'media',             group: 'media',             mode: '0774'}
     - {path: '/mnt/docker',                 owner: 'root',              group: 'media',             mode: '0774'}
     - {path: '/mnt/docker/traefik',         owner: 'root',              group: 'root',              mode: '0755'}
+    - {path: '/mnt/docker/portainer',       owner: 'root',              group: 'root',              mode: '0755'}
     - {path: '/mnt/docker/sabnzbd',         owner: 'media',             group: 'media',             mode: '0774'}
     - {path: '/mnt/docker/sickrage',        owner: 'media',             group: 'media',             mode: '0774'}
     - {path: '/mnt/docker/couchpotato',     owner: 'media',             group: 'media',             mode: '0774'}
@@ -234,6 +235,7 @@
     - samba
     - sftp
     - sickrage
+    - portainer
 
 - name: Enable the services
   systemd:
@@ -253,3 +255,4 @@
     - samba
     - sftp
     - sickrage
+    - portainer

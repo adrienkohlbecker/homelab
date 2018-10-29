@@ -1,0 +1,37 @@
+# portainer.service #######################################################################
+[Unit]
+Description=portainer
+After=docker.service
+Requires=docker.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+ExecStartPre=-/usr/bin/docker kill portainer.service
+ExecStartPre=-/usr/bin/docker rm portainer.service
+# ExecStartPre=/usr/bin/docker pull portainer/portainer:1.19.2
+ExecStart=/usr/bin/docker run \
+    --init \
+    --env-file /etc/env.d/portainer \
+    --log-driver syslog \
+    --log-opt tag="{{.Name}}" \
+    --name portainer.service \
+    --network traefik \
+    --volume /mnt/docker/portainer:/data \
+    --volume /var/run/docker.sock:/var/run/docker.sock \
+    --label "traefik.docker.network=traefik" \
+    --label "traefik.enable=true" \
+    --label "traefik.frontend.rule=Host:portainer.kohlby.fr" \
+    --label "traefik.port=9000" \
+    --label "traefik.protocol=http" \
+    portainer/portainer:1.19.2
+ExecStop=/usr/bin/docker stop portainer.service
+
+[Install]
+WantedBy=compose.service
