@@ -2,6 +2,24 @@
 
 deploy_user: pi
 deploy_user_group: pi
+deploy_user_additional_groups:
+  # default groups
+  - adm
+  - dialout
+  - cdrom
+  - sudo
+  - audio
+  - video
+  - plugdev
+  - games
+  - users
+  - input
+  - netdev
+  - gpio
+  - i2c
+  - spi
+  # additional groups for services
+  - ssh
 
 duo_enabled: false
 

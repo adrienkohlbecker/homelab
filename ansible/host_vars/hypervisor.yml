@@ -2,6 +2,19 @@
 
 deploy_user: adrien
 deploy_user_group: adrien
+deploy_user_additional_groups:
+  # default groups for admin
+  - adm
+  - cdrom
+  - dip
+  - plugdev
+  - sudo
+  - lpadmin
+  - sambashare
+  # additional groups for services
+  - ssh
+  - docker
+  - media
 
 duo_enabled: true
 
