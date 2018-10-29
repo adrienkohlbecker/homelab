@@ -18,7 +18,6 @@ ExecStartPre=-/usr/bin/docker rm speedtest
 ExecStartPre=/usr/bin/docker pull adolfintel/speedtest:latest
 ExecStart=/usr/bin/docker run \
     --init \
-    --network traefik \
     --name speedtest \
     --publish 8080:80 \
     adolfintel/speedtest:latest

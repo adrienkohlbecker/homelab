@@ -16,10 +16,8 @@ RestartSec=15
 ExecStartPre=-/usr/bin/docker kill traefik
 ExecStartPre=-/usr/bin/docker rm traefik
 # ExecStartPre=/usr/bin/docker pull traefik:1.7.3
-ExecStart=/usr/bin/docker run \
+ExecStartPre=/usr/bin/docker create \
     --init \
-    --network traefik \
-    --network traefik-auth \
     --name traefik \
     --publish 443:443 \
     --publish 80:80 \
@@ -33,6 +31,9 @@ ExecStart=/usr/bin/docker run \
     --label "traefik.enable=true" \
     --label "traefik.frontend.auth.forward.address=http://traefik-auth-cloudflare/auth/7b5077a29affd00abf2fa231b1ab8c119120e846a1a1a1276572d0c77ea5f57c" \
     traefik:1.7.3
+ExecStartPre=/usr/bin/docker network connect traefik traefik
+ExecStartPre=/usr/bin/docker network connect traefik-auth traefik
+ExecStart=/usr/bin/docker start --attach traefik
 ExecStop=/usr/bin/docker stop traefik
 
 [Install]
