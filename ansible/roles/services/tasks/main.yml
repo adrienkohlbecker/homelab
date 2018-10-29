@@ -146,6 +146,17 @@
   tags:
     - services
 
+- name: Download client ca from cloudflare
+  get_url:
+    url: https://support.cloudflare.com/hc/en-us/article_attachments/201243967/origin-pull-ca.pem
+    dest: /mnt/docker/traefik/cloudflare-origin-pull-ca.pem
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+
 - name: Configure traefik
   template:
     src: traefik.toml.j2
