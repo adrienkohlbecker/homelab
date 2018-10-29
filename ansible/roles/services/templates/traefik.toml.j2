@@ -22,9 +22,7 @@ defaultEntryPoints = ["https","http"]
     files = ["/cloudflare-origin-pull-ca.pem"]
     optional = false
 
-    [entryPoints.https.auth.digest]
-    users = ["{{ aws_ssm_traefik_adrien_htdigest }}"]
-
+    # only trust X-Forwarded-For headers from cloudflare ips
     [entryPoints.https.forwardedHeaders]
     trustedIPs = ["{{ (lookup('url', 'https://www.cloudflare.com/ips-v6', wantlist=True) + lookup('url', 'https://www.cloudflare.com/ips-v4', wantlist=True)) | join('\", \"') }}"]
 
