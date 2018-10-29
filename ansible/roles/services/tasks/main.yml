@@ -236,6 +236,7 @@
     - sftp
     - sickrage
     - portainer
+    - speedtest
 
 - name: Enable the services
   systemd:
@@ -256,3 +257,4 @@
     - sftp
     - sickrage
     - portainer
+    - speedtest
