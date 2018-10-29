@@ -21,8 +21,26 @@
 - name: Install zsh-history-substring-search
   git:
     repo: https://github.com/zsh-users/zsh-history-substring-search.git
-    dest: /usr/local/opt/zsh-history-substring-search
+    dest: /usr/local/share/zsh-history-substring-search
     update: no
+  become: yes
+  tags:
+    - dotfiles
+
+- name: Clone fzf
+  command: "su {{ deploy_user }} -c 'git clone git://github.com/junegunn/fzf.git .fzf'"
+  args:
+    chdir: "/home/{{ deploy_user }}"
+    creates: "/home/{{ deploy_user }}/.fzf"
+  become: yes
+  tags:
+    - dotfiles
+
+- name: Clone fzf
+  command: "su {{ deploy_user }} -c '.fzf/install --no-update-rc --no-bash --no-fish --completion --key-bindings'"
+  args:
+    chdir: "/home/{{ deploy_user }}"
+    creates: "/home/{{ deploy_user }}/.fzf/bin/fzf"
   become: yes
   tags:
     - dotfiles
