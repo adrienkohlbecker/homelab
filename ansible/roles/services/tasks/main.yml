@@ -222,6 +222,7 @@
   notify:
     - Restart compose
   with_items:
+    - traefik
     - couchpotato
     - sabnzbd
     - samba

@@ -18,6 +18,7 @@ ExecStartPre=-/usr/bin/docker rm traefik
 # ExecStartPre=/usr/bin/docker pull traefik:1.7.3
 ExecStartPre=/usr/bin/docker create \
     --init \
+    --env-file /etc/env.d/traefik \
     --name traefik \
     --publish 443:443 \
     --publish 80:80 \
