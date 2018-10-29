@@ -11,7 +11,8 @@
     - dotfiles
 
 - hosts: unifi
-  roles: []
+  roles:
+    - ubiquiti
 
 - hosts: hypervisor
   roles:
