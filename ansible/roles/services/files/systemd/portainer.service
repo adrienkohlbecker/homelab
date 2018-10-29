@@ -13,14 +13,12 @@ Restart=always
 TimeoutSec=300
 RestartSec=15
 
-ExecStartPre=-/usr/bin/docker kill portainer.service
-ExecStartPre=-/usr/bin/docker rm portainer.service
+ExecStartPre=-/usr/bin/docker kill portainer
+ExecStartPre=-/usr/bin/docker rm portainer
 # ExecStartPre=/usr/bin/docker pull portainer/portainer:1.19.2
 ExecStart=/usr/bin/docker run \
     --init \
-    --log-driver syslog \
-    --log-opt tag="{{.Name}}" \
-    --name portainer.service \
+    --name portainer \
     --network traefik \
     --volume /mnt/docker/portainer:/data \
     --volume /var/run/docker.sock:/var/run/docker.sock \
@@ -31,7 +29,7 @@ ExecStart=/usr/bin/docker run \
     --label "traefik.protocol=http" \
     --label "traefik.frontend.auth.forward.address=http://traefik-auth-cloudflare/auth/5e1fe5b47ca159f90126270dd84f1c10fd646e8a384c1564c612a43d772d7fdd" \
     portainer/portainer:1.19.2
-ExecStop=/usr/bin/docker stop portainer.service
+ExecStop=/usr/bin/docker stop portainer
 
 [Install]
 WantedBy=compose.service
