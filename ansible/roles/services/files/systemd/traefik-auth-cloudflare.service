@@ -1,6 +1,6 @@
-# traefik.service #######################################################################
+# traefik-auth-cloudflare #######################################################################
 [Unit]
-Description=Traefik
+Description=traefik-auth-cloudflare
 After=docker.service
 Requires=docker.service
 PartOf=compose.service
@@ -13,8 +13,8 @@ Restart=always
 TimeoutSec=300
 RestartSec=15
 
-ExecStartPre=-/usr/bin/docker kill traefik.service
-ExecStartPre=-/usr/bin/docker rm traefik.service
+ExecStartPre=-/usr/bin/docker kill traefik-auth-cloudflare
+ExecStartPre=-/usr/bin/docker rm traefik-auth-cloudflare
 ExecStartPre=/usr/bin/docker pull akohlbecker/traefik-auth-cloudflare
 ExecStart=/usr/bin/docker run \
     --init \
@@ -22,7 +22,7 @@ ExecStart=/usr/bin/docker run \
     --network traefik-auth \
     akohlbecker/traefik-auth-cloudflare \
     --auth-domain https://akohlbecker.cloudflareaccess.com
-ExecStop=/usr/bin/docker stop traefik.service
+ExecStop=/usr/bin/docker stop traefik-auth-cloudflare
 
 [Install]
 WantedBy=compose.service

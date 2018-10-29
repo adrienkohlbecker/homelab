@@ -22,7 +22,7 @@ ExecStart=/usr/bin/docker run \
     --log-opt tag="{{.Name}}" \
     --name speedtest.service \
     --network traefik \
-    --publish 8080:80
+    --publish 8080:80 \
     adolfintel/speedtest:latest
 ExecStop=/usr/bin/docker stop speedtest.service
 
