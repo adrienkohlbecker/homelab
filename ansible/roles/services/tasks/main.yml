@@ -24,7 +24,6 @@
   become: yes
   tags:
     - services
-    - focus
   with_items:
     - {path: '/mnt/docker',                 owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/brumath',                owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
@@ -47,7 +46,7 @@
 
 - name: Enable the service
   systemd:
-    name: "compose"
+    name: compose
     enabled: yes
     daemon_reload: yes
   become: yes
@@ -91,6 +90,18 @@
     - usenet-maintenance.service
   notify:
     - Restart usenet-maintenance
+
+- name: Enable the service
+  systemd:
+    name: "{{ item }}"
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  with_items:
+    - usenet-maintenance.path
+    - usenet-maintenance.timer
+  tags:
+    - services
 
 - import_tasks: avahi.yml
 - import_tasks: samba.yml
