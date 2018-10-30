@@ -15,20 +15,19 @@ RestartSec=15
 
 ExecStartPre=-/usr/bin/docker kill sickrage
 ExecStartPre=-/usr/bin/docker rm sickrage
-ExecStartPre=/usr/bin/docker pull akohlbecker/sickrage
-ExecStartPre=/usr/bin/docker run \
+ExecStartPre=/usr/bin/docker pull sickrage/sickrage
+ExecStartPre=/usr/bin/docker create \
     --init \
-    --env-file /etc/env.d/sickrage \
     --name sickrage \
-    --volume /mnt/docker/sickrage:/data \
-    --volume /mnt/media:/media \
+    --volume /mnt/docker/sickrage:/config \
+    --volume /mnt/media/TV:/tv \
     --label "traefik.docker.network=traefik" \
     --label "traefik.enable=true" \
     --label "traefik.frontend.rule=Host:sickrage.kohlby.fr" \
     --label "traefik.port=8081" \
     --label "traefik.protocol=http" \
     --label "traefik.frontend.auth.forward.address=http://traefik-auth-cloudflare/auth/287d2f4e699f1d692d2449c29775aff93424b1face49e0ba185956e74f014f51" \
-    akohlbecker/sickrage
+    sickrage/sickrage
 ExecStartPre=/usr/bin/docker network connect usenet sickrage
 ExecStartPre=/usr/bin/docker network connect traefik sickrage
 ExecStart=/usr/bin/docker start --attach sickrage

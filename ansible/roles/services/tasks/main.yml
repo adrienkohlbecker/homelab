@@ -6,6 +6,13 @@
   become: yes
   tags:
     - services
+  register: usenet_docker_network_output
+
+- name: Set fact with usenet docker network gateway
+  set_fact:
+    usenet_docker_network_gateway: "{{ usenet_docker_network_output.ansible_facts.docker_network.IPAM.Config[0].Gateway }}"
+  tags:
+    - services
 
 - name: Create a network
   docker_network:
@@ -119,8 +126,8 @@
     - {path: '/mnt/docker',                 owner: 'root',              group: 'media',             mode: '0774'}
     - {path: '/mnt/docker/traefik',         owner: 'root',              group: 'root',              mode: '0755'}
     - {path: '/mnt/docker/portainer',       owner: 'root',              group: 'root',              mode: '0755'}
-    - {path: '/mnt/docker/sabnzbd',         owner: 'media',             group: 'media',             mode: '0774'}
-    - {path: '/mnt/docker/sickrage',        owner: 'media',             group: 'media',             mode: '0774'}
+    - {path: '/mnt/docker/sabnzbd',         owner: 'root',              group: 'root',              mode: '0755'}
+    - {path: '/mnt/docker/sickrage',        owner: 'root',              group: 'root',              mode: '0755'}
     - {path: '/mnt/docker/couchpotato',     owner: 'media',             group: 'media',             mode: '0774'}
     - {path: '/mnt/docker/gitlab',          owner: 'root',              group: 'root',              mode: '0755'}
     - {path: '/mnt/docker/gitlab-storage',  owner: 'root',              group: 'root',              mode: '0755'}
@@ -185,6 +192,45 @@
   notify:
     - Restart traefik
 
+- name: Configure sickrage
+  template:
+    src: sickrage.ini.j2
+    dest: /mnt/docker/sickrage/config.ini
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+  notify:
+    - Restart sickrage
+
+- name: Configure sabnzbd
+  template:
+    src: sabnzbd.ini.j2
+    dest: /mnt/docker/sabnzbd/sabnzbd.ini
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+  notify:
+    - Restart sabnzbd
+
+- name: Configure sabnzbd
+  template:
+    src: autoProcessMedia.cfg.j2
+    dest: /mnt/docker/sabnzbd/autoProcessMedia.cfg
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+  notify:
+    - Restart sabnzbd
+
 - name: Create acme.json
   file:
     dest: /mnt/docker/traefik/acme.json
@@ -220,13 +266,11 @@
   tags:
     - services
   notify:
-    - Restart compose
+    - Restart {{ item }}
   with_items:
     - traefik
     - couchpotato
-    - sabnzbd
     - samba
-    - sickrage
 
 - name: Copy the unit files
   copy:
@@ -239,7 +283,7 @@
   tags:
     - services
   notify:
-    - Restart compose
+    # - Restart {{ item }}
   with_items:
     - avahi
     - compose
