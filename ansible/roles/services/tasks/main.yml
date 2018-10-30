@@ -128,7 +128,7 @@
     - {path: '/mnt/docker/portainer',       owner: 'root',              group: 'root',              mode: '0755'}
     - {path: '/mnt/docker/sabnzbd',         owner: 'root',              group: 'root',              mode: '0755'}
     - {path: '/mnt/docker/sickrage',        owner: 'root',              group: 'root',              mode: '0755'}
-    - {path: '/mnt/docker/couchpotato',     owner: 'media',             group: 'media',             mode: '0774'}
+    - {path: '/mnt/docker/couchpotato',     owner: 'root',              group: 'root',              mode: '0755'}
     - {path: '/mnt/docker/gitlab',          owner: 'root',              group: 'root',              mode: '0755'}
     - {path: '/mnt/docker/gitlab-storage',  owner: 'root',              group: 'root',              mode: '0755'}
     - {path: '/mnt/docker/plex',            owner: 'plex',              group: 'media',             mode: '0774'}
@@ -231,6 +231,19 @@
   notify:
     - Restart sabnzbd
 
+- name: Configure couchpotato
+  template:
+    src: couchpotato.ini.j2
+    dest: /mnt/docker/couchpotato/settings.conf
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+  notify:
+    - Restart couchpotato
+
 - name: Create acme.json
   file:
     dest: /mnt/docker/traefik/acme.json
@@ -269,7 +282,6 @@
     - Restart {{ item }}
   with_items:
     - traefik
-    - couchpotato
     - samba
 
 - name: Copy the unit files

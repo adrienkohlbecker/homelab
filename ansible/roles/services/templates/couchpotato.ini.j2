@@ -1,0 +1,750 @@
+[core]
+api_key = {{ aws_ssm_couchpotato_api_key }}
+username =
+ssl_key =
+proxy_server =
+ssl_cert =
+data_dir = /data
+use_proxy = 0
+permission_file = 0664
+proxy_password =
+dereferer = http://www.dereferer.org/?
+permission_folder = 0775
+dark_theme = 1
+development = 0
+proxy_username =
+ipv6 = 0
+debug = 0
+launch_browser = 0
+password =
+port = 5050
+url_base =
+show_wizard = 0
+username_internal_meta = rw
+bookmarklet_host =
+api_key_internal_meta = ro
+
+[download_providers]
+
+[updater]
+notification = True
+enabled = True
+git_command = git
+automatic = True
+
+[automation]
+rating = 7.5
+votes = 1000
+hour = 12
+required_genres =
+year =
+ignored_genres =
+
+[manage]
+startup_scan = True
+library_refresh_interval = 0
+cleanup = True
+enabled = 1
+library = /media/Movies
+
+[renamer]
+file_name = <thename><cd> (<year>).<ext>
+next_on_failed = False
+default_file_action = move
+ntfs_permission = False
+check_space = True
+nfo_name = <filename>.orig.<ext>
+from = /media/.tmp/couchpotato
+foldersep =
+to = /media/Movies
+cleanup = 1
+unrar_modify_date = False
+move_leftover = False
+rename_nfo = True
+folder_name = <namethe> (<year>)
+run_every = 0
+file_action = link
+replace_doubles = True
+unrar_path =
+enabled = 1
+unrar = 1
+separator =
+force_every = 0
+remove_lower_quality_copies = True
+
+[subtitle]
+languages = en,fr
+force = False
+enabled = True
+
+[trailer]
+quality = 720p
+enabled = False
+name = <filename>-trailer
+
+[blackhole]
+directory = /data/blackhole
+manual = 0
+enabled = 0
+create_subdir = 0
+use_for = both
+magnet_file = 0
+
+[deluge]
+username =
+delete_failed = True
+completed_directory =
+manual = 0
+enabled = 0
+label =
+paused = False
+host = localhost:58846
+delete_files = True
+directory =
+remove_complete = True
+password =
+
+[hadouken]
+auth_type = api_key
+auth_pass =
+enabled = 0
+label =
+host = localhost:7890
+version = v4
+auth_user =
+api_key =
+
+[nzbget]
+username = nzbget
+category = Movies
+delete_failed = True
+manual = 0
+enabled = 0
+priority = 0
+ssl = 0
+host = localhost:6789
+password =
+
+[nzbvortex]
+group =
+delete_failed = True
+manual = False
+enabled = 0
+host = https://localhost:4321
+api_key =
+
+[pneumatic]
+directory =
+manual = 0
+enabled = 0
+
+[putio]
+delete_file = 0
+callback_host =
+download_dir =
+manual = 0
+enabled = 0
+oauth_token =
+download = 0
+folder = 0
+
+[qbittorrent]
+username =
+manual = 0
+enabled = 0
+paused = False
+host = http://localhost:8080/
+delete_files = True
+remove_complete = False
+password =
+label = couchpotato
+
+[rtorrent]
+username =
+rpc_url = RPC2
+manual = 0
+enabled = 0
+label =
+paused = False
+ssl = 0
+host = localhost:80
+delete_files = True
+directory =
+remove_complete = False
+password =
+authentication = basic
+ssl_verify = 1
+ssl_ca_bundle =
+
+[sabnzbd]
+category = couchpotato
+delete_failed = True
+manual = False
+enabled = 1
+priority = 0
+ssl = 0
+host = sabnzbd:8080
+remove_complete = False
+api_key = {{ aws_ssm_sabnzbd_api_key }}
+
+[synology]
+username =
+manual = 0
+destination =
+enabled = 0
+host = localhost:5000
+password =
+use_for = both
+
+[transmission]
+username =
+stalled_as_failed = True
+delete_failed = True
+rpc_url = transmission
+manual = 0
+enabled = 0
+paused = False
+host =
+delete_files = True
+directory = /media/.tmp/couchpotato
+remove_complete = True
+password =
+
+[utorrent]
+username =
+delete_failed = True
+manual = 0
+enabled = 0
+label =
+paused = False
+host = localhost:8000
+delete_files = True
+remove_complete = True
+password =
+
+[notification_providers]
+
+[boxcar2]
+token =
+enabled = 0
+on_snatch = 0
+
+[email]
+starttls = 0
+smtp_pass =
+on_snatch = 0
+from =
+to =
+smtp_port = 25
+enabled = 0
+smtp_server =
+smtp_user =
+ssl = 0
+
+[emby]
+host = localhost:8096
+apikey =
+enabled = 0
+
+[growl]
+password =
+on_snatch = False
+hostname =
+enabled = 0
+port =
+
+[nmj]
+host = localhost
+enabled = 0
+mount =
+database =
+
+[notifymyandroid]
+priority = 0
+dev_key =
+api_key =
+enabled = 0
+on_snatch = 0
+
+[plex]
+username =
+on_snatch = 0
+auth_token = {{ aws_ssm_plex_token }}
+clients =
+enabled = 1
+media_server = {{ usenet_docker_network_gateway }}:32400
+password =
+
+[prowl]
+priority = 0
+on_snatch = 0
+api_key =
+enabled = 0
+
+[pushalot]
+auth_token =
+important = 0
+enabled = 0
+silent = 0
+on_snatch = 0
+
+[pushbullet]
+channels =
+on_snatch = 0
+api_key =
+enabled = 0
+devices =
+
+[pushover]
+sound =
+on_snatch = 0
+user_key =
+enabled = 0
+priority = 0
+api_token = YkxHMYDZp285L265L3IwH3LmzkTaCy
+
+[slack]
+on_snatch = 0
+as_user = False
+enabled = 0
+bot_name = CouchPotato
+channels =
+token =
+icon_emoji =
+icon_url =
+include_imdb = True
+
+[synoindex]
+enabled = 0
+
+[toasty]
+on_snatch = 0
+api_key =
+enabled = 0
+
+[trakt]
+remove_watchlist_enabled = False
+notification_enabled = False
+automation_enabled = False
+automation_oauth_refresh =
+automation_oauth_token =
+
+[twitter]
+on_snatch = 0
+screen_name =
+enabled = 0
+access_token_key =
+mention =
+access_token_secret =
+direct_message = 0
+
+[webhook]
+url =
+on_snatch = 0
+enabled = 0
+
+[xbmc]
+username = xbmc
+on_snatch = False
+force_full_scan = 0
+only_first = 0
+enabled = 0
+remote_dir_scan = 0
+host = localhost:8080
+password =
+meta_disc_art_name = disc.png
+meta_extra_thumbs_name = extrathumbs/thumb<i>.jpg
+meta_thumbnail = True
+meta_extra_fanart = False
+meta_logo = False
+meta_enabled = False
+meta_landscape_name = landscape.jpg
+meta_nfo_name = %s.nfo
+meta_banner_name = banner.jpg
+meta_landscape = False
+meta_extra_fanart_name = extrafanart/extrafanart<i>.jpg
+meta_nfo = True
+meta_fanart = True
+meta_thumbnail_name = %s.tbn
+meta_url_only = False
+meta_fanart_name = %s-fanart.jpg
+meta_logo_name = logo.png
+meta_banner = False
+meta_clear_art = False
+meta_clear_art_name = clearart.png
+meta_extra_thumbs = False
+meta_disc_art = False
+
+[xmpp]
+username =
+on_snatch = 0
+hostname = talk.google.com
+enabled = 0
+to =
+password =
+port = 5222
+
+[nzb_providers]
+
+[binsearch]
+enabled =
+extra_score = 0
+
+[newznab]
+use = 0,0,0,1,0
+extra_score = 0,0,0,0,0
+enabled = True
+host = api.nzb.su,api.dognzb.cr,nzbs.org,https://api.nzbgeek.info,https://www.nzbfinder.ws
+custom_tag = ,,,,
+api_key = ,,,{{ aws_ssm_nzbgeek_api_key }},
+
+[nzbclub]
+enabled =
+extra_score = 0
+
+[omgwtfnzbs]
+username =
+api_key =
+enabled =
+extra_score = 20
+custom_tag =
+
+[torrent_providers]
+
+[alpharatio]
+username =
+seed_time = 40
+extra_score = 0
+enabled = False
+scene_only = False
+password =
+seed_ratio = 1
+
+[awesomehd]
+seed_time = 40
+extra_score = 20
+only_internal = 1
+passkey =
+enabled = False
+favor = both
+prefer_internal = 1
+seed_ratio = 1
+
+[bithdtv]
+username =
+seed_time = 40
+extra_score = 20
+enabled = False
+password =
+seed_ratio = 1
+
+[bitsoup]
+username =
+seed_time = 40
+extra_score = 20
+enabled = False
+password =
+seed_ratio = 1
+
+[hd4free]
+username =
+apikey =
+seed_time = 0
+extra_score = 0
+enabled = False
+internal_only = False
+prefer_internal = 1
+seed_ratio = 0
+
+[hdaccess]
+username =
+apikey =
+seed_time = 0
+extra_score = 0
+enabled = False
+internal_only = False
+prefer_internal = 1
+seed_ratio = 0
+
+[hdbits]
+username =
+seed_time = 40
+extra_score = 0
+passkey =
+enabled = False
+internal_only = False
+seed_ratio = 1
+
+[ilovetorrents]
+username =
+seed_time = 40
+extra_score = 0
+enabled = False
+password =
+seed_ratio = 1
+
+[iptorrents]
+username =
+freeleech = 0
+extra_score = 0
+enabled = False
+seed_time = 40
+password =
+seed_ratio = 1
+
+[kickasstorrents]
+domain =
+seed_time = 40
+extra_score = 0
+enabled = False
+only_verified = False
+seed_ratio = 1
+
+[passthepopcorn]
+username =
+domain =
+seed_time = 40
+extra_score = 20
+passkey =
+prefer_scene = 0
+enabled = False
+prefer_golden = 1
+require_approval = 0
+password =
+seed_ratio = 1
+prefer_freeleech = 1
+
+[rarbg]
+min_leechers = 0
+enabled = False
+ranked_only = 1
+extra_score = 0
+min_seeders = 10
+
+[sceneaccess]
+username =
+seed_time = 40
+extra_score = 20
+enabled = False
+password =
+seed_ratio = 1
+
+[scenetime]
+username =
+seed_time = 40
+extra_score = 20
+enabled = False
+password =
+seed_ratio = 1
+
+[thepiratebay]
+seed_time = 40
+domain =
+enabled = 0
+seed_ratio = 1
+extra_score = 0
+trusted_only = False
+
+[torrentbytes]
+username =
+seed_time = 40
+extra_score = 20
+enabled = False
+password =
+seed_ratio = 1
+
+[torrentday]
+username =
+seed_time = 40
+extra_score = 0
+enabled = False
+password =
+seed_ratio = 1
+cookiesetting =
+
+[torrentleech]
+username =
+seed_time = 40
+extra_score = 20
+enabled = False
+password =
+seed_ratio = 1
+
+[torrentpotato]
+use =
+seed_time = 40
+name =
+extra_score = 0
+enabled = False
+host =
+pass_key = ,
+seed_ratio = 1
+
+[torrentshack]
+username =
+seed_time = 40
+extra_score = 0
+enabled = False
+scene_only = False
+password =
+seed_ratio = 1
+
+[torrentz]
+verified_only = True
+extra_score = 0
+minimal_seeds = 1
+enabled = False
+seed_time = 40
+seed_ratio = 1
+
+[yify]
+seed_time = 40
+domain =
+enabled = False
+seed_ratio = 1
+extra_score = 0
+
+[searcher]
+preferred_method = nzb
+required_words =
+ignored_words = german, dutch, danish, swedish, spanish, italian, korean, dubbed, swesub, korsub, dksubs, vain, HC, CAM
+preferred_words = BluRay, DTS-HD, DTS, Retail, x264, MULTI, DTSHD, DTSHD-MA
+
+[nzb]
+retention = 2031
+
+[torrent]
+minimum_seeders = 1
+
+[charts]
+
+[automation_providers]
+
+[bluray]
+automation_enabled = False
+chart_display_enabled = True
+backlog = False
+
+[crowdai]
+automation_enabled = False
+number_grabs = 500
+automation_urls_use = 1
+automation_urls = http://YOUR_PROVIDER/rss?t=THE_MOVIE_CATEGORY&i=YOUR_USER_ID&r=YOUR_API_KEY&res=2&rls=2&num=100
+
+[flixster]
+automation_ids_use =
+automation_enabled = False
+automation_ids =
+
+[goodfilms]
+automation_enabled = False
+automation_username =
+
+[hummingbird]
+automation_list_dropped = False
+automation_enabled = False
+automation_username =
+automation_list_hold = False
+automation_list_completed = False
+automation_list_plan = True
+automation_list_current = False
+
+[imdb]
+automation_charts_top250 = True
+chart_display_boxoffice = 1
+chart_display_top250 = 1
+automation_enabled = 0
+chart_display_rentals = False
+automation_urls_use =
+automation_urls =
+automation_providers_enabled = 1
+automation_charts_rentals = True
+chart_display_theater = 1
+automation_charts_theater = 1
+chart_display_enabled = True
+automation_charts_boxoffice = 1
+
+[itunes]
+automation_enabled = False
+automation_urls_use = ,
+automation_urls = https://itunes.apple.com/rss/topmovies/limit=25/xml,
+
+[kinepolis]
+automation_enabled = 1
+
+[letterboxd]
+automation_enabled = False
+automation_urls_use =
+automation_urls =
+
+[moviemeter]
+automation_enabled = 1
+
+[moviesio]
+automation_enabled = False
+automation_urls_use =
+automation_urls =
+
+[popularmovies]
+automation_enabled = 1
+
+[themoviedb]
+api_key =
+
+[mediabrowser]
+meta_enabled = False
+
+[sonyps3]
+meta_enabled = False
+
+[wdtvlive]
+meta_thumbnail = True
+meta_enabled = False
+meta_nfo = True
+
+[windowsmediacenter]
+meta_enabled = False
+
+[moviesearcher]
+cron_day = *
+cron_hour = 19
+cron_minute = 19
+always_search = False
+run_on_launch = 0
+search_on_add = 1
+
+[suggestion]
+enabled = True
+
+[androidpn]
+broadcast = 1
+username =
+on_snatch = 0
+enabled = 0
+url =
+
+[homey]
+url =
+enabled = 0
+
+[telegrambot]
+bot_token =
+on_snatch = 0
+enabled = 0
+receiver_user_id =
+
+[magnetdl]
+seed_time = 40
+max_pages = 3
+enabled = False
+seed_ratio = 1
+extra_score = 0
+
+[morethantv]
+username =
+seed_time = 40
+extra_score = 0
+enabled = False
+scene_only = False
+password =
+seed_ratio = 1

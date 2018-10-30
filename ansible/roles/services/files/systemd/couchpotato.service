@@ -18,7 +18,6 @@ ExecStartPre=-/usr/bin/docker rm couchpotato
 ExecStartPre=/usr/bin/docker pull akohlbecker/couchpotato
 ExecStartPre=/usr/bin/docker create \
     --init \
-    --env-file /etc/env.d/couchpotato \
     --name couchpotato \
     --volume /mnt/docker/couchpotato:/data \
     --volume /mnt/media:/media \
