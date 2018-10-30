@@ -54,6 +54,17 @@
   tags:
     - services
 
+- name: Copy the sort script
+  copy:
+    src: sort_ini.py
+    dest: /usr/local/bin/sort-ini
+    owner: root
+    group: root
+    mode: 0755
+  become: yes
+  tags:
+    - services
+
 - import_tasks: avahi.yml
 - import_tasks: samba.yml
 - import_tasks: traefik.yml

@@ -1,5 +1,64 @@
-__version__ = 19
 __encoding__ = utf-8
+__version__ = 19
+[acenter]
+acenter_cats = *,
+acenter_enable = 0
+acenter_prio_complete = 1
+acenter_prio_disk_full = 1
+acenter_prio_download = 0
+acenter_prio_error = 0
+acenter_prio_failed = 1
+acenter_prio_new_login = 0
+acenter_prio_other = 0
+acenter_prio_pp = 0
+acenter_prio_queue_done = 1
+acenter_prio_startup = 0
+acenter_prio_warning = 0
+[categories]
+[[*]]
+dir = /media/Other
+name = *
+newzbin = ""
+order = 0
+pp = 3
+priority = 0
+script = None
+[[couchpotato]]
+dir = /media/.tmp/couchpotato
+name = couchpotato
+newzbin = ""
+order = 0
+pp = ""
+priority = -100
+script = nzbToCouchPotato.py
+[[sickrage]]
+dir = /media/.tmp/sickrage
+name = sickrage
+newzbin = ""
+order = 0
+pp = ""
+priority = -100
+script = nzbToSickBeard.py
+[growl]
+growl_cats = *,
+growl_enable = 0
+growl_password = ""
+growl_prio_complete = 1
+growl_prio_disk_full = 1
+growl_prio_download = 0
+growl_prio_error = 0
+growl_prio_failed = 1
+growl_prio_new_login = 0
+growl_prio_other = 0
+growl_prio_pp = 0
+growl_prio_queue_done = 1
+growl_prio_startup = 1
+growl_prio_warning = 0
+growl_server = ""
+[logging]
+log_backups = 5
+log_level = 1
+max_log_size = 5242880
 [misc]
 action_on_unwanted_extensions = 0
 admin_dir = /data/admin
@@ -184,72 +243,6 @@ web_dir = Glitter
 win_menu = 1
 win_process_prio = 3
 x_frame_options = 1
-[logging]
-log_backups = 5
-log_level = 1
-max_log_size = 5242880
-[servers]
-[[news.usenet.farm]]
-username = {{ aws_ssm_sabnzbd_usenetfarm_username }}
-priority = 0
-enable = 1
-displayname = news.usenet.farm
-name = news.usenet.farm
-ssl_ciphers = ""
-notes = ""
-connections = 20
-ssl = 1
-host = news.usenet.farm
-timeout = 120
-ssl_verify = 2
-send_group = 0
-password = {{ aws_ssm_sabnzbd_usenetfarm_password }}
-optional = 0
-port = 563
-retention = 1000
-[[news-ssl.newsgroupdirect.com]]
-username = {{ aws_ssm_sabnzbd_newsgroupdirect_username }}
-priority = 1
-enable = 1
-displayname = news-ssl.newsgroupdirect.com
-name = news-ssl.newsgroupdirect.com
-ssl_ciphers = ""
-notes = ""
-connections = 50
-ssl = 1
-host = news-ssl.newsgroupdirect.com
-timeout = 120
-ssl_verify = 1
-send_group = 0
-password = {{ aws_ssm_sabnzbd_newsgroupdirect_password }}
-optional = 0
-port = 563
-retention = 2031
-[categories]
-[[*]]
-priority = 0
-pp = 3
-name = *
-script = None
-newzbin = ""
-order = 0
-dir = /media/Other
-[[couchpotato]]
-priority = -100
-pp = ""
-name = couchpotato
-script = nzbToCouchPotato.py
-newzbin = ""
-order = 0
-dir = /media/.tmp/couchpotato
-[[sickrage]]
-priority = -100
-pp = ""
-name = sickrage
-script = nzbToSickBeard.py
-newzbin = ""
-order = 0
-dir = /media/.tmp/sickrage
 [ncenter]
 ncenter_cats = *,
 ncenter_enable = 0
@@ -280,6 +273,51 @@ nscript_prio_queue_done = 1
 nscript_prio_startup = 1
 nscript_prio_warning = 0
 nscript_script = ""
+[ntfosd]
+ntfosd_cats = *,
+ntfosd_enable = 1
+ntfosd_prio_complete = 1
+ntfosd_prio_disk_full = 1
+ntfosd_prio_download = 0
+ntfosd_prio_error = 0
+ntfosd_prio_failed = 1
+ntfosd_prio_new_login = 0
+ntfosd_prio_other = 0
+ntfosd_prio_pp = 0
+ntfosd_prio_queue_done = 1
+ntfosd_prio_startup = 1
+ntfosd_prio_warning = 0
+[prowl]
+prowl_apikey = ""
+prowl_cats = *,
+prowl_enable = 0
+prowl_prio_complete = 0
+prowl_prio_disk_full = 1
+prowl_prio_download = -3
+prowl_prio_error = -3
+prowl_prio_failed = 1
+prowl_prio_new_login = -3
+prowl_prio_other = -3
+prowl_prio_pp = -3
+prowl_prio_queue_done = 0
+prowl_prio_startup = -3
+prowl_prio_warning = -3
+[pushbullet]
+pushbullet_apikey = ""
+pushbullet_cats = *,
+pushbullet_device = ""
+pushbullet_enable = 0
+pushbullet_prio_complete = 1
+pushbullet_prio_disk_full = 1
+pushbullet_prio_download = 0
+pushbullet_prio_error = 0
+pushbullet_prio_failed = 1
+pushbullet_prio_new_login = 0
+pushbullet_prio_other = 0
+pushbullet_prio_pp = 0
+pushbullet_prio_queue_done = 0
+pushbullet_prio_startup = 0
+pushbullet_prio_warning = 0
 [pushover]
 pushover_cats = *,
 pushover_device = ""
@@ -299,78 +337,40 @@ pushover_prio_startup = -3
 pushover_prio_warning = 1
 pushover_token = ""
 pushover_userkey = ""
-[growl]
-growl_cats = *,
-growl_enable = 0
-growl_password = ""
-growl_prio_complete = 1
-growl_prio_disk_full = 1
-growl_prio_download = 0
-growl_prio_error = 0
-growl_prio_failed = 1
-growl_prio_new_login = 0
-growl_prio_other = 0
-growl_prio_pp = 0
-growl_prio_queue_done = 1
-growl_prio_startup = 1
-growl_prio_warning = 0
-growl_server = ""
-[prowl]
-prowl_apikey = ""
-prowl_cats = *,
-prowl_enable = 0
-prowl_prio_complete = 0
-prowl_prio_disk_full = 1
-prowl_prio_download = -3
-prowl_prio_error = -3
-prowl_prio_failed = 1
-prowl_prio_new_login = -3
-prowl_prio_other = -3
-prowl_prio_pp = -3
-prowl_prio_queue_done = 0
-prowl_prio_startup = -3
-prowl_prio_warning = -3
-[acenter]
-acenter_cats = *,
-acenter_enable = 0
-acenter_prio_complete = 1
-acenter_prio_disk_full = 1
-acenter_prio_download = 0
-acenter_prio_error = 0
-acenter_prio_failed = 1
-acenter_prio_new_login = 0
-acenter_prio_other = 0
-acenter_prio_pp = 0
-acenter_prio_queue_done = 1
-acenter_prio_startup = 0
-acenter_prio_warning = 0
-[ntfosd]
-ntfosd_cats = *,
-ntfosd_enable = 1
-ntfosd_prio_complete = 1
-ntfosd_prio_disk_full = 1
-ntfosd_prio_download = 0
-ntfosd_prio_error = 0
-ntfosd_prio_failed = 1
-ntfosd_prio_new_login = 0
-ntfosd_prio_other = 0
-ntfosd_prio_pp = 0
-ntfosd_prio_queue_done = 1
-ntfosd_prio_startup = 1
-ntfosd_prio_warning = 0
-[pushbullet]
-pushbullet_prio_error = 0
-pushbullet_prio_download = 0
-pushbullet_prio_queue_done = 0
-pushbullet_cats = *,
-pushbullet_prio_complete = 1
-pushbullet_enable = 0
-pushbullet_device = ""
-pushbullet_prio_failed = 1
-pushbullet_prio_other = 0
-pushbullet_apikey = ""
-pushbullet_prio_disk_full = 1
-pushbullet_prio_new_login = 0
-pushbullet_prio_pp = 0
-pushbullet_prio_startup = 0
-pushbullet_prio_warning = 0
+[servers]
+[[news-ssl.newsgroupdirect.com]]
+connections = 50
+displayname = news-ssl.newsgroupdirect.com
+enable = 1
+host = news-ssl.newsgroupdirect.com
+name = news-ssl.newsgroupdirect.com
+notes = ""
+optional = 0
+password = {{ aws_ssm_sabnzbd_newsgroupdirect_password }}
+port = 563
+priority = 1
+retention = 2031
+send_group = 0
+ssl = 1
+ssl_ciphers = ""
+ssl_verify = 1
+timeout = 120
+username = {{ aws_ssm_sabnzbd_newsgroupdirect_username }}
+[[news.usenet.farm]]
+connections = 20
+displayname = news.usenet.farm
+enable = 1
+host = news.usenet.farm
+name = news.usenet.farm
+notes = ""
+optional = 0
+password = {{ aws_ssm_sabnzbd_usenetfarm_password }}
+port = 563
+priority = 0
+retention = 1000
+send_group = 0
+ssl = 1
+ssl_ciphers = ""
+ssl_verify = 2
+timeout = 120
+username = {{ aws_ssm_sabnzbd_usenetfarm_username }}
