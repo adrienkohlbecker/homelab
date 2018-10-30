@@ -79,6 +79,7 @@
   when: sasl_auth is changed
   tags:
     - mailer
+    - skip_ansible_lint
 
 - name: Setup user email aliases
   lineinfile:
@@ -101,3 +102,4 @@
   when: aliases is changed
   tags:
     - mailer
+    - skip_ansible_lint
