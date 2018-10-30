@@ -56,13 +56,6 @@
     - services
     - focus
   with_items:
-    - {path: '/mnt/media/Movies',           owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
-    - {path: '/mnt/media/Music',            owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
-    - {path: '/mnt/media/TV',               owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
-    - {path: '/mnt/media/.tmp',             owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/media/.tmp/couchpotato', owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/media/.tmp/sickrage',    owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/docker',                 owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/brumath',                owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/legacy',                 owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
