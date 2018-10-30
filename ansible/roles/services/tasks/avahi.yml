@@ -21,3 +21,19 @@
   tags:
     - services
     - avahi
+
+- name: Copy avahi services
+  copy:
+    src: avahi/{{ item }}.service
+    dest: /etc/avahi/services/{{ item }}.service
+    mode: 0644
+    owner: root
+    group: root
+  with_items:
+    - device-info
+    - smb
+  become: yes
+  notify: Restart avahi
+  tags:
+    - services
+    - avahi
