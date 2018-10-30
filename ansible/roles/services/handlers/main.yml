@@ -11,3 +11,63 @@
     name: traefik
     state: restarted
   become: yes
+
+- name: Restart sickrage
+  service:
+    name: sickrage
+    state: restarted
+  become: yes
+
+- name: Restart avahi
+  service:
+    name: avahi
+    state: restarted
+  become: yes
+
+- name: Restart couchpotato
+  service:
+    name: couchpotato
+    state: restarted
+  become: yes
+
+- name: Restart traefik-auth-cloudflare
+  service:
+    name: traefik-auth-cloudflare
+    state: restarted
+  become: yes
+
+- name: Restart plex
+  service:
+    name: plex
+    state: restarted
+  become: yes
+
+- name: Restart sabnzbd
+  service:
+    name: sabnzbd
+    state: restarted
+  become: yes
+
+- name: Restart samba
+  service:
+    name: samba
+    state: restarted
+  become: yes
+
+- name: Restart sftp
+  service:
+    name: sftp
+    state: restarted
+  become: yes
+
+- name: Restart portainer
+  service:
+    name: portainer
+    state: restarted
+  become: yes
+
+- name: Restart speedtest
+  service:
+    name: speedtest
+    state: restarted
+  become: yes

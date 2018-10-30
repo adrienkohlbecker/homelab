@@ -18,9 +18,9 @@ ExecStartPre=-/usr/bin/docker rm sabnzbd
 ExecStartPre=/usr/bin/docker pull akohlbecker/sabnzbd
 ExecStartPre=/usr/bin/docker create \
     --init \
-    --env-file /etc/env.d/sabnzbd \
     --name sabnzbd \
     --volume /mnt/docker/sabnzbd:/data \
+    --volume /mnt/docker/sabnzbd/autoProcessMedia.cfg:/opt/autoProcessMedia/autoProcessMedia.cfg \
     --volume /mnt/media:/media \
     --label "traefik.docker.network=traefik" \
     --label "traefik.enable=true" \
