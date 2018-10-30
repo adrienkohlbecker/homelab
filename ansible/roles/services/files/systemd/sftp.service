@@ -1,8 +1,8 @@
 # sftp.service #######################################################################
 [Unit]
 Description=SFTP
-After=docker.service mnt-media.mount zfs-mount.service
-Requires=docker.service mnt-media.mount zfs-mount.service
+After=docker.service zfs-mount.service
+Requires=docker.service zfs-mount.service
 PartOf=compose.service
 
 StartLimitInterval=300

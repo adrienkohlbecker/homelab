@@ -39,31 +39,12 @@
   tags:
     - mergerfs
 
-- name: Add media group
-  group:
-    name: media
-    gid: 2000
-    state: present
-  become: yes
-  tags:
-    - mergerfs
-
-- name: Add media user
-  user:
-    name: media
-    uid: 2000
-    group: media
-    state: present
-  become: yes
-  tags:
-    - mergerfs
-
-- name: Create media director ies
+- name: Create media directories
   file:
     dest: "{{ item }}"
     state: directory
-    owner: media
-    group: media
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
     mode: 0775
   become: yes
   tags:

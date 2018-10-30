@@ -14,36 +14,6 @@
   tags:
     - services
 
-- name: Add sftpaccess group
-  group:
-    name: sftpaccess
-    gid: 2200
-    state: present
-  become: yes
-  tags:
-    - services
-
-- name: Add arq user
-  user:
-    name: arq
-    group: sftpaccess
-    uid: 2201
-    createhome: no
-    state: present
-  become: yes
-  tags:
-    - services
-
-- name: Add deploy user to media group
-  user:
-    name: "{{ deploy_user }}"
-    groups: media
-    append: yes
-    createhome: no
-  become: yes
-  tags:
-    - services
-
 - name: Create mount points
   file:
     dest: "{{item.path}}"
@@ -60,13 +30,12 @@
     - {path: '/mnt/brumath',                owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/legacy',                 owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/pictures',               owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
-    - {path: '/mnt/sftp',                   owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/videos',                 owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
 
-- name: Copy the unit files
+- name: Copy the unit file
   copy:
-    src: systemd/{{ item }}.service
-    dest: /etc/systemd/system/{{ item }}.service
+    src: systemd/compose.service
+    dest: /etc/systemd/system/compose.service
     owner: root
     group: root
     mode: 0644
@@ -74,24 +43,16 @@
   tags:
     - services
   notify:
-    # - Restart {{ item }}
-  with_items:
-    - compose
-    - sftp
-    - speedtest
+    - Restart compose
 
-- name: Enable the services
+- name: Enable the service
   systemd:
-    name: "{{ item }}"
+    name: "compose"
     enabled: yes
     daemon_reload: yes
   become: yes
   tags:
     - services
-  with_items:
-    - compose
-    - sftp
-    - speedtest
 
 - import_tasks: avahi.yml
 - import_tasks: samba.yml
