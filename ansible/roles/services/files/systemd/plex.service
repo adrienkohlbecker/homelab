@@ -15,14 +15,15 @@ RestartSec=15
 
 ExecStartPre=-/usr/bin/docker kill plex
 ExecStartPre=-/usr/bin/docker rm plex
-ExecStartPre=/usr/bin/docker pull akohlbecker/plex
+ExecStartPre=/usr/bin/docker pull plexinc/pms-docker
 ExecStart=/usr/bin/docker run \
     --init \
     --name plex \
     --net host \
-    --volume /mnt/docker/plex:/data \
+    --volume "/mnt/docker/plex:/config/Library/Application Support" \
     --volume /mnt/media:/media \
-    akohlbecker/plex
+    --volume /tmp/transcode:/transcode \
+    plexinc/pms-docker
 ExecStop=/usr/bin/docker stop plex
 
 [Install]
