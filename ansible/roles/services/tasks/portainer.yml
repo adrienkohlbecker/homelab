@@ -1,0 +1,37 @@
+---
+
+- name: Create configuration directory
+  file:
+    dest: /mnt/docker/portainer
+    state: directory
+    owner: root
+    group: root
+    mode: 0775
+  become: yes
+  tags:
+    - services
+    - portainer
+
+- name: Copy the unit file
+  copy:
+    src: systemd/portainer.service
+    dest: /etc/systemd/system/portainer.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - portainer
+  notify:
+    - Restart portainer
+
+- name: Enable the service
+  systemd:
+    name: portainer
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - portainer

@@ -1,0 +1,121 @@
+---
+
+- name: Create the traefik docker network
+  docker_network:
+    name: traefik
+  become: yes
+  tags:
+    - services
+    - traefik
+
+- name: Create the traefik-auth docker network
+  docker_network:
+    name: traefik-auth
+  become: yes
+  tags:
+    - services
+    - traefik
+
+- name: Create configuration directory
+  file:
+    dest: /mnt/docker/traefik
+    state: directory
+    owner: root
+    group: root
+    mode: 0775
+  become: yes
+  tags:
+    - services
+    - traefik
+
+- name: Download client ca from cloudflare
+  get_url:
+    url: https://support.cloudflare.com/hc/en-us/article_attachments/201243967/origin-pull-ca.pem
+    dest: /mnt/docker/traefik/cloudflare-origin-pull-ca.pem
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - traefik
+  notify:
+    - Restart traefik
+
+- name: Configure traefik
+  template:
+    src: traefik.toml.j2
+    dest: /mnt/docker/traefik/traefik.toml
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+    - traefik
+  notify:
+    - Restart traefik
+
+- name: Create acme.json
+  file:
+    dest: /mnt/docker/traefik/acme.json
+    state: file
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+    - traefik
+  notify:
+    - Restart traefik
+
+- name: Create env.d directory
+  file:
+    dest: /etc/env.d
+    state: directory
+    owner: root
+    group: root
+    mode: 0700
+  become: yes
+  tags:
+    - services
+    - traefik
+
+- name: Copy the credentials
+  template:
+    src: environment/traefik.j2
+    dest: /etc/env.d/traefik
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+    - traefik
+  notify:
+    - Restart traefik
+
+- name: Copy the unit file
+  copy:
+    src: systemd/traefik.service
+    dest: /etc/systemd/system/traefik.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - traefik
+  notify:
+    - Restart traefik
+
+- name: Enable the service
+  systemd:
+    name: traefik
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - traefik

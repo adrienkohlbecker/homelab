@@ -14,46 +14,10 @@
   tags:
     - services
 
-- name: Create a network
-  docker_network:
-    name: traefik
-  become: yes
-  tags:
-    - services
-
-- name: Create a network
-  docker_network:
-    name: traefik-auth
-  become: yes
-  tags:
-    - services
-
 - name: Add sftpaccess group
   group:
     name: sftpaccess
     gid: 2200
-    state: present
-  become: yes
-  tags:
-    - services
-
-- name: Add plex group
-  group:
-    name: plex
-    gid: 2005
-    system: true
-    state: present
-  become: yes
-  tags:
-    - services
-
-- name: Add plex user
-  user:
-    name: plex
-    group: plex
-    uid: 2005
-    createhome: no
-    system: true
     state: present
   become: yes
   tags:
@@ -100,151 +64,11 @@
     - {path: '/mnt/media/.tmp/couchpotato', owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/media/.tmp/sickrage',    owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/docker',                 owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/docker/traefik',         owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/docker/portainer',       owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/docker/sabnzbd',         owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/docker/sickrage',        owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/docker/couchpotato',     owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/docker/plex',            owner: 'plex',              group: 'plex',              mode: '0775'}
     - {path: '/mnt/brumath',                owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/legacy',                 owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/pictures',               owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/sftp',                   owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/videos',                 owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
-
-- name: Copy docker-dbus apparmor profile
-  copy:
-    src: docker-dbus.apparmor
-    dest: /etc/apparmor.d/docker-dbus
-    mode: 0644
-    owner: root
-    group: root
-  become: yes
-  register: docker_dbus
-  tags:
-    - services
-
-- name: Register new apparmor profile
-  shell: apparmor_parser -r -W /etc/apparmor.d/docker-dbus
-  when: docker_dbus is changed
-  become: yes
-  tags:
-    - services
-
-- name: Download client ca from cloudflare
-  get_url:
-    url: https://support.cloudflare.com/hc/en-us/article_attachments/201243967/origin-pull-ca.pem
-    dest: /mnt/docker/traefik/cloudflare-origin-pull-ca.pem
-    owner: root
-    group: root
-    mode: 0644
-  become: yes
-  tags:
-    - services
-
-- name: Configure traefik
-  template:
-    src: traefik.toml.j2
-    dest: /mnt/docker/traefik/traefik.toml
-    owner: root
-    group: root
-    mode: 0600
-  become: yes
-  tags:
-    - services
-  notify:
-    - Restart traefik
-
-- name: Configure sickrage
-  template:
-    src: sickrage.ini.j2
-    dest: /mnt/docker/sickrage/config.ini
-    owner: root
-    group: root
-    mode: 0600
-  become: yes
-  tags:
-    - services
-  notify:
-    - Restart sickrage
-
-- name: Configure sabnzbd
-  template:
-    src: sabnzbd.ini.j2
-    dest: /mnt/docker/sabnzbd/sabnzbd.ini
-    owner: root
-    group: root
-    mode: 0600
-  become: yes
-  tags:
-    - services
-  notify:
-    - Restart sabnzbd
-
-- name: Configure sabnzbd
-  template:
-    src: autoProcessMedia.cfg.j2
-    dest: /mnt/docker/sabnzbd/autoProcessMedia.cfg
-    owner: root
-    group: root
-    mode: 0600
-  become: yes
-  tags:
-    - services
-  notify:
-    - Restart sabnzbd
-
-- name: Configure couchpotato
-  template:
-    src: couchpotato.ini.j2
-    dest: /mnt/docker/couchpotato/settings.conf
-    owner: root
-    group: root
-    mode: 0600
-  become: yes
-  tags:
-    - services
-  notify:
-    - Restart couchpotato
-
-- name: Create acme.json
-  file:
-    dest: /mnt/docker/traefik/acme.json
-    state: file
-    owner: root
-    group: root
-    mode: 0600
-  become: yes
-  tags:
-    - services
-  notify:
-    - Restart traefik
-
-- name: Create env.d directory
-  file:
-    dest: /etc/env.d
-    state: directory
-    owner: root
-    group: root
-    mode: 0700
-  become: yes
-  tags:
-    - services
-
-- name: Copy the credentials
-  template:
-    src: environment/{{ item }}.j2
-    dest: /etc/env.d/{{ item }}
-    owner: root
-    group: root
-    mode: 0600
-  become: yes
-  tags:
-    - services
-  notify:
-    - Restart {{ item }}
-  with_items:
-    - traefik
 
 - name: Copy the unit files
   copy:
@@ -260,14 +84,7 @@
     # - Restart {{ item }}
   with_items:
     - compose
-    - couchpotato
-    - traefik
-    - traefik-auth-cloudflare
-    - plex
-    - sabnzbd
     - sftp
-    - sickrage
-    - portainer
     - speedtest
 
 - name: Enable the services
@@ -280,15 +97,14 @@
     - services
   with_items:
     - compose
-    - couchpotato
-    - traefik
-    - traefik-auth-cloudflare
-    - plex
-    - sabnzbd
     - sftp
-    - sickrage
-    - portainer
     - speedtest
 
 - import_tasks: avahi.yml
 - import_tasks: samba.yml
+- import_tasks: traefik.yml
+- import_tasks: traefik-auth-cloudflare.yml
+- import_tasks: plex.yml
+- import_tasks: sabnzbd.yml
+- import_tasks: couchpotato.yml
+- import_tasks: sickrage.yml

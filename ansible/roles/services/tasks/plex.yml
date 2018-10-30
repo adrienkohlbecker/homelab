@@ -1,0 +1,59 @@
+---
+
+- name: Add plex group
+  group:
+    name: plex
+    gid: 2005
+    system: true
+    state: present
+  become: yes
+  tags:
+    - services
+
+- name: Add plex user
+  user:
+    name: plex
+    group: plex
+    uid: 2005
+    createhome: no
+    system: true
+    state: present
+  become: yes
+  tags:
+    - services
+
+- name: Create configuration directory
+  file:
+    dest: /mnt/docker/plex
+    state: directory
+    owner: plex
+    group: plex
+    mode: 0775
+  become: yes
+  tags:
+    - services
+    - plex
+
+- name: Copy the unit file
+  copy:
+    src: systemd/plex.service
+    dest: /etc/systemd/system/plex.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - plex
+  notify:
+    - Restart plex
+
+- name: Enable the service
+  systemd:
+    name: plex
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - plex
