@@ -34,6 +34,7 @@
     creates: /etc/ssh/ssh_host_ed25519_key
   become: yes
   tags:
+    - skip_ansible_lint
     - ssh
 
 - name: Add deploy user to ssh group

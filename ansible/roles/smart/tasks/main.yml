@@ -50,7 +50,7 @@
   copy:
     src: smart_short_test.sh
     dest: /usr/local/bin/smart_short_test
-    mode: 755
+    mode: 0755
   become: yes
   tags:
     - smart
@@ -71,7 +71,7 @@
   copy:
     src: smart_long_test.sh
     dest: /usr/local/bin/smart_long_test
-    mode: 755
+    mode: 0755
   become: yes
   tags:
     - smart

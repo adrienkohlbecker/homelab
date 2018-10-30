@@ -40,7 +40,7 @@
   copy:
     src: snapraid_sync.sh
     dest: /usr/local/bin/snapraid_sync
-    mode: 755
+    mode: 0755
   become: yes
   tags:
     - snapraid
@@ -61,7 +61,7 @@
   copy:
     src: snapraid_scrub.sh
     dest: /usr/local/bin/snapraid_scrub
-    mode: 755
+    mode: 0755
   become: yes
   tags:
     - snapraid

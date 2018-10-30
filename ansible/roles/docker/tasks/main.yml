@@ -38,7 +38,7 @@
   copy:
     src: docker_clean.sh
     dest: /usr/local/bin/docker_clean
-    mode: 755
+    mode: 0755
   become: yes
   tags:
     - docker

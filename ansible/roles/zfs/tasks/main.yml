@@ -17,7 +17,7 @@
   copy:
     src: zfs.conf
     dest: /etc/modprobe.d/zfs.conf
-    mode: 755
+    mode: 0755
   become: yes
   notify: Ask to reboot
   tags:
@@ -27,7 +27,7 @@
   copy:
     src: zfs_health.sh
     dest: /usr/local/bin/zfs_health
-    mode: 755
+    mode: 0755
   become: yes
   tags:
     - zfs
@@ -47,7 +47,7 @@
   copy:
     src: zfs_snaps.sh
     dest: /usr/local/bin/zfs_snaps
-    mode: 755
+    mode: 0755
   become: yes
   tags:
     - zfs
