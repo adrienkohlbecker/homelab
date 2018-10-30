@@ -1,0 +1,22 @@
+---
+
+- name: Install samba
+  apt:
+    pkg: samba
+    state: present
+  become: yes
+  tags:
+    - datadog
+
+- name: Copy samba config
+  copy:
+    src: smb.conf
+    dest: /etc/samba/smb.conf
+    mode: 0644
+    owner: root
+    group: root
+  become: yes
+  notify: Restart samba
+  tags:
+    - services
+    - samba
