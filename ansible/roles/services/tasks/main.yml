@@ -282,7 +282,6 @@
     - Restart {{ item }}
   with_items:
     - traefik
-    - samba
 
 - name: Copy the unit files
   copy:
@@ -326,8 +325,9 @@
     - traefik-auth-cloudflare
     - plex
     - sabnzbd
-    - samba
     - sftp
     - sickrage
     - portainer
     - speedtest
+
+include: "samba.yaml"
