@@ -1,0 +1,83 @@
+---
+
+- name: Create configuration directory
+  file:
+    dest: /mnt/docker/sabnzbd
+    state: directory
+    owner: root
+    group: root
+    mode: 0775
+  become: yes
+  tags:
+    - services
+    - sabnzbd
+
+- name: Create storage directories
+  file:
+    dest: "{{item.path}}"
+    state: directory
+    owner: "{{item.owner}}"
+    group: "{{item.group}}"
+    mode: "{{item.mode}}"
+  become: yes
+  tags:
+    - services
+    - sabnzbd
+  with_items:
+    - {path: '/mnt/media/Movies',           owner: 'media',             group: 'media',             mode: '0775'}
+    - {path: '/mnt/media/Music',            owner: 'media',             group: 'media',             mode: '0775'}
+    - {path: '/mnt/media/TV',               owner: 'media',             group: 'media',             mode: '0775'}
+    - {path: '/mnt/media/.tmp',             owner: 'root',              group: 'root',              mode: '0775'}
+    - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'root',              group: 'root',              mode: '0775'}
+    - {path: '/mnt/media/.tmp/couchpotato', owner: 'root',              group: 'root',              mode: '0775'}
+    - {path: '/mnt/media/.tmp/sickrage',    owner: 'root',              group: 'root',              mode: '0775'}
+
+- name: Configure sabnzbd
+  template:
+    src: sabnzbd.ini.j2
+    dest: /mnt/docker/sabnzbd/sabnzbd.ini
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+  notify:
+    - Restart sabnzbd
+
+- name: Configure sabnzbd
+  template:
+    src: autoProcessMedia.cfg.j2
+    dest: /mnt/docker/sabnzbd/autoProcessMedia.cfg
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+  notify:
+    - Restart sabnzbd
+
+- name: Copy the unit file
+  copy:
+    src: systemd/sabnzbd.service
+    dest: /etc/systemd/system/sabnzbd.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - sabnzbd
+  notify:
+    - Restart sabnzbd
+
+- name: Enable the service
+  systemd:
+    name: sabnzbd
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - sabnzbd

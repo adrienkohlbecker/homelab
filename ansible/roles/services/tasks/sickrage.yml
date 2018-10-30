@@ -1,0 +1,50 @@
+---
+
+- name: Create configuration directory
+  file:
+    dest: /mnt/docker/sickrage
+    state: directory
+    owner: root
+    group: root
+    mode: 0775
+  become: yes
+  tags:
+    - services
+    - sickrage
+
+- name: Configure sickrage
+  template:
+    src: sickrage.ini.j2
+    dest: /mnt/docker/sickrage/config.ini
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+  notify:
+    - Restart sickrage
+
+- name: Copy the unit file
+  copy:
+    src: systemd/sickrage.service
+    dest: /etc/systemd/system/sickrage.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - sickrage
+  notify:
+    - Restart sickrage
+
+- name: Enable the service
+  systemd:
+    name: sickrage
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - sickrage

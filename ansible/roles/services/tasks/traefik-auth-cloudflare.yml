@@ -1,0 +1,25 @@
+---
+
+- name: Copy the unit file
+  copy:
+    src: systemd/traefik-auth-cloudflare.service
+    dest: /etc/systemd/system/traefik-auth-cloudflare.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - traefik-auth-cloudflare
+  notify:
+    - Restart traefik-auth-cloudflare
+
+- name: Enable service
+  systemd:
+    name: traefik-auth-cloudflare
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - traefik-auth-cloudflare
