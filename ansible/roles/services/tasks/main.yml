@@ -28,31 +28,6 @@
   tags:
     - services
 
-- name: Add avahi group
-  group:
-    name: avahi
-    gid: 125
-    system: yes
-    state: present
-  become: yes
-  tags:
-    - services
-
-- name: Add avahi user
-  user:
-    name: avahi
-    group: avahi
-    uid: 125
-    createhome: no
-    comment: Avahi mDNS daemon,,,
-    home: /var/run/avahi-daemon
-    shell: /bin/false
-    system: yes
-    state: present
-  become: yes
-  tags:
-    - services
-
 - name: Add sftpaccess group
   group:
     name: sftpaccess
@@ -152,17 +127,6 @@
 - name: Register new apparmor profile
   shell: apparmor_parser -r -W /etc/apparmor.d/docker-dbus
   when: docker_dbus is changed
-  become: yes
-  tags:
-    - services
-
-- name: Copy avahi dbus config
-  copy:
-    src: avahi-dbus.conf
-    dest: /etc/dbus-1/system.d/avahi-dbus.conf
-    mode: 0644
-    owner: root
-    group: root
   become: yes
   tags:
     - services
@@ -295,7 +259,6 @@
   notify:
     # - Restart {{ item }}
   with_items:
-    - avahi
     - compose
     - couchpotato
     - traefik
@@ -316,7 +279,6 @@
   tags:
     - services
   with_items:
-    - avahi
     - compose
     - couchpotato
     - traefik
@@ -328,4 +290,5 @@
     - portainer
     - speedtest
 
+- import_tasks: avahi.yml
 - import_tasks: samba.yml
