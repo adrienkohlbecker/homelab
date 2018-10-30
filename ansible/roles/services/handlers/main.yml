@@ -20,7 +20,7 @@
 
 - name: Restart avahi
   service:
-    name: avahi
+    name: avahi-daemon
     state: restarted
   become: yes
 

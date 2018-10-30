@@ -1,0 +1,23 @@
+---
+
+- name: Install avahi-daemon
+  apt:
+    pkg: avahi-daemon
+    state: present
+  become: yes
+  tags:
+    - services
+    - avahi
+
+- name: Copy avahi config
+  copy:
+    src: avahi-daemon.conf
+    dest: /etc/avahi/avahi-daemon.conf
+    mode: 0644
+    owner: root
+    group: root
+  become: yes
+  notify: Restart avahi
+  tags:
+    - services
+    - avahi
