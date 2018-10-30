@@ -115,14 +115,15 @@
   become: yes
   tags:
     - services
+    - focus
   with_items:
     - {path: '/mnt/media/Movies',           owner: 'media',             group: 'media',             mode: '0774'}
     - {path: '/mnt/media/Music',            owner: 'media',             group: 'media',             mode: '0774'}
     - {path: '/mnt/media/TV',               owner: 'media',             group: 'media',             mode: '0774'}
-    - {path: '/mnt/media/.tmp',             owner: 'media',             group: 'media',             mode: '0775'}
-    - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'media',             group: 'media',             mode: '0775'}
-    - {path: '/mnt/media/.tmp/couchpotato', owner: 'media',             group: 'media',             mode: '0774'}
-    - {path: '/mnt/media/.tmp/sickrage',    owner: 'media',             group: 'media',             mode: '0774'}
+    - {path: '/mnt/media/.tmp',             owner: 'root',              group: 'root',              mode: '0755'}
+    - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'root',              group: 'root',              mode: '0755'}
+    - {path: '/mnt/media/.tmp/couchpotato', owner: 'root',              group: 'root',              mode: '0755'}
+    - {path: '/mnt/media/.tmp/sickrage',    owner: 'root',              group: 'root',              mode: '0755'}
     - {path: '/mnt/docker',                 owner: 'root',              group: 'media',             mode: '0774'}
     - {path: '/mnt/docker/traefik',         owner: 'root',              group: 'root',              mode: '0755'}
     - {path: '/mnt/docker/portainer',       owner: 'root',              group: 'root',              mode: '0755'}
