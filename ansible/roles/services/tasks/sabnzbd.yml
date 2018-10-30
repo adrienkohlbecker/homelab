@@ -24,9 +24,9 @@
     - services
     - sabnzbd
   with_items:
-    - {path: '/mnt/media/Movies',           owner: 'media',             group: 'media',             mode: '0775'}
-    - {path: '/mnt/media/Music',            owner: 'media',             group: 'media',             mode: '0775'}
-    - {path: '/mnt/media/TV',               owner: 'media',             group: 'media',             mode: '0775'}
+    - {path: '/mnt/media/Movies',           owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
+    - {path: '/mnt/media/Music',            owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
+    - {path: '/mnt/media/TV',               owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/media/.tmp',             owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/media/.tmp/couchpotato', owner: 'root',              group: 'root',              mode: '0775'}
