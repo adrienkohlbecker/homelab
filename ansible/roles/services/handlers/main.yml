@@ -71,3 +71,9 @@
     name: speedtest
     state: restarted
   become: yes
+
+- name: Restart usenet-maintenance
+  service:
+    name: usenet-maintenance
+    state: restarted
+  become: yes
