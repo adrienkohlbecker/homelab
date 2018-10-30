@@ -1,0 +1,7 @@
+[Path]
+PathModified=/mnt/docker/sickrage/config.ini
+PathModified=/mnt/docker/sabnzbd/sabnzbd.ini
+PathModified=/mnt/docker/couchpotato/settings.conf
+
+[Install]
+WantedBy=compose.service
