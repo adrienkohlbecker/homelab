@@ -1,0 +1,59 @@
+---
+
+- name: Create data directory
+  file:
+    dest: /mnt/sftp
+    state: directory
+    owner: root
+    group: root
+    mode: 0775
+  become: yes
+  tags:
+    - services
+    - sftp
+
+- name: Add sftpaccess group
+  group:
+    name: sftpaccess
+    gid: 2200
+    state: present
+  become: yes
+  tags:
+    - services
+    - sftp
+
+- name: Add arq user
+  user:
+    name: arq
+    group: sftpaccess
+    uid: 2201
+    createhome: no
+    state: present
+  become: yes
+  tags:
+    - services
+    - sftp
+
+- name: Copy the unit file
+  copy:
+    src: systemd/sftp.service
+    dest: /etc/systemd/system/sftp.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - sftp
+  notify:
+    - Restart sftp
+
+- name: Enable the service
+  systemd:
+    name: sftp
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - sftp
