@@ -14,7 +14,6 @@ deploy_user_additional_groups:
   # additional groups for services
   - ssh
   - docker
-  - media
 
 duo_enabled: true
 
