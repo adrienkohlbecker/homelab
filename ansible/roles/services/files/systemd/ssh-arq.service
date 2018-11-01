@@ -25,7 +25,7 @@ ExecStart=/usr/bin/docker run \
     --volume /etc/shadow:/etc/shadow:ro \
     --volume /etc/gshadow:/etc/gshadow:ro \
     --volume /home/arq:/home/arq:ro \
-    --volume /mnt/sftp/arq:/data \
+    --volume /mnt/arq:/data \
     --publish 2224:22 \
     akohlbecker/docker-ssh
 ExecStop=/usr/bin/docker stop ssh-arq

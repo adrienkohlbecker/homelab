@@ -9,7 +9,7 @@
   become: yes
   tags:
     - services
-    - sftp
+    - remote-ssh
 
 - name: Add arq user
   user:
@@ -21,7 +21,7 @@
   become: yes
   tags:
     - services
-    - sftp
+    - remote-ssh
 
 - name: Set arq authorized key
   authorized_key:
@@ -33,7 +33,7 @@
   become: yes
   tags:
     - services
-    - sftp
+    - remote-ssh
 
 - name: Add brumath group
   group:
@@ -44,7 +44,7 @@
   become: yes
   tags:
     - services
-    - sftp
+    - remote-ssh
 
 - name: Add brumath user
   user:
@@ -56,7 +56,7 @@
   become: yes
   tags:
     - services
-    - sftp
+    - remote-ssh
 
 - name: Set brumath authorized key
   authorized_key:
@@ -68,11 +68,11 @@
   become: yes
   tags:
     - services
-    - sftp
+    - remote-ssh
 
 - name: Create arq directory
   file:
-    dest: /mnt/sftp/arq
+    dest: /mnt/arq
     state: directory
     owner: arq
     group: arq
@@ -80,11 +80,11 @@
   become: yes
   tags:
     - services
-    - sftp
+    - remote-ssh
 
-- name: Create brumath directory
+- name: Create synology directory
   file:
-    dest: /mnt/sftp/brumath
+    dest: /mnt/synology
     state: directory
     owner: brumath
     group: brumath
@@ -92,7 +92,7 @@
   become: yes
   tags:
     - services
-    - sftp
+    - remote-ssh
 
 - name: Install bindfs
   apt:
@@ -101,19 +101,19 @@
   become: yes
   tags:
     - services
-    - sftp
+    - remote-ssh
 
 - name: Mount data with mapped user
   mount:
-    name: /mnt/sftp/brumath
-    src: /mnt/brumath
+    name: /mnt/synology
+    src: /mnt/brumath/synology
     fstype: fuse.bindfs
     opts: map=adrien/brumath:@adrien/@brumath
     state: mounted
   become: yes
   tags:
     - services
-    - sftp
+    - remote-ssh
 
 - name: Copy the unit file
   copy:
@@ -125,7 +125,7 @@
   become: yes
   tags:
     - services
-    - sftp
+    - remote-ssh
   notify:
     - Restart ssh-arq
 
@@ -137,7 +137,7 @@
   become: yes
   tags:
     - services
-    - sftp
+    - remote-ssh
 
 - name: Copy the unit file
   copy:
@@ -149,7 +149,7 @@
   become: yes
   tags:
     - services
-    - sftp
+    - remote-ssh
   notify:
     - Restart ssh-brumath
 
@@ -161,4 +161,4 @@
   become: yes
   tags:
     - services
-    - sftp
+    - remote-ssh

@@ -25,7 +25,7 @@ ExecStart=/usr/bin/docker run \
     --volume /etc/shadow:/etc/shadow:ro \
     --volume /etc/gshadow:/etc/gshadow:ro \
     --volume /home/brumath:/home/brumath:ro \
-    --volume /mnt/sftp/brumath:/data \
+    --volume /mnt/synology:/data \
     --publish 2223:22 \
     akohlbecker/docker-ssh
 ExecStop=/usr/bin/docker stop ssh-brumath
