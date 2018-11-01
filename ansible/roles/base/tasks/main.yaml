@@ -27,14 +27,6 @@
   tags:
     - base
 
-- name: Install aptitude
-  apt:
-    pkg: aptitude
-    state: present
-  become: yes
-  tags:
-    - base
-
 - name: apt-get upgrade
   apt:
     upgrade: full
@@ -70,23 +62,20 @@
 
 - name: Install base packages
   apt:
-    pkg: "{{item}}"
+    pkg:
+      - acpid
+      - fail2ban
+      - logrotate
+      - unattended-upgrades
+      - update-notifier-common
+      - console-data # keymaps
+      - python # ansible dep
+      - python-simplejson # ansible dep
+      - python-apt # ansible dep (for check mode)
+      - python-pip
+      - apt-transport-https
     state: present
   become: yes
-  with_items:
-    - acpid
-    - fail2ban
-    - logrotate
-    - unattended-upgrades
-    - update-notifier-common
-    # - ubuntu-minimal
-    # - grub-pc
-    - console-data # keymaps
-    - python # ansible dep
-    - python-simplejson # ansible dep
-    - python-apt # ansible dep (for check mode)
-    - python-pip
-    - apt-transport-https
   tags:
     - base
 
@@ -94,18 +83,6 @@
   pip:
     name: docker-py # ansible dep for docker module
   become: yes
-  tags:
-    - base
-
-- name: Install ubuntu base packages
-  apt:
-    pkg: "{{item}}"
-    state: present
-  become: yes
-  when: ansible_distribution == 'Ubuntu'
-  with_items:
-    - ubuntu-minimal
-    - grub-pc
   tags:
     - base
 
@@ -124,32 +101,6 @@
       line: 'XKBVARIANT="latin9"'
     - regexp: ^XKBOPTIONS=
       line: 'XKBOPTIONS="lv3:ralt_switch"'
-  tags:
-    - base
-
-- name: Configure concurrency level
-  lineinfile:
-    dest: /etc/environment
-    regexp: "{{item.regexp}}"
-    line: "{{item.line}}"
-  become: yes
-  with_items:
-    - regexp: ^CONCURRENCY_LEVEL=
-      line: 'CONCURRENCY_LEVEL="{{ ansible_processor_vcpus + 1 }}"'
-    - regexp: ^MAKE_FLAGS=
-      line: 'MAKE_FLAGS="-j{{ ansible_processor_vcpus + 1 }}"'
-  tags:
-    - base
-
-- name: Keep these vars when running sudo
-  lineinfile:
-    dest: /etc/sudoers.d/ansible
-    insertafter: EOF
-    line: 'Defaults        env_keep="CONCURRENCY_LEVEL MAKE_FLAGS"'
-    state: present
-    create: yes
-    validate: visudo -cf %s
-  become: yes
   tags:
     - base
 

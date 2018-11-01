@@ -21,8 +21,6 @@ aws_ssm_sabnzbd_sendgrid_password: "{{ lookup('aws_ssm', 'sabnzbd.sendgrid_passw
 aws_ssm_sabnzbd_sendgrid_username: "{{ lookup('aws_ssm', 'sabnzbd.sendgrid_username', region='eu-west-1' ) }}"
 aws_ssm_sabnzbd_usenetfarm_password: "{{ lookup('aws_ssm', 'sabnzbd.usenetfarm_password', region='eu-west-1' ) }}"
 aws_ssm_sabnzbd_usenetfarm_username: "{{ lookup('aws_ssm', 'sabnzbd.usenetfarm_username', region='eu-west-1' ) }}"
-aws_ssm_samba_password_adrien: "{{ lookup('aws_ssm', 'samba.password_adrien', region='eu-west-1' ) }}"
-aws_ssm_samba_password_sonos: "{{ lookup('aws_ssm', 'samba.password_sonos', region='eu-west-1' ) }}"
 aws_ssm_sendgrid_password: "{{ lookup('aws_ssm', 'sendgrid.password', region='eu-west-1' ) }}"
 aws_ssm_sendgrid_user: "{{ lookup('aws_ssm', 'sendgrid.user', region='eu-west-1' ) }}"
 aws_ssm_sickrage_addic7ed_password: "{{ lookup('aws_ssm', 'sickrage.addic7ed_password', region='eu-west-1' ) }}"

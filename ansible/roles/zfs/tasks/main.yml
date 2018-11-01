@@ -2,13 +2,12 @@
 
 - name: Install ZoL
   apt:
-    package: "{{ item }}"
-    state: present
-  with_items:
+    package:
     - linux-image-generic
     - zfsutils-linux
     - zfs-initramfs
     - zfs-zed
+    state: present
   become: yes
   tags:
     - zfs

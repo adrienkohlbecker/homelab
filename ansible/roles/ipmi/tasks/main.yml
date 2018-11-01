@@ -2,12 +2,11 @@
 
 - name: Install freeipmi
   apt:
-    pkg: "{{ item }}"
+    pkg:
+      - freeipmi-tools
+      - freeipmi-bmc-watchdog
+      - freeipmi-ipmiseld
     state: present
-  with_items:
-    - freeipmi-tools
-    - freeipmi-bmc-watchdog
-    - freeipmi-ipmiseld
   become: yes
   tags:
     - ipmi

@@ -21,8 +21,6 @@ aws_ssm_sabnzbd_sendgrid_password: changeme
 aws_ssm_sabnzbd_sendgrid_username: changeme
 aws_ssm_sabnzbd_usenetfarm_password: changeme
 aws_ssm_sabnzbd_usenetfarm_username: changeme
-aws_ssm_samba_password_adrien: changeme
-aws_ssm_samba_password_sonos: changeme
 aws_ssm_sendgrid_password: changeme
 aws_ssm_sendgrid_user: changeme
 aws_ssm_sickrage_addic7ed_password: changeme

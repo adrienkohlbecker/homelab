@@ -1,26 +1,17 @@
 ---
 
-- name: Install fuse
-  apt:
-    pkg: fuse
-    state: present
-  become: yes
-  tags:
-    - mergerfs
-
 - name: Install mergerfs deps
   apt:
-    pkg: "{{item}}"
+    pkg:
+      - libc6
+      - libfuse2
+      - libgcc1
+      - libstdc++6
+      - fuse
     state: present
   become: yes
   tags:
     - mergerfs
-  with_items:
-    - libc6
-    - libfuse2
-    - libgcc1
-    - libstdc++6
-    - fuse
 
 - name: Download mergerfs
   get_url:
