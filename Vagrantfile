@@ -15,6 +15,13 @@ AVAILABLE_CPU    = `hostinfo`.match(/(\d+) processors are logically available./)
 VM_MEMORY        = (AVAILABLE_MEMORY * 0.2 * 1024).to_i
 VM_CPU           = AVAILABLE_CPU / 2
 
+# Temporary workaround to Python bug in macOS High Sierra which can break Ansible
+# https://github.com/ansible/ansible/issues/34056#issuecomment-352862252
+# This is an ugly hack tightly bound to the internals of Vagrant.Util.Subprocess, specifically
+# the jailbreak method, self-described as "quite possibly, the saddest function in all of Vagrant."
+# That in turn makes this assignment the saddest line in all of Vagrantfiles.
+ENV["VAGRANT_OLD_ENV_OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
+
 # All Vagrant configuration is done below. The "2" in Vagrant.configure
 # configures the configuration version (we support older styles for
 # backwards compatibility). Please don't change it unless you know what
@@ -70,15 +77,15 @@ Vagrant.configure(2) do |config|
   #
   # View the documentation for the provider you are using for more
   # information on available options.
-  config.vm.provider 'vmware_desktop' do |vmw|
-    vmw.gui = true
-    vmw.vmx["memsize"] = VM_MEMORY
-    vmw.vmx["numvcpus"] = VM_CPU
-    vmw.vmx["ethernet0.virtualdev"] = "vmxnet3" # vagrant overrides this
-    vmw.vmx["vhv.enable"] = true # nested virtualization, will ask for root password on the host
+  config.vm.provider :vmware_desktop do |vmware|
+    vmware.gui = true
+    vmware.vmx["memsize"] = VM_MEMORY
+    vmware.vmx["numvcpus"] = VM_CPU
+    vmware.vmx["ethernet0.virtualdev"] = "vmxnet3" # vagrant overrides this
 
     # https://www.vagrantup.com/docs/vmware/boxes.html#vmx-whitelisting
-    vmw.vmx["ethernet0.pcislotnumber"] = "192"
+    # box assumes 192 in /etc/netplan/01-netcfg.yaml
+    vmware.vmx["ethernet0.pcislotnumber"] = "192"
   end
 
   # Define a Vagrant Push strategy for pushing to Atlas. Other push strategies

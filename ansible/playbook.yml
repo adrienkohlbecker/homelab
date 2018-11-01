@@ -14,7 +14,9 @@
   roles:
     - ubiquiti
 
-- hosts: hypervisor
+- hosts:
+    - hypervisor
+    - box
   roles:
     - grub
     - networking
