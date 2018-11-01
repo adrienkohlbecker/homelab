@@ -9,7 +9,7 @@ set -euxo pipefail
 EMAIL_TO="root"
 
 # Email subject prefix
-EMAIL_SUBJECT_PREFIX="[$(hostname -s)] $NAME"
+EMAIL_SUBJECT_PREFIX="[$(hostname -s)] zfs health"
 
 # Scrub expiration time in seconds. So for 40 days we calculate 40 days
 # times 24 hours times 3600 seconds to equal 3456000 seconds.
