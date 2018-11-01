@@ -1,0 +1,34 @@
+# ssh-brumath #######################################################################
+[Unit]
+Description=ssh-brumath
+After=docker.service
+Requires=docker.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+ExecStartPre=-/usr/bin/docker kill ssh-brumath
+ExecStartPre=-/usr/bin/docker rm ssh-brumath
+ExecStartPre=/usr/bin/docker pull akohlbecker/docker-ssh
+ExecStart=/usr/bin/docker run \
+    --init \
+    --name ssh-brumath \
+    --volume /etc/ssh:/etc/ssh:ro \
+    --volume /etc/passwd:/etc/passwd:ro \
+    --volume /etc/group:/etc/group:ro \
+    --volume /etc/shadow:/etc/shadow:ro \
+    --volume /etc/gshadow:/etc/gshadow:ro \
+    --volume /home/brumath:/home/brumath:ro \
+    --volume /mnt/sftp/brumath:/data \
+    --publish 2223:22 \
+    akohlbecker/docker-ssh
+ExecStop=/usr/bin/docker stop ssh-brumath
+
+[Install]
+WantedBy=compose.service

@@ -27,7 +27,9 @@
   authorized_key:
     user: arq
     state: present
-    key: command="internal-sftp -d /mnt/sftp/arq",no-x11-forwarding,no-user-rc,no-pty,no-port-forwarding,no-agent-forwarding ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDBS0T7CVm8Oi763BF5PbIaBAkstPviX5bRef6gWtdXxDA6JtDLRl80n6T0m0aiJ9LpPGuHt8vwE9Aujx5FFsZTJV7qClbDMZ8Fd63zTPQFB2qoAHEkDHweCD3t2m+YveK/TQOyZaKo8tBhXvESZq0nGx0zLciu05IQl6cFTm/HuAT2uJy0QWnQDzbn0LJwvMM+4pzmCiGtiPpO/aAxE6UmMRcawyZB8d8Mi4Ocq5+OP9sNBMMOzMFx/vLjnXL6v/J5CLs1p9QLHJ0ydvsv5i8UQLcNkHssepGM6/axFbvinX39+7QW4PLRA56PgB4zkWklCz22gusCoBnX/qr91p1ji3hWE/2wU4lAT/a9luXvYQOUSO8cglkuKWKqDUF8bOtlHvcdWSKpQ1Gg/dcS5xT61Q0z6PQe2nMVJd7a3wpcxERf3Dx6uTlSV4O2EeMS3/kcWC3YvO+Nr+WhZuWrFMB8MKp8Y6g7J6Ak6EkdnKjQJVsajUprszBbfP0pCSsz0IW+meMdKrcEWGrsE0wQJSqITfpLHym33IJxdK+iqUHC7acplVQKcXqjHv5yJvrOCLN0AwDQtPuELCgR7p/JXciokfd9KbJ12eKbSdsm4Dp1A0KjmHc1yw221fy59n13jlGNrg3zK0Wm3a00S37m7kJe03SMTyTbwKxeGyXuYYC3eQ==
+    key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDBS0T7CVm8Oi763BF5PbIaBAkstPviX5bRef6gWtdXxDA6JtDLRl80n6T0m0aiJ9LpPGuHt8vwE9Aujx5FFsZTJV7qClbDMZ8Fd63zTPQFB2qoAHEkDHweCD3t2m+YveK/TQOyZaKo8tBhXvESZq0nGx0zLciu05IQl6cFTm/HuAT2uJy0QWnQDzbn0LJwvMM+4pzmCiGtiPpO/aAxE6UmMRcawyZB8d8Mi4Ocq5+OP9sNBMMOzMFx/vLjnXL6v/J5CLs1p9QLHJ0ydvsv5i8UQLcNkHssepGM6/axFbvinX39+7QW4PLRA56PgB4zkWklCz22gusCoBnX/qr91p1ji3hWE/2wU4lAT/a9luXvYQOUSO8cglkuKWKqDUF8bOtlHvcdWSKpQ1Gg/dcS5xT61Q0z6PQe2nMVJd7a3wpcxERf3Dx6uTlSV4O2EeMS3/kcWC3YvO+Nr+WhZuWrFMB8MKp8Y6g7J6Ak6EkdnKjQJVsajUprszBbfP0pCSsz0IW+meMdKrcEWGrsE0wQJSqITfpLHym33IJxdK+iqUHC7acplVQKcXqjHv5yJvrOCLN0AwDQtPuELCgR7p/JXciokfd9KbJ12eKbSdsm4Dp1A0KjmHc1yw221fy59n13jlGNrg3zK0Wm3a00S37m7kJe03SMTyTbwKxeGyXuYYC3eQ==
+    key_options: command="internal-sftp -d /data",no-x11-forwarding,no-user-rc,no-pty,no-port-forwarding,no-agent-forwarding
+    exclusive: true
   become: yes
   tags:
     - services
@@ -60,7 +62,9 @@
   authorized_key:
     user: brumath
     state: present
-    key: no-x11-forwarding,no-user-rc,no-pty,no-port-forwarding,no-agent-forwarding ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDuwd+JH25u1x9sACmCJ4vYGZABH/hJ9hjj6vNJjbQgmNq5uiF15Tnhz0WyLxDPQuVAOBH4GFjteYtyX94LAm6Wv5A7KVdRrGwZp/H69/ikrvHTVgn0SNE9A2xdozcAgWhne7Ku/PYwRfFA1SGBaNSzkr/saNU5MiVUWFlDAzm8IAdlr10nDJ0ZjxNukEd+kd5zwNko3jA0o8EhAzhb1e1flzHTKif/lUXRrUII08O+l6pmov+aCwHuumTt/u8/76vPO2KyhVMInmhFd5KIpeMOJtXd2cqJdIwtvFkv4JA5k9bt6u8XdnNSfjSikbkbVDKrNHz8zW2pcDfGkT37OiLXHUv/r+cinL+Se4ipLzw5WODBr4SkCu9YypBNI4D9QXx0lQ9Z2med/0jvtOzZNILHqwaZHlfzTNyOoSzwb2cphnO6cy+sDSPLTZUZRQGMK/VHlEwRIeVc3ZHZ25DSnkPDC8ljF3lZH1RragS0Z2ilfp5PjwUkYwhUJ5+iI9e7QWrYqjJ7eD2mkbc7B/gb0n864t96gkbwYEXxKL9jMuh1hxqtGkEpKKhg88sAbkN5dHUq1LCNkkeC0uqjnl87r5KkkCW2dLmRgqx9FWMtrR9lWTVs8xsuTwv+lTJA6XaHid8BIW4eC4RNAZv1KsJMGvrpUdDWGQaU5z7jDQs0efEBPw==
+    key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDuwd+JH25u1x9sACmCJ4vYGZABH/hJ9hjj6vNJjbQgmNq5uiF15Tnhz0WyLxDPQuVAOBH4GFjteYtyX94LAm6Wv5A7KVdRrGwZp/H69/ikrvHTVgn0SNE9A2xdozcAgWhne7Ku/PYwRfFA1SGBaNSzkr/saNU5MiVUWFlDAzm8IAdlr10nDJ0ZjxNukEd+kd5zwNko3jA0o8EhAzhb1e1flzHTKif/lUXRrUII08O+l6pmov+aCwHuumTt/u8/76vPO2KyhVMInmhFd5KIpeMOJtXd2cqJdIwtvFkv4JA5k9bt6u8XdnNSfjSikbkbVDKrNHz8zW2pcDfGkT37OiLXHUv/r+cinL+Se4ipLzw5WODBr4SkCu9YypBNI4D9QXx0lQ9Z2med/0jvtOzZNILHqwaZHlfzTNyOoSzwb2cphnO6cy+sDSPLTZUZRQGMK/VHlEwRIeVc3ZHZ25DSnkPDC8ljF3lZH1RragS0Z2ilfp5PjwUkYwhUJ5+iI9e7QWrYqjJ7eD2mkbc7B/gb0n864t96gkbwYEXxKL9jMuh1hxqtGkEpKKhg88sAbkN5dHUq1LCNkkeC0uqjnl87r5KkkCW2dLmRgqx9FWMtrR9lWTVs8xsuTwv+lTJA6XaHid8BIW4eC4RNAZv1KsJMGvrpUdDWGQaU5z7jDQs0efEBPw==
+    key_options: no-x11-forwarding,no-user-rc,no-port-forwarding,no-agent-forwarding # no-pty removed
+    exclusive: true
   become: yes
   tags:
     - services
@@ -106,6 +110,54 @@
     fstype: fuse.bindfs
     opts: map=adrien/brumath:@adrien/@brumath
     state: mounted
+  become: yes
+  tags:
+    - services
+    - sftp
+
+- name: Copy the unit file
+  copy:
+    src: systemd/ssh-arq.service
+    dest: /etc/systemd/system/ssh-arq.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - sftp
+  notify:
+    - Restart ssh-arq
+
+- name: Enable the service
+  systemd:
+    name: ssh-arq
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - sftp
+
+- name: Copy the unit file
+  copy:
+    src: systemd/ssh-brumath.service
+    dest: /etc/systemd/system/ssh-brumath.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - sftp
+  notify:
+    - Restart ssh-brumath
+
+- name: Enable the service
+  systemd:
+    name: ssh-brumath
+    enabled: yes
+    daemon_reload: yes
   become: yes
   tags:
     - services
