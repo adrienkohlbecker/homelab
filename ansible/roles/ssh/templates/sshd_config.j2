@@ -1,5 +1,5 @@
 # Package generated configuration file
-# See https://wiki.mozilla.org/Security/Guidelines/OpenSSH#Modern_.28OpenSSH_6.7.2B.29 for recommendations
+# See https://infosec.mozilla.org/guidelines/openssh#modern-openssh-67
 # See the sshd_config(5) manpage for details
 
 # What ports, IPs and protocols we listen for
@@ -21,7 +21,8 @@ KexAlgorithms curve25519-sha256@libssh.org,ecdh-sha2-nistp521,ecdh-sha2-nistp384
 Ciphers chacha20-poly1305@openssh.com,aes256-gcm@openssh.com,aes128-gcm@openssh.com,aes256-ctr,aes192-ctr,aes128-ctr
 MACs hmac-sha2-512-etm@openssh.com,hmac-sha2-256-etm@openssh.com,umac-128-etm@openssh.com,hmac-sha2-512,hmac-sha2-256,umac-128@openssh.com
 
-AllowGroups ssh
+# Password based logins are disabled - only public key based logins are allowed.
+AuthenticationMethods publickey
 
 # Logging
 SyslogFacility AUTH
@@ -41,17 +42,9 @@ PermitRootLogin No
 
 StrictModes yes
 
-# Password based logins are disabled - only public key based logins are allowed.
-{% if duo_enabled %}
-# Keyboard interactive added for duo
-AuthenticationMethods publickey,keyboard-interactive
-{% else %}
-AuthenticationMethods publickey
-{% endif %}
-
 RSAAuthentication yes
 PubkeyAuthentication yes
-#AuthorizedKeysFile	%h/.ssh/authorized_keys
+#AuthorizedKeysFile %h/.ssh/authorized_keys
 
 # Don't read the user's ~/.rhosts and ~/.shosts files
 IgnoreRhosts yes
@@ -67,12 +60,7 @@ PermitEmptyPasswords no
 
 # Change to yes to enable challenge-response passwords (beware issues with
 # some PAM modules and threads)
-{% if duo_enabled %}
-# Enabled for duo
-ChallengeResponseAuthentication yes
-{% else %}
 ChallengeResponseAuthentication no
-{% endif %}
 
 # Change to no to disable tunnelled clear text passwords
 #PasswordAuthentication yes
@@ -87,17 +75,12 @@ ChallengeResponseAuthentication no
 #GSSAPIAuthentication no
 #GSSAPICleanupCredentials yes
 
-X11Forwarding yes
-X11DisplayOffset 10
+X11Forwarding no
+AllowTcpForwarding no
 PrintMotd no
 PrintLastLog yes
 TCPKeepAlive yes
 #UseLogin no
-
-{% if duo_enabled %}
-# Disabled for duo so that PAM Duo is always passed the IP address of the connecting user, rather than the resolved hostname.
-UseDNS no
-{% endif %}
 
 #MaxStartups 10:30:60
 #Banner /etc/issue.net
