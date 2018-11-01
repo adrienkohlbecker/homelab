@@ -1,9 +1,9 @@
 #!/bin/bash
-test -e /usr/local/lib/bash-framework && source /usr/local/lib/bash-framework || (echo "Could not load bash-framework" 1>&2; exit 1)
+# http://redsymbol.net/articles/unofficial-bash-strict-mode/
+IFS=$'\n\t'
+set -euxo pipefail
 
-################################
-#        SCRIPT CONFIG         #
-################################
+[ "$(id -u)" == "0" ] || { echo >&2 "I require root. Aborting"; exit 1; }
 
 # Testing schedule (index is the day, Monday=0, Sunday=6)
 declare -a SCHEDULE=(
@@ -16,31 +16,19 @@ declare -a SCHEDULE=(
   "/dev/disk/by-id/ata-Crucial_CT240M500SSD1_13410953598E /dev/disk/by-id/ata-Crucial_CT240M500SSD1_14230C42B78B /dev/disk/by-id/ata-WDC_WD20EZRX-00D8PB0_WD-WMC4M0859498"
 )
 
-################################
-#          ACTUAL JOB          #
-###############################@
-
-must_run_as_root
-
-br
-log "Smart long test started."
-br
-
 # Monday=0, Sunday=6
 DAY=$(($(date '+%u') - 1))
 
 if [ "${SCHEDULE[$DAY]}" == "" ]; then
-  log "No devices for today ($(date '+%A'))"
+  echo "No devices for today ($(date '+%A'))"
 else
   IFS=', ' read -a DEVICES <<< "${SCHEDULE[$DAY]}"
-  log "Devices for today ($(date '+%A')): ${SCHEDULE[$DAY]}"
+  echo "Devices for today ($(date '+%A')): ${SCHEDULE[$DAY]}"
 
   for device in "${DEVICES[@]}"; do
-    log "..."
-    run "smartctl -t long $device 2>&1"
+    echo "..."
+    smartctl -t long $device
   done
 fi
 
-deadmansnitch "39a52f20f7"
-log "Done"
-exit 0
+echo "Done"

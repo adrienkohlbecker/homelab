@@ -1,15 +1,9 @@
 #!/bin/bash
-test -e /usr/local/lib/bash-framework && source /usr/local/lib/bash-framework || (echo "Could not load bash-framework" 1>&2; exit 1)
+# http://redsymbol.net/articles/unofficial-bash-strict-mode/
+IFS=$'\n\t'
+set -euxo pipefail
 
-################################
-#          ACTUAL JOB          #
-###############################@
-
-must_run_as_root
-
-br
-log "Smart short test started."
-br
+[ "$(id -u)" == "0" ] || { echo >&2 "I require root. Aborting"; exit 1; }
 
 shopt -s nullglob
 DEVICES=(/dev/[shv]d?)
@@ -17,13 +11,11 @@ shopt -u nullglob
 
 for device in "${DEVICES[@]}"; do
 
-  run "smartctl -t short $device 2>&1"
-  log "Waiting 2 minutes for test on $device ..."
+  smartctl -t short $device
+  echo "Waiting 2 minutes for test on $device ..."
   sleep 120
-  log "$device done"
+  echo "$device done"
 
 done
 
-deadmansnitch "4e614313f5"
-log "Done"
-exit 0
+echo "Done"
