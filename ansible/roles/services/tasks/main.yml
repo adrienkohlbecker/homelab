@@ -6,6 +6,9 @@
   become: yes
   tags:
     - services
+    - couchpotato
+    - sickrage
+    - sabnzbd
   register: usenet_docker_network_output
 
 - name: Set fact with usenet docker network gateway
@@ -13,6 +16,9 @@
     usenet_docker_network_gateway: "{{ usenet_docker_network_output.ansible_facts.docker_network.IPAM.Config[0].Gateway }}"
   tags:
     - services
+    - couchpotato
+    - sickrage
+    - sabnzbd
 
 - name: Create mount points
   file:

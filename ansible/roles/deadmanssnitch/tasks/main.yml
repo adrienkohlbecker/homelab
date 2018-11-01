@@ -1,0 +1,11 @@
+---
+
+- name: Install dms
+  unarchive:
+    src: https://bin.equinox.io/c/kToLfSsFgCw/field-agent-stable-linux-amd64.tgz
+    dest: /usr/local/bin
+    creates: /usr/local/bin/dms
+    remote_src: yes
+  become: yes
+  tags:
+    - deadmanssnitch

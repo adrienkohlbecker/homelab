@@ -35,7 +35,7 @@
   cron:
     name: zfs_health
     minute: 55
-    job: /usr/local/bin/zfs_health
+    job: /usr/local/bin/dms --silence b1de25d002 /usr/bin/systemd-cat --identifier zfs_health /usr/local/bin/zfs_health
     user: root
     cron_file: ansible_zfs_health
   become: yes

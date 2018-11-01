@@ -18,6 +18,7 @@
     - hypervisor
     - box
   roles:
+    - deadmanssnitch
     - grub
     - networking
     - zfs
