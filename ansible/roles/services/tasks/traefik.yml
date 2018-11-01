@@ -59,10 +59,12 @@
 - name: Create acme.json
   file:
     dest: /mnt/services/traefik/acme.json
-    state: file
+    state: touch
     owner: root
     group: root
     mode: 0600
+    modification_time: preserve
+    access_time: preserve
   become: yes
   tags:
     - services

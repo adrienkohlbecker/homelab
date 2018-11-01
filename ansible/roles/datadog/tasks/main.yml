@@ -44,9 +44,6 @@
   tags:
     - datadog
 
-- debug:
-    msg: "{{ ansible_distribution }}"
-
 - name: Configure the agent
   template:
     src: datadog.yaml

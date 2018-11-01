@@ -84,6 +84,18 @@
 
 - name: Create synology directory
   file:
+    dest: /mnt/brumath/synology
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: 0755
+  become: yes
+  tags:
+    - services
+    - remote-ssh
+
+- name: Create synology directory
+  file:
     dest: /mnt/synology
     state: directory
     owner: brumath
@@ -108,7 +120,7 @@
     name: /mnt/synology
     src: /mnt/brumath/synology
     fstype: fuse.bindfs
-    opts: map=adrien/brumath:@adrien/@brumath
+    opts: "map={{ deploy_user }}/brumath:@{{ deploy_user }}/@brumath"
     state: mounted
   become: yes
   tags:

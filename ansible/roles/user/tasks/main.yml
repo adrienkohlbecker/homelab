@@ -44,7 +44,6 @@
     shell: /bin/zsh
     uid: "{{ deploy_user_uid }}"
     group: "{{ deploy_user_group }}"
-    groups: "{{ deploy_user_additional_groups | join(',') }}"
   become: yes
   tags:
     - user
