@@ -34,10 +34,11 @@ zpool export rpool
 zpool import -o altroot=/mirror -d /dev/disk/by-id rpool
 
 zfs create -o mountpoint=none rpool/ROOT
-zfs create -o mountpoint=/ rpool/ROOT/xenial
+zfs create -o mountpoint=/ rpool/ROOT/bionic
 
-sed -i 's|^GRUB_CMDLINE_LINUX=""|GRUB_CMDLINE_LINUX="root=ZFS=rpool/ROOT/xenial boot=zfs rpool=rpool bootfs=rpool/ROOT/xenial"|' /etc/default/grub
+sed -i 's|^GRUB_CMDLINE_LINUX=""|GRUB_CMDLINE_LINUX="root=ZFS=rpool/ROOT/bionic boot=zfs rpool=rpool bootfs=rpool/ROOT/bionic"|' /etc/default/grub
 
+zfs set acltype=posixacl rpool/ROOT/bionic
 rsync --one-file-system -aAXHW / /mirror/
 
 rm -rf /mirror/boot
@@ -56,7 +57,6 @@ EOF
 
 mount /dev/sdb1 /mirror/boot
 rsync --one-file-system -aAXHW /boot/ /mirror/boot/
-umount /boot
 umount /mirror/boot
 mount /dev/sdb1 /boot
 
