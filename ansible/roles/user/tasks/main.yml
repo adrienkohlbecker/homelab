@@ -2,29 +2,28 @@
 
 - name: Install packages
   apt:
-    pkg: "{{item}}"
+    pkg:
+      - curl
+      - git
+      - htop
+      - jq
+      - screen
+      - socat
+      - tree
+      - vim
+      - zsh
+      - gparted
+      - tig
+      - man-db
+      - sysstat
+      - nmon
+      - hddtemp
+      - lsof
+      - telnet
+      - mosh
+      - tmux
     state: present
   become: yes
-  with_items:
-    - curl
-    - git
-    - htop
-    - jq
-    - screen
-    - socat
-    - tree
-    - vim
-    - zsh
-    - gparted
-    - tig
-    - man-db
-    - sysstat
-    - nmon
-    - hddtemp
-    - lsof
-    - telnet
-    - mosh
-    - tmux
   tags:
     - user
 
