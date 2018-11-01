@@ -104,10 +104,13 @@
     - services
 
 - import_tasks: avahi.yml
-- import_tasks: samba.yml
-- import_tasks: traefik.yml
-- import_tasks: traefik-auth-cloudflare.yml
-- import_tasks: plex.yml
-- import_tasks: sabnzbd.yml
 - import_tasks: couchpotato.yml
+- import_tasks: plex.yml
+- import_tasks: portainer.yml
+- import_tasks: sabnzbd.yml
+- import_tasks: samba.yml
+- import_tasks: sftp.yml
 - import_tasks: sickrage.yml
+- import_tasks: speedtest.yml
+- import_tasks: traefik-auth-cloudflare.yml
+- import_tasks: traefik.yml
