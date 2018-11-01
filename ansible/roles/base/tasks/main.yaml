@@ -125,14 +125,3 @@
   become: yes
   tags:
     - base
-
-- name: Download bash framework
-  copy:
-    src: bash-framework.sh
-    dest: /usr/local/lib/bash-framework
-    owner: root
-    group: root
-    mode: 0755
-  become: yes
-  tags:
-    - base

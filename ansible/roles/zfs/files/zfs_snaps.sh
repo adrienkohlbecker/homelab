@@ -1,14 +1,9 @@
 #!/bin/bash
-
-# Unofficial bash strict mode http://redsymbol.net/articles/unofficial-bash-strict-mode/
-set -eu
-set -o pipefail
+# http://redsymbol.net/articles/unofficial-bash-strict-mode/
 IFS=$'\n\t'
+set -euxo pipefail
 
-if [[ $EUID -ne 0 ]]; then
-   echo "This script must be run as root" 1>&2
-   exit 1
-fi
+[ "$(id -u)" == "0" ] || { echo >&2 "I require root. Aborting"; exit 1; }
 
 COMMAND="$1"
 shift

@@ -1,18 +1,8 @@
 #!/bin/bash
-test -e /usr/local/lib/bash-framework && source /usr/local/lib/bash-framework || (echo "Could not load bash-framework" 1>&2; exit 1)
+# http://redsymbol.net/articles/unofficial-bash-strict-mode/
+IFS=$'\n\t'
+set -euxo pipefail
 
-################################
-#          ACTUAL JOB          #
-###############################@
+[ "$(id -u)" == "0" ] || { echo >&2 "I require root. Aborting"; exit 1; }
 
-must_run_as_root
-
-br
-log "Docker clean started."
-br
-
-run "docker system prune -f 2>&1"
-
-deadmansnitch "98d0602056"
-log "Done"
-exit 0
+docker system prune -f
