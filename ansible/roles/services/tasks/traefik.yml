@@ -18,7 +18,7 @@
 
 - name: Create configuration directory
   file:
-    dest: /mnt/docker/traefik
+    dest: /mnt/services/traefik
     state: directory
     owner: root
     group: root
@@ -31,7 +31,7 @@
 - name: Download client ca from cloudflare
   get_url:
     url: https://support.cloudflare.com/hc/en-us/article_attachments/201243967/origin-pull-ca.pem
-    dest: /mnt/docker/traefik/cloudflare-origin-pull-ca.pem
+    dest: /mnt/services/traefik/cloudflare-origin-pull-ca.pem
     owner: root
     group: root
     mode: 0644
@@ -45,7 +45,7 @@
 - name: Configure traefik
   template:
     src: traefik.toml.j2
-    dest: /mnt/docker/traefik/traefik.toml
+    dest: /mnt/services/traefik/traefik.toml
     owner: root
     group: root
     mode: 0600
@@ -58,7 +58,7 @@
 
 - name: Create acme.json
   file:
-    dest: /mnt/docker/traefik/acme.json
+    dest: /mnt/services/traefik/acme.json
     state: file
     owner: root
     group: root

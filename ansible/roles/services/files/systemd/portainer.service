@@ -20,7 +20,7 @@ ExecStart=/usr/bin/docker run \
     --init \
     --name portainer \
     --network traefik \
-    --volume /mnt/docker/portainer:/data \
+    --volume /mnt/services/portainer:/data \
     --volume /var/run/docker.sock:/var/run/docker.sock \
     --label "traefik.docker.network=traefik" \
     --label "traefik.enable=true" \

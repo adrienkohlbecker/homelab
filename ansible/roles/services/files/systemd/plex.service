@@ -20,7 +20,7 @@ ExecStart=/usr/bin/docker run \
     --init \
     --name plex \
     --net host \
-    --volume /mnt/docker/plex:/config \
+    --volume /mnt/services/plex:/config \
     --volume /mnt/media:/media \
     --volume /tmp/transcode:/transcode \
     --env PLEX_UID=2005 \

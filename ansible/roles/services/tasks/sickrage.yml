@@ -2,7 +2,7 @@
 
 - name: Create configuration directory
   file:
-    dest: /mnt/docker/sickrage
+    dest: /mnt/services/sickrage
     state: directory
     owner: root
     group: root
@@ -15,7 +15,7 @@
 - name: Configure sickrage
   template:
     src: sickrage.ini.j2
-    dest: /mnt/docker/sickrage/config.ini
+    dest: /mnt/services/sickrage/config.ini
     owner: root
     group: root
     mode: 0600
