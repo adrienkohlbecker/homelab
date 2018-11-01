@@ -50,7 +50,7 @@
     name: snapraid_sync
     minute: 5
     hour: 23
-    job: /usr/local/bin/dms --silence cebc7586ba /usr/bin/systemd-cat --identifier snapraid_sync /usr/local/bin/snapraid_sync
+    job: /usr/local/bin/dms --silent cebc7586ba /usr/bin/systemd-cat --identifier snapraid_sync /usr/local/bin/snapraid_sync
     user: root
     cron_file: ansible_snapraid_sync
   become: yes
@@ -72,7 +72,7 @@
     minute: 0
     hour: 1
     weekday: 0
-    job: /usr/local/bin/dms --silence 150c9a2135 /usr/bin/systemd-cat --identifier snapraid_scrub /usr/local/bin/snapraid_scrub
+    job: /usr/local/bin/dms --silent 150c9a2135 /usr/bin/systemd-cat --identifier snapraid_scrub /usr/local/bin/snapraid_scrub
     user: root
     cron_file: ansible_snapraid_scrub
   become: yes

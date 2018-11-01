@@ -60,7 +60,7 @@
     name: smart_short_test
     hour: 2
     minute: 0
-    job: /usr/local/bin/dms --silence 4e614313f5 /usr/bin/systemd-cat --identifier smart_short_test /usr/local/bin/smart_short_test
+    job: /usr/local/bin/dms --silent 4e614313f5 /usr/bin/systemd-cat --identifier smart_short_test /usr/local/bin/smart_short_test
     user: root
     cron_file: ansible_smart_short_test
   become: yes
@@ -81,7 +81,7 @@
     name: smart_long_test
     hour: 2
     minute: 30
-    job: /usr/local/bin/dms --silence 39a52f20f7 /usr/bin/systemd-cat --identifier smart_long_test /usr/local/bin/smart_long_test
+    job: /usr/local/bin/dms --silent 39a52f20f7 /usr/bin/systemd-cat --identifier smart_long_test /usr/local/bin/smart_long_test
     user: root
     cron_file: ansible_smart_long_test
   become: yes

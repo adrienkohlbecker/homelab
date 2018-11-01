@@ -47,7 +47,7 @@
     name: docker_clean
     minute: 0
     hour: 6
-    job: /usr/local/bin/dms --silence 98d0602056 /usr/bin/systemd-cat --identifier docker_clean /usr/local/bin/docker_clean
+    job: /usr/local/bin/dms --silent 98d0602056 /usr/bin/systemd-cat --identifier docker_clean /usr/local/bin/docker_clean
     user: root
     cron_file: ansible_docker_clean
   become: yes
