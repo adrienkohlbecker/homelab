@@ -54,9 +54,15 @@
     state: restarted
   become: yes
 
-- name: Restart sftp
+- name: Restart ssh-arq
   service:
-    name: sftp
+    name: ssh-arq
+    state: restarted
+  become: yes
+
+- name: Restart ssh-brumath
+  service:
+    name: ssh-brumath
     state: restarted
   become: yes
 
