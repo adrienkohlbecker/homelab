@@ -2,7 +2,7 @@
 
 - name: Create configuration directory
   file:
-    dest: /mnt/docker/portainer
+    dest: /mnt/services/portainer
     state: directory
     owner: root
     group: root

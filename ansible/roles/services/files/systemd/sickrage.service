@@ -19,7 +19,7 @@ ExecStartPre=/usr/bin/docker pull sickrage/sickrage
 ExecStartPre=/usr/bin/docker create \
     --init \
     --name sickrage \
-    --volume /mnt/docker/sickrage:/config \
+    --volume /mnt/services/sickrage:/config \
     --volume /mnt/media:/media \
     --label "traefik.docker.network=traefik" \
     --label "traefik.enable=true" \

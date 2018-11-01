@@ -19,7 +19,7 @@ ExecStartPre=/usr/bin/docker pull akohlbecker/couchpotato
 ExecStartPre=/usr/bin/docker create \
     --init \
     --name couchpotato \
-    --volume /mnt/docker/couchpotato:/data \
+    --volume /mnt/services/couchpotato:/data \
     --volume /mnt/media:/media \
     --label "traefik.docker.network=traefik" \
     --label "traefik.enable=true" \

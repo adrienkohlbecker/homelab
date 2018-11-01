@@ -23,9 +23,9 @@ ExecStartPre=/usr/bin/docker create \
     --publish 443:443 \
     --publish 80:80 \
     --volume /var/run/docker.sock:/var/run/docker.sock \
-    --volume /mnt/docker/traefik/traefik.toml:/traefik.toml \
-    --volume /mnt/docker/traefik/acme.json:/acme.json \
-    --volume /mnt/docker/traefik/cloudflare-origin-pull-ca.pem:/cloudflare-origin-pull-ca.pem \
+    --volume /mnt/services/traefik/traefik.toml:/traefik.toml \
+    --volume /mnt/services/traefik/acme.json:/acme.json \
+    --volume /mnt/services/traefik/cloudflare-origin-pull-ca.pem:/cloudflare-origin-pull-ca.pem \
     --label "traefik.port=8080" \
     --label "traefik.backend=traefikception" \
     --label "traefik.frontend.rule=Host:traefik.kohlby.fr" \

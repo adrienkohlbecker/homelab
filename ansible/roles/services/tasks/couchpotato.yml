@@ -2,7 +2,7 @@
 
 - name: Create configuration directory
   file:
-    dest: /mnt/docker/couchpotato
+    dest: /mnt/services/couchpotato
     state: directory
     owner: root
     group: root
@@ -15,7 +15,7 @@
 - name: Configure couchpotato
   template:
     src: couchpotato.ini.j2
-    dest: /mnt/docker/couchpotato/settings.conf
+    dest: /mnt/services/couchpotato/settings.conf
     owner: root
     group: root
     mode: 0600
