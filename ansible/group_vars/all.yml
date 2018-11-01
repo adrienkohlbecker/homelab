@@ -13,10 +13,6 @@ root_email: adrien.kohlbecker@gmail.com
 
 datadog_api_key: "{{ aws_ssm_datadog_api_key }}"
 
-duo_integration_key: "{{ aws_ssm_duo_integration_key }}"
-duo_secret_key: "{{ aws_ssm_duo_secret_key }}"
-duo_api_host: "{{ aws_ssm_duo_api_host }}"
-
 # In normal & recovery mode
 grub_cmdline: nomodeset
 

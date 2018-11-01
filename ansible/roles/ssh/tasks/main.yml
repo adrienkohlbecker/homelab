@@ -7,14 +7,6 @@
   tags:
     - ssh
 
-- name: Ensure ssh group is present
-  group:
-    name: ssh
-    state: present
-  become: yes
-  tags:
-    - ssh
-
 - name: Configure sshd
   template:
     src: sshd_config.j2
@@ -35,15 +27,6 @@
   become: yes
   tags:
     - skip_ansible_lint
-    - ssh
-
-- name: Add deploy user to ssh group
-  user:
-    name: "{{ deploy_user }}"
-    groups: ssh
-    append: yes
-  become: yes
-  tags:
     - ssh
 
 - name: Add authorized keys

@@ -18,7 +18,6 @@
   roles:
     - grub
     - networking
-    - duo
     - zfs
     - smart
     - hdparm

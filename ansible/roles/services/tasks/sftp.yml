@@ -1,21 +1,10 @@
 ---
 
-- name: Create data directory
-  file:
-    dest: /mnt/sftp
-    state: directory
-    owner: root
-    group: root
-    mode: 0775
-  become: yes
-  tags:
-    - services
-    - sftp
-
-- name: Add sftpaccess group
+- name: Add arq group
   group:
-    name: sftpaccess
-    gid: 2200
+    name: arq
+    gid: 2201
+    system: true
     state: present
   become: yes
   tags:
@@ -25,34 +14,98 @@
 - name: Add arq user
   user:
     name: arq
-    group: sftpaccess
+    group: arq
     uid: 2201
-    createhome: no
+    system: true
     state: present
   become: yes
   tags:
     - services
     - sftp
 
-- name: Copy the unit file
-  copy:
-    src: systemd/sftp.service
-    dest: /etc/systemd/system/sftp.service
-    owner: root
-    group: root
-    mode: 0644
+- name: Set arq authorized key
+  authorized_key:
+    user: arq
+    state: present
+    key: command="internal-sftp -d /mnt/sftp/arq",no-x11-forwarding,no-user-rc,no-pty,no-port-forwarding,no-agent-forwarding ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDBS0T7CVm8Oi763BF5PbIaBAkstPviX5bRef6gWtdXxDA6JtDLRl80n6T0m0aiJ9LpPGuHt8vwE9Aujx5FFsZTJV7qClbDMZ8Fd63zTPQFB2qoAHEkDHweCD3t2m+YveK/TQOyZaKo8tBhXvESZq0nGx0zLciu05IQl6cFTm/HuAT2uJy0QWnQDzbn0LJwvMM+4pzmCiGtiPpO/aAxE6UmMRcawyZB8d8Mi4Ocq5+OP9sNBMMOzMFx/vLjnXL6v/J5CLs1p9QLHJ0ydvsv5i8UQLcNkHssepGM6/axFbvinX39+7QW4PLRA56PgB4zkWklCz22gusCoBnX/qr91p1ji3hWE/2wU4lAT/a9luXvYQOUSO8cglkuKWKqDUF8bOtlHvcdWSKpQ1Gg/dcS5xT61Q0z6PQe2nMVJd7a3wpcxERf3Dx6uTlSV4O2EeMS3/kcWC3YvO+Nr+WhZuWrFMB8MKp8Y6g7J6Ak6EkdnKjQJVsajUprszBbfP0pCSsz0IW+meMdKrcEWGrsE0wQJSqITfpLHym33IJxdK+iqUHC7acplVQKcXqjHv5yJvrOCLN0AwDQtPuELCgR7p/JXciokfd9KbJ12eKbSdsm4Dp1A0KjmHc1yw221fy59n13jlGNrg3zK0Wm3a00S37m7kJe03SMTyTbwKxeGyXuYYC3eQ==
   become: yes
   tags:
     - services
     - sftp
-  notify:
-    - Restart sftp
 
-- name: Enable the service
-  systemd:
-    name: sftp
-    enabled: yes
-    daemon_reload: yes
+- name: Add brumath group
+  group:
+    name: brumath
+    gid: 2202
+    system: true
+    state: present
+  become: yes
+  tags:
+    - services
+    - sftp
+
+- name: Add brumath user
+  user:
+    name: brumath
+    group: brumath
+    uid: 2202
+    system: true
+    state: present
+  become: yes
+  tags:
+    - services
+    - sftp
+
+- name: Set brumath authorized key
+  authorized_key:
+    user: brumath
+    state: present
+    key: no-x11-forwarding,no-user-rc,no-pty,no-port-forwarding,no-agent-forwarding ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDuwd+JH25u1x9sACmCJ4vYGZABH/hJ9hjj6vNJjbQgmNq5uiF15Tnhz0WyLxDPQuVAOBH4GFjteYtyX94LAm6Wv5A7KVdRrGwZp/H69/ikrvHTVgn0SNE9A2xdozcAgWhne7Ku/PYwRfFA1SGBaNSzkr/saNU5MiVUWFlDAzm8IAdlr10nDJ0ZjxNukEd+kd5zwNko3jA0o8EhAzhb1e1flzHTKif/lUXRrUII08O+l6pmov+aCwHuumTt/u8/76vPO2KyhVMInmhFd5KIpeMOJtXd2cqJdIwtvFkv4JA5k9bt6u8XdnNSfjSikbkbVDKrNHz8zW2pcDfGkT37OiLXHUv/r+cinL+Se4ipLzw5WODBr4SkCu9YypBNI4D9QXx0lQ9Z2med/0jvtOzZNILHqwaZHlfzTNyOoSzwb2cphnO6cy+sDSPLTZUZRQGMK/VHlEwRIeVc3ZHZ25DSnkPDC8ljF3lZH1RragS0Z2ilfp5PjwUkYwhUJ5+iI9e7QWrYqjJ7eD2mkbc7B/gb0n864t96gkbwYEXxKL9jMuh1hxqtGkEpKKhg88sAbkN5dHUq1LCNkkeC0uqjnl87r5KkkCW2dLmRgqx9FWMtrR9lWTVs8xsuTwv+lTJA6XaHid8BIW4eC4RNAZv1KsJMGvrpUdDWGQaU5z7jDQs0efEBPw==
+  become: yes
+  tags:
+    - services
+    - sftp
+
+- name: Create arq directory
+  file:
+    dest: /mnt/sftp/arq
+    state: directory
+    owner: arq
+    group: arq
+    mode: 0755
+  become: yes
+  tags:
+    - services
+    - sftp
+
+- name: Create brumath directory
+  file:
+    dest: /mnt/sftp/brumath
+    state: directory
+    owner: brumath
+    group: brumath
+    mode: 0755
+  become: yes
+  tags:
+    - services
+    - sftp
+
+- name: Install bindfs
+  apt:
+    pkg: bindfs
+    state: present
+  become: yes
+  tags:
+    - services
+    - sftp
+
+- name: Mount data with mapped user
+  mount:
+    name: /mnt/sftp/brumath
+    src: /mnt/brumath
+    fstype: fuse.bindfs
+    opts: map=adrien/brumath:@adrien/@brumath
+    state: mounted
   become: yes
   tags:
     - services
