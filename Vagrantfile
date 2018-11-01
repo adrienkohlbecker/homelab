@@ -35,7 +35,7 @@ Vagrant.configure(2) do |config|
 
   # Every Vagrant development environment requires a box. You can search for
   # boxes at https://atlas.hashicorp.com/search.
-  config.vm.box = 'hypervisor'
+  config.vm.box = 'homelab'
   config.vm.box_url = 'file://vmware.box'
 
   # Disable automatic box update checking. If you disable this, then

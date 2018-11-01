@@ -8,10 +8,10 @@
             ],
             "expect_disconnect": true,
             "only": [
-              "hypervisor-base"
+              "homelab-base"
             ],
             "override": {
-                "hypervisor-base": {
+                "homelab-base": {
                     "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
                 }
             }
@@ -22,10 +22,10 @@
                 "{{ template_dir }}/scripts/zfsroot.sh"
             ],
             "only": [
-              "hypervisor-zfs"
+              "homelab-zfs"
             ],
             "override": {
-                "hypervisor-zfs": {
+                "homelab-zfs": {
                     "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
                 }
             }
@@ -36,10 +36,10 @@
                 "{{ template_dir }}/scripts/volume.sh"
             ],
             "only": [
-              "hypervisor-final"
+              "homelab-final"
             ],
             "override": {
-                "hypervisor-final": {
+                "homelab-final": {
                     "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
                 }
             }
@@ -50,13 +50,13 @@
                 "{{ template_dir }}/scripts/cleanup.sh"
             ],
             "override": {
-                "hypervisor-base": {
+                "homelab-base": {
                     "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
                 },
-                "hypervisor-zfs": {
+                "homelab-zfs": {
                     "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
                 },
-                "hypervisor-final": {
+                "homelab-final": {
                     "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
                 }
             }
@@ -67,10 +67,10 @@
                 "{{ template_dir }}/scripts/zerodisk.sh"
             ],
             "only": [
-              "hypervisor-base"
+              "homelab-base"
             ],
             "override": {
-                "hypervisor-base": {
+                "homelab-base": {
                     "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
                 }
             }
@@ -79,7 +79,7 @@
     "builders": [
         {
             "type": "vmware-iso",
-            "name": "hypervisor-base",
+            "name": "homelab-base",
             "boot_command": [
               "<esc><f6><esc>",
               "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
@@ -125,36 +125,36 @@
         },
         {
             "type": "vmware-vmx",
-            "name": "hypervisor-zfs",
-            "source_path": "output-hypervisor-base-with-disks/packer-hypervisor-base.vmx",
+            "name": "homelab-zfs",
+            "source_path": "output-homelab-base-with-disks/packer-homelab-base.vmx",
             "boot_wait": "10s",
             "ssh_username": "vagrant",
             "ssh_password": "vagrant",
             "ssh_port": 22,
             "ssh_wait_timeout": "10000s",
             "shutdown_command": "echo '/sbin/halt -h -p' > /tmp/shutdown.sh; echo 'vagrant'|sudo -S bash '/tmp/shutdown.sh'",
-            "vm_name": "packer-hypervisor-zfs",
+            "vm_name": "packer-homelab-zfs",
             "vmx_data": {
             }
         },
         {
             "type": "vmware-vmx",
-            "name": "hypervisor-final",
-            "source_path": "output-hypervisor-zfs-without-root/packer-hypervisor-zfs.vmx",
+            "name": "homelab-final",
+            "source_path": "output-homelab-zfs-without-root/packer-homelab-zfs.vmx",
             "boot_wait": "10s",
             "ssh_username": "vagrant",
             "ssh_password": "vagrant",
             "ssh_port": 22,
             "ssh_wait_timeout": "10000s",
             "shutdown_command": "echo '/sbin/halt -h -p' > /tmp/shutdown.sh; echo 'vagrant'|sudo -S bash '/tmp/shutdown.sh'",
-            "vm_name": "packer-hypervisor-final"
+            "vm_name": "packer-homelab-final"
         }
     ],
     "post-processors": [
         {
           "type": "vagrant",
           "only": [
-            "hypervisor-final"
+            "homelab-final"
           ],
           "output": "{{.Provider}}.box",
           "keep_input_artifact": true

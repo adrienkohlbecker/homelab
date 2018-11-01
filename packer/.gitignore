@@ -1,5 +1,5 @@
 packer_cache/
-output-hypervisor-base/
-output-hypervisor-zfs/
-output-hypervisor-final/
+output-homelab-base/
+output-homelab-zfs/
+output-homelab-final/
 *.box

@@ -1,4 +1,4 @@
-hypervisor
+homelab
 ==========
 
 Encrypting the ssh key for ansible :
