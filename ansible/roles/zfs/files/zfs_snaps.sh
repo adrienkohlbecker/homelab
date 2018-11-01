@@ -27,7 +27,7 @@ case "$COMMAND" in
     zfs snapshot "tank/pictures@$NAME"
     zfs snapshot "tank/brumath@$NAME"
     zfs snapshot "tank/videos@$NAME"
-    zfs snapshot "tank/sftp@$NAME"
+    zfs snapshot "tank/arq@$NAME"
 
     ;;
 
@@ -44,7 +44,7 @@ case "$COMMAND" in
     zfs destroy -f "tank/pictures@backup-disk-$DISK"     || true
     zfs destroy -f "tank/brumath@backup-disk-$DISK"      || true
     zfs destroy -f "tank/videos@backup-disk-$DISK"       || true
-    zfs destroy -f "tank/sftp@backup-disk-$DISK"         || true
+    zfs destroy -f "tank/arq@backup-disk-$DISK"          || true
 
     zfs destroy -f "backup-$DISK/xenial@backup-disk-$DISK"   || true
     zfs destroy -f "backup-$DISK/services@backup-disk-$DISK" || true
@@ -52,7 +52,7 @@ case "$COMMAND" in
     zfs destroy -f "backup-$DISK/pictures@backup-disk-$DISK" || true
     zfs destroy -f "backup-$DISK/brumath@backup-disk-$DISK"  || true
     zfs destroy -f "backup-$DISK/videos@backup-disk-$DISK"   || true
-    zfs destroy -f "backup-$DISK/sftp@backup-disk-$DISK"     || true
+    zfs destroy -f "backup-$DISK/arq@backup-disk-$DISK"     || true
 
     echo "Rolling back backup to: $FROM"
 
@@ -60,7 +60,7 @@ case "$COMMAND" in
     zfs rollback -r "backup-$DISK/services@$FROM"
     zfs rollback -r "backup-$DISK/legacy@$FROM"
     zfs rollback -r "backup-$DISK/pictures@$FROM"
-    zfs rollback -r "backup-$DISK/sftp@$FROM"
+    zfs rollback -r "backup-$DISK/arq@$FROM"
     zfs rollback -r "backup-$DISK/brumath@$FROM"
     zfs rollback -r "backup-$DISK/videos@$FROM"
 
@@ -72,7 +72,7 @@ case "$COMMAND" in
     zfs snapshot "tank/pictures@backup-disk-$DISK"
     zfs snapshot "tank/brumath@backup-disk-$DISK"
     zfs snapshot "tank/videos@backup-disk-$DISK"
-    zfs snapshot "tank/sftp@backup-disk-$DISK"
+    zfs snapshot "tank/arq@backup-disk-$DISK"
 
     echo "Incremental sync to backup: $FROM -> backup-disk-$DISK"
 
@@ -82,7 +82,7 @@ case "$COMMAND" in
     zfs send -pv -I "tank/pictures@$FROM" "tank/pictures@backup-disk-$DISK" | zfs receive -v "backup-$DISK/pictures"
     zfs send -pv -I "tank/brumath@$FROM" "tank/brumath@backup-disk-$DISK" | zfs receive -v "backup-$DISK/brumath"
     zfs send -pv -I "tank/videos@$FROM" "tank/videos@backup-disk-$DISK" | zfs receive -v "backup-$DISK/videos"
-    zfs send -pv -I "tank/sftp@$FROM" "tank/sftp@backup-disk-$DISK" | zfs receive -v "backup-$DISK/sftp"
+    zfs send -pv -I "tank/arq@$FROM" "tank/arq@backup-disk-$DISK" | zfs receive -v "backup-$DISK/arq"
 
     ;;
 
@@ -98,7 +98,7 @@ case "$COMMAND" in
     zfs destroy "tank/pictures@$SNAPSHOT"
     zfs destroy "tank/brumath@$SNAPSHOT"
     zfs destroy "tank/videos@$SNAPSHOT"
-    zfs destroy "tank/sftp@$SNAPSHOT"
+    zfs destroy "tank/arq@$SNAPSHOT"
 
     ;;
 
@@ -115,7 +115,7 @@ case "$COMMAND" in
     zfs destroy -f "backup-$DISK/pictures@$SNAPSHOT" || true
     zfs destroy -f "backup-$DISK/brumath@$SNAPSHOT"  || true
     zfs destroy -f "backup-$DISK/videos@$SNAPSHOT"   || true
-    zfs destroy -f "backup-$DISK/sftp@$SNAPSHOT"     || true
+    zfs destroy -f "backup-$DISK/arq@$SNAPSHOT"     || true
 
     ;;
 
