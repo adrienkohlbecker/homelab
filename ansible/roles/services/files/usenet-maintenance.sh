@@ -6,4 +6,7 @@ set -euxo pipefail
 /usr/local/bin/sort-ini /mnt/services/sickrage/config.ini
 /usr/local/bin/sort-ini /mnt/services/sabnzbd/sabnzbd.ini
 /usr/local/bin/sort-ini /mnt/services/couchpotato/settings.conf
+
+sed -i 's/[ \t]*$//' /mnt/services/sabnzbd/autoProcessMedia.cfg
+
 find /mnt/media -maxdepth 1 -mindepth 1 -type d -not -name ".tmp" -print0 | xargs -0 chown adrien:adrien
