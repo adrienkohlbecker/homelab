@@ -11,30 +11,24 @@
     - ups
 
 - name: Configure apcupsd
-  lineinfile:
+  copy:
+    src: apcupsd.conf
     dest: /etc/apcupsd/apcupsd.conf
-    regexp: "^#?{{ item.regexp }}"
-    line: "{{ item.line }}"
-    state: present
+    owner: root
+    group: root
+    mode: 0644
   become: yes
   notify: Restart apcupsd
-  with_items:
-    - regexp: UPSNAME
-      line: UPSNAME smartups
-    - regexp: UPSCABLE
-      line: UPSCABLE usb
-    - regexp: UPSTYPE
-      line: UPSTYPE usb
-    - regexp: DEVICE
-      line: '#DEVICE /dev/ttyS0'
   tags:
     - ups
 
 - name: Configure apcupsd
-  lineinfile:
+  copy:
+    src: apcupsd
     dest: /etc/default/apcupsd
-    regexp: ^ISCONFIGURED
-    line: ISCONFIGURED=yes
+    owner: root
+    group: root
+    mode: 0644
   become: yes
   notify: Restart apcupsd
   tags:
