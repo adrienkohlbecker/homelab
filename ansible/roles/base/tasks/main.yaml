@@ -87,20 +87,13 @@
     - base
 
 - name: Configure keyboard
-  lineinfile:
+  copy:
+    src: keyboard
     dest: /etc/default/keyboard
-    regexp: "{{item.regexp}}"
-    line: "{{item.line}}"
+    owner: root
+    group: root
+    mode: 0644
   become: yes
-  with_items:
-    - regexp: ^XKBMODEL=
-      line: 'XKBMODEL="pc105"'
-    - regexp: ^XKBLAYOUT=
-      line: 'XKBLAYOUT="fr"'
-    - regexp: ^XKBVARIANT=
-      line: 'XKBVARIANT="latin9"'
-    - regexp: ^XKBOPTIONS=
-      line: 'XKBOPTIONS="lv3:ralt_switch"'
   tags:
     - base
 
