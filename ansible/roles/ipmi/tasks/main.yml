@@ -10,8 +10,3 @@
   become: yes
   tags:
     - ipmi
-
-# TODO :
-# - configure bmc watchdog
-# - configure sel logging
-# - alerting
