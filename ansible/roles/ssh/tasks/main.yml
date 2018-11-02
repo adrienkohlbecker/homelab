@@ -28,12 +28,3 @@
   tags:
     - skip_ansible_lint
     - ssh
-
-- name: Add authorized keys
-  authorized_key:
-    user: "{{ deploy_user }}"
-    key: "{{ deploy_user_ssh_public_key }}"
-    state: present
-  become: yes
-  tags:
-    - ssh
