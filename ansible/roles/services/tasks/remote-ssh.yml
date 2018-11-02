@@ -115,18 +115,6 @@
     - services
     - remote-ssh
 
-- name: Mount data with mapped user
-  mount:
-    name: /mnt/synology
-    src: /mnt/brumath/synology
-    fstype: fuse.bindfs
-    opts: "map={{ deploy_user }}/brumath:@{{ deploy_user }}/@brumath"
-    state: mounted
-  become: yes
-  tags:
-    - services
-    - remote-ssh
-
 - name: Copy the unit file
   copy:
     src: systemd/ssh-arq.service
