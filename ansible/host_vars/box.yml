@@ -2,6 +2,7 @@
 
 deploy_user: vagrant
 deploy_user_group: vagrant
+deploy_user_password: $6$SutP1Z0MHr$12AxgSgzVdoYCs1NcocU9ep1BacoY8uoHUy8oTO6QjYT6GZWGx49UKr6gCxy1cWf9P3kq22LW8YUZHzXoWOtN/
 
 docker_host: true
 
