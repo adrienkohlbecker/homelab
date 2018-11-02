@@ -5,6 +5,9 @@ set -euxo pipefail
 
 [ "$(id -u)" == "0" ] || { echo >&2 "I require root. Aborting"; exit 1; }
 
+# Override path, for inside cron
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
 # Testing schedule (index is the day, Monday=0, Sunday=6)
 declare -a SCHEDULE=(
   "/dev/disk/by-id/ata-WDC_WD10JFCX-68N6GN0_WD-WXA1E63DJRT8 /dev/disk/by-id/ata-ST8000AS0002-1NA17Z_Z8403NE6"
