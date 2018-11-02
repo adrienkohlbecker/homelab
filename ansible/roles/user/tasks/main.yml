@@ -51,7 +51,6 @@
   copy:
     dest: "/etc/sudoers.d/{{ deploy_user }}"
     content: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL"
-    create: yes
     validate: visudo -cf %s
   become: yes
   tags:
