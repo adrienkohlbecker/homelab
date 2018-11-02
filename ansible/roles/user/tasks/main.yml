@@ -50,7 +50,7 @@
 - name: Sudo without password
   copy:
     dest: "/etc/sudoers.d/{{ deploy_user }}"
-    content: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL"
+    content: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL\n"
     validate: visudo -cf %s
   become: yes
   tags:
