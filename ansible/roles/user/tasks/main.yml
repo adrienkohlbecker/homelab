@@ -48,12 +48,9 @@
     - user
 
 - name: Sudo without password
-  lineinfile:
-    dest: /etc/sudoers.d/ansible
-    insertafter: EOF
-    line: '{{ deploy_user }} ALL=(ALL) NOPASSWD: ALL'
-    regexp: '{{ deploy_user }}'
-    state: present
+  copy:
+    dest: "/etc/sudoers.d/{{ deploy_user }}"
+    content: "{{ deploy_user }} ALL=(ALL) NOPASSWD:ALL"
     create: yes
     validate: visudo -cf %s
   become: yes
