@@ -18,7 +18,7 @@ apt-get -y upgrade >/dev/null
 # usermod -g 999 vagrant
 
 # Set up sudo
-echo 'vagrant ALL=NOPASSWD:ALL' > /etc/sudoers.d/vagrant
+echo 'vagrant ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/vagrant
 
 # Remove 5s grub timeout to speed up booting
 sed -i 's/^GRUB_HIDDEN_TIMEOUT=/#GRUB_HIDDEN_TIMEOUT=/' /etc/default/grub
