@@ -1,8 +1,8 @@
 # portainer.service #######################################################################
 [Unit]
 Description=portainer
-After=docker.service
-Requires=docker.service
+After=docker.service zfs-mount.service
+Requires=docker.service zfs-mount.service
 PartOf=compose.service
 
 StartLimitInterval=300
