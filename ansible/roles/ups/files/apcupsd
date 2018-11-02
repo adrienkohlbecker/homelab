@@ -1,0 +1,3 @@
+# Defaults for apcupsd initscript (unused with systemd as init).
+# Set to "yes" to enable startup of apcupsd.
+ISCONFIGURED=yes

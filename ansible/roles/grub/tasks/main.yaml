@@ -1,15 +1,15 @@
 ---
 
 - name: Configure GRUB
-  lineinfile:
+  copy:
+    src: grub
     dest: /etc/default/grub
-    regexp: '{{ item.regexp }}'
-    line: '{{ item.line }}'
-    state: present
+    owner: root
+    group: root
+    mode: 0644
   become: yes
-  with_items: "{{ grub_config }}"
   notify:
     - Update grub
     - Ask to reboot
   tags:
-    - base
+    - grub

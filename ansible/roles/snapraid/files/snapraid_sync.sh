@@ -5,6 +5,9 @@ set -euxo pipefail
 
 [ "$(id -u)" == "0" ] || { echo >&2 "I require root. Aborting"; exit 1; }
 
+# Override path, for inside cron
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
 # Threshold of deleted files over which to show an error
 # Useful in case of mass deletion by human error / missing device
 DEL_THRESHOLD=50
