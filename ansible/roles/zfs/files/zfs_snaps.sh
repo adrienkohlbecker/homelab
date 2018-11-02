@@ -16,7 +16,7 @@ case "$COMMAND" in
 
     echo "Snapshotting with name=$NAME"
 
-    zfs snapshot "rpool/ROOT/xenial@$NAME"
+    zfs snapshot "rpool/ROOT/bionic@$NAME"
     zfs snapshot "rpool/services@$NAME"
     zfs snapshot "tank/legacy@$NAME"
     zfs snapshot "tank/pictures@$NAME"
@@ -33,7 +33,7 @@ case "$COMMAND" in
 
     echo "Destroying snapshots: backup-disk-$DISK"
 
-    zfs destroy -f "rpool/ROOT/xenial@backup-disk-$DISK" || true
+    zfs destroy -f "rpool/ROOT/bionic@backup-disk-$DISK" || true
     zfs destroy -f "rpool/services@backup-disk-$DISK"    || true
     zfs destroy -f "tank/legacy@backup-disk-$DISK"       || true
     zfs destroy -f "tank/pictures@backup-disk-$DISK"     || true
@@ -41,7 +41,7 @@ case "$COMMAND" in
     zfs destroy -f "tank/videos@backup-disk-$DISK"       || true
     zfs destroy -f "tank/arq@backup-disk-$DISK"          || true
 
-    zfs destroy -f "backup-$DISK/xenial@backup-disk-$DISK"   || true
+    zfs destroy -f "backup-$DISK/bionic@backup-disk-$DISK"   || true
     zfs destroy -f "backup-$DISK/services@backup-disk-$DISK" || true
     zfs destroy -f "backup-$DISK/legacy@backup-disk-$DISK"   || true
     zfs destroy -f "backup-$DISK/pictures@backup-disk-$DISK" || true
@@ -51,7 +51,7 @@ case "$COMMAND" in
 
     echo "Rolling back backup to: $FROM"
 
-    zfs rollback -r "backup-$DISK/xenial@$FROM"
+    zfs rollback -r "backup-$DISK/bionic@$FROM"
     zfs rollback -r "backup-$DISK/services@$FROM"
     zfs rollback -r "backup-$DISK/legacy@$FROM"
     zfs rollback -r "backup-$DISK/pictures@$FROM"
@@ -61,7 +61,7 @@ case "$COMMAND" in
 
     echo "Snapshotting with name=backup-disk-$DISK"
 
-    zfs snapshot "rpool/ROOT/xenial@backup-disk-$DISK"
+    zfs snapshot "rpool/ROOT/bionic@backup-disk-$DISK"
     zfs snapshot "rpool/services@backup-disk-$DISK"
     zfs snapshot "tank/legacy@backup-disk-$DISK"
     zfs snapshot "tank/pictures@backup-disk-$DISK"
@@ -71,7 +71,7 @@ case "$COMMAND" in
 
     echo "Incremental sync to backup: $FROM -> backup-disk-$DISK"
 
-    zfs send -pv -I "rpool/ROOT/xenial@$FROM" "rpool/ROOT/xenial@backup-disk-$DISK" | zfs receive -v "backup-$DISK/xenial"
+    zfs send -pv -I "rpool/ROOT/bionic@$FROM" "rpool/ROOT/bionic@backup-disk-$DISK" | zfs receive -v "backup-$DISK/bionic"
     zfs send -pv -I "rpool/services@$FROM" "rpool/services@backup-disk-$DISK" | zfs receive -v "backup-$DISK/services"
     zfs send -pv -I "tank/legacy@$FROM" "tank/legacy@backup-disk-$DISK" | zfs receive -v "backup-$DISK/legacy"
     zfs send -pv -I "tank/pictures@$FROM" "tank/pictures@backup-disk-$DISK" | zfs receive -v "backup-$DISK/pictures"
@@ -87,7 +87,7 @@ case "$COMMAND" in
 
     echo "Destroying snapshots: $SNAPSHOT"
 
-    zfs destroy "rpool/ROOT/xenial@$SNAPSHOT"
+    zfs destroy "rpool/ROOT/bionic@$SNAPSHOT"
     zfs destroy "rpool/services@$SNAPSHOT"
     zfs destroy "tank/legacy@$SNAPSHOT"
     zfs destroy "tank/pictures@$SNAPSHOT"
@@ -104,7 +104,7 @@ case "$COMMAND" in
 
     echo "Destroying snapshots: $SNAPSHOT"
 
-    zfs destroy -f "backup-$DISK/xenial@$SNAPSHOT"   || true
+    zfs destroy -f "backup-$DISK/bionic@$SNAPSHOT"   || true
     zfs destroy -f "backup-$DISK/services@$SNAPSHOT" || true
     zfs destroy -f "backup-$DISK/legacy@$SNAPSHOT"   || true
     zfs destroy -f "backup-$DISK/pictures@$SNAPSHOT" || true

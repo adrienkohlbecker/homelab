@@ -8,8 +8,8 @@
     - ssh
 
 - name: Configure sshd
-  template:
-    src: sshd_config.j2
+  copy:
+    src: sshd_config
     dest: /etc/ssh/sshd_config
     owner: root
     group: root
@@ -27,33 +27,4 @@
   become: yes
   tags:
     - skip_ansible_lint
-    - ssh
-
-- name: Add authorized keys
-  authorized_key:
-    user: "{{ deploy_user }}"
-    key: "{{ deploy_user_ssh_public_key }}"
-    state: present
-  become: yes
-  tags:
-    - ssh
-
-- name: "Ensure permissions on .ssh directory"
-  file:
-    path: "/home/{{deploy_user}}/.ssh"
-    owner: "{{deploy_user}}"
-    group: "{{deploy_user}}"
-    mode: 0700
-  become: yes
-  tags:
-    - ssh
-
-- name: "Ensure permissions on authorized_keys file"
-  file:
-    path: "/home/{{deploy_user}}/.ssh/authorized_keys"
-    owner: "{{deploy_user}}"
-    group: "{{deploy_user}}"
-    mode: 0600
-  become: yes
-  tags:
     - ssh

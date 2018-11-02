@@ -41,21 +41,13 @@
   tags:
     - base
 
-- name: Setup new hostname to loopback in /etc/hosts (short)
-  lineinfile:
+- name: Setup hosts file
+  template:
+    src: hosts.j2
     dest: /etc/hosts
-    regexp: ^127.0.1.1
-    line: "127.0.1.1\t{{inventory_hostname_short}}"
-  become: yes
-  tags:
-    - base
-
-- name: Setup new hostname to loopback in /etc/hosts (long)
-  lineinfile:
-    dest: /etc/hosts
-    regexp: ^127.0.2.1
-    line: "127.0.2.1\t{{inventory_hostname}}"
-    state: '{{ "absent" if inventory_hostname == inventory_hostname_short else "present" }}'
+    owner: root
+    group: root
+    mode: 0644
   become: yes
   tags:
     - base
@@ -87,20 +79,13 @@
     - base
 
 - name: Configure keyboard
-  lineinfile:
+  copy:
+    src: keyboard
     dest: /etc/default/keyboard
-    regexp: "{{item.regexp}}"
-    line: "{{item.line}}"
+    owner: root
+    group: root
+    mode: 0644
   become: yes
-  with_items:
-    - regexp: ^XKBMODEL=
-      line: 'XKBMODEL="pc105"'
-    - regexp: ^XKBLAYOUT=
-      line: 'XKBLAYOUT="fr"'
-    - regexp: ^XKBVARIANT=
-      line: 'XKBVARIANT="latin9"'
-    - regexp: ^XKBOPTIONS=
-      line: 'XKBOPTIONS="lv3:ralt_switch"'
   tags:
     - base
 
