@@ -35,3 +35,4 @@ aws_ssm_sickrage_opensubtitles_password: "{{ lookup('aws_ssm', 'sickrage.opensub
 aws_ssm_sickrage_opensubtitles_username: "{{ lookup('aws_ssm', 'sickrage.opensubtitles_username', region='eu-west-1' ) }}"
 aws_ssm_sickrage_sickrage_api_key: "{{ lookup('aws_ssm', 'sickrage.sickrage_api_key', region='eu-west-1' ) }}"
 aws_ssm_sickrage_web_cookie_secret: "{{ lookup('aws_ssm', 'sickrage.web_cookie_secret', region='eu-west-1' ) }}"
+aws_ssm_wireguard_private_key: "{{ lookup('aws_ssm', 'wireguard.private_key', region='eu-west-1' ) }}"

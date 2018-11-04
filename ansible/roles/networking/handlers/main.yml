@@ -3,3 +3,13 @@
 - name: Apply netplan
   shell: netplan apply
   become: yes
+
+- name: Reload systemd
+  shell: systemctl daemon-reload
+  become: yes
+
+- name: Restart systemd-networkd
+  service:
+    name: systemd-networkd
+    state: restarted
+  become: yes
