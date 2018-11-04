@@ -1,0 +1,35 @@
+# gogs.service #######################################################################
+[Unit]
+Description=gogs
+After=docker.service zfs-mount.service
+Requires=docker.service zfs-mount.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+ExecStartPre=-/usr/bin/docker kill gogs
+ExecStartPre=-/usr/bin/docker rm gogs
+ExecStartPre=/usr/bin/docker pull gogs/gogs
+ExecStart=/usr/bin/docker run \
+    --init \
+    --name gogs \
+    --publish 2221:22 \
+    --network traefik \
+    --volume /mnt/services/gogs:/data \
+    --label "traefik.docker.network=traefik" \
+    --label "traefik.enable=true" \
+    --label "traefik.frontend.rule=Host:gogs.kohlby.fr" \
+    --label "traefik.port=3000" \
+    --label "traefik.protocol=http" \
+    --label "traefik.frontend.auth.forward.address=http://traefik-auth-cloudflare/auth/b6e1e2099ea3575476044a73e9e86f41395394fa392c16a1e2f041937bacb4d1" \
+    gogs/gogs
+ExecStop=/usr/bin/docker stop gogs
+
+[Install]
+WantedBy=compose.service
