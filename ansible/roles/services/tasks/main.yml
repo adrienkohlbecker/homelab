@@ -118,5 +118,6 @@
 - import_tasks: samba.yml
 - import_tasks: sickrage.yml
 - import_tasks: speedtest.yml
+- import_tasks: gogs.yml
 - import_tasks: traefik-auth-cloudflare.yml
 - import_tasks: traefik.yml
