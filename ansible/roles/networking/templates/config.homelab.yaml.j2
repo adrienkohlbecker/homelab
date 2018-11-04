@@ -1,0 +1,32 @@
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    enp5s0:
+      dhcp4: no
+      dhcp6: no
+    enp6s0:
+      dhcp4: no
+      dhcp6: no
+  bonds:
+    bond0:
+      dhcp4: no
+      dhcp6: no
+      interfaces:
+        - enp5s0
+        - enp6s0
+      parameters:
+        mode: 802.3ad
+        mii-monitor-interval: 100
+        lacp-rate: 1
+  bridges:
+    br0:
+      # fix the MAC to enp5s0 for DHCP
+      macaddress: 00:25:90:86:77:88
+      dhcp4: yes
+      dhcp6: no
+      interfaces:
+        - bond0
+      parameters:
+        stp: false
+        forward-delay: 0
