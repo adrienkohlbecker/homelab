@@ -19,7 +19,12 @@ ExecStartPre=/usr/bin/docker pull adolfintel/speedtest:latest
 ExecStart=/usr/bin/docker run \
     --init \
     --name speedtest \
-    --publish 8080:80 \
+    --network traefik \
+    --label "traefik.docker.network=traefik" \
+    --label "traefik.enable=true" \
+    --label "traefik.frontend.rule=Host:speedtest.kohlby.fr" \
+    --label "traefik.port=80" \
+    --label "traefik.protocol=http" \
     adolfintel/speedtest:latest
 ExecStop=/usr/bin/docker stop speedtest
 
