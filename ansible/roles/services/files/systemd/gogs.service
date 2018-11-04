@@ -27,7 +27,6 @@ ExecStart=/usr/bin/docker run \
     --label "traefik.frontend.rule=Host:gogs.kohlby.fr" \
     --label "traefik.port=3000" \
     --label "traefik.protocol=http" \
-    --label "traefik.frontend.auth.forward.address=http://traefik-auth-cloudflare/auth/b6e1e2099ea3575476044a73e9e86f41395394fa392c16a1e2f041937bacb4d1" \
     gogs/gogs
 ExecStop=/usr/bin/docker stop gogs
 

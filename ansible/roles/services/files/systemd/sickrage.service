@@ -26,7 +26,6 @@ ExecStartPre=/usr/bin/docker create \
     --label "traefik.frontend.rule=Host:sickrage.kohlby.fr" \
     --label "traefik.port=8081" \
     --label "traefik.protocol=http" \
-    --label "traefik.frontend.auth.forward.address=http://traefik-auth-cloudflare/auth/287d2f4e699f1d692d2449c29775aff93424b1face49e0ba185956e74f014f51" \
     sickrage/sickrage
 ExecStartPre=/usr/bin/docker network connect usenet sickrage
 ExecStartPre=/usr/bin/docker network connect traefik sickrage

@@ -17,14 +17,7 @@ defaultEntryPoints = ["https","http"]
   address = ":443"
   compress = true
 
-    # require traffic to go through cloudflare
-    [entryPoints.https.tls.ClientCA]
-    files = ["/cloudflare-origin-pull-ca.pem"]
-    optional = false
-
-    # only trust X-Forwarded-For headers from cloudflare ips
-    [entryPoints.https.forwardedHeaders]
-    trustedIPs = ["{{ (lookup('url', 'https://www.cloudflare.com/ips-v6', wantlist=True) + lookup('url', 'https://www.cloudflare.com/ips-v4', wantlist=True)) | join('\", \"') }}"]
+    [entryPoints.https.tls]
 
 [retry]
 
