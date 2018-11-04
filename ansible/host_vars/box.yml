@@ -36,3 +36,4 @@ aws_ssm_sickrage_opensubtitles_username: changeme
 aws_ssm_sickrage_sickrage_api_key: changeme
 aws_ssm_sickrage_web_cookie_secret: changeme
 aws_ssm_wireguard_private_key: changemes
+aws_ssm_gogs_secret_key: changeme
