@@ -12,6 +12,44 @@
     - services
     - gogs
 
+- name: Create configuration directory
+  file:
+    dest: /mnt/services/gogs/gogs
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: 0755
+  become: yes
+  tags:
+    - services
+    - gogs
+
+- name: Create configuration directory
+  file:
+    dest: /mnt/services/gogs/gogs/conf
+    state: directory
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: 0755
+  become: yes
+  tags:
+    - services
+    - gogs
+
+- name: Configure gogs
+  template:
+    src: gogs.ini.j2
+    dest: /mnt/services/gogs/gogs/conf/app.ini
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
+    mode: 0600
+  become: yes
+  tags:
+    - services
+    - gogs
+  notify:
+    - Restart gogs
+
 - name: Copy the unit file
   copy:
     src: systemd/gogs.service
