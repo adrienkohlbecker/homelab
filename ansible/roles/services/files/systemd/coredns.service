@@ -1,0 +1,31 @@
+# coredns.service #######################################################################
+[Unit]
+Description=coredns
+After=docker.service zfs-mount.service
+Requires=docker.service zfs-mount.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+ExecStartPre=-/usr/bin/docker kill coredns
+ExecStartPre=-/usr/bin/docker rm coredns
+ExecStartPre=/usr/bin/docker pull coredns/coredns
+ExecStart=/usr/bin/docker run \
+    --init \
+    --name coredns \
+    --publish 10.123.40.11:53:53/tcp \
+    --publish 10.123.40.11:53:53/udp \
+    --volume /mnt/services/coredns:/data \
+    --workdir /data \
+    coredns/coredns \
+    -conf Corefile
+ExecStop=/usr/bin/docker stop coredns
+
+[Install]
+WantedBy=compose.service
