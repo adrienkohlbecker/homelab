@@ -36,12 +36,6 @@
     state: restarted
   become: yes
 
-- name: Restart traefik-auth-cloudflare
-  service:
-    name: traefik-auth-cloudflare
-    state: restarted
-  become: yes
-
 - name: Restart plex
   service:
     name: plex
