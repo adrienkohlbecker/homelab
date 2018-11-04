@@ -1,0 +1,13 @@
+kohlby.fr {
+  file kohlby.fr
+  log
+}
+
+. {
+  forward . tls://1.1.1.1 {
+    tls_servername tls.cloudflare-dns.com
+  }
+  log
+  errors
+  cache
+}

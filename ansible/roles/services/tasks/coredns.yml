@@ -1,0 +1,65 @@
+---
+
+- name: Create configuration directory
+  file:
+    dest: /mnt/services/coredns
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  become: yes
+  tags:
+    - services
+    - coredns
+
+- name: Configure coredns
+  copy:
+    src: Corefile
+    dest: /mnt/services/coredns/Corefile
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - coredns
+  notify:
+    - Restart coredns
+
+- name: Configure zone
+  copy:
+    src: kohlby.fr.zone
+    dest: /mnt/services/coredns/kohlby.fr
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - coredns
+  notify:
+    - Restart coredns
+
+- name: Copy the unit file
+  copy:
+    src: systemd/coredns.service
+    dest: /etc/systemd/system/coredns.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - coredns
+  notify:
+    - Restart coredns
+
+- name: Enable the service
+  systemd:
+    name: coredns
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - coredns
