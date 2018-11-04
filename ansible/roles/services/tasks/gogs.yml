@@ -4,8 +4,8 @@
   file:
     dest: /mnt/services/gogs
     state: directory
-    owner: root
-    group: root
+    owner: "{{ deploy_user }}"
+    group: "{{ deploy_user }}"
     mode: 0755
   become: yes
   tags:
