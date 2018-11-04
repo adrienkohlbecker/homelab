@@ -1,0 +1,17 @@
+[NetDev]
+Name=wg0
+Kind=wireguard
+
+[WireGuard]
+PrivateKey={{ aws_ssm_wireguard_private_key }}
+ListenPort=51820
+
+# laptop
+[WireGuardPeer]
+PublicKey=W3xZCFs6Po9vc8im7eLl6+ptGb+565F4GnpJE8JNLmc=
+AllowedIPs=10.123.60.2/32
+
+# phone
+[WireGuardPeer]
+PublicKey=IfYMZKwHODWIZPZ/sqlQHXcGyW5aQ8Hu9ffeQWqCzAE=
+AllowedIPs=10.123.60.3/32
