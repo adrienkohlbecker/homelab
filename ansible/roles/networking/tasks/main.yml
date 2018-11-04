@@ -18,13 +18,13 @@
 
 - name: Configure networking
   template:
-    src: "interfaces.{{ inventory_hostname_short }}.j2"
-    dest: /etc/network/interfaces
+    src: "config.{{ inventory_hostname_short }}.yaml.j2"
+    dest: /etc/netplan/config.yaml
     owner: root
     group: root
     mode: 0644
   become: yes
   notify:
-    - Restart networking
+    - Apply netplan
   tags:
     - networking

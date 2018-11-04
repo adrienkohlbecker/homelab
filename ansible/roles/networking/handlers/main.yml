@@ -1,7 +1,5 @@
 ---
 
-- name: Restart networking
-  service:
-    name: networking
-    state: restarted
+- name: Apply netplan
+  shell: netplan apply
   become: yes
