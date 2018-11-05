@@ -16,7 +16,6 @@ $ORIGIN kohlby.fr.
 em             60  IN  CNAME  u2316703.wl204.sendgrid.net.
 s1._domainkey  60  IN  CNAME  s1.domainkey.u2316703.wl204.sendgrid.net.
 s2._domainkey  60  IN  CNAME  s2.domainkey.u2316703.wl204.sendgrid.net.
-ssh            60  IN  CNAME  home.kohlby.fr.
 track          60  IN  CNAME  sendgrid.net.
 
 ;; A Records (IPv4 addresses)
