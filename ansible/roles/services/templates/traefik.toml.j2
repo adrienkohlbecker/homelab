@@ -37,3 +37,51 @@ onHostRule = true
 
   [acme.dnsChallenge]
   provider = "cloudflare"
+
+[file]
+
+[backends]
+
+  [backends.edgeos]
+
+    [backends.edgeos.servers.server1]
+    url = "https://10.123.0.1:443"
+    weight = 1
+
+  [backends.unifi]
+
+    [backends.unifi.servers.server1]
+    url = "https://10.123.0.2:8443"
+    weight = 1
+
+  [backends.ipmi]
+
+    [backends.ipmi.servers.server1]
+    url = "https://10.123.0.10:443"
+    weight = 1
+
+[frontends]
+
+  [frontends.edgeos]
+  backend = "edgeos"
+  priority = 20
+  passHostHeader = true
+
+    [frontends.edgeos.routes.test_1]
+    rule = "Host:edgeos.kohlby.fr"
+
+  [frontends.unifi]
+  backend = "unifi"
+  priority = 20
+  passHostHeader = true
+
+    [frontends.unifi.routes.test_1]
+    rule = "Host:unifi.kohlby.fr"
+
+  [frontends.ipmi]
+  backend = "ipmi"
+  priority = 20
+  passHostHeader = true
+
+    [frontends.ipmi.routes.test_1]
+    rule = "Host:ipmi.kohlby.fr"
