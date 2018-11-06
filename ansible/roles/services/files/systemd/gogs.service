@@ -21,6 +21,8 @@ ExecStart=/usr/bin/docker run \
     --name gogs \
     --publish 2221:22 \
     --network traefik \
+    --env PGID=2003 \
+    --env PUID=2003 \
     --volume /mnt/services/gogs:/data \
     --label "traefik.docker.network=traefik" \
     --label "traefik.enable=true" \
