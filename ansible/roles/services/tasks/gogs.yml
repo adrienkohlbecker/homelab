@@ -1,11 +1,35 @@
 ---
 
+- name: Add gogs group
+  group:
+    name: gogs
+    gid: 2003
+    system: true
+    state: present
+  become: yes
+  tags:
+    - services
+    - gogs
+
+- name: Add gogs user
+  user:
+    name: gogs
+    group: gogs
+    uid: 2003
+    createhome: no
+    system: true
+    state: present
+  become: yes
+  tags:
+    - services
+    - gogs
+
 - name: Create configuration directory
   file:
     dest: /mnt/services/gogs
     state: directory
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
+    owner: gogs
+    group: gogs
     mode: 0755
   become: yes
   tags:
@@ -16,8 +40,8 @@
   file:
     dest: /mnt/services/gogs/gogs
     state: directory
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
+    owner: gogs
+    group: gogs
     mode: 0755
   become: yes
   tags:
@@ -28,8 +52,8 @@
   file:
     dest: /mnt/services/gogs/gogs/conf
     state: directory
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
+    owner: gogs
+    group: gogs
     mode: 0755
   become: yes
   tags:
@@ -40,8 +64,8 @@
   template:
     src: gogs.ini.j2
     dest: /mnt/services/gogs/gogs/conf/app.ini
-    owner: "{{ deploy_user }}"
-    group: "{{ deploy_user }}"
+    owner: gogs
+    group: gogs
     mode: 0600
   become: yes
   tags:
