@@ -19,8 +19,8 @@ ExecStartPre=/usr/bin/docker pull coredns/coredns
 ExecStart=/usr/bin/docker run \
     --init \
     --name coredns \
-    --publish 10.123.40.11:53:53/tcp \
-    --publish 10.123.40.11:53:53/udp \
+    --publish 10.123.0.11:53:53/tcp \
+    --publish 10.123.0.11:53:53/udp \
     --volume /mnt/services/coredns:/data \
     --workdir /data \
     coredns/coredns \

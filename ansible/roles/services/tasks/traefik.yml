@@ -8,14 +8,6 @@
     - services
     - traefik
 
-- name: Create the traefik-auth docker network
-  docker_network:
-    name: traefik-auth
-  become: yes
-  tags:
-    - services
-    - traefik
-
 - name: Create configuration directory
   file:
     dest: /mnt/services/traefik
