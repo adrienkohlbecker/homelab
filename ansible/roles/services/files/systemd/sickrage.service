@@ -13,12 +13,15 @@ Restart=always
 TimeoutSec=300
 RestartSec=15
 
+SyslogIdentifier=sickrage
+
 ExecStartPre=-/usr/bin/docker kill sickrage
 ExecStartPre=-/usr/bin/docker rm sickrage
 ExecStartPre=/usr/bin/docker pull sickrage/sickrage
 ExecStartPre=/usr/bin/docker create \
     --init \
     --name sickrage \
+    --log-driver none \
     --volume /mnt/services/sickrage:/config \
     --volume /mnt/media:/media \
     --label "traefik.docker.network=traefik" \

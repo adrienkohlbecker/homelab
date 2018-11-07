@@ -5,6 +5,7 @@ Description=Docker Compose Services
 Type=oneshot
 ExecStart=/bin/echo "started"
 RemainAfterExit=yes
+SyslogIdentifier=​compose
 
 [Install]
 WantedBy=multi-user.target

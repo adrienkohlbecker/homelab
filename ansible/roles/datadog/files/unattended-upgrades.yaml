@@ -1,0 +1,13 @@
+logs:
+  - type: file
+    path: /var/log/unattended-upgrades/unattended-upgrades-dpkg.log
+    service: unattended-upgrades.dpkg
+    source: custom
+  - type: file
+    path: /var/log/unattended-upgrades/unattended-upgrades-shutdown.log
+    service: unattended-upgrades.shutdown
+    source: custom
+  - type: file
+    path: /var/log/unattended-upgrades/unattended-upgrades.log
+    service: unattended-upgrades.main
+    source: custom

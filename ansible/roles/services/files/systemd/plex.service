@@ -13,12 +13,15 @@ Restart=always
 TimeoutSec=300
 RestartSec=15
 
+SyslogIdentifier=plex
+
 ExecStartPre=-/usr/bin/docker kill plex
 ExecStartPre=-/usr/bin/docker rm plex
 ExecStartPre=/usr/bin/docker pull plexinc/pms-docker
 ExecStart=/usr/bin/docker run \
     --init \
     --name plex \
+    --log-driver none \
     --net host \
     --volume /mnt/services/plex:/config \
     --volume /mnt/media:/media \

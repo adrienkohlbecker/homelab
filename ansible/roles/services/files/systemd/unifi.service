@@ -13,12 +13,15 @@ Restart=always
 TimeoutSec=300
 RestartSec=15
 
+SyslogIdentifier=unifi
+
 ExecStartPre=-/usr/bin/docker kill unifi
 ExecStartPre=-/usr/bin/docker rm unifi
 ExecStartPre=/usr/bin/docker pull jacobalberty/unifi:5.9
 ExecStart=/usr/bin/docker run \
     --init \
     --name unifi \
+    --log-driver none \
     --publish 8080:8080/tcp \
     --publish 8443:8443/tcp \
     --publish 8843:8843/tcp \

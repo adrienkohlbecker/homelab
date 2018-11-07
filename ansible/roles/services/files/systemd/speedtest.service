@@ -13,12 +13,15 @@ Restart=always
 TimeoutSec=300
 RestartSec=15
 
+SyslogIdentifier=speedtest
+
 ExecStartPre=-/usr/bin/docker kill speedtest
 ExecStartPre=-/usr/bin/docker rm speedtest
 ExecStartPre=/usr/bin/docker pull adolfintel/speedtest:latest
 ExecStart=/usr/bin/docker run \
     --init \
     --name speedtest \
+    --log-driver none \
     --network traefik \
     --label "traefik.docker.network=traefik" \
     --label "traefik.enable=true" \
