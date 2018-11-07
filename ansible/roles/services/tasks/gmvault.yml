@@ -1,0 +1,68 @@
+---
+
+- name: Create configuration directory
+  file:
+    dest: /root/.gmvault
+    state: directory
+    owner: root
+    group: root
+    mode: 0775
+  become: yes
+  tags:
+    - services
+    - gmvault
+
+- name: Create data directory
+  file:
+    dest: /mnt/services/gmvault
+    state: directory
+    owner: root
+    group: root
+    mode: 0775
+  become: yes
+  tags:
+    - services
+    - gmvault
+
+- name: Install virtualenv
+  apt:
+    pkg: python-virtualenv
+  become: yes
+  tags:
+    - services
+    - gmvault
+
+- name: Install gmvault
+  pip:
+    name: gmvault
+    virtualenv: /opt/gmvault
+    version: 1.9.1
+  become: yes
+  tags:
+    - services
+    - gmvault
+
+- name: Configure gmvault
+  template:
+    src: gmvault_defaults.conf.j2
+    dest: /root/.gmvault/gmvault_defaults.conf
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+    - gmvault
+
+- name: Schedule the backup
+  cron:
+    name: gmvault_sync
+    hour: 2
+    minute: 0
+    job: /usr/local/bin/dms --silent c84da32bce /usr/bin/systemd-cat --identifier gmvault_sync -- /opt/gmvault/bin/gmvault sync --db-dir /mnt/services/gmvault --type quick adrien.kohlbecker@gmail.com
+    user: root
+    cron_file: ansible_gmvault_sync
+  become: yes
+  tags:
+    - services
+    - gmvault
