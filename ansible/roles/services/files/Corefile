@@ -9,4 +9,5 @@ kohlby.fr {
   }
   errors
   cache
+  prometheus 0.0.0.0:9153
 }
