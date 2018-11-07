@@ -1,0 +1,53 @@
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#  Gmvault Configuration file containing Gmvault defaults.
+#  DO NOT CHANGE IT IF YOU ARE NOT AN ADVANCED USER
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+[Sync]
+quick_days=10
+
+[Restore]
+# it is 10 days but currently it will always be the current month or the last 2 months
+# the notion of days is not yet apparent in restore (only months).
+quick_days=10
+reserved_labels_map = { u'migrated' : u'gmv-migrated', u'\muted' : u'gmv-muted' }
+
+[General]
+limit_per_chat_dir=2000
+errors_if_chat_not_visible=False
+nb_messages_per_batch=500
+nb_messages_per_restore_batch=80
+restore_default_location=DRAFTS
+keep_in_bin=False
+enable_imap_compression=False
+
+[Localisation]
+#example with Russian
+chat_folder=[ u'[Google Mail]/Чаты', u'[Gmail]/Чаты' ]
+#uncomment if you need to force the terminal_encoding
+#terminal_encoding='utf-8'
+#encoding list used to guess heuristicly the encoding
+encoding_guess_list=['ascii','iso-8859-1','iso-8859-2','windows-1250','windows-1252','utf-8']
+#uncomment if you need to force the data email encoding when it is stored
+#email_encoding='utf-8'
+
+
+#Do not touch any parameters below as it could force an overwrite of this file
+[VERSION]
+conf_version=1.9
+
+[GoogleOauth2]
+scope=https://mail.google.com/
+# The URL root for accessing Google Accounts.
+google_accounts_base_url=https://accounts.google.com
+# Hardcoded dummy redirect URI for non-web apps.
+redirect_uri=urn:ietf:wg:oauth:2.0:oob
+#identifier and secret in app mode for gmvault
+gmvault_client_id={{ aws_ssm_gmvault_client_id }}
+gmvault_client_secret={{ aws_ssm_gmvault_client_secret }}
+
+#set environment variables for the program locally
+#they will be read only once the conf file has been loaded
+[ENV]
+#by default it is ~/.gmvault
+GMV_IMAP_DEBUG=0

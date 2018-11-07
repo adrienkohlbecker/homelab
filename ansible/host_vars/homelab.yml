@@ -37,3 +37,5 @@ aws_ssm_sickrage_sickrage_api_key: "{{ lookup('aws_ssm', 'sickrage.sickrage_api_
 aws_ssm_sickrage_web_cookie_secret: "{{ lookup('aws_ssm', 'sickrage.web_cookie_secret', region='eu-west-1' ) }}"
 aws_ssm_wireguard_private_key: "{{ lookup('aws_ssm', 'wireguard.private_key', region='eu-west-1' ) }}"
 aws_ssm_gogs_secret_key: "{{ lookup('aws_ssm', 'gogs.secret_key', region='eu-west-1' ) }}"
+aws_ssm_gmvault_client_id: "{{ lookup('aws_ssm', 'gmvault.client_id', region='eu-west-1' ) }}"
+aws_ssm_gmvault_client_secret: "{{ lookup('aws_ssm', 'gmvault.client_secret', region='eu-west-1' ) }}"

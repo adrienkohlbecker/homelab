@@ -122,3 +122,4 @@
 - import_tasks: speedtest.yml
 - import_tasks: gogs.yml
 - import_tasks: traefik.yml
+- import_tasks: gmvault.yml
