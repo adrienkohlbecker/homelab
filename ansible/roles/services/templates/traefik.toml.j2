@@ -1,5 +1,5 @@
 debug = false
-
+insecureSkipVerify = true
 logLevel = "INFO"
 defaultEntryPoints = ["https","http"]
 
@@ -48,12 +48,6 @@ onHostRule = true
     url = "https://10.123.0.1:443"
     weight = 1
 
-  [backends.unifi]
-
-    [backends.unifi.servers.server1]
-    url = "https://10.123.0.2:8443"
-    weight = 1
-
   [backends.ipmi]
 
     [backends.ipmi.servers.server1]
@@ -69,14 +63,6 @@ onHostRule = true
 
     [frontends.edgeos.routes.test_1]
     rule = "Host:edgeos.kohlby.fr"
-
-  [frontends.unifi]
-  backend = "unifi"
-  priority = 20
-  passHostHeader = true
-
-    [frontends.unifi.routes.test_1]
-    rule = "Host:unifi.kohlby.fr"
 
   [frontends.ipmi]
   backend = "ipmi"
