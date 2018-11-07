@@ -37,10 +37,10 @@
   tags:
     - datadog
 
-- name: Add dd-agent to systemd-journal group
+- name: Add dd-agent to systemd-journal / adm group to read logs
   user:
     name: dd-agent
-    groups: systemd-journal
+    groups: systemd-journal,adm
     append: yes
   become: yes
   tags:
@@ -64,6 +64,23 @@
     owner: dd-agent
     group: dd-agent
     mode: 0644
+  notify: Restart datadog
+  become: yes
+  tags:
+    - datadog
+
+- name: Configure system integrations
+  copy:
+    src: "{{ item }}.yaml"
+    dest: "/etc/datadog-agent/conf.d/{{ item }}.d/conf.yaml"
+    owner: dd-agent
+    group: dd-agent
+    mode: 0644
+  with_items:
+    - disk
+    - network
+    - ntp
+    - system_core
   notify: Restart datadog
   become: yes
   tags:
