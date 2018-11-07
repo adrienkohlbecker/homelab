@@ -1,0 +1,61 @@
+---
+
+- name: Add unifi group
+  group:
+    name: unifi
+    gid: 2002
+    system: true
+    state: present
+  become: yes
+  tags:
+    - services
+    - unifi
+
+- name: Add unifi user
+  user:
+    name: unifi
+    group: unifi
+    uid: 2002
+    createhome: no
+    system: true
+    state: present
+  become: yes
+  tags:
+    - services
+    - unifi
+
+- name: Create configuration directory
+  file:
+    dest: /mnt/services/unifi
+    state: directory
+    owner: unifi
+    group: unifi
+    mode: 0755
+  become: yes
+  tags:
+    - services
+    - unifi
+
+- name: Copy the unit file
+  copy:
+    src: systemd/unifi.service
+    dest: /etc/systemd/system/unifi.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - unifi
+  notify:
+    - Restart unifi
+
+- name: Enable the service
+  systemd:
+    name: unifi
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - unifi

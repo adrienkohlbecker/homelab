@@ -1,0 +1,43 @@
+# unifi.service #######################################################################
+[Unit]
+Description=unifi
+After=docker.service zfs-mount.service
+Requires=docker.service zfs-mount.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+ExecStartPre=-/usr/bin/docker kill unifi
+ExecStartPre=-/usr/bin/docker rm unifi
+ExecStartPre=/usr/bin/docker pull jacobalberty/unifi:5.9
+ExecStart=/usr/bin/docker run \
+    --init \
+    --name unifi \
+    --publish 8080:8080/tcp \
+    --publish 8443:8443/tcp \
+    --publish 8843:8843/tcp \
+    --publish 8880:8880/tcp \
+    --publish 3478:3478/udp \
+    --publish 6789:6789/tcp \
+    --publish 10001:10001/udp \
+    --network traefik \
+    --env RUNAS_UID0=false \
+    --env UNIFI_UID=2002 \
+    --env UNIFI_GID=2002 \
+    --volume /mnt/services/unifi:/unifi \
+    --label "traefik.docker.network=traefik" \
+    --label "traefik.enable=true" \
+    --label "traefik.frontend.rule=Host:unifi.kohlby.fr" \
+    --label "traefik.port=8443" \
+    --label "traefik.protocol=https" \
+    jacobalberty/unifi:5.9
+ExecStop=/usr/bin/docker stop unifi
+
+[Install]
+WantedBy=compose.service

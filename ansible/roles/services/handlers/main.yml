@@ -42,6 +42,12 @@
     state: restarted
   become: yes
 
+- name: Restart unifi
+  service:
+    name: unifi
+    state: restarted
+  become: yes
+
 - name: Restart plex
   service:
     name: plex
