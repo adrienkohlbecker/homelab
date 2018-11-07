@@ -13,12 +13,15 @@ Restart=always
 TimeoutSec=300
 RestartSec=15
 
+SyslogIdentifier=sabnzbd
+
 ExecStartPre=-/usr/bin/docker kill sabnzbd
 ExecStartPre=-/usr/bin/docker rm sabnzbd
 ExecStartPre=/usr/bin/docker pull akohlbecker/sabnzbd
 ExecStartPre=/usr/bin/docker create \
     --init \
     --name sabnzbd \
+    --log-driver none \
     --volume /mnt/services/sabnzbd:/data \
     --volume /mnt/services/sabnzbd/autoProcessMedia.cfg:/opt/nzbToMedia/autoProcessMedia.cfg \
     --volume /mnt/media:/media \

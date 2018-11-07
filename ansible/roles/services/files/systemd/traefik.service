@@ -13,6 +13,8 @@ Restart=always
 TimeoutSec=300
 RestartSec=15
 
+SyslogIdentifier=traefik
+
 ExecStartPre=-/usr/bin/docker kill traefik
 ExecStartPre=-/usr/bin/docker rm traefik
 # ExecStartPre=/usr/bin/docker pull traefik:1.7.3
@@ -21,6 +23,7 @@ ExecStart=/usr/bin/docker run \
     --env-file /etc/env.d/traefik \
     --name traefik \
     --network traefik \
+    --log-driver none \
     --publish 443:443 \
     --publish 80:80 \
     --volume /var/run/docker.sock:/var/run/docker.sock \

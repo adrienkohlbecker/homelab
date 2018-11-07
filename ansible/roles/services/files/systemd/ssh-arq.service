@@ -13,12 +13,15 @@ Restart=always
 TimeoutSec=300
 RestartSec=15
 
+SyslogIdentifier=ssh-arq
+
 ExecStartPre=-/usr/bin/docker kill ssh-arq
 ExecStartPre=-/usr/bin/docker rm ssh-arq
 ExecStartPre=/usr/bin/docker pull akohlbecker/docker-ssh
 ExecStart=/usr/bin/docker run \
     --init \
     --name ssh-arq \
+    --log-driver none \
     --volume /etc/ssh:/etc/ssh:ro \
     --volume /etc/passwd:/etc/passwd:ro \
     --volume /etc/group:/etc/group:ro \

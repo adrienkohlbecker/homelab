@@ -110,3 +110,29 @@
   become: yes
   tags:
     - base
+
+- name: Setup journald
+  copy:
+    src: journald.conf
+    dest: /etc/systemd/journald.conf
+    owner: root
+    group: root
+    mode: 0644
+  notify:
+    - Restart systemd-journald
+  become: yes
+  tags:
+    - base
+
+- name: Setup rsyslog
+  copy:
+    src: 00-discard.conf
+    dest: /etc/rsyslog.d/00-discard.conf
+    owner: root
+    group: root
+    mode: 0644
+  notify:
+    - Restart rsyslog
+  become: yes
+  tags:
+    - base

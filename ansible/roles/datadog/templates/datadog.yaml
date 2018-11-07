@@ -346,7 +346,7 @@ config_providers:
 # log_to_console: true
 
 # Set to 'true' to disable logging to the log file
-# disable_file_logging: false
+disable_file_logging: true
 
 # Set to 'true' to enable logging to syslog.
 #
@@ -559,7 +559,7 @@ process_config:
 #   If "disabled" it will be disabled altogether and won't start.
     enabled: "true"
 #   The full path to the file where process-agent logs will be written.
-#   log_file:
+    log_file: /dev/null
 #   The interval, in seconds, at which we will run each check. If you want consistent
 #   behavior between real-time you may set the Container/ProcessRT intervals to 10.
 #   Defaults to 10s for normal checks and 2s for others.

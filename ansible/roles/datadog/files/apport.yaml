@@ -1,0 +1,5 @@
+logs:
+  - type: file
+    path: /var/log/apport.log
+    service: apport
+    source: custom

@@ -1,0 +1,5 @@
+logs:
+  - type: file
+    path: /var/log/apcupsd.events
+    service: apcupsd
+    source: custom
