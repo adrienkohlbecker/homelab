@@ -21,25 +21,6 @@
   apt:
     pkg: datadog-agent
     state: present
-  when: ansible_distribution == 'Ubuntu'
-  become: yes
-  tags:
-    - datadog
-
-- name: Download datadog agent
-  get_url:
-    url: https://github.com/adrienkohlbecker/datadog-agent-armv7/releases/download/6.6.0/datadog-agent_6.6.0.armv7-1_armhf.deb
-    dest: /usr/src/datadog-agent_6.6.0.armv7-1_armhf.deb
-  when: ansible_distribution != 'Ubuntu'
-  become: yes
-  tags:
-    - datadog
-
-- name: Install datadog agent
-  apt:
-    deb: /usr/src/datadog-agent_6.6.0.armv7-1_armhf.deb
-    state: present
-  when: ansible_distribution != 'Ubuntu'
   become: yes
   tags:
     - datadog
