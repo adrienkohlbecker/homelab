@@ -1,0 +1,61 @@
+---
+
+- name: Add tautulli group
+  group:
+    name: tautulli
+    gid: 2001
+    system: true
+    state: present
+  become: yes
+  tags:
+    - services
+    - tautulli
+
+- name: Add tautulli user
+  user:
+    name: tautulli
+    group: tautulli
+    uid: 2001
+    createhome: no
+    system: true
+    state: present
+  become: yes
+  tags:
+    - services
+    - tautulli
+
+- name: Create configuration directory
+  file:
+    dest: /mnt/services/tautulli
+    state: directory
+    owner: tautulli
+    group: tautulli
+    mode: 0775
+  become: yes
+  tags:
+    - services
+    - tautulli
+
+- name: Copy the unit file
+  copy:
+    src: systemd/tautulli.service
+    dest: /etc/systemd/system/tautulli.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - tautulli
+  notify:
+    - Restart tautulli
+
+- name: Enable the service
+  systemd:
+    name: tautulli
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - tautulli

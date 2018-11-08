@@ -1,0 +1,39 @@
+# tautulli.service #######################################################################
+[Unit]
+Description=tautulli
+After=docker.service zfs-mount.service
+Requires=docker.service zfs-mount.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+SyslogIdentifier=tautulli
+
+ExecStartPre=-/usr/bin/docker kill tautulli
+ExecStartPre=-/usr/bin/docker rm tautulli
+ExecStartPre=/usr/bin/docker pull tautulli/tautulli
+ExecStart=/usr/bin/docker run \
+    --init \
+    --name tautulli \
+    --log-driver none \
+    --network traefik \
+    --volume /mnt/services/tautulli:/config \
+    --volume "/mnt/services/plex/Library/Application Support/Plex Media Server/Logs:/plex_logs:ro" \
+    --env PUID=2001 \
+    --env PGID=2001 \
+    --label "traefik.docker.network=traefik" \
+    --label "traefik.enable=true" \
+    --label "traefik.frontend.rule=Host:tautulli.kohlby.fr" \
+    --label "traefik.port=8181" \
+    --label "traefik.protocol=http" \
+    tautulli/tautulli
+ExecStop=/usr/bin/docker stop tautulli
+
+[Install]
+WantedBy=compose.service
