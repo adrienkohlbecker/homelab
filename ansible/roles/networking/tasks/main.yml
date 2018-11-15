@@ -1,21 +1,5 @@
 ---
 
-- name: Install bridge-utils
-  apt:
-    pkg: bridge-utils
-    state: present
-  become: yes
-  tags:
-    - networking
-
-- name: Enable bonding
-  modprobe:
-    name: bonding
-    state: present
-  become: yes
-  tags:
-    - networking
-
 - name: Configure networking
   template:
     src: "config.{{ inventory_hostname_short }}.yaml.j2"

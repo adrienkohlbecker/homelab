@@ -2,13 +2,13 @@ ansible-apply.%:
 	./ansible/roles/services/files/sort_ini.py ./ansible/roles/services/templates/sabnzbd.ini.j2
 	./ansible/roles/services/files/sort_ini.py ./ansible/roles/services/templates/sabnzbd.ini.j2
 	./ansible/roles/services/files/sort_ini.py ./ansible/roles/services/templates/sickrage.ini.j2
-	(cd ansible; aws-vault exec home -- env OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook --inventory hosts.ini --limit $* --diff ${ANSIBLE_OPTS} playbook.yml)
+	(cd ansible; aws-vault exec default -- env OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook --inventory hosts.ini --limit $* --diff ${ANSIBLE_OPTS} playbook.yml)
 
 ansible-check.%:
 	./ansible/roles/services/files/sort_ini.py ./ansible/roles/services/templates/sabnzbd.ini.j2
 	./ansible/roles/services/files/sort_ini.py ./ansible/roles/services/templates/sabnzbd.ini.j2
 	./ansible/roles/services/files/sort_ini.py ./ansible/roles/services/templates/sickrage.ini.j2
-	(cd ansible; aws-vault exec home -- env OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook --inventory hosts.ini --limit $* --diff --check ${ANSIBLE_OPTS} playbook.yml)
+	(cd ansible; aws-vault exec default -- env OBJC_DISABLE_INITIALIZE_FORK_SAFETY=YES ansible-playbook --inventory hosts.ini --limit $* --diff --check ${ANSIBLE_OPTS} playbook.yml)
 
 packer-base:
 	rm -rf output-homelab-base
