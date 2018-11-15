@@ -18,11 +18,10 @@ SyslogIdentifier=tautulli
 ExecStartPre=-/usr/bin/docker kill tautulli
 ExecStartPre=-/usr/bin/docker rm tautulli
 ExecStartPre=/usr/bin/docker pull tautulli/tautulli
-ExecStart=/usr/bin/docker run \
+ExecStartPre=/usr/bin/docker create \
     --init \
     --name tautulli \
     --log-driver none \
-    --network traefik \
     --volume /mnt/services/tautulli:/config \
     --volume "/mnt/services/plex/Library/Application Support/Plex Media Server/Logs:/plex_logs:ro" \
     --env PUID=2001 \
@@ -33,6 +32,9 @@ ExecStart=/usr/bin/docker run \
     --label "traefik.port=8181" \
     --label "traefik.protocol=http" \
     tautulli/tautulli
+ExecStartPre=/usr/bin/docker network connect usenet tautulli
+ExecStartPre=/usr/bin/docker network connect traefik tautulli
+ExecStart=/usr/bin/docker start --attach tautulli
 ExecStop=/usr/bin/docker stop tautulli
 
 [Install]
