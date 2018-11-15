@@ -1,0 +1,35 @@
+---
+
+- name: Install iptables-persistent
+  apt:
+    pkg: iptables-persistent
+    state: present
+  become: yes
+  tags:
+    - firewall
+
+- name: Configure iptables (v4)
+  copy:
+    src: rules.v4
+    dest: /etc/iptables/rules.v4
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - firewall
+  notify:
+    - Apply iptables v4
+
+- name: Configure iptables (v6)
+  copy:
+    src: rules.v6
+    dest: /etc/iptables/rules.v6
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - firewall
+  notify:
+    - Apply iptables v6

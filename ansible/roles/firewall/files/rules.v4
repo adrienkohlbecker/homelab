@@ -1,0 +1,85 @@
+*filter
+:INPUT ACCEPT [0:0]
+:FORWARD DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+:FILTERS-ENP5S0 - [0:0]
+:FILTERS-ENP6S0 - [0:0]
+:FILTERS-WG0 - [0:0]
+:DOCKER-USER - [0:0]
+
+-F INPUT
+-F DOCKER-USER
+-F FILTERS-ENP5S0
+-F FILTERS-ENP6S0
+-F FILTERS-WG0
+
+-A INPUT -i lo -j ACCEPT
+-A INPUT -p icmp --icmp-type any -j ACCEPT
+-A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+-A INPUT -i enp5s0 -j FILTERS-ENP5S0
+-A INPUT -i enp6s0 -j FILTERS-ENP6S0
+-A INPUT -i wg0    -j FILTERS-WG0
+-A INPUT -p tcp -m limit --limit 5/min -j LOG --log-prefix "[iptables] INPUT:REJECT: "
+-A INPUT -j REJECT --reject-with icmp-host-prohibited
+
+-A DOCKER-USER -m state --state ESTABLISHED,RELATED -j ACCEPT
+-A DOCKER-USER -i enp5s0 -j FILTERS-ENP5S0
+-A DOCKER-USER -i enp6s0 -j FILTERS-ENP6S0
+-A DOCKER-USER -i wg0 -j FILTERS-WG0
+
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 22 -j ACCEPT    -m comment --comment "Accept SSH"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 53 -j ACCEPT    -m comment --comment "Accept DNS/tcp"
+-A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 53 -j ACCEPT    -m comment --comment "Accept DNS/tcp"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT    -m comment --comment "Accept HTTP"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 443 -j ACCEPT   -m comment --comment "Accept HTTPS"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 2221 -j ACCEPT  -m comment --comment "Accept SSH/gogs"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 2223 -j ACCEPT  -m comment --comment "Accept SSH/brumath"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 2224 -j ACCEPT  -m comment --comment "Accept SSH/arq"
+-A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 5353 -j ACCEPT  -m comment --comment "Accept mDNS"
+-A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 51820 -j ACCEPT -m comment --comment "Accept wireguard"
+
+# Unifi ports
+-A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 3478 -j ACCEPT  -m comment --comment "Accept Unifi"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 8080 -j ACCEPT  -m comment --comment "Accept Unifi"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 8443 -j ACCEPT  -m comment --comment "Accept Unifi"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 8843 -j ACCEPT  -m comment --comment "Accept Unifi"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 8880 -j ACCEPT  -m comment --comment "Accept Unifi"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 6789 -j ACCEPT  -m comment --comment "Accept Unifi"
+-A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 10001 -j ACCEPT -m comment --comment "Accept Unifi"
+# End Unifi
+
+# Plex ports
+-A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 1900 -j ACCEPT  -m comment --comment "Accept Plex"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 3005 -j ACCEPT  -m comment --comment "Accept Plex"
+-A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 5353 -j ACCEPT  -m comment --comment "Accept Plex"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 8324 -j ACCEPT  -m comment --comment "Accept Plex"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 32400 -j ACCEPT -m comment --comment "Accept Plex"
+-A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 32410 -j ACCEPT -m comment --comment "Accept Plex"
+-A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 32412 -j ACCEPT -m comment --comment "Accept Plex"
+-A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 32413 -j ACCEPT -m comment --comment "Accept Plex"
+-A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 32414 -j ACCEPT -m comment --comment "Accept Plex"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 32469 -j ACCEPT -m comment --comment "Accept Plex"
+# end Plex ports
+
+# samba ports
+-A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 137 -j ACCEPT -m comment --comment "Accept Samba"
+-A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 138 -j ACCEPT -m comment --comment "Accept Samba"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 139 -j ACCEPT -m comment --comment "Accept Samba"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 445 -j ACCEPT -m comment --comment "Accept Samba"
+# end samba ports
+
+-A FILTERS-ENP5S0 -p tcp -m limit --limit 5/min -j LOG --log-prefix "[iptables] FILTERS-ENP5S0:REJECT: "
+-A FILTERS-ENP5S0 -j REJECT --reject-with icmp-host-prohibited
+
+-A FILTERS-ENP6S0 -p tcp -m limit --limit 5/min -j LOG --log-prefix "[iptables] FILTERS-ENP6S0:REJECT: "
+-A FILTERS-ENP6S0 -j REJECT --reject-with icmp-host-prohibited
+
+-A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 22 -j ACCEPT   -m comment --comment "Accept SSH"
+-A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT   -m comment --comment "Accept HTTP"
+-A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 443 -j ACCEPT  -m comment --comment "Accept HTTPS"
+-A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 2221 -j ACCEPT -m comment --comment "Accept SSH/gogs"
+-A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 2224 -j ACCEPT -m comment --comment "Accept SSH/arq"
+-A FILTERS-WG0 -p tcp -m limit --limit 5/min -j LOG --log-prefix "[iptables] FILTERS-WG0:REJECT: "
+-A FILTERS-WG0 -j REJECT --reject-with icmp-host-prohibited
+
+COMMIT

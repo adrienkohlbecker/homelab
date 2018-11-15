@@ -3,6 +3,7 @@
 - hosts: all
   roles:
     - base
+    - firewall
     - ntp
     - ssh
     - mailer
