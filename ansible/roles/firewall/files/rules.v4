@@ -7,25 +7,58 @@
 :FILTERS-WG0 - [0:0]
 :DOCKER-USER - [0:0]
 
+##################################################
+#                  CLEAR TABLES                  #
+##################################################
+#
+# Apply this file using `iptables-restore -n /etc/iptables/rules.v4`
+# to prevent flushing the docker entries
+
 -F INPUT
 -F DOCKER-USER
 -F FILTERS-ENP5S0
 -F FILTERS-ENP6S0
 -F FILTERS-WG0
 
+##################################################
+#                   INPUT RULES                  #
+##################################################
+
+# Accept loopback
 -A INPUT -i lo -j ACCEPT
+
+# Accept pings
 -A INPUT -p icmp --icmp-type any -j ACCEPT
+
+# Accept established and related
 -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# Filter chains for interfaces
 -A INPUT -i enp5s0 -j FILTERS-ENP5S0
 -A INPUT -i enp6s0 -j FILTERS-ENP6S0
 -A INPUT -i wg0    -j FILTERS-WG0
+
+# Reject anything not accepted by the filters
 -A INPUT -p tcp -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] INPUT:REJECT: "
 -A INPUT -j REJECT --reject-with icmp-host-prohibited
 
+##################################################
+#                DOCKER USER RULES               #
+##################################################
+
+# Accept established and related
 -A DOCKER-USER -m state --state ESTABLISHED,RELATED -j ACCEPT
+
+# Filter chains for interfaces
 -A DOCKER-USER -i enp5s0 -j FILTERS-ENP5S0
 -A DOCKER-USER -i enp6s0 -j FILTERS-ENP6S0
 -A DOCKER-USER -i wg0 -j FILTERS-WG0
+
+# Note: can't deny rest of traffic here as outbound traffic and inter container traffic goes through this
+
+##################################################
+#             ENP5S0 RULES (PRIVATE)             #
+##################################################
 
 -A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 22 -j ACCEPT    -m comment --comment "Accept SSH"
 -A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 53 -j ACCEPT    -m comment --comment "Accept DNS/tcp"
@@ -68,18 +101,39 @@
 -A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 445 -j ACCEPT -m comment --comment "Accept Samba"
 # end samba ports
 
+# Reject anything else
 -A FILTERS-ENP5S0 -p tcp -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] ENP5S0:REJECT: "
 -A FILTERS-ENP5S0 -j REJECT --reject-with icmp-host-prohibited
 
+##################################################
+#              ENP6S0 RULES (SHARED)             #
+##################################################
+
+# Reject anything else
 -A FILTERS-ENP6S0 -p tcp -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] ENP6S0:REJECT: "
 -A FILTERS-ENP6S0 -j REJECT --reject-with icmp-host-prohibited
+
+##################################################
+#                WIREGUARD RULES                 #
+##################################################
 
 -A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 22 -j ACCEPT   -m comment --comment "Accept SSH"
 -A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT   -m comment --comment "Accept HTTP"
 -A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 443 -j ACCEPT  -m comment --comment "Accept HTTPS"
+
+# Note: This does not actually work, since 2221 is mapped to 22 on the docker side, dport is actually 22, so this is
+# taken care of by the SSH rule above.
+# Same for 2223 and 2224. Ideally we wouldn't open 2223 through here
 -A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 2221 -j ACCEPT -m comment --comment "Accept SSH/gogs"
+-A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 2223 -j ACCEPT -m comment --comment "Accept SSH/brumath"
 -A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 2224 -j ACCEPT -m comment --comment "Accept SSH/arq"
+
+# Reject anything else
 -A FILTERS-WG0 -p tcp -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] WG0:REJECT: "
 -A FILTERS-WG0 -j REJECT --reject-with icmp-host-prohibited
+
+##################################################
+#                       END                      #
+##################################################
 
 COMMIT
