@@ -225,7 +225,7 @@ api_key: "{{ aws_ssm_datadog_api_key }}"
 # dogstatsd_buffer_size: 1024
 #
 # Whether dogstatsd should listen to non local UDP traffic
-# dogstatsd_non_local_traffic: false
+dogstatsd_non_local_traffic: true
 #
 # Publish dogstatsd's internal stats as Go expvars
 # dogstatsd_stats_enable: false

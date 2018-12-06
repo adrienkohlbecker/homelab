@@ -114,3 +114,4 @@
 - import_tasks: traefik.yml
 - import_tasks: gmvault.yml
 - import_tasks: tautulli.yml
+- import_tasks: homebridge.yml
