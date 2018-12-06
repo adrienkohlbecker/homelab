@@ -4,7 +4,7 @@
 
 XKBMODEL="pc105"
 XKBLAYOUT="fr"
-XKBVARIANT="latin9"
-XKBOPTIONS="lv3:ralt_switch"
+XKBVARIANT="mac"
+XKBOPTIONS=""
 
 BACKSPACE="guess"

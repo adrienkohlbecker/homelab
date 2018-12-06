@@ -7,7 +7,7 @@ export DEBIAN_FRONTEND=noninteractive
 
 # Update the box
 apt-get -y update >/dev/null
-apt-get -y install python # for ansible provisioner
+apt-get -y install python python-apt python-pip # for ansible provisioner
 apt-get -y upgrade >/dev/null
 
 # change user id for vagrant as 1000 is the default and is used in the playbook
