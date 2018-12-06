@@ -9,4 +9,4 @@ set -euxo pipefail
 
 sed -i 's/[ \t]*$//' /mnt/services/sabnzbd/autoProcessMedia.cfg
 
-find /mnt/media -maxdepth 1 -mindepth 1 -type d -not -name ".tmp" -print0 | xargs -0 chown adrien:adrien
+find /mnt/media -maxdepth 1 -mindepth 1 -type d -not -name ".tmp" -print0 | xargs -0 chown ak:ak

@@ -1,4 +1,4 @@
-#       $OpenBSD: sshd_config,v 1.101 2017/03/14 07:19:07 djm Exp $
+#      $OpenBSD: sshd_config,v 1.101 2017/03/14 07:19:07 djm Exp $
 
 # This is the sshd server system-wide configuration file.  See
 # sshd_config(5) for more information.
@@ -60,7 +60,7 @@ UsePrivilegeSeparation sandbox
 #PubkeyAuthentication yes
 
 # Expect .ssh/authorized_keys2 to be disregarded by default in future.
-#AuthorizedKeysFile     .ssh/authorized_keys .ssh/authorized_keys2
+#AuthorizedKeysFile    .ssh/authorized_keys .ssh/authorized_keys2
 
 #AuthorizedPrincipalsFile none
 
@@ -139,7 +139,7 @@ Subsystem sftp  /usr/lib/ssh/sftp-server -f AUTHPRIV -l INFO
 
 # Example of overriding settings on a per-user basis
 #Match User anoncvs
-#       X11Forwarding no
-#       AllowTcpForwarding no
-#       PermitTTY no
-#       ForceCommand cvs server
+#      X11Forwarding no
+#      AllowTcpForwarding no
+#      PermitTTY no
+#      ForceCommand cvs server
