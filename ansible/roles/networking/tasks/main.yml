@@ -3,7 +3,7 @@
 - name: Configure networking
   template:
     src: "config.{{ inventory_hostname_short }}.yaml.j2"
-    dest: /etc/netplan/config.yaml
+    dest: /etc/netplan/01-netcfg.yaml
     owner: root
     group: root
     mode: 0644

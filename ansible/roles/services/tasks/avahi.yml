@@ -2,7 +2,9 @@
 
 - name: Install avahi-daemon
   apt:
-    pkg: avahi-daemon
+    pkg:
+      - avahi-daemon
+      - avahi-utils
     state: present
   become: yes
   tags:
