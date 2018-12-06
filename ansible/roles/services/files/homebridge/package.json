@@ -1,5 +1,5 @@
 {
   "dependencies": {
-    "homebridge-http-webhooks": "^0.0.43"
+    "homebridge-http-webhooks": "adrienkohlbecker/homebridge-http-webhooks#master"
   }
 }
