@@ -8,15 +8,22 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get -y update
 apt-get -y install zfsutils zfs-initramfs
 
+apt-get -y install gdisk
+
+mdadm --zero-superblock --force /dev/sdb || true
+mdadm --zero-superblock --force /dev/sdc || true
+sgdisk --zap-all /dev/sdb
+sgdisk --zap-all /dev/sdc
+
 zpool create -f -o ashift=12 -O compression=lz4 -O mountpoint=none -O atime=off -O normalization=formD -O xattr=sa \
   rpool mirror /dev/sdb /dev/sdc
 
 # create grub partitions (zfs leaves the first 2048 sectors free)
-apt-get -y install gdisk
 sgdisk -a1 -n2:512:2047 -t2:EF02 /dev/sdb
 sgdisk -a1 -n2:512:2047 -t2:EF02 /dev/sdc
 sgdisk --print /dev/sdb
 sgdisk --print /dev/sdc
+
 apt-get -y remove --auto-remove gdisk
 
 zpool export rpool
