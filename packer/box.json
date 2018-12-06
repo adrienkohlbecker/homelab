@@ -33,7 +33,8 @@
         {
             "type": "shell",
             "scripts": [
-                "{{ template_dir }}/scripts/volume.sh"
+                "{{ template_dir }}/scripts/volume.sh",
+                "{{ template_dir }}/scripts/network.sh"
             ],
             "only": [
               "homelab-final"

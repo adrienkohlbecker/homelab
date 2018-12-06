@@ -5,8 +5,8 @@ set -euxo pipefail
 
 export DEBIAN_FRONTEND=noninteractive
 
-apt-get -y update >/dev/null
-apt-get -y install zfsutils-linux parted >/dev/null
+apt-get -y update
+apt-get -y install parted
 
 # /dev/sda and /dev/sdb are the first disk on the sata controller => the install is done there
 
@@ -16,7 +16,7 @@ ls -al /dev/disk/by-id
 zfs create -o mountpoint=/mnt/services rpool/services
 
 # Tank
-zpool create -f -o ashift=12 -O compression=lz4 -O casesensitivity=insensitive -O normalization=formD -O mountpoint=none \
+zpool create -f -o ashift=12 -O compression=lz4 -O casesensitivity=insensitive -O normalization=formD -O mountpoint=none -O atime=off -O xattr=sa \
   tank raidz2 /dev/sdc /dev/sdd /dev/sde /dev/sdf /dev/sdg /dev/sdh
 zfs create -o mountpoint=/mnt/legacy tank/legacy
 zfs create -o mountpoint=/mnt/pictures tank/pictures
@@ -53,4 +53,7 @@ parted -s /dev/sdm -- mkpart primary 0% 100%
 sleep 2
 mkfs.ext4 -L snapraid_p1 /dev/sdm1
 
-apt-get -y remove parted >/dev/null
+apt-get -y remove --auto-remove parted
+
+# Fix networking
+sed -i "s/ens192/ens32/" /etc/netplan/01-netcfg.yaml
