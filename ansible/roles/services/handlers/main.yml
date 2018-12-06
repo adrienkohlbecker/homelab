@@ -101,3 +101,9 @@
     name: usenet-maintenance
     state: restarted
   become: yes
+
+- name: Restart homebridge
+  service:
+    name: homebridge
+    state: restarted
+  become: yes

@@ -1,0 +1,89 @@
+---
+
+- name: Add homebridge group
+  group:
+    name: homebridge
+    gid: 2004
+    system: true
+    state: present
+  become: yes
+  tags:
+    - services
+    - homebridge
+
+- name: Add homebridge user
+  user:
+    name: homebridge
+    group: homebridge
+    uid: 2004
+    createhome: no
+    system: true
+    state: present
+  become: yes
+  tags:
+    - services
+    - homebridge
+
+- name: Create configuration directory
+  file:
+    dest: /mnt/services/homebridge
+    state: directory
+    owner: homebridge
+    group: homebridge
+    mode: 0755
+  become: yes
+  tags:
+    - services
+    - homebridge
+
+- name: Configure homebridge
+  copy:
+    src: homebridge/config.json
+    dest: /mnt/services/homebridge/config.json
+    owner: homebridge
+    group: homebridge
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - homebridge
+  notify:
+    - Restart homebridge
+
+- name: Configure homebridge
+  copy:
+    src: homebridge/package.json
+    dest: /mnt/services/homebridge/package.json
+    owner: homebridge
+    group: homebridge
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - homebridge
+  notify:
+    - Restart homebridge
+
+- name: Copy the unit file
+  copy:
+    src: systemd/homebridge.service
+    dest: /etc/systemd/system/homebridge.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - homebridge
+  notify:
+    - Restart homebridge
+
+- name: Enable the service
+  systemd:
+    name: homebridge
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - homebridge

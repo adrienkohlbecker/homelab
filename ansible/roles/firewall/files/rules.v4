@@ -69,7 +69,10 @@
 -A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 2223 -j ACCEPT  -m comment --comment "Accept SSH/brumath"
 -A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 2224 -j ACCEPT  -m comment --comment "Accept SSH/arq"
 -A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 5353 -j ACCEPT  -m comment --comment "Accept mDNS"
+-A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 8125 -j ACCEPT  -m comment --comment "Accept statsd"
 -A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 51820 -j ACCEPT -m comment --comment "Accept wireguard"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 51826 -j ACCEPT -m comment --comment "Accept Homebridge"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 51828 -j ACCEPT -m comment --comment "Accept Homebridge webhooks"
 
 # Unifi ports
 -A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 3478 -j ACCEPT  -m comment --comment "Accept Unifi"

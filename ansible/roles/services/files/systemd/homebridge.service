@@ -1,0 +1,33 @@
+# homebridge.service #######################################################################
+[Unit]
+Description=homebridge
+After=docker.service zfs-mount.service
+Requires=docker.service zfs-mount.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+SyslogIdentifier=homebridge
+
+ExecStartPre=-/usr/bin/docker kill homebridge
+ExecStartPre=-/usr/bin/docker rm homebridge
+ExecStartPre=/usr/bin/docker pull oznu/homebridge
+ExecStart=/usr/bin/docker run \
+    --init \
+    --name homebridge \
+    --log-driver none \
+    --net=host \
+    --volume /mnt/services/homebridge:/homebridge \
+    --env PUID=2004 \
+    --env PGID=2004 \
+    oznu/homebridge
+ExecStop=/usr/bin/docker stop homebridge
+
+[Install]
+WantedBy=compose.service
