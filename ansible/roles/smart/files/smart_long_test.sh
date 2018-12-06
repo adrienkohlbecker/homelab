@@ -16,7 +16,7 @@ declare -a SCHEDULE=(
   "/dev/disk/by-id/ata-WDC_WD10JFCX-68N6GN0_WD-WXA1E63EXDD4 /dev/disk/by-id/ata-Hitachi_HDS5C3030BLE630_MC49215X0B7DNA"
   "/dev/disk/by-id/ata-WDC_WD10JFCX-68N6GN0_WD-WXA1E63FXKH5 /dev/disk/by-id/ata-WDC_WD30EZRX-00D8PB0_WD-WMC4N1263858"
   "/dev/disk/by-id/ata-WDC_WD10JFCX-68N6GN0_WD-WXN1E53SA095 /dev/disk/by-id/ata-WDC_WD30EZRX-00SPEB0_WD-WCC4E1229185"
-  "/dev/disk/by-id/ata-Crucial_CT240M500SSD1_13410953598E /dev/disk/by-id/ata-Crucial_CT240M500SSD1_14230C42B78B /dev/disk/by-id/ata-WDC_WD20EZRX-00D8PB0_WD-WMC4M0859498"
+  "/dev/disk/by-id/ata-Crucial_CT240M500SSD1_13410953598E /dev/disk/by-id/ata-Crucial_CT240M500SSD1_14270C8904C3 /dev/disk/by-id/ata-WDC_WD20EZRX-00D8PB0_WD-WMC4M0859498"
 )
 
 # Monday=0, Sunday=6
@@ -30,7 +30,11 @@ else
 
   for device in "${DEVICES[@]}"; do
     echo "..."
-    smartctl -t long $device
+    if [ -h $device ]; then
+      smartctl -t long $device
+    else
+      echo "Skipping $device, does not exist"
+    fi
   done
 fi
 
