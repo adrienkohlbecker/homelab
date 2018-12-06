@@ -110,7 +110,9 @@ case "$COMMAND" in
     zfs destroy -f "backup-$DISK/pictures@$SNAPSHOT" || true
     zfs destroy -f "backup-$DISK/brumath@$SNAPSHOT"  || true
     zfs destroy -f "backup-$DISK/videos@$SNAPSHOT"   || true
-    zfs destroy -f "backup-$DISK/arq@$SNAPSHOT"     || true
+    zfs destroy -f "backup-$DISK/arq@$SNAPSHOT"      || true
+    zfs destroy -f "backup-$DISK/vms_ssd@$SNAPSHOT"  || true
+    zfs destroy -f "backup-$DISK/vms_hdd@$SNAPSHOT"  || true
 
     ;;
 
