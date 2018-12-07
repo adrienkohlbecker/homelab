@@ -1,5 +1,15 @@
 ---
 
+- name: Drop cloud-init network config
+  file:
+    path: /etc/netplan/50-cloud-init.yaml
+    state: absent
+  become: yes
+  notify:
+    - Apply netplan
+  tags:
+    - networking
+
 - name: Configure networking
   template:
     src: "config.{{ inventory_hostname_short }}.yaml.j2"
