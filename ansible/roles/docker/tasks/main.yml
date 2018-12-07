@@ -24,6 +24,18 @@
   tags:
     - docker
 
+- name: Copy the docker config
+  copy:
+    src: daemon.json
+    dest: /etc/docker/daemon.json
+    mode: 0644
+    owner: root
+    group: root
+  become: yes
+  notify: Restart docker
+  tags:
+    - docker
+
 - name: Add deploy user to docker group
   user:
     name: "{{ deploy_user }}"
