@@ -17,7 +17,7 @@ SyslogIdentifier=ssh-arq
 
 ExecStartPre=-/usr/bin/docker kill ssh-arq
 ExecStartPre=-/usr/bin/docker rm ssh-arq
-ExecStartPre=/usr/bin/docker pull akohlbecker/docker-ssh
+ExecStartPre=-/usr/bin/docker pull akohlbecker/docker-ssh
 ExecStart=/usr/bin/docker run \
     --init \
     --name ssh-arq \

@@ -17,7 +17,7 @@ SyslogIdentifier=homebridge
 
 ExecStartPre=-/usr/bin/docker kill homebridge
 ExecStartPre=-/usr/bin/docker rm homebridge
-ExecStartPre=/usr/bin/docker pull oznu/homebridge
+ExecStartPre=-/usr/bin/docker pull oznu/homebridge
 ExecStart=/usr/bin/docker run \
     --init \
     --name homebridge \

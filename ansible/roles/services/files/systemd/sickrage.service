@@ -17,7 +17,7 @@ SyslogIdentifier=sickrage
 
 ExecStartPre=-/usr/bin/docker kill sickrage
 ExecStartPre=-/usr/bin/docker rm sickrage
-ExecStartPre=/usr/bin/docker pull sickrage/sickrage
+ExecStartPre=-/usr/bin/docker pull sickrage/sickrage
 ExecStartPre=/usr/bin/docker create \
     --init \
     --name sickrage \

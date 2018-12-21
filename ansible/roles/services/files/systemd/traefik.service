@@ -17,7 +17,7 @@ SyslogIdentifier=traefik
 
 ExecStartPre=-/usr/bin/docker kill traefik
 ExecStartPre=-/usr/bin/docker rm traefik
-# ExecStartPre=/usr/bin/docker pull traefik:1.7.3
+# ExecStartPre=-/usr/bin/docker pull traefik:1.7.3
 ExecStart=/usr/bin/docker run \
     --init \
     --env-file /etc/env.d/traefik \

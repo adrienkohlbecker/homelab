@@ -17,7 +17,7 @@ SyslogIdentifier=plex
 
 ExecStartPre=-/usr/bin/docker kill plex
 ExecStartPre=-/usr/bin/docker rm plex
-ExecStartPre=/usr/bin/docker pull plexinc/pms-docker
+ExecStartPre=-/usr/bin/docker pull plexinc/pms-docker
 ExecStart=/usr/bin/docker run \
     --init \
     --name plex \
