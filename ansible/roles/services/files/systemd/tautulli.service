@@ -17,7 +17,7 @@ SyslogIdentifier=tautulli
 
 ExecStartPre=-/usr/bin/docker kill tautulli
 ExecStartPre=-/usr/bin/docker rm tautulli
-ExecStartPre=/usr/bin/docker pull tautulli/tautulli
+ExecStartPre=-/usr/bin/docker pull tautulli/tautulli
 ExecStartPre=/usr/bin/docker create \
     --init \
     --name tautulli \

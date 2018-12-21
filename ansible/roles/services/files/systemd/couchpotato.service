@@ -17,7 +17,7 @@ SyslogIdentifier=couchpotato
 
 ExecStartPre=-/usr/bin/docker kill couchpotato
 ExecStartPre=-/usr/bin/docker rm couchpotato
-ExecStartPre=/usr/bin/docker pull akohlbecker/couchpotato
+ExecStartPre=-/usr/bin/docker pull akohlbecker/couchpotato
 ExecStartPre=/usr/bin/docker create \
     --init \
     --name couchpotato \

@@ -17,7 +17,7 @@ SyslogIdentifier=gogs
 
 ExecStartPre=-/usr/bin/docker kill gogs
 ExecStartPre=-/usr/bin/docker rm gogs
-ExecStartPre=/usr/bin/docker pull gogs/gogs
+ExecStartPre=-/usr/bin/docker pull gogs/gogs
 ExecStart=/usr/bin/docker run \
     --init \
     --name gogs \

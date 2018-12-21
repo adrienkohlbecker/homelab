@@ -17,7 +17,7 @@ SyslogIdentifier=speedtest
 
 ExecStartPre=-/usr/bin/docker kill speedtest
 ExecStartPre=-/usr/bin/docker rm speedtest
-ExecStartPre=/usr/bin/docker pull adolfintel/speedtest:latest
+ExecStartPre=-/usr/bin/docker pull adolfintel/speedtest:latest
 ExecStart=/usr/bin/docker run \
     --init \
     --name speedtest \

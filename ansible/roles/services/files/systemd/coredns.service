@@ -17,7 +17,7 @@ SyslogIdentifier=coredns
 
 ExecStartPre=-/usr/bin/docker kill coredns
 ExecStartPre=-/usr/bin/docker rm coredns
-ExecStartPre=/usr/bin/docker pull coredns/coredns
+ExecStartPre=-/usr/bin/docker pull coredns/coredns
 ExecStart=/usr/bin/docker run \
     --init \
     --name coredns \

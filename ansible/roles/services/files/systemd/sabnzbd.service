@@ -17,7 +17,7 @@ SyslogIdentifier=sabnzbd
 
 ExecStartPre=-/usr/bin/docker kill sabnzbd
 ExecStartPre=-/usr/bin/docker rm sabnzbd
-ExecStartPre=/usr/bin/docker pull akohlbecker/sabnzbd
+ExecStartPre=-/usr/bin/docker pull akohlbecker/sabnzbd
 ExecStartPre=/usr/bin/docker create \
     --init \
     --name sabnzbd \
