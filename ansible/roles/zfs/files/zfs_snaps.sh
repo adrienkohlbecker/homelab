@@ -47,7 +47,7 @@ case "$COMMAND" in
     zfs destroy -f "backup-$DISK/pictures@backup-disk-$DISK" || true
     zfs destroy -f "backup-$DISK/brumath@backup-disk-$DISK"  || true
     zfs destroy -f "backup-$DISK/videos@backup-disk-$DISK"   || true
-    zfs destroy -f "backup-$DISK/arq@backup-disk-$DISK"     || true
+    zfs destroy -f "backup-$DISK/arq@backup-disk-$DISK"      || true
 
     echo "Rolling back backup to: $FROM"
 
@@ -111,8 +111,6 @@ case "$COMMAND" in
     zfs destroy -f "backup-$DISK/brumath@$SNAPSHOT"  || true
     zfs destroy -f "backup-$DISK/videos@$SNAPSHOT"   || true
     zfs destroy -f "backup-$DISK/arq@$SNAPSHOT"      || true
-    zfs destroy -f "backup-$DISK/vms_ssd@$SNAPSHOT"  || true
-    zfs destroy -f "backup-$DISK/vms_hdd@$SNAPSHOT"  || true
 
     ;;
 
