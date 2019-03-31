@@ -19,7 +19,6 @@ s2._domainkey  60  IN  CNAME  s2.domainkey.u2316703.wl204.sendgrid.net.
 track          60  IN  CNAME  sendgrid.net.
 
 ;; A Records (IPv4 addresses)
-brumath        60  IN  A  82.227.48.136
 home           60  IN  A  81.109.205.145
 
 couchpotato    60  IN  A  10.123.0.11
