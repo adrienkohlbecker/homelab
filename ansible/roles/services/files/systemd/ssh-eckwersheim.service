@@ -1,0 +1,39 @@
+# ssh-eckwersheim #######################################################################
+[Unit]
+Description=ssh-eckwersheim
+After=docker.service zfs-mount.service
+Requires=docker.service zfs-mount.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+SyslogIdentifier=ssh-eckwersheim
+
+ExecStartPre=-/usr/bin/docker kill ssh-eckwersheim
+ExecStartPre=-/usr/bin/docker rm ssh-eckwersheim
+ExecStartPre=-/usr/bin/docker pull akohlbecker/docker-ssh
+ExecStartPre=/bin/mkdir -p /var/run/synology-eckwersheim
+ExecStartPre=/bin/sh -c "/usr/bin/stat /var/run/synology-eckwersheim /synoquota.db || /usr/bin/bindfs /mnt/eckwersheim/synology /var/run/synology-eckwersheim  -o map=ak/eckwersheim:@ak/@eckwersheim"
+ExecStart=/usr/bin/docker run \
+    --init \
+    --name ssh-eckwersheim \
+    --log-driver none \
+    --volume /etc/ssh:/etc/ssh:ro \
+    --volume /etc/passwd:/etc/passwd:ro \
+    --volume /etc/group:/etc/group:ro \
+    --volume /etc/shadow:/etc/shadow:ro \
+    --volume /etc/gshadow:/etc/gshadow:ro \
+    --volume /home/eckwersheim:/home/eckwersheim:ro \
+    --volume /var/run/synology-eckwersheim:/data \
+    --publish 2222:22 \
+    akohlbecker/docker-ssh
+ExecStop=/usr/bin/docker stop ssh-eckwersheim
+
+[Install]
+WantedBy=compose.service

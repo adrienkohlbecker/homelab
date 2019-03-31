@@ -58,6 +58,7 @@
 
 - name: Add authorized keys
   authorized_key:
+    path: /home/{{ deploy_user }}/.ssh/authorized_keys
     user: "{{ deploy_user }}"
     key: "{{ deploy_user_ssh_public_key }}"
     state: present

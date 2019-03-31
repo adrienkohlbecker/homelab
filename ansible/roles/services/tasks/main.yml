@@ -23,6 +23,7 @@
   with_items:
     - {path: '/mnt/services',               owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/brumath',                owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
+    - {path: '/mnt/eckwersheim',            owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/legacy',                 owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/pictures',               owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/videos',                 owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}

@@ -84,6 +84,12 @@
     state: restarted
   become: yes
 
+- name: Restart ssh-eckwersheim
+  service:
+    name: ssh-eckwersheim
+    state: restarted
+  become: yes
+
 - name: Restart portainer
   service:
     name: portainer

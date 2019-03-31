@@ -66,6 +66,7 @@
 -A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT    -m comment --comment "Accept HTTP"
 -A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 443 -j ACCEPT   -m comment --comment "Accept HTTPS"
 -A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 2221 -j ACCEPT  -m comment --comment "Accept SSH/gogs"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 2222 -j ACCEPT  -m comment --comment "Accept SSH/eckwersheim"
 -A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 2223 -j ACCEPT  -m comment --comment "Accept SSH/brumath"
 -A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 2224 -j ACCEPT  -m comment --comment "Accept SSH/arq"
 -A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 5353 -j ACCEPT  -m comment --comment "Accept mDNS"
@@ -132,6 +133,7 @@
 # taken care of by the SSH rule above.
 # Same for 2223 and 2224. Ideally we wouldn't open 2223 through here
 -A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 2221 -j ACCEPT -m comment --comment "Accept SSH/gogs"
+-A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 2222 -j ACCEPT -m comment --comment "Accept SSH/eckwersheim"
 -A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 2223 -j ACCEPT -m comment --comment "Accept SSH/brumath"
 -A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 2224 -j ACCEPT -m comment --comment "Accept SSH/arq"
 # end Plex ports
