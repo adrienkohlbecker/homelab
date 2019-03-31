@@ -22,6 +22,7 @@ zfs create -o mountpoint=/mnt/legacy tank/legacy
 zfs create -o mountpoint=/mnt/pictures tank/pictures
 zfs create -o mountpoint=/mnt/arq tank/arq
 zfs create -o mountpoint=/mnt/brumath tank/brumath
+zfs create -o mountpoint=/mnt/eckwersheim tank/eckwersheim
 zfs create -o mountpoint=/mnt/videos tank/videos
 
 zpool export tank
