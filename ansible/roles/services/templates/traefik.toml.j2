@@ -42,12 +42,6 @@ onHostRule = true
 
 [backends]
 
-  [backends.edgeos]
-
-    [backends.edgeos.servers.server1]
-    url = "https://10.123.0.1:443"
-    weight = 1
-
   [backends.ipmi]
 
     [backends.ipmi.servers.server1]
@@ -55,14 +49,6 @@ onHostRule = true
     weight = 1
 
 [frontends]
-
-  [frontends.edgeos]
-  backend = "edgeos"
-  priority = 20
-  passHostHeader = true
-
-    [frontends.edgeos.routes.test_1]
-    rule = "Host:edgeos.kohlby.fr"
 
   [frontends.ipmi]
   backend = "ipmi"
