@@ -1,0 +1,100 @@
+---
+
+- name: Install virtualization tools
+  apt:
+    pkg:
+      - qemu-kvm
+      - libvirt-bin
+      - ovmf
+      - hugepages
+    state: present
+  become: yes
+  tags:
+    - virtualization
+- name: Add deploy user to libvirtd group
+  user:
+    name: "{{ deploy_user }}"
+    groups: libvirt
+    append: yes
+  become: yes
+  tags:
+    - virtualization
+
+- name: Blacklist the driver modules
+  kernel_blacklist:
+    name: "{{ item }}"
+    state: present
+  become: yes
+  notify: Ask to reboot
+  with_items:
+    - radeon
+    - amdgpu
+    - snd_hda_intel
+  tags:
+    - virtualization
+
+- name: Install lsgroup binary
+  copy:
+    src: lsgroup.sh
+    dest: /usr/bin/lsgroup
+    owner: root
+    group: root
+    mode: 0755
+  become: yes
+  tags:
+    - virtualization
+
+- name: Set modules load in initramfs
+  copy:
+    src: modules
+    dest: /etc/initramfs-tools/modules
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - virtualization
+
+- name: Set kvm module config
+  copy:
+    src: kvm.conf
+    dest: /etc/modprobe.d/kvm.conf
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - virtualization
+
+- name: Set vfio module config
+  copy:
+    src: vfio.conf
+    dest: /etc/modprobe.d/vfio.conf
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - virtualization
+
+- name: Create vms directory
+  file:
+    dest: /mnt/vms
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  become: yes
+  tags:
+    - virtualization
+
+- name: Create vms/ssd directory
+  file:
+    dest: /mnt/vms/ssd
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  become: yes
+  tags:
+    - virtualization

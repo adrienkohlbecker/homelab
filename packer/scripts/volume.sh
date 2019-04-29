@@ -14,6 +14,7 @@ ls -al /dev/disk/by-id
 
 # ssds
 zfs create -o mountpoint=/mnt/services rpool/services
+zfs create -o mountpoint=/mnt/vms/ssd rpool/vms
 
 # Tank
 zpool create -f -o ashift=12 -O compression=lz4 -O casesensitivity=insensitive -O normalization=formD -O mountpoint=none -O atime=off -O xattr=sa \
