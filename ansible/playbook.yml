@@ -22,6 +22,7 @@
     - mergerfs
     - docker
     - services
+    - virtualization
 
   post_tasks:
 

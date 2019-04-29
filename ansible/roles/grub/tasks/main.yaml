@@ -2,8 +2,8 @@
 
 - name: Configure GRUB
   copy:
-    src: grub
-    dest: /etc/default/grub
+    src: 99-custom.cfg
+    dest: /etc/default/grub.d/99-custom.cfg
     owner: root
     group: root
     mode: 0644
