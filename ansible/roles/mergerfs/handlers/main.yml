@@ -1,0 +1,7 @@
+---
+
+- name: Restart mnt-media.mount
+  service:
+    name: mnt-media.mount
+    state: restarted
+  become: yes

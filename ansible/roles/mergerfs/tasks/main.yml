@@ -47,13 +47,24 @@
     - /mnt/snapraid_d4/media
     - /mnt/media
 
-- name: Mount mergerfs partition
-  mount:
-    name: /mnt/media
-    src: /mnt/snapraid_d1/media:/mnt/snapraid_d2/media:/mnt/snapraid_d3/media:/mnt/snapraid_d4/media
-    fstype: fuse.mergerfs
-    opts: defaults,allow_other,direct_io,use_ino,hard_remove,fsname=media
-    state: mounted
+- name: Copy the unit file
+  copy:
+    src: mnt-media.mount
+    dest: /etc/systemd/system/mnt-media.mount
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - mergerfs
+  notify:
+    - Restart mnt-media.mount
+
+- name: Enable the mount
+  systemd:
+    name: mnt-media.mount
+    enabled: yes
+    daemon_reload: yes
   become: yes
   tags:
     - mergerfs
