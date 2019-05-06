@@ -101,7 +101,6 @@
     - services
 
 - import_tasks: avahi.yml
-- import_tasks: coredns.yml
 - import_tasks: unifi.yml
 - import_tasks: couchpotato.yml
 - import_tasks: plex.yml

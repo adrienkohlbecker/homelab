@@ -36,12 +36,6 @@
     state: restarted
   become: yes
 
-- name: Restart coredns
-  service:
-    name: coredns
-    state: restarted
-  become: yes
-
 - name: Restart tautulli
   service:
     name: tautulli
