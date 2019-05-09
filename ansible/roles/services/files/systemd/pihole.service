@@ -1,0 +1,38 @@
+# pihole.service #######################################################################
+[Unit]
+Description=pihole
+After=docker.service
+Requires=docker.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+SyslogIdentifier=pihole
+
+ExecStartPre=-/usr/bin/docker kill pihole
+ExecStartPre=-/usr/bin/docker rm pihole
+ExecStartPre=-/usr/bin/docker pull pihole/pihole
+ExecStart=/usr/bin/docker run \
+    --init \
+    --name pihole \
+    --log-driver none \
+    --volume /mnt/services/pihole/etc:/etc/pihole \
+    --volume /mnt/services/pihole/dnsmasq:/etc/dnsmasq.d \
+    --publish 53:53/tcp \
+    --publish 53:53/udp \
+    --publish 80:80 \
+    --publish 443:443 \
+    --env TZ="Europe/Amsterdam" \
+    --dns=127.0.0.1 \
+    --dns=1.1.1.1 \
+    pihole/pihole:latest
+ExecStop=/usr/bin/docker stop pihole
+
+[Install]
+WantedBy=compose.service

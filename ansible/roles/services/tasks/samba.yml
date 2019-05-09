@@ -1,5 +1,23 @@
 ---
 
+- name: Create mount points
+  file:
+    dest: "{{item.path}}"
+    state: directory
+    owner: "{{item.owner}}"
+    group: "{{item.group}}"
+    mode: "{{item.mode}}"
+  become: yes
+  tags:
+    - services
+    - samba
+  with_items:
+    - {path: '/mnt/brumath',                owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
+    - {path: '/mnt/eckwersheim',            owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
+    - {path: '/mnt/legacy',                 owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
+    - {path: '/mnt/pictures',               owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
+    - {path: '/mnt/videos',                 owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
+
 - name: Install samba
   apt:
     pkg: samba

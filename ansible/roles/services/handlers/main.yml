@@ -54,6 +54,12 @@
     state: restarted
   become: yes
 
+- name: Restart pihole
+  service:
+    name: pihole
+    state: restarted
+  become: yes
+
 - name: Restart sabnzbd
   service:
     name: sabnzbd
