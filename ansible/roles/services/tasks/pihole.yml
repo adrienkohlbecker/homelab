@@ -1,5 +1,25 @@
 ---
 
+- name: Stop systemd-resolved
+  systemd:
+    name: systemd-resolved
+    enabled: no
+    state: stopped
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - pihole
+
+- name: Remove resolv.conf
+  file:
+    path: /etc/resolv.conf
+    state: absent
+  become: yes
+  tags:
+    - services
+    - pihole
+
 - name: Create configuration directory
   file:
     dest: /mnt/services/pihole
