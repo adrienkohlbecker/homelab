@@ -10,8 +10,8 @@
 
 - name: Configure iptables (v4)
   copy:
-    src: rules.v4
-    dest: /etc/iptables/rules.v4.{{ inventory_hostname }}
+    src: "rules.v4.{{ inventory_hostname }}"
+    dest: /etc/iptables/rules.v4
     owner: root
     group: root
     mode: 0644
