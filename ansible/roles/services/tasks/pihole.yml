@@ -1,0 +1,37 @@
+---
+
+- name: Create configuration directory
+  file:
+    dest: /mnt/services/pihole
+    state: directory
+    owner: root
+    group: root
+    mode: 0775
+  become: yes
+  tags:
+    - services
+    - pihole
+
+- name: Copy the unit file
+  copy:
+    src: systemd/pihole.service
+    dest: /etc/systemd/system/pihole.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - pihole
+  notify:
+    - Restart pihole
+
+- name: Enable the service
+  systemd:
+    name: pihole
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - pihole

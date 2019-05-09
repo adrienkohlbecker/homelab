@@ -7,9 +7,12 @@
     - ntp
     - ssh
     - mailer
-    - datadog
     - user
     - dotfiles
+
+- hosts: homelab
+  roles:
+    - datadog
     - deadmanssnitch
     - grub
     - networking
@@ -20,9 +23,12 @@
     - ipmi
     - snapraid
     - mergerfs
+    - virtualization
+
+- hosts: all
+  roles:
     - docker
     - services
-    - virtualization
 
   post_tasks:
 
