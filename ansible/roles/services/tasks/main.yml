@@ -36,6 +36,7 @@
 - name: Include services
   block:
     - import_tasks: wireguard.yml
+    - import_tasks: traefik.yml
 
 - name: Include services
   block:
@@ -51,7 +52,6 @@
     - import_tasks: sickrage.yml
     - import_tasks: speedtest.yml
     - import_tasks: gogs.yml
-    - import_tasks: traefik.yml
     - import_tasks: gmvault.yml
     - import_tasks: tautulli.yml
     - import_tasks: homebridge.yml
