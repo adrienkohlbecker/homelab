@@ -1,0 +1,49 @@
+---
+
+- name: Add wireguard repository
+  apt_repository:
+    repo: ppa:wireguard/wireguard
+    state: present
+  become: yes
+  tags:
+    - services
+    - wireguard
+
+- name: Install wireguard
+  apt:
+    pkg: wireguard
+    state: present
+  become: yes
+  tags:
+    - services
+    - wireguard
+
+- name: Copy the network file
+  copy:
+    src: wg0.network
+    dest: /etc/systemd/network/wg0.network
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - wireguard
+  notify:
+    - Reload systemd
+    - Restart systemd-networkd
+
+- name: Copy the netdev file
+  template:
+    src: wg0.netdev.j2
+    dest: /etc/systemd/network/wg0.netdev
+    owner: root
+    group: systemd-network
+    mode: 0640
+  become: yes
+  tags:
+    - services
+    - wireguard
+  notify:
+    - Reload systemd
+    - Restart systemd-networkd
