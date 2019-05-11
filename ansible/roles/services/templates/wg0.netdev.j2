@@ -3,8 +3,9 @@ Name=wg0
 Kind=wireguard
 
 [WireGuard]
+# PublicKey={{ aws_ssm_wireguard_public_key }}
 PrivateKey={{ aws_ssm_wireguard_private_key }}
-ListenPort=51820
+ListenPort={{ wireguard_listen_port }}
 
 # laptop
 [WireGuardPeer]

@@ -6,6 +6,9 @@ deploy_user_password: $6$SutP1Z0MHr$12AxgSgzVdoYCs1NcocU9ep1BacoY8uoHUy8oTO6QjYT
 
 docker_host: true
 
+wireguard_address: 10.123.60.1
+wireguard_listen_port: 51820
+
 aws_ssm_cloudflare_email: changeme
 aws_ssm_cloudflare_api_key: changeme
 aws_ssm_couchpotato_api_key: changeme
@@ -35,7 +38,8 @@ aws_ssm_sickrage_opensubtitles_password: changeme
 aws_ssm_sickrage_opensubtitles_username: changeme
 aws_ssm_sickrage_sickrage_api_key: changeme
 aws_ssm_sickrage_web_cookie_secret: changeme
-aws_ssm_wireguard_private_key: changemes
+aws_ssm_wireguard_private_key: changeme
+aws_ssm_wireguard_public_key: changeme
 aws_ssm_gogs_secret_key: changeme
 aws_ssm_gmvault_client_id: changeme
 aws_ssm_gmvault_client_secret: changeme

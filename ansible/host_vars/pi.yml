@@ -6,6 +6,9 @@ deploy_user_password: $6$9WL6ah8B.K/Kk$x6tt2LKJxKYyXxBRIO1bkKzKvZ.eyysAMI4M60nfY
 
 docker_host: true
 
+wireguard_address: 10.123.60.4
+wireguard_listen_port: 51821
+
 aws_ssm_cloudflare_email: "{{ lookup('aws_ssm', 'cloudflare.email', region='eu-west-1' ) }}"
 aws_ssm_cloudflare_api_key: "{{ lookup('aws_ssm', 'cloudflare.api_key', region='eu-west-1' ) }}"
 aws_ssm_couchpotato_api_key: "{{ lookup('aws_ssm', 'couchpotato.api_key', region='eu-west-1' ) }}"
@@ -35,7 +38,8 @@ aws_ssm_sickrage_opensubtitles_password: "{{ lookup('aws_ssm', 'sickrage.opensub
 aws_ssm_sickrage_opensubtitles_username: "{{ lookup('aws_ssm', 'sickrage.opensubtitles_username', region='eu-west-1' ) }}"
 aws_ssm_sickrage_sickrage_api_key: "{{ lookup('aws_ssm', 'sickrage.sickrage_api_key', region='eu-west-1' ) }}"
 aws_ssm_sickrage_web_cookie_secret: "{{ lookup('aws_ssm', 'sickrage.web_cookie_secret', region='eu-west-1' ) }}"
-aws_ssm_wireguard_private_key: "{{ lookup('aws_ssm', 'wireguard.private_key', region='eu-west-1' ) }}"
+aws_ssm_wireguard_private_key: "{{ lookup('aws_ssm', 'wireguard.private_key_pi', region='eu-west-1' ) }}"
+aws_ssm_wireguard_public_key: "{{ lookup('aws_ssm', 'wireguard.public_key_pi', region='eu-west-1' ) }}"
 aws_ssm_gogs_secret_key: "{{ lookup('aws_ssm', 'gogs.secret_key', region='eu-west-1' ) }}"
 aws_ssm_gmvault_client_id: "{{ lookup('aws_ssm', 'gmvault.client_id', region='eu-west-1' ) }}"
 aws_ssm_gmvault_client_secret: "{{ lookup('aws_ssm', 'gmvault.client_secret', region='eu-west-1' ) }}"

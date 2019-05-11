@@ -36,6 +36,9 @@
 - name: Include services
   block:
     - import_tasks: wireguard.yml
+
+- name: Include services
+  block:
     - import_tasks: usenet.yml
     - import_tasks: avahi.yml
     - import_tasks: unifi.yml
@@ -57,6 +60,5 @@
 
 - name: Include services
   block:
-    - import_tasks: wireguard.yml
     - import_tasks: pihole.yml
   when: inventory_hostname == 'pi'
