@@ -1,8 +1,8 @@
 # plex.service #######################################################################
 [Unit]
 Description=Plex
-After=docker.service mnt-media.mount zfs-mount.service
-Requires=docker.service mnt-media.mount zfs-mount.service
+After=docker.service mnt-media.mount mnt-services.service
+Requires=docker.service mnt-media.mount mnt-services.service
 PartOf=compose.service
 
 StartLimitInterval=300

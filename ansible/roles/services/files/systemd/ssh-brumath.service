@@ -1,8 +1,8 @@
 # ssh-brumath #######################################################################
 [Unit]
 Description=ssh-brumath
-After=docker.service zfs-mount.service
-Requires=docker.service zfs-mount.service
+After=docker.service mnt-brumath.service
+Requires=docker.service mnt-brumath.service
 PartOf=compose.service
 
 StartLimitInterval=300
