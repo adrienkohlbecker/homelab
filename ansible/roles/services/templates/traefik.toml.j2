@@ -33,10 +33,14 @@ exposedByDefault = false
 email = "adrien.kohlbecker@gmail.com"
 storage = "acme.json"
 entryPoint = "https"
-onHostRule = true
+onHostRule = false
 
   [acme.dnsChallenge]
   provider = "cloudflare"
+
+  [[acme.domains]]
+  main = "*.kohlby.fr"
+  sans = ["kohlby.fr"]
 
 [file]
 
