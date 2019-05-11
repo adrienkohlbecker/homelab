@@ -22,6 +22,7 @@
       - telnet
       - mosh
       - tmux
+      - iperf
     state: present
   become: yes
   tags:
