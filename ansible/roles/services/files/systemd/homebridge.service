@@ -1,8 +1,8 @@
 # homebridge.service #######################################################################
 [Unit]
 Description=homebridge
-After=docker.service zfs-mount.service
-Requires=docker.service zfs-mount.service
+After=docker.service mnt-services.service
+Requires=docker.service mnt-services.service
 PartOf=compose.service
 
 StartLimitInterval=300

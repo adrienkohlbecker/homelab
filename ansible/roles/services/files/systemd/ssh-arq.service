@@ -1,8 +1,8 @@
 # ssh-arq #######################################################################
 [Unit]
 Description=ssh-arq
-After=docker.service zfs-mount.service
-Requires=docker.service zfs-mount.service
+After=docker.service mnt-arq.service
+Requires=docker.service mnt-arq.service
 PartOf=compose.service
 
 StartLimitInterval=300

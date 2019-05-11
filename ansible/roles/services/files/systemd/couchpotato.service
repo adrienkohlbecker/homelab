@@ -1,8 +1,8 @@
 # couchpotato.service #######################################################################
 [Unit]
 Description=Couchpotato
-After=docker.service mnt-media.mount zfs-mount.service sabnzbd.service
-Requires=docker.service mnt-media.mount zfs-mount.service sabnzbd.service
+After=docker.service mnt-media.mount mnt-services.service sabnzbd.service
+Requires=docker.service mnt-media.mount mnt-services.service sabnzbd.service
 PartOf=compose.service
 
 StartLimitInterval=300
