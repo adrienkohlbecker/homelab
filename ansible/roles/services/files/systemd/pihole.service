@@ -18,20 +18,25 @@ SyslogIdentifier=pihole
 ExecStartPre=-/usr/bin/docker kill pihole
 ExecStartPre=-/usr/bin/docker rm pihole
 ExecStartPre=-/usr/bin/docker pull pihole/pihole
-ExecStart=/usr/bin/docker run \
+ExecStartPre=/usr/bin/docker create \
     --init \
     --name pihole \
     --log-driver none \
+    --network traefik \
     --volume /mnt/services/pihole/etc:/etc/pihole \
     --volume /mnt/services/pihole/dnsmasq:/etc/dnsmasq.d \
-    --publish 53:53/tcp \
-    --publish 53:53/udp \
-    --publish 80:80 \
-    --publish 443:443 \
     --env TZ="Europe/Amsterdam" \
+    --env VIRTUAL_HOST=pihole.kohlby.fr \
     --dns=127.0.0.1 \
     --dns=1.1.1.1 \
+    --label "traefik.docker.network=traefik" \
+    --label "traefik.enable=true" \
+    --label "traefik.frontend.rule=Host:pihole.kohlby.fr" \
+    --label "traefik.port=80" \
+    --label "traefik.protocol=http" \
     pihole/pihole:latest
+ExecStartPre=/usr/bin/docker network connect macvlan_net pihole --ip 10.123.0.16
+ExecStart=/usr/bin/docker start --attach pihole
 ExecStop=/usr/bin/docker stop pihole
 
 [Install]

@@ -1,20 +1,14 @@
 ---
 
-- name: Stop systemd-resolved
-  systemd:
-    name: systemd-resolved
-    enabled: no
-    state: stopped
-    daemon_reload: yes
-  become: yes
-  tags:
-    - services
-    - pihole
-
-- name: Remove resolv.conf
-  file:
-    path: /etc/resolv.conf
-    state: absent
+- name: Create the macvlan docker network
+  docker_network:
+    name: macvlan_net
+    driver: macvlan
+    driver_options:
+      parent: "{{ ansible_default_ipv4.interface }}"
+    ipam_options:
+      subnet: 10.123.0.0/24
+      gateway: 10.123.0.1
   become: yes
   tags:
     - services
