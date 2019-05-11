@@ -1,5 +1,13 @@
 ---
 
+- name: Install virtualenv
+  apt:
+    pkg: python-virtualenv
+  become: yes
+  tags:
+    - services
+    - cloudflare-ddns
+
 - name: Install cloudflare-ddns-client
   git:
     repo: https://github.com/LINKIWI/cloudflare-ddns-client.git
