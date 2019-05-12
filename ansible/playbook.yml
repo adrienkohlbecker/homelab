@@ -9,10 +9,10 @@
     - mailer
     - user
     - dotfiles
+    - datadog
 
 - hosts: homelab
   roles:
-    - datadog
     - deadmanssnitch
     - grub
     - networking
