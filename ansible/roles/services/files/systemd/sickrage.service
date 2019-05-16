@@ -1,8 +1,8 @@
 # sickrage.service #######################################################################
 [Unit]
 Description=Sickrage
-After=docker.service mnt-media.mount mnt-services.service sabnzbd.service
-Requires=docker.service mnt-media.mount mnt-services.service sabnzbd.service
+After=docker.service mnt-media.mount mnt-services.mount sabnzbd.service
+Requires=docker.service mnt-media.mount mnt-services.mount sabnzbd.service
 PartOf=compose.service
 
 StartLimitInterval=300
