@@ -9,6 +9,8 @@ docker_host: true
 wireguard_address: 10.123.62.1
 wireguard_listen_port: 51822
 
+ddns_domain: brumath.kohlby.fr
+
 aws_ssm_cloudflare_email: "{{ lookup('aws_ssm', 'cloudflare.email', region='eu-west-1' ) }}"
 aws_ssm_cloudflare_api_key: "{{ lookup('aws_ssm', 'cloudflare.api_key', region='eu-west-1' ) }}"
 aws_ssm_couchpotato_api_key: "{{ lookup('aws_ssm', 'couchpotato.api_key', region='eu-west-1' ) }}"
