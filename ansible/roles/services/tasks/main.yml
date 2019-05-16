@@ -37,9 +37,6 @@
   block:
     - import_tasks: wireguard.yml
     - import_tasks: traefik.yml
-
-- name: Include services
-  block:
     - import_tasks: usenet.yml
     - import_tasks: avahi.yml
     - import_tasks: unifi.yml
@@ -59,6 +56,13 @@
 
 - name: Include services
   block:
+    - import_tasks: wireguard.yml
+    - import_tasks: traefik.yml
     - import_tasks: pihole.yml
     - import_tasks: cloudflare-ddns.yml
   when: inventory_hostname == 'pi'
+
+- name: Include services
+  block:
+    - import_tasks: wireguard.yml
+  when: inventory_hostname == 'vpn'
