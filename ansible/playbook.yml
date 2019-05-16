@@ -10,6 +10,7 @@
     - user
     - dotfiles
     - datadog
+    - docker
 
 - hosts: homelab
   roles:
@@ -27,7 +28,6 @@
 
 - hosts: all
   roles:
-    - docker
     - services
 
   post_tasks:
