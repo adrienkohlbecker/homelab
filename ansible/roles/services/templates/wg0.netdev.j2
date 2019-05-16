@@ -10,9 +10,9 @@ ListenPort={{ wireguard_listen_port }}
 # laptop
 [WireGuardPeer]
 PublicKey=TlQJW6mxFI3HQk5/rs3QepxjYB22tlf1ljUCAoHrGnk=
-AllowedIPs=10.123.60.2/32
+AllowedIPs={{ wireguard_address | ipmath(1) }}/32
 
 # phone
 [WireGuardPeer]
 PublicKey=IfYMZKwHODWIZPZ/sqlQHXcGyW5aQ8Hu9ffeQWqCzAE=
-AllowedIPs=10.123.60.3/32
+AllowedIPs={{ wireguard_address | ipmath(2) }}/32
