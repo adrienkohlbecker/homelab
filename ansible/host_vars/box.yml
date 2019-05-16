@@ -9,6 +9,8 @@ docker_host: true
 wireguard_address: 10.123.60.1
 wireguard_listen_port: 51820
 
+ddns_domain: home.kohlby.fr
+
 aws_ssm_cloudflare_email: changeme
 aws_ssm_cloudflare_api_key: changeme
 aws_ssm_couchpotato_api_key: changeme
