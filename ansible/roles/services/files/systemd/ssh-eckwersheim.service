@@ -1,8 +1,8 @@
 # ssh-eckwersheim #######################################################################
 [Unit]
 Description=ssh-eckwersheim
-After=docker.service mnt-eckwersheim.service
-Requires=docker.service mnt-eckwersheim.service
+After=docker.service mnt-eckwersheim.mount
+Requires=docker.service mnt-eckwersheim.mount
 PartOf=compose.service
 
 StartLimitInterval=300
