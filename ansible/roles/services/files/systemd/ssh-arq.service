@@ -1,8 +1,8 @@
 # ssh-arq #######################################################################
 [Unit]
 Description=ssh-arq
-After=docker.service mnt-arq.service
-Requires=docker.service mnt-arq.service
+After=docker.service mnt-arq-adrien.mount mnt-arq-marie.mount
+Requires=docker.service mnt-arq-adrien.mount mnt-arq-marie.mount
 PartOf=compose.service
 
 StartLimitInterval=300
@@ -28,7 +28,8 @@ ExecStart=/usr/bin/docker run \
     --volume /etc/shadow:/etc/shadow:ro \
     --volume /etc/gshadow:/etc/gshadow:ro \
     --volume /home/arq:/home/arq:ro \
-    --volume /mnt/arq:/data \
+    --volume /mnt/arq/adrien:/data/adrien \
+    --volume /mnt/arq/marie:/data/marie \
     --publish 2224:22 \
     akohlbecker/docker-ssh
 ExecStop=/usr/bin/docker stop ssh-arq

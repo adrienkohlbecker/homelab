@@ -24,7 +24,8 @@ case "$COMMAND" in
     zfs snapshot "tank/brumath@$NAME"
     zfs snapshot "tank/eckwersheim@$NAME"
     zfs snapshot "tank/videos@$NAME"
-    zfs snapshot "tank/arq@$NAME"
+    zfs snapshot "tank/arq/adrien@$NAME"
+    zfs snapshot "tank/arq/marie@$NAME"
 
     ;;
 
@@ -43,7 +44,8 @@ case "$COMMAND" in
     zfs destroy -f "tank/brumath@backup-disk-$DISK"      || true
     zfs destroy -f "tank/eckwersheim@backup-disk-$DISK"  || true
     zfs destroy -f "tank/videos@backup-disk-$DISK"       || true
-    zfs destroy -f "tank/arq@backup-disk-$DISK"          || true
+    zfs destroy -f "tank/arq/adrien@backup-disk-$DISK"   || true
+    zfs destroy -f "tank/arq/marie@backup-disk-$DISK"    || true
 
     zfs destroy -f "backup-$DISK/bionic@backup-disk-$DISK"       || true
     zfs destroy -f "backup-$DISK/services@backup-disk-$DISK"     || true
@@ -53,7 +55,8 @@ case "$COMMAND" in
     zfs destroy -f "backup-$DISK/brumath@backup-disk-$DISK"      || true
     zfs destroy -f "backup-$DISK/eckwersheim@backup-disk-$DISK"  || true
     zfs destroy -f "backup-$DISK/videos@backup-disk-$DISK"       || true
-    zfs destroy -f "backup-$DISK/arq@backup-disk-$DISK"          || true
+    zfs destroy -f "backup-$DISK/arq_adrien@backup-disk-$DISK"   || true
+    zfs destroy -f "backup-$DISK/arq_marie@backup-disk-$DISK"    || true
 
     echo "Rolling back backup to: $FROM"
 
@@ -62,7 +65,8 @@ case "$COMMAND" in
     zfs rollback -r "backup-$DISK/vms_ssd@$FROM"
     zfs rollback -r "backup-$DISK/legacy@$FROM"
     zfs rollback -r "backup-$DISK/pictures@$FROM"
-    zfs rollback -r "backup-$DISK/arq@$FROM"
+    zfs rollback -r "backup-$DISK/arq_adrien@$FROM"
+    zfs rollback -r "backup-$DISK/arq_marie@$FROM"
     zfs rollback -r "backup-$DISK/brumath@$FROM"
     zfs rollback -r "backup-$DISK/eckwersheim@$FROM"
     zfs rollback -r "backup-$DISK/videos@$FROM"
@@ -77,7 +81,8 @@ case "$COMMAND" in
     zfs snapshot "tank/brumath@backup-disk-$DISK"
     zfs snapshot "tank/eckwersheim@backup-disk-$DISK"
     zfs snapshot "tank/videos@backup-disk-$DISK"
-    zfs snapshot "tank/arq@backup-disk-$DISK"
+    zfs snapshot "tank/arq/adrien@backup-disk-$DISK"
+    zfs snapshot "tank/arq/marie@backup-disk-$DISK"
 
     echo "Incremental sync to backup: $FROM -> backup-disk-$DISK"
 
@@ -89,7 +94,8 @@ case "$COMMAND" in
     zfs send -pv -I "tank/brumath@$FROM" "tank/brumath@backup-disk-$DISK" | zfs receive -v "backup-$DISK/brumath"
     zfs send -pv -I "tank/eckwersheim@$FROM" "tank/eckwersheim@backup-disk-$DISK" | zfs receive -v "backup-$DISK/eckwersheim"
     zfs send -pv -I "tank/videos@$FROM" "tank/videos@backup-disk-$DISK" | zfs receive -v "backup-$DISK/videos"
-    zfs send -pv -I "tank/arq@$FROM" "tank/arq@backup-disk-$DISK" | zfs receive -v "backup-$DISK/arq"
+    zfs send -pv -I "tank/arq/adrien@$FROM" "tank/arq/adrien@backup-disk-$DISK" | zfs receive -v "backup-$DISK/arq_adrien"
+    zfs send -pv -I "tank/arq/marie@$FROM" "tank/arq/marie@backup-disk-$DISK" | zfs receive -v "backup-$DISK/arq_marie"
 
     ;;
 
@@ -107,7 +113,8 @@ case "$COMMAND" in
     zfs destroy "tank/brumath@$SNAPSHOT"       || true
     zfs destroy "tank/eckwersheim@$SNAPSHOT"   || true
     zfs destroy "tank/videos@$SNAPSHOT"        || true
-    zfs destroy "tank/arq@$SNAPSHOT"           || true
+    zfs destroy "tank/arq/adrien@$SNAPSHOT"    || true
+    zfs destroy "tank/arq/marie@$SNAPSHOT"     || true
 
     ;;
 
@@ -129,7 +136,8 @@ case "$COMMAND" in
     zfs destroy -f "backup-$DISK/brumath@$SNAPSHOT"      || true
     zfs destroy -f "backup-$DISK/eckwersheim@$SNAPSHOT"  || true
     zfs destroy -f "backup-$DISK/videos@$SNAPSHOT"       || true
-    zfs destroy -f "backup-$DISK/arq@$SNAPSHOT"          || true
+    zfs destroy -f "backup-$DISK/arq_adrien@$SNAPSHOT"   || true
+    zfs destroy -f "backup-$DISK/arq_marie@$SNAPSHOT"    || true
 
     ;;
 
