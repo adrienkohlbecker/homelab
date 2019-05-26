@@ -45,3 +45,5 @@ aws_ssm_wireguard_public_key: changeme
 aws_ssm_gogs_secret_key: changeme
 aws_ssm_gmvault_client_id: changeme
 aws_ssm_gmvault_client_secret: changeme
+aws_ssm_pi_ssh_backup_public_key: changeme
+aws_ssm_pi_ssh_backup_private_key: changeme
