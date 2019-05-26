@@ -3,14 +3,12 @@ Description = Mount mergerfs volume
 Requires = mnt-snapraid_d1.mount
 Requires = mnt-snapraid_d2.mount
 Requires = mnt-snapraid_d3.mount
-Requires = mnt-snapraid_d4.mount
 After = mnt-snapraid_d1.mount
 After = mnt-snapraid_d2.mount
 After = mnt-snapraid_d3.mount
-After = mnt-snapraid_d4.mount
 
 [Mount]
-What = /mnt/snapraid_d1/media:/mnt/snapraid_d2/media:/mnt/snapraid_d3/media:/mnt/snapraid_d4/media
+What = /mnt/snapraid_d1/media:/mnt/snapraid_d2/media:/mnt/snapraid_d3/media
 Where = /mnt/media
 Type = fuse.mergerfs
 Options = defaults,allow_other,direct_io,use_ino,hard_remove,fsname=media,minfreespace=50G,func.getattr=newest

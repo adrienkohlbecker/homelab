@@ -93,7 +93,6 @@
     - /mnt/snapraid_d1
     - /mnt/snapraid_d2
     - /mnt/snapraid_d3
-    - /mnt/snapraid_d4
     - /mnt/snapraid_p1
 
 - name: Mount snapraid partitons
@@ -107,7 +106,6 @@
     - {mountpoint: '/mnt/snapraid_d1', label: 'snapraid_d1'}
     - {mountpoint: '/mnt/snapraid_d2', label: 'snapraid_d2'}
     - {mountpoint: '/mnt/snapraid_d3', label: 'snapraid_d3'}
-    - {mountpoint: '/mnt/snapraid_d4', label: 'snapraid_d4'}
     - {mountpoint: '/mnt/snapraid_p1', label: 'snapraid_p1'}
   become: yes
   tags:
