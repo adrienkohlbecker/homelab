@@ -75,7 +75,7 @@ case "$COMMAND" in
 
     zfs snapshot "rpool/ROOT/bionic@backup-disk-$DISK"
     zfs snapshot "rpool/services@backup-disk-$DISK"
-    zfs snapshot "rpool/vms/ssd@backup-disk-$DISK"
+    zfs snapshot "rpool/vms@backup-disk-$DISK"
     zfs snapshot "tank/legacy@backup-disk-$DISK"
     zfs snapshot "tank/pictures@backup-disk-$DISK"
     zfs snapshot "tank/brumath@backup-disk-$DISK"
@@ -88,7 +88,7 @@ case "$COMMAND" in
 
     zfs send -pv -I "rpool/ROOT/bionic@$FROM" "rpool/ROOT/bionic@backup-disk-$DISK" | zfs receive -v "backup-$DISK/bionic"
     zfs send -pv -I "rpool/services@$FROM" "rpool/services@backup-disk-$DISK" | zfs receive -v "backup-$DISK/services"
-    zfs send -pv -I "rpool/vms/ssd@$FROM" "rpool/vms/ssd@backup-disk-$DISK" | zfs receive -v "backup-$DISK/vms_ssd"
+    zfs send -pv -I "rpool/vms@$FROM" "rpool/vms@backup-disk-$DISK" | zfs receive -v "backup-$DISK/vms_ssd"
     zfs send -pv -I "tank/legacy@$FROM" "tank/legacy@backup-disk-$DISK" | zfs receive -v "backup-$DISK/legacy"
     zfs send -pv -I "tank/pictures@$FROM" "tank/pictures@backup-disk-$DISK" | zfs receive -v "backup-$DISK/pictures"
     zfs send -pv -I "tank/brumath@$FROM" "tank/brumath@backup-disk-$DISK" | zfs receive -v "backup-$DISK/brumath"
@@ -107,7 +107,7 @@ case "$COMMAND" in
 
     zfs destroy "rpool/ROOT/bionic@$SNAPSHOT"  || true
     zfs destroy "rpool/services@$SNAPSHOT"     || true
-    zfs destroy "rpool/vms/ssd@$SNAPSHOT"      || true
+    zfs destroy "rpool/vms@$SNAPSHOT"          || true
     zfs destroy "tank/legacy@$SNAPSHOT"        || true
     zfs destroy "tank/pictures@$SNAPSHOT"      || true
     zfs destroy "tank/brumath@$SNAPSHOT"       || true
