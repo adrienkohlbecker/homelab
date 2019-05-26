@@ -4,7 +4,6 @@
 :OUTPUT ACCEPT [0:0]
 :FILTERS-ENP5S0 - [0:0]
 :FILTERS-ENP6S0 - [0:0]
-:FILTERS-WG0 - [0:0]
 :DOCKER-USER - [0:0]
 
 ##################################################
@@ -18,7 +17,16 @@
 -F DOCKER-USER
 -F FILTERS-ENP5S0
 -F FILTERS-ENP6S0
--F FILTERS-WG0
+
+##################################################
+#                  FORWARD RULES                 #
+##################################################
+
+# Note: these are not cleared before applying this file, as docker and libvirt insert their own complex rules
+
+# Accept forwarding traffic on wg0
+-A FORWARD -o wg0 -j ACCEPT
+-A FORWARD -i wg0 -j ACCEPT
 
 ##################################################
 #                   INPUT RULES                  #
@@ -36,7 +44,9 @@
 # Filter chains for interfaces
 -A INPUT -i enp5s0 -j FILTERS-ENP5S0
 -A INPUT -i enp6s0 -j FILTERS-ENP6S0
--A INPUT -i wg0    -j FILTERS-WG0
+
+# Someone authenticated by wireguard has unrestricted access to the network
+-A INPUT -i wg0 -j ACCEPT
 
 # Reject anything not accepted by the filters
 -A INPUT -p tcp -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] INPUT:REJECT: "
@@ -52,7 +62,9 @@
 # Filter chains for interfaces
 -A DOCKER-USER -i enp5s0 -j FILTERS-ENP5S0
 -A DOCKER-USER -i enp6s0 -j FILTERS-ENP6S0
--A DOCKER-USER -i wg0 -j FILTERS-WG0
+
+# Someone authenticated by wireguard has unrestricted access to the network
+-A DOCKER-USER -i wg0  -j ACCEPT
 
 # Note: can't deny rest of traffic here as outbound traffic and inter container traffic goes through this
 
@@ -114,34 +126,6 @@
 # Reject anything else
 -A FILTERS-ENP6S0 -p tcp -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] ENP6S0:REJECT: "
 -A FILTERS-ENP6S0 -j REJECT --reject-with icmp-host-prohibited
-
-##################################################
-#                WIREGUARD RULES                 #
-##################################################
-
--A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 22 -j ACCEPT   -m comment --comment "Accept SSH"
--A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT   -m comment --comment "Accept HTTP"
--A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 443 -j ACCEPT  -m comment --comment "Accept HTTPS"
-
-# Note: This does not actually work, since 2221 is mapped to 22 on the docker side, dport is actually 22, so this is
-# taken care of by the SSH rule above.
-# Same for 2223 and 2224. Ideally we wouldn't open 2223 through here
--A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 2221 -j ACCEPT -m comment --comment "Accept SSH/gogs"
--A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 2222 -j ACCEPT -m comment --comment "Accept SSH/eckwersheim"
--A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 2223 -j ACCEPT -m comment --comment "Accept SSH/brumath"
--A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 2224 -j ACCEPT -m comment --comment "Accept SSH/arq"
-# end Plex ports
-
-# samba ports
--A FILTERS-WG0 -m state --state NEW -m udp -p udp --dport 137 -j ACCEPT -m comment --comment "Accept Samba"
--A FILTERS-WG0 -m state --state NEW -m udp -p udp --dport 138 -j ACCEPT -m comment --comment "Accept Samba"
--A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 139 -j ACCEPT -m comment --comment "Accept Samba"
--A FILTERS-WG0 -m state --state NEW -m tcp -p tcp --dport 445 -j ACCEPT -m comment --comment "Accept Samba"
-# end samba ports
-
-# Reject anything else
--A FILTERS-WG0 -p tcp -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] WG0:REJECT: "
--A FILTERS-WG0 -j REJECT --reject-with icmp-host-prohibited
 
 ##################################################
 #                       END                      #
