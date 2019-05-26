@@ -45,3 +45,5 @@ aws_ssm_wireguard_public_key: "{{ lookup('aws_ssm', 'wireguard.public_key_pi', r
 aws_ssm_gogs_secret_key: "{{ lookup('aws_ssm', 'gogs.secret_key', region='eu-west-1' ) }}"
 aws_ssm_gmvault_client_id: "{{ lookup('aws_ssm', 'gmvault.client_id', region='eu-west-1' ) }}"
 aws_ssm_gmvault_client_secret: "{{ lookup('aws_ssm', 'gmvault.client_secret', region='eu-west-1' ) }}"
+aws_ssm_pi_ssh_backup_public_key: "{{ lookup('aws_ssm', 'pi.ssh_backup_public_key', region='eu-west-1' ) }}"
+aws_ssm_pi_ssh_backup_private_key: "{{ lookup('aws_ssm', 'pi.ssh_backup_private_key', region='eu-west-1' ) }}"
