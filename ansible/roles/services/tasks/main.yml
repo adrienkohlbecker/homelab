@@ -65,4 +65,5 @@
 - name: Include services
   block:
     - import_tasks: wireguard.yml
+    - import_tasks: cloudflare-ddns.yml
   when: inventory_hostname == 'vpn'
