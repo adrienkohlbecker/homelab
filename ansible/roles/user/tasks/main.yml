@@ -23,6 +23,7 @@
       - mosh
       - tmux
       - iperf
+      - ncdu
     state: present
   become: yes
   tags:
