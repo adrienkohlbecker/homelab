@@ -63,6 +63,7 @@
     user: "{{ deploy_user }}"
     key: "{{ deploy_user_ssh_public_key }}"
     state: present
+    exclusive: yes
   become: yes
   tags:
     - user
