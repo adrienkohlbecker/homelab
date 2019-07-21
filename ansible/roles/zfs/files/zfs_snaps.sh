@@ -21,11 +21,11 @@ case "$COMMAND" in
     zfs snapshot "rpool/vms@$NAME"
     zfs snapshot "tank/legacy@$NAME"
     zfs snapshot "tank/pictures@$NAME"
-    zfs snapshot "tank/brumath@$NAME"
-    zfs snapshot "tank/eckwersheim@$NAME"
+    zfs snapshot "data/brumath@$NAME"
+    zfs snapshot "data/eckwersheim@$NAME"
     zfs snapshot "tank/videos@$NAME"
-    zfs snapshot "tank/arq/adrien@$NAME"
-    zfs snapshot "tank/arq/marie@$NAME"
+    zfs snapshot "data/arq/adrien@$NAME"
+    zfs snapshot "data/arq/marie@$NAME"
 
     ;;
 
@@ -41,11 +41,11 @@ case "$COMMAND" in
     zfs destroy -f "rpool/vms@backup-disk-$DISK"         || true
     zfs destroy -f "tank/legacy@backup-disk-$DISK"       || true
     zfs destroy -f "tank/pictures@backup-disk-$DISK"     || true
-    zfs destroy -f "tank/brumath@backup-disk-$DISK"      || true
-    zfs destroy -f "tank/eckwersheim@backup-disk-$DISK"  || true
+    zfs destroy -f "data/brumath@backup-disk-$DISK"      || true
+    zfs destroy -f "data/eckwersheim@backup-disk-$DISK"  || true
     zfs destroy -f "tank/videos@backup-disk-$DISK"       || true
-    zfs destroy -f "tank/arq/adrien@backup-disk-$DISK"   || true
-    zfs destroy -f "tank/arq/marie@backup-disk-$DISK"    || true
+    zfs destroy -f "data/arq/adrien@backup-disk-$DISK"   || true
+    zfs destroy -f "data/arq/marie@backup-disk-$DISK"    || true
 
     zfs destroy -f "backup-$DISK/bionic@backup-disk-$DISK"       || true
     zfs destroy -f "backup-$DISK/services@backup-disk-$DISK"     || true
@@ -78,11 +78,11 @@ case "$COMMAND" in
     zfs snapshot "rpool/vms@backup-disk-$DISK"
     zfs snapshot "tank/legacy@backup-disk-$DISK"
     zfs snapshot "tank/pictures@backup-disk-$DISK"
-    zfs snapshot "tank/brumath@backup-disk-$DISK"
-    zfs snapshot "tank/eckwersheim@backup-disk-$DISK"
+    zfs snapshot "data/brumath@backup-disk-$DISK"
+    zfs snapshot "data/eckwersheim@backup-disk-$DISK"
     zfs snapshot "tank/videos@backup-disk-$DISK"
-    zfs snapshot "tank/arq/adrien@backup-disk-$DISK"
-    zfs snapshot "tank/arq/marie@backup-disk-$DISK"
+    zfs snapshot "data/arq/adrien@backup-disk-$DISK"
+    zfs snapshot "data/arq/marie@backup-disk-$DISK"
 
     echo "Incremental sync to backup: $FROM -> backup-disk-$DISK"
 
@@ -91,11 +91,11 @@ case "$COMMAND" in
     zfs send -pv -I "rpool/vms@$FROM" "rpool/vms@backup-disk-$DISK" | zfs receive -v "backup-$DISK/vms_ssd"
     zfs send -pv -I "tank/legacy@$FROM" "tank/legacy@backup-disk-$DISK" | zfs receive -v "backup-$DISK/legacy"
     zfs send -pv -I "tank/pictures@$FROM" "tank/pictures@backup-disk-$DISK" | zfs receive -v "backup-$DISK/pictures"
-    zfs send -pv -I "tank/brumath@$FROM" "tank/brumath@backup-disk-$DISK" | zfs receive -v "backup-$DISK/brumath"
-    zfs send -pv -I "tank/eckwersheim@$FROM" "tank/eckwersheim@backup-disk-$DISK" | zfs receive -v "backup-$DISK/eckwersheim"
+    zfs send -pv -I "data/brumath@$FROM" "data/brumath@backup-disk-$DISK" | zfs receive -v "backup-$DISK/brumath"
+    zfs send -pv -I "data/eckwersheim@$FROM" "data/eckwersheim@backup-disk-$DISK" | zfs receive -v "backup-$DISK/eckwersheim"
     zfs send -pv -I "tank/videos@$FROM" "tank/videos@backup-disk-$DISK" | zfs receive -v "backup-$DISK/videos"
-    zfs send -pv -I "tank/arq/adrien@$FROM" "tank/arq/adrien@backup-disk-$DISK" | zfs receive -v "backup-$DISK/arq_adrien"
-    zfs send -pv -I "tank/arq/marie@$FROM" "tank/arq/marie@backup-disk-$DISK" | zfs receive -v "backup-$DISK/arq_marie"
+    zfs send -pv -I "data/arq/adrien@$FROM" "data/arq/adrien@backup-disk-$DISK" | zfs receive -v "backup-$DISK/arq_adrien"
+    zfs send -pv -I "data/arq/marie@$FROM" "data/arq/marie@backup-disk-$DISK" | zfs receive -v "backup-$DISK/arq_marie"
 
     ;;
 
@@ -110,11 +110,11 @@ case "$COMMAND" in
     zfs destroy "rpool/vms@$SNAPSHOT"          || true
     zfs destroy "tank/legacy@$SNAPSHOT"        || true
     zfs destroy "tank/pictures@$SNAPSHOT"      || true
-    zfs destroy "tank/brumath@$SNAPSHOT"       || true
-    zfs destroy "tank/eckwersheim@$SNAPSHOT"   || true
+    zfs destroy "data/brumath@$SNAPSHOT"       || true
+    zfs destroy "data/eckwersheim@$SNAPSHOT"   || true
     zfs destroy "tank/videos@$SNAPSHOT"        || true
-    zfs destroy "tank/arq/adrien@$SNAPSHOT"    || true
-    zfs destroy "tank/arq/marie@$SNAPSHOT"     || true
+    zfs destroy "data/arq/adrien@$SNAPSHOT"    || true
+    zfs destroy "data/arq/marie@$SNAPSHOT"     || true
 
     ;;
 

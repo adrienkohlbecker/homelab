@@ -22,8 +22,6 @@
     - hdparm
     - ups
     - ipmi
-    - snapraid
-    - mergerfs
     - virtualization
 
 - hosts: all

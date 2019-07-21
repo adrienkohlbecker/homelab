@@ -16,41 +16,21 @@ ls -al /dev/disk/by-id
 zfs create -o mountpoint=/mnt/services rpool/services
 zfs create -o mountpoint=/mnt/vms/ssd rpool/vms
 
-# Tank
+# data
 zpool create -f -o ashift=12 -O compression=lz4 -O casesensitivity=insensitive -O normalization=formD -O mountpoint=none -O atime=off -O xattr=sa \
-  tank raidz2 /dev/sdc /dev/sdd /dev/sde /dev/sdf /dev/sdg /dev/sdh
-zfs create -o mountpoint=/mnt/legacy tank/legacy
-zfs create -o mountpoint=/mnt/pictures tank/pictures
-zfs create -o mountpoint=none tank/arq
-zfs create -o mountpoint=/mnt/arq/adrien tank/arq/adrien
-zfs create -o mountpoint=/mnt/arq/marie tank/arq/marie
-zfs create -o mountpoint=/mnt/brumath tank/brumath
-zfs create -o mountpoint=/mnt/eckwersheim tank/eckwersheim
-zfs create -o mountpoint=/mnt/videos tank/videos
+  data raidz2 /dev/sdc /dev/sdd /dev/sde /dev/sdf /dev/sdg /dev/sdh
+zfs create -o mountpoint=/mnt/legacy data/legacy
+zfs create -o mountpoint=/mnt/pictures data/pictures
+zfs create -o mountpoint=none data/arq
+zfs create -o mountpoint=/mnt/arq/adrien data/arq/adrien
+zfs create -o mountpoint=/mnt/arq/marie data/arq/marie
+zfs create -o mountpoint=/mnt/brumath data/brumath
+zfs create -o mountpoint=/mnt/eckwersheim data/eckwersheim
+zfs create -o mountpoint=/mnt/videos data/videos
+zfs create -o mountpoint=/mnt/media data/media
 
-zpool export tank
-zpool import -d /dev/disk/by-id tank
-
-# Media
-parted -s /dev/sdi -- mklabel gpt
-parted -s /dev/sdi -- mkpart primary 0% 100%
-sleep 2
-mkfs.ext4 -L snapraid_d1 /dev/sdi1
-
-parted -s /dev/sdj -- mklabel gpt
-parted -s /dev/sdj -- mkpart primary 0% 100%
-sleep 2
-mkfs.ext4 -L snapraid_d2 /dev/sdj1
-
-parted -s /dev/sdk -- mklabel gpt
-parted -s /dev/sdk -- mkpart primary 0% 100%
-sleep 2
-mkfs.ext4 -L snapraid_d3 /dev/sdk1
-
-parted -s /dev/sdm -- mklabel gpt
-parted -s /dev/sdm -- mkpart primary 0% 100%
-sleep 2
-mkfs.ext4 -L snapraid_p1 /dev/sdm1
+zpool export data
+zpool import -d /dev/disk/by-id data
 
 apt-get -y remove --auto-remove parted
 
