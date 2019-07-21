@@ -38,43 +38,19 @@ packer-zfs-without-root:
 	sed -E -i 's|scsi0:1.filename = (.*)|scsi0:1.fileName = "mirror-2-cl1.vmdk"|' output-homelab-zfs-without-root/packer-homelab-zfs.vmx
 	sed -E -i 's|scsi0:2(.*)||'                                               output-homelab-zfs-without-root/packer-homelab-zfs.vmx
 
-	# add tank volumes
-	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/tank-1.vmdk
-	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/tank-2.vmdk
-	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/tank-3.vmdk
-	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/tank-4.vmdk
-	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/tank-5.vmdk
-	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/tank-6.vmdk
-	echo 'scsi0:2.fileName = "tank-1.vmdk"' >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
+	# add data volumes
+	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/data-1.vmdk
+	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/data-2.vmdk
+	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/data-3.vmdk
+	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/data-4.vmdk
+	echo 'scsi0:2.fileName = "data-1.vmdk"' >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
 	echo 'scsi0:2.present = "TRUE"'         >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	echo 'scsi0:3.fileName = "tank-2.vmdk"' >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
+	echo 'scsi0:3.fileName = "data-2.vmdk"' >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
 	echo 'scsi0:3.present = "TRUE"'         >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	echo 'scsi0:4.fileName = "tank-3.vmdk"' >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
+	echo 'scsi0:4.fileName = "data-3.vmdk"' >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
 	echo 'scsi0:4.present = "TRUE"'         >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	echo 'scsi0:5.fileName = "tank-4.vmdk"' >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
+	echo 'scsi0:5.fileName = "data-4.vmdk"' >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
 	echo 'scsi0:5.present = "TRUE"'         >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	echo 'scsi0:6.fileName = "tank-5.vmdk"' >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	echo 'scsi0:6.present = "TRUE"'         >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	# scsi0:7 is reserved
-	echo 'scsi0:8.fileName = "tank-6.vmdk"' >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	echo 'scsi0:8.present = "TRUE"'         >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-
-	# add media volumes
-	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/media-1.vmdk
-	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/media-2.vmdk
-	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/media-3.vmdk
-	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/media-4.vmdk
-	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/media-5.vmdk
-	echo 'scsi0:9.fileName = "media-1.vmdk"' >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	echo 'scsi0:9.present = "TRUE"'          >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	echo 'scsi0:10.fileName = "media-2.vmdk"' >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	echo 'scsi0:10.present = "TRUE"'          >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	echo 'scsi0:11.fileName = "media-3.vmdk"' >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	echo 'scsi0:11.present = "TRUE"'          >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	echo 'scsi0:12.fileName = "media-4.vmdk"' >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	echo 'scsi0:12.present = "TRUE"'          >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	echo 'scsi0:13.fileName = "media-5.vmdk"' >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	echo 'scsi0:13.present = "TRUE"'          >> output-homelab-zfs-without-root/packer-homelab-zfs.vmx
 
 packer-final: packer-zfs-without-root
 	rm -rf output-homelab-final
