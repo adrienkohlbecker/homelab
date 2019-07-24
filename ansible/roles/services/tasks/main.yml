@@ -53,6 +53,7 @@
     - import_tasks: tautulli.yml
     - import_tasks: homebridge.yml
     - import_tasks: pi-backup-client.yml
+    - import_tasks: docker-hub-schedule.yml
   when: inventory_hostname == 'homelab'
 
 - name: Include services
