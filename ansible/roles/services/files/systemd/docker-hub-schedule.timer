@@ -1,0 +1,5 @@
+[Timer]
+OnUnitActiveSec=1w
+
+[Install]
+WantedBy=compose.service

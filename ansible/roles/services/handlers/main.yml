@@ -114,6 +114,12 @@
     state: restarted
   become: yes
 
+- name: Restart docker-hub-schedule
+  service:
+    name: docker-hub-schedule
+    state: restarted
+  become: yes
+
 - name: Reload systemd
   shell: systemctl daemon-reload
   become: yes
