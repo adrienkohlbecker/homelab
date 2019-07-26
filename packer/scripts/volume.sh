@@ -19,7 +19,7 @@ zfs create -o mountpoint=/mnt/vms/ssd rpool/vms
 # data
 zpool create -f -o ashift=12 -O compression=lz4 -O casesensitivity=insensitive -O normalization=formD -O mountpoint=none -O atime=off -O xattr=sa \
   data raidz2 /dev/sdc /dev/sdd /dev/sde /dev/sdf /dev/sdg /dev/sdh
-zfs create -o mountpoint=/mnt/legacy data/legacy
+zfs create -o mountpoint=/mnt/data data/data
 zfs create -o mountpoint=/mnt/pictures data/pictures
 zfs create -o mountpoint=none data/arq
 zfs create -o mountpoint=/mnt/arq/adrien data/arq/adrien
