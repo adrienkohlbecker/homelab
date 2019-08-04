@@ -20,13 +20,13 @@ zfs create -o mountpoint=/mnt/vms/ssd rpool/vms
 zpool create -f -o ashift=12 -O compression=lz4 -O casesensitivity=insensitive -O normalization=formD -O mountpoint=none -O atime=off -O xattr=sa \
   data raidz2 /dev/sdc /dev/sdd /dev/sde /dev/sdf /dev/sdg /dev/sdh
 zfs create -o mountpoint=/mnt/data data/data
-zfs create -o mountpoint=/mnt/pictures data/pictures
+zfs create -o mountpoint=none data/pictures
 zfs create -o mountpoint=none data/arq
 zfs create -o mountpoint=/mnt/arq/adrien data/arq/adrien
 zfs create -o mountpoint=/mnt/arq/marie data/arq/marie
 zfs create -o mountpoint=/mnt/brumath data/brumath
 zfs create -o mountpoint=/mnt/eckwersheim data/eckwersheim
-zfs create -o mountpoint=/mnt/videos data/videos
+zfs create -o mountpoint=none data/videos
 zfs create -o mountpoint=/mnt/media data/media
 
 zpool export data
