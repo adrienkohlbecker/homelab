@@ -9,6 +9,7 @@ deploy_user_ssh_public_key: |-
 
 mailer_domain: kohlby.fr
 smtp_host: smtp.sendgrid.net
+smtp_port: 587
 smtp_user: "{{ aws_ssm_sendgrid_user }}"
 smtp_password: "{{ aws_ssm_sendgrid_password }}"
 root_email: adrien.kohlbecker@gmail.com
