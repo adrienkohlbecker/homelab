@@ -86,16 +86,16 @@ case "$COMMAND" in
 
     echo "Incremental sync to backup: $FROM -> backup-disk-$DISK"
 
-    zfs send -pv -I "rpool/ROOT/bionic@$FROM" "rpool/ROOT/bionic@backup-disk-$DISK" | zfs receive -v "backup-$DISK/bionic"
-    zfs send -pv -I "rpool/services@$FROM" "rpool/services@backup-disk-$DISK" | zfs receive -v "backup-$DISK/services"
-    zfs send -pv -I "rpool/vms@$FROM" "rpool/vms@backup-disk-$DISK" | zfs receive -v "backup-$DISK/vms_ssd"
-    zfs send -pv -I "data/data@$FROM" "data/data@backup-disk-$DISK" | zfs receive -v "backup-$DISK/data"
-    zfs send -pv -I "data/pictures@$FROM" "data/pictures@backup-disk-$DISK" | zfs receive -v "backup-$DISK/pictures"
-    zfs send -pv -I "data/brumath@$FROM" "data/brumath@backup-disk-$DISK" | zfs receive -v "backup-$DISK/brumath"
-    zfs send -pv -I "data/eckwersheim@$FROM" "data/eckwersheim@backup-disk-$DISK" | zfs receive -v "backup-$DISK/eckwersheim"
-    zfs send -pv -I "data/videos@$FROM" "data/videos@backup-disk-$DISK" | zfs receive -v "backup-$DISK/videos"
-    zfs send -pv -I "data/arq/adrien@$FROM" "data/arq/adrien@backup-disk-$DISK" | zfs receive -v "backup-$DISK/arq_adrien"
-    zfs send -pv -I "data/arq/marie@$FROM" "data/arq/marie@backup-disk-$DISK" | zfs receive -v "backup-$DISK/arq_marie"
+    zfs send -pv -I "rpool/ROOT/bionic@$FROM" "rpool/ROOT/bionic@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/bionic"
+    zfs send -pv -I "rpool/services@$FROM" "rpool/services@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/services"
+    zfs send -pv -I "rpool/vms@$FROM" "rpool/vms@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/vms_ssd"
+    zfs send -pv -I "data/data@$FROM" "data/data@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/data"
+    zfs send -pv -I "data/pictures@$FROM" "data/pictures@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/pictures"
+    zfs send -pv -I "data/brumath@$FROM" "data/brumath@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/brumath"
+    zfs send -pv -I "data/eckwersheim@$FROM" "data/eckwersheim@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/eckwersheim"
+    zfs send -pv -I "data/videos@$FROM" "data/videos@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/videos"
+    zfs send -pv -I "data/arq/adrien@$FROM" "data/arq/adrien@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/arq_adrien"
+    zfs send -pv -I "data/arq/marie@$FROM" "data/arq/marie@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/arq_marie"
 
     ;;
 

@@ -7,6 +7,7 @@
     - zfsutils-linux
     - zfs-initramfs
     - zfs-zed
+    - mbuffer
     state: present
   become: yes
   tags:
