@@ -1,5 +1,6 @@
 [Timer]
 OnUnitActiveSec=1w
+Persistent=true
 
 [Install]
 WantedBy=compose.service
