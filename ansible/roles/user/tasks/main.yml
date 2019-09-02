@@ -24,6 +24,7 @@
       - tmux
       - iperf
       - ncdu
+      - iotop
     state: present
   become: yes
   tags:
