@@ -52,6 +52,7 @@
     - import_tasks: gmvault.yml
     - import_tasks: tautulli.yml
     - import_tasks: homebridge.yml
+    - import_tasks: netdata.yml
     - import_tasks: pi-backup-client.yml
     - import_tasks: docker-hub-schedule.yml
     - import_tasks: datadog_check.yml

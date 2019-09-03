@@ -1,0 +1,43 @@
+# netdata.service #######################################################################
+[Unit]
+Description=netdata
+After=docker.service mnt-services.mount
+Requires=docker.service mnt-services.mount
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+SyslogIdentifier=netdata
+
+ExecStartPre=-/usr/bin/docker kill netdata
+ExecStartPre=-/usr/bin/docker rm netdata
+ExecStartPre=-/usr/bin/docker pull netdata/netdata:latest
+ExecStart=/usr/bin/docker run \
+    --init \
+    --name netdata \
+    --log-driver none \
+    --network traefik \
+    --label "traefik.docker.network=traefik" \
+    --label "traefik.enable=true" \
+    --label "traefik.frontend.rule=Host:netdata.kohlby.fr" \
+    --label "traefik.port=19999" \
+    --label "traefik.protocol=http" \
+    --env PGID=999 \
+    --volume /proc:/host/proc:ro \
+    --volume /sys:/host/sys:ro \
+    --volume /var/run/docker.sock:/var/run/docker.sock:ro \
+    --volume /mnt/services/netdata/var/cache:/var/cache/netdata \
+    --volume /mnt/services/netdata/etc:/etc/netdata \
+    --cap-add SYS_PTRACE \
+    --security-opt apparmor=unconfined \
+    netdata/netdata:latest
+ExecStop=/usr/bin/docker stop netdata
+
+[Install]
+WantedBy=compose.service

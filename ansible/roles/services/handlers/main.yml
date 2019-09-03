@@ -135,3 +135,9 @@
     name: datadog-agent
     state: restarted
   become: yes
+
+- name: Restart netdata
+  service:
+    name: netdata
+    state: restarted
+  become: yes
