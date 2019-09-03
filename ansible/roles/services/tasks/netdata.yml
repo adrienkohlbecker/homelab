@@ -1,0 +1,61 @@
+---
+
+- name: Add netdata group
+  group:
+    name: netdata
+    gid: 201
+    system: true
+    state: present
+  become: yes
+  tags:
+    - services
+    - netdata
+
+- name: Add netdata user
+  user:
+    name: netdata
+    group: netdata
+    uid: 201
+    createhome: no
+    system: true
+    state: present
+  become: yes
+  tags:
+    - services
+    - netdata
+
+- name: Create configuration directory
+  file:
+    dest: /mnt/services/netdata
+    state: directory
+    owner: netdata
+    group: netdata
+    mode: 0775
+  become: yes
+  tags:
+    - services
+    - netdata
+
+- name: Copy the unit file
+  copy:
+    src: systemd/netdata.service
+    dest: /etc/systemd/system/netdata.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - netdata
+  notify:
+    - Restart netdata
+
+- name: Enable the service
+  systemd:
+    name: netdata
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - netdata
