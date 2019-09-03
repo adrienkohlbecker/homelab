@@ -54,6 +54,7 @@
     - import_tasks: homebridge.yml
     - import_tasks: pi-backup-client.yml
     - import_tasks: docker-hub-schedule.yml
+    - import_tasks: datadog_check.yml
   when: inventory_hostname == 'homelab'
 
 - name: Include services
@@ -63,6 +64,7 @@
     - import_tasks: pihole.yml
     - import_tasks: cloudflare-ddns.yml
     - import_tasks: pi-backup-server.yml
+    - import_tasks: datadog_check.yml
   when: inventory_hostname == 'pi'
 
 - name: Include services
