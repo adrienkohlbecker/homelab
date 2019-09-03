@@ -1,0 +1,12 @@
+---
+
+instances:
+  - health_status: none
+    container_names:
+      - traefik
+    min_collection_interval: 30
+
+  - health_status: healthy
+    container_names:
+      - pihole
+    min_collection_interval: 30
