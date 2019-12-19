@@ -30,9 +30,9 @@
 
 - name: Install datadog agent
   get_url:
-    url: https://github.com/adrienkohlbecker/datadog-agent-arm/releases/download/6.11.1/datadog-agent_6.11.1.ak-1_arm64.deb
-    dest: /opt/datadog-agent_6.11.1.ak-1_arm64.deb
-    checksum: sha256:ed30593ce8e1946d16b6d08ac383dc218b00c766794ae5ed96b3384c279477a6
+    url: https://github.com/adrienkohlbecker/datadog-agent-arm/releases/download/6.15.0/datadog-agent_6.15.0.ak-1_arm64.deb
+    dest: /opt/datadog-agent_6.15.0.ak-1_arm64.deb
+    checksum: sha256:68b1c3a7e2f31ec5d6dc55ec7f3307049932f90258628f4fe3d8b35a10913f4a
     owner: root
     group: root
     mode: 0644
@@ -43,7 +43,7 @@
 
 - name: Install datadog agent
   apt:
-    deb: /opt/datadog-agent_6.11.1.ak-1_arm64.deb
+    deb: /opt/datadog-agent_6.15.0.ak-1_arm64.deb
     state: present
   become: yes
   tags:

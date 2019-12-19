@@ -45,6 +45,9 @@
 -A INPUT -i enp5s0 -j FILTERS-ENP5S0
 -A INPUT -i enp6s0 -j FILTERS-ENP6S0
 
+# Accept inter container traffic
+-A INPUT -i docker0 -j ACCEPT
+
 # Someone authenticated by wireguard has unrestricted access to the network
 -A INPUT -i wg0 -j ACCEPT
 

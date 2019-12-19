@@ -46,7 +46,7 @@
     - import_tasks: sabnzbd.yml
     - import_tasks: samba.yml
     - import_tasks: remote-ssh.yml
-    - import_tasks: sickrage.yml
+    # - import_tasks: sickrage.yml
     - import_tasks: speedtest.yml
     - import_tasks: gogs.yml
     - import_tasks: gmvault.yml
