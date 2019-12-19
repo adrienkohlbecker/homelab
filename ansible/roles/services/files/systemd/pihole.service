@@ -36,8 +36,14 @@ ExecStartPre=/usr/bin/docker create \
     --label "traefik.protocol=http" \
     pihole/pihole:latest
 ExecStartPre=/usr/bin/docker network connect macvlan_net pihole --ip 10.123.0.16
+ExecStartPre=/bin/ip link add mac0 link enp5s0 type macvlan mode bridge
+ExecStartPre=/bin/ip addr add 10.123.0.251/32 dev mac0
+ExecStartPre=/bin/ip link set mac0 up
+ExecStartPre=/bin/ip route add 10.123.0.16/32 dev mac0
 ExecStart=/usr/bin/docker start --attach pihole
 ExecStop=/usr/bin/docker stop pihole
+ExecStopPost=/bin/ip route delete 10.123.0.16/32 dev mac0
+ExecStopPost=/bin/ip link delete mac0
 
 [Install]
 WantedBy=compose.service

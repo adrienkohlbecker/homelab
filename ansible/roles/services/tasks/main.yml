@@ -56,13 +56,14 @@
     - import_tasks: pi-backup-client.yml
     - import_tasks: docker-hub-schedule.yml
     - import_tasks: datadog_check.yml
+    - import_tasks: pihole.yml
   when: inventory_hostname == 'homelab'
 
 - name: Include services
   block:
     - import_tasks: wireguard.yml
     - import_tasks: traefik.yml
-    - import_tasks: pihole.yml
+    # - import_tasks: pihole.yml
     - import_tasks: cloudflare-ddns.yml
     - import_tasks: pi-backup-server.yml
     - import_tasks: datadog_check.yml
