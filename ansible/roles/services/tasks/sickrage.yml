@@ -6,25 +6,25 @@
     state: directory
     owner: root
     group: root
-    mode: 0775
+    mode: 0755
   become: yes
   tags:
     - services
     - sickrage
 
-- name: Configure sickrage
-  template:
-    src: sickrage.ini.j2
-    dest: /mnt/services/sickrage/config.ini
-    owner: root
-    group: root
-    mode: 0600
-  become: yes
-  tags:
-    - services
-    - sickrage
-  notify:
-    - Restart sickrage
+# - name: Configure sickrage
+#   template:
+#     src: sickrage.ini.j2
+#     dest: /mnt/services/sickrage/config.ini
+#     owner: root
+#     group: root
+#     mode: 0600
+#   become: yes
+#   tags:
+#     - services
+#     - sickrage
+#   notify:
+#     - Restart sickrage
 
 - name: Copy the unit file
   copy:
