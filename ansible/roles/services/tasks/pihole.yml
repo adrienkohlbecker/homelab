@@ -6,9 +6,9 @@
     driver: macvlan
     driver_options:
       parent: "{{ ansible_default_ipv4.interface }}"
-    ipam_options:
-      subnet: 10.123.0.0/24
-      gateway: 10.123.0.1
+    ipam_config:
+      - subnet: 10.123.0.0/24
+        gateway: 10.123.0.1
   become: yes
   tags:
     - services
