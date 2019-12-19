@@ -11,6 +11,7 @@
   become: yes
   tags:
     - virtualization
+
 - name: Add deploy user to libvirtd group
   user:
     name: "{{ deploy_user }}"
@@ -25,7 +26,9 @@
     name: "{{ item }}"
     state: present
   become: yes
-  notify: Ask to reboot
+  notify:
+    - Update initramfs
+    - Ask to reboot
   with_items:
     - radeon
     - amdgpu
@@ -51,6 +54,9 @@
     owner: root
     group: root
     mode: 0644
+  notify:
+    - Update initramfs
+    - Ask to reboot
   become: yes
   tags:
     - virtualization
@@ -62,6 +68,9 @@
     owner: root
     group: root
     mode: 0644
+  notify:
+    - Update initramfs
+    - Ask to reboot
   become: yes
   tags:
     - virtualization
@@ -73,6 +82,9 @@
     owner: root
     group: root
     mode: 0644
+  notify:
+    - Update initramfs
+    - Ask to reboot
   become: yes
   tags:
     - virtualization
