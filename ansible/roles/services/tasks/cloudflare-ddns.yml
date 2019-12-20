@@ -2,7 +2,7 @@
 
 - name: Install virtualenv
   apt:
-    pkg: python-virtualenv
+    pkg: virtualenv
   become: yes
   tags:
     - services

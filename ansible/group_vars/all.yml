@@ -1,5 +1,7 @@
 ---
 
+ansible_python_interpreter: /usr/bin/python3
+
 deploy_user_uid: 1000
 deploy_user_gid: 1000
 deploy_user_ssh_public_key: |-

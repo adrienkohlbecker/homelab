@@ -26,7 +26,7 @@
 
 - name: Install virtualenv
   apt:
-    pkg: python-virtualenv
+    pkg: virtualenv
   become: yes
   tags:
     - services
@@ -37,6 +37,7 @@
     name: gmvault
     virtualenv: /opt/gmvault
     version: 1.9.1
+    virtualenv_python: python2.7
   become: yes
   tags:
     - services
