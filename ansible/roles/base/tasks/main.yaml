@@ -19,20 +19,20 @@
   tags:
     - base
 
-# - name: apt-get update
-#   apt:
-#     update_cache: yes
-#     cache_valid_time: 3600
-#   become: yes
-#   tags:
-#     - base
+- name: apt-get update
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - base
 
-# - name: apt-get upgrade
-#   apt:
-#     upgrade: full
-#   become: yes
-#   tags:
-#     - base
+- name: apt-get upgrade
+  apt:
+    upgrade: full
+  become: yes
+  tags:
+    - base
 
 - name: Set hostname
   hostname:
@@ -61,10 +61,10 @@
       - unattended-upgrades
       - update-notifier-common
       - console-data # keymaps
-      - python # ansible dep
-      - python-simplejson # ansible dep
-      - python-apt # ansible dep (for check mode)
-      - python-pip
+      - python3 # ansible dep
+      - python3-simplejson # ansible dep
+      - python3-apt # ansible dep (for check mode)
+      - python3-pip
       - apt-transport-https
     state: present
   become: yes
