@@ -1,0 +1,9 @@
+logs:
+  - type: file
+    path: /mnt/services/unifi/log/mongod.log
+    service: unifi.mongod
+    source: custom
+  - type: file
+    path: /mnt/services/unifi/log/server.log
+    service: unifi.server
+    source: custom
