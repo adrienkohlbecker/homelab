@@ -10,6 +10,7 @@ instances:
       - portainer
       - sabnzbd
       - sickrage
+      - headphones
       - speedtest
       - ssh-arq
       - ssh-brumath
