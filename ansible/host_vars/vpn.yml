@@ -14,6 +14,8 @@ ddns_domain: brumath.kohlby.fr
 aws_ssm_cloudflare_email: "{{ lookup('aws_ssm', 'cloudflare.email', region='eu-west-1' ) }}"
 aws_ssm_cloudflare_api_key: "{{ lookup('aws_ssm', 'cloudflare.api_key', region='eu-west-1' ) }}"
 aws_ssm_couchpotato_api_key: "{{ lookup('aws_ssm', 'couchpotato.api_key', region='eu-west-1' ) }}"
+aws_ssm_headphones_api_key: "{{ lookup('aws_ssm', 'headphones.api_key', region='eu-west-1' ) }}"
+aws_ssm_headphones_songkick_api_key: "{{ lookup('aws_ssm', 'headphones.songkick_api_key', region='eu-west-1' ) }}"
 aws_ssm_datadog_api_key: "{{ lookup('aws_ssm', 'datadog.api_key', region='eu-west-1' ) }}"
 aws_ssm_plex_token: "{{ lookup('aws_ssm', 'plex.token', region='eu-west-1' ) }}"
 aws_ssm_omdb_api_key: "{{ lookup('aws_ssm', 'omdb.api_key', region='eu-west-1' ) }}"

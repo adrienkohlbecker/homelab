@@ -141,3 +141,9 @@
     name: netdata
     state: restarted
   become: yes
+
+- name: Restart headphones
+  service:
+    name: headphones
+    state: restarted
+  become: yes
