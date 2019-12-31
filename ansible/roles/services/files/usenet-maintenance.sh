@@ -3,7 +3,6 @@
 IFS=$'\n\t'
 set -euxo pipefail
 
-/usr/local/bin/sort-ini /mnt/services/sickrage/config.ini
 /usr/local/bin/sort-ini /mnt/services/sabnzbd/sabnzbd.ini
 /usr/local/bin/sort-ini /mnt/services/headphones/config.ini
 /usr/local/bin/sort-ini /mnt/services/couchpotato/settings.conf

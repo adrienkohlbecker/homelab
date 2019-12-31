@@ -9,8 +9,8 @@ instances:
       - netdata
       - portainer
       - sabnzbd
-      - sickrage
       - headphones
+      - sonarr
       - speedtest
       - ssh-arq
       - ssh-brumath

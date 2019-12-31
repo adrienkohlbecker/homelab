@@ -31,7 +31,7 @@
     - {path: '/mnt/media/.tmp',             owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/media/.tmp/couchpotato', owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/media/.tmp/sickrage',    owner: 'root',              group: 'root',              mode: '0775'}
+    - {path: '/mnt/media/.tmp/sonarr',      owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/media/.tmp/headphones',  owner: 'root',              group: 'root',              mode: '0775'}
 
 - name: Configure sabnzbd
