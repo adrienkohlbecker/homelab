@@ -104,10 +104,10 @@
     #### autoProcessing for TV Series
     #### tv - category that gets called for post-processing with SB
     [[tv]]
-        enabled = 1
-        host = sickrage
+        enabled = 0
+        host = localhost
         port = 8081
-        apikey = {{ aws_ssm_sickrage_sickrage_api_key }}
+        apikey = ""
         username = ""
         password = ""
         ###### ADVANCED USE - ONLY EDIT IF YOU KNOW WHAT YOU'RE DOING ######
@@ -134,7 +134,7 @@
         ##### Enable if SickBeard is on a remote server for this category
         remote_path = 0
         ##### Set to path where download client places completed downloads locally for this category
-        watch_dir = /media/.tmp/sickrage
+        watch_dir = ""
         ##### Set the recursive directory permissions to the following (0 to disable)
         chmodDirectory = 0
 
@@ -143,9 +143,9 @@
     #### autoProcessing for TV Series
     #### ndCategory - category that gets called for post-processing with NzbDrone/Sonarr
     [[tv]]
-        enabled = 0
-        apikey = ""
-        host = localhost
+        enabled = 1
+        apikey = {{ aws_ssm_sonarr_api_key }}
+        host = sonarr
         port = 8989
         username = ""
         password = ""
@@ -166,7 +166,7 @@
         ##### Enable if NzbDrone is on a remote server for this category
         remote_path = 0
         ##### Set to path where download client places completed downloads locally for this category
-        watch_dir = ""
+        watch_dir = /media/.tmp/sonarr
 
 [HeadPhones]
     #### autoProcessing for Music

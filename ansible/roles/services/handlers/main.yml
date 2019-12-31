@@ -12,12 +12,6 @@
     state: restarted
   become: yes
 
-- name: Restart sickrage
-  service:
-    name: sickrage
-    state: restarted
-  become: yes
-
 - name: Restart gogs
   service:
     name: gogs
@@ -145,5 +139,11 @@
 - name: Restart headphones
   service:
     name: headphones
+    state: restarted
+  become: yes
+
+- name: Restart sonarr
+  service:
+    name: sonarr
     state: restarted
   become: yes

@@ -1,0 +1,42 @@
+# sonarr.service #######################################################################
+[Unit]
+Description=sonarr
+After=docker.service mnt-media.mount mnt-services.mount sabnzbd.service
+Requires=docker.service mnt-media.mount mnt-services.mount sabnzbd.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+SyslogIdentifier=sonarr
+
+ExecStartPre=-/usr/bin/docker kill sonarr
+ExecStartPre=-/usr/bin/docker rm sonarr
+ExecStartPre=-/usr/bin/docker pull linuxserver/sonarr
+ExecStartPre=/usr/bin/docker create \
+    --init \
+    --name=sonarr \
+    --log-driver none \
+    --env PUID=0 \
+    --env PGID=0 \
+    --env TZ=Europe/Amsterdam \
+    --volume /mnt/services/sonarr:/config \
+    --volume /mnt/media:/media \
+    --label "traefik.docker.network=traefik" \
+    --label "traefik.enable=true" \
+    --label "traefik.frontend.rule=Host:sonarr.kohlby.fr" \
+    --label "traefik.port=8989" \
+    --label "traefik.protocol=http" \
+    linuxserver/sonarr
+ExecStartPre=/usr/bin/docker network connect usenet sonarr
+ExecStartPre=/usr/bin/docker network connect traefik sonarr
+ExecStart=/usr/bin/docker start --attach sonarr
+ExecStop=/usr/bin/docker stop sonarr
+
+[Install]
+WantedBy=compose.service

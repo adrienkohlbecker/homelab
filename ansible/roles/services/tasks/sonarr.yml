@@ -1,0 +1,51 @@
+---
+
+- name: Create configuration directory
+  file:
+    dest: /mnt/services/sonarr
+    state: directory
+    owner: root
+    group: root
+    mode: 0775
+  become: yes
+  tags:
+    - services
+    - sonarr
+
+- name: Configure sonarr
+  template:
+    src: sonarr.xml.j2
+    dest: /mnt/services/sonarr/config.xml
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+    - sonarr
+  notify:
+    - Restart sonarr
+
+- name: Copy the unit file
+  copy:
+    src: systemd/sonarr.service
+    dest: /etc/systemd/system/sonarr.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - sonarr
+  notify:
+    - Restart sonarr
+
+- name: Enable the service
+  systemd:
+    name: sonarr
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - sonarr
