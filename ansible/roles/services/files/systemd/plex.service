@@ -1,8 +1,8 @@
 # plex.service #######################################################################
 [Unit]
 Description=Plex
-After=docker.service mnt-media.mount mnt-services.mount
-Requires=docker.service mnt-media.mount mnt-services.mount
+After=docker.service mnt-media.mount mnt-services.mount mnt-data.mount
+Requires=docker.service mnt-media.mount mnt-services.mount mnt-data.mount
 PartOf=compose.service
 
 StartLimitInterval=300
@@ -34,6 +34,8 @@ ExecStart=/usr/bin/docker run \
     --publish 32414:32414/udp \
     --volume /mnt/services/plex:/config \
     --volume /mnt/media:/media \
+    --volume "/mnt/data/MacbookPro/Music/iTunes/iTunes Media/Music:/itunes:ro" \
+    --volume /mnt/data/Musique/Records:/records:ro \
     --volume /tmp/transcode:/transcode \
     --env ADVERTISE_IP="http://10.123.0.11:32400/" \
     --env PLEX_UID=2005 \
