@@ -1,5 +1,13 @@
 ---
 
+- name: Install apt-transport-https
+  apt:
+    pkg: apt-transport-https
+    state: present
+  become: yes
+  tags:
+    - datadog
+
 - name: Download datadog apt key
   apt_key:
     id: A2923DFF56EDA6E76E55E492D3A80E30382E94DE
@@ -11,7 +19,7 @@
 
 - name: Add datadog repository
   apt_repository:
-    repo: deb http://apt.datadoghq.com/ stable 6
+    repo: deb https://apt.datadoghq.com/ stable 7
     state: present
   become: yes
   tags:
