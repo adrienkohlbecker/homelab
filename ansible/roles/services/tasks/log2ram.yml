@@ -1,0 +1,56 @@
+---
+
+- name: Install rsync & mail
+  apt:
+    pkg:
+      - rsync
+      - mailutils
+  become: yes
+  tags:
+    - services
+    - log2ram
+
+- name: Download log2ram
+  unarchive:
+    src: https://github.com/azlux/log2ram/archive/1.4.2.tar.gz
+    remote_src: yes
+    dest: /opt
+    creates: /opt/log2ram-1.4.2/install.sh
+  become: yes
+  tags:
+    - services
+    - log2ram
+
+- name: Install log2ram
+  command:
+    cmd: /bin/sh -e /opt/log2ram-1.4.2/install.sh
+    creates: /usr/local/bin/log2ram
+    chdir: /opt/log2ram-1.4.2
+  become: yes
+  tags:
+    - services
+    - log2ram
+
+- name: Configure log2ram
+  copy:
+    src: log2ram.conf
+    dest: /etc/log2ram.conf
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - log2ram
+  notify:
+    - Restart log2ram
+
+- name: Enable the service
+  systemd:
+    name: log2ram
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - log2ram

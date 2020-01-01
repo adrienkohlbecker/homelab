@@ -11,6 +11,8 @@ wireguard_listen_port: 51820
 
 ddns_domain: home.kohlby.fr
 
+journald_storage: persistent
+
 aws_ssm_cloudflare_email: changeme
 aws_ssm_cloudflare_api_key: changeme
 aws_ssm_couchpotato_api_key: changeme
