@@ -62,7 +62,7 @@
 
 - name: Configure log integrations
   copy:
-    src: unifi.yaml
+    src: unifi-docker.yaml
     dest: /etc/datadog-agent/conf.d/unifi.yaml
     owner: dd-agent
     group: dd-agent
