@@ -1,0 +1,62 @@
+---
+
+- name: Download mongo apt key
+  apt_key:
+    url: https://www.mongodb.org/static/pgp/server-3.4.asc
+    state: present
+  become: yes
+  tags:
+    - services
+    - unifi
+
+- name: Add mongo repository
+  apt_repository:
+    repo: deb [ arch=arm64 ] http://repo.mongodb.org/apt/ubuntu xenial/mongodb-org/3.4 multiverse
+    state: present
+  become: yes
+  tags:
+    - services
+    - unifi
+
+- name: Install mongodb-server
+  apt:
+    pkg: mongodb-server
+    state: present
+  become: yes
+  tags:
+    - services
+    - unifi
+
+- name: Download unifi
+  get_url:
+    src: http://dl.ubnt.com/unifi/debian/pool/ubiquiti/u/unifi/unifi_5.12.35-12979-1_all.deb
+    checksum: sha256:2212b9f87db558e83b2245de76e0d360bae180720e52e654e8cb2a1dfde9c852
+    dest: /opt/unifi_5.12.35-12979-1_all.deb
+    mode: 0644
+    owner: root
+    group: root
+  become: yes
+  tags:
+    - services
+    - unifi
+
+- name: Install unifi
+  apt:
+    deb: /opt/unifi_5.12.35-12979-1_all.deb
+  become: yes
+  tags:
+    - services
+    - unifi
+
+- name: Configure log integrations
+  copy:
+    src: unifi-deb.yaml
+    dest: /etc/datadog-agent/conf.d/unifi.yaml
+    owner: dd-agent
+    group: dd-agent
+    mode: 0644
+  notify: Restart datadog
+  become: yes
+  tags:
+    - services
+    - unifi

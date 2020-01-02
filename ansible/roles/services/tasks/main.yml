@@ -39,7 +39,7 @@
     - import_tasks: traefik.yml
     - import_tasks: usenet.yml
     - import_tasks: avahi.yml
-    - import_tasks: unifi.yml
+    - import_tasks: unifi-docker.yml
     - import_tasks: couchpotato.yml
     - import_tasks: headphones.yml
     - import_tasks: sonarr.yml
@@ -76,4 +76,5 @@
     - import_tasks: log2ram.yml
     - import_tasks: wireguard.yml
     - import_tasks: cloudflare-ddns.yml
+    - import_tasks: unifi-deb.yml
   when: inventory_hostname == 'vpn'
