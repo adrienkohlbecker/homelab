@@ -3,7 +3,19 @@
 - name: extract rrsync
   command: "gunzip --keep /usr/share/doc/rsync/scripts/rrsync.gz"
   args:
-    creates: "/usr/share/doc/rsync/scripts/rrsync"
+    creates: /usr/share/doc/rsync/scripts/rrsync
+  become: yes
+  tags:
+    - services
+    - pi-backup-server
+
+- name: Ensure rrsync is executable
+  file:
+    dest: /usr/share/doc/rsync/scripts/rrsync
+    state: file
+    owner: root
+    group: root
+    mode: 0755
   become: yes
   tags:
     - services
