@@ -1,0 +1,6 @@
+[Timer]
+OnBootSec=15min
+OnUnitActiveSec=24h
+
+[Install]
+WantedBy=compose.service
