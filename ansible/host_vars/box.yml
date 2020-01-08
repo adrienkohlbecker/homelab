@@ -13,6 +13,12 @@ ddns_domain: home.kohlby.fr
 
 journald_storage: persistent
 
+pihole_host:
+pihole_ip:
+pihole_host_ip:
+pihole_host_iface:
+pihole_host_mac:
+
 aws_ssm_cloudflare_email: changeme
 aws_ssm_cloudflare_api_key: changeme
 aws_ssm_couchpotato_api_key: changeme
@@ -43,3 +49,5 @@ aws_ssm_gmvault_client_id: changeme
 aws_ssm_gmvault_client_secret: changeme
 aws_ssm_pi_ssh_backup_public_key: changeme
 aws_ssm_pi_ssh_backup_private_key: changeme
+aws_ssm_pihole_sync_public_key: changeme
+aws_ssm_pihole_sync_private_key: changeme

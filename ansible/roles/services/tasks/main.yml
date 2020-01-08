@@ -58,6 +58,7 @@
     - import_tasks: docker-hub-schedule.yml
     - import_tasks: datadog_check.yml
     - import_tasks: pihole.yml
+    - import_tasks: pihole-sync-server.yml
   when: inventory_hostname == 'homelab'
 
 - name: Include services
@@ -65,7 +66,8 @@
     - import_tasks: log2ram.yml
     - import_tasks: wireguard.yml
     - import_tasks: traefik.yml
-    # - import_tasks: pihole.yml
+    - import_tasks: pihole.yml
+    - import_tasks: pihole-sync-client.yml
     - import_tasks: cloudflare-ddns.yml
     - import_tasks: pi-backup-server.yml
     - import_tasks: datadog_check.yml

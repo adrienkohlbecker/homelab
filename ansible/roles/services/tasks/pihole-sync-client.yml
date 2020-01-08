@@ -1,0 +1,50 @@
+---
+
+- name: Drop ssh key
+  copy:
+    dest: /etc/pi_backup_rsa
+    content: "{{ aws_ssm_pihole_sync_private_key }}\n"
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+    - pihole-sync-client
+
+- name: Copy the backup script
+  copy:
+    src: pihole-sync.sh
+    dest: /usr/local/bin/pihole-sync
+    owner: root
+    group: root
+    mode: 0755
+  become: yes
+  tags:
+    - services
+    - pihole-sync-client
+
+- name: Copy the unit file
+  copy:
+    src: systemd/{{ item }}
+    dest: /etc/systemd/system/{{ item }}
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - pihole-sync-client
+  with_items:
+    - pihole-sync.timer
+    - pihole-sync.service
+
+- name: Enable the service
+  systemd:
+    name: pihole-sync.timer
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - pihole-sync-client

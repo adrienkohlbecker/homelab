@@ -20,6 +20,7 @@ instances:
 
   - health_status: healthy
     container_names:
+      - pihole
       - plex
       - tautulli
       - unifi
