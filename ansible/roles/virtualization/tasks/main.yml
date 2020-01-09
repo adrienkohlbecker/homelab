@@ -110,3 +110,24 @@
   become: yes
   tags:
     - virtualization
+
+- name: Create libvirt backup executable
+  copy:
+    src: virsh_backup.sh
+    dest: /usr/local/bin/virsh_backup
+    mode: 0755
+  become: yes
+  tags:
+    - virtualization
+
+- name: Schedule the backup
+  cron:
+    name: virsh_backup
+    minute: 0
+    hour: 5
+    job: /usr/bin/systemd-cat --identifier virsh_backup /usr/local/bin/virsh_backup
+    user: root
+    cron_file: ansible_virsh_backup
+  become: yes
+  tags:
+    - virtualization
