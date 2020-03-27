@@ -19,6 +19,8 @@ pihole_host_ip: 10.123.0.251
 pihole_host_iface: enp5s0
 pihole_host_mac: da:0a:6f:67:c7:a0
 
+grub_cmdline: intel_iommu=on iommu=pt default_hugepagesz=1G hugepagesz=1G hugepages=8
+
 aws_ssm_cloudflare_email: "{{ lookup('aws_ssm', 'cloudflare.email', region='eu-west-1' ) }}"
 aws_ssm_cloudflare_api_key: "{{ lookup('aws_ssm', 'cloudflare.api_key', region='eu-west-1' ) }}"
 aws_ssm_couchpotato_api_key: "{{ lookup('aws_ssm', 'couchpotato.api_key', region='eu-west-1' ) }}"

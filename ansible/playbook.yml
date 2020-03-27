@@ -11,12 +11,17 @@
     - dotfiles
     - datadog
     - docker
+    - deadmanssnitch
+
+- hosts:
+    - beelink
+    - homelab
+  roles:
+    - networking
+    - grub
 
 - hosts: homelab
   roles:
-    - deadmanssnitch
-    - grub
-    - networking
     - zfs
     - smart
     - hdparm
