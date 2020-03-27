@@ -10,6 +10,7 @@ instances:
       - portainer
       - sabnzbd
       - headphones
+      - quotes
       - sonarr
       - speedtest
       - ssh-arq

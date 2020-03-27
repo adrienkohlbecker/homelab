@@ -1,0 +1,35 @@
+# quotes.service #######################################################################
+[Unit]
+Description=quotes
+After=docker.service
+Requires=docker.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+SyslogIdentifier=quotes
+
+ExecStartPre=-/usr/bin/docker kill quotes
+ExecStartPre=-/usr/bin/docker rm quotes
+ExecStartPre=-/usr/bin/docker pull akohlbecker/quotes
+ExecStart=/usr/bin/docker run \
+    --init \
+    --name quotes \
+    --log-driver none \
+    --network traefik \
+    --label "traefik.docker.network=traefik" \
+    --label "traefik.enable=true" \
+    --label "traefik.frontend.rule=Host:quotes.kohlby.fr" \
+    --label "traefik.port=4567" \
+    --label "traefik.protocol=http" \
+    akohlbecker/quotes
+ExecStop=/usr/bin/docker stop quotes
+
+[Install]
+WantedBy=compose.service
