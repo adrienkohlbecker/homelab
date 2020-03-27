@@ -38,8 +38,7 @@
     mode: 0755
   become: yes
   tags:
-    - services
-    - remote-ssh
+    - dotfiles
 
 - name: Clone fzf
   git:

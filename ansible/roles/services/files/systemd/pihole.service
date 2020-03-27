@@ -1,8 +1,8 @@
 # pihole.service #######################################################################
 [Unit]
 Description=pihole
-After=docker.service
-Requires=docker.service
+After=docker.service mnt-services.mount
+Requires=docker.service mnt-services.mount
 PartOf=compose.service
 
 StartLimitInterval=300
