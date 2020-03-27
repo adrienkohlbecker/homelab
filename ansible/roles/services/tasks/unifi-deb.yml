@@ -18,9 +18,9 @@
     - services
     - unifi
 
-- name: Install mongodb-server
+- name: Install mongodb-org-server
   apt:
-    pkg: mongodb-server
+    pkg: mongodb-org-server
     state: present
   become: yes
   tags:
