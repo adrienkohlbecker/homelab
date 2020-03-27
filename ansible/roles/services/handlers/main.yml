@@ -153,3 +153,9 @@
     name: log2ram
     state: restarted
   become: yes
+
+- name: Restart quotes
+  service:
+    name: quotes
+    state: restarted
+  become: yes
