@@ -1,0 +1,10 @@
+---
+
+instances:
+  - health_status: none
+    container_names: []
+    min_collection_interval: 30
+
+  - health_status: healthy
+    container_names: []
+    min_collection_interval: 30

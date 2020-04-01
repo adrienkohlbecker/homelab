@@ -1,0 +1,25 @@
+---
+
+- name: Copy the unit file
+  copy:
+    src: systemd/tunnel-gdk.service
+    dest: /etc/systemd/system/tunnel-gdk.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - tunnel-gdk
+  notify:
+    - Restart tunnel-gdk
+
+- name: Enable the service
+  systemd:
+    name: tunnel-gdk
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - tunnel-gdk
