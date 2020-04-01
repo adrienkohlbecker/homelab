@@ -81,3 +81,10 @@
     - import_tasks: cloudflare-ddns.yml
     - import_tasks: unifi-deb.yml
   when: inventory_hostname == 'vpn'
+
+- name: Include services
+  block:
+    - import_tasks: ssl-proxy.yml
+    - import_tasks: tunnel-gdk.yml
+    # - import_tasks: tunnel-registry.yml
+  when: inventory_hostname == 'cloud'

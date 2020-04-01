@@ -1,0 +1,59 @@
+---
+
+deploy_user: akohlbecker
+deploy_user_group: akohlbecker
+deploy_user_password: $6$9WL6ah8B.K/Kk$x6tt2LKJxKYyXxBRIO1bkKzKvZ.eyysAMI4M60nfYIWk6nihR8W8g/bIdp9siG.X47wfQ2i9wraY1ZGH.UKrK.
+
+# override from all.yml
+deploy_user_uid: 1001
+deploy_user_gid: 1002
+
+docker_host: true
+
+wireguard_address:
+wireguard_listen_port:
+
+ddns_domain:
+
+journald_storage: persistent
+
+pihole_host:
+pihole_ip:
+pihole_host_ip:
+pihole_host_iface:
+pihole_host_mac:
+
+grub_cmdline:
+
+# aws_ssm_cloudflare_email: "{{ lookup('aws_ssm', 'cloudflare.email', region='eu-west-1' ) }}"
+# aws_ssm_cloudflare_api_key: "{{ lookup('aws_ssm', 'cloudflare.api_key', region='eu-west-1' ) }}"
+# aws_ssm_couchpotato_api_key: "{{ lookup('aws_ssm', 'couchpotato.api_key', region='eu-west-1' ) }}"
+# aws_ssm_sonarr_api_key: "{{ lookup('aws_ssm', 'sonarr.api_key', region='eu-west-1' ) }}"
+# aws_ssm_headphones_api_key: "{{ lookup('aws_ssm', 'headphones.api_key', region='eu-west-1' ) }}"
+# aws_ssm_headphones_songkick_api_key: "{{ lookup('aws_ssm', 'headphones.songkick_api_key', region='eu-west-1' ) }}"
+aws_ssm_datadog_api_key: "{{ lookup('aws_ssm', 'datadog.api_key', region='eu-west-1' ) }}"
+# aws_ssm_plex_token: "{{ lookup('aws_ssm', 'plex.token', region='eu-west-1' ) }}"
+# aws_ssm_omdb_api_key: "{{ lookup('aws_ssm', 'omdb.api_key', region='eu-west-1' ) }}"
+# aws_ssm_sabnzbd_api_key: "{{ lookup('aws_ssm', 'sabnzbd.api_key', region='eu-west-1' ) }}"
+# aws_ssm_sabnzbd_email_from: "{{ lookup('aws_ssm', 'sabnzbd.email_from', region='eu-west-1' ) }}"
+# aws_ssm_sabnzbd_email_to: "{{ lookup('aws_ssm', 'sabnzbd.email_to', region='eu-west-1' ) }}"
+# aws_ssm_sabnzbd_newsgroupdirect_password: "{{ lookup('aws_ssm', 'sabnzbd.newsgroupdirect_password', region='eu-west-1' ) }}"
+# aws_ssm_sabnzbd_newsgroupdirect_username: "{{ lookup('aws_ssm', 'sabnzbd.newsgroupdirect_username', region='eu-west-1' ) }}"
+# aws_ssm_sabnzbd_nzb_key: "{{ lookup('aws_ssm', 'sabnzbd.nzb_key', region='eu-west-1' ) }}"
+# aws_ssm_sabnzbd_sendgrid_password: "{{ lookup('aws_ssm', 'sabnzbd.sendgrid_password', region='eu-west-1' ) }}"
+# aws_ssm_sabnzbd_sendgrid_username: "{{ lookup('aws_ssm', 'sabnzbd.sendgrid_username', region='eu-west-1' ) }}"
+# aws_ssm_sabnzbd_usenetfarm_password: "{{ lookup('aws_ssm', 'sabnzbd.usenetfarm_password', region='eu-west-1' ) }}"
+# aws_ssm_sabnzbd_usenetfarm_username: "{{ lookup('aws_ssm', 'sabnzbd.usenetfarm_username', region='eu-west-1' ) }}"
+aws_ssm_sendgrid_password: "{{ lookup('aws_ssm', 'sendgrid.password', region='eu-west-1' ) }}"
+aws_ssm_sendgrid_user: "{{ lookup('aws_ssm', 'sendgrid.user', region='eu-west-1' ) }}"
+# aws_ssm_sickrage_dognzb_api_key: "{{ lookup('aws_ssm', 'sickrage.dognzb_api_key', region='eu-west-1' ) }}"
+# aws_ssm_sickrage_nzbgeek_api_key: "{{ lookup('aws_ssm', 'sickrage.nzbgeek_api_key', region='eu-west-1' ) }}"
+# aws_ssm_wireguard_private_key: "{{ lookup('aws_ssm', 'wireguard.private_key', region='eu-west-1' ) }}"
+# aws_ssm_wireguard_public_key: "{{ lookup('aws_ssm', 'wireguard.public_key', region='eu-west-1' ) }}"
+# aws_ssm_gogs_secret_key: "{{ lookup('aws_ssm', 'gogs.secret_key', region='eu-west-1' ) }}"
+# aws_ssm_gmvault_client_id: "{{ lookup('aws_ssm', 'gmvault.client_id', region='eu-west-1' ) }}"
+# aws_ssm_gmvault_client_secret: "{{ lookup('aws_ssm', 'gmvault.client_secret', region='eu-west-1' ) }}"
+# aws_ssm_pi_ssh_backup_public_key: "{{ lookup('aws_ssm', 'pi.ssh_backup_public_key', region='eu-west-1' ) }}"
+# aws_ssm_pi_ssh_backup_private_key: "{{ lookup('aws_ssm', 'pi.ssh_backup_private_key', region='eu-west-1' ) }}"
+# aws_ssm_pihole_sync_public_key: "{{ lookup('aws_ssm', 'pi.pihole_sync_public_key', region='eu-west-1' ) }}"
+# aws_ssm_pihole_sync_private_key: "{{ lookup('aws_ssm', 'pi.pihole_sync_private_key', region='eu-west-1' ) }}"

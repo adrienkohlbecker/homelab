@@ -1,0 +1,11 @@
+# This file describes the network interfaces available on your system
+# For more information, see netplan(5).
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    ens4:
+      dhcp4: true
+      match:
+        macaddress: 42:01:0a:a4:00:37
+      set-name: ens4

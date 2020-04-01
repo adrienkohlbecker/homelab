@@ -1,0 +1,25 @@
+---
+
+- name: Copy the unit file
+  copy:
+    src: systemd/tunnel-registry.service
+    dest: /etc/systemd/system/tunnel-registry.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - services
+    - tunnel-registry
+  notify:
+    - Restart tunnel-registry
+
+- name: Enable the service
+  systemd:
+    name: tunnel-registry
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - services
+    - tunnel-registry
