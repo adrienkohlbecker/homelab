@@ -16,7 +16,7 @@ journald_storage: volatile
 pihole_host: pihole-backup.kohlby.fr
 pihole_ip: 10.123.0.17
 pihole_host_ip: 10.123.0.252
-pihole_host_iface: eth0
+pihole_host_iface: enp1s0
 pihole_host_mac: 4e:31:4e:96:4d:6e
 
 # note: to build iso: ./isorespin.sh -i ubuntu-18.04.4-desktop-amd64.iso --apollo -g "memmap=0x6016000\\\\\$0x1687AA000"

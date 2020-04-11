@@ -1,0 +1,4 @@
+ansible
+netaddr
+boto3
+botocore
