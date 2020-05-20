@@ -45,6 +45,18 @@
   tags:
     - datadog
 
+- name: Configure the agent
+  copy:
+    src: system-probe.yaml
+    dest: /etc/datadog-agent/system-probe.yaml
+    owner: dd-agent
+    group: dd-agent
+    mode: 0644
+  notify: Restart datadog
+  become: yes
+  tags:
+    - datadog
+
 - name: Add dd-agent to systemd-journal / adm group to read logs
   user:
     name: dd-agent

@@ -533,7 +533,7 @@ apm_config:
 ## Uncomment this parameter and the one below to enable them.
 ## See https://docs.datadoghq.com/graphing/infrastructure/process/
 #
-# process_config:
+process_config:
 
   ## @param enabled - string - optional - default: "false"
   ##  A string indicating the enabled state of the Process Agent:
@@ -541,7 +541,7 @@ apm_config:
   ##    * "true"     : The Agent collects containers and processes information.
   ##    * "disabled" : The Agent process collection is disabled.
   #
-  # enabled: "true"
+  enabled: "true"
 
   ## @param expvar_port - string - optional - default: 6062
   ## Port for the debug endpoints for the process Agent.
