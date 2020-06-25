@@ -19,8 +19,7 @@ pihole_host_ip: 10.123.0.252
 pihole_host_iface: enp1s0
 pihole_host_mac: 4e:31:4e:96:4d:6e
 
-# note: to build iso: ./isorespin.sh -i ubuntu-18.04.4-desktop-amd64.iso --apollo -g "memmap=0x6016000\\\\\$0x1687AA000"
-grub_cmdline: memmap=0x6016000\\\$0x1687AA000
+grub_cmdline:
 
 aws_ssm_cloudflare_email: "{{ lookup('aws_ssm', 'cloudflare.email', region='eu-west-1' ) }}"
 aws_ssm_cloudflare_api_key: "{{ lookup('aws_ssm', 'cloudflare.api_key', region='eu-west-1' ) }}"

@@ -1,5 +1,13 @@
 ---
 
+- name: Install dnsutils
+  apt:
+    pkg: dnsutils
+  become: yes
+  tags:
+    - services
+    - pi-backup-client
+
 - name: Drop ssh key
   copy:
     dest: /etc/pi_backup_rsa

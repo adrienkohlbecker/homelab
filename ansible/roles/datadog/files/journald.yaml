@@ -1,3 +1,3 @@
 logs:
   - type: journald
-    path: /var/log/journal
+    container_mode: true
