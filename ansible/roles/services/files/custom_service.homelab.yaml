@@ -24,5 +24,4 @@ instances:
       - pihole
       - plex
       - tautulli
-      - unifi
     min_collection_interval: 30
