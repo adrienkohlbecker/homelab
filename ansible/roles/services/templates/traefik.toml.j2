@@ -52,6 +52,12 @@ onHostRule = false
     url = "https://10.123.0.10:443"
     weight = 1
 
+  [backends.unifi]
+
+    [backends.unifi.servers.server1]
+    url = "https://10.123.0.1:443"
+    weight = 1
+
 [frontends]
 
   [frontends.ipmi]
@@ -61,3 +67,11 @@ onHostRule = false
 
     [frontends.ipmi.routes.test_1]
     rule = "Host:ipmi.kohlby.fr"
+
+  [frontends.unifi]
+  backend = "unifi"
+  priority = 20
+  passHostHeader = true
+
+    [frontends.unifi.routes.test_1]
+    rule = "Host:unifi.kohlby.fr"

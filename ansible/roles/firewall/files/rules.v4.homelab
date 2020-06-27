@@ -90,16 +90,6 @@
 -A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 51826 -j ACCEPT -m comment --comment "Accept Homebridge"
 -A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 51828 -j ACCEPT -m comment --comment "Accept Homebridge webhooks"
 
-# Unifi ports
--A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 3478 -j ACCEPT  -m comment --comment "Accept Unifi"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 8080 -j ACCEPT  -m comment --comment "Accept Unifi"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 8443 -j ACCEPT  -m comment --comment "Accept Unifi"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 8843 -j ACCEPT  -m comment --comment "Accept Unifi"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 8880 -j ACCEPT  -m comment --comment "Accept Unifi"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 6789 -j ACCEPT  -m comment --comment "Accept Unifi"
--A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 10001 -j ACCEPT -m comment --comment "Accept Unifi"
-# End Unifi
-
 # Plex ports
 -A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 1900 -j ACCEPT  -m comment --comment "Accept Plex"
 -A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 3005 -j ACCEPT  -m comment --comment "Accept Plex"
