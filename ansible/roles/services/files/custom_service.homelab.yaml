@@ -6,7 +6,6 @@ instances:
       - couchpotato
       - gogs
       - homebridge
-      - netdata
       - portainer
       - sabnzbd
       - headphones
@@ -24,4 +23,5 @@ instances:
       - pihole
       - plex
       - tautulli
+      - netdata
     min_collection_interval: 30
