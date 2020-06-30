@@ -1,0 +1,5 @@
+logs:
+  - type: udp
+    port: 10518
+    service: unifi
+    source: syslog

@@ -71,6 +71,7 @@
     - import_tasks: cloudflare-ddns.yml
     - import_tasks: pi-backup-server.yml
     - import_tasks: datadog_check.yml
+    - import_tasks: unifi-syslog.yml
   when: inventory_hostname == 'beelink'
 
 - name: Include services

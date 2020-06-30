@@ -73,6 +73,7 @@
 -A FILTERS-ENP1S0 -m state --state NEW -m udp -p udp --dport 53 -j ACCEPT    -m comment --comment "Accept DNS/udp"
 -A FILTERS-ENP1S0 -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT    -m comment --comment "Accept HTTP"
 -A FILTERS-ENP1S0 -m state --state NEW -m tcp -p tcp --dport 443 -j ACCEPT   -m comment --comment "Accept HTTPS"
+-A FILTERS-ENP1S0 -m state --state NEW -m udp -p udp --dport 10518 -j ACCEPT -m comment --comment "Accept unifi"
 -A FILTERS-ENP1S0 -m state --state NEW -m udp -p udp --dport 51821 -j ACCEPT -m comment --comment "Accept wireguard"
 
 # Reject anything else
