@@ -11,7 +11,9 @@
 
 - name: Install wireguard
   apt:
-    pkg: wireguard
+    pkg:
+      - wireguard
+      - wireguard-dkms
     state: present
   become: yes
   tags:
