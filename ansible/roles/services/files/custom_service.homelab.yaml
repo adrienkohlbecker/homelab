@@ -16,6 +16,7 @@ instances:
       - ssh-brumath
       - ssh-eckwersheim
       - traefik
+      - transmission
     min_collection_interval: 30
 
   - health_status: healthy

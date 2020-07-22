@@ -165,3 +165,9 @@
     name: tunnel-registry
     state: restarted
   become: yes
+
+- name: Restart transmission
+  service:
+    name: transmission
+    state: restarted
+  become: yes
