@@ -1,0 +1,39 @@
+# transmission.service #######################################################################
+[Unit]
+Description=transmission
+After=docker.service mnt-services.mount mnt-media.mount
+Requires=docker.service mnt-services.mount mnt-media.mount
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+SyslogIdentifier=transmission
+
+ExecStartPre=-/usr/bin/docker kill transmission
+ExecStartPre=-/usr/bin/docker rm transmission
+ExecStartPre=-/usr/bin/docker pull linuxserver/transmission:latest
+ExecStart=/usr/bin/docker run \
+    --init \
+    --name transmission \
+    --log-driver none \
+    --env PUID=1000 \
+    --env PGID=1000 \
+    --env TZ=Europe/Amsterdam \
+    --publish 51413:51413 \
+    --publish 51413:51413/udp \
+    --network traefik \
+    --volume /mnt/services/transmission:/config \
+    --volume /mnt/media/Torrents:/downloads \
+    --label "traefik.docker.network=traefik" \
+    --label "traefik.enable=true" \
+    --label "traefik.frontend.rule=Host:transmission.kohlby.fr" \
+    --label "traefik.port=9091" \
+    --label "traefik.protocol=http" \
+    linuxserver/transmission:latest
+ExecStop=/usr/bin/docker stop transmission
