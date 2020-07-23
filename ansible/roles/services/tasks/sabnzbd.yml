@@ -28,11 +28,12 @@
     - {path: '/mnt/media/Music',            owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/media/TV',               owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/media/Torrents',         owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
-    - {path: '/mnt/media/.tmp',             owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/media/.tmp/sabnzbd',     owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/media/.tmp/couchpotato', owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/media/.tmp/sonarr',      owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/media/.tmp/headphones',  owner: 'root',              group: 'root',              mode: '0775'}
+    - {path: '/mnt/scratch/sabnzbd',        owner: 'root',              group: 'root',              mode: '0775'}
+    - {path: '/mnt/scratch/couchpotato',    owner: 'root',              group: 'root',              mode: '0775'}
+    - {path: '/mnt/scratch/sonarr',         owner: 'root',              group: 'root',              mode: '0775'}
+    - {path: '/mnt/scratch/headphones',     owner: 'root',              group: 'root',              mode: '0775'}
+    - {path: '/mnt/scratch/transmission',   owner: 'root',              group: 'root',              mode: '0775'}
+    - {path: '/mnt/scratch/plex',           owner: 'root',              group: 'root',              mode: '0775'}
 
 - name: Configure sabnzbd
   template:

@@ -24,7 +24,7 @@ pp = 3
 priority = 0
 script = None
 [[movie]]
-dir = /media/.tmp/couchpotato
+dir = /scratch/couchpotato
 name = movie
 newzbin = ""
 order = 0
@@ -32,7 +32,7 @@ pp = ""
 priority = -100
 script = nzbToCouchPotato.py
 [[music]]
-dir = /media/.tmp/headphones
+dir = /scratch/headphones
 name = music
 newzbin = ""
 order = 0
@@ -40,7 +40,7 @@ pp = ""
 priority = -100
 script = nzbToHeadPhones.py
 [[tv]]
-dir = /media/.tmp/sonarr
+dir = /scratch/sonarr
 name = tv
 newzbin = ""
 order = 0
@@ -96,7 +96,7 @@ direct_unpack_threads = 3
 dirscan_dir = ""
 dirscan_speed = 5
 disable_api_key = 0
-download_dir = /media/.tmp/sabnzbd
+download_dir = /scratch/sabnzbd
 download_free = 10G
 email_account = {{ aws_ssm_sabnzbd_sendgrid_username }}
 email_cats = *,
