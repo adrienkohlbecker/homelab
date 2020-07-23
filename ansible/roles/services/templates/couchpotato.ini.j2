@@ -210,6 +210,7 @@ chart_display_rentals = False
 chart_display_theater = 1
 chart_display_top250 = 1
 [iptorrents]
+cookiesetting = uid=1234;pass=567845439634987
 enabled = False
 extra_score = 0
 freeleech = 0
@@ -342,8 +343,10 @@ auth_token = {{ aws_ssm_plex_token }}
 clients =
 enabled = 1
 media_server = plex:32400
+media_server_port = 32400
 on_snatch = 0
 password =
+use_https = 0
 username =
 [pneumatic]
 directory =
@@ -677,3 +680,5 @@ extra_score = 0
 info = False
 seed_ratio = 1
 seed_time = 40
+[ytspopular]
+automation_enabled = False
