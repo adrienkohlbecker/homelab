@@ -154,6 +154,12 @@
     state: restarted
   become: yes
 
+- name: Restart filebrowser
+  service:
+    name: filebrowser
+    state: restarted
+  become: yes
+
 - name: Restart tunnel-gdk
   service:
     name: tunnel-gdk

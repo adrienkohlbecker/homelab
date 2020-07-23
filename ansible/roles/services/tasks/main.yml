@@ -55,6 +55,7 @@
     - import_tasks: netdata.yml
     - import_tasks: quotes.yml
     - import_tasks: transmission.yml
+    - import_tasks: filebrowser.yml
     - import_tasks: pi-backup-client.yml
     - import_tasks: docker-hub-schedule.yml
     - import_tasks: datadog_check.yml
