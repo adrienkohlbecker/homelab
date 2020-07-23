@@ -1,8 +1,8 @@
 # headphones.service #######################################################################
 [Unit]
 Description=headphones
-After=docker.service mnt-media.mount mnt-services.mount sabnzbd.service
-Requires=docker.service mnt-media.mount mnt-services.mount sabnzbd.service
+After=docker.service mnt-media.mount mnt-services.mount mnt-scratch.mount sabnzbd.service
+Requires=docker.service mnt-media.mount mnt-services.mount mnt-scratch.mount sabnzbd.service
 PartOf=compose.service
 
 StartLimitInterval=300
@@ -27,6 +27,7 @@ ExecStartPre=/usr/bin/docker create \
     --env TZ=Europe/Amsterdam \
     --volume /mnt/services/headphones:/config \
     --volume /mnt/media:/media \
+    --volume /mnt/scratch:/scratch \
     --label "traefik.docker.network=traefik" \
     --label "traefik.enable=true" \
     --label "traefik.frontend.rule=Host:headphones.kohlby.fr" \

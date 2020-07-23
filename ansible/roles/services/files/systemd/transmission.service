@@ -29,7 +29,8 @@ ExecStart=/usr/bin/docker run \
     --publish 51413:51413/udp \
     --network traefik \
     --volume /mnt/services/transmission:/config \
-    --volume /mnt/media/Torrents:/downloads \
+    --volume /mnt/media/Torrents:/downloads/complete \
+    --volume /mnt/scratch/transmission:/downloads/incomplete \
     --label "traefik.docker.network=traefik" \
     --label "traefik.enable=true" \
     --label "traefik.frontend.rule=Host:transmission.kohlby.fr" \

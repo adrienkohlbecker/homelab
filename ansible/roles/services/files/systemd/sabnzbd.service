@@ -1,8 +1,8 @@
 # sabnzbd.service #######################################################################
 [Unit]
 Description=Sabnzbd
-After=docker.service mnt-media.mount mnt-services.mount
-Requires=docker.service mnt-media.mount mnt-services.mount
+After=docker.service mnt-media.mount mnt-services.mount mnt-scratch.mount
+Requires=docker.service mnt-media.mount mnt-services.mount mnt-scratch.mount
 PartOf=compose.service
 
 StartLimitInterval=300
@@ -25,6 +25,7 @@ ExecStartPre=/usr/bin/docker create \
     --volume /mnt/services/sabnzbd:/data \
     --volume /mnt/services/sabnzbd/autoProcessMedia.cfg:/opt/nzbToMedia/autoProcessMedia.cfg \
     --volume /mnt/media:/media \
+    --volume /mnt/scratch:/scratch \
     --label "traefik.docker.network=traefik" \
     --label "traefik.enable=true" \
     --label "traefik.frontend.rule=Host:sabnzbd.kohlby.fr" \
