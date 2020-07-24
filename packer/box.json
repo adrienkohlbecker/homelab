@@ -12,7 +12,7 @@
             ],
             "override": {
                 "homelab-base": {
-                    "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
+                    "execute_command": "echo 'ubuntu'|sudo -S bash '{{.Path}}'"
                 }
             }
         },
@@ -26,22 +26,21 @@
             ],
             "override": {
                 "homelab-zfs": {
-                    "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
+                    "execute_command": "echo 'ubuntu'|sudo -S bash '{{.Path}}'"
                 }
             }
         },
         {
             "type": "shell",
             "scripts": [
-                "{{ template_dir }}/scripts/volume.sh",
-                "{{ template_dir }}/scripts/network.sh"
+                "{{ template_dir }}/scripts/volume.sh"
             ],
             "only": [
               "homelab-final"
             ],
             "override": {
                 "homelab-final": {
-                    "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
+                    "execute_command": "echo 'ubuntu'|sudo -S bash '{{.Path}}'"
                 }
             }
         },
@@ -52,13 +51,13 @@
             ],
             "override": {
                 "homelab-base": {
-                    "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
+                    "execute_command": "echo 'ubuntu'|sudo -S bash '{{.Path}}'"
                 },
                 "homelab-zfs": {
-                    "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
+                    "execute_command": "echo 'ubuntu'|sudo -S bash '{{.Path}}'"
                 },
                 "homelab-final": {
-                    "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
+                    "execute_command": "echo 'ubuntu'|sudo -S bash '{{.Path}}'"
                 }
             }
         },
@@ -72,7 +71,7 @@
             ],
             "override": {
                 "homelab-base": {
-                    "execute_command": "echo 'vagrant'|sudo -S bash '{{.Path}}'"
+                    "execute_command": "echo 'ubuntu'|sudo -S bash '{{.Path}}'"
                 }
             }
         }
@@ -82,39 +81,36 @@
             "type": "vmware-iso",
             "name": "homelab-base",
             "boot_command": [
-              "<esc><f6><esc>",
-              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
-              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
-              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
-              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
-              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
-              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
-              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
-              "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
-              "<bs><bs><bs>",
-              "initrd=/install/initrd.gz ",
-              "auto=true ",
-              "url=http://{{.HTTPIP}}:{{.HTTPPort}}/preseed.cfg ",
-              "language=en ",
-              "country=US ",
-              "locale=en_US.UTF-8 ",
-              "hostname=box ",
-              "console-setup/ask_detect=false ",
-              "keyboard-configuration/layoutcode=us ",
-              "vga=788 noprompt quiet -- <enter>"
+                " <wait><enter><wait>",
+                "<f6><esc>",
+                "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+                "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+                "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+                "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+                "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+                "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+                "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+                "<bs><bs><bs><bs><bs><bs><bs><bs><bs><bs>",
+                "<bs><bs><bs>",
+                "/casper/vmlinuz ",
+                "initrd=/casper/initrd ",
+                "autoinstall ",
+                "ds=nocloud-net;s=http://{{.HTTPIP}}:{{.HTTPPort}}/ ",
+                "<enter>"
             ],
-            "boot_wait": "10s",
+            "boot_wait": "5s",
             "disk_size": 8192,
-            "guest_os_type": "ubuntu",
+            "guest_os_type": "ubuntu-64",
             "http_directory": "{{template_dir}}/http",
-            "iso_checksum": "a5b0ea5918f850124f3d72ef4b85bda82f0fcd02ec721be19c1a6952791c8ee8",
+            "iso_checksum": "caf3fd69c77c439f162e2ba6040e9c320c4ff0d69aad1340a514319a9264df9f",
             "iso_checksum_type": "sha256",
-            "iso_url": "http://www.cdimage.ubuntu.com/ubuntu/releases/18.04/release/ubuntu-18.04.1-server-amd64.iso",
-            "ssh_username": "vagrant",
-            "ssh_password": "vagrant",
-            "ssh_port": 22,
-            "ssh_wait_timeout": "10000s",
-            "shutdown_command": "echo '/sbin/halt -h -p' > /tmp/shutdown.sh; echo 'vagrant'|sudo -S bash '/tmp/shutdown.sh'",
+            "iso_url": "https://releases.ubuntu.com/20.04/ubuntu-20.04-live-server-amd64.iso",
+            "ssh_username": "ubuntu",
+            "ssh_password": "ubuntu",
+            "ssh_pty": true,
+            "ssh_timeout": "20m",
+            "ssh_handshake_attempts": "20",
+            "shutdown_command": "sudo shutdown now",
             "vmx_data": {
                 "memsize": 1536,
                 "numvcpus": 2,
@@ -129,11 +125,11 @@
             "name": "homelab-zfs",
             "source_path": "output-homelab-base-with-disks/packer-homelab-base.vmx",
             "boot_wait": "10s",
-            "ssh_username": "vagrant",
-            "ssh_password": "vagrant",
+            "ssh_username": "ubuntu",
+            "ssh_password": "ubuntu",
             "ssh_port": 22,
             "ssh_wait_timeout": "10000s",
-            "shutdown_command": "echo '/sbin/halt -h -p' > /tmp/shutdown.sh; echo 'vagrant'|sudo -S bash '/tmp/shutdown.sh'",
+            "shutdown_command": "sudo shutdown now",
             "vm_name": "packer-homelab-zfs",
             "vmx_data": {
             }
@@ -143,11 +139,11 @@
             "name": "homelab-final",
             "source_path": "output-homelab-zfs-without-root/packer-homelab-zfs.vmx",
             "boot_wait": "10s",
-            "ssh_username": "vagrant",
-            "ssh_password": "vagrant",
+            "ssh_username": "ubuntu",
+            "ssh_password": "ubuntu",
             "ssh_port": 22,
             "ssh_wait_timeout": "10000s",
-            "shutdown_command": "echo '/sbin/halt -h -p' > /tmp/shutdown.sh; echo 'vagrant'|sudo -S bash '/tmp/shutdown.sh'",
+            "shutdown_command": "sudo shutdown now",
             "vm_name": "packer-homelab-final"
         }
     ],

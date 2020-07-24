@@ -12,7 +12,8 @@ end
 
 AVAILABLE_MEMORY = `hostinfo`.match(/memory available: (\d+\.\d+)/)[1].to_f
 AVAILABLE_CPU    = `hostinfo`.match(/(\d+) processors are logically available./)[1].to_i
-VM_MEMORY        = (AVAILABLE_MEMORY * 0.2 * 1024).to_i
+# needs to be a multiple of 4MB
+VM_MEMORY        = (AVAILABLE_MEMORY * 0.2 * 1024).fdiv(4).round * 4
 VM_CPU           = AVAILABLE_CPU / 2
 
 # Temporary workaround to Python bug in macOS High Sierra which can break Ansible
@@ -62,6 +63,8 @@ Vagrant.configure(2) do |config|
   # the path on the guest to mount the folder. And the optional third
   # argument is a set of non-required options.
   config.vm.synced_folder '.', '/vagrant', disabled: true
+
+  config.ssh.username = 'ubuntu'
 
   # Provider-specific configuration so you can fine-tune various
   # backing providers for Vagrant. These expose provider-specific options.
