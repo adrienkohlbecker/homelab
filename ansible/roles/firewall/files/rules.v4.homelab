@@ -89,6 +89,8 @@
 -A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 51820 -j ACCEPT -m comment --comment "Accept wireguard"
 -A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 51826 -j ACCEPT -m comment --comment "Accept Homebridge"
 -A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 51828 -j ACCEPT -m comment --comment "Accept Homebridge webhooks"
+-A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 51413 -j ACCEPT -m comment --comment "Accept Transmission"
+-A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 51413 -j ACCEPT -m comment --comment "Accept Transmission"
 
 # Plex ports
 -A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 1900 -j ACCEPT  -m comment --comment "Accept Plex"

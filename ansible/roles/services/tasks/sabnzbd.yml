@@ -32,8 +32,8 @@
     - {path: '/mnt/scratch/couchpotato',    owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/scratch/sonarr',         owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/scratch/headphones',     owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/scratch/transmission',   owner: 'root',              group: 'root',              mode: '0775'}
-    - {path: '/mnt/scratch/plex',           owner: 'root',              group: 'root',              mode: '0775'}
+    - {path: '/mnt/scratch/transmission',   owner: '1000',              group: '1000',              mode: '0775'}
+    - {path: '/mnt/scratch/plex',           owner: '2005',              group: '2005',              mode: '0775'}
 
 - name: Configure sabnzbd
   template:

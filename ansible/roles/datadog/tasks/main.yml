@@ -51,7 +51,7 @@
     dest: /etc/datadog-agent/system-probe.yaml
     owner: dd-agent
     group: dd-agent
-    mode: 0644
+    mode: 0440
   notify: Restart datadog
   become: yes
   tags:
