@@ -24,9 +24,11 @@
     - services
     - gmvault
 
-- name: Install virtualenv
+- name: Install virtualenv & python2
   apt:
-    pkg: virtualenv
+    pkg:
+      - virtualenv
+      - python2
   become: yes
   tags:
     - services

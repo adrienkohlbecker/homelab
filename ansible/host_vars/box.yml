@@ -1,8 +1,12 @@
 ---
 
-deploy_user: vagrant
-deploy_user_group: vagrant
-deploy_user_password: $6$SutP1Z0MHr$12AxgSgzVdoYCs1NcocU9ep1BacoY8uoHUy8oTO6QjYT6GZWGx49UKr6gCxy1cWf9P3kq22LW8YUZHzXoWOtN/
+deploy_user: ubuntu
+deploy_user_group: ubuntu
+deploy_user_password: $6$rounds=4096$lr3avlCVGnSwR.$OQ6tK6RPnPhiWtNKUkHC6BeMO0OfhdBTW17daJzS5SLeOeZdGQKXbZrehNj9u7gYssPy7d2uTf.QFjjf8ZybC0
+
+deploy_user_ssh_public_key: |-
+  {{ lookup('pipe', 'ssh-keygen -y -f '+ playbook_dir + '/../.vagrant/machines/box/vmware_desktop/private_key') }} vagrant
+  {{ deploy_user_ssh_public_key_global }}
 
 docker_host: true
 
@@ -49,7 +53,9 @@ aws_ssm_wireguard_public_key: changeme
 aws_ssm_gogs_secret_key: changeme
 aws_ssm_gmvault_client_id: changeme
 aws_ssm_gmvault_client_secret: changeme
-aws_ssm_pi_ssh_backup_public_key: changeme
+# needs a valid key, giving insecure vagrant key for testing
+aws_ssm_pi_ssh_backup_public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDb7DAuZq9ylfyGBni7ghZ5m8QLB+yw1oRljNYtGNzG119AC8fFQyogp9ZwAOkxysyLYk4gtYdRm7JFe8VFfMHJUy1G/xVtxcaHjeVu5Ivs07V62gk1Ox1xgAAh80/QwPA2QwJviCiEu0E8/ndsIxTDSAy5Ec0I4Key9EEPABjMRmpHnsbaP4/zBOy2kk6liJR697aELb73kMz+Jn4BSuXpmbROIvLh86hGqLP9bpoYsHin7QnOZPDHfTxqSiOZnubP2ASWtirPAZdkPAjHShkhEgLTBkOWDFPTAUX9gQbYL3/OX44wk78pDLPYWG+e9vbcFBJDj7nIHJfB2zHBgNWB vagrant
 aws_ssm_pi_ssh_backup_private_key: changeme
-aws_ssm_pihole_sync_public_key: changeme
+# needs a valid key, giving insecure vagrant key for testing
+aws_ssm_pihole_sync_public_key: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDb7DAuZq9ylfyGBni7ghZ5m8QLB+yw1oRljNYtGNzG119AC8fFQyogp9ZwAOkxysyLYk4gtYdRm7JFe8VFfMHJUy1G/xVtxcaHjeVu5Ivs07V62gk1Ox1xgAAh80/QwPA2QwJviCiEu0E8/ndsIxTDSAy5Ec0I4Key9EEPABjMRmpHnsbaP4/zBOy2kk6liJR697aELb73kMz+Jn4BSuXpmbROIvLh86hGqLP9bpoYsHin7QnOZPDHfTxqSiOZnubP2ASWtirPAZdkPAjHShkhEgLTBkOWDFPTAUX9gQbYL3/OX44wk78pDLPYWG+e9vbcFBJDj7nIHJfB2zHBgNWB vagrant
 aws_ssm_pihole_sync_private_key: changeme
