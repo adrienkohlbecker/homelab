@@ -1,26 +1,5 @@
 ---
 
-- name: extract rrsync
-  command: "gunzip --keep /usr/share/doc/rsync/scripts/rrsync.gz"
-  args:
-    creates: /usr/share/doc/rsync/scripts/rrsync
-  become: yes
-  tags:
-    - services
-    - pi-backup-server
-
-- name: Ensure rrsync is executable
-  file:
-    dest: /usr/share/doc/rsync/scripts/rrsync
-    state: file
-    owner: root
-    group: root
-    mode: 0755
-  become: yes
-  tags:
-    - services
-    - pi-backup-server
-
 - name: Add homelab group
   group:
     name: homelab
@@ -47,7 +26,7 @@
 - name: Sudo without password
   copy:
     dest: "/etc/sudoers.d/homelab"
-    content: "Defaults:homelab env_keep += \"SSH_ORIGINAL_COMMAND SSH_CONNECTION\"\nhomelab ALL=(ALL) NOPASSWD: /usr/share/doc/rsync/scripts/rrsync -ro /mnt/services/\n"
+    content: "Defaults:homelab env_keep += \"SSH_ORIGINAL_COMMAND SSH_CONNECTION\"\nhomelab ALL=(ALL) NOPASSWD: /usr/bin/rrsync -ro /mnt/services/\n"
     validate: visudo -cf %s
   become: yes
   tags:
@@ -60,7 +39,7 @@
     user: homelab
     state: present
     key: "{{ aws_ssm_pi_ssh_backup_public_key }}"
-    key_options: command="/usr/bin/sudo /usr/share/doc/rsync/scripts/rrsync -ro /mnt/services/",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding
+    key_options: command="/usr/bin/sudo /usr/bin/rrsync -ro /mnt/services/",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding
     exclusive: true
   become: yes
   tags:

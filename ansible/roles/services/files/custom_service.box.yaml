@@ -1,0 +1,29 @@
+---
+
+instances:
+  - health_status: none
+    container_names:
+      - couchpotato
+      - gogs
+      - homebridge
+      - portainer
+      - sabnzbd
+      - headphones
+      - quotes
+      - sonarr
+      - speedtest
+      - ssh-arq
+      - ssh-brumath
+      - ssh-eckwersheim
+      - traefik
+      - transmission
+      - filebrowser
+    min_collection_interval: 30
+
+  - health_status: healthy
+    container_names:
+      - pihole
+      - plex
+      - tautulli
+      - netdata
+    min_collection_interval: 30

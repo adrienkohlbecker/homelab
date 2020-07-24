@@ -21,10 +21,8 @@ apt-get -y upgrade >/dev/null
 echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/ubuntu
 
 # Remove 5s grub timeout to speed up booting
-sed -i 's/^GRUB_HIDDEN_TIMEOUT=/#GRUB_HIDDEN_TIMEOUT=/' /etc/default/grub
-sed -i 's/^GRUB_HIDDEN_TIMEOUT_QUIET=/#GRUB_HIDDEN_TIMEOUT_QUIET=/' /etc/default/grub
-sed -i 's/^GRUB_TIMEOUT=10/GRUB_TIMEOUT=0/' /etc/default/grub
-sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/GRUB_CMDLINE_LINUX_DEFAULT=""/' /etc/default/grub
+echo 'GRUB_TIMEOUT=0' >> /etc/default/grub.d/99-custom.cfg
+echo 'GRUB_CMDLINE_LINUX_DEFAULT=""' >> /etc/default/grub.d/99-custom.cfg
 
 update-grub
 

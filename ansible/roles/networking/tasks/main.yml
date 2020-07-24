@@ -10,10 +10,20 @@
   tags:
     - networking
 
+- name: Drop netcfg network config
+  file:
+    path: /etc/netplan/01-netcfg.yaml
+    state: absent
+  become: yes
+  notify:
+    - Apply netplan
+  tags:
+    - networking
+
 - name: Configure networking
-  template:
-    src: "config.{{ inventory_hostname_short }}.yaml.j2"
-    dest: /etc/netplan/01-netcfg.yaml
+  copy:
+    src: "config.{{ inventory_hostname_short }}.yaml"
+    dest: /etc/netplan/00-installer-config.yaml
     owner: root
     group: root
     mode: 0644

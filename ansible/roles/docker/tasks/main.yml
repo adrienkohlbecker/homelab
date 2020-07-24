@@ -10,7 +10,7 @@
 
 - name: Add docker repository
   apt_repository:
-    repo: deb https://download.docker.com/linux/ubuntu bionic stable
+    repo: deb https://download.docker.com/linux/ubuntu focal stable
     state: present
     update_cache: yes
   become: yes
@@ -57,8 +57,8 @@
 - name: Schedule the clean script
   cron:
     name: docker_clean
-    minute: 0
-    hour: 6
+    minute: '0'
+    hour: '6'
     job: /usr/bin/systemd-cat --identifier docker_clean /usr/local/bin/docker_clean
     user: root
     cron_file: ansible_docker_clean

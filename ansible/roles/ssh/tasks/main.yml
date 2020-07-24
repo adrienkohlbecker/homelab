@@ -10,7 +10,7 @@
 - name: Configure sshd
   copy:
     src: sshd_config
-    dest: /etc/ssh/sshd_config
+    dest: /etc/ssh/sshd_config.d/config
     owner: root
     group: root
     mode: 0644

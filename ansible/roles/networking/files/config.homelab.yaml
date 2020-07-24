@@ -1,0 +1,7 @@
+# This is the network config written by 'subiquity'
+network:
+  ethernets:
+    enp5s0:
+      dhcp4: true
+      dhcp6: false
+  version: 2

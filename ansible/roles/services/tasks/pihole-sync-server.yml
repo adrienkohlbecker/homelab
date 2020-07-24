@@ -1,26 +1,5 @@
 ---
 
-- name: extract rrsync
-  command: "gunzip --keep /usr/share/doc/rsync/scripts/rrsync.gz"
-  args:
-    creates: /usr/share/doc/rsync/scripts/rrsync
-  become: yes
-  tags:
-    - services
-    - pihole-sync-server
-
-- name: Ensure rrsync is executable
-  file:
-    dest: /usr/share/doc/rsync/scripts/rrsync
-    state: file
-    owner: root
-    group: root
-    mode: 0755
-  become: yes
-  tags:
-    - services
-    - pihole-sync-server
-
 - name: Add pi group
   group:
     name: pi
@@ -47,7 +26,7 @@
 - name: Sudo without password
   copy:
     dest: "/etc/sudoers.d/pi"
-    content: "Defaults:pi env_keep += \"SSH_ORIGINAL_COMMAND SSH_CONNECTION\"\npi ALL=(ALL) NOPASSWD: /usr/share/doc/rsync/scripts/rrsync -ro /mnt/services/pihole/\n"
+    content: "Defaults:pi env_keep += \"SSH_ORIGINAL_COMMAND SSH_CONNECTION\"\npi ALL=(ALL) NOPASSWD: /usr/bin/rrsync -ro /mnt/services/pihole/\n"
     validate: visudo -cf %s
   become: yes
   tags:
@@ -60,7 +39,7 @@
     user: pi
     state: present
     key: "{{ aws_ssm_pihole_sync_public_key }}"
-    key_options: command="/usr/bin/sudo /usr/share/doc/rsync/scripts/rrsync -ro /mnt/services/pihole/",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding
+    key_options: command="/usr/bin/sudo /usr/bin/rrsync -ro /mnt/services/pihole/",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding
     exclusive: true
   become: yes
   tags:

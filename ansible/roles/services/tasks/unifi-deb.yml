@@ -2,7 +2,7 @@
 
 - name: Download mongo apt key
   apt_key:
-    url: https://www.mongodb.org/static/pgp/server-3.4.asc
+    url: https://www.mongodb.org/static/pgp/server-3.6.asc
     state: present
   become: yes
   tags:
@@ -11,16 +11,35 @@
 
 - name: Add mongo repository
   apt_repository:
-    repo: deb [ arch=arm64 ] http://repo.mongodb.org/apt/ubuntu xenial/mongodb-org/3.4 multiverse
+    repo: deb http://repo.mongodb.org/apt/ubuntu xenial/mongodb-org/3.6 multiverse
     state: present
   become: yes
   tags:
     - services
     - unifi
 
-- name: Install mongodb-org-server
+- name: Get libssl1.0 url
+  shell: curl -s https://packages.ubuntu.com/bionic-updates/amd64/libssl1.0.0/download | grep -io "libssl1.0.0.*amd64.deb" | tail -n1
+  register: libssl_url
+  become: yes
+  changed_when: false
+  tags:
+    - services
+    - unifi
+
+- name: Install libssl1.0
   apt:
-    pkg: mongodb-org-server
+    deb: "http://archive.ubuntu.com/ubuntu/pool/main/o/openssl1.0/{{ libssl_url.stdout }}"
+  become: yes
+  tags:
+    - services
+    - unifi
+
+- name: Install mongodb-org-server & JRE
+  apt:
+    pkg:
+      - mongodb-org-server
+      - default-jre-headless
     state: present
   become: yes
   tags:
@@ -29,9 +48,9 @@
 
 - name: Download unifi
   get_url:
-    src: http://dl.ubnt.com/unifi/debian/pool/ubiquiti/u/unifi/unifi_5.12.35-12979-1_all.deb
-    checksum: sha256:2212b9f87db558e83b2245de76e0d360bae180720e52e654e8cb2a1dfde9c852
-    dest: /opt/unifi_5.12.35-12979-1_all.deb
+    url: http://dl.ubnt.com/unifi/debian/pool/ubiquiti/u/unifi/unifi_5.13.32-13646-1_all.deb
+    checksum: sha256:281e5332db66a830f06c6c52ac735c3e82ac517ed6d5fabc2cf4120bc7f93464
+    dest: /opt/unifi_5.13.32-13646-1_all.deb
     mode: 0644
     owner: root
     group: root
@@ -42,7 +61,7 @@
 
 - name: Install unifi
   apt:
-    deb: /opt/unifi_5.12.35-12979-1_all.deb
+    deb: /opt/unifi_5.13.32-13646-1_all.deb
   become: yes
   tags:
     - services

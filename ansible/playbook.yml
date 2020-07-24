@@ -12,20 +12,17 @@
     - datadog
     - docker
     - deadmanssnitch
-
-- hosts:
-    - beelink
-    - homelab
-  roles:
     - networking
     - grub
 
-- hosts: homelab
+- hosts:
+    - homelab
+    - box
   roles:
     - zfs
     - smart
     - hdparm
-    - ups
+    # - ups
     - ipmi
     - virtualization
 
@@ -55,8 +52,8 @@
 
     - name: waiting for server to come back
       wait_for:
-        port: 22
-        host: "{{ ansible_ssh_host }}"
+        port: "{{ ansible_port }}"
+        host: "{{ ansible_host }}"
         search_regex: OpenSSH
         delay: 10
       delegate_to: 127.0.0.1
