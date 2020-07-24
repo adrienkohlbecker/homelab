@@ -34,9 +34,9 @@ packer-zfs-without-root:
 
 	# drop root volume, put mirror in first place
 	rm -rf output-homelab-zfs-without-root/disk-cl1*
-	sed -E -i 's|scsi0:0.filename = (.*)|scsi0:0.fileName = "mirror-1-cl1.vmdk"|' output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	sed -E -i 's|scsi0:1.filename = (.*)|scsi0:1.fileName = "mirror-2-cl1.vmdk"|' output-homelab-zfs-without-root/packer-homelab-zfs.vmx
-	sed -E -i 's|scsi0:2(.*)||'                                               output-homelab-zfs-without-root/packer-homelab-zfs.vmx
+	gsed -E -i 's|scsi0:0.filename = (.*)|scsi0:0.fileName = "mirror-1-cl1.vmdk"|' output-homelab-zfs-without-root/packer-homelab-zfs.vmx
+	gsed -E -i 's|scsi0:1.filename = (.*)|scsi0:1.fileName = "mirror-2-cl1.vmdk"|' output-homelab-zfs-without-root/packer-homelab-zfs.vmx
+	gsed -E -i 's|scsi0:2(.*)||'                                               output-homelab-zfs-without-root/packer-homelab-zfs.vmx
 
 	# add data volumes
 	/Applications/VMware\ Fusion.app/Contents/Library/vmware-vdiskmanager -c -s 10G -t 1 -a scsi output-homelab-zfs-without-root/data-1.vmdk

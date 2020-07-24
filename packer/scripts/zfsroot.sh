@@ -30,7 +30,7 @@ zpool export rpool
 zpool import -o altroot=/mirror -d /dev/disk/by-id rpool
 
 zfs create -o mountpoint=none rpool/ROOT
-zfs create -o mountpoint=/ -o acltype=posixacl rpool/ROOT/bionic
+zfs create -o mountpoint=/ -o acltype=posixacl rpool/ROOT/focal
 
 rsync --one-file-system -aAXHW / /mirror/
 
@@ -45,8 +45,8 @@ chroot /mirror grub-install /dev/sdb
 chroot /mirror grub-install /dev/sdc
 chroot /mirror blkid
 chroot /mirror cat /boot/grub/grub.cfg
-# remove /dev/mapper from fstab as we'll remove that disk next
-chroot /mirror sed -i '/mapper/d' /etc/fstab
+# remove root disk from fstab as we'll remove that disk next
+chroot /mirror sed -i '/ext4/d' /etc/fstab
 
 # umount /mirror/dev
 # umount /mirror/proc

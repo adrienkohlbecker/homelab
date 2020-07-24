@@ -19,7 +19,7 @@ zfs create -o mountpoint=/mnt/scratch rpool/scratch
 
 # data
 zpool create -f -o ashift=12 -O compression=lz4 -O casesensitivity=insensitive -O normalization=formD -O mountpoint=none -O atime=off -O xattr=sa \
-  data raidz2 /dev/sdc /dev/sdd /dev/sde /dev/sdf /dev/sdg /dev/sdh
+  data raidz2 /dev/sdc /dev/sdd /dev/sde /dev/sdf
 zfs create -o mountpoint=/mnt/data data/data
 zfs create -o mountpoint=none data/pictures
 zfs create -o mountpoint=none data/arq
@@ -34,6 +34,3 @@ zpool export data
 zpool import -d /dev/disk/by-id data
 
 apt-get -y remove --auto-remove parted
-
-# Fix networking
-sed -i "s/ens192/ens32/" /etc/netplan/01-netcfg.yaml
