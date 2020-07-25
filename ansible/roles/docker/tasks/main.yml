@@ -1,25 +1,8 @@
 ---
 
-- name: Add docker repository key
-  apt_key:
-    url: https://download.docker.com/linux/ubuntu/gpg
-    state: present
-  become: yes
-  tags:
-    - docker
-
-- name: Add docker repository
-  apt_repository:
-    repo: deb https://download.docker.com/linux/ubuntu focal stable
-    state: present
-    update_cache: yes
-  become: yes
-  tags:
-    - docker
-
 - name: Install docker
   apt:
-    pkg: docker-ce
+    pkg: docker.io
   become: yes
   tags:
     - docker
