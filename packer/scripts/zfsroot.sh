@@ -15,7 +15,7 @@ mdadm --zero-superblock --force /dev/sdc || true
 sgdisk --zap-all /dev/sdb
 sgdisk --zap-all /dev/sdc
 
-zpool create -f -o ashift=12 -O compression=lz4 -O mountpoint=none -O atime=off -O normalization=formD -O xattr=sa \
+zpool create -f -o autotrim=on -o ashift=12 -O compression=lz4 -O mountpoint=none -O atime=off -O normalization=formD -O xattr=sa \
   rpool mirror /dev/sdb /dev/sdc
 
 # create grub partitions (zfs leaves the first 2048 sectors free)

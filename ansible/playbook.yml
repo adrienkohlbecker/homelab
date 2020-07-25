@@ -52,7 +52,7 @@
 
     - name: waiting for server to come back
       wait_for:
-        port: "{{ ansible_port }}"
+        port: "{{ ansible_port | default(22) }}"
         host: "{{ ansible_host }}"
         search_regex: OpenSSH
         delay: 10

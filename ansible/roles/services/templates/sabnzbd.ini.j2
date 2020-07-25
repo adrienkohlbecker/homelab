@@ -349,17 +349,17 @@ pushover_token = ""
 pushover_userkey = ""
 [servers]
 [[news-ssl.newsgroupdirect.com]]
-connections = 50
-displayname = news-ssl.newsgroupdirect.com
+connections = 100
+displayname = Newsgroupdirect
 enable = 1
-host = news-ssl.newsgroupdirect.com
+host = europe.newsgroupdirect.com
 name = news-ssl.newsgroupdirect.com
 notes = ""
 optional = 0
 password = {{ aws_ssm_sabnzbd_newsgroupdirect_password }}
 port = 563
 priority = 0
-retention = 3000
+retention = 3500
 send_group = 0
 ssl = 1
 ssl_ciphers = ""
@@ -367,8 +367,8 @@ ssl_verify = 1
 timeout = 120
 username = {{ aws_ssm_sabnzbd_newsgroupdirect_username }}
 [[news.usenet.farm]]
-connections = 20
-displayname = news.usenet.farm
+connections = 50
+displayname = Usenet Farm
 enable = 1
 host = news.usenet.farm
 name = news.usenet.farm

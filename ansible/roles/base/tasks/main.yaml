@@ -73,7 +73,7 @@
 
 - name: Install pip deps
   pip:
-    name: docker-py # ansible dep for docker module
+    name: docker # ansible dep for docker module
   become: yes
   tags:
     - base
