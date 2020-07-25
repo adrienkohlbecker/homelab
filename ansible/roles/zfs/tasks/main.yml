@@ -43,6 +43,19 @@
   tags:
     - zfs
 
+- name: Schedule the trim script
+  cron:
+    name: zfs_trim
+    weekday: 4
+    hour: 5
+    minute: 42
+    job: /sbin/zpool trim rpool
+    user: root
+    cron_file: ansible_zfs_trim
+  become: yes
+  tags:
+    - zfs
+
 - name: Copy the zfs tool
   copy:
     src: zfs_snaps.sh
