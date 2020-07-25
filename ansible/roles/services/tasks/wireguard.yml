@@ -1,14 +1,5 @@
 ---
 
-- name: Add wireguard repository
-  apt_repository:
-    repo: ppa:wireguard/wireguard
-    state: present
-  become: yes
-  tags:
-    - services
-    - wireguard
-
 - name: Install wireguard
   apt:
     pkg:
