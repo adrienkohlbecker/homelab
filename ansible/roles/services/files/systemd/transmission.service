@@ -38,3 +38,6 @@ ExecStart=/usr/bin/docker run \
     --label "traefik.protocol=http" \
     linuxserver/transmission:latest
 ExecStop=/usr/bin/docker stop transmission
+
+[Install]
+WantedBy=compose.service
