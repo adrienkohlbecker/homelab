@@ -160,6 +160,12 @@
     state: restarted
   become: yes
 
+- name: Restart monero
+  service:
+    name: monero
+    state: restarted
+  become: yes
+
 - name: Restart tunnel-gdk
   service:
     name: tunnel-gdk
