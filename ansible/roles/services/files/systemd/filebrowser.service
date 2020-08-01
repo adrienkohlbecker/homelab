@@ -35,3 +35,6 @@ ExecStart=/usr/bin/docker run \
     filebrowser/filebrowser:latest \
     --noauth
 ExecStop=/usr/bin/docker stop filebrowser
+
+[Install]
+WantedBy=compose.service

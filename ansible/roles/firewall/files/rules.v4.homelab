@@ -2,8 +2,8 @@
 :INPUT ACCEPT [0:0]
 :FORWARD DROP [0:0]
 :OUTPUT ACCEPT [0:0]
-:FILTERS-ENP5S0 - [0:0]
-:FILTERS-ENP6S0 - [0:0]
+:FILTERS-ENO1 - [0:0]
+:FILTERS-ENO2 - [0:0]
 :DOCKER-USER - [0:0]
 
 ##################################################
@@ -15,8 +15,8 @@
 
 -F INPUT
 -F DOCKER-USER
--F FILTERS-ENP5S0
--F FILTERS-ENP6S0
+-F FILTERS-ENO1
+-F FILTERS-ENO2
 
 ##################################################
 #                  FORWARD RULES                 #
@@ -42,8 +42,8 @@
 -A INPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
 
 # Filter chains for interfaces
--A INPUT -i enp5s0 -j FILTERS-ENP5S0
--A INPUT -i enp6s0 -j FILTERS-ENP6S0
+-A INPUT -i eno1 -j FILTERS-ENO1
+-A INPUT -i eno2 -j FILTERS-ENO2
 
 # Accept inter container traffic
 -A INPUT -i docker0 -j ACCEPT
@@ -63,8 +63,8 @@
 -A DOCKER-USER -m state --state ESTABLISHED,RELATED -j ACCEPT
 
 # Filter chains for interfaces
--A DOCKER-USER -i enp5s0 -j FILTERS-ENP5S0
--A DOCKER-USER -i enp6s0 -j FILTERS-ENP6S0
+-A DOCKER-USER -i eno1 -j FILTERS-ENO1
+-A DOCKER-USER -i eno2 -j FILTERS-ENO2
 
 # Someone authenticated by wireguard has unrestricted access to the network
 -A DOCKER-USER -i wg0  -j ACCEPT
@@ -72,57 +72,57 @@
 # Note: can't deny rest of traffic here as outbound traffic and inter container traffic goes through this
 
 ##################################################
-#             ENP5S0 RULES (PRIVATE)             #
+#             ENO1 RULES (PRIVATE)             #
 ##################################################
 
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 22 -j ACCEPT    -m comment --comment "Accept SSH"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 53 -j ACCEPT    -m comment --comment "Accept DNS/tcp"
--A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 53 -j ACCEPT    -m comment --comment "Accept DNS/udp"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT    -m comment --comment "Accept HTTP"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 443 -j ACCEPT   -m comment --comment "Accept HTTPS"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 2221 -j ACCEPT  -m comment --comment "Accept SSH/gogs"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 2222 -j ACCEPT  -m comment --comment "Accept SSH/eckwersheim"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 2223 -j ACCEPT  -m comment --comment "Accept SSH/brumath"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 2224 -j ACCEPT  -m comment --comment "Accept SSH/arq"
--A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 5353 -j ACCEPT  -m comment --comment "Accept mDNS"
--A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 8125 -j ACCEPT  -m comment --comment "Accept statsd"
--A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 51820 -j ACCEPT -m comment --comment "Accept wireguard"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 51826 -j ACCEPT -m comment --comment "Accept Homebridge"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 51828 -j ACCEPT -m comment --comment "Accept Homebridge webhooks"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 51413 -j ACCEPT -m comment --comment "Accept Transmission"
--A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 51413 -j ACCEPT -m comment --comment "Accept Transmission"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 22 -j ACCEPT    -m comment --comment "Accept SSH"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 53 -j ACCEPT    -m comment --comment "Accept DNS/tcp"
+-A FILTERS-ENO1 -m state --state NEW -m udp -p udp --dport 53 -j ACCEPT    -m comment --comment "Accept DNS/udp"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT    -m comment --comment "Accept HTTP"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 443 -j ACCEPT   -m comment --comment "Accept HTTPS"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 2221 -j ACCEPT  -m comment --comment "Accept SSH/gogs"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 2222 -j ACCEPT  -m comment --comment "Accept SSH/eckwersheim"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 2223 -j ACCEPT  -m comment --comment "Accept SSH/brumath"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 2224 -j ACCEPT  -m comment --comment "Accept SSH/arq"
+-A FILTERS-ENO1 -m state --state NEW -m udp -p udp --dport 5353 -j ACCEPT  -m comment --comment "Accept mDNS"
+-A FILTERS-ENO1 -m state --state NEW -m udp -p udp --dport 8125 -j ACCEPT  -m comment --comment "Accept statsd"
+-A FILTERS-ENO1 -m state --state NEW -m udp -p udp --dport 51820 -j ACCEPT -m comment --comment "Accept wireguard"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 51826 -j ACCEPT -m comment --comment "Accept Homebridge"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 51828 -j ACCEPT -m comment --comment "Accept Homebridge webhooks"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 51413 -j ACCEPT -m comment --comment "Accept Transmission"
+-A FILTERS-ENO1 -m state --state NEW -m udp -p udp --dport 51413 -j ACCEPT -m comment --comment "Accept Transmission"
 
 # Plex ports
--A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 1900 -j ACCEPT  -m comment --comment "Accept Plex"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 3005 -j ACCEPT  -m comment --comment "Accept Plex"
--A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 5353 -j ACCEPT  -m comment --comment "Accept Plex"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 8324 -j ACCEPT  -m comment --comment "Accept Plex"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 32400 -j ACCEPT -m comment --comment "Accept Plex"
--A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 32410 -j ACCEPT -m comment --comment "Accept Plex"
--A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 32412 -j ACCEPT -m comment --comment "Accept Plex"
--A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 32413 -j ACCEPT -m comment --comment "Accept Plex"
--A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 32414 -j ACCEPT -m comment --comment "Accept Plex"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 32469 -j ACCEPT -m comment --comment "Accept Plex"
+-A FILTERS-ENO1 -m state --state NEW -m udp -p udp --dport 1900 -j ACCEPT  -m comment --comment "Accept Plex"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 3005 -j ACCEPT  -m comment --comment "Accept Plex"
+-A FILTERS-ENO1 -m state --state NEW -m udp -p udp --dport 5353 -j ACCEPT  -m comment --comment "Accept Plex"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 8324 -j ACCEPT  -m comment --comment "Accept Plex"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 32400 -j ACCEPT -m comment --comment "Accept Plex"
+-A FILTERS-ENO1 -m state --state NEW -m udp -p udp --dport 32410 -j ACCEPT -m comment --comment "Accept Plex"
+-A FILTERS-ENO1 -m state --state NEW -m udp -p udp --dport 32412 -j ACCEPT -m comment --comment "Accept Plex"
+-A FILTERS-ENO1 -m state --state NEW -m udp -p udp --dport 32413 -j ACCEPT -m comment --comment "Accept Plex"
+-A FILTERS-ENO1 -m state --state NEW -m udp -p udp --dport 32414 -j ACCEPT -m comment --comment "Accept Plex"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 32469 -j ACCEPT -m comment --comment "Accept Plex"
 # end Plex ports
 
 # samba ports
--A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 137 -j ACCEPT -m comment --comment "Accept Samba"
--A FILTERS-ENP5S0 -m state --state NEW -m udp -p udp --dport 138 -j ACCEPT -m comment --comment "Accept Samba"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 139 -j ACCEPT -m comment --comment "Accept Samba"
--A FILTERS-ENP5S0 -m state --state NEW -m tcp -p tcp --dport 445 -j ACCEPT -m comment --comment "Accept Samba"
+-A FILTERS-ENO1 -m state --state NEW -m udp -p udp --dport 137 -j ACCEPT -m comment --comment "Accept Samba"
+-A FILTERS-ENO1 -m state --state NEW -m udp -p udp --dport 138 -j ACCEPT -m comment --comment "Accept Samba"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 139 -j ACCEPT -m comment --comment "Accept Samba"
+-A FILTERS-ENO1 -m state --state NEW -m tcp -p tcp --dport 445 -j ACCEPT -m comment --comment "Accept Samba"
 # end samba ports
 
 # Reject anything else
--A FILTERS-ENP5S0 -p tcp -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] ENP5S0:REJECT: "
--A FILTERS-ENP5S0 -j REJECT --reject-with icmp-host-prohibited
+-A FILTERS-ENO1 -p tcp -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] ENO1:REJECT: "
+-A FILTERS-ENO1 -j REJECT --reject-with icmp-host-prohibited
 
 ##################################################
-#              ENP6S0 RULES (SHARED)             #
+#              ENO2 RULES (SHARED)             #
 ##################################################
 
 # Reject anything else
--A FILTERS-ENP6S0 -p tcp -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] ENP6S0:REJECT: "
--A FILTERS-ENP6S0 -j REJECT --reject-with icmp-host-prohibited
+-A FILTERS-ENO2 -p tcp -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] ENO2:REJECT: "
+-A FILTERS-ENO2 -j REJECT --reject-with icmp-host-prohibited
 
 ##################################################
 #                       END                      #
