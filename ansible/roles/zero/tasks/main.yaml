@@ -1,0 +1,144 @@
+---
+
+- name: Install packages
+  apt:
+    pkg:
+      - git
+      - openssh-server
+      - minicom
+      - nodejs
+      - npm
+      - jq
+      - vim
+    state: present
+  become: yes
+  tags:
+    - zero
+
+- name: Install sonos repo
+  command: "su {{ deploy_user }} -c 'git clone https://github.com/jishi/node-sonos-http-api.git'"
+  args:
+    chdir: "/home/{{ deploy_user }}"
+    creates: "/home/{{ deploy_user }}/node-sonos-http-api"
+  become: yes
+  tags:
+    - zero
+  notify:
+    - Restart sonos-http-api
+
+- name: Install packages
+  npm:
+    path: "/home/{{ deploy_user }}/node-sonos-http-api"
+    production: yes
+  become: yes
+  become_user: "{{ deploy_user }}"
+  tags:
+    - zero
+  notify:
+    - Restart sonos-http-api
+
+- name: Configure sonos
+  copy:
+    src: settings.json
+    dest: "/home/{{ deploy_user }}/node-sonos-http-api/settings.json"
+    group: "{{ deploy_user }}"
+    owner: "{{ deploy_user }}"
+    mode: 0644
+  become: yes
+  tags:
+    - zero
+  notify:
+    - Restart sonos-http-api
+
+- name: Create webhook directory
+  file:
+    dest: "/home/{{ deploy_user }}/webhook"
+    state: directory
+    group: "{{ deploy_user }}"
+    owner: "{{ deploy_user }}"
+    mode: 0755
+  become: yes
+  tags:
+    - zero
+  notify:
+    - Restart webhook
+
+- name: Configure webhook
+  copy:
+    src: webhook/package.json
+    dest: "/home/{{ deploy_user }}/webhook"
+    group: "{{ deploy_user }}"
+    owner: "{{ deploy_user }}"
+    mode: 0644
+  become: yes
+  tags:
+    - zero
+  notify:
+    - Restart webhook
+
+- name: Configure webhook
+  copy:
+    src: webhook/server.js
+    dest: "/home/{{ deploy_user }}/webhook"
+    group: "{{ deploy_user }}"
+    owner: "{{ deploy_user }}"
+    mode: 0644
+  become: yes
+  tags:
+    - zero
+  notify:
+    - Restart webhook
+
+- name: Install packages
+  npm:
+    path: "/home/{{ deploy_user }}/webhook"
+  become: yes
+  become_user: "{{ deploy_user }}"
+  tags:
+    - zero
+  notify:
+    - Restart webhook
+
+- name: Copy the unit file
+  copy:
+    src: sonos-http-api.service
+    dest: /etc/systemd/system/sonos-http-api.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - zero
+  notify:
+    - Restart sonos-http-api
+
+- name: Enable the service
+  systemd:
+    name: sonos-http-api
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - zero
+
+- name: Copy the unit file
+  copy:
+    src: webhook.service
+    dest: /etc/systemd/system/webhook.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - zero
+  notify:
+    - Restart webhook
+
+- name: Enable the service
+  systemd:
+    name: webhook
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - zero

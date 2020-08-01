@@ -1,0 +1,5 @@
+---
+
+- hosts: zero
+  roles:
+    - zero

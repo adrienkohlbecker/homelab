@@ -1,0 +1,13 @@
+---
+
+- name: Restart sonos-http-api
+  service:
+    name: sonos-http-api
+    state: restarted
+  become: yes
+
+- name: Restart webhook
+  service:
+    name: webhook
+    state: restarted
+  become: yes

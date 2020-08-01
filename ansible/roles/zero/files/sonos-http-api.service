@@ -1,0 +1,19 @@
+# sonos-http-api.service #######################################################################
+[Unit]
+Description=sonos-http-api
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+SyslogIdentifier=sonos-http-api
+
+WorkingDirectory=/home/pi/node-sonos-http-api
+ExecStart=/usr/bin/npm start
+
+[Install]
+WantedBy=multi-user.target
