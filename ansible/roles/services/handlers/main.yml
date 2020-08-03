@@ -160,12 +160,6 @@
     state: restarted
   become: yes
 
-- name: Restart monero
-  service:
-    name: monero
-    state: restarted
-  become: yes
-
 - name: Restart nextcloud
   service:
     name: nextcloud
