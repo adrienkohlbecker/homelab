@@ -18,6 +18,7 @@ instances:
       - traefik
       - transmission
       - filebrowser
+      - monero
     min_collection_interval: 30
 
   - health_status: healthy

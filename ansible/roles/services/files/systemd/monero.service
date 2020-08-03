@@ -1,0 +1,38 @@
+# monero.service #######################################################################
+[Unit]
+Description=monero
+After=docker.service mnt-services.mount
+Requires=docker.service mnt-services.mount
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+SyslogIdentifier=monero
+
+ExecStartPre=-/usr/bin/docker kill monero
+ExecStartPre=-/usr/bin/docker rm monero
+ExecStartPre=-/usr/bin/docker pull xmrto/monero:latest
+ExecStart=/usr/bin/docker run \
+    --init \
+    --name monero \
+    --log-driver none \
+    --env USER_ID=2006 \
+    --network traefik \
+    --volume /mnt/services/monero:/monero \
+    --label "traefik.docker.network=traefik" \
+    --label "traefik.enable=true" \
+    --label "traefik.frontend.rule=Host:monero.kohlby.fr" \
+    --label "traefik.port=28081" \
+    --label "traefik.protocol=http" \
+    xmrto/monero:latest \
+    --data-dir /monero
+ExecStop=/usr/bin/docker stop monero
+
+[Install]
+WantedBy=compose.service
