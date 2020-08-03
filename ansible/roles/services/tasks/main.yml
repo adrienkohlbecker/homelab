@@ -56,6 +56,7 @@
     - import_tasks: quotes.yml
     - import_tasks: transmission.yml
     - import_tasks: filebrowser.yml
+    - import_tasks: nextcloud.yml
     - import_tasks: monero.yml
     - import_tasks: pi-backup-client.yml
     - import_tasks: docker-hub-schedule.yml

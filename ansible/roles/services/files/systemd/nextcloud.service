@@ -1,0 +1,40 @@
+# nextcloud.service #######################################################################
+[Unit]
+Description=nextcloud
+After=docker.service mnt-services.mount
+Requires=docker.service mnt-services.mount
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+SyslogIdentifier=nextcloud
+
+ExecStartPre=-/usr/bin/docker kill nextcloud
+ExecStartPre=-/usr/bin/docker rm nextcloud
+ExecStartPre=-/usr/bin/docker pull linuxserver/nextcloud:latest
+ExecStart=/usr/bin/docker run \
+    --init \
+    --name nextcloud \
+    --log-driver none \
+    --env PUID=2006 \
+    --env PGID=2006 \
+    --env TZ=Europe/Amsterdam \
+    --network traefik \
+    --volume /mnt/services/nextcloud/config:/config \
+    --volume /mnt/services/nextcloud/data:/data \
+    --label "traefik.docker.network=traefik" \
+    --label "traefik.enable=true" \
+    --label "traefik.frontend.rule=Host:nextcloud.kohlby.fr" \
+    --label "traefik.port=80" \
+    --label "traefik.protocol=http" \
+    linuxserver/nextcloud:latest
+ExecStop=/usr/bin/docker stop nextcloud
+
+[Install]
+WantedBy=compose.service
