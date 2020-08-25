@@ -57,3 +57,4 @@ aws_ssm_sendgrid_user: "{{ lookup('aws_ssm', 'sendgrid.user', region='eu-west-1'
 # aws_ssm_pi_ssh_backup_private_key: "{{ lookup('aws_ssm', 'pi.ssh_backup_private_key', region='eu-west-1' ) }}"
 # aws_ssm_pihole_sync_public_key: "{{ lookup('aws_ssm', 'pi.pihole_sync_public_key', region='eu-west-1' ) }}"
 # aws_ssm_pihole_sync_private_key: "{{ lookup('aws_ssm', 'pi.pihole_sync_private_key', region='eu-west-1' ) }}"
+aws_ssm_monero_password: "{{ lookup('aws_ssm', 'monero.password', region='eu-west-1' ) }}"

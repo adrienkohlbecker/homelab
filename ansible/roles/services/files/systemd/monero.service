@@ -21,6 +21,7 @@ ExecStartPre=-/usr/bin/docker pull xmrto/monero:latest
 ExecStart=/usr/bin/docker run \
     --init \
     --name monero \
+    --env-file /etc/env.d/monero \
     --log-driver none \
     --env USER_ID=2006 \
     --network traefik \
