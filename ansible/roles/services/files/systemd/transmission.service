@@ -1,8 +1,8 @@
 # transmission.service #######################################################################
 [Unit]
 Description=transmission
-After=docker.service mnt-services.mount mnt-media.mount
-Requires=docker.service mnt-services.mount mnt-media.mount
+After=docker.service mnt-services.mount mnt-scratch.mount mnt-media.mount
+Requires=docker.service mnt-services.mount mnt-scratch.mount mnt-media.mount
 PartOf=compose.service
 
 StartLimitInterval=300
