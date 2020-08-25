@@ -61,6 +61,7 @@
 -A FILTERS-ENS4 -m state --state NEW -m tcp -p tcp --dport 22 -j ACCEPT    -m comment --comment "Accept SSH"
 -A FILTERS-ENS4 -m state --state NEW -m tcp -p tcp --dport 80 -j ACCEPT    -m comment --comment "Accept HTTP"
 -A FILTERS-ENS4 -m state --state NEW -m tcp -p tcp --dport 443 -j ACCEPT   -m comment --comment "Accept HTTPS"
+-A FILTERS-ENS4 -m state --state NEW -m tcp -p tcp --dport 8080 -j ACCEPT -m comment --comment "Accept Monero"
 
 # Reject anything else
 -A FILTERS-ENS4 -p tcp -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] ENS4:REJECT: "

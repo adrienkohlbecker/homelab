@@ -1,8 +1,8 @@
 # monero.service #######################################################################
 [Unit]
 Description=monero
-After=docker.service mnt-services.mount
-Requires=docker.service mnt-services.mount
+After=docker.service
+Requires=docker.service
 PartOf=compose.service
 
 StartLimitInterval=300
@@ -24,13 +24,8 @@ ExecStart=/usr/bin/docker run \
     --env-file /etc/env.d/monero \
     --log-driver none \
     --env USER_ID=2006 \
-    --network traefik \
     --volume /mnt/services/monero:/monero \
-    --label "traefik.docker.network=traefik" \
-    --label "traefik.enable=true" \
-    --label "traefik.frontend.rule=Host:monero.kohlby.fr" \
-    --label "traefik.port=28081" \
-    --label "traefik.protocol=http" \
+    --publish 8080:28081 \
     xmrto/monero:latest \
     --data-dir /monero
 ExecStop=/usr/bin/docker stop monero
