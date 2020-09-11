@@ -172,18 +172,6 @@
     state: restarted
   become: yes
 
-- name: Restart tunnel-gdk
-  service:
-    name: tunnel-gdk
-    state: restarted
-  become: yes
-
-- name: Restart tunnel-registry
-  service:
-    name: tunnel-registry
-    state: restarted
-  become: yes
-
 - name: Restart transmission
   service:
     name: transmission
