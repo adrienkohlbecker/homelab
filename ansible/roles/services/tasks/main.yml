@@ -87,8 +87,5 @@
 
 - name: Include services
   block:
-    - import_tasks: ssl-proxy.yml
-    - import_tasks: tunnel-gdk.yml
     - import_tasks: monero.yml
-    # - import_tasks: tunnel-registry.yml
   when: inventory_hostname == 'cloud' or inventory_hostname == 'box'
