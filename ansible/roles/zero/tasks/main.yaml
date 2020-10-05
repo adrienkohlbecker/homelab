@@ -78,6 +78,19 @@
 
 - name: Configure webhook
   copy:
+    src: webhook/package-lock.json
+    dest: "/home/{{ deploy_user }}/webhook"
+    group: "{{ deploy_user }}"
+    owner: "{{ deploy_user }}"
+    mode: 0644
+  become: yes
+  tags:
+    - zero
+  notify:
+    - Restart webhook
+
+- name: Configure webhook
+  copy:
     src: webhook/server.js
     dest: "/home/{{ deploy_user }}/webhook"
     group: "{{ deploy_user }}"
@@ -86,6 +99,7 @@
   become: yes
   tags:
     - zero
+    - foo
   notify:
     - Restart webhook
 
