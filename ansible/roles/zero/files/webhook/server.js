@@ -1,10 +1,13 @@
 const fs = require('fs');
 const process = require('process');
 const express = require('express');
-const SerialPort = require('serialport')
+const SerialPort = require('serialport');
+const MarantzDenonTelnet = require('marantz-denon-telnet');
 
 const port = 3000;
 const serialPath = "/dev/ttyACM0";
+
+const marantz = new MarantzDenonTelnet("10.123.30.121");
 
 try {
   fs.accessSync(serialPath, fs.constants.R_OK | fs.constants.W_OK);
@@ -29,24 +32,54 @@ function write(text) {
   });
 }
 
-var lastSeenPlaying = 0;
-var lastSeenStopped = 0;
+var playingSerial = false;
+var playingTelnet = false;
 
-function playing() {
-  if (lastSeenPlaying < Date.now() - 1000) {
-    lastSeenPlaying = Date.now();
-    console.log("PLAYING");
+function setPlayingSerial() {
+  if (!playingSerial) {
+    playingSerial = true;
+    console.log("PLAYING OFFICE");
     write('$I5\r\n');
   } else {
     console.log("debouncing playing");
   }
 }
 
-function stopped() {
-  if (lastSeenStopped < Date.now() - 1000) {
-    lastSeenStopped = Date.now();
-    console.log("STOPPED");
+function setStoppedSerial() {
+  if (playingSerial) {
+    playingSerial = false;
+    console.log("STOPPED OFFICE");
     write('$I1\r\n');
+  } else {
+    console.log("debouncing stopped");
+  }
+}
+
+function setPlayingTelnet() {
+  if (!playingTelnet) {
+    playingTelnet = true;
+    console.log("PLAYING LIVING ROOM");
+    marantz.cmd('PWON', function(error, ret) {
+      error ? console.log(error) : marantz.cmd('SICD', function (error, ret) {
+        error ? console.log(error) : setTimeout(function() {
+          marantz.cmd('MV45', function (error, ret) {
+            console.log((error ? error : 'Sent command to turn AVR on.'));
+          })
+        }, 2000);
+      })
+    });
+  } else {
+    console.log("debouncing playing");
+  }
+}
+
+function setStoppedTelnet() {
+  if (playingTelnet) {
+    playingTelnet = false;
+    console.log("STOPPED LIVING ROOM");
+    marantz.cmd('PWSTANDBY', function(error, ret) {
+      console.log((error ? error : 'Sent command to turn AVR off.'));
+    });
   } else {
     console.log("debouncing stopped");
   }
@@ -58,9 +91,15 @@ app.post('/', function(request, response){
     if (request.body && request.body.type === "transport-state") {
       if (request.body.data && request.body.data.roomName === "Office") {
         if (request.body.data.state && request.body.data.state.playbackState && request.body.data.state.playbackState === "PLAYING") {
-          playing();
+          setPlayingSerial();
         } else {
-          stopped();
+          setStoppedSerial();
+        }
+      } else if (request.body.data && request.body.data.roomName === "Living Room") {
+        if (request.body.data.state && request.body.data.state.playbackState && request.body.data.state.playbackState === "PLAYING") {
+          setPlayingTelnet();
+        } else {
+          setStoppedTelnet();
         }
       }
     }
