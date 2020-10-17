@@ -55,19 +55,27 @@ function setStoppedSerial() {
   }
 }
 
+let wantStopped = false;
+
 function setPlayingTelnet() {
   if (!playingTelnet) {
-    playingTelnet = true;
-    console.log("PLAYING LIVING ROOM");
-    marantz.cmd('PWON', function(error, ret) {
-      error ? console.log(error) : marantz.cmd('SICD', function (error, ret) {
-        error ? console.log(error) : setTimeout(function() {
-          marantz.cmd('MV45', function (error, ret) {
-            console.log((error ? error : 'Sent command to turn AVR on.'));
-          })
-        }, 2000);
-      })
-    });
+    if (wantStopped) {
+      wantStopped = false
+      playingTelnet = true
+      console.log("cancelling stop")
+    } else {
+      playingTelnet = true;
+      console.log("PLAYING LIVING ROOM");
+      marantz.cmd('PWON', function(error, ret) {
+        error ? console.log(error) : marantz.cmd('SICD', function (error, ret) {
+          error ? console.log(error) : setTimeout(function() {
+            marantz.cmd('MV50', function (error, ret) {
+              console.log((error ? error : 'Sent command to turn AVR on.'));
+            })
+          }, 2000);
+        })
+      });
+    }
   } else {
     console.log("debouncing playing");
   }
@@ -76,10 +84,17 @@ function setPlayingTelnet() {
 function setStoppedTelnet() {
   if (playingTelnet) {
     playingTelnet = false;
-    console.log("STOPPED LIVING ROOM");
-    marantz.cmd('PWSTANDBY', function(error, ret) {
-      console.log((error ? error : 'Sent command to turn AVR off.'));
-    });
+    wantStopped = true;
+    console.log("Stopping in 5 seconds")
+    setTimeout(function() {
+      if (wantStopped) {
+        wantStopped = false
+        console.log("STOPPED LIVING ROOM");
+        marantz.cmd('PWSTANDBY', function(error, ret) {
+          console.log((error ? error : 'Sent command to turn AVR off.'));
+        });
+      }
+    }, 5000);
   } else {
     console.log("debouncing stopped");
   }
@@ -87,8 +102,8 @@ function setStoppedTelnet() {
 
 // Access the parse results as request.body
 app.post('/', function(request, response){
-    console.log("Webhook...");
-    if (request.body && request.body.type === "transport-state") {
+  if (request.body && request.body.type === "transport-state") {
+      console.log("Webhook..." + request.body.type + ' ' + (request.body.data.state.playbackState || '') + ' ' + (request.body.data.roomName || ' '));
       if (request.body.data && request.body.data.roomName === "Office") {
         if (request.body.data.state && request.body.data.state.playbackState && request.body.data.state.playbackState === "PLAYING") {
           setPlayingSerial();
@@ -96,6 +111,7 @@ app.post('/', function(request, response){
           setStoppedSerial();
         }
       } else if (request.body.data && request.body.data.roomName === "Living Room") {
+        console.log('playingTelnet ' + playingTelnet + ' wantStopped ' + wantStopped)
         if (request.body.data.state && request.body.data.state.playbackState && request.body.data.state.playbackState === "PLAYING") {
           setPlayingTelnet();
         } else {
