@@ -22,8 +22,8 @@ ExecStart=/usr/bin/docker run \
     --init \
     --name nextcloud \
     --log-driver none \
-    --env PUID=2006 \
-    --env PGID=2006 \
+    --env PUID=2007 \
+    --env PGID=2007 \
     --env TZ=Europe/Amsterdam \
     --network traefik \
     --volume /mnt/services/nextcloud/config:/config \

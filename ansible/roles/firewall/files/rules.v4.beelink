@@ -41,6 +41,7 @@
 
 # Filter chains for interfaces
 -A INPUT -i enp1s0 -j FILTERS-ENP1S0
+-A INPUT -i mac0 -j FILTERS-ENP1S0
 
 # Someone authenticated by wireguard has unrestricted access to the network
 -A INPUT -i wg0 -j ACCEPT
@@ -58,6 +59,7 @@
 
 # Filter chains for interfaces
 -A DOCKER-USER -i enp1s0 -j FILTERS-ENP1S0
+-A DOCKER-USER -i mac0 -j FILTERS-ENP1S0
 
 # Someone authenticated by wireguard has unrestricted access to the network
 -A DOCKER-USER -i wg0  -j ACCEPT
