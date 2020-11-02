@@ -54,7 +54,7 @@
     state: directory
     owner: nextcloud
     group: nextcloud
-    mode: 0775
+    mode: 0770
   become: yes
   tags:
     - services

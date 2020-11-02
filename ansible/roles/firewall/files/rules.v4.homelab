@@ -43,6 +43,7 @@
 
 # Filter chains for interfaces
 -A INPUT -i eno1 -j FILTERS-ENO1
+-A INPUT -i mac0 -j FILTERS-ENO1
 -A INPUT -i eno2 -j FILTERS-ENO2
 
 # Accept inter container traffic
@@ -64,6 +65,7 @@
 
 # Filter chains for interfaces
 -A DOCKER-USER -i eno1 -j FILTERS-ENO1
+-A DOCKER-USER -i mac0 -j FILTERS-ENO1
 -A DOCKER-USER -i eno2 -j FILTERS-ENO2
 
 # Someone authenticated by wireguard has unrestricted access to the network
