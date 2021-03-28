@@ -24,24 +24,20 @@
                     "type": "humidity"
                 }
             ],
-            "switches": [
-            ],
-            "pushbuttons": [
-            ],
-            "lights": [
-            ],
-            "thermostats": [
-            ],
-            "outlets": [
-            ],
-            "security": [
-            ],
-            "garagedooropeners": [
-            ],
-            "statelessswitches": [
-            ],
-            "lockmechanisms": [
-            ]
+            "switches": [],
+            "pushbuttons": [],
+            "lights": [],
+            "thermostats": [],
+            "outlets": [],
+            "security": [],
+            "garagedooropeners": [],
+            "statelessswitches": [],
+            "lockmechanisms": []
+        },
+        {
+            "name": "Config",
+            "port": 8581,
+            "platform": "config"
         }
     ]
 }
