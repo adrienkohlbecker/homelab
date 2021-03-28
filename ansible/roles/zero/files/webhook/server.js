@@ -1,26 +1,26 @@
-const fs = require('fs');
-const process = require('process');
+// const fs = require('fs');
+// const process = require('process');
 const express = require('express');
-const SerialPort = require('serialport');
+// const SerialPort = require('serialport');
 const MarantzDenonTelnet = require('marantz-denon-telnet');
 const req = require('request');
 
 const port = 3000;
-const serialPath = "/dev/ttyACM0";
+// const serialPath = "/dev/ttyACM0";
 
 const marantz = new MarantzDenonTelnet("10.123.30.121");
 
-try {
-  fs.accessSync(serialPath, fs.constants.R_OK | fs.constants.W_OK);
-} catch (err) {
-  console.error(`No access to ${serialPath}, are you root?`);
-  process.exit(1);
-}
+// try {
+//   fs.accessSync(serialPath, fs.constants.R_OK | fs.constants.W_OK);
+// } catch (err) {
+//   console.error(`No access to ${serialPath}, are you root?`);
+//   process.exit(1);
+// }
 
-const serialPort = new SerialPort(serialPath, { baudRate: 115200 })
-serialPort.on('error', function (err) {
-  console.log('Error: ', err.message)
-})
+// const serialPort = new SerialPort(serialPath, { baudRate: 115200 })
+// serialPort.on('error', function (err) {
+//   console.log('Error: ', err.message)
+// })
 
 const app = express();
 app.use(express.json());
@@ -33,28 +33,28 @@ function write(text) {
   });
 }
 
-var playingSerial = false;
-var playingTelnet = false;
+// var playingSerial = false;
+// var playingTelnet = false;
 
-function setPlayingSerial() {
-  if (!playingSerial) {
-    playingSerial = true;
-    console.log("PLAYING OFFICE");
-    write('$I5\r\n');
-  } else {
-    console.log("debouncing playing");
-  }
-}
+// function setPlayingSerial() {
+//   if (!playingSerial) {
+//     playingSerial = true;
+//     console.log("PLAYING OFFICE");
+//     write('$I5\r\n');
+//   } else {
+//     console.log("debouncing playing");
+//   }
+// }
 
-function setStoppedSerial() {
-  if (playingSerial) {
-    playingSerial = false;
-    console.log("STOPPED OFFICE");
-    write('$I1\r\n');
-  } else {
-    console.log("debouncing stopped");
-  }
-}
+// function setStoppedSerial() {
+//   if (playingSerial) {
+//     playingSerial = false;
+//     console.log("STOPPED OFFICE");
+//     write('$I1\r\n');
+//   } else {
+//     console.log("debouncing stopped");
+//   }
+// }
 
 let wantStopped = false;
 
@@ -116,11 +116,11 @@ app.post('/', function (request, _) {
 
           zone.members.forEach(member => {
             if (member.roomName === "Office") {
-              if (request.body.data.state && request.body.data.state.playbackState && request.body.data.state.playbackState === "PLAYING") {
-                setPlayingSerial();
-              } else {
-                setStoppedSerial();
-              }
+              // if (request.body.data.state && request.body.data.state.playbackState && request.body.data.state.playbackState === "PLAYING") {
+              //   setPlayingSerial();
+              // } else {
+              //   setStoppedSerial();
+              // }
             } else if (member.roomName === "Living Room") {
               console.log('playingTelnet ' + playingTelnet + ' wantStopped ' + wantStopped)
               if (request.body.data.state && request.body.data.state.playbackState && request.body.data.state.playbackState === "PLAYING") {
