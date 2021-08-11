@@ -17,7 +17,7 @@
     src: /dev/zvol/rpool/docker
     fstype: ext4
     state: present
-  when: "{{ zfs_root }}"
+  when: zfs_root
   become: yes
   tags:
     - docker
