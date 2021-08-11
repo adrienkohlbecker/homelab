@@ -6,22 +6,19 @@ scene_only = False
 seed_ratio = 1
 seed_time = 40
 username =
-
 [androidpn]
 broadcast = 1
 enabled = 0
 on_snatch = 0
 url =
 username =
-
 [automation]
 hour = 12
 ignored_genres =
 rating = 8
 required_genres =
-votes = 10000
+votes = 30000
 year =
-
 [awesomehd]
 enabled = False
 extra_score = 20
@@ -31,11 +28,9 @@ passkey =
 prefer_internal = 1
 seed_ratio = 1
 seed_time = 40
-
 [binsearch]
 enabled =
 extra_score = 0
-
 [bithdtv]
 cookiesettingsl =
 cookiesettingsp =
@@ -46,7 +41,6 @@ password =
 seed_ratio = 1
 seed_time = 40
 username =
-
 [bitsoup]
 enabled = False
 extra_score = 20
@@ -54,7 +48,6 @@ password =
 seed_ratio = 1
 seed_time = 40
 username =
-
 [blackhole]
 create_subdir = 0
 directory = /data/blackhole
@@ -62,17 +55,14 @@ enabled = 0
 magnet_file = 0
 manual = 0
 use_for = both
-
 [bluray]
-automation_enabled = False
+automation_enabled = 1
 backlog = False
 chart_display_enabled = 0
-
 [boxcar2]
 enabled = 0
 on_snatch = 0
 token =
-
 [core]
 api_key = {{ aws_ssm_couchpotato_api_key }}
 api_key_internal_meta = ro
@@ -98,13 +88,11 @@ url_base =
 use_proxy = 0
 username =
 username_internal_meta = rw
-
 [crowdai]
-automation_enabled = False
+automation_enabled = 0
 automation_urls = http://YOUR_PROVIDER/rss?t=THE_MOVIE_CATEGORY&i=YOUR_USER_ID&r=YOUR_API_KEY&res=2&rls=2&num=100
 automation_urls_use = 1
 number_grabs = 500
-
 [deluge]
 completed_directory =
 delete_failed = True
@@ -118,7 +106,6 @@ password =
 paused = False
 remove_complete = True
 username =
-
 [discord]
 avatar_url = https://couchpota.to/media/images/couch.png
 bot_name = CouchPotato
@@ -127,7 +114,6 @@ enabled = 0
 include_imdb = True
 on_snatch = 0
 webhook_url =
-
 [email]
 enabled = 0
 from =
@@ -139,28 +125,23 @@ smtp_user =
 ssl = 0
 starttls = 0
 to =
-
 [emby]
 apikey =
 enabled = 0
 host = localhost:8096
-
 [flixster]
-automation_enabled = False
+automation_enabled = 0
 automation_ids =
 automation_ids_use =
-
 [goodfilms]
 automation_enabled = False
 automation_username =
-
 [growl]
 enabled = 0
 hostname =
 on_snatch = False
 password =
 port =
-
 [hadouken]
 api_key =
 auth_pass =
@@ -170,7 +151,6 @@ enabled = 0
 host = localhost:7890
 label =
 version = v4
-
 [hd4free]
 apikey =
 enabled = False
@@ -180,7 +160,6 @@ prefer_internal = 1
 seed_ratio = 0
 seed_time = 0
 username =
-
 [hdaccess]
 apikey =
 enabled = False
@@ -190,7 +169,6 @@ prefer_internal = 1
 seed_ratio = 0
 seed_time = 0
 username =
-
 [hdbits]
 enabled = False
 extra_score = 0
@@ -199,11 +177,9 @@ passkey =
 seed_ratio = 1
 seed_time = 40
 username =
-
 [homey]
 enabled = 0
 url =
-
 [hummingbird]
 automation_enabled = False
 automation_list_completed = False
@@ -212,7 +188,6 @@ automation_list_dropped = False
 automation_list_hold = False
 automation_list_plan = True
 automation_username =
-
 [ilovetorrents]
 enabled = False
 extra_score = 0
@@ -220,7 +195,6 @@ password =
 seed_ratio = 1
 seed_time = 40
 username =
-
 [imdb]
 automation_charts_boxoffice = 1
 automation_charts_rentals = True
@@ -235,7 +209,6 @@ chart_display_enabled = 0
 chart_display_rentals = False
 chart_display_theater = 1
 chart_display_top250 = 1
-
 [iptorrents]
 cookiesetting = uid=1234;pass=567845439634987
 enabled = False
@@ -245,18 +218,15 @@ password =
 seed_ratio = 1
 seed_time = 40
 username =
-
 [itunes]
-automation_enabled = False
-automation_urls = https://itunes.apple.com/rss/topmovies/limit=25/xml,
-automation_urls_use = ,
-
+automation_enabled = 1
+automation_urls = https://rss.itunes.apple.com/api/v1/fr/movies/top-movies/all/50/explicit.rss,https://rss.itunes.apple.com/api/v1/us/movies/top-movies/all/50/explicit.rss
+automation_urls_use = 1,1
 [join]
 apikey =
 devices =
 enabled = 0
 on_snatch = 0
-
 [kickasstorrents]
 domain =
 enabled = False
@@ -264,32 +234,26 @@ extra_score = 0
 only_verified = False
 seed_ratio = 1
 seed_time = 40
-
 [kinepolis]
 automation_enabled = 1
-
 [letterboxd]
-automation_enabled = False
+automation_enabled = 0
 automation_urls =
 automation_urls_use =
-
 [magnetdl]
 enabled = False
 extra_score = 0
 max_pages = 3
 seed_ratio = 1
 seed_time = 40
-
 [manage]
 cleanup = True
 enabled = 1
 library = /media/Movies
 library_refresh_interval = 0
 startup_scan = True
-
 [mediabrowser]
 meta_enabled = False
-
 [morethantv]
 enabled = False
 extra_score = 0
@@ -298,10 +262,8 @@ scene_only = False
 seed_ratio = 1
 seed_time = 40
 username =
-
 [moviemeter]
 automation_enabled = 1
-
 [moviesearcher]
 always_search = False
 cron_day = *
@@ -309,12 +271,10 @@ cron_hour = 19
 cron_minute = 19
 run_on_launch = 0
 search_on_add = 1
-
 [moviesio]
 automation_enabled = False
 automation_urls =
 automation_urls_use =
-
 [newznab]
 api_key = ,{{ aws_ssm_sickrage_dognzb_api_key }},,{{ aws_ssm_sickrage_nzbgeek_api_key }},
 custom_categories =
@@ -323,27 +283,22 @@ enabled = True
 extra_score = 0,0,0,0,0
 host = api.nzb.su,api.dognzb.cr,nzbs.org,https://api.nzbgeek.info,https://www.nzbfinder.ws
 use = 0,1,0,1,0
-
 [nmj]
 database =
 enabled = 0
 host = localhost
 mount =
-
 [notifymyandroid]
 api_key =
 dev_key =
 enabled = 0
 on_snatch = 0
 priority = 0
-
 [nzb]
 retention = 2031
-
 [nzbclub]
 enabled =
 extra_score = 0
-
 [nzbget]
 category = Movies
 delete_failed = True
@@ -354,7 +309,6 @@ password =
 priority = 0
 ssl = 0
 username = nzbget
-
 [nzbvortex]
 api_key =
 delete_failed = True
@@ -362,17 +316,14 @@ enabled = 0
 group =
 host = https://localhost:4321
 manual = False
-
 [omdbapi]
 api_key = {{ aws_ssm_omdb_api_key }}
-
 [omgwtfnzbs]
 api_key =
 custom_tag =
 enabled =
 extra_score = 20
 username =
-
 [passthepopcorn]
 domain =
 enabled = False
@@ -387,7 +338,6 @@ require_approval = 0
 seed_ratio = 1
 seed_time = 40
 username =
-
 [plex]
 auth_token = {{ aws_ssm_plex_token }}
 clients =
@@ -398,35 +348,29 @@ on_snatch = 0
 password =
 use_https = 0
 username =
-
 [pneumatic]
 directory =
 enabled = 0
 manual = 0
-
 [popularmovies]
 automation_enabled = 1
-
 [prowl]
 api_key =
 enabled = 0
 on_snatch = 0
 priority = 0
-
 [pushalot]
 auth_token =
 enabled = 0
 important = 0
 on_snatch = 0
 silent = 0
-
 [pushbullet]
 api_key =
 channels =
 devices =
 enabled = 0
 on_snatch = 0
-
 [pushover]
 api_token = YkxHMYDZp285L265L3IwH3LmzkTaCy
 enabled = 0
@@ -434,7 +378,6 @@ on_snatch = 0
 priority = 0
 sound =
 user_key =
-
 [putio]
 callback_host =
 delete_file = 0
@@ -445,7 +388,6 @@ folder = 0
 https = 0
 manual = 0
 oauth_token =
-
 [qbittorrent]
 delete_files = True
 enabled = 0
@@ -456,14 +398,12 @@ password =
 paused = False
 remove_complete = False
 username =
-
 [rarbg]
 enabled = False
 extra_score = 0
 min_leechers = 0
 min_seeders = 10
 ranked_only = 1
-
 [renamer]
 check_space = True
 cleanup = 1
@@ -490,7 +430,6 @@ unrar = 1
 unrar_modify_date = False
 unrar_path =
 use_tab_threed = True
-
 [rtorrent]
 authentication = basic
 delete_files = True
@@ -507,7 +446,6 @@ ssl = 0
 ssl_ca_bundle =
 ssl_verify = 1
 username =
-
 [sabnzbd]
 api_key = {{ aws_ssm_sabnzbd_api_key }}
 category = movie
@@ -518,7 +456,6 @@ manual = False
 priority = 0
 remove_complete = False
 ssl = 0
-
 [sceneaccess]
 enabled = False
 extra_score = 20
@@ -526,7 +463,6 @@ password =
 seed_ratio = 1
 seed_time = 40
 username =
-
 [scenetime]
 enabled = False
 extra_score = 20
@@ -534,17 +470,14 @@ password =
 seed_ratio = 1
 seed_time = 40
 username =
-
 [script]
 enabled = 0
 path =
-
 [searcher]
 ignored_words = german, dutch, danish, swedish, spanish, italian, korean, dubbed, swesub, korsub, dksubs, vain, HC, CAM
 preferred_method = nzb
 preferred_words = extended, remastered, truehd, dts-hd, hevc, x265, 10bit, atmos, 2160p, dts-x, dolby, vision, HDR
 required_words =
-
 [slack]
 as_user = False
 bot_name = CouchPotato
@@ -555,21 +488,16 @@ icon_url =
 include_imdb = True
 on_snatch = 0
 token =
-
 [sonyps3]
 meta_enabled = False
-
 [subtitle]
 enabled = True
 force = False
 languages = en,fr
-
 [suggestion]
 enabled = 0
-
 [synoindex]
 enabled = 0
-
 [synology]
 destination =
 enabled = 0
@@ -578,16 +506,13 @@ manual = 0
 password =
 use_for = both
 username =
-
 [telegrambot]
 bot_token =
 enabled = 0
 on_snatch = 0
 receiver_user_id =
-
 [themoviedb]
 api_key =
-
 [thepiratebay]
 domain =
 enabled = 0
@@ -595,15 +520,12 @@ extra_score = 0
 seed_ratio = 1
 seed_time = 40
 trusted_only = False
-
 [toasty]
 api_key =
 enabled = 0
 on_snatch = 0
-
 [torrent]
 minimum_seeders = 1
-
 [torrentbytes]
 enabled = False
 extra_score = 20
@@ -611,7 +533,6 @@ password =
 seed_ratio = 1
 seed_time = 40
 username =
-
 [torrentday]
 cookiesetting =
 enabled = False
@@ -620,7 +541,6 @@ password =
 seed_ratio = 1
 seed_time = 40
 username =
-
 [torrentleech]
 enabled = False
 extra_score = 20
@@ -628,7 +548,6 @@ password =
 seed_ratio = 1
 seed_time = 40
 username =
-
 [torrentpotato]
 enabled = False
 extra_score = 0
@@ -638,7 +557,6 @@ pass_key = ,
 seed_ratio = 1
 seed_time = 40
 use =
-
 [torrentshack]
 enabled = False
 extra_score = 0
@@ -647,7 +565,6 @@ scene_only = False
 seed_ratio = 1
 seed_time = 40
 username =
-
 [torrentz]
 enabled = False
 extra_score = 0
@@ -655,19 +572,16 @@ minimal_seeds = 1
 seed_ratio = 1
 seed_time = 40
 verified_only = True
-
 [trailer]
 enabled = False
 name = <filename>-trailer
 quality = 720p
-
 [trakt]
 automation_enabled = False
 automation_oauth_refresh =
 automation_oauth_token =
 notification_enabled = False
 remove_watchlist_enabled = False
-
 [transmission]
 delete_failed = True
 delete_files = True
@@ -681,7 +595,6 @@ remove_complete = True
 rpc_url = transmission
 stalled_as_failed = True
 username =
-
 [twitter]
 access_token_key =
 access_token_secret =
@@ -690,13 +603,11 @@ enabled = 0
 mention =
 on_snatch = 0
 screen_name =
-
 [updater]
 automatic = True
 enabled = True
 git_command = git
 notification = True
-
 [utorrent]
 delete_failed = True
 delete_files = True
@@ -708,20 +619,16 @@ password =
 paused = False
 remove_complete = True
 username =
-
 [wdtvlive]
 meta_enabled = False
 meta_nfo = True
 meta_thumbnail = True
-
 [webhook]
 enabled = 0
 on_snatch = 0
 url =
-
 [windowsmediacenter]
 meta_enabled = False
-
 [xbmc]
 enabled = 0
 force_full_scan = 0
@@ -753,7 +660,6 @@ only_first = 0
 password =
 remote_dir_scan = 0
 username = xbmc
-
 [xmpp]
 enabled = 0
 hostname = talk.google.com
@@ -762,32 +668,17 @@ password =
 port = 5222
 to =
 username =
-
 [yify]
 domain =
 enabled = False
 extra_score = 0
 seed_ratio = 1
 seed_time = 40
-
 [yts]
 enabled = False
 extra_score = 0
 info = False
 seed_ratio = 1
 seed_time = 40
-
 [ytspopular]
-automation_enabled = False
-
-[download_providers]
-
-[notification_providers]
-
-[nzb_providers]
-
-[torrent_providers]
-
-[charts]
-
-[automation_providers]
+automation_enabled = 1

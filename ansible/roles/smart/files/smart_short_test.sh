@@ -8,17 +8,11 @@ set -euxo pipefail
 # Override path, for inside cron
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-shopt -s nullglob
-DEVICES=(/dev/[shv]d?)
-shopt -u nullglob
-
-for device in "${DEVICES[@]}"; do
-
+ls /dev/disk/by-path | grep -v usb | grep -v part | xargs -I{} readlink -f /dev/disk/by-path/{} | grep -v /dev/sr | while read -r device ; do
   smartctl -t short $device
   echo "Waiting 2 minutes for test on $device ..."
   sleep 120
   echo "$device done"
-
 done
 
 echo "Done"

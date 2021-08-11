@@ -17,6 +17,9 @@ zfs create -o mountpoint=/mnt/services rpool/services
 zfs create -o mountpoint=/mnt/vms/ssd -o recordsize=4k rpool/vms
 zfs create -o mountpoint=/mnt/scratch rpool/scratch
 
+zfs create -V 20gb rpool/docker
+mkfs.ext4 /dev/zvol/rpool/docker
+
 # data
 zpool create -f -o ashift=12 -O compression=lz4 -O casesensitivity=insensitive -O normalization=formD -O mountpoint=none -O atime=off -O xattr=sa \
   data raidz2 /dev/sdc /dev/sdd /dev/sde /dev/sdf

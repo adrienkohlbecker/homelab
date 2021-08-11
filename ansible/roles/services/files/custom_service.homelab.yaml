@@ -17,7 +17,6 @@ instances:
       - ssh-eckwersheim
       - traefik
       - transmission
-      - filebrowser
     min_collection_interval: 30
 
   - health_status: healthy
@@ -26,4 +25,5 @@ instances:
       - plex
       - tautulli
       - netdata
+      - filebrowser
     min_collection_interval: 30
