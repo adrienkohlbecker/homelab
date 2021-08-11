@@ -1,8 +1,31 @@
 ---
 
+- name: Create mount point
+  file:
+    dest: /var/lib/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0711"
+  become: yes
+  tags:
+    - docker
+
+- name: Mount docker directory
+  mount:
+    path: /var/lib/docker
+    src: /dev/zvol/rpool/docker
+    fstype: ext4
+    state: present
+  become: yes
+  tags:
+    - docker
+
 - name: Install docker
   apt:
-    pkg: docker.io
+    pkg:
+      - docker.io
+      - aufs-tools
   become: yes
   tags:
     - docker

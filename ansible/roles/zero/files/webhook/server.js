@@ -34,7 +34,7 @@ function write(text) {
 }
 
 // var playingSerial = false;
-// var playingTelnet = false;
+var playingTelnet = false;
 
 // function setPlayingSerial() {
 //   if (!playingSerial) {
