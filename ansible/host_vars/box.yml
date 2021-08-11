@@ -9,6 +9,7 @@ deploy_user_ssh_public_key: |-
   {{ deploy_user_ssh_public_key_global }}
 
 docker_host: true
+zfs_root: true
 
 wireguard_address: 10.123.60.1
 wireguard_listen_port: 51820

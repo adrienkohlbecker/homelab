@@ -17,6 +17,7 @@
     src: /dev/zvol/rpool/docker
     fstype: ext4
     state: present
+  when: "{{ zfs_root }}"
   become: yes
   tags:
     - docker
@@ -25,7 +26,6 @@
   apt:
     pkg:
       - docker.io
-      - aufs-tools
   become: yes
   tags:
     - docker
