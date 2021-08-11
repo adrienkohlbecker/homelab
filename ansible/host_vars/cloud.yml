@@ -9,6 +9,7 @@ deploy_user_uid: 1001
 deploy_user_gid: 1002
 
 docker_host: true
+zfs_root: false
 
 wireguard_address:
 wireguard_listen_port:
