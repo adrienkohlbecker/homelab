@@ -30,3 +30,6 @@ UsePrivilegeSeparation sandbox
 
 # To disable tunneled clear text passwords, change to no here!
 PasswordAuthentication no
+
+# Remove sockets before connecting (used for RemoteForward in gpg forwarding)
+StreamLocalBindUnlink yes
