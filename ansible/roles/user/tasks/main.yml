@@ -78,3 +78,12 @@
   become: yes
   tags:
     - user
+
+- name: Get public key
+  command: gpg --keyserver keyserver.ubuntu.com --recv-keys C248DE6357445D6302F9A62E74BFD03C20CC21AF
+  args:
+    creates: "/home/{{ deploy_user }}/.gnupg/pubring.kbx"
+  become: yes
+  become_user: "{{ deploy_user }}"
+  tags:
+    - user
