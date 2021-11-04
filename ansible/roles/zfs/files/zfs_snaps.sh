@@ -29,61 +29,60 @@ case "$COMMAND" in
 
   backup)
 
-    DISK="$1"
-    FROM="$2"
+    FROM="$1"
 
-    echo "Destroying snapshots: backup-disk-$DISK"
+    echo "Destroying snapshots: backup"
 
-    zfs destroy -f "rpool/ROOT/bionic@backup-disk-$DISK" || true
-    zfs destroy -f "rpool/services@backup-disk-$DISK"    || true
-    zfs destroy -f "rpool/vms@backup-disk-$DISK"         || true
-    zfs destroy -f "data/data@backup-disk-$DISK"         || true
-    zfs destroy -f "data/brumath@backup-disk-$DISK"      || true
-    zfs destroy -f "data/eckwersheim@backup-disk-$DISK"  || true
-    zfs destroy -f "data/arq/adrien@backup-disk-$DISK"   || true
-    zfs destroy -f "data/arq/marie@backup-disk-$DISK"    || true
+    zfs destroy -f "rpool/ROOT/bionic@backup" || true
+    zfs destroy -f "rpool/services@backup"    || true
+    zfs destroy -f "rpool/vms@backup"         || true
+    zfs destroy -f "data/data@backup"         || true
+    zfs destroy -f "data/brumath@backup"      || true
+    zfs destroy -f "data/eckwersheim@backup"  || true
+    zfs destroy -f "data/arq/adrien@backup"   || true
+    zfs destroy -f "data/arq/marie@backup"    || true
 
-    zfs destroy -f "backup-$DISK/bionic@backup-disk-$DISK"       || true
-    zfs destroy -f "backup-$DISK/services@backup-disk-$DISK"     || true
-    zfs destroy -f "backup-$DISK/vms_ssd@backup-disk-$DISK"      || true
-    zfs destroy -f "backup-$DISK/data@backup-disk-$DISK"         || true
-    zfs destroy -f "backup-$DISK/brumath@backup-disk-$DISK"      || true
-    zfs destroy -f "backup-$DISK/eckwersheim@backup-disk-$DISK"  || true
-    zfs destroy -f "backup-$DISK/arq_adrien@backup-disk-$DISK"   || true
-    zfs destroy -f "backup-$DISK/arq_marie@backup-disk-$DISK"    || true
+    zfs destroy -f "backup/bionic@backup"       || true
+    zfs destroy -f "backup/services@backup"     || true
+    zfs destroy -f "backup/vms_ssd@backup"      || true
+    zfs destroy -f "backup/data@backup"         || true
+    zfs destroy -f "backup/brumath@backup"      || true
+    zfs destroy -f "backup/eckwersheim@backup"  || true
+    zfs destroy -f "backup/arq_adrien@backup"   || true
+    zfs destroy -f "backup/arq_marie@backup"    || true
 
     echo "Rolling back backup to: $FROM"
 
-    zfs rollback -r "backup-$DISK/bionic@$FROM"
-    zfs rollback -r "backup-$DISK/services@$FROM"
-    zfs rollback -r "backup-$DISK/vms_ssd@$FROM"
-    zfs rollback -r "backup-$DISK/data@$FROM"
-    zfs rollback -r "backup-$DISK/arq_adrien@$FROM"
-    zfs rollback -r "backup-$DISK/arq_marie@$FROM"
-    zfs rollback -r "backup-$DISK/brumath@$FROM"
-    zfs rollback -r "backup-$DISK/eckwersheim@$FROM"
+    zfs rollback -r "backup/bionic@$FROM"
+    zfs rollback -r "backup/services@$FROM"
+    zfs rollback -r "backup/vms_ssd@$FROM"
+    zfs rollback -r "backup/data@$FROM"
+    zfs rollback -r "backup/arq_adrien@$FROM"
+    zfs rollback -r "backup/arq_marie@$FROM"
+    zfs rollback -r "backup/brumath@$FROM"
+    zfs rollback -r "backup/eckwersheim@$FROM"
 
-    echo "Snapshotting with name=backup-disk-$DISK"
+    echo "Snapshotting with name=backup"
 
-    zfs snapshot "rpool/ROOT/bionic@backup-disk-$DISK"
-    zfs snapshot "rpool/services@backup-disk-$DISK"
-    zfs snapshot "rpool/vms@backup-disk-$DISK"
-    zfs snapshot "data/data@backup-disk-$DISK"
-    zfs snapshot "data/brumath@backup-disk-$DISK"
-    zfs snapshot "data/eckwersheim@backup-disk-$DISK"
-    zfs snapshot "data/arq/adrien@backup-disk-$DISK"
-    zfs snapshot "data/arq/marie@backup-disk-$DISK"
+    zfs snapshot "rpool/ROOT/bionic@backup"
+    zfs snapshot "rpool/services@backup"
+    zfs snapshot "rpool/vms@backup"
+    zfs snapshot "data/data@backup"
+    zfs snapshot "data/brumath@backup"
+    zfs snapshot "data/eckwersheim@backup"
+    zfs snapshot "data/arq/adrien@backup"
+    zfs snapshot "data/arq/marie@backup"
 
-    echo "Incremental sync to backup: $FROM -> backup-disk-$DISK"
+    echo "Incremental sync to backup: $FROM -> backup"
 
-    zfs send -pv -I "rpool/ROOT/bionic@$FROM" "rpool/ROOT/bionic@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/bionic"
-    zfs send -pv -I "rpool/services@$FROM" "rpool/services@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/services"
-    zfs send -pv -I "rpool/vms@$FROM" "rpool/vms@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/vms_ssd"
-    zfs send -pv -I "data/data@$FROM" "data/data@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/data"
-    zfs send -pv -I "data/brumath@$FROM" "data/brumath@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/brumath"
-    zfs send -pv -I "data/eckwersheim@$FROM" "data/eckwersheim@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/eckwersheim"
-    zfs send -pv -I "data/arq/adrien@$FROM" "data/arq/adrien@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/arq_adrien"
-    zfs send -pv -I "data/arq/marie@$FROM" "data/arq/marie@backup-disk-$DISK" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup-$DISK/arq_marie"
+    zfs send -pv -I "rpool/ROOT/bionic@$FROM" "rpool/ROOT/bionic@backup" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup/bionic"
+    zfs send -pv -I "rpool/services@$FROM" "rpool/services@backup" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup/services"
+    zfs send -pv -I "rpool/vms@$FROM" "rpool/vms@backup" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup/vms_ssd"
+    zfs send -pv -I "data/data@$FROM" "data/data@backup" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup/data"
+    zfs send -pv -I "data/brumath@$FROM" "data/brumath@backup" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup/brumath"
+    zfs send -pv -I "data/eckwersheim@$FROM" "data/eckwersheim@backup" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup/eckwersheim"
+    zfs send -pv -I "data/arq/adrien@$FROM" "data/arq/adrien@backup" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup/arq_adrien"
+    zfs send -pv -I "data/arq/marie@$FROM" "data/arq/marie@backup" | mbuffer -q -s 128k -m 1G | zfs receive -v "backup/arq_marie"
 
     ;;
 
@@ -110,23 +109,22 @@ case "$COMMAND" in
 
   destroy-backup)
 
-    DISK="$1"
-    SNAPSHOT="$2"
+    SNAPSHOT="$1"
 
     echo "Destroying snapshots: $SNAPSHOT"
 
     # legacy
-    zfs destroy -f "backup-$DISK/pictures@$SNAPSHOT"     || true
-    zfs destroy -f "backup-$DISK/videos@$SNAPSHOT"       || true
+    zfs destroy -f "backup/pictures@$SNAPSHOT"     || true
+    zfs destroy -f "backup/videos@$SNAPSHOT"       || true
 
-    zfs destroy -f "backup-$DISK/bionic@$SNAPSHOT"       || true
-    zfs destroy -f "backup-$DISK/services@$SNAPSHOT"     || true
-    zfs destroy -f "backup-$DISK/vms_ssd@$SNAPSHOT"      || true
-    zfs destroy -f "backup-$DISK/data@$SNAPSHOT"         || true
-    zfs destroy -f "backup-$DISK/brumath@$SNAPSHOT"      || true
-    zfs destroy -f "backup-$DISK/eckwersheim@$SNAPSHOT"  || true
-    zfs destroy -f "backup-$DISK/arq_adrien@$SNAPSHOT"   || true
-    zfs destroy -f "backup-$DISK/arq_marie@$SNAPSHOT"    || true
+    zfs destroy -f "backup/bionic@$SNAPSHOT"       || true
+    zfs destroy -f "backup/services@$SNAPSHOT"     || true
+    zfs destroy -f "backup/vms_ssd@$SNAPSHOT"      || true
+    zfs destroy -f "backup/data@$SNAPSHOT"         || true
+    zfs destroy -f "backup/brumath@$SNAPSHOT"      || true
+    zfs destroy -f "backup/eckwersheim@$SNAPSHOT"  || true
+    zfs destroy -f "backup/arq_adrien@$SNAPSHOT"   || true
+    zfs destroy -f "backup/arq_marie@$SNAPSHOT"    || true
 
     ;;
 
