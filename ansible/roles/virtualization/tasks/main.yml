@@ -47,7 +47,7 @@
   cron:
     name: virsh_backup
     minute: 0
-    hour: 5
+    hour: 3
     job: /usr/bin/systemd-cat --identifier virsh_backup /usr/local/bin/virsh_backup
     user: root
     cron_file: ansible_virsh_backup

@@ -13,6 +13,13 @@
   tags:
     - zfs
 
+- name: Install pip deps
+  pip:
+    name: zfs-autobackup
+  become: yes
+  tags:
+    - zfs
+
 - name: Configure ARC
   copy:
     src: zfs.conf
@@ -58,9 +65,21 @@
 
 - name: Copy the zfs tool
   copy:
-    src: zfs_snaps.sh
-    dest: /usr/local/bin/zfs_snaps
+    src: zfs_backup.sh
+    dest: /usr/local/bin/zfs_backup
     mode: 0755
+  become: yes
+  tags:
+    - zfs
+
+- name: Schedule the backup script
+  cron:
+    name: zfs_backup
+    minute: 10
+    hour: 4
+    job: /usr/local/bin/dms --silent 2f07697414 /usr/bin/systemd-cat --identifier zfs_backup /usr/local/bin/zfs_backup
+    user: root
+    cron_file: ansible_zfs_backup
   become: yes
   tags:
     - zfs
