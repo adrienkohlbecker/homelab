@@ -33,6 +33,15 @@
   tags:
     - services
 
+- name: Copy the stop script
+  copy:
+    src: wait-for-compose.sh
+    dest: /usr/local/bin/wait-for-compose
+    mode: 0755
+  become: yes
+  tags:
+    - services
+
 - name: Include services
   block:
     - import_tasks: wireguard.yml
