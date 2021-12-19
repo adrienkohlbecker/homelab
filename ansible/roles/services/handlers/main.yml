@@ -112,6 +112,10 @@
   shell: systemctl daemon-reload
   become: yes
 
+- name: Reload networkctl
+  shell: networkctl reload
+  become: yes
+
 - name: Restart systemd-networkd
   service:
     name: systemd-networkd

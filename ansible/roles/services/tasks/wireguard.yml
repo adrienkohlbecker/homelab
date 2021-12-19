@@ -25,6 +25,7 @@
   notify:
     - Reload systemd
     - Restart systemd-networkd
+    - Reload networkctl
 
 - name: Copy the netdev file
   template:
@@ -40,3 +41,4 @@
   notify:
     - Reload systemd
     - Restart systemd-networkd
+    - Reload networkctl
