@@ -1,5 +1,21 @@
 ---
 
+- name: apt-get update
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - base
+
+- name: Install locales
+  apt:
+    pkg:
+      - locales
+  become: yes
+  tags:
+    - base
+
 - name: Set up locales
   locale_gen:
     name: "{{item}}"
@@ -15,14 +31,6 @@
   copy:
     content: "{{ 'LANG=en_US.UTF-8\n' }}"
     dest: /etc/default/locale
-  become: yes
-  tags:
-    - base
-
-- name: apt-get update
-  apt:
-    update_cache: yes
-    cache_valid_time: 3600
   become: yes
   tags:
     - base

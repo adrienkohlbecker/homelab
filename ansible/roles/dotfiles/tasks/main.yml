@@ -1,63 +1,5 @@
 ---
 
-- name: Install oh-my-zsh
-  command: "su {{ deploy_user }} -c 'git clone git://github.com/robbyrussell/oh-my-zsh.git .oh-my-zsh'"
-  args:
-    chdir: "/home/{{ deploy_user }}"
-    creates: "/home/{{ deploy_user }}/.oh-my-zsh"
-  become: yes
-  tags:
-    - dotfiles
-
-- name: Install zsh-syntax-highlighting
-  git:
-    repo: https://github.com/zsh-users/zsh-syntax-highlighting.git
-    version: master
-    dest: /usr/local/share/zsh-syntax-highlighting
-    update: no
-  become: yes
-  tags:
-    - dotfiles
-
-- name: Install zsh-history-substring-search
-  git:
-    repo: https://github.com/zsh-users/zsh-history-substring-search.git
-    version: master
-    dest: /usr/local/share/zsh-history-substring-search
-    update: no
-  become: yes
-  tags:
-    - dotfiles
-
-- name: Create /usr/local/opt directory
-  file:
-    dest: /usr/local/opt
-    state: directory
-    owner: root
-    group: root
-    mode: 0755
-  become: yes
-  tags:
-    - dotfiles
-
-- name: Clone fzf
-  git:
-    repo: https://github.com/junegunn/fzf.git
-    version: master
-    dest: /usr/local/opt/fzf
-    update: no
-  become: yes
-  tags:
-    - dotfiles
-
-- name: Install fzf
-  command: /usr/local/opt/fzf/install --no-update-rc --no-bash --no-fish --completion --key-bindings
-  args:
-    creates: "/usr/local/opt/fzf/bin/fzf"
-  become: yes
-  tags:
-    - dotfiles
-
 - name: Install dotfiles repo
   command: "su {{ deploy_user }} -c 'git clone --bare https://github.com/adrienkohlbecker/dotfiles.git .dotfiles'"
   args:
@@ -69,6 +11,15 @@
 
 - name: Install dotfiles
   command: "su {{ deploy_user }} -c 'git --git-dir=/home/{{ deploy_user }}/.dotfiles --work-tree=/home/{{ deploy_user }} reset --hard'"
+  args:
+    chdir: "/home/{{ deploy_user }}"
+    creates: "/home/{{ deploy_user }}/.zshrc"
+  become: yes
+  tags:
+    - dotfiles
+
+- name: Install dotfiles submodules
+  command: "su {{ deploy_user }} -c 'git --git-dir=/home/{{ deploy_user }}/.dotfiles --work-tree=/home/{{ deploy_user }} submodule update --init --recursive'"
   args:
     chdir: "/home/{{ deploy_user }}"
     creates: "/home/{{ deploy_user }}/.zshrc"

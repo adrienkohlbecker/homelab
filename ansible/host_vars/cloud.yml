@@ -5,8 +5,8 @@ deploy_user_group: akohlbecker
 deploy_user_password: $6$9WL6ah8B.K/Kk$x6tt2LKJxKYyXxBRIO1bkKzKvZ.eyysAMI4M60nfYIWk6nihR8W8g/bIdp9siG.X47wfQ2i9wraY1ZGH.UKrK.
 
 # override from all.yml
-deploy_user_uid: 1001
-deploy_user_gid: 1002
+deploy_user_uid: 1010
+deploy_user_gid: 1011
 
 docker_host: true
 zfs_root: false
