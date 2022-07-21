@@ -29,7 +29,7 @@
 
 - name: Set default locale
   copy:
-    content: "{{ 'LANG=en_US.UTF-8\n' }}"
+    content: "{{ 'LANG=en_US.UTF-8\nLANGUAGE=en_US.UTF-8\nLC_CTYPE=en_US.UTF-8\nLC_ALL=en_US.UTF-8\n' }}"
     dest: /etc/default/locale
   become: yes
   tags:
