@@ -17,7 +17,7 @@ SyslogIdentifier=transmission
 
 ExecStartPre=-/usr/bin/docker kill transmission
 ExecStartPre=-/usr/bin/docker rm transmission
-ExecStartPre=-/usr/bin/docker pull linuxserver/transmission:latest
+ExecStartPre=-/usr/bin/docker pull linuxserver/transmission:3.00-r5-ls126
 ExecStart=/usr/bin/docker run \
     --init \
     --name transmission \
@@ -36,7 +36,7 @@ ExecStart=/usr/bin/docker run \
     --label "traefik.frontend.rule=Host:transmission.kohlby.fr" \
     --label "traefik.port=9091" \
     --label "traefik.protocol=http" \
-    linuxserver/transmission:latest
+    linuxserver/transmission:3.00-r5-ls126
 ExecStop=/usr/bin/docker stop transmission
 
 [Install]

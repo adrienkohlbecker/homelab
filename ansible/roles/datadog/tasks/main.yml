@@ -10,7 +10,7 @@
 
 - name: Download datadog apt key
   apt_key:
-    id: A2923DFF56EDA6E76E55E492D3A80E30382E94DE
+    id: D75CEA17048B9ACBF186794B32637D44F14F620E
     keyserver: hkp://keyserver.ubuntu.com:80
     state: present
   become: yes
