@@ -10,21 +10,21 @@ ListenPort={{ wireguard_listen_port }}
 # laptop
 [WireGuardPeer]
 PublicKey=TlQJW6mxFI3HQk5/rs3QepxjYB22tlf1ljUCAoHrGnk=
-AllowedIPs={{ wireguard_address | ipmath(1) }}/32
+AllowedIPs={{ wireguard_address | ansible.utils.ipmath(1) }}/32
 
 # phone
 [WireGuardPeer]
 PublicKey=IfYMZKwHODWIZPZ/sqlQHXcGyW5aQ8Hu9ffeQWqCzAE=
-AllowedIPs={{ wireguard_address | ipmath(2) }}/32
+AllowedIPs={{ wireguard_address | ansible.utils.ipmath(2) }}/32
 
 # ipad
 [WireGuardPeer]
 PublicKey=Aezx2GD7c7Qwa699b1Z0twIKzvvSiBy/52lEfblHy1U=
-AllowedIPs={{ wireguard_address | ipmath(3) }}/32
+AllowedIPs={{ wireguard_address | ansible.utils.ipmath(3) }}/32
 
 # bunk
 [WireGuardPeer]
 PublicKey=6yN3/WcDJG9iWQ4XD/TUYEKPb5Bx/Hy7+fo8sgt0sQM=
-AllowedIPs={{ wireguard_address | ipmath(4) }}/32,192.168.0.45/24
+AllowedIPs={{ wireguard_address | ansible.utils.ipmath(4) }}/32,192.168.0.45/24
 #Endpoint=brumath.kohlby.fr:51820
 Endpoint=10.123.30.156:51820
