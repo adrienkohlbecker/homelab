@@ -19,7 +19,6 @@ ExecStartPre=-/usr/bin/docker kill sonarr
 ExecStartPre=-/usr/bin/docker rm sonarr
 ExecStartPre=-/usr/bin/docker pull linuxserver/sonarr
 ExecStartPre=/usr/bin/docker create \
-    --init \
     --name=sonarr \
     --log-driver none \
     --env PUID=0 \

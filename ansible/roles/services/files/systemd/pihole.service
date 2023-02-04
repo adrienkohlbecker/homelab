@@ -20,7 +20,6 @@ ExecStartPre=-/usr/bin/docker kill pihole
 ExecStartPre=-/usr/bin/docker rm pihole
 ExecStartPre=-/usr/bin/docker pull pihole/pihole
 ExecStartPre=/usr/bin/docker create \
-    --init \
     --name pihole \
     --log-driver none \
     --network traefik \

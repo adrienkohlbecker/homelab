@@ -19,7 +19,6 @@ ExecStartPre=-/usr/bin/docker kill headphones
 ExecStartPre=-/usr/bin/docker rm headphones
 ExecStartPre=-/usr/bin/docker pull linuxserver/headphones
 ExecStartPre=/usr/bin/docker create \
-    --init \
     --name=headphones \
     --log-driver none \
     --env PUID=0 \

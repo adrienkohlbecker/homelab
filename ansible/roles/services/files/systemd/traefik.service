@@ -33,7 +33,7 @@ ExecStart=/usr/bin/docker run \
     --label "traefik.backend=traefikception" \
     --label "traefik.frontend.rule=Host:traefik.kohlby.fr" \
     --label "traefik.enable=true" \
-    traefik:1.7.3
+    traefik:1.7.34
 ExecStop=/usr/bin/docker stop traefik
 
 [Install]
