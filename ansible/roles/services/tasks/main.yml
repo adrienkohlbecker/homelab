@@ -48,9 +48,9 @@
     - import_tasks: traefik.yml
     - import_tasks: usenet.yml
     - import_tasks: avahi.yml
-    - import_tasks: couchpotato.yml
     - import_tasks: headphones.yml
     - import_tasks: sonarr.yml
+    - import_tasks: radarr.yml
     - import_tasks: plex.yml
     - import_tasks: portainer.yml
     - import_tasks: sabnzbd.yml

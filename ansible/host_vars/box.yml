@@ -28,7 +28,7 @@ grub_cmdline:
 
 aws_ssm_cloudflare_email: changeme
 aws_ssm_cloudflare_api_key: changeme
-aws_ssm_couchpotato_api_key: changeme
+aws_ssm_radarr_api_key: changeme
 aws_ssm_sonarr_api_key: changeme
 aws_ssm_headphones_api_key: changeme
 aws_ssm_headphones_songkick_api_key: changeme
