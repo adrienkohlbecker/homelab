@@ -2,7 +2,7 @@
 
 - name: Create configuration directory
   file:
-    dest: /mnt/services/couchpotato
+    dest: /mnt/services/radarr
     state: directory
     owner: root
     group: root
@@ -10,42 +10,42 @@
   become: yes
   tags:
     - services
-    - couchpotato
+    - radarr
 
-- name: Configure couchpotato
+- name: Configure radarr
   template:
-    src: couchpotato.ini.j2
-    dest: /mnt/services/couchpotato/settings.conf
+    src: radarr.xml.j2
+    dest: /mnt/services/radarr/config.xml
     owner: root
     group: root
     mode: 0600
   become: yes
   tags:
     - services
-    - couchpotato
+    - radarr
   notify:
-    - Restart couchpotato
+    - Restart radarr
 
 - name: Copy the unit file
   copy:
-    src: systemd/couchpotato.service
-    dest: /etc/systemd/system/couchpotato.service
+    src: systemd/radarr.service
+    dest: /etc/systemd/system/radarr.service
     owner: root
     group: root
     mode: 0644
   become: yes
   tags:
     - services
-    - couchpotato
+    - radarr
   notify:
-    - Restart couchpotato
+    - Restart radarr
 
 - name: Enable the service
   systemd:
-    name: couchpotato
+    name: radarr
     enabled: yes
     daemon_reload: yes
   become: yes
   tags:
     - services
-    - couchpotato
+    - radarr

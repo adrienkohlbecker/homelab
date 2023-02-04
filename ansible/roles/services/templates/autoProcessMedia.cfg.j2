@@ -53,15 +53,15 @@
     #### autoProcessing for Movies
     #### movie - category that gets called for post-processing with CPS
     [[movie]]
-        enabled = 1
-        apikey = {{ aws_ssm_couchpotato_api_key }}
-        host = couchpotato
+        enabled = 0
+        apikey =
+        host = localhost
         port = 5050
         ###### ADVANCED USE - ONLY EDIT IF YOU KNOW WHAT YOU'RE DOING ######
         ssl = 0
         web_root = ""
         # api key for www.omdbapi.com (used as alternative to imdb)
-        omdbapikey = {{ aws_ssm_omdb_api_key }}
+        omdbapikey = ""
         # Enable/Disable linking for Torrents
         Torrent_NoLink = 0
         keep_archive = 1
@@ -78,7 +78,7 @@
         ##### Enable if Couchpotato is on a remote server for this category
         remote_path = 0
         ##### Set to path where download client places completed downloads locally for this category
-        watch_dir = /scratch/couchpotato
+        watch_dir = ""
         ##### Set the recursive directory permissions to the following (0 to disable)
         chmodDirectory = 0
 
@@ -86,15 +86,15 @@
     #### autoProcessing for Movies
     #### raCategory - category that gets called for post-processing with Radarr
     [[movie]]
-        enabled = 0
-        apikey = ""
-        host = localhost
+        enabled = 1
+        apikey = {{ aws_ssm_radarr_api_key }}
+        host = radarr
         port = 7878
         ###### ADVANCED USE - ONLY EDIT IF YOU KNOW WHAT YOU'RE DOING ######
         web_root = ""
         ssl = 0
         # api key for www.omdbapi.com (used as alternative to imdb)
-        omdbapikey = ""
+        omdbapikey = {{ aws_ssm_omdb_api_key }}
         delete_failed = 0
         # Enable/Disable linking for Torrents
         Torrent_NoLink = 0
@@ -109,7 +109,7 @@
         ##### Enable if NzbDrone is on a remote server for this category
         remote_path = 0
         ##### Set to path where download client places completed downloads locally for this category
-        watch_dir = ""
+        watch_dir = /scratch/radarr
         ##### Set to define import behavior Move or Copy
         importMode = Move
 

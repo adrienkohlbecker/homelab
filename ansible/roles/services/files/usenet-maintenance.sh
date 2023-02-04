@@ -5,7 +5,6 @@ set -euxo pipefail
 
 /usr/local/bin/sort-ini /mnt/services/sabnzbd/sabnzbd.ini
 /usr/local/bin/sort-ini /mnt/services/headphones/config.ini
-/usr/local/bin/sort-ini /mnt/services/couchpotato/settings.conf
 
 sed -i 's/[ \t]*$//' /mnt/services/sabnzbd/autoProcessMedia.cfg
 

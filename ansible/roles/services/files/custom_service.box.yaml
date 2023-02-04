@@ -3,7 +3,6 @@
 instances:
   - health_status: none
     container_names:
-      - couchpotato
       - gogs
       - homebridge
       - portainer
@@ -11,6 +10,7 @@ instances:
       - headphones
       - quotes
       - sonarr
+      - radarr
       - speedtest
       - ssh-arq
       - ssh-brumath

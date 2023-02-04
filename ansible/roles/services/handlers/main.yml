@@ -24,12 +24,6 @@
     state: restarted
   become: yes
 
-- name: Restart couchpotato
-  service:
-    name: couchpotato
-    state: restarted
-  become: yes
-
 - name: Restart tautulli
   service:
     name: tautulli
@@ -143,6 +137,12 @@
 - name: Restart sonarr
   service:
     name: sonarr
+    state: restarted
+  become: yes
+
+- name: Restart radarr
+  service:
+    name: radarr
     state: restarted
   become: yes
 

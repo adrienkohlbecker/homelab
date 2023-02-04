@@ -1,0 +1,42 @@
+# radarr.service #######################################################################
+[Unit]
+Description=radarr
+After=docker.service mnt-media.mount mnt-services.mount mnt-scratch.mount sabnzbd.service
+Requires=docker.service mnt-media.mount mnt-services.mount mnt-scratch.mount sabnzbd.service
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+SyslogIdentifier=radarr
+
+ExecStartPre=-/usr/bin/docker kill radarr
+ExecStartPre=-/usr/bin/docker rm radarr
+ExecStartPre=-/usr/bin/docker pull linuxserver/radarr
+ExecStartPre=/usr/bin/docker create \
+    --name=radarr \
+    --log-driver none \
+    --env PUID=0 \
+    --env PGID=0 \
+    --env TZ=Europe/Amsterdam \
+    --volume /mnt/services/radarr:/config \
+    --volume /mnt/media:/media \
+    --volume /mnt/scratch:/scratch \
+    --label "traefik.docker.network=traefik" \
+    --label "traefik.enable=true" \
+    --label "traefik.frontend.rule=Host:radarr.kohlby.fr" \
+    --label "traefik.port=7878" \
+    --label "traefik.protocol=http" \
+    linuxserver/radarr
+ExecStartPre=/usr/bin/docker network connect usenet radarr
+ExecStartPre=/usr/bin/docker network connect traefik radarr
+ExecStart=/usr/bin/docker start --attach radarr
+ExecStop=/usr/bin/docker stop radarr
+
+[Install]
+WantedBy=compose.service
