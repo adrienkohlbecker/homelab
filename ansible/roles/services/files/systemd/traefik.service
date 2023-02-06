@@ -17,7 +17,7 @@ SyslogIdentifier=traefik
 
 ExecStartPre=-/usr/bin/docker kill traefik
 ExecStartPre=-/usr/bin/docker rm traefik
-# ExecStartPre=-/usr/bin/docker pull traefik:1.7.3
+# ExecStartPre=-/usr/bin/docker pull traefik:2.9
 ExecStart=/usr/bin/docker run \
     --init \
     --env-file /etc/env.d/traefik \
@@ -28,12 +28,15 @@ ExecStart=/usr/bin/docker run \
     --publish 80:80 \
     --volume /var/run/docker.sock:/var/run/docker.sock \
     --volume /mnt/services/traefik/traefik.toml:/traefik.toml \
+    --volume /mnt/services/traefik/dynamic.toml:/dynamic.toml \
     --volume /mnt/services/traefik/acme.json:/acme.json \
-    --label "traefik.port=8080" \
-    --label "traefik.backend=traefikception" \
-    --label "traefik.frontend.rule=Host:traefik.kohlby.fr" \
     --label "traefik.enable=true" \
-    traefik:1.7.34
+    --label "traefik.http.routers.traefik.rule=Host(`traefik.kohlby.fr`)" \
+    --label "traefik.http.routers.traefik.service=api@internal" \
+    --label "traefik.http.routers.traefik.tls=true" \
+    --label "traefik.http.routers.traefik.tls.certresolver=letsencrypt" \
+    --label "traefik.http.routers.traefik.entrypoints=websecure" \
+    traefik:2.9
 ExecStop=/usr/bin/docker stop traefik
 
 [Install]

@@ -1,77 +1,35 @@
-debug = false
-insecureSkipVerify = true
-logLevel = "INFO"
-defaultEntryPoints = ["https","http"]
-
-[accessLog]
+[serversTransport]
+  insecureSkipVerify = true
 
 [entryPoints]
+  [entryPoints.web]
+    address = ":80"
 
-  [entryPoints.http]
-  address = ":80"
+    [entryPoints.web.http]
+      [entryPoints.web.http.redirections]
+        [entryPoints.web.http.redirections.entryPoint]
+          to = "websecure"
+          scheme = "https"
 
-    [entryPoints.http.redirect]
-    entryPoint = "https"
+  [entryPoints.websecure]
+    address = ":443"
 
-  [entryPoints.https]
-  address = ":443"
-  compress = true
-
-    [entryPoints.https.tls]
-
-[retry]
+[providers]
+  [providers.docker]
+    exposedByDefault = false
+    network = "traefik"
 
 [api]
 
-[docker]
-endpoint = "unix:///var/run/docker.sock"
-domain = "kohlby.fr"
-watch = true
-exposedByDefault = false
+[certificatesResolvers]
+  [certificatesResolvers.letsencrypt]
+    [certificatesResolvers.letsencrypt.acme]
+      email = "adrien.kohlbecker@gmail.com"
+      storage = "acme.json"
 
-[acme]
-email = "adrien.kohlbecker@gmail.com"
-storage = "acme.json"
-entryPoint = "https"
-onHostRule = false
+      [certificatesResolvers.letsencrypt.acme.dnsChallenge]
+        provider = "cloudflare"
+        delayBeforeCheck = "0s"
 
-  [acme.dnsChallenge]
-  provider = "cloudflare"
-
-  [[acme.domains]]
-  main = "*.kohlby.fr"
-  sans = ["kohlby.fr"]
-
-[file]
-
-[backends]
-
-  [backends.ipmi]
-
-    [backends.ipmi.servers.server1]
-    url = "https://10.123.0.10:443"
-    weight = 1
-
-  [backends.unifi]
-
-    [backends.unifi.servers.server1]
-    url = "https://10.123.0.1:443"
-    weight = 1
-
-[frontends]
-
-  [frontends.ipmi]
-  backend = "ipmi"
-  priority = 20
-  passHostHeader = true
-
-    [frontends.ipmi.routes.test_1]
-    rule = "Host:ipmi.kohlby.fr"
-
-  [frontends.unifi]
-  backend = "unifi"
-  priority = 20
-  passHostHeader = true
-
-    [frontends.unifi.routes.test_1]
-    rule = "Host:unifi.kohlby.fr"
+[providers.file]
+  filename = "/dynamic.toml"
