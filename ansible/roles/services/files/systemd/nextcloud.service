@@ -17,9 +17,8 @@ SyslogIdentifier=nextcloud
 
 ExecStartPre=-/usr/bin/docker kill nextcloud
 ExecStartPre=-/usr/bin/docker rm nextcloud
-ExecStartPre=-/usr/bin/docker pull linuxserver/nextcloud:latest
+ExecStartPre=-/usr/bin/docker pull linuxserver/nextcloud:23.0.4
 ExecStart=/usr/bin/docker run \
-    --init \
     --name nextcloud \
     --log-driver none \
     --env PUID=2007 \
@@ -33,7 +32,7 @@ ExecStart=/usr/bin/docker run \
     --label "traefik.frontend.rule=Host:nextcloud.kohlby.fr" \
     --label "traefik.port=80" \
     --label "traefik.protocol=http" \
-    linuxserver/nextcloud:latest
+    linuxserver/nextcloud:23.0.4
 ExecStop=/usr/bin/docker stop nextcloud
 
 [Install]
