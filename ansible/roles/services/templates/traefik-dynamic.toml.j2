@@ -1,0 +1,24 @@
+[http]
+  [http.routers]
+    [http.routers.unifi]
+      entryPoints = ["websecure"]
+      service = "unifi"
+      rule = "Host(`unifi.kohlby.fr`)"
+      [http.routers.unifi.tls]
+        certResolver = "letsencrypt"
+    [http.routers.ipmi]
+      entryPoints = ["websecure"]
+      service = "ipmi"
+      rule = "Host(`ipmi.kohlby.fr`)"
+      [http.routers.ipmi.tls]
+        certResolver = "letsencrypt"
+
+  [http.services]
+    [http.services.unifi]
+      [http.services.unifi.loadBalancer]
+        [[http.services.unifi.loadBalancer.servers]]
+          url = "https://10.123.0.1:443/"
+    [http.services.ipmi]
+      [http.services.ipmi.loadBalancer]
+        [[http.services.ipmi.loadBalancer.servers]]
+          url = "https://10.123.0.10:443/"

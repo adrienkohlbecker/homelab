@@ -34,6 +34,20 @@
   notify:
     - Restart traefik
 
+- name: Configure traefik
+  template:
+    src: traefik-dynamic.toml.j2
+    dest: /mnt/services/traefik/dynamic.toml
+    owner: root
+    group: root
+    mode: 0600
+  become: yes
+  tags:
+    - services
+    - traefik
+  notify:
+    - Restart traefik
+
 - name: Create acme.json
   file:
     dest: /mnt/services/traefik/acme.json

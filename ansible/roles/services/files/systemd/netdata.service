@@ -23,11 +23,12 @@ ExecStart=/usr/bin/docker run \
     --name netdata \
     --log-driver none \
     --network traefik \
-    --label "traefik.docker.network=traefik" \
     --label "traefik.enable=true" \
-    --label "traefik.frontend.rule=Host:netdata.kohlby.fr" \
-    --label "traefik.port=19999" \
-    --label "traefik.protocol=http" \
+    --label "traefik.http.services.netdata.loadbalancer.server.port=19999" \
+    --label "traefik.http.routers.netdata.rule=Host(`netdata.kohlby.fr`)" \
+    --label "traefik.http.routers.netdata.tls=true" \
+    --label "traefik.http.routers.netdata.tls.certresolver=letsencrypt" \
+    --label "traefik.http.routers.netdata.entrypoints=websecure" \
     --env PGID=999 \
     --volume /proc:/host/proc:ro \
     --volume /sys:/host/sys:ro \
