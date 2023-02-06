@@ -60,6 +60,7 @@
     - import_tasks: gogs.yml
     - import_tasks: gmvault.yml
     - import_tasks: tautulli.yml
+    - import_tasks: overseerr.yml
     - import_tasks: homebridge.yml
     - import_tasks: netdata.yml
     - import_tasks: quotes.yml
