@@ -30,6 +30,12 @@
     state: restarted
   become: yes
 
+- name: Restart overseerr
+  service:
+    name: overseerr
+    state: restarted
+  become: yes
+
 - name: Restart plex
   service:
     name: plex

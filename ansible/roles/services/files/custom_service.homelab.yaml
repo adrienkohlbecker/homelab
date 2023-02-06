@@ -17,6 +17,7 @@ instances:
       - ssh-eckwersheim
       - traefik
       - transmission
+      - overseerr
     min_collection_interval: 30
 
   - health_status: healthy
