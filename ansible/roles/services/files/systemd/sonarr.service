@@ -1,8 +1,8 @@
 # sonarr.service #######################################################################
 [Unit]
 Description=sonarr
-After=docker.service mnt-media.mount mnt-services.mount mnt-scratch.mount sabnzbd.service
-Requires=docker.service mnt-media.mount mnt-services.mount mnt-scratch.mount sabnzbd.service
+After=docker.service mnt-media.mount mnt-media_unsafe.mount mnt-services.mount mnt-scratch.mount sabnzbd.service
+Requires=docker.service mnt-media.mount mnt-media_unsafe.mount mnt-services.mount mnt-scratch.mount sabnzbd.service
 PartOf=compose.service
 
 StartLimitInterval=300
@@ -26,6 +26,7 @@ ExecStartPre=/usr/bin/docker create \
     --env TZ=Europe/Amsterdam \
     --volume /mnt/services/sonarr:/config \
     --volume /mnt/media:/media \
+    --volume /mnt/media_unsafe:/media_unsafe \
     --volume /mnt/scratch:/scratch \
     --label "traefik.enable=true" \
     --label "traefik.http.services.sonarr.loadbalancer.server.port=8989" \

@@ -1,8 +1,8 @@
 # plex.service #######################################################################
 [Unit]
 Description=Plex
-After=docker.service mnt-media.mount mnt-services.mount mnt-scratch.mount mnt-data.mount
-Requires=docker.service mnt-media.mount mnt-services.mount mnt-scratch.mount mnt-data.mount
+After=docker.service mnt-media.mount mnt-media_unsafe.mount mnt-services.mount mnt-scratch.mount mnt-data.mount
+Requires=docker.service mnt-media.mount mnt-media_unsafe.mount mnt-services.mount mnt-scratch.mount mnt-data.mount
 PartOf=compose.service
 
 StartLimitInterval=300
@@ -34,6 +34,7 @@ ExecStart=/usr/bin/docker run \
     --publish 32414:32414/udp \
     --volume /mnt/services/plex:/config \
     --volume /mnt/media:/media \
+    --volume /mnt/media_unsafe:/media_unsafe \
     --volume "/mnt/data/MacbookPro/Music/iTunes/iTunes Media/Music:/itunes:ro" \
     --volume /mnt/data/Musique/Records:/records:ro \
     --volume /mnt/scratch/plex:/transcode \
