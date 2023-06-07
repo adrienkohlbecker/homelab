@@ -1,8 +1,8 @@
 # filebrowser.service #######################################################################
 [Unit]
 Description=filebrowser
-After=docker.service mnt-services.mount mnt-media.mount mnt-data.mount
-Requires=docker.service mnt-services.mount mnt-media.mount mnt-data.mount
+After=docker.service mnt-services.mount mnt-media.mount mnt-media_unsafe.mount mnt-data.mount
+Requires=docker.service mnt-services.mount mnt-media.mount mnt-media_unsafe.mount mnt-data.mount
 PartOf=compose.service
 
 StartLimitInterval=300
@@ -25,6 +25,7 @@ ExecStart=/usr/bin/docker run \
     --network traefik \
     --volume /mnt/data:/srv/data:ro \
     --volume /mnt/media:/srv/media:ro \
+    --volume /mnt/media_unsafe:/srv/media_unsafe:ro \
     --volume /mnt/services/filebrowser/database.db:/database.db \
     --volume /mnt/services/filebrowser/filebrowser.json:/.filebrowser.json \
     --label "traefik.enable=true" \

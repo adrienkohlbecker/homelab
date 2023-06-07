@@ -48,9 +48,14 @@
     - sabnzbd
   with_items:
     - {path: '/mnt/media/Headphones',       owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
+    - {path: '/mnt/media/Live Music',       owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
+    - {path: '/mnt/media/Movies',           owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/media/Music',            owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
-    - {path: '/mnt/media/TV',               owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
+    - {path: '/mnt/media/Other',            owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/media/Torrents',         owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
+    - {path: '/mnt/media/TV',               owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
+    - {path: '/mnt/media_unsafe/Movies',    owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
+    - {path: '/mnt/media_unsafe/TV',        owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/scratch/sabnzbd',        owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/scratch/sonarr',         owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/scratch/radarr',         owner: 'root',              group: 'root',              mode: '0775'}
