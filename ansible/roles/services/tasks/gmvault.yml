@@ -60,8 +60,8 @@
 - name: Schedule the backup
   cron:
     name: gmvault_sync
-    hour: 3
-    minute: 0
+    hour: 0
+    minute: 5
     job: /usr/local/bin/dms --silent c84da32bce /usr/bin/systemd-cat --identifier gmvault_sync -- /opt/gmvault/bin/gmvault sync --db-dir /mnt/services/gmvault --type quick adrien.kohlbecker@gmail.com
     user: root
     cron_file: ansible_gmvault_sync
