@@ -54,8 +54,8 @@
   cron:
     name: zfs_trim
     weekday: 4
-    hour: 5
-    minute: 42
+    hour: 0
+    minute: 5
     job: /sbin/zpool trim rpool
     user: root
     cron_file: ansible_zfs_trim
@@ -75,8 +75,8 @@
 - name: Schedule the backup script
   cron:
     name: zfs_backup
-    minute: 10
-    hour: 4
+    minute: 20
+    hour: 0
     job: /usr/local/bin/dms --silent 2f07697414 /usr/bin/systemd-cat --identifier zfs_backup /usr/local/bin/zfs_backup
     user: root
     cron_file: ansible_zfs_backup
