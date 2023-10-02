@@ -52,11 +52,11 @@
 
     - name: waiting for server to come back
       wait_for:
-        port: "{{ ansible_port | default(22) }}"
-        host: "{{ ansible_host }}"
+        port: '{{ ansible_port | default(22) }}'
+        host: '{{ (ansible_ssh_host|default(ansible_host))|default(inventory_hostname) }}'
         search_regex: OpenSSH
         delay: 10
-      delegate_to: 127.0.0.1
+      connection: local
       become: false
       when: reboot_required is changed
       tags:
