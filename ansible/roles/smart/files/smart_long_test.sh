@@ -10,8 +10,8 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Testing schedule (index is the day, Monday=0, Sunday=6)
 declare -a SCHEDULE=(
-"/dev/disk/by-id/scsi-SATA_WDC_WD100EMAZ-00_2YKG8G2D"
-"/dev/disk/by-id/scsi-SATA_WDC_WD100EMAZ-00_JEJYH3LZ"
+"/dev/disk/by-id/scsi-SATA_WDC_WD141KFGX-68_9LKW9SAG"
+"/dev/disk/by-id/scsi-SATA_WDC_WD141KFGX-68_9LKWD6RG"
 "/dev/disk/by-id/scsi-SATA_WDC_WD100EMAZ-00_JEK2LK1Z"
 "/dev/disk/by-id/scsi-SATA_WDC_WD100EMAZ-00_JEKG9J2Z"
 "/dev/disk/by-id/scsi-SATA_WDC_WD101EFBX-68_VCJ3MYHP"
