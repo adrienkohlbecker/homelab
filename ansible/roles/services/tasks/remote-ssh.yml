@@ -1,42 +1,5 @@
 ---
 
-- name: Add arq group
-  group:
-    name: arq
-    gid: 2201
-    system: true
-    state: present
-  become: yes
-  tags:
-    - services
-    - remote-ssh
-
-- name: Add arq user
-  user:
-    name: arq
-    group: arq
-    uid: 2201
-    system: true
-    state: present
-  become: yes
-  tags:
-    - services
-    - remote-ssh
-
-- name: Set arq authorized key
-  authorized_key:
-    path: /home/arq/.ssh/authorized_keys
-    user: arq
-    state: present
-    key: |-
-      command="internal-sftp -d /data",no-x11-forwarding,no-user-rc,no-pty,no-port-forwarding,no-agent-forwarding ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDBS0T7CVm8Oi763BF5PbIaBAkstPviX5bRef6gWtdXxDA6JtDLRl80n6T0m0aiJ9LpPGuHt8vwE9Aujx5FFsZTJV7qClbDMZ8Fd63zTPQFB2qoAHEkDHweCD3t2m+YveK/TQOyZaKo8tBhXvESZq0nGx0zLciu05IQl6cFTm/HuAT2uJy0QWnQDzbn0LJwvMM+4pzmCiGtiPpO/aAxE6UmMRcawyZB8d8Mi4Ocq5+OP9sNBMMOzMFx/vLjnXL6v/J5CLs1p9QLHJ0ydvsv5i8UQLcNkHssepGM6/axFbvinX39+7QW4PLRA56PgB4zkWklCz22gusCoBnX/qr91p1ji3hWE/2wU4lAT/a9luXvYQOUSO8cglkuKWKqDUF8bOtlHvcdWSKpQ1Gg/dcS5xT61Q0z6PQe2nMVJd7a3wpcxERf3Dx6uTlSV4O2EeMS3/kcWC3YvO+Nr+WhZuWrFMB8MKp8Y6g7J6Ak6EkdnKjQJVsajUprszBbfP0pCSsz0IW+meMdKrcEWGrsE0wQJSqITfpLHym33IJxdK+iqUHC7acplVQKcXqjHv5yJvrOCLN0AwDQtPuELCgR7p/JXciokfd9KbJ12eKbSdsm4Dp1A0KjmHc1yw221fy59n13jlGNrg3zK0Wm3a00S37m7kJe03SMTyTbwKxeGyXuYYC3eQ==
-      command="internal-sftp -d /marie",no-x11-forwarding,no-user-rc,no-pty,no-port-forwarding,no-agent-forwarding ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDhU64CysCYeCYdidLt2Hx+WBp1/yagKGQaNgGaEk9ejIltV/hWt/+cpPQspg6GZnARR4LUIAIxWTw+bL52gBIc0kS5rCAdssqhS+/q6qVErbSVM/s5dtJMQyF0T1uw2SI/yLE6VeN9pthzAoyUpidenqODnPzMV+Pevi1iIYsp475wqUXbbUXvB7IMj/gW8Y4/ia+4A2wT5hqIMDJUySJCCgDL1k0WvBQA40ybixYxKpUAlrV3GCJgi9TBrjoKlFaPYovMrO8khev0juobhOiT0TnMK97jbqidbjwI4sd5YtoukaDI6VOPX0ggf8+LpDccOWbbodbCgC2IUM8SQGJB
-    exclusive: true
-  become: yes
-  tags:
-    - services
-    - remote-ssh
-
 - name: Add brumath group
   group:
     name: brumath
@@ -109,42 +72,6 @@
     - services
     - remote-ssh
 
-- name: Create arq directory
-  file:
-    dest: /mnt/arq
-    state: directory
-    owner: root
-    group: root
-    mode: 0755
-  become: yes
-  tags:
-    - services
-    - remote-ssh
-
-- name: Create arq adrien directory
-  file:
-    dest: /mnt/arq/adrien
-    state: directory
-    owner: arq
-    group: arq
-    mode: 0755
-  become: yes
-  tags:
-    - services
-    - remote-ssh
-
-- name: Create arq marie directory
-  file:
-    dest: /mnt/arq/marie
-    state: directory
-    owner: arq
-    group: arq
-    mode: 0755
-  become: yes
-  tags:
-    - services
-    - remote-ssh
-
 - name: Create synology directory
   file:
     dest: /mnt/brumath/synology
@@ -173,30 +100,6 @@
   apt:
     pkg: bindfs
     state: present
-  become: yes
-  tags:
-    - services
-    - remote-ssh
-
-- name: Copy the unit file
-  copy:
-    src: systemd/ssh-arq.service
-    dest: /etc/systemd/system/ssh-arq.service
-    owner: root
-    group: root
-    mode: 0644
-  become: yes
-  tags:
-    - services
-    - remote-ssh
-  notify:
-    - Restart ssh-arq
-
-- name: Enable the service
-  systemd:
-    name: ssh-arq
-    enabled: yes
-    daemon_reload: yes
   become: yes
   tags:
     - services
