@@ -14,12 +14,12 @@
     - deadmanssnitch
     - networking
     - grub
+    - zfs
 
 - hosts:
     - homelab
     - box
   roles:
-    - zfs
     - smart
     - hdparm
     # - ups

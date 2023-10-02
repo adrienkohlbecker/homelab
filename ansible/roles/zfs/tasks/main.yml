@@ -20,9 +20,18 @@
   tags:
     - zfs
 
-- name: Configure ARC
+- name: Configure root's SSH client
   copy:
-    src: zfs.conf
+    src: ssh_config
+    dest: /root/.ssh/config
+    mode: 0644
+  become: yes
+  tags:
+    - zfs
+
+- name: Configure ARC
+  template:
+    src: zfs.conf.j2
     dest: /etc/modprobe.d/zfs.conf
     mode: 0755
   become: yes
@@ -43,7 +52,7 @@
   cron:
     name: zfs_health
     minute: 55
-    job: /usr/local/bin/dms --silent b1de25d002 /usr/bin/systemd-cat --identifier zfs_health /usr/local/bin/zfs_health
+    job: "{{ temp_dms_zfs_health }} /usr/bin/systemd-cat --identifier zfs_health /usr/local/bin/zfs_health"
     user: root
     cron_file: ansible_zfs_health
   become: yes
@@ -56,7 +65,7 @@
     weekday: 4
     hour: 0
     minute: 5
-    job: /sbin/zpool trim rpool
+    job: /sbin/zpool trim {{ zfs_ssd_pool }}
     user: root
     cron_file: ansible_zfs_trim
   become: yes
@@ -64,8 +73,8 @@
     - zfs
 
 - name: Copy the zfs tool
-  copy:
-    src: zfs_backup.sh
+  template:
+    src: zfs_backup.sh.j2
     dest: /usr/local/bin/zfs_backup
     mode: 0755
   become: yes
@@ -77,7 +86,7 @@
     name: zfs_backup
     minute: 20
     hour: 0
-    job: /usr/local/bin/dms --silent 2f07697414 /usr/bin/systemd-cat --identifier zfs_backup /usr/local/bin/zfs_backup
+    job:  "{{ temp_dms_zfs_backup}} /usr/bin/systemd-cat --identifier zfs_backup /usr/local/bin/zfs_backup"
     user: root
     cron_file: ansible_zfs_backup
   become: yes
