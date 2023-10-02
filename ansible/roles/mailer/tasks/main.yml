@@ -79,3 +79,12 @@
   tags:
     - mailer
     - skip_ansible_lint
+
+- name: Copy the mail config
+  copy:
+    src: mailutils.conf
+    dest: /etc/mailutils.conf
+    mode: 0755
+  become: yes
+  tags:
+    - mailer
