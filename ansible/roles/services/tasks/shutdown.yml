@@ -1,0 +1,12 @@
+- name: Schedule the shutdown
+  cron:
+    name: shutdown
+    hour: 0
+    minute: 5
+    job: if [ $(date +\%w) -neq 0 ]; then shutdown "+20"; fi
+    user: root
+    cron_file: ansible_shutdown
+  become: yes
+  tags:
+    - services
+    - shutdown
