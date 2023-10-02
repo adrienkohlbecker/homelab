@@ -60,7 +60,7 @@ fi
 echo "Checking scrub age..."
 
 CURRENT_DATE=$(date +"%s")
-ZFS_VOLUMES=$(zpool list -H -o name | grep -v backup-A | grep -v backup-B)
+ZFS_VOLUMES=$(zpool list -H -o name)
 
 for volume in $ZFS_VOLUMES; do
   if zpool status "$volume" | grep -q "none requested"; then
