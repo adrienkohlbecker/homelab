@@ -4,6 +4,7 @@ instances:
   - health_status: none
     container_names:
       - traefik
+      - ssh-arq
     min_collection_interval: 30
 
   - health_status: healthy

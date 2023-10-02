@@ -12,7 +12,6 @@ instances:
       - sonarr
       - radarr
       - speedtest
-      - ssh-arq
       - ssh-brumath
       - ssh-eckwersheim
       - traefik
