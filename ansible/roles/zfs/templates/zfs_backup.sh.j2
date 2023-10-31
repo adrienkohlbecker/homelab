@@ -37,6 +37,8 @@ BUNK=ak@10.123.60.5
 {% if inventory_hostname == 'beelink' -%}
 "${RSYNC[@]}" "/mnt/arq/adrien/.zfs/snapshot/$LAST_SNAPSHOT/" $BUNK:/volume1/Backup/arq/adrien
 "${RSYNC[@]}" "/mnt/arq/marie/.zfs/snapshot/$LAST_SNAPSHOT/" $BUNK:/volume1/Backup/arq/marie
+"${RSYNC[@]}" "/mnt/arq/game/.zfs/snapshot/$LAST_SNAPSHOT/" $BUNK:/volume1/Backup/arq/game
+"${RSYNC[@]}" "/mnt/services/.zfs/snapshot/$LAST_SNAPSHOT/" $BUNK:/volume1/Backup/services_beelink
 {% else -%}
 "${RSYNC[@]}" "/mnt/data/.zfs/snapshot/$LAST_SNAPSHOT/" $BUNK:/volume1/Backup/data
 "${RSYNC[@]}" "/mnt/services/.zfs/snapshot/$LAST_SNAPSHOT/" $BUNK:/volume1/Backup/services

@@ -28,6 +28,7 @@ zfs create -o mountpoint=none data/pictures
 zfs create -o mountpoint=none data/arq
 zfs create -o mountpoint=/mnt/arq/adrien data/arq/adrien
 zfs create -o mountpoint=/mnt/arq/marie data/arq/marie
+zfs create -o mountpoint=/mnt/arq/game data/arq/game
 zfs create -o mountpoint=/mnt/brumath data/brumath
 zfs create -o mountpoint=/mnt/eckwersheim data/eckwersheim
 zfs create -o mountpoint=none data/videos
