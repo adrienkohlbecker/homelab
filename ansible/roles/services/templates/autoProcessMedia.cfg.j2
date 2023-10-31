@@ -28,6 +28,8 @@
     ffmpeg_path = ""
     # Enable/Disable media file checking using ffprobe.
     check_media = 1
+    # Required media audio language for media to be deemed valid. Leave blank to disregard media audio language check.
+    require_lan = ""
     # Enable/Disable a safety check to ensure we don't process all downloads in the default_downloadDirectories by mistake.
     safe_mode = 1
     # Turn this on to disable additional extraction attempts for failed downloads. Default = 0 will attempt to extract and verify if media is present.
@@ -54,7 +56,7 @@
     #### movie - category that gets called for post-processing with CPS
     [[movie]]
         enabled = 0
-        apikey =
+        apikey = ""
         host = localhost
         port = 5050
         ###### ADVANCED USE - ONLY EDIT IF YOU KNOW WHAT YOU'RE DOING ######
@@ -157,6 +159,52 @@
         web_root = ""
         ssl = 0
         fork = auto
+        delete_failed = 0
+        # Enable/Disable linking for Torrents
+        Torrent_NoLink = 0
+        keep_archive = 1
+        process_method = ""
+        # force processing of already processed content when running a manual scan.
+        force = 0
+        # Additionally to force, handle the download as a priority downlaod.
+        # The processed files will always replace existing qualities, also if this is a lower quality.
+        is_priority = 0
+        # tell SickRage/Medusa to delete all source files after processing.
+        delete_on = 0
+        # tell Medusa to ignore check for associated subtitle check when postponing release
+        ignore_subs = 0
+        extract = 1
+        nzbExtractionBy = Downloader
+        # Set this to minimum required size to consider a media file valid (in MB)
+        minSize = 0
+        # Enable/Disable deleting ignored files (samples and invalid media files)
+        delete_ignored = 0
+        ##### Enable if SickBeard is on a remote server for this category
+        remote_path = 0
+        ##### Set to path where download client places completed downloads locally for this category
+        watch_dir = ""
+        ##### Set the recursive directory permissions to the following (0 to disable)
+        chmodDirectory = 0
+        ##### pyMedusa (fork=medusa-apiv2) uses async postprocessing. Wait a maximum of x minutes for a pp result
+        wait_for = 10
+
+[SiCKRAGE]
+    #### autoProcessing for TV Series
+    #### tv - category that gets called for post-processing with SR
+    [[tv]]
+        enabled = 0
+        host = localhost
+        port = 8081
+        apikey = ""
+        # api version 1 uses api keys
+        # api version 2 uses SSO user/pass
+        api_version = 2
+        # SSO login requires API v2 to be set
+        sso_username = ""
+        sso_password = ""
+        ###### ADVANCED USE - ONLY EDIT IF YOU KNOW WHAT YOU'RE DOING ######
+        web_root = ""
+        ssl = 0
         delete_failed = 0
         # Enable/Disable linking for Torrents
         Torrent_NoLink = 0
