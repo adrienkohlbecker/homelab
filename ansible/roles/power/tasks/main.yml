@@ -1,0 +1,33 @@
+---
+
+- name: Install powertop
+  apt:
+    pkg:
+      - powertop
+    state: present
+  become: yes
+  tags:
+    - power
+
+
+- name: Copy the unit file
+  copy:
+    src: powertop.service
+    dest: /etc/systemd/system/powertop.service
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - power
+  notify:
+    - Restart powertop
+
+- name: Enable the service
+  systemd:
+    name: powertop
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - power
