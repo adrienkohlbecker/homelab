@@ -3,7 +3,7 @@
     name: shutdown
     hour: 0
     minute: 5
-    job: if [ $(date +\%w) -neq 0 ]; then shutdown "+20"; fi
+    job: if [ $(date +\%w) -ne 0 ]; then /sbin/shutdown "+20" 2> /dev/null; fi
     user: root
     cron_file: ansible_shutdown
   become: yes
