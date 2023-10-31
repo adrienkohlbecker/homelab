@@ -1,0 +1,17 @@
+- name: Set hostname
+  hostname:
+    name: "{{ inventory_hostname }}"
+  become: yes
+  tags:
+    - hostname
+
+- name: Setup hosts file
+  template:
+    src: hosts.j2
+    dest: /etc/hosts
+    owner: root
+    group: adm
+    mode: 0644
+  become: yes
+  tags:
+    - hostname

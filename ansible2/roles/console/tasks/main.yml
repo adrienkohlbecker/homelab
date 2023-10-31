@@ -1,0 +1,19 @@
+- name: Install console-setup
+  apt:
+    pkg:
+      - console-setup
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - locale
+
+- name: Configure console-setup
+  copy:
+    src: console-setup
+    dest: /etc/default/console-setup
+    owner: root
+    group: root
+    mode: 0644
+  become: yes
+  tags:
+    - base

@@ -4,18 +4,17 @@
 // from non-security sources (e.g. chromium). By allowing the release
 // pocket these get automatically pulled in.
 Unattended-Upgrade::Allowed-Origins {
-	"${distro_id}:${distro_codename}";
-	"${distro_id}:${distro_codename}-security";
-	"${distro_id}:${distro_codename}-updates";
-	// Extended Security Maintenance; doesn't necessarily exist for
-	// every release and this system may not have it installed, but if
-	// available, the policy for updates is such that unattended-upgrades
-	// should also install from here by default.
-	"${distro_id}ESMApps:${distro_codename}-apps-security";
-	"${distro_id}ESM:${distro_codename}-infra-security";
-//	"${distro_id}:${distro_codename}-updates";
-//	"${distro_id}:${distro_codename}-proposed";
-//	"${distro_id}:${distro_codename}-backports";
+        "${distro_id}:${distro_codename}";
+        "${distro_id}:${distro_codename}-security";
+        // Extended Security Maintenance; doesn't necessarily exist for
+        // every release and this system may not have it installed, but if
+        // available, the policy for updates is such that unattended-upgrades
+        // should also install from here by default.
+        "${distro_id}ESMApps:${distro_codename}-apps-security";
+        "${distro_id}ESM:${distro_codename}-infra-security";
+        "${distro_id}:${distro_codename}-updates";
+//      "${distro_id}:${distro_codename}-proposed";
+//      "${distro_id}:${distro_codename}-backports";
 };
 
 // Python regular expressions, matching packages to exclude from upgrading
@@ -84,7 +83,7 @@ Unattended-Upgrade::MailReport "only-on-error";
 Unattended-Upgrade::Remove-Unused-Kernel-Packages "true";
 
 // Do automatic removal of newly unused dependencies after the upgrade
-Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Remove-New-Unused-Dependencies "true";
 
 // Do automatic removal of unused packages after the upgrade
 // (equivalent to apt-get autoremove)

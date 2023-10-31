@@ -1,0 +1,19 @@
+- name: Install keyboard-configuration
+  apt:
+    pkg:
+      - keyboard-configuration
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - locale
+
+- name: Configure keyboard
+  copy:
+    src: keyboard
+    dest: /etc/default/keyboard
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+  tags:
+    - keyboard
