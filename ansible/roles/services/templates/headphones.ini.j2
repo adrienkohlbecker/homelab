@@ -1,8 +1,8 @@
 [Advanced]
 album_completion_pct = 80
 cache_sizemb = 32
-ignored_files = ,
-ignored_folders = ,
+ignored_files = []
+ignored_folders = []
 journal_mode = wal
 verify_ssl_cert = 1
 [Beets]
@@ -111,6 +111,7 @@ keep_nfo = 1
 keep_original_folder = 0
 keep_torrent_files = 0
 keep_torrent_files_dir = ""
+lastfm_apikey =
 lastfm_username = ""
 launch_browser = 1
 libraryscan = 1
@@ -139,6 +140,7 @@ preferred_quality = 1
 preferred_words = ""
 rename_files = 0
 rename_frozen = 1
+rename_single_disc_ignore = 0
 rename_unprocessed = 1
 replace_existing_folders = 1
 required_words = ""
@@ -190,7 +192,7 @@ nzbsorg = 0
 nzbsorg_hash = ""
 nzbsorg_uid = ""
 [Newznab]
-extra_newznabs = ,
+extra_newznabs =
 newznab = 1
 newznab_apikey = {{ aws_ssm_sickrage_nzbgeek_api_key }}
 newznab_enabled = 1
@@ -289,7 +291,7 @@ telegram_onsnatch = 0
 telegram_token = ""
 telegram_userid = ""
 [Torznab]
-extra_torznabs = ,
+extra_torznabs =
 torznab = 0
 torznab_apikey = ""
 torznab_enabled = 1
