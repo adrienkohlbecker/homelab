@@ -5,6 +5,7 @@ instances:
     container_names:
       - traefik
       - ssh-arq
+      - homeassistant
     min_collection_interval: 30
 
   - health_status: healthy
