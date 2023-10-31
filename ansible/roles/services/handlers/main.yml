@@ -176,6 +176,12 @@
     state: restarted
   become: yes
 
+- name: Restart homeassistant
+  service:
+    name: homeassistant
+    state: restarted
+  become: yes
+
 - name: Restart nextcloud
   service:
     name: nextcloud

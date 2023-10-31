@@ -87,6 +87,7 @@
     - import_tasks: pi-backup-server.yml
     - import_tasks: datadog_check.yml
     - import_tasks: unifi-syslog.yml
+    - import_tasks: homeassistant.yml
   when: inventory_hostname == 'beelink' or inventory_hostname == 'box'
 
 - name: Include services
