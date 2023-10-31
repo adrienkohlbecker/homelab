@@ -11,6 +11,9 @@ deploy_user_ssh_public_key: |-
 docker_host: true
 zfs_root: true
 
+eth0_name: "{{ ansible_default_ipv4.interface }}"
+eth1_name:
+
 wireguard_address: 10.123.60.1
 wireguard_listen_port: 51820
 
