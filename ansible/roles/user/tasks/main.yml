@@ -25,6 +25,8 @@
       - iperf
       - ncdu
       - iotop
+      - usbutils
+      - stress
     state: present
   become: yes
   tags:
