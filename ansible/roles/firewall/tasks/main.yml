@@ -9,8 +9,8 @@
     - firewall
 
 - name: Configure iptables (v4)
-  copy:
-    src: "rules.v4.{{ inventory_hostname }}"
+  template:
+    src: "rules.v4.{{ inventory_hostname }}.j2"
     dest: /etc/iptables/rules.v4
     owner: root
     group: root
@@ -22,8 +22,8 @@
     - Apply iptables v4
 
 - name: Configure iptables (v6)
-  copy:
-    src: rules.v6
+  template:
+    src: rules.v6.j2
     dest: /etc/iptables/rules.v6
     owner: root
     group: root

@@ -21,8 +21,8 @@
     - networking
 
 - name: Configure networking
-  copy:
-    src: "config.{{ inventory_hostname_short }}.yaml"
+  template:
+    src: "config.{{ inventory_hostname_short }}.yaml.j2"
     dest: /etc/netplan/00-installer-config.yaml
     owner: root
     group: root

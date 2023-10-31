@@ -7,6 +7,9 @@ deploy_user_password: $6$9WL6ah8B.K/Kk$x6tt2LKJxKYyXxBRIO1bkKzKvZ.eyysAMI4M60nfY
 docker_host: false
 zfs_root: false
 
+eth0_name: "{{ ansible_default_ipv4.interface }}"
+eth1_name:
+
 wireguard_address:
 wireguard_listen_port:
 
