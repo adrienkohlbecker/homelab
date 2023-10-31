@@ -1,0 +1,10 @@
+- hosts: all
+  roles:
+    - core_dependencies
+    - hostname
+    - locale
+    - keyboard
+    - console
+    - timezone
+    - apt
+    - logrotate

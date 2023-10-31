@@ -1,0 +1,29 @@
+# Install dependecies to support the Ansible core modules.
+- name: Install packages
+  apt:
+    name:
+      - acl
+      - at
+      - bzip2
+      - bash
+      - git
+      - gzip
+      - tar
+      - unzip
+      - apt-transport-https
+      - debconf
+      - debconf-i18n
+      - iproute2
+      - passwd
+      - python3-apt
+      - subversion
+      - xz-utils
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - core_dependencies
+  notify:
+    - Gather facts
+
+- name: Flush handlers
+  meta: flush_handlers

@@ -1,79 +1,13 @@
 ---
 
-- name: apt-get update
-  apt:
-    update_cache: yes
-    cache_valid_time: 3600
-  become: yes
-  tags:
-    - base
-
-- name: Install locales
-  apt:
-    pkg:
-      - locales
-  become: yes
-  tags:
-    - base
-
-- name: Set up locales
-  locale_gen:
-    name: "{{item}}"
-    state: present
-  become: yes
-  with_items:
-    - fr_FR.UTF-8
-    - en_US.UTF-8
-  tags:
-    - base
-
-- name: Set default locale
-  copy:
-    content: "{{ 'LANG=en_US.UTF-8\nLANGUAGE=en_US.UTF-8\nLC_CTYPE=en_US.UTF-8\nLC_ALL=en_US.UTF-8\n' }}"
-    dest: /etc/default/locale
-  become: yes
-  tags:
-    - base
-
-- name: apt-get upgrade
-  apt:
-    upgrade: full
-  become: yes
-  tags:
-    - base
-
-- name: Set hostname
-  hostname:
-    name: "{{inventory_hostname}}"
-  become: yes
-  tags:
-    - base
-
-- name: Setup hosts file
-  template:
-    src: hosts.j2
-    dest: /etc/hosts
-    owner: root
-    group: root
-    mode: 0644
-  become: yes
-  tags:
-    - base
 
 - name: Install base packages
   apt:
     pkg:
-      - acpid
       - fail2ban
-      - logrotate
-      - unattended-upgrades
-      - update-notifier-common
-      - console-data # keymaps
       - python3 # ansible dep
       - python3-simplejson # ansible dep
-      - python3-apt # ansible dep (for check mode)
       - python3-pip
-      - apt-transport-https
     state: present
   become: yes
   tags:
@@ -82,39 +16,6 @@
 - name: Install pip deps
   pip:
     name: docker # ansible dep for docker module
-  become: yes
-  tags:
-    - base
-
-- name: Configure keyboard
-  copy:
-    src: keyboard
-    dest: /etc/default/keyboard
-    owner: root
-    group: root
-    mode: 0644
-  become: yes
-  tags:
-    - base
-
-- name: Setup unattended-upgrades (20auto-upgrades)
-  copy:
-    src: 20auto-upgrades
-    dest: /etc/apt/apt.conf.d/20auto-upgrades
-    owner: root
-    group: root
-    mode: 0644
-  become: yes
-  tags:
-    - base
-
-- name: Setup unattended-upgrades (50unattended-upgrades)
-  copy:
-    src: 50unattended-upgrades
-    dest: "/etc/apt/apt.conf.d/50unattended-upgrades"
-    owner: root
-    group: root
-    mode: 0644
   become: yes
   tags:
     - base

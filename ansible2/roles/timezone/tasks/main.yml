@@ -1,0 +1,31 @@
+- name: Install tzdata
+  apt:
+    pkg:
+      - tzdata
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - timezone
+
+- name: Configure timezone
+  copy:
+    content: "Etc/UTC\n"
+    dest: /etc/timezone
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+  tags:
+    - timezone
+
+- name: Configure localtime
+  file:
+    src: /usr/share/zoneinfo/Etc/UTC
+    dest: /etc/localtime
+    owner: root
+    group: root
+    mode: '0777'
+    state: link
+  become: yes
+  tags:
+    - timezone
