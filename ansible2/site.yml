@@ -10,6 +10,7 @@
     - timezone
     - apt
     - unattended_upgrades
+    - grub
     - logrotate
 
   tasks:

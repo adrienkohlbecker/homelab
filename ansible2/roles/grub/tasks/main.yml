@@ -1,0 +1,35 @@
+- name: Create /etc/default/grub.d directory
+  file:
+    dest: /etc/default/grub.d
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  become: yes
+  tags:
+    - grub
+
+- name: Configure grub
+  copy:
+    src: 90-custom.cfg
+    dest: /etc/default/grub.d/90-custom.cfg
+  register: grub_cfg
+  become: yes
+  tags:
+    - grub
+
+- name: Update grub
+  when: grub_cfg.changed
+  command: update-grub
+  become: yes
+  tags:
+    - grub
+
+- name: Ask to reboot
+  when: grub_cfg.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+  become: yes
+  tags:
+    - grub
