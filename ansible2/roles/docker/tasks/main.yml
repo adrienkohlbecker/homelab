@@ -1,0 +1,86 @@
+- name: Create mount point
+  file:
+    dest: /var/lib/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0710"
+  become: yes
+  tags:
+    - docker
+
+- name: Create configuration directory
+  file:
+    dest: /etc/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: yes
+  tags:
+    - docker
+
+- name: Install docker
+  apt:
+    pkg:
+      - docker.io
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - docker
+
+- name: Copy the docker config
+  template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    mode: 0644
+    owner: root
+    group: root
+    validate: dockerd --validate --config-file=%s
+  register: docker_conf
+  become: yes
+  tags:
+    - docker
+
+- name: Restart docker
+  when: docker_conf.changed
+  systemd:
+    name: docker
+    state: restarted
+  become: yes
+  tags:
+    - docker
+
+- name: Add user to docker group
+  user:
+    name: "{{ ansible_ssh_user }}"
+    groups: docker
+    append: yes
+  become: yes
+  tags:
+    - docker
+
+- name: Enable memory cgroup and swap accounting
+  copy:
+    dest: /etc/default/grub.d/99-docker.cfg
+    content: "GRUB_CMDLINE_LINUX=\"$GRUB_CMDLINE_LINUX cgroup_enable=memory swapaccount=1\"\n"
+  register: grub_cfg
+  become: yes
+  tags:
+    - docker
+
+- name: Update grub
+  when: grub_cfg.changed
+  command: update-grub
+  become: yes
+  tags:
+    - docker
+
+- name: Ask to reboot
+  when: grub_cfg.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+  become: yes
+  tags:
+    - docker

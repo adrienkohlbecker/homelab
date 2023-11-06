@@ -1,0 +1,10 @@
+#jinja2: lstrip_blocks: "True"
+{
+  "log-driver": "local",
+  {% if zfs_root %}
+  "log-opts": {
+    "compress": false
+  },
+  {% endif %}
+  "storage-driver": "overlay2"
+}
