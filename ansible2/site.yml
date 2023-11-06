@@ -13,6 +13,7 @@
     - grub
     - logrotate
     - journald
+    - rsyslog
 
   tasks:
     - name: Check if a reboot is required
