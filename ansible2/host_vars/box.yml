@@ -1,1 +1,2 @@
 zfs_root: false
+journald_storage: persistent
