@@ -14,6 +14,7 @@
     owner: root
     group: root
     mode: '0644'
+  register: timezone_cfg
   become: yes
   tags:
     - timezone
@@ -24,8 +25,25 @@
     dest: /etc/localtime
     owner: root
     group: root
-    mode: '0777'
+    mode: '0644'
     state: link
+  register: localtime_cfg
+  become: yes
+  tags:
+    - timezone
+
+- name: Update initramfs
+  when: timezone_cfg.changed or localtime_cfg.changed
+  command: update-initramfs -u -k all
+  become: yes
+  tags:
+    - keyboard
+
+- name: Ask to reboot
+  when: timezone_cfg.changed or localtime_cfg.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
   become: yes
   tags:
     - timezone

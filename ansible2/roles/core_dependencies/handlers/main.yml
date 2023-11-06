@@ -1,2 +1,0 @@
-- name: Gather facts
-  setup:

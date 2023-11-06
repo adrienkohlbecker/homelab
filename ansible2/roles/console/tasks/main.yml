@@ -5,7 +5,7 @@
     cache_valid_time: 3600
   become: yes
   tags:
-    - locale
+    - console
 
 - name: Configure console-setup
   copy:
@@ -14,6 +14,23 @@
     owner: root
     group: root
     mode: 0644
+  register: console_cfg
   become: yes
   tags:
-    - base
+    - console
+
+- name: Update initramfs
+  when: console_cfg.changed
+  command: update-initramfs -u -k all
+  become: yes
+  tags:
+    - console
+
+- name: Ask to reboot
+  when: console_cfg.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+  become: yes
+  tags:
+    - console
