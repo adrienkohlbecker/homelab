@@ -12,6 +12,7 @@
     - unattended_upgrades
     - grub
     - logrotate
+    - journald
 
   tasks:
     - name: Check if a reboot is required
