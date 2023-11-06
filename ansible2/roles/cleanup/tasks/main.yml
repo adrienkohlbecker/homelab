@@ -1,0 +1,13 @@
+- name: Uninstall uneeded packages
+  apt:
+    pkg:
+      - ufw
+      - cloud-init
+      - snapd
+      - fwupd
+      - os-prober
+    state: absent
+    autoremove: true
+  become: yes
+  tags:
+    - cleanup
