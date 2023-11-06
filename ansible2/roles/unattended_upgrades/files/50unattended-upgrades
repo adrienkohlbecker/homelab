@@ -4,17 +4,17 @@
 // from non-security sources (e.g. chromium). By allowing the release
 // pocket these get automatically pulled in.
 Unattended-Upgrade::Allowed-Origins {
-        "${distro_id}:${distro_codename}";
-        "${distro_id}:${distro_codename}-security";
-        // Extended Security Maintenance; doesn't necessarily exist for
-        // every release and this system may not have it installed, but if
-        // available, the policy for updates is such that unattended-upgrades
-        // should also install from here by default.
-        "${distro_id}ESMApps:${distro_codename}-apps-security";
-        "${distro_id}ESM:${distro_codename}-infra-security";
-        "${distro_id}:${distro_codename}-updates";
-//      "${distro_id}:${distro_codename}-proposed";
-//      "${distro_id}:${distro_codename}-backports";
+	"${distro_id}:${distro_codename}";
+	"${distro_id}:${distro_codename}-security";
+	// Extended Security Maintenance; doesn't necessarily exist for
+	// every release and this system may not have it installed, but if
+	// available, the policy for updates is such that unattended-upgrades
+	// should also install from here by default.
+	"${distro_id}ESMApps:${distro_codename}-apps-security";
+	"${distro_id}ESM:${distro_codename}-infra-security";
+	"${distro_id}:${distro_codename}-updates";
+//	"${distro_id}:${distro_codename}-proposed";
+//	"${distro_id}:${distro_codename}-backports";
 };
 
 // Python regular expressions, matching packages to exclude from upgrading
@@ -129,3 +129,15 @@ Unattended-Upgrade::SyslogEnable "true";
 
 // Allow package downgrade if Pin-Priority exceeds 1000
 // Unattended-Upgrade::Allow-downgrade "false";
+
+// When APT fails to mark a package to be upgraded or installed try adjusting
+// candidates of related packages to help APT's resolver in finding a solution
+// where the package can be upgraded or installed.
+// This is a workaround until APT's resolver is fixed to always find a
+// solution if it exists. (See Debian bug #711128.)
+// The fallback is enabled by default, except on Debian's sid release because
+// uninstallable packages are frequent there.
+// Disabling the fallback speeds up unattended-upgrades when there are
+// uninstallable packages at the expense of rarely keeping back packages which
+// could be upgraded or installed.
+// Unattended-Upgrade::Allow-APT-Mark-Fallback "true";

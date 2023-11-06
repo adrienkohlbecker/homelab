@@ -1,0 +1,42 @@
+- name: Install unattended-upgrades
+  apt:
+    pkg:
+      - update-notifier-common
+      - unattended-upgrades
+    cache_valid_time: 3600
+    state: present
+  become: yes
+  tags:
+    - unattended_upgrades
+
+- name: Setup unattended-upgrades (20auto-upgrades)
+  copy:
+    src: 20auto-upgrades
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+  register: apt_unattended_20
+  tags:
+    - unattended_upgrades
+
+- name: Setup unattended-upgrades (50unattended-upgrades)
+  copy:
+    src: 50unattended-upgrades
+    dest: /etc/apt/apt.conf.d/50unattended-upgrades
+    owner: root
+    group: root
+    mode: '0644'
+  become: yes
+  register: apt_unattended_50
+  tags:
+    - unattended_upgrades
+
+- name: Dry-run unattended-upgrades
+  when: apt_unattended_20.changed or apt_unattended_50.changed
+  command: unattended-upgrades --dry-run --verbose
+  changed_when: false
+  become: yes
+  tags:
+    - unattended_upgrades
