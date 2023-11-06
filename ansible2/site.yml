@@ -8,4 +8,5 @@
     - console
     - timezone
     - apt
+    - unattended_upgrades
     - logrotate
