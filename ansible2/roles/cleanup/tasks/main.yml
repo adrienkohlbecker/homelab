@@ -1,3 +1,15 @@
+- name: Uninnstall snaps
+  snap:
+    name: "{{ item }}"
+    state: absent
+  become: yes
+  loop:
+      - lxd
+      - core20
+      - snapd
+  tags:
+    - cleanup
+
 - name: Uninstall uneeded packages
   apt:
     pkg:

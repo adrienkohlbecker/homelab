@@ -13,6 +13,7 @@
   copy:
     src: 90-custom.cfg
     dest: /etc/default/grub.d/90-custom.cfg
+    validate: grub-script-check %s
   register: grub_cfg
   become: yes
   tags:
