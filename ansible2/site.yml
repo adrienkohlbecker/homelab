@@ -10,3 +10,18 @@
     - apt
     - unattended_upgrades
     - logrotate
+
+  tasks:
+    - name: Check if a reboot is required
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+      tags:
+        - always
+
+    - name: restart machine
+      reboot:
+      become: yes
+      when: reboot_required.stat.exists
+      tags:
+        - always
