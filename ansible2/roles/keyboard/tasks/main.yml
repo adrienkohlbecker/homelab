@@ -5,7 +5,7 @@
     cache_valid_time: 3600
   become: yes
   tags:
-    - locale
+    - keyboard
 
 - name: Configure keyboard
   copy:
@@ -14,6 +14,23 @@
     owner: root
     group: root
     mode: '0644'
+  become: yes
+  register: keyboard_cfg
+  tags:
+    - keyboard
+
+- name: Update initramfs
+  when: keyboard_cfg.changed
+  command: update-initramfs -u -k all
+  become: yes
+  tags:
+    - keyboard
+
+- name: Ask to reboot
+  when: keyboard_cfg.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
   become: yes
   tags:
     - keyboard

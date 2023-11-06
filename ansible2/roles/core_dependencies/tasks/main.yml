@@ -19,11 +19,13 @@
       - subversion
       - xz-utils
     cache_valid_time: 3600
+  register: core_dependencies_apt
   become: yes
   tags:
     - core_dependencies
-  notify:
-    - Gather facts
 
-- name: Flush handlers
-  meta: flush_handlers
+- name: Gather facts
+  when: core_dependencies_apt.changed
+  setup:
+  tags:
+    - core_dependencies
