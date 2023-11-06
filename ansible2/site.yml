@@ -2,6 +2,7 @@
   roles:
     - core_dependencies
     - sudoers
+    - cleanup
     - hostname
     - locale
     - keyboard
