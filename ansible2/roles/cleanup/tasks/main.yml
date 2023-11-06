@@ -1,4 +1,11 @@
+- name: Gather the package facts
+  package_facts:
+    manager: apt
+  tags:
+    - cleanup
+
 - name: Uninnstall snaps
+  when: "'snapd' in ansible_facts.packages"
   snap:
     name: "{{ item }}"
     state: absent
