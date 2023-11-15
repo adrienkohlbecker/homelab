@@ -10,45 +10,41 @@
   find:
     paths:
       - /etc/logrotate.d
+    excludes: "*.dpkg-dist"
   register: logrotate_confs
   become: yes
   tags:
     - logrotate
 
-- block:
-
-  - name: Divert configuration files
-    community.general.dpkg_divert:
-      path: "{{ item }}"
-    loop: "{{ paths|flatten }}"
-    become: yes
-    tags:
-      - logrotate
-
-  - name: Disable compression on ZFS roots
-    lineinfile:
-      regexp: "{{ zfs_root | ternary(enable.regexp, disable.regexp) }}"
-      line: "{{ zfs_root | ternary(enable.line, disable.line) }}"
-      dest: "{{ item }}"
-      backrefs: true
-      backup: true
-    loop: "{{ paths|flatten }}"
-    register: logrotate_conf
-    become: yes
-    vars:
-      enable:
-        regexp: '^(\s*)compress'
-        line: '\1# compress # zfs already compresses disk contents'
-      disable:
-        regexp: '^(\s*)# compress # zfs already compresses disk contents'
-        line: '\1compress'
-    tags:
-      - logrotate
-
+- name: Configure logrotate compression
+  lineinfile:
+    regexp: "{{ zfs_root | ternary(enable.regexp, disable.regexp) }}"
+    line: "{{ zfs_root | ternary(enable.line, disable.line) }}"
+    dest: "{{ item }}"
+    backrefs: true
+    backup: true
+  loop: "{{ logrotate_confs.files | map(attribute='path') + [ '/etc/logrotate.conf' ] }}"
+  register: logrotate_conf
+  become: yes
   vars:
-    paths:
-      - "{{ logrotate_confs.files | map(attribute='path') }}"
-      - /etc/logrotate.conf
+    enable:
+      regexp: '^(\s*)compress'
+      line: '\1# compress # zfs already compresses disk contents'
+    disable:
+      regexp: '^(\s*)# compress # zfs already compresses disk contents'
+      line: '\1compress'
+  tags:
+    - logrotate
+
+- name: Divert configuration file
+  when: item.changed
+  community.general.dpkg_divert:
+    path: "{{ item.item }}"
+    divert: "{{ item.item }}.dpkg-dist" # so it is not included by logrotate.conf
+  loop: "{{ logrotate_conf.results }}"
+  become: yes
+  tags:
+    - logrotate
 
 - name: Enable the service
   systemd:
