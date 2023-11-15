@@ -28,6 +28,7 @@
       - os-prober
     state: absent
     autoremove: true
+    purge: true
   become: yes
   tags:
     - cleanup
