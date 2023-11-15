@@ -16,6 +16,7 @@
     - journald
     - iptables
     - fail2ban
+    - ssh
     - docker
 
   tasks:
