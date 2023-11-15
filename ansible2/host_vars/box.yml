@@ -1,2 +1,5 @@
 zfs_root: false
 journald_storage: persistent
+
+mountpoints:
+  - { path: '/var/lib/docker', src: '/dev/disk/by-id/ata-QEMU_HARDDISK_QM00003-part3', fstype: 'ext4', opts: 'defaults,noatime', owner: 'root', group: 'root', mode: '0710' }
