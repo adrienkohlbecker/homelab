@@ -102,3 +102,16 @@
   become: yes
   tags:
     - docker
+
+- name: Schedule the clean script
+  cron:
+    name: docker_clean
+    minute: '5'
+    hour: '0'
+    job: /usr/bin/systemd-cat --identifier docker_clean /usr/bin/docker system prune -f
+    user: root
+    cron_file: ansible_docker_clean
+    backup: yes
+  become: yes
+  tags:
+    - docker
