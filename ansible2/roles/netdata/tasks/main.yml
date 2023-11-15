@@ -1,0 +1,62 @@
+- name: Add repository key
+  apt_key:
+    id: 6588FDD7B14721FE7C3115E6F9177B5265F56346
+    url: https://repo.netdata.cloud/netdatabot.gpg.key
+    keyring: /etc/apt/trusted.gpg.d/netdata.gpg
+  become: yes
+  tags:
+    - netdata
+
+- name: Add repository
+  apt_repository:
+    repo: deb [signed-by=/etc/apt/trusted.gpg.d/netdata.gpg] https://repo.netdata.cloud/repos/stable/ubuntu/ {{ ansible_distribution_release }}/
+  become: yes
+  tags:
+    - netdata
+
+- import_role:
+    name: apt_unit_masked
+  vars:
+    pkg: netdata
+    unit: netdata.service
+  tags:
+    - netdata
+
+- name: Copy the prometheus config
+  template:
+    src: prometheus.conf.j2
+    dest: /etc/netdata/go.d/prometheus.conf
+    owner: netdata
+    group: netdata
+    mode: 0600
+    backup: yes
+  register: prometheus_conf
+  become: yes
+  tags:
+    - netdata
+
+- name: Enable the service
+  systemd:
+    name: netdata
+    enabled: yes
+  become: yes
+  tags:
+    - netdata
+
+- name: Start the service
+  systemd:
+    name: netdata
+    state: started
+  become: yes
+  register: systemd_started
+  tags:
+    - netdata
+
+- name: Restart the service
+  when: prometheus_conf.changed and not systemd_started.changed
+  systemd:
+    name: netdata
+    state: restarted
+  become: yes
+  tags:
+    - netdata
