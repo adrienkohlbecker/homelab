@@ -1,0 +1,19 @@
+- name: Configure netplan
+  template:
+    src: config.yaml.j2
+    dest: /etc/netplan/00-installer-config.yaml
+    owner: root
+    group: root
+    mode: "0600"
+    backup: yes
+  become: yes
+  register: netplan_cfg
+  tags:
+    - networking
+
+- name: Apply netplan
+  when: netplan_cfg.changed
+  shell: netplan apply
+  become: yes
+  tags:
+    - networking
