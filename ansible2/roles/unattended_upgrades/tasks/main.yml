@@ -15,7 +15,7 @@
     dest: /etc/apt/apt.conf.d/20auto-upgrades
     owner: root
     group: root
-    mode: '0644'
+    mode: "0644"
     backup: yes
   become: yes
   register: apt_unattended_20
@@ -28,7 +28,7 @@
     dest: /etc/apt/apt.conf.d/50unattended-upgrades
     owner: root
     group: root
-    mode: '0644'
+    mode: "0644"
   become: yes
   register: apt_unattended_50
   tags:

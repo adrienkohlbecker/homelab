@@ -13,7 +13,7 @@
     dest: /etc/timezone
     owner: root
     group: root
-    mode: '0644'
+    mode: "0644"
     backup: yes
   register: timezone_cfg
   become: yes
@@ -26,7 +26,7 @@
     dest: /etc/localtime
     owner: root
     group: root
-    mode: '0644'
+    mode: "0644"
     state: link
   register: localtime_cfg
   become: yes

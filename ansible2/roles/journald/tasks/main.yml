@@ -4,7 +4,7 @@
     state: directory
     owner: root
     group: root
-    mode: 0755
+    mode: "0755"
   become: yes
   tags:
     - journald
@@ -15,7 +15,7 @@
     dest: /etc/systemd/journald.conf.d/10-custom.conf
     owner: root
     group: root
-    mode: 0644
+    mode: "0644"
     backup: yes
   become: yes
   register: journald_conf

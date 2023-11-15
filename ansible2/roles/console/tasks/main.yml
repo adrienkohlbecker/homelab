@@ -13,7 +13,7 @@
     dest: /etc/default/console-setup
     owner: root
     group: root
-    mode: 0644
+    mode: "0644"
     backup: yes
   register: console_cfg
   become: yes
