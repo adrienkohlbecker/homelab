@@ -20,6 +20,7 @@
     - ntp
     - mailer
     - docker
+    - vector
 
   tasks:
     - name: Check if a reboot is required

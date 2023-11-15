@@ -1,0 +1,80 @@
+- name: Add repository key
+  apt_key:
+    id: 3543DB2D0A2BC4B8
+    url: https://repositories.timber.io/public/vector/gpg.3543DB2D0A2BC4B8.key
+    keyring: /etc/apt/trusted.gpg.d/vector.gpg
+  become: yes
+  tags:
+    - vector
+
+- name: Add repository
+  apt_repository:
+    repo: deb [signed-by=/etc/apt/trusted.gpg.d/vector.gpg] https://repositories.timber.io/public/vector/deb/ubuntu {{ ansible_distribution_release }} main
+  become: yes
+  tags:
+    - vector
+
+- import_role:
+    name: apt_unit_masked
+  vars:
+    pkg: vector
+    unit: vector.service
+  tags:
+    - vector
+
+# TODO: What if docker is not installed?
+- name: Add user to docker group
+  user:
+    name: vector
+    groups: docker
+    append: yes
+  become: yes
+  tags:
+    - vector
+
+- name: Divert vector config
+  community.general.dpkg_divert:
+    path: /etc/vector/vector.yaml
+  become: yes
+  tags:
+    - vector
+
+- name: Configure vector
+  copy:
+    src: vector.yaml
+    dest: /etc/vector/vector.yaml
+    owner: root
+    group: root
+    mode: "0644"
+    validate: vector validate --config-yaml %s
+    backup: yes
+  become: yes
+  register: vector_cfg
+  tags:
+    - vector
+
+- name: Enable the service
+  systemd:
+    name: vector
+    enabled: yes
+  become: yes
+  tags:
+    - vector
+
+- name: Start the service
+  systemd:
+    name: vector
+    state: started
+  become: yes
+  register: vector_started
+  tags:
+    - vector
+
+- name: Restart vector
+  when: vector_cfg.changed and not vector_started.changed
+  systemd:
+    name: vector
+    state: restarted
+  become: yes
+  tags:
+    - vector

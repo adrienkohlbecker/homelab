@@ -1,0 +1,221 @@
+#                                    __   __  __
+#                                    \ \ / / / /
+#                                     \ V / / /
+#                                      \_/  \/
+#
+#                                    V E C T O R
+#                                   Configuration
+#
+# ------------------------------------------------------------------------------
+# Website: https://vector.dev
+# Docs: https://vector.dev/docs
+# Chat: https://chat.vector.dev
+# ------------------------------------------------------------------------------
+
+# Change this to use a non-default directory for Vector data storage:
+# data_dir: "/var/lib/vector"
+
+sources:
+  file_alternatives:
+    type: file
+    include:
+      - /var/log/alternatives.log
+  file_apport:
+    type: file
+    include:
+      - /var/log/apport.log
+  file_apt_history:
+    type: file
+    include:
+      - /var/log/apt/history.log
+  file_apt_term:
+    type: file
+    include:
+      - /var/log/apt/term.log
+  file_dpkg:
+    type: file
+    include:
+      - /var/log/dpkg.log
+  file_unattended_upgrades:
+    type: file
+    include:
+      - /var/log/unattended-upgrades/unattended-upgrades.log
+      - /var/log/unattended-upgrades/unattended-upgrades-shutdown.log
+  # TODO: What if docker is not installed?
+  docker:
+    type: docker_logs
+  journal:
+    type: journald
+
+transforms:
+  transformed_alternatives:
+    # message format:
+    # update-alternatives 2023-11-06 11:50:17: run with --install /usr/bin/editor editor ...
+    type: remap
+    inputs: [file_alternatives]
+    timezone: local
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+        . |= parse_regex!(.message, r'^(?P<appname>update-alternatives) (?P<timestamp>\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d): (?P<message>.*)$')
+        .timestamp = parse_timestamp!(.timestamp, "%Y-%m-%d %H:%M:%S")
+
+  transformed_apport:
+    # message format:
+    #
+    # ERROR: apport (pid 54650) Wed Nov  8 11:18:12 2023: called for pid 2909, signal 6, core limit 0, dump mode 1
+    # ERROR: apport (pid 54650) Wed Nov  8 11:18:12 2023: executable: /usr/sbin/ipmiseld (command line "/usr/sbin/ipmiseld")
+    # ERROR: apport (pid 54650) Wed Nov  8 11:18:12 2023: apport: report /var/crash/_usr_sbin_ipmiseld.0.crash already exists and unseen, skipping to avoid disk usage DoS
+    type: remap
+    inputs: [file_apport]
+    timezone: local
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+        . |= parse_regex!(.message, r'^(?P<severity>\w+): (?P<appname>apport) \(pid (?P<pid>\d+)\) (?P<timestamp>\w+ \w+ [ \d]\d \d\d:\d\d:\d\d \d\d\d\d): (?P<message>.*)$')
+        .timestamp = parse_timestamp!(.timestamp, "%a %b %e %H:%M:%S %Y")
+        .pid = parse_int!(.pid)
+        .severity = downcase(.severity)
+        to_syslog_severity!(.severity)
+
+  reduced_apport:
+    type: reduce
+    inputs: [ transformed_apport ]
+    group_by: [ severity, pid, appname ]
+    starts_when: match(string!(.message), r'^called for pid')
+    merge_strategies:
+      message: concat_newline
+
+  reduced_apt_history:
+    # message format:
+    #
+    # Start-Date: 2023-11-12  10:31:18
+    # Commandline: /usr/bin/apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install vector=0.34.0-1
+    # Requested-By: ak (1000)
+    # Install: vector:amd64 (0.34.0-1)
+    # End-Date: 2023-11-12  10:31:33
+    type: reduce
+    inputs: [file_apt_history]
+    starts_when: match(string!(.message), r'^Start-Date')
+    merge_strategies:
+      message: concat_newline
+
+  reduced_apt_term:
+    # message format:
+    #
+    # Log started: 2023-11-12  14:02:02
+    # Selecting previously unselected package ncdu.
+    # (Reading database ... 107889 files and directories currently installed.)
+    # Preparing to unpack .../ncdu_1.15.1-1_amd64.deb ...
+    # Unpacking ncdu (1.15.1-1) ...
+    # Setting up ncdu (1.15.1-1) ...
+    # Processing triggers for man-db (2.10.2-1) ...
+    # Log ended: 2023-11-12  14:02:02
+    type: reduce
+    inputs: [file_apt_term]
+    starts_when: match(string!(.message), r'^Log started')
+    merge_strategies:
+      message: concat_newline
+
+  transformed_apt_history:
+    type: remap
+    inputs: [reduced_apt_history]
+    timezone: local
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+        if (.message != "") {
+          . |= parse_regex!(.message, r'^Start-Date: (?P<timestamp>\d\d\d\d-\d\d-\d\d  \d\d:\d\d:\d\d)\n(?P<message>(?s).*)End-Date: (?P<timestamp_end>\d\d\d\d-\d\d-\d\d  \d\d:\d\d:\d\d)\s*$')
+          .timestamp = parse_timestamp!(.timestamp, "%Y-%m-%d  %H:%M:%S")
+          .timestamp_end = parse_timestamp!(.timestamp_end, "%Y-%m-%d  %H:%M:%S")
+        }
+
+  transformed_apt_term:
+    type: remap
+    inputs: [reduced_apt_term]
+    timezone: local
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+        if (.message != "") {
+          . |= parse_regex!(.message, r'^Log started: (?P<timestamp>\d\d\d\d-\d\d-\d\d  \d\d:\d\d:\d\d)\n(?P<message>(?s).*)Log ended: (?P<timestamp_end>\d\d\d\d-\d\d-\d\d  \d\d:\d\d:\d\d)\s*$')
+          .timestamp = parse_timestamp!(.timestamp, "%Y-%m-%d  %H:%M:%S")
+          .timestamp_end = parse_timestamp!(.timestamp_end, "%Y-%m-%d  %H:%M:%S")
+        }
+
+  filtered_apt_history:
+    type: filter
+    inputs: [ transformed_apt_history ]
+    condition: .message != ""
+
+  filtered_apt_term:
+    type: filter
+    inputs: [ transformed_apt_term ]
+    condition: .message != ""
+
+  transformed_dpkg:
+    # message format:
+    # 2023-11-12 14:02:02 install ncdu:amd64 <none> 1.15.1-1
+    type: remap
+    inputs: [file_dpkg]
+    timezone: local
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+        . |= parse_regex!(.message, r'^(?P<timestamp>\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d) (?P<message>.*)$')
+        .timestamp = parse_timestamp!(.timestamp, "%Y-%m-%d %H:%M:%S")
+        .appname = "dpkg"
+
+  transformed_unattended_upgrades:
+    # message format:
+    # 2023-05-31 06:33:01,196 WARNING Found /var/run/reboot-required, rebooting
+    type: remap
+    inputs: [file_unattended_upgrades]
+    timezone: local
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+        . |= parse_regex!(.message, r'^(?P<timestamp>\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d,\d\d\d) (?P<severity>[^ ]+) (?P<message>.*)$')
+        .timestamp = parse_timestamp!(.timestamp, "%Y-%m-%d %H:%M:%S,%3f")
+        .appname = "unattended-upgrades"
+        .severity = downcase(.severity)
+        to_syslog_severity!(.severity)
+
+  logger:
+    type: remap
+    inputs:
+      - '*.dropped'
+    drop_on_error: true
+    reroute_dropped: false
+    source: |-
+      host = string!(.host)
+      message = string!(.message)
+      component_id = string!(.metadata.dropped.component_id)
+      log("component '" + component_id + "' dropped message from <" + host + ">: " + message, level: "warn")
+
+  clef:
+    type: remap
+    inputs: [ transformed_alternatives, reduced_apport, filtered_apt_history, filtered_apt_term, transformed_dpkg, transformed_unattended_upgrades, docker, journal ]
+    source: |-
+      .message = strip_ansi_escape_codes!(.message)
+
+      .@t = del(.timestamp)
+      .@m = del(.message)
+      .@l = del(.severity) || "info"
+
+sinks:
+  seq:
+    type: http
+    inputs: [ clef ]
+    uri: http://192.168.64.6:5341/api/events/raw?clef
+    encoding:
+      codec: json
+    framing:
+      method: newline_delimited
+
+# Vector's GraphQL API (disabled by default)
+# Uncomment to try it out with the `vector top` command or
+# in your browser at http://localhost:8686
+api:
+  enabled: true
+  address: "127.0.0.1:8686"
