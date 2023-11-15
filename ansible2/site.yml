@@ -24,6 +24,7 @@
     - vector
     - netdata
     - journald_exporter
+    - powertop
 
   tasks:
     - name: Check if a reboot is required
