@@ -3,28 +3,32 @@
     manager: apt
   no_log: yes
 
-- name: Mask {{ unit }} to prevent it from starting
-  when: pkg not in ansible_facts.packages
-  file:
-    src: /dev/null
-    dest: /etc/systemd/system/{{ unit }}
-    owner: root
-    group: root
-    state: link
-  register: masked_unit
-  become: yes
+- when: pkg not in ansible_facts.packages
+  block:
 
-- name: Install {{ pkg }}
-  apt:
-    pkg:
-      - "{{ pkg }}"
-    cache_valid_time: 3600
-  register: apt_unit_masked
-  become: yes
+  - name: Prevent daemons from starting during install
+    template:
+      src: policy-rc.d
+      dest: /usr/sbin/policy-rc.d
+      owner: root
+      group: root
+      mode: "0755"
+    register: policy_rcd
+    become: yes
 
-- name: Unmask {{ unit }}
-  when: masked_unit.changed
-  file:
-    dest: /etc/systemd/system/{{ unit }}
-    state: absent
-  become: yes
+  - name: Install {{ pkg }}
+    apt:
+      pkg:
+        - "{{ pkg }}"
+      cache_valid_time: 3600
+    register: apt_unit_masked
+    become: yes
+
+  always:
+
+  - name: Remove policy file
+    when: policy_rcd.changed
+    file:
+      dest: /usr/sbin/policy-rc.d
+      state: absent
+    become: yes
