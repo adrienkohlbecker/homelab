@@ -18,6 +18,7 @@
     - fail2ban
     - ssh
     - ntp
+    - mailer
     - docker
 
   tasks:
