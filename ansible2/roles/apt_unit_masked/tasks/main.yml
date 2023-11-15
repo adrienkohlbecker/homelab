@@ -1,0 +1,30 @@
+- name: Gather package facts
+  package_facts:
+    manager: apt
+  no_log: yes
+
+- name: Mask {{ unit }} to prevent it from starting
+  when: pkg not in ansible_facts.packages
+  file:
+    src: /dev/null
+    dest: /etc/systemd/system/{{ unit }}
+    owner: root
+    group: root
+    state: link
+  register: masked_unit
+  become: yes
+
+- name: Install {{ pkg }}
+  apt:
+    pkg:
+      - "{{ pkg }}"
+    cache_valid_time: 3600
+  register: apt_unit_masked
+  become: yes
+
+- name: Unmask {{ unit }}
+  when: masked_unit.changed
+  file:
+    dest: /etc/systemd/system/{{ unit }}
+    state: absent
+  become: yes
