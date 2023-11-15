@@ -15,6 +15,7 @@
     - logrotate
     - journald
     - iptables
+    - fail2ban
     - docker
 
   tasks:
