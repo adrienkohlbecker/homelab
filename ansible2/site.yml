@@ -3,6 +3,7 @@
     - core_dependencies
     - sudoers
     - cleanup
+    - mounts
     - hostname
     - networking
     - locale

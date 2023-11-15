@@ -1,25 +1,3 @@
-- name: Create mount point
-  file:
-    dest: /var/lib/docker
-    state: directory
-    owner: root
-    group: root
-    mode: "0710"
-  become: yes
-  tags:
-    - docker
-
-- name: Create configuration directory
-  file:
-    dest: /etc/docker
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: yes
-  tags:
-    - docker
-
 - import_role:
     name: apt_unit_masked
   vars:
