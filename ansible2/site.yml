@@ -4,6 +4,7 @@
     - sudoers
     - cleanup
     - hostname
+    - networking
     - locale
     - keyboard
     - console

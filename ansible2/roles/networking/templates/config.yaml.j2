@@ -1,0 +1,7 @@
+# This is the network config written by 'subiquity'
+network:
+  ethernets:
+    {{ ansible_default_ipv4.interface }}:
+      dhcp4: true
+      dhcp6: false
+  version: 2
