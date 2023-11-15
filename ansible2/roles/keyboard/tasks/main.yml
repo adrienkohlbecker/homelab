@@ -13,7 +13,7 @@
     dest: /etc/default/keyboard
     owner: root
     group: root
-    mode: '0644'
+    mode: "0644"
     backup: yes
   become: yes
   register: keyboard_cfg
