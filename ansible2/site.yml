@@ -17,6 +17,7 @@
     - iptables
     - fail2ban
     - ssh
+    - ntp
     - docker
 
   tasks:
