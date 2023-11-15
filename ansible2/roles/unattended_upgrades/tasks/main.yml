@@ -29,6 +29,7 @@
     owner: root
     group: root
     mode: "0644"
+    backup: yes
   become: yes
   register: apt_unattended_50
   tags:
