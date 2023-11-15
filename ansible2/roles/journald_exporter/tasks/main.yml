@@ -1,0 +1,87 @@
+- name: Download journald-exporter installer
+  get_url:
+    url:  https://github.com/dead-claudia/journald-exporter/releases/download/v1.0.0/journald-exporter
+    dest: /usr/local/bin/journald-exporter
+    mode: "0755"
+    owner: root
+    group: root
+    backup: yes
+  become: yes
+  tags:
+    - journald_exporter
+
+- name: Add journald-exporter user
+  user:
+    name: journald-exporter
+    createhome: no
+    system: true
+  become: yes
+  tags:
+    - journald_exporter
+
+- name: Create configuration directory
+  file:
+    dest: /etc/journald-exporter
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: yes
+  tags:
+    - journald_exporter
+
+- name: Create keys directory
+  file:
+    dest: /etc/journald-exporter/keys
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: yes
+  tags:
+    - journald_exporter
+
+- name: Create key
+  copy:
+    content: "{{ journald_exporter_key }}"
+    dest: /etc/journald-exporter/keys/netdata
+    owner: root
+    group: root
+    mode: "0600"
+  become: yes
+  tags:
+    - journald_exporter
+
+- import_role:
+    name: systemd_unit
+  vars:
+    src: journald-exporter.service
+  tags:
+    - journald_exporter
+
+- name: Enable the service
+  systemd:
+    name: journald-exporter
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - journald_exporter
+
+- name: Start the service
+  systemd:
+    name: journald-exporter
+    state: started
+  register: systemd_started
+  become: yes
+  tags:
+    - journald_exporter
+
+- name: Restart the service
+  when: systemd_unit.changed and not systemd_started.changed
+  systemd:
+    name: journald-exporter
+    state: restarted
+  become: yes
+  tags:
+    - journald_exporter
