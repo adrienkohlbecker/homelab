@@ -22,6 +22,7 @@
     - docker
     - vector
     - netdata
+    - journald_exporter
 
   tasks:
     - name: Check if a reboot is required
