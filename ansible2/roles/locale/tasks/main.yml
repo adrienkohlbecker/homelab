@@ -19,6 +19,7 @@
   copy:
     src: locale
     dest: /etc/default/locale
+    backup: yes
   become: yes
   tags:
     - locale

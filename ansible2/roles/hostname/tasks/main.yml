@@ -12,6 +12,7 @@
     owner: root
     group: adm
     mode: 0644
+    backup: yes
   become: yes
   tags:
     - hostname

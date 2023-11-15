@@ -14,6 +14,7 @@
     src: 90-custom.cfg
     dest: /etc/default/grub.d/90-custom.cfg
     validate: grub-script-check %s
+    backup: yes
   register: grub_cfg
   become: yes
   tags:

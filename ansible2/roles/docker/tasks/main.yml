@@ -37,6 +37,7 @@
     owner: root
     group: root
     validate: dockerd --validate --config-file=%s
+    backup: yes
   register: docker_conf
   become: yes
   tags:
@@ -64,6 +65,7 @@
   copy:
     dest: /etc/default/grub.d/99-docker.cfg
     content: "GRUB_CMDLINE_LINUX=\"$GRUB_CMDLINE_LINUX cgroup_enable=memory swapaccount=1\"\n"
+    backup: yes
   register: grub_cfg
   become: yes
   tags:

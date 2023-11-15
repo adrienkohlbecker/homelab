@@ -5,7 +5,8 @@
     replace: 'deb\1 http://archive.ubuntu.com/ubuntu'
     owner: root
     group: root
-    mode: '0644'
+    mode: "0644"
+    backup: true
   become: yes
   register: apt_mirror
   tags:
