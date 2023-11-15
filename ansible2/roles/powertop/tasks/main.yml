@@ -1,0 +1,44 @@
+---
+
+- name: Install powertop
+  apt:
+    pkg:
+      - powertop
+    state: present
+  become: yes
+  tags:
+    - powertop
+
+- import_role:
+    name: systemd_unit
+  vars:
+    src: powertop.service
+  tags:
+    - powertop
+
+- name: Enable the service
+  systemd:
+    name: powertop
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - powertop
+
+- name: Start the service
+  systemd:
+    name: powertop
+    state: started
+  register: systemd_started
+  become: yes
+  tags:
+    - powertop
+
+- name: Restart the service
+  when: systemd_unit.changed and not systemd_started.changed
+  systemd:
+    name: powertop
+    state: restarted
+  become: yes
+  tags:
+    - powertop
