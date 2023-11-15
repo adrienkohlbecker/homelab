@@ -1,9 +1,8 @@
-- name: Install logrotate
-  apt:
-    pkg:
-      - logrotate
-    cache_valid_time: 3600
-  become: yes
+- import_role:
+    name: apt_unit_masked
+  vars:
+    pkg: logrotate
+    unit: logrotate.service
   tags:
     - logrotate
 
@@ -34,6 +33,7 @@
       backrefs: true
       backup: true
     loop: "{{ paths|flatten }}"
+    register: logrotate_conf
     become: yes
     vars:
       enable:
@@ -49,5 +49,29 @@
     paths:
       - "{{ logrotate_confs.files | map(attribute='path') }}"
       - /etc/logrotate.conf
+
+- name: Enable the service
+  systemd:
+    name: logrotate
+    enabled: yes
+  become: yes
+  tags:
+    - logrotate
+
+- name: Start the service
+  systemd:
+    name: logrotate
+    state: started
+  become: yes
+  register: systemd_started
+  tags:
+    - logrotate
+
+- name: Restart the service
+  when: logrotate_conf.changed and not systemd_started.changed
+  systemd:
+    name: logrotate
+    state: restarted
+  become: yes
   tags:
     - logrotate
