@@ -1,6 +1,7 @@
-- name: Download journald-exporter installer
+- name: Download journald-exporter
   get_url:
     url:  https://github.com/dead-claudia/journald-exporter/releases/download/v1.0.0/journald-exporter
+    checksum: sha256:6a47b863145be1d2a265dfa5cd04986ad6be7c6af16312e685460121ce468815
     dest: /usr/local/bin/journald-exporter
     mode: "0755"
     owner: root
