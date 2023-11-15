@@ -21,6 +21,7 @@
     - mailer
     - docker
     - vector
+    - netdata
 
   tasks:
     - name: Check if a reboot is required
