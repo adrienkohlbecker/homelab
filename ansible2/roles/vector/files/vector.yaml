@@ -191,7 +191,7 @@ transforms:
       host = string!(.host)
       message = string!(.message)
       component_id = string!(.metadata.dropped.component_id)
-      log("component '" + component_id + "' dropped message from <" + host + ">: " + message, level: "warn")
+      log("component '" + component_id + "' dropped message from <" + host + ">: " + replace(message, "\n", "\\n"), level: "warn")
 
   clef:
     type: remap

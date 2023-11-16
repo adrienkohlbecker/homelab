@@ -38,7 +38,7 @@
   command: update-initramfs -u -k all
   become: yes
   tags:
-    - keyboard
+    - timezone
 
 - name: Ask to reboot
   when: timezone_cfg.changed or localtime_cfg.changed
