@@ -1,0 +1,101 @@
+---
+
+- name: Install packages
+  apt:
+    pkg:
+      - curl
+      - git
+      - gparted
+      - htop
+      - iotop
+      - iperf
+      - jq
+      - lsof
+      - man-db
+      - mosh
+      - ncdu
+      - nmon
+      - screen
+      - socat
+      - stress
+      - sysstat
+      - telnet
+      - tig
+      - tmux
+      - tree
+      - usbutils
+      - vim
+      - zsh
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - user
+
+- name: Set shell to zsh
+  user:
+    name: "{{ ansible_ssh_user }}"
+    shell: /bin/zsh
+  become: yes
+  tags:
+    - user
+
+- name: Sudo without password
+  copy:
+    dest: /etc/sudoers.d/{{ ansible_ssh_user }}
+    content: "{{ ansible_ssh_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    validate: visudo -cf %s
+    backup: yes
+  become: yes
+  tags:
+    - user
+
+- name: Add authorized keys
+  authorized_key:
+    user: "{{ ansible_ssh_user }}"
+    key: "{{ ssh_public_keys }}"
+    state: present
+    exclusive: yes
+  tags:
+    - user
+
+- name: Configure git
+  copy:
+    src: gitconfig
+    dest: /home/{{ ansible_ssh_user }}/.gitconfig.local
+    mode: "0644"
+    owner: "{{ ansible_ssh_user }}"
+    group: "{{ ansible_ssh_user }}"
+    backup: yes
+  tags:
+    - user
+
+- name: Get public key
+  command: gpg --keyserver keyserver.ubuntu.com --recv-keys C248DE6357445D6302F9A62E74BFD03C20CC21AF
+  args:
+    creates: /home/{{ ansible_ssh_user }}/.gnupg/pubring.kbx
+  tags:
+    - user
+
+- name: Install dotfiles repo
+  command: git clone --bare https://github.com/adrienkohlbecker/dotfiles.git .dotfiles
+  args:
+    chdir: /home/{{ ansible_ssh_user }}
+    creates: /home/{{ ansible_ssh_user }}/.dotfiles
+  tags:
+    - user
+
+- name: Install dotfiles
+  command: git --git-dir=/home/{{ ansible_ssh_user }}/.dotfiles --work-tree=/home/{{ ansible_ssh_user }} reset --hard
+  args:
+    chdir: /home/{{ ansible_ssh_user }}
+    creates: /home/{{ ansible_ssh_user }}/.zshrc
+  tags:
+    - user
+
+- name: Install dotfiles submodules
+  command: git --git-dir=/home/{{ ansible_ssh_user }}/.dotfiles --work-tree=/home/{{ ansible_ssh_user }} submodule update --init --recursive
+  args:
+    chdir: /home/{{ ansible_ssh_user }}
+    creates: /home/{{ ansible_ssh_user }}/.zsh/pure/readme.md
+  tags:
+    - user
