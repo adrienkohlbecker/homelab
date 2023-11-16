@@ -1,0 +1,16 @@
+- name: Install lm-sensors
+  apt:
+    pkg:
+      - lm-sensors
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - lm_sensors
+
+# tasks:
+#   - name: Install packages
+#     apt:
+#       pkg:
+#         - hddtemp
+#       cache_valid_time: 3600
+#     become: yes
