@@ -25,6 +25,7 @@
     - netdata
     - journald_exporter
     - powertop
+    - lm_sensors
 
   tasks:
     - name: Check if a reboot is required
