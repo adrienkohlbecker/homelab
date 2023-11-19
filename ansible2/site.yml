@@ -24,6 +24,7 @@
     - mailer
     - hdparm
     - docker
+    - virtualization
     - vector
     - netdata
     - journald_exporter
