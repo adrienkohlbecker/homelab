@@ -7,3 +7,6 @@ mountpoints:
 zfs_arc_min: 536870912
 zfs_arc_max: 1073741824
 zfs_trim_pools: []
+
+system_is_qemu_vm: true
+system_is_ipmi_capable: true

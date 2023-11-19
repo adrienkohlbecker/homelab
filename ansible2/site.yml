@@ -13,6 +13,7 @@
     - apt
     - unattended_upgrades
     - kernel
+    - hardware
     - grub
     - logrotate
     - journald

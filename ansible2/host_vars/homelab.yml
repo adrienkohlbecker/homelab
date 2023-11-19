@@ -8,3 +8,6 @@ zfs_arc_min: 1073741824
 zfs_arc_max: 8589934592
 zfs_trim_pools:
   - rpool
+
+system_is_qemu_vm: false
+system_is_ipmi_capable: true
