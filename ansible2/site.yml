@@ -23,14 +23,14 @@
     - ntp
     - mailer
     - hdparm
+    - powertop
+    - lm_sensors
+    - zfs
     - docker
     - virtualization
     - vector
     - netdata
     - journald_exporter
-    - powertop
-    - lm_sensors
-    - zfs
 
   tasks:
     - name: Check if a reboot is required
