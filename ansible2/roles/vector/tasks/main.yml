@@ -52,6 +52,7 @@
   register: vector_cfg
   tags:
     - vector
+    - vector_conf
 
 - name: Enable the service
   systemd:
@@ -69,6 +70,7 @@
   register: vector_started
   tags:
     - vector
+    - vector_conf
 
 - name: Restart vector
   when: vector_cfg.changed and not vector_started.changed
@@ -78,3 +80,4 @@
   become: yes
   tags:
     - vector
+    - vector_conf
