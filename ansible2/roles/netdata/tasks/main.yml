@@ -22,13 +22,33 @@
   tags:
     - netdata
 
+- name: Divert configuration file
+  community.general.dpkg_divert:
+    path: /etc/netdata/netdata.conf
+  become: yes
+  tags:
+    - netdata
+
+- name: Copy the netdata config
+  copy:
+    src: netdata.conf
+    dest: /etc/netdata/netdata.conf
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: yes
+  register: netdata_conf
+  become: yes
+  tags:
+    - netdata
+
 - name: Copy the prometheus config
   template:
     src: prometheus.conf.j2
     dest: /etc/netdata/go.d/prometheus.conf
     owner: netdata
     group: netdata
-    mode: 0600
+    mode: "0600"
     backup: yes
   register: prometheus_conf
   become: yes
@@ -53,7 +73,7 @@
     - netdata
 
 - name: Restart the service
-  when: prometheus_conf.changed and not systemd_started.changed
+  when: (netdata_conf.changed or prometheus_conf.changed) and not systemd_started.changed
   systemd:
     name: netdata
     state: restarted
