@@ -74,9 +74,8 @@ transforms:
     source: |-
         . |= parse_regex!(.message, r'^(?P<severity>\w+): (?P<appname>apport) \(pid (?P<pid>\d+)\) (?P<timestamp>\w+ \w+ [ \d]\d \d\d:\d\d:\d\d \d\d\d\d): (?P<message>.*)$')
         .timestamp = parse_timestamp!(.timestamp, "%a %b %e %H:%M:%S %Y")
-        .pid = parse_int!(.pid)
-        .severity = downcase(.severity)
-        to_syslog_severity!(.severity)
+        .pid = parse_int!(.pid, 10)
+        .severity = to_syslog_severity!(downcase(.severity))
 
   reduced_apport:
     type: reduce
@@ -85,6 +84,8 @@ transforms:
     starts_when: match(string!(.message), r'^called for pid')
     merge_strategies:
       message: concat_newline
+      pid: retain
+      severity: retain
 
   reduced_apt_history:
     # message format:
@@ -126,8 +127,10 @@ transforms:
     source: |-
         if (.message != "") {
           . |= parse_regex!(.message, r'^Start-Date: (?P<timestamp>\d\d\d\d-\d\d-\d\d  \d\d:\d\d:\d\d)\n(?P<message>(?s).*)End-Date: (?P<timestamp_end>\d\d\d\d-\d\d-\d\d  \d\d:\d\d:\d\d)\s*$')
+          .message = strip_whitespace(.message)
           .timestamp = parse_timestamp!(.timestamp, "%Y-%m-%d  %H:%M:%S")
           .timestamp_end = parse_timestamp!(.timestamp_end, "%Y-%m-%d  %H:%M:%S")
+          .appname = "apt-history"
         }
 
   transformed_apt_term:
@@ -139,8 +142,10 @@ transforms:
     source: |-
         if (.message != "") {
           . |= parse_regex!(.message, r'^Log started: (?P<timestamp>\d\d\d\d-\d\d-\d\d  \d\d:\d\d:\d\d)\n(?P<message>(?s).*)Log ended: (?P<timestamp_end>\d\d\d\d-\d\d-\d\d  \d\d:\d\d:\d\d)\s*$')
+          .message = strip_whitespace(.message)
           .timestamp = parse_timestamp!(.timestamp, "%Y-%m-%d  %H:%M:%S")
           .timestamp_end = parse_timestamp!(.timestamp_end, "%Y-%m-%d  %H:%M:%S")
+          .appname = "apt-term"
         }
 
   filtered_apt_history:
@@ -178,8 +183,7 @@ transforms:
         . |= parse_regex!(.message, r'^(?P<timestamp>\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d,\d\d\d) (?P<severity>[^ ]+) (?P<message>.*)$')
         .timestamp = parse_timestamp!(.timestamp, "%Y-%m-%d %H:%M:%S,%3f")
         .appname = "unattended-upgrades"
-        .severity = downcase(.severity)
-        to_syslog_severity!(.severity)
+        .severity = to_syslog_severity!(downcase(.severity))
 
   logger:
     type: remap
@@ -193,12 +197,15 @@ transforms:
       component_id = string!(.metadata.dropped.component_id)
       log("component '" + component_id + "' dropped message from <" + host + ">: " + replace(message, "\n", "\\n"), level: "warn")
 
-  clef:
+  clean_docker:
     type: remap
-    inputs: [ transformed_alternatives, reduced_apport, filtered_apt_history, filtered_apt_term, transformed_dpkg, transformed_unattended_upgrades, docker, journal ]
+    inputs: [ docker ]
     source: |-
       .message = strip_ansi_escape_codes!(.message)
 
+  clef:
+    inputs: [ transformed_alternatives, reduced_apport, filtered_apt_history, filtered_apt_term, transformed_dpkg, transformed_unattended_upgrades, clean_docker, journal ]
+    source: |-
       .@t = del(.timestamp)
       .@m = del(.message)
       .@l = del(.severity) || "info"
