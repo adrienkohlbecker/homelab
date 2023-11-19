@@ -22,6 +22,7 @@
     - ssh
     - ntp
     - mailer
+    - hdparm
     - docker
     - vector
     - netdata
