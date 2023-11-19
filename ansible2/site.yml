@@ -12,6 +12,7 @@
     - timezone
     - apt
     - unattended_upgrades
+    - kernel
     - grub
     - logrotate
     - journald

@@ -1,0 +1,19 @@
+- name: Install OEM kernel
+  apt:
+    pkg:
+      - linux-oem-22.04d
+      - linux-generic-hwe-22.04
+    cache_valid_time: 3600
+  register: kernel_apt
+  become: yes
+  tags:
+    - kernel
+
+- name: Ask to reboot
+  when: kernel_apt.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+  become: yes
+  tags:
+    - kernel
