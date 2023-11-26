@@ -5,12 +5,12 @@
     - cleanup
     - mounts
     - hostname
+    - apt
     - networking
     - locale
     - keyboard
     - console
     - timezone
-    - apt
     - unattended_upgrades
     - kernel
     - hardware
