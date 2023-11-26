@@ -1,0 +1,10 @@
+- name: Add user to group
+  user:
+    name: "{{ ansible_ssh_user }}"
+    groups: "{{ group }}"
+    append: yes
+  register: usergroup
+  become: yes
+
+- when: usergroup.changed
+  include_tasks: reset_connection.yml

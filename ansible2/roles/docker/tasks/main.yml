@@ -46,12 +46,10 @@
   tags:
     - docker
 
-- name: Add user to docker group
-  user:
-    name: "{{ ansible_ssh_user }}"
-    groups: docker
-    append: yes
-  become: yes
+- import_role:
+    name: usergroup_immediate
+  vars:
+    group: docker
   tags:
     - docker
 
