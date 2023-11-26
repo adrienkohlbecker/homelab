@@ -16,6 +16,7 @@
       - iproute2
       - passwd
       - python3-apt
+      - python3-requests # docker module
       - subversion
       - xz-utils
     cache_valid_time: 3600
