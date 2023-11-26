@@ -27,7 +27,7 @@
     - lm_sensors
     - zfs
     - docker
-    - virtualization
+    - libvirt
     - vector
     - netdata
     - journald_exporter
