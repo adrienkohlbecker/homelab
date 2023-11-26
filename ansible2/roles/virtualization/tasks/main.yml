@@ -13,6 +13,15 @@
   tags:
     - virtualization
 
+- import_role:
+    name: usergroup_immediate
+  vars:
+    group:
+      - libvirt
+      - kvm
+  tags:
+    - virtualization
+
 - name: Create libvirt backup executable
   copy:
     src: virsh_backup.sh
