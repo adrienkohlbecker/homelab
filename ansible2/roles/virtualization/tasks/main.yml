@@ -13,12 +13,89 @@
   tags:
     - virtualization
 
+- name: Install ansible dependencies to run libvirt module
+  apt:
+    name:
+      - python3-libvirt
+      - python3-lxml
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - virtualization
+
 - import_role:
     name: usergroup_immediate
   vars:
     group:
       - libvirt
       - kvm
+  tags:
+    - virtualization
+
+- name: Compute network values
+  set_fact:
+    libvirt_network_mac: "{{ '52:54:00' | random_mac(seed=inventory_hostname) }}"
+    libvirt_network_gateway: "{{ libvirt_default_network | ansible.utils.ipaddr('address') }}"
+    libvirt_network_netmask: "{{ libvirt_default_network | ansible.utils.ipaddr('netmask') }}"
+    libvirt_network_dhcp_start: "{{ libvirt_default_network | ansible.utils.ipaddr('next_usable') }}"
+    libvirt_network_dhcp_end: "{{ libvirt_default_network | ansible.utils.ipaddr('last_usable') }}"
+  tags:
+    - virtualization
+
+- name: Check ip math is valid
+  assert:
+    that:
+      - libvirt_network_gateway and libvirt_network_gateway != ""
+      - libvirt_network_netmask and libvirt_network_netmask != ""
+      - libvirt_network_dhcp_start and libvirt_network_dhcp_start != ""
+      - libvirt_network_dhcp_end and libvirt_network_dhcp_end != ""
+  tags:
+    - virtualization
+
+- name: Get network facts
+  virt_net:
+    command: facts
+    name: default
+  register: virt_net
+  failed_when: virt_net.msg is defined and virt_net.msg != "network default not found"
+  become: true
+  tags:
+    - virtualization
+
+# assuming the random mac is not the same as libvirt initially generated at install...
+- when: ansible_libvirt_networks is undefined or (ansible_libvirt_networks['default'] and ansible_libvirt_networks['default'].macaddress != libvirt_network_mac)
+  block:
+
+  - name: Remove default network
+    community.libvirt.virt_net:
+      name: default
+      state: absent
+    become: yes
+    tags:
+      - virtualization
+
+  - name: Define default network
+    community.libvirt.virt_net:
+      name: default
+      command: define
+      xml: '{{ lookup("template", "default_network.xml.j2") }}'
+    become: yes
+    tags:
+      - virtualization
+
+- name: Start default network
+  community.libvirt.virt_net:
+    name: default
+    state: active
+  become: yes
+  tags:
+    - virtualization
+
+- name: Autostart default network
+  community.libvirt.virt_net:
+    name: default
+    autostart: true
+  become: yes
   tags:
     - virtualization
 
