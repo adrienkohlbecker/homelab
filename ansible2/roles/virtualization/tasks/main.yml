@@ -5,31 +5,10 @@
     pkg:
       - qemu-kvm
       - libvirt-daemon
+      - libvirt-daemon-system
       - ovmf
       - libhugetlbfs-bin
     cache_valid_time: 3600
-  become: yes
-  tags:
-    - virtualization
-
-- name: Create vms directory
-  file:
-    dest: /mnt/vms
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: yes
-  tags:
-    - virtualization
-
-- name: Create vms/ssd directory
-  file:
-    dest: /mnt/vms/ssd
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
   become: yes
   tags:
     - virtualization
