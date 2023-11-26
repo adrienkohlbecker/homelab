@@ -4,5 +4,5 @@ IFS=$'\n\t'
 set -euxo pipefail
 
 for domain in $(virsh list --all --name); do
-  virsh dumpxml "$domain" > "/mnt/vms/ssd/$domain.xml"
+  virsh dumpxml "$domain" > "/var/lib/libvirt/images/$domain.xml"
 done
