@@ -1,0 +1,21 @@
+- name: Create data dir
+  file:
+    dest: /mnt/services
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: yes
+  tags:
+    - services
+
+- name: Create env.d directory
+  file:
+    dest: /etc/env.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: yes
+  tags:
+    - services
