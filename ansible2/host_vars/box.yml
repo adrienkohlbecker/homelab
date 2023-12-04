@@ -13,3 +13,5 @@ system_is_qemu_vm: true
 system_is_ipmi_capable: true
 
 libvirt_default_network: "192.168.121.1/24"
+
+networking_additional_iface: [ enp7s0 ]
