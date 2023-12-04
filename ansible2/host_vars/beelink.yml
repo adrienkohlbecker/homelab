@@ -12,4 +12,4 @@ zfs_trim_pools:
 system_is_qemu_vm: false
 system_is_ipmi_capable: false
 
-libvirt_default_network: "192.168.121.1/24"
+libvirt_default_network: "192.168.122.1/24"
