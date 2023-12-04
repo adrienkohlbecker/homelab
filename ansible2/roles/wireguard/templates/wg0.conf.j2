@@ -1,0 +1,23 @@
+{% set own_peer = wireguard_peers|selectattr("public_key", "eq", wireguard_public_key)|first -%}
+# {{ ansible_managed }}
+
+[Interface]
+# PublicKey = {{ wireguard_public_key }}
+PrivateKey = {{ wireguard_private_key }}
+Address = {{ own_peer.address }}/24
+ListenPort = 51820
+
+{% for peer in wireguard_peers if peer.public_key != wireguard_public_key %}
+{% set allowed_ips = [peer.address]+peer.get('allowed_ips', []) %}
+[Peer]
+# Name = {{ peer.name }}
+PublicKey = {{ peer.public_key }}
+AllowedIPs = {{ allowed_ips|join(',') }}
+{% if 'preshared_key' in peer %}
+PresharedKey = {{ peer.preshared_key }}
+{% endif %}
+{% if 'endpoint' in peer %}
+Endpoint = {{ peer.endpoint }}
+{% endif %}
+
+{% endfor %}
