@@ -35,6 +35,7 @@
     - journald_exporter
     - certbot
     - traefik
+    - services
 
   tasks:
     - name: Check if a reboot is required
