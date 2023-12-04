@@ -33,6 +33,7 @@
     - vector
     - netdata
     - journald_exporter
+    - certbot
 
   tasks:
     - name: Check if a reboot is required
