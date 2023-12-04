@@ -1,0 +1,40 @@
+- name: Install certbot
+  apt:
+    pkg:
+      - certbot
+      - python3-certbot-dns-cloudflare
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - certbot
+
+- name: Create config directory directory
+  file:
+    dest: /etc/letsencrypt
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: yes
+  tags:
+    - certbot
+
+- name: Write cloudflare credentials
+  copy:
+    dest: /etc/letsencrypt/cloudflare.ini
+    content: "dns_cloudflare_api_token = {{ cloudflare_api_token }}\n"
+    mode: "0600"
+    owner: root
+    group: root
+    backup: yes
+  become: yes
+  tags:
+    - certbot
+
+- name: Get certificate
+  command: certbot certonly --agree-tos -m {{ root_email }} --noninteractive --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini -d "{{ domain }}" -d "*.{{ domain }}"
+  args:
+    creates: /etc/letsencrypt/live/{{ domain }}/privkey.pem
+  become: yes
+  tags:
+    - certbot
