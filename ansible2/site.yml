@@ -28,6 +28,7 @@
     - lm_sensors
     - zfs
     - docker
+    - podman
     - libvirt
     - vector
     - netdata
