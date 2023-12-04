@@ -34,6 +34,7 @@
     - netdata
     - journald_exporter
     - certbot
+    - traefik
 
   tasks:
     - name: Check if a reboot is required
