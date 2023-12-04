@@ -1,0 +1,25 @@
+- name: Install podman
+  apt:
+    pkg:
+      - podman
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - podman
+
+- name: Enable the service
+  systemd:
+    name: podman
+    enabled: yes
+  become: yes
+  tags:
+    - podman
+
+- name: Start the service
+  systemd:
+    name: podman
+    state: started
+  become: yes
+  register: systemd_started
+  tags:
+    - podman
