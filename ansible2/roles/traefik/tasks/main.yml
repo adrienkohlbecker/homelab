@@ -1,0 +1,91 @@
+---
+
+- name: Create the traefik podman network
+  containers.podman.podman_network:
+    name: traefik
+  become: yes
+  tags:
+    - traefik
+
+- name: Hotfix network CNI version bug # https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2024394
+  lineinfile:
+    path: /etc/cni/net.d/traefik.conflist
+    regexp: '^(\s*)"cniVersion":'
+    line: '\1"cniVersion": "0.4.0",'
+    backrefs: yes
+    backup: yes
+    validate: jq . %s
+  become: yes
+  tags:
+    - traefik
+
+- name: Create configuration directory
+  file:
+    dest: /etc/traefik
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: yes
+  tags:
+    - traefik
+
+- name: Configure traefik
+  template:
+    src: traefik.yml.j2
+    dest: /etc/traefik/traefik.yml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  register: traefik_yml
+  become: yes
+  tags:
+    - traefik
+
+- name: Configure traefik
+  template:
+    src: traefik-dynamic.yml.j2
+    dest: /etc/traefik/dynamic.yml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  register: traefik_dynamic_yml
+  become: yes
+  tags:
+    - traefik
+
+- import_role:
+    name: systemd_unit
+  vars:
+    src: traefik.service
+  tags:
+    - traefik
+
+- name: Enable the service
+  systemd:
+    name: traefik
+    enabled: yes
+    daemon_reload: yes
+  become: yes
+  tags:
+    - traefik
+
+- name: Start the service
+  systemd:
+    name: traefik
+    state: started
+  register: systemd_started
+  become: yes
+  tags:
+    - traefik
+
+- name: Restart the service
+  when: (systemd_unit.changed or traefik_yml.changed or traefik_dynamic_yml.changed) and not systemd_started.changed
+  systemd:
+    name: traefik
+    state: restarted
+  become: yes
+  tags:
+    - traefik

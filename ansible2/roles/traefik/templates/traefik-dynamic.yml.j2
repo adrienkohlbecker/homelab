@@ -1,0 +1,28 @@
+tls:
+  certificates:
+    - certFile: '/etc/letsencrypt/live/{{ domain }}/fullchain.pem'
+      keyFile: '/etc/letsencrypt/live/{{ domain }}/privkey.pem'
+
+http:
+  routers:
+    unifi:
+      entryPoints:
+        - websecure
+      service: unifi
+      rule: Host(`unifi.fahm.fr`)
+      tls: {}
+    ipmi:
+      entryPoints:
+        - websecure
+      service: ipmi
+      rule: Host(`ipmi.fahm.fr`)
+      tls: {}
+  services:
+    unifi:
+      loadBalancer:
+        servers:
+          - url: 'https://10.123.0.1:443/'
+    ipmi:
+      loadBalancer:
+        servers:
+          - url: 'https://10.123.0.10:443/'
