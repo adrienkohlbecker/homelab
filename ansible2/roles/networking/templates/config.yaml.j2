@@ -4,4 +4,9 @@ network:
     {{ ansible_default_ipv4.interface }}:
       dhcp4: true
       dhcp6: false
+{% for iface in networking_additional_iface %}
+    {{ iface }}:
+      dhcp4: true
+      dhcp6: false
+{% endfor %}
   version: 2
