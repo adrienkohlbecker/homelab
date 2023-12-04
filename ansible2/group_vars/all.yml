@@ -27,3 +27,37 @@ journald_exporter_key: !vault |
           3532326231636264320a336234646135383838316634323366376437643732343239333436653931
           36663263316661393165656365663565353834323034646539356666663833393830336561383764
           3461316434666435613761313731376338663661353964323564
+
+wireguard_peers:
+  - name: homelab
+    address: "10.123.60.1"
+    endpoint: "10.123.0.11:51820"
+    public_key: lab/YYyxFkJJt86HfCnauipuYE4pBzBcDOkrXTzCmTE=
+  - name: beelink
+    address: "10.123.60.2"
+    endpoint: "10.123.0.15:51820"
+    public_key: bee/uOCIBcgZzD3J/FcDV1wzJcvoYQFde19jfmQH7iA=
+  - name: box
+    address: "10.123.60.3"
+    endpoint: "10.123.30.11:51820"
+    public_key: box/F8UYPGCYhjT5eH3stLTk9wZalaH2z1VIE1EYDVg=
+  - name: laptop
+    address: "10.123.60.4"
+    public_key: lap/a1O/kGX4bZhQGQ7Y66RGloVkGYh4MKLWKLOOkFQ=
+  - name: phone
+    address: "10.123.60.5"
+    public_key: pho/2r3gGof6abXnmTxhdgJl1zvVDV9whuY7eOwuGSM=
+  - name: ipad
+    address: "10.123.60.6"
+    public_key: ipa/80KvY6a8qAOvEd0Hj5JmX/WCV4Yx4z9O6WhO1hg=
+  - name: marie_laptop
+    address: "10.123.60.7"
+    public_key: mla/KiwD4MSb7hMcZAmXFYEueZoCoM2WRz5zQfNLCzs=
+  - name: marie_phone
+    address: "10.123.60.8"
+    public_key: mph/M5ByZ6slJatM3MV3zOfgrrjUdyEXli+Ecv67ohE=
+  - name: bunk
+    address: "10.123.60.9"
+    allowed_ips: [ 192.168.0.0/24 ] # 192.168.0.45
+    endpoint: bonniers.ddns.net:51820
+    public_key: bun/Cqg3yML+J7YpC1SAxHqdK3NH1oUOSB+WFjtijhQ=
