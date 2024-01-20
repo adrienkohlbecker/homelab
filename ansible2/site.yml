@@ -40,6 +40,7 @@
     - traefik_ipmi
     - services
     - minio
+    - influxdb
 
   tasks:
     - name: Check if a reboot is required
