@@ -36,6 +36,8 @@
     - journald_exporter
     - certbot
     - traefik
+    - traefik_unifi
+    - traefik_ipmi
     - services
 
   tasks:

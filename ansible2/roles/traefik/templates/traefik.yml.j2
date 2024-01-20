@@ -19,11 +19,11 @@ providers:
     exposedByDefault: false
     network: traefik
   file:
-    filename: /etc/traefik/dynamic.yml
+    directory: /etc/traefik/dynamic.d
+    watch: true
 
 ping: {}
-api:
-  insecure: true
+api: {}
 accessLog: {}
 log:
   level: INFO

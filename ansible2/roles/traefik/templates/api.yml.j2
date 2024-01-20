@@ -1,0 +1,14 @@
+http:
+  routers:
+    dashboard:
+      rule: Host(`traefik.{{ domain }}`)
+      service: api@internal
+      tls: {}
+      middlewares:
+        - redirect_to_dashboard
+
+  middlewares:
+    redirect_to_dashboard:
+      redirectRegex:
+        regex: "^https://traefik.{{ domain }}/$"
+        replacement: "https://traefik.{{ domain }}/dashboard/"
