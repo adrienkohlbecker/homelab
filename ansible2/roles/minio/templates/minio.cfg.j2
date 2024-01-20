@@ -1,0 +1,15 @@
+# Volume to be used for MinIO server.
+MINIO_VOLUMES="/mnt/services/minio"
+# Use if you want to run MinIO on a custom port.
+MINIO_OPTS="--address :9199 --console-address :9001"
+# Root user for the server.
+MINIO_ROOT_USER={{ minio_root_user }}
+# Root secret for the server.
+MINIO_ROOT_PASSWORD={{ minio_root_password }}
+
+# set this for MinIO to reload entries with 'mc admin service restart'
+MINIO_CONFIG_ENV_FILE=/etc/default/minio
+
+# browser path
+MINIO_SERVER_URL=https://minio.{{ domain }}
+MINIO_BROWSER_REDIRECT_URL=https://minio.{{ domain }}/console
