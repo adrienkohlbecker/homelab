@@ -2,7 +2,7 @@
 Description=Traefik
 Wants=network-online.target
 After=network-online.target
-RequiresMountsFor=%t/containers
+
 StartLimitInterval=300
 StartLimitBurst=5
 
@@ -10,35 +10,9 @@ StartLimitBurst=5
 Restart=always
 TimeoutSec=70
 RestartSec=15
-ExecStartPre=/bin/rm -f %t/%n.ctr-id
-ExecStart=/usr/bin/podman run \
-    --cidfile=%t/%n.ctr-id \
-    --cgroups=no-conmon \
-    --rm \
-    --sdnotify=conmon \
-    --replace \
-    --init \
-    --env-file /etc/traefik/env \
-    --name traefik \
-    --network traefik \
-    --log-driver none \
-    --publish 443:443 \
-    --publish 80:80 \
-    --publish 8080:8080 \
-    --volume /etc/traefik/:/etc/traefik \
-    --volume /etc/letsencrypt/:/etc/letsencrypt \
-    --volume /run/podman/podman.sock:/var/run/docker.sock \
-    --health-cmd "traefik healthcheck" \
-    --label traefik.enable=true \
-    --label traefik.http.routers.traefik.rule=Host(`traefik.fahm.fr`) \
-    --label traefik.http.routers.traefik.service=api@internal \
-    --label traefik.http.routers.traefik.tls=true \
-    --label traefik.http.routers.traefik.entrypoints=websecure \
-    docker.io/library/traefik:2.10
-ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
-ExecStopPost=/usr/bin/podman rm -f --ignore --cidfile=%t/%n.ctr-id
-Type=notify
-NotifyAccess=all
+
+ExecStart=/usr/local/bin/traefik
+Type=exec
 
 [Install]
 WantedBy=default.target

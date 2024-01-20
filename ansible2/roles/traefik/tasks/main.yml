@@ -19,9 +19,62 @@
   tags:
     - traefik
 
+- name: check if traefik is installed
+  command: traefik version
+  register: traefik_check
+  failed_when: false
+  changed_when: false
+  become: yes
+  tags:
+    - traefik
+
+- when: '"2.10.6" not in traefik_check.stdout'
+  block:
+
+    - name: Download traefik
+      get_url:
+        url: https://github.com/traefik/traefik/releases/download/v2.10.6/traefik_v2.10.6_linux_amd64.tar.gz
+        dest: /tmp/traefik.tar.gz
+        mode: '0644'
+        owner: root
+        group: root
+        checksum: sha256:4ac55046e8db8a945ccc2cde19ca3f605830953c13ad11e372a1f7fa7e7fee17
+
+    - name: Install traefik
+      unarchive:
+        src: /tmp/traefik.tar.gz
+        remote_src: yes
+        dest: /usr/local/bin
+        mode: '0755'
+        owner: root
+        group: root
+        include: [ traefik ]
+        list_files: yes
+      register: traefik_installed
+
+    - name: Delete tar file
+      file:
+         path: /tmp/traefik.tar.gz
+         state: absent
+
+  become: yes
+  tags:
+    - traefik
+
 - name: Create configuration directory
   file:
     dest: /etc/traefik
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: yes
+  tags:
+    - traefik
+
+- name: Create configuration directory
+  file:
+    dest: /etc/traefik/dynamic.d
     state: directory
     owner: root
     group: root
@@ -45,13 +98,24 @@
 
 - name: Configure traefik
   template:
-    src: traefik-dynamic.yml.j2
-    dest: /etc/traefik/dynamic.yml
+    src: tls.yml.j2
+    dest: /etc/traefik/dynamic.d/tls.yml
     owner: root
     group: root
     mode: "0644"
     backup: yes
-  register: traefik_dynamic_yml
+  become: yes
+  tags:
+    - traefik
+
+- name: Configure traefik
+  template:
+    src: api.yml.j2
+    dest: /etc/traefik/dynamic.d/api.yml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
   become: yes
   tags:
     - traefik
@@ -82,7 +146,7 @@
     - traefik
 
 - name: Restart the service
-  when: (systemd_unit.changed or traefik_yml.changed or traefik_dynamic_yml.changed) and not systemd_started.changed
+  when: (systemd_unit.changed or traefik_yml.changed) and not systemd_started.changed
   systemd:
     name: traefik
     state: restarted

@@ -1,0 +1,13 @@
+http:
+  routers:
+    unifi:
+      entryPoints:
+        - websecure
+      service: unifi
+      rule: Host(`unifi.{{ domain }}`)
+      tls: {}
+  services:
+    unifi:
+      loadBalancer:
+        servers:
+          - url: 'https://10.123.0.1:443/'
