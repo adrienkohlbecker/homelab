@@ -1,0 +1,13 @@
+http:
+  routers:
+    influxdb:
+      entryPoints:
+        - websecure
+      service: influxdb
+      rule: Host(`influxdb.{{ domain }}`)
+      tls: {}
+  services:
+    influxdb:
+      loadBalancer:
+        servers:
+          - url: 'http://127.0.0.1:8086/'

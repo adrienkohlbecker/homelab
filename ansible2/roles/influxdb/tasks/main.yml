@@ -1,0 +1,97 @@
+- name: Add repository key
+  apt_key:
+    id: D8FF8E1F7DF8B07E
+    url: https://repos.influxdata.com/influxdata-archive_compat.key
+    keyring: /etc/apt/trusted.gpg.d/influxdb.gpg
+  become: yes
+  tags:
+    - influxdb
+
+- name: Add repository
+  apt_repository:
+    repo: deb [signed-by=/etc/apt/trusted.gpg.d/influxdb.gpg] https://repos.influxdata.com/debian stable main
+  become: yes
+  tags:
+    - influxdb
+
+- import_role:
+    name: apt_unit_masked
+  vars:
+    pkg: influxdb2
+    unit: influxdb.service
+  tags:
+    - influxdb
+
+- name: Configure influxdb default
+  copy:
+    src: influxdb2
+    dest: /etc/default/influxdb2
+    owner: root
+    group: root
+    mode: "0644"
+    validate: sh -n %s
+    backup: yes
+  become: yes
+  register: influxdb_default
+  tags:
+    - influxdb
+
+# - name: Configure influxdb
+#   copy:
+#     src: influxdb.yaml
+#     dest: /etc/influxdb/influxdb.yaml
+#     owner: root
+#     group: root
+#     mode: "0644"
+#     validate: influxdb validate --config-yaml %s
+#     backup: yes
+#   become: yes
+#   register: influxdb_cfg
+#   tags:
+#     - influxdb
+
+- name: Enable the service
+  systemd:
+    name: influxdb
+    enabled: yes
+  become: yes
+  tags:
+    - influxdb
+
+- name: Start the service
+  systemd:
+    name: influxdb
+    state: started
+  become: yes
+  register: influxdb_started
+  tags:
+    - influxdb
+
+- name: Restart influxdb
+  when: (influxdb_default.changed) and not influxdb_started.changed
+  systemd:
+    name: influxdb
+    state: restarted
+  become: yes
+  tags:
+    - influxdb
+
+- name: Initial setup
+  command: influx setup --username "{{ influxdb_root_user }}" --password "{{ influxdb_root_password }}" --org home --bucket default --force
+  args:
+    creates: /home/{{ ansible_user }}/.influxdbv2/configs
+  tags:
+    - influxdb
+
+
+- name: Configure traefik
+  template:
+    src: influxdb.yml.j2
+    dest: /etc/traefik/dynamic.d/influxdb.yml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  become: yes
+  tags:
+    - influxdb
