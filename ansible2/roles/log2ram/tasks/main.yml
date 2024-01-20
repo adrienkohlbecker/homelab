@@ -1,0 +1,50 @@
+---
+- name: Add repository key
+  apt_key:
+    id: CA548A0A0312D8E6
+    url: https://azlux.fr/repo.gpg
+    keyring: /etc/apt/trusted.gpg.d/log2ram.gpg
+  become: yes
+  tags:
+    - log2ram
+
+- name: Add repository
+  apt_repository:
+    repo: deb [signed-by=/etc/apt/trusted.gpg.d/log2ram.gpg] http://packages.azlux.fr/debian/ bookworm main
+  become: yes
+  tags:
+    - log2ram
+
+- name: Install log2ram
+  apt:
+    pkg:
+      - log2ram
+      - rsync
+      - mailutils
+    cache_valid_time: 3600
+  register: log2ram_installed
+  become: yes
+  tags:
+    - log2ram
+
+- name: Configure log2ram
+  copy:
+    src: log2ram.conf
+    dest: /etc/log2ram.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  register: log2ram_cfg
+  become: yes
+  tags:
+    - log2ram
+
+- name: Ask to reboot
+  when: log2ram_installed.changed or log2ram_cfg.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+  become: yes
+  tags:
+    - log2ram
