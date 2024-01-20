@@ -39,6 +39,7 @@
     - traefik_unifi
     - traefik_ipmi
     - services
+    - minio
 
   tasks:
     - name: Check if a reboot is required
