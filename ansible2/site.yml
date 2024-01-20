@@ -18,6 +18,7 @@
     - grub
     - logrotate
     - journald
+    - log2ram
     - iptables
     - fail2ban
     - ssh
