@@ -49,6 +49,14 @@
   tags:
     - user
 
+- name: Cleanup sudoers added by cloud-init
+  file:
+    path: /etc/sudoers.d/90-cloud-init-users
+    state: absent
+  become: yes
+  tags:
+    - user
+
 - name: Add authorized keys
   authorized_key:
     user: "{{ ansible_ssh_user }}"

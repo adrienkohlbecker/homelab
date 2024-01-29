@@ -11,6 +11,14 @@
   tags:
     - networking
 
+- name: Cleanup config added by cloud-init
+  file:
+    path: /etc/netplan/50-cloud-init.yaml
+    state: absent
+  become: yes
+  tags:
+    - networking
+
 - name: Apply netplan
   when: netplan_cfg.changed
   shell: netplan apply

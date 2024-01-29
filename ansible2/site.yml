@@ -13,9 +13,7 @@
     - console
     - timezone
     - unattended_upgrades
-    - kernel
     - hardware
-    - grub
     - logrotate
     - journald
     - log2ram
@@ -24,6 +22,11 @@
     - ssh
     - ntp
     - mailer
+
+- hosts: 'all:!zero'
+  roles:
+    - hwe_kernel
+    - grub
     - hdparm
     - powertop
     - lm_sensors
@@ -42,6 +45,7 @@
     - minio
     - influxdb
 
+- hosts: all
   tasks:
     - name: Check if a reboot is required
       stat:

@@ -14,7 +14,14 @@ system_is_ipmi_capable: true
 
 libvirt_default_network: "192.168.123.1/24"
 
-networking_additional_iface: [ eno2 ]
+netplan:
+  ethernets:
+    eno1:
+      dhcp4: true
+      dhcp6: false
+    eno2:
+      dhcp4: true
+      dhcp6: false
 
 # wireguard-vanity-keygen -c $NAME/
 wireguard_public_key: lab/YYyxFkJJt86HfCnauipuYE4pBzBcDOkrXTzCmTE=

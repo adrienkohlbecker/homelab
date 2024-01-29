@@ -70,6 +70,9 @@ wireguard_peers:
     allowed_ips: [ 192.168.0.0/24 ] # 192.168.0.45
     endpoint: bonniers.ddns.net:51820
     public_key: bun/Cqg3yML+J7YpC1SAxHqdK3NH1oUOSB+WFjtijhQ=
+  - name: zero
+    address: "10.123.60.10"
+    public_key: zero/D9yM8L1s0FQ3ExYOorWAI3iJ1312KmoL56oaHw=
 
 minio_root_user: minio
 minio_root_password: !vault |

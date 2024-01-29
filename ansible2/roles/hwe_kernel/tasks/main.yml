@@ -1,7 +1,6 @@
-- name: Install OEM kernel
+- name: Install HWE kernel
   apt:
     pkg:
-      - linux-oem-22.04d
       - linux-generic-hwe-22.04
     cache_valid_time: 3600
   register: kernel_apt

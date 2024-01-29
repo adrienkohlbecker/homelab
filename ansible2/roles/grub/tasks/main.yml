@@ -1,3 +1,13 @@
+- name: Ensure grub-common is installed
+  apt:
+    pkg:
+      - grub-common
+      - grub2-common
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - grub
+
 - name: Create /etc/default/grub.d directory
   file:
     dest: /etc/default/grub.d
