@@ -1,5 +1,0 @@
-logs:
-  - type: file
-    path: /var/log/dpkg.log
-    service: dpkg
-    source: custom
