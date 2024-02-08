@@ -1,0 +1,52 @@
+# pihole.service #######################################################################
+[Unit]
+Description=pihole
+After=docker.service mnt-services.mount
+Requires=docker.service mnt-services.mount
+PartOf=compose.service
+
+StartLimitInterval=300
+StartLimitBurst=5
+
+[Service]
+Restart=always
+TimeoutSec=300
+RestartSec=15
+
+SyslogIdentifier=pihole
+EnvironmentFile=/etc/env.d/pihole
+
+ExecStartPre=-/usr/bin/docker kill pihole
+ExecStartPre=-/usr/bin/docker rm pihole
+ExecStartPre=-/usr/bin/docker pull pihole/pihole
+ExecStartPre=/usr/bin/docker create \
+    --name pihole \
+    --log-driver none \
+    --network traefik \
+    --volume /mnt/services/pihole/etc:/etc/pihole \
+    --volume /mnt/services/pihole/dnsmasq:/etc/dnsmasq.d \
+    --env TZ="Europe/Amsterdam" \
+    --env VIRTUAL_HOST={{ pihole_host }} \
+    --dns=127.0.0.1 \
+    --dns=1.1.1.1 \
+    --label "traefik.docker.network=traefik" \
+    --label "traefik.enable=true" \
+    --label "traefik.http.services.pihole.loadbalancer.server.port=80" \
+    --label "traefik.http.routers.pihole.rule=Host(`{{ pihole_host }}`)" \
+    --label "traefik.http.routers.pihole.tls=true" \
+    --label "traefik.http.routers.pihole.tls.certresolver=letsencrypt" \
+    --label "traefik.http.routers.pihole.entrypoints=websecure" \
+    pihole/pihole:latest
+ExecStartPre=/usr/bin/docker network connect macvlan_net pihole --ip {{ pihole_ip }}
+ExecStartPre=/bin/ip link add mac0 link {{ pihole_host_iface }} type macvlan mode bridge
+ExecStartPre=/bin/ip addr add {{ pihole_host_ip }}/32 dev mac0
+ExecStartPre=/bin/ip link set mac0 address {{ pihole_host_mac }}
+ExecStartPre=/bin/ip link set mac0 up
+ExecStartPre=/bin/ip route add {{ pihole_ip }}/32 dev mac0
+ExecStart=/usr/bin/docker start --attach pihole
+ExecStop=/usr/bin/docker stop pihole
+ExecStopPost=/bin/ip route delete {{ pihole_ip }}/32 dev mac0
+ExecStopPost=/bin/ip link delete mac0
+
+[Install]
+WantedBy=compose.service

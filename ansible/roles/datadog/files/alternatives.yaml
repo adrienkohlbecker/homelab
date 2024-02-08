@@ -1,5 +1,0 @@
-logs:
-  - type: file
-    path: /var/log/alternatives.log
-    service: alternatives
-    source: custom

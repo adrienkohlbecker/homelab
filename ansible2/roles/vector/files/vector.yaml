@@ -15,6 +15,15 @@
 # Change this to use a non-default directory for Vector data storage:
 # data_dir: "/var/lib/vector"
 
+# Defined fields & types after transformations
+# .host       str
+# .message    str
+# .timestamp  timestamp
+# .pid        int           optional, process id
+# .appname    int           optional, syslog appname
+# .severity   int           optional, syslog severity
+# .facility   int           optional, syslog facility
+
 sources:
   file_alternatives:
     type: file
@@ -44,8 +53,8 @@ sources:
   # TODO: What if docker is not installed?
   docker:
     type: docker_logs
-  journal:
-    type: journald
+  # journal:
+  #   type: journald
 
 transforms:
   transformed_alternatives:
@@ -203,22 +212,102 @@ transforms:
     source: |-
       .message = strip_ansi_escape_codes!(.message)
 
-  clef:
-    inputs: [ transformed_alternatives, reduced_apport, filtered_apt_history, filtered_apt_term, transformed_dpkg, transformed_unattended_upgrades, clean_docker, journal ]
+  to_syslog:
+    type: remap
+    inputs: [ transformed_alternatives, reduced_apport, filtered_apt_history, filtered_apt_term, transformed_dpkg, transformed_unattended_upgrades, clean_docker ]
+    # <165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"] An application event log entry...
     source: |-
-      .@t = del(.timestamp)
-      .@m = del(.message)
-      .@l = del(.severity) || "info"
+      data = .
+
+      message = string!(del(data.message))
+      assert!(!is_empty(message), "message is required")
+
+      host = string!(del(data.host))
+      assert!(!is_empty(host), "host is required")
+
+      time = timestamp!(del(data.timestamp))
+      time = format_timestamp!(time, format: "%Y-%m-%dT%H:%M:%S%.f%:z")
+
+      version = "1"
+      msgid = "-"
+
+      appname = del(data.appname)
+      if is_null(appname) {
+        appname = "-"
+      } else {
+        appname = string!(appname)
+      }
+
+      pid = del(data.pid)
+      if is_null(pid) {
+        pid = "-"
+      } else {
+        pid = format_int!(int!(pid))
+      }
+
+      severity = del(data.severity)
+      if is_null(severity) {
+        severity = 6 # info by default
+      } else {
+        severity = int!(severity)
+      }
+
+      facility = del(data.facility)
+      if is_null(facility) {
+        facility = 3 # daemon by default
+      } else {
+        facility = int!(facility)
+      }
+
+      priority = format_int!( facility * 8 + severity )
+
+      if (!is_empty(data)) {
+        data = map_values(data, recursive: true) -> |value| { to_string!(value) }
+        data = encode_key_value(data)
+
+        message = "[data@32473 {{ data }} ] {{ message }}"
+      }
+
+      . = {}
+      .message, err = "<{{ priority }}>{{ version }} {{ time }} {{ host }} {{ appname }} {{ pid }} {{ msgid }} {{ message }}"
+      if err != null {
+        log("Unable to template messge: " + err, level: "error")
+      }
+
+#   clef:
+#     type: remap
+#     inputs: [ journal ]
+#     source: |-
+#       .@t = del(.timestamp)
+#       .@m = del(.message)
+#       .@l = del(.severity) || "info"
 
 sinks:
-  seq:
-    type: http
-    inputs: [ clef ]
-    uri: http://192.168.64.6:5341/api/events/raw?clef
+#   seq:
+#     type: http
+#     inputs: [ clef ]
+#     uri: http://192.168.64.6:5341/api/events/raw?clef
+#     encoding:
+#       codec: json
+#     framing:
+#       method: newline_delimited
+  devlog:
+    type: socket
+    mode: unix
+    inputs: [ to_syslog ]
+    path: /run/systemd/journal/stdout
     encoding:
-      codec: json
+      codec: text
     framing:
       method: newline_delimited
+  # test:
+  #   type: file
+  #   inputs: [  ]
+  #   path: /tmp/vector.log
+  #   encoding:
+  #     codec: json
+  #   framing:
+  #     method: newline_delimited
 
 # Vector's GraphQL API (disabled by default)
 # Uncomment to try it out with the `vector top` command or

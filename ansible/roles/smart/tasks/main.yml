@@ -3,7 +3,14 @@
 - name: Install smartctl
   apt:
     pkg: smartmontools
-    state: present
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - smart
+
+- name: Divert smartd.conf
+  community.general.dpkg_divert:
+    path: /etc/smartd.conf
   become: yes
   tags:
     - smart
@@ -14,9 +21,10 @@
     dest: /etc/smartd.conf
     owner: root
     group: root
-    mode: 0644
+    mode: "0644"
+    backup: yes
+  register: smartd_cfg
   become: yes
-  notify: Restart smartmontools
   tags:
     - smart
 
@@ -26,9 +34,19 @@
     dest: /etc/default/smartmontools
     owner: root
     group: root
-    mode: 0644
+    mode: "0644"
+    backup: yes
+  register: smartmontools_cfg
   become: yes
-  notify: Restart smartmontools
+  tags:
+    - smart
+
+- name: Restart smartmontools
+  when: smartd_cfg.changed or smartmontools_cfg.changed
+  service:
+    name: smartmontools
+    state: restarted
+  become: yes
   tags:
     - smart
 
@@ -36,7 +54,10 @@
   copy:
     src: smart_short_test.sh
     dest: /usr/local/bin/smart_short_test
-    mode: 0755
+    owner: root
+    group: root
+    mode: "0755"
+    backup: yes
   become: yes
   tags:
     - smart
@@ -46,9 +67,10 @@
     name: smart_short_test
     hour: 0
     minute: 10
-    job: /usr/local/bin/dms --silent 4e614313f5 /usr/bin/systemd-cat --identifier smart_short_test /usr/local/bin/smart_short_test
+    job: /usr/bin/systemd-cat --identifier smart_short_test /usr/local/bin/smart_short_test
     user: root
     cron_file: ansible_smart_short_test
+    backup: yes
   become: yes
   tags:
     - smart
@@ -57,7 +79,10 @@
   copy:
     src: smart_long_test.sh
     dest: /usr/local/bin/smart_long_test
-    mode: 0755
+    owner: root
+    group: root
+    mode: "0755"
+    backup: yes
   become: yes
   tags:
     - smart
@@ -67,9 +92,10 @@
     name: smart_long_test
     hour: 0
     minute: 35
-    job: /usr/local/bin/dms --silent 39a52f20f7 /usr/bin/systemd-cat --identifier smart_long_test /usr/local/bin/smart_long_test
+    job: /usr/bin/systemd-cat --identifier smart_long_test /usr/local/bin/smart_long_test
     user: root
     cron_file: ansible_smart_long_test
+    backup: yes
   become: yes
   tags:
     - smart

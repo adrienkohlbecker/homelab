@@ -1,14 +1,10 @@
----
 
-- name: Install ZoL
+
+- name: Install mbuffer
   apt:
     package:
-    - linux-image-generic
-    - zfsutils-linux
-    - zfs-initramfs
-    - zfs-zed
-    - mbuffer
-    state: present
+      - mbuffer
+    cache_valid_time: 3600
   become: yes
   tags:
     - zfs
@@ -20,63 +16,14 @@
   tags:
     - zfs
 
-- name: Configure root's SSH client
-  copy:
-    src: ssh_config
-    dest: /root/.ssh/config
-    mode: 0644
-  become: yes
-  tags:
-    - zfs
-
-- name: Configure ARC
-  template:
-    src: zfs.conf.j2
-    dest: /etc/modprobe.d/zfs.conf
-    mode: 0755
-  become: yes
-  notify: Ask to reboot
-  tags:
-    - zfs
-
-- name: Copy the health script
-  copy:
-    src: zfs_health.sh
-    dest: /usr/local/bin/zfs_health
-    mode: 0755
-  become: yes
-  tags:
-    - zfs
-
-- name: Schedule the health script
-  cron:
-    name: zfs_health
-    minute: 55
-    job: "{{ temp_dms_zfs_health }} /usr/bin/systemd-cat --identifier zfs_health /usr/local/bin/zfs_health"
-    user: root
-    cron_file: ansible_zfs_health
-  become: yes
-  tags:
-    - zfs
-
-- name: Schedule the trim script
-  cron:
-    name: zfs_trim
-    weekday: 4
-    hour: 0
-    minute: 5
-    job: /sbin/zpool trim {{ zfs_ssd_pool }}
-    user: root
-    cron_file: ansible_zfs_trim
-  become: yes
-  tags:
-    - zfs
-
 - name: Copy the zfs tool
   template:
     src: zfs_backup.sh.j2
     dest: /usr/local/bin/zfs_backup
-    mode: 0755
+    mode: "0755"
+    owner: root
+    group: root
+    backup: yes
   become: yes
   tags:
     - zfs
@@ -86,9 +33,10 @@
     name: zfs_backup
     minute: 20
     hour: 0
-    job:  "{{ temp_dms_zfs_backup}} /usr/bin/systemd-cat --identifier zfs_backup /usr/local/bin/zfs_backup"
+    job:  "/usr/bin/systemd-cat --identifier zfs_backup /usr/local/bin/zfs_backup"
     user: root
     cron_file: ansible_zfs_backup
+    backup: yes
   become: yes
   tags:
     - zfs
