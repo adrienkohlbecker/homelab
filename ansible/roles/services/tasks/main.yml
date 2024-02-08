@@ -1,16 +1,5 @@
 ---
 
-- name: Create mount point
-  file:
-    dest: /mnt/services
-    state: directory
-    owner: root
-    group: root
-    mode: 0775
-  become: yes
-  tags:
-    - services
-
 - name: Copy the unit file
   copy:
     src: systemd/compose.service
@@ -44,8 +33,6 @@
 
 - name: Include services
   block:
-    - import_tasks: wireguard.yml
-    - import_tasks: traefik.yml
     - import_tasks: usenet.yml
     - import_tasks: avahi.yml
     - import_tasks: headphones.yml
@@ -77,10 +64,6 @@
 
 - name: Include services
   block:
-    - import_tasks: log2ram.yml
-    - import_tasks: ssh-arq.yml
-    - import_tasks: wireguard.yml
-    - import_tasks: traefik.yml
     - import_tasks: pihole.yml
     - import_tasks: pihole-sync-client.yml
     - import_tasks: cloudflare-ddns.yml
@@ -92,8 +75,6 @@
 
 - name: Include services
   block:
-    - import_tasks: log2ram.yml
-    - import_tasks: wireguard.yml
     - import_tasks: cloudflare-ddns.yml
     - import_tasks: unifi-deb.yml
   when: inventory_hostname == 'vpn' or inventory_hostname == 'box'

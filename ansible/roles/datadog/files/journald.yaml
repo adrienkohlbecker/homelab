@@ -1,3 +1,0 @@
-logs:
-  - type: journald
-    container_mode: true

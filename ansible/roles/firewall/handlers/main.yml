@@ -1,9 +1,0 @@
----
-
-- name: Apply iptables v4
-  shell: iptables-restore -n /etc/iptables/rules.v4
-  become: yes
-
-- name: Apply iptables v6
-  shell: ip6tables-restore -n /etc/iptables/rules.v6
-  become: yes

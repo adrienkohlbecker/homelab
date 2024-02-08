@@ -1,9 +1,0 @@
-logs:
-  - type: file
-    path: /var/log/apt/history.log
-    service: apt.history
-    source: custom
-  - type: file
-    path: /var/log/apt/term.log
-    service: apt.term
-    source: custom
