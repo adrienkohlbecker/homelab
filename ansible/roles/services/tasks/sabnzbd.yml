@@ -27,7 +27,7 @@
 - name: Mount docker directory
   mount:
     path: /mnt/scratch
-    src: /dev/disk/by-id/scsi-SATA_CT240BX500SSD1_214732E6E8B4-part2
+    src: /dev/disk/by-id/scsi-SATA_WDC_WD141KFGX-68_9LKWD6RG-part2
     fstype: ext4
     state: present
   become: yes
@@ -54,8 +54,6 @@
     - {path: '/mnt/media/Other',            owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/media/Torrents',         owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/media/TV',               owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
-    - {path: '/mnt/media_unsafe/Movies',    owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
-    - {path: '/mnt/media_unsafe/TV',        owner: '{{ deploy_user }}', group: '{{ deploy_user }}', mode: '0775'}
     - {path: '/mnt/scratch/sabnzbd',        owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/scratch/sonarr',         owner: 'root',              group: 'root',              mode: '0775'}
     - {path: '/mnt/scratch/radarr',         owner: 'root',              group: 'root',              mode: '0775'}

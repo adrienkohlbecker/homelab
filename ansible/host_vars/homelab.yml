@@ -8,7 +8,7 @@ docker_host: true
 zfs_root: true
 
 eth0_name: "{{ ansible_default_ipv4.interface }}"
-eth1_name: eno2
+eth1_name: enp5s0
 
 wireguard_address: 10.123.60.1
 wireguard_listen_port: 51820
@@ -23,7 +23,7 @@ pihole_host_ip: 10.123.0.251
 pihole_host_iface: "{{ ansible_default_ipv4.interface }}"
 pihole_host_mac: da:0a:6f:67:c7:a0
 
-grub_cmdline: intel_iommu=on iommu=pt default_hugepagesz=1G hugepagesz=1G hugepages=8
+grub_cmdline: intel_iommu=on iommu=pt default_hugepagesz=1G hugepagesz=1G hugepages=8 init_on_alloc=0
 
 aws_ssm_cloudflare_email: "{{ lookup('aws_ssm', 'cloudflare.email', region='eu-west-1' ) }}"
 aws_ssm_cloudflare_api_key: "{{ lookup('aws_ssm', 'cloudflare.api_key', region='eu-west-1' ) }}"
@@ -64,6 +64,8 @@ aws_ssm_monero_password: "{{ lookup('aws_ssm', 'monero.password', region='eu-wes
 temp_dms_zfs_health: /usr/local/bin/dms --silent b1de25d002
 temp_dms_zfs_backup: /usr/local/bin/dms --silent 2f07697414
 
-zfs_ssd_pool: rpool
+zfs_ssd_pools:
+  - rpool
+  - bpool
 zfs_arc_min: 1073741824
 zfs_arc_max: 8589934592
