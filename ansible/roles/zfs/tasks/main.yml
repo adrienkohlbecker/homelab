@@ -61,13 +61,14 @@
 
 - name: Schedule the trim script
   cron:
-    name: zfs_trim
+    name: zfs_trim_{{ item }}
     weekday: 4
     hour: 0
     minute: 5
-    job: /sbin/zpool trim {{ zfs_ssd_pool }}
+    job: /sbin/zpool trim {{ item }}
     user: root
     cron_file: ansible_zfs_trim
+  with_items: "{{ zfs_ssd_pools }}"
   become: yes
   tags:
     - zfs

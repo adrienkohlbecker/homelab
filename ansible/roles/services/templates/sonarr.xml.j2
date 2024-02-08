@@ -6,10 +6,12 @@
   <SslPort>9898</SslPort>
   <EnableSsl>False</EnableSsl>
   <ApiKey>{{ aws_ssm_sonarr_api_key }}</ApiKey>
-  <AuthenticationMethod>None</AuthenticationMethod>
+  <AuthenticationMethod>Forms</AuthenticationMethod>
   <Branch>main</Branch>
   <LaunchBrowser>True</LaunchBrowser>
-  <SslCertHash></SslCertHash>
   <UpdateMechanism>Docker</UpdateMechanism>
   <InstanceName>Sonarr</InstanceName>
+  <AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>
+  <SslCertPath></SslCertPath>
+  <SslCertPassword></SslCertPassword>
 </Config>
