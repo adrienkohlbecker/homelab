@@ -17,7 +17,7 @@ ddns_domain:
 
 journald_storage: persistent
 
-pihole_host: pihole-backup.kohlby.fr
+pihole_host: pihole.kohlby.fr
 pihole_ip: 10.123.0.16
 pihole_host_ip: 10.123.0.251
 pihole_host_iface: "{{ ansible_default_ipv4.interface }}"

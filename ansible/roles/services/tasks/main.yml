@@ -72,13 +72,13 @@
     - import_tasks: datadog_check.yml
     - import_tasks: pihole.yml
     - import_tasks: pihole-sync-server.yml
-    - import_tasks: shutdown.yml
+    - import_tasks: ssh-arq.yml
+    - import_tasks: homeassistant.yml
   when: inventory_hostname == 'homelab' or inventory_hostname == 'box'
 
 - name: Include services
   block:
     - import_tasks: log2ram.yml
-    - import_tasks: ssh-arq.yml
     - import_tasks: wireguard.yml
     - import_tasks: traefik.yml
     - import_tasks: pihole.yml
@@ -87,7 +87,6 @@
     - import_tasks: pi-backup-server.yml
     - import_tasks: datadog_check.yml
     - import_tasks: unifi-syslog.yml
-    - import_tasks: homeassistant.yml
   when: inventory_hostname == 'beelink' or inventory_hostname == 'box'
 
 - name: Include services

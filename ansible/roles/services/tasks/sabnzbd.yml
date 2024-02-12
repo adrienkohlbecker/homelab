@@ -24,17 +24,6 @@
     - services
     - sabnzbd
 
-- name: Mount docker directory
-  mount:
-    path: /mnt/scratch
-    src: /dev/disk/by-id/scsi-SATA_WDC_WD141KFGX-68_9LKWD6RG-part2
-    fstype: ext4
-    state: present
-  become: yes
-  tags:
-    - services
-    - sabnzbd
-
 - name: Create storage directories
   file:
     dest: "{{item.path}}"

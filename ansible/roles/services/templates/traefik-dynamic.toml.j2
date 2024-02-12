@@ -12,6 +12,12 @@
       rule = "Host(`ipmi.kohlby.fr`)"
       [http.routers.ipmi.tls]
         certResolver = "letsencrypt"
+    [http.routers.wolweb]
+      entryPoints = ["websecure"]
+      service = "wolweb"
+      rule = "Host(`wolweb.kohlby.fr`)"
+      [http.routers.wolweb.tls]
+        certResolver = "letsencrypt"
 
   [http.services]
     [http.services.unifi]
@@ -22,3 +28,7 @@
       [http.services.ipmi.loadBalancer]
         [[http.services.ipmi.loadBalancer.servers]]
           url = "https://10.123.0.10:443/"
+    [http.services.wolweb]
+      [http.services.wolweb.loadBalancer]
+        [[http.services.wolweb.loadBalancer.servers]]
+          url = "http://10.123.0.10:8089/"

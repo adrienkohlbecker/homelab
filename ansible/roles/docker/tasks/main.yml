@@ -14,7 +14,7 @@
 - name: Mount docker directory
   mount:
     path: /var/lib/docker
-    src: /dev/disk/by-id/scsi-SATA_WDC_WD141KFGX-68_9LKW9SAG-part2
+    src: /dev/zvol/rpool/docker
     fstype: ext4
     state: present
   when: zfs_root
