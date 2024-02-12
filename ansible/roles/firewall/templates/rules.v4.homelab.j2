@@ -87,6 +87,7 @@
 -A FILTERS-ETH0 -m state --state NEW -m tcp -p tcp --dport 2223 -j ACCEPT  -m comment --comment "Accept SSH/brumath"
 -A FILTERS-ETH0 -m state --state NEW -m tcp -p tcp --dport 2224 -j ACCEPT  -m comment --comment "Accept SSH/arq"
 -A FILTERS-ETH0 -m state --state NEW -m udp -p udp --dport 5353 -j ACCEPT  -m comment --comment "Accept mDNS"
+-A FILTERS-ETH0 -m state --state NEW -m tcp -p tcp --dport 8089 -j ACCEPT  -m comment --comment "Accept wolweb"
 -A FILTERS-ETH0 -m state --state NEW -m udp -p udp --dport 8125 -j ACCEPT  -m comment --comment "Accept statsd"
 -A FILTERS-ETH0 -m state --state NEW -m udp -p udp --dport 51820 -j ACCEPT -m comment --comment "Accept wireguard"
 -A FILTERS-ETH0 -m state --state NEW -m tcp -p tcp --dport 51826 -j ACCEPT -m comment --comment "Accept Homebridge"
