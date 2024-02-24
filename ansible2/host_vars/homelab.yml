@@ -14,6 +14,8 @@ system_is_ipmi_capable: true
 
 libvirt_default_network: "192.168.123.1/24"
 
+sensor_modules: []
+
 netplan:
   ethernets:
     eno1:
