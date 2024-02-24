@@ -4,10 +4,12 @@
       - podman
     cache_valid_time: 3600
   become: yes
+  register: apt_install_podman
   tags:
     - podman
 
 - name: Enable the service
+  when: not ansible_check_mode or not apt_install_podman.changed
   systemd:
     name: podman
     enabled: yes
@@ -16,6 +18,7 @@
     - podman
 
 - name: Start the service
+  when: not ansible_check_mode or not apt_install_podman.changed
   systemd:
     name: podman
     state: started

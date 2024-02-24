@@ -6,6 +6,7 @@
       - powertop
     state: present
   become: yes
+  register: apt_install_powertop
   tags:
     - powertop
 
@@ -17,6 +18,7 @@
     - powertop
 
 - name: Enable the service
+  when: not ansible_check_mode or not apt_install_powertop.changed
   systemd:
     name: powertop
     enabled: yes
@@ -26,6 +28,7 @@
     - powertop
 
 - name: Start the service
+  when: not ansible_check_mode or not apt_install_powertop.changed
   systemd:
     name: powertop
     state: started
@@ -35,7 +38,7 @@
     - powertop
 
 - name: Restart the service
-  when: systemd_unit.changed and not systemd_started.changed
+  when: (not ansible_check_mode or not apt_install_powertop.changed) and systemd_unit.changed and not systemd_started.changed
   systemd:
     name: powertop
     state: restarted

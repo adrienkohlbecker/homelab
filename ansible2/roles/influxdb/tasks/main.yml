@@ -1,4 +1,14 @@
+- name: Install gpg
+  apt:
+    pkg: gpg
+    cache_valid_time: 3600
+  become: yes
+  register: apt_install_gpg
+  tags:
+    - influxdb
+
 - name: Add repository key
+  when: not ansible_check_mode or not apt_install_gpg.changed
   apt_key:
     id: D8FF8E1F7DF8B07E
     url: https://repos.influxdata.com/influxdata-archive_compat.key
@@ -11,6 +21,7 @@
   apt_repository:
     repo: deb [signed-by=/etc/apt/trusted.gpg.d/influxdb.gpg] https://repos.influxdata.com/debian stable main
   become: yes
+  register: apt_repository_influxdb
   tags:
     - influxdb
 
@@ -19,6 +30,7 @@
   vars:
     pkg: influxdb2
     unit: influxdb.service
+    condition: "{{ not ansible_check_mode or not apt_repository_influxdb.changed }}"
   tags:
     - influxdb
 
@@ -51,6 +63,7 @@
 #     - influxdb
 
 - name: Enable the service
+  when: not ansible_check_mode or (not apt_unit_masked.changed and not apt_unit_masked.skipped)
   systemd:
     name: influxdb
     enabled: yes
@@ -59,6 +72,7 @@
     - influxdb
 
 - name: Start the service
+  when: not ansible_check_mode or (not apt_unit_masked.changed and not apt_unit_masked.skipped)
   systemd:
     name: influxdb
     state: started
@@ -68,7 +82,7 @@
     - influxdb
 
 - name: Restart influxdb
-  when: (influxdb_default.changed) and not influxdb_started.changed
+  when: (not ansible_check_mode or (not apt_unit_masked.changed and not apt_unit_masked.skipped)) and (influxdb_default.changed) and not influxdb_started.changed
   systemd:
     name: influxdb
     state: restarted
@@ -77,6 +91,7 @@
     - influxdb
 
 - name: Initial setup
+  when: (not ansible_check_mode or (not apt_unit_masked.changed and not apt_unit_masked.skipped))
   command: influx setup --username "{{ influxdb_root_user }}" --password "{{ influxdb_root_password }}" --org home --bucket default --force
   args:
     creates: /home/{{ ansible_user }}/.influxdbv2/configs

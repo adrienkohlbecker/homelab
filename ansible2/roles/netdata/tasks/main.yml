@@ -1,15 +1,26 @@
+- name: Install gpg
+  apt:
+    pkg: gpg
+    cache_valid_time: 3600
+  become: yes
+  register: apt_install_gpg
+  tags:
+    - vector
+
 - name: Add repository key
   apt_key:
     id: 6588FDD7B14721FE7C3115E6F9177B5265F56346
     url: https://repo.netdata.cloud/netdatabot.gpg.key
     keyring: /etc/apt/trusted.gpg.d/netdata.gpg
   become: yes
+  when: not ansible_check_mode or not apt_install_gpg.changed
   tags:
     - netdata
 
 - name: Add repository
   apt_repository:
     repo: deb [signed-by=/etc/apt/trusted.gpg.d/netdata.gpg] https://repo.netdata.cloud/repos/stable/ubuntu/ {{ ansible_distribution_release }}/
+  register: apt_repository_netdata
   become: yes
   tags:
     - netdata
@@ -19,6 +30,7 @@
   vars:
     pkg: netdata
     unit: netdata.service
+    condition: "{{ not ansible_check_mode or not apt_repository_netdata.changed }}"
   tags:
     - netdata
 
@@ -56,6 +68,7 @@
     - netdata
 
 - name: Enable the service
+  when: not ansible_check_mode or (not apt_unit_masked.changed and not apt_unit_masked.skipped)
   systemd:
     name: netdata
     enabled: yes
@@ -64,6 +77,7 @@
     - netdata
 
 - name: Start the service
+  when: not ansible_check_mode or (not apt_unit_masked.changed and not apt_unit_masked.skipped)
   systemd:
     name: netdata
     state: started
@@ -73,7 +87,7 @@
     - netdata
 
 - name: Restart the service
-  when: (netdata_conf.changed or prometheus_conf.changed) and not systemd_started.changed
+  when: (not ansible_check_mode or (not apt_unit_masked.changed and not apt_unit_masked.skipped)) and (netdata_conf.changed or prometheus_conf.changed) and not systemd_started.changed
   systemd:
     name: netdata
     state: restarted

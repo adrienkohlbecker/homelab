@@ -1,5 +1,14 @@
----
+- name: Install gpg
+  apt:
+    pkg: gpg
+    cache_valid_time: 3600
+  become: yes
+  register: apt_install_gpg
+  tags:
+    - log2ram
+
 - name: Add repository key
+  when: not ansible_check_mode or not apt_install_gpg.changed
   apt_key:
     id: CA548A0A0312D8E6
     url: https://azlux.fr/repo.gpg
@@ -12,17 +21,27 @@
   apt_repository:
     repo: deb [signed-by=/etc/apt/trusted.gpg.d/log2ram.gpg] http://packages.azlux.fr/debian/ bookworm main
   become: yes
+  register: apt_repository_log2ram
   tags:
     - log2ram
 
 - name: Install log2ram
+  when: not ansible_check_mode or not apt_repository_log2ram.changed
   apt:
     pkg:
       - log2ram
+    cache_valid_time: 3600
+  register: log2ram_installed
+  become: yes
+  tags:
+    - log2ram
+
+- name: Install dependencies
+  apt:
+    pkg:
       - rsync
       - mailutils
     cache_valid_time: 3600
-  register: log2ram_installed
   become: yes
   tags:
     - log2ram

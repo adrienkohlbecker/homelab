@@ -61,6 +61,7 @@
     - journald_exporter
 
 - name: Enable the service
+  when: not ansible_check_mode or not systemd_unit.changed
   systemd:
     name: journald-exporter
     enabled: yes
@@ -70,6 +71,7 @@
     - journald_exporter
 
 - name: Start the service
+  when: not ansible_check_mode or not systemd_unit.changed
   systemd:
     name: journald-exporter
     state: started
@@ -79,7 +81,7 @@
     - journald_exporter
 
 - name: Restart the service
-  when: systemd_unit.changed and not systemd_started.changed
+  when: (not ansible_check_mode or not systemd_unit.changed) and systemd_unit.changed and not systemd_started.changed
   systemd:
     name: journald-exporter
     state: restarted
