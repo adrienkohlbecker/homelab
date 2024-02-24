@@ -22,9 +22,6 @@
     - ssh
     - ntp
     - mailer
-
-- hosts: 'all:!zero'
-  roles:
     - hwe_kernel
     - grub
     - hdparm
