@@ -31,7 +31,7 @@
     - podman
     - libvirt
 
-- hosts: all:box
+- hosts: box
   roles:
     - log2ram
 
@@ -45,6 +45,9 @@
     - traefik_unifi
     - traefik_ipmi
     - services
+
+- hosts: box,homelab
+  roles:
     - minio
     - influxdb
 
