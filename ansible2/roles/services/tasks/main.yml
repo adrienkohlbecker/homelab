@@ -19,3 +19,14 @@
   become: yes
   tags:
     - services
+
+- name: Create zfs filesystem
+  when: zfs_root
+  zfs:
+    name: rpool/services
+    state: present
+    extra_zfs_properties:
+      mountpoint: /mnt/services
+  become: yes
+  tags:
+    - services
