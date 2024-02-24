@@ -1,0 +1,33 @@
+zfs_root: true
+journald_storage: persistent
+
+mountpoints: []
+  # - { path: '/var/lib/docker', src: '/dev/disk/by-id/ata-QEMU_HARDDISK_QM00003-part3', fstype: 'ext4', opts: 'defaults,noatime', owner: 'root', group: 'root', mode: '0710' }
+
+zfs_arc_min: 1073741824
+zfs_arc_max: 8589934592
+zfs_trim_pools:
+  - rpool
+  - bpool
+
+system_is_qemu_vm: false
+system_is_ipmi_capable: false
+
+libvirt_default_network: "192.168.122.1/24"
+
+netplan:
+  ethernets:
+    enp1s0:
+      dhcp4: true
+      dhcp6: false
+
+# wireguard-vanity-keygen -c $NAME/
+wireguard_public_key: bak/nQ8PyILF2E5Ith7iHJZ7R67chEfWHihujiqyL1g=
+wireguard_private_key: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          35643566333431303563343139333862633838636332313365346539383930396361333634663831
+          6530633337306538643139656138376365373132633835300a393939326639316266616539303139
+          38356536393436386633656463666665323161356164313234656131353965663165353666366562
+          3939303461303235620a333430653465613033663730336465663634646663393639323930343435
+          64643937303135376434663961633938346137353163366264316332623734363230356337363666
+          3135383733633732623962393737353330313237663733663261
