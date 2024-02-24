@@ -5,7 +5,7 @@
   become: yes
   register: apt_install_gpg
   tags:
-    - vector
+    - netdata
 
 - name: Add repository key
   apt_key:
