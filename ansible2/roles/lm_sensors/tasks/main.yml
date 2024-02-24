@@ -7,10 +7,24 @@
   tags:
     - lm_sensors
 
-# tasks:
-#   - name: Install packages
-#     apt:
-#       pkg:
-#         - hddtemp
-#       cache_valid_time: 3600
-#     become: yes
+- name: Load detected sensor modules
+  copy:
+    dest: /etc/modules-load.d/lm_sensors.conf
+    content: "{{ sensor_modules|join('\n') }}\n"
+    mode: "0644"
+    owner: root
+    group: root
+    backup: yes
+  become: yes
+  register: kernel_modules
+  tags:
+    - lm_sensors
+
+- name: Ask to reboot
+  when: kernel_modules.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+  become: yes
+  tags:
+    - lm_sensors
