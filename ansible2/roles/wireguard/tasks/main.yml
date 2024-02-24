@@ -33,7 +33,7 @@
     - wireguard
 
 - name: Enable the service
-  when: not ansible_check_mode or not apt_install_wireguard.changed
+  when: not (ansible_check_mode and apt_install_wireguard.changed)
   systemd:
     name: wg-quick@wg0.service
     enabled: yes
@@ -42,7 +42,7 @@
     - wireguard
 
 - name: Start the service
-  when: not ansible_check_mode or not apt_install_wireguard.changed
+  when: not (ansible_check_mode and apt_install_wireguard.changed)
   systemd:
     name: wg-quick@wg0.service
     state: started
@@ -52,7 +52,7 @@
     - wireguard
 
 - name: Restart wireguard
-  when: (not ansible_check_mode or not apt_install_wireguard.changed) and wireguard_cfg.changed and not wireguard_started.changed
+  when: not (ansible_check_mode and apt_install_wireguard.changed) and wireguard_cfg.changed and not wireguard_started.changed
   systemd:
     name: wg-quick@wg0.service
     state: restarted

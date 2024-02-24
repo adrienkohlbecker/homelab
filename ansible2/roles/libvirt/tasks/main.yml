@@ -27,7 +27,7 @@
 
 - import_role:
     name: usergroup_immediate
-  when: not ansible_check_mode or not apt_install_libvirt.changed
+  when: not (ansible_check_mode and apt_install_libvirt.changed)
   vars:
     group:
       - libvirt
@@ -56,7 +56,7 @@
     - libvirt
 
 - name: Get network facts
-  when: not ansible_check_mode or not apt_install_python_libvirt.changed
+  when: not (ansible_check_mode and apt_install_python_libvirt.changed)
   virt_net:
     command: facts
     name: default
@@ -67,7 +67,7 @@
     - libvirt
 
 # assuming the random mac is not the same as libvirt initially generated at install...
-- when: (not ansible_check_mode or not apt_install_python_libvirt.changed) and (ansible_libvirt_networks is undefined or (ansible_libvirt_networks['default'] and ansible_libvirt_networks['default'].macaddress != libvirt_network_mac))
+- when: not (ansible_check_mode and apt_install_python_libvirt.changed) and (ansible_libvirt_networks is undefined or (ansible_libvirt_networks['default'] and ansible_libvirt_networks['default'].macaddress != libvirt_network_mac))
   block:
 
   - name: Remove default network
@@ -88,7 +88,7 @@
       - virtualization
 
 - name: Start default network
-  when: not ansible_check_mode or not apt_install_python_libvirt.changed
+  when: not (ansible_check_mode and apt_install_python_libvirt.changed)
   community.libvirt.virt_net:
     name: default
     state: active
@@ -97,7 +97,7 @@
     - libvirt
 
 - name: Autostart default network
-  when: not ansible_check_mode or not apt_install_python_libvirt.changed
+  when: not (ansible_check_mode and apt_install_python_libvirt.changed)
   community.libvirt.virt_net:
     name: default
     autostart: true

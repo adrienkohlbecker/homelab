@@ -8,7 +8,7 @@
     - log2ram
 
 - name: Add repository key
-  when: not ansible_check_mode or not apt_install_gpg.changed
+  when: not (ansible_check_mode and apt_install_gpg.changed)
   apt_key:
     id: CA548A0A0312D8E6
     url: https://azlux.fr/repo.gpg
@@ -26,7 +26,7 @@
     - log2ram
 
 - name: Install log2ram
-  when: not ansible_check_mode or not apt_repository_log2ram.changed
+  when: not (ansible_check_mode and apt_repository_log2ram.changed)
   apt:
     pkg:
       - log2ram
