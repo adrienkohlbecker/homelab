@@ -16,7 +16,7 @@
     path: "{{ item }}"
     state: absent
   become: yes
-  with_items:
+  loop:
     - /etc/netplan/00-installer-config.yaml
     - /etc/netplan/50-cloud-init.yaml
   tags:
