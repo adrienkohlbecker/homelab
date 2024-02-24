@@ -1,7 +1,7 @@
 - name: Configure netplan
   template:
     src: config.yaml.j2
-    dest: /etc/netplan/00-installer-config.yaml
+    dest: /etc/netplan/01-netcfg.yaml
     owner: root
     group: root
     mode: "0600"
@@ -11,11 +11,14 @@
   tags:
     - networking
 
-- name: Cleanup config added by cloud-init
+- name: Cleanup config added by cloud-init and installer
   file:
-    path: /etc/netplan/50-cloud-init.yaml
+    path: "{{ item }}"
     state: absent
   become: yes
+  with_items:
+    - /etc/netplan/00-installer-config.yaml
+    - /etc/netplan/50-cloud-init.yaml
   tags:
     - networking
 
