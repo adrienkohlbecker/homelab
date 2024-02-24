@@ -20,6 +20,51 @@
   tags:
     - docker
 
+- name: Create mount point
+  file:
+    dest: /var/lib/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0710"
+  become: yes
+  tags:
+    - docker
+
+- name: Create docker zvol
+  when: zfs_root
+  zfs:
+    name: rpool/docker
+    state: present
+    extra_zfs_properties:
+      volsize: 20gb
+  register: zfs_zvol_docker
+  become: yes
+  tags:
+    - docker
+
+- name: Create a ext4 filesystem on docker zvol
+  when: not (ansible_check_mode and zfs_zvol_docker.changed) and zfs_root
+  filesystem:
+    fstype: ext4
+    dev: /dev/zvol/rpool/docker
+  become: yes
+  tags:
+    - docker
+
+- name: Mount docker zvol
+  when: zfs_root
+  mount:
+    path: /var/lib/docker
+    src: /dev/zvol/rpool/docker
+    fstype: ext4
+    opts: defaults
+    state: mounted
+    backup: yes
+  become: yes
+  tags:
+    - docker
+
 - name: Enable the service
   when: not ansible_check_mode or not apt_unit_masked.changed
   systemd:
