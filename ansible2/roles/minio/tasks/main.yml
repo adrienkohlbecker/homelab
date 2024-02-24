@@ -80,7 +80,7 @@
     - minio
 
 - name: Enable the service
-  when: not ansible_check_mode or not minio_installed.changed
+  when: not (ansible_check_mode and minio_installed.changed)
   systemd:
     name: minio
     enabled: yes
@@ -89,7 +89,7 @@
     - minio
 
 - name: Start the service
-  when: not ansible_check_mode or not minio_installed.changed
+  when: not (ansible_check_mode and minio_installed.changed)
   systemd:
     name: minio
     state: started
@@ -99,7 +99,7 @@
     - minio
 
 - name: Restart minio
-  when: (not ansible_check_mode or not minio_installed.changed) and minio_cfg.changed and not minio_started.changed
+  when: not (ansible_check_mode and minio_installed.changed) and minio_cfg.changed and not minio_started.changed
   systemd:
     name: minio
     state: restarted
