@@ -21,6 +21,7 @@
     - docker
 
 - name: Enable the service
+  when: not ansible_check_mode or not apt_unit_masked.changed
   systemd:
     name: docker
     enabled: yes
@@ -29,6 +30,7 @@
     - docker
 
 - name: Start the service
+  when: not ansible_check_mode or not apt_unit_masked.changed
   systemd:
     name: docker
     state: started
@@ -38,7 +40,7 @@
     - docker
 
 - name: Restart docker
-  when: docker_conf.changed and not systemd_started.changed
+  when: (not ansible_check_mode or not apt_unit_masked.changed) and docker_conf.changed and not systemd_started.changed
   systemd:
     name: docker
     state: restarted
@@ -48,6 +50,7 @@
 
 - import_role:
     name: usergroup_immediate
+  when: not ansible_check_mode or not apt_unit_masked.changed
   vars:
     group: docker
   tags:

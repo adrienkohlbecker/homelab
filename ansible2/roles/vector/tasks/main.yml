@@ -1,4 +1,14 @@
+- name: Install gpg
+  apt:
+    pkg: gpg
+    cache_valid_time: 3600
+  become: yes
+  register: apt_install_gpg
+  tags:
+    - vector
+
 - name: Add repository key
+  when: not ansible_check_mode or not apt_install_gpg.changed
   apt_key:
     id: 3543DB2D0A2BC4B8
     url: https://repositories.timber.io/public/vector/gpg.3543DB2D0A2BC4B8.key
@@ -10,6 +20,7 @@
 - name: Add repository
   apt_repository:
     repo: deb [signed-by=/etc/apt/trusted.gpg.d/vector.gpg] https://repositories.timber.io/public/vector/deb/ubuntu {{ ansible_distribution_release }} main
+  register: apt_repository_vector
   become: yes
   tags:
     - vector
@@ -19,6 +30,7 @@
   vars:
     pkg: vector
     unit: vector.service
+    condition: "{{ not ansible_check_mode or not apt_repository_vector.changed }}"
   tags:
     - vector
 
@@ -55,6 +67,7 @@
     - vector_conf
 
 - name: Enable the service
+  when: not ansible_check_mode or (not apt_unit_masked.changed and not apt_unit_masked.skipped)
   systemd:
     name: vector
     enabled: yes
@@ -63,6 +76,7 @@
     - vector
 
 - name: Start the service
+  when: not ansible_check_mode or (not apt_unit_masked.changed and not apt_unit_masked.skipped)
   systemd:
     name: vector
     state: started
@@ -73,7 +87,7 @@
     - vector_conf
 
 - name: Restart vector
-  when: vector_cfg.changed and not vector_started.changed
+  when: (not ansible_check_mode or (not apt_unit_masked.changed and not apt_unit_masked.skipped)) and vector_cfg.changed and not vector_started.changed
   systemd:
     name: vector
     state: restarted

@@ -52,6 +52,7 @@
     - mailer
 
 - name: Enable the service
+  when: not ansible_check_mode or not apt_unit_masked.changed
   systemd:
     name: postfix
     enabled: yes
@@ -60,6 +61,7 @@
     - mailer
 
 - name: Start the service
+  when: not ansible_check_mode or not apt_unit_masked.changed
   systemd:
     name: postfix
     state: started
@@ -69,7 +71,7 @@
     - mailer
 
 - name: Restart postfix
-  when: (postfix_cfg.changed or sasl_auth.changed) and not systemd_started.changed
+  when: (not ansible_check_mode or not apt_unit_masked.changed) and (postfix_cfg.changed or sasl_auth.changed) and not systemd_started.changed
   service:
     name: postfix
     state: restarted

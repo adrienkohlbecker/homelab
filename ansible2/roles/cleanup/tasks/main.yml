@@ -4,6 +4,7 @@
   tags:
     - cleanup
   no_log: yes
+  check_mode: false
 
 - name: Uninstall snaps
   when: "'snapd' in ansible_facts.packages"

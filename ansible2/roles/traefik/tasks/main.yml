@@ -4,10 +4,12 @@
   containers.podman.podman_network:
     name: traefik
   become: yes
+  register: podman_network_traefik
   tags:
     - traefik
 
 - name: Hotfix network CNI version bug # https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2024394
+  when: not ansible_check_mode or (not podman_network_traefik.changed and not podman_network_traefik.skipped)
   lineinfile:
     path: /etc/cni/net.d/traefik.conflist
     regexp: '^(\s*)"cniVersion":'
@@ -32,6 +34,7 @@
   block:
 
     - name: Download traefik
+      check_mode: false
       get_url:
         url: https://github.com/traefik/traefik/releases/download/v2.10.6/traefik_v2.10.6_linux_amd64.tar.gz
         dest: /tmp/traefik.tar.gz
@@ -128,6 +131,7 @@
     - traefik
 
 - name: Enable the service
+  when: not ansible_check_mode or not systemd_unit.changed
   systemd:
     name: traefik
     enabled: yes
@@ -137,6 +141,7 @@
     - traefik
 
 - name: Start the service
+  when: not ansible_check_mode or not systemd_unit.changed
   systemd:
     name: traefik
     state: started
@@ -146,7 +151,7 @@
     - traefik
 
 - name: Restart the service
-  when: (systemd_unit.changed or traefik_yml.changed) and not systemd_started.changed
+  when: (not ansible_check_mode or not systemd_unit.changed) and (systemd_unit.changed or traefik_yml.changed) and not systemd_started.changed
   systemd:
     name: traefik
     state: restarted

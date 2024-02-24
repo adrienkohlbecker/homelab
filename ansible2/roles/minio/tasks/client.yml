@@ -2,6 +2,7 @@
   package_facts:
     manager: apt
   no_log: yes
+  check_mode: false
   tags:
     - minio
 
@@ -9,6 +10,7 @@
   block:
 
     - name: Download mcli deb
+      check_mode: false
       get_url:
         url: https://dl.min.io/client/mc/release/linux-amd64/archive/mcli_20221029100923.0.0_amd64.deb
         dest: /tmp/mcli.deb
@@ -32,6 +34,7 @@
     - minio
 
 - name: Configure alias
+  when: not ansible_check_mode or not mcli_installed.changed
   command: mcli alias set default https://minio.{{ domain }} {{ minio_root_user }} {{ minio_root_password }}
   args:
     creates: ~/.mcli/config.json

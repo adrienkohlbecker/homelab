@@ -2,6 +2,7 @@
   package_facts:
     manager: apt
   no_log: yes
+  check_mode: false
 
 - when: pkg not in ansible_facts.packages
   block:
@@ -17,6 +18,7 @@
     become: yes
 
   - name: Install {{ pkg }}
+    when: condition is not defined or condition
     apt:
       pkg:
         - "{{ pkg }}"
