@@ -7,6 +7,7 @@
       - bzip2
       - bash
       - git
+      - gpg
       - gzip
       - tar
       - unzip

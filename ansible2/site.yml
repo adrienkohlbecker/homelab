@@ -16,7 +16,6 @@
     - hardware
     - logrotate
     - journald
-    - log2ram
     - iptables
     - fail2ban
     - ssh
@@ -31,6 +30,13 @@
     - docker
     - podman
     - libvirt
+
+- hosts: all:box
+  roles:
+    - log2ram
+
+- hosts: all
+  roles:
     - vector
     - netdata
     - journald_exporter
