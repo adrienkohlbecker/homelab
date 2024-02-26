@@ -30,7 +30,7 @@
   vars:
     pkg: influxdb2
     unit: influxdb.service
-    condition: not (ansible_check_mode and apt_repository_influxdb.changed)
+    condition: "{{ not (ansible_check_mode and apt_repository_influxdb.changed) }}"
   tags:
     - influxdb
 

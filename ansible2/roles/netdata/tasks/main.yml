@@ -30,7 +30,7 @@
   vars:
     pkg: netdata
     unit: netdata.service
-    condition: not (ansible_check_mode and apt_repository_netdata.changed)
+    condition: "{{ not (ansible_check_mode and apt_repository_netdata.changed) }}"
   tags:
     - netdata
 

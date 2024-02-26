@@ -18,7 +18,7 @@
     become: yes
 
   - name: Install {{ pkg }}
-    when: "{{ condition|default:'yes' }}"
+    when: condition | default(true)
     apt:
       pkg:
         - "{{ pkg }}"
