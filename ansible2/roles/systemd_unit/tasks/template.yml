@@ -1,0 +1,40 @@
+# Note: with ubuntu 24.04, may be able to use `validate: systemd-analyze verify %s:foo.service`,
+# although it won't fail for warnings like undefined keys?
+- name: systemd service
+  block:
+    - name: Template the unit file
+      template:
+        src: "{{ src }}.j2"
+        dest: "/etc/systemd/system/{{ src }}"
+        owner: root
+        group: root
+        mode: "0644"
+        backup: yes
+      become: yes
+      register: systemd_unit
+
+    - name: validate unit file
+      command: systemd-analyze verify /etc/systemd/system/{{ src }}
+      register: systemd_verify
+      changed_when: false
+      failed_when: systemd_verify.rc != 0 or systemd_verify.stderr != ''
+      become: yes
+
+  rescue:
+    - name: Copy backup file to original
+      when: '"backup_file" in systemd_unit'
+      copy:
+         remote_src: true
+         dest: "/etc/systemd/system/{{ src }}"
+         src: "{{ systemd_unit.backup_file }}"
+      become: yes
+
+    - name: Delete backup file
+      when: '"backup_file" in systemd_unit'
+      file:
+         path: "{{ systemd_unit.backup_file }}"
+         state: absent
+      become: yes
+
+    - fail:
+        msg: "Unable to install systemd unit"
