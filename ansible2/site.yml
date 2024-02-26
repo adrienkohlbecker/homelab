@@ -45,6 +45,7 @@
     - traefik_ipmi
     - netdata
     - services
+    - pihole
 
 - hosts: box,homelab
   roles:

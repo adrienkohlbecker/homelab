@@ -1,41 +1,67 @@
-- name: Copy the credentials
-  template:
-    src: environment/pihole.j2
-    dest: /etc/env.d/pihole
-    owner: root
-    group: root
-    mode: 0600
+# TODO: migrate to podman once on 24.04
+
+- name: Add pihole group
+  group:
+    name: pihole
+    system: true
   become: yes
   tags:
     - pihole
-  notify:
-    - Restart pihole
+
+- name: Add pihole user
+  user:
+    name: pihole
+    group: pihole
+    createhome: no
+    system: true
+  register: pihole_user
+  become: yes
+  tags:
+    - pihole
 
 - name: Create configuration directory
   file:
-    dest: /mnt/services/pihole
+    dest: /mnt/services/pihole/etc
+    state: directory
+    owner: "{{ pihole_user.uid }}"
+    group: "{{ pihole_user.group }}"
+    mode: "0775"
+  become: yes
+  tags:
+    - pihole
+
+- name: Create configuration directory
+  file:
+    dest: /mnt/services/pihole/dnsmasq
     state: directory
     owner: root
     group: root
-    mode: 0775
+    mode: "0755"
   become: yes
   tags:
     - pihole
 
-- name: Copy the unit file
-  copy:
-    src: systemd/pihole.service
-    dest: /etc/systemd/system/pihole.service
-    owner: root
-    group: root
-    mode: 0644
+- name: Create log directory
+  file:
+    dest: /var/log/pihole
+    state: directory
+    owner: "{{ pihole_user.uid }}"
+    group: "{{ pihole_user.group }}"
+    mode: "0755"
   become: yes
   tags:
     - pihole
-  notify:
-    - Restart pihole
+
+- import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    src: pihole.service
+  tags:
+    - pihole
 
 - name: Enable the service
+  when: not (ansible_check_mode and systemd_unit.changed)
   systemd:
     name: pihole
     enabled: yes
@@ -43,3 +69,53 @@
   become: yes
   tags:
     - pihole
+
+- name: Start the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: pihole
+    state: started
+  register: systemd_started
+  become: yes
+  tags:
+    - pihole
+
+- import_role:
+    name: logrotate
+    tasks_from: compression
+  vars:
+    item: /mnt/services/pihole/etc/logrotate
+  tags:
+    - pihole
+
+- name: Set web password
+  lineinfile:
+    path: /mnt/services/pihole/etc/setupVars.conf
+    regexp: '^WEBPASSWORD='
+    line: WEBPASSWORD={{ pihole_password | hash('sha256') | hash('sha256') }}
+    validate: bash -n %s
+    backup: true
+  register: logrotate_pass
+  become: yes
+  tags:
+    - pihole
+
+- name: Restart the service
+  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed and not systemd_started.changed) or logrotate_conf.changed or logrotate_pass.changed)
+  systemd:
+    name: pihole
+    state: restarted
+  become: yes
+  tags:
+    - pihole
+
+- name: Whitelist domains
+  command: docker exec pihole pihole {{ item }}
+  loop: "{{ lookup('file', 'files/common_whitelist.sh').splitlines() }}"
+  register: pihole_whitelist
+  changed_when: '"Adding" in pihole_whitelist.stdout'
+  failed_when: pihole_whitelist.rc != 0 or "✗" in pihole_whitelist.stdout
+  become: yes
+  tags:
+    - pihole
+    - focus
