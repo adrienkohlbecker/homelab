@@ -1,0 +1,10 @@
+- name: Install freeipmi
+  apt:
+    pkg:
+      - freeipmi-tools
+      - freeipmi-bmc-watchdog
+      - freeipmi-ipmiseld
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - ipmi

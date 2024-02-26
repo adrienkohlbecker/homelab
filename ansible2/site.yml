@@ -12,7 +12,6 @@
     - console
     - timezone
     - unattended_upgrades
-    - hardware
     - logrotate
     - journald
     - iptables
@@ -33,6 +32,7 @@
 - hosts: box
   roles:
     - log2ram
+    - qemu_guest
 
 - hosts: all
   roles:
@@ -47,6 +47,7 @@
 
 - hosts: box,homelab
   roles:
+    - ipmi
     - minio
     - influxdb
 
