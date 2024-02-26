@@ -1,10 +1,6 @@
 zfs_root: false
 journald_storage: volatile
 
-mountpoints:
-  - { path: '/var/lib/docker', src: '/dev/vda3', fstype: 'ext4', opts: 'defaults,noatime', owner: 'root', group: 'root', mode: '0710' }
-  - { path: '/var/lib/libvirt/images', src: '/dev/vda4', fstype: 'ext4', opts: 'defaults,noatime', owner: 'root', group: 'root', mode: '0711' }
-
 zfs_arc_min: 536870912
 zfs_arc_max: 1073741824
 zfs_trim_pools: []

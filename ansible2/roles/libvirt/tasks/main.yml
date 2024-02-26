@@ -25,6 +25,28 @@
   tags:
     - libvirt
 
+- name: Create mount point
+  file:
+    dest: /var/lib/libvirt/images
+    state: directory
+    owner: root
+    group: root
+    mode: "0711"
+  become: yes
+  tags:
+    - libvirt
+
+- name: Create zfs filesystem
+  when: zfs_root
+  zfs:
+    name: rpool/vms
+    state: present
+    extra_zfs_properties:
+      mountpoint: /var/lib/libvirt/images
+  become: yes
+  tags:
+    - libvirt
+
 - import_role:
     name: usergroup_immediate
   when: not (ansible_check_mode and apt_install_libvirt.changed)
