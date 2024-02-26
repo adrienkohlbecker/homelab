@@ -31,10 +31,13 @@
   tags:
     - certbot
 
-- name: Get certificate
-  command: certbot certonly --agree-tos -m {{ root_email }} --noninteractive --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini -d "{{ domain }}" -d "*.{{ domain }}"
+- name: Get certificates
+  command: certbot certonly --agree-tos -m {{ root_email }} --noninteractive --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini -d "{{ item }}" -d "*.{{ item }}"
   args:
-    creates: /etc/letsencrypt/live/{{ domain }}/privkey.pem
+    creates: /etc/letsencrypt/live/{{ item }}/privkey.pem
   become: yes
+  loop:
+    - "{{ domain }}"
+    - "{{ inventory_hostname }}.{{ domain }}"
   tags:
     - certbot

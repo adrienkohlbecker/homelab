@@ -4,7 +4,7 @@ http:
       entryPoints:
         - websecure
       service: influxdb
-      rule: Host(`influxdb.{{ domain }}`)
+      rule: Host(`influxdb.{{ domain }}`) || Host(`influxdb.{{ inventory_hostname }}.{{ domain }}`)
       tls: {}
   services:
     influxdb:

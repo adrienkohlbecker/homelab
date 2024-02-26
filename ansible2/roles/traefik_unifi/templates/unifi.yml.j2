@@ -4,7 +4,7 @@ http:
       entryPoints:
         - websecure
       service: unifi
-      rule: Host(`unifi.{{ domain }}`)
+      rule: Host(`unifi.{{ domain }}`) || Host(`unifi.{{ inventory_hostname }}.{{ domain }}`)
       tls: {}
   services:
     unifi:
