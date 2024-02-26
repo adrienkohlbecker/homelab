@@ -9,17 +9,11 @@
 - when: '"minio" not in ansible_facts.packages or ansible_facts.packages["minio"][0].version != "20221024183507.0.0"'
   block:
 
-    - name: Create temporary file
-      tempfile:
-        state: file
-        suffix: .deb
-      register: tempfile
-
     - name: Download minio deb
       check_mode: false
       get_url:
         url: https://dl.min.io/server/minio/release/linux-amd64/archive/minio_20221024183507.0.0_amd64.deb
-        dest: "{{ tempfile.path }}"
+        dest: /tmp/minio.deb
         mode: '0644'
         owner: root
         group: root
@@ -27,12 +21,12 @@
 
     - name: Install minio
       apt:
-        deb: "{{ tempfile.path }}"
+        deb: /tmp/minio.deb
       register: minio_installed
 
-    - name: Delete temp file
+    - name: Delete deb file
       file:
-         path: "{{ tempfile.path }}"
+         path: /tmp/minio.deb
          state: absent
 
   become: yes
