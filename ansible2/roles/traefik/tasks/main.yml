@@ -33,11 +33,17 @@
 - when: '"2.10.6" not in traefik_check.stdout'
   block:
 
+    - name: Create temporary file
+      tempfile:
+        state: file
+        suffix: .tgz
+      register: tempfile
+
     - name: Download traefik
       check_mode: false
       get_url:
         url: https://github.com/traefik/traefik/releases/download/v2.10.6/traefik_v2.10.6_linux_amd64.tar.gz
-        dest: /tmp/traefik.tar.gz
+        dest: "{{ tempfile.path }}"
         mode: '0644'
         owner: root
         group: root
@@ -45,7 +51,7 @@
 
     - name: Install traefik
       unarchive:
-        src: /tmp/traefik.tar.gz
+        src: "{{ tempfile.path }}"
         remote_src: yes
         dest: /usr/local/bin
         mode: '0755'
@@ -55,9 +61,9 @@
         list_files: yes
       register: traefik_installed
 
-    - name: Delete tar file
+    - name: Delete temp file
       file:
-         path: /tmp/traefik.tar.gz
+         path: "{{ tempfile.path }}"
          state: absent
 
   become: yes

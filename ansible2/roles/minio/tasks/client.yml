@@ -9,11 +9,17 @@
 - when: '"mcli" not in ansible_facts.packages or ansible_facts.packages["mcli"][0].version != "20221029100923.0.0"'
   block:
 
+    - name: Create temporary file
+      tempfile:
+        state: file
+        suffix: .deb
+      register: tempfile
+
     - name: Download mcli deb
       check_mode: false
       get_url:
         url: https://dl.min.io/client/mc/release/linux-amd64/archive/mcli_20221029100923.0.0_amd64.deb
-        dest: /tmp/mcli.deb
+        dest: "{{ tempfile.path }}"
         mode: '0644'
         owner: root
         group: root
@@ -21,12 +27,12 @@
 
     - name: Install mcli
       apt:
-        deb: /tmp/mcli.deb
+        deb: "{{ tempfile.path }}"
       register: mcli_installed
 
-    - name: Delete deb file
+    - name: Delete temp file
       file:
-         path: /tmp/mcli.deb
+         path: "{{ tempfile.path }}"
          state: absent
 
   become: yes
