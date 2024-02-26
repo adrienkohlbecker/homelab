@@ -13,6 +13,7 @@ ListenPort = 51820
 # Name = {{ peer.name }}
 PublicKey = {{ peer.public_key }}
 AllowedIPs = {{ allowed_ips|join(',') }}
+PersistentKeepalive = 25
 {% if 'preshared_key' in peer %}
 PresharedKey = {{ peer.preshared_key }}
 {% endif %}
