@@ -32,7 +32,7 @@
     - certbot
 
 - name: Get certificates
-  command: certbot certonly --agree-tos -m {{ root_email }} --noninteractive --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini -d "{{ item }}" -d "*.{{ item }}"
+  command: certbot certonly --agree-tos -m {{ root_email }} --noninteractive --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini --dns-cloudflare-propagation-seconds 30 -d "{{ item }}" -d "*.{{ item }}"
   args:
     creates: /etc/letsencrypt/live/{{ item }}/privkey.pem
   become: yes
