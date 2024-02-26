@@ -47,8 +47,8 @@
     - log2ram
 
 - name: Configure log2ram
-  copy:
-    src: log2ram.conf
+  template:
+    src: log2ram.conf.j2
     dest: /etc/log2ram.conf
     owner: root
     group: root

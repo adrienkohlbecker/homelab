@@ -14,6 +14,8 @@ sensor_modules:
   - coretemp
   - nct6775
 
+log2ram_size:
+
 netplan:
   ethernets:
     enp1s0:
