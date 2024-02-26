@@ -1,0 +1,16 @@
+[Unit]
+Description=mac0 interface setup
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+ExecStart=/bin/ip link add mac0 link {{ macvlan_parent }} type macvlan mode bridge
+ExecStart=/bin/ip addr add {{ macvlan_host_ip }}/32 dev mac0
+ExecStart=/bin/ip link set mac0 address {{ macvlan_host_mac }}
+ExecStart=/bin/ip link set mac0 up
+ExecStop=/bin/ip link delete mac0
+
+[Install]
+WantedBy=multi-user.target
