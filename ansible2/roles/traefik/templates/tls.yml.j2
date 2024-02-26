@@ -3,4 +3,4 @@ tls:
     - certFile: '/etc/letsencrypt/live/{{ domain }}/fullchain.pem'
       keyFile: '/etc/letsencrypt/live/{{ domain }}/privkey.pem'
     - certFile: '/etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem'
-      keyFile: '/etc/letsencrypt/live{{ inventory_hostname }}.{{ domain }}/privkey.pem'
+      keyFile: '/etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem'
