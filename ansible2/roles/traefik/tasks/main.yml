@@ -9,7 +9,7 @@
     - traefik
 
 - name: Hotfix network CNI version bug # https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2024394
-  when: not (ansible_check_mode and (podman_network_traefik.changed or podman_network_traefik.skipped))
+  when: not (ansible_check_mode and (podman_network_traefik.changed or 'skipped' in podman_network_traefik))
   lineinfile:
     path: /etc/cni/net.d/traefik.conflist
     regexp: '^(\s*)"cniVersion":'

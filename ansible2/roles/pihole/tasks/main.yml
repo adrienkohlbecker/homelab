@@ -1,5 +1,13 @@
 # TODO: migrate to podman once on 24.04
 
+- name: Check pihole_ip is valid
+  assert:
+    that: pihole_ip + "/32" == pihole_ip | ansible.utils.ipaddr('host') | ansible.utils.ipaddr(macvlan_subnet)
+    fail_msg: "pihole_ip is not in a valid range or has the wrong format"
+    success_msg: "pihole_ip is valid"
+  tags:
+    - pihole
+
 - name: Add pihole group
   group:
     name: pihole
@@ -20,6 +28,7 @@
     - pihole
 
 - name: Create configuration directory
+  when: not (ansible_check_mode and pihole_user.changed)
   file:
     dest: /mnt/services/pihole/etc
     state: directory
@@ -42,6 +51,7 @@
     - pihole
 
 - name: Create log directory
+  when: not (ansible_check_mode and pihole_user.changed)
   file:
     dest: /var/log/pihole
     state: directory
@@ -57,11 +67,12 @@
     tasks_from: template
   vars:
     src: pihole.service
+    condition: "{{ not (ansible_check_mode and pihole_user.changed) }}"
   tags:
     - pihole
 
 - name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed))
   systemd:
     name: pihole
     enabled: yes
@@ -71,7 +82,7 @@
     - pihole
 
 - name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed))
   systemd:
     name: pihole
     state: started
@@ -85,10 +96,12 @@
     tasks_from: compression
   vars:
     item: /mnt/services/pihole/etc/logrotate
+    condition: "{{ not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed)) }}"
   tags:
     - pihole
 
 - name: Set web password
+  when: not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed))
   lineinfile:
     path: /mnt/services/pihole/etc/setupVars.conf
     regexp: '^WEBPASSWORD='
@@ -101,7 +114,7 @@
     - pihole
 
 - name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed and not systemd_started.changed) or logrotate_conf.changed or logrotate_pass.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and ((systemd_unit.changed and not systemd_started.changed) or logrotate_conf.changed or logrotate_pass.changed)
   systemd:
     name: pihole
     state: restarted
@@ -110,6 +123,7 @@
     - pihole
 
 - name: Whitelist domains
+  no_log: yes
   command: docker exec pihole pihole {{ item }}
   loop: "{{ lookup('file', 'files/common_whitelist.sh').splitlines() }}"
   register: pihole_whitelist

@@ -119,6 +119,4 @@
   tags:
     - minio
 
-- include_tasks: client.yml
-  tags:
-    - always
+- import_tasks: client.yml

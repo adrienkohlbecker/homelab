@@ -3,6 +3,7 @@
 - name: systemd service
   block:
     - name: Template the unit file
+      when: condition | default(true)
       template:
         src: "{{ src }}.j2"
         dest: "/etc/systemd/system/{{ src }}"
@@ -14,6 +15,7 @@
       register: systemd_unit
 
     - name: validate unit file
+      when: systemd_unit.changed
       command: systemd-analyze verify /etc/systemd/system/{{ src }}
       register: systemd_verify
       changed_when: false

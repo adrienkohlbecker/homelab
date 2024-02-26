@@ -1,4 +1,5 @@
 - name: Configure logrotate compression {{ item }}
+  when: condition | default(true)
   lineinfile:
     regexp: "{{ zfs_root | ternary(enable.regexp, disable.regexp) }}"
     line: "{{ zfs_root | ternary(enable.line, disable.line) }}"
