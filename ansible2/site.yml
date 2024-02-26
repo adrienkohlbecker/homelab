@@ -3,7 +3,6 @@
     - ansible_dependencies
     - user
     - cleanup
-    - mounts
     - hostname
     - apt
     - networking
