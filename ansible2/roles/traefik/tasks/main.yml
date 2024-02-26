@@ -26,6 +26,7 @@
   register: traefik_check
   failed_when: false
   changed_when: false
+  check_mode: false
   become: yes
   tags:
     - traefik

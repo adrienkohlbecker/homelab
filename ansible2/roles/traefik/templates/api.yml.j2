@@ -1,11 +1,12 @@
 http:
   routers:
     dashboard:
-      rule: Host(`traefik.{{ domain }}`) || Host(`traefik.{{ inventory_hostname }}.{{ domain }}`))
+      rule: Host(`traefik.{{ domain }}`) || Host(`traefik.{{ inventory_hostname }}.{{ domain }}`)
       service: api@internal
       tls: {}
       middlewares:
-        - redirect_to_dashboard
+        - redirect_to_dashboard_root
+        - redirect_to_dashboard_local
 
   middlewares:
     redirect_to_dashboard_root:
