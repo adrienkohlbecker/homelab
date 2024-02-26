@@ -8,6 +8,7 @@
     - lm_sensors
 
 - name: Load detected sensor modules
+  when: sensor_modules|length > 0
   copy:
     dest: /etc/modules-load.d/lm_sensors.conf
     content: "{{ sensor_modules|join('\n') }}\n"
@@ -16,12 +17,22 @@
     group: root
     backup: yes
   become: yes
-  register: kernel_modules
+  register: kernel_modules_copy
+  tags:
+    - lm_sensors
+
+- name: Remove sensor modules
+  when: sensor_modules|length == 0
+  file:
+    path: /etc/modules-load.d/lm_sensors.conf
+    state: absent
+  become: yes
+  register: kernel_modules_rm
   tags:
     - lm_sensors
 
 - name: Ask to reboot
-  when: kernel_modules.changed
+  when: kernel_modules_copy.changed or kernel_modules_rm.changed
   file:
     path: /var/run/reboot-required
     state: touch
