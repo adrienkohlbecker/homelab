@@ -4,6 +4,7 @@
   apt:
     pkg:
       - qemu-kvm
+      - libvirt-clients
       - libvirt-daemon
       - libvirt-daemon-system
       - ovmf
@@ -31,7 +32,7 @@
     state: directory
     owner: root
     group: root
-    mode: "0711"
+    mode: "0755"
   become: yes
   tags:
     - libvirt
@@ -56,6 +57,34 @@
       - kvm
   tags:
     - libvirt
+
+- name: Enable the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: libvirtd
+    enabled: yes
+  become: yes
+  tags:
+    - libvirt
+
+- name: Start the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: libvirtd
+    state: started
+  become: yes
+  register: systemd_started
+  tags:
+    - libvirt
+
+# - name: Restart libvirt
+#   when: not (ansible_check_mode and apt_unit_masked.changed) and libvirt_conf.changed and not systemd_started.changed
+#   systemd:
+#     name: libvirtd
+#     state: restarted
+#   become: yes
+#   tags:
+#     - libvirt
 
 - name: Compute network values
   set_fact:
