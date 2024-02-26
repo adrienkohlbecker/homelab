@@ -13,6 +13,7 @@ system_is_ipmi_capable: false
 libvirt_default_network: "192.168.122.1/24"
 
 sensor_modules:
+  - drivetemp
   - coretemp
   - nct6775
 

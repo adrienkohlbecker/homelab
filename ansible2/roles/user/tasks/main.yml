@@ -15,6 +15,7 @@
       - mosh
       - ncdu
       - nmon
+      - progress
       - screen
       - socat
       - stress
