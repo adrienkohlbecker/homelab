@@ -37,12 +37,12 @@
 - hosts: all
   roles:
     - vector
-    - netdata
     - journald_exporter
     - certbot
     - traefik
     - traefik_unifi
     - traefik_ipmi
+    - netdata
     - services
 
 - hosts: box,homelab
