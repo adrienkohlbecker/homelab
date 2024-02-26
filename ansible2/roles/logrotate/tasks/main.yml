@@ -19,32 +19,11 @@
     - logrotate
 
 - name: Configure logrotate compression
-  lineinfile:
-    regexp: "{{ zfs_root | ternary(enable.regexp, disable.regexp) }}"
-    line: "{{ zfs_root | ternary(enable.line, disable.line) }}"
-    dest: "{{ item }}"
-    backrefs: true
-    backup: true
+  include_tasks:
+    file: compression.yml
+    apply:
+      tags: logrotate
   loop: "{{ logrotate_confs.files | map(attribute='path') + [ '/etc/logrotate.conf' ] }}"
-  register: logrotate_conf
-  become: yes
-  vars:
-    enable:
-      regexp: '^(\s*)compress'
-      line: '\1# compress # zfs already compresses disk contents'
-    disable:
-      regexp: '^(\s*)# compress # zfs already compresses disk contents'
-      line: '\1compress'
-  tags:
-    - logrotate
-
-- name: Divert configuration file
-  when: item.changed
-  community.general.dpkg_divert:
-    path: "{{ item.item }}"
-    divert: "{{ item.item }}.dpkg-dist" # so it is not included by logrotate.conf
-  loop: "{{ logrotate_conf.results }}"
-  become: yes
   tags:
     - logrotate
 

@@ -1,0 +1,34 @@
+- name: Configure logrotate compression {{ item }}
+  lineinfile:
+    regexp: "{{ zfs_root | ternary(enable.regexp, disable.regexp) }}"
+    line: "{{ zfs_root | ternary(enable.line, disable.line) }}"
+    dest: "{{ item }}"
+    backrefs: true
+    backup: true
+  register: logrotate_conf
+  become: yes
+  vars:
+    enable:
+      regexp: '^(\s*)compress'
+      line: '\1# compress # zfs already compresses disk contents'
+    disable:
+      regexp: '^(\s*)# compress # zfs already compresses disk contents'
+      line: '\1compress'
+
+- name: Check apt source for {{ item }}
+  when: logrotate_conf.changed
+  command: dpkg -S {{ item }}
+  check_mode: false
+  changed_when: false
+  failed_when:
+    - logrotate_conf_dpkg.rc != 0
+    - '"no path found matching pattern" not in logrotate_conf_dpkg.stderr'
+  register: logrotate_conf_dpkg
+  become: yes
+
+- name: Divert {{ item }}
+  when: 'logrotate_conf.changed and "no path found matching pattern" not in logrotate_conf_dpkg.stderr'
+  community.general.dpkg_divert:
+    path: "{{ item }}"
+    divert: "{{ item }}.dpkg-dist" # so it is not included by logrotate.conf
+  become: yes
