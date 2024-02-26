@@ -94,3 +94,15 @@
   become: yes
   tags:
     - netdata
+
+- name: Configure traefik
+  template:
+    src: netdata.yml.j2
+    dest: /etc/traefik/dynamic.d/netdata.yml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  become: yes
+  tags:
+    - netdata
