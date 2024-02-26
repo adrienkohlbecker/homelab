@@ -10,7 +10,9 @@
   find:
     paths:
       - /etc/logrotate.d
-    excludes: "*.dpkg-dist"
+    excludes:
+      - "*.dpkg-dist" # diverted files
+      - "*~" # ansible backups
   register: logrotate_confs
   become: yes
   tags:
@@ -50,24 +52,6 @@
   systemd:
     name: logrotate
     enabled: yes
-  become: yes
-  tags:
-    - logrotate
-
-- name: Start the service
-  systemd:
-    name: logrotate
-    state: started
-  become: yes
-  register: systemd_started
-  tags:
-    - logrotate
-
-- name: Restart the service
-  when: logrotate_conf.changed and not systemd_started.changed
-  systemd:
-    name: logrotate
-    state: restarted
   become: yes
   tags:
     - logrotate
