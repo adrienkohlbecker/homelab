@@ -35,7 +35,7 @@
 
 - name: Configure alias
   when: not (ansible_check_mode and mcli_installed.changed)
-  command: mcli alias set default https://minio.{{ domain }} {{ minio_root_user }} {{ minio_root_password }}
+  command: mcli alias set default https://minio.{{ inventory_hostname }}.{{ domain }} {{ minio_root_user }} {{ minio_root_password }}
   args:
     creates: ~/.mcli/config.json
   tags:

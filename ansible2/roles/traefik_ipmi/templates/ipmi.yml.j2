@@ -4,7 +4,7 @@ http:
       entryPoints:
         - websecure
       service: ipmi
-      rule: Host(`ipmi.{{ domain }}`)
+      rule: Host(`ipmi.{{ domain }}`) || Host(`ipmi.{{ inventory_hostname }}.{{ domain }}`)
       tls: {}
   services:
     ipmi:

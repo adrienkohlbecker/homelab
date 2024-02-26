@@ -4,7 +4,7 @@ http:
       entryPoints:
         - websecure
       service: minio_api
-      rule: Host(`minio.{{ domain }}`)
+      rule: Host(`minio.{{ domain }}`) || Host(`minio.{{ inventory_hostname }}.{{ domain }}`)
       tls: {}
     minio_console:
       entryPoints:
@@ -12,7 +12,7 @@ http:
       service: minio_console
       middlewares:
         - minio_stripconsole
-      rule: Host(`minio.{{ domain }}`) && PathPrefix(`/console`)
+      rule: (Host(`minio.{{ domain }}`) || Host(`minio.{{ inventory_hostname }}.{{ domain }}`)) && PathPrefix(`/console`)
       tls: {}
   middlewares:
     minio_stripconsole:
