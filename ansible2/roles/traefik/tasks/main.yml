@@ -172,3 +172,25 @@
   become: yes
   tags:
     - traefik
+
+- name: Configure logrotate
+  template:
+    src: logrotate.j2
+    dest: /etc/logrotate.d/traefik
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  register: logrotate_conf
+  become: yes
+  tags:
+    - traefik
+
+- name: Restart logrotate
+  when: logrotate_conf.changed
+  systemd:
+    name: logrotate
+    state: restarted
+  become: yes
+  tags:
+    - traefik
