@@ -22,7 +22,9 @@ providers:
     directory: /etc/traefik/dynamic.d
     watch: true
 
-ping: {}
+ping:
+  entryPoint: websecure
+  manualRouting: true
 api: {}
 accessLog: {}
 log:

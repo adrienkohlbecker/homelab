@@ -124,8 +124,21 @@
   tags:
     - traefik
 
+- name: Configure traefik
+  template:
+    src: ping.yml.j2
+    dest: /etc/traefik/dynamic.d/ping.yml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  become: yes
+  tags:
+    - traefik
+
 - import_role:
     name: systemd_unit
+    tasks_from: template
   vars:
     src: traefik.service
   tags:

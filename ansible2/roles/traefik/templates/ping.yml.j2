@@ -1,0 +1,6 @@
+http:
+  routers:
+    ping:
+      rule: (Host(`traefik.{{ domain }}`) || Host(`traefik.{{ inventory_hostname }}.{{ domain }}`)) && PathPrefix(`/ping`)
+      service: ping@internal
+      tls: {}
