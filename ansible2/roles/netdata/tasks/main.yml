@@ -41,14 +41,21 @@
   tags:
     - netdata
 
-- name: Copy the netdata config
-  copy:
-    src: netdata.conf
-    dest: /etc/netdata/netdata.conf
+- name: Configure netdata
+  community.general.ini_file:
+    path: /etc/netdata/netdata.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
     owner: netdata
     group: netdata
     mode: "0644"
-    backup: yes
+    ignore_spaces: true
+    backup: true
+  with_items:
+    - section: web
+      option: bind to
+      value: 127.0.0.1
   register: netdata_conf
   become: yes
   tags:
@@ -63,6 +70,33 @@
     mode: "0600"
     backup: yes
   register: prometheus_conf
+  become: yes
+  tags:
+    - netdata
+
+- name: Copy health_alarm_notify template
+  command: cp /usr/lib/netdata/conf.d/health_alarm_notify.conf /etc/netdata/health_alarm_notify.conf
+  args:
+    creates: /etc/netdata/health_alarm_notify.conf
+  become: yes
+  tags:
+    - netdata
+
+- name: Setup health_alarm_notify
+  lineinfile:
+    path: /etc/netdata/health_alarm_notify.conf
+    regexp: "{{ item.line }}"
+    line: "{{ item.value }}"
+    validate: bash -n %s
+    backup: true
+  with_items:
+    - line: ^SEND_TELEGRAM=
+      value: SEND_TELEGRAM="YES"
+    - line: ^TELEGRAM_BOT_TOKEN=
+      value: TELEGRAM_BOT_TOKEN="{{ telegram_netdata_bot_token }}"
+    - line: ^DEFAULT_RECIPIENT_TELEGRAM=
+      value: DEFAULT_RECIPIENT_TELEGRAM="{{ telegram_personal_chat_id }}"
+  register: netdata_health_alarm_notify
   become: yes
   tags:
     - netdata
@@ -87,7 +121,7 @@
     - netdata
 
 - name: Restart the service
-  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) and (netdata_conf.changed or prometheus_conf.changed) and not systemd_started.changed
+  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) and (netdata_conf.changed or prometheus_conf.changed or netdata_health_alarm_notify.changed) and not systemd_started.changed
   systemd:
     name: netdata
     state: restarted
