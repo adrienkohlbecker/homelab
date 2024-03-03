@@ -122,14 +122,37 @@
   tags:
     - pihole
 
-- name: Whitelist domains
-  no_log: yes
-  command: docker exec pihole pihole {{ item }}
-  loop: "{{ lookup('file', 'files/common_whitelist.sh').splitlines() }}"
-  register: pihole_whitelist
-  changed_when: '"Adding" in pihole_whitelist.stdout'
-  failed_when: pihole_whitelist.rc != 0 or "✗" in pihole_whitelist.stdout
+- set_fact:
+    pihole_list_update_cmd: /usr/bin/docker run --rm --volume /mnt/services/pihole/etc:/etc/pihole --entrypoint "/usr/bin/php" --env ADLISTS_URL="{{ pihole_adlists | join(' ')}}" --env WHITELIST_URL="{{ pihole_whitelists | join(' ')}}" jacklul/pihole:latest /usr/local/sbin/pihole-updatelists --no-gravity --no-reload --env
+  tags:
+    - pihole
+
+- name: Schedule updating lists
+  cron:
+    name: pihole_list_update
+    hour: 0
+    minute: 47
+    weekday: 7
+    job: "/usr/bin/systemd-cat --identifier pihole_list_update {{ pihole_list_update_cmd }}"
+    user: root
+    cron_file: ansible_pihole_list_update
   become: yes
   tags:
     - pihole
-    - focus
+
+- name: Trigger list update
+  command: "{{ pihole_list_update_cmd }}"
+  register: pihole_list_update
+  changed_when: '["inserted", "enabled", "disabled", "migrated"] | select("in", pihole_list_update.stdout) | length > 0'
+  become: yes
+  tags:
+    - pihole
+
+- name: Trigger gravity update
+  when: pihole_list_update.changed
+  command: /usr/bin/docker exec pihole pihole -g
+  register: pihole_gravity_update
+  changed_when: true # unclear how to parse the output
+  become: yes
+  tags:
+    - pihole
