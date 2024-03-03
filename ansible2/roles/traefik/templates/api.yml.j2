@@ -1,7 +1,7 @@
 http:
   routers:
     dashboard:
-      rule: Host(`traefik.{{ domain }}`) || Host(`traefik.{{ inventory_hostname }}.{{ domain }}`)
+      rule: (Host(`traefik.{{ domain }}`) || Host(`traefik.{{ inventory_hostname }}.{{ domain }}`)) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))
       service: api@internal
       tls: {}
       middlewares:
