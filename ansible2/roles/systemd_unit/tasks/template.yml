@@ -6,7 +6,7 @@
       when: condition | default(true)
       template:
         src: "{{ src }}.j2"
-        dest: "/etc/systemd/system/{{ src }}"
+        dest: "/etc/systemd/system/{{ dest | default(src) }}"
         owner: root
         group: root
         mode: "0644"
@@ -16,7 +16,7 @@
 
     - name: validate unit file
       when: systemd_unit.changed
-      command: systemd-analyze verify /etc/systemd/system/{{ src }}
+      command: systemd-analyze verify /etc/systemd/system/{{ verify | default(src) }}
       register: systemd_verify
       changed_when: false
       failed_when: systemd_verify.rc != 0 or systemd_verify.stderr != ''
@@ -27,7 +27,7 @@
       when: '"backup_file" in systemd_unit'
       copy:
          remote_src: true
-         dest: "/etc/systemd/system/{{ src }}"
+         dest: "/etc/systemd/system/{{ dest | default(src) }}"
          src: "{{ systemd_unit.backup_file }}"
       become: yes
 
@@ -35,6 +35,13 @@
       when: '"backup_file" in systemd_unit'
       file:
          path: "{{ systemd_unit.backup_file }}"
+         state: absent
+      become: yes
+
+    - name: Delete newly added file
+      when: '"backup_file" not in systemd_unit'
+      file:
+         path: /etc/systemd/system/{{ dest | default(src) }}
          state: absent
       become: yes
 
