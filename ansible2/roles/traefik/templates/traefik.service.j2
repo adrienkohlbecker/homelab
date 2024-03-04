@@ -1,7 +1,7 @@
 [Unit]
 Description=Traefik
-Wants=network-online.target
-After=network-online.target
+Wants=network-online.target podman.socket
+After=network-online.target podman.socket
 
 StartLimitInterval=300
 StartLimitBurst=5
