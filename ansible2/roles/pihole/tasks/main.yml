@@ -115,7 +115,7 @@
     - pihole
 
 - set_fact:
-    pihole_list_update_cmd: /usr/bin/docker run --rm --volume /mnt/services/pihole/etc:/etc/pihole --entrypoint "/usr/bin/php" --env ADLISTS_URL="{{ pihole_adlists | join(' ')}}" --env WHITELIST_URL="{{ pihole_whitelists | join(' ')}}" jacklul/pihole:latest /usr/local/sbin/pihole-updatelists --no-gravity --no-reload --env
+    pihole_list_update_cmd: /usr/bin/podman run --rm --quiet --volume /mnt/services/pihole/etc:/etc/pihole --entrypoint "/usr/bin/php" --env ADLISTS_URL="{{ pihole_adlists | join(' ')}}" --env WHITELIST_URL="{{ pihole_whitelists | join(' ')}}" docker.io/jacklul/pihole:latest /usr/local/sbin/pihole-updatelists --no-gravity --no-reload --env
   tags:
     - pihole
 
@@ -142,7 +142,7 @@
 
 - name: Trigger gravity update
   when: pihole_list_update.changed
-  command: /usr/bin/docker exec pihole pihole -g
+  command: /usr/bin/podman exec pihole pihole -g
   register: pihole_gravity_update
   changed_when: true # unclear how to parse the output
   become: yes
