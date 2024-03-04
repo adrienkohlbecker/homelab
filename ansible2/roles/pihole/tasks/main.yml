@@ -1,13 +1,3 @@
-# TODO: migrate to podman once on 24.04
-
-- name: Check pihole_ip is valid
-  assert:
-    that: pihole_ip + "/32" == pihole_ip | ansible.utils.ipaddr('host') | ansible.utils.ipaddr(macvlan_subnet)
-    fail_msg: "pihole_ip is not in a valid range or has the wrong format"
-    success_msg: "pihole_ip is valid"
-  tags:
-    - pihole
-
 - name: Add pihole group
   group:
     name: pihole

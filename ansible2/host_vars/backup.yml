@@ -19,8 +19,6 @@ macvlan_subnet: 10.123.0.48/28
 
 log2ram_size:
 
-pihole_ip: 10.123.0.49
-
 netplan:
   ethernets:
     enp1s0:

@@ -26,7 +26,7 @@
     - powertop
     - lm_sensors
     - zfs
-    - docker
+    # - docker
     - podman
     - libvirt
 

@@ -16,6 +16,7 @@ serversTransport:
 
 providers:
   docker:
+    endpoint: unix:///run/podman/podman.sock
     exposedByDefault: false
     network: traefik
   file:
