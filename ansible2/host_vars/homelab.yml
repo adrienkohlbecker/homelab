@@ -10,6 +10,7 @@ libvirt_default_network: "192.168.123.1/24"
 
 sensor_modules: []
 
+macvlan_enable_docker: false
 macvlan_parent: eno1
 macvlan_subnet: 10.123.0.32/28
 

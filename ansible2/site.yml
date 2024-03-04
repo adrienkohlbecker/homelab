@@ -6,7 +6,6 @@
     - hostname
     - apt
     - networking
-    # - macvlan
     - wireguard
     - locale
     - keyboard
@@ -26,7 +25,6 @@
     - powertop
     - lm_sensors
     - zfs
-    # - docker
     - podman
     - libvirt
 
@@ -34,6 +32,8 @@
   roles:
     - log2ram
     - qemu_guest
+    - macvlan
+    - docker
 
 - hosts: all
   roles:

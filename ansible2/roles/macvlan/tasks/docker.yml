@@ -1,0 +1,14 @@
+- name: Create the macvlan docker network
+  docker_network:
+    name: macvlan_net
+    driver: macvlan
+    driver_options:
+      parent: "{{ macvlan_parent }}"
+    ipam_config:
+      - subnet: "{{ macvlan_parent_subnet }}"
+        gateway: "{{ macvlan_parent_gateway }}"
+        iprange: "{{ macvlan_subnet }}"
+        aux_addresses: host={{ macvlan_host_ip }}
+  become: yes
+  tags:
+    - macvlan
