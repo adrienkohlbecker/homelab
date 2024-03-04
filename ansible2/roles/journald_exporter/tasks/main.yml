@@ -16,6 +16,8 @@
     name: journald-exporter
     createhome: no
     system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
   become: yes
   tags:
     - journald_exporter

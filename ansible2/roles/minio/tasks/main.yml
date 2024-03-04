@@ -36,9 +36,7 @@
 - name: Add minio group
   group:
     name: minio-user
-    gid: 2210
     system: true
-    state: present
   become: yes
   tags:
     - minio
@@ -47,10 +45,10 @@
   user:
     name: minio-user
     group: minio-user
-    uid: 2210
     system: true
-    state: present
     create_home: false
+    shell: /usr/sbin/nologin
+    home: /nonexistent
   become: yes
   tags:
     - minio
