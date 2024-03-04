@@ -6,8 +6,7 @@
 
 # Custom chains
 :FILTERS - [0:0]
-:DOCKER-USER - [0:0]
-:DOCKER-FILTERS - [0:0]
+:FWD_DROP - [0:0]
 
 ##################################################
 #                  CLEAR TABLES                  #
@@ -18,14 +17,13 @@
 
 -F INPUT
 -F FILTERS
--F DOCKER-USER
--F DOCKER-FILTERS
+-F FWD_DROP
 
 ##################################################
 #                  FILTERS RULES                 #
 ##################################################
 
-# This only matches traffic going to the host (excluding ports bound by docker containers)
+# This only matches traffic going to the host (excluding ports bound by containers)
 # So external host -> port bound to external interface
 # And container -> port bound to bridge interface
 
@@ -49,17 +47,6 @@
 -A FILTERS -p tcp --dport 22    -j ACCEPT                                     -m comment --comment "Allow SSH"
 -A FILTERS -p tcp --dport 80    -j ACCEPT                                     -m comment --comment "Allow HTTP"
 -A FILTERS -p tcp --dport 443   -j ACCEPT                                     -m comment --comment "Allow HTTPS"
-
-##################################################
-#               DOCKER-FILTERS RULES             #
-##################################################
-
-# This only handles external traffic going to containers
-# Remember to use `-m conntrack --ctorigdstport 80` to match the original destination port
-# As traffic intended for containers goes through DNAT, changing the external port to the container port
-
--A DOCKER-FILTERS -p udp -m conntrack --ctorigdstport 53 -j ACCEPT -m comment --comment "Allow Pihole"
--A DOCKER-FILTERS -p tcp -m conntrack --ctorigdstport 53 -j ACCEPT -m comment --comment "Allow Pihole"
 
 ##################################################
 #                   INPUT RULES                  #
@@ -88,34 +75,13 @@
 -A INPUT -j REJECT --reject-with icmp-proto-unreachable
 
 ##################################################
-#                DOCKER-USER RULES               #
+#                   FORWARD RULES                #
 ##################################################
 
-# # Boilerplate acceptance policy
--A DOCKER-USER -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
--A DOCKER-USER -i lo -j ACCEPT
-
-# # Drop invalid packets
--A DOCKER-USER -m conntrack --ctstate INVALID -j DROP
-
-# Don't handle anything container-to-container, or container-to-outside
--A DOCKER-USER -i docker0 -o docker0 -j RETURN
--A DOCKER-USER -i docker0 ! -o docker0 -j RETURN
-
-# Pass traffic to filter chain
-## Only allow new connections (established and related should already be handled)
-## For TCP, additionally only allow new SYN packets since that is the only valid
-## method for establishing a new TCP connection
--A DOCKER-USER -p udp -m conntrack --ctstate NEW -j DOCKER-FILTERS
--A DOCKER-USER -p tcp --syn -m conntrack --ctstate NEW -j DOCKER-FILTERS
--A DOCKER-USER -p icmp -m conntrack --ctstate NEW -j ACCEPT
-
-# Reject anything that's fallen through to this point
-## Try to be protocol-specific w/ rejection message
--A DOCKER-USER -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] DOCKER-USER:REJECT: "
--A DOCKER-USER -p udp -j REJECT --reject-with icmp-port-unreachable
--A DOCKER-USER -p tcp -j REJECT --reject-with tcp-reset
--A DOCKER-USER -j REJECT --reject-with icmp-proto-unreachable
+# workaround to avoid clearing the FORWARD chain on apply and loosing rules added by CNI/podman
+-A FWD_DROP -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] FORWARD:REJECT: "
+-A FWD_DROP -j DROP
+-A FORWARD -j FWD_DROP
 
 ##################################################
 #                       END                      #

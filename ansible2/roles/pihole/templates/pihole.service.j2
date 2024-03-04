@@ -48,8 +48,12 @@ ExecStart=/usr/bin/podman run \
     --label "traefik.http.routers.pihole.entrypoints=websecure" \
     docker.io/pihole/pihole:latest
 ExecStartPost=/usr/bin/timeout 60 bash -c 'sleep 1; while ! /usr/bin/podman healthcheck run $(cat /run/pihole.service.ctr-id); do sleep 2; done'
+ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -p udp -m conntrack --ctorigsrc {{ home_subnet }} --ctorigdstport 53 -j ACCEPT -m comment --comment "Allow Pihole"
+ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -p tcp -m conntrack --ctorigsrc {{ home_subnet }} --ctorigdstport 53 -j ACCEPT -m comment --comment "Allow Pihole"
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
-ExecStopPost=/usr/bin/podman rm -f --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=-/usr/bin/podman rm -f --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=-/usr/sbin/iptables -D CNI-ADMIN -p udp -m conntrack --ctorigsrc {{ home_subnet }} --ctorigdstport 53 -j ACCEPT -m comment --comment "Allow Pihole"
+ExecStopPost=-/usr/sbin/iptables -D CNI-ADMIN -p tcp -m conntrack --ctorigsrc {{ home_subnet }} --ctorigdstport 53 -j ACCEPT -m comment --comment "Allow Pihole"
 Type=notify
 NotifyAccess=all
 
