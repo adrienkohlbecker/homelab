@@ -22,6 +22,8 @@
     group: pihole
     createhome: no
     system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
   register: pihole_user
   become: yes
   tags:
