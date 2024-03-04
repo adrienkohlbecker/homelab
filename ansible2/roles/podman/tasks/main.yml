@@ -8,6 +8,51 @@
   tags:
     - podman
 
+- name: Create mount point
+  file:
+    dest: /var/lib/containers/storage
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: yes
+  tags:
+    - podman
+
+- name: Create podman zvol
+  when: zfs_root
+  zfs:
+    name: rpool/podman
+    state: present
+    extra_zfs_properties:
+      volsize: '{{ "20GB" | human_to_bytes }}'
+  register: zfs_zvol_podman
+  become: yes
+  tags:
+    - podman
+
+- name: Create a ext4 filesystem on podman zvol
+  when: not (ansible_check_mode and zfs_zvol_podman.changed) and zfs_root
+  filesystem:
+    fstype: ext4
+    dev: /dev/zvol/rpool/podman
+  become: yes
+  tags:
+    - podman
+
+- name: Mount podman zvol
+  when: zfs_root
+  mount:
+    path: /var/lib/containers/storage
+    src: /dev/zvol/rpool/podman
+    fstype: ext4
+    opts: defaults
+    state: mounted
+    backup: yes
+  become: yes
+  tags:
+    - podman
+
 - name: Enable the service
   when: not (ansible_check_mode and apt_install_podman.changed)
   systemd:
