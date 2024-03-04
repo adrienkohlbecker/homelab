@@ -22,6 +22,12 @@
       failed_when: systemd_verify.rc != 0 or systemd_verify.stderr != ''
       become: yes
 
+    - name: Reload daemon
+      when: systemd_unit.changed
+      systemd:
+        daemon_reload: yes
+      become: yes
+
   rescue:
     - name: Copy backup file to original
       when: '"backup_file" in systemd_unit'

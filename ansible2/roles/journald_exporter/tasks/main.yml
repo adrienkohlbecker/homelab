@@ -67,7 +67,6 @@
   systemd:
     name: journald-exporter
     enabled: yes
-    daemon_reload: yes
   become: yes
   tags:
     - journald_exporter

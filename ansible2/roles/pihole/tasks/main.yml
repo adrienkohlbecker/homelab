@@ -68,7 +68,6 @@
   systemd:
     name: pihole
     enabled: yes
-    daemon_reload: yes
   become: yes
   tags:
     - pihole

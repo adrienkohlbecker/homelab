@@ -149,7 +149,6 @@
   systemd:
     name: traefik
     enabled: yes
-    daemon_reload: yes
   become: yes
   tags:
     - traefik

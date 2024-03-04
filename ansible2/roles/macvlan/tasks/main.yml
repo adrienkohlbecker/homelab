@@ -28,7 +28,6 @@
   systemd:
     name: mac0
     enabled: yes
-    daemon_reload: yes
   become: yes
   tags:
     - macvlan
