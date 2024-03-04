@@ -34,11 +34,11 @@
   tags:
     - vector
 
-# TODO: What if docker is not installed?
-- name: Add user to docker group
+# TODO: What if podman is not installed?
+- name: Add user to podman-socket group
   user:
     name: vector
-    groups: docker
+    groups: podman-socket
     append: yes
   become: yes
   tags:
