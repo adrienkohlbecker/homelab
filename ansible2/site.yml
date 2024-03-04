@@ -6,7 +6,7 @@
     - hostname
     - apt
     - networking
-    - macvlan
+    # - macvlan
     - wireguard
     - locale
     - keyboard
