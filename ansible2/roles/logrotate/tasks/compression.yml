@@ -1,20 +1,15 @@
 - name: Configure logrotate compression {{ item }}
   when: condition | default(true)
-  lineinfile:
-    regexp: "{{ zfs_root | ternary(enable.regexp, disable.regexp) }}"
-    line: "{{ zfs_root | ternary(enable.line, disable.line) }}"
-    dest: "{{ item }}"
-    backrefs: true
+  replace:
+    regexp: ^(\s*)(# )?compress(.*)$
+    replace: "{{ zfs_root | ternary(disable, enable) }}"
+    path: "{{ item }}"
     backup: true
   register: logrotate_conf
   become: yes
   vars:
-    enable:
-      regexp: '^(\s*)compress'
-      line: '\1# compress # zfs already compresses disk contents'
-    disable:
-      regexp: '^(\s*)# compress # zfs already compresses disk contents'
-      line: '\1compress'
+    disable: '\1# compress # zfs already compresses disk contents'
+    enable: '\1compress'
 
 - name: Check apt source for {{ item }}
   when: logrotate_conf.changed

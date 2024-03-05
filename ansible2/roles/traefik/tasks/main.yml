@@ -8,11 +8,10 @@
 
 - name: Hotfix network CNI version bug # https://bugs.launchpad.net/ubuntu/+source/libpod/+bug/2024394
   when: not (ansible_check_mode and (podman_network_traefik.changed or 'skipped' in podman_network_traefik))
-  lineinfile:
+  replace:
     path: /etc/cni/net.d/traefik.conflist
-    regexp: '^(\s*)"cniVersion":'
-    line: '\1"cniVersion": "0.4.0",'
-    backrefs: yes
+    regexp: '^(\s*)"cniVersion":(.*)$'
+    replace: '\1"cniVersion": "0.4.0",'
     backup: yes
     validate: jq . %s
   become: yes
