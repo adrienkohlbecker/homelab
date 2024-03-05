@@ -43,6 +43,7 @@
     - traefik
     - traefik_unifi
     - traefik_ipmi
+    - traefik_ups
     - netdata
     - services
     - pihole
