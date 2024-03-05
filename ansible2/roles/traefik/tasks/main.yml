@@ -1,5 +1,3 @@
----
-
 - name: Create the traefik podman network
   containers.podman.podman_network:
     name: traefik
