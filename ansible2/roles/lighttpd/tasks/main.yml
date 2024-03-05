@@ -1,0 +1,74 @@
+- import_role:
+    name: apt_unit_masked
+  vars:
+    pkg: lighttpd
+    unit:
+      - lighttpd.service
+  tags:
+    - lighttpd
+
+- name: Configure lighttpd
+  lineinfile:
+    regexp: '{{ item.regexp }}'
+    line: '{{ item.line }}'
+    insertafter: '{{ item.insertafter | default(omit) }}'
+    dest: /etc/lighttpd/lighttpd.conf
+    backup: true
+  with_items:
+    - regexp: '^server\.bind'
+      line: 'server.bind = "127.0.0.1"'
+      insertafter: '^server\.port'
+    - regexp: '^server\.port'
+      line: 'server.port = 8080'
+    - regexp: '^#?server\.errorlog-use-syslog\s'
+      line: 'server.errorlog-use-syslog	= "enable"'
+    - regexp: '^#?server\.errorlog\s'
+      line: '# server.errorlog = "/var/log/lighttpd/error.log"'
+  register: lighttpd_conf
+  become: yes
+  tags:
+    - lighttpd
+
+- name: Enable modules
+  file:
+    src: ../conf-available/{{ item }}
+    dest: /etc/lighttpd/conf-enabled/{{ item }}
+    owner: root
+    group: root
+    mode: "0644"
+    state: link
+  with_items:
+    - 10-cgi.conf
+    - 10-accesslog.conf
+  register: lighttpd_mod
+  become: yes
+  tags:
+    - lighttpd
+
+- name: Enable the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: lighttpd
+    enabled: yes
+  become: yes
+  tags:
+    - lighttpd
+
+- name: Start the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: lighttpd
+    state: started
+  become: yes
+  register: systemd_started
+  tags:
+    - lighttpd
+
+- name: Restart lighttpd
+  when: not (ansible_check_mode and apt_unit_masked.changed) and (lighttpd_conf.changed or lighttpd_mod.changed) and not systemd_started.changed
+  systemd:
+    name: lighttpd
+    state: restarted
+  become: yes
+  tags:
+    - lighttpd

@@ -21,6 +21,7 @@
     - mailer
     - hwe_kernel
     - grub
+    - lighttpd
     - hdparm
     - powertop
     - lm_sensors
