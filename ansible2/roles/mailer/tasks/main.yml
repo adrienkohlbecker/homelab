@@ -1,5 +1,3 @@
----
-
 - import_role:
     name: apt_unit_masked
   vars:

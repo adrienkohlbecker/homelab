@@ -1,5 +1,3 @@
----
-
 - name: Install hdparm
   apt:
     pkg: hdparm
