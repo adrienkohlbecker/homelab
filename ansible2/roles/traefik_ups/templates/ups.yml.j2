@@ -1,0 +1,13 @@
+http:
+  routers:
+    ups:
+      entryPoints:
+        - websecure
+      service: ups
+      rule: Host(`ups.{{ domain }}`) || Host(`ups.{{ inventory_hostname }}.{{ domain }}`)
+      tls: {}
+  services:
+    ups:
+      loadBalancer:
+        servers:
+          - url: 'https://10.123.0.5:443/'
