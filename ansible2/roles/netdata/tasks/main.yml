@@ -42,7 +42,7 @@
     - netdata
 
 - name: Configure netdata
-  community.general.ini_file:
+  ini_file:
     path: /etc/netdata/netdata.conf
     section: "{{ item.section }}"
     option: "{{ item.option }}"
