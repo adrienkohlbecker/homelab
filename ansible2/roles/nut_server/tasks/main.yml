@@ -28,7 +28,8 @@
     path: /etc/nut/ups.conf
     section: eaton
     option: "{{ item.option }}"
-    value: "{{ item.value }}"
+    value: "{{ item.value | default(omit) }}"
+    allow_no_value: "{{ item.allow_no_value | default(omit) }}"
     owner: root
     group: nut
     mode: "0640"
@@ -45,6 +46,12 @@
       value: v1
     - option: pollfreq
       value: 15
+    - option: ignorelb # UPS immediately shutds down when low battery is reached. Currently low battery is set to 5%
+      allow_no_value: true
+    - option: override.battery.charge.low
+      value: 20 # approx 8 minutes if the runtime at 100% is 40min
+    - option: override.battery.runtime.low
+      value: 300 # 5 minutes
   register: nut_ups_conf
   become: yes
   tags:
