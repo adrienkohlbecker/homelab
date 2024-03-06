@@ -165,6 +165,18 @@
   tags:
     - nut
 
+- name: Configure nut-notify
+  template:
+    src: nut-notify.sh.j2
+    dest: /usr/local/bin/nut-notify
+    owner: root
+    group: root
+    mode: "0755"
+    backup: yes
+  become: yes
+  tags:
+    - nut
+
 - name: Enable the driver
   when: not (ansible_check_mode and apt_install_nut.changed)
   systemd:

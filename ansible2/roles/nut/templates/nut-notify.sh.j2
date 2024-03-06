@@ -1,10 +1,15 @@
 #!/bin/bash
 # http://redsymbol.net/articles/unofficial-bash-strict-mode/
 IFS=$'\n\t'
-set -euxo pipefail
+set -euo pipefail
 
-EVENT=$1
+EVENT=${1:-}
 case $EVENT in
+  "")
+    >&2 echo "Missing event argument"
+    echo "Usage: nut-notify EVENT"
+    exit 1
+    ;;
   online)
     MSG="UPS is back online"
     ;;
@@ -36,7 +41,7 @@ case $EVENT in
     MSG="upsmon parent process died - shutdown impossible"
     ;;
   *)
-    echo "unexpected event $EVENT"
+    >&2 echo "unexpected event $EVENT"
     exit 1
     ;;
 esac
@@ -44,8 +49,8 @@ esac
 UPS=eaton@localhost
 STAT=`upsc $UPS ups.status`
 BATT=`upsc $UPS battery.charge`
-RUNTIME=`upsc $UPS battery.runtime`
+RUNTIME_SEC=`upsc $UPS battery.runtime`
+RUNTIME=`date -d@$RUNTIME_SEC -u +%H:%M:%S`
 DATE=`date --iso-8601=seconds`
-HOSTNAME=`hostname`
 
-echo "$MSG\n\nDate: $DATE\nStatus: $STAT\nBattery charge: $BATT\nRuntime: $RUNTIME" | mail -s "UPS event $EVENT on $HOSTNAME" root
+printf "$MSG\n\nStatus Page: https://nut.{{ inventory_hostname }}.{{ domain }}/upsstats.cgi?host=$UPS\nDate: $DATE\nStatus: $STAT\nBattery charge: $BATT\nRuntime: $RUNTIME\n\n" | mail -s "UPS event $EVENT on {{ inventory_hostname }}" root
