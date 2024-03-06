@@ -29,6 +29,7 @@
 
 # UDP traffic rules
 -A FILTERS -p udp --dport 1900  -j ACCEPT                                     -m comment --comment "Allow UPnP broadcast"
+-A FILTERS -p udp --dport 5353  -j ACCEPT                                     -m comment --comment "Allow mDNS"
 -A FILTERS -p udp --dport 51820 -j ACCEPT                                     -m comment --comment "Allow Wireguard"
 
 # be explicit with rejection of known traffic so they are documented and don't appear in logs
