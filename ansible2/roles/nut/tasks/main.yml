@@ -1,0 +1,288 @@
+- name: Install nut
+  apt:
+    pkg:
+      - nut-snmp
+      - nut-cgi
+    state: present
+  become: yes
+  register: apt_install_nut
+  tags:
+    - nut
+
+- name: Configure nut nut.conf
+  lineinfile:
+    regexp: '^#?\s*MODE='
+    line: MODE=standalone
+    dest: /etc/nut/nut.conf
+    backup: true
+    owner: root
+    group: nut
+    mode: "0640"
+  become: yes
+  register: nut_nut_conf
+  tags:
+    - nut
+
+- name: Configure nut ups.conf
+  ini_file:
+    path: /etc/nut/ups.conf
+    section: eaton
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    owner: root
+    group: nut
+    mode: "0640"
+    ignore_spaces: true
+    backup: true
+  with_items:
+    - option: driver
+      value: snmp-ups
+    - option: port
+      value: 10.123.0.5
+    - option: community
+      value: public
+    - option: snmp_version
+      value: v1
+    - option: pollfreq
+      value: 15
+  register: nut_ups_conf
+  become: yes
+  tags:
+    - nut
+
+- name: Configure nut upsd.conf
+  lineinfile:
+    regexp: '^LISTEN '
+    insertafter: '^#?\s*LISTEN <'
+    line: LISTEN 127.0.0.1 3493
+    dest: /etc/nut/upsd.conf
+    backup: true
+    owner: root
+    group: nut
+    mode: "0640"
+  become: yes
+  register: nut_upsd_conf
+  tags:
+    - nut
+
+- name: Configure nut upsd.users
+  lineinfile:
+    line: "{{ item.line }}"
+    insertafter: "{{ item.insertafter | default(omit) }}"
+    dest: /etc/nut/upsd.users
+    owner: root
+    group: nut
+    mode: "0640"
+    backup: true
+  with_items:
+    - line: '[upsmon]'
+    - line: password = {{ nut_upsmon_password }}
+      regex: ^password =
+      insertafter: '\[upsmon\]'
+    - line: upsmon master
+      insertafter: ^password =
+  become: yes
+  register: nut_upsd_users
+  tags:
+    - nut
+
+- name: Configure nut upsmon.conf
+  lineinfile:
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    insertafter: "{{ item.insertafter | default('EOF') }}"
+    dest: /etc/nut/upsmon.conf
+    backup: true
+    owner: root
+    group: nut
+    mode: "0640"
+  with_items:
+    - regexp: ^MONITOR
+      line: MONITOR eaton@localhost 1 upsmon {{ nut_upsmon_password }} master
+      insertafter: ^# MONITOR
+    - regexp: ^NOTIFYCMD
+      line: NOTIFYCMD /usr/sbin/upssched
+      insertafter: ^# NOTIFYCMD
+    - regexp: ^#?\s+NOTIFYFLAG ONLINE
+      line: NOTIFYFLAG ONLINE	SYSLOG+WALL+EXEC
+    - regexp: ^#?\s+NOTIFYFLAG ONBATT
+      line: NOTIFYFLAG ONBATT	SYSLOG+WALL+EXEC
+    - regexp: ^#?\s+NOTIFYFLAG LOWBATT
+      line: NOTIFYFLAG LOWBATT	SYSLOG+WALL+EXEC
+    - regexp: ^#?\s+NOTIFYFLAG FSD
+      line: NOTIFYFLAG FSD	SYSLOG+WALL+EXEC
+    - regexp: ^#?\s+NOTIFYFLAG COMMOK
+      line: NOTIFYFLAG COMMOK	SYSLOG+WALL+EXEC
+    - regexp: ^#?\s+NOTIFYFLAG COMMBAD
+      line: NOTIFYFLAG COMMBAD	SYSLOG+WALL+EXEC
+    - regexp: ^#?\s+NOTIFYFLAG SHUTDOWN
+      line: NOTIFYFLAG SHUTDOWN	SYSLOG+WALL+EXEC
+    - regexp: ^#?\s+NOTIFYFLAG REPLBATT
+      line: NOTIFYFLAG REPLBATT	SYSLOG+WALL+EXEC
+    - regexp: ^#?\s+NOTIFYFLAG NOCOMM
+      line: NOTIFYFLAG NOCOMM	SYSLOG+WALL+EXEC
+    - regexp: ^#?\s+NOTIFYFLAG NOPARENT
+      line: NOTIFYFLAG NOPARENT	SYSLOG+WALL+EXEC
+  become: yes
+  register: nut_upsmon_conf
+  tags:
+    - nut
+
+- name: Configure nut upssched.conf
+  lineinfile:
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    dest: /etc/nut/upssched.conf
+    backup: true
+    owner: root
+    group: nut
+    mode: "0640"
+  with_items:
+    - regexp: ^CMDSCRIPT
+      line: CMDSCRIPT /usr/local/bin/nut-notify
+    - regexp: ^AT ONBATT
+      line: AT ONBATT * START-TIMER onbatt 60
+    - regexp: ^AT ONLINE
+      line: AT ONLINE * CANCEL-TIMER onbatt online
+    - regexp: ^AT LOWBATT
+      line: AT LOWBATT * EXECUTE lowbatt
+    - regexp: ^AT FSD
+      line: AT FSD * EXECUTE fsd
+    - regexp: ^AT COMMBAD
+      line: AT COMMBAD * START-TIMER commbad 30
+    - regexp: ^AT COMMOK
+      line: AT COMMOK * CANCEL-TIMER commbad commok
+    - regexp: ^AT NOCOMM
+      line: AT NOCOMM * EXECUTE nocomm
+    - regexp: ^AT SHUTDOWN
+      line: AT SHUTDOWN * EXECUTE powerdown
+    - regexp: ^AT REPLBATT
+      line: AT REPLBATT * EXECUTE replbatt
+    - regexp: ^AT NOPARENT
+      line: AT NOPARENT * EXECUTE noparent
+  become: yes
+  register: nut_upsmon_conf
+  tags:
+    - nut
+
+- name: Enable the driver
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  systemd:
+    name: nut-driver
+    enabled: yes
+  become: yes
+  tags:
+    - nut
+
+- name: Start the driver
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  systemd:
+    name: nut-driver
+    state: started
+  register: systemd_started
+  become: yes
+  tags:
+    - nut
+
+- name: Restart the driver
+  when: not (ansible_check_mode and apt_install_nut.changed) and (nut_nut_conf.changed or nut_ups_conf.changed) and not systemd_started.changed
+  systemd:
+    name: nut-driver
+    state: restarted
+  become: yes
+  tags:
+    - nut
+
+- name: Enable the server
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  systemd:
+    name: nut-server
+    enabled: yes
+  become: yes
+  tags:
+    - nut
+
+- name: Start the server
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  systemd:
+    name: nut-server
+    state: started
+  register: systemd_started
+  become: yes
+  tags:
+    - nut
+
+- name: Restart the server
+  when: not (ansible_check_mode and apt_install_nut.changed) and (nut_nut_conf.changed or nut_upsd_conf.changed or nut_upsd_users.changed) and not systemd_started.changed
+  systemd:
+    name: nut-server
+    state: restarted
+  become: yes
+  tags:
+    - nut
+
+- name: Enable the client
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  systemd:
+    name: nut-client
+    enabled: yes
+  become: yes
+  tags:
+    - nut
+
+- name: Start the client
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  systemd:
+    name: nut-client
+    state: started
+  register: systemd_started
+  become: yes
+  tags:
+    - nut
+
+- name: Restart the client
+  when: not (ansible_check_mode and apt_install_nut.changed) and (nut_nut_conf.changed or nut_upsmon_conf.changed) and not systemd_started.changed
+  systemd:
+    name: nut-client
+    state: restarted
+  become: yes
+  tags:
+    - nut
+
+- name: Configure nut hosts.conf
+  lineinfile:
+    regexp: '^MONITOR '
+    insertafter: '^#?\s*MONITOR'
+    line: MONITOR eaton@localhost "Local UPS"
+    dest: /etc/nut/hosts.conf
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: yes
+  tags:
+    - nut
+
+- name: Configure nut upsset.conf
+  lineinfile:
+    line: I_HAVE_SECURED_MY_CGI_DIRECTORY
+    dest: /etc/nut/upsset.conf
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: yes
+  tags:
+    - nut
+
+- name: Configure traefik
+  template:
+    src: nut.yml.j2
+    dest: /etc/traefik/dynamic.d/nut.yml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  become: yes
+  tags:
+    - nut
