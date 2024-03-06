@@ -2,9 +2,9 @@
 # pihole.service #######################################################################
 [Unit]
 Description=pihole
-After=network-online.target podman.socket {{- zfs_root | ternary(" mnt-services.mount", "") }}
-Wants=network-online.target
-Requires=podman.socket {{- zfs_root | ternary(" mnt-services.mount", "") }}
+After=network-online.target podman.service {{- zfs_root | ternary(" mnt-services.mount", "") }}
+Wants=network-online.target podman.service
+Requires={{- zfs_root | ternary(" mnt-services.mount", "") }}
 StartLimitInterval=600
 StartLimitBurst=5
 
