@@ -22,7 +22,8 @@
     - hwe_kernel
     - grub
     - lighttpd
-    - nut
+    - nut_server
+    - nut_monitor
     - hdparm
     - powertop
     - lm_sensors
