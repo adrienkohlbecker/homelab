@@ -60,8 +60,12 @@
     group: nut
     mode: "0640"
   with_items:
-    - regexp: ^CMDSCRIPT
+    - regexp: ^(# )?CMDSCRIPT
       line: CMDSCRIPT /usr/local/bin/nut-notify
+    - regexp: ^(# )?PIPEFN
+      line: PIPEFN /run/nut/upssched/upssched.pipe
+    - regexp: ^(# )?LOCKFN
+      line: LOCKFN /run/nut/upssched/upssched.lock
     - regexp: ^AT ONBATT
       line: AT ONBATT * START-TIMER onbatt 60
     - regexp: ^AT ONLINE
