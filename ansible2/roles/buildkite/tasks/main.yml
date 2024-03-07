@@ -1,0 +1,80 @@
+- name: Install gpg
+  apt:
+    pkg: gpg
+    cache_valid_time: 3600
+  become: yes
+  register: apt_install_gpg
+  tags:
+    - buildkite
+
+- name: Add repository key
+  when: not (ansible_check_mode and apt_install_gpg.changed)
+  apt_key:
+    id: 32A37959C2FA5C3C99EFBC32A79206696452D198
+    keyserver: keyserver.ubuntu.com
+    keyring: /etc/apt/trusted.gpg.d/buildkite.gpg
+  become: yes
+  tags:
+    - buildkite
+
+- name: Add repository
+  apt_repository:
+    repo: deb [signed-by=/etc/apt/trusted.gpg.d/buildkite.gpg] https://apt.buildkite.com/buildkite-agent stable main
+  become: yes
+  register: apt_repository_buildkite
+  tags:
+    - buildkite
+
+- name: Install buildkite
+  when: not (ansible_check_mode and apt_repository_buildkite.changed)
+  apt:
+    pkg:
+      - buildkite-agent
+    cache_valid_time: 3600
+  register: buildkite_installed
+  become: yes
+  tags:
+    - buildkite
+
+- name: Configure buildkite
+  copy:
+    src: buildkite.conf
+    dest: /etc/buildkite-agent/buildkite-agent.cfg
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  register: buildkite_cfg
+  become: yes
+  tags:
+    - buildkite
+
+- name: Enable the service
+  when: not (ansible_check_mode and (buildkite_installed.changed or apt_repository_buildkite.changed))
+  systemd:
+    name: buildkite-agent
+    enabled: yes
+  become: yes
+  tags:
+    - buildkite
+
+- name: Start the service
+  when: not (ansible_check_mode and (buildkite_installed.changed or apt_repository_buildkite.changed))
+  systemd:
+    name: buildkite-agent
+    state: started
+  become: yes
+  register: buildkite_started
+  tags:
+    - buildkite
+    - buildkite_conf
+
+- name: Restart buildkite
+  when: not (ansible_check_mode and (buildkite_installed.changed or apt_repository_buildkite.changed)) and buildkite_cfg.changed and not buildkite_started.changed
+  systemd:
+    name: buildkite-agent
+    state: restarted
+  become: yes
+  tags:
+    - buildkite
+    - buildkite_conf

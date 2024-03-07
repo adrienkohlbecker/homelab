@@ -24,12 +24,13 @@
     - lighttpd
     - nut_server
     - nut_monitor
+    - eaton_ipp
     - hdparm
     - powertop
     - lm_sensors
     - zfs
     - podman
-    - libvirt
+    # - libvirt
 
 - hosts: box
   roles:

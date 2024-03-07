@@ -1,0 +1,13 @@
+http:
+  routers:
+    ipp:
+      entryPoints:
+        - websecure
+      service: ipp
+      rule: Host(`ipp.{{ domain }}`) || Host(`ipp.{{ inventory_hostname }}.{{ domain }}`)
+      tls: {}
+  services:
+    ipp:
+      loadBalancer:
+        servers:
+          - url: 'https://localhost:4680/'
