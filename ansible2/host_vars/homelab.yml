@@ -11,17 +11,26 @@ libvirt_default_network: "192.168.123.1/24"
 sensor_modules: []
 
 macvlan_enable_docker: false
-macvlan_parent: eno1
+macvlan_parent: eth0
 macvlan_subnet: 10.123.0.32/28
 
 log2ram_size:
 
 netplan:
   ethernets:
-    eno1:
+    nic0:
+      match:
+        macaddress: a8:a1:59:f5:82:92
+      set-name: eth0
+      link-local: [] # do not setup random link local address when no dhcp is present
       dhcp4: true
       dhcp6: false
-    eno2:
+    nic1:
+      match:
+        macaddress: a8:a1:59:f5:82:93
+      set-name: eth1
+      activation-mode: off # do not enable interface
+      link-local: [] # do not setup random link local address when no dhcp is present
       dhcp4: true
       dhcp6: false
 
