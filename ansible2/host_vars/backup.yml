@@ -15,14 +15,18 @@ sensor_modules:
   - nct6775
 
 macvlan_enable_docker: false
-macvlan_parent: enp1s0
+macvlan_parent: eth0
 macvlan_subnet: 10.123.0.48/28
 
 log2ram_size:
 
 netplan:
   ethernets:
-    enp1s0:
+    nic0:
+      match:
+        macaddress: 9c:6b:00:26:ef:5d
+      set-name: eth0
+      link-local: [] # do not setup random link local address when no dhcp is present
       dhcp4: true
       dhcp6: false
 
