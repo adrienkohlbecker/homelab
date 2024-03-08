@@ -30,7 +30,7 @@
     state: directory
     owner: overseerr
     group: overseerr
-    mode: 0775
+    mode: "0755"
   become: yes
   tags:
     - services
