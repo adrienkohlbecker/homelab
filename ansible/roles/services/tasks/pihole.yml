@@ -5,7 +5,7 @@
     name: macvlan_net
     driver: macvlan
     driver_options:
-      parent: "{{ ansible_default_ipv4.interface }}"
+      parent: "{{ pihole_host_iface }}"
     ipam_config:
       - subnet: 10.123.0.0/24
         gateway: 10.123.0.1
