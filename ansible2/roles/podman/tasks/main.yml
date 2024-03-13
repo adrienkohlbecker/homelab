@@ -62,6 +62,27 @@
   tags:
     - podman
 
+- name: Divert configuration file
+  community.general.dpkg_divert:
+    path: /usr/lib/tmpfiles.d/podman.conf
+  become: yes
+  tags:
+    - podman
+
+- name: Configure tmpfiles.d
+  lineinfile:
+    regexp: '^(# )?(.*) /run/podman (.*)$'
+    line: '# \2 /run/podman \3'
+    backrefs: true
+    dest: /usr/lib/tmpfiles.d/podman.conf
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: yes
+  tags:
+    - podman
+
 - name: Create mount point
   file:
     dest: /var/lib/containers/storage
