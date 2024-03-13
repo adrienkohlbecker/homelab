@@ -13,6 +13,7 @@
       - mosh
       - ncdu
       - nmon
+      - nvme-cli
       - progress
       - screen
       - socat
