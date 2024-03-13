@@ -2,8 +2,8 @@
 # pihole.service #######################################################################
 [Unit]
 Description=pihole
-After=network-online.target podman.service {{- zfs_root | ternary(" mnt-services.mount", "") }}
-Wants=network-online.target podman.service
+After=network-online.target {{- zfs_root | ternary(" mnt-services.mount", "") }}
+Wants=network-online.target
 Requires={{- zfs_root | ternary(" mnt-services.mount", "") }}
 StartLimitInterval=600
 StartLimitBurst=5
@@ -11,19 +11,24 @@ StartLimitBurst=5
 [Service]
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=on-failure
-KillMode=mixed
+Delegate=yes
 TimeoutSec=100
 RestartSec=5
+Type=notify
+NotifyAccess=all
+
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
-    --cgroups=no-conmon \
+    --cgroups=split \
     {# todo move this to healthy on later podman versions, and remove ExecStartPost #}
     --sdnotify=conmon \
+    --detach \
     --replace \
     --rm \
     --name pihole \
-    --log-driver none \
+    --log-driver journald \
+    --log-opt tag="pihole" \
     --volume /mnt/services/pihole/etc:/etc/pihole \
     --volume /mnt/services/pihole/dnsmasq:/etc/dnsmasq.d \
     --volume /var/log/pihole:/var/log/pihole \
@@ -48,13 +53,13 @@ ExecStart=/usr/bin/podman run \
     --label "traefik.http.routers.pihole.tls=true" \
     --label "traefik.http.routers.pihole.entrypoints=websecure" \
     docker.io/pihole/pihole:latest
-ExecStartPost=/usr/bin/timeout 60 bash -c 'sleep 1; while ! /usr/bin/podman healthcheck run $(cat /run/pihole.service.ctr-id); do sleep 2; done'
+ExecStartPost=/usr/bin/timeout 60 bash -c 'sleep 1; while ! /usr/bin/podman healthcheck run $(cat /run/pihole.service.ctr-id); do echo "pihole unhealthy"; sleep 2; done; echo "pihole healthy"'
 ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -p udp -m conntrack --ctorigsrc {{ home_subnet }} --ctorigdstport 53 -j ACCEPT -m comment --comment "Allow Pihole"
 ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -p tcp -m conntrack --ctorigsrc {{ home_subnet }} --ctorigdstport 53 -j ACCEPT -m comment --comment "Allow Pihole"
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=-/usr/sbin/iptables -D CNI-ADMIN -p udp -m conntrack --ctorigsrc {{ home_subnet }} --ctorigdstport 53 -j ACCEPT -m comment --comment "Allow Pihole"
 ExecStopPost=-/usr/sbin/iptables -D CNI-ADMIN -p tcp -m conntrack --ctorigsrc {{ home_subnet }} --ctorigdstport 53 -j ACCEPT -m comment --comment "Allow Pihole"
-Type=notify
-NotifyAccess=all
 
 [Install]
 WantedBy=default.target
