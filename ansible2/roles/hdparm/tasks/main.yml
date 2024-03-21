@@ -14,12 +14,12 @@
     - hdparm
 
 - name: Copy hdparm.conf
-  copy:
-    src: hdparm.conf
+  template:
+    src: hdparm.conf.j2
     dest: /etc/hdparm.conf
     owner: root
     group: root
-    mode: "0755"
+    mode: "0644"
     backup: yes
   register: hdparm_conf
   become: yes
