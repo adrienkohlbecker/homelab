@@ -26,6 +26,7 @@
     - nut_monitor
     - eaton_ipp
     - hdparm
+    - hd_idle
     - powertop
     - lm_sensors
     - zfs

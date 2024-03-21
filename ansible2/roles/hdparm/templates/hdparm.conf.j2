@@ -123,14 +123,8 @@ quiet
 #       interrupt_unmask = on
 #       io32_support = 0
 #}
-
-#spindown_time = 60  # 5 min
-#spindown_time = 240 # 20 min
-#spindown_time = 250 # 30 min
-#spindown_time = 280 # 1 hour
-#spindown_time = 340 # 2 hours
-
 {% for id, settings in hdparm_settings.items() %}
+
 /dev/disk/by-id/{{ id }} {
 {% for setting, value in settings.items() %}
         {{ setting }} = {{ value}}
