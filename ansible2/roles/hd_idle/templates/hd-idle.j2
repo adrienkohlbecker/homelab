@@ -1,0 +1,37 @@
+# defaults file for hd-idle
+
+## Debian specific defaults for hd-idle
+# In order to make init.d script and systemd service consistent, hd-idle
+# defaults file supports only one option - HD_IDLE_OPTS.
+
+# Don't start hd-idle by defaulit. By specifying "-h" in HD_IDEL_OPTS,
+# hd-idle daemon will print usage and successfully exit both for systemd
+# and systemv scripts
+# properly update HD_IDLE_OPTS in order to star hd-idle
+
+#HD_IDLE_OPTS="-h"
+
+# hd-idle command line options
+# Options are:
+#  -a <name>               Set device name of disks for subsequent idle-time
+#                          parameters (-i). This parameter is optional in the
+#                          sense that there's a default entry for all disks
+#                          which are not named otherwise by using this
+#                          parameter. This can also be a symlink
+#                          (e.g. /dev/disk/by-uuid/...)
+#  -i <idle_time>          Idle time in seconds.
+#  -l <logfile>            Name of logfile (written only after a disk has spun
+#                          up). Please note that this option might cause the
+#                          disk which holds the logfile to spin up just because
+#                          another disk had some activity. This option should
+#                          not be used on systems with more than one disk
+#                          except for tuning purposes. On single-disk systems,
+#                          this option should not cause any additional spinups.
+#
+# Options not exactly useful here:
+#  -t <disk>               Spin-down the specfified disk immediately and exit.
+#  -d                      Debug mode. This will prevent hd-idle from
+#                          becoming a daemon and print debugging info to
+#                          stdout/stderr
+#  -h                      Print usage information.
+HD_IDLE_OPTS="-i 0 -l /var/log/hd-idle.log{% for id in hd_idle_disks %} -a /dev/disk/by-id/{{ id }} -i 1200{% endfor %}"
