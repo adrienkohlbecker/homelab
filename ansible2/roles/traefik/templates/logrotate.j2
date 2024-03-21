@@ -1,13 +1,13 @@
 /var/log/traefik/*.log {
-	daily
-	missingok
-	rotate 14
+  weekly
+  minsize 100K
+  missingok
+  rotate 14
   {{ zfs_root | ternary("# compress # zfs already compresses disk contents", "compress") }}
-	# compress # zfs already compresses disk contents
-	delaycompress
-	notifempty
-	sharedscripts
-	postrotate
-		/usr/bin/systemctl kill -s SIGUSR1 traefik 2>/dev/null || true
-	endscript
+  delaycompress
+  notifempty
+  sharedscripts
+  postrotate
+    /usr/bin/systemctl kill -s SIGUSR1 traefik 2>/dev/null || true
+  endscript
 }
