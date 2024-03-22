@@ -45,3 +45,5 @@ hd_idle_disks:
   - ata-WDC_WD101EFBX-68B0AN0_VCJ3MYHP
   - ata-WDC_WD101EFBX-68B0AN0_VCJ3V79P
 hdparm_settings: {}
+
+rand_order: 1

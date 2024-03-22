@@ -1,0 +1,153 @@
+- name: Install zfs autobackup dependencies
+  apt:
+    package:
+      - python3-pip
+      - python3-virtualenv
+    cache_valid_time: 3600
+  become: yes
+  tags:
+    - zfs_autobackup
+
+- name: Install zfs autobackup
+  pip:
+    name: zfs-autobackup
+    virtualenv: /opt/virtualenv/zfs_autobackup
+    extra_args: --no-deps
+  become: yes
+  register: zfs_autobackup_install
+  tags:
+    - zfs_autobackup
+
+# in two steps because https://www.reddit.com/r/learnpython/comments/uj3dhx/why_does_pip_keep_reinstalling_the_same_version/ marks it changed every time
+- name: Install zfs autobackup
+  when: zfs_autobackup_install.changed
+  pip:
+    name: zfs-autobackup
+    virtualenv: /opt/virtualenv/zfs_autobackup
+  become: yes
+  tags:
+    - zfs_autobackup
+
+- name: Configure symlink
+  file:
+    src: /opt/virtualenv/zfs_autobackup/bin/zfs-autobackup
+    dest: /usr/local/bin/zfs-autobackup
+    owner: root
+    group: root
+    mode: "0755"
+    state: link
+  become: yes
+  tags:
+    - zfs_autobackup
+
+- name: Set properties on rpool
+  when: zfs_root
+  zfs:
+    name: rpool/ROOT/jammy
+    state: present
+    extra_zfs_properties:
+      'autobackup:bak': 'true'
+  become: yes
+  tags:
+    - zfs_autobackup
+
+- name: Set properties on bpool
+  when: zfs_root
+  zfs:
+    name: bpool/BOOT/jammy
+    state: present
+    extra_zfs_properties:
+      'autobackup:bak': 'true'
+  become: yes
+  tags:
+    - zfs_autobackup
+
+- import_role:
+    name: systemd_unit
+  vars:
+    src: zfs_autosnapshot.target
+  tags:
+    - zfs_autobackup
+
+- name: Enable the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: zfs_autosnapshot.target
+    enabled: yes
+  become: yes
+  tags:
+    - zfs_autobackup
+
+- name: Start the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: zfs_autosnapshot.target
+    state: started
+  register: systemd_started
+  become: yes
+  tags:
+    - zfs_autobackup
+
+- name: Restart the service
+  when: not (ansible_check_mode and systemd_unit.changed) and (systemd_unit.changed) and not systemd_started.changed
+  systemd:
+    name: zfs_autosnapshot.target
+    state: restarted
+  become: yes
+  tags:
+    - zfs_autobackup
+
+- name: Copy the snapshot script
+  copy:
+    src: zfs_autosnapshot.sh
+    dest: /usr/local/bin/zfs_autosnapshot
+    mode: "0755"
+    owner: root
+    group: root
+    backup: yes
+  become: yes
+  tags:
+    - zfs_autobackup
+
+- name: Schedule the snapshot script
+  cron:
+    name: zfs_autosnapshot
+    minute: "{{ rand_order * 10 }}" # space each host out by 10 minutes so services don't stop at the same time
+    hour: 2
+    job: /usr/bin/systemd-cat --identifier zfs_autosnapshot /usr/local/bin/zfs_autosnapshot
+    user: root
+    cron_file: ansible_zfs_autosnapshot
+    backup: yes
+  become: yes
+  tags:
+    - zfs_autobackup
+
+- name: Copy the sync script
+  copy:
+    src: zfs_autosync.sh
+    dest: /usr/local/bin/zfs_autosync
+    mode: "0755"
+    owner: root
+    group: root
+    backup: yes
+  become: yes
+  tags:
+    - zfs_autobackup
+
+- name: Schedule the sync script
+  cron:
+    name: zfs_autosync
+    minute: "{{ rand_order * 10 }}" # space each host out by 10 minutes so services don't stop at the same time
+    hour: 3
+    job: /usr/bin/systemd-cat --identifier zfs_autosync /usr/local/bin/zfs_autosync
+    user: root
+    cron_file: ansible_zfs_autosync
+    backup: yes
+  become: yes
+  tags:
+    - zfs_autobackup
+
+- import_tasks: source.yml
+  when: inventory_hostname != 'backup'
+- import_tasks: target.yml
+  when: inventory_hostname == 'backup' or inventory_hostname == 'box'

@@ -47,3 +47,5 @@ wireguard_private_key: !vault |
 
 hd_idle_disks: []
 hdparm_settings: {}
+
+rand_order: 2
