@@ -4,7 +4,7 @@
       - grub-common
       - grub2-common
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - grub
 
@@ -15,7 +15,7 @@
     owner: root
     group: root
     mode: "0755"
-  become: yes
+  become: true
   tags:
     - grub
 
@@ -24,16 +24,16 @@
     src: 90-custom.cfg
     dest: /etc/default/grub.d/90-custom.cfg
     validate: grub-script-check %s
-    backup: yes
+    backup: true
   register: grub_cfg
-  become: yes
+  become: true
   tags:
     - grub
 
 - name: Update grub
   when: grub_cfg.changed
   command: update-grub
-  become: yes
+  become: true
   tags:
     - grub
 
@@ -42,6 +42,6 @@
   file:
     path: /var/run/reboot-required
     state: touch
-  become: yes
+  become: true
   tags:
     - grub

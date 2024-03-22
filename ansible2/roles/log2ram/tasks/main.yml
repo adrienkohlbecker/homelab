@@ -2,7 +2,7 @@
   apt:
     pkg: gpg
     cache_valid_time: 3600
-  become: yes
+  become: true
   register: apt_install_gpg
   tags:
     - log2ram
@@ -13,14 +13,14 @@
     id: CA548A0A0312D8E6
     url: https://azlux.fr/repo.gpg
     keyring: /etc/apt/trusted.gpg.d/log2ram.gpg
-  become: yes
+  become: true
   tags:
     - log2ram
 
 - name: Add repository
   apt_repository:
     repo: deb [signed-by=/etc/apt/trusted.gpg.d/log2ram.gpg] http://packages.azlux.fr/debian/ bookworm main
-  become: yes
+  become: true
   register: apt_repository_log2ram
   tags:
     - log2ram
@@ -32,7 +32,7 @@
       - log2ram
     cache_valid_time: 3600
   register: log2ram_installed
-  become: yes
+  become: true
   tags:
     - log2ram
 
@@ -42,7 +42,7 @@
       - rsync
       - mailutils
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - log2ram
 
@@ -53,9 +53,9 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
+    backup: true
   register: log2ram_cfg
-  become: yes
+  become: true
   tags:
     - log2ram
 
@@ -64,6 +64,6 @@
   file:
     path: /var/run/reboot-required
     state: touch
-  become: yes
+  become: true
   tags:
     - log2ram

@@ -1,7 +1,7 @@
 - name: Gather package facts
   package_facts:
     manager: apt
-  no_log: yes
+  no_log: true
   check_mode: false
   tags:
     - minio
@@ -29,7 +29,7 @@
          path: /tmp/mcli.deb
          state: absent
 
-  become: yes
+  become: true
   tags:
     - minio
 

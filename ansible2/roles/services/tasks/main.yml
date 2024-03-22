@@ -5,7 +5,7 @@
     owner: root
     group: root
     mode: "0755"
-  become: yes
+  become: true
   tags:
     - services
 
@@ -16,7 +16,7 @@
     owner: root
     group: root
     mode: "0700"
-  become: yes
+  become: true
   tags:
     - services
 
@@ -28,6 +28,6 @@
     extra_zfs_properties:
       mountpoint: /mnt/services
       'autobackup:bak': 'true'
-  become: yes
+  become: true
   tags:
     - services

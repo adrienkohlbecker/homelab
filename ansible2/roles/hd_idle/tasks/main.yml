@@ -2,14 +2,14 @@
   apt:
     pkg: hd-idle
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - hd_idle
 
 - name: Divert hd-idle configuration
   community.general.dpkg_divert:
     path: /etc/default/hd-idle
-  become: yes
+  become: true
   tags:
     - hd_idle
 
@@ -20,9 +20,9 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
+    backup: true
   register: hd_idle_conf
-  become: yes
+  become: true
   tags:
     - hd_idle
 
@@ -30,8 +30,8 @@
   when: not (ansible_check_mode and apt_unit_masked.changed)
   systemd:
     name: hd-idle
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - hd_idle
 
@@ -40,7 +40,7 @@
   systemd:
     name: hd-idle
     state: started
-  become: yes
+  become: true
   register: systemd_started
   tags:
     - hd_idle
@@ -50,7 +50,7 @@
   systemd:
     name: hd-idle
     state: restarted
-  become: yes
+  become: true
   tags:
     - hd_idle
 
@@ -61,9 +61,9 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
+    backup: true
   register: logrotate_conf
-  become: yes
+  become: true
   tags:
     - hd_idle
 
@@ -72,6 +72,6 @@
   systemd:
     name: logrotate
     state: restarted
-  become: yes
+  become: true
   tags:
     - hd_idle

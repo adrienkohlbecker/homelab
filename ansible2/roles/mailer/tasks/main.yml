@@ -12,7 +12,7 @@
       - libsasl2-modules
       - mailutils
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - mailer
 
@@ -23,8 +23,8 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   register: postfix_cfg
   tags:
     - mailer
@@ -36,15 +36,15 @@
     owner: root
     group: root
     mode: "0600"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   register: sasl_auth
   tags:
     - mailer
 
 - name: Update postfix credentials
   shell: postmap /etc/postfix/sasl_passwd
-  become: yes
+  become: true
   when: sasl_auth.changed
   tags:
     - mailer
@@ -53,8 +53,8 @@
   when: not (ansible_check_mode and apt_unit_masked.changed)
   systemd:
     name: postfix
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - mailer
 
@@ -63,7 +63,7 @@
   systemd:
     name: postfix
     state: started
-  become: yes
+  become: true
   register: systemd_started
   tags:
     - mailer
@@ -73,7 +73,7 @@
   service:
     name: postfix
     state: restarted
-  become: yes
+  become: true
   tags:
     - mailer
 
@@ -84,15 +84,15 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   register: aliases
   tags:
     - mailer
 
 - name: Rebuild aliases database
   shell: newaliases
-  become: yes
+  become: true
   when: aliases.changed
   tags:
     - mailer
@@ -102,7 +102,7 @@
     src: mailutils.conf.j2
     dest: /etc/mailutils.conf
     mode: "0755"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - mailer

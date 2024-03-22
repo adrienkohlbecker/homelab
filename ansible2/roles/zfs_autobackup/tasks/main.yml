@@ -4,7 +4,7 @@
       - python3-pip
       - python3-virtualenv
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - zfs_autobackup
 
@@ -13,7 +13,7 @@
     name: zfs-autobackup
     virtualenv: /opt/virtualenv/zfs_autobackup
     extra_args: --no-deps
-  become: yes
+  become: true
   register: zfs_autobackup_install
   tags:
     - zfs_autobackup
@@ -24,7 +24,7 @@
   pip:
     name: zfs-autobackup
     virtualenv: /opt/virtualenv/zfs_autobackup
-  become: yes
+  become: true
   tags:
     - zfs_autobackup
 
@@ -36,7 +36,7 @@
     group: root
     mode: "0755"
     state: link
-  become: yes
+  become: true
   tags:
     - zfs_autobackup
 
@@ -47,7 +47,7 @@
     state: present
     extra_zfs_properties:
       'autobackup:bak': 'true'
-  become: yes
+  become: true
   tags:
     - zfs_autobackup
 
@@ -58,7 +58,7 @@
     state: present
     extra_zfs_properties:
       'autobackup:bak': 'true'
-  become: yes
+  become: true
   tags:
     - zfs_autobackup
 
@@ -73,8 +73,8 @@
   when: not (ansible_check_mode and systemd_unit.changed)
   systemd:
     name: zfs_autosnapshot.target
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - zfs_autobackup
 
@@ -84,7 +84,7 @@
     name: zfs_autosnapshot.target
     state: started
   register: systemd_started
-  become: yes
+  become: true
   tags:
     - zfs_autobackup
 
@@ -93,7 +93,7 @@
   systemd:
     name: zfs_autosnapshot.target
     state: restarted
-  become: yes
+  become: true
   tags:
     - zfs_autobackup
 
@@ -104,8 +104,8 @@
     mode: "0755"
     owner: root
     group: root
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - zfs_autobackup
 
@@ -117,8 +117,8 @@
     job: /usr/bin/systemd-cat --identifier zfs_autosnapshot /usr/local/bin/zfs_autosnapshot
     user: root
     cron_file: ansible_zfs_autosnapshot
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - zfs_autobackup
 
@@ -129,8 +129,8 @@
     mode: "0755"
     owner: root
     group: root
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - zfs_autobackup
 
@@ -142,8 +142,8 @@
     job: /usr/bin/systemd-cat --identifier zfs_autosync /usr/local/bin/zfs_autosync
     user: root
     cron_file: ansible_zfs_autosync
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - zfs_autobackup
 

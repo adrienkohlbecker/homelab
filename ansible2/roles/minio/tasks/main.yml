@@ -1,7 +1,7 @@
 - name: Gather package facts
   package_facts:
     manager: apt
-  no_log: yes
+  no_log: true
   check_mode: false
   tags:
     - minio
@@ -29,7 +29,7 @@
          path: /tmp/minio.deb
          state: absent
 
-  become: yes
+  become: true
   tags:
     - minio
 
@@ -37,7 +37,7 @@
   group:
     name: minio-user
     system: true
-  become: yes
+  become: true
   tags:
     - minio
 
@@ -49,7 +49,7 @@
     create_home: false
     shell: /usr/sbin/nologin
     home: /nonexistent
-  become: yes
+  become: true
   tags:
     - minio
 
@@ -60,7 +60,7 @@
     owner: minio-user
     group: minio-user
     mode: "0755"
-  become: yes
+  become: true
   tags:
     - minio
 
@@ -71,9 +71,9 @@
     owner: minio-user
     group: minio-user
     mode: "0600"
-    backup: yes
+    backup: true
   register: minio_cfg
-  become: yes
+  become: true
   tags:
     - minio
 
@@ -85,7 +85,7 @@
     owner: root
     group: root
     mode: "0755"
-  become: yes
+  become: true
   tags:
     - minio
 
@@ -103,8 +103,8 @@
   when: not (ansible_check_mode and minio_installed.changed)
   systemd:
     name: minio
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - minio
 
@@ -113,7 +113,7 @@
   systemd:
     name: minio
     state: started
-  become: yes
+  become: true
   register: minio_started
   tags:
     - minio
@@ -123,7 +123,7 @@
   systemd:
     name: minio
     state: restarted
-  become: yes
+  become: true
   tags:
     - minio
 
@@ -134,8 +134,8 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - minio
 

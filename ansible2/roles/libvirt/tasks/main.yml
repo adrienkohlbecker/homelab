@@ -8,7 +8,7 @@
       - ovmf
       - libhugetlbfs-bin
     cache_valid_time: 3600
-  become: yes
+  become: true
   register: apt_install_libvirt
   tags:
     - libvirt
@@ -19,7 +19,7 @@
       - python3-libvirt
       - python3-lxml
     cache_valid_time: 3600
-  become: yes
+  become: true
   register: apt_install_python_libvirt
   tags:
     - libvirt
@@ -31,7 +31,7 @@
     owner: root
     group: root
     mode: "0755"
-  become: yes
+  become: true
   tags:
     - libvirt
 
@@ -42,7 +42,7 @@
     state: present
     extra_zfs_properties:
       mountpoint: /var/lib/libvirt/images
-  become: yes
+  become: true
   tags:
     - libvirt
 
@@ -60,8 +60,8 @@
   when: not (ansible_check_mode and apt_unit_masked.changed)
   systemd:
     name: libvirtd
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - libvirt
 
@@ -70,7 +70,7 @@
   systemd:
     name: libvirtd
     state: started
-  become: yes
+  become: true
   register: systemd_started
   tags:
     - libvirt
@@ -80,7 +80,7 @@
 #   systemd:
 #     name: libvirtd
 #     state: restarted
-#   become: yes
+#   become: true
 #   tags:
 #     - libvirt
 
@@ -123,7 +123,7 @@
     community.libvirt.virt_net:
       name: default
       state: absent
-    become: yes
+    become: true
     tags:
       - libvirt
 
@@ -132,7 +132,7 @@
       name: default
       command: define
       xml: '{{ lookup("template", "default_network.xml.j2") }}'
-    become: yes
+    become: true
     tags:
       - libvirt
 
@@ -141,7 +141,7 @@
   community.libvirt.virt_net:
     name: default
     state: active
-  become: yes
+  become: true
   tags:
     - libvirt
 
@@ -150,7 +150,7 @@
   community.libvirt.virt_net:
     name: default
     autostart: true
-  become: yes
+  become: true
   tags:
     - libvirt
 
@@ -161,8 +161,8 @@
     owner: root
     group: root
     mode: "0755"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - libvirt
 
@@ -174,7 +174,7 @@
     job: /usr/bin/systemd-cat --identifier virsh_backup /usr/local/bin/virsh_backup
     user: root
     cron_file: ansible_virsh_backup
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - libvirt

@@ -9,6 +9,6 @@
         gateway: "{{ macvlan_parent_gateway }}"
         iprange: "{{ macvlan_subnet }}"
         aux_addresses: host={{ macvlan_host_ip }}
-  become: yes
+  become: true
   tags:
     - macvlan

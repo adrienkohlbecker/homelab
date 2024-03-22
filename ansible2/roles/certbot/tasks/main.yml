@@ -4,7 +4,7 @@
       - certbot
       - python3-certbot-dns-cloudflare
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - certbot
 
@@ -15,7 +15,7 @@
     owner: root
     group: root
     mode: "0755"
-  become: yes
+  become: true
   tags:
     - certbot
 
@@ -26,8 +26,8 @@
     mode: "0600"
     owner: root
     group: root
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - certbot
 
@@ -35,7 +35,7 @@
   command: certbot certonly --agree-tos -m {{ root_email }} --noninteractive --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini --dns-cloudflare-propagation-seconds 30 -d "{{ item }}" -d "*.{{ item }}"
   args:
     creates: /etc/letsencrypt/live/{{ item }}/privkey.pem
-  become: yes
+  become: true
   loop:
     - "{{ domain }}"
     - "{{ inventory_hostname }}.{{ domain }}"

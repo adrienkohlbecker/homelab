@@ -1,7 +1,7 @@
 - name: Gather package facts
   package_facts:
     manager: apt
-  no_log: yes
+  no_log: true
   check_mode: false
 
 - when: pkg not in ansible_facts.packages
@@ -15,7 +15,7 @@
       group: root
       mode: "0755"
     register: policy_rcd
-    become: yes
+    become: true
 
   - name: Install {{ pkg }}
     when: condition | default(true)
@@ -24,7 +24,7 @@
         - "{{ pkg }}"
       cache_valid_time: 3600
     register: apt_unit_masked
-    become: yes
+    become: true
 
   always:
 
@@ -33,4 +33,4 @@
     file:
       dest: /usr/sbin/policy-rc.d
       state: absent
-    become: yes
+    become: true

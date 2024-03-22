@@ -3,14 +3,14 @@
     pkg:
       - locales
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - locale
 
 - name: Set up locales
   locale_gen:
     name: en_US.UTF-8
-  become: yes
+  become: true
   tags:
     - locale
 
@@ -18,7 +18,7 @@
   copy:
     src: locale
     dest: /etc/default/locale
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - locale

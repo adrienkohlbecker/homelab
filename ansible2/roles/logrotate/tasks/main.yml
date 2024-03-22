@@ -14,7 +14,7 @@
       - "*.dpkg-dist" # diverted files
       - "*~" # ansible backups
   register: logrotate_confs
-  become: yes
+  become: true
   tags:
     - logrotate
 
@@ -30,7 +30,7 @@
 - name: Enable the service
   systemd:
     name: logrotate
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - logrotate

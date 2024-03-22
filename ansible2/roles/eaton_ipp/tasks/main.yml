@@ -1,7 +1,7 @@
 - name: Gather package facts
   package_facts:
     manager: apt
-  no_log: yes
+  no_log: true
   check_mode: false
   tags:
     - eaton_ipp
@@ -37,7 +37,7 @@
          path: /tmp/ipp-linux.deb
          state: absent
 
-  become: yes
+  become: true
   tags:
     - eaton_ipp
 
@@ -45,8 +45,8 @@
   when: not (ansible_check_mode and ipp_linux_installed.changed)
   systemd:
     name: eaton-ipp
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - eaton_ipp
 
@@ -55,7 +55,7 @@
   systemd:
     name: eaton-ipp
     state: started
-  become: yes
+  become: true
   register: ipp_linux_started
   tags:
     - eaton_ipp
@@ -65,7 +65,7 @@
 #   systemd:
 #     name: eaton_ipp
 #     state: restarted
-#   become: yes
+#   become: true
 #   tags:
 #     - eaton_ipp
 
@@ -76,7 +76,7 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - eaton_ipp

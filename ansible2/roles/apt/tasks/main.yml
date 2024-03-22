@@ -7,7 +7,7 @@
     group: root
     mode: "0644"
     backup: true
-  become: yes
+  become: true
   register: apt_mirror
   tags:
     - apt
@@ -15,8 +15,8 @@
 - name: force apt update
   when: apt_mirror.changed
   apt:
-    update_cache: yes
-  become: yes
+    update_cache: true
+  become: true
   tags:
     - apt
 
@@ -25,6 +25,6 @@
     upgrade: safe
     autoremove: true
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - apt

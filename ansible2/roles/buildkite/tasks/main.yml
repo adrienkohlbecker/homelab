@@ -2,7 +2,7 @@
   apt:
     pkg: gpg
     cache_valid_time: 3600
-  become: yes
+  become: true
   register: apt_install_gpg
   tags:
     - buildkite
@@ -13,14 +13,14 @@
     id: 32A37959C2FA5C3C99EFBC32A79206696452D198
     keyserver: keyserver.ubuntu.com
     keyring: /etc/apt/trusted.gpg.d/buildkite.gpg
-  become: yes
+  become: true
   tags:
     - buildkite
 
 - name: Add repository
   apt_repository:
     repo: deb [signed-by=/etc/apt/trusted.gpg.d/buildkite.gpg] https://apt.buildkite.com/buildkite-agent stable main
-  become: yes
+  become: true
   register: apt_repository_buildkite
   tags:
     - buildkite
@@ -32,7 +32,7 @@
       - buildkite-agent
     cache_valid_time: 3600
   register: buildkite_installed
-  become: yes
+  become: true
   tags:
     - buildkite
 
@@ -43,9 +43,9 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
+    backup: true
   register: buildkite_cfg
-  become: yes
+  become: true
   tags:
     - buildkite
 
@@ -53,8 +53,8 @@
   when: not (ansible_check_mode and (buildkite_installed.changed or apt_repository_buildkite.changed))
   systemd:
     name: buildkite-agent
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - buildkite
 
@@ -63,7 +63,7 @@
   systemd:
     name: buildkite-agent
     state: started
-  become: yes
+  become: true
   register: buildkite_started
   tags:
     - buildkite
@@ -74,7 +74,7 @@
   systemd:
     name: buildkite-agent
     state: restarted
-  become: yes
+  become: true
   tags:
     - buildkite
     - buildkite_conf

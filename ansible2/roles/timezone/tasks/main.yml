@@ -3,7 +3,7 @@
     pkg:
       - tzdata
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - timezone
 
@@ -14,9 +14,9 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
+    backup: true
   register: timezone_cfg
-  become: yes
+  become: true
   tags:
     - timezone
 
@@ -29,14 +29,14 @@
     mode: "0644"
     state: link
   register: localtime_cfg
-  become: yes
+  become: true
   tags:
     - timezone
 
 - name: Update initramfs
   when: timezone_cfg.changed or localtime_cfg.changed
   command: update-initramfs -u -k all
-  become: yes
+  become: true
   tags:
     - timezone
 
@@ -45,6 +45,6 @@
   file:
     path: /var/run/reboot-required
     state: touch
-  become: yes
+  become: true
   tags:
     - timezone
