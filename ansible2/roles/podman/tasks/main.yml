@@ -98,7 +98,6 @@
   when: zfs_root
   zfs:
     name: rpool/podman
-    state: present
     extra_zfs_properties:
       volsize: '{{ "20GB" | human_to_bytes }}'
   register: zfs_zvol_podman
