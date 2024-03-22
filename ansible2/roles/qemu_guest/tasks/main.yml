@@ -3,6 +3,6 @@
     pkg:
       - qemu-guest-agent
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - qemu_guest

@@ -5,9 +5,9 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
+    backup: true
   register: sshd_config
-  become: yes
+  become: true
   tags:
     - ssh
 
@@ -16,6 +16,6 @@
   systemd:
     name: ssh
     state: restarted
-  become: yes
+  become: true
   tags:
     - ssh

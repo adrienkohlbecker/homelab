@@ -4,7 +4,7 @@
       - nut-snmp
       - nut-cgi
     cache_valid_time: 3600
-  become: yes
+  become: true
   register: apt_install_nut
   tags:
     - nut_server
@@ -18,7 +18,7 @@
     owner: root
     group: nut
     mode: "0640"
-  become: yes
+  become: true
   register: nut_nut_conf
   tags:
     - nut_server
@@ -53,7 +53,7 @@
     - option: override.battery.runtime.low
       value: 300 # 5 minutes
   register: nut_ups_conf
-  become: yes
+  become: true
   tags:
     - nut_server
 
@@ -67,7 +67,7 @@
     owner: root
     group: nut
     mode: "0640"
-  become: yes
+  become: true
   register: nut_upsd_conf
   tags:
     - nut_server
@@ -88,7 +88,7 @@
       insertafter: '\[upsmon\]'
     - line: upsmon master
       insertafter: ^password =
-  become: yes
+  become: true
   register: nut_upsd_users
   tags:
     - nut_server
@@ -97,8 +97,8 @@
   when: not (ansible_check_mode and apt_install_nut.changed)
   systemd:
     name: nut-driver
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - nut_server
 
@@ -108,7 +108,7 @@
     name: nut-driver
     state: started
   register: systemd_started
-  become: yes
+  become: true
   tags:
     - nut_server
 
@@ -117,7 +117,7 @@
   systemd:
     name: nut-driver
     state: restarted
-  become: yes
+  become: true
   tags:
     - nut_server
 
@@ -125,8 +125,8 @@
   when: not (ansible_check_mode and apt_install_nut.changed)
   systemd:
     name: nut-server
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - nut_server
 
@@ -136,7 +136,7 @@
     name: nut-server
     state: started
   register: systemd_started
-  become: yes
+  become: true
   tags:
     - nut_server
 
@@ -145,7 +145,7 @@
   systemd:
     name: nut-server
     state: restarted
-  become: yes
+  become: true
   tags:
     - nut_server
 
@@ -159,7 +159,7 @@
     owner: root
     group: root
     mode: "0644"
-  become: yes
+  become: true
   tags:
     - nut_server
 
@@ -171,7 +171,7 @@
     owner: root
     group: root
     mode: "0644"
-  become: yes
+  become: true
   tags:
     - nut_server
 
@@ -182,7 +182,7 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - nut_server

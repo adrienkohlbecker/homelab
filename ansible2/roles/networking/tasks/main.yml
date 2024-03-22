@@ -5,8 +5,8 @@
     owner: root
     group: root
     mode: "0600"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   register: netplan_cfg
   tags:
     - networking
@@ -15,7 +15,7 @@
   file:
     path: "{{ item }}"
     state: absent
-  become: yes
+  become: true
   loop:
     - /etc/netplan/00-installer-config.yaml
     - /etc/netplan/50-cloud-init.yaml
@@ -25,6 +25,6 @@
 - name: Apply netplan
   when: netplan_cfg.changed
   shell: netplan apply
-  become: yes
+  become: true
   tags:
     - networking

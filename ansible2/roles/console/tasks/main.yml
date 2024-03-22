@@ -3,7 +3,7 @@
     pkg:
       - console-setup
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - console
 
@@ -14,16 +14,16 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
+    backup: true
   register: console_cfg
-  become: yes
+  become: true
   tags:
     - console
 
 - name: Update initramfs
   when: console_cfg.changed
   command: update-initramfs -u -k all
-  become: yes
+  become: true
   tags:
     - console
 
@@ -32,6 +32,6 @@
   file:
     path: /var/run/reboot-required
     state: touch
-  become: yes
+  become: true
   tags:
     - console

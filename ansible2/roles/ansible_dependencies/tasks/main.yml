@@ -22,7 +22,7 @@
       - xz-utils
     cache_valid_time: 3600
   register: core_dependencies_apt
-  become: yes
+  become: true
   tags:
     - core_dependencies
 

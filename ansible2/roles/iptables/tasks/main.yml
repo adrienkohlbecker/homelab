@@ -3,7 +3,7 @@
     pkg:
       - iptables-persistent
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - iptables
 
@@ -14,16 +14,16 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
+    backup: true
   register: iptables_v4
-  become: yes
+  become: true
   tags:
     - iptables
 
 - name: Apply iptables v4
   when: iptables_v4.changed
   shell: iptables-restore -n /etc/iptables/rules.v4
-  become: yes
+  become: true
   tags:
     - iptables
 
@@ -34,15 +34,15 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
+    backup: true
   register: iptables_v6
-  become: yes
+  become: true
   tags:
     - iptables
 
 - name: Apply iptables v6
   when: iptables_v6.changed
   shell: ip6tables-restore -n /etc/iptables/rules.v6
-  become: yes
+  become: true
   tags:
     - iptables

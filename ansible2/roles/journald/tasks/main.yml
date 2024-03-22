@@ -5,7 +5,7 @@
     owner: root
     group: root
     mode: "0755"
-  become: yes
+  become: true
   tags:
     - journald
 
@@ -16,8 +16,8 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   register: journald_conf
   tags:
     - journald
@@ -27,7 +27,7 @@
   systemd:
     name: systemd-journald
     state: restarted
-  become: yes
+  become: true
   tags:
     - journald
 
@@ -35,6 +35,6 @@
   when: journald_conf.changed
   command: journalctl --flush
   changed_when: false
-  become: yes
+  become: true
   tags:
     - journald

@@ -72,7 +72,7 @@
 
     - name: restart machine
       reboot:
-      become: yes
+      become: true
       when: reboot_required.stat.exists
       tags:
         - always

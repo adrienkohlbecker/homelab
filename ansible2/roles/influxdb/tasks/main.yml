@@ -2,7 +2,7 @@
   apt:
     pkg: gpg
     cache_valid_time: 3600
-  become: yes
+  become: true
   register: apt_install_gpg
   tags:
     - influxdb
@@ -13,14 +13,14 @@
     id: D8FF8E1F7DF8B07E
     url: https://repos.influxdata.com/influxdata-archive_compat.key
     keyring: /etc/apt/trusted.gpg.d/influxdb.gpg
-  become: yes
+  become: true
   tags:
     - influxdb
 
 - name: Add repository
   apt_repository:
     repo: deb [signed-by=/etc/apt/trusted.gpg.d/influxdb.gpg] https://repos.influxdata.com/debian stable main
-  become: yes
+  become: true
   register: apt_repository_influxdb
   tags:
     - influxdb
@@ -42,8 +42,8 @@
     group: root
     mode: "0644"
     validate: sh -n %s
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   register: influxdb_default
   tags:
     - influxdb
@@ -56,8 +56,8 @@
 #     group: root
 #     mode: "0644"
 #     validate: influxdb validate --config-yaml %s
-#     backup: yes
-#   become: yes
+#     backup: true
+#   become: true
 #   register: influxdb_cfg
 #   tags:
 #     - influxdb
@@ -66,8 +66,8 @@
   when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_influxdb.changed))
   systemd:
     name: influxdb
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - influxdb
 
@@ -76,7 +76,7 @@
   systemd:
     name: influxdb
     state: started
-  become: yes
+  become: true
   register: influxdb_started
   tags:
     - influxdb
@@ -86,7 +86,7 @@
   systemd:
     name: influxdb
     state: restarted
-  become: yes
+  become: true
   tags:
     - influxdb
 
@@ -106,7 +106,7 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - influxdb

@@ -3,7 +3,7 @@
     pkg:
       - keyboard-configuration
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - keyboard
 
@@ -14,8 +14,8 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   register: keyboard_cfg
   tags:
     - keyboard
@@ -23,7 +23,7 @@
 - name: Update initramfs
   when: keyboard_cfg.changed
   command: update-initramfs -u -k all
-  become: yes
+  become: true
   tags:
     - keyboard
 
@@ -32,6 +32,6 @@
   file:
     path: /var/run/reboot-required
     state: touch
-  become: yes
+  become: true
   tags:
     - keyboard

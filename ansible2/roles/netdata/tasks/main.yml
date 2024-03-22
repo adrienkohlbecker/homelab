@@ -2,7 +2,7 @@
   apt:
     pkg: gpg
     cache_valid_time: 3600
-  become: yes
+  become: true
   register: apt_install_gpg
   tags:
     - netdata
@@ -12,7 +12,7 @@
     id: 6588FDD7B14721FE7C3115E6F9177B5265F56346
     url: https://repo.netdata.cloud/netdatabot.gpg.key
     keyring: /etc/apt/trusted.gpg.d/netdata.gpg
-  become: yes
+  become: true
   when: not (ansible_check_mode and apt_install_gpg.changed)
   tags:
     - netdata
@@ -21,7 +21,7 @@
   apt_repository:
     repo: deb [signed-by=/etc/apt/trusted.gpg.d/netdata.gpg] https://repo.netdata.cloud/repos/stable/ubuntu/ {{ ansible_distribution_release }}/
   register: apt_repository_netdata
-  become: yes
+  become: true
   tags:
     - netdata
 
@@ -37,7 +37,7 @@
 - name: Divert configuration file
   community.general.dpkg_divert:
     path: /etc/netdata/netdata.conf
-  become: yes
+  become: true
   tags:
     - netdata
 
@@ -57,7 +57,7 @@
       option: bind to
       value: 127.0.0.1
   register: netdata_conf
-  become: yes
+  become: true
   tags:
     - netdata
 
@@ -68,9 +68,9 @@
     owner: netdata
     group: netdata
     mode: "0600"
-    backup: yes
+    backup: true
   register: prometheus_conf
-  become: yes
+  become: true
   tags:
     - netdata
 
@@ -81,9 +81,9 @@
     owner: netdata
     group: netdata
     mode: "0600"
-    backup: yes
+    backup: true
   register: docker_conf
-  become: yes
+  become: true
   tags:
     - netdata
 
@@ -91,7 +91,7 @@
   command: cp /usr/lib/netdata/conf.d/health_alarm_notify.conf /etc/netdata/health_alarm_notify.conf
   args:
     creates: /etc/netdata/health_alarm_notify.conf
-  become: yes
+  become: true
   tags:
     - netdata
 
@@ -110,7 +110,7 @@
     - line: ^DEFAULT_RECIPIENT_TELEGRAM=
       value: DEFAULT_RECIPIENT_TELEGRAM="{{ telegram_personal_chat_id }}"
   register: netdata_health_alarm_notify
-  become: yes
+  become: true
   tags:
     - netdata
 
@@ -118,8 +118,8 @@
   user:
     name: netdata
     groups: podman-socket
-    append: yes
-  become: yes
+    append: true
+  become: true
   tags:
     - netdata
 
@@ -127,8 +127,8 @@
   when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed))
   systemd:
     name: netdata
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - netdata
 
@@ -137,7 +137,7 @@
   systemd:
     name: netdata
     state: started
-  become: yes
+  become: true
   register: systemd_started
   tags:
     - netdata
@@ -147,7 +147,7 @@
   systemd:
     name: netdata
     state: restarted
-  become: yes
+  become: true
   tags:
     - netdata
 
@@ -158,7 +158,7 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - netdata

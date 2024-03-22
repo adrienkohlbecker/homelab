@@ -25,7 +25,7 @@
     - regexp: '^#?server\.errorlog\s'
       line: '# server.errorlog = "/var/log/lighttpd/error.log"'
   register: lighttpd_conf
-  become: yes
+  become: true
   tags:
     - lighttpd
 
@@ -41,7 +41,7 @@
     - 10-cgi.conf
     - 10-accesslog.conf
   register: lighttpd_mod
-  become: yes
+  become: true
   tags:
     - lighttpd
 
@@ -49,8 +49,8 @@
   when: not (ansible_check_mode and apt_unit_masked.changed)
   systemd:
     name: lighttpd
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - lighttpd
 
@@ -59,7 +59,7 @@
   systemd:
     name: lighttpd
     state: started
-  become: yes
+  become: true
   register: systemd_started
   tags:
     - lighttpd
@@ -69,6 +69,6 @@
   systemd:
     name: lighttpd
     state: restarted
-  become: yes
+  become: true
   tags:
     - lighttpd

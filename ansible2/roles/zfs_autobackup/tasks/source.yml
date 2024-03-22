@@ -3,7 +3,7 @@
   group:
     name: zfs_autobackup
     system: true
-  become: yes
+  become: true
   tags:
     - zfs_autobackup
 
@@ -13,7 +13,7 @@
     group: zfs_autobackup
     system: true
     shell: /bin/bash
-  become: yes
+  become: true
   tags:
     - zfs_autobackup
 
@@ -21,7 +21,7 @@
   authorized_key:
     user: zfs_autobackup
     key: "{{ zfs_autobackup_public_key }}"
-    exclusive: yes
-  become: yes
+    exclusive: true
+  become: true
   tags:
     - zfs_autobackup

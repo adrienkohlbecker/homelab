@@ -6,7 +6,7 @@
     owner: root
     group: root
     mode: "0700"
-  become: yes
+  become: true
   tags:
     - zfs_autobackup
     - focus
@@ -18,8 +18,8 @@
     owner: root
     group: root
     mode: "0600"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - zfs_autobackup
     - focus
@@ -31,8 +31,8 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - zfs_autobackup
     - focus
@@ -44,8 +44,8 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - zfs_autobackup
     - focus

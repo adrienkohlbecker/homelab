@@ -1,7 +1,7 @@
 - name: Set hostname
   hostname:
     name: "{{ inventory_hostname }}"
-  become: yes
+  become: true
   tags:
     - hostname
 
@@ -12,7 +12,7 @@
     owner: root
     group: adm
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - hostname

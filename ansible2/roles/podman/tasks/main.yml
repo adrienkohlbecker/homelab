@@ -12,7 +12,7 @@
   group:
     name: podman-socket
     system: true
-  become: yes
+  become: true
   tags:
     - podman
 
@@ -23,7 +23,7 @@
     owner: root
     group: root
     mode: "0755"
-  become: yes
+  become: true
   tags:
     - podman
 
@@ -49,7 +49,7 @@
     owner: root
     group: root
     mode: "0755"
-  become: yes
+  become: true
   tags:
     - podman
 
@@ -65,7 +65,7 @@
 - name: Divert configuration file
   community.general.dpkg_divert:
     path: /usr/lib/tmpfiles.d/podman.conf
-  become: yes
+  become: true
   tags:
     - podman
 
@@ -79,7 +79,7 @@
     owner: root
     group: root
     mode: "0644"
-  become: yes
+  become: true
   tags:
     - podman
 
@@ -90,7 +90,7 @@
     owner: root
     group: root
     mode: "0700"
-  become: yes
+  become: true
   tags:
     - podman
 
@@ -102,7 +102,7 @@
     extra_zfs_properties:
       volsize: '{{ "20GB" | human_to_bytes }}'
   register: zfs_zvol_podman
-  become: yes
+  become: true
   tags:
     - podman
 
@@ -111,7 +111,7 @@
   filesystem:
     fstype: ext4
     dev: /dev/zvol/rpool/podman
-  become: yes
+  become: true
   tags:
     - podman
 
@@ -123,8 +123,8 @@
     fstype: ext4
     opts: defaults
     state: mounted
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - podman
 
@@ -132,8 +132,8 @@
   when: not (ansible_check_mode and apt_unit_masked.changed)
   systemd:
     name: podman
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - podman
 
@@ -141,8 +141,8 @@
   when: not (ansible_check_mode and apt_unit_masked.changed)
   systemd:
     name: podman.socket
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - podman
 
@@ -151,7 +151,7 @@
   systemd:
     name: podman.socket
     state: started
-  become: yes
+  become: true
   register: systemd_started
   tags:
     - podman
@@ -161,6 +161,6 @@
   systemd:
     name: podman.socket
     state: restarted
-  become: yes
+  become: true
   tags:
     - podman

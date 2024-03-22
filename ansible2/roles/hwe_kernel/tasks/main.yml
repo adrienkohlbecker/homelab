@@ -4,7 +4,7 @@
       - linux-generic-hwe-22.04
     cache_valid_time: 3600
   register: kernel_apt
-  become: yes
+  become: true
   tags:
     - kernel
 
@@ -13,6 +13,6 @@
   file:
     path: /var/run/reboot-required
     state: touch
-  become: yes
+  become: true
   tags:
     - kernel

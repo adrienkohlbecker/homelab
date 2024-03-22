@@ -4,7 +4,7 @@
       - update-notifier-common
       - unattended-upgrades
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - unattended_upgrades
 
@@ -15,8 +15,8 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   register: apt_unattended_20
   tags:
     - unattended_upgrades
@@ -28,8 +28,8 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   register: apt_unattended_50
   tags:
     - unattended_upgrades
@@ -38,6 +38,6 @@
   when: apt_unattended_20.changed or apt_unattended_50.changed
   command: unattended-upgrades --dry-run --verbose
   changed_when: false
-  become: yes
+  become: true
   tags:
     - unattended_upgrades

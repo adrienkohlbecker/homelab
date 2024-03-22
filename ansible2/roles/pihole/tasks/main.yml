@@ -2,7 +2,7 @@
   group:
     name: pihole
     system: true
-  become: yes
+  become: true
   tags:
     - pihole
 
@@ -10,12 +10,12 @@
   user:
     name: pihole
     group: pihole
-    createhome: no
+    createhome: false
     system: true
     shell: /usr/sbin/nologin
     home: /nonexistent
   register: pihole_user
-  become: yes
+  become: true
   tags:
     - pihole
 
@@ -27,7 +27,7 @@
     owner: "{{ pihole_user.uid }}"
     group: "{{ pihole_user.group }}"
     mode: "0775"
-  become: yes
+  become: true
   tags:
     - pihole
 
@@ -38,7 +38,7 @@
     owner: root
     group: root
     mode: "0755"
-  become: yes
+  become: true
   tags:
     - pihole
 
@@ -50,7 +50,7 @@
     owner: "{{ pihole_user.uid }}"
     group: "{{ pihole_user.group }}"
     mode: "0755"
-  become: yes
+  become: true
   tags:
     - pihole
 
@@ -67,8 +67,8 @@
   when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed))
   systemd:
     name: pihole
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - pihole
 
@@ -78,7 +78,7 @@
     name: pihole
     state: started
   register: systemd_started
-  become: yes
+  become: true
   tags:
     - pihole
 
@@ -100,7 +100,7 @@
     validate: bash -n %s
     backup: true
   register: logrotate_pass
-  become: yes
+  become: true
   tags:
     - pihole
 
@@ -109,7 +109,7 @@
   systemd:
     name: pihole
     state: restarted
-  become: yes
+  become: true
   tags:
     - pihole
 
@@ -127,7 +127,7 @@
     job: "/usr/bin/systemd-cat --identifier pihole_list_update {{ pihole_list_update_cmd }}"
     user: root
     cron_file: ansible_pihole_list_update
-  become: yes
+  become: true
   tags:
     - pihole
 
@@ -135,7 +135,7 @@
   command: "{{ pihole_list_update_cmd }}"
   register: pihole_list_update
   changed_when: '["inserted", "enabled", "disabled", "migrated"] | select("in", pihole_list_update.stdout) | length > 0'
-  become: yes
+  become: true
   tags:
     - pihole
 
@@ -144,6 +144,6 @@
   command: /usr/bin/podman exec pihole pihole -g
   register: pihole_gravity_update
   changed_when: true # unclear how to parse the output
-  become: yes
+  become: true
   tags:
     - pihole

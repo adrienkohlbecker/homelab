@@ -1,7 +1,7 @@
 - name: Create the traefik podman network
   containers.podman.podman_network:
     name: traefik
-  become: yes
+  become: true
   register: podman_network_traefik
   tags:
     - traefik
@@ -12,9 +12,9 @@
     path: /etc/cni/net.d/traefik.conflist
     regexp: '^(\s*)"cniVersion":(.*)$'
     replace: '\1"cniVersion": "0.4.0",'
-    backup: yes
+    backup: true
     validate: jq . %s
-  become: yes
+  become: true
   tags:
     - traefik
 
@@ -24,7 +24,7 @@
   failed_when: false
   changed_when: false
   check_mode: false
-  become: yes
+  become: true
   tags:
     - traefik
 
@@ -44,13 +44,13 @@
     - name: Install traefik
       unarchive:
         src: /tmp/traefik.tar.gz
-        remote_src: yes
+        remote_src: true
         dest: /usr/local/bin
         mode: '0755'
         owner: root
         group: root
         include: [ traefik ]
-        list_files: yes
+        list_files: true
       register: traefik_installed
 
     - name: Delete tar file
@@ -58,7 +58,7 @@
          path: /tmp/traefik.tar.gz
          state: absent
 
-  become: yes
+  become: true
   tags:
     - traefik
 
@@ -69,7 +69,7 @@
     owner: root
     group: root
     mode: "0755"
-  become: yes
+  become: true
   tags:
     - traefik
 
@@ -80,7 +80,7 @@
     owner: root
     group: root
     mode: "0755"
-  become: yes
+  become: true
   tags:
     - traefik
 
@@ -91,9 +91,9 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
+    backup: true
   register: traefik_yml
-  become: yes
+  become: true
   tags:
     - traefik
 
@@ -104,8 +104,8 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - traefik
 
@@ -116,8 +116,8 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - traefik
 
@@ -128,8 +128,8 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - traefik
 
@@ -145,8 +145,8 @@
   when: not (ansible_check_mode and systemd_unit.changed)
   systemd:
     name: traefik
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - traefik
 
@@ -156,7 +156,7 @@
     name: traefik
     state: started
   register: systemd_started
-  become: yes
+  become: true
   tags:
     - traefik
 
@@ -165,7 +165,7 @@
   systemd:
     name: traefik
     state: restarted
-  become: yes
+  become: true
   tags:
     - traefik
 
@@ -176,9 +176,9 @@
     owner: root
     group: root
     mode: "0644"
-    backup: yes
+    backup: true
   register: logrotate_conf
-  become: yes
+  become: true
   tags:
     - traefik
 
@@ -187,6 +187,6 @@
   systemd:
     name: logrotate
     state: restarted
-  become: yes
+  become: true
   tags:
     - traefik

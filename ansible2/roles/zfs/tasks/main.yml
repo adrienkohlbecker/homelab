@@ -6,7 +6,7 @@
       - mbuffer
       - zfs-zed
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - zfs
 
@@ -17,16 +17,16 @@
     mode: "0644"
     owner: root
     group: root
-    backup: yes
+    backup: true
   register: zfs_module_conf
-  become: yes
+  become: true
   tags:
     - zfs
 
 - name: Update initramfs
   when: zfs_module_conf.changed
   command: update-initramfs -u -k all
-  become: yes
+  become: true
   tags:
     - zfs
 
@@ -35,7 +35,7 @@
   file:
     path: /var/run/reboot-required
     state: touch
-  become: yes
+  become: true
   tags:
     - zfs
 
@@ -46,8 +46,8 @@
     mode: "0755"
     owner: root
     group: root
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - zfs
 
@@ -58,8 +58,8 @@
     job: /usr/bin/systemd-cat --identifier zfs_health /usr/local/bin/zfs_health
     user: root
     cron_file: ansible_zfs_health
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   tags:
     - zfs
 
@@ -72,8 +72,8 @@
     job: /usr/bin/systemd-cat --identifier zfs_trim /sbin/zpool trim {{ item }}
     user: root
     cron_file: ansible_zfs_trim
-    backup: yes
+    backup: true
   loop: "{{ zfs_trim_pools }}"
-  become: yes
+  become: true
   tags:
     - zfs

@@ -3,7 +3,7 @@
     pkg:
       - lm-sensors
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - lm_sensors
 
@@ -15,8 +15,8 @@
     mode: "0644"
     owner: root
     group: root
-    backup: yes
-  become: yes
+    backup: true
+  become: true
   register: kernel_modules_copy
   tags:
     - lm_sensors
@@ -26,7 +26,7 @@
   file:
     path: /etc/modules-load.d/lm_sensors.conf
     state: absent
-  become: yes
+  become: true
   register: kernel_modules_rm
   tags:
     - lm_sensors
@@ -36,6 +36,6 @@
   file:
     path: /var/run/reboot-required
     state: touch
-  become: yes
+  become: true
   tags:
     - lm_sensors

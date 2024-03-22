@@ -5,6 +5,6 @@
       - freeipmi-bmc-watchdog
       - freeipmi-ipmiseld
     cache_valid_time: 3600
-  become: yes
+  become: true
   tags:
     - ipmi

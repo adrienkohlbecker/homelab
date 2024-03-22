@@ -27,8 +27,8 @@
   when: not (ansible_check_mode and systemd_unit.changed)
   systemd:
     name: mac0
-    enabled: yes
-  become: yes
+    enabled: true
+  become: true
   tags:
     - macvlan
 
@@ -38,7 +38,7 @@
     name: mac0
     state: started
   register: systemd_started
-  become: yes
+  become: true
   tags:
     - macvlan
 
@@ -47,7 +47,7 @@
   systemd:
     name: mac0
     state: restarted
-  become: yes
+  become: true
   tags:
     - macvlan
 
