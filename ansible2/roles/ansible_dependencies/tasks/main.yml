@@ -1,4 +1,4 @@
-# Install dependecies to support the Ansible core modules.
+# Install dependencies to support the Ansible core modules.
 - name: Install packages
   apt:
     name:
