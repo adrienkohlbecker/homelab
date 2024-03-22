@@ -35,7 +35,6 @@
   when: zfs_root
   zfs:
     name: rpool/docker
-    state: present
     extra_zfs_properties:
       volsize: '{{ "20GB" | human_to_bytes }}'
   register: zfs_zvol_docker

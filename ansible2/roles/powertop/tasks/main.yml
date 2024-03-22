@@ -2,7 +2,7 @@
   apt:
     pkg:
       - powertop
-    state: present
+    cache_valid_time: 3600
   become: yes
   register: apt_install_powertop
   tags:
