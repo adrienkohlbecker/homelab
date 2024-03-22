@@ -2,11 +2,15 @@
 # pihole.service #######################################################################
 [Unit]
 Description=pihole
-After=network-online.target {{- zfs_root | ternary(" mnt-services.mount", "") }}
+After=network-online.target
 Wants=network-online.target
-Requires={{- zfs_root | ternary(" mnt-services.mount", "") }}
 StartLimitInterval=600
 StartLimitBurst=5
+{% if zfs_root %}
+After=mnt-services.mount zfs_autosnapshot.target
+Requires=mnt-services.mount
+PartOf=zfs_autosnapshot.target
+{% endif %}
 
 [Service]
 Environment=PODMAN_SYSTEMD_UNIT=%n
@@ -63,3 +67,6 @@ ExecStopPost=-/usr/sbin/iptables -D CNI-ADMIN -p tcp -m conntrack --ctorigsrc {{
 
 [Install]
 WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

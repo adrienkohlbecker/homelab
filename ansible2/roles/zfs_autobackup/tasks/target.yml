@@ -1,0 +1,51 @@
+
+- name: Create ssh directory
+  file:
+    dest: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: yes
+  tags:
+    - zfs_autobackup
+    - focus
+
+- name: Install ssh private key
+  copy:
+    content: "{{ zfs_autobackup_private_key }}"
+    dest: /root/.ssh/zfs_autobackup
+    owner: root
+    group: root
+    mode: "0600"
+    backup: yes
+  become: yes
+  tags:
+    - zfs_autobackup
+    - focus
+
+- name: Install ssh public key
+  copy:
+    content: "{{ zfs_autobackup_public_key }}\n"
+    dest: /root/.ssh/zfs_autobackup.pub
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  become: yes
+  tags:
+    - zfs_autobackup
+    - focus
+
+- name: Install ssh config
+  copy:
+    src: zfs_autobackup.conf
+    dest: /root/.ssh/zfs_autobackup.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  become: yes
+  tags:
+    - zfs_autobackup
+    - focus
