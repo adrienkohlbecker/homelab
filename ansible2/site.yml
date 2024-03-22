@@ -27,6 +27,7 @@
     - eaton_ipp
     - hdparm
     - hd_idle
+    - smart
     - powertop
     - lm_sensors
     - zfs

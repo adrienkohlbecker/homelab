@@ -1,0 +1,58 @@
+---
+
+- import_role:
+    name: apt_unit_masked
+  vars:
+    pkg: smartmontools
+    unit:
+      - smartmontools.service
+  tags:
+    - smart
+
+- name: Divert smartd.conf
+  community.general.dpkg_divert:
+    path: /etc/smartd.conf
+  become: yes
+  tags:
+    - smart
+
+- name: Configure smartd
+  copy:
+    src: smartd.conf
+    dest: /etc/smartd.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: yes
+  register: smartd_cfg
+  become: yes
+  tags:
+    - smart
+
+- name: Enable the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: smartmontools
+    enabled: yes
+  become: yes
+  tags:
+    - smart
+
+- name: Start the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: smartmontools
+    state: started
+  become: yes
+  register: systemd_started
+  tags:
+    - smart
+
+- name: Restart the service
+  when: not (ansible_check_mode and apt_unit_masked.changed) and (smartd_cfg.changed) and not systemd_started.changed
+  systemd:
+    name: smartmontools
+    state: restarted
+  become: yes
+  tags:
+    - smart
