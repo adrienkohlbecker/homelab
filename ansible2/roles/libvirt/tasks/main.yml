@@ -39,6 +39,7 @@
   when: zfs_root
   zfs:
     name: rpool/vms
+    state: present
     extra_zfs_properties:
       mountpoint: /var/lib/libvirt/images
   become: yes
