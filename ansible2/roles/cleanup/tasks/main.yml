@@ -19,7 +19,7 @@
   tags:
     - cleanup
 
-- name: Uninstall uneeded packages
+- name: Uninstall unneeded packages
   apt:
     pkg:
       - ufw
