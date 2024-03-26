@@ -8,7 +8,7 @@
   tags:
     - certbot
 
-- name: Create config directory directory
+- name: Create config directory
   file:
     dest: /etc/letsencrypt
     state: directory
