@@ -3,6 +3,7 @@
     package:
       - python3-pip
       - python3-virtualenv
+      - mbuffer
     cache_valid_time: 3600
   become: true
   tags:
