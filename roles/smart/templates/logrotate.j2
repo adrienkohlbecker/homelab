@@ -1,0 +1,10 @@
+/var/log/smartd/*.log {
+  weekly
+  minsize 100K
+  missingok
+  rotate 14
+  {{ zfs_root | ternary("# compress # zfs already compresses disk contents", "compress") }}
+  delaycompress
+  notifempty
+  sharedscripts
+}
