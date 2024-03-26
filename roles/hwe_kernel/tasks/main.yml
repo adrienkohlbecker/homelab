@@ -6,13 +6,59 @@
   register: kernel_apt
   become: true
   tags:
-    - kernel
+    - hwe_kernel
+
+- name: Pin zfsutils-linux from mantic
+  copy:
+    src: zfsutils-mantic-backport
+    dest: /etc/apt/preferences.d/zfsutils-mantic-backport
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: apt_zfs_pin
+  become: true
+  tags:
+    - hwe_kernel
+
+- name: Add mantic repository
+  apt_repository:
+    repo: 'deb http://archive.ubuntu.com/ubuntu mantic main restricted universe multiverse # For zfsutils-linux userspace tools'
+  become: true
+  tags:
+    - hwe_kernel
+
+- name: Add mantic-updates repository
+  apt_repository:
+    repo: 'deb http://archive.ubuntu.com/ubuntu mantic-updates main restricted universe multiverse # For zfsutils-linux userspace tools'
+  become: true
+  tags:
+    - hwe_kernel
+
+- name: Add mantic-security repository
+  apt_repository:
+    repo: 'deb http://archive.ubuntu.com/ubuntu mantic-security main restricted universe multiverse # For zfsutils-linux userspace tools'
+  become: true
+  tags:
+    - hwe_kernel
+
+- name: Install zfsutils from mantic
+  apt:
+    pkg:
+      - zfsutils-linux
+    state: latest
+    default_release: mantic
+    cache_valid_time: 3600
+  register: zfsutils_apt
+  become: true
+  tags:
+    - hwe_kernel
 
 - name: Ask to reboot
-  when: kernel_apt.changed
+  when: kernel_apt.changed or zfsutils_apt.changed
   file:
     path: /var/run/reboot-required
     state: touch
   become: true
   tags:
-    - kernel
+    - hwe_kernel
