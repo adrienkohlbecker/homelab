@@ -1,0 +1,12 @@
+Package: zfsutils-linux libnvpair3linux libuutil3linux libzfs4linux libzpool5linux libc6 chrony tzdata-legacy libgnutls30 libgmp10 libp11-kit0 tzdata
+Pin: release n=mantic
+Pin-Priority: 990
+
+# Don't do anything with packages that are not from jammy
+Package: *
+Pin: release n=jammy
+Pin-Priority: 900
+
+Package: *
+Pin: release o=Ubuntu
+Pin-Priority: -10
