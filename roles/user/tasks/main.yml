@@ -10,6 +10,7 @@
       - jq
       - lsof
       - man-db
+      - moreutils
       - mosh
       - ncdu
       - nmon
