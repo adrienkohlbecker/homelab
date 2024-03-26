@@ -76,7 +76,7 @@ for volume in $ZFS_VOLUMES; do
     break
   fi
 
-  SCRUB_RAW_DATE=$(zpool status "$volume" | grep scrub | awk '{print $13" "$14" " $15" " $16" "$17}')
+  SCRUB_RAW_DATE=$(zpool status "$volume" | grep scrub | rev | cut -d' ' -f1-5 | rev)
   SCRUB_DATE=$(date -d "$SCRUB_RAW_DATE" +"%s")
 
   if [ $((CURRENT_DATE - SCRUB_DATE)) -ge $SCRUB_EXPIRE ]; then
