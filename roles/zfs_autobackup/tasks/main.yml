@@ -41,25 +41,15 @@
   tags:
     - zfs_autobackup
 
-- name: Set properties on rpool
+- name: Set properties on datasets
   when: zfs_root
   zfs:
-    name: rpool/ROOT/jammy
+    name: "{{ item.dataset }}"
     state: present
     extra_zfs_properties:
       'autobackup:bak': 'true'
   become: true
-  tags:
-    - zfs_autobackup
-
-- name: Set properties on bpool
-  when: zfs_root
-  zfs:
-    name: bpool/BOOT/jammy
-    state: present
-    extra_zfs_properties:
-      'autobackup:bak': 'true'
-  become: true
+  loop: "{{ bunk_sync_datasets }}"
   tags:
     - zfs_autobackup
 
@@ -98,9 +88,20 @@
   tags:
     - zfs_autobackup
 
+- name: Create log directory
+  file:
+    dest: /var/log/zfs_autobackup
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  tags:
+    - zfs_autobackup
+
 - name: Copy the snapshot script
-  copy:
-    src: zfs_autosnapshot.sh
+  template:
+    src: zfs_autosnapshot.sh.j2
     dest: /usr/local/bin/zfs_autosnapshot
     mode: "0755"
     owner: root
@@ -148,7 +149,27 @@
   tags:
     - zfs_autobackup
 
+- name: Configure logrotate
+  template:
+    src: logrotate.j2
+    dest: /etc/logrotate.d/zfs_autobackup
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: logrotate_conf
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Restart logrotate
+  when: logrotate_conf.changed
+  systemd:
+    name: logrotate
+    state: restarted
+  become: true
+  tags:
+    - zfs_autobackup
+
 - import_tasks: source.yml
   when: inventory_hostname != 'backup'
-- import_tasks: target.yml
-  when: inventory_hostname == 'backup' or inventory_hostname == 'box'

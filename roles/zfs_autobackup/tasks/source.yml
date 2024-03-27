@@ -1,4 +1,3 @@
-
 - name: Add zfs_autobackup group
   group:
     name: zfs_autobackup
@@ -20,8 +19,10 @@
 - name: Add authorized keys
   authorized_key:
     user: zfs_autobackup
-    key: "{{ zfs_autobackup_public_key }}"
+    key: "{{ ssh_root_at_backup_public_key }}"
     exclusive: true
   become: true
   tags:
     - zfs_autobackup
+
+# TODO: sudo zfs allow zfs_autobackup send,hold,release dataset

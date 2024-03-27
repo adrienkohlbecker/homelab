@@ -1,0 +1,34 @@
+- name: Create ssh directory
+  file:
+    dest: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  tags:
+    - ssh_root
+
+- name: Generate an OpenSSH keypair with a different algorithm (dsa)
+  openssh_keypair:
+    path: /root/.ssh/id_ed25519
+    type: ed25519
+    owner: root
+    group: root
+    mode: "0600"
+    comment: root@{{ inventory_hostname }}
+  become: true
+  tags:
+    - ssh_root
+
+- name: Configure ssh
+  copy:
+    src: ssh_config
+    dest: /root/.ssh/config
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - ssh_root
