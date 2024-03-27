@@ -61,7 +61,7 @@
     mode: "0644"
     ignore_spaces: true
     backup: true
-  with_items:
+  loop:
     - section: web
       option: bind to
       value: 127.0.0.1
@@ -124,7 +124,7 @@
     line: "{{ item.value }}"
     validate: bash -n %s
     backup: true
-  with_items:
+  loop:
     - line: ^SEND_TELEGRAM=
       value: SEND_TELEGRAM="YES"
     - line: ^TELEGRAM_BOT_TOKEN=

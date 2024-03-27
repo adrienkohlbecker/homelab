@@ -35,7 +35,7 @@
     mode: "0640"
     ignore_spaces: true
     backup: true
-  with_items:
+  loop:
     - option: driver
       value: snmp-ups
     - option: port
@@ -81,7 +81,7 @@
     group: nut
     mode: "0640"
     backup: true
-  with_items:
+  loop:
     - line: '[upsmon]'
     - line: password = {{ nut_upsmon_password }}
       regex: ^password =
