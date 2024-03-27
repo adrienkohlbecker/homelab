@@ -14,7 +14,7 @@
     insertafter: '{{ item.insertafter | default(omit) }}'
     dest: /etc/lighttpd/lighttpd.conf
     backup: true
-  with_items:
+  loop:
     - regexp: '^server\.bind'
       line: 'server.bind = "127.0.0.1"'
       insertafter: '^server\.port'
@@ -37,7 +37,7 @@
     group: root
     mode: "0644"
     state: link
-  with_items:
+  loop:
     - 10-cgi.conf
     - 10-accesslog.conf
   register: lighttpd_mod

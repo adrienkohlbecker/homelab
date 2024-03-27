@@ -18,7 +18,7 @@
     owner: root
     group: nut
     mode: "0640"
-  with_items:
+  loop:
     - regexp: ^MONITOR
       line: MONITOR eaton@localhost 1 upsmon {{ nut_upsmon_password }} master
       insertafter: ^# MONITOR
@@ -59,7 +59,7 @@
     owner: root
     group: nut
     mode: "0640"
-  with_items:
+  loop:
     - regexp: ^(# )?CMDSCRIPT
       line: CMDSCRIPT /usr/local/bin/nut-notify
     - regexp: ^(# )?PIPEFN
