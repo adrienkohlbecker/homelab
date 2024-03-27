@@ -1,17 +1,5 @@
 ---
 
-- name: Restart compose
-  service:
-    name: compose
-    state: restarted
-  become: yes
-
-- name: Restart traefik
-  service:
-    name: traefik
-    state: restarted
-  become: yes
-
 - name: Restart gogs
   service:
     name: gogs
@@ -39,12 +27,6 @@
 - name: Restart plex
   service:
     name: plex
-    state: restarted
-  become: yes
-
-- name: Restart pihole
-  service:
-    name: pihole
     state: restarted
   become: yes
 
@@ -96,35 +78,9 @@
     state: restarted
   become: yes
 
-- name: Restart docker-hub-schedule
-  service:
-    name: docker-hub-schedule
-    state: restarted
-  become: yes
-
-- name: Reload systemd
-  shell: systemctl daemon-reload
-  become: yes
-
-- name: Reload networkctl
-  shell: networkctl reload
-  become: yes
-
-- name: Restart systemd-networkd
-  service:
-    name: systemd-networkd
-    state: restarted
-  become: yes
-
 - name: Restart datadog
   service:
     name: datadog-agent
-    state: restarted
-  become: yes
-
-- name: Restart netdata
-  service:
-    name: netdata
     state: restarted
   become: yes
 
@@ -143,12 +99,6 @@
 - name: Restart radarr
   service:
     name: radarr
-    state: restarted
-  become: yes
-
-- name: Restart log2ram
-  service:
-    name: log2ram
     state: restarted
   become: yes
 
