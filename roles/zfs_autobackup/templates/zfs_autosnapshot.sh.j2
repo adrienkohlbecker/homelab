@@ -1,0 +1,32 @@
+#!/bin/bash
+# http://redsymbol.net/articles/unofficial-bash-strict-mode/
+IFS=$'\n\t'
+set -euxo pipefail
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# zfs-autobackup \
+#   --no-send \
+#   --keep-source 10,1d1w,1w1m,1m10y \
+#   --keep-target 16384 \
+#   --allow-empty \
+#   --exclude-received \
+#   --post-snapshot-cmd 'systemctl start zfs_autosnapshot.target' \
+#   --pre-snapshot-cmd 'systemctl stop zfs_autosnapshot.target' \
+#   --verbose \
+#   bak
+
+doit () {
+  local dataset=$1
+  local mountpoint=$2
+  local destpath=$3
+
+  LAST_SNAPSHOT=$(zfs list -t snapshot -o name -s creation -r $dataset | grep "@bak-" | tail -1 | cut -d@ -f2)
+  RSYNC=(rsync -ah --delete --delete-excluded --compress --timeout 60 --log-file=/var/log/zfs_autobackup/${dataset//\//_}.log --one-file-system --exclude .DS_Store --exclude "._*" --exclude .DocumentRevisions-V100 --exclude .Trashes --exclude .TemporaryItems)
+
+  "${RSYNC[@]}" "${mountpoint%"/"}/.zfs/snapshot/$LAST_SNAPSHOT/" bunk:/volume1/Backup/$destpath
+}
+
+{% for item in bunk_sync_datasets %}
+doit {{ item.dataset }} {{ item.mountpoint }} {{ item.destpath }}
+{% endfor %}

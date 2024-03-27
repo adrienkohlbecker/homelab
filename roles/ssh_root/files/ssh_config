@@ -1,0 +1,11 @@
+Host bunk
+  Hostname 10.123.60.9
+  User ak
+
+Host *
+    ControlPath ~/.ssh/control-master-%r@%h:%p
+    ControlMaster auto
+    ControlPersist 3600
+    IdentityFile ~/.ssh/id_ed25519
+    ServerAliveInterval 30
+    ConnectTimeout 2

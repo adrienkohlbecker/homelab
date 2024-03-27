@@ -31,6 +31,7 @@
     - powertop
     - lm_sensors
     - zfs
+    - ssh_root
     - zfs_autobackup
     - podman
     # - libvirt

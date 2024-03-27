@@ -36,3 +36,7 @@ hd_idle_disks:
 hdparm_settings: {}
 
 rand_order: 1
+
+bunk_sync_datasets:
+  - { dataset: rpool/services,   mountpoint: /mnt/services, destpath: backup_services }
+  - { dataset: rpool/ROOT/jammy, mountpoint: /,             destpath: backup_rpool }

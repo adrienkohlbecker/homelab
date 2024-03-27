@@ -38,3 +38,14 @@ hd_idle_disks: []
 hdparm_settings: {}
 
 rand_order: 2
+
+bunk_sync_datasets:
+  - { dataset: beelink/arq/adrien, mountpoint: /mnt/arq/adrien,  destpath: arq/adrien }
+  - { dataset: beelink/arq/marie,  mountpoint: /mnt/arq/marie,   destpath: arq/marie }
+  - { dataset: beelink/arq/game,   mountpoint: /mnt/arq/game,    destpath: arq/game }
+  - { dataset: data/data,          mountpoint: /mnt/data,        destpath: data }
+  - { dataset: data/brumath,       mountpoint: /mnt/brumath,     destpath: brumath }
+  - { dataset: data/eckwersheim,   mountpoint: /mnt/eckwersheim, destpath: eckwersheim }
+  - { dataset: rpool/services,     mountpoint: /mnt/services,    destpath: services }
+  - { dataset: rpool/vms,          mountpoint: /mnt/vms/ssd,     destpath: vms_ssd }
+  - { dataset: rpool/ROOT/jammy,   mountpoint: /,                destpath: rpool }
