@@ -27,6 +27,8 @@
     group: root
     mode: "0600"
     backup: true
+  vars:
+    own_peer_name: "{{ inventory_hostname }}"
   register: wireguard_cfg
   become: true
   tags:
