@@ -1,6 +1,8 @@
 domain: fahm.fr
 home_subnet: 10.123.0.0/16
 external_ips:
+  backup: 10.123.0.15
+  box: 10.123.30.11
   eaton: 10.123.0.5
   homelab: 10.123.0.11
   ipmi: 10.123.0.10
