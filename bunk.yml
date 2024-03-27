@@ -1,0 +1,23 @@
+- hosts: bunk
+  tasks:
+    - name: Copy wireguard configuration
+      copy:
+        src: "{{ playbook_dir }}/wireguard/bunk/home.conf"
+        dest: /etc/wireguard/wg0.conf
+        owner: root
+        group: root
+        mode: "0600"
+        backup: true
+      become: true
+      register: wg_conf
+      tags:
+        - wireguard
+
+    - name: Restart wireguard
+      when: wg_conf.changed
+      systemd:
+        name: pkg-wg-quick@wg0
+        state: restarted
+      become: true
+      tags:
+        - wireguard

@@ -135,6 +135,8 @@ wireguard_peers:
     address: 10.123.60.9
     allowed_ips: [ 192.168.0.149/32 ]
     endpoint: bonniers.ddns.net:51820
+    post_up: iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
+    post_down: iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
     public_key: bun/Cqg3yML+J7YpC1SAxHqdK3NH1oUOSB+WFjtijhQ=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256

@@ -1,4 +1,4 @@
-{% set own_peer = wireguard_peers|selectattr("own_peer_name", "eq", own_peer_name)|first -%}
+{% set own_peer = wireguard_peers|selectattr("name", "eq", own_peer_name)|first -%}
 # {{ ansible_managed }}
 
 [Interface]
@@ -6,6 +6,12 @@
 PrivateKey = {{ own_peer.private_key }}
 Address = {{ own_peer.address }}/24
 ListenPort = 51820
+{% if 'post_up' in own_peer %}
+PostUp = {{ own_peer.post_up }}
+{% endif %}
+{% if 'post_down' in own_peer %}
+PostDown = {{ own_peer.post_up }}
+{% endif %}
 
 {% for peer in wireguard_peers if peer.public_key != own_peer.public_key %}
 {% set allowed_ips = [peer.address+'/32']+peer.get('allowed_ips', []) %}

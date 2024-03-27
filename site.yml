@@ -1,4 +1,4 @@
-- hosts: all
+- hosts: all:!bunk
   roles:
     - ansible_dependencies
     - user
@@ -42,7 +42,7 @@
     - macvlan
     - docker
 
-- hosts: all
+- hosts: all:!bunk
   roles:
     - vector
     - journald_exporter
@@ -61,7 +61,7 @@
     - minio
     - influxdb
 
-- hosts: all
+- hosts: all:!bunk
   tasks:
     - name: Check if a reboot is required
       stat:
