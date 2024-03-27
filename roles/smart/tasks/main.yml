@@ -17,8 +17,8 @@
     - smart
 
 - name: Configure smartd
-  copy:
-    src: smartd.conf
+  template:
+    src: smartd.conf.j2
     dest: /etc/smartd.conf
     owner: root
     group: root
