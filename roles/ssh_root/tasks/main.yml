@@ -22,8 +22,8 @@
     - ssh_root
 
 - name: Configure ssh
-  copy:
-    src: ssh_config
+  template:
+    src: ssh_config.j2
     dest: /root/.ssh/config
     owner: root
     group: root

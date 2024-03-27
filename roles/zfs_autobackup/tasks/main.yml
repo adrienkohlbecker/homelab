@@ -125,8 +125,8 @@
     - zfs_autobackup
 
 - name: Copy the sync script
-  copy:
-    src: zfs_autosync.sh
+  template:
+    src: zfs_autosync.sh.j2
     dest: /usr/local/bin/zfs_autosync
     mode: "0755"
     owner: root

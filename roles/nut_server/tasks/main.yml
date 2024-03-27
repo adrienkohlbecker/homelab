@@ -39,7 +39,7 @@
     - option: driver
       value: snmp-ups
     - option: port
-      value: 10.123.0.5
+      value: "{{ external_ips.eaton }}"
     - option: community
       value: public
     - option: snmp_version

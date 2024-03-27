@@ -1,5 +1,5 @@
 Host bunk
-  Hostname 10.123.60.9
+  Hostname {{ (wireguard_peers|selectattr("name", "eq", "bunk")|first).address }}
   User ak
 
 Host *
