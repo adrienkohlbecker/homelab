@@ -42,6 +42,19 @@
   tags:
     - pihole
 
+- name: Configure dnsmasq
+  template:
+    src: fahm.conf.j2
+    dest: /mnt/services/pihole/dnsmasq/fahm.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: fahm_cfg
+  become: true
+  tags:
+    - pihole
+
 - name: Create log directory
   when: not (ansible_check_mode and pihole_user.changed)
   file:
@@ -105,7 +118,7 @@
     - pihole
 
 - name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and ((systemd_unit.changed and not systemd_started.changed) or logrotate_conf.changed or logrotate_pass.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and ((systemd_unit.changed and not systemd_started.changed) or logrotate_conf.changed or logrotate_pass.changed or fahm_cfg.changed)
   systemd:
     name: pihole
     state: restarted
