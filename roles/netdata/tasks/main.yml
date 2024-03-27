@@ -34,6 +34,15 @@
   tags:
     - netdata
 
+- name: Install netdata plugins
+  apt:
+    pkg:
+      - netdata-plugin-slabinfo
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - netdata
+
 - name: Divert configuration file
   community.general.dpkg_divert:
     path: /etc/netdata/netdata.conf
@@ -136,6 +145,19 @@
   tags:
     - netdata
 
+- name: Mount debugfs
+  mount:
+    path: /sys/kernel/debug
+    src: /debugfs
+    fstype: debugfs
+    opts: defaults
+    state: mounted
+    backup: true
+  register: debugfs_mount
+  become: true
+  tags:
+    - netdata
+
 - name: Enable the service
   when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed))
   systemd:
@@ -156,7 +178,7 @@
     - netdata
 
 - name: Restart the service
-  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) and (netdata_conf.changed or prometheus_conf.changed or docker_conf.changed or netdata_health_alarm_notify.changed or smartd_log_conf.changed) and not systemd_started.changed
+  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) and (netdata_conf.changed or prometheus_conf.changed or docker_conf.changed or netdata_health_alarm_notify.changed or smartd_log_conf.changed or debugfs_mount.changed) and not systemd_started.changed
   systemd:
     name: netdata
     state: restarted
