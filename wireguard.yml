@@ -22,21 +22,40 @@
       tags:
         - wireguard
 
+    - name: Create directory
+      file:
+        dest: "{{ playbook_dir }}/wireguard/psk"
+        state: directory
+        owner: "{{ ansible_facts.user_uid }}"
+        group: "{{ ansible_facts.user_gid }}"
+        mode: "0755"
+      tags:
+        - wireguard
+
+    - name: Generate preshared key
+      shell: openssl rand -base64 32 | tr -d '\n' > {{ playbook_dir }}/wireguard/psk/{{ item[0] }}-{{ item[1] }}.psk
+      args:
+        creates: "{{ playbook_dir }}/wireguard/psk/{{ item[0] }}-{{ item[1] }}.psk"
+      loop: "{{ wireguard_peers | map(attribute='name') | sort | combinations(2) }}"
+      tags:
+        - wireguard
+
     - name: Generate wireguard configuration
       template:
         src: "{{ playbook_dir }}/roles/wireguard/templates/wg0.conf.j2"
-        dest: "{{ playbook_dir }}/wireguard/{{ item.name }}/home.conf"
+        dest: "{{ playbook_dir }}/wireguard/{{ item }}/home.conf"
         owner: "{{ ansible_facts.user_uid }}"
         group: "{{ ansible_facts.user_gid }}"
         mode: "0644"
       vars:
-        own_peer_name: "{{ item.name }}"
-      loop: "{{ wireguard_peers }}"
+        own_peer_name: "{{ item }}"
+      loop: "{{ wireguard_peers | map(attribute='name') }}"
+      register: wg_conf
       tags:
         - wireguard
 
     - name: Generate wireguard QR code
-      command: "qrencode -t png -o {{ playbook_dir }}/wireguard/{{ item.name }}/qr.png -r {{ playbook_dir }}/wireguard/{{ item.name }}/home.conf"
-      loop: "{{ wireguard_peers }}"
+      command: "qrencode -t png -o {{ playbook_dir }}/wireguard/{{ item }}/qr.png -r {{ playbook_dir }}/wireguard/{{ item }}/home.conf"
+      loop: "{{ wg_conf.results | selectattr('changed') | map(attribute='item') }}"
       tags:
         - wireguard

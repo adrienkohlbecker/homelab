@@ -15,13 +15,12 @@ PostDown = {{ own_peer.post_up }}
 
 {% for peer in wireguard_peers if peer.public_key != own_peer.public_key %}
 {% set allowed_ips = [peer.address+'/32']+peer.get('allowed_ips', []) %}
+{% set tuple = [own_peer.name, peer.name]|sort %}
 [Peer]
 # Name = {{ peer.name }}
 PublicKey = {{ peer.public_key }}
 AllowedIPs = {{ allowed_ips|join(',') }}
-{% if 'preshared_key' in peer %}
-PresharedKey = {{ peer.preshared_key }}
-{% endif %}
+PresharedKey = {{ lookup('file', playbook_dir + '/wireguard/psk/' + tuple[0] + '-' + tuple[1] + '.psk') }}
 {% if 'endpoint' in peer %}
 Endpoint = {{ peer.endpoint }}
 {% endif %}
