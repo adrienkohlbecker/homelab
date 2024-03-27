@@ -68,8 +68,8 @@
     - user
 
 - name: Configure git
-  copy:
-    src: gitconfig
+  template:
+    src: gitconfig.j2
     dest: /home/{{ ansible_ssh_user }}/.gitconfig.local
     mode: "0644"
     owner: "{{ ansible_ssh_user }}"

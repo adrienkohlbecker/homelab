@@ -28,6 +28,6 @@ zfs-autobackup \
   --set-properties readonly=on \
   --verbose \
   --ssh-config /root/.ssh/zfs_autobackup.conf \
-  --ssh-source zfs_autobackup@10.123.0.11 \
+  --ssh-source zfs_autobackup@{{ external_ips.homelab }} \
   --compress=zstd-fast \
   bak bak/homelab
