@@ -78,12 +78,6 @@
     state: restarted
   become: yes
 
-- name: Restart datadog
-  service:
-    name: datadog-agent
-    state: restarted
-  become: yes
-
 - name: Restart headphones
   service:
     name: headphones
@@ -111,12 +105,6 @@
 - name: Restart filebrowser
   service:
     name: filebrowser
-    state: restarted
-  become: yes
-
-- name: Restart monero
-  service:
-    name: monero
     state: restarted
   become: yes
 

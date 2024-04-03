@@ -1,9 +1,0 @@
-logs:
-  - type: file
-    path: /var/log/unifi/mongod.log
-    service: unifi.mongod
-    source: custom
-  - type: file
-    path: /var/log/unifi/server.log
-    service: unifi.server
-    source: custom

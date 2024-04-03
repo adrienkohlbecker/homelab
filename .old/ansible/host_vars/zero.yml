@@ -1,29 +1,11 @@
 ---
 
 deploy_user: pi
-deploy_user_group: pi
-deploy_user_password: $6$9WL6ah8B.K/Kk$x6tt2LKJxKYyXxBRIO1bkKzKvZ.eyysAMI4M60nfYIWk6nihR8W8g/bIdp9siG.X47wfQ2i9wraY1ZGH.UKrK.
-
-docker_host: false
-zfs_root: false
 
 eth0_name: "{{ ansible_default_ipv4.interface }}"
 eth1_name:
 
-wireguard_address:
-wireguard_listen_port:
-
 ddns_domain:
-
-journald_storage: volatile
-
-pihole_host:
-pihole_ip:
-pihole_host_ip:
-pihole_host_iface:
-pihole_host_mac:
-
-grub_cmdline:
 
 aws_ssm_cloudflare_email: "{{ lookup('aws_ssm', 'cloudflare.email', region='eu-west-1' ) }}"
 aws_ssm_cloudflare_api_key: "{{ lookup('aws_ssm', 'cloudflare.api_key', region='eu-west-1' ) }}"
