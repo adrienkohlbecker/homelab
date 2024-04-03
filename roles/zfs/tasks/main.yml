@@ -76,3 +76,21 @@
   become: true
   tags:
     - zfs
+
+- name: Enable zed
+  systemd:
+    name: zfs-zed
+    enabled: true
+  become: true
+  tags:
+    - zfs
+
+- name: Start zed
+  systemd:
+    name: zfs-zed
+    state: started
+  become: true
+  tags:
+    - zfs
+
+- import_tasks: mount_generator.yml

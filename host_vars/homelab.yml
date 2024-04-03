@@ -5,6 +5,10 @@ zfs_arc_min: 1073741824
 zfs_arc_max: 8589934592
 zfs_trim_pools:
   - rpool
+  - bpool
+zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
+  - rpool/ROOT/jammy
+  - bpool/BOOT/jammy
 
 libvirt_default_network: "192.168.123.1/24"
 

@@ -4,6 +4,7 @@ journald_storage: volatile
 zfs_arc_min: 536870912
 zfs_arc_max: 1073741824
 zfs_trim_pools: []
+zfs_mount_cache_datasets: [] # must list one dataset per pool. canmount must be set to "on" on this dataset
 
 libvirt_default_network: "192.168.121.1/24"
 
