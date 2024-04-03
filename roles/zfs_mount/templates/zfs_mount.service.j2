@@ -1,7 +1,6 @@
 [Unit]
 Description=ZFS mount status at boot
-Requires={{ mountpoint | regex_replace('^/$', '--') | replace('/', '-') | regex_replace('^-', '') }}.mount
-After={{ mountpoint | regex_replace('^/$', '--') | replace('/', '-') | regex_replace('^-', '') }}.mount
+After=local-fs.target
 
 [Service]
 Type=oneshot
