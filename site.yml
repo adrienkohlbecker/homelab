@@ -33,6 +33,7 @@
     - zfs
     - ssh_root
     - zfs_autobackup
+    - zfs_mount
     - podman
     # - libvirt
 

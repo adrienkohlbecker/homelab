@@ -46,6 +46,16 @@
   tags:
     - libvirt
 
+- when: zfs_root
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    dataset: rpool/vms
+    mountpoint: /var/lib/libvirt/images
+  tags:
+    - libvirt
+
 - import_role:
     name: usergroup_immediate
   when: not (ansible_check_mode and apt_install_libvirt.changed)

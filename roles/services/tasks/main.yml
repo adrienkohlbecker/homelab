@@ -30,3 +30,13 @@
   become: true
   tags:
     - services
+
+- when: zfs_root
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    dataset: rpool/services
+    mountpoint: /mnt/services
+  tags:
+    - services
