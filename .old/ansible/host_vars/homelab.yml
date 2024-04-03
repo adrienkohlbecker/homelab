@@ -1,29 +1,11 @@
 ---
 
 deploy_user: ak
-deploy_user_group: ak
-deploy_user_password: $6$9WL6ah8B.K/Kk$x6tt2LKJxKYyXxBRIO1bkKzKvZ.eyysAMI4M60nfYIWk6nihR8W8g/bIdp9siG.X47wfQ2i9wraY1ZGH.UKrK.
-
-docker_host: true
-zfs_root: true
 
 eth0_name: "{{ ansible_default_ipv4.interface }}"
 eth1_name: eno2
 
-wireguard_address: 10.123.60.1
-wireguard_listen_port: 51820
-
 ddns_domain:
-
-journald_storage: persistent
-
-pihole_host: pihole-backup.kohlby.fr
-pihole_ip: 10.123.0.16
-pihole_host_ip: 10.123.0.251
-pihole_host_iface: "{{ ansible_default_ipv4.interface }}"
-pihole_host_mac: da:0a:6f:67:c7:a0
-
-grub_cmdline: intel_iommu=on iommu=pt default_hugepagesz=1G hugepagesz=1G hugepages=8
 
 aws_ssm_cloudflare_email: "{{ lookup('aws_ssm', 'cloudflare.email', region='eu-west-1' ) }}"
 aws_ssm_cloudflare_api_key: "{{ lookup('aws_ssm', 'cloudflare.api_key', region='eu-west-1' ) }}"
@@ -60,10 +42,3 @@ aws_ssm_pi_ssh_backup_private_key: "{{ lookup('aws_ssm', 'pi.ssh_backup_private_
 aws_ssm_pihole_sync_public_key: "{{ lookup('aws_ssm', 'pi.pihole_sync_public_key', region='eu-west-1' ) }}"
 aws_ssm_pihole_sync_private_key: "{{ lookup('aws_ssm', 'pi.pihole_sync_private_key', region='eu-west-1' ) }}"
 aws_ssm_monero_password: "{{ lookup('aws_ssm', 'monero.password', region='eu-west-1' ) }}"
-
-temp_dms_zfs_health: /usr/local/bin/dms --silent b1de25d002
-temp_dms_zfs_backup: /usr/local/bin/dms --silent 2f07697414
-
-zfs_ssd_pool: rpool
-zfs_arc_min: 1073741824
-zfs_arc_max: 8589934592
