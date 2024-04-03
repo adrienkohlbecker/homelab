@@ -1,0 +1,12 @@
+[Unit]
+Description=ZFS mount status at boot
+Requires={{ mountpoint | regex_replace('^/$', '--') | replace('/', '-') | regex_replace('^-', '') }}.mount
+After={{ mountpoint | regex_replace('^/$', '--') | replace('/', '-') | regex_replace('^-', '') }}.mount
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+ExecStart=/usr/local/bin/zfs_check_mount {{ dataset }} {{ mountpoint }}
+
+[Install]
+WantedBy=multi-user.target
