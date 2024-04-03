@@ -16,7 +16,7 @@
 
     - name: validate unit file
       when: systemd_unit.changed
-      command: systemd-analyze verify /etc/systemd/system/{{ verify | default(src) }}
+      command: systemd-analyze verify /etc/systemd/system/{{ verify | default(dest) | default(src) }}
       register: systemd_verify
       changed_when: false
       failed_when: systemd_verify.rc != 0 or systemd_verify.stderr != ''
