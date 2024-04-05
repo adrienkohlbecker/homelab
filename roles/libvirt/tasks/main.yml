@@ -46,21 +46,23 @@
   tags:
     - libvirt
 
-- when: zfs_root
+- name: Install zfs mount service
+  when: zfs_root
   import_role:
     name: zfs_mount
     tasks_from: unit
   vars:
-    dataset: rpool/vms
-    mountpoint: /var/lib/libvirt/images
+    zfs_mount_dataset: rpool/vms
+    zfs_mount_mountpoint: /var/lib/libvirt/images
   tags:
     - libvirt
 
-- import_role:
+- name: Add current user to virtualization groups
+  import_role:
     name: usergroup_immediate
   when: not (ansible_check_mode and apt_install_libvirt.changed)
   vars:
-    group:
+    usergroup_immediate_group:
       - libvirt
       - kvm
   tags:
@@ -126,25 +128,26 @@
     - libvirt
 
 # assuming the random mac is not the same as libvirt initially generated at install...
-- when: not (ansible_check_mode and apt_install_python_libvirt.changed) and (ansible_libvirt_networks is undefined or (ansible_libvirt_networks['default'] and ansible_libvirt_networks['default'].macaddress != libvirt_network_mac))
+- name: Configure default network
+  when: not (ansible_check_mode and apt_install_python_libvirt.changed) and (ansible_libvirt_networks is undefined or (ansible_libvirt_networks['default'] and ansible_libvirt_networks['default'].macaddress != libvirt_network_mac))
   block:
 
-  - name: Remove default network
-    community.libvirt.virt_net:
-      name: default
-      state: absent
-    become: true
-    tags:
-      - libvirt
+    - name: Remove default network
+      community.libvirt.virt_net:
+        name: default
+        state: absent
+      become: true
+      tags:
+        - libvirt
 
-  - name: Define default network
-    community.libvirt.virt_net:
-      name: default
-      command: define
-      xml: '{{ lookup("template", "default_network.xml.j2") }}'
-    become: true
-    tags:
-      - libvirt
+    - name: Define default network
+      community.libvirt.virt_net:
+        name: default
+        command: define
+        xml: '{{ lookup("template", "default_network.xml.j2") }}'
+      become: true
+      tags:
+        - libvirt
 
 - name: Start default network
   when: not (ansible_check_mode and apt_install_python_libvirt.changed)

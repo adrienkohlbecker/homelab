@@ -1,8 +1,9 @@
-- import_role:
+- name: Install logrotate
+  import_role:
     name: apt_unit_masked
   vars:
-    pkg: logrotate
-    unit: logrotate.service
+    apt_unit_masked_pkg: logrotate
+    apt_unit_masked_unit: logrotate.service
   tags:
     - logrotate
 
@@ -23,7 +24,9 @@
     file: compression.yml
     apply:
       tags: logrotate
-  loop: "{{ logrotate_confs.files | map(attribute='path') + [ '/etc/logrotate.conf' ] }}"
+  loop: "{{ logrotate_confs.files | map(attribute='path') + ['/etc/logrotate.conf'] }}"
+  loop_control:
+    loop_var: logrotate_item
   tags:
     - logrotate
 

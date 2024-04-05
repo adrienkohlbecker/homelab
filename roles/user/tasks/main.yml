@@ -47,6 +47,9 @@
     content: "{{ ansible_ssh_user }} ALL=(ALL) NOPASSWD:ALL\n"
     validate: visudo -cf %s
     backup: true
+    owner: root
+    group: root
+    mode: "0440"
   become: true
   tags:
     - user

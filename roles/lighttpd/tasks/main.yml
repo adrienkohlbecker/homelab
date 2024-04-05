@@ -1,9 +1,9 @@
-- import_role:
+- name: Install lighttpd
+  import_role:
     name: apt_unit_masked
   vars:
-    pkg: lighttpd
-    unit:
-      - lighttpd.service
+    apt_unit_masked_pkg: lighttpd
+    apt_unit_masked_unit: lighttpd.service
   tags:
     - lighttpd
 

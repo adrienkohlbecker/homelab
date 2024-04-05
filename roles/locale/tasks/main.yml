@@ -19,6 +19,9 @@
     src: locale
     dest: /etc/default/locale
     backup: true
+    owner: root
+    group: root
+    mode: "0644"
   become: true
   tags:
     - locale

@@ -1,35 +1,36 @@
-- import_role:
+- name: unit | Install systemd mount service
+  import_role:
     name: systemd_unit
     tasks_from: template
   vars:
-    src: zfs_mount.service
-    dest: zfs_mount{{ mountpoint | regex_replace('^/$', 'root') | replace('/', '_') }}.service
+    systemd_unit_src: zfs_mount.service
+    systemd_unit_dest: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', 'root') | replace('/', '_') }}.service
   tags:
     - zfs_mount
 
-- name: Enable the service
+- name: unit | Enable the service
   when: not (ansible_check_mode and systemd_unit.changed)
   systemd:
-    name: zfs_mount{{ mountpoint | regex_replace('^/$', 'root') | replace('/', '_') }}
+    name: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', 'root') | replace('/', '_') }}
     enabled: true
   become: true
   tags:
     - zfs_mount
 
-- name: Start the service
+- name: unit | Start the service
   when: not (ansible_check_mode and systemd_unit.changed)
   systemd:
-    name: zfs_mount{{ mountpoint | regex_replace('^/$', 'root') | replace('/', '_') }}
+    name: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', 'root') | replace('/', '_') }}
     state: started
   register: systemd_started
   become: true
   tags:
     - zfs_mount
 
-- name: Restart the service
+- name: unit | Restart the service
   when: not (ansible_check_mode and systemd_unit.changed) and systemd_unit.changed and not systemd_started.changed
   systemd:
-    name: zfs_mount{{ mountpoint | regex_replace('^/$', 'root') | replace('/', '_') }}
+    name: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', 'root') | replace('/', '_') }}
     state: restarted
   become: true
   tags:

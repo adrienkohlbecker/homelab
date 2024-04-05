@@ -1,4 +1,4 @@
-- name: Create the macvlan docker network
+- name: docker | Create the macvlan docker network
   docker_network:
     name: macvlan_net
     driver: macvlan

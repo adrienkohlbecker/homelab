@@ -25,12 +25,13 @@
   tags:
     - netdata
 
-- import_role:
+- name: Install netdata
+  import_role:
     name: apt_unit_masked
   vars:
-    pkg: netdata
-    unit: netdata.service
-    condition: "{{ not (ansible_check_mode and apt_repository_netdata.changed) }}"
+    apt_unit_masked_pkg: netdata
+    apt_unit_masked_unit: netdata.service
+    apt_unit_masked_condition: "{{ not (ansible_check_mode and apt_repository_netdata.changed) }}"
   tags:
     - netdata
 

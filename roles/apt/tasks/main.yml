@@ -12,7 +12,7 @@
   tags:
     - apt
 
-- name: force apt update
+- name: Force apt update
   when: apt_mirror.changed
   apt:
     update_cache: true
@@ -20,7 +20,7 @@
   tags:
     - apt
 
-- name: apt safe-upgrade
+- name: Run apt safe-upgrade
   apt:
     upgrade: safe
     autoremove: true

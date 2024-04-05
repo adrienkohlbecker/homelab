@@ -10,7 +10,7 @@
     - ssh_root
 
 - name: Generate an OpenSSH keypair with a different algorithm (dsa)
-  openssh_keypair:
+  community.crypto.openssh_keypair:
     path: /root/.ssh/id_ed25519
     type: ed25519
     owner: root

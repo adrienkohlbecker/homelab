@@ -13,9 +13,9 @@
     state: absent
   become: true
   loop:
-      - lxd
-      - core20
-      - snapd
+    - lxd
+    - core20
+    - snapd
   tags:
     - cleanup
 

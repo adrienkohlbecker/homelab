@@ -1,11 +1,11 @@
 ---
 
-- import_role:
+- name: Install smartmontools
+  import_role:
     name: apt_unit_masked
   vars:
-    pkg: smartmontools
-    unit:
-      - smartmontools.service
+    apt_unit_masked_pkg: smartmontools
+    apt_unit_masked_unit: smartmontools.service
   tags:
     - smart
 

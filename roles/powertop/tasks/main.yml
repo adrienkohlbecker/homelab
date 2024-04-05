@@ -8,10 +8,11 @@
   tags:
     - powertop
 
-- import_role:
+- name: Install powertop service
+  import_role:
     name: systemd_unit
   vars:
-    src: powertop.service
+    systemd_unit_src: powertop.service
   tags:
     - powertop
 

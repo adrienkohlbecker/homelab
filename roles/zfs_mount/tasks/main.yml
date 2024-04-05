@@ -10,20 +10,22 @@
   tags:
     - zfs_mount
 
-- import_role:
+- name: Add zfs mount service for root pool
+  import_role:
     name: zfs_mount
     tasks_from: unit
   vars:
-    dataset: rpool/ROOT/jammy
-    mountpoint: /
+    zfs_mount_dataset: rpool/ROOT/jammy
+    zfs_mount_mountpoint: /
   tags:
     - zfs_mount
 
-- import_role:
+- name: Add zfs mount service for boot pool
+  import_role:
     name: zfs_mount
     tasks_from: unit
   vars:
-    dataset: bpool/BOOT/jammy
-    mountpoint: /boot
+    zfs_mount_dataset: bpool/BOOT/jammy
+    zfs_mount_mountpoint: /boot
   tags:
     - zfs_mount

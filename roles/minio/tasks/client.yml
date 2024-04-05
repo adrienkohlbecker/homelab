@@ -1,4 +1,4 @@
-- name: Gather package facts
+- name: client | Gather package facts
   package_facts:
     manager: apt
   no_log: true
@@ -6,10 +6,14 @@
   tags:
     - minio
 
-- when: '"mcli" not in ansible_facts.packages or ansible_facts.packages["mcli"][0].version != "20221029100923.0.0"'
+- name: client | Install mcli if needed
+  when: '"mcli" not in ansible_facts.packages or ansible_facts.packages["mcli"][0].version != "20221029100923.0.0"'
+  become: true
+  tags:
+    - minio
   block:
 
-    - name: Download mcli deb
+    - name: client | Download mcli deb
       check_mode: false
       get_url:
         url: https://dl.min.io/client/mc/release/linux-amd64/archive/mcli_20221029100923.0.0_amd64.deb
@@ -19,21 +23,17 @@
         group: root
         checksum: sha256:796d0e7a5c6e59020e02ecb3a46f9ec771a26ecc0dfc45d76fe6e351d75cf4c7
 
-    - name: Install mcli
+    - name: client | Install mcli
       apt:
         deb: /tmp/mcli.deb
       register: mcli_installed
 
-    - name: Delete deb file
+    - name: client | Delete deb file
       file:
-         path: /tmp/mcli.deb
-         state: absent
+        path: /tmp/mcli.deb
+        state: absent
 
-  become: true
-  tags:
-    - minio
-
-- name: Configure alias
+- name: client | Configure alias
   when: not (ansible_check_mode and mcli_installed.changed)
   command: mcli alias set default https://minio.{{ inventory_hostname }}.{{ domain }} {{ minio_root_user }} {{ minio_root_password }}
   args:

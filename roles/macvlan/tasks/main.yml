@@ -15,11 +15,12 @@
   tags:
     - macvlan
 
-- import_role:
+- name: Install mac0 service
+  import_role:
     name: systemd_unit
     tasks_from: template
   vars:
-    src: mac0.service
+    systemd_unit_src: mac0.service
   tags:
     - macvlan
 
@@ -51,6 +52,6 @@
   tags:
     - macvlan
 
-- name: configure docker network
+- name: Configure docker network
   include_tasks: docker.yml
   when: macvlan_enable_docker

@@ -1,4 +1,5 @@
-- hosts: all:!bunk
+- name: Base installation
+  hosts: all:!bunk
   roles:
     - ansible_dependencies
     - user
@@ -37,14 +38,16 @@
     - podman
     # - libvirt
 
-- hosts: box
+- name: Unused roles (dev box only)
+  hosts: box
   roles:
     - log2ram
     - qemu_guest
     - macvlan
     - docker
 
-- hosts: all:!bunk
+- name: Add more services
+  hosts: all:!bunk
   roles:
     - vector
     - journald_exporter
@@ -57,13 +60,15 @@
     - services
     - pihole
 
-- hosts: box,homelab
+- name: Homelab roles
+  hosts: box,homelab
   roles:
     - ipmi
     - minio
     - influxdb
 
-- hosts: all:!bunk
+- name: Reboot check
+  hosts: all:!bunk
   tasks:
     - name: Check if a reboot is required
       stat:
@@ -72,7 +77,7 @@
       tags:
         - always
 
-    - name: restart machine
+    - name: Restart machine
       reboot:
       become: true
       when: reboot_required.stat.exists

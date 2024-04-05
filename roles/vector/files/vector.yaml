@@ -78,7 +78,7 @@ transforms:
     # message format:
     # update-alternatives 2023-11-06 11:50:17: run with --install /usr/bin/editor editor ...
     type: remap
-    inputs: [file_alternatives]
+    inputs: [ file_alternative ]
     timezone: local
     drop_on_error: true
     reroute_dropped: true
@@ -93,7 +93,7 @@ transforms:
     # ERROR: apport (pid 54650) Wed Nov  8 11:18:12 2023: executable: /usr/sbin/ipmiseld (command line "/usr/sbin/ipmiseld")
     # ERROR: apport (pid 54650) Wed Nov  8 11:18:12 2023: apport: report /var/crash/_usr_sbin_ipmiseld.0.crash already exists and unseen, skipping to avoid disk usage DoS
     type: remap
-    inputs: [file_apport]
+    inputs: [ file_apport ]
     timezone: local
     drop_on_error: true
     reroute_dropped: true
@@ -122,7 +122,7 @@ transforms:
     # Install: vector:amd64 (0.34.0-1)
     # End-Date: 2023-11-12  10:31:33
     type: reduce
-    inputs: [file_apt_history]
+    inputs: [ file_apt_history ]
     starts_when: match(string!(.message), r'^Start-Date')
     merge_strategies:
       message: concat_newline
@@ -139,14 +139,14 @@ transforms:
     # Processing triggers for man-db (2.10.2-1) ...
     # Log ended: 2023-11-12  14:02:02
     type: reduce
-    inputs: [file_apt_term]
+    inputs: [ file_apt_term ]
     starts_when: match(string!(.message), r'^Log started')
     merge_strategies:
       message: concat_newline
 
   transformed_apt_history:
     type: remap
-    inputs: [reduced_apt_history]
+    inputs: [ reduced_apt_history ]
     timezone: local
     drop_on_error: true
     reroute_dropped: true
@@ -161,7 +161,7 @@ transforms:
 
   transformed_apt_term:
     type: remap
-    inputs: [reduced_apt_term]
+    inputs: [ reduced_apt_term ]
     timezone: local
     drop_on_error: true
     reroute_dropped: true
@@ -188,7 +188,7 @@ transforms:
     # message format:
     # 2023-11-12 14:02:02 install ncdu:amd64 <none> 1.15.1-1
     type: remap
-    inputs: [file_dpkg]
+    inputs: [ file_dpkg ]
     timezone: local
     drop_on_error: true
     reroute_dropped: true
@@ -201,7 +201,7 @@ transforms:
     # message format:
     # 2023-05-31 06:33:01,196 WARNING Found /var/run/reboot-required, rebooting
     type: remap
-    inputs: [file_unattended_upgrades]
+    inputs: [ file_unattended_upgrades ]
     timezone: local
     drop_on_error: true
     reroute_dropped: true

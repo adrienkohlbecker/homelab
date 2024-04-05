@@ -18,7 +18,7 @@
   tags:
     - traefik
 
-- name: check if traefik is installed
+- name: Check if traefik is installed
   command: traefik version
   register: traefik_check
   failed_when: false
@@ -28,7 +28,11 @@
   tags:
     - traefik
 
-- when: '"2.10.6" not in traefik_check.stdout'
+- name: Install traefik if needed
+  when: '"2.10.6" not in traefik_check.stdout'
+  become: true
+  tags:
+    - traefik
   block:
 
     - name: Download traefik
@@ -55,12 +59,8 @@
 
     - name: Delete tar file
       file:
-         path: /tmp/traefik.tar.gz
-         state: absent
-
-  become: true
-  tags:
-    - traefik
+        path: /tmp/traefik.tar.gz
+        state: absent
 
 - name: Create configuration directory
   file:
@@ -133,11 +133,12 @@
   tags:
     - traefik
 
-- import_role:
+- name: Install traefik service
+  import_role:
     name: systemd_unit
     tasks_from: template
   vars:
-    src: traefik.service
+    systemd_unit_src: traefik.service
   tags:
     - traefik
 
