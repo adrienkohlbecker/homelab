@@ -1,4 +1,5 @@
-- hosts: bunk
+- name: Configure bunk
+  hosts: bunk
   tasks:
     - name: Copy wireguard configuration
       copy:

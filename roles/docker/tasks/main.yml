@@ -1,8 +1,9 @@
-- import_role:
+- name: Install docker
+  import_role:
     name: apt_unit_masked
   vars:
-    pkg: docker.io
-    unit: docker.service
+    apt_unit_masked_pkg: docker.io
+    apt_unit_masked_unit: docker.service
   tags:
     - docker
 
@@ -93,11 +94,12 @@
   tags:
     - docker
 
-- import_role:
+- name: Add user to docker group
+  import_role:
     name: usergroup_immediate
   when: not (ansible_check_mode and apt_unit_masked.changed)
   vars:
-    group: docker
+    usergroup_immediate_group: docker
   tags:
     - docker
 
@@ -106,6 +108,9 @@
     dest: /etc/default/grub.d/99-docker.cfg
     content: "GRUB_CMDLINE_LINUX=\"$GRUB_CMDLINE_LINUX cgroup_enable=memory swapaccount=1\"\n"
     backup: true
+    owner: root
+    group: root
+    mode: "0644"
   register: grub_cfg
   become: true
   tags:
@@ -114,6 +119,7 @@
 - name: Update grub
   when: grub_cfg.changed
   command: update-grub
+  changed_when: true
   become: true
   tags:
     - docker
@@ -123,6 +129,9 @@
   file:
     path: /var/run/reboot-required
     state: touch
+    owner: root
+    group: root
+    mode: "0644"
   become: true
   tags:
     - docker

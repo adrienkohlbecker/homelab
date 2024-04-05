@@ -22,7 +22,8 @@
 
 - name: Apply iptables v4
   when: iptables_v4.changed
-  shell: iptables-restore -n /etc/iptables/rules.v4
+  command: iptables-restore -n /etc/iptables/rules.v4
+  changed_when: true
   become: true
   tags:
     - iptables
@@ -42,7 +43,8 @@
 
 - name: Apply iptables v6
   when: iptables_v6.changed
-  shell: ip6tables-restore -n /etc/iptables/rules.v6
+  command: ip6tables-restore -n /etc/iptables/rules.v6
+  changed_when: true
   become: true
   tags:
     - iptables

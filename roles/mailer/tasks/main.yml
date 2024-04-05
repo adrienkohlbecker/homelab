@@ -1,12 +1,13 @@
-- import_role:
+- name: Install postfix
+  import_role:
     name: apt_unit_masked
   vars:
-    pkg: postfix
-    unit: postfix.service
+    apt_unit_masked_pkg: postfix
+    apt_unit_masked_unit: postfix.service
   tags:
     - mailer
 
-- name: libsasl2 (for postfix TLS authentication) and mailutils (for sending emails)
+- name: Install libsasl2 (for postfix TLS authentication) and mailutils (for sending emails)
   apt:
     pkg:
       - libsasl2-modules
@@ -43,7 +44,8 @@
     - mailer
 
 - name: Update postfix credentials
-  shell: postmap /etc/postfix/sasl_passwd
+  command: postmap /etc/postfix/sasl_passwd
+  changed_when: true
   become: true
   when: sasl_auth.changed
   tags:
@@ -91,9 +93,10 @@
     - mailer
 
 - name: Rebuild aliases database
-  shell: newaliases
+  command: newaliases
   become: true
   when: aliases.changed
+  changed_when: true
   tags:
     - mailer
 

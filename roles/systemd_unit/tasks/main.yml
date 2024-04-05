@@ -1,12 +1,12 @@
 # Note: with ubuntu 24.04, may be able to use `validate: systemd-analyze verify %s:foo.service`,
 # although it won't fail for warnings like undefined keys?
-- name: systemd service
+- name: Systemd service
   block:
     - name: Copy the unit file
-      when: condition | default(true)
+      when: systemd_unit_condition | default(true)
       copy:
-        src: "{{ src }}"
-        dest: "/etc/systemd/system/{{ dest | default(src) }}"
+        src: "{{ systemd_unit_src }}"
+        dest: "/etc/systemd/system/{{ systemd_unit_dest | default(systemd_unit_src) }}"
         owner: root
         group: root
         mode: "0644"
@@ -14,9 +14,9 @@
       become: true
       register: systemd_unit
 
-    - name: validate unit file
+    - name: Validate unit file
       when: systemd_unit.changed
-      command: systemd-analyze verify /etc/systemd/system/{{ verify | default(dest) | default(src) }}
+      command: systemd-analyze verify /etc/systemd/system/{{ systemd_unit_verify | default(systemd_unit_dest) | default(systemd_unit_src) }}
       register: systemd_verify
       changed_when: false
       failed_when: systemd_verify.rc != 0 or systemd_verify.stderr != ''
@@ -32,24 +32,28 @@
     - name: Copy backup file to original
       when: '"backup_file" in systemd_unit'
       copy:
-         remote_src: true
-         dest: "/etc/systemd/system/{{ dest | default(src) }}"
-         src: "{{ systemd_unit.backup_file }}"
+        remote_src: true
+        dest: "/etc/systemd/system/{{ systemd_unit_dest | default(systemd_unit_src) }}"
+        src: "{{ systemd_unit.backup_file }}"
+        owner: root
+        group: root
+        mode: "0644"
       become: true
 
     - name: Delete backup file
       when: '"backup_file" in systemd_unit'
       file:
-         path: "{{ systemd_unit.backup_file }}"
-         state: absent
+        path: "{{ systemd_unit.backup_file }}"
+        state: absent
       become: true
 
     - name: Delete newly added file
       when: '"backup_file" not in systemd_unit'
       file:
-         path: /etc/systemd/system/{{ dest | default(src) }}
-         state: absent
+        path: /etc/systemd/system/{{ systemd_unit_dest | default(systemd_unit_src) }}
+        state: absent
       become: true
 
-    - fail:
+    - name: Record failure
+      fail:
         msg: "Unable to install systemd unit"

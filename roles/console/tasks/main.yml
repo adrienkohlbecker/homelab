@@ -23,6 +23,7 @@
 - name: Update initramfs
   when: console_cfg.changed
   command: update-initramfs -u -k all
+  changed_when: true
   become: true
   tags:
     - console
@@ -32,6 +33,9 @@
   file:
     path: /var/run/reboot-required
     state: touch
+    owner: root
+    group: root
+    mode: "0644"
   become: true
   tags:
     - console

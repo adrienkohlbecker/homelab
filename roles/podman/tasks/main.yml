@@ -1,8 +1,9 @@
-- import_role:
+- name: Install podman
+  import_role:
     name: apt_unit_masked
   vars:
-    pkg: podman
-    unit:
+    apt_unit_masked_pkg: podman
+    apt_unit_masked_unit:
       - podman.service
       - podman.socket
   tags:
@@ -27,16 +28,17 @@
   tags:
     - podman
 
-- import_role:
+- name: Install podman socket override
+  import_role:
     name: systemd_unit
   vars:
-    src: override_socket.conf
-    dest: podman.socket.d/override.conf
-    verify: podman.socket
+    systemd_unit_src: override_socket.conf
+    systemd_unit_dest: podman.socket.d/override.conf
+    systemd_unit_verify: podman.socket
   tags:
     - podman
 
-- name: save return value
+- name: Save return value
   set_fact:
     socket_systemd_unit: '{{ systemd_unit }}'
   tags:
@@ -53,12 +55,13 @@
   tags:
     - podman
 
-- import_role:
+- name: Install postman service override
+  import_role:
     name: systemd_unit
   vars:
-    src: override_service.conf
-    dest: podman.service.d/override.conf
-    verify: podman.service
+    systemd_unit_src: override_service.conf
+    systemd_unit_dest: podman.service.d/override.conf
+    systemd_unit_verify: podman.service
   tags:
     - podman
 

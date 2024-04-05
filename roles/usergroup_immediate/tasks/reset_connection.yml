@@ -1,4 +1,4 @@
-- name: Reset connection to apply user group change
+- name: reset_connection | Reset connection to apply user group change
   meta: reset_connection
   tags:
     - always

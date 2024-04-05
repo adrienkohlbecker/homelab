@@ -25,6 +25,9 @@
     dest: /etc/default/grub.d/90-custom.cfg
     validate: grub-script-check %s
     backup: true
+    owner: root
+    group: root
+    mode: "0644"
   register: grub_cfg
   become: true
   tags:
@@ -33,6 +36,7 @@
 - name: Update grub
   when: grub_cfg.changed
   command: update-grub
+  changed_when: true
   become: true
   tags:
     - grub
@@ -42,6 +46,9 @@
   file:
     path: /var/run/reboot-required
     state: touch
+    owner: root
+    group: root
+    mode: "0644"
   become: true
   tags:
     - grub

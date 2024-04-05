@@ -26,6 +26,7 @@
   when: zfs_module_conf.changed
   command: update-initramfs -u -k all
   become: true
+  changed_when: true
   tags:
     - zfs
 
@@ -34,6 +35,9 @@
   file:
     path: /var/run/reboot-required
     state: touch
+    owner: root
+    group: root
+    mode: "0644"
   become: true
   tags:
     - zfs
@@ -93,4 +97,5 @@
   tags:
     - zfs
 
-- import_tasks: mount_generator.yml
+- name: Setup mount generator
+  import_tasks: mount_generator.yml

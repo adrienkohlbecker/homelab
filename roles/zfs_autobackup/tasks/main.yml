@@ -43,7 +43,7 @@
 
 - name: Set properties on datasets
   when: zfs_root
-  zfs:
+  community.general.zfs:
     name: "{{ item.dataset }}"
     state: present
     extra_zfs_properties:
@@ -53,10 +53,11 @@
   tags:
     - zfs_autobackup
 
-- import_role:
+- name: Add zfs_autosnapshot.target systemd unit
+  import_role:
     name: systemd_unit
   vars:
-    src: zfs_autosnapshot.target
+    systemd_unit_src: zfs_autosnapshot.target
   tags:
     - zfs_autobackup
 
@@ -171,5 +172,6 @@
   tags:
     - zfs_autobackup
 
-- import_tasks: source.yml
+- name: Configure host as a source for backups
+  import_tasks: source.yml
   when: inventory_hostname != 'backup'

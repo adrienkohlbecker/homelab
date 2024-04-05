@@ -37,6 +37,7 @@
   when: timezone_cfg.changed or localtime_cfg.changed
   command: update-initramfs -u -k all
   become: true
+  changed_when: true
   tags:
     - timezone
 
@@ -45,6 +46,9 @@
   file:
     path: /var/run/reboot-required
     state: touch
+    owner: root
+    group: root
+    mode: "0644"
   become: true
   tags:
     - timezone

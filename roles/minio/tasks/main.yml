@@ -6,7 +6,11 @@
   tags:
     - minio
 
-- when: '"minio" not in ansible_facts.packages or ansible_facts.packages["minio"][0].version != "20221024183507.0.0"'
+- name: Install minio if needed
+  when: '"minio" not in ansible_facts.packages or ansible_facts.packages["minio"][0].version != "20221024183507.0.0"'
+  become: true
+  tags:
+    - minio
   block:
 
     - name: Download minio deb
@@ -26,12 +30,8 @@
 
     - name: Delete deb file
       file:
-         path: /tmp/minio.deb
-         state: absent
-
-  become: true
-  tags:
-    - minio
+        path: /tmp/minio.deb
+        state: absent
 
 - name: Add minio group
   group:
@@ -89,13 +89,14 @@
   tags:
     - minio
 
-- import_role:
+- name: Install minio service override
+  import_role:
     name: systemd_unit
   vars:
-    src: override_service.conf
-    dest: minio.service.d/override.conf
-    verify: minio.service
-    condition: "{{ zfs_root }}"
+    systemd_unit_src: override_service.conf
+    systemd_unit_dest: minio.service.d/override.conf
+    systemd_unit_verify: minio.service
+    systemd_unit_condition: "{{ zfs_root }}"
   tags:
     - minio
 
@@ -139,4 +140,5 @@
   tags:
     - minio
 
-- import_tasks: client.yml
+- name: Configure minio client
+  import_tasks: client.yml

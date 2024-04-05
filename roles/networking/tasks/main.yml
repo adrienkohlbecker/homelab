@@ -24,7 +24,8 @@
 
 - name: Apply netplan
   when: netplan_cfg.changed
-  shell: netplan apply
+  command: netplan apply
+  changed_when: true
   become: true
   tags:
     - networking

@@ -1,4 +1,4 @@
-- name: Add zfs_autobackup group
+- name: source | Add zfs_autobackup group
   group:
     name: zfs_autobackup
     system: true
@@ -6,7 +6,7 @@
   tags:
     - zfs_autobackup
 
-- name: Add zfs_autobackup user
+- name: source | Add zfs_autobackup user
   user:
     name: zfs_autobackup
     group: zfs_autobackup
@@ -16,8 +16,8 @@
   tags:
     - zfs_autobackup
 
-- name: Add authorized keys
-  authorized_key:
+- name: source | Add authorized keys
+  ansible.posix.authorized_key:
     user: zfs_autobackup
     key: "{{ ssh_root_at_backup_public_key }}"
     exclusive: true

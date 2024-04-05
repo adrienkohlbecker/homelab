@@ -67,12 +67,13 @@
   tags:
     - pihole
 
-- import_role:
+- name: Install pihole service
+  import_role:
     name: systemd_unit
     tasks_from: template
   vars:
-    src: pihole.service
-    condition: "{{ not (ansible_check_mode and pihole_user.changed) }}"
+    systemd_unit_src: pihole.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and pihole_user.changed) }}"
   tags:
     - pihole
 
@@ -95,12 +96,13 @@
   tags:
     - pihole
 
-- import_role:
+- name: Configure pihole logrotate
+  import_role:
     name: logrotate
     tasks_from: compression
   vars:
-    item: /mnt/services/pihole/etc/logrotate
-    condition: "{{ not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed)) }}"
+    logrotate_item: /mnt/services/pihole/etc/logrotate
+    logrotate_condition: "{{ not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed)) }}"
   tags:
     - pihole
 
@@ -126,8 +128,9 @@
   tags:
     - pihole
 
-- set_fact:
-    pihole_list_update_cmd: /usr/bin/podman run --rm --quiet --volume /mnt/services/pihole/etc:/etc/pihole --entrypoint "/usr/bin/php" --env ADLISTS_URL="{{ pihole_adlists | join(' ')}}" --env WHITELIST_URL="{{ pihole_whitelists | join(' ')}}" docker.io/jacklul/pihole:latest /usr/local/sbin/pihole-updatelists --no-gravity --no-reload --env
+- name: Compute list update command
+  set_fact:
+    pihole_list_update_cmd: /usr/bin/podman run --rm --quiet --volume /mnt/services/pihole/etc:/etc/pihole --entrypoint "/usr/bin/php" --env ADLISTS_URL="{{ pihole_adlists | join(' ') }}" --env WHITELIST_URL="{{ pihole_whitelists | join(' ') }}" docker.io/jacklul/pihole:latest /usr/local/sbin/pihole-updatelists --no-gravity --no-reload --env
   tags:
     - pihole
 

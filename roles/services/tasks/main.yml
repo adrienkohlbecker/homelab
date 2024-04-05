@@ -31,12 +31,13 @@
   tags:
     - services
 
-- when: zfs_root
+- name: Set up mount service for rpool/services
+  when: zfs_root
   import_role:
     name: zfs_mount
     tasks_from: unit
   vars:
-    dataset: rpool/services
-    mountpoint: /mnt/services
+    zfs_mount_dataset: rpool/services
+    zfs_mount_mountpoint: /mnt/services
   tags:
     - services
