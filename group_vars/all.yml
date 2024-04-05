@@ -50,6 +50,7 @@ wireguard_peers:
   - name: homelab
     address: 10.123.60.1
     endpoint: home.fahm.fr:51820
+    allowed_ips: [ 10.123.0.11/32 ]
     public_key: lab/YYyxFkJJt86HfCnauipuYE4pBzBcDOkrXTzCmTE=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -62,6 +63,7 @@ wireguard_peers:
   - name: backup
     address: 10.123.60.2
     endpoint: home.fahm.fr:51821
+    allowed_ips: [ 10.123.0.15/32 ]
     public_key: bak/nQ8PyILF2E5Ith7iHJZ7R67chEfWHihujiqyL1g=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -74,6 +76,7 @@ wireguard_peers:
   - name: box
     address: 10.123.60.3
     endpoint: home.fahm.fr:51823
+    allowed_ips: [ 10.123.30.11/32 ]
     public_key: box/F8UYPGCYhjT5eH3stLTk9wZalaH2z1VIE1EYDVg=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
