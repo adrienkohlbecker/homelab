@@ -19,7 +19,7 @@ PostDown = {{ own_peer.post_up }}
 [Peer]
 # Name = {{ peer.name }}
 PublicKey = {{ peer.public_key }}
-AllowedIPs = {{ allowed_ips|join(',') }}
+AllowedIPs = {{ allowed_ips|join(', ') }}
 PresharedKey = {{ lookup('file', playbook_dir + '/wireguard/psk/' + tuple[0] + '-' + tuple[1] + '.psk') }}
 {% if 'endpoint' in peer %}
 Endpoint = {{ peer.endpoint }}
