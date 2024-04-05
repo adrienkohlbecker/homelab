@@ -50,12 +50,15 @@
       vars:
         own_peer_name: "{{ item }}"
       loop: "{{ wireguard_peers | map(attribute='name') }}"
-      register: wg_conf
       tags:
         - wireguard
 
     - name: Generate wireguard QR code
-      command: "qrencode -t png -o {{ playbook_dir }}/wireguard/{{ item }}/qr.png -r {{ playbook_dir }}/wireguard/{{ item }}/home.conf"
-      loop: "{{ wg_conf.results | selectattr('changed') | map(attribute='item') }}"
+      shell: set -euo pipefail; if [ -f {{ playbook_dir }}/wireguard/{{ item }}/qr.png ]; then bfr=`md5sum {{ playbook_dir }}/wireguard/{{ item }}/qr.png | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o {{ playbook_dir }}/wireguard/{{ item }}/qr.png -r {{ playbook_dir }}/wireguard/{{ item }}/home.conf; aftr=`md5sum {{ playbook_dir }}/wireguard/{{ item }}/qr.png | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
+      args:
+        executable: /bin/bash
+      register: qr_generate_cmd
+      changed_when: "'file updated' in qr_generate_cmd.stdout"
+      loop: "{{ wireguard_peers | map(attribute='name') }}"
       tags:
         - wireguard
