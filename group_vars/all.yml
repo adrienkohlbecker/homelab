@@ -6,6 +6,11 @@ external_ips:
   eaton: 10.123.0.4
   homelab: 10.123.0.2
   udm: 10.123.0.1
+  marantz: 10.123.2.2
+  printer: 10.123.2.3
+  siglent: 10.123.2.4
+  tubeszb: 10.123.4.2
+  otgw: 10.123.4.3
 
 ssh_public_keys: |
   ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC/x/7HjVzMzqx9r8sRtZxgviFo7V35svZXaZAKGd6BJLUS+qwYreSRCkyjJHmwFyDyUR2sOJmo69weV3XYs0GOvL72t23czWUDDU/fXQWmIcWHPyU+nUEN3VKHgh5zed002ACEivTDUvSjmprBGSx5YZNfZjnqtd+X+kVojwI5BTWyQMNJGSAPf/I7Zdt01d8Klq5eKs30QAdMCiwQ7qyME31gk7dbWVrcf1tc4VCbKbL0co1dj3A5tRe6TtZ/OObj5EHj0UZNmG16PY9cbi3kkwZ5Wxb2e6LHelgUjWn7a1OGRSox5IkTjDNUJ/71p+qoYGjH7V+UtvUBx2f3gG2A4oeduUpthfDUjDW4Rii43miMZJ2OAH95nY0NtDTdek6ZHqMwyqIEZdxV3QiDO1qIeCViJ3xBn3xHJb4oZs0nTOugrlcDXziQ5bfbvkMUpGkkM26+/S1iaA/rtel40P70obZx07s0SA3wTREBurP+wd7mrpp2rmpyqLlWygyorf9DMPMpj0YeAuPV5hl/qQdM0qVG+u+leY4GzrdO69vh3rI7edTROlkzSTmaKfyZ8t71O/0i3y+GsQxVx3z62zvgQ0chvUIsUSWUOGFZDBLM0X7z9MddGqAqaf5MnkQ6NEdE4hYKXtg+u0vYcfwjGO06/Rbc0/V9y68OZoJxMeqsXw== laptop
@@ -43,6 +48,15 @@ cloudflare_api_token: !vault |
           3762383037616234660a393263653164636135336338366464653661363561613630653731306430
           38333163633466643465623138643631393232363162653438653639636331306231633733343330
           3565393161386565396535626334326431386238353533336161
+
+traefik_hosts:
+  marantz: 'https://{{ external_ips.marantz }}:10443/'
+  printer: 'http://{{ external_ips.printer }}:80/'
+  siglent: 'http://{{ external_ips.siglent }}:80/'
+  unifi: 'https://{{ external_ips.udm }}:443/'
+  ups: 'https://{{ external_ips.eaton }}:443/'
+  tubeszb: 'http://{{ external_ips.tubeszb }}:80/'
+  otgw: 'http://{{ external_ips.otgw }}:80/'
 
 # wireguard-vanity-keygen -c $NAME/
 wireguard_peers:

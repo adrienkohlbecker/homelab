@@ -54,8 +54,6 @@
     - journald_exporter
     - certbot
     - traefik
-    - traefik_unifi
-    - traefik_ups
     - netdata
     - services
     - pihole
