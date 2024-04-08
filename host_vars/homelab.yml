@@ -10,13 +10,13 @@ zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set
   - rpool/ROOT/jammy
   - bpool/BOOT/jammy
 
-libvirt_default_network: "192.168.123.1/24"
+libvirt_default_network: 10.123.48.0/24
 
 sensor_modules: []
 
 macvlan_enable_docker: false
 macvlan_parent: eth0
-macvlan_subnet: 10.123.0.32/28
+macvlan_subnet: 10.123.1.0/27
 
 log2ram_size:
 
