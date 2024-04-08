@@ -78,7 +78,7 @@ transforms:
     # message format:
     # update-alternatives 2023-11-06 11:50:17: run with --install /usr/bin/editor editor ...
     type: remap
-    inputs: [ file_alternative ]
+    inputs: [ file_alternatives ]
     timezone: local
     drop_on_error: true
     reroute_dropped: true

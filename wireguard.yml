@@ -56,7 +56,7 @@
         - wireguard
 
     - name: Generate wireguard QR code
-      shell: set -euo pipefail; if [ -f {{ playbook_dir }}/wireguard/{{ item }}/qr.png ]; then bfr=`md5sum {{ playbook_dir }}/wireguard/{{ item }}/qr.png | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o {{ playbook_dir }}/wireguard/{{ item }}/qr.png -r {{ playbook_dir }}/wireguard/{{ item }}/home.conf; aftr=`md5sum {{ playbook_dir }}/wireguard/{{ item }}/qr.png | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
+      shell: set -euo pipefail; if [ -f "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" ]; then bfr=`md5sum "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" -r "{{ playbook_dir }}/wireguard/{{ item }}/home.conf"; aftr=`md5sum "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
       args:
         executable: /bin/bash
       register: qr_generate_cmd
