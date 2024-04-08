@@ -1,10 +1,10 @@
 domain: fahm.fr
 home_subnet: 10.123.0.0/16
 external_ips:
-  backup: 10.123.0.15
-  box: 10.123.30.11
-  eaton: 10.123.0.5
-  homelab: 10.123.0.11
+  backup: 10.123.0.3
+  box: 10.123.0.5
+  eaton: 10.123.0.4
+  homelab: 10.123.0.2
   ipmi: 10.123.0.10
   udm: 10.123.0.1
 
@@ -48,9 +48,9 @@ cloudflare_api_token: !vault |
 # wireguard-vanity-keygen -c $NAME/
 wireguard_peers:
   - name: homelab
-    address: 10.123.60.1
+    address: 10.123.128.2
     endpoint: home.fahm.fr:51820
-    allowed_ips: [ 10.123.0.11/32 ]
+    allowed_ips: [ 10.123.0.2/32 ]
     public_key: lab/YYyxFkJJt86HfCnauipuYE4pBzBcDOkrXTzCmTE=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -61,9 +61,9 @@ wireguard_peers:
           61336534343533363331303430363164653763396166633132663830626130316633383139646230
           6438613332613466366333323130343765663161303265386131
   - name: backup
-    address: 10.123.60.2
+    address: 10.123.128.3
     endpoint: home.fahm.fr:51821
-    allowed_ips: [ 10.123.0.15/32 ]
+    allowed_ips: [ 10.123.0.3/32 ]
     public_key: bak/nQ8PyILF2E5Ith7iHJZ7R67chEfWHihujiqyL1g=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -74,9 +74,9 @@ wireguard_peers:
           64643937303135376434663961633938346137353163366264316332623734363230356337363666
           3135383733633732623962393737353330313237663733663261
   - name: box
-    address: 10.123.60.3
-    endpoint: home.fahm.fr:51823
-    allowed_ips: [ 10.123.30.11/32 ]
+    address: 10.123.128.5
+    endpoint: home.fahm.fr:51822
+    allowed_ips: [ 10.123.0.5/32 ]
     public_key: box/F8UYPGCYhjT5eH3stLTk9wZalaH2z1VIE1EYDVg=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -87,7 +87,7 @@ wireguard_peers:
           64373033386137346630383437616463356131613164636232363139303533653765663830356464
           6237626161356236393432306437623166333136333437343830
   - name: laptop
-    address: 10.123.60.4
+    address: 10.123.130.128
     public_key: lap/a1O/kGX4bZhQGQ7Y66RGloVkGYh4MKLWKLOOkFQ=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -98,7 +98,7 @@ wireguard_peers:
           32666238313131386264303839663830303363396534613666373036373833623635333561313864
           6166333431303438643431383939346133363236656664656362
   - name: phone
-    address: 10.123.60.5
+    address: 10.123.130.129
     public_key: pho/2r3gGof6abXnmTxhdgJl1zvVDV9whuY7eOwuGSM=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -109,7 +109,7 @@ wireguard_peers:
           63343835386264386431363538333236643163383061336161386236653137396632373264626563
           3436653463386366663438363430633131393534343764306465
   - name: ipad
-    address: 10.123.60.6
+    address: 10.123.130.130
     public_key: ipa/80KvY6a8qAOvEd0Hj5JmX/WCV4Yx4z9O6WhO1hg=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -120,7 +120,7 @@ wireguard_peers:
           66373566326236626463333064346338386234373566616363653131306332316139623436333361
           3634393465336136393432353363666563383435613331363639
   - name: marie_laptop
-    address: 10.123.60.7
+    address: 10.123.130.131
     public_key: mla/KiwD4MSb7hMcZAmXFYEueZoCoM2WRz5zQfNLCzs=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -131,7 +131,7 @@ wireguard_peers:
           63393232336633396439383133316265666532613638386666613663313261363962353831343135
           3430666130393731663433333236663835383131336533633533
   - name: marie_phone
-    address: 10.123.60.8
+    address: 10.123.130.132
     public_key: mph/M5ByZ6slJatM3MV3zOfgrrjUdyEXli+Ecv67ohE=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -142,8 +142,8 @@ wireguard_peers:
           34313035653735626361306439303135663934343035353438356362383531663761313366353161
           6435636261343766623266643765626531303131303231626462
   - name: bunk
-    address: 10.123.60.9
-    allowed_ips: [ 192.168.0.149/32 ]
+    address: 10.123.185.3
+    allowed_ips: [ 10.123.121.3/32 ]
     endpoint: bonniers.ddns.net:51820
     post_up: iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
     post_down: iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
