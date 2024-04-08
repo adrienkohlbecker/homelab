@@ -1,0 +1,17 @@
+http:
+  routers:
+{% for k,v in traefik_hosts.items() %}
+    {{ k }}:
+      entryPoints:
+        - websecure
+      service: {{ k }}
+      rule: Host(`{{ k }}.{{ domain }}`) || Host(`{{ k }}.{{ inventory_hostname }}.{{ domain }}`)
+      tls: {}
+{% endfor %}
+  services:
+{% for k,v in traefik_hosts.items() %}
+    {{ k }}:
+      loadBalancer:
+        servers:
+          - url: '{{ v }}'
+{% endfor %}
