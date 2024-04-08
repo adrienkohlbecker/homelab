@@ -45,6 +45,7 @@
     - qemu_guest
     - macvlan
     - docker
+    - ipmi
 
 - name: Add more services
   hosts: all:!bunk
@@ -54,7 +55,6 @@
     - certbot
     - traefik
     - traefik_unifi
-    - traefik_ipmi
     - traefik_ups
     - netdata
     - services
@@ -63,7 +63,6 @@
 - name: Homelab roles
   hosts: box,homelab
   roles:
-    - ipmi
     - minio
     - influxdb
 

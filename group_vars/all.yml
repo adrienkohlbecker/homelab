@@ -5,7 +5,6 @@ external_ips:
   box: 10.123.0.5
   eaton: 10.123.0.4
   homelab: 10.123.0.2
-  ipmi: 10.123.0.10
   udm: 10.123.0.1
 
 ssh_public_keys: |
