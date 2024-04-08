@@ -25,25 +25,25 @@
     - regexp: ^NOTIFYCMD
       line: NOTIFYCMD /usr/sbin/upssched
       insertafter: ^# NOTIFYCMD
-    - regexp: ^#?\s+NOTIFYFLAG ONLINE
+    - regexp: ^(#\s*)?NOTIFYFLAG ONLINE
       line: NOTIFYFLAG ONLINE SYSLOG+WALL+EXEC
-    - regexp: ^#?\s+NOTIFYFLAG ONBATT
+    - regexp: ^(#\s*)?NOTIFYFLAG ONBATT
       line: NOTIFYFLAG ONBATT SYSLOG+WALL+EXEC
-    - regexp: ^#?\s+NOTIFYFLAG LOWBATT
+    - regexp: ^(#\s*)?NOTIFYFLAG LOWBATT
       line: NOTIFYFLAG LOWBATT SYSLOG+WALL+EXEC
-    - regexp: ^#?\s+NOTIFYFLAG FSD
+    - regexp: ^(#\s*)?NOTIFYFLAG FSD
       line: NOTIFYFLAG FSD SYSLOG+WALL+EXEC
-    - regexp: ^#?\s+NOTIFYFLAG COMMOK
+    - regexp: ^(#\s*)?NOTIFYFLAG COMMOK
       line: NOTIFYFLAG COMMOK SYSLOG+WALL+EXEC
-    - regexp: ^#?\s+NOTIFYFLAG COMMBAD
+    - regexp: ^(#\s*)?NOTIFYFLAG COMMBAD
       line: NOTIFYFLAG COMMBAD SYSLOG+WALL+EXEC
-    - regexp: ^#?\s+NOTIFYFLAG SHUTDOWN
+    - regexp: ^(#\s*)?NOTIFYFLAG SHUTDOWN
       line: NOTIFYFLAG SHUTDOWN SYSLOG+WALL+EXEC
-    - regexp: ^#?\s+NOTIFYFLAG REPLBATT
+    - regexp: ^(#\s*)?NOTIFYFLAG REPLBATT
       line: NOTIFYFLAG REPLBATT SYSLOG+WALL+EXEC
-    - regexp: ^#?\s+NOTIFYFLAG NOCOMM
+    - regexp: ^(#\s*)?NOTIFYFLAG NOCOMM
       line: NOTIFYFLAG NOCOMM SYSLOG+WALL+EXEC
-    - regexp: ^#?\s+NOTIFYFLAG NOPARENT
+    - regexp: ^(#\s*)?NOTIFYFLAG NOPARENT
       line: NOTIFYFLAG NOPARENT SYSLOG+WALL+EXEC
   become: true
   register: nut_upsmon_conf
