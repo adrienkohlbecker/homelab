@@ -64,3 +64,31 @@
       loop: "{{ wireguard_peers | map(attribute='name') }}"
       tags:
         - wireguard
+
+    - name: Generate wireguard configuration
+      template:
+        src: "{{ playbook_dir }}/roles/wireguard/templates/wg0.conf.j2"
+        dest: "{{ playbook_dir }}/wireguard/{{ item[1] }}/home ({{ item[0] }} all-traffic).conf"
+        owner: "{{ ansible_facts.user_uid }}"
+        group: "{{ ansible_facts.user_gid }}"
+        mode: "0644"
+      vars:
+        own_peer_name: "{{ item[1] }}"
+        vpn_peer_name: "{{ item[0] }}"
+      with_nested:
+        - "{{ wireguard_peers | selectattr('vpn_target', 'defined') | selectattr('vpn_target', 'eq', true) | map(attribute='name') }}"
+        - "{{ wireguard_peers | selectattr('vpn_device', 'defined') | selectattr('vpn_device', 'eq', true) | map(attribute='name') }}"
+      tags:
+        - wireguard
+
+    - name: Generate wireguard QR code
+      shell: set -euo pipefail; if [ -f "{{ playbook_dir }}/wireguard/{{ item[1] }}/qr ({{ item[0] }} all-traffic).png" ]; then bfr=`md5sum "{{ playbook_dir }}/wireguard/{{ item[1] }}/qr ({{ item[0] }} all-traffic).png" | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o "{{ playbook_dir }}/wireguard/{{ item[1] }}/qr ({{ item[0] }} all-traffic).png" -r "{{ playbook_dir }}/wireguard/{{ item[1] }}/home ({{ item[0] }} all-traffic).conf"; aftr=`md5sum "{{ playbook_dir }}/wireguard/{{ item[1] }}/qr ({{ item[0] }} all-traffic).png" | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
+      args:
+        executable: /bin/bash
+      register: qr_generate_cmd
+      changed_when: "'file updated' in qr_generate_cmd.stdout"
+      with_nested:
+        - "{{ wireguard_peers | selectattr('vpn_target', 'defined') | selectattr('vpn_target', 'eq', true) | map(attribute='name') }}"
+        - "{{ wireguard_peers | selectattr('vpn_device', 'defined') | selectattr('vpn_device', 'eq', true) | map(attribute='name') }}"
+      tags:
+        - wireguard
