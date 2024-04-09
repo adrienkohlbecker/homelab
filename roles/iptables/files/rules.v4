@@ -79,6 +79,12 @@
 #                   FORWARD RULES                #
 ##################################################
 
+# Boilerplate policy
+-A FWD_DROP -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+-A FWD_DROP -m conntrack --ctstate INVALID -j DROP
+
+-A FWD_DROP -i wg0 -o eth0 -j ACCEPT -m comment --comment "Allow forwarding traffic to external hosts coming in through wireguard"
+
 # workaround to avoid clearing the FORWARD chain on apply and loosing rules added by CNI/podman
 -A FWD_DROP -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] FORWARD:REJECT: "
 -A FWD_DROP -j DROP
@@ -100,6 +106,9 @@ COMMIT
 :INPUT ACCEPT [0:0]
 :OUTPUT ACCEPT [0:0]
 :POSTROUTING ACCEPT [0:0]
+
+-A POSTROUTING -o eth0 -j MASQUERADE -m comment --comment "Ensure forwarded packets have our IP as source and keep track of where to send the replies"
+
 COMMIT
 
 *security
