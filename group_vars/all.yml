@@ -62,7 +62,7 @@ traefik_hosts:
 wireguard_peers:
   - name: homelab
     address: 10.123.128.2
-    endpoint: home.fahm.fr:51820
+    endpoint: home.fahm.fr:51821
     allowed_ips: [ 10.123.0.2/32 ]
     public_key: lab/YYyxFkJJt86HfCnauipuYE4pBzBcDOkrXTzCmTE=
     private_key: !vault |
@@ -75,7 +75,7 @@ wireguard_peers:
           6438613332613466366333323130343765663161303265386131
   - name: backup
     address: 10.123.128.3
-    endpoint: home.fahm.fr:51821
+    endpoint: home.fahm.fr:51822
     allowed_ips: [ 10.123.0.3/32 ]
     public_key: bak/nQ8PyILF2E5Ith7iHJZ7R67chEfWHihujiqyL1g=
     private_key: !vault |
@@ -88,7 +88,7 @@ wireguard_peers:
           3135383733633732623962393737353330313237663733663261
   - name: box
     address: 10.123.128.5
-    endpoint: home.fahm.fr:51822
+    endpoint: home.fahm.fr:51823
     allowed_ips: [ 10.123.0.5/32 ]
     public_key: box/F8UYPGCYhjT5eH3stLTk9wZalaH2z1VIE1EYDVg=
     private_key: !vault |
