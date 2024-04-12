@@ -32,7 +32,7 @@ netplan:
       match:
         macaddress: c8:7f:54:5c:57:5c
       set-name: eth1
-      activation-mode: false # do not enable interface
+      activation-mode: 'off' # do not enable interface
       link-local: [] # do not setup random link local address when no dhcp is present
       dhcp4: true
       dhcp6: false

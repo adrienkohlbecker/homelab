@@ -21,21 +21,21 @@
     - ntp
     - mailer
     - hwe_kernel
-    - grub
-    - lighttpd
-    - nut_server
-    - nut_monitor
-    - eaton_ipp
     - hdparm
     - hd_idle
     - smart
-    - powertop
     - lm_sensors
     - zfs
     - ssh_root
     - zfs_autobackup
     - zfs_mount
     - podman
+
+- name: Backup roles
+  hosts: box,backup
+  roles:
+    - grub
+    - powertop
 
 - name: Unused roles (dev box only)
   hosts: box
@@ -46,14 +46,18 @@
     - docker
     - ipmi
     - libvirt
+    - vector
+    - eaton_ipp
 
 - name: Add more services
   hosts: all:!bunk
   roles:
-    - vector
     - journald_exporter
     - certbot
     - traefik
+    - lighttpd
+    - nut_server
+    - nut_monitor
     - netdata
     - services
     - pihole

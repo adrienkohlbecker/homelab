@@ -10,7 +10,7 @@
     src: hosts.j2
     dest: /etc/hosts
     owner: root
-    group: adm
+    group: root
     mode: "0644"
     backup: true
   become: true

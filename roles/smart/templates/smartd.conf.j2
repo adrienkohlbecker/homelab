@@ -157,11 +157,11 @@
 # -d nvme,0xffffffff : use broadcast namespace id instead of namespace pointed to by symlink
 DEFAULT -a -n standby,48 -m root -M exec /usr/share/smartmontools/smartd-runner -o on -S on -s (L/../01/./04:024|S/../.././02) -I 194 -I 190 -I 231 -I 9
 
-{% for id, dev in ansible_devices.items() %}
-{% if id.startswith('nvme') %}
-/dev/disk/by-id/{{ dev.links.ids[0] }} -d nvme,0xffffffff -W 0,60,80
-{% elif id.startswith('sd') %}
-/dev/disk/by-id/{{ dev.links.ids[0] }} -d ata -W 0,45,50
+{% for dev in ansible_devices.values() | map(attribute='links') | map(attribute='ids') | select | map('first') | sort %}
+{% if dev.startswith('nvme-') %}
+/dev/disk/by-id/{{ dev }} -d nvme,0xffffffff -W 0,60,80
+{% elif dev.startswith('ata-') %}
+/dev/disk/by-id/{{ dev }} -d ata -W 0,45,50
 {% endif %}
 {% endfor %}
 
