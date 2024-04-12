@@ -36,6 +36,7 @@
     - netdata
 
 - name: Install netdata plugins
+  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed))
   apt:
     pkg:
       - netdata-plugin-slabinfo
@@ -114,11 +115,13 @@
   command: cp /usr/lib/netdata/conf.d/health_alarm_notify.conf /etc/netdata/health_alarm_notify.conf
   args:
     creates: /etc/netdata/health_alarm_notify.conf
+  register: netdata_health_alarm_notify_template
   become: true
   tags:
     - netdata
 
 - name: Setup health_alarm_notify
+  when: not (ansible_check_mode and netdata_health_alarm_notify_template.changed)
   lineinfile:
     path: /etc/netdata/health_alarm_notify.conf
     regexp: "{{ item.line }}"

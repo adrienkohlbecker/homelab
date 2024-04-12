@@ -6,10 +6,12 @@
     group: root
     mode: "0700"
   become: true
+  register: ssh_root_directory
   tags:
     - ssh_root
 
-- name: Generate an OpenSSH keypair with a different algorithm (dsa)
+- name: Generate an OpenSSH keypair
+  when: not (ansible_check_mode and ssh_root_directory.changed)
   community.crypto.openssh_keypair:
     path: /root/.ssh/id_ed25519
     type: ed25519
@@ -22,6 +24,7 @@
     - ssh_root
 
 - name: Configure ssh
+  when: not (ansible_check_mode and ssh_root_directory.changed)
   template:
     src: ssh_config.j2
     dest: /root/.ssh/config

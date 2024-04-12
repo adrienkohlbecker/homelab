@@ -13,10 +13,12 @@
     system: true
     shell: /bin/bash
   become: true
+  register: zfs_autobackup_user
   tags:
     - zfs_autobackup
 
 - name: source | Add authorized keys
+  when: not (ansible_check_mode and zfs_autobackup_user.changed)
   ansible.posix.authorized_key:
     user: zfs_autobackup
     key: "{{ ssh_root_at_backup_public_key }}"
