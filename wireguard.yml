@@ -76,8 +76,8 @@
         own_peer_name: "{{ item[1] }}"
         vpn_peer_name: "{{ item[0] }}"
       with_nested:
-        - "{{ wireguard_peers | selectattr('vpn_target', 'defined') | selectattr('vpn_target', 'eq', true) | map(attribute='name') }}"
-        - "{{ wireguard_peers | selectattr('vpn_device', 'defined') | selectattr('vpn_device', 'eq', true) | map(attribute='name') }}"
+        - "{{ wireguard_peers | selectattr('is_server', 'eq', true)  | map(attribute='name') }}"
+        - "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
       tags:
         - wireguard
 
@@ -88,7 +88,7 @@
       register: qr_generate_cmd
       changed_when: "'file updated' in qr_generate_cmd.stdout"
       with_nested:
-        - "{{ wireguard_peers | selectattr('vpn_target', 'defined') | selectattr('vpn_target', 'eq', true) | map(attribute='name') }}"
-        - "{{ wireguard_peers | selectattr('vpn_device', 'defined') | selectattr('vpn_device', 'eq', true) | map(attribute='name') }}"
+        - "{{ wireguard_peers | selectattr('is_server', 'eq', true)  | map(attribute='name') }}"
+        - "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
       tags:
         - wireguard

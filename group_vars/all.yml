@@ -62,9 +62,11 @@ traefik_hosts:
 wireguard_peers:
   - name: homelab
     address: 10.123.128.2
-    endpoint: home.fahm.fr:51821
-    #allowed_ips: [ 10.123.0.2/32 ]
-    vpn_target: true
+    endpoint:
+      local: "{{ external_ips.homelab }}:51820"
+      remote: "home.fahm.fr:51821"
+    is_server: true
+    dns_address: 10.123.0.2
     site_subnet: 10.123.0.0/21
     public_key: lab/YYyxFkJJt86HfCnauipuYE4pBzBcDOkrXTzCmTE=
     private_key: !vault |
@@ -77,9 +79,11 @@ wireguard_peers:
           6438613332613466366333323130343765663161303265386131
   - name: backup
     address: 10.123.128.3
-    endpoint: home.fahm.fr:51822
-    #allowed_ips: [ 10.123.0.3/32 ]
-    vpn_target: true
+    endpoint:
+      local: "{{ external_ips.backup }}:51820"
+      remote: "home.fahm.fr:51822"
+    is_server: true
+    dns_address: 10.123.0.3
     site_subnet: 10.123.0.0/21
     public_key: bak/nQ8PyILF2E5Ith7iHJZ7R67chEfWHihujiqyL1g=
     private_key: !vault |
@@ -92,9 +96,11 @@ wireguard_peers:
           3135383733633732623962393737353330313237663733663261
   - name: box
     address: 10.123.128.5
-    endpoint: home.fahm.fr:51823
-    #allowed_ips: [ 10.123.0.5/32 ]
-    vpn_target: true
+    endpoint:
+      local: "{{ external_ips.box }}:51820"
+      remote: home.fahm.fr:51823
+    is_server: true
+    dns_address: 10.123.0.5
     site_subnet: 10.123.0.0/21
     public_key: box/F8UYPGCYhjT5eH3stLTk9wZalaH2z1VIE1EYDVg=
     private_key: !vault |
@@ -107,7 +113,7 @@ wireguard_peers:
           6237626161356236393432306437623166333136333437343830
   - name: laptop
     address: 10.123.130.128
-    vpn_device: true
+    is_server: false
     public_key: lap/a1O/kGX4bZhQGQ7Y66RGloVkGYh4MKLWKLOOkFQ=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -119,7 +125,7 @@ wireguard_peers:
           6166333431303438643431383939346133363236656664656362
   - name: phone
     address: 10.123.130.129
-    vpn_device: true
+    is_server: false
     public_key: pho/2r3gGof6abXnmTxhdgJl1zvVDV9whuY7eOwuGSM=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -131,7 +137,7 @@ wireguard_peers:
           3436653463386366663438363430633131393534343764306465
   - name: ipad
     address: 10.123.130.130
-    vpn_device: true
+    is_server: false
     public_key: ipa/80KvY6a8qAOvEd0Hj5JmX/WCV4Yx4z9O6WhO1hg=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -143,7 +149,7 @@ wireguard_peers:
           3634393465336136393432353363666563383435613331363639
   - name: marie_laptop
     address: 10.123.130.131
-    vpn_device: true
+    is_server: false
     public_key: mla/KiwD4MSb7hMcZAmXFYEueZoCoM2WRz5zQfNLCzs=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -155,7 +161,7 @@ wireguard_peers:
           3430666130393731663433333236663835383131336533633533
   - name: marie_phone
     address: 10.123.130.132
-    vpn_device: true
+    is_server: false
     public_key: mph/M5ByZ6slJatM3MV3zOfgrrjUdyEXli+Ecv67ohE=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -167,11 +173,12 @@ wireguard_peers:
           6435636261343766623266643765626531303131303231626462
   - name: bunk
     address: 10.123.185.3
-    #allowed_ips: [ 10.123.121.3/32 ]
-    endpoint: bonniers.ddns.net:51820
+    endpoint:
+      local: 192.168.0.149:51820
+      remote: bonniers.ddns.net:51820
     post_up: iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
     post_down: iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
-    vpn_target: true
+    is_server: true
     site_subnet: 192.168.0.0/24 # 10.123.57.0/24 todo update this!
     dns_address: 192.168.0.1 # todo update this!
     public_key: bun/Cqg3yML+J7YpC1SAxHqdK3NH1oUOSB+WFjtijhQ=
