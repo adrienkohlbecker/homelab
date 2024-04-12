@@ -36,7 +36,6 @@
     - zfs_autobackup
     - zfs_mount
     - podman
-    # - libvirt
 
 - name: Unused roles (dev box only)
   hosts: box
@@ -46,6 +45,7 @@
     - macvlan
     - docker
     - ipmi
+    - libvirt
 
 - name: Add more services
   hosts: all:!bunk
