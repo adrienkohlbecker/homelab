@@ -1,0 +1,35 @@
+- name: dest | Copy the sync script
+  template:
+    src: zfs_autosync.sh.j2
+    dest: /usr/local/bin/zfs_autosync
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: dest | Schedule the sync script
+  cron:
+    name: zfs_autosync
+    minute: "{{ rand_order * 10 }}" # space each host out by 10 minutes so services don't stop at the same time
+    hour: 3
+    job: /usr/bin/systemd-cat --identifier zfs_autosync /usr/local/bin/zfs_autosync
+    user: root
+    cron_file: ansible_zfs_autosync
+    backup: true
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: dest | Set properties on bak dataset
+  community.general.zfs:
+    name: bak
+    state: present
+    extra_zfs_properties:
+      atime: 'off'
+      relatime: 'off'
+  become: true
+  tags:
+    - zfs_autobackup

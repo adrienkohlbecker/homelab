@@ -97,15 +97,27 @@
   tags:
     - zfs
 
-- name: Set properties on datasets
+- name: Set properties on root dataset
   community.general.zfs:
-    name: "{{ item }}"
+    name: rpool/ROOT/jammy
     state: present
     extra_zfs_properties:
-      'atime': 'off'
-      'relatime': 'off'
+      'autobackup:bak': 'true'
+      atime: 'off'
+      relatime: 'off'
   become: true
-  loop: "{{ zfs_atime_pools }}"
+  tags:
+    - zfs
+
+- name: Set properties on boot dataset
+  when: zfs_has_bpool
+  community.general.zfs:
+    name: bpool/BOOT/jammy
+    state: present
+    extra_zfs_properties:
+      atime: 'off'
+      relatime: 'off'
+  become: true
   tags:
     - zfs
 

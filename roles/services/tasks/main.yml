@@ -27,6 +27,7 @@
     state: present
     extra_zfs_properties:
       mountpoint: /mnt/services
+      'autobackup:bak': 'true'
   become: true
   tags:
     - services
