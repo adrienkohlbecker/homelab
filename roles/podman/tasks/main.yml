@@ -73,6 +73,7 @@
     - podman
 
 - name: Configure tmpfiles.d
+  when: not (ansible_check_mode and apt_unit_masked.changed)
   lineinfile:
     regexp: '^(# )?(.*) /run/podman (.*)$'
     line: '# \2 /run/podman \3'

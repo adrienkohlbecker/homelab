@@ -25,6 +25,7 @@
   apt_repository:
     repo: 'deb http://archive.ubuntu.com/ubuntu mantic main restricted universe multiverse # For zfsutils-linux userspace tools'
   become: true
+  register: mantic_repository
   tags:
     - hwe_kernel
 
@@ -43,6 +44,7 @@
     - hwe_kernel
 
 - name: Install zfsutils from mantic
+  when: not (ansible_check_mode and mantic_repository.changed)
   apt:
     pkg:
       - zfsutils-linux

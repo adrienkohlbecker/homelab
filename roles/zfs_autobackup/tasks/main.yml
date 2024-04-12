@@ -30,6 +30,7 @@
     - zfs_autobackup
 
 - name: Configure symlink
+  when: not (ansible_check_mode and zfs_autobackup_install.changed)
   file:
     src: /opt/virtualenv/zfs_autobackup/bin/zfs-autobackup
     dest: /usr/local/bin/zfs-autobackup

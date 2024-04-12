@@ -8,6 +8,7 @@
     - lighttpd
 
 - name: Configure lighttpd
+  when: not (ansible_check_mode and apt_unit_masked.changed)
   lineinfile:
     regexp: '{{ item.regexp }}'
     line: '{{ item.line }}'
@@ -30,6 +31,7 @@
     - lighttpd
 
 - name: Enable modules
+  when: not (ansible_check_mode and apt_unit_masked.changed)
   file:
     src: ../conf-available/{{ item }}
     dest: /etc/lighttpd/conf-enabled/{{ item }}
