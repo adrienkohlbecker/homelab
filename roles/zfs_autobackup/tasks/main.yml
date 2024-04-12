@@ -127,6 +127,7 @@
     - zfs_autobackup
 
 - name: Copy the sync script
+  when: inventory_hostname == 'backup' or inventory_hostname == 'box'
   template:
     src: zfs_autosync.sh.j2
     dest: /usr/local/bin/zfs_autosync
@@ -139,6 +140,7 @@
     - zfs_autobackup
 
 - name: Schedule the sync script
+  when: inventory_hostname == 'backup' or inventory_hostname == 'box'
   cron:
     name: zfs_autosync
     minute: "{{ rand_order * 10 }}" # space each host out by 10 minutes so services don't stop at the same time
