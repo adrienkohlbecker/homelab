@@ -5,6 +5,7 @@
       - python3-certbot-dns-cloudflare
     cache_valid_time: 3600
   become: true
+  register: apt_install_certbot
   tags:
     - certbot
 
@@ -39,5 +40,15 @@
   loop:
     - "{{ domain }}"
     - "{{ inventory_hostname }}.{{ domain }}"
+  tags:
+    - certbot
+
+- name: Configure logrotate
+  import_role:
+    name: logrotate
+    tasks_from: compression
+  vars:
+    logrotate_item: /etc/logrotate.d/certbot
+    logrotate_condition: "{{ not (ansible_check_mode and apt_install_certbot.changed) }}"
   tags:
     - certbot
