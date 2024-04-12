@@ -21,6 +21,7 @@
     - zfs_mount
 
 - name: Add zfs mount service for boot pool
+  when: zfs_has_bpool
   import_role:
     name: zfs_mount
     tasks_from: unit

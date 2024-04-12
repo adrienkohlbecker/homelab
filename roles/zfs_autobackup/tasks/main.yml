@@ -42,18 +42,6 @@
   tags:
     - zfs_autobackup
 
-- name: Set properties on datasets
-  when: zfs_root
-  community.general.zfs:
-    name: "{{ item.dataset }}"
-    state: present
-    extra_zfs_properties:
-      'autobackup:bak': 'true'
-  become: true
-  loop: "{{ bunk_sync_datasets }}"
-  tags:
-    - zfs_autobackup
-
 - name: Add zfs_autosnapshot.target systemd unit
   import_role:
     name: systemd_unit
@@ -126,33 +114,6 @@
   tags:
     - zfs_autobackup
 
-- name: Copy the sync script
-  when: inventory_hostname == 'backup' or inventory_hostname == 'box'
-  template:
-    src: zfs_autosync.sh.j2
-    dest: /usr/local/bin/zfs_autosync
-    mode: "0755"
-    owner: root
-    group: root
-    backup: true
-  become: true
-  tags:
-    - zfs_autobackup
-
-- name: Schedule the sync script
-  when: inventory_hostname == 'backup' or inventory_hostname == 'box'
-  cron:
-    name: zfs_autosync
-    minute: "{{ rand_order * 10 }}" # space each host out by 10 minutes so services don't stop at the same time
-    hour: 3
-    job: /usr/bin/systemd-cat --identifier zfs_autosync /usr/local/bin/zfs_autosync
-    user: root
-    cron_file: ansible_zfs_autosync
-    backup: true
-  become: true
-  tags:
-    - zfs_autobackup
-
 - name: Configure logrotate
   template:
     src: logrotate.j2
@@ -178,3 +139,7 @@
 - name: Configure host as a source for backups
   import_tasks: source.yml
   when: inventory_hostname != 'backup'
+
+- name: Configure host as a destination for backups
+  import_tasks: dest.yml
+  when: inventory_hostname == 'backup' or inventory_hostname == 'box'
