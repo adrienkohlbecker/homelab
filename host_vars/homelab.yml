@@ -5,15 +5,12 @@ zfs_arc_min: 1073741824
 zfs_arc_max: 8589934592
 zfs_trim_pools:
   - rpool
-  - bpool
 zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
   - rpool/ROOT/jammy
-  - bpool/BOOT/jammy
 zfs_atime_pools:
   - rpool
-  - bpool
-  - beelink
-  - data
+  # - beelink
+  # - data
 
 libvirt_default_network: 10.123.48.0/24
 
@@ -29,14 +26,14 @@ netplan:
   ethernets:
     nic0:
       match:
-        macaddress: a8:a1:59:f5:82:92
+        macaddress: c8:7f:54:5c:57:5b
       set-name: eth0
       link-local: [] # do not setup random link local address when no dhcp is present
       dhcp4: true
       dhcp6: false
     nic1:
       match:
-        macaddress: a8:a1:59:f5:82:93
+        macaddress: c8:7f:54:5c:57:5c
       set-name: eth1
       activation-mode: false # do not enable interface
       link-local: [] # do not setup random link local address when no dhcp is present
@@ -49,12 +46,12 @@ hdparm_settings: {}
 rand_order: 2
 
 bunk_sync_datasets:
-  - { dataset: beelink/arq/adrien, mountpoint: /mnt/arq/adrien,  destpath: arq/adrien }
-  - { dataset: beelink/arq/marie,  mountpoint: /mnt/arq/marie,   destpath: arq/marie }
-  - { dataset: beelink/arq/game,   mountpoint: /mnt/arq/game,    destpath: arq/game }
-  - { dataset: data/data,          mountpoint: /mnt/data,        destpath: data }
-  - { dataset: data/brumath,       mountpoint: /mnt/brumath,     destpath: brumath }
-  - { dataset: data/eckwersheim,   mountpoint: /mnt/eckwersheim, destpath: eckwersheim }
+  # - { dataset: beelink/arq/adrien, mountpoint: /mnt/arq/adrien,  destpath: arq/adrien }
+  # - { dataset: beelink/arq/marie,  mountpoint: /mnt/arq/marie,   destpath: arq/marie }
+  # - { dataset: beelink/arq/game,   mountpoint: /mnt/arq/game,    destpath: arq/game }
+  # - { dataset: data/data,          mountpoint: /mnt/data,        destpath: data }
+  # - { dataset: data/brumath,       mountpoint: /mnt/brumath,     destpath: brumath }
+  # - { dataset: data/eckwersheim,   mountpoint: /mnt/eckwersheim, destpath: eckwersheim }
   - { dataset: rpool/services,     mountpoint: /mnt/services,    destpath: services }
   - { dataset: rpool/vms,          mountpoint: /mnt/vms/ssd,     destpath: vms_ssd }
   - { dataset: rpool/ROOT/jammy,   mountpoint: /,                destpath: rpool }
