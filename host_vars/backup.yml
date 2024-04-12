@@ -9,6 +9,10 @@ zfs_trim_pools:
 zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
   - rpool/ROOT/jammy
   - bpool/BOOT/jammy
+zfs_atime_pools:
+  - rpool
+  - bpool
+  - bak
 
 libvirt_default_network: 10.123.49.0/24
 

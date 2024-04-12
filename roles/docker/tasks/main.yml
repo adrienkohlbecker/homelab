@@ -59,7 +59,7 @@
     path: /var/lib/docker
     src: /dev/zvol/rpool/docker
     fstype: ext4
-    opts: defaults
+    opts: defaults,noatime
     state: mounted
     backup: true
   become: true

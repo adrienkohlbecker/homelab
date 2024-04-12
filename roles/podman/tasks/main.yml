@@ -124,7 +124,7 @@
     path: /var/lib/containers/storage
     src: /dev/zvol/rpool/podman
     fstype: ext4
-    opts: defaults
+    opts: defaults,noatime
     state: mounted
     backup: true
   become: true
