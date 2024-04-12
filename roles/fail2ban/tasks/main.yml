@@ -4,5 +4,16 @@
       - fail2ban
     cache_valid_time: 3600
   become: true
+  register: apt_install_fail2ban
   tags:
     - fail2ban
+
+- name: Configure logrotate
+  import_role:
+    name: logrotate
+    tasks_from: compression
+  vars:
+    logrotate_item: /etc/logrotate.d/netdata
+    logrotate_condition: "{{ not (ansible_check_mode and apt_install_fail2ban.changed) }}"
+  tags:
+    - netdata

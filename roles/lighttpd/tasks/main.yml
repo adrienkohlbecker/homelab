@@ -72,3 +72,13 @@
   become: true
   tags:
     - lighttpd
+
+- name: Configure logrotate
+  import_role:
+    name: logrotate
+    tasks_from: compression
+  vars:
+    logrotate_item: /etc/logrotate.d/lighttpd
+    logrotate_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
+  tags:
+    - lighttpd
