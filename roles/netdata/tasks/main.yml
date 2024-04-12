@@ -151,7 +151,7 @@
     path: /sys/kernel/debug
     src: /debugfs
     fstype: debugfs
-    opts: defaults
+    opts: defaults,noatime
     state: mounted
     backup: true
   register: debugfs_mount

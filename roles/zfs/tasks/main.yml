@@ -97,5 +97,17 @@
   tags:
     - zfs
 
+- name: Set properties on datasets
+  community.general.zfs:
+    name: "{{ item }}"
+    state: present
+    extra_zfs_properties:
+      'atime': 'off'
+      'relatime': 'off'
+  become: true
+  loop: "{{ zfs_atime_pools }}"
+  tags:
+    - zfs
+
 - name: Setup mount generator
   import_tasks: mount_generator.yml
