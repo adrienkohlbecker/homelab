@@ -14,7 +14,10 @@ zfs_has_bpool: false
 
 libvirt_default_network: 10.123.48.0/24
 
-sensor_modules: []
+sensor_modules:
+  - drivetemp
+  - coretemp
+  - nct6775
 
 macvlan_enable_docker: false
 macvlan_parent: eth0
