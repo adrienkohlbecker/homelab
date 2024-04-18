@@ -6,8 +6,15 @@ http:
       service: custom_exporter
       rule: Host(`custom_exporter.{{ domain }}`) || Host(`custom_exporter.{{ inventory_hostname }}.{{ domain }}`)
       tls: {}
+      middlewares:
+        - redirect_to_metrics
   services:
     custom_exporter:
       loadBalancer:
         servers:
           - url: 'http://localhost:19392/'
+  middlewares:
+    redirect_to_metrics:
+      redirectRegex:
+        regex: ^https://([^/]+)/?$
+        replacement: "https://${1}/metrics"
