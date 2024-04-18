@@ -58,10 +58,23 @@
   cron:
     name: zfs_health
     minute: 55
-    job: /usr/bin/systemd-cat --identifier zfs_health /usr/local/bin/zfs_health
+    job: /usr/local/bin/run_job zfs_health /usr/local/bin/zfs_health
     user: root
     cron_file: ansible_zfs_health
     backup: true
+  become: true
+  tags:
+    - zfs
+
+- name: Monitor cron entry
+  file:
+    path: /var/log/jobs/zfs_health
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
   become: true
   tags:
     - zfs
@@ -72,11 +85,24 @@
     weekday: 4
     hour: 0
     minute: 5
-    job: /usr/bin/systemd-cat --identifier zfs_trim /sbin/zpool trim {{ item }}
+    job: /usr/local/bin/run_job zfs_trim /sbin/zpool trim {{ item }}
     user: root
     cron_file: ansible_zfs_trim
     backup: true
   loop: "{{ zfs_trim_pools }}"
+  become: true
+  tags:
+    - zfs
+
+- name: Monitor cron entry
+  file:
+    path: /var/log/jobs/zfs_trim
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
   become: true
   tags:
     - zfs

@@ -141,10 +141,23 @@
     name: docker_clean
     minute: '5'
     hour: '0'
-    job: /usr/bin/systemd-cat --identifier docker_clean /usr/bin/docker system prune -f
+    job: /usr/local/bin/run_job docker_clean /usr/bin/docker system prune -f
     user: root
     cron_file: ansible_docker_clean
     backup: true
+  become: true
+  tags:
+    - docker
+
+- name: Monitor cron entry
+  file:
+    path: /var/log/jobs/docker_clean
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
   become: true
   tags:
     - docker
