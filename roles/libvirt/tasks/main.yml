@@ -184,10 +184,23 @@
     name: virsh_backup
     minute: 5
     hour: 0
-    job: /usr/bin/systemd-cat --identifier virsh_backup /usr/local/bin/virsh_backup
+    job: /usr/local/bin/run_job virsh_backup /usr/local/bin/virsh_backup
     user: root
     cron_file: ansible_virsh_backup
     backup: true
   become: true
   tags:
     - libvirt
+
+- name: Monitor cron entry
+  file:
+    path: /var/log/jobs/virsh_backup
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - docker

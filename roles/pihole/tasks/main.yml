@@ -140,9 +140,22 @@
     hour: 0
     minute: 47
     weekday: 7
-    job: "/usr/bin/systemd-cat --identifier pihole_list_update {{ pihole_list_update_cmd }}"
+    job: "/usr/local/bin/run_job pihole_list_update {{ pihole_list_update_cmd }}"
     user: root
     cron_file: ansible_pihole_list_update
+  become: true
+  tags:
+    - pihole
+
+- name: Monitor cron entry
+  file:
+    path: /var/log/jobs/pihole_list_update
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
   become: true
   tags:
     - pihole

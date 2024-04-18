@@ -21,6 +21,7 @@
     - ntp
     - mailer
     - hwe_kernel
+    - cron
     - hdparm
     - hd_idle
     - smart

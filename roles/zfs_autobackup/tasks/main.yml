@@ -106,10 +106,23 @@
     name: zfs_autosnapshot
     minute: "{{ rand_order * 10 }}" # space each host out by 10 minutes so services don't stop at the same time
     hour: 2
-    job: /usr/bin/systemd-cat --identifier zfs_autosnapshot /usr/local/bin/zfs_autosnapshot
+    job: /usr/local/bin/run_job zfs_autosnapshot /usr/local/bin/zfs_autosnapshot
     user: root
     cron_file: ansible_zfs_autosnapshot
     backup: true
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Monitor cron entry
+  file:
+    path: /var/log/jobs/zfs_autosnapshot
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
   become: true
   tags:
     - zfs_autobackup
