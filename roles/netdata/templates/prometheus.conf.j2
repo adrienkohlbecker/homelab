@@ -1,9 +1,9 @@
 # vim:ft=yaml
 jobs:
-  - name: journald_local
+  - name: journald
     url: http://127.0.0.1:12345/metrics
     username: metrics
     password: {{ journald_exporter_key }}
 
-  - name: custom_local
+  - name: custom
     url: http://127.0.0.1:19392/metrics
