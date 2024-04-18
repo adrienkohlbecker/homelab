@@ -24,4 +24,4 @@ if [ "$*" = "" ]; then
   exit 1
 fi
 
-/usr/bin/systemd-cat --identifier "$identifier" "$@" && echo "$frequency $(/usr/bin/date --iso-8601=seconds)" >"/var/log/jobs/$identifier"
+exec /usr/bin/systemd-cat --identifier "$identifier" "$@" && echo "$frequency $(/usr/bin/date --iso-8601=seconds)" >"/var/log/jobs/$identifier"
