@@ -162,6 +162,50 @@
   tags:
     - netdata
 
+- name: Copy systemdunits health template
+  command: cp /usr/lib/netdata/conf.d/health.d/systemdunits.conf /etc/netdata/health.d/systemdunits.conf
+  args:
+    creates: /etc/netdata/health.d/systemdunits.conf
+  register: netdata_systemdunits_health_template
+  become: true
+  tags:
+    - netdata
+
+- name: Setup systemdunits alerts
+  when: not (ansible_check_mode and netdata_systemdunits_health_template.changed)
+  lineinfile:
+    path: /etc/netdata/health.d/systemdunits.conf
+    line: "chart labels: unit_name=!*"
+    state: absent
+    backup: true
+  register: netdata_systemdunits_health
+  become: true
+  tags:
+    - netdata
+
+- name: Copy systemdunits metrics template
+  command: cp /usr/lib/netdata/conf.d/go.d/systemdunits.conf /etc/netdata/go.d/systemdunits.conf
+  args:
+    creates: /etc/netdata/go.d/systemdunits.conf
+  register: netdata_systemdunits_conf_template
+  become: true
+  tags:
+    - netdata
+
+- name: Setup systemdunits metrics
+  when: not (ansible_check_mode and netdata_systemdunits_conf_template.changed)
+  copy:
+    src: systemdunits.conf
+    dest: /etc/netdata/go.d/systemdunits.conf
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: true
+  register: netdata_systemdunits_conf
+  become: true
+  tags:
+    - netdata
+
 - name: Enable the service
   when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed))
   systemd:
@@ -182,10 +226,19 @@
     - netdata
 
 - name: Restart the service
-  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) and (netdata_conf.changed or prometheus_conf.changed or docker_conf.changed or netdata_health_alarm_notify.changed or smartd_log_conf.changed or debugfs_mount.changed) and not systemd_started.changed
+  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) and (netdata_conf.changed or prometheus_conf.changed or docker_conf.changed or netdata_health_alarm_notify.changed or smartd_log_conf.changed or debugfs_mount.changed or netdata_systemdunits_conf.changed) and not systemd_started.changed
   systemd:
     name: netdata
     state: restarted
+  become: true
+  register: systemd_restarted
+  tags:
+    - netdata
+
+- name: Reload health configuration
+  when: (netdata_systemdunits_conf_template.changed or netdata_systemdunits_conf.changed) and not (systemd_started.changed or systemd_restarted.changed)
+  command: netdatacli reload-health
+  changed_when: true
   become: true
   tags:
     - netdata
