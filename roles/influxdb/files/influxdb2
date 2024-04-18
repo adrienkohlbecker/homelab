@@ -1,2 +1,3 @@
+# vim:ft=properties
 ARG1="--reporting-disabled"
 ARG2="--storage-validate-keys"
