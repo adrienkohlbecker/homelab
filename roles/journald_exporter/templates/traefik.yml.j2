@@ -1,0 +1,13 @@
+http:
+  routers:
+    journald_exporter:
+      entryPoints:
+        - websecure
+      service: journald_exporter
+      rule: Host(`journald_exporter.{{ domain }}`) || Host(`journald_exporter.{{ inventory_hostname }}.{{ domain }}`)
+      tls: {}
+  services:
+    journald_exporter:
+      loadBalancer:
+        servers:
+          - url: 'http://localhost:12345/'
