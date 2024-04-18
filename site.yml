@@ -82,6 +82,7 @@
 
     - name: Restart machine
       reboot:
+      throttle: 1
       become: true
       when: reboot_required.stat.exists
       tags:
