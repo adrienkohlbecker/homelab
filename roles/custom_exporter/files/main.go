@@ -28,7 +28,10 @@ func init() {
 
 func main() {
   r := prometheus.NewRegistry()
-	r.MustRegister(driveActiveStatus)
+	r.MustRegister(driveActiveGauge)
+	r.MustRegister(driveStandbyGauge)
+	r.MustRegister(driveSleepingGauge)
+	r.MustRegister(driveUnknownGauge)
 	r.MustRegister(cronLastSuccessTimestamp)
 	r.MustRegister(cronNextRunTimestamp)
 
@@ -70,16 +73,44 @@ func gatherMetrics() {
 // ██████╔╝██║  ██║██║ ╚████╔╝ ███████╗    ██║  ██║╚██████╗   ██║   ██║ ╚████╔╝ ███████╗    ███████║   ██║   ██║  ██║   ██║   ╚██████╔╝███████║
 // ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝  ╚══════╝    ╚═╝  ╚═╝ ╚═════╝   ╚═╝   ╚═╝  ╚═══╝  ╚══════╝    ╚══════╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚══════╝
 
-var driveActiveStatus = prometheus.NewGaugeVec(
+var driveActiveGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
-		Name: "drive_active_status",
-		Help: "Is set to 1 when the drive is not in standby",
+		Name: "hdparm_drive_active",
+		Help: "Is set to 1 when the drive is active",
 	},
 	[]string{
 		// device id (from /dev/disk/by-id)
 		"device",
-		// state (`unknown`, `active/idle`, `standby`, `sleeping`)
-		"state",
+	},
+)
+var driveStandbyGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "hdparm_drive_standby",
+		Help: "Is set to 1 when the drive is in standby",
+	},
+	[]string{
+		// device id (from /dev/disk/by-id)
+		"device",
+	},
+)
+var driveSleepingGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "hdparm_drive_sleeping",
+		Help: "Is set to 1 when the drive is sleeping",
+	},
+	[]string{
+		// device id (from /dev/disk/by-id)
+		"device",
+	},
+)
+var driveUnknownGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "hdparm_drive_unknown",
+		Help: "Is set to 1 when the drive is in an unknown state",
+	},
+	[]string{
+		// device id (from /dev/disk/by-id)
+		"device",
 	},
 )
 var driveHdparmRegex = regexp.MustCompile("/dev/disk/by-id/([^/ ]+):\n drive state is:  ([\\w\\/]+)\n")
@@ -145,13 +176,27 @@ func getDriveActiveStatus() error {
 	}
 
 	for _, d := range driveHdparmDevices {
-		for _, s := range driveHdparmStates {
-			var value float64
-			if (data[d] == s) {
-				value = 1
-			}
-			driveActiveStatus.With(prometheus.Labels{"device": d, "state": s}).Set(value)
+		var active float64
+		var sleeping float64
+		var standby float64
+		var unknown float64
+
+		switch data[d] {
+		case "active/idle":
+			active = 1
+		case "standby":
+			standby = 1
+		case "sleeping":
+			sleeping = 1
+		case "unknown":
+			unknown = 1
 		}
+
+		driveActiveGauge.With(prometheus.Labels{"device": d}).Set(active)
+		driveSleepingGauge.With(prometheus.Labels{"device": d}).Set(sleeping)
+		driveStandbyGauge.With(prometheus.Labels{"device": d}).Set(standby)
+		driveUnknownGauge.With(prometheus.Labels{"device": d}).Set(unknown)
+
 	}
 
 	return nil
