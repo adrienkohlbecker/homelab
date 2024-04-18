@@ -25,6 +25,8 @@
       line: 'server.errorlog-use-syslog	= "enable"'
     - regexp: '^#?server\.errorlog\s'
       line: '# server.errorlog = "/var/log/lighttpd/error.log"'
+    - regexp: '^#?status\.status-url\s'
+      line: 'status.status-url = "/server-status"'
   register: lighttpd_conf
   become: true
   tags:
@@ -42,6 +44,7 @@
   loop:
     - 10-cgi.conf
     - 10-accesslog.conf
+    - 10-status.conf
   register: lighttpd_mod
   become: true
   tags:
