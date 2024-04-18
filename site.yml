@@ -52,6 +52,7 @@
 - name: Add more services
   hosts: all:!bunk
   roles:
+    - custom_exporter
     - journald_exporter
     - certbot
     - traefik

@@ -1,0 +1,12 @@
+
+/dev/disk/by-id/ata-WDC_WD101EFBX-68B0AN0_VCJ3MYHP:
+ drive state is:  active/idle
+
+/dev/disk/by-id/ata-WDC_WD101EFBX-68B0AN0_VCJ3V59P:
+ drive state is:  unknown
+
+/dev/disk/by-id/ata-WDC_WD101EFBX-68B0AN0_VCA3V79P:
+ drive state is:  standby
+
+/dev/disk/by-id/ata-WDC_WD101EFBX-68B0AN0_VCJ3B79P:
+ drive state is:  sleeping
