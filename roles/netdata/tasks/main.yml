@@ -243,6 +243,19 @@
   tags:
     - netdata
 
+- name: Setup shell for netdata user (for console troubleshooting)
+  file:
+    path: /var/lib/netdata/.zshrc
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: netdata
+    group: netdata
+    mode: "0644"
+  become: true
+  tags:
+    - netdata
+
 - name: Configure traefik
   template:
     src: netdata.yml.j2
