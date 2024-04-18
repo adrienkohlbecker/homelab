@@ -98,7 +98,7 @@
 - name: Copy the alerting config
   copy:
     src: alerts.conf
-    dest: /etc/netdata/health.d/alerts.conf
+    dest: /etc/netdata/health.d/custom_exporter.conf
     owner: netdata
     group: netdata
     mode: "0600"
