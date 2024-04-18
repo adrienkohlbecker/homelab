@@ -4,8 +4,12 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path"
 	"regexp"
+	"strconv"
 	"strings"
+
+	"golang.org/x/exp/slices"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
@@ -25,6 +29,7 @@ func init() {
 func main() {
   r := prometheus.NewRegistry()
 	r.MustRegister(driveActiveStatus)
+	r.MustRegister(cronLastSuccessTimestamp)
 
   handler := promhttp.HandlerFor(r, promhttp.HandlerOpts{})
 	http.Handle("/metrics", handler)
@@ -46,8 +51,23 @@ func main() {
 }
 
 func gatherMetrics() {
-	getDriveActiveStatus()
+	var err error
+	err = getDriveActiveStatus()
+	if err != nil {
+		log.Errorf("error during getDriveActiveStatus: %s", err)
+	}
+	err = getCronLastSuccessTimestamp()
+	if err != nil {
+		log.Errorf("error during getCronLastSuccessTimestamp: %s", err)
+	}
 }
+
+// ██████╗ ██████╗ ██╗██╗   ██╗███████╗     █████╗  ██████╗████████╗██╗██╗   ██╗███████╗    ███████╗████████╗ █████╗ ████████╗██╗   ██╗███████╗
+// ██╔══██╗██╔══██╗██║██║   ██║██╔════╝    ██╔══██╗██╔════╝╚══██╔══╝██║██║   ██║██╔════╝    ██╔════╝╚══██╔══╝██╔══██╗╚══██╔══╝██║   ██║██╔════╝
+// ██║  ██║██████╔╝██║██║   ██║█████╗      ███████║██║        ██║   ██║██║   ██║█████╗      ███████╗   ██║   ███████║   ██║   ██║   ██║███████╗
+// ██║  ██║██╔══██╗██║╚██╗ ██╔╝██╔══╝      ██╔══██║██║        ██║   ██║╚██╗ ██╔╝██╔══╝      ╚════██║   ██║   ██╔══██║   ██║   ██║   ██║╚════██║
+// ██████╔╝██║  ██║██║ ╚████╔╝ ███████╗    ██║  ██║╚██████╗   ██║   ██║ ╚████╔╝ ███████╗    ███████║   ██║   ██║  ██║   ██║   ╚██████╔╝███████║
+// ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═══╝  ╚══════╝    ╚═╝  ╚═╝ ╚═════╝   ╚═╝   ╚═╝  ╚═══╝  ╚══════╝    ╚══════╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚══════╝
 
 var driveActiveStatus = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
@@ -73,17 +93,17 @@ func getDriveActiveStatusInit() {
 
 }
 
-func getDriveActiveStatus() {
+func getDriveActiveStatus() error {
 	if len(driveHdparmDevices) == 0 {
-		return
+		return nil
 	}
 
-	// cmd := exec.Command("/bin/sh", "-c", "cat test.txt")
+	// cmd := exec.Command("/bin/sh", "-c", "cat test/test.txt")
 	cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("hdparm -C /dev/disk/by-id/%s", strings.Join(driveHdparmDevices, " /dev/disk/by-id/")))
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		log.Fatalf("unable to execute hdparm: %s\n", err)
+		return fmt.Errorf("unable to execute hdparm: %s", err)
 	}
 	// Output:
 	//
@@ -95,16 +115,32 @@ func getDriveActiveStatus() {
 
 	matches := driveHdparmRegex.FindAllStringSubmatch(string(out), -1)
 	if matches == nil {
-		log.Fatal("unable to match output, result is nil\n", err)
+		return fmt.Errorf("unable to match output, result is nil: %s", strconv.Quote(string(out)))
 	}
 
 	data := map[string]string{}
 
+	var loopErr []error
 	for _, m := range matches {
 		device := m[1]
 		state := m[2]
 
+		if (!slices.Contains(driveHdparmDevices, device)) {
+			loopErr = append(loopErr, fmt.Errorf("invalid device found: %s", device))
+		}
+		if (!slices.Contains(driveHdparmStates, state)) {
+			loopErr = append(loopErr, fmt.Errorf("invalid state found: %s", state))
+		}
+
 		data[device] = state
+	}
+
+	if len(loopErr) > 0 {
+		var errorMsg []string
+		for _, e := range loopErr {
+			errorMsg = append(errorMsg, e.Error())
+		}
+		return fmt.Errorf("unable to hdparm output: %s", strings.Join(errorMsg, ", "))
 	}
 
 	for _, d := range driveHdparmDevices {
@@ -116,5 +152,76 @@ func getDriveActiveStatus() {
 			driveActiveStatus.With(prometheus.Labels{"device": d, "state": s}).Set(value)
 		}
 	}
+
+	return nil
+
+}
+
+//  ██████╗██████╗  ██████╗ ███╗   ██╗    ██╗      █████╗ ███████╗████████╗    ███████╗██╗   ██╗ ██████╗ ██████╗███████╗███████╗███████╗    ████████╗██╗███╗   ███╗███████╗███████╗████████╗ █████╗ ███╗   ███╗██████╗
+// ██╔════╝██╔══██╗██╔═══██╗████╗  ██║    ██║     ██╔══██╗██╔════╝╚══██╔══╝    ██╔════╝██║   ██║██╔════╝██╔════╝██╔════╝██╔════╝██╔════╝    ╚══██╔══╝██║████╗ ████║██╔════╝██╔════╝╚══██╔══╝██╔══██╗████╗ ████║██╔══██╗
+// ██║     ██████╔╝██║   ██║██╔██╗ ██║    ██║     ███████║███████╗   ██║       ███████╗██║   ██║██║     ██║     █████╗  ███████╗███████╗       ██║   ██║██╔████╔██║█████╗  ███████╗   ██║   ███████║██╔████╔██║██████╔╝
+// ██║     ██╔══██╗██║   ██║██║╚██╗██║    ██║     ██╔══██║╚════██║   ██║       ╚════██║██║   ██║██║     ██║     ██╔══╝  ╚════██║╚════██║       ██║   ██║██║╚██╔╝██║██╔══╝  ╚════██║   ██║   ██╔══██║██║╚██╔╝██║██╔═══╝
+// ╚██████╗██║  ██║╚██████╔╝██║ ╚████║    ███████╗██║  ██║███████║   ██║       ███████║╚██████╔╝╚██████╗╚██████╗███████╗███████║███████║       ██║   ██║██║ ╚═╝ ██║███████╗███████║   ██║   ██║  ██║██║ ╚═╝ ██║██║
+//  ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝    ╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝       ╚══════╝ ╚═════╝  ╚═════╝ ╚═════╝╚══════╝╚══════╝╚══════╝       ╚═╝   ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝
+
+
+var cronLastSuccessTimestamp = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "cron_last_success_timestamp",
+		Help: "Set to the last time a cron job succeeded (0 if it never did)",
+	},
+	[]string{
+		// job identifier
+		"job",
+	},
+)
+
+func getCronLastSuccessTimestamp() error {
+
+	// dir := "test/jobs"
+	dir := "/var/log/jobs"
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+			return fmt.Errorf("unable to read jobs directory: %s", err)
+	}
+
+	var loopErr []error
+	for _, e := range entries {
+
+		p := path.Join(dir, e.Name())
+		buf, err := os.ReadFile(p)
+		if err != nil {
+			loopErr = append(loopErr, fmt.Errorf("unable to read %s: %s", p, err))
+			continue
+		}
+
+		str := strings.TrimSpace(string(buf))
+		var value float64
+
+		if str != "" {
+
+			dataTime, err :=  time.Parse(time.RFC3339, str)
+			if err != nil {
+				loopErr = append(loopErr, fmt.Errorf("unable to parse date from %s: %s", p, err))
+				continue
+			}
+
+			value = float64(dataTime.Unix())
+		}
+
+		cronLastSuccessTimestamp.With(prometheus.Labels{"job": e.Name()}).Set(value)
+
+	}
+
+	if len(loopErr) > 0 {
+		var errorMsg []string
+		for _, e := range loopErr {
+			errorMsg = append(errorMsg, e.Error())
+		}
+		return fmt.Errorf("unable to process jobs log directory: %s", strings.Join(errorMsg, ", "))
+	}
+
+	return nil
 
 }
