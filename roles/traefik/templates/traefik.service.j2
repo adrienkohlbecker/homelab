@@ -12,7 +12,7 @@ TimeoutSec=70
 RestartSec=15
 
 ExecStart=/usr/local/bin/traefik
-ExecStartPost=/usr/bin/timeout 60 bash -c 'sleep 1; while [ "`/usr/bin/curl --location --silent --show-error --fail --max-time 5 https://traefik.{{ inventory_hostname }}.{{ domain }}/ping`" != "OK" ]; do sleep 2; done'
+ExecStartPost=/usr/bin/timeout 60 bash -c 'sleep 1; while [ "`/usr/bin/curl --location --silent --show-error --fail --max-time 5 http://localhost:8082/ping`" != "OK" ]; do sleep 2; done'
 Type=exec
 
 [Install]

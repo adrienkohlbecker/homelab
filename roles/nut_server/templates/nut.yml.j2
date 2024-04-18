@@ -7,8 +7,8 @@ http:
       rule: Host(`nut.{{ domain }}`) || Host(`nut.{{ inventory_hostname }}.{{ domain }}`)
       tls: {}
       middlewares:
-        - redirect_to_cgi_script
-        - redirect_to_nut_subfolder
+        - nut_redirect_to_cgi_script
+        - nut_redirect_to_nut_subfolder
   services:
     nut:
       loadBalancer:
@@ -16,10 +16,10 @@ http:
           - url: 'http://localhost:8080/'
 
   middlewares:
-    redirect_to_nut_subfolder:
+    nut_redirect_to_nut_subfolder:
       addPrefix:
         prefix: "/cgi-bin/nut"
-    redirect_to_cgi_script:
+    nut_redirect_to_cgi_script:
       redirectRegex:
         regex: ^https://([^/]+)/?$
         replacement: "https://${1}/upsstats.cgi"

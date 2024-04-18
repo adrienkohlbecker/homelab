@@ -10,6 +10,8 @@ entryPoints:
     address: ':443'
     http:
       tls: {}
+  internal:
+    address: '127.0.0.1:8082'
 
 serversTransport:
   insecureSkipVerify: true
@@ -24,10 +26,12 @@ providers:
     watch: true
 
 ping:
-  entryPoint: websecure
   manualRouting: true
 api: {}
 accessLog:
   filePath: /var/log/traefik/access.log
 log:
   level: INFO
+metrics:
+  prometheus:
+    manualRouting: true

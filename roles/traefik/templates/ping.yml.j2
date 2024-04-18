@@ -1,6 +1,13 @@
 http:
   routers:
+    ping_internal:
+      rule: PathPrefix(`/ping`)
+      service: ping@internal
+      entryPoints:
+        - internal
     ping:
       rule: (Host(`traefik.{{ domain }}`) || Host(`traefik.{{ inventory_hostname }}.{{ domain }}`)) && PathPrefix(`/ping`)
       service: ping@internal
       tls: {}
+      entryPoints:
+        - websecure
