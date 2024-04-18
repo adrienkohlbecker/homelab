@@ -34,4 +34,4 @@
 #                          becoming a daemon and print debugging info to
 #                          stdout/stderr
 #  -h                      Print usage information.
-HD_IDLE_OPTS="-i 0 -l /var/log/hd-idle.log{% for id in hd_idle_disks %} -a /dev/disk/by-id/{{ id }} -i 1200{% endfor %}"
+HD_IDLE_OPTS="-i 0 -l /var/log/hd-idle.log{% for dev in ansible_devices.values() | selectattr("rotational", "equalto", "1") | map(attribute='links') | map(attribute='ids') | select | map('first') | sort %} -a /dev/disk/by-id/{{ dev }} -i 1200{% endfor %}"
