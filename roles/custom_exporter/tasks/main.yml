@@ -94,3 +94,24 @@
   become: true
   tags:
     - custom_exporter
+
+- name: Copy the alerting config
+  copy:
+    src: alerts.conf
+    dest: /etc/netdata/health.d/alerts.conf
+    owner: netdata
+    group: netdata
+    mode: "0600"
+    backup: true
+  register: alerts_conf
+  become: true
+  tags:
+    - custom_exporter
+
+- name: Reload health configuration
+  when: alerts_conf.changed
+  command: netdatacli reload-health
+  changed_when: true
+  become: true
+  tags:
+    - custom_exporter
