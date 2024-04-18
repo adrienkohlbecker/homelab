@@ -141,7 +141,7 @@
     name: docker_clean
     minute: '5'
     hour: '0'
-    job: /usr/local/bin/run_job docker_clean /usr/bin/docker system prune -f
+    job: /usr/local/bin/run_job daily docker_clean /usr/bin/docker system prune -f
     user: root
     cron_file: ansible_docker_clean
     backup: true

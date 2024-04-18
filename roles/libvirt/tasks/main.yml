@@ -184,7 +184,7 @@
     name: virsh_backup
     minute: 5
     hour: 0
-    job: /usr/local/bin/run_job virsh_backup /usr/local/bin/virsh_backup
+    job: /usr/local/bin/run_job daily virsh_backup /usr/local/bin/virsh_backup
     user: root
     cron_file: ansible_virsh_backup
     backup: true

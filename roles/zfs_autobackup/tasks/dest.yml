@@ -15,7 +15,7 @@
     name: zfs_autosync
     minute: "{{ rand_order * 10 }}" # space each host out by 10 minutes so services don't stop at the same time
     hour: 3
-    job: /usr/local/bin/run_job zfs_autosync /usr/local/bin/zfs_autosync
+    job: /usr/local/bin/run_job daily zfs_autosync /usr/local/bin/zfs_autosync
     user: root
     cron_file: ansible_zfs_autosync
     backup: true

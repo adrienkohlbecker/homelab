@@ -2,8 +2,15 @@
 set -euo pipefail
 
 usage() {
-  echo >&2 "Usage: run_job IDENTIFIER CMD [ARGS...]"
+  echo >&2 "Usage: run_job (daily|weekly|monthly) IDENTIFIER CMD [ARGS...]"
 }
+
+frequency=${1:-}
+if [ "$frequency" != "daily" ] && [ "$frequency" != "weekly" ] && [ "$frequency" != "monthly" ]; then
+  usage
+  exit 1
+fi
+shift
 
 identifier=${1:-}
 if [ "$identifier" = "" ]; then
@@ -17,4 +24,4 @@ if [ "$*" = "" ]; then
   exit 1
 fi
 
-/usr/bin/systemd-cat --identifier "$identifier" "$@" && /usr/bin/date --iso-8601=seconds >"/var/log/jobs/$identifier"
+/usr/bin/systemd-cat --identifier "$identifier" "$@" && echo "$frequency $(/usr/bin/date --iso-8601=seconds)" >"/var/log/jobs/$identifier"

@@ -140,7 +140,7 @@
     hour: 0
     minute: 47
     weekday: 7
-    job: "/usr/local/bin/run_job pihole_list_update {{ pihole_list_update_cmd }}"
+    job: "/usr/local/bin/run_job weekly pihole_list_update {{ pihole_list_update_cmd }}"
     user: root
     cron_file: ansible_pihole_list_update
   become: true

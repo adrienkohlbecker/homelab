@@ -30,6 +30,7 @@ func main() {
   r := prometheus.NewRegistry()
 	r.MustRegister(driveActiveStatus)
 	r.MustRegister(cronLastSuccessTimestamp)
+	r.MustRegister(cronNextRunTimestamp)
 
   handler := promhttp.HandlerFor(r, promhttp.HandlerOpts{})
 	http.Handle("/metrics", handler)
@@ -175,6 +176,16 @@ var cronLastSuccessTimestamp = prometheus.NewGaugeVec(
 		"job",
 	},
 )
+var cronNextRunTimestamp = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "cron_next_run_timestamp",
+		Help: "Set to the next time a cron job has to run (0 if it never ran once)",
+	},
+	[]string{
+		// job identifier
+		"job",
+	},
+)
 
 func getCronLastSuccessTimestamp() error {
 
@@ -198,19 +209,43 @@ func getCronLastSuccessTimestamp() error {
 
 		str := strings.TrimSpace(string(buf))
 		var value float64
+		var nextValue float64
 
 		if str != "" {
 
-			dataTime, err :=  time.Parse(time.RFC3339, str)
+			//format: weekly 2024-05-18T13:33:06+00:00
+			d := strings.Split(str, " ")
+			if len(d) != 2 {
+				loopErr = append(loopErr, fmt.Errorf("invalid format in job log %s", strconv.Quote(str)))
+				continue
+			}
+
+			dataTime, err :=  time.Parse(time.RFC3339, d[1])
 			if err != nil {
 				loopErr = append(loopErr, fmt.Errorf("unable to parse date from %s: %s", p, err))
 				continue
 			}
 
+			var nextDataTime time.Time
+			switch d[0] {
+			case "daily":
+				nextDataTime = dataTime.AddDate(0,0,1)
+			case "weekly":
+				nextDataTime = dataTime.AddDate(0,0,7)
+			case "monthly":
+				nextDataTime = dataTime.AddDate(0,1,0)
+			default:
+				loopErr = append(loopErr, fmt.Errorf("invalid frequency value %s", strconv.Quote(d[0])))
+				continue
+			}
+
 			value = float64(dataTime.Unix())
+			nextValue = float64(nextDataTime.Unix())
+
 		}
 
 		cronLastSuccessTimestamp.With(prometheus.Labels{"job": e.Name()}).Set(value)
+		cronNextRunTimestamp.With(prometheus.Labels{"job": e.Name()}).Set(nextValue)
 
 	}
 
