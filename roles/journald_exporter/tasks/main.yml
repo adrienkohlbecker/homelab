@@ -90,3 +90,15 @@
   become: true
   tags:
     - journald_exporter
+
+- name: Configure traefik
+  template:
+    src: traefik.yml.j2
+    dest: /etc/traefik/dynamic.d/journald_exporter.yml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - journald_exporter

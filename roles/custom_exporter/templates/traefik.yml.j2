@@ -1,0 +1,13 @@
+http:
+  routers:
+    custom_exporter:
+      entryPoints:
+        - websecure
+      service: custom_exporter
+      rule: Host(`custom_exporter.{{ domain }}`) || Host(`custom_exporter.{{ inventory_hostname }}.{{ domain }}`)
+      tls: {}
+  services:
+    custom_exporter:
+      loadBalancer:
+        servers:
+          - url: 'http://localhost:19392/'
