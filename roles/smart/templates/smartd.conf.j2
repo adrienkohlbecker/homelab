@@ -147,7 +147,7 @@
 # If the test string DEVICESCAN is the first uncommented text
 # then smartd will scan for devices.
 # DEVICESCAN may be followed by any desired Directives.
-# -n standby,48 : don't wake up devices except once per day (since checks run every 30 min)
+# -n standby : don't wake up devices
 # -W 0,45,50 log above 40°, critical above 50°
 # -s (L/../01/./04:024|S/../.././02:001) short test daily at 2am staggered by 1h. long tests 1st of the month at 4am staggered by 24h
 # -I 194 : Do not log Temperature_Celsius changes
@@ -155,7 +155,7 @@
 # -I 231 : Do not log Temperature changes
 # -I 9 : Do not log Power_On_Hours changes
 # -d nvme,0xffffffff : use broadcast namespace id instead of namespace pointed to by symlink
-DEFAULT -a -n standby,48 -m root -M exec /usr/share/smartmontools/smartd-runner -o on -S on -s (L/../01/./04:024|S/../.././02) -I 194 -I 190 -I 231 -I 9
+DEFAULT -a -n standby -m root -M exec /usr/share/smartmontools/smartd-runner -o on -S on -s (L/../01/./04:024|S/../.././02) -I 194 -I 190 -I 231 -I 9
 
 {% for dev in ansible_devices.values() | map(attribute='links') | map(attribute='ids') | select | map('first') | sort %}
 {% if dev.startswith('nvme-') %}
