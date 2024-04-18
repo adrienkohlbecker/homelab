@@ -4,24 +4,24 @@ http:
       entryPoints:
         - websecure
       service: journald_exporter
-      rule: Host(`journald_exporter.{{ domain }}`) || Host(`journald_exporter.{{ inventory_hostname }}.{{ domain }}`)
+      rule: Host(`journald-exporter.{{ domain }}`) || Host(`journald-exporter.{{ inventory_hostname }}.{{ domain }}`)
       tls: {}
       middlewares:
-        - redirect_to_metrics
-        - change_headers
+        - journald_redirect_to_metrics
+        - journald_change_headers
   services:
     journald_exporter:
       loadBalancer:
         servers:
           - url: 'http://localhost:12345/'
   middlewares:
-    change_headers:
+    journald_change_headers:
       headers:
         customRequestHeaders:
           Authorization: Basic {{ ("metrics:"+journald_exporter_key) | b64encode }}
         customResponseHeaders:
           Content-Type: text/plain
-    redirect_to_metrics:
+    journald_redirect_to_metrics:
       redirectRegex:
         regex: ^https://([^/]+)/?$
         replacement: "https://${1}/metrics"

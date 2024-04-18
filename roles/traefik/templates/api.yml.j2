@@ -1,19 +1,21 @@
 http:
   routers:
+    dashboard_internal:
+      rule: PathPrefix(`/api`) || PathPrefix(`/dashboard`)
+      service: api@internal
+      entryPoints:
+        - internal
     dashboard:
-      rule: (Host(`traefik.{{ domain }}`) || Host(`traefik.{{ inventory_hostname }}.{{ domain }}`)) && (PathPrefix(`/api`) || PathPrefix(`/dashboard`))
+      rule: Host(`traefik.{{ domain }}`) || Host(`traefik.{{ inventory_hostname }}.{{ domain }}`)
       service: api@internal
       tls: {}
+      entryPoints:
+        - websecure
       middlewares:
-        - redirect_to_dashboard_root
-        - redirect_to_dashboard_local
+        - api_redirect_to_dashboard
 
   middlewares:
-    redirect_to_dashboard_root:
+    api_redirect_to_dashboard:
       redirectRegex:
-        regex: "^https://traefik.{{ domain }}/$"
-        replacement: "https://traefik.{{ domain }}/dashboard/"
-    redirect_to_dashboard_local:
-      redirectRegex:
-        regex: "^https://traefik.{{ inventory_hostname }}.{{ domain }}/$"
-        replacement: "https://traefik.{{ inventory_hostname }}.{{ domain }}/dashboard/"
+        regex: ^https://([^/]+)/?$
+        replacement: "https://${1}/dashboard/"
