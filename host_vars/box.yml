@@ -34,7 +34,6 @@ netplan:
       dhcp4: true
       dhcp6: false
 
-hd_idle_disks: []
 hdparm_settings: {}
 
 rand_order: 3
