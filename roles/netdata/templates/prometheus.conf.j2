@@ -3,3 +3,6 @@ jobs:
     url: http://127.0.0.1:12345/metrics
     username: metrics
     password: {{ journald_exporter_key }}
+
+  - name: custom_local
+    url: http://127.0.0.1:9392/metrics
