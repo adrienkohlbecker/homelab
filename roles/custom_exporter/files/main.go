@@ -20,7 +20,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-const DEFAULT_ADDRESS = ":9392"
+const DEFAULT_ADDRESS = ":19392"
 
 func init() {
 	getDriveActiveStatusInit()
