@@ -1,0 +1,5 @@
+# vim:ft=yaml
+jobs:
+  - name: local
+    url: http://{{ pihole_fixed_ip }}
+    password: "{{ pihole_password | hash('sha256') | hash('sha256') }}"
