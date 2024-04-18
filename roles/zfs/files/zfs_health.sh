@@ -3,7 +3,10 @@
 IFS=$'\n\t'
 set -euxo pipefail
 
-[ "$(id -u)" == "0" ] || { echo >&2 "I require root. Aborting"; exit 1; }
+[ "$(id -u)" == "0" ] || {
+  echo >&2 "I require root. Aborting"
+  exit 1
+}
 
 # Override path, for inside cron
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
@@ -30,7 +33,7 @@ echo "Checking pool health condition..."
 if zpool status | grep -q -e 'DEGRADED\|FAULTED\|OFFLINE\|UNAVAIL\|REMOVED\|FAIL\|DESTROYED\|corrupt\|cannot\|unrecover'; then
 
   echo "ERROR :: Detected pool health fault"
-  mail -s "$EMAIL_SUBJECT_PREFIX - Health fault" "$EMAIL_TO" < "$TMP_OUTPUT"
+  mail -s "$EMAIL_SUBJECT_PREFIX - Health fault" "$EMAIL_TO" <"$TMP_OUTPUT"
   exit 1
 fi
 
@@ -41,7 +44,7 @@ fi
 echo "Checking drive errors..."
 if zpool status | grep ONLINE | grep -v state | awk '{print $3 $4 $5}' | grep -qv 000; then
   echo "ERROR :: Detected drive errors"
-  mail -s "$EMAIL_SUBJECT_PREFIX - Drive errors" "$EMAIL_TO" < "$TMP_OUTPUT"
+  mail -s "$EMAIL_SUBJECT_PREFIX - Drive errors" "$EMAIL_TO" <"$TMP_OUTPUT"
   exit 1
 fi
 
@@ -65,23 +68,23 @@ ZFS_VOLUMES=$(zpool list -H -o name)
 for volume in $ZFS_VOLUMES; do
   if zpool status "$volume" | grep -q "none requested"; then
     echo "ERROR :: No scrub requested on $volume"
-    mail -s "$EMAIL_SUBJECT_PREFIX - No scrub requested on $volume" "$EMAIL_TO" < "$TMP_OUTPUT"
+    mail -s "$EMAIL_SUBJECT_PREFIX - No scrub requested on $volume" "$EMAIL_TO" <"$TMP_OUTPUT"
     exit 1
   elif zpool status "$volume" | grep -q -e "scrub canceled"; then
     echo "ERROR :: Last scrub canceled on $volume"
-    mail -s "$EMAIL_SUBJECT_PREFIX - Last scrub canceled on $volume" "$EMAIL_TO" < "$TMP_OUTPUT"
+    mail -s "$EMAIL_SUBJECT_PREFIX - Last scrub canceled on $volume" "$EMAIL_TO" <"$TMP_OUTPUT"
     exit 1
   elif zpool status "$volume" | grep -q -e "scrub in progress\|resilver"; then
     echo "Scrub in progress for $volume, skipping."
     break
   fi
 
-  SCRUB_RAW_DATE=$(zpool status "$volume" | grep scrub | rev | cut -d' ' -f1-5 | rev)
+  SCRUB_RAW_DATE=$(zpool status "$volume" | grep -e "scrub repaired" -e "scrub paused" | rev | cut -d' ' -f1-5 | rev)
   SCRUB_DATE=$(date -d "$SCRUB_RAW_DATE" +"%s")
 
   if [ $((CURRENT_DATE - SCRUB_DATE)) -ge $SCRUB_EXPIRE ]; then
     echo "ERROR :: Scrub expired on $volume"
-    mail -s "$EMAIL_SUBJECT_PREFIX - Scrub expired on $volume" "$EMAIL_TO" < "$TMP_OUTPUT"
+    mail -s "$EMAIL_SUBJECT_PREFIX - Scrub expired on $volume" "$EMAIL_TO" <"$TMP_OUTPUT"
     exit 1
   fi
 done
