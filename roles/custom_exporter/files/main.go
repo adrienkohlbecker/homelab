@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -12,7 +13,6 @@ import (
 	"golang.org/x/exp/slices"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	log "github.com/sirupsen/logrus"
 
 	"os/exec"
 	"time"
@@ -22,7 +22,12 @@ import (
 
 const DEFAULT_ADDRESS = ":19392"
 
+var stderr *log.Logger
+var stdout *log.Logger
+
 func init() {
+	stdout = log.New(os.Stdout, "", 0)
+	stderr = log.New(os.Stderr, "", 0)
 	getDriveActiveStatusInit()
 }
 
@@ -50,19 +55,19 @@ func main() {
 		addr = DEFAULT_ADDRESS
 	}
 
-	log.Info(fmt.Sprintf("Beginning to serve on address `%s`", addr))
-	log.Fatal(http.ListenAndServe(addr, nil))
+	stdout.Printf("Beginning to serve on address `%s`\n", addr)
+	stderr.Fatal(http.ListenAndServe(addr, nil))
 }
 
 func gatherMetrics() {
 	var err error
 	err = getDriveActiveStatus()
 	if err != nil {
-		log.Errorf("error during getDriveActiveStatus: %s", err)
+		stderr.Printf("error during getDriveActiveStatus: %s\n", err)
 	}
 	err = getCronLastSuccessTimestamp()
 	if err != nil {
-		log.Errorf("error during getCronLastSuccessTimestamp: %s", err)
+		stderr.Printf("error during getCronLastSuccessTimestamp: %s\n", err)
 	}
 }
 
