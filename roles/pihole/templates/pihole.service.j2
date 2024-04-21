@@ -58,7 +58,7 @@ ExecStart=/usr/bin/podman run \
     --label "traefik.http.routers.pihole.tls=true" \
     --label "traefik.http.routers.pihole.entrypoints=websecure" \
     docker.io/pihole/pihole:latest
-ExecStartPost=/usr/bin/timeout 60 bash -c 'sleep 1; while ! /usr/bin/podman healthcheck run $(cat /run/pihole.service.ctr-id); do echo "pihole unhealthy"; sleep 2; done; echo "pihole healthy"'
+ExecStartPost=/usr/bin/timeout 60 bash -c 'sleep 1; while [ "$(/usr/bin/podman container inspect "$(cat %t/%n.ctr-id)" --format "{{ "{{" }}.State.Healthcheck.Status{{ "}}" }}")" != "healthy" ]; do sleep 2; done'
 ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -d {{ pihole_fixed_ip }} -p udp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
 ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -d {{ pihole_fixed_ip }} -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
