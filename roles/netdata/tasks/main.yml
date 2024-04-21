@@ -248,7 +248,7 @@
     - netdata
 
 - name: Reload health configuration
-  when: (netdata_systemdunits_health_template.changed or netdata_systemdunits_health.changed or netdata_systemdunits_health_2) and not (systemd_started.changed or systemd_restarted.changed)
+  when: (netdata_systemdunits_health_template.changed or netdata_systemdunits_health.changed or netdata_systemdunits_health_2.changed) and not (systemd_started.changed or systemd_restarted.changed)
   command: netdatacli reload-health
   changed_when: true
   become: true
