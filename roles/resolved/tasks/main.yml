@@ -26,8 +26,6 @@
   file:
     src: /run/systemd/resolve/resolv.conf
     dest: /etc/resolv.conf
-    owner: root
-    group: root
     state: link
   become: true
   register: resolv_conf
