@@ -15,6 +15,7 @@
     - unattended_upgrades
     - logrotate
     - journald
+    - resolved
     - iptables
     - fail2ban
     - ssh
