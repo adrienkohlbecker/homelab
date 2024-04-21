@@ -48,7 +48,7 @@
       become: true
 
     - name: template | Delete newly added file
-      when: '"backup_file" not in systemd_unit'
+      when: systemd_unit.changed and "backup_file" not in systemd_unit
       file:
         path: /etc/systemd/system/{{ systemd_unit_dest | default(systemd_unit_src) }}
         state: absent
