@@ -131,6 +131,14 @@
       'autobackup:bak': 'true'
       atime: 'off'
       relatime: 'off'
+  register: zfs_root_properties
+  become: true
+  tags:
+    - zfs
+
+- name: Workaround for setting atime on mounted root
+  when: zfs_root_properties.changed
+  command: mount -o remount -o noatime /
   become: true
   tags:
     - zfs
