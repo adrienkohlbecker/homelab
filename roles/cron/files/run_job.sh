@@ -6,7 +6,7 @@ usage() {
 }
 
 frequency=${1:-}
-if [ "$frequency" != "daily" ] && [ "$frequency" != "weekly" ] && [ "$frequency" != "monthly" ]; then
+if [ "$frequency" != "hourly" ] && [ "$frequency" != "daily" ] && [ "$frequency" != "weekly" ] && [ "$frequency" != "monthly" ]; then
   usage
   exit 1
 fi
