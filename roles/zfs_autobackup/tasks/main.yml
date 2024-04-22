@@ -89,6 +89,42 @@
   tags:
     - zfs_autobackup
 
+- name: Copy the local backup script
+  copy:
+    src: zfs_backup_local.sh
+    dest: /usr/local/bin/zfs_backup_local
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Copy the onsite backup script
+  copy:
+    src: zfs_backup_onsite.sh
+    dest: /usr/local/bin/zfs_backup_onsite
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Copy the offsite backup script
+  copy:
+    src: zfs_backup_offsite.sh
+    dest: /usr/local/bin/zfs_backup_offsite
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+  become: true
+  tags:
+    - zfs_autobackup
+
 - name: Copy the snapshot script
   template:
     src: zfs_autosnapshot.sh.j2
@@ -151,8 +187,6 @@
 
 - name: Configure host as a source for backups
   import_tasks: source.yml
-  when: inventory_hostname != 'backup'
 
 - name: Configure host as a destination for backups
   import_tasks: dest.yml
-  when: inventory_hostname == 'backup' or inventory_hostname == 'box'

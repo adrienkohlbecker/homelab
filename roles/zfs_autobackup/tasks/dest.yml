@@ -1,11 +1,7 @@
 - name: dest | Copy the sync script
-  template:
-    src: zfs_autosync.sh.j2
-    dest: /usr/local/bin/zfs_autosync
-    mode: "0755"
-    owner: root
-    group: root
-    backup: true
+  file:
+    path: /usr/local/bin/zfs_autosync
+    state: absent
   become: true
   tags:
     - zfs_autobackup
@@ -19,6 +15,7 @@
     user: root
     cron_file: ansible_zfs_autosync
     backup: true
+    state: absent
   become: true
   tags:
     - zfs_autobackup
@@ -26,19 +23,25 @@
 - name: dest | Monitor cron entry
   file:
     path: /var/log/jobs/zfs_autosync
-    state: touch
-    access_time: preserve
-    modification_time: preserve
-    owner: root
-    group: root
-    mode: "0644"
+    state: absent
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: dest | Set properties on backup dataset
+  community.general.zfs:
+    name: "{{ zfs_autobackup_dest_dataset.split('/')[0] }}"
+    state: present
+    extra_zfs_properties:
+      atime: 'off'
+      relatime: 'off'
   become: true
   tags:
     - zfs_autobackup
 
 - name: dest | Set properties on bak dataset
   community.general.zfs:
-    name: bak
+    name: "{{ zfs_autobackup_dest_dataset }}"
     state: present
     extra_zfs_properties:
       atime: 'off'

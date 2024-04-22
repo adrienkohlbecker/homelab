@@ -1,7 +1,3 @@
-Host bunk
-  Hostname {{ (wireguard_peers|selectattr("name", "eq", "bunk")|first).address }}
-  User ak
-
 Host *
     ControlPath ~/.ssh/.controlmaster-%C
     ControlMaster auto

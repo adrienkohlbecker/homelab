@@ -38,7 +38,6 @@ hdparm_settings: {}
 
 rand_order: 1
 
-bunk_sync_datasets:
-  - { dataset: rpool/services,     mountpoint: /mnt/services,     destpath: backup_services }
-  - { dataset: rpool/ROOT/jammy,   mountpoint: /,                 destpath: backup_jammy }
-  - { dataset: rpool/old_services, mountpoint: /mnt/old_services, destpath: backup_old_services }
+zfs_autobackup_source_host: homelab
+zfs_autobackup_dest_dataset: bak/homelab
+zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@homelab
