@@ -155,13 +155,15 @@
 # -I 231 : Do not log Temperature changes
 # -I 9 : Do not log Power_On_Hours changes
 # -d nvme,0xffffffff : use broadcast namespace id instead of namespace pointed to by symlink
-DEFAULT -a -n standby -m root -M exec /usr/share/smartmontools/smartd-runner -o on -S on -s (L/../01/./04:024|S/../.././02) -I 194 -I 190 -I 231 -I 9
+
+# TODO: once in noble (smartmontools 7.4, re-enable default arguments with -a and error log checking on nvme)
+DEFAULT -H -f -t -l selftest -C 197 -U 198 -n standby -m root -M exec /usr/share/smartmontools/smartd-runner -o on -S on -s (L/../01/./04:024|S/../.././02) -I 194 -I 190 -I 231 -I 9
 
 {% for dev in ansible_devices.values() | map(attribute='links') | map(attribute='ids') | select | map('first') | sort %}
 {% if dev.startswith('nvme-') %}
 /dev/disk/by-id/{{ dev }} -d nvme,0xffffffff -W 0,60,80
 {% elif dev.startswith('ata-') %}
-/dev/disk/by-id/{{ dev }} -d ata -W 0,45,50
+/dev/disk/by-id/{{ dev }} -d ata -W 0,45,50 -l error
 {% endif %}
 {% endfor %}
 
