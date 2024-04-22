@@ -54,6 +54,7 @@
 - name: Add more services
   hosts: all:!bunk
   roles:
+    - avahi
     - custom_exporter
     - journald_exporter
     - certbot
