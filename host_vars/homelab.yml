@@ -62,6 +62,9 @@ bunk_sync_datasets:
   # - { dataset: data/data,          mountpoint: /mnt/data,        destpath: data }
   # - { dataset: data/brumath,       mountpoint: /mnt/brumath,     destpath: brumath }
   # - { dataset: data/eckwersheim,   mountpoint: /mnt/eckwersheim, destpath: eckwersheim }
-  - { dataset: rpool/services,     mountpoint: /mnt/services,    destpath: services }
-  - { dataset: rpool/vms,          mountpoint: /mnt/vms/ssd,     destpath: vms_ssd }
-  - { dataset: rpool/ROOT/jammy,   mountpoint: /,                destpath: rpool }
+  - { dataset: rpool/services,     mountpoint: /mnt/services,               destpath: services }
+  # - { dataset: rpool/vms,          mountpoint: /var/lib/libvirt/images,     destpath: vms }
+  - { dataset: rpool/ROOT/jammy,   mountpoint: /,                           destpath: jammy }
+  - { dataset: rpool/ROOT/bionic,  mountpoint: /mnt/old_bionic,             destpath: old_bionic }
+  - { dataset: rpool/old_services, mountpoint: /mnt/old_services,           destpath: old_services }
+  - { dataset: rpool/old_vms,      mountpoint: /mnt/old_vms,                destpath: old_vms }
