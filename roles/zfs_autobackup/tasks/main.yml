@@ -9,23 +9,22 @@
   tags:
     - zfs_autobackup
 
-- name: Install zfs autobackup
-  pip:
-    name: zfs-autobackup
-    virtualenv: /opt/virtualenv/zfs_autobackup
-    extra_args: --no-deps
+# because https://www.reddit.com/r/learnpython/comments/uj3dhx/why_does_pip_keep_reinstalling_the_same_version/ marks it changed every time
+- name: Check if zfs autobackup installed
+  stat:
+    path: /opt/virtualenv/zfs_autobackup/bin/zfs-autobackup
   become: true
-  register: zfs_autobackup_install
+  register: zfs_autobackup_installed
   tags:
     - zfs_autobackup
 
-# in two steps because https://www.reddit.com/r/learnpython/comments/uj3dhx/why_does_pip_keep_reinstalling_the_same_version/ marks it changed every time
 - name: Install zfs autobackup
-  when: zfs_autobackup_install.changed
+  when: not zfs_autobackup_installed.stat.exists
   pip:
     name: zfs-autobackup
     virtualenv: /opt/virtualenv/zfs_autobackup
   become: true
+  register: zfs_autobackup_install
   tags:
     - zfs_autobackup
 

@@ -139,6 +139,7 @@
 - name: Workaround for setting atime on mounted root
   when: zfs_root_properties.changed
   command: mount -o remount -o noatime /
+  changed_when: true
   become: true
   tags:
     - zfs
