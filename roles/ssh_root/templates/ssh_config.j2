@@ -3,7 +3,7 @@ Host bunk
   User ak
 
 Host *
-    ControlPath ~/.ssh/control-master-%r@%h:%p
+    ControlPath ~/.ssh/.controlmaster-%C
     ControlMaster auto
     ControlPersist 3600
     IdentityFile ~/.ssh/id_ed25519
