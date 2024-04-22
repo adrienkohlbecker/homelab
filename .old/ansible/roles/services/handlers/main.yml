@@ -6,12 +6,6 @@
     state: restarted
   become: yes
 
-- name: Restart avahi
-  service:
-    name: avahi-daemon
-    state: restarted
-  become: yes
-
 - name: Restart tautulli
   service:
     name: tautulli
