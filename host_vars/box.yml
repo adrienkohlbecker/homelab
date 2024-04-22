@@ -38,4 +38,6 @@ hdparm_settings: {}
 
 rand_order: 3
 
-bunk_sync_datasets: []
+zfs_autobackup_source_host:
+zfs_autobackup_dest_dataset:
+zfs_autobackup_ssh_public_key:

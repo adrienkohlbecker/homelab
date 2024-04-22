@@ -21,10 +21,29 @@
   when: not (ansible_check_mode and zfs_autobackup_user.changed)
   ansible.posix.authorized_key:
     user: zfs_autobackup
-    key: "{{ ssh_root_at_backup_public_key }}"
+    key: "{{ zfs_autobackup_ssh_public_key }}"
     exclusive: true
   become: true
   tags:
     - zfs_autobackup
 
-# TODO: sudo zfs allow zfs_autobackup send,hold,release dataset
+- name: Get back up datasets
+  shell: zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'
+  changed_when: false
+  register: zfs_backup_datasets
+  become: true
+  tags:
+    - zfs_autobackup
+    - focus
+
+- name: Set permissions on backed up datasets
+  shell: set -euo pipefail; bfr=`zfs allow {{ item }} | md5sum | cut -f 1 -d " "`; zfs allow zfs_autobackup send,hold,release {{ item }}; aftr=`zfs allow {{ item }} | md5sum | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "permissions updated" || exit 1)
+  args:
+    executable: /bin/bash
+  register: zfs_allow_cmd
+  changed_when: "'permissions updated' in zfs_allow_cmd.stdout"
+  loop: "{{ zfs_backup_datasets.stdout_lines }}"
+  become: true
+  tags:
+    - zfs_autobackup
+    - focus

@@ -55,16 +55,6 @@ hdparm_settings: {}
 
 rand_order: 2
 
-bunk_sync_datasets:
-  # - { dataset: beelink/arq/adrien, mountpoint: /mnt/arq/adrien,  destpath: arq/adrien }
-  # - { dataset: beelink/arq/marie,  mountpoint: /mnt/arq/marie,   destpath: arq/marie }
-  # - { dataset: beelink/arq/game,   mountpoint: /mnt/arq/game,    destpath: arq/game }
-  # - { dataset: data/data,          mountpoint: /mnt/data,        destpath: data }
-  # - { dataset: data/brumath,       mountpoint: /mnt/brumath,     destpath: brumath }
-  # - { dataset: data/eckwersheim,   mountpoint: /mnt/eckwersheim, destpath: eckwersheim }
-  - { dataset: rpool/services,     mountpoint: /mnt/services,               destpath: services }
-  # - { dataset: rpool/vms,          mountpoint: /var/lib/libvirt/images,     destpath: vms }
-  - { dataset: rpool/ROOT/jammy,   mountpoint: /,                           destpath: jammy }
-  - { dataset: rpool/ROOT/bionic,  mountpoint: /mnt/old_bionic,             destpath: old_bionic }
-  - { dataset: rpool/old_services, mountpoint: /mnt/old_services,           destpath: old_services }
-  - { dataset: rpool/old_vms,      mountpoint: /mnt/old_vms,                destpath: old_vms }
+zfs_autobackup_source_host: backup
+zfs_autobackup_dest_dataset: data/backup
+zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDp277oY86WuDWYdU4Xr8eBUMAZ7L089F5SjBhmZzRS8 root@backup
