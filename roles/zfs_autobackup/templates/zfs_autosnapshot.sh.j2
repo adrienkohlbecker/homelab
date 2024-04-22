@@ -5,21 +5,23 @@ set -euxo pipefail
 
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# zfs-autobackup \
-#   --no-send \
-#   --keep-source 10,1d1w,1w1m,1m10y \
-#   --keep-target 16384 \
-#   --allow-empty \
-#   --exclude-received \
-#   --post-snapshot-cmd 'systemctl start zfs_autosnapshot.target' \
-#   --pre-snapshot-cmd 'systemctl stop zfs_autosnapshot.target' \
-#   --verbose \
-#   bak
+zfs-autobackup \
+  --no-send \
+  --keep-source 10,1d1w,1w1m,1m10y \
+  --keep-target 16384 \
+  --allow-empty \
+  --exclude-received \
+  --post-snapshot-cmd 'systemctl start zfs_autosnapshot.target' \
+  --pre-snapshot-cmd 'systemctl stop zfs_autosnapshot.target' \
+  --verbose \
+  bak
 
-doit () {
+doit() {
   local dataset=$1
   local mountpoint=$2
   local destpath=$3
+
+  zfs_check_mount $dataset $mountpoint
 
   LAST_SNAPSHOT=$(zfs list -t snapshot -o name -s creation -r $dataset | grep "@bak-" | tail -1 | cut -d@ -f2)
   RSYNC=(rsync -ah --delete --delete-excluded --compress --timeout 60 --log-file=/var/log/zfs_autobackup/${dataset//\//_}.log --one-file-system --exclude .DS_Store --exclude "._*" --exclude .DocumentRevisions-V100 --exclude .Trashes --exclude .TemporaryItems)
