@@ -11,5 +11,7 @@
   {# Ensure that we don't use ZFS by mistake #}
   "storage-driver": "overlay2",
   {# Do not bind to 0.0.0.0 by default when publishing ports, which would bind them to all interfaces including externally #}
-  "ip": "127.0.0.1"
+  "ip": "127.0.0.1",
+  {# Enable metrics server #}
+  "metrics-addr": "127.0.0.1:9323"
 }
