@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -30,6 +31,8 @@ func init() {
 	stderr = log.New(os.Stderr, "", 0)
 	getDriveActiveStatusInit()
 	exporterUpInit()
+	getNetdataContextStatusInit()
+	getNetdataCollectorStatusInit()
 }
 
 func main() {
@@ -42,6 +45,7 @@ func main() {
 	r.MustRegister(driveUnknownGauge)
 	r.MustRegister(cronLastSuccessTimestamp)
 	r.MustRegister(cronNextRunTimestamp)
+	r.MustRegister(netdataCollectorUp)
 
   handler := promhttp.HandlerFor(r, promhttp.HandlerOpts{})
 	http.Handle("/metrics", handler)
@@ -74,6 +78,17 @@ func gatherMetrics() {
 		stderr.Printf("error during getCronLastSuccessTimestamp: %s\n", err)
 		exporterErrors.Inc()
 	}
+	err = getNetdataContextStatus()
+	if err != nil {
+		stderr.Printf("error during getNetdataContextStatus: %s\n", err)
+		exporterErrors.Inc()
+	}
+	err = getNetdataCollectorStatus()
+	if err != nil {
+		stderr.Printf("error during getNetdataCollectorStatus: %s\n", err)
+		exporterErrors.Inc()
+	}
+}
 
 //  ██████╗██╗   ██╗███████╗████████╗ ██████╗ ███╗   ███╗    ███████╗██╗  ██╗██████╗  ██████╗ ██████╗ ████████╗███████╗██████╗
 // ██╔════╝██║   ██║██╔════╝╚══██╔══╝██╔═══██╗████╗ ████║    ██╔════╝╚██╗██╔╝██╔══██╗██╔═══██╗██╔══██╗╚══██╔══╝██╔════╝██╔══██╗
@@ -97,6 +112,24 @@ var exporterErrors = prometheus.NewCounter(
 
 func exporterUpInit() {
 	exporterUp.Set(1)
+}
+
+func getJSON(url string, result interface{}) error {
+	resp, err := http.Get(url)
+	if err != nil {
+			return fmt.Errorf("cannot fetch URL %q: %v", url, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("unexpected http GET status: %s", resp.Status)
+	}
+	// We could check the resulting content type
+	// here if desired.
+	err = json.NewDecoder(resp.Body).Decode(result)
+	if err != nil {
+			return fmt.Errorf("cannot decode JSON: %v", err)
+	}
+	return nil
 }
 
 // ██████╗ ██████╗ ██╗██╗   ██╗███████╗     █████╗  ██████╗████████╗██╗██╗   ██╗███████╗    ███████╗████████╗ █████╗ ████████╗██╗   ██╗███████╗
@@ -332,6 +365,133 @@ func getCronLastSuccessTimestamp() error {
 			errorMsg = append(errorMsg, e.Error())
 		}
 		return fmt.Errorf("unable to process jobs log directory: %s", strings.Join(errorMsg, ", "))
+	}
+
+	return nil
+
+}
+
+// ███╗   ██╗███████╗████████╗██████╗  █████╗ ████████╗ █████╗      ██████╗ ██████╗ ██╗     ██╗     ███████╗ ██████╗████████╗ ██████╗ ██████╗     ███████╗████████╗ █████╗ ████████╗██╗   ██╗███████╗
+// ████╗  ██║██╔════╝╚══██╔══╝██╔══██╗██╔══██╗╚══██╔══╝██╔══██╗    ██╔════╝██╔═══██╗██║     ██║     ██╔════╝██╔════╝╚══██╔══╝██╔═══██╗██╔══██╗    ██╔════╝╚══██╔══╝██╔══██╗╚══██╔══╝██║   ██║██╔════╝
+// ██╔██╗ ██║█████╗     ██║   ██║  ██║███████║   ██║   ███████║    ██║     ██║   ██║██║     ██║     █████╗  ██║        ██║   ██║   ██║██████╔╝    ███████╗   ██║   ███████║   ██║   ██║   ██║███████╗
+// ██║╚██╗██║██╔══╝     ██║   ██║  ██║██╔══██║   ██║   ██╔══██║    ██║     ██║   ██║██║     ██║     ██╔══╝  ██║        ██║   ██║   ██║██╔══██╗    ╚════██║   ██║   ██╔══██║   ██║   ██║   ██║╚════██║
+// ██║ ╚████║███████╗   ██║   ██████╔╝██║  ██║   ██║   ██║  ██║    ╚██████╗╚██████╔╝███████╗███████╗███████╗╚██████╗   ██║   ╚██████╔╝██║  ██║    ███████║   ██║   ██║  ██║   ██║   ╚██████╔╝███████║
+// ╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝     ╚═════╝ ╚═════╝ ╚══════╝╚══════╝╚══════╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝    ╚══════╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚══════╝
+
+var netdataCollectorUp = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "netdata_collector_up",
+		Help: "Always reports 1 when the collector is up",
+	},
+	[]string{
+		// collector identifier
+		"collector",
+	},
+)
+
+type NetdataContext struct {
+	Family string
+	Priority int
+	FirstEntry int
+	LastEntry int
+	Live bool
+}
+
+type NetdataContextsResponse struct {
+	Contexts map[string]NetdataContext
+}
+
+var netdataContexts map[string]string
+
+func getNetdataContextStatusInit() {
+	netdataContexts = make(map[string]string)
+
+	value, ok := os.LookupEnv("NETDATA_CONTEXTS")
+	if ok && value != "" {
+		for _, v := range strings.Split(value,",") {
+			vv := strings.Split(v, ":")
+			if len(vv) != 2 {
+				log.Fatalf("Invalid format for NETDATA_CONTEXTS env var, expected comma separated list of values separated by colon, got: %s", v)
+			}
+
+			netdataContexts[vv[1]] = vv[0]
+		}
+	}
+}
+
+func getNetdataContextStatus() error {
+
+	if len(netdataContexts) == 0 {
+		return nil
+	}
+
+	var resp NetdataContextsResponse
+  err := getJSON("http://localhost:19999/api/v2/contexts", &resp)
+	if (err != nil) {
+		return err
+	}
+
+	for id, c := range resp.Contexts {
+		collector, ok := netdataContexts[id]
+		if !ok {
+			continue
+		}
+
+		var live float64
+		if c.Live {
+			live = 1
+		}
+		netdataCollectorUp.With(prometheus.Labels{"collector": collector}).Set(live)
+	}
+
+	return nil
+
+}
+
+type NetdataCollector struct {
+	Type string
+	Status string
+	Sync bool
+	UserDisabled bool
+	RestartRequired bool
+	PluginRejected bool
+}
+
+type NetdataConfigResponse struct {
+	Tree map[string]map[string]NetdataCollector
+}
+
+var netdataCollectors []string
+
+func getNetdataCollectorStatusInit() {
+	value, ok := os.LookupEnv("NETDATA_COLLECTORS")
+	if ok && value != "" {
+		netdataCollectors = strings.Split(value,",")
+	}
+}
+
+func getNetdataCollectorStatus() error {
+
+	if len(netdataCollectors) == 0 {
+		return nil
+	}
+
+	var resp NetdataConfigResponse
+  err := getJSON("http://localhost:19999/api/v1/config", &resp)
+	if (err != nil) {
+		return err
+	}
+
+	for id, c := range resp.Tree["/collectors/jobs"] {
+		if !slices.Contains(netdataCollectors, id) {
+			continue
+		}
+
+		var live float64
+		if !c.UserDisabled && !c.PluginRejected && !c.RestartRequired {
+			live = 1
+		}
+		netdataCollectorUp.With(prometheus.Labels{"collector": id}).Set(live)
 	}
 
 	return nil
