@@ -338,6 +338,8 @@ func getCronLastSuccessTimestamp() error {
 
 			var nextDataTime time.Time
 			switch d[0] {
+			case "hourly":
+				nextDataTime = dataTime.Add(60 * time.Minute)
 			case "daily":
 				nextDataTime = dataTime.AddDate(0,0,1)
 			case "weekly":
