@@ -29,10 +29,13 @@ func init() {
 	stdout = log.New(os.Stdout, "", 0)
 	stderr = log.New(os.Stderr, "", 0)
 	getDriveActiveStatusInit()
+	exporterUpInit()
 }
 
 func main() {
   r := prometheus.NewRegistry()
+	r.MustRegister(exporterUp)
+	r.MustRegister(exporterErrors)
 	r.MustRegister(driveActiveGauge)
 	r.MustRegister(driveStandbyGauge)
 	r.MustRegister(driveSleepingGauge)
@@ -64,11 +67,36 @@ func gatherMetrics() {
 	err = getDriveActiveStatus()
 	if err != nil {
 		stderr.Printf("error during getDriveActiveStatus: %s\n", err)
+		exporterErrors.Inc()
 	}
 	err = getCronLastSuccessTimestamp()
 	if err != nil {
 		stderr.Printf("error during getCronLastSuccessTimestamp: %s\n", err)
+		exporterErrors.Inc()
 	}
+
+//  ██████╗██╗   ██╗███████╗████████╗ ██████╗ ███╗   ███╗    ███████╗██╗  ██╗██████╗  ██████╗ ██████╗ ████████╗███████╗██████╗
+// ██╔════╝██║   ██║██╔════╝╚══██╔══╝██╔═══██╗████╗ ████║    ██╔════╝╚██╗██╔╝██╔══██╗██╔═══██╗██╔══██╗╚══██╔══╝██╔════╝██╔══██╗
+// ██║     ██║   ██║███████╗   ██║   ██║   ██║██╔████╔██║    █████╗   ╚███╔╝ ██████╔╝██║   ██║██████╔╝   ██║   █████╗  ██████╔╝
+// ██║     ██║   ██║╚════██║   ██║   ██║   ██║██║╚██╔╝██║    ██╔══╝   ██╔██╗ ██╔═══╝ ██║   ██║██╔══██╗   ██║   ██╔══╝  ██╔══██╗
+// ╚██████╗╚██████╔╝███████║   ██║   ╚██████╔╝██║ ╚═╝ ██║    ███████╗██╔╝ ██╗██║     ╚██████╔╝██║  ██║   ██║   ███████╗██║  ██║
+//  ╚═════╝ ╚═════╝ ╚══════╝   ╚═╝    ╚═════╝ ╚═╝     ╚═╝    ╚══════╝╚═╝  ╚═╝╚═╝      ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚══════╝╚═╝  ╚═╝
+
+var exporterUp = prometheus.NewGauge(
+	prometheus.GaugeOpts{
+		Name: "exporter_up",
+		Help: "Always reports 1 when the service is up",
+	},
+)
+var exporterErrors = prometheus.NewCounter(
+	prometheus.CounterOpts{
+		Name: "exporter_errors",
+		Help: "Count the number of errors",
+	},
+)
+
+func exporterUpInit() {
+	exporterUp.Set(1)
 }
 
 // ██████╗ ██████╗ ██╗██╗   ██╗███████╗     █████╗  ██████╗████████╗██╗██╗   ██╗███████╗    ███████╗████████╗ █████╗ ████████╗██╗   ██╗███████╗
@@ -127,7 +155,6 @@ func getDriveActiveStatusInit() {
 	if ok && value != "" {
 		driveHdparmDevices = strings.Split(value,",")
 	}
-
 }
 
 func getDriveActiveStatus() error {
@@ -266,13 +293,13 @@ func getCronLastSuccessTimestamp() error {
 			//format: weekly 2024-05-18T13:33:06+00:00
 			d := strings.Split(str, " ")
 			if len(d) != 2 {
-				loopErr = append(loopErr, fmt.Errorf("invalid format in job log %s", strconv.Quote(str)))
+				loopErr = append(loopErr, fmt.Errorf("invalid format in job log for %s: %s", e.Name(), strconv.Quote(str)))
 				continue
 			}
 
 			dataTime, err :=  time.Parse(time.RFC3339, d[1])
 			if err != nil {
-				loopErr = append(loopErr, fmt.Errorf("unable to parse date from %s: %s", p, err))
+				loopErr = append(loopErr, fmt.Errorf("unable to parse date for %s: %s", e.Name(), err))
 				continue
 			}
 
@@ -285,7 +312,7 @@ func getCronLastSuccessTimestamp() error {
 			case "monthly":
 				nextDataTime = dataTime.AddDate(0,1,0)
 			default:
-				loopErr = append(loopErr, fmt.Errorf("invalid frequency value %s", strconv.Quote(d[0])))
+				loopErr = append(loopErr, fmt.Errorf("invalid frequency value for %s: %s", e.Name(), strconv.Quote(d[0])))
 				continue
 			}
 
