@@ -12,6 +12,7 @@
     - keyboard
     - console
     - timezone
+    - fancontrol
     - unattended_upgrades
     - logrotate
     - journald

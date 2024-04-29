@@ -41,3 +41,19 @@ rand_order: 1
 zfs_autobackup_source_host: homelab
 zfs_autobackup_dest_dataset: bak/homelab
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@homelab
+
+fancontrol_settings: |
+  # hwmon4/pwm2 => CHA_FAN_1
+  # hwmon4/pwm3 => CHA_FAN_2
+  # hwmon4/temp1_input => cpu?
+  # hwmon2/temp1_input => drivetemp
+  INTERVAL=10
+  DEVPATH=hwmon2=devices/pci0000:00/0000:00:17.0/ata2/host1/target1:0:0/1:0:0:0 hwmon4=devices/platform/nct6775.672
+  DEVNAME=hwmon2=drivetemp hwmon4=nct6798
+  FCTEMPS=hwmon4/pwm3=hwmon4/temp1_input hwmon4/pwm2=hwmon2/temp1_input
+  FCFANS=hwmon4/pwm3=hwmon4/fan3_input hwmon4/pwm2=hwmon4/fan2_input
+  MINTEMP=hwmon4/pwm3=40 hwmon4/pwm2=30
+  MAXTEMP=hwmon4/pwm3=60 hwmon4/pwm2=45
+  MINSTART=hwmon4/pwm3=40 hwmon4/pwm2=120
+  MINSTOP=hwmon4/pwm3=10 hwmon4/pwm2=90
+  MINPWM=hwmon4/pwm3=10 hwmon4/pwm2=90

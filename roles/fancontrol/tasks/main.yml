@@ -1,0 +1,61 @@
+- name: Install fancontrol
+  apt:
+    pkg:
+      - fancontrol
+    cache_valid_time: 3600
+  become: true
+  register: apt_fancontrol
+  tags:
+    - fancontrol
+
+- name: Configure fancontrol
+  when: fancontrol_settings != ''
+  template:
+    src: fancontrol.j2
+    dest: /etc/fancontrol
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: fancontrol_cfg
+  become: true
+  tags:
+    - fancontrol
+
+- name: Configure fancontrol
+  when: fancontrol_settings == ''
+  file:
+    path: /etc/fancontrol
+    state: absent
+  become: true
+  register: fancontrol_rm
+  tags:
+    - fancontrol
+
+- name: Enable the service
+  when: not (ansible_check_mode and apt_fancontrol.changed)
+  systemd:
+    name: fancontrol
+    enabled: true
+  become: true
+  tags:
+    - fancontrol
+
+- name: Start the service
+  when: not (ansible_check_mode and apt_fancontrol.changed)
+  systemd:
+    name: fancontrol
+    state: started
+  become: true
+  register: fancontrol_started
+  tags:
+    - fancontrol
+
+- name: Restart fancontrol
+  when: not (ansible_check_mode and apt_fancontrol.changed) and (fancontrol_cfg.changed or fancontrol_rm.changed) and not fancontrol_started.changed
+  systemd:
+    name: fancontrol
+    state: restarted
+  become: true
+  tags:
+    - fancontrol
