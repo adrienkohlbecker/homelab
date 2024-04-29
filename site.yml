@@ -72,6 +72,8 @@
   roles:
     - minio
     - influxdb
+    - scratch
+    - media
 
 - name: Reboot check
   hosts: all:!bunk
