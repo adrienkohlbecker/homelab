@@ -41,3 +41,5 @@ rand_order: 3
 zfs_autobackup_source_host:
 zfs_autobackup_dest_dataset:
 zfs_autobackup_ssh_public_key:
+
+fancontrol_settings: ""
