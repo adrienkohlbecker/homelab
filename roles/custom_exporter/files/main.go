@@ -336,16 +336,17 @@ func getCronLastSuccessTimestamp() error {
 				continue
 			}
 
+			retry := 2 // allow for one failure without alert
 			var nextDataTime time.Time
 			switch d[0] {
 			case "hourly":
-				nextDataTime = dataTime.Add(60 * time.Minute)
+				nextDataTime = dataTime.Add(time.Hour * time.Duration(retry))
 			case "daily":
-				nextDataTime = dataTime.AddDate(0,0,1)
+				nextDataTime = dataTime.AddDate(0,0,retry*1)
 			case "weekly":
-				nextDataTime = dataTime.AddDate(0,0,7)
+				nextDataTime = dataTime.AddDate(0,0,retry*7)
 			case "monthly":
-				nextDataTime = dataTime.AddDate(0,1,0)
+				nextDataTime = dataTime.AddDate(0,retry*1,0)
 			default:
 				loopErr = append(loopErr, fmt.Errorf("invalid frequency value for %s: %s", e.Name(), strconv.Quote(d[0])))
 				continue
