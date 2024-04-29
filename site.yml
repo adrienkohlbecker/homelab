@@ -74,6 +74,7 @@
     - influxdb
     - scratch
     - media
+    - jellyfin
 
 - name: Reboot check
   hosts: all:!bunk

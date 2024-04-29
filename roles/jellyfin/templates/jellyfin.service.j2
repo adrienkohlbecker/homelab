@@ -1,0 +1,58 @@
+# jinja2: lstrip_blocks: "True"
+# jellyfin.service #######################################################################
+[Unit]
+Description=jellyfin
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=5
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service zfs_mount_mnt_scratch.service zfs_mount_mnt_media.service  zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service zfs_mount_mnt_scratch.service zfs_mount_mnt_media.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+Delegate=yes
+TimeoutSec=100
+RestartSec=5
+Type=notify
+NotifyAccess=all
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    {# todo move this to healthy on later podman versions, and remove ExecStartPost #}
+    --sdnotify=conmon \
+    --detach \
+    --replace \
+    --rm \
+    --name jellyfin \
+    --user {{ jellyfin_user.uid }}:{{ jellyfin_user.group }} \
+    --userns keep-id \
+    --log-driver journald \
+    --log-opt tag="jellyfin" \
+    --volume /mnt/services/jellyfin:/config \
+    --volume /mnt/scratch/jellyfin:/cache \
+    {# ro by jellyfin user because the dir below is owned by me #}
+    --volume /mnt/media:/media:ro \
+    --device /dev/dri/:/dev/dri/ \
+    --label "traefik.enable=true" \
+    --label "traefik.docker.network=podman" \
+    --label "traefik.http.services.jellyfin.loadbalancer.server.port=8096" \
+    --label "traefik.http.routers.jellyfin.rule=Host(`jellyfin.{{ domain }}`) || Host(`jellyfin.{{ inventory_hostname }}.{{ domain }}`)" \
+    --label "traefik.http.routers.jellyfin.tls=true" \
+    --label "traefik.http.routers.jellyfin.entrypoints=websecure" \
+    docker.io/jellyfin/jellyfin:latest
+ExecStartPost=/usr/bin/timeout 60 bash -c 'sleep 1; while [ "$(/usr/bin/podman container inspect "$(cat %t/%n.ctr-id)" --format "{{ "{{" }}.State.Healthcheck.Status{{ "}}" }}")" != "healthy" ]; do sleep 2; done'
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

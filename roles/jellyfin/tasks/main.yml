@@ -1,0 +1,81 @@
+- name: Add jellyfin group
+  group:
+    name: jellyfin
+    system: true
+  become: true
+  tags:
+    - jellyfin
+
+- name: Add jellyfin user
+  user:
+    name: jellyfin
+    group: jellyfin
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  register: jellyfin_user
+  tags:
+    - jellyfin
+
+- name: Create configuration directory
+  when: not (ansible_check_mode and jellyfin_user.changed)
+  file:
+    dest: /mnt/services/jellyfin
+    state: directory
+    owner: "{{ jellyfin_user.uid }}"
+    group: "{{ jellyfin_user.group }}"
+    mode: "0755"
+  become: true
+  tags:
+    - jellyfin
+
+- name: Create scratch directory
+  file:
+    dest: /mnt/scratch/jellyfin
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - jellyfin
+
+- name: Install jellyfin service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: jellyfin.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and jellyfin_user.changed) }}"
+  tags:
+    - jellyfin
+
+- name: Enable the service
+  when: not (ansible_check_mode and (systemd_unit.changed or jellyfin_user.changed))
+  systemd:
+    name: jellyfin
+    enabled: true
+  become: true
+  tags:
+    - jellyfin
+
+- name: Start the service
+  when: not (ansible_check_mode and (systemd_unit.changed or jellyfin_user.changed))
+  systemd:
+    name: jellyfin
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - jellyfin
+
+- name: Restart the service
+  when: not (ansible_check_mode and (systemd_unit.changed or jellyfin_user.changed)) and (systemd_unit.changed and not systemd_started.changed)
+  systemd:
+    name: jellyfin
+    state: restarted
+  become: true
+  tags:
+    - jellyfin
