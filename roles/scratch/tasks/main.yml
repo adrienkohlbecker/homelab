@@ -1,0 +1,35 @@
+- name: Create mount point
+  file:
+    dest: /mnt/scratch
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - scratch
+
+- name: Create zfs filesystem
+  when: zfs_root
+  zfs:
+    name: beelink/scratch
+    state: present
+    extra_zfs_properties:
+      mountpoint: /mnt/scratch
+      atime: 'off'
+      relatime: 'off'
+      'autobackup:bak': 'false'
+  become: true
+  tags:
+    - scratch
+
+- name: Set up mount service for beelink/scratch
+  when: zfs_root
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    zfs_mount_dataset: beelink/scratch
+    zfs_mount_mountpoint: /mnt/scratch
+  tags:
+    - scratch
