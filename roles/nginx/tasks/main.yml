@@ -78,6 +78,15 @@
   tags:
     - nginx
 
+- name: Restart netdata
+  when: (nginx_status_conf.changed)
+  systemd:
+    name: netdata
+    state: restarted
+  become: true
+  tags:
+    - nginx
+
 - name: Configure nginx static sites (marantz)
   import_tasks: site.yml
   vars:
