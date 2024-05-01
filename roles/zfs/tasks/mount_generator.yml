@@ -24,7 +24,7 @@
     - zfs_mount_generator
 
 - name: mount_generator | Generate mount cache
-  shell: set -euo pipefail; [ $(zfs get -o value -pH canmount {{ item }}) = "on" ]; before=`md5sum {{ item.split('/')[0] }} | cut -f 1 -d " "`; zfs set canmount=on {{ item }}; after=`md5sum {{ item.split('/')[0] }} | cut -f 1 -d " "`; test $before = $after || ([ "$?" = 1 ] && echo "file updated" || exit 1)
+  shell: set -euo pipefail; [ $(zfs get -o value -pH canmount {{ item }}) = "on" ]; before=`md5sum /etc/zfs/zfs-list.cache/{{ item.split('/')[0] }} | cut -f 1 -d " "`; zfs set canmount=on {{ item }}; after=`md5sum /etc/zfs/zfs-list.cache/{{ item.split('/')[0] }} | cut -f 1 -d " "`; test $before = $after || ([ "$?" = 1 ] && echo "file updated" || exit 1)
   args:
     chdir: /etc/zfs/zfs-list.cache
     executable: /bin/bash
