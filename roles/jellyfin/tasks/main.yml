@@ -42,6 +42,28 @@
   tags:
     - jellyfin
 
+- name: Create transcodes directory
+  file:
+    dest: /mnt/scratch/jellyfin/transcodes
+    state: directory
+    owner: "{{ jellyfin_user.uid }}"
+    group: "{{ jellyfin_user.group }}"
+    mode: "0755"
+  become: true
+  tags:
+    - jellyfin
+
+- name: Create logs directory
+  file:
+    dest: /var/log/jellyfin
+    state: directory
+    owner: "{{ jellyfin_user.uid }}"
+    group: "{{ jellyfin_user.group }}"
+    mode: "0755"
+  become: true
+  tags:
+    - jellyfin
+
 - name: Install jellyfin service
   import_role:
     name: systemd_unit
