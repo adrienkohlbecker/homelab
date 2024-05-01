@@ -35,8 +35,8 @@
   file:
     dest: /mnt/scratch/jellyfin
     state: directory
-    owner: root
-    group: root
+    owner: "{{ jellyfin_user.uid }}"
+    group: "{{ jellyfin_user.group }}"
     mode: "0755"
   become: true
   tags:
