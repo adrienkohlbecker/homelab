@@ -36,6 +36,8 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="jellyfin" \
     --volume /mnt/services/jellyfin:/config \
+    --volume /mnt/scratch/jellyfin/transcodes:/config/transcodes \
+    --volume /var/log/jellyfin:/config/log \
     --volume /mnt/scratch/jellyfin:/cache \
     {# ro by jellyfin user because the dir below is owned by me #}
     --volume /mnt/media:/media:ro \
