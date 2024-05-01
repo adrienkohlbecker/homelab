@@ -1,0 +1,139 @@
+- name: Install nginx
+  import_role:
+    name: apt_unit_masked
+  vars:
+    apt_unit_masked_pkg: nginx
+    apt_unit_masked_unit: nginx.service
+  tags:
+    - nginx
+
+- name: Disable default site
+  file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  register: nginx_default_conf
+  become: true
+  tags:
+    - nginx
+
+- name: Generate Diffie-Hellman parameters
+  openssl_dhparam:
+    path: /etc/nginx/dhparam.pem
+    size: 2048
+  become: true
+  tags:
+    - nginx
+
+- name: Configure nginx
+  template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: nginx_conf
+  tags:
+    - nginx
+
+- name: Enable stub_status
+  copy:
+    src: status.conf
+    dest: /etc/nginx/conf.d/status.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: nginx_status_conf
+  tags:
+    - nginx
+
+- name: Enable the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: nginx
+    enabled: true
+  become: true
+  tags:
+    - nginx
+
+- name: Start the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: nginx
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - nginx
+
+- name: Restart the service
+  when: not (ansible_check_mode and apt_unit_masked.changed) and (apt_unit_masked.changed or nginx_default_conf.changed or nginx_conf.changed or nginx_status_conf.changed) and not systemd_started.changed
+  systemd:
+    name: nginx
+    state: restarted
+  become: true
+  tags:
+    - nginx
+
+- name: Configure nginx static sites (marantz)
+  import_tasks: site.yml
+  vars:
+    subdomain: marantz
+    proxy_pass: https://{{ external_ips.marantz }}:10443/
+  tags:
+    - nginx
+
+- name: Configure nginx static sites (printer)
+  import_tasks: site.yml
+  vars:
+    subdomain: printer
+    proxy_pass: http://{{ external_ips.printer }}:80/
+  tags:
+    - nginx
+
+- name: Configure nginx static sites (siglent)
+  import_tasks: site.yml
+  vars:
+    subdomain: siglent
+    proxy_pass: http://{{ external_ips.siglent }}:80/
+  tags:
+    - nginx
+
+- name: Configure nginx static sites (unifi)
+  import_tasks: site.yml
+  vars:
+    subdomain: unifi
+    proxy_pass: https://{{ external_ips.udm }}:443/
+  tags:
+    - nginx
+
+- name: Configure nginx static sites (ups)
+  import_tasks: site.yml
+  vars:
+    subdomain: ups
+    proxy_pass: https://{{ external_ips.eaton }}:443/
+  tags:
+    - nginx
+
+- name: Configure nginx static sites (tubeszb)
+  import_tasks: site.yml
+  vars:
+    subdomain: tubeszb
+    proxy_pass: http://{{ external_ips.tubeszb }}:80/
+  tags:
+    - nginx
+
+- name: Configure nginx static sites (otgw)
+  import_tasks: site.yml
+  vars:
+    subdomain: otgw
+    proxy_pass: http://{{ external_ips.otgw }}:80/
+    location_conf: |
+      # bypass http auth
+      proxy_set_header Authorization "Basic {{ ("admin:"+otgw_admin_password) | b64encode }}";
+    permissions: "0600"
+  tags:
+    - nginx

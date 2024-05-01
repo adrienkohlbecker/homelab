@@ -208,3 +208,13 @@
   become: true
   tags:
     - pihole
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    subdomain: pihole
+    proxy_pass: http://localhost:8943/
+  tags:
+    - pihole

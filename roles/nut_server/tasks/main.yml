@@ -3,6 +3,7 @@
     pkg:
       - nut-snmp
       - nut-cgi
+      - fcgiwrap
     cache_valid_time: 3600
   become: true
   register: apt_install_nut
@@ -181,14 +182,23 @@
   tags:
     - nut_server
 
-- name: Configure traefik
-  template:
-    src: nut.yml.j2
-    dest: /etc/traefik/dynamic.d/nut.yml
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    subdomain: nut
+    server_conf: |
+      location = / {
+        return 301 /upsstats.cgi;
+      }
+    location_conf: |
+      gzip off;
+      root /usr/lib/cgi-bin/nut;
+
+      include /etc/nginx/fastcgi_params;
+
+      fastcgi_pass  unix:/var/run/fcgiwrap.socket;
+      fastcgi_param SCRIPT_FILENAME  /usr/lib/cgi-bin/nut$fastcgi_script_name;
   tags:
     - nut_server

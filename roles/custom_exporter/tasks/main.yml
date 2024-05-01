@@ -116,14 +116,16 @@
   tags:
     - custom_exporter
 
-- name: Configure traefik
-  template:
-    src: traefik.yml.j2
-    dest: /etc/traefik/dynamic.d/custom_exporter.yml
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    subdomain: custom-exporter
+    proxy_pass: http://localhost:19392/
+    server_conf: |
+      location = / {
+        return 301 /metrics;
+      }
   tags:
     - custom_exporter

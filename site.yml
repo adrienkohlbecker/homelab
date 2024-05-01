@@ -56,11 +56,10 @@
   hosts: all:!bunk
   roles:
     - avahi
+    - nginx
     - custom_exporter
     - journald_exporter
     - certbot
-    - traefik
-    - lighttpd
     - nut_server
     - nut_monitor
     - netdata
