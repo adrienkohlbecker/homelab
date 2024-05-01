@@ -128,15 +128,23 @@
   tags:
     - minio
 
-- name: Configure traefik
-  template:
-    src: minio.yml.j2
-    dest: /etc/traefik/dynamic.d/minio.yml
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    subdomain: minio
+    proxy_pass: http://127.0.0.1:9001/
+  tags:
+    - minio
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    subdomain: minio-api
+    proxy_pass: http://localhost:9199/
   tags:
     - minio
 

@@ -50,10 +50,10 @@ sources:
     include:
       - /var/log/unattended-upgrades/unattended-upgrades.log
       - /var/log/unattended-upgrades/unattended-upgrades-shutdown.log
-  file_traefik_access:
+  file_nginx_access:
     type: file
     include:
-      - /var/log/traefik/access.log
+      - /var/log/nginx/access.log
   file_netdata_access:
     type: file
     include:
@@ -231,7 +231,7 @@ transforms:
 
   to_syslog:
     type: remap
-    inputs: [ transformed_alternatives, reduced_apport, filtered_apt_history, filtered_apt_term, transformed_dpkg, transformed_unattended_upgrades, file_traefik_access, file_netdata_access, file_netdata_debug, file_netdata_aclk ]
+    inputs: [ transformed_alternatives, reduced_apport, filtered_apt_history, filtered_apt_term, transformed_dpkg, transformed_unattended_upgrades, file_nginx_access, file_netdata_access, file_netdata_debug, file_netdata_aclk ]
     # <165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"] An application event log entry...
     source: |-
       data = .

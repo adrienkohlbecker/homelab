@@ -71,14 +71,12 @@
 #   tags:
 #     - eaton_ipp
 
-- name: Configure traefik
-  template:
-    src: ipp.yml.j2
-    dest: /etc/traefik/dynamic.d/ipp.yml
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    subdomain: ipp
+    proxy_pass: https://localhost:4680/
   tags:
     - eaton_ipp

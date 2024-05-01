@@ -99,16 +99,13 @@
   tags:
     - influxdb
 
-
-- name: Configure traefik
-  template:
-    src: influxdb.yml.j2
-    dest: /etc/traefik/dynamic.d/influxdb.yml
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    subdomain: influxdb
+    proxy_pass: http://localhost:8086/
   tags:
     - influxdb
 
