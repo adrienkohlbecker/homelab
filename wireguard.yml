@@ -92,3 +92,16 @@
         - "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
       tags:
         - wireguard
+
+    - name: Create a zip archive
+      archive:
+        path:
+          - "{{ playbook_dir }}/wireguard/{{ item }}/*.conf"
+        dest: "{{ playbook_dir }}/wireguard/{{ item }}/{{ item }}.zip"
+        format: zip
+        owner: "{{ ansible_facts.user_uid }}"
+        group: "{{ ansible_facts.user_gid }}"
+        mode: "0644"
+      loop: "{{ wireguard_peers | map(attribute='name') }}"
+      tags:
+        - wireguard
