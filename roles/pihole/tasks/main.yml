@@ -119,6 +119,18 @@
   tags:
     - pihole
 
+- name: Configure health script
+  copy:
+    src: pihole_healthcheck.sh
+    dest: /usr/local/bin/pihole_healthcheck
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+  become: true
+  tags:
+    - pihole
+
 - name: Restart the service
   when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and ((systemd_unit.changed and not systemd_started.changed) or logrotate_conf.changed or logrotate_pass.changed or fahm_cfg.changed)
   systemd:
@@ -216,5 +228,27 @@
   vars:
     subdomain: pihole
     proxy_pass: http://localhost:8943/
+  tags:
+    - pihole
+
+- name: Configure keepalived
+  template:
+    src: keepalived.conf.j2
+    dest: /etc/keepalived/conf.d/pihole.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: pihole_keepalived_cfg
+  become: true
+  tags:
+    - pihole
+
+- name: Restart keepalived
+  when: (pihole_keepalived_cfg.changed)
+  systemd:
+    name: keepalived
+    state: restarted
+  become: true
   tags:
     - pihole

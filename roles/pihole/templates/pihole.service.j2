@@ -46,20 +46,20 @@ ExecStart=/usr/bin/podman run \
     --env PIHOLE_GID={{ pihole_user.group }} \
     --dns=127.0.0.1 \
     --dns=1.1.1.1 \
-    --ip={{ pihole_fixed_ip }} \
+    --ip={{ pihole_podman_ip }} \
     --publish 0.0.0.0:53:53/udp \
     --publish 0.0.0.0:53:53/tcp \
     --publish 127.0.0.1:8943:80/tcp \
     {# todo remove when this is fixed https://github.com/containers/podman/issues/18904 #}
     --health-cmd "dig +short +norecurse +retry=0 @127.0.0.1 pi.hole || exit 1" \
     docker.io/pihole/pihole:latest
-ExecStartPost=/usr/bin/timeout 60 bash -c 'sleep 1; while [ "$(/usr/bin/podman container inspect "$(cat %t/%n.ctr-id)" --format "{{ "{{" }}.State.Healthcheck.Status{{ "}}" }}")" != "healthy" ]; do sleep 2; done'
-ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -d {{ pihole_fixed_ip }} -p udp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
-ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -d {{ pihole_fixed_ip }} -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
+ExecStartPost=/usr/bin/timeout 60 bash -c 'sleep 1; until /usr/local/bin/pihole_healthcheck; do sleep 2; done'
+ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -d {{ pihole_podman_ip }} -p udp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
+ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -d {{ pihole_podman_ip }} -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
-ExecStopPost=-/usr/sbin/iptables -D CNI-ADMIN -d {{ pihole_fixed_ip }} -p udp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
-ExecStopPost=-/usr/sbin/iptables -D CNI-ADMIN -d {{ pihole_fixed_ip }} -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
+ExecStopPost=-/usr/sbin/iptables -D CNI-ADMIN -d {{ pihole_podman_ip }} -p udp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
+ExecStopPost=-/usr/sbin/iptables -D CNI-ADMIN -d {{ pihole_podman_ip }} -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
 
 [Install]
 WantedBy=default.target
