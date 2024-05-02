@@ -34,8 +34,8 @@
     - zfs_mount
     - podman
 
-- name: Backup roles
-  hosts: box,backup
+- name: pug roles
+  hosts: box,pug
   roles:
     - grub
     - powertop
@@ -66,8 +66,8 @@
     - services
     - pihole
 
-- name: Homelab roles
-  hosts: box,homelab
+- name: lab roles
+  hosts: box,lab
   roles:
     - minio
     - influxdb

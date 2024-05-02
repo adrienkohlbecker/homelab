@@ -54,9 +54,9 @@ hdparm_settings: {}
 
 rand_order: 2
 
-zfs_autobackup_source_host: backup
-zfs_autobackup_dest_dataset: data/backup
-zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDp277oY86WuDWYdU4Xr8eBUMAZ7L089F5SjBhmZzRS8 root@backup
+zfs_autobackup_source_host: pug
+zfs_autobackup_dest_dataset: data/pug
+zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDp277oY86WuDWYdU4Xr8eBUMAZ7L089F5SjBhmZzRS8 root@pug
 
 fancontrol_settings: |
   # hwmon12/pwm2 => CPU_FAN

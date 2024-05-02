@@ -37,9 +37,9 @@ hdparm_settings: {}
 
 rand_order: 1
 
-zfs_autobackup_source_host: homelab
-zfs_autobackup_dest_dataset: bak/homelab
-zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@homelab
+zfs_autobackup_source_host: lab
+zfs_autobackup_dest_dataset: bak/lab
+zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab
 
 fancontrol_settings: |
   # hwmon4/pwm2 => CHA_FAN_1
