@@ -42,3 +42,6 @@ zfs_autobackup_dest_dataset:
 zfs_autobackup_ssh_public_key:
 
 fancontrol_settings: ""
+
+pihole_keepalived_role: BACKUP
+pihole_keepalived_priority: 5

@@ -75,3 +75,6 @@ fancontrol_settings: |
   MINSTART=hwmon12/pwm2=58 hwmon12/pwm1=46 hwmon12/pwm4=46 hwmon12/pwm3=46
   MINSTOP=hwmon12/pwm2=28 hwmon12/pwm1=16 hwmon12/pwm4=16 hwmon12/pwm3=16
   MINPWM=hwmon12/pwm2=28 hwmon12/pwm1=16 hwmon12/pwm4=16 hwmon12/pwm3=16
+
+pihole_keepalived_role: MASTER
+pihole_keepalived_priority: 100
