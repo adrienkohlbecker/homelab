@@ -53,7 +53,7 @@ ExecStart=/usr/bin/podman run \
     {# todo remove when this is fixed https://github.com/containers/podman/issues/18904 #}
     --health-cmd "dig +short +norecurse +retry=0 @127.0.0.1 pi.hole || exit 1" \
     docker.io/pihole/pihole:latest
-ExecStartPost=/usr/bin/timeout 60 bash -euo pipefail -c 'sleep 1; until /usr/local/bin/pihole_healthcheck; do sleep 2; done'
+ExecStartPost=/usr/bin/timeout 60 /usr/local/bin/wait_for_healthy_container %t/%n.ctr-id
 ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -d {{ pihole_podman_ip }} -p udp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
 ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -d {{ pihole_podman_ip }} -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
