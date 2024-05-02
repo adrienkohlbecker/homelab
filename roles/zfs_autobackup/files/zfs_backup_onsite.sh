@@ -20,6 +20,7 @@ zfs-autobackup \
   --keep-source 16384 \
   --keep-target 10,1d1w,1w1m,1m10y \
   --set-properties readonly=on \
+  --set-properties mountpoint=none \
   --verbose \
   --ssh-config /root/.ssh/config \
   --ssh-source "zfs_autobackup@$SSH_SOURCE" \
