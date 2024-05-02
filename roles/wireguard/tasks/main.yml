@@ -19,21 +19,6 @@
   tags:
     - wireguard
 
-- name: Configure wireguard interface
-  template:
-    src: wg0.conf.j2
-    dest: /etc/wireguard/wg0.conf
-    owner: root
-    group: root
-    mode: "0600"
-    backup: true
-  vars:
-    own_peer_name: "{{ inventory_hostname }}"
-  register: wireguard_cfg
-  become: true
-  tags:
-    - wireguard
-
 - name: Enable ipv4 forwarding
   ansible.posix.sysctl:
     name: net.ipv4.ip_forward
@@ -50,30 +35,11 @@
   tags:
     - wireguard
 
-- name: Enable the service
-  when: not (ansible_check_mode and apt_install_wireguard.changed)
-  systemd:
-    name: wg-quick@wg0.service
-    enabled: true
-  become: true
-  tags:
-    - wireguard
-
-- name: Start the service
-  when: not (ansible_check_mode and apt_install_wireguard.changed)
-  systemd:
-    name: wg-quick@wg0.service
-    state: started
-  become: true
-  register: wireguard_started
-  tags:
-    - wireguard
-
-- name: Restart wireguard
-  when: not (ansible_check_mode and apt_install_wireguard.changed) and wireguard_cfg.changed and not wireguard_started.changed
-  systemd:
-    name: wg-quick@wg0.service
-    state: restarted
-  become: true
+- name: Configure wireguard interface (wg0)
+  import_tasks: wg.yml
+  vars:
+    iface: wg0
+    listen_port: '51820'
+    own_peer_name: "{{ inventory_hostname }}"
   tags:
     - wireguard
