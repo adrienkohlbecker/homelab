@@ -8,6 +8,8 @@
     backup: true
   become: true
   register: nginx_static_conf
+  tags:
+    - nginx_site
 
 - name: site | Enable nginx site
   when: not (ansible_check_mode and nginx_static_conf.changed)
@@ -17,6 +19,8 @@
     state: link
   become: true
   register: nginx_static_conf_enable
+  tags:
+    - nginx_site
 
 - name: site | Reload nginx config
   when: nginx_static_conf.changed or nginx_static_conf_enable.changed
@@ -24,3 +28,5 @@
     name: nginx
     state: reloaded
   become: true
+  tags:
+    - nginx_site
