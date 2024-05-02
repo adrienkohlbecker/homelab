@@ -15,6 +15,7 @@
         owner: root
         group: root
         mode: "0755"
+        validate: bash -n %s
       register: policy_rcd
       become: true
 

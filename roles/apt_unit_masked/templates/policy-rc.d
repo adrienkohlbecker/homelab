@@ -1,6 +1,6 @@
 #!/bin/bash
-set -euo pipefail
-trap 'eval echo "\# $BASH_COMMAND"' DEBUG
+# shellcheck source=../../bash/files/functions.sh
+source /usr/local/lib/functions.sh
 
 unit=${1:-}
 if [ "$unit" = "" ]; then
