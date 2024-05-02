@@ -3,7 +3,7 @@
 source /usr/local/lib/functions.sh
 
 unit=${1:-}
-if [ -n "$unit" ]; then
+if [ -z "$unit" ]; then
   f_fail "Expected unit as argument, got: '$*'"
 fi
 

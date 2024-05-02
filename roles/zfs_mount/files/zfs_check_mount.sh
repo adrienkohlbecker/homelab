@@ -5,7 +5,7 @@ source /usr/local/lib/functions.sh
 DATASET=${1:-}
 MOUNTPOINT=${2:-}
 
-if [ -n "$DATASET" ] || [ -n "$MOUNTPOINT" ]; then
+if [ -z "$DATASET" ] || [ -z "$MOUNTPOINT" ]; then
   f_fail "Usage: zfs_check_mount DATASET MOUNTPOINT"
 fi
 

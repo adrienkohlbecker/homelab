@@ -7,7 +7,7 @@ f_require_root
 OFFSITE_IP=${1:-}
 DATASET=${2:-}
 
-if [ -n "$OFFSITE_IP" ] || [ -n "$DATASET" ]; then
+if [ -z "$OFFSITE_IP" ] || [ -z "$DATASET" ]; then
   f_fail "Usage: zfs_backup_offsite OFFSITE_IP DATASET"
 fi
 

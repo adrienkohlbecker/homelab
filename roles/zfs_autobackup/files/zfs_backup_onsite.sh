@@ -7,7 +7,7 @@ f_require_root
 SSH_SOURCE=${1:-}
 DEST_DATASET=${2:-}
 
-if [ -n "$SSH_SOURCE" ] || [ -n "$DEST_DATASET" ]; then
+if [ -z "$SSH_SOURCE" ] || [ -z "$DEST_DATASET" ]; then
   f_fail "Usage: zfs_backup_onsite SSH_SOURCE DEST_DATASET"
 fi
 
