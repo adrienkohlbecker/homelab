@@ -56,10 +56,10 @@
   hosts: all:!bunk
   roles:
     - avahi
+    - certbot
     - nginx
     - custom_exporter
     - journald_exporter
-    - certbot
     - nut_server
     - nut_monitor
     - netdata
