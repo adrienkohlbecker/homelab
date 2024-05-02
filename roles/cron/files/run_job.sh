@@ -1,6 +1,6 @@
 #!/bin/bash
-set -euo pipefail
-trap 'eval echo "\# $BASH_COMMAND"' DEBUG
+# shellcheck source=../../bash/files/functions.sh
+source /usr/local/lib/functions.sh
 
 usage() {
   echo >&2 "Usage: run_job (hourly|daily|weekly|monthly) IDENTIFIER CMD [ARGS...]"

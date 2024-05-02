@@ -6,6 +6,7 @@
     owner: root
     group: root
     backup: true
+    validate: bash -n %s
   become: true
   tags:
     - zfs_mount

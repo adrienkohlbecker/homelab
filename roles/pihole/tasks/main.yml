@@ -127,6 +127,7 @@
     group: root
     mode: "0755"
     backup: true
+    validate: bash -n %s
   become: true
   tags:
     - pihole
