@@ -44,7 +44,7 @@ ExecStart=/usr/bin/podman run \
     --device /dev/dri/:/dev/dri/ \
     --publish 127.0.0.1:8096:8096/tcp \
     docker.io/jellyfin/jellyfin:latest
-ExecStartPost=/usr/bin/timeout 60 bash -euo pipefail -c 'sleep 1; while [ "$(/usr/bin/podman container inspect "$(cat %t/%n.ctr-id)" --format "{{ "{{" }}.State.Healthcheck.Status{{ "}}" }}")" != "healthy" ]; do sleep 2; done'
+ExecStartPost=/usr/bin/timeout 60 /usr/local/bin/wait_for_healthy_container %t/%n.ctr-id
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
