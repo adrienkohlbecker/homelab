@@ -1,7 +1,8 @@
 #!/bin/bash
 # http://redsymbol.net/articles/unofficial-bash-strict-mode/
 IFS=$'\n\t'
-set -euxo pipefail
+set -euo pipefail
+trap 'eval echo "\# $BASH_COMMAND"' DEBUG
 
 SSH_SOURCE=${1:-}
 DEST_DATASET=${2:-}

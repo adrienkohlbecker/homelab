@@ -2,6 +2,7 @@
 # http://redsymbol.net/articles/unofficial-bash-strict-mode/
 IFS=$'\n\t'
 set -euo pipefail
+trap 'eval echo "\# $BASH_COMMAND"' DEBUG
 
 DATASET=${1:-}
 MOUNTPOINT=${2:-}

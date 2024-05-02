@@ -2,6 +2,7 @@
 # http://redsymbol.net/articles/unofficial-bash-strict-mode/
 IFS=$'\n\t'
 set -euo pipefail
+trap 'eval echo "\# $BASH_COMMAND"' DEBUG
 
 CTR_ID="$(cat /run/pihole.service.ctr-id)"
 HEALTH=$(/usr/bin/podman container inspect "$CTR_ID" --format "{{ .State.Healthcheck.Status }}")

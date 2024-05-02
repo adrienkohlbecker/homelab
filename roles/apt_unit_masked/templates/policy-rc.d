@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+trap 'eval echo "\# $BASH_COMMAND"' DEBUG
 
 unit=${1:-}
 if [ "$unit" = "" ]; then
