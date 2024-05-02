@@ -3,7 +3,7 @@
 source /usr/local/lib/functions.sh
 
 usage() {
-  echo >&2 "Usage: run_job (hourly|daily|weekly|monthly) IDENTIFIER CMD [ARGS...]"
+  f_error "Usage: run_job (hourly|daily|weekly|monthly) IDENTIFIER CMD [ARGS...]"
 }
 
 frequency=${1:-}

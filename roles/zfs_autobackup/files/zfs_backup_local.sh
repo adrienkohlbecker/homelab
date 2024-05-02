@@ -2,6 +2,8 @@
 # shellcheck source=../../bash/files/functions.sh
 source /usr/local/lib/functions.sh
 
+f_require_root
+
 zfs-autobackup \
   --no-send \
   --keep-source 10,1d1w,1w1m,1m10y \

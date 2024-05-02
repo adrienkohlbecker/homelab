@@ -2,12 +2,13 @@
 # shellcheck source=../../bash/files/functions.sh
 source /usr/local/lib/functions.sh
 
+f_require_root
+
 OFFSITE_IP=${1:-}
 DATASET=${2:-}
 
-if [ "$OFFSITE_IP" = "" ] || [ "$DATASET" = "" ]; then
-  echo "Usage: zfs_backup_offsite OFFSITE_IP DATASET" >&2
-  exit 1
+if [ -n "$OFFSITE_IP" ] || [ -n "$DATASET" ]; then
+  f_fail "Usage: zfs_backup_offsite OFFSITE_IP DATASET"
 fi
 
 MOUNTPOINT=$(zfs get mountpoint -H -o value "$DATASET")

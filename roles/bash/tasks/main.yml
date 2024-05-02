@@ -1,14 +1,3 @@
-- name: Create logs directory
-  file:
-    dest: /var/log/bash
-    state: directory
-    owner: root
-    group: root
-    mode: "0777"
-  become: true
-  tags:
-    - bash
-
 - name: Copy the functions
   copy:
     src: functions.sh
