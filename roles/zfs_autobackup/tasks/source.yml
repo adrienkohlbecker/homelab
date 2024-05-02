@@ -34,7 +34,6 @@
   become: true
   tags:
     - zfs_autobackup
-    - focus
 
 - name: Set permissions on backed up datasets
   shell: set -euo pipefail; bfr=`zfs allow {{ item }} | md5sum | cut -f 1 -d " "`; zfs allow zfs_autobackup send,hold,release {{ item }}; aftr=`zfs allow {{ item }} | md5sum | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "permissions updated" || exit 1)
@@ -46,4 +45,3 @@
   become: true
   tags:
     - zfs_autobackup
-    - focus
