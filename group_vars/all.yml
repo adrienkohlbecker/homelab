@@ -11,6 +11,7 @@ external_ips:
   siglent: 10.123.2.4
   tubeszb: 10.123.4.2
   otgw: 10.123.4.3
+  pihole: "{{ pihole_keepalived_ip }}"
 
 ssh_public_keys: |
   ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC/x/7HjVzMzqx9r8sRtZxgviFo7V35svZXaZAKGd6BJLUS+qwYreSRCkyjJHmwFyDyUR2sOJmo69weV3XYs0GOvL72t23czWUDDU/fXQWmIcWHPyU+nUEN3VKHgh5zed002ACEivTDUvSjmprBGSx5YZNfZjnqtd+X+kVojwI5BTWyQMNJGSAPf/I7Zdt01d8Klq5eKs30QAdMCiwQ7qyME31gk7dbWVrcf1tc4VCbKbL0co1dj3A5tRe6TtZ/OObj5EHj0UZNmG16PY9cbi3kkwZ5Wxb2e6LHelgUjWn7a1OGRSox5IkTjDNUJ/71p+qoYGjH7V+UtvUBx2f3gG2A4oeduUpthfDUjDW4Rii43miMZJ2OAH95nY0NtDTdek6ZHqMwyqIEZdxV3QiDO1qIeCViJ3xBn3xHJb4oZs0nTOugrlcDXziQ5bfbvkMUpGkkM26+/S1iaA/rtel40P70obZx07s0SA3wTREBurP+wd7mrpp2rmpyqLlWygyorf9DMPMpj0YeAuPV5hl/qQdM0qVG+u+leY4GzrdO69vh3rI7edTROlkzSTmaKfyZ8t71O/0i3y+GsQxVx3z62zvgQ0chvUIsUSWUOGFZDBLM0X7z9MddGqAqaf5MnkQ6NEdE4hYKXtg+u0vYcfwjGO06/Rbc0/V9y68OZoJxMeqsXw== laptop
@@ -57,7 +58,7 @@ wireguard_peers:
       local: "{{ external_ips.lab }}:51820"
       remote: "home.fahm.fr:51821"
     is_server: true
-    dns_address: 10.123.0.2
+    dns_address: "{{ external_ips.pihole }}"
     site_subnet: 10.123.0.0/21
     public_key: lab/YYyxFkJJt86HfCnauipuYE4pBzBcDOkrXTzCmTE=
     private_key: !vault |
@@ -74,7 +75,7 @@ wireguard_peers:
       local: "{{ external_ips.pug }}:51820"
       remote: "home.fahm.fr:51822"
     is_server: true
-    dns_address: 10.123.0.3
+    dns_address: "{{ external_ips.pihole }}"
     site_subnet: 10.123.0.0/21
     public_key: pug/2tk1iYPAwTGTK3ChOCBwEIIhoC4PsgKnQ2VoVWE=
     private_key: !vault |
@@ -91,7 +92,7 @@ wireguard_peers:
       local: "{{ external_ips.box }}:51820"
       remote: home.fahm.fr:51823
     is_server: true
-    dns_address: 10.123.0.5
+    dns_address: "{{ external_ips.pihole }}"
     site_subnet: 10.123.0.0/21
     public_key: box/F8UYPGCYhjT5eH3stLTk9wZalaH2z1VIE1EYDVg=
     private_key: !vault |

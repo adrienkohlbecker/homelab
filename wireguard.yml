@@ -44,7 +44,7 @@
 
     - name: Generate wireguard configuration
       template:
-        src: "{{ playbook_dir }}/roles/wireguard/templates/wg0.conf.j2"
+        src: "{{ playbook_dir }}/roles/wireguard/templates/wg.conf.j2"
         dest: "{{ playbook_dir }}/wireguard/{{ item }}/home.conf"
         owner: "{{ ansible_facts.user_uid }}"
         group: "{{ ansible_facts.user_gid }}"
@@ -67,7 +67,7 @@
 
     - name: Generate wireguard configuration
       template:
-        src: "{{ playbook_dir }}/roles/wireguard/templates/wg0.conf.j2"
+        src: "{{ playbook_dir }}/roles/wireguard/templates/wg.conf.j2"
         dest: "{{ playbook_dir }}/wireguard/{{ item[1] }}/home ({{ item[0] }} all-traffic).conf"
         owner: "{{ ansible_facts.user_uid }}"
         group: "{{ ansible_facts.user_gid }}"
