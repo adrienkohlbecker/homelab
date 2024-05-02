@@ -3,9 +3,8 @@
 source /usr/local/lib/functions.sh
 
 unit=${1:-}
-if [ "$unit" = "" ]; then
-  echo >&2 "Expected unit as argument, got: '$*'"
-  exit 1
+if [ -n "$unit" ]; then
+  f_fail "Expected unit as argument, got: '$*'"
 fi
 
 items="{{ apt_unit_masked_unit|string()|ternary([apt_unit_masked_unit],apt_unit_masked_unit)|join(' ') }}"
@@ -19,9 +18,9 @@ done
 
 if [ "$found" = true ]; then
   msg="denied call with [$*]"
-  echo >&2 "policy-rc.d $msg"
+  f_error "policy-rc.d $msg"
   logger --priority user.warn --tag policy-rc.d "$msg"
   exit 101
 else
-  echo >&2 "policy-rc.d called with $*"
+  f_error "policy-rc.d called with $*"
 fi

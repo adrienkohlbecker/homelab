@@ -2,12 +2,13 @@
 # shellcheck source=../../bash/files/functions.sh
 source /usr/local/lib/functions.sh
 
+f_require_root
+
 SSH_SOURCE=${1:-}
 DEST_DATASET=${2:-}
 
-if [ "$SSH_SOURCE" = "" ] || [ "$DEST_DATASET" = "" ]; then
-  echo "Usage: zfs_backup_onsite SSH_SOURCE DEST_DATASET" >&2
-  exit 1
+if [ -n "$SSH_SOURCE" ] || [ -n "$DEST_DATASET" ]; then
+  f_fail "Usage: zfs_backup_onsite SSH_SOURCE DEST_DATASET"
 fi
 
 zfs-autobackup \
