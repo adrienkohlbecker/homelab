@@ -5,7 +5,7 @@ source /usr/local/lib/functions.sh
 f_require_root
 
 CIDFILE="${1:-}"
-if [ -n "$CIDFILE" ]; then
+if [ -z "$CIDFILE" ]; then
   f_fail "Usage: $F_SCRIPT CIDFILE"
 fi
 
