@@ -159,6 +159,8 @@
     validate: bash -n %s
     backup: true
   loop:
+    - line: ^SEND_EMAIL=
+      value: SEND_EMAIL="NO"
     - line: ^SEND_TELEGRAM=
       value: SEND_TELEGRAM="YES"
     - line: ^TELEGRAM_BOT_TOKEN=
