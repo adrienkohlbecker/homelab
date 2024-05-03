@@ -130,29 +130,7 @@
     state: present
     extra_zfs_properties:
       'autobackup:bak': 'true'
-      atime: 'off'
-      relatime: 'off'
   register: zfs_root_properties
-  become: true
-  tags:
-    - zfs
-
-- name: Workaround for setting atime on mounted root
-  when: zfs_root_properties.changed
-  command: mount -o remount -o noatime /
-  changed_when: true
-  become: true
-  tags:
-    - zfs
-
-- name: Set properties on boot dataset
-  when: zfs_has_bpool
-  community.general.zfs:
-    name: bpool/BOOT/jammy
-    state: present
-    extra_zfs_properties:
-      atime: 'off'
-      relatime: 'off'
   become: true
   tags:
     - zfs

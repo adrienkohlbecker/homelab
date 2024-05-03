@@ -27,25 +27,3 @@
   become: true
   tags:
     - zfs_autobackup
-
-- name: dest | Set properties on backup dataset
-  community.general.zfs:
-    name: "{{ zfs_autobackup_dest_dataset.split('/')[0] }}"
-    state: present
-    extra_zfs_properties:
-      atime: 'off'
-      relatime: 'off'
-  become: true
-  tags:
-    - zfs_autobackup
-
-- name: dest | Set properties on bak dataset
-  community.general.zfs:
-    name: "{{ zfs_autobackup_dest_dataset }}"
-    state: present
-    extra_zfs_properties:
-      atime: 'off'
-      relatime: 'off'
-  become: true
-  tags:
-    - zfs_autobackup
