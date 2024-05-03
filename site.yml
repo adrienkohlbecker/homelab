@@ -29,6 +29,7 @@
     - hd_idle
     - smart
     - lm_sensors
+    - powertop
     - zfs
     - ssh_root
     - zfs_autobackup
@@ -39,7 +40,6 @@
   hosts: box,pug
   roles:
     - grub
-    - powertop
 
 - name: Unused roles (dev box only)
   hosts: box
