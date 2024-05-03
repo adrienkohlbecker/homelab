@@ -12,24 +12,22 @@
 - name: Create zfs filesystem
   when: zfs_root
   zfs:
-    name: data/media
+    name: tank/media
     state: present
     extra_zfs_properties:
       mountpoint: /mnt/media
-      atime: 'off'
-      relatime: 'off'
       'autobackup:bak': 'false'
   become: true
   tags:
     - media
 
-- name: Set up mount service for data/media
+- name: Set up mount service for tank/media
   when: zfs_root
   import_role:
     name: zfs_mount
     tasks_from: unit
   vars:
-    zfs_mount_dataset: data/media
+    zfs_mount_dataset: tank/media
     zfs_mount_mountpoint: /mnt/media
   tags:
     - media

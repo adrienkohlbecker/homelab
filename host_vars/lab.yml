@@ -4,11 +4,11 @@ journald_storage: persistent
 zfs_arc_max: 8589934592
 zfs_trim_pools:
   - rpool
-  - beelink
+  - dozer
 zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
   - rpool/ROOT/jammy
-  - beelink/arq/adrien
-  - data/data
+  - dozer/arq/adrien
+  - tank/data
 zfs_has_bpool: false
 
 libvirt_default_network: 10.123.48.0/24
@@ -55,7 +55,7 @@ hdparm_settings: {}
 rand_order: 2
 
 zfs_autobackup_source_host: pug
-zfs_autobackup_dest_dataset: data/pug
+zfs_autobackup_dest_dataset: tank/pug
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDp277oY86WuDWYdU4Xr8eBUMAZ7L089F5SjBhmZzRS8 root@pug
 
 fancontrol_settings: |
