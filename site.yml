@@ -22,7 +22,7 @@
     - fail2ban
     - ssh
     - ntp
-    - mailer
+    - postfix
     - hwe_kernel
     - cron
     - hdparm
