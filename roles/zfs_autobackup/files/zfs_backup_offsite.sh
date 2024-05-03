@@ -20,7 +20,11 @@ LAST_SNAPSHOT=$(zfs list -t snapshot -o name -s creation -r "$DATASET" | grep "@
 
 rsync \
   --archive \
+  --hard-links \
+  --acls \
+  --xattrs \
   --human-readable \
+  --sparse \
   --delete \
   --delete-excluded \
   --compress \
