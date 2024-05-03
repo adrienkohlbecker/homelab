@@ -67,7 +67,23 @@
     - section: web
       option: bind to
       value: 127.0.0.1
+    - section: global
+      option: access log
+      value: none # accesses are logged by nginx
   register: netdata_conf
+  become: true
+  tags:
+    - netdata
+
+- name: Copy the cloud config
+  copy:
+    src: cloud.conf
+    dest: /var/lib/netdata/cloud.d/cloud.conf
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: true
+  register: cloud_conf
   become: true
   tags:
     - netdata
@@ -81,6 +97,20 @@
     mode: "0600"
     backup: true
   register: prometheus_conf
+  become: true
+  tags:
+    - netdata
+
+- name: Disable analytics
+  file:
+    path: /etc/netdata/.opt-out-from-anonymous-statistics
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: netdata
+    group: netdata
+    mode: "0644"
+  register: netdata_optout
   become: true
   tags:
     - netdata
@@ -238,7 +268,7 @@
     - netdata
 
 - name: Restart the service
-  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) and (netdata_conf.changed or prometheus_conf.changed or docker_conf.changed or netdata_health_alarm_notify.changed or smartd_log_conf.changed or debugfs_mount.changed or netdata_systemdunits_conf_template.changed or netdata_systemdunits_conf.changed) and not systemd_started.changed
+  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) and (netdata_conf.changed or cloud_conf.changed or netdata_optout.changed or prometheus_conf.changed or docker_conf.changed or netdata_health_alarm_notify.changed or smartd_log_conf.changed or debugfs_mount.changed or netdata_systemdunits_conf_template.changed or netdata_systemdunits_conf.changed) and not systemd_started.changed
   systemd:
     name: netdata
     state: restarted
