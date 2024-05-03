@@ -86,7 +86,7 @@
     weekday: 4
     hour: 0
     minute: 5
-    job: /usr/local/bin/run_job weekly zfs_trim /sbin/zpool trim {{ item }}
+    job: /usr/local/bin/run_job weekly zfs_trim_{{ item }} /sbin/zpool trim {{ item }}
     user: root
     cron_file: ansible_zfs_trim
     backup: true
@@ -97,13 +97,14 @@
 
 - name: Monitor cron entry
   file:
-    path: /var/log/jobs/zfs_trim
+    path: /var/log/jobs/zfs_trim_{{ item }}
     state: touch
     access_time: preserve
     modification_time: preserve
     owner: root
     group: root
     mode: "0644"
+  loop: "{{ zfs_trim_pools }}"
   become: true
   tags:
     - zfs
