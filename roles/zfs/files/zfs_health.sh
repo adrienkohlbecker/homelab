@@ -59,11 +59,7 @@ CURRENT_DATE=$(date +"%s")
 ZFS_VOLUMES=$(zpool list -H -o name)
 
 for volume in $ZFS_VOLUMES; do
-  if zpool status "$volume" | grep -q "none requested"; then
-    echo "ERROR :: No scrub requested on $volume"
-    mail -s "$EMAIL_SUBJECT_PREFIX - No scrub requested on $volume" "$EMAIL_TO" <"$TMP_OUTPUT"
-    exit 1
-  elif zpool status "$volume" | grep -q -e "scrub canceled"; then
+  if zpool status "$volume" | grep -q -e "scrub canceled"; then
     echo "ERROR :: Last scrub canceled on $volume"
     mail -s "$EMAIL_SUBJECT_PREFIX - Last scrub canceled on $volume" "$EMAIL_TO" <"$TMP_OUTPUT"
     exit 1
@@ -72,8 +68,13 @@ for volume in $ZFS_VOLUMES; do
     break
   fi
 
-  SCRUB_RAW_DATE=$(zpool status "$volume" | grep -e "scrub repaired" -e "scrub paused" | rev | cut -d' ' -f1-5 | rev)
-  SCRUB_DATE=$(date -d "$SCRUB_RAW_DATE" +"%s")
+  if (! zpool status "$volume" | grep -q -e "scan: scrub") || (zpool status "$volume" | grep -q "none requested"); then
+    # No scrub happened; get creation date
+    SCRUB_DATE=$(zfs get creation -Hpo value "$volume")
+  else
+    SCRUB_RAW_DATE=$(zpool status "$volume" | grep -e "scrub repaired" -e "scrub paused" | rev | cut -d' ' -f1-5 | rev)
+    SCRUB_DATE=$(date -d "$SCRUB_RAW_DATE" +"%s")
+  fi
 
   if [ $((CURRENT_DATE - SCRUB_DATE)) -ge $SCRUB_EXPIRE ]; then
     echo "ERROR :: Scrub expired on $volume"
