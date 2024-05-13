@@ -27,12 +27,14 @@ scrape_configs:
     static_configs:
       - targets: ['localhost:9090']
 
+{% if minio_enabled|default(false) %}
   - job_name: minio-job
     metrics_path: /minio/v2/metrics/cluster
     scrape_interval: 5s
     scrape_timeout: 5s
     static_configs:
     - targets: ['localhost:9199']
+{% endif %}
 
 # TODO use this starting with v2.52
 # scrape_config_files:

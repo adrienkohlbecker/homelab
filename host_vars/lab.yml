@@ -79,12 +79,14 @@ fancontrol_settings: |
 pihole_keepalived_role: MASTER
 pihole_keepalived_priority: 100
 
+prometheus_enabled: true
+
+minio_enabled: true
 minio_buckets:
   - arq-adrien
   - arq-marie
   - arq-game
   - test
-
 minio_users:
   - access_key: arq-adrien
     secret_key: !vault |
