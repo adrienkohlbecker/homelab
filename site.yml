@@ -72,6 +72,7 @@
 - name: lab roles
   hosts: box,lab
   roles:
+    - prometheus # for minio
     - minio
     - influxdb
     - scratch
