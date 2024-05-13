@@ -7,7 +7,7 @@
     - minio
 
 - name: client | Install mcli if needed
-  when: '"mcli" not in ansible_facts.packages or ansible_facts.packages["mcli"][0].version != "20221029100923.0.0"'
+  when: '"mcli" not in ansible_facts.packages or ansible_facts.packages["mcli"][0].version != "20220610222912.0.0"'
   become: true
   tags:
     - minio
@@ -16,12 +16,12 @@
     - name: client | Download mcli deb
       check_mode: false
       get_url:
-        url: https://dl.min.io/client/mc/release/linux-amd64/archive/mcli_20221029100923.0.0_amd64.deb
+        url: https://dl.min.io/client/mc/release/linux-amd64/archive/mcli_20220610222912.0.0_amd64.deb
         dest: /tmp/mcli.deb
         mode: '0644'
         owner: root
         group: root
-        checksum: sha256:796d0e7a5c6e59020e02ecb3a46f9ec771a26ecc0dfc45d76fe6e351d75cf4c7
+        checksum: sha256:175304d072db889d67824a3da2317b3b698ba09d79709010acdec62f05c38069
 
     - name: client | Install mcli
       apt:
