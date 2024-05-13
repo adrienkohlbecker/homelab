@@ -40,3 +40,9 @@ MINIO_ROOT_PASSWORD={{ minio_root_password }}
 # MinIO hosts in the deployment as a temporary measure.
 MINIO_SERVER_URL=https://minio-api.{{ inventory_hostname }}.{{ domain }}
 MINIO_BROWSER_REDIRECT_URL=https://minio.{{ inventory_hostname }}.{{ domain }}
+
+# don't require auth on metrics endpoint
+MINIO_PROMETHEUS_AUTH_TYPE=public
+
+# Display metrics in the console
+MINIO_PROMETHEUS_URL=http://localhost:9090

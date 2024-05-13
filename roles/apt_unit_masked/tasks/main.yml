@@ -25,6 +25,7 @@
         pkg:
           - "{{ apt_unit_masked_pkg }}"
         cache_valid_time: 3600
+        install_recommends: "{{ apt_unit_masked_install_recommends | default(true) }}"
       register: apt_unit_masked
       become: true
 
