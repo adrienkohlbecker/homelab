@@ -68,6 +68,10 @@
 -A INPUT -p tcp --syn -m conntrack --ctstate NEW -j FILTERS
 -A INPUT -p icmp -m conntrack --ctstate NEW -j ACCEPT
 
+# Other protocols
+-A INPUT -p 112 -j ACCEPT -m comment --comment "Allow keepalived (VRRP)"
+-A INPUT -p 51  -j ACCEPT -m comment --comment "Allow keepalived (auth_type AH)"
+
 # Reject anything that's fallen through to this point
 ## Try to be protocol-specific w/ rejection message
 -A INPUT -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] INPUT:REJECT: "
