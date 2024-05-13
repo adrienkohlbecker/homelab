@@ -23,6 +23,7 @@
     - minio
 
 - name: data | Upload policy
+  when: not minio_useronly_policy_dir.stat.exists
   copy:
     src: useronly.json
     dest: /tmp/useronly.json
@@ -44,6 +45,7 @@
     - minio
 
 - name: data | Remove tempfile
+  when: not minio_useronly_policy_dir.stat.exists
   file:
     path: /tmp/useronly.json
     state: absent
@@ -52,6 +54,7 @@
     - minio
 
 - name: data | Attach policy
+  when: not minio_useronly_policy_dir.stat.exists
   command: mcli admin policy set default useronly user={{ item.access_key }}
   args:
     creates: /mnt/minio/.minio.sys/config/iam/policydb/users/{{ item.access_key }}.json

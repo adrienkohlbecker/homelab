@@ -9,8 +9,8 @@
     - prometheus
 
 - name: Copy the configuration
-  copy:
-    src: prometheus.yml
+  template:
+    src: prometheus.yml.j2
     dest: /etc/prometheus/prometheus.yml
     mode: "0644"
     owner: root

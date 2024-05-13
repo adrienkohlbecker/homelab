@@ -46,9 +46,11 @@ fancontrol_settings: ""
 pihole_keepalived_role: BACKUP
 pihole_keepalived_priority: 5
 
+prometheus_enabled: true
+
+minio_enabled: true
 minio_buckets:
   - test
-
 minio_users:
   - access_key: test
     secret_key: !vault |
