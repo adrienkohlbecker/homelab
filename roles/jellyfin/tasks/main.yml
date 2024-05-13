@@ -53,6 +53,17 @@
   tags:
     - jellyfin
 
+- name: Create cache directory
+  file:
+    dest: /mnt/scratch/jellyfin/cache
+    state: directory
+    owner: "{{ jellyfin_user.uid }}"
+    group: "{{ jellyfin_user.group }}"
+    mode: "0755"
+  become: true
+  tags:
+    - jellyfin
+
 - name: Create logs directory
   file:
     dest: /var/log/jellyfin

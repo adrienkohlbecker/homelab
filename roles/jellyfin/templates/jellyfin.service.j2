@@ -38,7 +38,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/jellyfin:/config \
     --volume /mnt/scratch/jellyfin/transcodes:/config/transcodes \
     --volume /var/log/jellyfin:/config/log \
-    --volume /mnt/scratch/jellyfin:/cache \
+    --volume /mnt/scratch/jellyfin/cache:/cache \
     {# ro by jellyfin user because the dir below is owned by me #}
     --volume /mnt/media:/media:ro \
     --device /dev/dri/:/dev/dri/ \
