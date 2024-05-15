@@ -56,11 +56,11 @@
 - name: Add more services
   hosts: all:!bunk
   roles:
-    - keepalived
-    - keepalived_exporter
     - avahi
     - certbot
     - nginx
+    - keepalived
+    - keepalived_exporter
     - custom_exporter
     - journald_exporter
     - nut_server
