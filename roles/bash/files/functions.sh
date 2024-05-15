@@ -49,3 +49,8 @@ f_require_root() {
     f_fail "Error: I require root"
   fi
 }
+
+f_trace() {
+  echo "\$ $*"
+  "$@"
+}

@@ -4,7 +4,7 @@ source /usr/local/lib/functions.sh
 
 f_require_root
 
-zfs-autobackup \
+f_trace zfs-autobackup \
   --no-send \
   --keep-source 10,1d1w,1w1m,1m10y \
   --keep-target 16384 \

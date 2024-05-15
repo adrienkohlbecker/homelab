@@ -11,7 +11,7 @@ if [ -z "$SSH_SOURCE" ] || [ -z "$DEST_DATASET" ]; then
   f_fail "Usage: zfs_backup_onsite SSH_SOURCE DEST_DATASET"
 fi
 
-zfs-autobackup \
+f_trace zfs-autobackup \
   --buffer 256M \
   --no-snapshot \
   --exclude-received \
