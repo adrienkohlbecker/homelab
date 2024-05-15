@@ -171,7 +171,9 @@
     proxy_pass: http://localhost:9199/
     location_conf: |
       # Otherwise ARQ uploads return HTTP 413
-      client_max_body_size 100M;
+      client_max_body_size     60M;
+      # Increase body buffer size to not buffer uploads to disk
+      client_body_buffer_size  60M;
   tags:
     - minio
 

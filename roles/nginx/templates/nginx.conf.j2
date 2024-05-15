@@ -30,8 +30,9 @@ http {
     default_type           application/octet-stream;
 
     # Logging
-    access_log             off;
-    error_log              /dev/null;
+    log_format custom      '$remote_addr - $remote_user [$time_local] $host "$request" $server_name $status $body_bytes_sent';
+    access_log             /var/log/nginx/access.log custom buffer=512k flush=1m;
+    error_log              stderr warn;
 
     # SSL
     ssl_session_timeout    1d;
@@ -84,6 +85,18 @@ http {
 
         # Otherwise, replace it
         default "$proxy_forwarded_elem";
+    }
+
+    # Default servers for missing Host header, or header not matching configured site
+    server {
+        listen              80 default_server;
+        server_name         _;
+        return              404;
+    }
+    server {
+        listen              443 default_server ssl http2;
+        server_name         _;
+        return              404;
     }
 
     # Load configs
