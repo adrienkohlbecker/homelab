@@ -18,7 +18,7 @@ zfs_check_mount "$DATASET" "$MOUNTPOINT"
 
 LAST_SNAPSHOT=$(zfs list -t snapshot -o name -s creation -r "$DATASET" | grep "@bak-" | tail -1 | cut -d@ -f2)
 
-rsync \
+f_trace rsync \
   --archive \
   --hard-links \
   --acls \
