@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euxo pipefail
 
+read -r -a DISKS <<<"$DISKS"
+
 export DEBIAN_FRONTEND=noninteractive
 
 apt-get update
@@ -41,25 +43,46 @@ EOF
 
 apt-get install --yes dosfstools
 
-mkdosfs -F 32 -s 1 -n EFI ${DISK}-part1
+for disk in "${DISKS[@]}"; do
+  mkdosfs -F 32 -s 1 -n EFI "${disk}-part1"
+done
 mkdir /boot/efi
-echo "$(blkid -s UUID | grep "$(readlink -f ${DISK}-part1)" | cut -d' ' -f2)" \
+echo "$(blkid -s UUID | grep "$(readlink -f "${DISKS[0]}-part1")" | cut -d' ' -f2)" \
   /boot/efi vfat defaults 0 0 >>/etc/fstab
 mount /boot/efi
 
-mkdir /boot/efi/grub /boot/grub
-echo /boot/efi/grub /boot/grub none defaults,bind 0 0 >>/etc/fstab
-mount /boot/grub
+if [ "$LAYOUT" = "" ]; then
+  mkdir /boot/efi/grub /boot/grub
+  echo /boot/efi/grub /boot/grub none defaults,bind 0 0 >>/etc/fstab
+  mount /boot/grub
+fi
 
 apt-get install --yes \
-  grub-efi-$ARCH grub-efi-$ARCH-signed linux-image-generic \
+  "grub-efi-$ARCH" "grub-efi-$ARCH-signed" linux-image-generic \
   shim-signed zfs-initramfs
 apt-get purge --yes os-prober
 
-mkswap -f ${DISK}-part2
-echo "$(blkid -s UUID | grep "$(readlink -f ${DISK}-part2)" | cut -d' ' -f2)" \
-  none swap discard 0 0 >>/etc/fstab
-swapon -a
+if [ "$LAYOUT" = "" ]; then
+  mkswap -f "${DISKS[0]}-part2"
+  echo "$(blkid -s UUID | grep "$(readlink -f "${DISKS[0]}-part2")" | cut -d' ' -f2)" \
+    none swap discard 0 0 >>/etc/fstab
+  swapon -a
+else
+  if [ "$LAYOUT" = "mirror" ]; then
+    level="mirror"
+  elif [ "$LAYOUT" = "raidz" ]; then
+    level="raid5"
+  elif [ "$LAYOUT" = "raidz2" ]; then
+    level="raid6"
+  else
+    echo >&2 "Unexpected layout $LAYOUT"
+    exit 1
+  fi
+  apt-get install --yes mdadm
+  mdadm --create /dev/md0 --metadata=1.2 --level="$level" --raid-devices="${#DISKS[@]}" "${DISKS[@]/%/-part2}"
+  mkswap -f /dev/md0
+  echo "/dev/disk/by-uuid/$(blkid -s UUID -o value /dev/md0) none swap discard 0 0" >>/etc/fstab
+fi
 
 cp /usr/share/systemd/tmp.mount /etc/systemd/system/
 systemctl enable tmp.mount
@@ -81,8 +104,17 @@ sed -i 's/#GRUB_TERMINAL=console/GRUB_TERMINAL=console/' /etc/default/grub
 
 update-grub
 
-grub-install --target=$ARCH_GRUB-efi --efi-directory=/boot/efi \
-  --bootloader-id=ubuntu --recheck --no-floppy
+umount /boot/efi
+for disk in "${DISKS[@]}"; do
+  mount "${disk}-part1" /boot/efi
+  grub-install --target="$ARCH_GRUB-efi" --efi-directory=/boot/efi --bootloader-id=ubuntu --recheck --no-floppy
+  umount /boot/efi
+done
+mount /boot/efi
+
+if [ "$LAYOUT" != "" ]; then
+  systemctl mask grub-initrd-fallback.service
+fi
 
 mkdir /etc/zfs/zfs-list.cache
 touch /etc/zfs/zfs-list.cache/bpool
@@ -107,8 +139,8 @@ chmod 0600 "/home/$USERNAME/.ssh/authorized_keys"
 chown -R "$USERNAME:$USERNAME" "/home/$USERNAME"
 usermod -a -G adm,cdrom,dip,lpadmin,lxd,plugdev,sambashare,sudo "$USERNAME"
 
-echo "$USERNAME ALL=(ALL) NOPASSWD: ALL" >/etc/sudoers.d/$USERNAME
-chown root:root /etc/sudoers.d/$USERNAME
-chmod 400 /etc/sudoers.d/$USERNAME
+echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >"/etc/sudoers.d/$USERNAME"
+chown root:root "/etc/sudoers.d/$USERNAME"
+chmod 400 "/etc/sudoers.d/$USERNAME"
 
 apt-get install --yes open-vm-tools
