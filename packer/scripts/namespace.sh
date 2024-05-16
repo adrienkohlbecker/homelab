@@ -1,6 +1,10 @@
 #!/bin/bash
 set -euxo pipefail
 
+read -r -a DISKS <<<"$DISKS"
+
+export DEBIAN_FRONTEND=noninteractive
+
 mkdir /chroot/run
 mount -t tmpfs tmpfs /chroot/run
 mkdir /chroot/run/lock
@@ -34,10 +38,9 @@ network:
 EOF
 
 cp /etc/apt/sources.list /chroot/etc/apt/
-#cp /etc/ssh/ssh_host_* /chroot/etc/ssh/
 
 mount --make-private --rbind /dev /chroot/dev
 mount --make-private --rbind /proc /chroot/proc
 mount --make-private --rbind /sys /chroot/sys
 
-chroot /chroot env DISK="$DISK" HOSTNAME="$HOSTNAME" PASSWORD="$PASSWORD" ARCH="$ARCH" ARCH_GRUB="$ARCH_GRUB" USERNAME="$USERNAME" SSH_KEY_PUB="$SSH_KEY_PUB" bash </home/vagrant/chroot.sh
+chroot /chroot env DISKS="${DISKS[*]}" HOSTNAME="$HOSTNAME" PASSWORD="$PASSWORD" ARCH="$ARCH" ARCH_GRUB="$ARCH_GRUB" USERNAME="$USERNAME" SSH_KEY_PUB="$SSH_KEY_PUB" LAYOUT="$LAYOUT" bash </home/vagrant/chroot.sh
