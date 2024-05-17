@@ -9,15 +9,6 @@ ddns_domain: home.kohlby.fr
 
 aws_ssm_cloudflare_email: "{{ lookup('aws_ssm', 'cloudflare.email', region='eu-west-1' ) }}"
 aws_ssm_cloudflare_api_key: "{{ lookup('aws_ssm', 'cloudflare.api_key', region='eu-west-1' ) }}"
-aws_ssm_radarr_api_key: "{{ lookup('aws_ssm', 'radarr.api_key', region='eu-west-1' ) }}"
-aws_ssm_sonarr_api_key: "{{ lookup('aws_ssm', 'sonarr.api_key', region='eu-west-1' ) }}"
-aws_ssm_headphones_api_key: "{{ lookup('aws_ssm', 'headphones.api_key', region='eu-west-1' ) }}"
-aws_ssm_headphones_songkick_api_key: "{{ lookup('aws_ssm', 'headphones.songkick_api_key', region='eu-west-1' ) }}"
-
-aws_ssm_sabnzbd_api_key: "{{ lookup('aws_ssm', 'sabnzbd.api_key', region='eu-west-1' ) }}"
-
-aws_ssm_sickrage_nzbgeek_api_key: "{{ lookup('aws_ssm', 'sickrage.nzbgeek_api_key', region='eu-west-1' ) }}"
-
 aws_ssm_gogs_secret_key: "{{ lookup('aws_ssm', 'gogs.secret_key', region='eu-west-1' ) }}"
 aws_ssm_gmvault_client_id: "{{ lookup('aws_ssm', 'gmvault.client_id', region='eu-west-1' ) }}"
 aws_ssm_gmvault_client_secret: "{{ lookup('aws_ssm', 'gmvault.client_secret', region='eu-west-1' ) }}"

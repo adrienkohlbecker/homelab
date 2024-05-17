@@ -2,14 +2,9 @@
 
 - name: Include services
   block:
-    - import_tasks: usenet.yml
     - import_tasks: avahi.yml
-    - import_tasks: headphones.yml
-    - import_tasks: sonarr.yml
-    - import_tasks: radarr.yml
     - import_tasks: plex.yml
     - import_tasks: portainer.yml
-    - import_tasks: sabnzbd.yml
     - import_tasks: samba.yml
     - import_tasks: remote-ssh.yml
     - import_tasks: speedtest.yml
