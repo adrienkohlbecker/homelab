@@ -82,6 +82,7 @@
     - sabnzbd
     - sonarr
     - radarr
+    - headphones
 
 - name: Reboot check
   hosts: all:!bunk

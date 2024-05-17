@@ -1,0 +1,120 @@
+- name: Add headphones group
+  group:
+    name: headphones
+    system: true
+  become: true
+  tags:
+    - headphones
+
+- name: Add headphones user
+  user:
+    name: headphones
+    group: headphones
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  register: headphones_user
+  tags:
+    - headphones
+
+- name: Add user to group
+  user:
+    name: headphones
+    groups: media
+    append: true
+  become: true
+  tags:
+    - headphones
+
+- name: Get all groups
+  getent:
+    database: group
+    split: ':'
+  become: true
+  tags:
+    - headphones
+
+- name: Create configuration directory
+  when: not (ansible_check_mode and headphones_user.changed)
+  file:
+    dest: /mnt/services/headphones
+    state: directory
+    owner: headphones
+    group: media
+    mode: "0755"
+  become: true
+  tags:
+    - headphones
+
+- name: Configure headphones
+  template:
+    src: config.ini.j2
+    dest: /mnt/services/headphones/config.ini
+    owner: headphones
+    group: media
+    mode: "0600"
+    backup: true
+  register: headphones_conf
+  become: true
+  tags:
+    - headphones
+
+- name: Install headphones service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: headphones.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and headphones_user.changed) }}"
+  tags:
+    - headphones
+
+- name: Enable the service
+  when: not (ansible_check_mode and (systemd_unit.changed or headphones_user.changed))
+  systemd:
+    name: headphones
+    enabled: true
+  become: true
+  tags:
+    - headphones
+
+- name: Start the service
+  when: not (ansible_check_mode and (systemd_unit.changed or headphones_user.changed))
+  systemd:
+    name: headphones
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - headphones
+
+- name: Restart the service
+  when: not (ansible_check_mode and (systemd_unit.changed or headphones_user.changed)) and ((systemd_unit.changed or headphones_conf.changed) and not systemd_started.changed)
+  systemd:
+    name: headphones
+    state: restarted
+  become: true
+  tags:
+    - headphones
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    subdomain: headphones
+    proxy_pass: http://localhost:8181/
+  tags:
+    - headphones
+
+- name: Configure ini watcher
+  import_role:
+    name: sort_ini
+    tasks_from: path
+  vars:
+    path: /mnt/services/headphones/config.ini
+    escaped_path: mnt-services-headphones-config.ini
+  tags:
+    - headphones
