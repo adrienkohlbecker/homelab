@@ -36,7 +36,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/pihole/etc:/etc/pihole \
     --volume /mnt/services/pihole/dnsmasq:/etc/dnsmasq.d \
     --volume /var/log/pihole:/var/log/pihole \
-    --env TZ="Europe/Amsterdam" \
+    --env TZ="Europe/Paris" \
     --env VIRTUAL_HOST=pihole.{{ inventory_hostname }}.{{ domain }} \
     --env FTLCONF_LOCAL_IPV4={{ ansible_facts.default_ipv4.address }} \
     --env REV_SERVER=true \
