@@ -1,5 +1,0 @@
-packer_cache/
-output-homelab-base/
-output-homelab-zfs/
-output-homelab-final/
-*.box

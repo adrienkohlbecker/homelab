@@ -3,14 +3,6 @@
 - hosts: all
   roles:
     - firewall
-    - zfs_backup
-    - smart
-
-- hosts:
-    - homelab
-    - box
-  roles:
-    # - ups
 
 - hosts: all
   roles:
