@@ -81,6 +81,7 @@
     - jellyfin
     - sabnzbd
     - sonarr
+    - radarr
 
 - name: Reboot check
   hosts: all:!bunk
