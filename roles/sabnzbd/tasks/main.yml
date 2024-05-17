@@ -1,0 +1,152 @@
+- name: Add sabnzbd group
+  group:
+    name: sabnzbd
+    system: true
+  become: true
+  tags:
+    - sabnzbd
+
+- name: Add sabnzbd user
+  user:
+    name: sabnzbd
+    group: sabnzbd
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  register: sabnzbd_user
+  tags:
+    - sabnzbd
+
+- name: Add user to group
+  user:
+    name: sabnzbd
+    groups: media
+    append: true
+  become: true
+  tags:
+    - sabnzbd
+
+- name: Get all groups
+  getent:
+    database: group
+    split: ':'
+  become: true
+  tags:
+    - sabnzbd
+
+- name: Create configuration directory
+  when: not (ansible_check_mode and sabnzbd_user.changed)
+  file:
+    dest: /mnt/services/sabnzbd
+    state: directory
+    owner: "{{ sabnzbd_user.uid }}"
+    group: "{{ sabnzbd_user.group }}"
+    mode: "0755"
+  become: true
+  tags:
+    - sabnzbd
+
+# - name: Create storage directories
+#   file:
+#     dest: "{{item.path}}"
+#     state: directory
+#     owner: "{{item.owner}}"
+#     group: "{{item.group}}"
+#     mode: "{{item.mode}}"
+#   become: true
+#   tags:
+#     - services
+#     - sabnzbd
+#   with_items:
+#     - {path: '/mnt/scratch/sonarr',         owner: 'root',              group: 'root',              mode: '0775'}
+#     - {path: '/mnt/scratch/radarr',         owner: 'root',              group: 'root',              mode: '0775'}
+#     - {path: '/mnt/scratch/headphones',     owner: 'root',              group: 'root',              mode: '0775'}
+#     - {path: '/mnt/scratch/transmission',   owner: '1000',              group: '1000',              mode: '0775'}
+#     - {path: '/mnt/scratch/plex',           owner: '2005',              group: '2005',              mode: '0775'}
+
+- name: Configure sabnzbd
+  template:
+    src: sabnzbd.ini.j2
+    dest: /mnt/services/sabnzbd/sabnzbd.ini
+    owner: sabnzbd
+    group: sabnzbd
+    mode: "0600"
+    backup: true
+  register: sabnzbd_conf
+  become: true
+  tags:
+    - sabnzbd
+
+- name: Configure sabnzbd
+  template:
+    src: autoProcessMedia.cfg.j2
+    dest: /mnt/services/sabnzbd/autoProcessMedia.cfg
+    owner: sabnzbd
+    group: sabnzbd
+    mode: "0600"
+    backup: true
+  register: sabnzbd_media_conf
+  become: true
+  tags:
+    - sabnzbd
+
+- name: Create scratch directory
+  file:
+    dest: /mnt/scratch/sabnzbd
+    state: directory
+    owner: "{{ sabnzbd_user.uid }}"
+    group: "{{ sabnzbd_user.group }}"
+    mode: "0755"
+  become: true
+  tags:
+    - sabnzbd
+
+- name: Install sabnzbd service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: sabnzbd.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and sabnzbd_user.changed) }}"
+  tags:
+    - sabnzbd
+
+- name: Enable the service
+  when: not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed))
+  systemd:
+    name: sabnzbd
+    enabled: true
+  become: true
+  tags:
+    - sabnzbd
+
+- name: Start the service
+  when: not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed))
+  systemd:
+    name: sabnzbd
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - sabnzbd
+
+- name: Restart the service
+  when: not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed)) and ((systemd_unit.changed or sabnzbd_conf.changed or sabnzbd_media_conf.changed) and not systemd_started.changed)
+  systemd:
+    name: sabnzbd
+    state: restarted
+  become: true
+  tags:
+    - sabnzbd
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    subdomain: sabnzbd
+    proxy_pass: http://localhost:8080/
+  tags:
+    - sabnzbd
