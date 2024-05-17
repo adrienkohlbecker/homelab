@@ -90,11 +90,11 @@
     [[movie]]
         enabled = 1
         apikey = {{ radarr_api_key }}
-        host = radarr
-        port = 7878
+        host = radarr.{{ inventory_hostname}}.{{ domain }}
+        port = 443
         ###### ADVANCED USE - ONLY EDIT IF YOU KNOW WHAT YOU'RE DOING ######
         web_root =
-        ssl = 0
+        ssl = 1
         # api key for www.omdbapi.com (used as alternative to imdb)
         omdbapikey = {{ omdb_api_key }}
         delete_failed = 0
@@ -236,13 +236,13 @@
     [[tv]]
         enabled = 1
         apikey = {{ sonarr_api_key }}
-        host = sonarr
-        port = 8989
+        host = sonarr.{{ inventory_hostname}}.{{ domain }}
+        port = 443
         username =
         password =
         ###### ADVANCED USE - ONLY EDIT IF YOU KNOW WHAT YOU'RE DOING ######
         web_root =
-        ssl = 0
+        ssl = 1
         delete_failed = 0
         # Enable/Disable linking for Torrents
         Torrent_NoLink = 0
@@ -267,10 +267,10 @@
     [[music]]
         enabled = 1
         apikey = {{ headphones_api_key }}
-        host = headphones
-        port = 8181
+        host = headphones.{{ inventory_hostname}}.{{ domain }}
+        port = 443
         ###### ADVANCED USE - ONLY EDIT IF YOU KNOW WHAT YOU'RE DOING ######
-        ssl = 0
+        ssl = 1
         web_root =
         delete_failed = 0
         wait_for = 2
@@ -460,13 +460,13 @@
 [Plex]
     # Only enter these details if you want to update plex library after processing.
     # Do not enter these details if you send the plex notifications from Sickbeard/CouchPotato.
-    plex_host = plex
+    plex_host = localhost
     plex_port = 32400
-    plex_token = {{ plex_token }}
+    plex_token =
     plex_ssl = 0
     # Enter Plex category to section mapping as Category,section and separate each pair with '|'
     # e.g. plex_sections = movie,3|tv,4
-    plex_sections = movie, 1|tv, 2|music, 8
+    plex_sections =
 
 [Transcoder]
     # getsubs. enable to download subtitles.
