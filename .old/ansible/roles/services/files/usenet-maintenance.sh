@@ -3,9 +3,6 @@
 IFS=$'\n\t'
 set -euxo pipefail
 
-/usr/local/bin/sort-ini /mnt/services/sabnzbd/sabnzbd.ini
-/usr/local/bin/sort-ini /mnt/services/headphones/config.ini
-
 sed -i 's/[ \t]*$//' /mnt/services/sabnzbd/autoProcessMedia.cfg
 
 find /mnt/media -maxdepth 1 -mindepth 1 -type d -not -name ".tmp" -print0 | xargs -0 chown -R ak:ak

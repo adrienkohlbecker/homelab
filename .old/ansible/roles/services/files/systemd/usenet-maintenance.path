@@ -1,6 +1,5 @@
 [Path]
 PathModified=/mnt/services/headphones/config.ini
-PathModified=/mnt/services/sabnzbd/sabnzbd.ini
 
 [Install]
 WantedBy=compose.service
