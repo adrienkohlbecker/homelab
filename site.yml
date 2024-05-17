@@ -80,6 +80,7 @@
     - media
     - jellyfin
     - sabnzbd
+    - sonarr
 
 - name: Reboot check
   hosts: all:!bunk
