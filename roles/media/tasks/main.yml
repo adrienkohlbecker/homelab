@@ -60,7 +60,7 @@
   become: true
   tags:
     - media
-  with_items:
+  loop:
     - /mnt/media/Headphones
     - /mnt/media/Live Music
     - /mnt/media/Movies
