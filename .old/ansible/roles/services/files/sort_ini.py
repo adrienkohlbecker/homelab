@@ -1,14 +1,14 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 import sys
 
 USAGE = 'USAGE:\n\tsort_ini.py file.ini'
 
 def sort_ini(fname):
   """sort .ini file: sorts sections and in each section sorts keys"""
-  f = file(fname)
+  f = open(fname)
   lines = f.readlines()
   f.close()
-  f = file(fname, 'w')
+  f = open(fname, 'w')
   f.truncate(0)
   section = ''
   subcat = ''
@@ -23,18 +23,18 @@ def sort_ini(fname):
         section = line
         subcat = ''
         continue
-      if not sections.has_key(section):
+      if section not in sections:
         sections[section] = {}
-      if not sections[section].has_key(subcat):
+      if subcat not in sections[section]:
         sections[section][subcat] = []
       sections[section][subcat].append(line)
 
   if sections:
-    sk = sections.keys()
+    sk = list(sections.keys())
     sk.sort()
     for k in sk:
       vals = sections[k]
-      sks = vals.keys()
+      sks = list(vals.keys())
       sks.sort()
       if k != '':
         f.write(k.strip()+'\n')
@@ -47,6 +47,6 @@ def sort_ini(fname):
         f.write('\n')
 
 if len(sys.argv) < 2:
-  print USAGE
+  print(USAGE)
 else:
   sort_ini(sys.argv[1])
