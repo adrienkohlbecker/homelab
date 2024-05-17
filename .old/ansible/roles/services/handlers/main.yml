@@ -24,12 +24,6 @@
     state: restarted
   become: yes
 
-- name: Restart sabnzbd
-  service:
-    name: sabnzbd
-    state: restarted
-  become: yes
-
 - name: Restart samba
   service:
     name: smbd
