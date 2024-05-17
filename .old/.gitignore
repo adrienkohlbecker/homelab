@@ -1,4 +1,0 @@
-.vagrant/
-output-*/
-packer_cache/
-/*.box
