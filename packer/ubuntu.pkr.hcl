@@ -148,6 +148,11 @@ build {
     pause_after = "2m" # ensure we have time to run all the first boot things (eg cloud-init)
   }
 
+  provisioner "shell" {
+    execute_command = "echo 'vagrant' | sudo -S -H sh -c '{{ .Vars }} {{ .Path }}'"
+    scripts =  ["${path.root}/scripts/cleanup.sh"]
+  }
+
   post-processors {
     post-processor "manifest" {
       output = "${path.root}/output-${source.name}/manifest.json"
@@ -197,7 +202,7 @@ build {
   provisioner "shell" {
     pause_before = "30s"
     execute_command = "echo 'vagrant' | sudo -S -H sh -c '{{ .Vars }} {{ .Path }}'"
-    scripts =  ["${path.root}/scripts/postreboot.sh", "${path.root}/scripts/packer_extras.sh"]
+    scripts =  ["${path.root}/scripts/postreboot.sh", "${path.root}/scripts/packer_extras.sh", "${path.root}/scripts/cleanup.sh"]
   }
 
   post-processors {
