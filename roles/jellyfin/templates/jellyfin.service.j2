@@ -31,15 +31,14 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name jellyfin \
-    --user {{ jellyfin_user.uid }}:{{ jellyfin_user.group }} \
+    --user {{ jellyfin_user.uid }}:{{ ansible_facts.getent_group['media'][1] }} \
     --log-driver journald \
     --log-opt tag="jellyfin" \
     --volume /mnt/services/jellyfin:/config \
     --volume /mnt/scratch/jellyfin/transcodes:/config/transcodes \
     --volume /var/log/jellyfin:/config/log \
     --volume /mnt/scratch/jellyfin/cache:/cache \
-    {# ro by jellyfin user because the dir below is owned by me #}
-    --volume /mnt/media:/media:ro \
+    --volume /mnt/media:/media \
     --device /dev/dri/:/dev/dri/ \
     --publish 127.0.0.1:8096:8096/tcp \
     docker.io/jellyfin/jellyfin:latest
