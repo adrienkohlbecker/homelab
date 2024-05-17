@@ -56,6 +56,7 @@
 - name: Add more services
   hosts: all:!bunk
   roles:
+    - sort_ini
     - avahi
     - certbot
     - nginx

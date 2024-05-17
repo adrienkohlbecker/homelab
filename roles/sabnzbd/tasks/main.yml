@@ -150,3 +150,13 @@
     proxy_pass: http://localhost:8080/
   tags:
     - sabnzbd
+
+- name: Configure ini watcher
+  import_role:
+    name: sort_ini
+    tasks_from: path
+  vars:
+    path: /mnt/services/sabnzbd/sabnzbd.ini
+    escaped_path: mnt-services-sabnzbd-sabnzbd.ini
+  tags:
+    - sabnzbd
