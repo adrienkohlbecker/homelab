@@ -78,6 +78,7 @@
     - scratch
     - media
     - jellyfin
+    - sabnzbd
 
 - name: Reboot check
   hosts: all:!bunk
