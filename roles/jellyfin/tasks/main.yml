@@ -19,6 +19,14 @@
   tags:
     - jellyfin
 
+- name: Get all groups
+  getent:
+    database: group
+    split: ':'
+  become: true
+  tags:
+    - jellyfin
+
 - name: Create configuration directory
   when: not (ansible_check_mode and jellyfin_user.changed)
   file:
