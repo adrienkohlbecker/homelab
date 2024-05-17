@@ -32,7 +32,6 @@ ExecStart=/usr/bin/podman run \
     --rm \
     --name jellyfin \
     --user {{ jellyfin_user.uid }}:{{ jellyfin_user.group }} \
-    --userns keep-id \
     --log-driver journald \
     --log-opt tag="jellyfin" \
     --volume /mnt/services/jellyfin:/config \
