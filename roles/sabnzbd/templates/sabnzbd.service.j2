@@ -31,14 +31,14 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name sabnzbd \
-    --user {{ sabnzbd_user.uid }}:{{ sabnzbd_user.group }} \
-    --group-add {{ ansible_facts.getent_group['media'][1] }} \
+    --user {{ sabnzbd_user.uid }}:{{ ansible_facts.getent_group['media'][1] }} \
     --log-driver journald \
     --log-opt tag="sabnzbd" \
     --volume /mnt/services/sabnzbd:/data \
     --volume /mnt/services/sabnzbd/autoProcessMedia.cfg:/opt/nzbToMedia/autoProcessMedia.cfg \
     --volume /mnt/media:/media \
     --volume /mnt/scratch:/scratch \
+    --volume /opt/nzbToMedia:/opt/nzbToMedia \
     --publish 127.0.0.1:8080:8080/tcp \
     docker.io/akohlbecker/sabnzbd
 # ExecStartPost=/usr/bin/timeout 60 /usr/local/bin/wait_for_healthy_container %t/%n.ctr-id

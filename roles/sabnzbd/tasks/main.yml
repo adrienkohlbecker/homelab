@@ -41,37 +41,36 @@
   file:
     dest: /mnt/services/sabnzbd
     state: directory
-    owner: "{{ sabnzbd_user.uid }}"
-    group: "{{ sabnzbd_user.group }}"
+    owner: sabnzbd
+    group: media
     mode: "0755"
   become: true
   tags:
     - sabnzbd
 
-# - name: Create storage directories
-#   file:
-#     dest: "{{item.path}}"
-#     state: directory
-#     owner: "{{item.owner}}"
-#     group: "{{item.group}}"
-#     mode: "{{item.mode}}"
-#   become: true
-#   tags:
-#     - services
-#     - sabnzbd
-#   with_items:
-#     - {path: '/mnt/scratch/sonarr',         owner: 'root',              group: 'root',              mode: '0775'}
-#     - {path: '/mnt/scratch/radarr',         owner: 'root',              group: 'root',              mode: '0775'}
-#     - {path: '/mnt/scratch/headphones',     owner: 'root',              group: 'root',              mode: '0775'}
-#     - {path: '/mnt/scratch/transmission',   owner: '1000',              group: '1000',              mode: '0775'}
-#     - {path: '/mnt/scratch/plex',           owner: '2005',              group: '2005',              mode: '0775'}
+- name: Create storage directories
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: sabnzbd
+    group: media
+    mode: "0775"
+  become: true
+  tags:
+    - sabnzbd
+  loop:
+    - /mnt/scratch/sonarr
+    - /mnt/scratch/radarr
+    - /mnt/scratch/headphones
+    # - {path: '/mnt/scratch/transmission',   owner: '1000',              group: '1000',              mode: '0775'}
+    # - {path: '/mnt/scratch/plex',           owner: '2005',              group: '2005',              mode: '0775'}
 
 - name: Configure sabnzbd
   template:
     src: sabnzbd.ini.j2
     dest: /mnt/services/sabnzbd/sabnzbd.ini
     owner: sabnzbd
-    group: sabnzbd
+    group: media
     mode: "0600"
     backup: true
   register: sabnzbd_conf
@@ -84,7 +83,7 @@
     src: autoProcessMedia.cfg.j2
     dest: /mnt/services/sabnzbd/autoProcessMedia.cfg
     owner: sabnzbd
-    group: sabnzbd
+    group: media
     mode: "0600"
     backup: true
   register: sabnzbd_media_conf
@@ -96,10 +95,31 @@
   file:
     dest: /mnt/scratch/sabnzbd
     state: directory
-    owner: "{{ sabnzbd_user.uid }}"
-    group: "{{ sabnzbd_user.group }}"
+    owner: sabnzbd
+    group: media
     mode: "0755"
   become: true
+  tags:
+    - sabnzbd
+
+- name: Create nzbToMedia directory
+  file:
+    dest: /opt/nzbToMedia
+    state: directory
+    owner: sabnzbd
+    group: media
+    mode: "0755"
+  become: true
+  tags:
+    - sabnzbd
+
+- name: Download nzbToMedia
+  git:
+    repo: https://github.com/clinton-hall/nzbToMedia.git
+    dest: /opt/nzbToMedia
+    update: false
+  become: true
+  become_user: sabnzbd
   tags:
     - sabnzbd
 
