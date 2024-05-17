@@ -92,7 +92,7 @@ zpool create \
   -O relatime=on \
   -O utf8only=on \
   -O xattr=sa \
-  -m /boot \
+  -m none \
   -R /chroot \
   bpool $LAYOUT "${DISKS[@]/%/-part3}"
 
@@ -111,7 +111,7 @@ zpool create \
   -O relatime=on \
   -O utf8only=on \
   -O xattr=sa \
-  -m / \
+  -m none \
   -R /chroot \
   rpool $LAYOUT "${DISKS[@]/%/-part4}"
 
