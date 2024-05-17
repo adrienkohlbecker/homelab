@@ -54,33 +54,9 @@
     state: restarted
   become: yes
 
-- name: Restart usenet-maintenance
-  service:
-    name: usenet-maintenance
-    state: restarted
-  become: yes
-
 - name: Restart homebridge
   service:
     name: homebridge
-    state: restarted
-  become: yes
-
-- name: Restart headphones
-  service:
-    name: headphones
-    state: restarted
-  become: yes
-
-- name: Restart sonarr
-  service:
-    name: sonarr
-    state: restarted
-  become: yes
-
-- name: Restart radarr
-  service:
-    name: radarr
     state: restarted
   become: yes
 
