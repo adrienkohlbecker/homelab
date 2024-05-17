@@ -35,6 +35,7 @@ network:
   ethernets:
     $IFACE:
       dhcp4: true
+      dhcp-identifier: mac
 EOF
 
 cp /etc/apt/sources.list /chroot/etc/apt/
