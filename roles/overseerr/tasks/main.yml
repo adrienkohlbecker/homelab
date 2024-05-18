@@ -48,6 +48,15 @@
   tags:
     - overseerr
 
+- name: Load JSON file
+  slurp:
+    src: /mnt/services/overseerr/settings.json
+  register: overseer_settings_b64
+  failed_when: false
+  become: true
+  tags:
+    - overseerr
+
 - name: Configure overseerr
   template:
     src: settings.json.j2
@@ -57,6 +66,8 @@
     mode: "0600"
     backup: true
   register: overseerr_conf
+  vars:
+    overseerr_settings_json: "{{ overseer_settings_b64['content'] | default('e30=') | b64decode | from_json }}"
   become: true
   tags:
     - overseerr
