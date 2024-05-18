@@ -1,0 +1,33 @@
+- name: Create mount point
+  file:
+    dest: /mnt/data
+    state: directory
+    owner: "{{ ansible_ssh_user }}"
+    group: "{{ ansible_ssh_user }}"
+    mode: "0755"
+  become: true
+  tags:
+    - data
+
+- name: Create zfs filesystem
+  when: zfs_root
+  zfs:
+    name: tank/data
+    state: present
+    extra_zfs_properties:
+      mountpoint: /mnt/data
+      'autobackup:bak': 'true'
+  become: true
+  tags:
+    - data
+
+- name: Set up mount service for tank/data
+  when: zfs_root
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    zfs_mount_dataset: tank/data
+    zfs_mount_mountpoint: /mnt/data
+  tags:
+    - data
