@@ -36,7 +36,7 @@
     - zfs_mount
     - podman
 
-- name: pug roles
+- name: Pug roles
   hosts: box,pug
   roles:
     - grub
@@ -70,7 +70,7 @@
     - services
     - pihole
 
-- name: lab roles
+- name: Lab roles
   hosts: box,lab
   roles:
     - prometheus # for minio

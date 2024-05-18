@@ -1,6 +1,7 @@
+---
 - name: wg | Configure wireguard interface
   template:
-    src: "wg.conf.j2"
+    src: wg.conf.j2
     dest: /etc/wireguard/{{ iface }}.conf
     owner: root
     group: root

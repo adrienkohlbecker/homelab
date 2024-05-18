@@ -104,8 +104,8 @@
     name: nginx
     tasks_from: site
   vars:
-    subdomain: influxdb
-    proxy_pass: http://localhost:8086/
+    nginx_subdomain: influxdb
+    nginx_proxy_pass: http://localhost:8086/
   tags:
     - influxdb
 

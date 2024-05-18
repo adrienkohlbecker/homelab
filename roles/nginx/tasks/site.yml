@@ -1,10 +1,10 @@
 - name: site | Configure nginx site
   template:
     src: site.conf.j2
-    dest: /etc/nginx/sites-available/{{ subdomain }}
+    dest: /etc/nginx/sites-available/{{ nginx_subdomain }}
     owner: root
     group: root
-    mode: "{{ permissions | default('0644') }}"
+    mode: "{{ nginx_permissions | default('0644') }}"
     backup: true
   become: true
   register: nginx_static_conf
@@ -14,8 +14,8 @@
 - name: site | Enable nginx site
   when: not (ansible_check_mode and nginx_static_conf.changed)
   file:
-    src: /etc/nginx/sites-available/{{ subdomain }}
-    dest: /etc/nginx/sites-enabled/{{ subdomain }}
+    src: /etc/nginx/sites-available/{{ nginx_subdomain }}
+    dest: /etc/nginx/sites-enabled/{{ nginx_subdomain }}
     state: link
   become: true
   register: nginx_static_conf_enable

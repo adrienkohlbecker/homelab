@@ -187,12 +187,12 @@
     name: nginx
     tasks_from: site
   vars:
-    subdomain: nut
-    server_conf: |
+    nginx_subdomain: nut
+    nginx_server_conf: |
       location = / {
         return 301 /upsstats.cgi;
       }
-    location_conf: |
+    nginx_location_conf: |
       gzip off;
       root /usr/lib/cgi-bin/nut;
 

@@ -142,7 +142,7 @@
     proxy_pass: http://{{ external_ips.otgw }}:80/
     location_conf: |
       # bypass http auth
-      proxy_set_header Authorization "Basic {{ ("admin:"+otgw_admin_password) | b64encode }}";
+      proxy_set_header Authorization "Basic {{ ("admin:" + otgw_admin_password) | b64encode }}";
     permissions: "0600"
   tags:
     - nginx

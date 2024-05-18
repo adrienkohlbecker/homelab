@@ -96,18 +96,18 @@
     name: nginx
     tasks_from: site
   vars:
-    subdomain: journald-exporter
-    proxy_pass: http://localhost:12345/
-    server_conf: |
+    nginx_subdomain: journald-exporter
+    nginx_proxy_pass: http://localhost:12345/
+    nginx_server_conf: |
       location = / {
         return 301 /metrics;
       }
-    location_conf: |
+    nginx_location_conf: |
       # bypass http auth
-      proxy_set_header Authorization "Basic {{ ("metrics:"+journald_exporter_key) | b64encode }}";
+      proxy_set_header Authorization "Basic {{ ("metrics:" + journald_exporter_key) | b64encode }}";
       # overide content type so metrics can be viewed in a browser
       proxy_hide_header Content-Type;
       add_header Content-Type "text/plain; charset=UTF-8";
-    permissions: "0600"
+    nginx_permissions: "0600"
   tags:
     - journald_exporter

@@ -126,7 +126,7 @@
     name: nginx
     tasks_from: site
   vars:
-    subdomain: jellyfin
-    proxy_pass: http://localhost:8096/
+    nginx_subdomain: jellyfin
+    nginx_proxy_pass: http://localhost:8096/
   tags:
     - jellyfin
