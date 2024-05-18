@@ -143,7 +143,7 @@
 
 - name: Compute list update command
   set_fact:
-    pihole_list_update_cmd: /usr/bin/podman run --rm --quiet --volume /mnt/services/pihole/etc:/etc/pihole --entrypoint "/usr/bin/php" --env ADLISTS_URL="{{ pihole_adlists | join(' ') }}" --env WHITELIST_URL="{{ pihole_whitelists | join(' ') }}" docker.io/jacklul/pihole:latest /usr/local/sbin/pihole-updatelists --no-gravity --no-reload --env
+    pihole_list_update_cmd: /usr/bin/podman run --rm --quiet --volume /mnt/services/pihole/etc:/etc/pihole --entrypoint "/usr/bin/php" --env ADLISTS_URL="{{ pihole_adlists | join(' ') }}" --env WHITELIST_URL="{{ pihole_whitelists | join(' ') }}" docker.io/jacklul/pihole:2024.05.0 /usr/local/sbin/pihole-updatelists --no-gravity --no-reload --env
   tags:
     - pihole
 
