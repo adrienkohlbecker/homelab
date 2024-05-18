@@ -40,7 +40,7 @@
   command: mcli admin policy add default useronly /tmp/useronly.json
   args:
     creates: /mnt/minio/.minio.sys/config/iam/policies/useronly
-    stdin: "{{ lookup('file', role_path+'/files/useronly.json') }}"
+    stdin: "{{ lookup('file', role_path + '/files/useronly.json') }}"
   tags:
     - minio
 

@@ -54,7 +54,7 @@
     name: nginx
     tasks_from: site
   vars:
-    subdomain: prometheus
-    proxy_pass: http://127.0.0.1:9090/
+    nginx_subdomain: prometheus
+    nginx_proxy_pass: http://127.0.0.1:9090/
   tags:
     - prometheus

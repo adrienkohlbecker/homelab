@@ -9,7 +9,7 @@
     - fancontrol
 
 - name: Configure fancontrol
-  when: fancontrol_settings != ''
+  when: fancontrol_settings | length > 0
   template:
     src: fancontrol.j2
     dest: /etc/fancontrol
@@ -23,7 +23,7 @@
     - fancontrol
 
 - name: Configure fancontrol
-  when: fancontrol_settings == ''
+  when: fancontrol_settings | length == 0
   file:
     path: /etc/fancontrol
     state: absent

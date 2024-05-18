@@ -104,7 +104,7 @@
     name: nginx
     tasks_from: site
   vars:
-    subdomain: sonarr
-    proxy_pass: http://localhost:8989/
+    nginx_subdomain: sonarr
+    nginx_proxy_pass: http://localhost:8989/
   tags:
     - sonarr

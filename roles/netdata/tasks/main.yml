@@ -305,8 +305,8 @@
     name: nginx
     tasks_from: site
   vars:
-    subdomain: netdata
-    proxy_pass: http://127.0.0.1:19999/
+    nginx_subdomain: netdata
+    nginx_proxy_pass: http://127.0.0.1:19999/
   tags:
     - netdata
 

@@ -103,9 +103,9 @@
     name: nginx
     tasks_from: site
   vars:
-    subdomain: plex
-    proxy_pass: http://localhost:32400/
-    csp_default_src: "plex.tv *.plex.tv wss://*.plex.tv"
-    csp_additional: "connect-src https://*.plex.direct:32400 plex.tv *.plex.tv wss://*.plex.tv {{ csp_default }}"
+    nginx_subdomain: plex
+    nginx_proxy_pass: http://localhost:32400/
+    nginx_csp_default_src: "plex.tv *.plex.tv wss://*.plex.tv"
+    nginx_csp_additional: "connect-src https://*.plex.direct:32400 plex.tv *.plex.tv wss://*.plex.tv {{ nginx_csp_default }}"
   tags:
     - plex

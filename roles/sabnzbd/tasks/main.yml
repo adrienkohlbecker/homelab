@@ -166,8 +166,8 @@
     name: nginx
     tasks_from: site
   vars:
-    subdomain: sabnzbd
-    proxy_pass: http://localhost:8080/
+    nginx_subdomain: sabnzbd
+    nginx_proxy_pass: http://localhost:8080/
   tags:
     - sabnzbd
 
@@ -176,7 +176,7 @@
     name: sort_ini
     tasks_from: path
   vars:
-    path: /mnt/services/sabnzbd/sabnzbd.ini
-    escaped_path: mnt-services-sabnzbd-sabnzbd.ini
+    sort_ini_path: /mnt/services/sabnzbd/sabnzbd.ini
+    sort_ini_escaped_path: mnt-services-sabnzbd-sabnzbd.ini
   tags:
     - sabnzbd

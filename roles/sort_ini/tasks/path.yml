@@ -1,29 +1,29 @@
-- name: Install sort_ini@{{ escaped_path }}.path
+- name: path | Install sort_ini@.path {{ sort_ini_escaped_path }}
   import_role:
     name: systemd_unit
     tasks_from: template
   vars:
     systemd_unit_src: sort_ini@.path
-    systemd_unit_dest: sort_ini@{{ escaped_path }}.path
+    systemd_unit_dest: sort_ini@{{ sort_ini_escaped_path }}.path
 
-- name: Enable the service
+- name: path | Enable the service
   when: not (ansible_check_mode and systemd_unit.changed)
   systemd:
-    name: sort_ini@{{ escaped_path }}.path
+    name: sort_ini@{{ sort_ini_escaped_path }}.path
     enabled: true
   become: true
 
-- name: Start the service
+- name: path | Start the service
   when: not (ansible_check_mode and systemd_unit.changed)
   systemd:
-    name: sort_ini@{{ escaped_path }}.path
+    name: sort_ini@{{ sort_ini_escaped_path }}.path
     state: started
   register: systemd_started
   become: true
 
-- name: Restart the service
+- name: path | Restart the service
   when: not (ansible_check_mode and systemd_unit.changed) and (systemd_unit.changed and not systemd_started.changed)
   systemd:
-    name: sort_ini@{{ escaped_path }}.path
+    name: sort_ini@{{ sort_ini_escaped_path }}.path
     state: restarted
   become: true

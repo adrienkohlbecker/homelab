@@ -76,7 +76,7 @@
     name: nginx
     tasks_from: site
   vars:
-    subdomain: ipp
-    proxy_pass: https://localhost:4680/
+    nginx_subdomain: ipp
+    nginx_proxy_pass: https://localhost:4680/
   tags:
     - eaton_ipp

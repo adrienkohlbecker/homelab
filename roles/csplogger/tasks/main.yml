@@ -74,9 +74,9 @@
     name: nginx
     tasks_from: site
   vars:
-    subdomain: csplogger
-    proxy_pass: http://localhost:8443/
-    server_conf: |
+    nginx_subdomain: csplogger
+    nginx_proxy_pass: http://localhost:8443/
+    nginx_server_conf: |
       location = / {
         return 301 /dashboard;
       }
