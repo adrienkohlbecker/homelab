@@ -56,7 +56,6 @@
 - name: Add more services
   hosts: all:!bunk
   roles:
-    - sort_ini
     - avahi
     - certbot
     - nginx
@@ -81,6 +80,7 @@
     - data
     - media
     - jellyfin
+    - sort_ini
     - sabnzbd
     - sonarr
     - radarr
