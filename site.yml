@@ -86,6 +86,7 @@
     - radarr
     - headphones
     - overseerr
+    - plex
 
 - name: Reboot check
   hosts: all:!bunk
