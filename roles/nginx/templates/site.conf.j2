@@ -7,9 +7,10 @@ server {
   add_header X-XSS-Protection          "1; mode=block" always;
   add_header X-Content-Type-Options    "nosniff" always;
   add_header Referrer-Policy           "same-origin" always;
-  add_header Content-Security-Policy   "script-src 'self' 'unsafe-eval' {{ subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ subdomain }}.{{ domain}} 'unsafe-inline'; default-src 'self' data: {{ subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ subdomain }}.{{ domain}} 'unsafe-inline'; frame-ancestors 'self';" always;
+  add_header Content-Security-Policy   "{% if csp_additional is defined %}{{ csp_additional }} {% endif %}default-src {% if csp_default_src is defined %}{{ csp_default_src }} {% endif %}{{ csp_default }}; frame-ancestors 'self'; report-uri https://csplogger.{{ inventory_hostname }}.{{ domain }}/log; report-to csp-endpoint;" always;
   add_header Permissions-Policy        "interest-cohort=()" always;
   add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+  add_header Reporting-Endpoints       'csp-endpoint="https://csplogger.{{ inventory_hostname }}.{{ domain }}/log"' always;
 
   # . files
   location ~ /\.(?!well-known) {

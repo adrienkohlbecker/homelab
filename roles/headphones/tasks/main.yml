@@ -106,6 +106,8 @@
   vars:
     subdomain: headphones
     proxy_pass: http://localhost:8181/
+    csp_additional: "script-src https://api.songkick.com {{ csp_default }};"
+    csp_default_src: "http://headphones.{{ inventory_hostname }}.{{ domain }}"
   tags:
     - headphones
 
