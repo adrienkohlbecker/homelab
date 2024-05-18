@@ -1,0 +1,55 @@
+# jinja2: lstrip_blocks: "True"
+# plex.service #######################################################################
+[Unit]
+Description=plex
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=5
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service zfs_mount_mnt_scratch.service zfs_mount_mnt_media.service zfs_mount_mnt_data.service   zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service zfs_mount_mnt_scratch.service zfs_mount_mnt_media.service zfs_mount_mnt_data.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+Delegate=yes
+TimeoutSec=100
+RestartSec=5
+Type=notify
+NotifyAccess=all
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    {# todo move this to healthy on later podman versions, and remove ExecStartPost #}
+    --sdnotify=conmon \
+    --detach \
+    --replace \
+    --rm \
+    --name plex \
+    --log-driver journald \
+    --log-opt tag="plex" \
+    --env ADVERTISE_IP="http://{{ ansible_facts.default_ipv4.address }}:32400/" \
+    --env PLEX_UID={{ plex_user.uid }} \
+    --env PLEX_GID={{ ansible_facts.getent_group['media'][1] }} \
+    --volume /mnt/services/plex:/config \
+    --volume /mnt/media:/media \
+    --volume "/mnt/data/MacbookPro/Music/iTunes/iTunes Media/Music:/itunes:ro" \
+    --volume /mnt/data/Musique/Records:/records:ro \
+    --volume /mnt/scratch/plex:/transcode \
+    --publish 0.0.0.0:32400:32400/tcp \
+    --device /dev/dri/:/dev/dri/ \
+    docker.io/plexinc/pms-docker
+# ExecStartPost=/usr/bin/timeout 60 /usr/local/bin/wait_for_healthy_container %t/%n.ctr-id
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

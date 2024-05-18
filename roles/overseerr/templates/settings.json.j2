@@ -23,11 +23,34 @@
   "locale": "en"
  },
  "plex": {
-  "name": "",
-  "ip": "",
-  "port": 32400,
-  "useSsl": false,
-  "libraries": []
+  "name": "DockerPlex",
+  "ip": "plex.{{ inventory_hostname }}.{{ domain }}",
+  "port": 443,
+  "useSsl": true,
+  "libraries": [
+   {
+    "id": "10",
+    "name": "Live Music",
+    "enabled": false,
+    "type": "movie"
+   },
+   {
+    "id": "1",
+    "name": "Movies",
+    "enabled": true,
+    "type": "movie",
+    "lastScan": 1716037200039
+   },
+   {
+    "id": "2",
+    "name": "TV Shows",
+    "enabled": true,
+    "type": "show",
+    "lastScan": 1716037200047
+   }
+  ],
+  "webAppUrl": "https://plex.{{ inventory_hostname }}.{{ domain }}/web/index.html",
+  "machineId": "{{ plex_machine_id }}"
  },
  "tautulli": {},
  "radarr": [

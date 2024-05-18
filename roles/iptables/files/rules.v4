@@ -48,6 +48,7 @@
 -A FILTERS -p tcp --dport 22    -j ACCEPT                                     -m comment --comment "Allow SSH"
 -A FILTERS -p tcp --dport 80    -j ACCEPT                                     -m comment --comment "Allow HTTP"
 -A FILTERS -p tcp --dport 443   -j ACCEPT                                     -m comment --comment "Allow HTTPS"
+-A FILTERS -p tcp --dport 32400 -j ACCEPT                                     -m comment --comment "Allow Plex"
 
 ##################################################
 #                   INPUT RULES                  #
