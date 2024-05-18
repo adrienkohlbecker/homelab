@@ -60,6 +60,7 @@
     - avahi
     - certbot
     - nginx
+    - csplogger
     - keepalived
     - keepalived_exporter
     - custom_exporter
