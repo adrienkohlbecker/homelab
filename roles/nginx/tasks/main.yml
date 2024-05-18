@@ -90,59 +90,59 @@
 - name: Configure nginx static sites (marantz)
   import_tasks: site.yml
   vars:
-    subdomain: marantz
-    proxy_pass: https://{{ external_ips.marantz }}:10443/
+    nginx_subdomain: marantz
+    nginx_proxy_pass: https://{{ external_ips.marantz }}:10443/
   tags:
     - nginx
 
 - name: Configure nginx static sites (printer)
   import_tasks: site.yml
   vars:
-    subdomain: printer
-    proxy_pass: http://{{ external_ips.printer }}:80/
+    nginx_subdomain: printer
+    nginx_proxy_pass: http://{{ external_ips.printer }}:80/
   tags:
     - nginx
 
 - name: Configure nginx static sites (siglent)
   import_tasks: site.yml
   vars:
-    subdomain: siglent
-    proxy_pass: http://{{ external_ips.siglent }}:80/
+    nginx_subdomain: siglent
+    nginx_proxy_pass: http://{{ external_ips.siglent }}:80/
   tags:
     - nginx
 
 - name: Configure nginx static sites (unifi)
   import_tasks: site.yml
   vars:
-    subdomain: unifi
-    proxy_pass: https://{{ external_ips.udm }}:443/
+    nginx_subdomain: unifi
+    nginx_proxy_pass: https://{{ external_ips.udm }}:443/
   tags:
     - nginx
 
 - name: Configure nginx static sites (ups)
   import_tasks: site.yml
   vars:
-    subdomain: ups
-    proxy_pass: https://{{ external_ips.eaton }}:443/
+    nginx_subdomain: ups
+    nginx_proxy_pass: https://{{ external_ips.eaton }}:443/
   tags:
     - nginx
 
 - name: Configure nginx static sites (tubeszb)
   import_tasks: site.yml
   vars:
-    subdomain: tubeszb
-    proxy_pass: http://{{ external_ips.tubeszb }}:80/
+    nginx_subdomain: tubeszb
+    nginx_proxy_pass: http://{{ external_ips.tubeszb }}:80/
   tags:
     - nginx
 
 - name: Configure nginx static sites (otgw)
   import_tasks: site.yml
   vars:
-    subdomain: otgw
-    proxy_pass: http://{{ external_ips.otgw }}:80/
-    location_conf: |
+    nginx_subdomain: otgw
+    nginx_proxy_pass: http://{{ external_ips.otgw }}:80/
+    nginx_location_conf: |
       # bypass http auth
       proxy_set_header Authorization "Basic {{ ("admin:" + otgw_admin_password) | b64encode }}";
-    permissions: "0600"
+    nginx_permissions: "0600"
   tags:
     - nginx

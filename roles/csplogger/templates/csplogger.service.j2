@@ -36,7 +36,7 @@ ExecStart=/usr/bin/podman run \
     --user {{ csplogger_user.uid }}:{{ csplogger_user.group }}  \
     --volume /mnt/services/csplogger:/app/databases \
     --publish 127.0.0.1:8443:8443/tcp \
-    docker.io/giuliocomi/csplogger:5460b64fa6cb
+    docker.io/giuliocomi/csplogger@sha256:5460b64fa6cb0471cb5a254d7f63719782de463fd155ba1f17b74a275f3249f8
 # ExecStartPost=/usr/bin/timeout 60 /usr/local/bin/wait_for_healthy_container %t/%n.ctr-id
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id

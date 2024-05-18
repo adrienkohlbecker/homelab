@@ -137,6 +137,7 @@
   systemd:
     name: pihole
     state: restarted
+  throttle: 1
   become: true
   tags:
     - pihole
