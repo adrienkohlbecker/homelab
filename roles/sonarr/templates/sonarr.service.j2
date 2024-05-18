@@ -40,7 +40,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/media:/media \
     --volume /mnt/scratch:/scratch \
     --publish 127.0.0.1:8989:8989/tcp \
-    docker.io/linuxserver/sonarr
+    docker.io/linuxserver/sonarr:4.0.4
 # ExecStartPost=/usr/bin/timeout 60 /usr/local/bin/wait_for_healthy_container %t/%n.ctr-id
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id

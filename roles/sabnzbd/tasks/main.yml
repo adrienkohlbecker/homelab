@@ -117,7 +117,7 @@
   git:
     repo: https://github.com/clinton-hall/nzbToMedia.git
     dest: /opt/nzbToMedia
-    update: false
+    version: 12.1.13
   become: true
   become_user: sabnzbd
   tags:

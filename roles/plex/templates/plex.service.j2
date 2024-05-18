@@ -44,7 +44,7 @@ ExecStart=/usr/bin/podman run \
     --publish 0.0.0.0:32400:32400/tcp \
     --device /dev/dri/:/dev/dri/ \
     --ip={{ plex_podman_ip }} \
-    docker.io/plexinc/pms-docker
+    docker.io/plexinc/pms-docker:1.40.2.8395-c67dce28e
 # ExecStartPost=/usr/bin/timeout 60 /usr/local/bin/wait_for_healthy_container %t/%n.ctr-id
 ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -d {{ plex_podman_ip }} -p tcp --dport 32400 -j ACCEPT -m comment --comment "Allow Plex"
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60

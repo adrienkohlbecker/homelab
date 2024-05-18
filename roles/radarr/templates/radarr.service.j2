@@ -40,7 +40,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/media:/media \
     --volume /mnt/scratch:/scratch \
     --publish 127.0.0.1:7878:7878/tcp \
-    docker.io/linuxserver/radarr
+    docker.io/linuxserver/radarr:5.6.0
 # ExecStartPost=/usr/bin/timeout 60 /usr/local/bin/wait_for_healthy_container %t/%n.ctr-id
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
