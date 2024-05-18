@@ -87,6 +87,7 @@
     - headphones
     - overseerr
     - plex
+    - tautulli
 
 - name: Reboot check
   hosts: all:!bunk

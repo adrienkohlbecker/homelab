@@ -1,0 +1,51 @@
+# jinja2: lstrip_blocks: "True"
+# tautulli.service #######################################################################
+[Unit]
+Description=tautulli
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=5
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+Delegate=yes
+TimeoutSec=100
+RestartSec=5
+Type=notify
+NotifyAccess=all
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    {# todo move this to healthy on later podman versions, and remove ExecStartPost #}
+    --sdnotify=conmon \
+    --detach \
+    --replace \
+    --rm \
+    --name tautulli \
+    --log-driver journald \
+    --log-opt tag="tautulli" \
+    --volume /mnt/services/tautulli:/config \
+    --volume "/mnt/services/plex/Library/Application Support/Plex Media Server/Logs:/plex_logs:ro" \
+    --env PUID={{ tautulli_user.uid }} \
+    --env PGID={{ tautulli_user.group }} \
+    --env TZ=Europe/Amsterdam \
+    --publish 127.0.0.1:8182:8181/tcp \
+    docker.io/linuxserver/tautulli
+# ExecStartPost=/usr/bin/timeout 60 /usr/local/bin/wait_for_healthy_container %t/%n.ctr-id
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}
