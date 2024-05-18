@@ -78,6 +78,7 @@
     - minio
     - influxdb
     - scratch
+    - data
     - media
     - jellyfin
     - sabnzbd
