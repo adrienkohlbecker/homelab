@@ -106,5 +106,7 @@
   vars:
     subdomain: overseerr
     proxy_pass: http://localhost:5055/
+    csp_default_src: "plex.tv *.plex.tv"
+    csp_additional: "img-src plex.tv *.plex.tv *.gravatar.com *.tmdb.org {{ csp_default }}; font-src plex.tv *.plex.tv fonts.gstatic.com {{ csp_default }};"
   tags:
     - overseerr
