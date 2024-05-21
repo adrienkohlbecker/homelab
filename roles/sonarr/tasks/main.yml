@@ -106,5 +106,6 @@
   vars:
     nginx_subdomain: sonarr
     nginx_proxy_pass: http://localhost:8989/
+    nginx_csp_additional: "connect-src plex.tv *.plex.tv {{ nginx_csp_default }}"
   tags:
     - sonarr

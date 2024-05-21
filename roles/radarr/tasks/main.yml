@@ -106,5 +106,6 @@
   vars:
     nginx_subdomain: radarr
     nginx_proxy_pass: http://localhost:7878/
+    nginx_csp_additional: "connect-src plex.tv *.plex.tv {{ nginx_csp_default }}"
   tags:
     - radarr
