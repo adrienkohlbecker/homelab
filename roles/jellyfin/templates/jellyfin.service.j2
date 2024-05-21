@@ -42,7 +42,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/media:/media \
     --device /dev/dri/:/dev/dri/ \
     --publish 127.0.0.1:8096:8096/tcp \
-    --health-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 http://localhost:8096/health > /dev/null" \
+    --health-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8096/health" \
     --health-start-period "10s" \
     docker.io/jellyfin/jellyfin:10.9.2
 ExecStartPost=/usr/local/bin/wait_for_healthy_container %t/%n.ctr-id
