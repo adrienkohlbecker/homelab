@@ -16,7 +16,6 @@
     group: root
     mode: "0644"
     backup: true
-  register: apt_zfs_pin
   become: true
   tags:
     - hwe_kernel
@@ -43,7 +42,29 @@
   tags:
     - hwe_kernel
 
-- name: Install zfsutils from mantic
+- name: Add noble repository
+  apt_repository:
+    repo: 'deb http://archive.ubuntu.com/ubuntu noble main restricted universe multiverse # For zfsutils-linux userspace tools'
+  become: true
+  register: noble_repository
+  tags:
+    - hwe_kernel
+
+- name: Add noble-updates repository
+  apt_repository:
+    repo: 'deb http://archive.ubuntu.com/ubuntu noble-updates main restricted universe multiverse # For zfsutils-linux userspace tools'
+  become: true
+  tags:
+    - hwe_kernel
+
+- name: Add noble-security repository
+  apt_repository:
+    repo: 'deb http://archive.ubuntu.com/ubuntu noble-security main restricted universe multiverse # For zfsutils-linux userspace tools'
+  become: true
+  tags:
+    - hwe_kernel
+
+- name: Install tools from mantic
   when: not (ansible_check_mode and mantic_repository.changed)
   apt:
     pkg:
@@ -56,8 +77,23 @@
   tags:
     - hwe_kernel
 
+- name: Install tools from noble
+  when: not (ansible_check_mode and noble_repository.changed)
+  apt:
+    pkg:
+      - podman
+      - buildah
+      - containernetworking-plugins
+    state: latest
+    default_release: noble
+    cache_valid_time: 3600
+  register: podman_apt
+  become: true
+  tags:
+    - hwe_kernel
+
 - name: Ask to reboot
-  when: kernel_apt.changed or zfsutils_apt.changed
+  when: kernel_apt.changed or zfsutils_apt.changed or podman_apt.changed
   file:
     path: /var/run/reboot-required
     state: touch
