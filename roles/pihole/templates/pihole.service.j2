@@ -47,7 +47,6 @@ ExecStart=/usr/bin/podman run \
     --env PIHOLE_GID={{ pihole_user.group }} \
     --dns=127.0.0.1 \
     --dns=1.1.1.1 \
-    --ip={{ pihole_podman_ip }} \
     --publish 0.0.0.0:53:53/udp \
     --publish 0.0.0.0:53:53/tcp \
     --publish 127.0.0.1:8943:80/tcp \
@@ -56,12 +55,8 @@ ExecStart=/usr/bin/podman run \
     --health-start-period "10s" \
     docker.io/pihole/pihole:2024.05.0
 ExecStartPost=/usr/local/bin/wait_for_healthy_container %t/%n.ctr-id
-ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -d {{ pihole_podman_ip }} -p udp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
-ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -d {{ pihole_podman_ip }} -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
-ExecStopPost=-/usr/sbin/iptables -D CNI-ADMIN -d {{ pihole_podman_ip }} -p udp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
-ExecStopPost=-/usr/sbin/iptables -D CNI-ADMIN -d {{ pihole_podman_ip }} -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
 
 [Install]
 WantedBy=default.target
