@@ -16,7 +16,8 @@ PartOf=zfs_autosnapshot.target
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=on-failure
 Delegate=yes
-TimeoutSec=100
+TimeoutStartSec=120
+TimeoutStopSec=30
 RestartSec=5
 Type=notify
 NotifyAccess=all
@@ -52,8 +53,9 @@ ExecStart=/usr/bin/podman run \
     --publish 127.0.0.1:8943:80/tcp \
     {# todo remove when this is fixed https://github.com/containers/podman/issues/18904 #}
     --health-cmd "dig +short +norecurse +retry=0 @127.0.0.1 pi.hole || exit 1" \
+    --health-start-period "10s" \
     docker.io/pihole/pihole:2024.05.0
-ExecStartPost=/usr/bin/timeout 60 /usr/local/bin/wait_for_healthy_container %t/%n.ctr-id
+ExecStartPost=/usr/local/bin/wait_for_healthy_container %t/%n.ctr-id
 ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -d {{ pihole_podman_ip }} -p udp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
 ExecStartPost=/usr/sbin/iptables -A CNI-ADMIN -d {{ pihole_podman_ip }} -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow Pihole"
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
