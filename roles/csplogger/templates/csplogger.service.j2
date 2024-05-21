@@ -26,8 +26,7 @@ ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
     --cgroups=split \
-    {# todo move this to healthy on later podman versions, and remove ExecStartPost #}
-    --sdnotify=conmon \
+    --sdnotify=healthy \
     --detach \
     --replace \
     --rm \
@@ -40,7 +39,6 @@ ExecStart=/usr/bin/podman run \
     --health-cmd "wget --quiet --tries=1 --spider http://localhost:8443/dashboard > /dev/null" \
     --health-start-period "10s" \
     docker.io/giuliocomi/csplogger@sha256:5460b64fa6cb0471cb5a254d7f63719782de463fd155ba1f17b74a275f3249f8
-ExecStartPost=/usr/local/bin/wait_for_healthy_container %t/%n.ctr-id
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 

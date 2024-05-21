@@ -170,14 +170,9 @@
     - podman
 
 - name: Configure health script
-  copy:
-    src: wait_for_healthy_container.sh
-    dest: /usr/local/bin/wait_for_healthy_container
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-    validate: bash -n %s
+  file:
+    path: /usr/local/bin/wait_for_healthy_container
+    state: absent
   become: true
   tags:
     - podman

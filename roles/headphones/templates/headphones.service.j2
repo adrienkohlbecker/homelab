@@ -26,8 +26,7 @@ ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
     --cgroups=split \
-    {# todo move this to healthy on later podman versions, and remove ExecStartPost #}
-    --sdnotify=conmon \
+    --sdnotify=healthy \
     --detach \
     --replace \
     --rm \
@@ -44,7 +43,6 @@ ExecStart=/usr/bin/podman run \
     --health-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8181/" \
     --health-start-period "10s" \
     docker.io/linuxserver/headphones:version-a78f38c1
-ExecStartPost=/usr/local/bin/wait_for_healthy_container %t/%n.ctr-id
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
