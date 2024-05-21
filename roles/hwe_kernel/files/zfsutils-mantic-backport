@@ -1,3 +1,7 @@
+Package: podman libsubid4 buildah golang-github-containers-common container-network-stack netavark containernetworking-plugins libgpgme11t64
+Pin: release n=noble
+Pin-Priority: 991
+
 Package: zfsutils-linux libnvpair3linux libuutil3linux libzfs4linux libzpool5linux libc6 chrony tzdata-legacy libgnutls30 libgmp10 libp11-kit0 tzdata
 Pin: release n=mantic
 Pin-Priority: 990
