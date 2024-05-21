@@ -52,7 +52,13 @@
   "webAppUrl": "https://plex.{{ inventory_hostname }}.{{ domain }}/web/index.html",
   "machineId": "{{ plex_machine_id }}"
  },
- "tautulli": {},
+ "tautulli": {
+   "hostname": "tautulli.{{ inventory_hostname }}.{{ domain }}",
+   "port": 443,
+   "useSsl": true,
+   "apiKey": "{{ tautulli_api_key }}",
+   "externalUrl": "https://tautulli.{{ inventory_hostname }}.{{ domain }}"
+ },
  "radarr": [
   {
    "name": "radarr",
