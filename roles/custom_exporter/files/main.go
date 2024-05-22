@@ -434,17 +434,26 @@ func getNetdataContextStatus() error {
 		return err
 	}
 
+	metrics := map[string]float64{}
+
 	for id, c := range resp.Contexts {
 		collector, ok := netdataContexts[id]
 		if !ok {
 			continue
 		}
 
-		var live float64
 		if c.Live {
-			live = 1
+			metrics[collector] = 1
 		}
-		netdataCollectorUp.With(prometheus.Labels{"collector": collector}).Set(live)
+	}
+
+	for _, collector := range netdataContexts {
+		value, ok := metrics[collector]
+		if !ok {
+			value = 0
+		}
+
+		netdataCollectorUp.With(prometheus.Labels{"collector": collector}).Set(value)
 	}
 
 	return nil
@@ -485,16 +494,25 @@ func getNetdataCollectorStatus() error {
 		return err
 	}
 
+	metrics := map[string]float64{}
+
 	for id, c := range resp.Tree["/collectors/jobs"] {
 		if !slices.Contains(netdataCollectors, id) {
 			continue
 		}
 
-		var live float64
-		if !c.UserDisabled && !c.PluginRejected && !c.RestartRequired {
-			live = 1
+		if !c.UserDisabled && !c.PluginRejected && !c.RestartRequired && c.Status == "running" {
+			metrics[id] = 1
 		}
-		netdataCollectorUp.With(prometheus.Labels{"collector": id}).Set(live)
+	}
+
+	for _, id := range netdataCollectors {
+		value, ok := metrics[id]
+		if !ok {
+			value = 0
+		}
+
+		netdataCollectorUp.With(prometheus.Labels{"collector": id}).Set(value)
 	}
 
 	return nil

@@ -70,6 +70,9 @@
     - section: global
       option: access log
       value: none # accesses are logged by nginx
+    - section: db
+      option: update every
+      value: 5
   register: netdata_conf
   become: true
   tags:
