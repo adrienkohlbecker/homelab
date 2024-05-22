@@ -31,6 +31,19 @@
   tags:
     - tautulli
 
+- name: Configure tautulli
+  template:
+    src: config.ini.j2
+    dest: /mnt/services/tautulli/config.ini
+    owner: tautulli
+    group: media
+    mode: "0600"
+    backup: true
+  register: tautulli_conf
+  become: true
+  tags:
+    - tautulli
+
 - name: Install tautulli service
   import_role:
     name: systemd_unit
@@ -61,7 +74,7 @@
     - tautulli
 
 - name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or tautulli_user.changed)) and ((systemd_unit.changed) and not systemd_started.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or tautulli_user.changed)) and ((systemd_unit.changed or tautulli_conf) and not systemd_started.changed)
   systemd:
     name: tautulli
     state: restarted
@@ -77,5 +90,15 @@
     nginx_subdomain: tautulli
     nginx_proxy_pass: http://localhost:8182/
     nginx_csp_default_src: "plex.tv *.plex.tv"
+  tags:
+    - tautulli
+
+- name: Configure ini watcher
+  import_role:
+    name: sort_ini
+    tasks_from: path
+  vars:
+    sort_ini_path: /mnt/services/tautulli/config.ini
+    sort_ini_escaped_path: mnt-services-tautulli-config.ini
   tags:
     - tautulli
