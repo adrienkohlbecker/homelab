@@ -44,24 +44,33 @@
   tags:
     - podman
 
+- name: Install postman service override
+  file:
+    path: /etc/systemd/system/podman.service.d/override.conf
+    state: absent
+  become: true
+  register: systemd_unit
+  tags:
+    - podman
+
 - name: Create override directory
   file:
-    dest: /etc/systemd/system/podman.service.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
+    path: /etc/systemd/system/podman.service.d
+    state: absent
   become: true
   tags:
     - podman
 
-- name: Install postman service override
-  import_role:
-    name: systemd_unit
-  vars:
-    systemd_unit_src: override_service.conf
-    systemd_unit_dest: podman.service.d/override.conf
-    systemd_unit_verify: podman.service
+- name: Configure containers
+  copy:
+    src: containers.conf
+    dest: /etc/containers/containers.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: containers_cfg
+  become: true
   tags:
     - podman
 
@@ -161,7 +170,7 @@
     - podman
 
 - name: Restart the socket
-  when: not (ansible_check_mode and apt_unit_masked.changed) and (systemd_unit.changed or socket_systemd_unit.changed) and not systemd_started.changed
+  when: not (ansible_check_mode and apt_unit_masked.changed) and (systemd_unit.changed or socket_systemd_unit.changed or containers_cfg.changed) and not systemd_started.changed
   systemd:
     name: podman.socket
     state: restarted
