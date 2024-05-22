@@ -146,3 +146,26 @@
     nginx_permissions: "0600"
   tags:
     - nginx
+
+- name: Setup web_log metrics
+  when: not (ansible_check_mode)
+  copy:
+    src: web_log.conf
+    dest: /etc/netdata/go.d/web_log.conf
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: true
+  register: netdata_web_log_conf
+  become: true
+  tags:
+    - nginx
+
+- name: Restart netdata
+  when: netdata_web_log_conf.changed
+  systemd:
+    name: netdata
+    state: restarted
+  become: true
+  tags:
+    - nginx

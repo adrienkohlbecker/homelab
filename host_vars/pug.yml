@@ -59,3 +59,59 @@ fancontrol_settings: |
 
 pihole_keepalived_role: BACKUP
 pihole_keepalived_priority: 10
+
+netdata_contexts:
+  apps:            app.cpu_utilization
+  conntrack:       netfilter.conntrack_sockets
+  containers:      cgroup.cpu_limit
+  diskspace:       disk.space
+  diskstatistics:  disk.io
+  #edac:            mem.edac_mc_errors
+  entropy:         system.entropy
+  extfrag:         mem.fragmentation_index_dma
+  idlejitter:      system.idlejitter
+  interrupts:      system.interrupts
+  ipc:             system.ipc_semaphores
+  # ksm:             mem.ksm
+  loadavg:         system.load
+  # md:              md.health
+  meminfo:         system.ram
+  netdev:          system.net
+  netstat:         system.ip
+  # numa:            mem.numa_nodes
+  nvme:            nvme.device_estimated_endurance_perc
+  # pagetypeinfo:    mem.pagetype_global
+  # perf:            perf.cpu_cycles
+  postfix:         postfix.qsize
+  powercap:        cpu.powercap_intel_rapl_zone
+  # powersupply:     powersupply.capacity
+  pressure:        system.cpu_some_pressure
+  procstat:        system.cpu
+  sensors:         sensors.fan
+  # slabinfo:        mem.slabmemory
+  smartd:          smartd_log.current_pending_sector_count
+  softirqs:        system.softirqs
+  systemd_service: systemd.service.cpu.utilization
+  uptime:          system.uptime
+  usergroups:      usergroup.cpu_utilization
+  users:           user.cpu_utilization
+  # vmstat:          mem.swapio
+  zfs:             zfs.arc_size
+  zfspool:         zfspool.state
+  # zram:            mem.zram_usage
+netdata_collectors:
+  - go.d:collector:chrony:local
+  - go.d:collector:docker:local
+  - go.d:collector:logind:logind
+  - go.d:collector:nginx:local
+  - go.d:collector:nvme:nvme
+  - go.d:collector:pihole:local
+  - go.d:collector:prometheus:custom
+  - go.d:collector:prometheus:journald
+  - go.d:collector:prometheus:keepalived_exporter_local
+  # - go.d:collector:systemdunits:service-units
+  - go.d:collector:upsd:local
+  - go.d:collector:web_log:nginx
+  - go.d:collector:wireguard:wireguard
+  - go.d:collector:x509check:domain_cert
+  - go.d:collector:x509check:host_cert
