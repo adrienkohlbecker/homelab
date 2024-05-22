@@ -84,6 +84,7 @@
       - podman
       - buildah
       - containernetworking-plugins
+      - conmon
     state: latest
     default_release: noble
     cache_valid_time: 3600
