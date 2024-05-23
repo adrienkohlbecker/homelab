@@ -29,6 +29,11 @@ f_trace rsync \
   --delete-excluded \
   --compress \
   --timeout 60 \
+  --devices \
+  --specials \
+  -M--fake-super \
+  --numeric-ids \
+  --stats \
   --log-file="/var/log/zfs_autobackup/$DESTPATH.log" \
   --one-file-system \
   --exclude .DS_Store \
