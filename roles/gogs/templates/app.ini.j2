@@ -1,0 +1,54 @@
+BRAND_NAME = Gogs
+RUN_USER   = git
+RUN_MODE   = prod
+
+[database]
+TYPE     = sqlite3
+HOST     = 127.0.0.1:5432
+NAME     = gogs
+USER     = gogs
+PASSWORD =
+SSL_MODE = disable
+PATH     = data/gogs.db
+
+[repository]
+ROOT = /data/git/gogs-repositories
+
+[server]
+DOMAIN           = gogs.{{ inventory_hostname }}.{{ domain }}
+HTTP_PORT        = 3000
+EXTERNAL_URL     = https://gogs.{{ inventory_hostname }}.{{ domain }}/
+DISABLE_SSH      = false
+SSH_PORT         = 2221
+START_SSH_SERVER = false
+OFFLINE_MODE     = true
+
+[mailer]
+ENABLED = true
+HOST    = {{ smtp_host }}:{{ smtp_port }}
+FROM    = gogs@{{ domain }}
+USER    = {{ smtp_user }}
+PASSWD  = {{ gogs_sendgrid_password }}
+
+[service]
+REGISTER_EMAIL_CONFIRM = true
+ENABLE_NOTIFY_MAIL     = true
+DISABLE_REGISTRATION   = false
+ENABLE_CAPTCHA         = true
+REQUIRE_SIGNIN_VIEW    = false
+
+[picture]
+DISABLE_GRAVATAR        = true
+ENABLE_FEDERATED_AVATAR = false
+
+[session]
+PROVIDER = file
+
+[log]
+MODE      = console, file
+LEVEL     = Info
+ROOT_PATH = /app/gogs/log
+
+[security]
+INSTALL_LOCK = true
+SECRET_KEY   = {{ gogs_secret_key }}
