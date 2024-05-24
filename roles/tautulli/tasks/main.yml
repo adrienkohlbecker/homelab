@@ -36,7 +36,7 @@
     src: config.ini.j2
     dest: /mnt/services/tautulli/config.ini
     owner: tautulli
-    group: media
+    group: tautulli
     mode: "0600"
     backup: true
   register: tautulli_conf
