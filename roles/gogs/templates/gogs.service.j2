@@ -1,0 +1,51 @@
+# jinja2: lstrip_blocks: "True"
+# gogs.service #######################################################################
+[Unit]
+Description=gogs
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=5
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+Delegate=yes
+TimeoutStartSec=120
+TimeoutStopSec=30
+RestartSec=5
+Type=notify
+NotifyAccess=all
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=conmon \
+    --detach \
+    --replace \
+    --rm \
+    --name gogs \
+    --log-driver journald \
+    --log-opt tag="gogs" \
+    --volume /mnt/services/gogs:/data \
+    --env PUID={{ gogs_user.uid }} \
+    --env PGID={{ gogs_user.group }} \
+    --env TZ=Europe/Amsterdam \
+    --publish 0.0.0.0:2221:22/tcp \
+    --publish 127.0.0.1:3000:3000/tcp \
+    --health-start-period "10s" \
+    docker.io/gogs/gogs:0.12.11
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

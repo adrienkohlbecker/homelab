@@ -88,6 +88,7 @@
     - overseerr
     - plex
     - tautulli
+    - gogs
 
 - name: Reboot check
   hosts: all:!bunk
