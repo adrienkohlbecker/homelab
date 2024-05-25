@@ -1,0 +1,32 @@
+# jinja2: lstrip_blocks: "True"
+# gitea.service #######################################################################
+[Unit]
+Description=gitea
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=5
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=120
+TimeoutStopSec=30
+RestartSec=5
+
+Type=simple
+User=git
+Group=git
+WorkingDirectory=/mnt/services/gitea/
+ExecStart=/usr/local/bin/gitea web --config /etc/gitea/app.ini
+Environment=USER=git HOME=/home/git GITEA_WORK_DIR=/mnt/services/gitea
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}
