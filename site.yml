@@ -89,6 +89,7 @@
     - plex
     - tautulli
     - gitea
+    - transmission
 
 - name: Reboot check
   hosts: all:!bunk
