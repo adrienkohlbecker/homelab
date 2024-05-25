@@ -94,8 +94,6 @@
 -A FWD_DROP -i wg0 -o cni-podman0 -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow pihole tcp through wireguard"
 -A FWD_DROP -i eth0 -o cni-podman0 -p udp --dport 53 -j ACCEPT -m comment --comment "Allow pihole udp through eth0"
 -A FWD_DROP -i wg0 -o cni-podman0 -p udp --dport 53 -j ACCEPT -m comment --comment "Allow pihole udp through wireguard"
--A FWD_DROP -i eth0 -o cni-podman0 -p tcp --dport 22 -j ACCEPT -m comment --comment "Allow gogs eth0"
--A FWD_DROP -i wg0 -o cni-podman0 -p tcp --dport 22 -j ACCEPT -m comment --comment "Allow gogs wireguard"
 
 # workaround to avoid clearing the FORWARD chain on apply and loosing rules added by CNI/podman
 -A FWD_DROP -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] FORWARD:REJECT: "
