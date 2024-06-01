@@ -17,6 +17,10 @@ Vagrant.configure("2") do |config|
     base.vm.box_url = 'file://packer/packer_ubuntu_vmware_arm64.box'
   end
 
+  config.vm.provider "vmware_desktop" do |vb|
+    vb.gui = true
+  end
+
   config.vm.provision "ansible" do |ansible|
     ansible.playbook = "site.yml"
   end
