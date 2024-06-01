@@ -21,31 +21,24 @@ apt-get autoclean -y
 
 rm -rf /tmp/* >/dev/null
 
-echo 'Whiteout swap'
-swappart=$(tail -n1 /proc/swaps | awk -F ' ' '{print $1}')
-swapoff "$swappart"
-fallocate -l 1G "$swappart"
-chmod 600 "$swappart"
-mkswap "$swappart"
-swapon "$swappart"
+# echo 'Whiteout swap'
+# swappart=$(tail -n1 /proc/swaps | awk -F ' ' '{print $1}')
+# swapsize=$(tail -n1 /proc/swaps | awk -F ' ' '{print $3}')
+# swapoff "$swappart"
+# dd if=/dev/zero of="$swappart" bs=1024 count="$swapsize" || true
+# mkswap "$swappart"
+# swapon "$swappart"
 
-echo 'Whiteout root'
-count=$(df --sync -kP / | tail -n1 | awk -F ' ' '{print $4}')
-let count--
-dd if=/dev/zero of=/tmp/whitespace bs=1024 count="$count" || true
-rm /tmp/whitespace
+# for pool in $(zpool list -H -o name); do
+#   zfs create -o compression=off -o dedup=off -o mountpoint=/tmp/tmp $pool/tmp
+#   dd if=/dev/zero of=/tmp/tmp/whitespace bs=1024 || true
+#   rm /tmp/tmp/whitespace
+#   zfs destroy $pool/tmp
+# done
 
-echo 'Whiteout /boot'
-count=$(df --sync -kP /boot | tail -n1 | awk -F ' ' '{print $4}')
-let count--
-dd if=/dev/zero of=/boot/whitespace bs=1024 count="$count" || true
-rm /boot/whitespace
-
-echo 'Whiteout /boot/grub'
-count=$(df --sync -kP /boot/grub | tail -n1 | awk -F ' ' '{print $4}')
-let count--
-dd if=/dev/zero of=/boot/grub/whitespace bs=1024 count="$count" || true
-rm /boot/grub/whitespace
+# echo 'Whiteout /boot/efi'
+# dd if=/dev/zero of=/boot/efi/whitespace bs=1024 || true
+# rm /boot/efi/whitespace
 
 # Sync to ensure that the delete completes before this moves on.
 sync
