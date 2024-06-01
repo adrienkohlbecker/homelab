@@ -106,7 +106,7 @@
   vars:
     nginx_subdomain: headphones
     nginx_proxy_pass: http://localhost:8181/
-    nginx_csp_additional: script-src https://api.songkick.com {{ nginx_csp_default }};
+    nginx_csp_additional: script-src https://api.songkick.com {{ nginx_csp_default }}
     nginx_csp_default_src: http://headphones.{{ inventory_hostname }}.{{ domain }}
   tags:
     - headphones
