@@ -35,6 +35,7 @@
     - zfs_autobackup
     - zfs_mount
     - podman
+    - samba
 
 - name: Pug roles
   hosts: box,pug
