@@ -51,3 +51,5 @@ fancontrol_settings: |
   MINSTART=hwmon4/pwm3=40 hwmon4/pwm2=120
   MINSTOP=hwmon4/pwm3=10 hwmon4/pwm2=90
   MINPWM=hwmon4/pwm3=10 hwmon4/pwm2=90
+
+smb_shares: []

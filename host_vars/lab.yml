@@ -173,3 +173,13 @@ netdata_collectors:
   - go.d:collector:wireguard:wireguard
   - go.d:collector:x509check:domain_cert
   - go.d:collector:x509check:host_cert
+
+smb_shares:
+  - name: media
+    path: /mnt/media
+  - name: data
+    path: /mnt/data
+  - name: brumath
+    path: /mnt/brumath
+  - name: eckwersheim
+    path: /mnt/eckwersheim
