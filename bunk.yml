@@ -11,6 +11,7 @@
         backup: true
       vars:
         own_peer_name: "{{ inventory_hostname }}"
+        subnet: "{{ ( wireguard_peers | selectattr('name', 'eq', inventory_hostname) | first ).site_subnet }}"
       become: true
       register: wg_conf
       tags:

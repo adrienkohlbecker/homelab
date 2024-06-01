@@ -41,5 +41,6 @@
     iface: wg0
     listen_port: '51820'
     own_peer_name: "{{ inventory_hostname }}"
+    subnet: "{{ ( wireguard_peers | selectattr('name', 'eq', inventory_hostname) | first ).site_subnet }}"
   tags:
     - wireguard

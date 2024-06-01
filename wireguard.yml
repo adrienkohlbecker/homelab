@@ -45,23 +45,34 @@
     - name: Generate wireguard configuration
       template:
         src: "{{ playbook_dir }}/roles/wireguard/templates/wg.conf.j2"
-        dest: "{{ playbook_dir }}/wireguard/{{ item }}/home.conf"
+        dest: "{{ playbook_dir }}/wireguard/{{ item[0] }}/home ({{ item[1] }}).conf"
         owner: "{{ ansible_facts.user_uid }}"
         group: "{{ ansible_facts.user_gid }}"
         mode: "0644"
       vars:
-        own_peer_name: "{{ item }}"
-      loop: "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
+        own_peer_name: "{{ item[0] }}"
+        subnet: "{{ site_subnets[item[1]] | default('default') }}"
+      with_nested:
+        - "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
+        -
+          - default
+          - home
+          - bonniers
       tags:
         - wireguard
 
     - name: Generate wireguard QR code
-      shell: set -euo pipefail; if [ -f "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" ]; then bfr=`md5sum "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" -r "{{ playbook_dir }}/wireguard/{{ item }}/home.conf"; aftr=`md5sum "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
+      shell: set -euo pipefail; if [ -f "{{ playbook_dir }}/wireguard/{{ item[0] }}/qr ({{ item[1] }}).png" ]; then bfr=`md5sum "{{ playbook_dir }}/wireguard/{{ item[0] }}/qr ({{ item[1] }}).png" | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o "{{ playbook_dir }}/wireguard/{{ item[0] }}/qr ({{ item[1] }}).png" -r "{{ playbook_dir }}/wireguard/{{ item[0] }}/home ({{ item[1] }}).conf"; aftr=`md5sum "{{ playbook_dir }}/wireguard/{{ item[0] }}/qr ({{ item[1] }}).png" | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
       args:
         executable: /bin/bash
       register: qr_generate_cmd
       changed_when: "'file updated' in qr_generate_cmd.stdout"
-      loop: "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
+      with_nested:
+        - "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
+        -
+          - default
+          - home
+          - bonniers
       tags:
         - wireguard
 
@@ -75,6 +86,7 @@
       vars:
         own_peer_name: "{{ item[1] }}"
         vpn_peer_name: "{{ item[0] }}"
+        subnet: 'default'
       with_nested:
         - "{{ wireguard_peers | selectattr('is_server', 'eq', true) | map(attribute='name') }}"
         - "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
