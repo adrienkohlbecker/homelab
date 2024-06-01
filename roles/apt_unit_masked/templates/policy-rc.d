@@ -7,11 +7,11 @@ if [ -z "$unit" ]; then
   f_fail "Expected unit as argument, got: '$*'"
 fi
 
-items="{{ apt_unit_masked_unit|string()|ternary([apt_unit_masked_unit],apt_unit_masked_unit)|join(' ') }}"
+items="{{ (apt_unit_masked_unit is string) | ternary([apt_unit_masked_unit], apt_unit_masked_unit) | join(' ') }}"
 
 found=false
 for item in $items; do
-  if [ "$unit" = "$item" ] || [ "$unit.service" = "$item" ]; then
+  if [ "$unit" = "$item" ] || [ "$unit.service" = "$item" ] || [ "$unit" = "$item.service" ]; then
     found=true
   fi
 done
