@@ -2,13 +2,15 @@
   hosts: bunk
   tasks:
     - name: Copy wireguard configuration
-      copy:
-        src: "{{ playbook_dir }}/wireguard/bunk/home.conf"
+      template:
+        src: "{{ playbook_dir }}/roles/wireguard/templates/wg.conf.j2"
         dest: /etc/wireguard/wg0.conf
         owner: root
         group: root
         mode: "0600"
         backup: true
+      vars:
+        own_peer_name: "{{ inventory_hostname }}"
       become: true
       register: wg_conf
       tags:
