@@ -1,5 +1,9 @@
 domain: fahm.fr
 home_subnet: 10.123.0.0/16
+site_subnets:
+  home: 10.123.0.0/21
+  brumath: 10.123.56.0/24
+  bonniers: 192.168.0.0/24 # 10.123.57.0/24 todo update this!
 external_ips:
   pug: 10.123.0.3
   box: 10.123.0.5
@@ -11,6 +15,7 @@ external_ips:
   siglent: 10.123.2.4
   tubeszb: 10.123.4.2
   otgw: 10.123.4.3
+  bunk: 192.168.0.149
   pihole: "{{ pihole_keepalived_ip }}"
 
 ssh_public_keys: |
@@ -61,7 +66,7 @@ wireguard_peers:
       remote: "home.fahm.fr:51821"
     is_server: true
     dns_address: "{{ external_ips.pihole }}"
-    site_subnet: 10.123.0.0/21
+    site_subnet: "{{ site_subnets.home }}"
     public_key: lab/YYyxFkJJt86HfCnauipuYE4pBzBcDOkrXTzCmTE=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -78,7 +83,7 @@ wireguard_peers:
       remote: "home.fahm.fr:51822"
     is_server: true
     dns_address: "{{ external_ips.pihole }}"
-    site_subnet: 10.123.0.0/21
+    site_subnet: "{{ site_subnets.home }}"
     public_key: pug/2tk1iYPAwTGTK3ChOCBwEIIhoC4PsgKnQ2VoVWE=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -95,7 +100,7 @@ wireguard_peers:
       remote: home.fahm.fr:51823
     is_server: true
     dns_address: "{{ external_ips.pihole }}"
-    site_subnet: 10.123.0.0/21
+    site_subnet: "{{ site_subnets.home }}"
     public_key: box/F8UYPGCYhjT5eH3stLTk9wZalaH2z1VIE1EYDVg=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
@@ -168,12 +173,12 @@ wireguard_peers:
   - name: bunk
     address: 10.123.185.3
     endpoint:
-      local: 192.168.0.149:51820
+      local: "{{ external_ips.bunk }}:51820"
       remote: akohlbecker.synology.me:51820
     post_up: iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
     post_down: iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
     is_server: true
-    site_subnet: 192.168.0.0/24 # 10.123.57.0/24 todo update this!
+    site_subnet: "{{ site_subnets.bonniers }}"
     dns_address: 192.168.0.1 # todo update this!
     public_key: bun/Cqg3yML+J7YpC1SAxHqdK3NH1oUOSB+WFjtijhQ=
     private_key: !vault |
