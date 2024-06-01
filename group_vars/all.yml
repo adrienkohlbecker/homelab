@@ -61,7 +61,6 @@ cloudflare_api_token: !vault |
 wireguard_peers:
   - name: lab
     address: 10.123.128.2
-    local_ip: "{{ external_ips.lab }}"
     endpoint:
       local: "{{ external_ips.lab }}:51820"
       remote: "home.fahm.fr:51821"
@@ -79,7 +78,6 @@ wireguard_peers:
           6438613332613466366333323130343765663161303265386131
   - name: pug
     address: 10.123.128.3
-    local_ip: "{{ external_ips.pug }}"
     endpoint:
       local: "{{ external_ips.pug }}:51820"
       remote: "home.fahm.fr:51822"
@@ -97,7 +95,6 @@ wireguard_peers:
           6666626531643462636236383565396665653961383430316161
   - name: box
     address: 10.123.128.5
-    local_ip: "{{ external_ips.box }}"
     endpoint:
       local: "{{ external_ips.box }}:51820"
       remote: home.fahm.fr:51823
@@ -175,7 +172,6 @@ wireguard_peers:
           6435636261343766623266643765626531303131303231626462
   - name: bunk
     address: 10.123.185.3
-    local_ip: "{{ external_ips.bunk }}"
     endpoint:
       local: "{{ external_ips.bunk }}:51820"
       remote: akohlbecker.synology.me:51820
