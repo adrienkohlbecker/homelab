@@ -52,19 +52,19 @@
 
 - name: Create storage directories
   file:
-    dest: "{{ item }}"
+    dest: "{{ item.path }}"
     state: directory
-    owner: "{{ ansible_ssh_user }}"
+    owner: "{{ item.owner }}"
     group: media
     mode: "0775"
   become: true
   tags:
     - media
   loop:
-    - /mnt/media/Headphones
-    - /mnt/media/Live Music
-    - /mnt/media/Movies
-    - /mnt/media/Music
-    - /mnt/media/Other
-    - /mnt/media/Torrents
-    - /mnt/media/TV
+    - { path: /mnt/media/Headphones,  owner:  "{{ ansible_ssh_user }}" }
+    - { path: /mnt/media/Live Music,  owner:  "{{ ansible_ssh_user }}" }
+    - { path: /mnt/media/Movies,      owner:  "{{ ansible_ssh_user }}" }
+    - { path: /mnt/media/Music,       owner:  "{{ ansible_ssh_user }}" }
+    - { path: /mnt/media/Other,       owner:  "{{ ansible_ssh_user }}" }
+    - { path: /mnt/media/Torrents,    owner:  transmission             }
+    - { path: /mnt/media/TV,          owner:  "{{ ansible_ssh_user }}" }

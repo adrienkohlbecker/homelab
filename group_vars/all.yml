@@ -169,7 +169,7 @@ wireguard_peers:
     address: 10.123.185.3
     endpoint:
       local: 192.168.0.149:51820
-      remote: bonniers.ddns.net:51820
+      remote: akohlbecker.synology.me:51820
     post_up: iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
     post_down: iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
     is_server: true
