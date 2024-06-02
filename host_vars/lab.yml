@@ -177,6 +177,10 @@ netdata_collectors:
 smb_shares:
   - name: media
     path: /mnt/media
+    opts: |
+      force group = media
+      force create mode = 0664
+      force directory mode = 0775
   - name: data
     path: /mnt/data
   - name: brumath
