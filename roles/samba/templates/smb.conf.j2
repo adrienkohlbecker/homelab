@@ -279,4 +279,5 @@ ea support = yes
 [{{ share.name }}]
 path = {{ share.path }}
 writeable = yes
+{% if 'opts' in share %}{{ share.opts }}{% endif %}
 {% endfor %}
