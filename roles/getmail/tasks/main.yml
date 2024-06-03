@@ -1,0 +1,73 @@
+- name: Install getmail
+  apt:
+    package:
+      - getmail6
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - getmail
+
+- name: Create getmail config directory
+  file:
+    dest: /home/{{ ansible_ssh_user }}/.config/getmail
+    state: directory
+    owner: "{{ ansible_ssh_user }}"
+    group: "{{ ansible_ssh_user }}"
+    mode: "0755"
+  tags:
+    - getmail
+
+- name: Create getmail data directory
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_ssh_user }}"
+    group: "{{ ansible_ssh_user }}"
+    mode: "0755"
+  become: true
+  loop:
+    - /mnt/services/getmail
+    - /mnt/services/getmail/cur
+    - /mnt/services/getmail/new
+    - /mnt/services/getmail/tmp
+  tags:
+    - getmail
+
+- name: Configure getmail
+  template:
+    src: getmailrc.j2
+    dest: /home/{{ ansible_ssh_user }}/.config/getmail/getmailrc
+    owner: "{{ ansible_ssh_user }}"
+    group: "{{ ansible_ssh_user }}"
+    mode: "0600"
+    backup: true
+    validate: getmail --dump --rcfile %s
+  register: getmail_cfg
+  tags:
+    - getmail
+
+- name: Schedule the snapshot script
+  cron:
+    name: getmail
+    minute: 24
+    hour: 0
+    job: /usr/local/bin/run_job daily getmail su {{ ansible_ssh_user }} getmail
+    user: root
+    cron_file: ansible_getmail
+    backup: true
+  become: true
+  tags:
+    - getmail
+
+- name: Monitor cron entry
+  file:
+    path: /var/log/jobs/getmail
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - getmail

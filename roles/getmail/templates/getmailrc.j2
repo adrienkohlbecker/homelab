@@ -1,0 +1,16 @@
+[retriever]
+type = SimpleIMAPSSLRetriever
+server = imap.gmail.com
+username = {{ root_email }}
+password = {{ gmail_app_password }}
+record_mailbox = false
+mailboxes = ("Inbox", "[Gmail]/Sent Mail", "[Gmail]/All Mail")
+
+[destination]
+type = Maildir
+path = /mnt/services/getmail/
+
+[options]
+read_all = false
+delivered_to = false
+received = false
