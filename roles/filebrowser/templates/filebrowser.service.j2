@@ -1,0 +1,52 @@
+# jinja2: lstrip_blocks: "True"
+# filebrowser.service #######################################################################
+[Unit]
+Description=filebrowser
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=5
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service zfs_mount_mnt_media.service zfs_mount_mnt_data.service zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service zfs_mount_mnt_media.service zfs_mount_mnt_data.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+Delegate=yes
+TimeoutSec=120
+RestartSec=5
+Type=notify
+NotifyAccess=all
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name filebrowser \
+    --log-driver journald \
+    --log-opt tag="filebrowser" \
+    --volume /home/{{ ansible_ssh_user }}:/srv/home:ro \
+    --volume /mnt/data:/srv/data:ro \
+    --volume /mnt/media:/srv/media:ro \
+    --volume /mnt/services:/srv/services:ro \
+    --volume /mnt/services/filebrowser/database.db:/database.db \
+    --volume /mnt/services/filebrowser/config.json:/.filebrowser.json \
+    --publish 127.0.0.1:5890:5890/tcp \
+    --health-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:5890/health" \
+    --health-start-period "10s" \
+    docker.io/filebrowser/filebrowser:v2.30.0
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

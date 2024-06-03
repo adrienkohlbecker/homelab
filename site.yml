@@ -94,6 +94,7 @@
     - getmail
     - quotes
     - speedtest
+    - filebrowser
 
 - name: Reboot check
   hosts: all:!bunk
