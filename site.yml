@@ -93,6 +93,7 @@
     - transmission
     - getmail
     - quotes
+    - speedtest
 
 - name: Reboot check
   hosts: all:!bunk
