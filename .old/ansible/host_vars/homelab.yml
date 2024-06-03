@@ -9,6 +9,3 @@ ddns_domain:
 
 aws_ssm_cloudflare_email: "{{ lookup('aws_ssm', 'cloudflare.email', region='eu-west-1' ) }}"
 aws_ssm_cloudflare_api_key: "{{ lookup('aws_ssm', 'cloudflare.api_key', region='eu-west-1' ) }}"
-aws_ssm_gogs_secret_key: "{{ lookup('aws_ssm', 'gogs.secret_key', region='eu-west-1' ) }}"
-aws_ssm_gmvault_client_id: "{{ lookup('aws_ssm', 'gmvault.client_id', region='eu-west-1' ) }}"
-aws_ssm_gmvault_client_secret: "{{ lookup('aws_ssm', 'gmvault.client_secret', region='eu-west-1' ) }}"

@@ -2,19 +2,10 @@
 
 - name: Include services
   block:
-    - import_tasks: avahi.yml
-    - import_tasks: plex.yml
     - import_tasks: portainer.yml
-    - import_tasks: samba.yml
     - import_tasks: remote-ssh.yml
     - import_tasks: speedtest.yml
-    - import_tasks: gogs.yml
-    - import_tasks: gmvault.yml
-    - import_tasks: tautulli.yml
-    - import_tasks: overseerr.yml
     - import_tasks: homebridge.yml
-    - import_tasks: quotes.yml
-    - import_tasks: transmission.yml
     - import_tasks: filebrowser.yml
     - import_tasks: nextcloud.yml
   when: inventory_hostname == 'homelab' or inventory_hostname == 'box'
