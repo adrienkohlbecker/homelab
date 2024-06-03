@@ -91,6 +91,7 @@
     - tautulli
     - gitea
     - transmission
+    - quotes
 
 - name: Reboot check
   hosts: all:!bunk
