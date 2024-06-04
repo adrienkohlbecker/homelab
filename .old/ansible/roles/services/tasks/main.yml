@@ -2,11 +2,7 @@
 
 - name: Include services
   block:
-    - import_tasks: portainer.yml
     - import_tasks: remote-ssh.yml
-    - import_tasks: speedtest.yml
-    - import_tasks: homebridge.yml
-    - import_tasks: filebrowser.yml
     - import_tasks: nextcloud.yml
   when: inventory_hostname == 'homelab' or inventory_hostname == 'box'
 
