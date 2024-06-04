@@ -37,6 +37,7 @@ ExecStart=/usr/bin/podman run \
     --publish 127.0.0.1:8443:8443/tcp \
     --health-cmd "wget --quiet --tries=1 --spider http://localhost:8443/dashboard > /dev/null" \
     --health-start-period "10s" \
+    --health-interval "45s" \
     docker.io/giuliocomi/csplogger@sha256:5460b64fa6cb0471cb5a254d7f63719782de463fd155ba1f17b74a275f3249f8
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
