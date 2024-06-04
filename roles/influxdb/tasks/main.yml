@@ -1,70 +1,52 @@
-- name: Install gpg
-  apt:
-    pkg: gpg
-    cache_valid_time: 3600
-  become: true
-  register: apt_install_gpg
-  tags:
-    - influxdb
-
-- name: Add repository key
-  when: not (ansible_check_mode and apt_install_gpg.changed)
-  apt_key:
-    id: D8FF8E1F7DF8B07E
-    url: https://repos.influxdata.com/influxdata-archive_compat.key
-    keyring: /etc/apt/trusted.gpg.d/influxdb.gpg
+- name: Add influxdb group
+  group:
+    name: influxdb
+    system: true
   become: true
   tags:
     - influxdb
 
-- name: Add repository
-  apt_repository:
-    repo: deb [signed-by=/etc/apt/trusted.gpg.d/influxdb.gpg] https://repos.influxdata.com/debian stable main
+- name: Add influxdb user
+  user:
+    name: influxdb
+    group: influxdb
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
   become: true
-  register: apt_repository_influxdb
+  register: influxdb_user
   tags:
     - influxdb
 
-- name: Install influxdb
+- name: Create configuration directory
+  when: not (ansible_check_mode and influxdb_user.changed)
+  file:
+    dest: "{{ item.path }}"
+    state: directory
+    owner: influxdb
+    group: influxdb
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /mnt/services/influxdb,        mode: '0755'}
+    - { path: /mnt/services/influxdb/config, mode: '0775'}
+    - { path: /mnt/services/influxdb/data,   mode: '0700'}
+  become: true
+  tags:
+    - influxdb
+
+- name: Install influxdb service
   import_role:
-    name: apt_unit_masked
+    name: systemd_unit
+    tasks_from: template
   vars:
-    apt_unit_masked_pkg: influxdb2
-    apt_unit_masked_unit: influxdb.service
-    apt_unit_masked_condition: "{{ not (ansible_check_mode and apt_repository_influxdb.changed) }}"
+    systemd_unit_src: influxdb.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and influxdb_user.changed) }}"
   tags:
     - influxdb
-
-- name: Configure influxdb default
-  copy:
-    src: influxdb2
-    dest: /etc/default/influxdb2
-    owner: root
-    group: root
-    mode: "0644"
-    validate: sh -n %s
-    backup: true
-  become: true
-  register: influxdb_default
-  tags:
-    - influxdb
-
-# - name: Configure influxdb
-#   copy:
-#     src: influxdb.yaml
-#     dest: /etc/influxdb/influxdb.yaml
-#     owner: root
-#     group: root
-#     mode: "0644"
-#     validate: influxdb validate --config-yaml %s
-#     backup: true
-#   become: true
-#   register: influxdb_cfg
-#   tags:
-#     - influxdb
 
 - name: Enable the service
-  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_influxdb.changed))
+  when: not (ansible_check_mode and (systemd_unit.changed or influxdb_user.changed))
   systemd:
     name: influxdb
     enabled: true
@@ -73,17 +55,17 @@
     - influxdb
 
 - name: Start the service
-  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_influxdb.changed))
+  when: not (ansible_check_mode and (systemd_unit.changed or influxdb_user.changed))
   systemd:
     name: influxdb
     state: started
+  register: systemd_started
   become: true
-  register: influxdb_started
   tags:
     - influxdb
 
-- name: Restart influxdb
-  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_influxdb.changed)) and (influxdb_default.changed) and not influxdb_started.changed
+- name: Restart the service
+  when: not (ansible_check_mode and (systemd_unit.changed or influxdb_user.changed)) and ((systemd_unit.changed) and not systemd_started.changed)
   systemd:
     name: influxdb
     state: restarted
@@ -92,10 +74,11 @@
     - influxdb
 
 - name: Initial setup
-  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_influxdb.changed))
-  command: influx setup --username "{{ influxdb_root_user }}" --password "{{ influxdb_root_password }}" --org home --bucket default --force
+  when: not (ansible_check_mode and (systemd_unit.changed or influxdb_user.changed))
+  command: podman exec influxdb influx setup --username "{{ influxdb_root_user }}" --password "{{ influxdb_root_password }}" --org home --bucket default --force
   args:
-    creates: /home/{{ ansible_user }}/.influxdbv2/configs
+    creates: /mnt/services/influxdb/config/influx-configs
+  become: true
   tags:
     - influxdb
 
@@ -106,15 +89,5 @@
   vars:
     nginx_subdomain: influxdb
     nginx_proxy_pass: http://localhost:8086/
-  tags:
-    - influxdb
-
-- name: Configure logrotate
-  import_role:
-    name: logrotate
-    tasks_from: compression
-  vars:
-    logrotate_item: /etc/logrotate.d/influxdb
-    logrotate_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
   tags:
     - influxdb

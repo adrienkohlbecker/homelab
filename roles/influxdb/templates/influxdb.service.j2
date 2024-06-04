@@ -1,0 +1,51 @@
+# jinja2: lstrip_blocks: "True"
+# influxdb.service #######################################################################
+[Unit]
+Description=influxdb
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=5
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+Delegate=yes
+TimeoutSec=120
+RestartSec=5
+Type=notify
+NotifyAccess=all
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name influxdb \
+    --log-driver journald \
+    --log-opt tag="influxdb" \
+    --user {{ influxdb_user.uid }}:{{ influxdb_user.group }}  \
+    --env INFLUXD_REPORTING_DISABLED=true \
+    --env INFLUXD_STORAGE_VALIDATE_KEYS=true \
+    --volume /mnt/services/influxdb/data:/var/lib/influxdb2 \
+    --volume /mnt/services/influxdb/config:/etc/influxdb2 \
+    --publish 127.0.0.1:8086:8086/tcp \
+    --health-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8086/health" \
+    --health-start-period "10s" \
+    docker.io/influxdb:2.7.6
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}
