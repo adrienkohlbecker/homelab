@@ -95,6 +95,7 @@
     - quotes
     - speedtest
     - filebrowser
+    - homeassistant
 
 - name: Reboot check
   hosts: all:!bunk

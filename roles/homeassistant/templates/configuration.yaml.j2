@@ -1,0 +1,50 @@
+
+# Loads default set of integrations. Do not remove.
+default_config:
+
+# Load frontend themes from the themes folder
+frontend:
+  themes: !include_dir_merge_named themes
+  extra_module_url:
+    - /local/thermal_comfort_icons.js
+
+automation: !include automations.yaml
+script: !include scripts.yaml
+scene: !include scenes.yaml
+sensor: !include sensors.yaml
+template: !include templates.yaml
+
+zha:
+  zigpy_config:
+    ota:
+      otau_directory: /config/zigpy_ota
+      ikea_provider: true
+      inovelli_provider: true
+      ledvance_provider: true
+      salus_provider: true
+      sonoff_provider: true
+      thirdreality_provider: true
+
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 10.88.0.1 # podman
+
+influxdb:
+  api_version: 2
+  host: influxdb.<<< inventory_hostname >>>.<<< domain >>>
+  port: 443
+  ssl: true
+  verify_ssl: true
+  token: <<< homeassistant_influxdb_auth.stdout >>>
+  organization: <<< homeassistant_influxdb_org.stdout >>>
+  bucket: homeassistant
+  max_retries: 3
+  measurement_attr: domain__device_class
+  tags_attributes:
+    - unit_of_measurement
+    - device_class
+    - state_class
+    - friendly_name
+    - hidden
+    - area

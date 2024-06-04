@@ -1,0 +1,49 @@
+# jinja2: lstrip_blocks: "True"
+# homeassistant.service #######################################################################
+[Unit]
+Description=homeassistant
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=5
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+Delegate=yes
+TimeoutSec=120
+RestartSec=5
+Type=notify
+NotifyAccess=all
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name homeassistant \
+    --log-driver journald \
+    --log-opt tag="homeassistant" \
+    --user {{ homeassistant_user.uid }}:{{ homeassistant_user.group }}  \
+    --env TZ=Europe/Amsterdam \
+    --volume /mnt/services/homeassistant:/config \
+    --publish 127.0.0.1:8123:8123/tcp \
+    --health-cmd "sh -c 'curl --head --request GET --location --silent --show-error --connect-timeout 1 --max-time 5 http://localhost:8123/api/ | grep -q Unauthorized'" \
+    --health-start-period "10s" \
+    ghcr.io/home-assistant/home-assistant:2024.5.5
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}
