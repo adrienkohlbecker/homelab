@@ -51,7 +51,7 @@
     name: getmail
     minute: 24
     hour: 0
-    job: /usr/local/bin/run_job daily getmail su {{ ansible_ssh_user }} getmail
+    job: /usr/local/bin/run_job daily getmail su {{ ansible_ssh_user }} -c getmail
     user: root
     cron_file: ansible_getmail
     backup: true
