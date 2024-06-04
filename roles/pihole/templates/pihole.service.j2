@@ -49,8 +49,10 @@ ExecStart=/usr/bin/podman run \
     --publish 0.0.0.0:53:53/tcp \
     --publish 127.0.0.1:8943:80/tcp \
     {# todo remove when this is fixed https://github.com/containers/podman/issues/18904 #}
-    --health-cmd "dig +short +norecurse +retry=0 @127.0.0.1 pi.hole || exit 1" \
-    --health-start-period "10s" \
+    --health-cmd         "dig +short +norecurse +retry=0 @127.0.0.1 pi.hole || exit 1" \
+    --health-startup-cmd "dig +short +norecurse +retry=0 @127.0.0.1 pi.hole || exit 1" \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
     docker.io/pihole/pihole:2024.05.0
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
