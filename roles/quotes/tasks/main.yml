@@ -42,6 +42,27 @@
   tags:
     - quotes
 
+- name: Add quotes group
+  group:
+    name: quotes
+    system: true
+  become: true
+  tags:
+    - quotes
+
+- name: Add quotes user
+  user:
+    name: quotes
+    group: quotes
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  register: quotes_user
+  tags:
+    - quotes
+
 - name: Install quotes service
   import_role:
     name: systemd_unit
