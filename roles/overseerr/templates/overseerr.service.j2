@@ -38,8 +38,10 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/overseerr:/config \
     --volume /mnt/media:/media \
     --publish 127.0.0.1:5055:5055/tcp \
-    --health-cmd "curl --get --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:5055/api/v1/status" \
-    --health-start-period "10s" \
+    --health-cmd         "curl --get --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:5055/api/v1/status" \
+    --health-startup-cmd "curl --get --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:5055/api/v1/status" \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
     docker.io/linuxserver/overseerr:1.33.2
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id

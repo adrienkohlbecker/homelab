@@ -43,8 +43,10 @@ ExecStart=/usr/bin/podman run \
     --publish 127.0.0.1:9091:9091/tcp \
     --publish 0.0.0.0:51413:51413/tcp \
     --publish 0.0.0.0:51413:51413/udp \
-    --health-cmd "/usr/local/bin/transmission_healthcheck" \
-    --health-start-period "10s" \
+    --health-cmd         "/usr/local/bin/transmission_healthcheck" \
+    --health-startup-cmd "/usr/local/bin/transmission_healthcheck" \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
     docker.io/linuxserver/transmission:4.0.5
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id

@@ -36,8 +36,10 @@ ExecStart=/usr/bin/podman run \
     --env TZ=Europe/Amsterdam \
     --volume /mnt/services/homeassistant:/config \
     --publish 127.0.0.1:8123:8123/tcp \
-    --health-cmd "sh -c 'curl --head --request GET --location --silent --show-error --connect-timeout 1 --max-time 5 http://localhost:8123/api/ | grep -q Unauthorized'" \
-    --health-start-period "10s" \
+    --health-cmd         "sh -c 'curl --head --request GET --location --silent --show-error --connect-timeout 1 --max-time 5 http://localhost:8123/api/ | grep -q Unauthorized'" \
+    --health-startup-cmd "sh -c 'curl --head --request GET --location --silent --show-error --connect-timeout 1 --max-time 5 http://localhost:8123/api/ | grep -q Unauthorized'" \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
     ghcr.io/home-assistant/home-assistant:2024.5.5
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
