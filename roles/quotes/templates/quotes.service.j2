@@ -27,6 +27,7 @@ ExecStart=/usr/bin/podman run \
     --name quotes \
     --log-driver journald \
     --log-opt tag="quotes" \
+    --user {{ quotes_user.uid }}:{{ quotes_user.group }}  \
     --publish 127.0.0.1:4567:4567/tcp \
     --health-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:4567/" \
     --health-start-period "10s" \
