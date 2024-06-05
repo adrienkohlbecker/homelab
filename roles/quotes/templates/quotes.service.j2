@@ -5,7 +5,7 @@ Description=quotes
 After=network-online.target
 Wants=network-online.target
 StartLimitInterval=600
-StartLimitBurst=5
+StartLimitBurst=3
 
 [Service]
 Environment=PODMAN_SYSTEMD_UNIT=%n

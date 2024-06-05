@@ -4,7 +4,7 @@ Wants=network-online.target
 After=network-online.target
 
 StartLimitInterval=300
-StartLimitBurst=5
+StartLimitBurst=3
 
 [Service]
 Restart=always
