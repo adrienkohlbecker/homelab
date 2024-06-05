@@ -73,6 +73,12 @@
     - section: db
       option: update every
       value: 5
+    - section: registry
+      option: enabled
+      value: 'yes'
+    - section: registry
+      option: registry to announce
+      value: https://netdata.{{ inventory_hostname }}.{{ domain }}
   register: netdata_conf
   become: true
   tags:
