@@ -1,0 +1,112 @@
+- name: Add wolweb group
+  group:
+    name: wolweb
+    system: true
+  become: true
+  tags:
+    - wolweb
+
+- name: Add wolweb user
+  user:
+    name: wolweb
+    group: wolweb
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  register: wolweb_user
+  tags:
+    - wolweb
+
+- name: Create configuration directory
+  when: not (ansible_check_mode and wolweb_user.changed)
+  file:
+    dest: /mnt/services/wolweb
+    state: directory
+    owner: wolweb
+    group: wolweb
+    mode: "0755"
+  become: true
+  tags:
+    - wolweb
+
+- name: Compute broadcast ip
+  set_fact:
+    wolweb_broadcast_ip: "{{ (ansible_facts.default_ipv4.address + '/' + ansible_facts.default_ipv4.netmask) | ansible.utils.ipaddr('broadcast') }}"
+  become: true
+  tags:
+    - wolweb
+
+- name: Configure wolweb
+  template:
+    src: config.json.j2
+    dest: /mnt/services/wolweb/config.json
+    owner: wolweb
+    group: wolweb
+    mode: "0600"
+    backup: true
+  register: wolweb_conf
+  become: true
+  tags:
+    - wolweb
+
+- name: Configure wolweb
+  template:
+    src: devices.json.j2
+    dest: /mnt/services/wolweb/devices.json
+    owner: wolweb
+    group: wolweb
+    mode: "0600"
+    backup: true
+  register: wolweb_devices
+  become: true
+  tags:
+    - wolweb
+
+- name: Install wolweb service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: wolweb.service
+  tags:
+    - wolweb
+
+- name: Enable the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: wolweb
+    enabled: true
+  become: true
+  tags:
+    - wolweb
+
+- name: Start the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: wolweb
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - wolweb
+
+- name: Restart the service
+  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed or wolweb_conf.changed or wolweb_devices.changed) and not systemd_started.changed)
+  systemd:
+    name: wolweb
+    state: restarted
+  become: true
+  tags:
+    - wolweb
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: wolweb
+    nginx_proxy_pass: http://localhost:8089/
+  tags:
+    - wolweb

@@ -22,9 +22,10 @@ netplan:
   ethernets:
     nic0:
       match:
-        macaddress: d0:37:45:ea:6f:1
+        macaddress: "{{ mac_addresses.pom }}"
       set-name: eth0
       link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
       dhcp4: true
       dhcp6: false
 

@@ -28,25 +28,28 @@ netplan:
   ethernets:
     nic0:
       match:
-        macaddress: e8:ea:6a:09:97:67
+        macaddress: "{{ mac_addresses.lab_i210 }}"
       set-name: eth0
       link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
       dhcp4: true
       dhcp6: false
     nic1:
       match:
-        macaddress: c8:7f:54:5c:57:5b
+        macaddress: "{{ mac_addresses.lab_i225p1 }}"
       set-name: eth1
       activation-mode: 'off' # do not enable interface
       link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
       dhcp4: true
       dhcp6: false
     nic2:
       match:
-        macaddress: c8:7f:54:5c:57:5c
+        macaddress: "{{ mac_addresses.lab_i225p2 }}"
       set-name: eth2
       activation-mode: 'off' # do not enable interface
       link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
       dhcp4: true
       dhcp6: false
 

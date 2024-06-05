@@ -23,6 +23,7 @@ netplan:
         driver: virtio-pci
       set-name: eth0
       link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
       dhcp4: true
       dhcp6: false
     nic1:
@@ -30,6 +31,7 @@ netplan:
         macaddress: a8:a1:59:f5:82:93
       set-name: eth1
       link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
       dhcp4: true
       dhcp6: false
 

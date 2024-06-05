@@ -36,6 +36,7 @@
     - zfs_mount
     - podman
     - samba
+    - wolweb
 
 - name: Pug roles
   hosts: box,pug
