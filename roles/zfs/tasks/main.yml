@@ -9,6 +9,28 @@
   tags:
     - zfs
 
+- name: Disable init_on_alloc
+  when: grub_bootloader
+  copy:
+    dest: /etc/default/grub.d/99-zfs.cfg
+    content: "GRUB_CMDLINE_LINUX_DEFAULT=\"$GRUB_CMDLINE_LINUX_DEFAULT init_on_alloc=0\"\n"
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  register: grub_cfg
+  become: true
+  tags:
+    - zfs
+
+- name: Update grub
+  when: grub_bootloader and grub_cfg.changed
+  command: update-grub
+  changed_when: true
+  become: true
+  tags:
+    - zfs
+
 - name: Configure ARC
   template:
     src: zfs.conf.j2

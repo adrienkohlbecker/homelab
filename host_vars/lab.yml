@@ -1,5 +1,6 @@
 zfs_root: true
 journald_storage: persistent
+grub_bootloader: false
 
 zfs_arc_max: 8589934592
 zfs_trim_pools:
