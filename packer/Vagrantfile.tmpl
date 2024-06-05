@@ -1,0 +1,6 @@
+Vagrant.configure("2") do |config|
+  config.vm.provider "vmware_desktop" do |vmware|
+    vmware.vmx["ethernet0.pcislotnumber"] = "160"
+    vmware.allowlist_verified = true
+  end
+end

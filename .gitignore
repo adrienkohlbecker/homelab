@@ -1,4 +1,2 @@
-.vagrant/
-output-*/
-packer_cache/
-/*.box
+/wireguard
+/.vagrant

@@ -1,0 +1,121 @@
+zfs_root: true
+journald_storage: persistent
+grub_bootloader: true
+
+zfs_arc_max: 8589934592
+zfs_trim_pools:
+  - rpool
+  - bpool
+zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
+  - rpool/ROOT/jammy
+  - bpool/BOOT/jammy
+zfs_has_bpool: true
+
+libvirt_default_network: 10.123.49.0/24
+
+sensor_modules:
+  - drivetemp
+  - coretemp
+  - nct6775
+
+macvlan_enable_docker: false
+macvlan_parent: eth0
+macvlan_subnet: 10.123.1.32/27
+
+log2ram_size:
+
+netplan:
+  ethernets:
+    nic0:
+      match:
+        macaddress: "{{ mac_addresses.pug }}"
+      set-name: eth0
+      link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
+      dhcp4: true
+      dhcp6: false
+
+hdparm_settings: {}
+
+rand_order: 1
+
+zfs_autobackup_source_host: lab
+zfs_autobackup_dest_dataset: apoc/lab
+zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab
+
+fancontrol_settings: |
+  # hwmon4/pwm2 => CHA_FAN_1
+  # hwmon4/pwm3 => CHA_FAN_2
+  # hwmon4/temp1_input => cpu?
+  # hwmon2/temp1_input => drivetemp
+  INTERVAL=10
+  DEVPATH=hwmon2=devices/pci0000:00/0000:00:17.0/ata2/host1/target1:0:0/1:0:0:0 hwmon4=devices/platform/nct6775.672
+  DEVNAME=hwmon2=drivetemp hwmon4=nct6798
+  FCTEMPS=hwmon4/pwm3=hwmon4/temp1_input hwmon4/pwm2=hwmon2/temp1_input
+  FCFANS=hwmon4/pwm3=hwmon4/fan3_input hwmon4/pwm2=hwmon4/fan2_input
+  MINTEMP=hwmon4/pwm3=40 hwmon4/pwm2=30
+  MAXTEMP=hwmon4/pwm3=60 hwmon4/pwm2=45
+  MINSTART=hwmon4/pwm3=40 hwmon4/pwm2=120
+  MINSTOP=hwmon4/pwm3=10 hwmon4/pwm2=90
+  MINPWM=hwmon4/pwm3=10 hwmon4/pwm2=90
+
+pihole_keepalived_role: BACKUP
+pihole_keepalived_priority: 10
+
+netdata_contexts:
+  apps:            app.cpu_utilization
+  conntrack:       netfilter.conntrack_sockets
+  containers:      cgroup.cpu_limit
+  diskspace:       disk.space
+  diskstatistics:  disk.io
+  #edac:            mem.edac_mc_errors
+  entropy:         system.entropy
+  extfrag:         mem.fragmentation_index_dma
+  idlejitter:      system.idlejitter
+  interrupts:      system.interrupts
+  ipc:             system.ipc_semaphores
+  # ksm:             mem.ksm
+  loadavg:         system.load
+  # md:              md.health
+  meminfo:         system.ram
+  netdev:          system.net
+  netstat:         system.ip
+  # numa:            mem.numa_nodes
+  nvme:            nvme.device_estimated_endurance_perc
+  # pagetypeinfo:    mem.pagetype_global
+  # perf:            perf.cpu_cycles
+  postfix:         postfix.qsize
+  powercap:        cpu.powercap_intel_rapl_zone
+  # powersupply:     powersupply.capacity
+  pressure:        system.cpu_some_pressure
+  procstat:        system.cpu
+  sensors:         sensors.fan
+  # slabinfo:        mem.slabmemory
+  smartd:          smartd_log.current_pending_sector_count
+  softirqs:        system.softirqs
+  systemd_service: systemd.service.cpu.utilization
+  uptime:          system.uptime
+  usergroups:      usergroup.cpu_utilization
+  users:           user.cpu_utilization
+  # vmstat:          mem.swapio
+  zfs:             zfs.arc_size
+  zfspool:         zfspool.state
+  # zram:            mem.zram_usage
+netdata_collectors:
+  - go.d:collector:chrony:local
+  - go.d:collector:docker:local
+  - go.d:collector:logind:logind
+  - go.d:collector:nginx:local
+  - go.d:collector:nvme:nvme
+  - go.d:collector:pihole:local
+  - go.d:collector:prometheus:custom
+  - go.d:collector:prometheus:journald
+  - go.d:collector:prometheus:keepalived_exporter_local
+  # - go.d:collector:systemdunits:service-units
+  - go.d:collector:upsd:local
+  - go.d:collector:web_log:nginx
+  - go.d:collector:wireguard:wireguard
+  - go.d:collector:x509check:domain_cert
+  - go.d:collector:x509check:host_cert
+
+smb_shares: []

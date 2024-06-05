@@ -1,0 +1,39 @@
+- name: Install logrotate
+  import_role:
+    name: apt_unit_masked
+  vars:
+    apt_unit_masked_pkg: logrotate
+    apt_unit_masked_unit: logrotate.service
+  tags:
+    - logrotate
+
+- name: Gather list of config files
+  find:
+    paths:
+      - /etc/logrotate.d
+    excludes:
+      - "*.dpkg-dist" # diverted files
+      - "*~" # ansible backups
+  register: logrotate_confs
+  become: true
+  tags:
+    - logrotate
+
+- name: Configure logrotate compression
+  include_tasks:
+    file: compression.yml
+    apply:
+      tags: logrotate
+  loop: "{{ logrotate_confs.files | map(attribute='path') + ['/etc/logrotate.conf'] }}"
+  loop_control:
+    loop_var: logrotate_item
+  tags:
+    - logrotate
+
+- name: Enable the service
+  systemd:
+    name: logrotate
+    enabled: true
+  become: true
+  tags:
+    - logrotate

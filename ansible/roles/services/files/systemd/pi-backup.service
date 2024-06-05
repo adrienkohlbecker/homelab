@@ -1,3 +1,0 @@
-[Service]
-Type=oneshot
-ExecStart=/usr/local/bin/dms 98d0602056 /usr/local/bin/pi-backup

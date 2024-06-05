@@ -1,0 +1,29 @@
+- name: dest | Copy the sync script
+  file:
+    path: /usr/local/bin/zfs_autosync
+    state: absent
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: dest | Schedule the sync script
+  cron:
+    name: zfs_autosync
+    minute: "{{ rand_order * 10 }}" # space each host out by 10 minutes so services don't stop at the same time
+    hour: 3
+    job: /usr/local/bin/run_job daily zfs_autosync /usr/local/bin/zfs_autosync
+    user: root
+    cron_file: ansible_zfs_autosync
+    backup: true
+    state: absent
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: dest | Monitor cron entry
+  file:
+    path: /var/log/jobs/zfs_autosync
+    state: absent
+  become: true
+  tags:
+    - zfs_autobackup

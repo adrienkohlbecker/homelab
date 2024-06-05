@@ -1,0 +1,50 @@
+- name: Install iptables-persistent
+  apt:
+    pkg:
+      - iptables-persistent
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - iptables
+
+- name: Configure iptables (v4)
+  copy:
+    src: rules.v4
+    dest: /etc/iptables/rules.v4
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: iptables_v4
+  become: true
+  tags:
+    - iptables
+
+- name: Apply iptables v4
+  when: iptables_v4.changed
+  command: iptables-restore -n /etc/iptables/rules.v4
+  changed_when: true
+  become: true
+  tags:
+    - iptables
+
+- name: Configure iptables (v6)
+  copy:
+    src: rules.v6
+    dest: /etc/iptables/rules.v6
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: iptables_v6
+  become: true
+  tags:
+    - iptables
+
+- name: Apply iptables v6
+  when: iptables_v6.changed
+  command: ip6tables-restore -n /etc/iptables/rules.v6
+  changed_when: true
+  become: true
+  tags:
+    - iptables

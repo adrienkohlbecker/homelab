@@ -1,0 +1,27 @@
+- name: Install locales
+  apt:
+    pkg:
+      - locales
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - locale
+
+- name: Set up locales
+  locale_gen:
+    name: en_US.UTF-8
+  become: true
+  tags:
+    - locale
+
+- name: Set default locale
+  copy:
+    src: locale
+    dest: /etc/default/locale
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - locale

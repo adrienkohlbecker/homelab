@@ -1,0 +1,4 @@
+[Journal]
+Storage={{ journald_storage }}
+Compress={{ zfs_root | ternary('no', 'yes') }}
+ForwardToSyslog=no

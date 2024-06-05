@@ -1,0 +1,45 @@
+- name: Install wireguard
+  apt:
+    pkg:
+      - wireguard
+    cache_valid_time: 3600
+  become: true
+  register: apt_install_wireguard
+  tags:
+    - wireguard
+
+- name: Create configuration directory
+  file:
+    dest: /etc/wireguard
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  tags:
+    - wireguard
+
+- name: Enable ipv4 forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+  become: true
+  tags:
+    - wireguard
+
+- name: Enable ipv6 forwarding
+  ansible.posix.sysctl:
+    name: net.ipv6.conf.all.forwarding
+    value: '1'
+  become: true
+  tags:
+    - wireguard
+
+- name: Configure wireguard interface (wg0)
+  import_tasks: wg.yml
+  vars:
+    iface: wg0
+    listen_port: '51820'
+    own_peer_name: "{{ inventory_hostname }}"
+  tags:
+    - wireguard

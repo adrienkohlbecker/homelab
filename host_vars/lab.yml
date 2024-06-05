@@ -1,0 +1,193 @@
+zfs_root: true
+journald_storage: persistent
+grub_bootloader: false
+
+zfs_arc_max: 8589934592
+zfs_trim_pools:
+  - rpool
+  - dozer
+zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
+  - rpool/ROOT/jammy
+  - dozer/minio
+  - tank/data
+zfs_has_bpool: false
+
+libvirt_default_network: 10.123.48.0/24
+
+sensor_modules:
+  - drivetemp
+  - coretemp
+  - nct6775
+
+macvlan_enable_docker: false
+macvlan_parent: eth0
+macvlan_subnet: 10.123.1.0/27
+
+log2ram_size:
+
+netplan:
+  ethernets:
+    nic0:
+      match:
+        macaddress: "{{ mac_addresses.lab_i210 }}"
+      set-name: eth0
+      link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
+      dhcp4: true
+      dhcp6: false
+    nic1:
+      match:
+        macaddress: "{{ mac_addresses.lab_i225p1 }}"
+      set-name: eth1
+      activation-mode: 'off' # do not enable interface
+      link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
+      dhcp4: true
+      dhcp6: false
+    nic2:
+      match:
+        macaddress: "{{ mac_addresses.lab_i225p2 }}"
+      set-name: eth2
+      activation-mode: 'off' # do not enable interface
+      link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
+      dhcp4: true
+      dhcp6: false
+
+hdparm_settings: {}
+
+rand_order: 2
+
+zfs_autobackup_source_host: pug
+zfs_autobackup_dest_dataset: tank/pug
+zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDp277oY86WuDWYdU4Xr8eBUMAZ7L089F5SjBhmZzRS8 root@pug
+
+fancontrol_settings: |
+  # hwmon12/pwm2 => CPU_FAN
+  # hwmon12/pwm1 => CHA_FAN1 => exhaust
+  # hwmon12/pwm3 => CHA_FAN2 => intake
+  # hwmon12/pwm4 => CHA_FAN3 => intake
+  # hwmon12/temp7_input => CPU temp?
+  # hwmon4/temp1_input => HDD temp?
+  INTERVAL=10
+  DEVPATH=hwmon12=devices/platform/nct6775.656 hwmon4=devices/pci0000:00/0000:00:17.0/ata1/host0/target0:0:0/0:0:0:0
+  DEVNAME=hwmon12=nct6798 hwmon4=drivetemp
+  FCTEMPS=hwmon12/pwm2=hwmon12/temp7_input hwmon12/pwm1=hwmon12/temp7_input hwmon12/pwm4=hwmon4/temp1_input hwmon12/pwm3=hwmon4/temp1_input
+  FCFANS=hwmon12/pwm2=hwmon12/fan2_input hwmon12/pwm1=hwmon12/fan1_input hwmon12/pwm4=hwmon12/fan4_input hwmon12/pwm3=hwmon12/fan3_input
+  MINTEMP=hwmon12/pwm2=30 hwmon12/pwm1=30 hwmon12/pwm4=30 hwmon12/pwm3=30
+  MAXTEMP=hwmon12/pwm2=60 hwmon12/pwm1=60 hwmon12/pwm4=40 hwmon12/pwm3=40
+  MINSTART=hwmon12/pwm2=58 hwmon12/pwm1=46 hwmon12/pwm4=46 hwmon12/pwm3=46
+  MINSTOP=hwmon12/pwm2=28 hwmon12/pwm1=16 hwmon12/pwm4=16 hwmon12/pwm3=16
+  MINPWM=hwmon12/pwm2=28 hwmon12/pwm1=16 hwmon12/pwm4=16 hwmon12/pwm3=16
+
+pihole_keepalived_role: MASTER
+pihole_keepalived_priority: 100
+
+prometheus_enabled: true
+
+minio_enabled: true
+minio_buckets:
+  - arq-adrien
+  - arq-marie
+  - arq-game
+  - test
+minio_users:
+  - access_key: arq-adrien
+    secret_key: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          35313637353134336235343166653839336334326666656632333663616433613530303562313231
+          3666373862613666663035316665396233633336336365620a323464616566393435396164613664
+          39643064346537383461353133306261353137663762623834633130353164663733636434643732
+          3161613434396433610a636339626432316136366465333437316432316435376531633863656363
+          39356564363636653833623562313037363563353862623838633638656139366363383035323562
+          3766666534333431353030386332303130363931666136323831
+  - access_key: arq-marie
+    secret_key: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          39326461333465663438303931636235363334386564636232313165316663623736373866623234
+          3239393334306666346538653861323666613631343536610a333361616134306437303636333238
+          39646430656461626335343262646562313339646639383163386162396130656637623237383561
+          3535373966316563370a666335376539323165396335376630303034353930376631346230623538
+          61366235346464633434383531343937346637636465373639633234633534336538646530613632
+          3263366533363434313736393135393533343164663235383533
+  - access_key: arq-game
+    secret_key: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          65356636373063643136623966653633653930326134373565373066313432656564353137616665
+          3536363039623432333736663935396639306337663437350a653434633566346635383832643566
+          34313465333139333733343631666439656364303264373862376330643230393731666434643465
+          3664663464303535630a626663613335656537343836633030386365653237386139346433333632
+          66313037363630353537396434613734633862303032616366306331326635633837646336643038
+          3734653937633264376662383035363834623065396233366461
+
+netdata_contexts:
+  apps:            app.cpu_utilization
+  conntrack:       netfilter.conntrack_sockets
+  containers:      cgroup.cpu_limit
+  diskspace:       disk.space
+  diskstatistics:  disk.io
+  #edac:            mem.edac_mc_errors
+  entropy:         system.entropy
+  extfrag:         mem.fragmentation_index_dma
+  idlejitter:      system.idlejitter
+  interrupts:      system.interrupts
+  ipc:             system.ipc_semaphores
+  # ksm:             mem.ksm
+  loadavg:         system.load
+  md:              md.health
+  meminfo:         system.ram
+  netdev:          system.net
+  netstat:         system.ip
+  # numa:            mem.numa_nodes
+  nvme:            nvme.device_estimated_endurance_perc
+  # pagetypeinfo:    mem.pagetype_global
+  # perf:            perf.cpu_cycles
+  postfix:         postfix.qsize
+  powercap:        cpu.powercap_intel_rapl_zone
+  # powersupply:     powersupply.capacity
+  pressure:        system.cpu_some_pressure
+  procstat:        system.cpu
+  sensors:         sensors.fan
+  # slabinfo:        mem.slabmemory
+  smartd:          smartd_log.current_pending_sector_count
+  softirqs:        system.softirqs
+  systemd_service: systemd.service.cpu.utilization
+  uptime:          system.uptime
+  usergroups:      usergroup.cpu_utilization
+  users:           user.cpu_utilization
+  # vmstat:          mem.swapio
+  zfs:             zfs.arc_size
+  zfspool:         zfspool.state
+  # zram:            mem.zram_usage
+netdata_collectors:
+  - go.d:collector:chrony:local
+  - go.d:collector:docker:local
+  - go.d:collector:logind:logind
+  - go.d:collector:nginx:local
+  - go.d:collector:nvme:nvme
+  - go.d:collector:pihole:local
+  - go.d:collector:prometheus:custom
+  - go.d:collector:prometheus:journald
+  - go.d:collector:prometheus:keepalived_exporter_local
+  - go.d:collector:prometheus:minio
+  - go.d:collector:prometheus:prometheus
+  # - go.d:collector:systemdunits:service-units
+  - go.d:collector:upsd:local
+  - go.d:collector:web_log:nginx
+  - go.d:collector:wireguard:wireguard
+  - go.d:collector:x509check:domain_cert
+  - go.d:collector:x509check:host_cert
+
+smb_shares:
+  - name: media
+    path: /mnt/media
+    opts: |
+      force group = media
+      force create mode = 0664
+      force directory mode = 0775
+  - name: data
+    path: /mnt/data
+  - name: brumath
+    path: /mnt/brumath
+  - name: eckwersheim
+    path: /mnt/eckwersheim

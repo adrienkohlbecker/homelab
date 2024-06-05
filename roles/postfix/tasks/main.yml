@@ -1,0 +1,111 @@
+- name: Install postfix
+  import_role:
+    name: apt_unit_masked
+  vars:
+    apt_unit_masked_pkg: postfix
+    apt_unit_masked_unit: postfix.service
+  tags:
+    - postfix
+
+- name: Install libsasl2 (for postfix TLS authentication) and mailutils (for sending emails)
+  apt:
+    pkg:
+      - libsasl2-modules
+      - mailutils
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - postfix
+
+- name: Postfix relay configuration
+  template:
+    src: main.cf.j2
+    dest: /etc/postfix/main.cf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: postfix_cfg
+  tags:
+    - postfix
+
+- name: Install Sasl authentication details
+  template:
+    src: sasl_passwd.j2
+    dest: /etc/postfix/sasl_passwd
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+  become: true
+  register: sasl_auth
+  tags:
+    - postfix
+
+- name: Update postfix credentials
+  command: postmap /etc/postfix/sasl_passwd
+  changed_when: true
+  become: true
+  when: sasl_auth.changed
+  tags:
+    - postfix
+
+- name: Enable the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: postfix
+    enabled: true
+  become: true
+  tags:
+    - postfix
+
+- name: Start the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: postfix
+    state: started
+  become: true
+  register: systemd_started
+  tags:
+    - postfix
+
+- name: Restart postfix
+  when: not (ansible_check_mode and apt_unit_masked.changed) and (postfix_cfg.changed or sasl_auth.changed) and not systemd_started.changed
+  service:
+    name: postfix
+    state: restarted
+  become: true
+  tags:
+    - postfix
+
+- name: Setup user email aliases
+  template:
+    src: aliases.j2
+    dest: /etc/aliases
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: aliases
+  tags:
+    - postfix
+
+- name: Rebuild aliases database
+  command: newaliases
+  become: true
+  when: aliases.changed
+  changed_when: true
+  tags:
+    - postfix
+
+- name: Copy the mail config
+  template:
+    src: mailutils.conf.j2
+    dest: /etc/mailutils.conf
+    mode: "0755"
+    backup: true
+  become: true
+  tags:
+    - postfix

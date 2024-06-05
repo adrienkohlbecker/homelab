@@ -1,0 +1,111 @@
+---
+
+- name: Install smartmontools
+  import_role:
+    name: apt_unit_masked
+  vars:
+    apt_unit_masked_pkg: smartmontools
+    apt_unit_masked_unit: smartmontools.service
+  tags:
+    - smart
+
+- name: Divert smartd.conf
+  community.general.dpkg_divert:
+    path: /etc/smartd.conf
+  become: true
+  tags:
+    - smart
+
+- name: Configure smartd
+  template:
+    src: smartd.conf.j2
+    dest: /etc/smartd.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: smartd_cfg
+  become: true
+  tags:
+    - smart
+
+- name: Divert default smartmontools
+  community.general.dpkg_divert:
+    path: /etc/default/smartmontools
+  become: true
+  tags:
+    - smart
+
+- name: Configure smartmontools
+  copy:
+    src: smartmontools
+    dest: /etc/default/smartmontools
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: smartmontools_cfg
+  become: true
+  tags:
+    - smart
+
+- name: Create log directory
+  file:
+    dest: /var/log/smartd/
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - smart
+
+- name: Configure logrotate
+  template:
+    src: logrotate.j2
+    dest: /etc/logrotate.d/smartd
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: logrotate_conf
+  become: true
+  tags:
+    - smart
+
+- name: Restart logrotate
+  when: logrotate_conf.changed
+  systemd:
+    name: logrotate
+    state: restarted
+  become: true
+  tags:
+    - smart
+
+- name: Enable the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: smartmontools
+    enabled: true
+  become: true
+  tags:
+    - smart
+
+- name: Start the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: smartmontools
+    state: started
+  become: true
+  register: systemd_started
+  tags:
+    - smart
+
+- name: Restart the service
+  when: not (ansible_check_mode and apt_unit_masked.changed) and (smartd_cfg.changed or smartmontools_cfg.changed) and not systemd_started.changed
+  systemd:
+    name: smartmontools
+    state: restarted
+  become: true
+  tags:
+    - smart

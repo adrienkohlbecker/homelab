@@ -1,0 +1,30 @@
+[Unit]
+Description=journald-exporter
+Documentation=https://github.com/dead-claudia/journald-exporter
+# Couple conditions so it doesn't immediately bork on startup. The program also
+# checks for the directory, but this avoids having to reset the failure counter
+# in case it fails for whatever reason.
+After=network.target
+# Asserting here as it's pretty important to make sure metrics are flowing.
+AssertPathIsDirectory=/etc/journald-exporter/keys
+
+# So it'll run on startup.
+[Install]
+WantedBy=default.target
+
+[Service]
+Type=notify
+ExecStart=/usr/local/bin/journald-exporter --key-dir /etc/journald-exporter/keys --port 12345
+WatchdogSec=5m
+Restart=always
+# And a number of security settings to lock down the program somewhat.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectClock=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+MemoryDenyWriteExecute=true
+SyslogLevel=warning
+SyslogLevelPrefix=false

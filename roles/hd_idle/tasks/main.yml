@@ -1,0 +1,78 @@
+- name: Install hd-idle
+  apt:
+    pkg: hd-idle
+    cache_valid_time: 3600
+  register: apt_install_hdidle
+  become: true
+  tags:
+    - hd_idle
+
+- name: Divert hd-idle configuration
+  community.general.dpkg_divert:
+    path: /etc/default/hd-idle
+  become: true
+  tags:
+    - hd_idle
+
+- name: Copy hd-idle configuration
+  template:
+    src: hd-idle.j2
+    dest: /etc/default/hd-idle
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: hd_idle_conf
+  become: true
+  tags:
+    - hd_idle
+
+- name: Enable the service
+  when: not (ansible_check_mode and apt_install_hdidle.changed)
+  systemd:
+    name: hd-idle
+    enabled: true
+  become: true
+  tags:
+    - hd_idle
+
+- name: Start the service
+  when: not (ansible_check_mode and apt_install_hdidle.changed)
+  systemd:
+    name: hd-idle
+    state: started
+  become: true
+  register: systemd_started
+  tags:
+    - hd_idle
+
+- name: Restart the service
+  when: not (ansible_check_mode and apt_install_hdidle.changed) and (hd_idle_conf.changed) and not systemd_started.changed
+  systemd:
+    name: hd-idle
+    state: restarted
+  become: true
+  tags:
+    - hd_idle
+
+- name: Configure logrotate
+  template:
+    src: logrotate.j2
+    dest: /etc/logrotate.d/hd-idle
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: logrotate_conf
+  become: true
+  tags:
+    - hd_idle
+
+- name: Restart logrotate
+  when: logrotate_conf.changed
+  systemd:
+    name: logrotate
+    state: restarted
+  become: true
+  tags:
+    - hd_idle

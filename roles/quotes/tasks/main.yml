@@ -1,0 +1,111 @@
+- name: Install ruby
+  apt:
+    package:
+      - ruby-bundler
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - quotes
+
+- name: Create quotes directory
+  file:
+    dest: /opt/quotes
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - quotes
+
+- name: Download quotes
+  git:
+    repo: https://github.com/adrienkohlbecker/quotes.git
+    dest: /opt/quotes
+    version: master
+    force: true
+  register: quotes_git
+  become: true
+  tags:
+    - quotes
+
+- name: Build a podman image
+  containers.podman.podman_image:
+    name: quotes:latest
+    path: /opt/quotes
+    build:
+      format: oci
+    state: build
+    force: "{{ quotes_git.changed }}"
+  register: quotes_podman
+  become: true
+  tags:
+    - quotes
+
+- name: Add quotes group
+  group:
+    name: quotes
+    system: true
+  become: true
+  tags:
+    - quotes
+
+- name: Add quotes user
+  user:
+    name: quotes
+    group: quotes
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  register: quotes_user
+  tags:
+    - quotes
+
+- name: Install quotes service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: quotes.service
+  tags:
+    - quotes
+
+- name: Enable the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: quotes
+    enabled: true
+  become: true
+  tags:
+    - quotes
+
+- name: Start the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: quotes
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - quotes
+
+- name: Restart the service
+  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed or quotes_podman.changed) and not systemd_started.changed)
+  systemd:
+    name: quotes
+    state: restarted
+  become: true
+  tags:
+    - quotes
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: quotes
+    nginx_proxy_pass: http://localhost:4567/
+  tags:
+    - quotes

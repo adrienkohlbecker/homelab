@@ -1,0 +1,33 @@
+- name: Copy the script
+  copy:
+    src: zfs_check_mount.sh
+    dest: /usr/local/bin/zfs_check_mount
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - zfs_mount
+
+- name: Add zfs mount service for root pool
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    zfs_mount_dataset: rpool/ROOT/jammy
+    zfs_mount_mountpoint: /
+  tags:
+    - zfs_mount
+
+- name: Add zfs mount service for boot pool
+  when: zfs_has_bpool
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    zfs_mount_dataset: bpool/BOOT/jammy
+    zfs_mount_mountpoint: /boot
+  tags:
+    - zfs_mount

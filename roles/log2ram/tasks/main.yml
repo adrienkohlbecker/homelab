@@ -1,0 +1,72 @@
+- name: Install gpg
+  apt:
+    pkg: gpg
+    cache_valid_time: 3600
+  become: true
+  register: apt_install_gpg
+  tags:
+    - log2ram
+
+- name: Add repository key
+  when: not (ansible_check_mode and apt_install_gpg.changed)
+  apt_key:
+    id: CA548A0A0312D8E6
+    url: https://azlux.fr/repo.gpg
+    keyring: /etc/apt/trusted.gpg.d/log2ram.gpg
+  become: true
+  tags:
+    - log2ram
+
+- name: Add repository
+  apt_repository:
+    repo: deb [signed-by=/etc/apt/trusted.gpg.d/log2ram.gpg] http://packages.azlux.fr/debian/ bookworm main
+  become: true
+  register: apt_repository_log2ram
+  tags:
+    - log2ram
+
+- name: Install log2ram
+  when: not (ansible_check_mode and apt_repository_log2ram.changed)
+  apt:
+    pkg:
+      - log2ram
+    cache_valid_time: 3600
+  register: log2ram_installed
+  become: true
+  tags:
+    - log2ram
+
+- name: Install dependencies
+  apt:
+    pkg:
+      - rsync
+      - mailutils
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - log2ram
+
+- name: Configure log2ram
+  template:
+    src: log2ram.conf.j2
+    dest: /etc/log2ram.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: log2ram_cfg
+  become: true
+  tags:
+    - log2ram
+
+- name: Ask to reboot
+  when: log2ram_installed.changed or log2ram_cfg.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - log2ram

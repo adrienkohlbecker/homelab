@@ -1,0 +1,57 @@
+- name: Compute network values
+  set_fact:
+    macvlan_parent_gateway: "{{ ansible_facts[macvlan_parent].ipv4.network | ansible.utils.ipmath(1) }}"
+    macvlan_parent_subnet: "{{ ansible_facts[macvlan_parent].ipv4.network }}/{{ ansible_facts[macvlan_parent].ipv4.prefix }}"
+    macvlan_host_ip: "{{ macvlan_subnet | ansible.utils.usable_range | json_query('usable_ips[0]') }}"
+    macvlan_host_mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname) }}"
+  tags:
+    - macvlan
+
+- name: Check macvlan_subnet is valid
+  assert:
+    that: macvlan_subnet == macvlan_subnet | ansible.utils.ipaddr('net') | ansible.utils.ipaddr(macvlan_parent_subnet) | ansible.utils.ipaddr(home_subnet)
+    fail_msg: "macvlan_subnet is not in a valid range or has the wrong format (network/prefixlength)"
+    success_msg: "macvlan_subnet is valid"
+  tags:
+    - macvlan
+
+- name: Install mac0 service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: mac0.service
+  tags:
+    - macvlan
+
+- name: Enable the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: mac0
+    enabled: true
+  become: true
+  tags:
+    - macvlan
+
+- name: Start the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: mac0
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - macvlan
+
+- name: Restart the service
+  when: not (ansible_check_mode and systemd_unit.changed) and systemd_unit.changed and not systemd_started.changed
+  systemd:
+    name: mac0
+    state: restarted
+  become: true
+  tags:
+    - macvlan
+
+- name: Configure docker network
+  include_tasks: docker.yml
+  when: macvlan_enable_docker

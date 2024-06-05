@@ -1,0 +1,33 @@
+# Install dependencies to support the Ansible core modules.
+- name: Install packages
+  apt:
+    name:
+      - acl
+      - at
+      - bzip2
+      - bash
+      - git
+      - gpg
+      - gzip
+      - tar
+      - unzip
+      - apt-transport-https
+      - debconf
+      - debconf-i18n
+      - iproute2
+      - passwd
+      - python3-apt
+      - python3-requests # docker module
+      - subversion
+      - xz-utils
+    cache_valid_time: 3600
+  register: core_dependencies_apt
+  become: true
+  tags:
+    - core_dependencies
+
+- name: Gather facts
+  when: core_dependencies_apt.changed
+  setup:
+  tags:
+    - core_dependencies

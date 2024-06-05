@@ -1,0 +1,206 @@
+- name: Install virtualization tools
+  apt:
+    pkg:
+      - qemu-kvm
+      - libvirt-clients
+      - libvirt-daemon
+      - libvirt-daemon-system
+      - ovmf
+      - libhugetlbfs-bin
+    cache_valid_time: 3600
+  become: true
+  register: apt_install_libvirt
+  tags:
+    - libvirt
+
+- name: Install ansible dependencies to run libvirt module
+  apt:
+    name:
+      - python3-libvirt
+      - python3-lxml
+    cache_valid_time: 3600
+  become: true
+  register: apt_install_python_libvirt
+  tags:
+    - libvirt
+
+- name: Create mount point
+  file:
+    dest: /var/lib/libvirt/images
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - libvirt
+
+- name: Create zfs filesystem
+  when: zfs_root
+  zfs:
+    name: rpool/vms
+    state: present
+    extra_zfs_properties:
+      mountpoint: /var/lib/libvirt/images
+  become: true
+  tags:
+    - libvirt
+
+- name: Install zfs mount service
+  when: zfs_root
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    zfs_mount_dataset: rpool/vms
+    zfs_mount_mountpoint: /var/lib/libvirt/images
+  tags:
+    - libvirt
+
+- name: Add current user to virtualization groups
+  import_role:
+    name: usergroup_immediate
+  when: not (ansible_check_mode and apt_install_libvirt.changed)
+  vars:
+    usergroup_immediate_group:
+      - libvirt
+      - kvm
+  tags:
+    - libvirt
+
+- name: Enable the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: libvirtd
+    enabled: true
+  become: true
+  tags:
+    - libvirt
+
+- name: Start the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: libvirtd
+    state: started
+  become: true
+  register: systemd_started
+  tags:
+    - libvirt
+
+# - name: Restart libvirt
+#   when: not (ansible_check_mode and apt_unit_masked.changed) and libvirt_conf.changed and not systemd_started.changed
+#   systemd:
+#     name: libvirtd
+#     state: restarted
+#   become: true
+#   tags:
+#     - libvirt
+
+- name: Compute network values
+  set_fact:
+    libvirt_network_mac: "{{ '52:54:00' | random_mac(seed=inventory_hostname) }}"
+    libvirt_network_gateway: "{{ libvirt_default_network | ansible.utils.ipaddr('address') }}"
+    libvirt_network_netmask: "{{ libvirt_default_network | ansible.utils.ipaddr('netmask') }}"
+    libvirt_network_dhcp_start: "{{ libvirt_default_network | ansible.utils.ipaddr('next_usable') }}"
+    libvirt_network_dhcp_end: "{{ libvirt_default_network | ansible.utils.ipaddr('last_usable') }}"
+  tags:
+    - libvirt
+
+- name: Check ip math is valid
+  assert:
+    that:
+      - libvirt_network_gateway and libvirt_network_gateway != ""
+      - libvirt_network_netmask and libvirt_network_netmask != ""
+      - libvirt_network_dhcp_start and libvirt_network_dhcp_start != ""
+      - libvirt_network_dhcp_end and libvirt_network_dhcp_end != ""
+  tags:
+    - libvirt
+
+- name: Get network facts
+  when: not (ansible_check_mode and apt_install_python_libvirt.changed)
+  virt_net:
+    command: facts
+    name: default
+  register: virt_net
+  failed_when: virt_net.msg is defined and virt_net.msg != "network default not found"
+  become: true
+  tags:
+    - libvirt
+
+# assuming the random mac is not the same as libvirt initially generated at install...
+- name: Configure default network
+  when: not (ansible_check_mode and apt_install_python_libvirt.changed) and (ansible_libvirt_networks is undefined or (ansible_libvirt_networks['default'] and ansible_libvirt_networks['default'].macaddress != libvirt_network_mac))
+  block:
+
+    - name: Remove default network
+      community.libvirt.virt_net:
+        name: default
+        state: absent
+      become: true
+      tags:
+        - libvirt
+
+    - name: Define default network
+      community.libvirt.virt_net:
+        name: default
+        command: define
+        xml: '{{ lookup("template", "default_network.xml.j2") }}'
+      become: true
+      tags:
+        - libvirt
+
+- name: Start default network
+  when: not (ansible_check_mode and apt_install_python_libvirt.changed)
+  community.libvirt.virt_net:
+    name: default
+    state: active
+  become: true
+  tags:
+    - libvirt
+
+- name: Autostart default network
+  when: not (ansible_check_mode and apt_install_python_libvirt.changed)
+  community.libvirt.virt_net:
+    name: default
+    autostart: true
+  become: true
+  tags:
+    - libvirt
+
+- name: Create libvirt backup executable
+  copy:
+    src: virsh_backup.sh
+    dest: /usr/local/bin/virsh_backup
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+  become: true
+  tags:
+    - libvirt
+
+- name: Schedule the backup
+  cron:
+    name: virsh_backup
+    minute: 5
+    hour: 0
+    job: /usr/local/bin/run_job daily virsh_backup /usr/local/bin/virsh_backup
+    user: root
+    cron_file: ansible_virsh_backup
+    backup: true
+  become: true
+  tags:
+    - libvirt
+
+- name: Monitor cron entry
+  file:
+    path: /var/log/jobs/virsh_backup
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - docker

@@ -1,0 +1,164 @@
+- name: Install docker
+  import_role:
+    name: apt_unit_masked
+  vars:
+    apt_unit_masked_pkg: docker.io
+    apt_unit_masked_unit: docker.service
+  tags:
+    - docker
+
+- name: Copy the docker config
+  template:
+    src: daemon.json.j2
+    dest: /etc/docker/daemon.json
+    mode: "0644"
+    owner: root
+    group: root
+    validate: dockerd --validate --config-file=%s
+    backup: true
+  register: docker_conf
+  become: true
+  tags:
+    - docker
+
+- name: Create mount point
+  file:
+    dest: /var/lib/docker
+    state: directory
+    owner: root
+    group: root
+    mode: "0710"
+  become: true
+  tags:
+    - docker
+
+- name: Create docker zvol
+  when: zfs_root
+  zfs:
+    name: rpool/docker
+    state: present
+    extra_zfs_properties:
+      volsize: '{{ "20GB" | human_to_bytes }}'
+  register: zfs_zvol_docker
+  become: true
+  tags:
+    - docker
+
+- name: Create a ext4 filesystem on docker zvol
+  when: not (ansible_check_mode and zfs_zvol_docker.changed) and zfs_root
+  filesystem:
+    fstype: ext4
+    dev: /dev/zvol/rpool/docker
+  become: true
+  tags:
+    - docker
+
+- name: Mount docker zvol
+  when: zfs_root
+  mount:
+    path: /var/lib/docker
+    src: /dev/zvol/rpool/docker
+    fstype: ext4
+    opts: defaults,noatime
+    state: mounted
+    backup: true
+  become: true
+  tags:
+    - docker
+
+- name: Enable the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: docker
+    enabled: true
+  become: true
+  tags:
+    - docker
+
+- name: Start the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: docker
+    state: started
+  become: true
+  register: systemd_started
+  tags:
+    - docker
+
+- name: Restart docker
+  when: not (ansible_check_mode and apt_unit_masked.changed) and docker_conf.changed and not systemd_started.changed
+  systemd:
+    name: docker
+    state: restarted
+  become: true
+  tags:
+    - docker
+
+- name: Add user to docker group
+  import_role:
+    name: usergroup_immediate
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  vars:
+    usergroup_immediate_group: docker
+  tags:
+    - docker
+
+- name: Enable memory cgroup and swap accounting
+  when: grub_bootloader
+  copy:
+    dest: /etc/default/grub.d/99-docker.cfg
+    content: "GRUB_CMDLINE_LINUX=\"$GRUB_CMDLINE_LINUX cgroup_enable=memory swapaccount=1\"\n"
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  register: grub_cfg
+  become: true
+  tags:
+    - docker
+
+- name: Update grub
+  when: grub_bootloader and grub_cfg.changed
+  command: update-grub
+  changed_when: true
+  become: true
+  tags:
+    - docker
+
+- name: Ask to reboot
+  when: grub_cfg.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - docker
+
+- name: Schedule the clean script
+  cron:
+    name: docker_clean
+    minute: '5'
+    hour: '0'
+    job: /usr/local/bin/run_job daily docker_clean /usr/bin/docker system prune -f
+    user: root
+    cron_file: ansible_docker_clean
+    backup: true
+  become: true
+  tags:
+    - docker
+
+- name: Monitor cron entry
+  file:
+    path: /var/log/jobs/docker_clean
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - docker

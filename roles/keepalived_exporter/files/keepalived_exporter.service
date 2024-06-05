@@ -1,0 +1,18 @@
+[Unit]
+Description=keepalived_exporter
+Wants=network-online.target
+After=network-online.target
+
+StartLimitInterval=300
+StartLimitBurst=3
+
+[Service]
+Restart=always
+TimeoutSec=70
+RestartSec=15
+Type=exec
+
+ExecStart=/usr/local/bin/keepalived_exporter -web.listen-address 127.0.0.1:9650
+
+[Install]
+WantedBy=default.target

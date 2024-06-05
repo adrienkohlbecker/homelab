@@ -1,5 +1,0 @@
-- name: Restart powertop
-  service:
-    name: powertop
-    state: restarted
-  become: yes

@@ -1,24 +1,35 @@
 #cloud-config
-
-# https://imagineer.in/blog/packer-build-for-ubuntu-20-04/
-# https://ubuntu.com/server/docs/install/autoinstall-reference
 autoinstall:
-  version: 1
-  locale: en_US.UTF-8
-  keyboard:
-    layout: en
-    variant: us
-  storage:
-    layout:
-      name: direct
-  identity:
-    hostname: ubuntu
-    username: ubuntu
-    password: $6$rounds=4096$p.FvcYRVG$GDWscPlBU2vHLwbDoUKmmUqnyANIBkRPzAfz5it5Q3UFZ53kq5ILtXyKh/qCmHbDP2kvYuK/1qpThFMz.TVjM/
-  ssh:
-    install-server: yes
-  late-commands:
-    # While building in VMWare, restart after installation causes change in IP address of the instance. This leads packer build to timeout awaiting SSH connection. To fix this issue, we can configure MAC address to be send as identifier in DHCP request.
-    # dhcp-identifier: mac
-    # Since there is no option to set dhcp-identifier via cloud config, this is appended to ens33 interface in /etc/netplan/00-installer-config.yaml via late-commands.
-    - 'sed -i "s/dhcp4: true/&\n      dhcp-identifier: mac/" /target/etc/netplan/00-installer-config.yaml'
+    version: 1
+    early-commands:
+        # Stop ssh for packer
+        - sudo systemctl stop ssh
+    locale: en_US.UTF-8
+    refresh-installer:
+        update: true
+    keyboard:
+        layout: fr
+        variant: mac
+    identity:
+        hostname: box
+        username: vagrant
+        password: '$6$rounds=4096$5CU3LEj/MQvbkfPb$LmKEF9pCfU8R.dA.GemgE/8GT6r9blge3grJvdsVTMFKyLEQwzEF3SGWqAzjawY/XHRpWj4fOiLBrRyxJhIRJ1'
+    ssh:
+        install-server: yes
+        allow-pw: no
+        authorized-keys:
+          - ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA6NF8iallvQVp22WDkTkyrtvp9eWW6A8YVr+kz4TjGYe7gHzIw+niNltGEFHzD8+v1I2YJ6oXevct1YeS0o9HZyN1Q9qgCgzUFtdOKLv6IedplqoPkcmF0aYet2PkEDo3MlTBckFXPITAMzF8dJSIFo9D8HfdOV0IAdx4O7PtixWKn5y2hMNG0zQPyUecp4pzC6kivAIhyfHilFR61RGL+GPXQ2MWZWFYbAGjyiYJnAmCP3NOTd0jMZEnDkbUvxhMmBYSdETk1rRgm+R4LOzFUGaHqHDLKLX+FIPKcF96hrucXzcWyLbIbEgE98OHlnVYCzRdK8jlqm8tehUc9c9WhQ== vagrant insecure public key
+          - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key
+    storage:
+        layout:
+            name: direct
+    timezone: UTC
+    user-data:
+        disable_root: false
+    late-commands:
+        - echo 'vagrant ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/vagrant
+        - curtin in-target --target=/target -- chmod 440 /etc/sudoers.d/vagrant
+        - curtin in-target --target=/target -- apt-get update
+        - curtin in-target --target=/target -- apt-get upgrade --yes
+        # While building in VMWare, restart after installation causes change in IP address of the instance. This leads packer build to timeout awaiting SSH connection. To fix this issue, we can configure MAC address to be send as identifier in DHCP request.
+        - 'sed -i "s/dhcp4: true/&\n      dhcp-identifier: mac/" /target/etc/netplan/00-installer-config.yaml'

@@ -1,0 +1,63 @@
+- name: data | Create users
+  command: mcli admin user add default {{ item.access_key }} {{ item.secret_key }}
+  args:
+    creates: /mnt/minio/.minio.sys/config/iam/users/{{ item.access_key }}
+  loop: "{{ minio_users }}"
+  tags:
+    - minio
+
+- name: data | Create buckets
+  command: mcli mb default/{{ item }}
+  args:
+    creates: /mnt/minio/{{ item }}
+  loop: "{{ minio_buckets }}"
+  tags:
+    - minio
+
+- name: data | Check if policy exists
+  stat:
+    path: /mnt/minio/.minio.sys/config/iam/policies/useronly
+  register: minio_useronly_policy_dir
+  become: true
+  tags:
+    - minio
+
+- name: data | Upload policy
+  when: not minio_useronly_policy_dir.stat.exists
+  copy:
+    src: useronly.json
+    dest: /tmp/useronly.json
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - minio
+
+- name: data | Add useronly policy
+  when: not minio_useronly_policy_dir.stat.exists
+  command: mcli admin policy add default useronly /tmp/useronly.json
+  args:
+    creates: /mnt/minio/.minio.sys/config/iam/policies/useronly
+    stdin: "{{ lookup('file', role_path + '/files/useronly.json') }}"
+  tags:
+    - minio
+
+- name: data | Remove tempfile
+  when: not minio_useronly_policy_dir.stat.exists
+  file:
+    path: /tmp/useronly.json
+    state: absent
+  become: true
+  tags:
+    - minio
+
+- name: data | Attach policy
+  when: not minio_useronly_policy_dir.stat.exists
+  command: mcli admin policy set default useronly user={{ item.access_key }}
+  args:
+    creates: /mnt/minio/.minio.sys/config/iam/policydb/users/{{ item.access_key }}.json
+  loop: "{{ minio_users }}"
+  tags:
+    - minio

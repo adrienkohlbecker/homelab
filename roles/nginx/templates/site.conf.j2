@@ -1,0 +1,79 @@
+server {
+  listen              443 ssl http2;
+
+  server_name         {{ nginx_subdomain }} {{ nginx_subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_subdomain }}.{{ domain}};
+
+  # security headers
+  add_header X-XSS-Protection          "1; mode=block" always;
+  add_header X-Content-Type-Options    "nosniff" always;
+  add_header Referrer-Policy           "same-origin" always;
+  add_header Content-Security-Policy   "{% if nginx_csp_additional is defined %}{{ nginx_csp_additional }}; {% endif %}default-src {% if nginx_csp_default_src is defined %}{{ nginx_csp_default_src }} {% endif %}{{ nginx_csp_default }}; frame-ancestors 'self'; report-uri https://csplogger.{{ inventory_hostname }}.{{ domain }}/log; report-to csp-endpoint;" always;
+  add_header Permissions-Policy        "interest-cohort=()" always;
+  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+  add_header Reporting-Endpoints       'csp-endpoint="https://csplogger.{{ inventory_hostname }}.{{ domain }}/log"' always;
+
+  # . files
+  location ~ /\.(?!well-known) {
+      deny all;
+  }
+
+  # favicon.ico
+  location = /favicon.ico {
+      log_not_found off;
+  }
+
+  # robots.txt
+  location = /robots.txt {
+      log_not_found off;
+  }
+
+  # gzip
+  gzip            on;
+  gzip_vary       on;
+  gzip_proxied    any;
+  gzip_comp_level 6;
+  gzip_types      text/plain text/css text/xml application/json application/javascript application/rss+xml application/atom+xml image/svg+xml;
+
+  location / {
+{% if nginx_proxy_pass is defined %}
+    proxy_pass         {{ nginx_proxy_pass }};
+
+    proxy_http_version 1.1;
+    proxy_cache_bypass $http_upgrade;
+
+    # Proxy SSL
+    proxy_ssl_server_name on;
+
+    # Proxy headers
+    proxy_set_header Host              $host;
+    proxy_set_header Upgrade           $http_upgrade;
+    proxy_set_header Connection        $connection_upgrade;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header Forwarded         $proxy_add_forwarded;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host  $host;
+    proxy_set_header X-Forwarded-Port  $server_port;
+
+    # Proxy timeouts
+    proxy_connect_timeout 60s;
+    proxy_send_timeout    60s;
+    proxy_read_timeout    60s;
+{% endif %}
+{% if nginx_location_conf is defined %}
+
+    {{ nginx_location_conf | trim | indent(4) }}
+{% endif %}
+  }
+{% if nginx_server_conf is defined %}
+
+  {{ nginx_server_conf | trim | indent(2) }}
+{% endif %}
+}
+
+server {
+    listen      80;
+    server_name {{ nginx_subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_subdomain }}.{{ domain}};
+
+    return 301 https://$host$request_uri;
+}

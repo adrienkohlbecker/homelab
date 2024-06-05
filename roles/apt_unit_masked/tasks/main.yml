@@ -1,0 +1,39 @@
+- name: Gather package facts
+  package_facts:
+    manager: apt
+  no_log: true
+  check_mode: false
+
+- name: Install package if needed
+  when: apt_unit_masked_pkg not in ansible_facts.packages
+  block:
+
+    - name: Prevent daemons from starting during install
+      template:
+        src: policy-rc.d
+        dest: /usr/sbin/policy-rc.d
+        owner: root
+        group: root
+        mode: "0755"
+        validate: bash -n %s
+      register: policy_rcd
+      become: true
+
+    - name: Install {{ apt_unit_masked_pkg }}
+      when: apt_unit_masked_condition | default(true)
+      apt:
+        pkg:
+          - "{{ apt_unit_masked_pkg }}"
+        cache_valid_time: 3600
+        install_recommends: "{{ apt_unit_masked_install_recommends | default(true) }}"
+      register: apt_unit_masked
+      become: true
+
+  always:
+
+    - name: Remove policy file
+      when: policy_rcd.changed
+      file:
+        dest: /usr/sbin/policy-rc.d
+        state: absent
+      become: true

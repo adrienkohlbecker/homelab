@@ -1,0 +1,41 @@
+- name: Install keyboard-configuration
+  apt:
+    pkg:
+      - keyboard-configuration
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - keyboard
+
+- name: Configure keyboard
+  copy:
+    src: keyboard
+    dest: /etc/default/keyboard
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: keyboard_cfg
+  tags:
+    - keyboard
+
+- name: Update initramfs
+  when: keyboard_cfg.changed
+  command: update-initramfs -u -k all
+  become: true
+  changed_when: true
+  tags:
+    - keyboard
+
+- name: Ask to reboot
+  when: keyboard_cfg.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - keyboard

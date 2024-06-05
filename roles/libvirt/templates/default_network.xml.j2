@@ -1,0 +1,11 @@
+<network>
+  <name>default</name>
+  <bridge name="virbr0"/>
+  <forward/>
+  <mac address="{{ libvirt_network_mac }}"/>
+  <ip address="{{ libvirt_network_gateway }}" netmask="{{ libvirt_network_netmask }}">
+    <dhcp>
+      <range start="{{ libvirt_network_dhcp_start }}" end="{{ libvirt_network_dhcp_end }}"/>
+    </dhcp>
+  </ip>
+</network>

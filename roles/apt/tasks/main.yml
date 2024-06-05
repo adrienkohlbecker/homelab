@@ -1,0 +1,30 @@
+- name: Ensure apt is using the correct mirror for ubuntu
+  replace:
+    path: /etc/apt/sources.list
+    regexp: 'deb(-src)? http:\/\/([^ \.]+)\.(archive|ports)\.ubuntu\.com\/ubuntu'
+    replace: 'deb\1 http://\3.ubuntu.com/ubuntu'
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: apt_mirror
+  tags:
+    - apt
+
+- name: Force apt update
+  when: apt_mirror.changed
+  apt:
+    update_cache: true
+  become: true
+  tags:
+    - apt
+
+- name: Run apt safe-upgrade
+  apt:
+    upgrade: safe
+    autoremove: true
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - apt

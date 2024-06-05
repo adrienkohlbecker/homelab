@@ -1,0 +1,93 @@
+- name: Check if keepalived_exporter is installed
+  command: keepalived_exporter -version
+  register: keepalived_exporter_check
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - keepalived_exporter
+
+- name: Install keepalived_exporter if needed
+  when: '"0.7.0" not in keepalived_exporter_check.stderr'
+  become: true
+  tags:
+    - keepalived_exporter
+  block:
+    - name: Download keepalived_exporter
+      check_mode: false
+      get_url:
+        url: https://github.com/gen2brain/keepalived_exporter/releases/download/v0.7.0/keepalived_exporter-0.7.0-amd64.tar.gz
+        checksum: sha256:83098655dc26e58fb0b9a1fd04d5e96301cb687876e6d70a99eddd23533d987b
+        dest: /tmp/keepalived_exporter.tar.gz
+        mode: "0644"
+        owner: root
+        group: root
+
+    - name: Install keepalived_exporter
+      unarchive:
+        src: /tmp/keepalived_exporter.tar.gz
+        remote_src: true
+        dest: /usr/local/bin
+        mode: "0755"
+        owner: root
+        group: root
+        include: [ keepalived_exporter-0.7.0-amd64/keepalived_exporter ]
+        list_files: true
+        extra_opts: [ --strip-components=1 ]
+      register: keepalived_exporter_installed
+
+    - name: Delete tar file
+      file:
+        path: /tmp/keepalived_exporter.tar.gz
+        state: absent
+
+- name: Install keepalived_exporter service
+  import_role:
+    name: systemd_unit
+  vars:
+    systemd_unit_src: keepalived_exporter.service
+  tags:
+    - keepalived_exporter
+
+- name: Enable the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: keepalived_exporter
+    enabled: true
+  become: true
+  tags:
+    - keepalived_exporter
+
+- name: Start the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: keepalived_exporter
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - keepalived_exporter
+
+- name: Restart the service
+  when: not (ansible_check_mode and systemd_unit.changed) and systemd_unit.changed and not systemd_started.changed
+  systemd:
+    name: keepalived_exporter
+    state: restarted
+  become: true
+  tags:
+    - keepalived_exporter
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: keepalived-exporter
+    nginx_proxy_pass: http://localhost:9650/
+    nginx_server_conf: |
+      location = / {
+        return 301 /metrics;
+      }
+  tags:
+    - keepalived_exporter

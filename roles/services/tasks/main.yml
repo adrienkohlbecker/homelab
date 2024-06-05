@@ -1,0 +1,44 @@
+- name: Create data dir
+  file:
+    dest: /mnt/services
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - services
+
+- name: Create env.d directory
+  file:
+    dest: /etc/env.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  tags:
+    - services
+
+- name: Create zfs filesystem
+  when: zfs_root
+  zfs:
+    name: rpool/services
+    state: present
+    extra_zfs_properties:
+      mountpoint: /mnt/services
+      autobackup:bak: "true"
+  become: true
+  tags:
+    - services
+
+- name: Set up mount service for rpool/services
+  when: zfs_root
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    zfs_mount_dataset: rpool/services
+    zfs_mount_mountpoint: /mnt/services
+  tags:
+    - services

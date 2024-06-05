@@ -1,0 +1,142 @@
+*filter
+# Allow all outgoing, but drop incoming and forwarding packets by default
+:INPUT DROP [0:0]
+:FORWARD DROP [0:0]
+:OUTPUT ACCEPT [0:0]
+
+# Custom chains
+:FILTERS - [0:0]
+:FWD_DROP - [0:0]
+
+##################################################
+#                  CLEAR TABLES                  #
+##################################################
+
+# Apply this file using `iptables-restore -n /etc/iptables/rules.v4`
+# to prevent flushing what we don't setup here
+
+-F INPUT
+-F FILTERS
+-F FWD_DROP
+
+##################################################
+#                  FILTERS RULES                 #
+##################################################
+
+# This only matches traffic going to the host (excluding ports bound by containers)
+# So external host -> port bound to external interface
+# And container -> port bound to bridge interface
+
+# UDP traffic rules
+-A FILTERS -p udp --dport 1900  -j ACCEPT                                     -m comment --comment "Allow UPnP broadcast"
+-A FILTERS -p udp --dport 5353  -j ACCEPT                                     -m comment --comment "Allow mDNS"
+-A FILTERS -p udp --dport 51820 -j ACCEPT                                     -m comment --comment "Allow Wireguard"
+
+# be explicit with rejection of known traffic so they are documented and don't appear in logs
+-A FILTERS -p udp --dport 67    -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny DHCP"
+-A FILTERS -p udp --dport 137   -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny NetBIOS"
+-A FILTERS -p udp --dport 138   -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny NetBIOS"
+-A FILTERS -p udp --dport 139   -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny NetBIOS"
+-A FILTERS -p udp --dport 9003  -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Could be HEOS? From Marantz"
+-A FILTERS -p udp --dport 10001 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny Unifi device discovery broadcast"
+-A FILTERS -p udp --dport 10518 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Unsure what this is?"
+-A FILTERS -p udp --dport 17500 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny Dropbox LanSync"
+-A FILTERS -p udp --dport 57621 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny Spotify P2P"
+-A FILTERS -p udp --dport 65001 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Could be HDHomeRun? From Shield"
+
+# TCP traffic rules
+-A FILTERS -p tcp --dport 22    -j ACCEPT                                     -m comment --comment "Allow SSH"
+-A FILTERS -p tcp --dport 80    -j ACCEPT                                     -m comment --comment "Allow HTTP"
+-A FILTERS -p tcp --dport 443   -j ACCEPT                                     -m comment --comment "Allow HTTPS"
+-A FILTERS -p tcp --dport 445   -j ACCEPT                                     -m comment --comment "Allow Samba"
+
+##################################################
+#                   INPUT RULES                  #
+##################################################
+
+# Boilerplate acceptance policy
+-A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+-A INPUT -i lo -j ACCEPT
+
+# Drop invalid packets
+-A INPUT -m conntrack --ctstate INVALID -j DROP
+
+# Pass traffic to filter chain
+## Only allow new connections (established and related should already be handled)
+## For TCP, additionally only allow new SYN packets since that is the only valid
+## method for establishing a new TCP connection
+-A INPUT -p udp -m conntrack --ctstate NEW -j FILTERS
+-A INPUT -p tcp --syn -m conntrack --ctstate NEW -j FILTERS
+-A INPUT -p icmp -m conntrack --ctstate NEW -j ACCEPT
+
+# Other protocols
+-A INPUT -p 112 -j ACCEPT -m comment --comment "Allow keepalived (VRRP)"
+-A INPUT -p 51  -j ACCEPT -m comment --comment "Allow keepalived (auth_type AH)"
+
+# Reject anything that's fallen through to this point
+## Try to be protocol-specific w/ rejection message
+-A INPUT -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] INPUT:REJECT: "
+-A INPUT -p udp -j REJECT --reject-with icmp-port-unreachable
+-A INPUT -p tcp -j REJECT --reject-with tcp-reset
+-A INPUT -j REJECT --reject-with icmp-proto-unreachable
+
+##################################################
+#                   FORWARD RULES                #
+##################################################
+
+# Boilerplate policy
+-A FWD_DROP -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+-A FWD_DROP -m conntrack --ctstate INVALID -j DROP
+
+-A FWD_DROP -i wg0 -o eth0 -j ACCEPT -m comment --comment "Allow forwarding traffic to external hosts coming in through wireguard"
+
+-A FWD_DROP -i eth0 -o cni-podman0 -p tcp --dport 32400 -j ACCEPT -m comment --comment "Allow plex through eth0"
+-A FWD_DROP -i wg0 -o cni-podman0 -p tcp --dport 32400 -j ACCEPT -m comment --comment "Allow plex through wireguard"
+
+-A FWD_DROP -i eth0 -o cni-podman0 -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow pihole tcp through eth0"
+-A FWD_DROP -i wg0 -o cni-podman0 -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow pihole tcp through wireguard"
+-A FWD_DROP -i eth0 -o cni-podman0 -p udp --dport 53 -j ACCEPT -m comment --comment "Allow pihole udp through eth0"
+-A FWD_DROP -i wg0 -o cni-podman0 -p udp --dport 53 -j ACCEPT -m comment --comment "Allow pihole udp through wireguard"
+
+-A FWD_DROP -i eth0 -o cni-podman0 -p tcp --dport 51413 -j ACCEPT -m comment --comment "Allow transmission tcp through eth0"
+-A FWD_DROP -i eth0 -o cni-podman0 -p udp --dport 51413 -j ACCEPT -m comment --comment "Allow transmission udp through eth0"
+
+# workaround to avoid clearing the FORWARD chain on apply and loosing rules added by CNI/podman
+-A FWD_DROP -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] FORWARD:REJECT: "
+-A FWD_DROP -j DROP
+-A FORWARD -j FWD_DROP
+
+##################################################
+#                       END                      #
+##################################################
+
+COMMIT
+
+*raw
+:PREROUTING ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+COMMIT
+
+*nat
+:PREROUTING ACCEPT [0:0]
+:INPUT ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+
+-A POSTROUTING -o eth0 -j MASQUERADE -m comment --comment "Ensure forwarded packets have our IP as source and keep track of where to send the replies"
+
+COMMIT
+
+*security
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+COMMIT
+
+*mangle
+:PREROUTING ACCEPT [0:0]
+:INPUT ACCEPT [0:0]
+:FORWARD ACCEPT [0:0]
+:OUTPUT ACCEPT [0:0]
+:POSTROUTING ACCEPT [0:0]
+COMMIT

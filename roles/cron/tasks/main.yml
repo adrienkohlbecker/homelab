@@ -1,0 +1,23 @@
+- name: Create logs directory
+  file:
+    dest: /var/log/jobs
+    state: directory
+    owner: root
+    group: root
+    mode: "0777"
+  become: true
+  tags:
+    - cron
+
+- name: Copy the run script
+  copy:
+    src: run_job.sh
+    dest: /usr/local/bin/run_job
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - cron
