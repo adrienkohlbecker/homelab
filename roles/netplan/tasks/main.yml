@@ -9,7 +9,7 @@
   become: true
   register: netplan_cfg
   tags:
-    - networking
+    - netplan
 
 - name: Cleanup config added by cloud-init and installer
   file:
@@ -20,7 +20,7 @@
     - /etc/netplan/00-installer-config.yaml
     - /etc/netplan/50-cloud-init.yaml
   tags:
-    - networking
+    - netplan
 
 - name: Apply netplan
   when: netplan_cfg.changed
@@ -28,4 +28,4 @@
   changed_when: true
   become: true
   tags:
-    - networking
+    - netplan
