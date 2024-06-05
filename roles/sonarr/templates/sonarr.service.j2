@@ -5,7 +5,7 @@ Description=sonarr
 After=network-online.target
 Wants=network-online.target
 StartLimitInterval=600
-StartLimitBurst=5
+StartLimitBurst=3
 {% if zfs_root %}
 After=zfs_mount_mnt_services.service zfs_mount_mnt_scratch.service zfs_mount_mnt_media.service  zfs_autosnapshot.target
 Requires=zfs_mount_mnt_services.service zfs_mount_mnt_scratch.service zfs_mount_mnt_media.service
