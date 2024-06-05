@@ -17,6 +17,12 @@ external_ips:
   otgw: 10.123.4.3
   bunk: 192.168.0.149
   pihole: "{{ pihole_keepalived_ip }}"
+mac_addresses:
+  pug: 9c:6b:00:26:ef:5d
+  lab_i210: e8:ea:6a:09:97:67
+  lab_i225p1: c8:7f:54:5c:57:5b
+  lab_i225p2: c8:7f:54:5c:57:5c
+  pom: d0:37:45:ea:6f:1
 
 ssh_public_keys: |
   ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQC/x/7HjVzMzqx9r8sRtZxgviFo7V35svZXaZAKGd6BJLUS+qwYreSRCkyjJHmwFyDyUR2sOJmo69weV3XYs0GOvL72t23czWUDDU/fXQWmIcWHPyU+nUEN3VKHgh5zed002ACEivTDUvSjmprBGSx5YZNfZjnqtd+X+kVojwI5BTWyQMNJGSAPf/I7Zdt01d8Klq5eKs30QAdMCiwQ7qyME31gk7dbWVrcf1tc4VCbKbL0co1dj3A5tRe6TtZ/OObj5EHj0UZNmG16PY9cbi3kkwZ5Wxb2e6LHelgUjWn7a1OGRSox5IkTjDNUJ/71p+qoYGjH7V+UtvUBx2f3gG2A4oeduUpthfDUjDW4Rii43miMZJ2OAH95nY0NtDTdek6ZHqMwyqIEZdxV3QiDO1qIeCViJ3xBn3xHJb4oZs0nTOugrlcDXziQ5bfbvkMUpGkkM26+/S1iaA/rtel40P70obZx07s0SA3wTREBurP+wd7mrpp2rmpyqLlWygyorf9DMPMpj0YeAuPV5hl/qQdM0qVG+u+leY4GzrdO69vh3rI7edTROlkzSTmaKfyZ8t71O/0i3y+GsQxVx3z62zvgQ0chvUIsUSWUOGFZDBLM0X7z9MddGqAqaf5MnkQ6NEdE4hYKXtg+u0vYcfwjGO06/Rbc0/V9y68OZoJxMeqsXw== laptop
