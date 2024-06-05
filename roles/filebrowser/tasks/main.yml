@@ -1,5 +1,4 @@
 - name: Create configuration directory
-  when: not (ansible_check_mode and filebrowser_user.changed)
   file:
     dest: /mnt/services/filebrowser
     state: directory
