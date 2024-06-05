@@ -1,0 +1,39 @@
+- name: Install hdparm
+  apt:
+    pkg: hdparm
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - hdparm
+
+- name: Divert hdparm.conf
+  community.general.dpkg_divert:
+    path: /etc/hdparm.conf
+  become: true
+  tags:
+    - hdparm
+
+- name: Copy hdparm.conf
+  template:
+    src: hdparm.conf.j2
+    dest: /etc/hdparm.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: hdparm_conf
+  become: true
+  tags:
+    - hdparm
+
+- name: Ask to reboot
+  when: hdparm_conf.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - hdparm

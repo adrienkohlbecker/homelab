@@ -1,0 +1,204 @@
+- name: Install nut
+  apt:
+    pkg:
+      - nut-snmp
+      - nut-cgi
+      - fcgiwrap
+    cache_valid_time: 3600
+  become: true
+  register: apt_install_nut
+  tags:
+    - nut_server
+
+- name: Configure nut nut.conf
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  lineinfile:
+    regexp: '^#?\s*MODE='
+    line: MODE=standalone
+    dest: /etc/nut/nut.conf
+    backup: true
+    owner: root
+    group: nut
+    mode: "0640"
+  become: true
+  register: nut_nut_conf
+  tags:
+    - nut_server
+
+- name: Configure nut ups.conf
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  ini_file:
+    path: /etc/nut/ups.conf
+    section: eaton
+    option: "{{ item.option }}"
+    value: "{{ item.value | default(omit) }}"
+    allow_no_value: "{{ item.allow_no_value | default(omit) }}"
+    owner: root
+    group: nut
+    mode: "0640"
+    ignore_spaces: true
+    backup: true
+  loop:
+    - option: driver
+      value: snmp-ups
+    - option: port
+      value: "{{ external_ips.eaton }}"
+    - option: community
+      value: public
+    - option: snmp_version
+      value: v1
+    - option: pollfreq
+      value: 15
+    - option: ignorelb # UPS immediately shutds down when low battery is reached. Currently low battery is set to 5%
+      allow_no_value: true
+    - option: override.battery.charge.low
+      value: 20 # approx 8 minutes if the runtime at 100% is 40min
+    - option: override.battery.runtime.low
+      value: 300 # 5 minutes
+  register: nut_ups_conf
+  become: true
+  tags:
+    - nut_server
+
+- name: Configure nut upsd.conf
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  lineinfile:
+    regexp: '^LISTEN '
+    insertafter: '^#?\s*LISTEN <'
+    line: LISTEN 127.0.0.1 3493
+    dest: /etc/nut/upsd.conf
+    backup: true
+    owner: root
+    group: nut
+    mode: "0640"
+  become: true
+  register: nut_upsd_conf
+  tags:
+    - nut_server
+
+- name: Configure nut upsd.users
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  lineinfile:
+    line: "{{ item.line }}"
+    insertafter: "{{ item.insertafter | default(omit) }}"
+    dest: /etc/nut/upsd.users
+    owner: root
+    group: nut
+    mode: "0640"
+    backup: true
+  loop:
+    - line: '[upsmon]'
+    - line: password = {{ nut_upsmon_password }}
+      regex: ^password =
+      insertafter: '\[upsmon\]'
+    - line: upsmon master
+      insertafter: ^password =
+  become: true
+  register: nut_upsd_users
+  tags:
+    - nut_server
+
+- name: Enable the driver
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  systemd:
+    name: nut-driver
+    enabled: true
+  become: true
+  tags:
+    - nut_server
+
+- name: Start the driver
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  systemd:
+    name: nut-driver
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - nut_server
+
+- name: Restart the driver
+  when: not (ansible_check_mode and apt_install_nut.changed) and (nut_nut_conf.changed or nut_ups_conf.changed) and not systemd_started.changed
+  systemd:
+    name: nut-driver
+    state: restarted
+  become: true
+  tags:
+    - nut_server
+
+- name: Enable the server
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  systemd:
+    name: nut-server
+    enabled: true
+  become: true
+  tags:
+    - nut_server
+
+- name: Start the server
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  systemd:
+    name: nut-server
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - nut_server
+
+- name: Restart the server
+  when: not (ansible_check_mode and apt_install_nut.changed) and (nut_nut_conf.changed or nut_upsd_conf.changed or nut_upsd_users.changed) and not systemd_started.changed
+  systemd:
+    name: nut-server
+    state: restarted
+  become: true
+  tags:
+    - nut_server
+
+- name: Configure nut hosts.conf
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  lineinfile:
+    regexp: '^MONITOR '
+    insertafter: '^#?\s*MONITOR'
+    line: MONITOR eaton@localhost "Local UPS"
+    dest: /etc/nut/hosts.conf
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - nut_server
+
+- name: Configure nut upsset.conf
+  when: not (ansible_check_mode and apt_install_nut.changed)
+  lineinfile:
+    line: I_HAVE_SECURED_MY_CGI_DIRECTORY
+    dest: /etc/nut/upsset.conf
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - nut_server
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: nut
+    nginx_server_conf: |
+      location = / {
+        return 301 /upsstats.cgi;
+      }
+    nginx_location_conf: |
+      gzip off;
+      root /usr/lib/cgi-bin/nut;
+
+      include /etc/nginx/fastcgi_params;
+
+      fastcgi_pass  unix:/var/run/fcgiwrap.socket;
+      fastcgi_param SCRIPT_FILENAME  /usr/lib/cgi-bin/nut$fastcgi_script_name;
+  tags:
+    - nut_server

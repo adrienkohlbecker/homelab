@@ -1,0 +1,6 @@
+# vim:ft=yaml
+jobs:
+  - name: local
+    url: http://127.0.0.1:8943
+    password: "{{ pihole_password | hash('sha256') | hash('sha256') }}"
+    autodetection_retry: 60

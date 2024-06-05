@@ -1,0 +1,84 @@
+- name: Create configuration directory
+  when: not (ansible_check_mode and filebrowser_user.changed)
+  file:
+    dest: /mnt/services/filebrowser
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - filebrowser
+
+- name: Configure filebrowser
+  template:
+    src: config.json.j2
+    dest: /mnt/services/filebrowser/config.json
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+  register: filebrowser_conf
+  become: true
+  tags:
+    - filebrowser
+
+- name: Ensure database file exists
+  file:
+    path: /mnt/services/filebrowser/database.db
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - filebrowser
+
+- name: Install filebrowser service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: filebrowser.service
+  tags:
+    - filebrowser
+
+- name: Enable the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: filebrowser
+    enabled: true
+  become: true
+  tags:
+    - filebrowser
+
+- name: Start the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: filebrowser
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - filebrowser
+
+- name: Restart the service
+  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed or filebrowser_conf.changed) and not systemd_started.changed)
+  systemd:
+    name: filebrowser
+    state: restarted
+  become: true
+  tags:
+    - filebrowser
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: filebrowser
+    nginx_proxy_pass: http://localhost:5890/
+  tags:
+    - filebrowser

@@ -1,0 +1,7 @@
+Host *
+    ControlPath ~/.ssh/.controlmaster-%C
+    ControlMaster auto
+    ControlPersist 3600
+    IdentityFile ~/.ssh/id_ed25519
+    ServerAliveInterval 30
+    ConnectTimeout 2

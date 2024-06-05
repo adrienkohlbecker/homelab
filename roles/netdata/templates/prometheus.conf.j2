@@ -1,0 +1,24 @@
+# vim:ft=yaml
+jobs:
+  - name: journald
+    url: http://127.0.0.1:12345/metrics
+    username: metrics
+    password: {{ journald_exporter_key }}
+    max_time_series: 10000 # there is many series per individual systemd service, including temporary ones. Let's see if this is enough
+    autodetection_retry: 60
+
+  - name: custom
+    url: http://127.0.0.1:19392/metrics
+    autodetection_retry: 60
+{% if prometheus_enabled|default(false) %}
+
+  - name: prometheus
+    url: http://127.0.0.1:9090/metrics
+    autodetection_retry: 60
+{% endif %}
+{% if minio_enabled|default(false) %}
+
+  - name: minio
+    url: http://127.0.0.1:9199/minio/v2/metrics/cluster
+    autodetection_retry: 60
+{% endif %}

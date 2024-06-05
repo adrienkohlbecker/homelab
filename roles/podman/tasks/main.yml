@@ -1,0 +1,178 @@
+- name: Install podman
+  import_role:
+    name: apt_unit_masked
+  vars:
+    apt_unit_masked_pkg: podman
+    apt_unit_masked_unit:
+      - podman.service
+      - podman.socket
+  tags:
+    - podman
+
+- name: Add podman-socket group
+  group:
+    name: podman-socket
+    system: true
+  become: true
+  tags:
+    - podman
+
+- name: Create override directory
+  file:
+    dest: /etc/systemd/system/podman.socket.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - podman
+
+- name: Install podman socket override
+  import_role:
+    name: systemd_unit
+  vars:
+    systemd_unit_src: override_socket.conf
+    systemd_unit_dest: podman.socket.d/override.conf
+    systemd_unit_verify: podman.socket
+  tags:
+    - podman
+
+- name: Save return value
+  set_fact:
+    socket_systemd_unit: '{{ systemd_unit }}'
+  tags:
+    - podman
+
+- name: Create override directory
+  file:
+    dest: /etc/systemd/system/podman.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - podman
+
+- name: Install postman service override
+  import_role:
+    name: systemd_unit
+  vars:
+    systemd_unit_src: override_service.conf
+    systemd_unit_dest: podman.service.d/override.conf
+    systemd_unit_verify: podman.service
+  tags:
+    - podman
+
+- name: Divert configuration file
+  community.general.dpkg_divert:
+    path: /usr/lib/tmpfiles.d/podman.conf
+  become: true
+  tags:
+    - podman
+
+- name: Configure tmpfiles.d
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  lineinfile:
+    regexp: '^(# )?(.*) /run/podman (.*)$'
+    line: '# \2 /run/podman \3'
+    backrefs: true
+    dest: /usr/lib/tmpfiles.d/podman.conf
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - podman
+
+- name: Create mount point
+  file:
+    dest: /var/lib/containers/storage
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - podman
+
+- name: Create podman zvol
+  when: zfs_root
+  zfs:
+    name: rpool/podman
+    state: present
+    extra_zfs_properties:
+      volsize: '{{ "20GB" | human_to_bytes }}'
+  register: zfs_zvol_podman
+  become: true
+  tags:
+    - podman
+
+- name: Create a ext4 filesystem on podman zvol
+  when: not (ansible_check_mode and zfs_zvol_podman.changed) and zfs_root
+  filesystem:
+    fstype: ext4
+    dev: /dev/zvol/rpool/podman
+  become: true
+  tags:
+    - podman
+
+- name: Mount podman zvol
+  when: zfs_root
+  mount:
+    path: /var/lib/containers/storage
+    src: /dev/zvol/rpool/podman
+    fstype: ext4
+    opts: defaults,noatime
+    state: mounted
+    backup: true
+  become: true
+  tags:
+    - podman
+
+- name: Enable the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: podman
+    enabled: true
+  become: true
+  tags:
+    - podman
+
+- name: Enable the socket
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: podman.socket
+    enabled: true
+  become: true
+  tags:
+    - podman
+
+- name: Start the socket
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: podman.socket
+    state: started
+  become: true
+  register: systemd_started
+  tags:
+    - podman
+
+- name: Restart the socket
+  when: not (ansible_check_mode and apt_unit_masked.changed) and (systemd_unit.changed or socket_systemd_unit.changed) and not systemd_started.changed
+  systemd:
+    name: podman.socket
+    state: restarted
+  become: true
+  tags:
+    - podman
+
+- name: Configure health script
+  file:
+    path: /usr/local/bin/wait_for_healthy_container
+    state: absent
+  become: true
+  tags:
+    - podman

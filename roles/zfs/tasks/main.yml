@@ -1,0 +1,162 @@
+- name: Install ZoL
+  apt:
+    package:
+      - zfsutils-linux
+      - zfs-initramfs
+      - zfs-zed
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - zfs
+
+- name: Disable init_on_alloc
+  when: grub_bootloader
+  copy:
+    dest: /etc/default/grub.d/99-zfs.cfg
+    content: "GRUB_CMDLINE_LINUX_DEFAULT=\"$GRUB_CMDLINE_LINUX_DEFAULT init_on_alloc=0\"\n"
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  register: grub_cfg
+  become: true
+  tags:
+    - zfs
+
+- name: Update grub
+  when: grub_bootloader and grub_cfg.changed
+  command: update-grub
+  changed_when: true
+  become: true
+  tags:
+    - zfs
+
+- name: Configure ARC
+  template:
+    src: zfs.conf.j2
+    dest: /etc/modprobe.d/zfs.conf
+    mode: "0644"
+    owner: root
+    group: root
+    backup: true
+  register: zfs_module_conf
+  become: true
+  tags:
+    - zfs
+
+- name: Update initramfs
+  when: zfs_module_conf.changed
+  command: update-initramfs -u -k all
+  become: true
+  changed_when: true
+  tags:
+    - zfs
+
+- name: Ask to reboot
+  when: zfs_module_conf.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - zfs
+
+- name: Copy the health script
+  copy:
+    src: zfs_health.sh
+    dest: /usr/local/bin/zfs_health
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - zfs
+
+- name: Schedule the health script
+  cron:
+    name: zfs_health
+    minute: 55
+    job: /usr/local/bin/run_job hourly zfs_health /usr/local/bin/zfs_health
+    user: root
+    cron_file: ansible_zfs_health
+    backup: true
+  become: true
+  tags:
+    - zfs
+
+- name: Monitor cron entry
+  file:
+    path: /var/log/jobs/zfs_health
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - zfs
+
+- name: Schedule the trim script
+  cron:
+    name: zfs_trim_{{ item }}
+    weekday: 4
+    hour: 0
+    minute: 5
+    job: /usr/local/bin/run_job weekly zfs_trim_{{ item }} /sbin/zpool trim {{ item }}
+    user: root
+    cron_file: ansible_zfs_trim
+    backup: true
+  loop: "{{ zfs_trim_pools }}"
+  become: true
+  tags:
+    - zfs
+
+- name: Monitor cron entry
+  file:
+    path: /var/log/jobs/zfs_trim_{{ item }}
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ zfs_trim_pools }}"
+  become: true
+  tags:
+    - zfs
+
+- name: Enable zed
+  systemd:
+    name: zfs-zed
+    enabled: true
+  become: true
+  tags:
+    - zfs
+
+- name: Start zed
+  systemd:
+    name: zfs-zed
+    state: started
+  become: true
+  tags:
+    - zfs
+
+- name: Set properties on root dataset
+  community.general.zfs:
+    name: rpool/ROOT/jammy
+    state: present
+    extra_zfs_properties:
+      'autobackup:bak': 'true'
+  register: zfs_root_properties
+  become: true
+  tags:
+    - zfs
+
+- name: Setup mount generator
+  import_tasks: mount_generator.yml

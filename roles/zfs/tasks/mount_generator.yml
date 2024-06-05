@@ -1,0 +1,37 @@
+- name: mount_generator | Enable zfs-mount-generator for pool
+  file:
+    path: /etc/zfs/zfs-list.cache/{{ item.split('/')[0] }}
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
+  with_items: "{{ zfs_mount_cache_datasets }}"
+  become: true
+  tags:
+    - zfs
+    - zfs_mount_generator
+
+- name: mount_generator | Configure symlink
+  file:
+    src: /usr/lib/zfs-linux/zed.d/history_event-zfs-list-cacher.sh
+    dest: /etc/zfs/zed.d/history_event-zfs-list-cacher.sh
+    state: link
+  become: true
+  tags:
+    - zfs
+    - zfs_mount_generator
+
+- name: mount_generator | Generate mount cache
+  shell: set -euo pipefail; [ $(zfs get -o value -pH canmount {{ item }}) = "on" ]; before=`md5sum /etc/zfs/zfs-list.cache/{{ item.split('/')[0] }} | cut -f 1 -d " "`; zfs set canmount=on {{ item }}; after=`md5sum /etc/zfs/zfs-list.cache/{{ item.split('/')[0] }} | cut -f 1 -d " "`; test $before = $after || ([ "$?" = 1 ] && echo "file updated" || exit 1)
+  args:
+    chdir: /etc/zfs/zfs-list.cache
+    executable: /bin/bash
+  register: zfs_mount_cache_cmd
+  changed_when: "'file updated' in zfs_mount_cache_cmd.stdout"
+  with_items: "{{ zfs_mount_cache_datasets }}"
+  become: true
+  tags:
+    - zfs
+    - zfs_mount_generator

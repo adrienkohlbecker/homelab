@@ -1,0 +1,59 @@
+# Note: with ubuntu 24.04, may be able to use `validate: systemd-analyze verify %s:foo.service`,
+# although it won't fail for warnings like undefined keys?
+- name: Systemd service
+  block:
+    - name: Copy the unit file
+      when: systemd_unit_condition | default(true)
+      copy:
+        src: "{{ systemd_unit_src }}"
+        dest: "/etc/systemd/system/{{ systemd_unit_dest | default(systemd_unit_src) }}"
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+      become: true
+      register: systemd_unit
+
+    - name: Validate unit file
+      when: systemd_unit.changed
+      command: systemd-analyze verify /etc/systemd/system/{{ systemd_unit_verify | default(systemd_unit_dest) | default(systemd_unit_src) }}
+      register: systemd_verify
+      changed_when: false
+      failed_when: systemd_verify.rc != 0 or systemd_verify.stderr != ''
+      become: true
+
+    - name: Reload daemon
+      when: systemd_unit.changed
+      systemd:
+        daemon_reload: true
+      become: true
+
+  rescue:
+    - name: Copy backup file to original
+      when: '"backup_file" in systemd_unit'
+      copy:
+        remote_src: true
+        dest: "/etc/systemd/system/{{ systemd_unit_dest | default(systemd_unit_src) }}"
+        src: "{{ systemd_unit.backup_file }}"
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+
+    - name: Delete backup file
+      when: '"backup_file" in systemd_unit'
+      file:
+        path: "{{ systemd_unit.backup_file }}"
+        state: absent
+      become: true
+
+    - name: Delete newly added file
+      when: systemd_unit.changed and "backup_file" not in systemd_unit
+      file:
+        path: /etc/systemd/system/{{ systemd_unit_dest | default(systemd_unit_src) }}
+        state: absent
+      become: true
+
+    - name: Record failure
+      fail:
+        msg: "Unable to install systemd unit"

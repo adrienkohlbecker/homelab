@@ -1,0 +1,68 @@
+zfs_root: false
+journald_storage: volatile
+grub_bootloader: true
+
+zfs_arc_max: 1073741824
+zfs_trim_pools: []
+zfs_mount_cache_datasets: [] # must list one dataset per pool. canmount must be set to "on" on this dataset
+zfs_has_bpool: false
+
+libvirt_default_network: 10.123.50.0/24
+
+sensor_modules: []
+
+macvlan_enable_docker: true
+macvlan_parent: eth1
+macvlan_subnet: 10.123.1.64/27
+
+log2ram_size: 100M
+
+netplan:
+  ethernets:
+    nic0:
+      match:
+        driver: virtio-pci
+      set-name: eth0
+      link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
+      dhcp4: true
+      dhcp6: false
+    nic1:
+      match:
+        macaddress: a8:a1:59:f5:82:93
+      set-name: eth1
+      link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
+      dhcp4: true
+      dhcp6: false
+
+hdparm_settings: {}
+
+rand_order: 3
+
+zfs_autobackup_source_host:
+zfs_autobackup_dest_dataset:
+zfs_autobackup_ssh_public_key:
+
+fancontrol_settings: ""
+
+pihole_keepalived_role: BACKUP
+pihole_keepalived_priority: 5
+
+prometheus_enabled: true
+
+minio_enabled: true
+minio_buckets:
+  - test
+minio_users:
+  - access_key: test
+    secret_key: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          37366466373233653966666664366239356332353763353966353266373236636566376533306562
+          6338356431343632323366373234663066623731373437630a666364333131396563373364663739
+          36663965656535613835333861613438656439313737333264326265306466373939656665646633
+          6334653362613031320a636632633535303837323262376239666431643137396463316631316538
+          33356336353563633265613935323962353233623462616561376336643866313335376137323039
+          3561313531653038363638633966666365623739316634613734
+
+smb_shares: []

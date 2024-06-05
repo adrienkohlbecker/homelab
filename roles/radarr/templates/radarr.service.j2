@@ -1,0 +1,54 @@
+# jinja2: lstrip_blocks: "True"
+# radarr.service #######################################################################
+[Unit]
+Description=radarr
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service zfs_mount_mnt_scratch.service zfs_mount_mnt_media.service  zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service zfs_mount_mnt_scratch.service zfs_mount_mnt_media.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+Delegate=yes
+TimeoutSec=120
+RestartSec=5
+Type=notify
+NotifyAccess=all
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name radarr \
+    --log-driver journald \
+    --log-opt tag="radarr" \
+    --env PUID={{ radarr_user.uid }} \
+    --env PGID={{ ansible_facts.getent_group['media'][1] }} \
+    --env TZ=Europe/Paris \
+    --volume /mnt/services/radarr:/config \
+    --volume /mnt/media:/media \
+    --volume /mnt/scratch:/scratch \
+    --publish 127.0.0.1:7878:7878/tcp \
+    --health-cmd         "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:7878/ping" \
+    --health-startup-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:7878/ping" \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    docker.io/linuxserver/radarr:5.6.0
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

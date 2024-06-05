@@ -1,5 +1,0 @@
-{
-  "dependencies": {
-    "homebridge-http-webhooks": "adrienkohlbecker/homebridge-http-webhooks#master"
-  }
-}

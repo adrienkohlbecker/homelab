@@ -1,0 +1,70 @@
+- name: Add media group
+  group:
+    name: media
+    system: true
+  become: true
+  register: media_group
+  tags:
+    - media
+
+- name: Add user to media group
+  import_role:
+    name: usergroup_immediate
+  when: not (ansible_check_mode and media_group.changed)
+  vars:
+    usergroup_immediate_group: media
+  tags:
+    - media
+
+- name: Create mount point
+  file:
+    dest: /mnt/media
+    state: directory
+    owner: "{{ ansible_ssh_user }}"
+    group: media
+    mode: "0775"
+  become: true
+  tags:
+    - media
+
+- name: Create zfs filesystem
+  when: zfs_root
+  zfs:
+    name: tank/media
+    state: present
+    extra_zfs_properties:
+      mountpoint: /mnt/media
+      'autobackup:bak': 'false'
+  become: true
+  tags:
+    - media
+
+- name: Set up mount service for tank/media
+  when: zfs_root
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    zfs_mount_dataset: tank/media
+    zfs_mount_mountpoint: /mnt/media
+  tags:
+    - media
+
+- name: Create storage directories
+  file:
+    dest: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: media
+    mode: "0775"
+  become: true
+  tags:
+    - media
+  loop:
+    - { path: /mnt/media/Headphones,  owner:  "{{ ansible_ssh_user }}" }
+    - { path: /mnt/media/Live Music,  owner:  "{{ ansible_ssh_user }}" }
+    - { path: /mnt/media/Movies,      owner:  "{{ ansible_ssh_user }}" }
+    - { path: /mnt/media/Music,       owner:  "{{ ansible_ssh_user }}" }
+    - { path: /mnt/media/Other,       owner:  "{{ ansible_ssh_user }}" }
+    - { path: /mnt/media/Torrents,    owner:  transmission             }
+    - { path: /mnt/media/TV,          owner:  "{{ ansible_ssh_user }}" }

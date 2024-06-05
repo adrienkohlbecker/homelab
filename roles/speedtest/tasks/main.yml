@@ -1,0 +1,46 @@
+- name: Install speedtest service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: speedtest.service
+  tags:
+    - speedtest
+
+- name: Enable the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: speedtest
+    enabled: true
+  become: true
+  tags:
+    - speedtest
+
+- name: Start the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: speedtest
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - speedtest
+
+- name: Restart the service
+  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed) and not systemd_started.changed)
+  systemd:
+    name: speedtest
+    state: restarted
+  become: true
+  tags:
+    - speedtest
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: speedtest
+    nginx_proxy_pass: http://localhost:2807/
+  tags:
+    - speedtest

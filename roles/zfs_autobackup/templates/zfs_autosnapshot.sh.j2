@@ -1,0 +1,23 @@
+#!/bin/bash
+# shellcheck source=../../bash/files/functions.sh
+source /usr/local/lib/functions.sh
+
+f_require_root
+
+# create local snapshots
+f_rescue f_trace zfs_backup_local
+
+# backup snapshot to other server
+f_rescue f_trace zfs_backup_onsite "{{ external_ips[zfs_autobackup_source_host] }}" "{{ zfs_autobackup_dest_dataset }}"
+
+# sync each dataset to offsite synology
+for dataset in $(zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'); do
+  f_rescue f_trace zfs_backup_offsite "{{ (wireguard_peers|selectattr('name', 'eq', 'bunk')|first).address }}" "$dataset"
+done
+
+# fail if any of the above failed
+if [ $f_failed -ne 0 ]; then
+  f_fail "Error: Some backup steps have failed"
+fi
+
+echo "Done"

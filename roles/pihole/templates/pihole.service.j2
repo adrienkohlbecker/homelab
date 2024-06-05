@@ -1,0 +1,64 @@
+# jinja2: lstrip_blocks: "True"
+# pihole.service #######################################################################
+[Unit]
+Description=pihole
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service  zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+Delegate=yes
+TimeoutSec=120
+RestartSec=5
+Type=notify
+NotifyAccess=all
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name pihole \
+    --log-driver journald \
+    --log-opt tag="pihole" \
+    --volume /mnt/services/pihole/etc:/etc/pihole \
+    --volume /mnt/services/pihole/dnsmasq:/etc/dnsmasq.d \
+    --volume /var/log/pihole:/var/log/pihole \
+    --env TZ="Europe/Paris" \
+    --env VIRTUAL_HOST=pihole.{{ inventory_hostname }}.{{ domain }} \
+    --env FTLCONF_LOCAL_IPV4={{ ansible_facts.default_ipv4.address }} \
+    --env REV_SERVER=true \
+    --env REV_SERVER_TARGET={{ home_subnet | ansible.utils.usable_range | json_query('usable_ips[1]') }} \
+    --env REV_SERVER_CIDR={{ home_subnet }} \
+    --env PIHOLE_UID={{ pihole_user.uid }} \
+    --env PIHOLE_GID={{ pihole_user.group }} \
+    --dns=127.0.0.1 \
+    --dns=1.1.1.1 \
+    --publish 0.0.0.0:53:53/udp \
+    --publish 0.0.0.0:53:53/tcp \
+    --publish 127.0.0.1:8943:80/tcp \
+    {# todo remove when this is fixed https://github.com/containers/podman/issues/18904 #}
+    --health-cmd         "dig +short +norecurse +retry=0 @127.0.0.1 pi.hole || exit 1" \
+    --health-startup-cmd "dig +short +norecurse +retry=0 @127.0.0.1 pi.hole || exit 1" \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    docker.io/pihole/pihole:2024.05.0
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

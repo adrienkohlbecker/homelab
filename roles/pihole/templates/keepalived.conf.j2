@@ -1,0 +1,36 @@
+vrrp_script pihole_healthcheck {
+  script   /usr/local/bin/pihole_healthcheck
+  interval 1
+  timeout  5
+  rise     1
+  fall     2
+  user     root
+}
+
+vrrp_instance pihole {
+  state     BACKUP
+  interface eth0
+
+  unicast_src_ip {{ external_ips[inventory_hostname] }}
+  unicast_peer {
+    {% for name in pihole_keepalived_peers | select("ne", inventory_hostname) | sort %}
+    {{ external_ips[name] }}
+    {% endfor %}
+  }
+
+  virtual_router_id 1
+  priority          {{ pihole_keepalived_priority }}
+
+  authentication {
+    auth_type PASS
+    auth_pass {{ pihole_keepalived_password }}
+  }
+
+  virtual_ipaddress {
+    {{ pihole_keepalived_ip }}/32
+  }
+
+  track_script {
+    pihole_healthcheck
+  }
+}

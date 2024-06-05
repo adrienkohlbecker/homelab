@@ -1,0 +1,196 @@
+- name: Install zfs autobackup dependencies
+  apt:
+    package:
+      - python3-pip
+      - python3-virtualenv
+      - mbuffer
+      - rsync
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - zfs_autobackup
+
+# because https://www.reddit.com/r/learnpython/comments/uj3dhx/why_does_pip_keep_reinstalling_the_same_version/ marks it changed every time
+- name: Check if zfs autobackup installed
+  stat:
+    path: /opt/virtualenv/zfs_autobackup/bin/zfs-autobackup
+  become: true
+  register: zfs_autobackup_installed
+  tags:
+    - zfs_autobackup
+
+- name: Install zfs autobackup
+  when: not zfs_autobackup_installed.stat.exists
+  pip:
+    name: zfs-autobackup
+    virtualenv: /opt/virtualenv/zfs_autobackup
+  become: true
+  register: zfs_autobackup_install
+  tags:
+    - zfs_autobackup
+
+- name: Configure symlink
+  when: not (ansible_check_mode and zfs_autobackup_install.changed)
+  file:
+    src: /opt/virtualenv/zfs_autobackup/bin/zfs-autobackup
+    dest: /usr/local/bin/zfs-autobackup
+    owner: root
+    group: root
+    mode: "0755"
+    state: link
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Add zfs_autosnapshot.target systemd unit
+  import_role:
+    name: systemd_unit
+  vars:
+    systemd_unit_src: zfs_autosnapshot.target
+  tags:
+    - zfs_autobackup
+
+- name: Enable the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: zfs_autosnapshot.target
+    enabled: true
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Start the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: zfs_autosnapshot.target
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Restart the service
+  when: not (ansible_check_mode and systemd_unit.changed) and (systemd_unit.changed) and not systemd_started.changed
+  systemd:
+    name: zfs_autosnapshot.target
+    state: restarted
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Create log directory
+  file:
+    dest: /var/log/zfs_autobackup
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Copy the local backup script
+  copy:
+    src: zfs_backup_local.sh
+    dest: /usr/local/bin/zfs_backup_local
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Copy the onsite backup script
+  copy:
+    src: zfs_backup_onsite.sh
+    dest: /usr/local/bin/zfs_backup_onsite
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Copy the offsite backup script
+  copy:
+    src: zfs_backup_offsite.sh
+    dest: /usr/local/bin/zfs_backup_offsite
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Copy the snapshot script
+  template:
+    src: zfs_autosnapshot.sh.j2
+    dest: /usr/local/bin/zfs_autosnapshot
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Schedule the snapshot script
+  cron:
+    name: zfs_autosnapshot
+    minute: "{{ rand_order * 10 }}" # space each host out by 10 minutes so services don't stop at the same time
+    hour: 2
+    job: /usr/local/bin/run_job daily zfs_autosnapshot /usr/local/bin/zfs_autosnapshot
+    user: root
+    cron_file: ansible_zfs_autosnapshot
+    backup: true
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Monitor cron entry
+  file:
+    path: /var/log/jobs/zfs_autosnapshot
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Configure logrotate
+  template:
+    src: logrotate.j2
+    dest: /etc/logrotate.d/zfs_autobackup
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: logrotate_conf
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Restart logrotate
+  when: logrotate_conf.changed
+  systemd:
+    name: logrotate
+    state: restarted
+  become: true
+  tags:
+    - zfs_autobackup
+
+- name: Configure host as a source for backups
+  import_tasks: source.yml
+
+- name: Configure host as a destination for backups
+  import_tasks: dest.yml

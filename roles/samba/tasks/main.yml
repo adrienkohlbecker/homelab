@@ -1,0 +1,111 @@
+- name: Install vector package
+  import_role:
+    name: apt_unit_masked
+  vars:
+    apt_unit_masked_pkg: samba
+    apt_unit_masked_unit:
+      - smbd.service
+      - nmbd.service
+  tags:
+    - samba
+
+- name: Configure samba
+  template:
+    src: smb.conf.j2
+    dest: /etc/samba/smb.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: testparm %s
+  register: samba_cfg
+  become: true
+  tags:
+    - samba
+
+- name: Enable the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: smbd
+    enabled: true
+  become: true
+  tags:
+    - samba
+
+- name: Start the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: smbd
+    state: started
+  become: true
+  register: samba_started
+  tags:
+    - samba
+
+- name: Restart samba
+  when: not (ansible_check_mode and apt_unit_masked.changed) and (samba_cfg.changed) and not samba_started.changed
+  systemd:
+    name: smbd
+    state: restarted
+  become: true
+  tags:
+    - samba
+
+- name: Enable the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: nmbd
+    enabled: true
+  become: true
+  tags:
+    - samba
+
+- name: Start the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: nmbd
+    state: started
+  become: true
+  register: samba_started
+  tags:
+    - samba
+
+- name: Restart samba
+  when: not (ansible_check_mode and apt_unit_masked.changed) and (samba_cfg.changed) and not samba_started.changed
+  systemd:
+    name: nmbd
+    state: restarted
+  become: true
+  tags:
+    - samba
+
+- name: Copy avahi smb service
+  copy:
+    src: smb.service
+    dest: /etc/avahi/services/smb.service
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: avahi_smb
+  tags:
+    - samba
+
+- name: Restart avahi
+  when: avahi_smb.changed
+  systemd:
+    name: avahi-daemon
+    state: restarted
+  become: true
+  tags:
+    - samba
+
+- name: Configure Samba user
+  shell: set -euo pipefail; (pdbedit --user={{ ansible_ssh_user }} 2>&1 > /dev/null) || (echo '{{ samba_password }}'; echo '{{ samba_password }}') | smbpasswd -s -a {{ ansible_ssh_user }}
+  args:
+    executable: /bin/bash
+  register: smbpasswd
+  changed_when: "'Added user' in smbpasswd.stdout"
+  become: true
+  tags:
+    - samba

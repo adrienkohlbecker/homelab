@@ -1,0 +1,133 @@
+- name: Add git group
+  group:
+    name: git
+    system: true
+  become: true
+  tags:
+    - gitea
+
+- name: Add git user
+  user:
+    name: git
+    group: git
+    createhome: true
+    system: true
+    shell: /bin/bash
+    home: /home/git
+  become: true
+  register: gitea_user
+  tags:
+    - gitea
+
+- name: Create configuration directory
+  when: not (ansible_check_mode and gitea_user.changed)
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: git
+    group: git
+    mode: "0755"
+  become: true
+  loop:
+    - /mnt/services/gitea
+    - /mnt/services/gitea/custom
+    - /mnt/services/gitea/data
+    - /var/log/gitea
+  tags:
+    - gitea
+
+- name: Create configuration directory
+  when: not (ansible_check_mode and gitea_user.changed)
+  file:
+    dest: /etc/gitea
+    state: directory
+    owner: git
+    group: git
+    mode: "0755"
+  become: true
+  tags:
+    - gitea
+
+- name: Configure gitea
+  template:
+    src: app.ini.j2
+    dest: /etc/gitea/app.ini
+    owner: git
+    group: git
+    mode: "0600"
+    backup: true
+  register: gitea_conf
+  become: true
+  tags:
+    - gitea
+
+- name: Check if gitea is installed
+  command: gitea -version
+  register: gitea_check
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - gitea
+
+- name: Install gitea if needed
+  when: '"1.21.11" not in gitea_check.stderr'
+  get_url:
+    url: https://dl.gitea.com/gitea/1.21.11/gitea-1.21.11-linux-amd64
+    checksum: sha256:238056fa4616633a9ec5a358aac75275bd3f271d5e5238af3dd5f22c713fe97e
+    dest: /usr/local/bin/gitea
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  tags:
+    - gitea
+
+- name: Install gitea service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: gitea.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and gitea_user.changed) }}"
+  tags:
+    - gitea
+
+- name: Enable the service
+  when: not (ansible_check_mode and (systemd_unit.changed or gitea_user.changed))
+  systemd:
+    name: gitea
+    enabled: true
+  become: true
+  tags:
+    - gitea
+
+- name: Start the service
+  when: not (ansible_check_mode and (systemd_unit.changed or gitea_user.changed))
+  systemd:
+    name: gitea
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - gitea
+
+- name: Restart the service
+  when: not (ansible_check_mode and (systemd_unit.changed or gitea_user.changed)) and ((systemd_unit.changed or gitea_conf.changed) and not systemd_started.changed)
+  systemd:
+    name: gitea
+    state: restarted
+  become: true
+  tags:
+    - gitea
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: gitea
+    nginx_proxy_pass: http://localhost:3000/
+  tags:
+    - gitea

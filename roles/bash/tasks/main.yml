@@ -1,0 +1,12 @@
+- name: Copy the functions
+  copy:
+    src: functions.sh
+    dest: /usr/local/lib/functions.sh
+    mode: "0644"
+    owner: root
+    group: root
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - bash

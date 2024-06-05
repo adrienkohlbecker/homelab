@@ -1,0 +1,45 @@
+- name: Install powertop
+  apt:
+    pkg:
+      - powertop
+    cache_valid_time: 3600
+  become: true
+  register: apt_install_powertop
+  tags:
+    - powertop
+
+- name: Install powertop service
+  import_role:
+    name: systemd_unit
+  vars:
+    systemd_unit_src: powertop.service
+  tags:
+    - powertop
+
+- name: Enable the service
+  when: not (ansible_check_mode and apt_install_powertop.changed)
+  systemd:
+    name: powertop
+    enabled: true
+  become: true
+  tags:
+    - powertop
+
+- name: Start the service
+  when: not (ansible_check_mode and apt_install_powertop.changed)
+  systemd:
+    name: powertop
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - powertop
+
+- name: Restart the service
+  when: not (ansible_check_mode and apt_install_powertop.changed) and systemd_unit.changed and not systemd_started.changed
+  systemd:
+    name: powertop
+    state: restarted
+  become: true
+  tags:
+    - powertop

@@ -1,0 +1,31 @@
+- name: Configure netplan
+  template:
+    src: config.yaml.j2
+    dest: /etc/netplan/01-netcfg.yaml
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+  become: true
+  register: netplan_cfg
+  tags:
+    - netplan
+
+- name: Cleanup config added by cloud-init and installer
+  file:
+    path: "{{ item }}"
+    state: absent
+  become: true
+  loop:
+    - /etc/netplan/00-installer-config.yaml
+    - /etc/netplan/50-cloud-init.yaml
+  tags:
+    - netplan
+
+- name: Apply netplan
+  when: netplan_cfg.changed
+  command: netplan apply
+  changed_when: true
+  become: true
+  tags:
+    - netplan

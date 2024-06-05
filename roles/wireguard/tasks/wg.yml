@@ -1,0 +1,41 @@
+---
+- name: wg | Configure wireguard interface
+  template:
+    src: wg.conf.j2
+    dest: /etc/wireguard/{{ iface }}.conf
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+  register: wireguard_cfg
+  become: true
+  tags:
+    - wireguard
+
+- name: wg | Enable the service
+  when: not (ansible_check_mode and apt_install_wireguard.changed)
+  systemd:
+    name: wg-quick@{{ iface }}.service
+    enabled: true
+  become: true
+  tags:
+    - wireguard
+
+- name: wg | Start the service
+  when: not (ansible_check_mode and apt_install_wireguard.changed)
+  systemd:
+    name: wg-quick@{{ iface }}.service
+    state: started
+  become: true
+  register: wireguard_started
+  tags:
+    - wireguard
+
+- name: wg | Restart wireguard
+  when: not (ansible_check_mode and apt_install_wireguard.changed) and wireguard_cfg.changed and not wireguard_started.changed
+  systemd:
+    name: wg-quick@{{ iface }}.service
+    state: restarted
+  become: true
+  tags:
+    - wireguard

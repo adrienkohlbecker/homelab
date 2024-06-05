@@ -1,0 +1,53 @@
+#!/bin/bash
+# shellcheck source=../../bash/files/functions.sh
+source /usr/local/lib/functions.sh
+
+EVENT=${1:-}
+case $EVENT in
+"")
+  f_error "Missing event argument"
+  f_fail "Usage: nut-notify EVENT"
+  ;;
+online)
+  MSG="UPS is back online"
+  ;;
+onbatt)
+  MSG="UPS is on battery"
+  ;;
+lowbatt)
+  MSG="UPS is on battery and has a low battery (is critical)"
+  ;;
+fsd)
+  MSG="UPS is being shutdown by the primary (FSD = Forced Shutdown)"
+  ;;
+commok)
+  MSG="Communications established with the UPS"
+  ;;
+commbad)
+  MSG="Communications lost to the UPS"
+  ;;
+shutdown)
+  MSG="The system is being shutdown"
+  ;;
+replbatt)
+  MSG="The UPS battery is bad and needs to be replaced"
+  ;;
+nocomm)
+  MSG="A UPS is unavailable (can't be contacted for monitoring)"
+  ;;
+noparent)
+  MSG="upsmon parent process died - shutdown impossible"
+  ;;
+*)
+  f_fail "unexpected event $EVENT"
+  ;;
+esac
+
+UPS=eaton@localhost
+STAT=$(upsc $UPS ups.status)
+BATT=$(upsc $UPS battery.charge)
+RUNTIME_SEC=$(upsc $UPS battery.runtime)
+RUNTIME=$(date -d@"$RUNTIME_SEC" -u +%H:%M:%S)
+DATE=$(date --iso-8601=seconds)
+
+printf "%s\n\nStatus Page: https://nut.{{ inventory_hostname }}.{{ domain }}/upsstats.cgi?host=%s\nDate: %s\nStatus: %s\nBattery charge: %s\nRuntime: $RUNTIME\n\n" "$MSG" "$UPS" "$DATE" "$STAT" "$BATT" | mail -s "UPS event $EVENT on {{ inventory_hostname }}" root

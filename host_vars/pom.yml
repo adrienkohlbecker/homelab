@@ -1,0 +1,57 @@
+zfs_root: true
+journald_storage: persistent
+grub_bootloader: false
+
+zfs_arc_max: 1073741824
+zfs_trim_pools:
+  - rpool
+zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
+  - rpool/ROOT/jammy
+zfs_has_bpool: false
+
+libvirt_default_network: 10.123.49.0/24
+
+sensor_modules: []
+
+macvlan_enable_docker: false
+macvlan_parent: eth0
+macvlan_subnet: 10.123.1.32/27
+
+log2ram_size:
+
+netplan:
+  ethernets:
+    nic0:
+      match:
+        macaddress: "{{ mac_addresses.pom }}"
+      set-name: eth0
+      link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
+      dhcp4: true
+      dhcp6: false
+
+hdparm_settings: {}
+
+rand_order: 4
+
+zfs_autobackup_source_host: lab # TODO
+zfs_autobackup_dest_dataset: apoc/lab # TODO
+zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab # TODO
+
+fancontrol_settings: |
+  # hwmon4/pwm2 => CHA_FAN_1
+  # hwmon4/pwm3 => CHA_FAN_2
+  # hwmon4/temp1_input => cpu?
+  # hwmon2/temp1_input => drivetemp
+  INTERVAL=10
+  DEVPATH=hwmon2=devices/pci0000:00/0000:00:17.0/ata2/host1/target1:0:0/1:0:0:0 hwmon4=devices/platform/nct6775.672
+  DEVNAME=hwmon2=drivetemp hwmon4=nct6798
+  FCTEMPS=hwmon4/pwm3=hwmon4/temp1_input hwmon4/pwm2=hwmon2/temp1_input
+  FCFANS=hwmon4/pwm3=hwmon4/fan3_input hwmon4/pwm2=hwmon4/fan2_input
+  MINTEMP=hwmon4/pwm3=40 hwmon4/pwm2=30
+  MAXTEMP=hwmon4/pwm3=60 hwmon4/pwm2=45
+  MINSTART=hwmon4/pwm3=40 hwmon4/pwm2=120
+  MINSTOP=hwmon4/pwm3=10 hwmon4/pwm2=90
+  MINPWM=hwmon4/pwm3=10 hwmon4/pwm2=90
+
+smb_shares: []

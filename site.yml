@@ -1,0 +1,117 @@
+- name: Base installation
+  hosts: all:!bunk
+  roles:
+    - ansible_dependencies
+    - bash
+    - user
+    - cleanup
+    - hostname
+    - apt
+    - netplan
+    - wireguard
+    - locale
+    - keyboard
+    - console
+    - timezone
+    - fancontrol
+    - unattended_upgrades
+    - logrotate
+    - journald
+    - resolved
+    - iptables
+    - fail2ban
+    - ssh
+    - ntp
+    - postfix
+    - hwe_kernel
+    - cron
+    - hdparm
+    - hd_idle
+    - smart
+    - lm_sensors
+    - powertop
+    - zfs
+    - ssh_root
+    - zfs_autobackup
+    - zfs_mount
+    - podman
+    - samba
+    - wolweb
+
+- name: Pug roles
+  hosts: box,pug
+  roles:
+    - grub
+
+- name: Unused roles (dev box only)
+  hosts: box
+  roles:
+    - log2ram
+    - qemu_guest
+    - macvlan
+    - docker
+    - ipmi
+    - libvirt
+    - vector
+    - eaton_ipp
+
+- name: Add more services
+  hosts: all:!bunk
+  roles:
+    - avahi
+    - certbot
+    - nginx
+    - csplogger
+    - keepalived
+    - keepalived_exporter
+    - custom_exporter
+    - journald_exporter
+    - nut_server
+    - nut_monitor
+    - netdata
+    - services
+    - pihole
+
+- name: Lab roles
+  hosts: box,lab
+  roles:
+    - prometheus # for minio
+    - minio
+    - influxdb
+    - scratch
+    - data
+    - media
+    - jellyfin
+    - sort_ini
+    - sabnzbd
+    - sonarr
+    - radarr
+    - headphones
+    - overseerr
+    - plex
+    - tautulli
+    - gitea
+    - transmission
+    - getmail
+    - quotes
+    - speedtest
+    - filebrowser
+    - homeassistant
+
+- name: Reboot check
+  hosts: all:!bunk
+  tasks:
+    - name: Check if a reboot is required
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+      tags:
+        - always
+
+    - name: Restart machine
+      reboot:
+      throttle: 1
+      become: true
+      when: reboot_required.stat.exists
+      tags:
+        - always

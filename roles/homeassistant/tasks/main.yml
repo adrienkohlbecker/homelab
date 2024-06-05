@@ -1,0 +1,318 @@
+- name: Add homeassistant group
+  group:
+    name: homeassistant
+    system: true
+  become: true
+  tags:
+    - homeassistant
+
+- name: Add homeassistant user
+  user:
+    name: homeassistant
+    group: homeassistant
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  register: homeassistant_user
+  tags:
+    - homeassistant
+
+- name: Create configuration directory
+  file:
+    dest: /mnt/services/homeassistant
+    state: directory
+    owner: homeassistant
+    group: homeassistant
+    mode: "0755"
+  become: true
+  tags:
+    - homeassistant
+
+- name: Get influxdb org ID
+  shell: set -euo pipefail; podman exec influxdb influx org list --name home --hide-headers | cut -f1
+  args:
+    executable: /bin/bash
+  check_mode: false
+  changed_when: false
+  register: homeassistant_influxdb_org
+  become: true
+  tags:
+    - homeassistant
+
+- name: Create influxdb user
+  check_mode: false
+  shell: set -euo pipefail; ((podman exec influxdb influx user list --name homeassistant --hide-headers && echo >&2 "Found!") || ( {{ ansible_check_mode | ternary('echo TODO', 'podman exec influxdb influx user create --org-id ' + homeassistant_influxdb_org.stdout + ' --name homeassistant --hide-headers') }} )) | tr -s '\t' | cut -f1
+  args:
+    executable: /bin/bash
+  changed_when: "'Found!' not in homeassistant_influxdb_user.stderr"
+  register: homeassistant_influxdb_user
+  become: true
+  tags:
+    - homeassistant
+
+- name: Create influxdb bucket
+  check_mode: false
+  shell: set -euo pipefail; ((podman exec influxdb influx bucket list --org-id {{ homeassistant_influxdb_org.stdout }} --name homeassistant --hide-headers && echo >&2 "Found!") || ( {{ ansible_check_mode | ternary('echo TODO', 'podman exec influxdb influx bucket create --org-id ' + homeassistant_influxdb_org.stdout + ' --name homeassistant --hide-headers') }} )) | tr -s '\t' | cut -f1
+  args:
+    executable: /bin/bash
+  changed_when: "'Found!' not in homeassistant_influxdb_bucket.stderr"
+  register: homeassistant_influxdb_bucket
+  become: true
+  tags:
+    - homeassistant
+
+- name: Create influxdb auth
+  check_mode: false
+  shell: set -euo pipefail; ((podman exec influxdb influx auth list -u homeassistant | grep "{{ homeassistant_influxdb_user.stdout }}" | grep "\\[write:orgs/{{ homeassistant_influxdb_org.stdout }}/buckets/{{ homeassistant_influxdb_bucket.stdout }}\\]" && echo >&2 "Found!") || ( {{ ansible_check_mode | ternary('echo TODO', 'podman exec influxdb influx auth create --org-id ' + homeassistant_influxdb_org.stdout + ' --user homeassistant --write-bucket ' + homeassistant_influxdb_bucket.stdout + ' --hide-headers') }} )) | tr -s '\t' | cut -f2
+  args:
+    executable: /bin/bash
+  changed_when: "'Found!' not in homeassistant_influxdb_auth.stderr"
+  register: homeassistant_influxdb_auth
+  become: true
+  tags:
+    - homeassistant
+
+- name: Configure homeassistant
+  template:
+    src: configuration.yaml.j2
+    dest: /mnt/services/homeassistant/configuration.yaml
+    owner: homeassistant
+    group: homeassistant
+    mode: "0600"
+    backup: true
+    block_start_string: "<<%"
+    block_end_string: "%>>"
+    variable_start_string: "<<<"
+    variable_end_string: ">>>"
+  register: homeassistant_conf
+  become: true
+  tags:
+    - homeassistant
+
+- name: Configure homeassistant automations
+  copy:
+    src: automations.yaml
+    dest: /mnt/services/homeassistant/automations.yaml
+    owner: homeassistant
+    group: homeassistant
+    mode: "0600"
+    backup: true
+  register: homeassistant_automations
+  become: true
+  tags:
+    - homeassistant
+
+- name: Create custom_templates directory
+  file:
+    dest: /mnt/services/homeassistant/custom_templates
+    state: directory
+    owner: homeassistant
+    group: homeassistant
+    mode: "0755"
+  become: true
+  tags:
+    - homeassistant
+
+- name: Configure homeassistant macros
+  copy:
+    src: macros.jinja
+    dest: /mnt/services/homeassistant/custom_templates/macros.jinja
+    owner: homeassistant
+    group: homeassistant
+    mode: "0600"
+    backup: true
+  register: homeassistant_macros
+  become: true
+  tags:
+    - homeassistant
+
+- name: Configure homeassistant sensors
+  copy:
+    src: sensors.yaml
+    dest: /mnt/services/homeassistant/sensors.yaml
+    owner: homeassistant
+    group: homeassistant
+    mode: "0600"
+    backup: true
+  register: homeassistant_sensors
+  become: true
+  tags:
+    - homeassistant
+
+- name: Configure homeassistant templates
+  copy:
+    src: templates.yaml
+    dest: /mnt/services/homeassistant/templates.yaml
+    owner: homeassistant
+    group: homeassistant
+    mode: "0600"
+    backup: true
+  register: homeassistant_templates
+  become: true
+  tags:
+    - homeassistant
+
+- name: Create www directory
+  file:
+    dest: /mnt/services/homeassistant/www
+    state: directory
+    owner: homeassistant
+    group: homeassistant
+    mode: "0755"
+  become: true
+  tags:
+    - homeassistant
+
+- name: Get stats of the thermal_comfort_icons.js file
+  stat:
+    path: /mnt/services/homeassistant/www/thermal_comfort_icons.js
+  register: thermal_comfort_icons_check
+  become: true
+  tags:
+    - homeassistant
+
+- name: Install thermal_comfort_icons if needed
+  when: not thermal_comfort_icons_check.stat.exists or thermal_comfort_icons_check.stat.checksum != '7a37a9c4532308923adfc1378715cf09aaaa4d13'
+  become: true
+  tags:
+    - homeassistant
+  block:
+    - name: Download thermal_comfort_icons
+      check_mode: false
+      get_url:
+        url: https://github.com/rautesamtr/thermal_comfort_icons/archive/refs/tags/1.3.0.tar.gz
+        checksum: sha256:fc790c528f223c15eef0920bb66b0f1cb0986d41e8a447cf21ee4dae0750aa53
+        dest: /tmp/thermal_comfort_icons.tar.gz
+        mode: "0644"
+        owner: root
+        group: root
+
+    - name: Install thermal_comfort_icons
+      unarchive:
+        src: /tmp/thermal_comfort_icons.tar.gz
+        remote_src: true
+        dest: /mnt/services/homeassistant/www
+        mode: "0644"
+        owner: homeassistant
+        group: homeassistant
+        include: [ thermal_comfort_icons-1.3.0/dist/thermal_comfort_icons.js ]
+        list_files: true
+        extra_opts: [ --strip-components=2 ]
+      register: thermal_comfort_icons_installed
+
+    - name: Delete tar file
+      file:
+        path: /tmp/thermal_comfort_icons.tar.gz
+        state: absent
+
+- name: Create custom_components directory
+  file:
+    dest: /mnt/services/homeassistant/custom_components
+    state: directory
+    owner: homeassistant
+    group: homeassistant
+    mode: "0755"
+  become: true
+  tags:
+    - homeassistant
+
+- name: Create thermal_comfort directory
+  file:
+    dest: /mnt/services/homeassistant/custom_components/thermal_comfort
+    state: directory
+    owner: homeassistant
+    group: homeassistant
+    mode: "0755"
+  become: true
+  tags:
+    - homeassistant
+
+- name: Get stats of the thermal_comfort custom_component
+  stat:
+    path: /mnt/services/homeassistant/custom_components/thermal_comfort/manifest.json
+  register: thermal_comfort_check
+  become: true
+  tags:
+    - homeassistant
+
+- name: Install thermal_comfort if needed
+  when: not thermal_comfort_check.stat.exists
+  become: true
+  tags:
+    - homeassistant
+  block:
+    - name: Download thermal_comfort
+      check_mode: false
+      get_url:
+        url: https://github.com/dolezsa/thermal_comfort/releases/download/2.2.2/thermal_comfort.zip
+        checksum: sha256:55232e2d5dee0d37709132e953c786fa75d9011270b779cd2f492eb19195e1dc
+        dest: /tmp/thermal_comfort.zip
+        mode: "0644"
+        owner: root
+        group: root
+
+    - name: Install thermal_comfort
+      unarchive:
+        src: /tmp/thermal_comfort.zip
+        remote_src: true
+        dest: /mnt/services/homeassistant/custom_components/thermal_comfort
+        mode: "a+rX"
+        owner: homeassistant
+        group: homeassistant
+        list_files: true
+      register: thermal_comfort_installed
+
+    - name: Delete tar file
+      file:
+        path: /tmp/thermal_comfort.zip
+        state: absent
+
+- name: Install homeassistant service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: homeassistant.service
+  tags:
+    - homeassistant
+
+- name: Enable the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: homeassistant
+    enabled: true
+  become: true
+  tags:
+    - homeassistant
+
+- name: Start the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: homeassistant
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - homeassistant
+
+- name: Restart the service
+  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed or homeassistant_conf.changed or thermal_comfort_icons_installed.changed or thermal_comfort_installed.changed or homeassistant_automations.changed or homeassistant_macros.changed or homeassistant_sensors.changed or homeassistant_templates.changed) and not systemd_started.changed)
+  systemd:
+    name: homeassistant
+    state: restarted
+  become: true
+  tags:
+    - homeassistant
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: homeassistant
+    nginx_proxy_pass: http://localhost:8123/
+    nginx_csp_additional: "connect-src *.openstreetmap.org {{ nginx_csp_default }}; img-src *.cartocdn.com *.home-assistant.io {{ nginx_csp_default }}"
+  tags:
+    - homeassistant

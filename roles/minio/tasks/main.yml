@@ -1,0 +1,184 @@
+- name: Gather package facts
+  package_facts:
+    manager: apt
+  no_log: true
+  check_mode: false
+  tags:
+    - minio
+
+- name: Install minio if needed
+  when: '"minio" not in ansible_facts.packages or ansible_facts.packages["minio"][0].version != "20220526054841.0.0"'
+  become: true
+  tags:
+    - minio
+  block:
+
+    - name: Download minio deb
+      check_mode: false
+      get_url:
+        url: https://dl.min.io/server/minio/release/linux-amd64/archive/minio_20220526054841.0.0_amd64.deb
+        dest: /tmp/minio.deb
+        mode: '0644'
+        owner: root
+        group: root
+        checksum: sha256:c2183166105b418675c12a92b759f0ba470d3e4c6de68d9cacbe5fd6ede71a8f
+
+    - name: Install minio
+      apt:
+        deb: /tmp/minio.deb
+      register: minio_installed
+
+    - name: Delete deb file
+      file:
+        path: /tmp/minio.deb
+        state: absent
+
+- name: Add minio group
+  group:
+    name: minio-user
+    system: true
+  become: true
+  tags:
+    - minio
+
+- name: Add minio user
+  user:
+    name: minio-user
+    group: minio-user
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  tags:
+    - minio
+
+- name: Create data dir
+  file:
+    dest: /mnt/minio
+    state: directory
+    owner: minio-user
+    group: minio-user
+    mode: "0755"
+  become: true
+  tags:
+    - minio
+
+- name: Create zfs filesystem
+  when: zfs_root
+  zfs:
+    name: dozer/minio
+    state: present
+    extra_zfs_properties:
+      mountpoint: /mnt/minio
+      'autobackup:bak': 'true'
+  become: true
+  tags:
+    - minio
+
+- name: Set up mount service for dozer/minio
+  when: zfs_root
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    zfs_mount_dataset: dozer/minio
+    zfs_mount_mountpoint: /mnt/minio
+  become: true
+  tags:
+    - minio
+
+- name: Configure minio
+  template:
+    src: minio.cfg.j2
+    dest: /etc/default/minio
+    owner: minio-user
+    group: minio-user
+    mode: "0600"
+    backup: true
+  register: minio_cfg
+  become: true
+  tags:
+    - minio
+
+- name: Create override directory
+  when: zfs_root
+  file:
+    dest: /etc/systemd/system/minio.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - minio
+
+- name: Install minio service override
+  import_role:
+    name: systemd_unit
+  vars:
+    systemd_unit_src: override_service.conf
+    systemd_unit_dest: minio.service.d/override.conf
+    systemd_unit_verify: minio.service
+    systemd_unit_condition: "{{ zfs_root }}"
+  tags:
+    - minio
+
+- name: Enable the service
+  when: not (ansible_check_mode and minio_installed.changed)
+  systemd:
+    name: minio
+    enabled: true
+  become: true
+  tags:
+    - minio
+
+- name: Start the service
+  when: not (ansible_check_mode and minio_installed.changed)
+  systemd:
+    name: minio
+    state: started
+  become: true
+  register: minio_started
+  tags:
+    - minio
+
+- name: Restart minio
+  when: not (ansible_check_mode and minio_installed.changed) and (minio_cfg.changed or systemd_unit.changed) and not minio_started.changed
+  systemd:
+    name: minio
+    state: restarted
+  become: true
+  tags:
+    - minio
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: minio
+    nginx_proxy_pass: http://127.0.0.1:9001/
+  tags:
+    - minio
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: minio-api
+    nginx_proxy_pass: http://localhost:9199/
+    nginx_location_conf: |
+      # Otherwise ARQ uploads return HTTP 413
+      client_max_body_size     60M;
+      # Increase body buffer size to not buffer uploads to disk
+      client_body_buffer_size  60M;
+  tags:
+    - minio
+
+- name: Configure minio client
+  import_tasks: client.yml
+
+- name: Configure minio data
+  import_tasks: data.yml

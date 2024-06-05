@@ -1,0 +1,111 @@
+- name: Add plex group
+  group:
+    name: plex
+    system: true
+  become: true
+  tags:
+    - plex
+
+- name: Add plex user
+  user:
+    name: plex
+    group: plex
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  register: plex_user
+  tags:
+    - plex
+
+- name: Add user to group
+  user:
+    name: plex
+    groups: media
+    append: true
+  become: true
+  tags:
+    - plex
+
+- name: Get all groups
+  getent:
+    database: group
+    split: ':'
+  become: true
+  tags:
+    - plex
+
+- name: Create configuration directory
+  when: not (ansible_check_mode and plex_user.changed)
+  file:
+    dest: /mnt/services/plex
+    state: directory
+    owner: plex
+    group: media
+    mode: "0755"
+  become: true
+  tags:
+    - plex
+
+- name: Create scratch directory
+  when: not (ansible_check_mode and plex_user.changed)
+  file:
+    dest: /mnt/scratch/plex
+    state: directory
+    owner: plex
+    group: media
+    mode: "0755"
+  become: true
+  tags:
+    - plex
+
+- name: Install plex service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: plex.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and plex_user.changed) }}"
+  tags:
+    - plex
+
+- name: Enable the service
+  when: not (ansible_check_mode and (systemd_unit.changed or plex_user.changed))
+  systemd:
+    name: plex
+    enabled: true
+  become: true
+  tags:
+    - plex
+
+- name: Start the service
+  when: not (ansible_check_mode and (systemd_unit.changed or plex_user.changed))
+  systemd:
+    name: plex
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - plex
+
+- name: Restart the service
+  when: not (ansible_check_mode and (systemd_unit.changed or plex_user.changed)) and ((systemd_unit.changed) and not systemd_started.changed)
+  systemd:
+    name: plex
+    state: restarted
+  become: true
+  tags:
+    - plex
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: plex
+    nginx_proxy_pass: http://localhost:32400/
+    nginx_csp_default_src: "plex.tv *.plex.tv wss://*.plex.tv"
+    nginx_csp_additional: "connect-src https://*.plex.direct:32400 plex.tv *.plex.tv wss://*.plex.tv {{ nginx_csp_default }}"
+  tags:
+    - plex

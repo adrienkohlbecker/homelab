@@ -1,0 +1,69 @@
+- name: Install keepalived
+  import_role:
+    name: apt_unit_masked
+  vars:
+    apt_unit_masked_pkg: keepalived
+    apt_unit_masked_unit: keepalived.service
+  tags:
+    - keepalived
+
+- name: Create configuration directory
+  file:
+    dest: /etc/keepalived/conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - keepalived
+
+- name: Copy the configuration
+  copy:
+    src: keepalived.conf
+    dest: /etc/keepalived/keepalived.conf
+    mode: "0644"
+    owner: root
+    group: root
+    backup: true
+  register: keepalived_conf
+  become: true
+  tags:
+    - keepalived
+
+- name: Enable the service
+  when: not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: keepalived
+    enabled: true
+  become: true
+  tags:
+    - keepalived
+
+- name: Count number of configurations
+  find:
+    paths: /etc/keepalived/conf.d
+    patterns: '*.conf'
+  register: keepalived_active_confs
+  become: true
+  tags:
+    - keepalived
+
+- name: Start the service
+  when: not (ansible_check_mode and apt_unit_masked.changed) and keepalived_active_confs.matched > 0
+  systemd:
+    name: keepalived
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - keepalived
+
+- name: Restart the service
+  when: not (ansible_check_mode and apt_unit_masked.changed) and keepalived_active_confs.matched > 0 and (apt_unit_masked.changed or keepalived_conf.changed) and not systemd_started.changed
+  systemd:
+    name: keepalived
+    state: restarted
+  become: true
+  tags:
+    - keepalived

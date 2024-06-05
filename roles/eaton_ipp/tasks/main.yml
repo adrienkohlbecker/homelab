@@ -1,0 +1,82 @@
+- name: Gather package facts
+  package_facts:
+    manager: apt
+  no_log: true
+  check_mode: false
+  tags:
+    - eaton_ipp
+
+- name: Install eaton ipp if needed
+  when: '"ipp-linux" not in ansible_facts.packages or ansible_facts.packages["ipp-linux"][0].version != "1.73.175"'
+  become: true
+  tags:
+    - eaton_ipp
+  block:
+
+    # Not sure why this is timing out...
+    # - name: Download ipp-linux deb
+    #   check_mode: false
+    #   get_url:
+    #     url: https://www.eaton.com/content/dam/eaton/products/backup-power-ups-surge-it-power-distribution/power-management-software-connectivity/eaton-intelligent-power-protector/software/ippv1-73/ipp-linux_1.73.175-1_amd64.deb
+    #     http_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36
+    #     dest: /tmp/ipp-linux.deb
+    #     mode: '0644'
+    #     owner: root
+    #     group: root
+    #     checksum: sha256:9f7e86668a8d7d40fe959e13db6d8bf03ec7bb09002e4dfc03f2f81ad8a98ad3
+
+    - name: Download ipp-linux deb
+      command: curl --quiet --output /tmp/ipp-linux.deb --user-agent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36" https://www.eaton.com/content/dam/eaton/products/backup-power-ups-surge-it-power-distribution/power-management-software-connectivity/eaton-intelligent-power-protector/software/ippv1-73/ipp-linux_1.73.175-1_amd64.deb
+      changed_when: true
+
+    - name: Check shasum
+      command: echo "9f7e86668a8d7d40fe959e13db6d8bf03ec7bb09002e4dfc03f2f81ad8a98ad3 /tmp/ipp-linux.deb" | sha256sum --check --status
+      changed_when: false
+
+    - name: Install ipp-linux
+      apt:
+        deb: /tmp/ipp-linux.deb
+      register: ipp_linux_installed
+
+    - name: Delete deb file
+      file:
+        path: /tmp/ipp-linux.deb
+        state: absent
+
+- name: Enable the service
+  when: not (ansible_check_mode and ipp_linux_installed.changed)
+  systemd:
+    name: eaton-ipp
+    enabled: true
+  become: true
+  tags:
+    - eaton_ipp
+
+- name: Start the service
+  when: not (ansible_check_mode and ipp_linux_installed.changed)
+  systemd:
+    name: eaton-ipp
+    state: started
+  become: true
+  register: ipp_linux_started
+  tags:
+    - eaton_ipp
+
+# - name: Restart eaton_ipp
+#   when: not (ansible_check_mode and ipp_linux_installed.changed) and ipp_linux_cfg.changed and not ipp_linux_started.changed
+#   systemd:
+#     name: eaton_ipp
+#     state: restarted
+#   become: true
+#   tags:
+#     - eaton_ipp
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: ipp
+    nginx_proxy_pass: https://localhost:4680/
+  tags:
+    - eaton_ipp

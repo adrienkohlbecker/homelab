@@ -1,0 +1,107 @@
+- name: Generate wireguard configuration files and QR codes
+  hosts: 127.0.0.1
+  connection: local
+  tasks:
+    - name: Create directory
+      file:
+        dest: "{{ playbook_dir }}/wireguard"
+        state: directory
+        owner: "{{ ansible_facts.user_uid }}"
+        group: "{{ ansible_facts.user_gid }}"
+        mode: "0755"
+      tags:
+        - wireguard
+
+    - name: Create directory
+      file:
+        dest: "{{ playbook_dir }}/wireguard/{{ item }}"
+        state: directory
+        owner: "{{ ansible_facts.user_uid }}"
+        group: "{{ ansible_facts.user_gid }}"
+        mode: "0755"
+      loop: "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
+      tags:
+        - wireguard
+
+    - name: Create directory
+      file:
+        dest: "{{ playbook_dir }}/wireguard/psk"
+        state: directory
+        owner: "{{ ansible_facts.user_uid }}"
+        group: "{{ ansible_facts.user_gid }}"
+        mode: "0755"
+      tags:
+        - wireguard
+
+    - name: Generate preshared key
+      shell: set -euo pipefail; openssl rand -base64 32 | tr -d '\n' > {{ playbook_dir }}/wireguard/psk/{{ item[0] }}-{{ item[1] }}.psk
+      args:
+        executable: /bin/bash
+        creates: "{{ playbook_dir }}/wireguard/psk/{{ item[0] }}-{{ item[1] }}.psk"
+      loop: "{{ wireguard_peers | map(attribute='name') | sort | combinations(2) }}"
+      tags:
+        - wireguard
+
+    - name: Generate wireguard configuration
+      template:
+        src: "{{ playbook_dir }}/roles/wireguard/templates/wg.conf.j2"
+        dest: "{{ playbook_dir }}/wireguard/{{ item }}/home.conf"
+        owner: "{{ ansible_facts.user_uid }}"
+        group: "{{ ansible_facts.user_gid }}"
+        mode: "0644"
+      vars:
+        own_peer_name: "{{ item }}"
+      loop: "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
+      tags:
+        - wireguard
+
+    - name: Generate wireguard QR code
+      shell: set -euo pipefail; if [ -f "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" ]; then bfr=`md5sum "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" -r "{{ playbook_dir }}/wireguard/{{ item }}/home.conf"; aftr=`md5sum "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
+      args:
+        executable: /bin/bash
+      register: qr_generate_cmd
+      changed_when: "'file updated' in qr_generate_cmd.stdout"
+      loop: "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
+      tags:
+        - wireguard
+
+    - name: Generate wireguard configuration
+      template:
+        src: "{{ playbook_dir }}/roles/wireguard/templates/wg.conf.j2"
+        dest: "{{ playbook_dir }}/wireguard/{{ item[1] }}/home ({{ item[0] }} all-traffic).conf"
+        owner: "{{ ansible_facts.user_uid }}"
+        group: "{{ ansible_facts.user_gid }}"
+        mode: "0644"
+      vars:
+        own_peer_name: "{{ item[1] }}"
+        vpn_peer_name: "{{ item[0] }}"
+      with_nested:
+        - "{{ wireguard_peers | selectattr('is_server', 'eq', true) | map(attribute='name') }}"
+        - "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
+      tags:
+        - wireguard
+
+    - name: Generate wireguard QR code
+      shell: set -euo pipefail; if [ -f "{{ playbook_dir }}/wireguard/{{ item[1] }}/qr ({{ item[0] }} all-traffic).png" ]; then bfr=`md5sum "{{ playbook_dir }}/wireguard/{{ item[1] }}/qr ({{ item[0] }} all-traffic).png" | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o "{{ playbook_dir }}/wireguard/{{ item[1] }}/qr ({{ item[0] }} all-traffic).png" -r "{{ playbook_dir }}/wireguard/{{ item[1] }}/home ({{ item[0] }} all-traffic).conf"; aftr=`md5sum "{{ playbook_dir }}/wireguard/{{ item[1] }}/qr ({{ item[0] }} all-traffic).png" | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
+      args:
+        executable: /bin/bash
+      register: qr_generate_cmd
+      changed_when: "'file updated' in qr_generate_cmd.stdout"
+      with_nested:
+        - "{{ wireguard_peers | selectattr('is_server', 'eq', true) | map(attribute='name') }}"
+        - "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
+      tags:
+        - wireguard
+
+    - name: Create a zip archive
+      archive:
+        path:
+          - "{{ playbook_dir }}/wireguard/{{ item }}/*.conf"
+        dest: "{{ playbook_dir }}/wireguard/{{ item }}/{{ item }}.zip"
+        format: zip
+        owner: "{{ ansible_facts.user_uid }}"
+        group: "{{ ansible_facts.user_gid }}"
+        mode: "0644"
+      loop: "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
+      tags:
+        - wireguard

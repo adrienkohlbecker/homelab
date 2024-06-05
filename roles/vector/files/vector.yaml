@@ -1,0 +1,334 @@
+#                                    __   __  __
+#                                    \ \ / / / /
+#                                     \ V / / /
+#                                      \_/  \/
+#
+#                                    V E C T O R
+#                                   Configuration
+#
+# ------------------------------------------------------------------------------
+# Website: https://vector.dev
+# Docs: https://vector.dev/docs
+# Chat: https://chat.vector.dev
+# ------------------------------------------------------------------------------
+
+# Change this to use a non-default directory for Vector data storage:
+# data_dir: "/var/lib/vector"
+
+# Defined fields & types after transformations
+# .host       str
+# .message    str
+# .timestamp  timestamp
+# .pid        int           optional, process id
+# .appname    int           optional, syslog appname
+# .severity   int           optional, syslog severity
+# .facility   int           optional, syslog facility
+
+sources:
+  file_alternatives:
+    type: file
+    include:
+      - /var/log/alternatives.log
+  file_apport:
+    type: file
+    include:
+      - /var/log/apport.log
+  file_apt_history:
+    type: file
+    include:
+      - /var/log/apt/history.log
+  file_apt_term:
+    type: file
+    include:
+      - /var/log/apt/term.log
+  file_dpkg:
+    type: file
+    include:
+      - /var/log/dpkg.log
+  file_unattended_upgrades:
+    type: file
+    include:
+      - /var/log/unattended-upgrades/unattended-upgrades.log
+      - /var/log/unattended-upgrades/unattended-upgrades-shutdown.log
+  file_nginx_access:
+    type: file
+    include:
+      - /var/log/nginx/access.log
+  file_netdata_access:
+    type: file
+    include:
+      - /var/log/netdata/access.log
+  file_netdata_debug:
+    type: file
+    include:
+      - /var/log/netdata/debug.log
+  file_netdata_aclk:
+    type: file
+    include:
+      - /var/log/netdata/aclk.log
+  # TODO: What if docker is not installed?
+  # docker:
+  #   type: docker_logs
+  #   docker_host: unix:///run/podman/podman.sock
+  # journal:
+  #   type: journald
+
+transforms:
+  transformed_alternatives:
+    # message format:
+    # update-alternatives 2023-11-06 11:50:17: run with --install /usr/bin/editor editor ...
+    type: remap
+    inputs: [ file_alternatives ]
+    timezone: local
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+        . |= parse_regex!(.message, r'^(?P<appname>update-alternatives) (?P<timestamp>\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d): (?P<message>.*)$')
+        .timestamp = parse_timestamp!(.timestamp, "%Y-%m-%d %H:%M:%S")
+
+  transformed_apport:
+    # message format:
+    #
+    # ERROR: apport (pid 54650) Wed Nov  8 11:18:12 2023: called for pid 2909, signal 6, core limit 0, dump mode 1
+    # ERROR: apport (pid 54650) Wed Nov  8 11:18:12 2023: executable: /usr/sbin/ipmiseld (command line "/usr/sbin/ipmiseld")
+    # ERROR: apport (pid 54650) Wed Nov  8 11:18:12 2023: apport: report /var/crash/_usr_sbin_ipmiseld.0.crash already exists and unseen, skipping to avoid disk usage DoS
+    type: remap
+    inputs: [ file_apport ]
+    timezone: local
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+        . |= parse_regex!(.message, r'^(?P<severity>\w+): (?P<appname>apport) \(pid (?P<pid>\d+)\) (?P<timestamp>\w+ \w+ [ \d]\d \d\d:\d\d:\d\d \d\d\d\d): (?P<message>.*)$')
+        .timestamp = parse_timestamp!(.timestamp, "%a %b %e %H:%M:%S %Y")
+        .pid = parse_int!(.pid, 10)
+        .severity = to_syslog_severity!(downcase(.severity))
+
+  reduced_apport:
+    type: reduce
+    inputs: [ transformed_apport ]
+    group_by: [ severity, pid, appname ]
+    starts_when: match(string!(.message), r'^called for pid')
+    merge_strategies:
+      message: concat_newline
+      pid: retain
+      severity: retain
+
+  reduced_apt_history:
+    # message format:
+    #
+    # Start-Date: 2023-11-12  10:31:18
+    # Commandline: /usr/bin/apt-get -y -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold install vector=0.34.0-1
+    # Requested-By: ak (1000)
+    # Install: vector:amd64 (0.34.0-1)
+    # End-Date: 2023-11-12  10:31:33
+    type: reduce
+    inputs: [ file_apt_history ]
+    starts_when: match(string!(.message), r'^Start-Date')
+    merge_strategies:
+      message: concat_newline
+
+  reduced_apt_term:
+    # message format:
+    #
+    # Log started: 2023-11-12  14:02:02
+    # Selecting previously unselected package ncdu.
+    # (Reading database ... 107889 files and directories currently installed.)
+    # Preparing to unpack .../ncdu_1.15.1-1_amd64.deb ...
+    # Unpacking ncdu (1.15.1-1) ...
+    # Setting up ncdu (1.15.1-1) ...
+    # Processing triggers for man-db (2.10.2-1) ...
+    # Log ended: 2023-11-12  14:02:02
+    type: reduce
+    inputs: [ file_apt_term ]
+    starts_when: match(string!(.message), r'^Log started')
+    merge_strategies:
+      message: concat_newline
+
+  transformed_apt_history:
+    type: remap
+    inputs: [ reduced_apt_history ]
+    timezone: local
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+        if (.message != "") {
+          . |= parse_regex!(.message, r'^Start-Date: (?P<timestamp>\d\d\d\d-\d\d-\d\d  \d\d:\d\d:\d\d)\n(?P<message>(?s).*)End-Date: (?P<timestamp_end>\d\d\d\d-\d\d-\d\d  \d\d:\d\d:\d\d)\s*$')
+          .message = strip_whitespace(.message)
+          .timestamp = parse_timestamp!(.timestamp, "%Y-%m-%d  %H:%M:%S")
+          .timestamp_end = parse_timestamp!(.timestamp_end, "%Y-%m-%d  %H:%M:%S")
+          .appname = "apt-history"
+        }
+
+  transformed_apt_term:
+    type: remap
+    inputs: [ reduced_apt_term ]
+    timezone: local
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+        if (.message != "") {
+          . |= parse_regex!(.message, r'^Log started: (?P<timestamp>\d\d\d\d-\d\d-\d\d  \d\d:\d\d:\d\d)\n(?P<message>(?s).*)Log ended: (?P<timestamp_end>\d\d\d\d-\d\d-\d\d  \d\d:\d\d:\d\d)\s*$')
+          .message = strip_whitespace(.message)
+          .timestamp = parse_timestamp!(.timestamp, "%Y-%m-%d  %H:%M:%S")
+          .timestamp_end = parse_timestamp!(.timestamp_end, "%Y-%m-%d  %H:%M:%S")
+          .appname = "apt-term"
+        }
+
+  filtered_apt_history:
+    type: filter
+    inputs: [ transformed_apt_history ]
+    condition: .message != ""
+
+  filtered_apt_term:
+    type: filter
+    inputs: [ transformed_apt_term ]
+    condition: .message != ""
+
+  transformed_dpkg:
+    # message format:
+    # 2023-11-12 14:02:02 install ncdu:amd64 <none> 1.15.1-1
+    type: remap
+    inputs: [ file_dpkg ]
+    timezone: local
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+        . |= parse_regex!(.message, r'^(?P<timestamp>\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d) (?P<message>.*)$')
+        .timestamp = parse_timestamp!(.timestamp, "%Y-%m-%d %H:%M:%S")
+        .appname = "dpkg"
+
+  transformed_unattended_upgrades:
+    # message format:
+    # 2023-05-31 06:33:01,196 WARNING Found /var/run/reboot-required, rebooting
+    type: remap
+    inputs: [ file_unattended_upgrades ]
+    timezone: local
+    drop_on_error: true
+    reroute_dropped: true
+    source: |-
+        . |= parse_regex!(.message, r'^(?P<timestamp>\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d,\d\d\d) (?P<severity>[^ ]+) (?P<message>.*)$')
+        .timestamp = parse_timestamp!(.timestamp, "%Y-%m-%d %H:%M:%S,%3f")
+        .appname = "unattended-upgrades"
+        .severity = to_syslog_severity!(downcase(.severity))
+
+  logger:
+    type: remap
+    inputs:
+      - '*.dropped'
+    drop_on_error: true
+    reroute_dropped: false
+    source: |-
+      host = string!(.host)
+      message = string!(.message)
+      component_id = string!(.metadata.dropped.component_id)
+      log("component '" + component_id + "' dropped message from <" + host + ">: " + replace(message, "\n", "\\n"), level: "warn")
+
+  # clean_docker:
+  #   type: remap
+  #   inputs: [ docker ]
+  #   source: |-
+  #     .message = strip_ansi_escape_codes!(.message)
+
+  to_syslog:
+    type: remap
+    inputs: [ transformed_alternatives, reduced_apport, filtered_apt_history, filtered_apt_term, transformed_dpkg, transformed_unattended_upgrades, file_nginx_access, file_netdata_access, file_netdata_debug, file_netdata_aclk ]
+    # <165>1 2003-10-11T22:14:15.003Z mymachine.example.com evntslog - ID47 [exampleSDID@32473 iut="3" eventSource="Application" eventID="1011"] An application event log entry...
+    source: |-
+      data = .
+
+      message = string!(del(data.message))
+      assert!(!is_empty(message), "message is required")
+
+      host = string!(del(data.host))
+      assert!(!is_empty(host), "host is required")
+
+      time = timestamp!(del(data.timestamp))
+      time = format_timestamp!(time, format: "%Y-%m-%dT%H:%M:%S%.f%:z")
+
+      version = "1"
+      msgid = "-"
+
+      appname = del(data.appname)
+      if is_null(appname) {
+        appname = "-"
+      } else {
+        appname = string!(appname)
+      }
+
+      pid = del(data.pid)
+      if is_null(pid) {
+        pid = "-"
+      } else {
+        pid = format_int!(int!(pid))
+      }
+
+      severity = del(data.severity)
+      if is_null(severity) {
+        severity = 6 # info by default
+      } else {
+        severity = int!(severity)
+      }
+
+      facility = del(data.facility)
+      if is_null(facility) {
+        facility = 3 # daemon by default
+      } else {
+        facility = int!(facility)
+      }
+
+      priority = format_int!( facility * 8 + severity )
+
+      if (!is_empty(data)) {
+        data = map_values(data, recursive: true) -> |value| { to_string!(value) }
+        data = encode_key_value(data)
+
+        message = "[data@32473 {{ data }} ] {{ message }}"
+      }
+
+      . = {}
+      .message, err = "<{{ priority }}>{{ version }} {{ time }} {{ host }} {{ appname }} {{ pid }} {{ msgid }} {{ message }}"
+      if err != null {
+        log("Unable to template messge: " + err, level: "error")
+      }
+
+#   clef:
+#     type: remap
+#     inputs: [ journal ]
+#     source: |-
+#       .@t = del(.timestamp)
+#       .@m = del(.message)
+#       .@l = del(.severity) || "info"
+
+sinks:
+#   seq:
+#     type: http
+#     inputs: [ clef ]
+#     uri: http://192.168.64.6:5341/api/events/raw?clef
+#     encoding:
+#       codec: json
+#     framing:
+#       method: newline_delimited
+  devlog:
+    type: socket
+    mode: unix
+    inputs: [ to_syslog ]
+    path: /run/systemd/journal/stdout
+    encoding:
+      codec: text
+    framing:
+      method: newline_delimited
+  # test:
+  #   type: file
+  #   inputs: [  ]
+  #   path: /tmp/vector.log
+  #   encoding:
+  #     codec: json
+  #   framing:
+  #     method: newline_delimited
+
+# Vector's GraphQL API (disabled by default)
+# Uncomment to try it out with the `vector top` command or
+# in your browser at http://localhost:8686
+api:
+  enabled: true
+  address: "127.0.0.1:8686"
