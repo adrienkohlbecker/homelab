@@ -104,6 +104,7 @@
     - docker
 
 - name: Enable memory cgroup and swap accounting
+  when: grub_bootloader
   copy:
     dest: /etc/default/grub.d/99-docker.cfg
     content: "GRUB_CMDLINE_LINUX=\"$GRUB_CMDLINE_LINUX cgroup_enable=memory swapaccount=1\"\n"
@@ -117,7 +118,7 @@
     - docker
 
 - name: Update grub
-  when: grub_cfg.changed
+  when: grub_bootloader and grub_cfg.changed
   command: update-grub
   changed_when: true
   become: true
