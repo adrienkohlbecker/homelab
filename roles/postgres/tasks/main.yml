@@ -1,0 +1,85 @@
+- name: Add postgres group
+  group:
+    name: postgres
+    system: true
+  become: true
+  tags:
+    - postgres
+
+- name: Add postgres user
+  user:
+    name: postgres
+    group: postgres
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  register: postgres_user
+  tags:
+    - postgres
+
+- name: Create configuration directory
+  when: not (ansible_check_mode and postgres_user.changed)
+  file:
+    dest: /mnt/services/postgres
+    state: directory
+    owner: postgres
+    group: postgres
+    mode: "0700"
+  become: true
+  tags:
+    - postgres
+
+- name: Init database
+  command: >-
+    podman run
+      --rm --quiet
+      --volume /mnt/services/postgres:/var/lib/postgresql/data
+      --user {{ postgres_user.uid }}:{{ postgres_user.group }}
+      --env POSTGRES_PASSWORD="{{ postgres_password }}"
+      --env POSTGRES_INITDB_ARGS="--encoding=UTF8 --locale=en_US.UTF-8 --data-checksums"
+      docker.io/postgres:16.3
+      docker-ensure-initdb.sh
+  args:
+    creates: /var/lib/postgresql/data/PG_VERSION
+  become: true
+  tags:
+    - postgres
+
+- name: Install postgres service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: postgres.service
+  tags:
+    - postgres
+
+- name: Enable the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: postgres
+    enabled: true
+  become: true
+  tags:
+    - postgres
+
+- name: Start the service
+  when: not (ansible_check_mode and systemd_unit.changed)
+  systemd:
+    name: postgres
+    state: started
+  register: systemd_started
+  become: true
+  tags:
+    - postgres
+
+- name: Restart the service
+  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed) and not systemd_started.changed)
+  systemd:
+    name: postgres
+    state: restarted
+  become: true
+  tags:
+    - postgres

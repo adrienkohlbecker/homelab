@@ -54,6 +54,7 @@
     - libvirt
     - vector
     - eaton_ipp
+    - postgres
 
 - name: Add more services
   hosts: all:!bunk
