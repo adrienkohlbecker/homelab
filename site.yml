@@ -97,6 +97,7 @@
     - speedtest
     - filebrowser
     - homeassistant
+    - kuma
 
 - name: Reboot check
   hosts: all:!bunk
