@@ -116,6 +116,7 @@
   vars:
     nginx_subdomain: unifi
     nginx_proxy_pass: https://{{ external_ips.udm }}:443/
+    nginx_csp_additional: img-src static.ui.com {{ nginx_csp_default }}
   tags:
     - nginx
 
