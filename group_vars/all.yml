@@ -34,7 +34,7 @@ root_email: adrien.kohlbecker@gmail.com
 smtp_host: smtp.sendgrid.net
 smtp_port: 587
 smtp_user: apikey
-smtp_password: !vault |
+postfix_smtp_password: !vault |
           $ANSIBLE_VAULT;1.1;AES256
           31303136383461396361636230386633666164643535326235643762313931353161663730393133
           3561376666656336393331333137323866666638343939370a323161643732626137313036646633
