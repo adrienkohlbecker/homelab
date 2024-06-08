@@ -99,6 +99,7 @@
     - filebrowser
     - homeassistant
     - kuma
+    - healthchecks
 
 - name: Reboot check
   hosts: all:!bunk

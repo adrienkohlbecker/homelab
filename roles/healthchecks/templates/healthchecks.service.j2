@@ -1,0 +1,68 @@
+# jinja2: lstrip_blocks: "True"
+# healthchecks.service #######################################################################
+[Unit]
+Description=healthchecks
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+Delegate=yes
+TimeoutSec=120
+RestartSec=5
+Type=notify
+NotifyAccess=all
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name healthchecks \
+    --log-driver journald \
+    --log-opt tag="healthchecks" \
+    --volume /mnt/services/healthchecks:/config \
+    --volume /opt/healthchecks.png:/app/healthchecks/static-collected/img/logo.png \
+    --env PUID={{ healthchecks_user.uid }} \
+    --env PGID={{ healthchecks_user.group }}  \
+    --env RP_ID=healthchecks.{{ inventory_hostname }}.{{ domain }} \
+    --env SITE_ROOT=https://healthchecks.{{ inventory_hostname }}.{{ domain }} \
+    --env SITE_NAME=Healthchecks \
+    --env ADMINS={{ root_email }} \
+    --env SUPERUSER_EMAIL={{ root_email }} \
+    --secret=healthchecks_password,type=env,target=SUPERUSER_PASSWORD \
+    --env DEBUG=False \
+    --env DEFAULT_FROM_EMAIL="healthchecks@{{ domain }}" \
+    --env EMAIL_HOST="{{ smtp_host }}" \
+    --env EMAIL_PORT="{{ smtp_port }}" \
+    --env EMAIL_HOST_USER="{{ smtp_user}}" \
+    --secret=healthchecks_sendgrid_password,type=env,target=EMAIL_HOST_PASSWORD \
+    --env EMAIL_USE_TLS="True" \
+    --env SITE_LOGO_URL=/static/img/logo.png \
+    --env UWSGI_DISABLE_LOGGING=1 \
+    --env UWSGI_HOOK_MASTER_START="unix_signal:15 gracefully_kill_them_all" \
+    --publish 127.0.0.1:8000:8000/tcp \
+    --health-cmd "curl --head --request GET --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8000/" \
+    --health-startup-cmd "curl --head --request GET --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8000/" \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    docker.io/linuxserver/healthchecks:3.3.20240603
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}
