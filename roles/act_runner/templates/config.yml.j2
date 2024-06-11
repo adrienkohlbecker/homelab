@@ -1,0 +1,58 @@
+# Example configuration file, it's safe to copy this as the default config file without any modification.
+
+# You don't have to copy this file to your instance,
+# just run `./act_runner generate-config > config.yaml` to generate a config file.
+
+log:
+  # The level of logging, can be trace, debug, info, warn, error, fatal
+  level: info
+
+runner:
+  # Where to store the registration result.
+  file: /mnt/services/act_runner/.runner
+  # Execute how many tasks concurrently at the same time.
+  capacity: 4
+  # Extra environment variables to run jobs.
+  envs: {}
+  # Extra environment variables to run jobs from a file.
+  # It will be ignored if it's empty or the file doesn't exist.
+  env_file: /mnt/services/act_runner/.env
+  # The timeout for a job to be finished.
+  # Please note that the Gitea instance also has a timeout (3h by default) for the job.
+  # So the job could be stopped by the Gitea instance if it's timeout is shorter than this.
+  timeout: 1h
+  # Whether skip verifying the TLS certificate of the Gitea instance.
+  insecure: false
+  # The timeout for fetching the job from the Gitea instance.
+  fetch_timeout: 5s
+  # The interval for fetching the job from the Gitea instance.
+  fetch_interval: 2s
+  # The labels of a runner are used to determine which jobs the runner can run, and how to run them.
+  # Like: "macos-arm64:host" or "ubuntu-latest:docker://gitea/runner-images:ubuntu-latest"
+  # Find more images provided by Gitea at https://gitea.com/gitea/runner-images .
+  # If it's empty when registering, it will ask for inputting labels.
+  # If it's empty when execute `daemon`, will use labels in `.runner` file.
+  labels: []
+
+cache:
+  # Enable cache server to use actions/cache.
+  enabled: true
+  # The directory to store the cache data.
+  # If it's empty, the cache data will be stored in $HOME/.cache/actcache.
+  dir: /mnt/scratch/act_runner/cache
+  # The host of the cache server.
+  # It's not for the address to listen, but the address to connect from job containers.
+  # So 0.0.0.0 is a bad choice, leave it empty to detect automatically.
+  host: ""
+  # The port of the cache server.
+  # 0 means to use a random available port.
+  port: 0
+  # The external cache server URL. Valid only when enable is true.
+  # If it's specified, act_runner will use this URL as the ACTIONS_CACHE_URL rather than start a server by itself.
+  # The URL should generally end with "/".
+  external_server: ""
+
+host:
+  # The parent directory of a job's working directory.
+  # If it's empty, $HOME/.cache/act/ will be used.
+  workdir_parent: /mnt/scratch/act_runner/workdir

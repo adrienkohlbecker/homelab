@@ -1,0 +1,32 @@
+# jinja2: lstrip_blocks: "True"
+# act_runner.service #######################################################################
+[Unit]
+Description=act_runner
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service zfs_mount_mnt_scratch.service zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service zfs_mount_mnt_scratch.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=120
+TimeoutStopSec=30
+RestartSec=5
+
+Type=simple
+User=act_runner
+Group=act_runner
+WorkingDirectory=/mnt/services/act_runner/
+ExecStart=/usr/local/bin/act_runner daemon --config /mnt/services/act_runner/config.yml
+ExecReload=/bin/kill -s HUP $MAINPID
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}
