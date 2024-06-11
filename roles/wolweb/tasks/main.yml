@@ -46,6 +46,7 @@
     group: wolweb
     mode: "0600"
     backup: true
+    validate: jq . %s
   register: wolweb_conf
   become: true
   tags:
@@ -59,6 +60,7 @@
     group: wolweb
     mode: "0600"
     backup: true
+    validate: jq . %s
   register: wolweb_devices
   become: true
   tags:

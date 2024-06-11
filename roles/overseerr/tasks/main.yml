@@ -65,6 +65,7 @@
     group: media
     mode: "0600"
     backup: true
+    validate: jq . %s
   register: overseerr_conf
   vars:
     overseerr_settings_json: "{{ overseer_settings_b64['content'] | default('e30=') | b64decode | from_json }}"

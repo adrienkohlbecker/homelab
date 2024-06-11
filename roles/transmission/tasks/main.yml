@@ -67,6 +67,7 @@
     group: media
     mode: "0600"
     backup: true
+    validate: jq . %s
   register: transmission_conf
   become: true
   tags:
