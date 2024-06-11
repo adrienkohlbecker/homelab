@@ -17,6 +17,7 @@
     group: root
     mode: "0600"
     backup: true
+    validate: jq . %s
   register: filebrowser_conf
   become: true
   tags:
