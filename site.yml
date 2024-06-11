@@ -92,6 +92,7 @@
     - plex
     - tautulli
     - gitea
+    - act_runner
     - transmission
     - getmail
     - quotes
