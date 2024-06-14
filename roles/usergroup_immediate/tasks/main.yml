@@ -1,6 +1,6 @@
 - name: Add user to group
   user:
-    name: "{{ ansible_ssh_user }}"
+    name: "{{ ansible_user }}"
     groups: "{{ usergroup_immediate_group }}"
     append: true
   register: usergroup
