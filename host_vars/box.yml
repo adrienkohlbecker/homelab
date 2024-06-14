@@ -66,3 +66,6 @@ minio_users:
           3561313531653038363638633966666365623739316634613734
 
 smb_shares: []
+
+subid_users:
+  - act_runner

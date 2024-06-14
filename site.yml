@@ -13,6 +13,7 @@
     - keyboard
     - console
     - timezone
+    - subid
     - fancontrol
     - unattended_upgrades
     - logrotate
@@ -92,6 +93,7 @@
     - plex
     - tautulli
     - gitea
+    - nodejs
     - act_runner
     - transmission
     - getmail

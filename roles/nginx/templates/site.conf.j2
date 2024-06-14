@@ -12,11 +12,6 @@ server {
   add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
   add_header Reporting-Endpoints       'csp-endpoint="https://csplogger.{{ inventory_hostname }}.{{ domain }}/log"' always;
 
-  # . files
-  location ~ /\.(?!well-known) {
-      deny all;
-  }
-
   # favicon.ico
   location = /favicon.ico {
       log_not_found off;
