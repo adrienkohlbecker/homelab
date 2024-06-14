@@ -76,6 +76,7 @@
   command: act_runner register -c /mnt/services/act_runner/config.yml --no-interactive --instance https://gitea.{{ inventory_hostname }}.{{ domain }} --token {{ gitea_runner_registration_token }}
   args:
     creates: /mnt/services/act_runner/.runner
+  timeout: 5
   become: true
   become_user: act_runner
   register: act_runner_registration
@@ -86,7 +87,6 @@
   slurp:
     src: /mnt/services/act_runner/.runner
   register: act_runner_settings_b64
-  failed_when: false
   become: true
   tags:
     - act_runner

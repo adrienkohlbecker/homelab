@@ -1,10 +1,10 @@
 #!/bin/bash
-# shellcheck source=../../bash/files/functions.sh
-source /usr/local/lib/functions.sh
+set -euo pipefail
 
 unit=${1:-}
 if [ -z "$unit" ]; then
-  f_fail "Expected unit as argument, got: '$*'"
+  echo "Expected unit as argument, got: '$*'" >&2
+  exit 1
 fi
 
 items="{{ (apt_unit_masked_unit is string) | ternary([apt_unit_masked_unit], apt_unit_masked_unit) | join(' ') }}"
@@ -18,9 +18,9 @@ done
 
 if [ "$found" = true ]; then
   msg="denied call with [$*]"
-  f_error "policy-rc.d $msg"
+  echo "policy-rc.d $msg" >&2
   logger --priority user.warn --tag policy-rc.d "$msg"
   exit 101
 else
-  f_error "policy-rc.d called with $*"
+  echo "policy-rc.d called with $*" >&2
 fi

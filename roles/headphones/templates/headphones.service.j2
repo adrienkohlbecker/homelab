@@ -33,7 +33,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="headphones" \
     --env PUID={{ headphones_user.uid }} \
-    --env PGID={{ ansible_facts.getent_group['media'][1] }} \
+    --env PGID={{ media_group.gid }} \
     --env TZ=Europe/Paris \
     --volume /mnt/services/headphones:/config \
     --volume /mnt/media:/media \

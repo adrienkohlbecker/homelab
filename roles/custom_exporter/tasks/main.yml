@@ -95,6 +95,20 @@
   tags:
     - custom_exporter
 
+- name: Ensure netdata directory exists
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/netdata/
+    - /etc/netdata/health.d/
+  become: true
+  tags:
+    - custom_exporter
+
 - name: Copy the alerting config
   copy:
     src: alerts.conf

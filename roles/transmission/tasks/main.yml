@@ -59,6 +59,17 @@
   tags:
     - transmission
 
+- name: Create storage directory
+  file:
+    dest: /mnt/media/Torrents
+    state: directory
+    owner: transmission
+    group: media
+    mode: "0775"
+  become: true
+  tags:
+    - transmission
+
 - name: Configure transmission
   template:
     src: settings.json.j2

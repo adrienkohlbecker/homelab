@@ -37,6 +37,7 @@
     tasks_from: template
   vars:
     systemd_unit_src: kuma.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and kuma_user.changed) }}"
   tags:
     - kuma
 

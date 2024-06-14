@@ -103,6 +103,17 @@
   tags:
     - docker
 
+- name: Ensure grub directory exists
+  file:
+    dest: /etc/default/grub.d/
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - docker
+
 - name: Enable memory cgroup and swap accounting
   when: grub_bootloader
   copy:
@@ -150,15 +161,11 @@
   tags:
     - docker
 
-- name: Monitor cron entry
-  file:
-    path: /var/log/jobs/docker_clean
-    state: touch
-    access_time: preserve
-    modification_time: preserve
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+- name: Monitor clean script
+  import_role:
+    name: cron
+    tasks_from: monitor
+  vars:
+    cron_entry: docker_clean
   tags:
     - docker

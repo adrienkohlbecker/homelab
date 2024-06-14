@@ -1,3 +1,17 @@
+- name: site | Ensure directories exists
+  file:
+    state: directory
+    path: "{{ item }}"
+    mode: '0755'
+    owner: root
+    group: root
+  loop:
+    - /etc/nginx/sites-available
+    - /etc/nginx/sites-enabled
+  become: true
+  tags:
+    - nginx_site
+
 - name: site | Configure nginx site
   template:
     src: site.conf.j2

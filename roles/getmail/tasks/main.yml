@@ -59,15 +59,11 @@
   tags:
     - getmail
 
-- name: Monitor cron entry
-  file:
-    path: /var/log/jobs/getmail
-    state: touch
-    access_time: preserve
-    modification_time: preserve
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+- name: Monitor snapshot script
+  import_role:
+    name: cron
+    tasks_from: monitor
+  vars:
+    cron_entry: getmail
   tags:
     - getmail

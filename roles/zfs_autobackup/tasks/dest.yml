@@ -19,11 +19,3 @@
   become: true
   tags:
     - zfs_autobackup
-
-- name: dest | Monitor cron entry
-  file:
-    path: /var/log/jobs/zfs_autosync
-    state: absent
-  become: true
-  tags:
-    - zfs_autobackup

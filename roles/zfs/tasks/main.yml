@@ -89,16 +89,12 @@
   tags:
     - zfs
 
-- name: Monitor cron entry
-  file:
-    path: /var/log/jobs/zfs_health
-    state: touch
-    access_time: preserve
-    modification_time: preserve
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+- name: Monitor health script
+  import_role:
+    name: cron
+    tasks_from: monitor
+  vars:
+    cron_entry: zfs_health
   tags:
     - zfs
 
@@ -117,17 +113,12 @@
   tags:
     - zfs
 
-- name: Monitor cron entry
-  file:
-    path: /var/log/jobs/zfs_trim_{{ item }}
-    state: touch
-    access_time: preserve
-    modification_time: preserve
-    owner: root
-    group: root
-    mode: "0644"
-  loop: "{{ zfs_trim_pools }}"
-  become: true
+- name: Monitor trim scripts
+  import_role:
+    name: cron
+    tasks_from: monitor
+  vars:
+    cron_entry: "{{ zfs_trim_pools }}"
   tags:
     - zfs
 

@@ -21,7 +21,6 @@
       - screen
       - socat
       - stress
-      - sudo
       - sysstat
       - telnet
       - tig

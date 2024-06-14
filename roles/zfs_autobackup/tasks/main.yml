@@ -154,16 +154,12 @@
   tags:
     - zfs_autobackup
 
-- name: Monitor cron entry
-  file:
-    path: /var/log/jobs/zfs_autosnapshot
-    state: touch
-    access_time: preserve
-    modification_time: preserve
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+- name: Monitor snapshot script
+  import_role:
+    name: cron
+    tasks_from: monitor
+  vars:
+    cron_entry: zfs_autosnapshot
   tags:
     - zfs_autobackup
 
