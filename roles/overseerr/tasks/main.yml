@@ -19,19 +19,20 @@
   tags:
     - overseerr
 
+- name: Add media group
+  group:
+    name: media
+    system: true
+  become: true
+  register: media_group
+  tags:
+    - overseerr
+
 - name: Add user to group
   user:
     name: overseerr
     groups: media
     append: true
-  become: true
-  tags:
-    - overseerr
-
-- name: Get all groups
-  getent:
-    database: group
-    split: ":"
   become: true
   tags:
     - overseerr

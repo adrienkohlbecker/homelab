@@ -9,8 +9,24 @@
 
 - name: Check macvlan_subnet is valid
   assert:
-    that: macvlan_subnet == macvlan_subnet | ansible.utils.ipaddr('net') | ansible.utils.ipaddr(macvlan_parent_subnet) | ansible.utils.ipaddr(home_subnet)
+    that: macvlan_subnet == macvlan_subnet | ansible.utils.ipaddr('net')
     fail_msg: "macvlan_subnet is not in a valid range or has the wrong format (network/prefixlength)"
+    success_msg: "macvlan_subnet is valid"
+  tags:
+    - macvlan
+
+- name: Check macvlan_subnet is in parent subnet
+  assert:
+    that: macvlan_subnet == macvlan_subnet | ansible.utils.ipaddr(macvlan_parent_subnet)
+    fail_msg: "macvlan_subnet is not in a valid range"
+    success_msg: "macvlan_subnet is valid"
+  tags:
+    - macvlan
+
+- name: Check macvlan_subnet is in home subnet
+  assert:
+    that: macvlan_subnet == macvlan_subnet | ansible.utils.ipaddr(home_subnet)
+    fail_msg: "macvlan_subnet is not in a valid range"
     success_msg: "macvlan_subnet is valid"
   tags:
     - macvlan

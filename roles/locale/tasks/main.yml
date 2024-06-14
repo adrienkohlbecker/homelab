@@ -4,10 +4,12 @@
       - locales
     cache_valid_time: 3600
   become: true
+  register: apt_locales
   tags:
     - locale
 
 - name: Set up locales
+  when: not (ansible_check_mode and apt_locales.changed)
   locale_gen:
     name: en_US.UTF-8
   become: true

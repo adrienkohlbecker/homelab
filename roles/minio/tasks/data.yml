@@ -1,3 +1,11 @@
+- name: data | Install jq
+  apt:
+    pkg: jq
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - minio
+
 - name: data | Create users
   command: mcli admin user add default {{ item.access_key }} {{ item.secret_key }}
   args:

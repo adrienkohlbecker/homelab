@@ -1,0 +1,20 @@
+- name: monitor | Ensure job log directory exists
+  file:
+    dest: /var/log/jobs
+    state: directory
+    owner: root
+    group: root
+    mode: "0777"
+  become: true
+
+- name: monitor | Monitor cron entry
+  file:
+    path: /var/log/jobs/{{ item }}
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ cron_entry is string | ternary([cron_entry], cron_entry) }}"
+  become: true

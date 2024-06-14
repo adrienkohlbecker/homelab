@@ -162,6 +162,7 @@
     group: homeassistant
     mode: "0755"
   become: true
+  register: homeassistant_www_dir
   tags:
     - homeassistant
 
@@ -190,6 +191,7 @@
         group: root
 
     - name: Install thermal_comfort_icons
+      when: not (ansible_check_mode and homeassistant_www_dir.changed)
       unarchive:
         src: /tmp/thermal_comfort_icons.tar.gz
         remote_src: true
@@ -226,6 +228,16 @@
     group: homeassistant
     mode: "0755"
   become: true
+  register: homeassistant_thermal_comfort_dir
+  tags:
+    - homeassistant
+
+- name: Install unzip
+  apt:
+    pkg:
+      - unzip
+    cache_valid_time: 3600
+  become: true
   tags:
     - homeassistant
 
@@ -254,6 +266,7 @@
         group: root
 
     - name: Install thermal_comfort
+      when: not (ansible_check_mode and homeassistant_thermal_comfort_dir.changed)
       unarchive:
         src: /tmp/thermal_comfort.zip
         remote_src: true
@@ -275,6 +288,7 @@
     tasks_from: template
   vars:
     systemd_unit_src: homeassistant.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and homeassistant_user.changed) }}"
   tags:
     - homeassistant
 

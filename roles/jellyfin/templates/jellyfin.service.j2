@@ -30,7 +30,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name jellyfin \
-    --user {{ jellyfin_user.uid }}:{{ ansible_facts.getent_group['media'][1] }} \
+    --user {{ jellyfin_user.uid }}:{{ media_group.gid }} \
     --log-driver journald \
     --log-opt tag="jellyfin" \
     --volume /mnt/services/jellyfin:/config \

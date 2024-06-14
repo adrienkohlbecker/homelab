@@ -33,14 +33,6 @@
   tags:
     - timezone
 
-- name: Update initramfs
-  when: timezone_cfg.changed or localtime_cfg.changed
-  command: update-initramfs -u -k all
-  become: true
-  changed_when: true
-  tags:
-    - timezone
-
 - name: Ask to reboot
   when: timezone_cfg.changed or localtime_cfg.changed
   file:

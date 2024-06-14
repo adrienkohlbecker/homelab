@@ -6,6 +6,15 @@
   tags:
     - jellyfin
 
+- name: Add media group
+  group:
+    name: media
+    system: true
+  become: true
+  register: media_group
+  tags:
+    - jellyfin
+
 - name: Add jellyfin user
   user:
     name: jellyfin
@@ -19,10 +28,11 @@
   tags:
     - jellyfin
 
-- name: Get all groups
-  getent:
-    database: group
-    split: ':'
+- name: Add user to group
+  user:
+    name: jellyfin
+    groups: media
+    append: true
   become: true
   tags:
     - jellyfin
@@ -40,6 +50,7 @@
     - jellyfin
 
 - name: Create scratch directory
+  when: not (ansible_check_mode and jellyfin_user.changed)
   file:
     dest: /mnt/scratch/jellyfin
     state: directory
@@ -51,6 +62,7 @@
     - jellyfin
 
 - name: Create transcodes directory
+  when: not (ansible_check_mode and jellyfin_user.changed)
   file:
     dest: /mnt/scratch/jellyfin/transcodes
     state: directory
@@ -62,6 +74,7 @@
     - jellyfin
 
 - name: Create cache directory
+  when: not (ansible_check_mode and jellyfin_user.changed)
   file:
     dest: /mnt/scratch/jellyfin/cache
     state: directory
@@ -73,20 +86,13 @@
     - jellyfin
 
 - name: Create logs directory
+  when: not (ansible_check_mode and jellyfin_user.changed)
   file:
     dest: /var/log/jellyfin
     state: directory
     owner: "{{ jellyfin_user.uid }}"
     group: media
     mode: "0755"
-  become: true
-  tags:
-    - jellyfin
-
-- name: Get all groups
-  getent:
-    database: group
-    split: ':'
   become: true
   tags:
     - jellyfin

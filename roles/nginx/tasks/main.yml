@@ -17,6 +17,7 @@
     - nginx
 
 - name: Generate Diffie-Hellman parameters
+  when: not (ansible_check_mode and apt_unit_masked.changed)
   openssl_dhparam:
     path: /etc/nginx/dhparam.pem
     size: 2048

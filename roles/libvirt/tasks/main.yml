@@ -99,10 +99,10 @@
 - name: Compute network values
   set_fact:
     libvirt_network_mac: "{{ '52:54:00' | random_mac(seed=inventory_hostname) }}"
-    libvirt_network_gateway: "{{ libvirt_default_network | ansible.utils.ipaddr('address') }}"
-    libvirt_network_netmask: "{{ libvirt_default_network | ansible.utils.ipaddr('netmask') }}"
-    libvirt_network_dhcp_start: "{{ libvirt_default_network | ansible.utils.ipaddr('next_usable') }}"
-    libvirt_network_dhcp_end: "{{ libvirt_default_network | ansible.utils.ipaddr('last_usable') }}"
+    libvirt_network_gateway: "{{ libvirt_default_network | ansible.utils.ipaddr('subnet') | ansible.utils.next_nth_usable(1) }}"
+    libvirt_network_netmask: "{{ libvirt_default_network | ansible.utils.ipaddr('subnet') | ansible.utils.ipaddr('netmask') }}"
+    libvirt_network_dhcp_start: "{{ libvirt_default_network | ansible.utils.ipaddr('subnet') | ansible.utils.next_nth_usable(2) }}"
+    libvirt_network_dhcp_end: "{{ libvirt_default_network | ansible.utils.ipaddr('subnet') | ansible.utils.ipaddr('last_usable') }}"
   tags:
     - libvirt
 
@@ -192,15 +192,11 @@
   tags:
     - libvirt
 
-- name: Monitor cron entry
-  file:
-    path: /var/log/jobs/virsh_backup
-    state: touch
-    access_time: preserve
-    modification_time: preserve
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+- name: Monitor backup script
+  import_role:
+    name: cron
+    tasks_from: monitor
+  vars:
+    cron_entry: virsh_backup
   tags:
-    - docker
+    - libvirt

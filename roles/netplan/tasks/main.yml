@@ -1,3 +1,11 @@
+- name: Install netplan
+  apt:
+    pkg: netplan.io
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - netplan
+
 - name: Configure netplan
   template:
     src: config.yaml.j2
