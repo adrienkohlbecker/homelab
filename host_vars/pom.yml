@@ -9,7 +9,7 @@ zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set
   - rpool/ROOT/jammy
 zfs_has_bpool: false
 
-libvirt_default_network: 10.123.49.0/24
+libvirt_default_network: 10.123.51.0/24
 
 sensor_modules: []
 
@@ -53,6 +53,9 @@ fancontrol_settings: |
   MINSTART=hwmon4/pwm3=40 hwmon4/pwm2=120
   MINSTOP=hwmon4/pwm3=10 hwmon4/pwm2=90
   MINPWM=hwmon4/pwm3=10 hwmon4/pwm2=90
+
+netdata_contexts: {}
+netdata_collectors: []
 
 smb_shares: []
 subid_users: []
