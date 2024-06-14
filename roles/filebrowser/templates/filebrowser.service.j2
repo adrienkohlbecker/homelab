@@ -32,7 +32,7 @@ ExecStart=/usr/bin/podman run \
     --name filebrowser \
     --log-driver journald \
     --log-opt tag="filebrowser" \
-    --volume /home/{{ ansible_ssh_user }}:/srv/home:ro \
+    --volume {{ ansible_user_dir }}:/srv/home:ro \
     --volume /mnt/data:/srv/data:ro \
     --volume /mnt/media:/srv/media:ro \
     --volume /mnt/services:/srv/services:ro \

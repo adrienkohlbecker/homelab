@@ -19,11 +19,11 @@ TimeoutStopSec=30
 RestartSec=5
 
 Type=simple
-User=git
-Group=git
+User={{ gitea_user.name }}
+Group={{ gitea_user.name }}
 WorkingDirectory=/mnt/services/gitea/
 ExecStart=/usr/local/bin/gitea web --config /etc/gitea/app.ini
-Environment=USER=git HOME=/home/git GITEA_WORK_DIR=/mnt/services/gitea
+Environment=USER={{ gitea_user.name }} HOME={{ gitea_user.home }} GITEA_WORK_DIR=/mnt/services/gitea
 
 [Install]
 WantedBy=default.target

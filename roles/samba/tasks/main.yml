@@ -101,7 +101,7 @@
     - samba
 
 - name: Configure Samba user
-  shell: set -euo pipefail; (pdbedit --user={{ ansible_ssh_user }} 2>&1 > /dev/null) || (echo '{{ samba_password }}'; echo '{{ samba_password }}') | smbpasswd -s -a {{ ansible_ssh_user }}
+  shell: set -euo pipefail; (pdbedit --user={{ ansible_user }} 2>&1 > /dev/null) || (echo '{{ samba_password }}'; echo '{{ samba_password }}') | smbpasswd -s -a {{ ansible_user }}
   args:
     executable: /bin/bash
   register: smbpasswd

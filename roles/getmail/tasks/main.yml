@@ -9,10 +9,10 @@
 
 - name: Create getmail config directory
   file:
-    dest: /home/{{ ansible_ssh_user }}/.config/getmail
+    dest: "{{ ansible_user_dir }}/.config/getmail"
     state: directory
-    owner: "{{ ansible_ssh_user }}"
-    group: "{{ ansible_ssh_user }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: "0755"
   tags:
     - getmail
@@ -21,8 +21,8 @@
   file:
     dest: "{{ item }}"
     state: directory
-    owner: "{{ ansible_ssh_user }}"
-    group: "{{ ansible_ssh_user }}"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: "0755"
   become: true
   loop:
@@ -36,9 +36,9 @@
 - name: Configure getmail
   template:
     src: getmailrc.j2
-    dest: /home/{{ ansible_ssh_user }}/.config/getmail/getmailrc
-    owner: "{{ ansible_ssh_user }}"
-    group: "{{ ansible_ssh_user }}"
+    dest: "{{ ansible_user_dir }}/.config/getmail/getmailrc"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
     mode: "0600"
     backup: true
     validate: getmail --dump --rcfile %s
@@ -51,7 +51,7 @@
     name: getmail
     minute: 24
     hour: 0
-    job: /usr/local/bin/run_job daily getmail su {{ ansible_ssh_user }} -c getmail
+    job: /usr/local/bin/run_job daily getmail su {{ ansible_user }} -c getmail
     user: root
     cron_file: ansible_getmail
     backup: true
