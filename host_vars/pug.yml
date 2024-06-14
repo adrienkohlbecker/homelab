@@ -119,3 +119,4 @@ netdata_collectors:
   - go.d:collector:x509check:host_cert
 
 smb_shares: []
+subid_users: []

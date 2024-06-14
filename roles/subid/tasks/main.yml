@@ -1,0 +1,14 @@
+- name: Apply subuid and subgid settings
+  template:
+    src: subid.j2
+    dest: /etc/{{ item }}
+    owner: root
+    group: root
+    mode: '0644'
+    backup: true
+  become: true
+  tags:
+    - subid
+  with_items:
+    - subuid
+    - subgid

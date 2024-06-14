@@ -191,3 +191,6 @@ smb_shares:
     path: /mnt/brumath
   - name: eckwersheim
     path: /mnt/eckwersheim
+
+subid_users:
+  - act_runner

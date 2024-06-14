@@ -12,8 +12,8 @@
     group: act_runner
     createhome: false
     system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
+    shell: /bin/bash
+    home: /mnt/scratch/act_runner
   become: true
   register: act_runner_user
   tags:
@@ -142,5 +142,34 @@
     name: act_runner
     state: restarted
   become: true
+  tags:
+    - act_runner
+
+- name: Turn on linger
+  command: loginctl enable-linger act_runner
+  args:
+    creates: /var/lib/systemd/linger/act_runner
+  become: true
+  tags:
+    - act_runner
+
+- name: Enable rootless podman socket
+  systemd:
+    name: podman.socket
+    enabled: true
+    scope: user
+  become: true
+  become_user: act_runner
+  tags:
+    - act_runner
+
+- name: Start rootless podman socket
+  systemd:
+    name: podman.socket
+    state: started
+    scope: user
+  register: systemd_started
+  become: true
+  become_user: act_runner
   tags:
     - act_runner

@@ -20,6 +20,7 @@
       - python3-requests # docker module
       - subversion
       - xz-utils
+      - systemd-container # machinectl
     cache_valid_time: 3600
   register: core_dependencies_apt
   become: true

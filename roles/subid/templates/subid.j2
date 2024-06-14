@@ -1,0 +1,4 @@
+{{ ansible_ssh_user}}:100000:65536
+{% for user in subid_users %}
+{{ user }}:{{100000 + (loop.index * 65536)}}:65536
+{% endfor %}
