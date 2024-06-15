@@ -134,7 +134,7 @@
     - minio
 
 - name: Start the service
-  when: not (ansible_check_mode and minio_installed.changed)
+  when: not (ansible_check_mode and minio_installed.changed) and not docker_test
   systemd:
     name: minio
     state: started
@@ -144,7 +144,7 @@
     - minio
 
 - name: Restart minio
-  when: not (ansible_check_mode and minio_installed.changed) and (minio_cfg.changed or systemd_unit.changed) and not minio_started.changed
+  when: not (ansible_check_mode and minio_installed.changed) and not docker_test and (minio_cfg.changed or systemd_unit.changed) and not minio_started.changed
   systemd:
     name: minio
     state: restarted

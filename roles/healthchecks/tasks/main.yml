@@ -1,3 +1,13 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - healthchecks
+
 - name: Add healthchecks group
   group:
     name: healthchecks
@@ -44,6 +54,7 @@
     - healthchecks
 
 - name: Create secret
+  when: not docker_test
   containers.podman.podman_secret:
     name: healthchecks_password
     data: "{{ healthchecks_password }}"
@@ -53,6 +64,7 @@
     - healthchecks
 
 - name: Create secret
+  when: not docker_test
   containers.podman.podman_secret:
     name: healthchecks_sendgrid_password
     data: "{{ healthchecks_sendgrid_password }}"
@@ -72,7 +84,7 @@
     - healthchecks
 
 - name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
   systemd:
     name: healthchecks
     enabled: true
@@ -81,7 +93,7 @@
     - healthchecks
 
 - name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
   systemd:
     name: healthchecks
     state: started
@@ -91,7 +103,7 @@
     - healthchecks
 
 - name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed or healthchecks_password.changed or healthchecks_sendgrid_password.changed) and not systemd_started.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test and ((systemd_unit.changed or healthchecks_password.changed or healthchecks_sendgrid_password.changed) and not systemd_started.changed)
   systemd:
     name: healthchecks
     state: restarted

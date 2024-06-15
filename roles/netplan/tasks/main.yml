@@ -31,7 +31,7 @@
     - netplan
 
 - name: Apply netplan
-  when: netplan_cfg.changed
+  when: netplan_cfg.changed and not docker_test
   command: netplan apply
   changed_when: true
   become: true

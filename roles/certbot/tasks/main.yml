@@ -8,6 +8,8 @@
   register: apt_install_certbot
   tags:
     - certbot
+    - _check_stage1
+    - _check_stage2
 
 - name: Create config directory
   file:
@@ -19,6 +21,7 @@
   become: true
   tags:
     - certbot
+    - _check_stage2
 
 - name: Set permissions on storage directories
   file:
@@ -33,6 +36,7 @@
   become: true
   tags:
     - certbot
+    - _check_stage2
 
 - name: Write cloudflare credentials
   copy:
@@ -45,9 +49,10 @@
   become: true
   tags:
     - certbot
+    - _check_stage2
 
 - name: Get certificates
-  command: certbot certonly --agree-tos -m {{ root_email }} --noninteractive --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini --dns-cloudflare-propagation-seconds 30 -d "{{ item }}" -d "*.{{ item }}"
+  command: certbot certonly --agree-tos -m {{ root_email }} --noninteractive {{ docker_test|ternary('--test-cert', '') }} --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini --dns-cloudflare-propagation-seconds 30 -d "{{ item }}" -d "*.{{ item }}"
   args:
     creates: /etc/letsencrypt/live/{{ item }}/privkey.pem
   become: true
@@ -56,6 +61,7 @@
     - "{{ inventory_hostname }}.{{ domain }}"
   tags:
     - certbot
+    - _check_stage2
 
 - name: Configure logrotate
   import_role:
@@ -66,8 +72,10 @@
     logrotate_condition: "{{ not (ansible_check_mode and apt_install_certbot.changed) }}"
   tags:
     - certbot
+    - _check_stage2
 
 - name: Copy certificate metrics template
+  when: not docker_test
   command: cp /usr/lib/netdata/conf.d/go.d/x509check.conf /etc/netdata/go.d/x509check.conf
   args:
     creates: /etc/netdata/go.d/x509check.conf
@@ -75,9 +83,10 @@
   become: true
   tags:
     - certbot
+    - _check_stage2
 
 - name: Setup certificate metrics
-  when: not (ansible_check_mode and netdata_certificate_conf_template.changed)
+  when: not docker_test and not (ansible_check_mode and netdata_certificate_conf_template.changed)
   template:
     src: x509check.conf.j2
     dest: /etc/netdata/go.d/x509check.conf
@@ -91,7 +100,7 @@
     - certbot
 
 - name: Restart netdata
-  when: (netdata_certificate_conf_template.changed or netdata_certificate_conf.changed)
+  when: not docker_test and (netdata_certificate_conf_template.changed or netdata_certificate_conf.changed)
   systemd:
     name: netdata
     state: restarted

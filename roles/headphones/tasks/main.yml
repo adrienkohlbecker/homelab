@@ -1,3 +1,13 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - headphones
+
 - name: Add media group
   group:
     name: media
@@ -82,7 +92,7 @@
     - headphones
 
 - name: Start the service
-  when: not (ansible_check_mode and (systemd_unit.changed or headphones_user.changed))
+  when: not (ansible_check_mode and (systemd_unit.changed or headphones_user.changed)) and not docker_test
   systemd:
     name: headphones
     state: started
@@ -92,7 +102,7 @@
     - headphones
 
 - name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or headphones_user.changed)) and ((systemd_unit.changed or headphones_conf.changed) and not systemd_started.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or headphones_user.changed)) and not docker_test and ((systemd_unit.changed or headphones_conf.changed) and not systemd_started.changed)
   systemd:
     name: headphones
     state: restarted

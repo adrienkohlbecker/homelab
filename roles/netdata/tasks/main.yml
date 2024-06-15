@@ -182,6 +182,7 @@
     - netdata
 
 - name: Add user to podman-socket group
+  when: not docker_test
   user:
     name: netdata
     groups: podman-socket
@@ -191,6 +192,7 @@
     - netdata
 
 - name: Mount debugfs
+  when: not docker_test
   mount:
     path: /sys/kernel/debug
     src: /debugfs
@@ -269,7 +271,7 @@
     - netdata
 
 - name: Start the service
-  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed))
+  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) and not docker_test
   systemd:
     name: netdata
     state: started
@@ -279,7 +281,7 @@
     - netdata
 
 - name: Restart the service
-  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) and (netdata_conf.changed or cloud_conf.changed or netdata_optout.changed or prometheus_conf.changed or docker_conf.changed or netdata_health_alarm_notify.changed or smartd_log_conf.changed or debugfs_mount.changed or netdata_systemdunits_conf_template.changed or netdata_systemdunits_conf.changed) and not systemd_started.changed
+  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) and not docker_test and (netdata_conf.changed or cloud_conf.changed or netdata_optout.changed or prometheus_conf.changed or docker_conf.changed or netdata_health_alarm_notify.changed or smartd_log_conf.changed or debugfs_mount.changed or netdata_systemdunits_conf_template.changed or netdata_systemdunits_conf.changed) and not systemd_started.changed
   systemd:
     name: netdata
     state: restarted
@@ -289,7 +291,7 @@
     - netdata
 
 - name: Reload health configuration
-  when: (netdata_systemdunits_health_template.changed or netdata_systemdunits_health.changed or netdata_systemdunits_health_2.changed) and not (systemd_started.changed or systemd_restarted.changed)
+  when: (netdata_systemdunits_health_template.changed or netdata_systemdunits_health.changed or netdata_systemdunits_health_2.changed) and not docker_test and not (systemd_started.changed or systemd_restarted.changed)
   command: netdatacli reload-health
   changed_when: true
   become: true

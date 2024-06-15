@@ -23,7 +23,7 @@
     - journald
 
 - name: Restart systemd-journald
-  when: journald_conf.changed
+  when: journald_conf.changed and not docker_test
   systemd:
     name: systemd-journald
     state: restarted
@@ -32,7 +32,7 @@
     - journald
 
 - name: Flush log messages from memory to disk (if storage config changed)
-  when: journald_conf.changed
+  when: journald_conf.changed and not docker_test
   command: journalctl --flush
   changed_when: false
   become: true

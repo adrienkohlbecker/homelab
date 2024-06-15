@@ -37,7 +37,7 @@
     - hd_idle
 
 - name: Start the service
-  when: not (ansible_check_mode and apt_install_hdidle.changed)
+  when: not (ansible_check_mode and apt_install_hdidle.changed) and not docker_test
   systemd:
     name: hd-idle
     state: started
@@ -47,7 +47,7 @@
     - hd_idle
 
 - name: Restart the service
-  when: not (ansible_check_mode and apt_install_hdidle.changed) and (hd_idle_conf.changed) and not systemd_started.changed
+  when: not (ansible_check_mode and apt_install_hdidle.changed) and not docker_test and (hd_idle_conf.changed) and not systemd_started.changed
   systemd:
     name: hd-idle
     state: restarted
@@ -69,7 +69,7 @@
     - hd_idle
 
 - name: Restart logrotate
-  when: logrotate_conf.changed
+  when: logrotate_conf.changed and not docker_test
   systemd:
     name: logrotate
     state: restarted

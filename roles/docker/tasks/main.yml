@@ -6,6 +6,8 @@
     apt_unit_masked_unit: docker.service
   tags:
     - docker
+    - _check_stage1
+    - _check_stage2
 
 - name: Copy the docker config
   template:
@@ -20,6 +22,7 @@
   become: true
   tags:
     - docker
+    - _check_stage2
 
 - name: Create mount point
   file:
@@ -31,6 +34,7 @@
   become: true
   tags:
     - docker
+    - _check_stage2
 
 - name: Create docker zvol
   when: zfs_root
@@ -43,6 +47,7 @@
   become: true
   tags:
     - docker
+    - _check_stage2
 
 - name: Create a ext4 filesystem on docker zvol
   when: not (ansible_check_mode and zfs_zvol_docker.changed) and zfs_root
@@ -76,7 +81,7 @@
     - docker
 
 - name: Start the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
+  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
   systemd:
     name: docker
     state: started
@@ -86,7 +91,7 @@
     - docker
 
 - name: Restart docker
-  when: not (ansible_check_mode and apt_unit_masked.changed) and docker_conf.changed and not systemd_started.changed
+  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test and docker_conf.changed and not systemd_started.changed
   systemd:
     name: docker
     state: restarted
@@ -129,7 +134,7 @@
     - docker
 
 - name: Update grub
-  when: grub_bootloader and grub_cfg.changed
+  when: grub_bootloader and grub_cfg.changed and not docker_test
   command: update-grub
   changed_when: true
   become: true

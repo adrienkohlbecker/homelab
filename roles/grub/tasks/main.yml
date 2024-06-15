@@ -34,7 +34,7 @@
     - grub
 
 - name: Update grub
-  when: grub_cfg.changed
+  when: grub_cfg.changed and not docker_test
   command: update-grub
   changed_when: true
   become: true
