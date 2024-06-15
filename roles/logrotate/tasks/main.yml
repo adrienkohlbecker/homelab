@@ -1,6 +1,7 @@
 - name: Install logrotate
   import_role:
     name: apt_unit_masked
+    tasks_from: apt
   vars:
     apt_unit_masked_pkg: logrotate
     apt_unit_masked_unit: logrotate.service

@@ -1,3 +1,13 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - sabnzbd
+
 - name: Add sonarr group
   group:
     name: sonarr
@@ -19,19 +29,20 @@
   tags:
     - sonarr
 
+- name: Add media group
+  group:
+    name: media
+    system: true
+  become: true
+  register: media_group
+  tags:
+    - sonarr
+
 - name: Add user to group
   user:
     name: sonarr
     groups: media
     append: true
-  become: true
-  tags:
-    - sonarr
-
-- name: Get all groups
-  getent:
-    database: group
-    split: ':'
   become: true
   tags:
     - sonarr
@@ -72,7 +83,7 @@
     - sonarr
 
 - name: Enable the service
-  when: not (ansible_check_mode and (systemd_unit.changed or sonarr_user.changed))
+  when: not (ansible_check_mode and (systemd_unit.changed or sonarr_user.changed)) and not docker_test
   systemd:
     name: sonarr
     enabled: true
@@ -81,7 +92,7 @@
     - sonarr
 
 - name: Start the service
-  when: not (ansible_check_mode and (systemd_unit.changed or sonarr_user.changed))
+  when: not (ansible_check_mode and (systemd_unit.changed or sonarr_user.changed)) and not docker_test
   systemd:
     name: sonarr
     state: started
@@ -91,7 +102,7 @@
     - sonarr
 
 - name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or sonarr_user.changed)) and ((systemd_unit.changed or sonarr_conf.changed) and not systemd_started.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or sonarr_user.changed)) and not docker_test and ((systemd_unit.changed or sonarr_conf.changed) and not systemd_started.changed)
   systemd:
     name: sonarr
     state: restarted

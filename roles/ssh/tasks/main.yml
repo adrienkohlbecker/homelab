@@ -12,7 +12,7 @@
     - ssh
 
 - name: Restart ssh
-  when: sshd_config.changed
+  when: sshd_config.changed and not docker_test
   systemd:
     name: ssh
     state: restarted

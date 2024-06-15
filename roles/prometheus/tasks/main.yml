@@ -1,6 +1,7 @@
 - name: Install prometheus
   import_role:
     name: apt_unit_masked
+    tasks_from: apt
   vars:
     apt_unit_masked_pkg: prometheus
     apt_unit_masked_unit: prometheus.service
@@ -22,7 +23,7 @@
     - prometheus
 
 - name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
+  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
   systemd:
     name: prometheus
     enabled: true
@@ -31,7 +32,7 @@
     - prometheus
 
 - name: Start the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
+  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
   systemd:
     name: prometheus
     state: started
@@ -41,7 +42,7 @@
     - prometheus
 
 - name: Restart the service
-  when: not (ansible_check_mode and apt_unit_masked.changed) and (apt_unit_masked.changed or prometheus_conf.changed) and not systemd_started.changed
+  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test and (apt_unit_masked.changed or prometheus_conf.changed) and not systemd_started.changed
   systemd:
     name: prometheus
     state: restarted

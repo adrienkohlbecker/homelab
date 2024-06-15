@@ -1,6 +1,7 @@
 - name: Install keepalived
   import_role:
     name: apt_unit_masked
+    tasks_from: apt
   vars:
     apt_unit_masked_pkg: keepalived
     apt_unit_masked_unit: keepalived.service

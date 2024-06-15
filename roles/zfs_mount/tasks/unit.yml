@@ -9,7 +9,7 @@
     - zfs_mount
 
 - name: unit | Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
   systemd:
     name: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', 'root') | replace('/', '_') }}
     enabled: true
@@ -18,7 +18,7 @@
     - zfs_mount
 
 - name: unit | Start the service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
   systemd:
     name: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', 'root') | replace('/', '_') }}
     state: started
@@ -28,7 +28,7 @@
     - zfs_mount
 
 - name: unit | Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and systemd_unit.changed and not systemd_started.changed
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test and systemd_unit.changed and not systemd_started.changed
   systemd:
     name: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', 'root') | replace('/', '_') }}
     state: restarted

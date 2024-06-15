@@ -4,6 +4,7 @@
       - tzdata
     cache_valid_time: 3600
   become: true
+  register: tzdata_apt
   tags:
     - timezone
 
@@ -21,6 +22,7 @@
     - timezone
 
 - name: Configure localtime
+  when: not (ansible_check_mode and tzdata_apt.changed)
   file:
     src: /usr/share/zoneinfo/Etc/UTC
     dest: /etc/localtime

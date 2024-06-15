@@ -116,6 +116,7 @@
 - name: Install minio service override
   import_role:
     name: systemd_unit
+    tasks_from: copy
   vars:
     systemd_unit_src: override_service.conf
     systemd_unit_dest: minio.service.d/override.conf

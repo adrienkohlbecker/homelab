@@ -1,8 +1,20 @@
-- name: Install ruby
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - quotes
+
+- name: Install dependencies
   apt:
     package:
       - ruby-bundler
+      - git
     cache_valid_time: 3600
+  register: quotes_apt_deps
   become: true
   tags:
     - quotes
@@ -19,6 +31,7 @@
     - quotes
 
 - name: Download quotes
+  when: not (ansible_check_mode and quotes_apt_deps.changed)
   git:
     repo: https://github.com/adrienkohlbecker/quotes.git
     dest: /opt/quotes
@@ -30,6 +43,7 @@
     - quotes
 
 - name: Build a podman image
+  when: not docker_test
   containers.podman.podman_image:
     name: quotes:latest
     path: /opt/quotes
@@ -69,11 +83,12 @@
     tasks_from: template
   vars:
     systemd_unit_src: quotes.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and quotes_user.changed) }}"
   tags:
     - quotes
 
 - name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
   systemd:
     name: quotes
     enabled: true
@@ -82,7 +97,7 @@
     - quotes
 
 - name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
   systemd:
     name: quotes
     state: started
@@ -92,7 +107,7 @@
     - quotes
 
 - name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed or quotes_podman.changed) and not systemd_started.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test and ((systemd_unit.changed or quotes_podman.changed) and not systemd_started.changed)
   systemd:
     name: quotes
     state: restarted

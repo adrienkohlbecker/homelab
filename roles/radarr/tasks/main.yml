@@ -1,3 +1,13 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - radarr
+
 - name: Add radarr group
   group:
     name: radarr
@@ -19,19 +29,20 @@
   tags:
     - radarr
 
+- name: Add media group
+  group:
+    name: media
+    system: true
+  become: true
+  register: media_group
+  tags:
+    - radarr
+
 - name: Add user to group
   user:
     name: radarr
     groups: media
     append: true
-  become: true
-  tags:
-    - radarr
-
-- name: Get all groups
-  getent:
-    database: group
-    split: ":"
   become: true
   tags:
     - radarr
@@ -72,7 +83,7 @@
     - radarr
 
 - name: Enable the service
-  when: not (ansible_check_mode and (systemd_unit.changed or radarr_user.changed))
+  when: not (ansible_check_mode and (systemd_unit.changed or radarr_user.changed)) and not docker_test
   systemd:
     name: radarr
     enabled: true
@@ -81,7 +92,7 @@
     - radarr
 
 - name: Start the service
-  when: not (ansible_check_mode and (systemd_unit.changed or radarr_user.changed))
+  when: not (ansible_check_mode and (systemd_unit.changed or radarr_user.changed)) and not docker_test
   systemd:
     name: radarr
     state: started
@@ -91,7 +102,7 @@
     - radarr
 
 - name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or radarr_user.changed)) and ((systemd_unit.changed or radarr_conf.changed) and not systemd_started.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or radarr_user.changed)) and not docker_test and ((systemd_unit.changed or radarr_conf.changed) and not systemd_started.changed)
   systemd:
     name: radarr
     state: restarted

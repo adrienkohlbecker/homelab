@@ -1,6 +1,7 @@
 - name: Install postfix
   import_role:
     name: apt_unit_masked
+    tasks_from: apt
   vars:
     apt_unit_masked_pkg: postfix
     apt_unit_masked_unit: postfix.service
@@ -52,7 +53,7 @@
     - postfix
 
 - name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
+  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
   systemd:
     name: postfix
     enabled: true
@@ -61,7 +62,7 @@
     - postfix
 
 - name: Start the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
+  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
   systemd:
     name: postfix
     state: started
@@ -71,7 +72,7 @@
     - postfix
 
 - name: Restart postfix
-  when: not (ansible_check_mode and apt_unit_masked.changed) and (postfix_cfg.changed or sasl_auth.changed) and not systemd_started.changed
+  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test and (postfix_cfg.changed or sasl_auth.changed) and not systemd_started.changed
   service:
     name: postfix
     state: restarted

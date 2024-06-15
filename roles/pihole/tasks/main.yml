@@ -1,3 +1,13 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - pihole
+
 - name: Add pihole group
   group:
     name: pihole
@@ -78,7 +88,7 @@
     - pihole
 
 - name: Enable the service
-  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed))
+  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and not docker_test
   systemd:
     name: pihole
     enabled: true
@@ -87,7 +97,7 @@
     - pihole
 
 - name: Start the service
-  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed))
+  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and not docker_test
   systemd:
     name: pihole
     state: started
@@ -102,12 +112,12 @@
     tasks_from: compression
   vars:
     logrotate_item: /mnt/services/pihole/etc/logrotate
-    logrotate_condition: "{{ not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed)) }}"
+    logrotate_condition: "{{ not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed)) and not docker_test }}"
   tags:
     - pihole
 
 - name: Set web password
-  when: not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed))
+  when: not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed)) and not docker_test
   lineinfile:
     path: /mnt/services/pihole/etc/setupVars.conf
     regexp: ^WEBPASSWORD=
@@ -133,7 +143,7 @@
     - pihole
 
 - name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and ((systemd_unit.changed and not systemd_started.changed) or logrotate_conf.changed or logrotate_pass.changed or fahm_cfg.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and not docker_test and ((systemd_unit.changed and not systemd_started.changed) or logrotate_conf.changed or logrotate_pass.changed or fahm_cfg.changed)
   systemd:
     name: pihole
     state: restarted
@@ -171,6 +181,7 @@
     - pihole
 
 - name: Trigger list update
+  when: not docker_test
   command: "{{ pihole_list_update_cmd }}"
   register: pihole_list_update
   changed_when: '["inserted", "enabled", "disabled", "migrated"] | select("in", pihole_list_update.stdout) | length > 0'
@@ -187,7 +198,22 @@
   tags:
     - pihole
 
+- name: Ensure netdata directory exists
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/netdata/
+    - /etc/netdata/go.d/
+  become: true
+  tags:
+    - pihole
+
 - name: Copy pihole metrics template
+  when: not docker_test
   command: cp /usr/lib/netdata/conf.d/go.d/pihole.conf /etc/netdata/go.d/pihole.conf
   args:
     creates: /etc/netdata/go.d/pihole.conf
@@ -201,8 +227,8 @@
   template:
     src: pihole.conf.j2
     dest: /etc/netdata/go.d/pihole.conf
-    owner: netdata
-    group: netdata
+    owner: "{{ docker_test|ternary('root', 'netdata') }}"
+    group: "{{ docker_test|ternary('root', 'netdata') }}"
     mode: "0600"
     backup: true
   register: netdata_pihole_conf
@@ -211,7 +237,7 @@
     - pihole
 
 - name: Restart netdata
-  when: (netdata_pihole_conf_template.changed or netdata_pihole_conf.changed)
+  when: (netdata_pihole_conf_template.changed or netdata_pihole_conf.changed) and not docker_test
   systemd:
     name: netdata
     state: restarted
@@ -229,6 +255,20 @@
   tags:
     - pihole
 
+- name: Ensure keepalived directory exists
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/keepalived/
+    - /etc/keepalived/conf.d/
+  become: true
+  tags:
+    - pihole
+
 - name: Configure keepalived
   template:
     src: keepalived.conf.j2
@@ -243,7 +283,7 @@
     - pihole
 
 - name: Restart keepalived
-  when: (pihole_keepalived_cfg.changed)
+  when: (pihole_keepalived_cfg.changed) and not docker_test
   systemd:
     name: keepalived
     state: restarted

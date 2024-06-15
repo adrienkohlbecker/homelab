@@ -1,6 +1,7 @@
 - name: Install podman
   import_role:
     name: apt_unit_masked
+    tasks_from: apt
   vars:
     apt_unit_masked_pkg: podman
     apt_unit_masked_unit:
@@ -31,6 +32,7 @@
 - name: Install podman socket override
   import_role:
     name: systemd_unit
+    tasks_from: copy
   vars:
     systemd_unit_src: override_socket.conf
     systemd_unit_dest: podman.socket.d/override.conf
@@ -58,6 +60,7 @@
 - name: Install postman service override
   import_role:
     name: systemd_unit
+    tasks_from: copy
   vars:
     systemd_unit_src: override_service.conf
     systemd_unit_dest: podman.service.d/override.conf
@@ -133,7 +136,7 @@
     - podman
 
 - name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
+  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
   systemd:
     name: podman
     enabled: true
@@ -142,7 +145,7 @@
     - podman
 
 - name: Enable the socket
-  when: not (ansible_check_mode and apt_unit_masked.changed)
+  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
   systemd:
     name: podman.socket
     enabled: true
@@ -151,7 +154,7 @@
     - podman
 
 - name: Start the socket
-  when: not (ansible_check_mode and apt_unit_masked.changed)
+  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
   systemd:
     name: podman.socket
     state: started
@@ -161,7 +164,7 @@
     - podman
 
 - name: Restart the socket
-  when: not (ansible_check_mode and apt_unit_masked.changed) and (systemd_unit.changed or socket_systemd_unit.changed) and not systemd_started.changed
+  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test and (systemd_unit.changed or socket_systemd_unit.changed) and not systemd_started.changed
   systemd:
     name: podman.socket
     state: restarted

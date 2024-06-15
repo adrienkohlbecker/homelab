@@ -1,3 +1,23 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - sabnzbd
+
+- name: Install dependencies
+  apt:
+    package:
+      - git
+    cache_valid_time: 3600
+  register: sabnzbd_apt_deps
+  become: true
+  tags:
+    - sabnzbd
+
 - name: Add sabnzbd group
   group:
     name: sabnzbd
@@ -19,19 +39,20 @@
   tags:
     - sabnzbd
 
+- name: Add media group
+  group:
+    name: media
+    system: true
+  become: true
+  register: media_group
+  tags:
+    - sabnzbd
+
 - name: Add user to group
   user:
     name: sabnzbd
     groups: media
     append: true
-  become: true
-  tags:
-    - sabnzbd
-
-- name: Get all groups
-  getent:
-    database: group
-    split: ':'
   become: true
   tags:
     - sabnzbd
@@ -112,6 +133,7 @@
     - sabnzbd
 
 - name: Download nzbToMedia
+  when: not (ansible_check_mode and sabnzbd_user.changed)
   git:
     repo: https://github.com/clinton-hall/nzbToMedia.git
     dest: /opt/nzbToMedia
@@ -132,7 +154,7 @@
     - sabnzbd
 
 - name: Enable the service
-  when: not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed))
+  when: not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed)) and not docker_test
   systemd:
     name: sabnzbd
     enabled: true
@@ -141,7 +163,7 @@
     - sabnzbd
 
 - name: Start the service
-  when: not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed))
+  when: not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed)) and not docker_test
   systemd:
     name: sabnzbd
     state: started
@@ -151,7 +173,7 @@
     - sabnzbd
 
 - name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed)) and ((systemd_unit.changed or sabnzbd_conf.changed or sabnzbd_media_conf.changed) and not systemd_started.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed)) and not docker_test and ((systemd_unit.changed or sabnzbd_conf.changed or sabnzbd_media_conf.changed) and not systemd_started.changed)
   systemd:
     name: sabnzbd
     state: restarted

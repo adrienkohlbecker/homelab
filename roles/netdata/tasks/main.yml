@@ -28,6 +28,7 @@
 - name: Install netdata
   import_role:
     name: apt_unit_masked
+    tasks_from: apt
   vars:
     apt_unit_masked_pkg: netdata
     apt_unit_masked_unit: netdata.service

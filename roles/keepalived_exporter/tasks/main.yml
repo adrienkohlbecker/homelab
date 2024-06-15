@@ -45,6 +45,7 @@
 - name: Install keepalived_exporter service
   import_role:
     name: systemd_unit
+    tasks_from: copy
   vars:
     systemd_unit_src: keepalived_exporter.service
   tags:

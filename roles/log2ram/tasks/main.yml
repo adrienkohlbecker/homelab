@@ -28,10 +28,11 @@
 - name: Install log2ram
   import_role:
     name: apt_unit_masked
+    tasks_from: apt
   vars:
     apt_unit_masked_pkg: log2ram
     apt_unit_masked_unit: log2ram.service
-    apt_unit_masked_condition: "{{ not (ansible_check_mode and apt_repository_log2ram.changed) }}"
+    apt_unit_masked_condition: "{{ not (ansible_check_mode and apt_repository_log2ram.changed) and not docker_test }}"
   tags:
     - log2ram
 
