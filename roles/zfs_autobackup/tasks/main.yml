@@ -45,13 +45,14 @@
 - name: Add zfs_autosnapshot.target systemd unit
   import_role:
     name: systemd_unit
+    tasks_from: copy
   vars:
     systemd_unit_src: zfs_autosnapshot.target
   tags:
     - zfs_autobackup
 
 - name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
   systemd:
     name: zfs_autosnapshot.target
     enabled: true
@@ -60,7 +61,7 @@
     - zfs_autobackup
 
 - name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
   systemd:
     name: zfs_autosnapshot.target
     state: started
@@ -70,7 +71,7 @@
     - zfs_autobackup
 
 - name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and (systemd_unit.changed) and not systemd_started.changed
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test and (systemd_unit.changed) and not systemd_started.changed
   systemd:
     name: zfs_autosnapshot.target
     state: restarted
@@ -177,7 +178,7 @@
     - zfs_autobackup
 
 - name: Restart logrotate
-  when: logrotate_conf.changed
+  when: logrotate_conf.changed and not docker_test
   systemd:
     name: logrotate
     state: restarted

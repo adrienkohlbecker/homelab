@@ -99,7 +99,7 @@
     - nut_server
 
 - name: Enable the driver
-  when: not (ansible_check_mode and apt_install_nut.changed)
+  when: not (ansible_check_mode and apt_install_nut.changed) and not docker_test
   systemd:
     name: nut-driver
     enabled: true
@@ -108,7 +108,7 @@
     - nut_server
 
 - name: Start the driver
-  when: not (ansible_check_mode and apt_install_nut.changed)
+  when: not (ansible_check_mode and apt_install_nut.changed) and not docker_test
   systemd:
     name: nut-driver
     state: started
@@ -118,7 +118,7 @@
     - nut_server
 
 - name: Restart the driver
-  when: not (ansible_check_mode and apt_install_nut.changed) and (nut_nut_conf.changed or nut_ups_conf.changed) and not systemd_started.changed
+  when: not (ansible_check_mode and apt_install_nut.changed) and not docker_test and (nut_nut_conf.changed or nut_ups_conf.changed) and not systemd_started.changed
   systemd:
     name: nut-driver
     state: restarted
@@ -127,7 +127,7 @@
     - nut_server
 
 - name: Enable the server
-  when: not (ansible_check_mode and apt_install_nut.changed)
+  when: not (ansible_check_mode and apt_install_nut.changed) and not docker_test
   systemd:
     name: nut-server
     enabled: true
@@ -136,7 +136,7 @@
     - nut_server
 
 - name: Start the server
-  when: not (ansible_check_mode and apt_install_nut.changed)
+  when: not (ansible_check_mode and apt_install_nut.changed) and not docker_test
   systemd:
     name: nut-server
     state: started
@@ -146,7 +146,7 @@
     - nut_server
 
 - name: Restart the server
-  when: not (ansible_check_mode and apt_install_nut.changed) and (nut_nut_conf.changed or nut_upsd_conf.changed or nut_upsd_users.changed) and not systemd_started.changed
+  when: not (ansible_check_mode and apt_install_nut.changed) and not docker_test and (nut_nut_conf.changed or nut_upsd_conf.changed or nut_upsd_users.changed) and not systemd_started.changed
   systemd:
     name: nut-server
     state: restarted

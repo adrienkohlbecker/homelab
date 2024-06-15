@@ -13,7 +13,7 @@
 - name: Install sort_ini service
   import_role:
     name: systemd_unit
-    tasks_from: main
+    tasks_from: copy
   vars:
     systemd_unit_src: sort_ini@.service
   tags:

@@ -10,6 +10,7 @@
 - name: Add user to media group
   import_role:
     name: usergroup_immediate
+    tasks_from: user
   when: not (ansible_check_mode and media_group.changed)
   vars:
     usergroup_immediate_group: media

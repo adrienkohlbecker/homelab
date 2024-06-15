@@ -1,3 +1,13 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - pihole
+
 - name: Add postgres group
   group:
     name: postgres
@@ -32,6 +42,7 @@
     - postgres
 
 - name: Init database
+  when: not docker_test
   command: >-
     podman run
       --rm --quiet
@@ -53,11 +64,12 @@
     tasks_from: template
   vars:
     systemd_unit_src: postgres.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and postgres_user.changed) }}"
   tags:
     - postgres
 
 - name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
   systemd:
     name: postgres
     enabled: true
@@ -66,7 +78,7 @@
     - postgres
 
 - name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
   systemd:
     name: postgres
     state: started
@@ -76,7 +88,7 @@
     - postgres
 
 - name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed) and not systemd_started.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test and ((systemd_unit.changed) and not systemd_started.changed)
   systemd:
     name: postgres
     state: restarted

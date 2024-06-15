@@ -1,3 +1,22 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - transmission
+
+- name: Install jq
+  apt:
+    pkg:
+      - jq
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - transmission
+
 - name: Add transmission group
   group:
     name: transmission
@@ -19,19 +38,20 @@
   tags:
     - transmission
 
+- name: Add media group
+  group:
+    name: media
+    system: true
+  become: true
+  register: media_group
+  tags:
+    - transmission
+
 - name: Add user to group
   user:
     name: transmission
     groups: media
     append: true
-  become: true
-  tags:
-    - transmission
-
-- name: Get all groups
-  getent:
-    database: group
-    split: ':'
   become: true
   tags:
     - transmission
@@ -121,7 +141,7 @@
     - transmission
 
 - name: Enable the service
-  when: not (ansible_check_mode and (systemd_unit.changed or transmission_user.changed))
+  when: not (ansible_check_mode and (systemd_unit.changed or transmission_user.changed)) and not docker_test
   systemd:
     name: transmission
     enabled: true
@@ -130,7 +150,7 @@
     - transmission
 
 - name: Start the service
-  when: not (ansible_check_mode and (systemd_unit.changed or transmission_user.changed))
+  when: not (ansible_check_mode and (systemd_unit.changed or transmission_user.changed)) and not docker_test
   systemd:
     name: transmission
     state: started
@@ -140,7 +160,7 @@
     - transmission
 
 - name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or transmission_user.changed)) and ((systemd_unit.changed or transmission_conf.changed or transmission_env.changed or transmission_health.changed) and not systemd_started.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or transmission_user.changed)) and not docker_test and ((systemd_unit.changed or transmission_conf.changed or transmission_env.changed or transmission_health.changed) and not systemd_started.changed)
   systemd:
     name: transmission
     state: restarted

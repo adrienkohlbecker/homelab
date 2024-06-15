@@ -58,6 +58,7 @@
 - name: Install journald-exporter service
   import_role:
     name: systemd_unit
+    tasks_from: copy
   vars:
     systemd_unit_src: journald-exporter.service
   tags:

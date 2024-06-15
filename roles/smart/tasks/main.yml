@@ -3,6 +3,7 @@
 - name: Install smartmontools
   import_role:
     name: apt_unit_masked
+    tasks_from: apt
   vars:
     apt_unit_masked_pkg: smartmontools
     apt_unit_masked_unit: smartmontools.service
@@ -74,7 +75,7 @@
     - smart
 
 - name: Restart logrotate
-  when: logrotate_conf.changed
+  when: logrotate_conf.changed and not docker_test
   systemd:
     name: logrotate
     state: restarted
@@ -83,7 +84,7 @@
     - smart
 
 - name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
+  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
   systemd:
     name: smartmontools
     enabled: true
@@ -92,7 +93,7 @@
     - smart
 
 - name: Start the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
+  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
   systemd:
     name: smartmontools
     state: started
@@ -102,7 +103,7 @@
     - smart
 
 - name: Restart the service
-  when: not (ansible_check_mode and apt_unit_masked.changed) and (smartd_cfg.changed or smartmontools_cfg.changed) and not systemd_started.changed
+  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test and (smartd_cfg.changed or smartmontools_cfg.changed) and not systemd_started.changed
   systemd:
     name: smartmontools
     state: restarted
