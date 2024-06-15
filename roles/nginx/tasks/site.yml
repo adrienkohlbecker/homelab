@@ -37,7 +37,7 @@
     - nginx_site
 
 - name: site | Reload nginx config
-  when: nginx_static_conf.changed or nginx_static_conf_enable.changed
+  when: not docker_test and (nginx_static_conf.changed or nginx_static_conf_enable.changed)
   systemd:
     name: nginx
     state: reloaded

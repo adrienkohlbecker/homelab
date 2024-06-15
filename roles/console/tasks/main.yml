@@ -21,7 +21,7 @@
     - console
 
 - name: Update initramfs
-  when: console_cfg.changed
+  when: not docker_test and console_cfg.changed
   command: update-initramfs -u -k all
   changed_when: true
   become: true

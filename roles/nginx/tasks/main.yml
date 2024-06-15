@@ -80,7 +80,7 @@
     - nginx
 
 - name: Restart netdata
-  when: (nginx_status_conf.changed)
+  when: nginx_status_conf.changed and not docker_test
   systemd:
     name: netdata
     state: restarted

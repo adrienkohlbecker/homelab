@@ -42,7 +42,7 @@
     - fancontrol
 
 - name: Start the service
-  when: not (ansible_check_mode and apt_fancontrol.changed)
+  when: not (ansible_check_mode and apt_fancontrol.changed) and not docker_test
   systemd:
     name: fancontrol
     state: started
@@ -52,7 +52,7 @@
     - fancontrol
 
 - name: Restart fancontrol
-  when: not (ansible_check_mode and apt_fancontrol.changed) and (fancontrol_cfg.changed or fancontrol_rm.changed) and not fancontrol_started.changed
+  when: not (ansible_check_mode and apt_fancontrol.changed) and not docker_test and (fancontrol_cfg.changed or fancontrol_rm.changed) and not fancontrol_started.changed
   systemd:
     name: fancontrol
     state: restarted

@@ -34,7 +34,7 @@
         state: absent
 
 - name: client | Configure alias
-  when: not (ansible_check_mode and mcli_installed.changed)
+  when: not (ansible_check_mode and mcli_installed.changed) and not docker_test
   command: mcli alias set default http://localhost:9199 {{ minio_root_user }} {{ minio_root_password }}
   args:
     creates: ~/.mcli/config.json

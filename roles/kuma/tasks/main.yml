@@ -1,3 +1,13 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - kuma
+
 - name: Add kuma group
   group:
     name: kuma
@@ -42,7 +52,7 @@
     - kuma
 
 - name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
   systemd:
     name: kuma
     enabled: true
@@ -51,7 +61,7 @@
     - kuma
 
 - name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
   systemd:
     name: kuma
     state: started
@@ -61,7 +71,7 @@
     - kuma
 
 - name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed) and not systemd_started.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test and ((systemd_unit.changed) and not systemd_started.changed)
   systemd:
     name: kuma
     state: restarted

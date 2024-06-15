@@ -73,7 +73,7 @@
     - journald_exporter
 
 - name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
   systemd:
     name: journald-exporter
     state: started
@@ -83,7 +83,7 @@
     - journald_exporter
 
 - name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and systemd_unit.changed and not systemd_started.changed
+  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test and systemd_unit.changed and not systemd_started.changed
   systemd:
     name: journald-exporter
     state: restarted

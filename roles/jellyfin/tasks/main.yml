@@ -1,3 +1,13 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - jellyfin
+
 - name: Add jellyfin group
   group:
     name: jellyfin
@@ -117,7 +127,7 @@
     - jellyfin
 
 - name: Start the service
-  when: not (ansible_check_mode and (systemd_unit.changed or jellyfin_user.changed))
+  when: not (ansible_check_mode and (systemd_unit.changed or jellyfin_user.changed)) and not docker_test
   systemd:
     name: jellyfin
     state: started
@@ -127,7 +137,7 @@
     - jellyfin
 
 - name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or jellyfin_user.changed)) and (systemd_unit.changed and not systemd_started.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or jellyfin_user.changed)) and not docker_test and (systemd_unit.changed and not systemd_started.changed)
   systemd:
     name: jellyfin
     state: restarted

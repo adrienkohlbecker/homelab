@@ -5,6 +5,7 @@
   check_mode: false
   tags:
     - eaton_ipp
+    - _check_stage1
 
 - name: Install curl
   apt:
@@ -14,12 +15,14 @@
   become: true
   tags:
     - eaton_ipp
+    - _check_stage1
 
 - name: Install eaton ipp if needed
   when: '"ipp-linux" not in ansible_facts.packages or ansible_facts.packages["ipp-linux"][0].version != "1.73.175"'
   become: true
   tags:
     - eaton_ipp
+    - _check_stage1
   block:
 
     # Not sure why this is timing out...
@@ -36,6 +39,7 @@
     #     checksum: sha256:9f7e86668a8d7d40fe959e13db6d8bf03ec7bb09002e4dfc03f2f81ad8a98ad3
 
     - name: Copy eaton_ipp deb
+      check_mode: false
       copy:
         src: ipp-linux_1.73.175-1_amd64.deb
         dest: /tmp/ipp-linux.deb
@@ -49,6 +53,7 @@
       changed_when: false
 
     - name: Install ipp-linux
+      when: not docker_test
       apt:
         deb: /tmp/ipp-linux.deb
       register: ipp_linux_installed
@@ -59,7 +64,7 @@
         state: absent
 
 - name: Enable the service
-  when: not (ansible_check_mode and ipp_linux_installed.changed)
+  when: not (ansible_check_mode and ipp_linux_installed.changed) and not docker_test
   systemd:
     name: eaton-ipp
     enabled: true
@@ -68,7 +73,7 @@
     - eaton_ipp
 
 - name: Start the service
-  when: not (ansible_check_mode and ipp_linux_installed.changed)
+  when: not (ansible_check_mode and ipp_linux_installed.changed) and not docker_test
   systemd:
     name: eaton-ipp
     state: started
@@ -78,7 +83,7 @@
     - eaton_ipp
 
 # - name: Restart eaton_ipp
-#   when: not (ansible_check_mode and ipp_linux_installed.changed) and ipp_linux_cfg.changed and not ipp_linux_started.changed
+#   when: not (ansible_check_mode and ipp_linux_installed.changed) and not docker_test and ipp_linux_cfg.changed and not ipp_linux_started.changed
 #   systemd:
 #     name: eaton_ipp
 #     state: restarted
