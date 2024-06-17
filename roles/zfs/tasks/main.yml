@@ -132,7 +132,7 @@
     name: cron
     tasks_from: monitor
   vars:
-    cron_entry: "{{ zfs_trim_pools }}"
+    cron_entry: "{{ ['zfs_trim_'] | product(zfs_trim_pools) | map('join') | list }}"
   tags:
     - zfs
 
