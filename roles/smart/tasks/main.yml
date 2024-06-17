@@ -63,24 +63,12 @@
     - smart
 
 - name: Configure logrotate
-  template:
-    src: logrotate.j2
-    dest: /etc/logrotate.d/smartd
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: logrotate_conf
-  become: true
-  tags:
-    - smart
-
-- name: Restart logrotate
-  when: logrotate_conf.changed and not docker_test
-  systemd:
+  import_role:
     name: logrotate
-    state: restarted
-  become: true
+    tasks_from: template
+  vars:
+    logrotate_src: logrotate.j2
+    logrotate_dest: /etc/logrotate.d/smartd
   tags:
     - smart
 

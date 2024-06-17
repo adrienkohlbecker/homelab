@@ -311,13 +311,3 @@
     nginx_proxy_pass: http://127.0.0.1:19999/
   tags:
     - netdata
-
-- name: Configure logrotate
-  import_role:
-    name: logrotate
-    tasks_from: compression
-  vars:
-    logrotate_item: /etc/logrotate.d/netdata
-    logrotate_condition: "{{ not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) }}"
-  tags:
-    - netdata
