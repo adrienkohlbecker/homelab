@@ -31,21 +31,3 @@
     loop_var: logrotate_item
   tags:
     - logrotate
-
-- name: Enable the service
-  when: not docker_test
-  systemd:
-    name: logrotate
-    enabled: true
-  become: true
-  tags:
-    - logrotate
-
-- name: Start the service
-  when: not docker_test
-  systemd:
-    name: logrotate
-    state: started
-  become: true
-  tags:
-    - logrotate
