@@ -163,31 +163,14 @@
     - sabnzbd
     - _check_stage2
 
-- name: Enable the service
-  when: not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed)) and not docker_test
-  systemd:
-    name: sabnzbd
-    enabled: true
-  become: true
-  tags:
-    - sabnzbd
-
-- name: Start the service
-  when: not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed)) and not docker_test
-  systemd:
-    name: sabnzbd
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - sabnzbd
-
-- name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed)) and not docker_test and ((systemd_unit.changed or sabnzbd_conf.changed or sabnzbd_media_conf.changed) and not systemd_started.changed)
-  systemd:
-    name: sabnzbd
-    state: restarted
-  become: true
+- name: Enable sabnzbd service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: sabnzbd
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed)) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or sabnzbd_conf.changed or sabnzbd_media_conf.changed }}"
   tags:
     - sabnzbd
 

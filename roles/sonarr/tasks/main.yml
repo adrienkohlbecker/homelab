@@ -85,31 +85,14 @@
     - sonarr
     - _check_stage2
 
-- name: Enable the service
-  when: not (ansible_check_mode and (systemd_unit.changed or sonarr_user.changed)) and not docker_test
-  systemd:
-    name: sonarr
-    enabled: true
-  become: true
-  tags:
-    - sonarr
-
-- name: Start the service
-  when: not (ansible_check_mode and (systemd_unit.changed or sonarr_user.changed)) and not docker_test
-  systemd:
-    name: sonarr
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - sonarr
-
-- name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or sonarr_user.changed)) and not docker_test and ((systemd_unit.changed or sonarr_conf.changed) and not systemd_started.changed)
-  systemd:
-    name: sonarr
-    state: restarted
-  become: true
+- name: Enable sonarr service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: sonarr
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or sonarr_user.changed)) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or sonarr_conf.changed }}"
   tags:
     - sonarr
 

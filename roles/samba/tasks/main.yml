@@ -25,59 +25,25 @@
   tags:
     - samba
 
-- name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
-  systemd:
-    name: smbd
-    enabled: true
-  become: true
+- name: Enable smbd service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: smbd
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
+    systemd_unit_restart: "{{ samba_cfg.changed }}"
   tags:
     - samba
 
-- name: Start the service
-  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
-  systemd:
-    name: smbd
-    state: started
-  become: true
-  register: samba_started
-  tags:
-    - samba
-
-- name: Restart samba
-  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test and (samba_cfg.changed) and not samba_started.changed
-  systemd:
-    name: smbd
-    state: restarted
-  become: true
-  tags:
-    - samba
-
-- name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
-  systemd:
-    name: nmbd
-    enabled: true
-  become: true
-  tags:
-    - samba
-
-- name: Start the service
-  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
-  systemd:
-    name: nmbd
-    state: started
-  become: true
-  register: samba_started
-  tags:
-    - samba
-
-- name: Restart samba
-  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test and (samba_cfg.changed) and not samba_started.changed
-  systemd:
-    name: nmbd
-    state: restarted
-  become: true
+- name: Enable nmbd service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: nmbd
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
+    systemd_unit_restart: "{{ samba_cfg.changed }}"
   tags:
     - samba
 

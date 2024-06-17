@@ -19,31 +19,14 @@
     - speedtest
     - _check_stage1
 
-- name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
-  systemd:
-    name: speedtest
-    enabled: true
-  become: true
-  tags:
-    - speedtest
-
-- name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
-  systemd:
-    name: speedtest
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - speedtest
-
-- name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test and ((systemd_unit.changed) and not systemd_started.changed)
-  systemd:
-    name: speedtest
-    state: restarted
-  become: true
+- name: Enable speedtest service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: speedtest
+    systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - speedtest
 

@@ -33,15 +33,6 @@
   tags:
     - keepalived
 
-- name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
-  systemd:
-    name: keepalived
-    enabled: true
-  become: true
-  tags:
-    - keepalived
-
 - name: Count number of configurations
   find:
     paths: /etc/keepalived/conf.d

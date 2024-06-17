@@ -101,31 +101,14 @@
     - quotes
     - _check_stage3
 
-- name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
-  systemd:
-    name: quotes
-    enabled: true
-  become: true
-  tags:
-    - quotes
-
-- name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
-  systemd:
-    name: quotes
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - quotes
-
-- name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test and ((systemd_unit.changed or quotes_podman.changed) and not systemd_started.changed)
-  systemd:
-    name: quotes
-    state: restarted
-  become: true
+- name: Enable quotes service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: quotes
+    systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or quotes_podman.changed }}"
   tags:
     - quotes
 
