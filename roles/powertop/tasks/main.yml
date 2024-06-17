@@ -8,6 +8,7 @@
   tags:
     - powertop
     - _check_stage1
+    - _check_stage2
 
 - name: Install powertop service
   import_role:
@@ -17,31 +18,15 @@
     systemd_unit_src: powertop.service
   tags:
     - powertop
+    - _check_stage2
 
-- name: Enable the service
-  when: not (ansible_check_mode and apt_install_powertop.changed) and not docker_test
-  systemd:
-    name: powertop
-    enabled: true
-  become: true
-  tags:
-    - powertop
-
-- name: Start the service
-  when: not (ansible_check_mode and apt_install_powertop.changed) and not docker_test
-  systemd:
-    name: powertop
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - powertop
-
-- name: Restart the service
-  when: not (ansible_check_mode and apt_install_powertop.changed) and not docker_test and systemd_unit.changed and not systemd_started.changed
-  systemd:
-    name: powertop
-    state: restarted
-  become: true
+- name: Enable powertop service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: powertop
+    systemd_unit_condition: "{{ not (ansible_check_mode and (apt_install_powertop.changed or systemd_unit.changed)) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - powertop

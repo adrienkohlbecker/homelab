@@ -156,31 +156,14 @@
   tags:
     - podman
 
-- name: Enable the socket
-  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
-  systemd:
-    name: podman.socket
-    enabled: true
-  become: true
-  tags:
-    - podman
-
-- name: Start the socket
-  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
-  systemd:
-    name: podman.socket
-    state: started
-  become: true
-  register: systemd_started
-  tags:
-    - podman
-
-- name: Restart the socket
-  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test and (systemd_unit.changed or socket_systemd_unit.changed) and not systemd_started.changed
-  systemd:
-    name: podman.socket
-    state: restarted
-  become: true
+- name: Enable podman.socket
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: podman.socket
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or socket_systemd_unit.changed }}"
   tags:
     - podman
 

@@ -84,30 +84,13 @@
   tags:
     - smart
 
-- name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
-  systemd:
-    name: smartmontools
-    enabled: true
-  become: true
-  tags:
-    - smart
-
-- name: Start the service
-  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
-  systemd:
-    name: smartmontools
-    state: started
-  become: true
-  register: systemd_started
-  tags:
-    - smart
-
-- name: Restart the service
-  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test and (smartd_cfg.changed or smartmontools_cfg.changed) and not systemd_started.changed
-  systemd:
-    name: smartmontools
-    state: restarted
-  become: true
+- name: Enable smartmontools service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: smartmontools
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
+    systemd_unit_restart: "{{ smartd_cfg.changed or smartmontools_cfg.changed }}"
   tags:
     - smart

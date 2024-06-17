@@ -59,7 +59,7 @@
     - csplogger
     - _check_stage2
 
-- name: Enable Csplogger service
+- name: Enable csplogger service
   import_role:
     name: systemd_unit
     tasks_from: service

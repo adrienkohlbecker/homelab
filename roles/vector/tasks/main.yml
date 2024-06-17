@@ -77,32 +77,13 @@
     - vector
     - vector_conf
 
-- name: Enable the service
-  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_vector.changed)) and not docker_test
-  systemd:
-    name: vector
-    enabled: true
-  become: true
+- name: Enable vector service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: vector
+    systemd_unit_condition: "{{ not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_vector.changed)) }}"
+    systemd_unit_restart: "{{ vector_cfg.changed }}"
   tags:
     - vector
-
-- name: Start the service
-  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_vector.changed)) and not docker_test
-  systemd:
-    name: vector
-    state: started
-  become: true
-  register: vector_started
-  tags:
-    - vector
-    - vector_conf
-
-- name: Restart vector
-  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_vector.changed)) and not docker_test and vector_cfg.changed and not vector_started.changed
-  systemd:
-    name: vector
-    state: restarted
-  become: true
-  tags:
-    - vector
-    - vector_conf

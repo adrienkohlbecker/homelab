@@ -108,31 +108,14 @@
     - wolweb
     - _check_stage2
 
-- name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
-  systemd:
-    name: wolweb
-    enabled: true
-  become: true
-  tags:
-    - wolweb
-
-- name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
-  systemd:
-    name: wolweb
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - wolweb
-
-- name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test and ((systemd_unit.changed or wolweb_conf.changed or wolweb_devices.changed) and not systemd_started.changed)
-  systemd:
-    name: wolweb
-    state: restarted
-  become: true
+- name: Enable wolweb service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: wolweb
+    systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or wolweb_conf.changed or wolweb_devices.changed }}"
   tags:
     - wolweb
 

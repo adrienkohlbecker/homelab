@@ -108,31 +108,14 @@
     - overseerr
     - _check_stage2
 
-- name: Enable the service
-  when: not (ansible_check_mode and (systemd_unit.changed or overseerr_user.changed)) and not docker_test
-  systemd:
-    name: overseerr
-    enabled: true
-  become: true
-  tags:
-    - overseerr
-
-- name: Start the service
-  when: not (ansible_check_mode and (systemd_unit.changed or overseerr_user.changed)) and not docker_test
-  systemd:
-    name: overseerr
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - overseerr
-
-- name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or overseerr_user.changed)) and not docker_test and ((systemd_unit.changed or overseerr_conf.changed) and not systemd_started.changed)
-  systemd:
-    name: overseerr
-    state: restarted
-  become: true
+- name: Enable overseerr service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: overseerr
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or overseerr_user.changed)) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or overseerr_conf.changed }}"
   tags:
     - overseerr
 
