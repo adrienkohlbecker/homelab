@@ -33,7 +33,7 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: hd_idle
+    systemd_unit_src: hd-idle
     systemd_unit_condition: "{{ not (ansible_check_mode and apt_install_hdidle.changed) }}"
     systemd_unit_restart: "{{ hd_idle_conf.changed }}"
   tags:
