@@ -72,31 +72,14 @@
   tags:
     - docker
 
-- name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
-  systemd:
-    name: docker
-    enabled: true
-  become: true
-  tags:
-    - docker
-
-- name: Start the service
-  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test
-  systemd:
-    name: docker
-    state: started
-  become: true
-  register: systemd_started
-  tags:
-    - docker
-
-- name: Restart docker
-  when: not (ansible_check_mode and apt_unit_masked.changed) and not docker_test and docker_conf.changed and not systemd_started.changed
-  systemd:
-    name: docker
-    state: restarted
-  become: true
+- name: Enable docker service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: docker
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
+    systemd_unit_restart: "{{ docker_conf.changed }}"
   tags:
     - docker
 

@@ -104,31 +104,14 @@
     - gitea
     - _check_stage2
 
-- name: Enable the service
-  when: not (ansible_check_mode and (systemd_unit.changed or gitea_user.changed))
-  systemd:
-    name: gitea
-    enabled: true
-  become: true
-  tags:
-    - gitea
-
-- name: Start the service
-  when: not (ansible_check_mode and (systemd_unit.changed or gitea_user.changed)) and not docker_test
-  systemd:
-    name: gitea
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - gitea
-
-- name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or gitea_user.changed)) and not docker_test and ((systemd_unit.changed or gitea_conf.changed) and not systemd_started.changed)
-  systemd:
-    name: gitea
-    state: restarted
-  become: true
+- name: Enable gitea service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: gitea
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or gitea_user.changed)) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or gitea_conf.changed }}"
   tags:
     - gitea
 

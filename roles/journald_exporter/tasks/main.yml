@@ -70,31 +70,14 @@
     - journald_exporter
     - _check_stage1
 
-- name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed)
-  systemd:
-    name: journald-exporter
-    enabled: true
-  become: true
-  tags:
-    - journald_exporter
-
-- name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test
-  systemd:
-    name: journald-exporter
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - journald_exporter
-
-- name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and not docker_test and systemd_unit.changed and not systemd_started.changed
-  systemd:
-    name: journald-exporter
-    state: restarted
-  become: true
+- name: Enable journald_exporter service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: journald-exporter
+    systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - journald_exporter
 

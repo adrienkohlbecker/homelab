@@ -63,33 +63,16 @@
         path: /tmp/ipp-linux.deb
         state: absent
 
-- name: Enable the service
-  when: not (ansible_check_mode and ipp_linux_installed.changed) and not docker_test
-  systemd:
-    name: eaton-ipp
-    enabled: true
-  become: true
+- name: Enable eaton-ipp service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: eaton-ipp
+    systemd_unit_condition: "{{ not (ansible_check_mode and ipp_linux_installed.changed) }}"
+    systemd_unit_restart: false
   tags:
     - eaton_ipp
-
-- name: Start the service
-  when: not (ansible_check_mode and ipp_linux_installed.changed) and not docker_test
-  systemd:
-    name: eaton-ipp
-    state: started
-  become: true
-  register: ipp_linux_started
-  tags:
-    - eaton_ipp
-
-# - name: Restart eaton_ipp
-#   when: not (ansible_check_mode and ipp_linux_installed.changed) and not docker_test and ipp_linux_cfg.changed and not ipp_linux_started.changed
-#   systemd:
-#     name: eaton_ipp
-#     state: restarted
-#   become: true
-#   tags:
-#     - eaton_ipp
 
 - name: Configure nginx
   import_role:

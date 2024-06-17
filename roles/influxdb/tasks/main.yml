@@ -63,31 +63,14 @@
     - influxdb
     - _check_stage2
 
-- name: Enable the service
-  when: not (ansible_check_mode and (systemd_unit.changed or influxdb_user.changed))
-  systemd:
-    name: influxdb
-    enabled: true
-  become: true
-  tags:
-    - influxdb
-
-- name: Start the service
-  when: not (ansible_check_mode and (systemd_unit.changed or influxdb_user.changed)) and not docker_test
-  systemd:
-    name: influxdb
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - influxdb
-
-- name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or influxdb_user.changed)) and not docker_test and ((systemd_unit.changed) and not systemd_started.changed)
-  systemd:
-    name: influxdb
-    state: restarted
-  become: true
+- name: Enable influxdb service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: influxdb
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or influxdb_user.changed)) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - influxdb
 

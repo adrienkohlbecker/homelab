@@ -127,31 +127,14 @@
   tags:
     - minio
 
-- name: Enable the service
-  when: not (ansible_check_mode and minio_installed.changed)
-  systemd:
-    name: minio
-    enabled: true
-  become: true
-  tags:
-    - minio
-
-- name: Start the service
-  when: not (ansible_check_mode and minio_installed.changed) and not docker_test
-  systemd:
-    name: minio
-    state: started
-  become: true
-  register: minio_started
-  tags:
-    - minio
-
-- name: Restart minio
-  when: not (ansible_check_mode and minio_installed.changed) and not docker_test and (minio_cfg.changed or systemd_unit.changed) and not minio_started.changed
-  systemd:
-    name: minio
-    state: restarted
-  become: true
+- name: Enable minio service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: minio
+    systemd_unit_condition: "{{ not (ansible_check_mode and minio_installed.changed) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or minio_cfg.changed }}"
   tags:
     - minio
 
