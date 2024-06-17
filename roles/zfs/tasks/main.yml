@@ -9,6 +9,7 @@
   become: true
   tags:
     - zfs
+    - _check_stage1
 
 - name: Create /etc/default/grub.d directory
   when: grub_bootloader

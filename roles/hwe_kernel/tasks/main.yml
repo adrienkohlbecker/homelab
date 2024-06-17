@@ -7,6 +7,8 @@
   become: true
   tags:
     - hwe_kernel
+    - _check_stage1
+    - _check_stage2
 
 - name: Pin zfsutils-linux from mantic
   copy:
@@ -19,50 +21,35 @@
   become: true
   tags:
     - hwe_kernel
+    - _check_stage1
+    - _check_stage2
 
 - name: Add mantic repository
   apt_repository:
-    repo: 'deb http://archive.ubuntu.com/ubuntu mantic main restricted universe multiverse # For zfsutils-linux userspace tools'
+    repo: "{{ item }}"
   become: true
   register: mantic_repository
+  loop:
+    - 'deb http://archive.ubuntu.com/ubuntu mantic main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb http://archive.ubuntu.com/ubuntu mantic-updates main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb http://archive.ubuntu.com/ubuntu mantic-security main restricted universe multiverse # For zfsutils-linux userspace tools'
   tags:
     - hwe_kernel
-
-- name: Add mantic-updates repository
-  apt_repository:
-    repo: 'deb http://archive.ubuntu.com/ubuntu mantic-updates main restricted universe multiverse # For zfsutils-linux userspace tools'
-  become: true
-  tags:
-    - hwe_kernel
-
-- name: Add mantic-security repository
-  apt_repository:
-    repo: 'deb http://archive.ubuntu.com/ubuntu mantic-security main restricted universe multiverse # For zfsutils-linux userspace tools'
-  become: true
-  tags:
-    - hwe_kernel
+    - _check_stage1
+    - _check_stage2
 
 - name: Add noble repository
   apt_repository:
-    repo: 'deb http://archive.ubuntu.com/ubuntu noble main restricted universe multiverse # For zfsutils-linux userspace tools'
+    repo: "{{ item }}"
   become: true
   register: noble_repository
+  loop:
+    - 'deb http://archive.ubuntu.com/ubuntu noble main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb http://archive.ubuntu.com/ubuntu noble-updates main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb http://archive.ubuntu.com/ubuntu noble-security main restricted universe multiverse # For zfsutils-linux userspace tools'
   tags:
     - hwe_kernel
-
-- name: Add noble-updates repository
-  apt_repository:
-    repo: 'deb http://archive.ubuntu.com/ubuntu noble-updates main restricted universe multiverse # For zfsutils-linux userspace tools'
-  become: true
-  tags:
-    - hwe_kernel
-
-- name: Add noble-security repository
-  apt_repository:
-    repo: 'deb http://archive.ubuntu.com/ubuntu noble-security main restricted universe multiverse # For zfsutils-linux userspace tools'
-  become: true
-  tags:
-    - hwe_kernel
+    - _check_stage2
 
 - name: Install tools from mantic
   when: not (ansible_check_mode and mantic_repository.changed)

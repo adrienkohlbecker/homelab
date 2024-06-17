@@ -9,6 +9,8 @@
   become: true
   tags:
     - zfs_autobackup
+    - _check_stage1
+    - _check_stage2
 
 # because https://www.reddit.com/r/learnpython/comments/uj3dhx/why_does_pip_keep_reinstalling_the_same_version/ marks it changed every time
 - name: Check if zfs autobackup installed
@@ -18,6 +20,8 @@
   register: zfs_autobackup_installed
   tags:
     - zfs_autobackup
+    - _check_stage1
+    - _check_stage2
 
 - name: Install zfs autobackup
   when: not zfs_autobackup_installed.stat.exists
@@ -28,6 +32,8 @@
   register: zfs_autobackup_install
   tags:
     - zfs_autobackup
+    - _check_stage1
+    - _check_stage2
 
 - name: Configure symlink
   when: not (ansible_check_mode and zfs_autobackup_install.changed)
@@ -41,6 +47,7 @@
   become: true
   tags:
     - zfs_autobackup
+    - _check_stage2
 
 - name: Add zfs_autosnapshot.target systemd unit
   import_role:
@@ -50,6 +57,7 @@
     systemd_unit_src: zfs_autosnapshot.target
   tags:
     - zfs_autobackup
+    - _check_stage2
 
 - name: Enable the service
   when: not (ansible_check_mode and systemd_unit.changed) and not docker_test

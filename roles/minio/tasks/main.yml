@@ -5,12 +5,14 @@
   check_mode: false
   tags:
     - minio
+    - _check_stage1
 
 - name: Install minio if needed
   when: '"minio" not in ansible_facts.packages or ansible_facts.packages["minio"][0].version != "20220526054841.0.0"'
   become: true
   tags:
     - minio
+    - _check_stage1
   block:
 
     - name: Download minio deb

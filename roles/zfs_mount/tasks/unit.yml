@@ -1,3 +1,14 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/local/bin/zfs_check_mount
+    mode: '0755'
+  become: true
+  tags:
+    - zfs_mount
+    - _check_stage1
+
 - name: unit | Install systemd mount service
   import_role:
     name: systemd_unit
@@ -7,6 +18,7 @@
     systemd_unit_dest: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', 'root') | replace('/', '_') }}.service
   tags:
     - zfs_mount
+    - _check_stage1
 
 - name: unit | Enable the service
   when: not (ansible_check_mode and systemd_unit.changed) and not docker_test

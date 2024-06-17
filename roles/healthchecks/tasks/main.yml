@@ -7,6 +7,8 @@
   become: true
   tags:
     - healthchecks
+    - _check_stage1
+    - _check_stage2
 
 - name: Add healthchecks group
   group:
@@ -15,6 +17,8 @@
   become: true
   tags:
     - healthchecks
+    - _check_stage1
+    - _check_stage2
 
 - name: Add healthchecks user
   user:
@@ -28,6 +32,8 @@
   register: healthchecks_user
   tags:
     - healthchecks
+    - _check_stage1
+    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and healthchecks_user.changed)
@@ -40,6 +46,7 @@
   become: true
   tags:
     - healthchecks
+    - _check_stage2
 
 - name: Copy healthchecks logo
   copy:
@@ -52,6 +59,7 @@
   become: true
   tags:
     - healthchecks
+    - _check_stage2
 
 - name: Create secret
   when: not docker_test
@@ -62,6 +70,7 @@
   become: true
   tags:
     - healthchecks
+    - _check_stage2
 
 - name: Create secret
   when: not docker_test
@@ -72,6 +81,7 @@
   become: true
   tags:
     - healthchecks
+    - _check_stage2
 
 - name: Install healthchecks service
   import_role:
@@ -82,6 +92,7 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and healthchecks_user.changed) }}"
   tags:
     - healthchecks
+    - _check_stage2
 
 - name: Enable the service
   when: not (ansible_check_mode and systemd_unit.changed) and not docker_test

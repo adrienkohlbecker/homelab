@@ -7,6 +7,7 @@
   register: apt_fancontrol
   tags:
     - fancontrol
+    - _check_stage1
 
 - name: Configure fancontrol
   when: fancontrol_settings | length > 0

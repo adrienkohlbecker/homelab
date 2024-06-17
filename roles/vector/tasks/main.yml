@@ -6,6 +6,9 @@
   register: apt_install_gpg
   tags:
     - vector
+    - _check_stage1
+    - _check_stage2
+    - _check_stage3
 
 - name: Add repository key
   when: not (ansible_check_mode and apt_install_gpg.changed)
@@ -16,6 +19,8 @@
   become: true
   tags:
     - vector
+    - _check_stage2
+    - _check_stage3
 
 - name: Add repository
   apt_repository:
@@ -24,6 +29,8 @@
   become: true
   tags:
     - vector
+    - _check_stage2
+    - _check_stage3
 
 - name: Install vector package
   import_role:
@@ -35,6 +42,7 @@
     apt_unit_masked_condition: "{{ not (ansible_check_mode and apt_repository_vector.changed) }}"
   tags:
     - vector
+    - _check_stage3
 
 # TODO: What if podman is not installed?
 - name: Add user to podman-socket group

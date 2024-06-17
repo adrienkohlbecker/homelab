@@ -7,6 +7,10 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage1
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Add homeassistant group
   group:
@@ -15,6 +19,10 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage1
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Add homeassistant user
   user:
@@ -28,6 +36,10 @@
   register: homeassistant_user
   tags:
     - homeassistant
+    - _check_stage1
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Create configuration directory
   file:
@@ -39,6 +51,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Get influxdb org ID
   when: not docker_test
@@ -51,6 +66,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Create influxdb user
   when: not docker_test
@@ -63,6 +81,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Create influxdb bucket
   when: not docker_test
@@ -75,6 +96,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Create influxdb auth
   when: not docker_test
@@ -87,6 +111,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Configure homeassistant
   template:
@@ -104,6 +131,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Configure homeassistant automations
   copy:
@@ -117,6 +147,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Create custom_templates directory
   file:
@@ -128,6 +161,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Configure homeassistant macros
   copy:
@@ -141,6 +177,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Configure homeassistant sensors
   copy:
@@ -154,6 +193,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Configure homeassistant templates
   copy:
@@ -167,6 +209,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Create www directory
   file:
@@ -179,6 +224,9 @@
   register: homeassistant_www_dir
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Get stats of the thermal_comfort_icons.js file
   stat:
@@ -187,12 +235,16 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage3
+    - _check_stage4
 
 - name: Install thermal_comfort_icons if needed
   when: not thermal_comfort_icons_check.stat.exists or thermal_comfort_icons_check.stat.checksum != '7a37a9c4532308923adfc1378715cf09aaaa4d13'
   become: true
   tags:
     - homeassistant
+    - _check_stage3
+    - _check_stage4
   block:
     - name: Download thermal_comfort_icons
       check_mode: false
@@ -233,6 +285,8 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage3
+    - _check_stage4
 
 - name: Create thermal_comfort directory
   file:
@@ -245,6 +299,8 @@
   register: homeassistant_thermal_comfort_dir
   tags:
     - homeassistant
+    - _check_stage3
+    - _check_stage4
 
 - name: Install unzip
   apt:
@@ -254,6 +310,7 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage4
 
 - name: Get stats of the thermal_comfort custom_component
   stat:
@@ -262,12 +319,14 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage4
 
 - name: Install thermal_comfort if needed
   when: not thermal_comfort_check.stat.exists
   become: true
   tags:
     - homeassistant
+    - _check_stage4
   block:
     - name: Download thermal_comfort
       check_mode: false
@@ -305,6 +364,7 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and homeassistant_user.changed) }}"
   tags:
     - homeassistant
+    - _check_stage4
 
 - name: Enable the service
   when: not (ansible_check_mode and systemd_unit.changed) and not docker_test

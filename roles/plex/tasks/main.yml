@@ -7,6 +7,8 @@
   become: true
   tags:
     - plex
+    - _check_stage1
+    - _check_stage2
 
 - name: Add plex group
   group:
@@ -15,19 +17,8 @@
   become: true
   tags:
     - plex
-
-- name: Add plex user
-  user:
-    name: plex
-    group: plex
-    createhome: false
-    system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
-  become: true
-  register: plex_user
-  tags:
-    - plex
+    - _check_stage1
+    - _check_stage2
 
 - name: Add media group
   group:
@@ -36,16 +27,25 @@
   become: true
   register: media_group
   tags:
-    - overseerr
+    - plex
+    - _check_stage1
+    - _check_stage2
 
-- name: Add user to group
+- name: Add plex user
   user:
     name: plex
+    group: plex
     groups: media
-    append: true
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
   become: true
+  register: plex_user
   tags:
     - plex
+    - _check_stage1
+    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and plex_user.changed)
@@ -58,6 +58,7 @@
   become: true
   tags:
     - plex
+    - _check_stage2
 
 - name: Create scratch directory
   when: not (ansible_check_mode and plex_user.changed)
@@ -70,6 +71,7 @@
   become: true
   tags:
     - plex
+    - _check_stage2
 
 - name: Install plex service
   import_role:
@@ -80,6 +82,7 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and plex_user.changed) }}"
   tags:
     - plex
+    - _check_stage2
 
 - name: Enable the service
   when: not (ansible_check_mode and (systemd_unit.changed or plex_user.changed)) and not docker_test

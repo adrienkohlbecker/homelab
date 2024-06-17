@@ -5,12 +5,14 @@
   check_mode: false
   tags:
     - minio
+    - _check_stage1
 
 - name: client | Install mcli if needed
   when: '"mcli" not in ansible_facts.packages or ansible_facts.packages["mcli"][0].version != "20220610222912.0.0"'
   become: true
   tags:
     - minio
+    - _check_stage1
   block:
 
     - name: client | Download mcli deb

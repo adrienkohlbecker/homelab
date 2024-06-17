@@ -1,3 +1,14 @@
+- name: Install iproute2
+  apt:
+    pkg:
+      - iproute2
+    cache_valid_time: 3600
+  become: true
+  register: apt_locales
+  tags:
+    - macvlan
+    - _check_stage1
+
 - name: Add test binary
   when: docker_test
   file:
@@ -7,6 +18,7 @@
   become: true
   tags:
     - macvlan
+    - _check_stage1
 
 - name: Compute network values
   when: not docker_test
@@ -17,6 +29,7 @@
     macvlan_host_mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname) }}"
   tags:
     - macvlan
+    - _check_stage1
 
 - name: Compute network values
   when: docker_test
@@ -27,6 +40,7 @@
     macvlan_host_mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname) }}"
   tags:
     - macvlan
+    - _check_stage1
 
 - name: Check macvlan_subnet is valid
   assert:
@@ -35,6 +49,7 @@
     success_msg: "macvlan_subnet is valid"
   tags:
     - macvlan
+    - _check_stage1
 
 - name: Check macvlan_subnet is in parent subnet
   assert:
@@ -43,6 +58,7 @@
     success_msg: "macvlan_subnet is valid"
   tags:
     - macvlan
+    - _check_stage1
 
 - name: Check macvlan_subnet is in home subnet
   assert:
@@ -51,6 +67,7 @@
     success_msg: "macvlan_subnet is valid"
   tags:
     - macvlan
+    - _check_stage1
 
 - name: Install mac0 service
   import_role:
@@ -60,6 +77,7 @@
     systemd_unit_src: mac0.service
   tags:
     - macvlan
+    - _check_stage1
 
 - name: Enable the service
   when: not (ansible_check_mode and systemd_unit.changed)

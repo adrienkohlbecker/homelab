@@ -7,6 +7,9 @@
   become: true
   tags:
     - quotes
+    - _check_stage1
+    - _check_stage2
+    - _check_stage3
 
 - name: Install dependencies
   apt:
@@ -18,6 +21,34 @@
   become: true
   tags:
     - quotes
+    - _check_stage1
+    - _check_stage2
+    - _check_stage3
+
+- name: Add quotes group
+  group:
+    name: quotes
+    system: true
+  become: true
+  tags:
+    - quotes
+    - _check_stage2
+    - _check_stage3
+
+- name: Add quotes user
+  user:
+    name: quotes
+    group: quotes
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  register: quotes_user
+  tags:
+    - quotes
+    - _check_stage2
+    - _check_stage3
 
 - name: Create quotes directory
   file:
@@ -29,6 +60,7 @@
   become: true
   tags:
     - quotes
+    - _check_stage3
 
 - name: Download quotes
   when: not (ansible_check_mode and quotes_apt_deps.changed)
@@ -41,6 +73,7 @@
   become: true
   tags:
     - quotes
+    - _check_stage3
 
 - name: Build a podman image
   when: not docker_test
@@ -55,27 +88,7 @@
   become: true
   tags:
     - quotes
-
-- name: Add quotes group
-  group:
-    name: quotes
-    system: true
-  become: true
-  tags:
-    - quotes
-
-- name: Add quotes user
-  user:
-    name: quotes
-    group: quotes
-    createhome: false
-    system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
-  become: true
-  register: quotes_user
-  tags:
-    - quotes
+    - _check_stage3
 
 - name: Install quotes service
   import_role:
@@ -86,6 +99,7 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and quotes_user.changed) }}"
   tags:
     - quotes
+    - _check_stage3
 
 - name: Enable the service
   when: not (ansible_check_mode and systemd_unit.changed) and not docker_test

@@ -7,6 +7,8 @@
   become: true
   tags:
     - transmission
+    - _check_stage1
+    - _check_stage2
 
 - name: Install jq
   apt:
@@ -16,6 +18,8 @@
   become: true
   tags:
     - transmission
+    - _check_stage1
+    - _check_stage2
 
 - name: Add transmission group
   group:
@@ -24,19 +28,8 @@
   become: true
   tags:
     - transmission
-
-- name: Add transmission user
-  user:
-    name: transmission
-    group: transmission
-    createhome: false
-    system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
-  become: true
-  register: transmission_user
-  tags:
-    - transmission
+    - _check_stage1
+    - _check_stage2
 
 - name: Add media group
   group:
@@ -46,15 +39,24 @@
   register: media_group
   tags:
     - transmission
+    - _check_stage1
+    - _check_stage2
 
-- name: Add user to group
+- name: Add transmission user
   user:
     name: transmission
+    group: transmission
     groups: media
-    append: true
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
   become: true
+  register: transmission_user
   tags:
     - transmission
+    - _check_stage1
+    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and transmission_user.changed)
@@ -67,6 +69,7 @@
   become: true
   tags:
     - transmission
+    - _check_stage2
 
 - name: Create scratch directory
   file:
@@ -78,6 +81,7 @@
   become: true
   tags:
     - transmission
+    - _check_stage2
 
 - name: Create storage directory
   file:
@@ -89,6 +93,7 @@
   become: true
   tags:
     - transmission
+    - _check_stage2
 
 - name: Configure transmission
   template:
@@ -103,6 +108,7 @@
   become: true
   tags:
     - transmission
+    - _check_stage2
 
 - name: Configure environment
   template:
@@ -116,6 +122,7 @@
   become: true
   tags:
     - transmission
+    - _check_stage2
 
 - name: Configure environment
   copy:
@@ -129,6 +136,7 @@
   become: true
   tags:
     - transmission
+    - _check_stage2
 
 - name: Install transmission service
   import_role:
@@ -139,6 +147,7 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and transmission_user.changed) }}"
   tags:
     - transmission
+    - _check_stage2
 
 - name: Enable the service
   when: not (ansible_check_mode and (systemd_unit.changed or transmission_user.changed)) and not docker_test

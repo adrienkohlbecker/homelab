@@ -6,6 +6,9 @@
   register: apt_install_gpg
   tags:
     - netdata
+    - _check_stage1
+    - _check_stage2
+    - _check_stage3
 
 - name: Add repository key
   apt_key:
@@ -16,6 +19,8 @@
   when: not (ansible_check_mode and apt_install_gpg.changed)
   tags:
     - netdata
+    - _check_stage2
+    - _check_stage3
 
 - name: Add repository
   apt_repository:
@@ -24,6 +29,8 @@
   become: true
   tags:
     - netdata
+    - _check_stage2
+    - _check_stage3
 
 - name: Install netdata
   import_role:
@@ -35,6 +42,7 @@
     apt_unit_masked_condition: "{{ not (ansible_check_mode and apt_repository_netdata.changed) }}"
   tags:
     - netdata
+    - _check_stage3
 
 - name: Install netdata plugins
   when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed))
@@ -161,7 +169,7 @@
     - netdata
 
 - name: Setup health_alarm_notify
-  when: not (ansible_check_mode and netdata_health_alarm_notify_template.changed)
+  when: not (ansible_check_mode and netdata_health_alarm_notify_template.changed) # TODO add _check_stageX tag
   lineinfile:
     path: /etc/netdata/health_alarm_notify.conf
     regexp: "{{ item.line }}"
@@ -216,7 +224,7 @@
     - netdata
 
 - name: Setup systemdunits alerts
-  when: not (ansible_check_mode and netdata_systemdunits_health_template.changed)
+  when: not (ansible_check_mode and netdata_systemdunits_health_template.changed) # TODO add _check_stageX tag
   lineinfile:
     path: /etc/netdata/health.d/systemdunits.conf
     line: "chart labels: unit_name=!*"
@@ -228,7 +236,7 @@
     - netdata
 
 - name: Setup systemdunits alerts
-  when: not (ansible_check_mode and netdata_systemdunits_health_template.changed)
+  when: not (ansible_check_mode and netdata_systemdunits_health_template.changed) # TODO add _check_stageX tag
   replace:
     path: /etc/netdata/health.d/systemdunits.conf
     regexp: "^       delay: .*"
@@ -249,7 +257,7 @@
     - netdata
 
 - name: Setup systemdunits metrics
-  when: not (ansible_check_mode and netdata_systemdunits_conf_template.changed)
+  when: not (ansible_check_mode and netdata_systemdunits_conf_template.changed) # TODO add _check_stageX tag
   copy:
     src: systemdunits.conf
     dest: /etc/netdata/go.d/systemdunits.conf

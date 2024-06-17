@@ -5,6 +5,8 @@
   vars:
     systemd_unit_src: sort_ini@.path
     systemd_unit_dest: sort_ini@{{ sort_ini_escaped_path }}.path
+  tags:
+    - _check_stage1
 
 - name: path | Enable the service
   when: not (ansible_check_mode and systemd_unit.changed)

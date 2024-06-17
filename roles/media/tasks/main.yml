@@ -6,6 +6,7 @@
   register: media_group
   tags:
     - media
+    - _check_stage1
 
 - name: Add user to media group
   import_role:

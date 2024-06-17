@@ -9,6 +9,7 @@
       - nmbd.service
   tags:
     - samba
+    - _check_stage1
 
 - name: Configure samba
   template:

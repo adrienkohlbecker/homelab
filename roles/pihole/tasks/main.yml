@@ -7,6 +7,8 @@
   become: true
   tags:
     - pihole
+    - _check_stage1
+    - _check_stage2
 
 - name: Add pihole group
   group:
@@ -15,6 +17,8 @@
   become: true
   tags:
     - pihole
+    - _check_stage1
+    - _check_stage2
 
 - name: Add pihole user
   user:
@@ -28,6 +32,8 @@
   become: true
   tags:
     - pihole
+    - _check_stage1
+    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and pihole_user.changed)
@@ -40,6 +46,7 @@
   become: true
   tags:
     - pihole
+    - _check_stage2
 
 - name: Create configuration directory
   file:
@@ -51,6 +58,7 @@
   become: true
   tags:
     - pihole
+    - _check_stage2
 
 - name: Configure dnsmasq
   template:
@@ -64,6 +72,7 @@
   become: true
   tags:
     - pihole
+    - _check_stage2
 
 - name: Create log directory
   when: not (ansible_check_mode and pihole_user.changed)
@@ -76,6 +85,7 @@
   become: true
   tags:
     - pihole
+    - _check_stage2
 
 - name: Install pihole service
   import_role:
@@ -86,6 +96,7 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and pihole_user.changed) }}"
   tags:
     - pihole
+    - _check_stage2
 
 - name: Enable the service
   when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and not docker_test
@@ -223,7 +234,7 @@
     - pihole
 
 - name: Setup pihole metrics
-  when: not (ansible_check_mode and netdata_pihole_conf_template.changed)
+  when: not (ansible_check_mode and netdata_pihole_conf_template.changed) # TODO add _check_stageX tag
   template:
     src: pihole.conf.j2
     dest: /etc/netdata/go.d/pihole.conf

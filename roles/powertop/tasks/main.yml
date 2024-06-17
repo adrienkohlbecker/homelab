@@ -7,6 +7,7 @@
   register: apt_install_powertop
   tags:
     - powertop
+    - _check_stage1
 
 - name: Install powertop service
   import_role:
