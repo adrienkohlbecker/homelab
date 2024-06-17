@@ -50,6 +50,8 @@ done
 
 LIST_TAGS=$(ansible-playbook "$TMPDIR/site.yml" --list-tags)
 
+set -x
+
 ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --check "$@"
 
 if [[ $LIST_TAGS == *"_check_stage1"* ]]; then
@@ -59,6 +61,16 @@ fi
 
 if [[ $LIST_TAGS == *"_check_stage2"* ]]; then
   ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --tags _check_stage2 "$@"
+  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --check "$@"
+fi
+
+if [[ $LIST_TAGS == *"_check_stage3"* ]]; then
+  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --tags _check_stage3 "$@"
+  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --check "$@"
+fi
+
+if [[ $LIST_TAGS == *"_check_stage4"* ]]; then
+  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --tags _check_stage4 "$@"
   ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --check "$@"
 fi
 

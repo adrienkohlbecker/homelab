@@ -6,7 +6,8 @@
     mode: '0755'
   become: true
   tags:
-    - sabnzbd
+    - speedtest
+    - _check_stage1
 
 - name: Install speedtest service
   import_role:
@@ -16,6 +17,7 @@
     systemd_unit_src: speedtest.service
   tags:
     - speedtest
+    - _check_stage1
 
 - name: Enable the service
   when: not (ansible_check_mode and systemd_unit.changed) and not docker_test

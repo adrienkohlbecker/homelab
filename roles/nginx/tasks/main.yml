@@ -7,6 +7,7 @@
     apt_unit_masked_unit: nginx.service
   tags:
     - nginx
+    - _check_stage1
 
 - name: Disable default site
   file:
@@ -165,7 +166,6 @@
     - nginx
 
 - name: Setup web_log metrics
-  when: not (ansible_check_mode)
   copy:
     src: web_log.conf
     dest: /etc/netdata/go.d/web_log.conf

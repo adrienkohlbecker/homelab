@@ -7,6 +7,8 @@
   become: true
   tags:
     - tautulli
+    - _check_stage1
+    - _check_stage2
 
 - name: Add tautulli group
   group:
@@ -15,6 +17,8 @@
   become: true
   tags:
     - tautulli
+    - _check_stage1
+    - _check_stage2
 
 - name: Add tautulli user
   user:
@@ -28,6 +32,8 @@
   register: tautulli_user
   tags:
     - tautulli
+    - _check_stage1
+    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and tautulli_user.changed)
@@ -40,6 +46,7 @@
   become: true
   tags:
     - tautulli
+    - _check_stage2
 
 - name: Configure tautulli
   template:
@@ -53,6 +60,7 @@
   become: true
   tags:
     - tautulli
+    - _check_stage2
 
 - name: Install tautulli service
   import_role:
@@ -63,6 +71,7 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and tautulli_user.changed) }}"
   tags:
     - tautulli
+    - _check_stage2
 
 - name: Enable the service
   when: not (ansible_check_mode and (systemd_unit.changed or tautulli_user.changed)) and not docker_test

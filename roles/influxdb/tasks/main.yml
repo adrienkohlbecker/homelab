@@ -7,6 +7,8 @@
   become: true
   tags:
     - influxdb
+    - _check_stage1
+    - _check_stage2
 
 - name: Add influxdb group
   group:
@@ -15,6 +17,8 @@
   become: true
   tags:
     - influxdb
+    - _check_stage1
+    - _check_stage2
 
 - name: Add influxdb user
   user:
@@ -28,6 +32,8 @@
   register: influxdb_user
   tags:
     - influxdb
+    - _check_stage1
+    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and influxdb_user.changed)
@@ -44,6 +50,7 @@
   become: true
   tags:
     - influxdb
+    - _check_stage2
 
 - name: Install influxdb service
   import_role:
@@ -54,6 +61,7 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and influxdb_user.changed) }}"
   tags:
     - influxdb
+    - _check_stage2
 
 - name: Enable the service
   when: not (ansible_check_mode and (systemd_unit.changed or influxdb_user.changed))

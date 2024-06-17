@@ -8,6 +8,7 @@
     apt_unit_masked_install_recommends: false
   tags:
     - prometheus
+    - _check_stage1
 
 - name: Copy the configuration
   template:

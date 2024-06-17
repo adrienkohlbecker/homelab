@@ -7,6 +7,8 @@
   become: true
   tags:
     - radarr
+    - _check_stage1
+    - _check_stage2
 
 - name: Add radarr group
   group:
@@ -15,19 +17,8 @@
   become: true
   tags:
     - radarr
-
-- name: Add radarr user
-  user:
-    name: radarr
-    group: radarr
-    createhome: false
-    system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
-  become: true
-  register: radarr_user
-  tags:
-    - radarr
+    - _check_stage1
+    - _check_stage2
 
 - name: Add media group
   group:
@@ -37,15 +28,24 @@
   register: media_group
   tags:
     - radarr
+    - _check_stage1
+    - _check_stage2
 
-- name: Add user to group
+- name: Add radarr user
   user:
     name: radarr
+    group: radarr
     groups: media
-    append: true
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
   become: true
+  register: radarr_user
   tags:
     - radarr
+    - _check_stage1
+    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and radarr_user.changed)
@@ -58,6 +58,7 @@
   become: true
   tags:
     - radarr
+    - _check_stage2
 
 - name: Configure radarr
   template:
@@ -71,6 +72,7 @@
   become: true
   tags:
     - radarr
+    - _check_stage2
 
 - name: Install radarr service
   import_role:
@@ -81,6 +83,7 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and radarr_user.changed) }}"
   tags:
     - radarr
+    - _check_stage2
 
 - name: Enable the service
   when: not (ansible_check_mode and (systemd_unit.changed or radarr_user.changed)) and not docker_test

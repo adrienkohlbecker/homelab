@@ -7,6 +7,8 @@
   become: true
   tags:
     - kuma
+    - _check_stage1
+    - _check_stage2
 
 - name: Add kuma group
   group:
@@ -15,6 +17,8 @@
   become: true
   tags:
     - kuma
+    - _check_stage1
+    - _check_stage2
 
 - name: Add kuma user
   user:
@@ -28,6 +32,8 @@
   register: kuma_user
   tags:
     - kuma
+    - _check_stage1
+    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and kuma_user.changed)
@@ -40,6 +46,7 @@
   become: true
   tags:
     - kuma
+    - _check_stage2
 
 - name: Install kuma service
   import_role:
@@ -50,6 +57,7 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and kuma_user.changed) }}"
   tags:
     - kuma
+    - _check_stage2
 
 - name: Enable the service
   when: not (ansible_check_mode and systemd_unit.changed) and not docker_test

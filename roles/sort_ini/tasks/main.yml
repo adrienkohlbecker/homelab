@@ -9,6 +9,7 @@
   become: true
   tags:
     - sort_ini
+    - _check_stage1
 
 - name: Install sort_ini service
   import_role:
@@ -18,6 +19,7 @@
     systemd_unit_src: sort_ini@.service
   tags:
     - sort_ini
+    - _check_stage1
 
 - name: Enable the service
   when: not (ansible_check_mode and systemd_unit.changed)

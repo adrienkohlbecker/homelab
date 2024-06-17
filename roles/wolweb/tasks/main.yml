@@ -7,6 +7,8 @@
   become: true
   tags:
     - wolweb
+    - _check_stage1
+    - _check_stage2
 
 - name: Install jq
   apt:
@@ -16,6 +18,8 @@
   become: true
   tags:
     - wolweb
+    - _check_stage1
+    - _check_stage2
 
 - name: Add wolweb group
   group:
@@ -24,6 +28,8 @@
   become: true
   tags:
     - wolweb
+    - _check_stage1
+    - _check_stage2
 
 - name: Add wolweb user
   user:
@@ -37,6 +43,8 @@
   register: wolweb_user
   tags:
     - wolweb
+    - _check_stage1
+    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and wolweb_user.changed)
@@ -49,6 +57,7 @@
   become: true
   tags:
     - wolweb
+    - _check_stage2
 
 - name: Compute broadcast ip
   set_fact:
@@ -56,6 +65,7 @@
   become: true
   tags:
     - wolweb
+    - _check_stage2
 
 - name: Configure wolweb
   template:
@@ -70,6 +80,7 @@
   become: true
   tags:
     - wolweb
+    - _check_stage2
 
 - name: Configure wolweb
   template:
@@ -84,6 +95,7 @@
   become: true
   tags:
     - wolweb
+    - _check_stage2
 
 - name: Install wolweb service
   import_role:
@@ -94,6 +106,7 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and wolweb_user.changed) }}"
   tags:
     - wolweb
+    - _check_stage2
 
 - name: Enable the service
   when: not (ansible_check_mode and systemd_unit.changed) and not docker_test

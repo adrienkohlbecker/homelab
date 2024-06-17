@@ -7,6 +7,7 @@
     apt_unit_masked_unit: postfix.service
   tags:
     - postfix
+    - _check_stage1
 
 - name: Install libsasl2 (for postfix TLS authentication) and mailutils (for sending emails)
   apt:
