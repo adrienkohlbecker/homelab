@@ -123,31 +123,14 @@
     - jellyfin
     - _check_stage2
 
-- name: Enable the service
-  when: not (ansible_check_mode and (systemd_unit.changed or jellyfin_user.changed))
-  systemd:
-    name: jellyfin
-    enabled: true
-  become: true
-  tags:
-    - jellyfin
-
-- name: Start the service
-  when: not (ansible_check_mode and (systemd_unit.changed or jellyfin_user.changed)) and not docker_test
-  systemd:
-    name: jellyfin
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - jellyfin
-
-- name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or jellyfin_user.changed)) and not docker_test and (systemd_unit.changed and not systemd_started.changed)
-  systemd:
-    name: jellyfin
-    state: restarted
-  become: true
+- name: Enable jellyfin service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: jellyfin
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or jellyfin_user.changed)) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - jellyfin
 
