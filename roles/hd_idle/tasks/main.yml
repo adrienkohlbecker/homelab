@@ -40,23 +40,11 @@
     - hd_idle
 
 - name: Configure logrotate
-  template:
-    src: logrotate.j2
-    dest: /etc/logrotate.d/hd-idle
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: logrotate_conf
-  become: true
-  tags:
-    - hd_idle
-
-- name: Restart logrotate
-  when: logrotate_conf.changed and not docker_test
-  systemd:
+  import_role:
     name: logrotate
-    state: restarted
-  become: true
+    tasks_from: template
+  vars:
+    logrotate_src: logrotate.j2
+    logrotate_dest: /etc/logrotate.d/hd-idle
   tags:
     - hd_idle

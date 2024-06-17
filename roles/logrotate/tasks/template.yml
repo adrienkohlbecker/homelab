@@ -1,0 +1,17 @@
+- name: template | Configure logrotate
+  template:
+    src: "{{ logrotate_src }}"
+    dest: "{{ logrotate_dest }}"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: logrotate_conf
+  become: true
+
+- name: template | Restart logrotate
+  when: logrotate_conf.changed and not docker_test
+  systemd:
+    name: logrotate
+    state: restarted
+  become: true
