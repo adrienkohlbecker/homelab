@@ -201,52 +201,14 @@
   tags:
     - pihole
 
-- name: Ensure netdata directory exists
-  file:
-    dest: "{{ item }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  loop:
-    - /etc/netdata/
-    - /etc/netdata/go.d/
-  become: true
-  tags:
-    - pihole
-
-- name: Copy pihole metrics template
-  when: not docker_test
-  command: cp /usr/lib/netdata/conf.d/go.d/pihole.conf /etc/netdata/go.d/pihole.conf
-  args:
-    creates: /etc/netdata/go.d/pihole.conf
-  register: netdata_pihole_conf_template
-  become: true
-  tags:
-    - pihole
-
-- name: Setup pihole metrics
-  when: not (ansible_check_mode and netdata_pihole_conf_template.changed) # TODO add _check_stageX tag
-  template:
-    src: pihole.conf.j2
-    dest: /etc/netdata/go.d/pihole.conf
-    owner: "{{ docker_test|ternary('root', 'netdata') }}"
-    group: "{{ docker_test|ternary('root', 'netdata') }}"
-    mode: "0600"
-    backup: true
-  register: netdata_pihole_conf
-  become: true
-  tags:
-    - pihole
-
-- name: Restart netdata
-  when: (netdata_pihole_conf_template.changed or netdata_pihole_conf.changed) and not docker_test
-  systemd:
+- name: Configure pihole metrics
+  import_role:
     name: netdata
-    state: restarted
-  become: true
-  tags:
-    - pihole
+    tasks_from: template
+  vars:
+    netdata_template_src: pihole.conf.j2
+    netdata_template_dest: go.d/pihole.conf
+    netdata_template_mode: "0600"
 
 - name: Configure nginx
   import_role:
