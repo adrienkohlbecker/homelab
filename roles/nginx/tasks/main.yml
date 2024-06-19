@@ -134,38 +134,10 @@
   tags:
     - nginx
 
-- name: Ensure netdata directory exists
-  file:
-    dest: "{{ item }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  loop:
-    - /etc/netdata/
-    - /etc/netdata/go.d/
-  become: true
-  tags:
-    - nginx
-
-- name: Setup web_log metrics
-  copy:
-    src: web_log.conf
-    dest: /etc/netdata/go.d/web_log.conf
-    owner: "{{ docker_test|ternary('root', 'netdata') }}"
-    group: "{{ docker_test|ternary('root', 'netdata') }}"
-    mode: "0644"
-    backup: true
-  register: netdata_web_log_conf
-  become: true
-  tags:
-    - nginx
-
-- name: Restart netdata
-  when: netdata_web_log_conf.changed and not docker_test
-  systemd:
+- name: Configure web log metrics
+  import_role:
     name: netdata
-    state: restarted
-  become: true
-  tags:
-    - nginx
+    tasks_from: copy
+  vars:
+    netdata_copy_src: web_log.conf
+    netdata_copy_dest: go.d/web_log.conf
