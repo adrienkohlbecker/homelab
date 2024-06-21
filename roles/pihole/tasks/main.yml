@@ -209,6 +209,8 @@
     netdata_template_src: pihole.conf.j2
     netdata_template_dest: go.d/pihole.conf
     netdata_template_mode: "0600"
+  tags:
+    - pihole
 
 - name: Configure nginx
   import_role:
