@@ -106,16 +106,14 @@
   tags:
     - netdata
 
-- name: Copy the prometheus config
-  template:
-    src: prometheus.conf.j2
-    dest: /etc/netdata/go.d/prometheus.conf
-    owner: netdata
-    group: netdata
-    mode: "0600"
-    backup: true
-  register: prometheus_conf
-  become: true
+- name: Configure prometheus metrics
+  import_role:
+    name: netdata
+    tasks_from: template
+  vars:
+    netdata_template_src: prometheus.conf.j2
+    netdata_template_dest: go.d/prometheus.conf
+    netdata_template_mode: "0600"
   tags:
     - netdata
 
@@ -133,29 +131,23 @@
   tags:
     - netdata
 
-- name: Copy the docker config
-  copy:
-    src: docker.conf
-    dest: /etc/netdata/go.d/docker.conf
-    owner: netdata
-    group: netdata
-    mode: "0600"
-    backup: true
-  register: docker_conf
-  become: true
+- name: Configure docker metrics
+  import_role:
+    name: netdata
+    tasks_from: copy
+  vars:
+    netdata_copy_src: docker.conf
+    netdata_copy_dest: go.d/docker.conf
   tags:
     - netdata
 
-- name: Copy the smartd_log config
-  copy:
-    src: smartd_log.conf
-    dest: /etc/netdata/python.d/smartd_log.conf
-    owner: netdata
-    group: netdata
-    mode: "0644"
-    backup: true
-  register: smartd_log_conf
-  become: true
+- name: Configure smartd_log metrics
+  import_role:
+    name: netdata
+    tasks_from: copy
+  vars:
+    netdata_copy_src: smartd_log.conf
+    netdata_copy_dest: python.d/smartd_log.conf
   tags:
     - netdata
 
@@ -214,59 +206,23 @@
   tags:
     - netdata
 
-- name: Copy systemdunits health template
-  command: cp /usr/lib/netdata/conf.d/health.d/systemdunits.conf /etc/netdata/health.d/systemdunits.conf
-  args:
-    creates: /etc/netdata/health.d/systemdunits.conf
-  register: netdata_systemdunits_health_template
-  become: true
+- name: Configure netdata alerts
+  import_role:
+    name: netdata
+    tasks_from: health_copy
+  vars:
+    netdata_copy_src: systemdunits_alerts.conf
+    netdata_copy_dest: systemdunits.conf
   tags:
     - netdata
 
-- name: Setup systemdunits alerts
-  when: not (ansible_check_mode and netdata_systemdunits_health_template.changed) # TODO add _check_stageX tag
-  lineinfile:
-    path: /etc/netdata/health.d/systemdunits.conf
-    line: "chart labels: unit_name=!*"
-    state: absent
-    backup: true
-  register: netdata_systemdunits_health
-  become: true
-  tags:
-    - netdata
-
-- name: Setup systemdunits alerts
-  when: not (ansible_check_mode and netdata_systemdunits_health_template.changed) # TODO add _check_stageX tag
-  replace:
-    path: /etc/netdata/health.d/systemdunits.conf
-    regexp: "^       delay: .*"
-    replace: "       delay: up 1m down 5m multiplier 1.5 max 1h"
-    backup: true
-  register: netdata_systemdunits_health_2
-  become: true
-  tags:
-    - netdata
-
-- name: Copy systemdunits metrics template
-  command: cp /usr/lib/netdata/conf.d/go.d/systemdunits.conf /etc/netdata/go.d/systemdunits.conf
-  args:
-    creates: /etc/netdata/go.d/systemdunits.conf
-  register: netdata_systemdunits_conf_template
-  become: true
-  tags:
-    - netdata
-
-- name: Setup systemdunits metrics
-  when: not (ansible_check_mode and netdata_systemdunits_conf_template.changed) # TODO add _check_stageX tag
-  copy:
-    src: systemdunits.conf
-    dest: /etc/netdata/go.d/systemdunits.conf
-    owner: netdata
-    group: netdata
-    mode: "0644"
-    backup: true
-  register: netdata_systemdunits_conf
-  become: true
+- name: Configure systemdunits metrics
+  import_role:
+    name: netdata
+    tasks_from: copy
+  vars:
+    netdata_copy_src: systemdunits.conf
+    netdata_copy_dest: go.d/systemdunits.conf
   tags:
     - netdata
 
@@ -277,15 +233,7 @@
   vars:
     systemd_unit_src: netdata
     systemd_unit_condition: "{{ not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) }}"
-    systemd_unit_restart: "{{ netdata_conf.changed or cloud_conf.changed or netdata_optout.changed or prometheus_conf.changed or docker_conf.changed or netdata_health_alarm_notify.changed or smartd_log_conf.changed or debugfs_mount.changed or netdata_systemdunits_conf_template.changed or netdata_systemdunits_conf.changed }}"
-  tags:
-    - netdata
-
-- name: Reload health configuration
-  when: (netdata_systemdunits_health_template.changed or netdata_systemdunits_health.changed or netdata_systemdunits_health_2.changed) and not docker_test and not (systemd_started.changed or systemd_restarted.changed)
-  command: netdatacli reload-health
-  changed_when: true
-  become: true
+    systemd_unit_restart: "{{ netdata_conf.changed or cloud_conf.changed or netdata_optout.changed or netdata_health_alarm_notify.changed or debugfs_mount.changed }}"
   tags:
     - netdata
 

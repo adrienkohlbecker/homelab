@@ -10,7 +10,7 @@
     - /etc/netdata/{{ netdata_template_dest | dirname }}/
   become: true
 
-- name: template | Copy certificate metrics template
+- name: template | Copy metrics template
   when: not docker_test
   command: cp /usr/lib/netdata/conf.d/{{ netdata_template_dest }} /etc/netdata/{{ netdata_template_dest }}
   args:
@@ -18,7 +18,7 @@
   register: netdata_template_copy
   become: true
 
-- name: template | Setup certificate metrics
+- name: template | Setup metrics
   when: not (ansible_check_mode and netdata_template_copy.changed)
   template:
     src: "{{ netdata_template_src }}"

@@ -1,4 +1,4 @@
-- name: template | Ensure netdata directory exists
+- name: copy | Ensure netdata directory exists
   file:
     dest: "{{ item }}"
     state: directory
@@ -10,7 +10,7 @@
     - /etc/netdata/{{ netdata_copy_dest | dirname }}/
   become: true
 
-- name: template | Copy certificate metrics template
+- name: copy | Copy metrics template
   when: not docker_test
   command: cp /usr/lib/netdata/conf.d/{{ netdata_copy_dest }} /etc/netdata/{{ netdata_copy_dest }}
   args:
@@ -18,7 +18,7 @@
   register: netdata_copy_copy
   become: true
 
-- name: template | Setup certificate metrics
+- name: copy | Setup metrics
   when: not (ansible_check_mode and netdata_copy_copy.changed)
   copy:
     src: "{{ netdata_copy_src }}"
@@ -30,7 +30,7 @@
   register: netdata_copy
   become: true
 
-- name: template | Restart netdata
+- name: copy | Restart netdata
   when: not docker_test and (netdata_copy_copy.changed or netdata_copy.changed)
   systemd:
     name: netdata

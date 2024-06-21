@@ -87,38 +87,14 @@
   tags:
     - custom_exporter
 
-- name: Ensure netdata directory exists
-  file:
-    dest: "{{ item }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  loop:
-    - /etc/netdata/
-    - /etc/netdata/health.d/
-  become: true
-  tags:
-    - custom_exporter
-
-- name: Copy the alerting config
-  copy:
-    src: alerts.conf
-    dest: /etc/netdata/health.d/custom_exporter.conf
-    owner: "{{ docker_test|ternary('root', 'netdata') }}"
-    group: "{{ docker_test|ternary('root', 'netdata') }}"
-    mode: "0600"
-    backup: true
-  register: alerts_conf
-  become: true
-  tags:
-    - custom_exporter
-
-- name: Reload health configuration
-  when: alerts_conf.changed and not docker_test
-  command: netdatacli reload-health
-  changed_when: true
-  become: true
+- name: Configure netdata alerts
+  import_role:
+    name: netdata
+    tasks_from: health_copy
+  vars:
+    netdata_copy_src: alerts.conf
+    netdata_copy_dest: custom_exporter.conf
+    netdata_copy_mode: "0600"
   tags:
     - custom_exporter
 
