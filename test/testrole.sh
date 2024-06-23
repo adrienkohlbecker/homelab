@@ -34,7 +34,7 @@ stop() {
 
 trap stop EXIT
 
-podman run -i --rm -p 127.0.0.1::22 -d --cidfile $TMPDIR/cid homelab
+podman run --interactive --rm --publish 127.0.0.1::22 --detach --cidfile $TMPDIR/cid --timeout 600 homelab
 
 while [ ! -f $TMPDIR/cid ]; do
   echo "."
