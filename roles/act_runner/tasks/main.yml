@@ -70,8 +70,8 @@
 - name: Install act_runner if needed
   when: '"v0.2.10" not in act_runner_check.stderr'
   get_url:
-    url: https://gitea.com/gitea/act_runner/releases/download/v0.2.10/act_runner-0.2.10-linux-amd64
-    checksum: sha256:b11753c8fe0143dfbaa392ffc5cc035db551fd7254c145dce512aebc8947542a.
+    url: https://gitea.com/gitea/act_runner/releases/download/v0.2.10/act_runner-0.2.10-linux-{{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }}
+    checksum: sha256:{{ (ansible_architecture == "aarch64") | ternary('1d727f9190ce559689db9d716d548f01c0cde1c034c9c4d570f7992857251be8', 'b11753c8fe0143dfbaa392ffc5cc035db551fd7254c145dce512aebc8947542a') }}
     dest: /usr/local/bin/act_runner
     mode: "0755"
     owner: root
