@@ -8,41 +8,25 @@
   tags:
     - keepalived_exporter
     - _check_stage1
+    - _check_stage2
 
 - name: Install keepalived_exporter if needed
-  when: '"0.7.0" not in keepalived_exporter_check.stderr'
-  become: true
+  when: '"0.7.0" not in keepalived_exporter_check.stderr and ansible_architecture == "x86_64"'
   tags:
     - keepalived_exporter
-    - _check_stage1
   block:
-    - name: Download keepalived_exporter
-      check_mode: false
-      get_url:
-        url: https://github.com/gen2brain/keepalived_exporter/releases/download/v0.7.0/keepalived_exporter-0.7.0-amd64.tar.gz
-        checksum: sha256:83098655dc26e58fb0b9a1fd04d5e96301cb687876e6d70a99eddd23533d987b
-        dest: /tmp/keepalived_exporter.tar.gz
-        mode: "0644"
-        owner: root
-        group: root
+    - name: Install for amd64
+      import_tasks:
+        file: install_amd64.yml
 
-    - name: Install keepalived_exporter
-      unarchive:
-        src: /tmp/keepalived_exporter.tar.gz
-        remote_src: true
-        dest: /usr/local/bin
-        mode: "0755"
-        owner: root
-        group: root
-        include: [ keepalived_exporter-0.7.0-amd64/keepalived_exporter ]
-        list_files: true
-        extra_opts: [ --strip-components=1 ]
-      register: keepalived_exporter_installed
-
-    - name: Delete tar file
-      file:
-        path: /tmp/keepalived_exporter.tar.gz
-        state: absent
+- name: Install keepalived_exporter if needed
+  when: '"0.7.0" not in keepalived_exporter_check.stderr and ansible_architecture != "x86_64"'
+  tags:
+    - keepalived_exporter
+  block:
+    - name: Install for non amd64
+      import_tasks:
+        file: install_arm64.yml
 
 - name: Install keepalived_exporter service
   import_role:
@@ -52,7 +36,7 @@
     systemd_unit_src: keepalived_exporter.service
   tags:
     - keepalived_exporter
-    - _check_stage1
+    - _check_stage2
 
 - name: Enable keepalived_exporter service
   import_role:
