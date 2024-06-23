@@ -9,6 +9,8 @@
   become: true
   tags:
     - zfs_autobackup
+    - _check_stage1
+    - _check_stage2
 
 # because https://www.reddit.com/r/learnpython/comments/uj3dhx/why_does_pip_keep_reinstalling_the_same_version/ marks it changed every time
 - name: Check if zfs autobackup installed
@@ -18,6 +20,8 @@
   register: zfs_autobackup_installed
   tags:
     - zfs_autobackup
+    - _check_stage1
+    - _check_stage2
 
 - name: Install zfs autobackup
   when: not zfs_autobackup_installed.stat.exists
@@ -28,6 +32,8 @@
   register: zfs_autobackup_install
   tags:
     - zfs_autobackup
+    - _check_stage1
+    - _check_stage2
 
 - name: Configure symlink
   when: not (ansible_check_mode and zfs_autobackup_install.changed)
@@ -41,40 +47,26 @@
   become: true
   tags:
     - zfs_autobackup
+    - _check_stage2
 
 - name: Add zfs_autosnapshot.target systemd unit
   import_role:
     name: systemd_unit
+    tasks_from: copy
   vars:
     systemd_unit_src: zfs_autosnapshot.target
   tags:
     - zfs_autobackup
+    - _check_stage2
 
-- name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed)
-  systemd:
-    name: zfs_autosnapshot.target
-    enabled: true
-  become: true
-  tags:
-    - zfs_autobackup
-
-- name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed)
-  systemd:
-    name: zfs_autosnapshot.target
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - zfs_autobackup
-
-- name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and (systemd_unit.changed) and not systemd_started.changed
-  systemd:
-    name: zfs_autosnapshot.target
-    state: restarted
-  become: true
+- name: Enable zfs_autosnapshot.target
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: zfs_autosnapshot.target
+    systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - zfs_autobackup
 
@@ -164,24 +156,12 @@
     - zfs_autobackup
 
 - name: Configure logrotate
-  template:
-    src: logrotate.j2
-    dest: /etc/logrotate.d/zfs_autobackup
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: logrotate_conf
-  become: true
-  tags:
-    - zfs_autobackup
-
-- name: Restart logrotate
-  when: logrotate_conf.changed
-  systemd:
+  import_role:
     name: logrotate
-    state: restarted
-  become: true
+    tasks_from: template
+  vars:
+    logrotate_src: logrotate.j2
+    logrotate_dest: /etc/logrotate.d/zfs_autobackup
   tags:
     - zfs_autobackup
 

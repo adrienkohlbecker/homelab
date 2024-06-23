@@ -8,6 +8,7 @@
   register: apt_install_certbot
   tags:
     - certbot
+    - _check_stage1
 
 - name: Create config directory
   file:
@@ -47,7 +48,7 @@
     - certbot
 
 - name: Get certificates
-  command: certbot certonly --agree-tos -m {{ root_email }} --noninteractive --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini --dns-cloudflare-propagation-seconds 30 -d "{{ item }}" -d "*.{{ item }}"
+  command: certbot certonly --agree-tos -m {{ root_email }} --noninteractive {{ docker_test|ternary('--test-cert', '') }} --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini --dns-cloudflare-propagation-seconds 30 -d "{{ item }}" -d "*.{{ item }}"
   args:
     creates: /etc/letsencrypt/live/{{ item }}/privkey.pem
   become: true
@@ -57,44 +58,12 @@
   tags:
     - certbot
 
-- name: Configure logrotate
+- name: Configure certificate metrics
   import_role:
-    name: logrotate
-    tasks_from: compression
-  vars:
-    logrotate_item: /etc/logrotate.d/certbot
-    logrotate_condition: "{{ not (ansible_check_mode and apt_install_certbot.changed) }}"
-  tags:
-    - certbot
-
-- name: Copy certificate metrics template
-  command: cp /usr/lib/netdata/conf.d/go.d/x509check.conf /etc/netdata/go.d/x509check.conf
-  args:
-    creates: /etc/netdata/go.d/x509check.conf
-  register: netdata_certificate_conf_template
-  become: true
-  tags:
-    - certbot
-
-- name: Setup certificate metrics
-  when: not (ansible_check_mode and netdata_certificate_conf_template.changed)
-  template:
-    src: x509check.conf.j2
-    dest: /etc/netdata/go.d/x509check.conf
-    owner: netdata
-    group: netdata
-    mode: "0644"
-    backup: true
-  register: netdata_certificate_conf
-  become: true
-  tags:
-    - certbot
-
-- name: Restart netdata
-  when: (netdata_certificate_conf_template.changed or netdata_certificate_conf.changed)
-  systemd:
     name: netdata
-    state: restarted
-  become: true
+    tasks_from: template
+  vars:
+    netdata_template_src: x509check.conf.j2
+    netdata_template_dest: go.d/x509check.conf
   tags:
     - certbot

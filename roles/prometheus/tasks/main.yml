@@ -1,12 +1,14 @@
 - name: Install prometheus
   import_role:
     name: apt_unit_masked
+    tasks_from: apt
   vars:
     apt_unit_masked_pkg: prometheus
     apt_unit_masked_unit: prometheus.service
     apt_unit_masked_install_recommends: false
   tags:
     - prometheus
+    - _check_stage1
 
 - name: Copy the configuration
   template:
@@ -21,31 +23,14 @@
   tags:
     - prometheus
 
-- name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
-  systemd:
-    name: prometheus
-    enabled: true
-  become: true
-  tags:
-    - prometheus
-
-- name: Start the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
-  systemd:
-    name: prometheus
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - prometheus
-
-- name: Restart the service
-  when: not (ansible_check_mode and apt_unit_masked.changed) and (apt_unit_masked.changed or prometheus_conf.changed) and not systemd_started.changed
-  systemd:
-    name: prometheus
-    state: restarted
-  become: true
+- name: Enable prometheus service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: prometheus
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
+    systemd_unit_restart: "{{ apt_unit_masked.changed or prometheus_conf.changed }}"
   tags:
     - prometheus
 

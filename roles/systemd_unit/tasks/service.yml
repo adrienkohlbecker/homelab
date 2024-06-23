@@ -1,0 +1,21 @@
+- name: Enable the service
+  when: (systemd_unit_condition | default(true)) and not docker_test
+  systemd:
+    name: "{{ systemd_unit_dest | default(systemd_unit_src) }}"
+    enabled: true
+  become: true
+
+- name: Start the service
+  when: (systemd_unit_condition | default(true)) and not docker_test and (systemd_unit_start | default(true))
+  systemd:
+    name: "{{ systemd_unit_dest | default(systemd_unit_src) }}"
+    state: started
+  register: systemd_started
+  become: true
+
+- name: Restart the service
+  when: (systemd_unit_condition | default(true)) and not docker_test and (systemd_unit_start | default(true)) and (systemd_unit_restart | default(false) and not systemd_started.changed)
+  systemd:
+    name: "{{ systemd_unit_dest | default(systemd_unit_src) }}"
+    state: restarted
+  become: true

@@ -12,6 +12,8 @@
   register: apt_install_libvirt
   tags:
     - libvirt
+    - _check_stage1
+    - _check_stage2
 
 - name: Install ansible dependencies to run libvirt module
   apt:
@@ -23,6 +25,7 @@
   register: apt_install_python_libvirt
   tags:
     - libvirt
+    - _check_stage2
 
 - name: Create mount point
   file:
@@ -60,6 +63,7 @@
 - name: Add current user to virtualization groups
   import_role:
     name: usergroup_immediate
+    tasks_from: user
   when: not (ansible_check_mode and apt_install_libvirt.changed)
   vars:
     usergroup_immediate_group:
@@ -68,33 +72,16 @@
   tags:
     - libvirt
 
-- name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
-  systemd:
-    name: libvirtd
-    enabled: true
-  become: true
+- name: Enable libvirtd service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: libvirtd
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_install_libvirt.changed) }}"
+    systemd_unit_restart: false
   tags:
     - libvirt
-
-- name: Start the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
-  systemd:
-    name: libvirtd
-    state: started
-  become: true
-  register: systemd_started
-  tags:
-    - libvirt
-
-# - name: Restart libvirt
-#   when: not (ansible_check_mode and apt_unit_masked.changed) and libvirt_conf.changed and not systemd_started.changed
-#   systemd:
-#     name: libvirtd
-#     state: restarted
-#   become: true
-#   tags:
-#     - libvirt
 
 - name: Compute network values
   set_fact:
@@ -117,7 +104,7 @@
     - libvirt
 
 - name: Get network facts
-  when: not (ansible_check_mode and apt_install_python_libvirt.changed)
+  when: not (ansible_check_mode and apt_install_python_libvirt.changed) and not docker_test
   virt_net:
     command: facts
     name: default
@@ -129,7 +116,7 @@
 
 # assuming the random mac is not the same as libvirt initially generated at install...
 - name: Configure default network
-  when: not (ansible_check_mode and apt_install_python_libvirt.changed) and (ansible_libvirt_networks is undefined or (ansible_libvirt_networks['default'] and ansible_libvirt_networks['default'].macaddress != libvirt_network_mac))
+  when: not (ansible_check_mode and apt_install_python_libvirt.changed) and not docker_test and (ansible_libvirt_networks is undefined or (ansible_libvirt_networks['default'] and ansible_libvirt_networks['default'].macaddress != libvirt_network_mac))
   block:
 
     - name: Remove default network
@@ -150,7 +137,7 @@
         - libvirt
 
 - name: Start default network
-  when: not (ansible_check_mode and apt_install_python_libvirt.changed)
+  when: not (ansible_check_mode and apt_install_python_libvirt.changed) and not docker_test
   community.libvirt.virt_net:
     name: default
     state: active
@@ -159,7 +146,7 @@
     - libvirt
 
 - name: Autostart default network
-  when: not (ansible_check_mode and apt_install_python_libvirt.changed)
+  when: not (ansible_check_mode and apt_install_python_libvirt.changed) and not docker_test
   community.libvirt.virt_net:
     name: default
     autostart: true

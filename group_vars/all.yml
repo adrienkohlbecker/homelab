@@ -1,3 +1,4 @@
+docker_test: false
 domain: fahm.fr
 home_subnet: 10.123.0.0/16
 site_subnets:

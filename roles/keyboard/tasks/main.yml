@@ -21,7 +21,7 @@
     - keyboard
 
 - name: Update initramfs
-  when: keyboard_cfg.changed
+  when: keyboard_cfg.changed and not docker_test
   command: update-initramfs -u -k all
   become: true
   changed_when: true

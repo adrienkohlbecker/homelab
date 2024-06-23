@@ -9,6 +9,7 @@
   register: ssh_root_directory
   tags:
     - ssh_root
+    - _check_stage1
 
 - name: Generate an OpenSSH keypair
   when: not (ansible_check_mode and ssh_root_directory.changed)

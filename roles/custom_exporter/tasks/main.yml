@@ -6,6 +6,8 @@
   become: true
   tags:
     - custom_exporter
+    - _check_stage1
+    - _check_stage2
 
 - name: Create source directory
   file:
@@ -18,6 +20,8 @@
   register: custom_exporter_dir
   tags:
     - custom_exporter
+    - _check_stage1
+    - _check_stage2
 
 - name: Copy files
   copy:
@@ -35,6 +39,7 @@
   become: true
   tags:
     - custom_exporter
+    - _check_stage2
 
 - name: Compile source
   command: go build main.go
@@ -45,6 +50,7 @@
   become: true
   tags:
     - custom_exporter
+    - _check_stage2
 
 - name: Configure custom_exporter
   template:
@@ -58,75 +64,37 @@
   become: true
   tags:
     - custom_exporter
+    - _check_stage2
 
 - name: Install custom_exporter service
   import_role:
     name: systemd_unit
+    tasks_from: copy
   vars:
     systemd_unit_src: custom_exporter.service
   tags:
     - custom_exporter
+    - _check_stage2
 
-- name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed)
-  systemd:
-    name: custom_exporter
-    enabled: true
-  become: true
+- name: Enable custom_exporter service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: custom_exporter
+    systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or custom_exporter_files.changed or custom_exporter_cfg.changed }}"
   tags:
     - custom_exporter
 
-- name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed)
-  systemd:
-    name: custom_exporter
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - custom_exporter
-
-- name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and (systemd_unit.changed or custom_exporter_files.changed or custom_exporter_cfg.changed) and not systemd_started.changed
-  systemd:
-    name: custom_exporter
-    state: restarted
-  become: true
-  tags:
-    - custom_exporter
-
-- name: Ensure netdata directory exists
-  file:
-    dest: "{{ item }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  loop:
-    - /etc/netdata/
-    - /etc/netdata/health.d/
-  become: true
-  tags:
-    - custom_exporter
-
-- name: Copy the alerting config
-  copy:
-    src: alerts.conf
-    dest: /etc/netdata/health.d/custom_exporter.conf
-    owner: netdata
-    group: netdata
-    mode: "0600"
-    backup: true
-  register: alerts_conf
-  become: true
-  tags:
-    - custom_exporter
-
-- name: Reload health configuration
-  when: alerts_conf.changed
-  command: netdatacli reload-health
-  changed_when: true
-  become: true
+- name: Configure netdata alerts
+  import_role:
+    name: netdata
+    tasks_from: health_copy
+  vars:
+    netdata_copy_src: alerts.conf
+    netdata_copy_dest: custom_exporter.conf
+    netdata_copy_mode: "0600"
   tags:
     - custom_exporter
 

@@ -8,6 +8,7 @@
   become: true
   tags:
     - avahi
+    - _check_stage1
 
 - name: Copy avahi device-info service
   copy:
@@ -21,30 +22,13 @@
   tags:
     - avahi
 
-- name: Enable the service
-  when: not (ansible_check_mode and apt_install_avahi.changed)
-  systemd:
-    name: avahi-daemon
-    enabled: true
-  become: true
-  tags:
-    - avahi
-
-- name: Start the service
-  when: not (ansible_check_mode and apt_install_avahi.changed)
-  systemd:
-    name: avahi-daemon
-    state: started
-  become: true
-  register: systemd_started
-  tags:
-    - avahi
-
-- name: Restart the service
-  when: not (ansible_check_mode and apt_install_avahi.changed) and (avahi_device_info.changed) and not systemd_started.changed
-  systemd:
-    name: avahi-daemon
-    state: restarted
-  become: true
+- name: Enable avahi service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: avahi-daemon
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_install_avahi.changed) }}"
+    systemd_unit_restart: "{{ avahi_device_info.changed }}"
   tags:
     - avahi

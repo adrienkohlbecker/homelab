@@ -1,6 +1,7 @@
 - name: Install vector package
   import_role:
     name: apt_unit_masked
+    tasks_from: apt
   vars:
     apt_unit_masked_pkg: samba
     apt_unit_masked_unit:
@@ -8,6 +9,7 @@
       - nmbd.service
   tags:
     - samba
+    - _check_stage1
 
 - name: Configure samba
   template:
@@ -23,58 +25,38 @@
   tags:
     - samba
 
-- name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
-  systemd:
-    name: smbd
-    enabled: true
-  become: true
+- name: Enable smbd service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: smbd
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
+    systemd_unit_restart: "{{ samba_cfg.changed }}"
   tags:
     - samba
 
-- name: Start the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
-  systemd:
-    name: smbd
-    state: started
-  become: true
-  register: samba_started
+- name: Enable nmbd service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: nmbd
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
+    systemd_unit_restart: "{{ samba_cfg.changed }}"
   tags:
     - samba
 
-- name: Restart samba
-  when: not (ansible_check_mode and apt_unit_masked.changed) and (samba_cfg.changed) and not samba_started.changed
-  systemd:
-    name: smbd
-    state: restarted
-  become: true
-  tags:
-    - samba
-
-- name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
-  systemd:
-    name: nmbd
-    enabled: true
-  become: true
-  tags:
-    - samba
-
-- name: Start the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
-  systemd:
-    name: nmbd
-    state: started
-  become: true
-  register: samba_started
-  tags:
-    - samba
-
-- name: Restart samba
-  when: not (ansible_check_mode and apt_unit_masked.changed) and (samba_cfg.changed) and not samba_started.changed
-  systemd:
-    name: nmbd
-    state: restarted
+- name: Ensure avahi directory exists
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/avahi/
+    - /etc/avahi/services/
   become: true
   tags:
     - samba
@@ -92,7 +74,7 @@
     - samba
 
 - name: Restart avahi
-  when: avahi_smb.changed
+  when: avahi_smb.changed and not docker_test
   systemd:
     name: avahi-daemon
     state: restarted

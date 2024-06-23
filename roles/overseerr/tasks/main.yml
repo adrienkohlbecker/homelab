@@ -1,3 +1,25 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - overseerr
+    - _check_stage1
+    - _check_stage2
+
+- name: Install jq
+  apt:
+    pkg: jq
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - overseerr
+    - _check_stage1
+    - _check_stage2
+
 - name: Add overseerr group
   group:
     name: overseerr
@@ -5,19 +27,8 @@
   become: true
   tags:
     - overseerr
-
-- name: Add overseerr user
-  user:
-    name: overseerr
-    group: overseerr
-    createhome: false
-    system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
-  become: true
-  register: overseerr_user
-  tags:
-    - overseerr
+    - _check_stage1
+    - _check_stage2
 
 - name: Add media group
   group:
@@ -27,15 +38,24 @@
   register: media_group
   tags:
     - overseerr
+    - _check_stage1
+    - _check_stage2
 
-- name: Add user to group
+- name: Add overseerr user
   user:
     name: overseerr
+    group: overseerr
     groups: media
-    append: true
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
   become: true
+  register: overseerr_user
   tags:
     - overseerr
+    - _check_stage1
+    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and overseerr_user.changed)
@@ -48,6 +68,7 @@
   become: true
   tags:
     - overseerr
+    - _check_stage2
 
 - name: Load JSON file
   slurp:
@@ -57,6 +78,7 @@
   become: true
   tags:
     - overseerr
+    - _check_stage2
 
 - name: Configure overseerr
   template:
@@ -73,6 +95,7 @@
   become: true
   tags:
     - overseerr
+    - _check_stage2
 
 - name: Install overseerr service
   import_role:
@@ -83,32 +106,16 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and overseerr_user.changed) }}"
   tags:
     - overseerr
+    - _check_stage2
 
-- name: Enable the service
-  when: not (ansible_check_mode and (systemd_unit.changed or overseerr_user.changed))
-  systemd:
-    name: overseerr
-    enabled: true
-  become: true
-  tags:
-    - overseerr
-
-- name: Start the service
-  when: not (ansible_check_mode and (systemd_unit.changed or overseerr_user.changed))
-  systemd:
-    name: overseerr
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - overseerr
-
-- name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or overseerr_user.changed)) and ((systemd_unit.changed or overseerr_conf.changed) and not systemd_started.changed)
-  systemd:
-    name: overseerr
-    state: restarted
-  become: true
+- name: Enable overseerr service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: overseerr
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or overseerr_user.changed)) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or overseerr_conf.changed }}"
   tags:
     - overseerr
 

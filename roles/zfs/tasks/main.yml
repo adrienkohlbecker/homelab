@@ -5,6 +5,20 @@
       - zfs-initramfs
       - zfs-zed
     cache_valid_time: 3600
+  register: zfs_apt
+  become: true
+  tags:
+    - zfs
+    - _check_stage1
+
+- name: Create /etc/default/grub.d directory
+  when: grub_bootloader
+  file:
+    dest: /etc/default/grub.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
   become: true
   tags:
     - zfs
@@ -24,7 +38,7 @@
     - zfs
 
 - name: Update grub
-  when: grub_bootloader and grub_cfg.changed
+  when: grub_bootloader and grub_cfg.changed and not docker_test
   command: update-grub
   changed_when: true
   become: true
@@ -118,11 +132,12 @@
     name: cron
     tasks_from: monitor
   vars:
-    cron_entry: "{{ zfs_trim_pools }}"
+    cron_entry: "{{ ['zfs_trim_'] | product(zfs_trim_pools) | map('join') | list }}"
   tags:
     - zfs
 
 - name: Enable zed
+  when: not docker_test
   systemd:
     name: zfs-zed
     enabled: true
@@ -131,6 +146,7 @@
     - zfs
 
 - name: Start zed
+  when: not docker_test
   systemd:
     name: zfs-zed
     state: started
@@ -139,6 +155,7 @@
     - zfs
 
 - name: Set properties on root dataset
+  when: zfs_root
   community.general.zfs:
     name: rpool/ROOT/jammy
     state: present

@@ -7,6 +7,7 @@
   register: apt_locales
   tags:
     - locale
+    - _check_stage1
 
 - name: Set up locales
   when: not (ansible_check_mode and apt_locales.changed)

@@ -1,3 +1,15 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - pihole
+    - _check_stage1
+    - _check_stage2
+
 - name: Add pihole group
   group:
     name: pihole
@@ -5,6 +17,8 @@
   become: true
   tags:
     - pihole
+    - _check_stage1
+    - _check_stage2
 
 - name: Add pihole user
   user:
@@ -18,6 +32,8 @@
   become: true
   tags:
     - pihole
+    - _check_stage1
+    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and pihole_user.changed)
@@ -30,6 +46,7 @@
   become: true
   tags:
     - pihole
+    - _check_stage2
 
 - name: Create configuration directory
   file:
@@ -41,6 +58,7 @@
   become: true
   tags:
     - pihole
+    - _check_stage2
 
 - name: Configure dnsmasq
   template:
@@ -54,6 +72,7 @@
   become: true
   tags:
     - pihole
+    - _check_stage2
 
 - name: Create log directory
   when: not (ansible_check_mode and pihole_user.changed)
@@ -66,6 +85,7 @@
   become: true
   tags:
     - pihole
+    - _check_stage2
 
 - name: Install pihole service
   import_role:
@@ -76,23 +96,16 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and pihole_user.changed) }}"
   tags:
     - pihole
+    - _check_stage2
 
-- name: Enable the service
-  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed))
-  systemd:
-    name: pihole
-    enabled: true
-  become: true
-  tags:
-    - pihole
-
-- name: Start the service
-  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed))
-  systemd:
-    name: pihole
-    state: started
-  register: systemd_started
-  become: true
+- name: Enable pihole service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: pihole
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) }}"
+    systemd_unit_restart: false
   tags:
     - pihole
 
@@ -102,19 +115,19 @@
     tasks_from: compression
   vars:
     logrotate_item: /mnt/services/pihole/etc/logrotate
-    logrotate_condition: "{{ not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed)) }}"
+    logrotate_condition: "{{ not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed)) and not docker_test }}"
   tags:
     - pihole
 
 - name: Set web password
-  when: not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed))
+  when: not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed)) and not docker_test
   lineinfile:
     path: /mnt/services/pihole/etc/setupVars.conf
     regexp: ^WEBPASSWORD=
     line: WEBPASSWORD={{ pihole_password | hash('sha256') | hash('sha256') }}
     validate: bash -n %s
     backup: true
-  register: logrotate_pass
+  register: pihole_webpassword
   become: true
   tags:
     - pihole
@@ -133,7 +146,7 @@
     - pihole
 
 - name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and ((systemd_unit.changed and not systemd_started.changed) or logrotate_conf.changed or logrotate_pass.changed or fahm_cfg.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and not docker_test and ((systemd_unit.changed and not systemd_started.changed) or logrotate_conf.changed or pihole_webpassword.changed or fahm_cfg.changed)
   systemd:
     name: pihole
     state: restarted
@@ -171,6 +184,7 @@
     - pihole
 
 - name: Trigger list update
+  when: not docker_test
   command: "{{ pihole_list_update_cmd }}"
   register: pihole_list_update
   changed_when: '["inserted", "enabled", "disabled", "migrated"] | select("in", pihole_list_update.stdout) | length > 0'
@@ -187,35 +201,14 @@
   tags:
     - pihole
 
-- name: Copy pihole metrics template
-  command: cp /usr/lib/netdata/conf.d/go.d/pihole.conf /etc/netdata/go.d/pihole.conf
-  args:
-    creates: /etc/netdata/go.d/pihole.conf
-  register: netdata_pihole_conf_template
-  become: true
-  tags:
-    - pihole
-
-- name: Setup pihole metrics
-  when: not (ansible_check_mode and netdata_pihole_conf_template.changed)
-  template:
-    src: pihole.conf.j2
-    dest: /etc/netdata/go.d/pihole.conf
-    owner: netdata
-    group: netdata
-    mode: "0600"
-    backup: true
-  register: netdata_pihole_conf
-  become: true
-  tags:
-    - pihole
-
-- name: Restart netdata
-  when: (netdata_pihole_conf_template.changed or netdata_pihole_conf.changed)
-  systemd:
+- name: Configure pihole metrics
+  import_role:
     name: netdata
-    state: restarted
-  become: true
+    tasks_from: template
+  vars:
+    netdata_template_src: pihole.conf.j2
+    netdata_template_dest: go.d/pihole.conf
+    netdata_template_mode: "0600"
   tags:
     - pihole
 
@@ -226,6 +219,20 @@
   vars:
     nginx_subdomain: pihole
     nginx_proxy_pass: http://localhost:8943/
+  tags:
+    - pihole
+
+- name: Ensure keepalived directory exists
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/keepalived/
+    - /etc/keepalived/conf.d/
+  become: true
   tags:
     - pihole
 
@@ -243,7 +250,7 @@
     - pihole
 
 - name: Restart keepalived
-  when: (pihole_keepalived_cfg.changed)
+  when: (pihole_keepalived_cfg.changed) and not docker_test
   systemd:
     name: keepalived
     state: restarted

@@ -1,4 +1,27 @@
+- name: Install iproute2
+  apt:
+    pkg:
+      - iproute2
+    cache_valid_time: 3600
+  become: true
+  register: apt_locales
+  tags:
+    - macvlan
+    - _check_stage1
+
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /bin/ip
+    mode: '0755'
+  become: true
+  tags:
+    - macvlan
+    - _check_stage1
+
 - name: Compute network values
+  when: not docker_test
   set_fact:
     macvlan_parent_gateway: "{{ ansible_facts[macvlan_parent].ipv4.network | ansible.utils.ipmath(1) }}"
     macvlan_parent_subnet: "{{ ansible_facts[macvlan_parent].ipv4.network }}/{{ ansible_facts[macvlan_parent].ipv4.prefix }}"
@@ -6,6 +29,18 @@
     macvlan_host_mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname) }}"
   tags:
     - macvlan
+    - _check_stage1
+
+- name: Compute network values
+  when: docker_test
+  set_fact:
+    macvlan_parent_gateway: "10.123.0.1"
+    macvlan_parent_subnet: "10.123.0.0/23"
+    macvlan_host_ip: "{{ macvlan_subnet | ansible.utils.usable_range | json_query('usable_ips[0]') }}"
+    macvlan_host_mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname) }}"
+  tags:
+    - macvlan
+    - _check_stage1
 
 - name: Check macvlan_subnet is valid
   assert:
@@ -14,6 +49,7 @@
     success_msg: "macvlan_subnet is valid"
   tags:
     - macvlan
+    - _check_stage1
 
 - name: Check macvlan_subnet is in parent subnet
   assert:
@@ -22,6 +58,7 @@
     success_msg: "macvlan_subnet is valid"
   tags:
     - macvlan
+    - _check_stage1
 
 - name: Check macvlan_subnet is in home subnet
   assert:
@@ -30,6 +67,7 @@
     success_msg: "macvlan_subnet is valid"
   tags:
     - macvlan
+    - _check_stage1
 
 - name: Install mac0 service
   import_role:
@@ -39,32 +77,16 @@
     systemd_unit_src: mac0.service
   tags:
     - macvlan
+    - _check_stage1
 
-- name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed)
-  systemd:
-    name: mac0
-    enabled: true
-  become: true
-  tags:
-    - macvlan
-
-- name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed)
-  systemd:
-    name: mac0
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - macvlan
-
-- name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and systemd_unit.changed and not systemd_started.changed
-  systemd:
-    name: mac0
-    state: restarted
-  become: true
+- name: Enable mac0 service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: mac0
+    systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - macvlan
 

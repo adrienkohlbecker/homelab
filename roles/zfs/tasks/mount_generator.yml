@@ -14,6 +14,7 @@
     - zfs_mount_generator
 
 - name: mount_generator | Configure symlink
+  when: not (ansible_check_mode and zfs_apt.changed)
   file:
     src: /usr/lib/zfs-linux/zed.d/history_event-zfs-list-cacher.sh
     dest: /etc/zfs/zed.d/history_event-zfs-list-cacher.sh

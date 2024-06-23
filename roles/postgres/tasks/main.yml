@@ -1,3 +1,15 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - pihole
+    - _check_stage1
+    - _check_stage2
+
 - name: Add postgres group
   group:
     name: postgres
@@ -5,6 +17,8 @@
   become: true
   tags:
     - postgres
+    - _check_stage1
+    - _check_stage2
 
 - name: Add postgres user
   user:
@@ -18,6 +32,8 @@
   register: postgres_user
   tags:
     - postgres
+    - _check_stage1
+    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and postgres_user.changed)
@@ -30,8 +46,10 @@
   become: true
   tags:
     - postgres
+    - _check_stage2
 
 - name: Init database
+  when: not docker_test
   command: >-
     podman run
       --rm --quiet
@@ -46,6 +64,7 @@
   become: true
   tags:
     - postgres
+    - _check_stage2
 
 - name: Install postgres service
   import_role:
@@ -53,33 +72,18 @@
     tasks_from: template
   vars:
     systemd_unit_src: postgres.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and postgres_user.changed) }}"
   tags:
     - postgres
+    - _check_stage2
 
-- name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed)
-  systemd:
-    name: postgres
-    enabled: true
-  become: true
-  tags:
-    - postgres
-
-- name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed)
-  systemd:
-    name: postgres
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - postgres
-
-- name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed) and not systemd_started.changed)
-  systemd:
-    name: postgres
-    state: restarted
-  become: true
+- name: Enable postgres service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: postgres
+    systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - postgres
