@@ -1,3 +1,26 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - wolweb
+    - _check_stage1
+    - _check_stage2
+
+- name: Install jq
+  apt:
+    pkg:
+      - jq
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - wolweb
+    - _check_stage1
+    - _check_stage2
+
 - name: Add wolweb group
   group:
     name: wolweb
@@ -5,6 +28,8 @@
   become: true
   tags:
     - wolweb
+    - _check_stage1
+    - _check_stage2
 
 - name: Add wolweb user
   user:
@@ -18,6 +43,8 @@
   register: wolweb_user
   tags:
     - wolweb
+    - _check_stage1
+    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and wolweb_user.changed)
@@ -30,13 +57,15 @@
   become: true
   tags:
     - wolweb
+    - _check_stage2
 
 - name: Compute broadcast ip
   set_fact:
-    wolweb_broadcast_ip: "{{ (ansible_facts.default_ipv4.address + '/' + ansible_facts.default_ipv4.netmask) | ansible.utils.ipaddr('broadcast') }}"
+    wolweb_broadcast_ip: "{{ (docker_test|ternary('127.0.0.1',ansible_facts.default_ipv4.address) + '/' + docker_test|ternary('24',ansible_facts.default_ipv4.netmask)) | ansible.utils.ipaddr('broadcast') }}"
   become: true
   tags:
     - wolweb
+    - _check_stage2
 
 - name: Configure wolweb
   template:
@@ -51,6 +80,7 @@
   become: true
   tags:
     - wolweb
+    - _check_stage2
 
 - name: Configure wolweb
   template:
@@ -65,6 +95,7 @@
   become: true
   tags:
     - wolweb
+    - _check_stage2
 
 - name: Install wolweb service
   import_role:
@@ -72,34 +103,19 @@
     tasks_from: template
   vars:
     systemd_unit_src: wolweb.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and wolweb_user.changed) }}"
   tags:
     - wolweb
+    - _check_stage2
 
-- name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed)
-  systemd:
-    name: wolweb
-    enabled: true
-  become: true
-  tags:
-    - wolweb
-
-- name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed)
-  systemd:
-    name: wolweb
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - wolweb
-
-- name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed or wolweb_conf.changed or wolweb_devices.changed) and not systemd_started.changed)
-  systemd:
-    name: wolweb
-    state: restarted
-  become: true
+- name: Enable wolweb service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: wolweb
+    systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or wolweb_conf.changed or wolweb_devices.changed }}"
   tags:
     - wolweb
 

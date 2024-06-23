@@ -6,6 +6,7 @@
   become: true
   tags:
     - hd_idle
+    - _check_stage1
 
 - name: Divert hd-idle configuration
   community.general.dpkg_divert:
@@ -27,52 +28,23 @@
   tags:
     - hd_idle
 
-- name: Enable the service
-  when: not (ansible_check_mode and apt_install_hdidle.changed)
-  systemd:
-    name: hd-idle
-    enabled: true
-  become: true
-  tags:
-    - hd_idle
-
-- name: Start the service
-  when: not (ansible_check_mode and apt_install_hdidle.changed)
-  systemd:
-    name: hd-idle
-    state: started
-  become: true
-  register: systemd_started
-  tags:
-    - hd_idle
-
-- name: Restart the service
-  when: not (ansible_check_mode and apt_install_hdidle.changed) and (hd_idle_conf.changed) and not systemd_started.changed
-  systemd:
-    name: hd-idle
-    state: restarted
-  become: true
+- name: Enable hd_idle service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: hd-idle
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_install_hdidle.changed) }}"
+    systemd_unit_restart: "{{ hd_idle_conf.changed }}"
   tags:
     - hd_idle
 
 - name: Configure logrotate
-  template:
-    src: logrotate.j2
-    dest: /etc/logrotate.d/hd-idle
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: logrotate_conf
-  become: true
-  tags:
-    - hd_idle
-
-- name: Restart logrotate
-  when: logrotate_conf.changed
-  systemd:
+  import_role:
     name: logrotate
-    state: restarted
-  become: true
+    tasks_from: template
+  vars:
+    logrotate_src: logrotate.j2
+    logrotate_dest: /etc/logrotate.d/hd-idle
   tags:
     - hd_idle

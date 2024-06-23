@@ -7,6 +7,7 @@
     - minio
 
 - name: data | Create users
+  when: not docker_test
   command: mcli admin user add default {{ item.access_key }} {{ item.secret_key }}
   args:
     creates: /mnt/minio/.minio.sys/config/iam/users/{{ item.access_key }}
@@ -15,6 +16,7 @@
     - minio
 
 - name: data | Create buckets
+  when: not docker_test
   command: mcli mb default/{{ item }}
   args:
     creates: /mnt/minio/{{ item }}
@@ -45,7 +47,7 @@
     - minio
 
 - name: data | Add useronly policy
-  when: not minio_useronly_policy_dir.stat.exists
+  when: not minio_useronly_policy_dir.stat.exists and not docker_test
   command: mcli admin policy add default useronly /tmp/useronly.json
   args:
     creates: /mnt/minio/.minio.sys/config/iam/policies/useronly
@@ -63,7 +65,7 @@
     - minio
 
 - name: data | Attach policy
-  when: not minio_useronly_policy_dir.stat.exists
+  when: not minio_useronly_policy_dir.stat.exists and not docker_test
   command: mcli admin policy set default useronly user={{ item.access_key }}
   args:
     creates: /mnt/minio/.minio.sys/config/iam/policydb/users/{{ item.access_key }}.json

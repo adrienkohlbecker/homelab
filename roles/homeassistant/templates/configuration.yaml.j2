@@ -36,8 +36,8 @@ influxdb:
   port: 443
   ssl: true
   verify_ssl: true
-  token: <<< homeassistant_influxdb_auth.stdout >>>
-  organization: <<< homeassistant_influxdb_org.stdout >>>
+  token: <<< docker_test|ternary('changeme',homeassistant_influxdb_auth.stdout) >>>
+  organization: <<< docker_test|ternary('changeme',homeassistant_influxdb_org.stdout) >>>
   bucket: homeassistant
   max_retries: 3
   measurement_attr: domain__device_class

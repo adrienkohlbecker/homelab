@@ -1,11 +1,14 @@
 - name: Install docker
   import_role:
     name: apt_unit_masked
+    tasks_from: apt
   vars:
     apt_unit_masked_pkg: docker.io
     apt_unit_masked_unit: docker.service
   tags:
     - docker
+    - _check_stage1
+    - _check_stage2
 
 - name: Copy the docker config
   template:
@@ -20,6 +23,7 @@
   become: true
   tags:
     - docker
+    - _check_stage2
 
 - name: Create mount point
   file:
@@ -31,6 +35,7 @@
   become: true
   tags:
     - docker
+    - _check_stage2
 
 - name: Create docker zvol
   when: zfs_root
@@ -43,6 +48,7 @@
   become: true
   tags:
     - docker
+    - _check_stage2
 
 - name: Create a ext4 filesystem on docker zvol
   when: not (ansible_check_mode and zfs_zvol_docker.changed) and zfs_root
@@ -66,37 +72,21 @@
   tags:
     - docker
 
-- name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
-  systemd:
-    name: docker
-    enabled: true
-  become: true
-  tags:
-    - docker
-
-- name: Start the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
-  systemd:
-    name: docker
-    state: started
-  become: true
-  register: systemd_started
-  tags:
-    - docker
-
-- name: Restart docker
-  when: not (ansible_check_mode and apt_unit_masked.changed) and docker_conf.changed and not systemd_started.changed
-  systemd:
-    name: docker
-    state: restarted
-  become: true
+- name: Enable docker service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: docker
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
+    systemd_unit_restart: "{{ docker_conf.changed }}"
   tags:
     - docker
 
 - name: Add user to docker group
   import_role:
     name: usergroup_immediate
+    tasks_from: user
   when: not (ansible_check_mode and apt_unit_masked.changed)
   vars:
     usergroup_immediate_group: docker
@@ -129,7 +119,7 @@
     - docker
 
 - name: Update grub
-  when: grub_bootloader and grub_cfg.changed
+  when: grub_bootloader and grub_cfg.changed and not docker_test
   command: update-grub
   changed_when: true
   become: true

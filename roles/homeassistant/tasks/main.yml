@@ -1,3 +1,17 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - homeassistant
+    - _check_stage1
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
+
 - name: Add homeassistant group
   group:
     name: homeassistant
@@ -5,6 +19,10 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage1
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Add homeassistant user
   user:
@@ -18,6 +36,10 @@
   register: homeassistant_user
   tags:
     - homeassistant
+    - _check_stage1
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Create configuration directory
   file:
@@ -29,8 +51,12 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Get influxdb org ID
+  when: not docker_test
   shell: set -euo pipefail; podman exec influxdb influx org list --name home --hide-headers | cut -f1
   args:
     executable: /bin/bash
@@ -40,8 +66,12 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Create influxdb user
+  when: not docker_test
   check_mode: false
   shell: set -euo pipefail; ((podman exec influxdb influx user list --name homeassistant --hide-headers && echo >&2 "Found!") || ( {{ ansible_check_mode | ternary('echo TODO', 'podman exec influxdb influx user create --org-id ' + homeassistant_influxdb_org.stdout + ' --name homeassistant --hide-headers') }} )) | tr -s '\t' | cut -f1
   args:
@@ -51,8 +81,12 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Create influxdb bucket
+  when: not docker_test
   check_mode: false
   shell: set -euo pipefail; ((podman exec influxdb influx bucket list --org-id {{ homeassistant_influxdb_org.stdout }} --name homeassistant --hide-headers && echo >&2 "Found!") || ( {{ ansible_check_mode | ternary('echo TODO', 'podman exec influxdb influx bucket create --org-id ' + homeassistant_influxdb_org.stdout + ' --name homeassistant --hide-headers') }} )) | tr -s '\t' | cut -f1
   args:
@@ -62,8 +96,12 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Create influxdb auth
+  when: not docker_test
   check_mode: false
   shell: set -euo pipefail; ((podman exec influxdb influx auth list -u homeassistant | grep "{{ homeassistant_influxdb_user.stdout }}" | grep "\\[write:orgs/{{ homeassistant_influxdb_org.stdout }}/buckets/{{ homeassistant_influxdb_bucket.stdout }}\\]" && echo >&2 "Found!") || ( {{ ansible_check_mode | ternary('echo TODO', 'podman exec influxdb influx auth create --org-id ' + homeassistant_influxdb_org.stdout + ' --user homeassistant --write-bucket ' + homeassistant_influxdb_bucket.stdout + ' --hide-headers') }} )) | tr -s '\t' | cut -f2
   args:
@@ -73,6 +111,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Configure homeassistant
   template:
@@ -90,6 +131,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Configure homeassistant automations
   copy:
@@ -103,6 +147,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Create custom_templates directory
   file:
@@ -114,6 +161,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Configure homeassistant macros
   copy:
@@ -127,6 +177,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Configure homeassistant sensors
   copy:
@@ -140,6 +193,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Configure homeassistant templates
   copy:
@@ -153,6 +209,9 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Create www directory
   file:
@@ -165,6 +224,9 @@
   register: homeassistant_www_dir
   tags:
     - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
 
 - name: Get stats of the thermal_comfort_icons.js file
   stat:
@@ -173,12 +235,16 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage3
+    - _check_stage4
 
 - name: Install thermal_comfort_icons if needed
   when: not thermal_comfort_icons_check.stat.exists or thermal_comfort_icons_check.stat.checksum != '7a37a9c4532308923adfc1378715cf09aaaa4d13'
   become: true
   tags:
     - homeassistant
+    - _check_stage3
+    - _check_stage4
   block:
     - name: Download thermal_comfort_icons
       check_mode: false
@@ -219,6 +285,8 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage3
+    - _check_stage4
 
 - name: Create thermal_comfort directory
   file:
@@ -231,6 +299,8 @@
   register: homeassistant_thermal_comfort_dir
   tags:
     - homeassistant
+    - _check_stage3
+    - _check_stage4
 
 - name: Install unzip
   apt:
@@ -240,6 +310,7 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage4
 
 - name: Get stats of the thermal_comfort custom_component
   stat:
@@ -248,12 +319,14 @@
   become: true
   tags:
     - homeassistant
+    - _check_stage4
 
 - name: Install thermal_comfort if needed
   when: not thermal_comfort_check.stat.exists
   become: true
   tags:
     - homeassistant
+    - _check_stage4
   block:
     - name: Download thermal_comfort
       check_mode: false
@@ -291,32 +364,16 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and homeassistant_user.changed) }}"
   tags:
     - homeassistant
+    - _check_stage4
 
-- name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed)
-  systemd:
-    name: homeassistant
-    enabled: true
-  become: true
-  tags:
-    - homeassistant
-
-- name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed)
-  systemd:
-    name: homeassistant
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - homeassistant
-
-- name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed or homeassistant_conf.changed or thermal_comfort_icons_installed.changed or thermal_comfort_installed.changed or homeassistant_automations.changed or homeassistant_macros.changed or homeassistant_sensors.changed or homeassistant_templates.changed) and not systemd_started.changed)
-  systemd:
-    name: homeassistant
-    state: restarted
-  become: true
+- name: Enable homeassistant service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: homeassistant
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or homeassistant_user.changed)) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or homeassistant_conf.changed or thermal_comfort_icons_installed.changed or thermal_comfort_installed.changed or homeassistant_automations.changed or homeassistant_macros.changed or homeassistant_sensors.changed or homeassistant_templates.changed }}"
   tags:
     - homeassistant
 

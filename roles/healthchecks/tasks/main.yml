@@ -1,3 +1,15 @@
+- name: Add test binary
+  when: docker_test
+  file:
+    state: touch
+    path: /usr/bin/podman
+    mode: '0755'
+  become: true
+  tags:
+    - healthchecks
+    - _check_stage1
+    - _check_stage2
+
 - name: Add healthchecks group
   group:
     name: healthchecks
@@ -5,6 +17,8 @@
   become: true
   tags:
     - healthchecks
+    - _check_stage1
+    - _check_stage2
 
 - name: Add healthchecks user
   user:
@@ -18,6 +32,8 @@
   register: healthchecks_user
   tags:
     - healthchecks
+    - _check_stage1
+    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and healthchecks_user.changed)
@@ -30,6 +46,7 @@
   become: true
   tags:
     - healthchecks
+    - _check_stage2
 
 - name: Copy healthchecks logo
   copy:
@@ -42,8 +59,10 @@
   become: true
   tags:
     - healthchecks
+    - _check_stage2
 
 - name: Create secret
+  when: not docker_test
   containers.podman.podman_secret:
     name: healthchecks_password
     data: "{{ healthchecks_password }}"
@@ -51,8 +70,10 @@
   become: true
   tags:
     - healthchecks
+    - _check_stage2
 
 - name: Create secret
+  when: not docker_test
   containers.podman.podman_secret:
     name: healthchecks_sendgrid_password
     data: "{{ healthchecks_sendgrid_password }}"
@@ -60,6 +81,7 @@
   become: true
   tags:
     - healthchecks
+    - _check_stage2
 
 - name: Install healthchecks service
   import_role:
@@ -70,32 +92,16 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and healthchecks_user.changed) }}"
   tags:
     - healthchecks
+    - _check_stage2
 
-- name: Enable the service
-  when: not (ansible_check_mode and systemd_unit.changed)
-  systemd:
-    name: healthchecks
-    enabled: true
-  become: true
-  tags:
-    - healthchecks
-
-- name: Start the service
-  when: not (ansible_check_mode and systemd_unit.changed)
-  systemd:
-    name: healthchecks
-    state: started
-  register: systemd_started
-  become: true
-  tags:
-    - healthchecks
-
-- name: Restart the service
-  when: not (ansible_check_mode and systemd_unit.changed) and ((systemd_unit.changed or healthchecks_password.changed or healthchecks_sendgrid_password.changed) and not systemd_started.changed)
-  systemd:
-    name: healthchecks
-    state: restarted
-  become: true
+- name: Enable healthchecks service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: healthchecks
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or healthchecks_user.changed)) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or healthchecks_password.changed or healthchecks_sendgrid_password.changed }}"
   tags:
     - healthchecks
 

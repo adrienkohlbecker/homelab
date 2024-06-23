@@ -1,0 +1,38 @@
+- name: template | Ensure netdata directory exists
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/netdata/
+    - /etc/netdata/{{ netdata_template_dest | dirname }}/
+  become: true
+
+- name: template | Copy metrics template
+  when: not docker_test
+  command: cp /usr/lib/netdata/conf.d/{{ netdata_template_dest }} /etc/netdata/{{ netdata_template_dest }}
+  args:
+    creates: /etc/netdata/{{ netdata_template_dest }}
+  register: netdata_template_copy
+  become: true
+
+- name: template | Setup metrics
+  when: not (ansible_check_mode and netdata_template_copy.changed)
+  template:
+    src: "{{ netdata_template_src }}"
+    dest: /etc/netdata/{{ netdata_template_dest }}
+    owner: "{{ docker_test|ternary('root', 'netdata') }}"
+    group: "{{ docker_test|ternary('root', 'netdata') }}"
+    mode: "{{ netdata_template_mode | default('0644') }}"
+    backup: true
+  register: netdata_template
+  become: true
+
+- name: template | Restart netdata
+  when: not docker_test and (netdata_template_copy.changed or netdata_template.changed)
+  systemd:
+    name: netdata
+    state: restarted
+  become: true

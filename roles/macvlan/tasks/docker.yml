@@ -1,4 +1,5 @@
 - name: docker | Create the macvlan docker network
+  when: not docker_test
   docker_network:
     name: macvlan_net
     driver: macvlan

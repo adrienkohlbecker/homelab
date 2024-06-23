@@ -3,11 +3,13 @@
 - name: Install smartmontools
   import_role:
     name: apt_unit_masked
+    tasks_from: apt
   vars:
     apt_unit_masked_pkg: smartmontools
     apt_unit_masked_unit: smartmontools.service
   tags:
     - smart
+    - _check_stage1
 
 - name: Divert smartd.conf
   community.general.dpkg_divert:
@@ -61,51 +63,22 @@
     - smart
 
 - name: Configure logrotate
-  template:
-    src: logrotate.j2
-    dest: /etc/logrotate.d/smartd
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: logrotate_conf
-  become: true
-  tags:
-    - smart
-
-- name: Restart logrotate
-  when: logrotate_conf.changed
-  systemd:
+  import_role:
     name: logrotate
-    state: restarted
-  become: true
+    tasks_from: template
+  vars:
+    logrotate_src: logrotate.j2
+    logrotate_dest: /etc/logrotate.d/smartd
   tags:
     - smart
 
-- name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
-  systemd:
-    name: smartmontools
-    enabled: true
-  become: true
-  tags:
-    - smart
-
-- name: Start the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
-  systemd:
-    name: smartmontools
-    state: started
-  become: true
-  register: systemd_started
-  tags:
-    - smart
-
-- name: Restart the service
-  when: not (ansible_check_mode and apt_unit_masked.changed) and (smartd_cfg.changed or smartmontools_cfg.changed) and not systemd_started.changed
-  systemd:
-    name: smartmontools
-    state: restarted
-  become: true
+- name: Enable smartmontools service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: smartmontools
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
+    systemd_unit_restart: "{{ smartd_cfg.changed or smartmontools_cfg.changed }}"
   tags:
     - smart

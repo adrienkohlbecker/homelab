@@ -26,7 +26,7 @@
     - nginx_site
 
 - name: site | Enable nginx site
-  when: not (ansible_check_mode and nginx_static_conf.changed)
+  when: not (ansible_check_mode and nginx_static_conf.changed) # TODO add _check_stageX tag
   file:
     src: /etc/nginx/sites-available/{{ nginx_subdomain }}
     dest: /etc/nginx/sites-enabled/{{ nginx_subdomain }}
@@ -37,7 +37,7 @@
     - nginx_site
 
 - name: site | Reload nginx config
-  when: nginx_static_conf.changed or nginx_static_conf_enable.changed
+  when: not docker_test and (nginx_static_conf.changed or nginx_static_conf_enable.changed)
   systemd:
     name: nginx
     state: reloaded

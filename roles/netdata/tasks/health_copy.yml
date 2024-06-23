@@ -1,0 +1,42 @@
+- name: health_copy | Ensure netdata directory exists
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/netdata/
+    - /etc/netdata/health.d/
+  become: true
+
+- name: health_copy | Check if built-in template
+  stat:
+    path: /usr/lib/netdata/conf.d/health.d/{{ netdata_copy_dest }}
+  register: netdata_alerts_template_builtin
+  become: true
+
+- name: health_copy | Copy alerting template
+  when: netdata_alerts_template_builtin.stat.exists
+  command: cp /usr/lib/netdata/conf.d/health.d/{{ netdata_copy_dest }} /etc/netdata/health.d/{{ netdata_copy_dest }}
+  args:
+    creates: /etc/netdata/health.d/{{ netdata_copy_dest }}
+  register: netdata_alerts_template
+  become: true
+
+- name: health_copy | Copy the alerting config
+  copy:
+    src: "{{ netdata_copy_src }}"
+    dest: "/etc/netdata/health.d/{{ netdata_copy_dest }}"
+    owner: "{{ docker_test|ternary('root', 'netdata') }}"
+    group: "{{ docker_test|ternary('root', 'netdata') }}"
+    mode: "{{ netdata_copy_mode | default('0644') }}"
+    backup: true
+  register: netdata_alerts_conf
+  become: true
+
+- name: health_copy | Reload health configuration
+  when: (netdata_alerts_conf.changed or netdata_alerts_template.changed) and not docker_test
+  command: netdatacli reload-health
+  changed_when: true
+  become: true
