@@ -22,7 +22,7 @@
     include: [ keepalived_exporter-0.7.0-amd64/keepalived_exporter ]
     list_files: true
     extra_opts: [ --strip-components=1 ]
-    become: true
+  become: true
   register: keepalived_exporter_installed
   tags:
     - _check_stage2
