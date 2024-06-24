@@ -141,13 +141,21 @@
   tags:
     - netdata
 
-- name: Configure smartd_log metrics
+- name: Install intel-gpu-tools
+  apt:
+    pkg: intel-gpu-tools
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - netdata
+
+- name: Configure intel gpu metrics
   import_role:
     name: netdata
     tasks_from: copy
   vars:
-    netdata_copy_src: smartd_log.conf
-    netdata_copy_dest: python.d/smartd_log.conf
+    netdata_copy_src: intelgpu.conf
+    netdata_copy_dest: go.d/intelgpu.conf
   tags:
     - netdata
 
