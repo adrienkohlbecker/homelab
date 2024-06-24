@@ -4,6 +4,8 @@
     state: touch
     path: /usr/local/bin/zfs_check_mount
     mode: '0755'
+    access_time: preserve
+    modification_time: preserve
   become: true
   tags:
     - zfs_mount

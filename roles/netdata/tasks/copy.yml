@@ -1,4 +1,5 @@
 - name: copy | Ensure netdata directory exists
+  when: netdata_copy_condition | default(true)
   file:
     dest: "{{ item }}"
     state: directory
@@ -11,7 +12,7 @@
   become: true
 
 - name: copy | Copy metrics template
-  when: not docker_test
+  when: not docker_test and (netdata_copy_condition | default(true))
   command: cp /usr/lib/netdata/conf.d/{{ netdata_copy_dest }} /etc/netdata/{{ netdata_copy_dest }}
   args:
     creates: /etc/netdata/{{ netdata_copy_dest }}
@@ -19,7 +20,7 @@
   become: true
 
 - name: copy | Setup metrics
-  when: not (ansible_check_mode and netdata_copy_copy.changed)
+  when: not (ansible_check_mode and netdata_copy_copy.changed) and (netdata_copy_condition | default(true))
   copy:
     src: "{{ netdata_copy_src }}"
     dest: /etc/netdata/{{ netdata_copy_dest }}

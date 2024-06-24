@@ -15,6 +15,8 @@
     state: touch
     path: /bin/ip
     mode: '0755'
+    access_time: preserve
+    modification_time: preserve
   become: true
   tags:
     - macvlan

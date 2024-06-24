@@ -4,6 +4,8 @@
     state: touch
     path: /usr/bin/podman
     mode: '0755'
+    access_time: preserve
+    modification_time: preserve
   become: true
   tags:
     - pihole
@@ -84,6 +86,7 @@
   vars:
     systemd_unit_src: postgres
     systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
+    systemd_unit_start: "{{ not docker_test }}"
     systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - postgres
