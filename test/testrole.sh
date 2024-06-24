@@ -32,6 +32,11 @@ stop() {
   rm -rf "$TMPDIR"
 }
 
+err() {
+  podman exec --tty "$(cat $TMPDIR/cid)" journalctl --pager-end --priority warning
+}
+
+trap err ERR
 trap stop EXIT
 
 podman run --interactive --rm --publish 127.0.0.1::22 --detach --cidfile $TMPDIR/cid --timeout 600 homelab

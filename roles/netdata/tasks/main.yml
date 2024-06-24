@@ -142,6 +142,7 @@
     - netdata
 
 - name: Install intel-gpu-tools
+  when: ansible_architecture == "x86_64"
   apt:
     pkg: intel-gpu-tools
     cache_valid_time: 3600
@@ -156,6 +157,7 @@
   vars:
     netdata_copy_src: intelgpu.conf
     netdata_copy_dest: go.d/intelgpu.conf
+    netdata_copy_condition: '{{ ansible_architecture == "x86_64" }}'
   tags:
     - netdata
 

@@ -4,6 +4,8 @@
     state: touch
     path: /usr/bin/podman
     mode: '0755'
+    access_time: preserve
+    modification_time: preserve
   become: true
   tags:
     - influxdb
@@ -70,6 +72,7 @@
   vars:
     systemd_unit_src: influxdb
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or influxdb_user.changed)) }}"
+    systemd_unit_start: "{{ not docker_test }}"
     systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - influxdb

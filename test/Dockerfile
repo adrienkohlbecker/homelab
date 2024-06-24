@@ -3,10 +3,12 @@ FROM ubuntu:22.04
 RUN set -x \
  && export DEBIAN_FRONTEND=noninteractive \
  && apt-get update \
- && apt-get install -y openssh-server \
+ && apt-get install -y openssh-server systemd \
  && rm -f /etc/ssh/ssh_host* \
- && mkdir /var/run/sshd \
  && rm -rf /var/lib/apt/lists/*
+
+COPY ssh-keygen.service /etc/systemd/system/ssh-keygen.service
+RUN systemctl enable ssh-keygen.service
 
 RUN set -x \
  && mkdir /root/.ssh \
@@ -24,11 +26,8 @@ RUN set -x \
  && apt-get install -y python3-apt \
  && apt-get install -y python3-requests \
  && apt-get install -y sudo \
- && apt-get install -y  cron
+ && apt-get install -y cron
 
 EXPOSE 22
 
-COPY entry.sh /entry.sh
-ENTRYPOINT ["/entry.sh"]
-
-CMD ["/usr/sbin/sshd", "-D", "-e"]
+CMD [ "/usr/sbin/init" ]
