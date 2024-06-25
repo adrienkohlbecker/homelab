@@ -1,16 +1,3 @@
-- name: Add test binary
-  when: docker_test
-  file:
-    state: touch
-    path: /usr/bin/podman
-    mode: '0755'
-    access_time: preserve
-    modification_time: preserve
-  become: true
-  tags:
-    - filebrowser
-    - _check_stage1
-
 - name: Install jq
   apt:
     pkg:
@@ -79,7 +66,6 @@
   vars:
     systemd_unit_src: filebrowser
     systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
-    systemd_unit_start: "{{ not docker_test }}"
     systemd_unit_restart: "{{ systemd_unit.changed or filebrowser_conf.changed }}"
   tags:
     - filebrowser

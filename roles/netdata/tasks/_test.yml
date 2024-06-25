@@ -1,0 +1,10 @@
+- name: _test | Install nginx
+  import_role:
+    name: _test
+    tasks_from: nginx
+
+- name: Add podman-socket group
+  group:
+    name: podman-socket
+    system: true
+  become: true

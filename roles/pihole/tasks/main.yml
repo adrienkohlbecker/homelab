@@ -1,17 +1,3 @@
-- name: Add test binary
-  when: docker_test
-  file:
-    state: touch
-    path: /usr/bin/podman
-    mode: '0755'
-    access_time: preserve
-    modification_time: preserve
-  become: true
-  tags:
-    - pihole
-    - _check_stage1
-    - _check_stage2
-
 - name: Add pihole group
   group:
     name: pihole
@@ -107,7 +93,6 @@
   vars:
     systemd_unit_src: pihole
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) }}"
-    systemd_unit_start: "{{ not docker_test }}"
     systemd_unit_restart: false
   tags:
     - pihole
@@ -118,12 +103,12 @@
     tasks_from: compression
   vars:
     logrotate_item: /mnt/services/pihole/etc/logrotate
-    logrotate_condition: "{{ not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed)) and not docker_test }}"
+    logrotate_condition: "{{ not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed)) }}"
   tags:
     - pihole
 
 - name: Set web password
-  when: not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed)) and not docker_test
+  when: not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed))
   lineinfile:
     path: /mnt/services/pihole/etc/setupVars.conf
     regexp: ^WEBPASSWORD=
@@ -149,7 +134,7 @@
     - pihole
 
 - name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and not docker_test and ((systemd_unit.changed and not systemd_started.changed) or logrotate_conf.changed or pihole_webpassword.changed or fahm_cfg.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and ((systemd_unit.changed and not systemd_started.changed) or logrotate_conf.changed or pihole_webpassword.changed or fahm_cfg.changed)
   systemd:
     name: pihole
     state: restarted
@@ -187,7 +172,6 @@
     - pihole
 
 - name: Trigger list update
-  when: not docker_test
   command: "{{ pihole_list_update_cmd }}"
   register: pihole_list_update
   changed_when: '["inserted", "enabled", "disabled", "migrated"] | select("in", pihole_list_update.stdout) | length > 0'
@@ -253,7 +237,7 @@
     - pihole
 
 - name: Restart keepalived
-  when: (pihole_keepalived_cfg.changed) and not docker_test
+  when: (pihole_keepalived_cfg.changed)
   systemd:
     name: keepalived
     state: restarted

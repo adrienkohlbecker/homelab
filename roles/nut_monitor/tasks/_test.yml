@@ -1,0 +1,26 @@
+- name: _test | Install dependencies
+  apt:
+    pkg:
+      - nut-server
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
+- name: _test | Configure nut-server
+  shell: |
+    set -euo pipefail
+
+    echo "MODE=standalone" > /etc/nut/nut.conf
+
+    cat <<EOF >>/etc/nut/ups.conf
+    [eaton]
+        driver = dummy-ups
+        port = evolution500.seq
+        desc = "dummy-ups in dummy-loop mode"
+    EOF
+
+    touch /tmp/done
+  args:
+    executable: /bin/bash
+    creates: /tmp/done
+  become: true

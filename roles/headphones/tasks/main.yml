@@ -1,17 +1,3 @@
-- name: Add test binary
-  when: docker_test
-  file:
-    state: touch
-    path: /usr/bin/podman
-    mode: '0755'
-    access_time: preserve
-    modification_time: preserve
-  become: true
-  tags:
-    - headphones
-    - _check_stage1
-    - _check_stage2
-
 - name: Add headphones group
   group:
     name: headphones
@@ -94,7 +80,6 @@
   vars:
     systemd_unit_src: headphones
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or headphones_user.changed)) }}"
-    systemd_unit_start: "{{ not docker_test }}"
     systemd_unit_restart: "{{ systemd_unit.changed or headphones_conf.changed }}"
   tags:
     - headphones

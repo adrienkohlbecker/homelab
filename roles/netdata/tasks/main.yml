@@ -114,6 +114,7 @@
     netdata_template_src: prometheus.conf.j2
     netdata_template_dest: go.d/prometheus.conf
     netdata_template_mode: "0600"
+    netdata_template_restart: "{{ not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
 
@@ -138,6 +139,7 @@
   vars:
     netdata_copy_src: docker.conf
     netdata_copy_dest: go.d/docker.conf
+    netdata_copy_restart: "{{ not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
 
@@ -158,6 +160,7 @@
     netdata_copy_src: intelgpu.conf
     netdata_copy_dest: go.d/intelgpu.conf
     netdata_copy_condition: '{{ ansible_architecture == "x86_64" }}'
+    netdata_copy_restart: "{{ not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
 
@@ -193,7 +196,6 @@
     - netdata
 
 - name: Add user to podman-socket group
-  when: not docker_test
   user:
     name: netdata
     groups: podman-socket
@@ -203,7 +205,6 @@
     - netdata
 
 - name: Mount debugfs
-  when: not docker_test
   mount:
     path: /sys/kernel/debug
     src: /debugfs
@@ -223,6 +224,7 @@
   vars:
     netdata_copy_src: systemdunits_alerts.conf
     netdata_copy_dest: systemdunits.conf
+    netdata_copy_restart: "{{ not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
 
@@ -233,6 +235,7 @@
   vars:
     netdata_copy_src: systemdunits.conf
     netdata_copy_dest: go.d/systemdunits.conf
+    netdata_copy_restart: "{{ not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
 

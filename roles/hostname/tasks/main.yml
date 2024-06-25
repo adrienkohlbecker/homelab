@@ -1,4 +1,5 @@
 - name: Set hostname
+  when: not docker_test
   hostname:
     name: "{{ inventory_hostname }}"
   become: true

@@ -1,17 +1,3 @@
-- name: Add test binary
-  when: docker_test
-  file:
-    state: touch
-    path: /usr/bin/podman
-    mode: '0755'
-    access_time: preserve
-    modification_time: preserve
-  become: true
-  tags:
-    - jellyfin
-    - _check_stage1
-    - _check_stage2
-
 - name: Add jellyfin group
   group:
     name: jellyfin
@@ -132,7 +118,6 @@
   vars:
     systemd_unit_src: jellyfin
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or jellyfin_user.changed)) }}"
-    systemd_unit_start: "{{ not docker_test }}"
     systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - jellyfin

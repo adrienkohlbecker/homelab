@@ -19,6 +19,7 @@ cp -r "roles/nginx" "$TMPDIR"
 cp -r "roles/cron" "$TMPDIR"
 cp -r "roles/zfs_mount" "$TMPDIR"
 cp -r "roles/sort_ini" "$TMPDIR"
+cp -r "roles/_test" "$TMPDIR"
 cp -r "roles/$ROLE" "$TMPDIR"
 
 cat <<EOF >"$TMPDIR/site.yml"
@@ -26,20 +27,29 @@ cat <<EOF >"$TMPDIR/site.yml"
   roles:
     - $ROLE
 EOF
+if [ -f "roles/$ROLE/tasks/_test.yml" ]; then
+  cat <<EOF >>"$TMPDIR/_test.yml"
+- hosts: box
+  tasks:
+    - import_role:
+        name: $ROLE
+        tasks_from: _test
+EOF
+fi
 
 stop() {
-  podman stop --ignore --cidfile $TMPDIR/cid
+  podman stop --ignore --time 20 --cidfile $TMPDIR/cid
   rm -rf "$TMPDIR"
 }
 
 err() {
-  podman exec --tty "$(cat $TMPDIR/cid)" journalctl --pager-end --priority warning
+  podman exec --tty "$(cat $TMPDIR/cid)" journalctl --pager-end --no-pager --priority info
 }
 
 trap err ERR
 trap stop EXIT
 
-podman run --interactive --rm --publish 127.0.0.1::22 --detach --cidfile $TMPDIR/cid --timeout 600 homelab
+podman run --interactive --rm --publish 127.0.0.1::22 --detach --privileged --cidfile $TMPDIR/cid --timeout 600 homelab
 
 while [ ! -f $TMPDIR/cid ]; do
   echo "."
@@ -53,6 +63,12 @@ while [ -z "$(socat -T2 stdout tcp:127.0.0.1:$PORT,connect-timeout=2,readbytes=1
   echo "."
   sleep 1
 done
+
+podman exec --tty "$(cat $TMPDIR/cid)" apt-get update
+
+if [ -f "$TMPDIR/_test.yml" ]; then
+  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/_test.yml" "$@"
+fi
 
 LIST_TAGS=$(ansible-playbook "$TMPDIR/site.yml" --list-tags)
 

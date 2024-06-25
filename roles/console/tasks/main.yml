@@ -1,6 +1,7 @@
 - name: Install console-setup
   apt:
     pkg:
+      - initramfs-tools
       - console-setup
     cache_valid_time: 3600
   become: true
@@ -21,7 +22,7 @@
     - console
 
 - name: Update initramfs
-  when: not docker_test and console_cfg.changed
+  when: console_cfg.changed
   command: update-initramfs -u -k all
   changed_when: true
   become: true

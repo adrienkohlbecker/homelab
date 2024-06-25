@@ -34,7 +34,7 @@
     - resolved
 
 - name: Restart systemd-resolved
-  when: (resolved_conf.changed or resolv_conf.changed) and not docker_test
+  when: (resolved_conf.changed or resolv_conf.changed)
   systemd:
     name: systemd-resolved
     state: restarted

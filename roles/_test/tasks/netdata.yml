@@ -1,0 +1,11 @@
+- name: _test | Install netdata
+  shell: |
+    set -euo pipefail
+
+    wget -O /tmp/netdata-kickstart.sh https://get.netdata.cloud/kickstart.sh &&
+    sh /tmp/netdata-kickstart.sh --no-updates --stable-channel --disable-telemetry --disable-cloud
+    systemctl start netdata
+  args:
+    executable: /bin/bash
+    creates: /tmp/netdata-kickstart.sh
+  become: true

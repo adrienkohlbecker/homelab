@@ -12,7 +12,7 @@
   become: true
 
 - name: template | Copy metrics template
-  when: not docker_test and (netdata_template_condition | default(true))
+  when: netdata_template_condition | default(true)
   command: cp /usr/lib/netdata/conf.d/{{ netdata_template_dest }} /etc/netdata/{{ netdata_template_dest }}
   args:
     creates: /etc/netdata/{{ netdata_template_dest }}
@@ -24,15 +24,15 @@
   template:
     src: "{{ netdata_template_src }}"
     dest: /etc/netdata/{{ netdata_template_dest }}
-    owner: "{{ docker_test|ternary('root', 'netdata') }}"
-    group: "{{ docker_test|ternary('root', 'netdata') }}"
+    owner: netdata
+    group: netdata
     mode: "{{ netdata_template_mode | default('0644') }}"
     backup: true
   register: netdata_template
   become: true
 
 - name: template | Restart netdata
-  when: not docker_test and (netdata_template_copy.changed or netdata_template.changed)
+  when: (netdata_template_restart | default(true)) and (netdata_template_copy.changed or netdata_template.changed)
   systemd:
     name: netdata
     state: restarted

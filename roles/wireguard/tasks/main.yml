@@ -2,6 +2,7 @@
   apt:
     pkg:
       - wireguard
+      - iproute2
     cache_valid_time: 3600
   become: true
   register: apt_install_wireguard

@@ -8,6 +8,7 @@
   tags:
     - nginx
     - _check_stage1
+    - _check_stage2
 
 - name: Disable default site
   file:
@@ -17,6 +18,7 @@
   become: true
   tags:
     - nginx
+    - _check_stage2
 
 - name: Generate Diffie-Hellman parameters
   when: not (ansible_check_mode and apt_unit_masked.changed)
@@ -26,6 +28,7 @@
   become: true
   tags:
     - nginx
+    - _check_stage2
 
 - name: Configure nginx
   template:
@@ -65,7 +68,7 @@
     - nginx
 
 - name: Restart netdata
-  when: nginx_status_conf.changed and not docker_test
+  when: nginx_status_conf.changed
   systemd:
     name: netdata
     state: restarted
@@ -78,6 +81,7 @@
   vars:
     nginx_subdomain: marantz
     nginx_proxy_pass: https://{{ external_ips.marantz }}:10443/
+    nginx_site_reload: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
   tags:
     - nginx
 
@@ -86,6 +90,7 @@
   vars:
     nginx_subdomain: printer
     nginx_proxy_pass: http://{{ external_ips.printer }}:80/
+    nginx_site_reload: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
   tags:
     - nginx
 
@@ -94,6 +99,7 @@
   vars:
     nginx_subdomain: siglent
     nginx_proxy_pass: http://{{ external_ips.siglent }}:80/
+    nginx_site_reload: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
   tags:
     - nginx
 
@@ -103,6 +109,7 @@
     nginx_subdomain: unifi
     nginx_proxy_pass: https://{{ external_ips.udm }}:443/
     nginx_csp_additional: img-src static.ui.com {{ nginx_csp_default }}
+    nginx_site_reload: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
   tags:
     - nginx
 
@@ -111,6 +118,7 @@
   vars:
     nginx_subdomain: ups
     nginx_proxy_pass: https://{{ external_ips.eaton }}:443/
+    nginx_site_reload: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
   tags:
     - nginx
 
@@ -119,6 +127,7 @@
   vars:
     nginx_subdomain: tubeszb
     nginx_proxy_pass: http://{{ external_ips.tubeszb }}:80/
+    nginx_site_reload: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
   tags:
     - nginx
 
@@ -131,6 +140,7 @@
       # bypass http auth
       proxy_set_header Authorization "Basic {{ ("admin:" + otgw_admin_password) | b64encode }}";
     nginx_permissions: "0600"
+    nginx_site_reload: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
   tags:
     - nginx
 

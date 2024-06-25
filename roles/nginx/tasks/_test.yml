@@ -1,0 +1,28 @@
+- name: _test | Install netdata
+  import_role:
+    name: _test
+    tasks_from: netdata
+
+- name: _test | Install dependencies
+  apt:
+    pkg:
+      - ssl-cert
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
+- name: _test | Generate certificates
+  shell: |
+    set -euo pipefail
+
+    mkdir -p /etc/letsencrypt/live/{{ item }}
+    cp /etc/ssl/private/ssl-cert-snakeoil.key /etc/letsencrypt/live/{{ item }}/privkey.pem
+    cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/letsencrypt/live/{{ item }}/chain.pem
+    cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/letsencrypt/live/{{ item }}/fullchain.pem
+  args:
+    executable: /bin/bash
+    creates: /etc/letsencrypt/live/{{ item }}
+  become: true
+  loop:
+    - '{{ domain }}'
+    - '{{ inventory_hostname }}.{{ domain }}'

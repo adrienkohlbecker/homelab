@@ -4,40 +4,14 @@
       - iproute2
     cache_valid_time: 3600
   become: true
-  register: apt_locales
-  tags:
-    - macvlan
-    - _check_stage1
-
-- name: Add test binary
-  when: docker_test
-  file:
-    state: touch
-    path: /bin/ip
-    mode: '0755'
-    access_time: preserve
-    modification_time: preserve
-  become: true
   tags:
     - macvlan
     - _check_stage1
 
 - name: Compute network values
-  when: not docker_test
   set_fact:
     macvlan_parent_gateway: "{{ ansible_facts[macvlan_parent].ipv4.network | ansible.utils.ipmath(1) }}"
     macvlan_parent_subnet: "{{ ansible_facts[macvlan_parent].ipv4.network }}/{{ ansible_facts[macvlan_parent].ipv4.prefix }}"
-    macvlan_host_ip: "{{ macvlan_subnet | ansible.utils.usable_range | json_query('usable_ips[0]') }}"
-    macvlan_host_mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname) }}"
-  tags:
-    - macvlan
-    - _check_stage1
-
-- name: Compute network values
-  when: docker_test
-  set_fact:
-    macvlan_parent_gateway: "10.123.0.1"
-    macvlan_parent_subnet: "10.123.0.0/23"
     macvlan_host_ip: "{{ macvlan_subnet | ansible.utils.usable_range | json_query('usable_ips[0]') }}"
     macvlan_host_mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname) }}"
   tags:
