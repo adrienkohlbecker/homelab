@@ -1,17 +1,3 @@
-- name: Add test binary
-  when: docker_test
-  file:
-    state: touch
-    path: /usr/bin/podman
-    mode: '0755'
-    access_time: preserve
-    modification_time: preserve
-  become: true
-  tags:
-    - influxdb
-    - _check_stage1
-    - _check_stage2
-
 - name: Add influxdb group
   group:
     name: influxdb
@@ -72,13 +58,12 @@
   vars:
     systemd_unit_src: influxdb
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or influxdb_user.changed)) }}"
-    systemd_unit_start: "{{ not docker_test }}"
     systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - influxdb
 
 - name: Initial setup
-  when: not (ansible_check_mode and (systemd_unit.changed or influxdb_user.changed)) and not docker_test
+  when: not (ansible_check_mode and (systemd_unit.changed or influxdb_user.changed))
   command: podman exec influxdb influx setup --username "{{ influxdb_root_user }}" --password "{{ influxdb_root_password }}" --org home --bucket default --force
   args:
     creates: /mnt/services/influxdb/config/influx-configs

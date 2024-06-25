@@ -17,7 +17,7 @@
     tasks_from: template
   vars:
     systemd_unit_src: zfs_mount.service
-    systemd_unit_dest: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', 'root') | replace('/', '_') }}.service
+    systemd_unit_dest: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', '/root') | replace('/', '_') }}.service
   tags:
     - zfs_mount
     - _check_stage1
@@ -27,7 +27,7 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', 'root') | replace('/', '_') }}
+    systemd_unit_src: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', '/root') | replace('/', '_') }}
     systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
     systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:

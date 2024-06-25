@@ -1,0 +1,18 @@
+- name: _test | Install podman
+  import_role:
+    name: _test
+    tasks_from: podman
+
+- name: _test | Install nginx
+  import_role:
+    name: _test
+    tasks_from: nginx
+
+- name: _test | Setup dependencies
+  shell: |
+    set -euo pipefail
+    mkdir /mnt/{services,scratch,media}
+  args:
+    executable: /bin/bash
+    creates: /mnt/services
+  become: true

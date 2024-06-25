@@ -38,7 +38,7 @@ ExecStart=/usr/bin/podman run \
     --volume /var/log/jellyfin:/config/log \
     --volume /mnt/scratch/jellyfin/cache:/cache \
     --volume /mnt/media:/media \
-    --device /dev/dri/:/dev/dri/ \
+    {{ docker_test | ternary('', '--device /dev/dri/:/dev/dri/') }} \
     --publish 127.0.0.1:8096:8096/tcp \
     --health-cmd         "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8096/health" \
     --health-startup-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8096/health" \

@@ -23,7 +23,7 @@
       become: true
 
     - name: template | Reload daemon
-      when: systemd_unit.changed and not docker_test
+      when: systemd_unit.changed
       systemd:
         daemon_reload: true
       become: true

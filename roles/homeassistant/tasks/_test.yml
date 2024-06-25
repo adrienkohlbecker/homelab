@@ -1,0 +1,27 @@
+- name: _test | Install podman
+  import_role:
+    name: _test
+    tasks_from: podman
+
+- name: _test | Install nginx
+  import_role:
+    name: _test
+    tasks_from: nginx
+
+- name: _test | Setup dependencies
+  shell: |
+    set -euo pipefail
+    mkdir /mnt/services
+
+    podman run -d -p 8086:8086 \
+      --name influxdb \
+      -e DOCKER_INFLUXDB_INIT_MODE=setup \
+      -e DOCKER_INFLUXDB_INIT_USERNAME={{ influxdb_root_user }} \
+      -e DOCKER_INFLUXDB_INIT_PASSWORD={{ influxdb_root_password }} \
+      -e DOCKER_INFLUXDB_INIT_ORG=home \
+      -e DOCKER_INFLUXDB_INIT_BUCKET=default \
+      docker.io/influxdb:2.7.6
+  args:
+    executable: /bin/bash
+    creates: /mnt/services
+  become: true

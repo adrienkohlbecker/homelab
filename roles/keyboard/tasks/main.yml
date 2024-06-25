@@ -2,6 +2,7 @@
   apt:
     pkg:
       - keyboard-configuration
+      - initramfs-tools
     cache_valid_time: 3600
   become: true
   tags:
@@ -21,7 +22,7 @@
     - keyboard
 
 - name: Update initramfs
-  when: keyboard_cfg.changed and not docker_test
+  when: keyboard_cfg.changed
   command: update-initramfs -u -k all
   become: true
   changed_when: true

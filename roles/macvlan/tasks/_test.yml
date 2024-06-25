@@ -1,0 +1,16 @@
+- name: _test | Install dependencies
+  apt:
+    pkg:
+      - docker.io
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
+- name: _test | Setup dependencies
+  shell: |
+    set -euo pipefail
+    systemctl start docker
+  args:
+    executable: /bin/bash
+    creates: /mnt/services
+  become: true

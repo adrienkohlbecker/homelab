@@ -1,0 +1,59 @@
+- name: _test | Install dependencies
+  apt:
+    pkg:
+      - podman
+      - git
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
+- name: _test | Install gitea
+  get_url:
+    url: https://dl.gitea.com/gitea/1.21.11/gitea-1.21.11-linux-{{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }}
+    checksum: sha256:{{ (ansible_architecture == "aarch64") | ternary('1bdbb3507067b3db9c2178be0bc038c2549fddb4eafff96d4a7c0010c7d1e404', '238056fa4616633a9ec5a358aac75275bd3f271d5e5238af3dd5f22c713fe97e') }}
+    dest: /gitea
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: _test | Run gitea
+  shell: |
+    set -euo pipefail
+
+    mkdir -p /{custom,data,log}
+    mkdir -p /custom/conf
+    mkdir -p /data/gitea-repositories
+    cat <<EOF >/custom/conf/app.ini
+    I_AM_BEING_UNSAFE_RUNNING_AS_ROOT=true
+
+    [database]
+    DB_TYPE = sqlite3
+
+    [security]
+    INSTALL_LOCK = true
+
+    [actions]
+    ENABLED = true
+    EOF
+
+    systemd-run env HOME=/root /gitea web
+    sleep 5
+    echo "gitea.{{ inventory_hostname }}.{{ domain }}"
+  args:
+    executable: /bin/bash
+    creates: /custom/conf/app.ini
+  changed_when: true
+  become: true
+
+- name: _test | Get registration token
+  command: /gitea actions generate-runner-token
+  changed_when: true
+  register: _test_runner_token
+  become: true
+
+- name: _test | Set fact
+  when: not ansible_check_mode
+  set_fact:
+    gitea_runner_registration_token: '{{ _test_runner_token.stdout_lines[1] }}'
+  become: true

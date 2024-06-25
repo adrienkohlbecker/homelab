@@ -26,7 +26,11 @@ RUN set -x \
  && apt-get install -y python3-apt \
  && apt-get install -y python3-requests \
  && apt-get install -y sudo \
- && apt-get install -y cron
+ && apt-get install -y cron \
+ && rm -rf /var/lib/apt/lists/*
+
+# to use podman-in-podman
+VOLUME /var/lib/containers
 
 EXPOSE 22
 

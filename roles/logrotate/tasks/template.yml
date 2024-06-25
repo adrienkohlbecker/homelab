@@ -10,7 +10,7 @@
   become: true
 
 - name: template | Restart logrotate
-  when: logrotate_conf.changed and not docker_test
+  when: logrotate_conf.changed
   systemd:
     name: logrotate
     state: restarted

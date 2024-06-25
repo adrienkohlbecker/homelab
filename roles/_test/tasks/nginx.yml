@@ -1,0 +1,36 @@
+- name: _test | Install dependencies
+  apt:
+    pkg:
+      - nginx
+      - ssl-cert
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
+- name: _test | Configure nginx
+  shell: |
+    set -euo pipefail
+
+    cat <<EOF >/etc/nginx/conf.d/ssl.conf
+    ssl_certificate         /etc/ssl/certs/ssl-cert-snakeoil.pem;
+    ssl_certificate_key     /etc/ssl/private/ssl-cert-snakeoil.key;
+    ssl_trusted_certificate /etc/ssl/certs/ssl-cert-snakeoil.pem;
+
+    map \$http_upgrade \$connection_upgrade {
+        default foobar;
+    }
+
+    map \$remote_addr \$proxy_forwarded_elem {
+        default foobar;
+    }
+
+    map \$http_forwarded \$proxy_add_forwarded {
+        default foobar;
+    }
+    EOF
+
+    systemctl restart nginx
+  args:
+    executable: /bin/bash
+    creates: /etc/nginx/conf.d/ssl.conf
+  become: true
