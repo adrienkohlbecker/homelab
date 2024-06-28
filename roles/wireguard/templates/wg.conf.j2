@@ -9,7 +9,7 @@ ListenPort = {{ listen_port | default('51820') }}
 PostUp = {{ own_peer.post_up }}
 {% endif %}
 {% if 'post_down' in own_peer %}
-PostDown = {{ own_peer.post_up }}
+PostDown = {{ own_peer.post_down }}
 {% endif %}
 {% if vpn_peer %}
 DNS = {{ vpn_peer.dns_address }}
