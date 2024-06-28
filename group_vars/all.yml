@@ -4,7 +4,7 @@ home_subnet: 10.123.0.0/16
 site_subnets:
   home: 10.123.0.0/21
   brumath: 10.123.56.0/24
-  bonniers: 192.168.0.0/24 # 10.123.57.0/24 todo update this!
+  bonniers: 10.123.57.0/24
 external_ips:
   pug: 10.123.0.3
   box: 10.123.0.5
@@ -16,7 +16,7 @@ external_ips:
   siglent: 10.123.2.4
   tubeszb: 10.123.4.2
   otgw: 10.123.4.3
-  bunk: 192.168.0.149
+  bunk: 10.123.57.3
   pihole: "{{ pihole_keepalived_ip }}"
 mac_addresses:
   pug: 9c:6b:00:26:ef:5d
@@ -182,11 +182,11 @@ wireguard_peers:
     endpoint:
       local: "{{ external_ips.bunk }}:51820"
       remote: akohlbecker.synology.me:51820
-    post_up: iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o eth0 -j MASQUERADE
-    post_down: iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o eth0 -j MASQUERADE
+    post_up: iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ovs_eth0 -j MASQUERADE
+    post_down: iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ovs_eth0 -j MASQUERADE
     is_server: true
     site_subnet: "{{ site_subnets.bonniers }}"
-    dns_address: 192.168.0.1 # todo update this!
+    dns_address: 10.123.57.1
     public_key: bun/Cqg3yML+J7YpC1SAxHqdK3NH1oUOSB+WFjtijhQ=
     private_key: !vault |
           $ANSIBLE_VAULT;1.1;AES256
