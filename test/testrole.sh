@@ -38,12 +38,14 @@ EOF
 fi
 
 stop() {
-  podman stop --ignore --time 20 --cidfile $TMPDIR/cid
+  podman stop --ignore --time 5 --cidfile $TMPDIR/cid
   rm -rf "$TMPDIR"
 }
 
 err() {
-  podman exec --tty "$(cat $TMPDIR/cid)" journalctl --pager-end --no-pager --priority info
+  TMPFILE=$(mktemp)
+  podman exec --tty "$(cat $TMPDIR/cid)" journalctl --pager-end --no-pager --priority info >$TMPFILE
+  echo "$TMPFILE"
 }
 
 trap err ERR
@@ -64,36 +66,39 @@ while [ -z "$(socat -T2 stdout tcp:127.0.0.1:$PORT,connect-timeout=2,readbytes=1
   sleep 1
 done
 
-podman exec --tty "$(cat $TMPDIR/cid)" apt-get update
-
 if [ -f "$TMPDIR/_test.yml" ]; then
   ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/_test.yml" "$@"
 fi
 
-LIST_TAGS=$(ansible-playbook "$TMPDIR/site.yml" --list-tags)
-
 set -x
 
-ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --check "$@"
+if [[ ${1:-} == "--checkmode" ]]; then
+  shift
 
-if [[ $LIST_TAGS == *"_check_stage1"* ]]; then
-  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --tags _check_stage1 "$@"
-  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --check "$@"
-fi
+  LIST_TAGS=$(ansible-playbook "$TMPDIR/site.yml" --list-tags)
 
-if [[ $LIST_TAGS == *"_check_stage2"* ]]; then
-  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --tags _check_stage2 "$@"
   ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --check "$@"
-fi
 
-if [[ $LIST_TAGS == *"_check_stage3"* ]]; then
-  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --tags _check_stage3 "$@"
-  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --check "$@"
-fi
+  if [[ $LIST_TAGS == *"_check_stage1"* ]]; then
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --tags _check_stage1 "$@"
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --check "$@"
+  fi
 
-if [[ $LIST_TAGS == *"_check_stage4"* ]]; then
-  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --tags _check_stage4 "$@"
-  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --check "$@"
+  if [[ $LIST_TAGS == *"_check_stage2"* ]]; then
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --tags _check_stage2 "$@"
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --check "$@"
+  fi
+
+  if [[ $LIST_TAGS == *"_check_stage3"* ]]; then
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --tags _check_stage3 "$@"
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --check "$@"
+  fi
+
+  if [[ $LIST_TAGS == *"_check_stage4"* ]]; then
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --tags _check_stage4 "$@"
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" --check "$@"
+  fi
+
 fi
 
 ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/site.yml" "$@"

@@ -29,6 +29,9 @@ RUN set -x \
  && apt-get install -y cron \
  && rm -rf /var/lib/apt/lists/*
 
+# Ensure we have a working apt cache (keep the cleanup in other sections for easy reuse)
+RUN apt-get update
+
 # to use podman-in-podman
 VOLUME /var/lib/containers
 
