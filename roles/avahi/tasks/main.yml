@@ -1,14 +1,34 @@
 - name: Install avahi-daemon
-  apt:
-    pkg:
-      - avahi-daemon
-      - avahi-utils
-    cache_valid_time: 3600
-  register: apt_install_avahi
-  become: true
+  import_role:
+    name: apt_unit_masked
+    tasks_from: apt
+  vars:
+    apt_unit_masked_pkg: avahi-daemon
+    apt_unit_masked_unit: avahi-daemon.service
   tags:
     - avahi
     - _check_stage1
+
+- name: Install tools
+  apt:
+    pkg:
+      - avahi-utils
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - avahi
+
+- name: Copy avahi daemon conf
+  copy:
+    src: avahi-daemon.conf
+    dest: /etc/avahi/avahi-daemon.conf
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  register: avahi_daemon_conf
+  tags:
+    - avahi
 
 - name: Copy avahi device-info service
   copy:
@@ -29,6 +49,6 @@
   vars:
     systemd_unit_src: avahi-daemon
     systemd_unit_condition: "{{ not (ansible_check_mode and apt_install_avahi.changed) }}"
-    systemd_unit_restart: "{{ avahi_device_info.changed }}"
+    systemd_unit_restart: "{{ avahi_device_info.changed or avahi_daemon_conf.changed }}"
   tags:
     - avahi
