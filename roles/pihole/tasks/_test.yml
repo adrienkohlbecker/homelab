@@ -21,3 +21,15 @@
   import_role:
     name: _test
     tasks_from: podman
+
+- name: _test | Configure resolved
+  shell: |
+    set -euo pipefail
+
+    systemctl disable systemd-resolved.service
+    systemctl stop systemd-resolved
+    echo "nameserver 1.1.1.1" > /etc/resolv.conf
+  args:
+    executable: /bin/bash
+    removes: /etc/systemd/system/multi-user.target.wants/systemd-resolved.service
+  become: true
