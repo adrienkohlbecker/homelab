@@ -36,7 +36,7 @@
 # The specific set of interfaces / networks to bind to
 # This can be either the interface name or an IP address/netmask;
 # interface names are normally preferred
-   interfaces = 127.0.0.0/8 eth0 wg0
+   interfaces = 127.0.0.0/8 eth0 {{ (wireguard_peers|selectattr('name', 'eq', inventory_hostname)|first).address }}/18
 
 # Only bind to the named interfaces and/or networks; you must use the
 # 'interfaces' option above to use this.
