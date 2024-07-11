@@ -103,6 +103,7 @@
     - homeassistant
     - kuma
     - healthchecks
+    - spouse
 
 - name: Reboot check
   hosts: all:!bunk

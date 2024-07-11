@@ -1,0 +1,30 @@
+- name: Add spouse group
+  group:
+    name: spouse
+    system: false
+  become: true
+  tags:
+    - spouse
+
+- name: Add spouse user
+  user:
+    name: spouse
+    group: spouse
+    createhome: true
+    system: false
+    shell: /bin/bash
+    home: /mnt/data/spouse
+  become: true
+  register: spouse_user
+  tags:
+    - spouse
+
+- name: Configure spouse samba user
+  shell: set -euo pipefail; (pdbedit --user=spouse 2>&1 > /dev/null) || (echo '{{ spouse_samba_password }}'; echo '{{ spouse_samba_password }}') | smbpasswd -s -a spouse
+  args:
+    executable: /bin/bash
+  register: smbpasswd
+  changed_when: "'Added user' in smbpasswd.stdout"
+  become: true
+  tags:
+    - spouse
