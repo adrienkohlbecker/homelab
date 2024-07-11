@@ -1,0 +1,30 @@
+- name: Add marie group
+  group:
+    name: marie
+    system: false
+  become: true
+  tags:
+    - marie
+
+- name: Add marie user
+  user:
+    name: marie
+    group: marie
+    createhome: true
+    system: false
+    shell: /bin/bash
+    home: /mnt/data/marie
+  become: true
+  register: marie_user
+  tags:
+    - marie
+
+- name: Configure marie samba user
+  shell: set -euo pipefail; (pdbedit --user=marie 2>&1 > /dev/null) || (echo '{{ marie_samba_password }}'; echo '{{ marie_samba_password }}') | smbpasswd -s -a marie
+  args:
+    executable: /bin/bash
+  register: smbpasswd
+  changed_when: "'Added user' in smbpasswd.stdout"
+  become: true
+  tags:
+    - marie

@@ -188,10 +188,14 @@ smb_shares:
       force directory mode = 0775
   - name: data
     path: /mnt/data
+    valid users: ak
   - name: brumath
     path: /mnt/brumath
+    valid users: ak
   - name: eckwersheim
     path: /mnt/eckwersheim
+    valid users: ak
 
 subid_users:
   - act_runner
+  - marie
