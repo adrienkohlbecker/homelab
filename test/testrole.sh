@@ -66,11 +66,11 @@ while [ -z "$(socat -T2 stdout tcp:127.0.0.1:$PORT,connect-timeout=2,readbytes=1
   sleep 1
 done
 
-if [ -f "$TMPDIR/_test.yml" ]; then
-  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/_test.yml" "$@"
-fi
-
 set -x
+
+if [ -f "$TMPDIR/_test.yml" ]; then
+  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$TMPDIR/_test.yml"
+fi
 
 if [[ ${1:-} == "--checkmode" ]]; then
   shift
