@@ -8,7 +8,7 @@
     modification_time: preserve
   become: true
   tags:
-    - quotes
+    - compta
     - _check_stage1
     - _check_stage2
     - _check_stage3
@@ -19,110 +19,110 @@
       - ruby-bundler
       - git
     cache_valid_time: 3600
-  register: quotes_apt_deps
+  register: compta_apt_deps
   become: true
   tags:
-    - quotes
+    - compta
     - _check_stage1
     - _check_stage2
     - _check_stage3
 
-- name: Add quotes group
+- name: Add compta group
   group:
-    name: quotes
+    name: compta
     system: true
   become: true
   tags:
-    - quotes
+    - compta
     - _check_stage2
     - _check_stage3
 
-- name: Add quotes user
+- name: Add compta user
   user:
-    name: quotes
-    group: quotes
+    name: compta
+    group: compta
     createhome: false
     system: true
     shell: /usr/sbin/nologin
     home: /nonexistent
   become: true
-  register: quotes_user
+  register: compta_user
   tags:
-    - quotes
+    - compta
     - _check_stage2
     - _check_stage3
 
-- name: Create quotes directory
+- name: Create compta directory
   file:
-    dest: /opt/quotes
+    dest: /opt/compta
     state: directory
     owner: root
     group: root
     mode: "0755"
   become: true
   tags:
-    - quotes
+    - compta
     - _check_stage3
 
-- name: Download quotes
-  when: not (ansible_check_mode and quotes_apt_deps.changed)
+- name: Download compta
+  when: not (ansible_check_mode and compta_apt_deps.changed)
   git:
     repo: git@github.com:adrienkohlbecker/compta.git
-    dest: /opt/quotes
+    dest: /opt/compta
     version: master
     force: true
     accept_newhostkey: true
-  register: quotes_git
+  register: compta_git
   become: true
   become_flags: "--preserve-env=SSH_AUTH_SOCK"
   tags:
-    - quotes
+    - compta
     - _check_stage3
 
 - name: Build a podman image
   when: not docker_test
   containers.podman.podman_image:
-    name: quotes:latest
-    path: /opt/quotes
+    name: compta:latest
+    path: /opt/compta
     build:
       format: oci
     state: build
-    force: "{{ quotes_git.changed }}"
-  register: quotes_podman
+    force: "{{ compta_git.changed }}"
+  register: compta_podman
   become: true
   tags:
-    - quotes
+    - compta
     - _check_stage3
 
-- name: Install quotes service
+- name: Install compta service
   import_role:
     name: systemd_unit
     tasks_from: template
   vars:
-    systemd_unit_src: quotes.service
-    systemd_unit_condition: "{{ not (ansible_check_mode and quotes_user.changed) }}"
+    systemd_unit_src: compta.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and compta_user.changed) }}"
   tags:
-    - quotes
+    - compta
     - _check_stage3
 
-- name: Enable quotes service
+- name: Enable compta service
   import_role:
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: quotes
-    systemd_unit_condition: "{{ not (ansible_check_mode and (quotes_user.changed or systemd_unit.changed)) }}"
+    systemd_unit_src: compta
+    systemd_unit_condition: "{{ not (ansible_check_mode and (compta_user.changed or systemd_unit.changed)) }}"
     systemd_unit_start: "{{ not docker_test }}"
-    systemd_unit_restart: "{{ systemd_unit.changed or quotes_podman.changed }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or compta_podman.changed }}"
   tags:
-    - quotes
+    - compta
 
 - name: Configure nginx
   import_role:
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: quotes
+    nginx_subdomain: compta
     nginx_proxy_pass: http://localhost:4567/
   tags:
-    - quotes
+    - compta
