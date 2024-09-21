@@ -67,12 +67,14 @@
 - name: Download quotes
   when: not (ansible_check_mode and quotes_apt_deps.changed)
   git:
-    repo: https://github.com/adrienkohlbecker/quotes.git
+    repo: git@github.com:adrienkohlbecker/compta.git
     dest: /opt/quotes
     version: master
     force: true
+    accept_newhostkey: true
   register: quotes_git
   become: true
+  become_flags: "--preserve-env=SSH_AUTH_SOCK"
   tags:
     - quotes
     - _check_stage3
