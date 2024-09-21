@@ -32,6 +32,21 @@
     - _check_stage2
     - _check_stage3
 
+- name: Configure apt
+  copy:
+    src: apt_preferences
+    dest: /etc/apt/preferences.d/netdata
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: apt_pin_netdata
+  become: true
+  tags:
+    - netdata
+    - _check_stage2
+    - _check_stage3
+
 - name: Install netdata
   import_role:
     name: apt_unit_masked
