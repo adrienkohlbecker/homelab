@@ -4,6 +4,12 @@ set -euo pipefail
 ROLE=$1
 shift
 
+if [ "$(uname -o)" = "GNU/Linux" ]; then
+  PODMAN="sudo podman"
+else
+  PODMAN="podman"
+fi
+
 TMPDIR=$(mktemp -d)
 trap 'rm -rf $TMPDIR' EXIT
 
@@ -38,27 +44,34 @@ EOF
 fi
 
 stop() {
-  podman stop --ignore --time 5 --cidfile $TMPDIR/cid
+  if [ "${KEEPAROUND:-}" = "1" ]; then
+    echo "ssh -i packer/vagrant.key -p $PORT root@localhost"
+    echo "$PODMAN stop --ignore --time 5 $(cat $TMPDIR/cid)"
+  else
+    $PODMAN stop --ignore --time 5 --cidfile $TMPDIR/cid
+  fi
   rm -rf "$TMPDIR"
 }
 
 err() {
   TMPFILE=$(mktemp)
-  podman exec --tty "$(cat $TMPDIR/cid)" journalctl --pager-end --no-pager --priority info >$TMPFILE
+  $PODMAN exec --tty "$(cat $TMPDIR/cid)" journalctl --pager-end --no-pager --priority info >$TMPFILE
   echo "$TMPFILE"
 }
 
 trap err ERR
 trap stop EXIT
 
-podman run --interactive --rm --publish 127.0.0.1::22 --detach --privileged --cidfile $TMPDIR/cid --timeout 600 homelab
+$PODMAN run --interactive --rm --publish 127.0.0.1::22 --detach --privileged --cidfile $TMPDIR/cid --timeout 600 homelab
 
 while [ ! -f $TMPDIR/cid ]; do
   echo "."
   sleep 1
 done
 
-ADDR=$(podman port $(cat $TMPDIR/cid) 22)
+sleep 2
+
+ADDR=$($PODMAN port $(cat $TMPDIR/cid) 22)
 PORT="${ADDR#*:}"
 
 while [ -z "$(socat -T2 stdout tcp:127.0.0.1:$PORT,connect-timeout=2,readbytes=1 2>/dev/null)" ]; do

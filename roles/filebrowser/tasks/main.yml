@@ -65,7 +65,7 @@
     tasks_from: service
   vars:
     systemd_unit_src: filebrowser
-    systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
+    systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) and not docker_test }}" # becomes unreachable?
     systemd_unit_restart: "{{ systemd_unit.changed or filebrowser_conf.changed }}"
   tags:
     - filebrowser
