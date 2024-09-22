@@ -31,6 +31,7 @@
 -A FILTERS -p udp --dport 1900  -j ACCEPT                                     -m comment --comment "Allow UPnP broadcast"
 -A FILTERS -p udp --dport 5353  -j ACCEPT                                     -m comment --comment "Allow mDNS"
 -A FILTERS -p udp --dport 51820 -j ACCEPT                                     -m comment --comment "Allow Wireguard"
+-A FILTERS -p udp --dport 60000 -j ACCEPT                                     -m comment --comment "Allow Mosh"
 
 # be explicit with rejection of known traffic so they are documented and don't appear in logs
 -A FILTERS -p udp --dport 67    -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny DHCP"
