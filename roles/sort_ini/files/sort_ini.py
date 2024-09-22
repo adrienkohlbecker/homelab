@@ -30,9 +30,9 @@ def sort_ini(fname):
       sections[section][subcat].append(line)
 
   if sections:
-    sk = list(sections.keys())
-    sk.sort()
-    for k in sk:
+    keys = list(sections.keys())
+    keys.sort()
+    for k in keys:
       vals = sections[k]
       sks = list(vals.keys())
       sks.sort()
