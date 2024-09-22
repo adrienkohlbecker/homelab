@@ -45,15 +45,3 @@
     creates: /custom/conf/app.ini
   changed_when: true
   become: true
-
-- name: _test | Get registration token
-  command: /gitea actions generate-runner-token
-  changed_when: true
-  register: _test_runner_token
-  become: true
-
-- name: _test | Set fact
-  when: not ansible_check_mode
-  set_fact:
-    gitea_runner_registration_token: '{{ _test_runner_token.stdout_lines[1] }}'
-  become: true

@@ -13,10 +13,13 @@
 - name: Add repository key
   when: not (ansible_check_mode and apt_install_gpg.changed)
   apt_key:
-    id: 32637D44F14F620E
-    url: https://keys.datadoghq.com/DATADOG_APT_KEY_F14F620E.public
+    id: "{{ item.id }}"
+    url: https://keys.datadoghq.com/{{ item.file }}
     keyring: /etc/apt/trusted.gpg.d/vector.gpg
   become: true
+  with_items:
+    - { file: DATADOG_APT_KEY_C0962C7D.public, id: E6266D4AC0962C7D }
+    - { file: DATADOG_APT_KEY_F14F620E.public, id: 32637D44F14F620E }
   tags:
     - vector
     - _check_stage2
