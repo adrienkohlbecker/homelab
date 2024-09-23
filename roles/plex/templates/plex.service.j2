@@ -32,7 +32,7 @@ ExecStart=/usr/bin/podman run \
     --name plex \
     --log-driver journald \
     --log-opt tag="plex" \
-    --env ADVERTISE_IP="http://{{ docker_test|ternary('127.0.0.1', ansible_facts.default_ipv4.address) }}:32400/" \
+    --env ADVERTISE_IP="http://{{ ansible_facts.default_ipv4.address }}:32400/" \
     --env PLEX_UID={{ plex_user.uid }} \
     --env PLEX_GID={{ media_group.gid }} \
     --volume /mnt/services/plex:/config \
