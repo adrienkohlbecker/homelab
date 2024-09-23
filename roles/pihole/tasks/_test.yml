@@ -3,6 +3,7 @@
     pkg:
       - logrotate
       - keepalived
+      - iproute2 # for ansible network facts
     install_recommends: false
     cache_valid_time: 3600
   become: true

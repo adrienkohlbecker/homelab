@@ -1,3 +1,11 @@
+- name: _test | Install dependencies
+  apt:
+    pkg:
+      - iproute2 # for ansible network facts
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
 - name: _test | Install nginx
   import_role:
     name: _test

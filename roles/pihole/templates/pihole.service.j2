@@ -37,7 +37,7 @@ ExecStart=/usr/bin/podman run \
     --volume /var/log/pihole:/var/log/pihole \
     --env TZ="Europe/Paris" \
     --env VIRTUAL_HOST=pihole.{{ inventory_hostname }}.{{ domain }} \
-    --env FTLCONF_LOCAL_IPV4={{ docker_test|ternary('127.0.0.1',ansible_facts.default_ipv4.address) }} \
+    --env FTLCONF_LOCAL_IPV4={{ ansible_facts.default_ipv4.address }} \
     --env REV_SERVER=true \
     --env REV_SERVER_TARGET={{ home_subnet | ansible.utils.usable_range | json_query('usable_ips[1]') }} \
     --env REV_SERVER_CIDR={{ home_subnet }} \

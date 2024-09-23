@@ -63,7 +63,7 @@
 
 - name: Compute broadcast ip
   set_fact:
-    wolweb_broadcast_ip: "{{ (docker_test|ternary('127.0.0.1',ansible_facts.default_ipv4.address) + '/' + docker_test|ternary('24',ansible_facts.default_ipv4.netmask)) | ansible.utils.ipaddr('broadcast') }}"
+    wolweb_broadcast_ip: "{{ (ansible_facts.default_ipv4.address + '/' + ansible_facts.default_ipv4.netmask) | ansible.utils.ipaddr('broadcast') }}"
   become: true
   tags:
     - wolweb
