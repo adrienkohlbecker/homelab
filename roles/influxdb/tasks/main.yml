@@ -57,7 +57,8 @@
     tasks_from: service
   vars:
     systemd_unit_src: influxdb
-    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or influxdb_user.changed)) and not docker_test }}" # becomes unreachable?
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or influxdb_user.changed)) }}"
+    systemd_unit_start: "{{ not docker_test }}" # becomes unreachable?
     systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - influxdb
