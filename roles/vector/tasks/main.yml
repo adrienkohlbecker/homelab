@@ -49,7 +49,6 @@
 
 # TODO: What if podman is not installed?
 - name: Add user to podman-socket group
-  when: not docker_test
   user:
     name: vector
     groups: podman-socket
