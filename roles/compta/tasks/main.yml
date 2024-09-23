@@ -65,7 +65,6 @@
     - _check_stage3
 
 - name: Build a podman image
-  when: not docker_test
   containers.podman.podman_image:
     name: compta:latest
     path: /opt/compta

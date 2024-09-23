@@ -1,0 +1,7 @@
+- name: _test | Install dependencies
+  apt:
+    pkg:
+      - avahi-daemon
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true

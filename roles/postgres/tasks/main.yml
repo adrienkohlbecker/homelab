@@ -1,17 +1,3 @@
-- name: Add test binary
-  when: docker_test
-  file:
-    state: touch
-    path: /usr/bin/podman
-    mode: '0755'
-    access_time: preserve
-    modification_time: preserve
-  become: true
-  tags:
-    - pihole
-    - _check_stage1
-    - _check_stage2
-
 - name: Add postgres group
   group:
     name: postgres
@@ -51,7 +37,6 @@
     - _check_stage2
 
 - name: Init database
-  when: not docker_test
   command: >-
     podman run
       --rm --quiet
@@ -86,7 +71,7 @@
   vars:
     systemd_unit_src: postgres
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or postgres_user.changed)) }}"
-    systemd_unit_start: "{{ not docker_test }}"
+    systemd_unit_start: "{{ not docker_test }}" # becomes unreachable?
     systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - postgres

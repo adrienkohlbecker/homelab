@@ -1,8 +1,3 @@
-- name: _test | Install nginx
-  import_role:
-    name: _test
-    tasks_from: nginx
-
 - name: _test | Install podman
   import_role:
     name: _test

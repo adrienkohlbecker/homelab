@@ -1,16 +1,3 @@
-- name: Add test binary
-  when: docker_test
-  file:
-    state: touch
-    path: /usr/bin/podman
-    mode: '0755'
-    access_time: preserve
-    modification_time: preserve
-  become: true
-  tags:
-    - speedtest
-    - _check_stage1
-
 - name: Install speedtest service
   import_role:
     name: systemd_unit

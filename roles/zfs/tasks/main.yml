@@ -137,7 +137,6 @@
     - zfs
 
 - name: Enable zed
-  when: not docker_test
   systemd:
     name: zfs-zed
     enabled: true
@@ -146,7 +145,6 @@
     - zfs
 
 - name: Start zed
-  when: not docker_test
   systemd:
     name: zfs-zed
     state: started
