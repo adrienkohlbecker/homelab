@@ -120,7 +120,7 @@
 
 - name: Register runner
   when: not (ansible_check_mode and act_runner_user.changed)
-  command: act_runner register -c /mnt/services/act_runner/config.yml --no-interactive --instance {{ docker_test | ternary('http://localhost:3000', 'https://gitea.' + inventory_hostname + '.' + domain) }} --token {{ docker_test | ternary(_test_runner_token.stdout_lines[1], gitea_runner_registration_token) }}
+  command: act_runner register -c /mnt/services/act_runner/config.yml --no-interactive --instance {{ docker_test | ternary('http://localhost:3000', 'https://gitea.' + inventory_hostname + '.' + domain) }} --token {{ docker_test | ternary((ansible_check_mode | ternary("TOKEN", _test_runner_token.stdout_lines[1])), gitea_runner_registration_token) }}
   args:
     creates: /mnt/services/act_runner/.runner
   timeout: 5
