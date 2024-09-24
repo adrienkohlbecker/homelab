@@ -80,7 +80,6 @@
   vars:
     systemd_unit_src: sonarr
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or sonarr_user.changed)) }}"
-    systemd_unit_start: "{{ not docker_test }}"
     systemd_unit_restart: "{{ systemd_unit.changed or sonarr_conf.changed }}"
   tags:
     - sonarr

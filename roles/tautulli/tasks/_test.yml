@@ -7,3 +7,12 @@
   import_role:
     name: _test
     tasks_from: podman
+
+- name: _test | Setup dependencies
+  shell: |
+    set -euo pipefail
+    mkdir -p "/mnt/services/plex/Library/Application Support/Plex Media Server/Logs"
+  args:
+    executable: /bin/bash
+    creates: /mnt/services
+  become: true

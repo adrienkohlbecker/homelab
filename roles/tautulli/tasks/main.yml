@@ -68,7 +68,6 @@
   vars:
     systemd_unit_src: tautulli
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or tautulli_user.changed)) }}"
-    systemd_unit_start: "{{ not docker_test }}"
     systemd_unit_restart: "{{ systemd_unit.changed or tautulli_conf.changed }}"
   tags:
     - tautulli

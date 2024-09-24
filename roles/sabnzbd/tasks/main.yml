@@ -158,7 +158,6 @@
   vars:
     systemd_unit_src: sabnzbd
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed)) }}"
-    systemd_unit_start: "{{ not docker_test }}"
     systemd_unit_restart: "{{ systemd_unit.changed or sabnzbd_conf.changed or sabnzbd_media_conf.changed }}"
   tags:
     - sabnzbd
