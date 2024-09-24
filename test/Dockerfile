@@ -32,8 +32,9 @@ RUN set -x \
 # Ensure we have a working apt cache (keep the cleanup in other sections for easy reuse)
 RUN apt-get update
 
-# to use podman-in-podman
+# to use podman-in-podman and docker-in-podman
 VOLUME /var/lib/containers
+VOLUME /var/lib/docker
 
 EXPOSE 22
 
