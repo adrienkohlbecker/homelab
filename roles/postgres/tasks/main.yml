@@ -37,6 +37,7 @@
     - _check_stage2
 
 - name: Init database
+  when: not (ansible_check_mode and postgres_user.changed)
   command: >-
     podman run
       --rm --quiet
