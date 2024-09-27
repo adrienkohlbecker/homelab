@@ -104,6 +104,7 @@
     - kuma
     - healthchecks
     - marie
+    - redis
 
 - name: Reboot check
   hosts: all:!bunk
