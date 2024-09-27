@@ -104,6 +104,7 @@
     - kuma
     - healthchecks
     - spouse
+    - redis
 
 - name: Reboot check
   hosts: all:!bunk

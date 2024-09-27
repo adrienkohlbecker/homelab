@@ -169,6 +169,7 @@ netdata_collectors:
   - go.d:collector:prometheus:keepalived_exporter_local
   - go.d:collector:prometheus:minio
   - go.d:collector:prometheus:prometheus
+  - go.d:collector:redis:local
   - go.d:collector:sensors:sensors
   - go.d:collector:smartctl:smartctl
   - go.d:collector:systemdunits:service-units
