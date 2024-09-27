@@ -67,12 +67,12 @@ fancontrol_settings: |
   # hwmon12/pwm1 => CHA_FAN1 => exhaust
   # hwmon12/pwm3 => CHA_FAN2 => intake
   # hwmon12/pwm4 => CHA_FAN3 => intake
-  # hwmon12/temp7_input => CPU temp?
+  # hwmon12/temp2_input => CPU temp
   # hwmon4/temp1_input => HDD temp?
   INTERVAL=10
   DEVPATH=hwmon12=devices/platform/nct6775.656 hwmon4=devices/pci0000:00/0000:00:17.0/ata1/host0/target0:0:0/0:0:0:0
   DEVNAME=hwmon12=nct6798 hwmon4=drivetemp
-  FCTEMPS=hwmon12/pwm2=hwmon12/temp7_input hwmon12/pwm1=hwmon12/temp7_input hwmon12/pwm4=hwmon4/temp1_input hwmon12/pwm3=hwmon4/temp1_input
+  FCTEMPS=hwmon12/pwm2=hwmon12/temp2_input hwmon12/pwm1=hwmon12/temp2_input hwmon12/pwm4=hwmon4/temp1_input hwmon12/pwm3=hwmon4/temp1_input
   FCFANS=hwmon12/pwm2=hwmon12/fan2_input hwmon12/pwm1=hwmon12/fan1_input hwmon12/pwm4=hwmon12/fan4_input hwmon12/pwm3=hwmon12/fan3_input
   MINTEMP=hwmon12/pwm2=30 hwmon12/pwm1=30 hwmon12/pwm4=30 hwmon12/pwm3=30
   MAXTEMP=hwmon12/pwm2=60 hwmon12/pwm1=60 hwmon12/pwm4=40 hwmon12/pwm3=40
