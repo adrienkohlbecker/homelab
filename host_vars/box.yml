@@ -11,10 +11,12 @@ libvirt_default_network: 10.123.50.0/24
 
 sensor_modules: []
 
+home_subnet: 10.88.0.0/16
+podman_default_network: 10.87.0.0/16
+
 macvlan_enable_docker: true
 macvlan_parent: eth0
-macvlan_subnet: 10.88.1.0/27
-home_subnet: 10.88.0.0/16
+macvlan_subnet: '{{ home_subnet | ansible.utils.ipsubnet(27, 8) }}'
 
 log2ram_size: 100M
 
