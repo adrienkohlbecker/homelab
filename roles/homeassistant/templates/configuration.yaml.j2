@@ -28,7 +28,7 @@ zha:
 http:
   use_x_forwarded_for: true
   trusted_proxies:
-    - 10.88.0.1 # podman
+    - <<< podman_default_network | ansible.utils.ipmath(1) >>> # podman host IP
 
 influxdb:
   api_version: 2
