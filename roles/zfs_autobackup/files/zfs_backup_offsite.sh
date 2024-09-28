@@ -41,4 +41,6 @@ f_trace rsync \
   --exclude .DocumentRevisions-V100 \
   --exclude .Trashes \
   --exclude .TemporaryItems \
+  --exclude /var/lib/containers \
+  --exclude /home/ak/.local/share/containers \
   "${MOUNTPOINT%"/"}/.zfs/snapshot/$LAST_SNAPSHOT/" "ak@$OFFSITE_IP:/volume1/Backup/$(hostname -s)/$DESTPATH"

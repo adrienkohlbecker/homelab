@@ -68,35 +68,26 @@ netdata_contexts:
   containers:      cgroup.cpu_limit
   diskspace:       disk.space
   diskstatistics:  disk.io
-  #edac:            mem.edac_mc_errors
   entropy:         system.entropy
   extfrag:         mem.fragmentation_index_dma
   idlejitter:      system.idlejitter
   interrupts:      system.interrupts
   ipc:             system.ipc_semaphores
-  # ksm:             mem.ksm
   loadavg:         system.load
-  # md:              md.health
   meminfo:         system.ram
   netdev:          system.net
   netstat:         system.ip
-  # numa:            mem.numa_nodes
-  # pagetypeinfo:    mem.pagetype_global
-  # perf:            perf.cpu_cycles
   postfix:         postfix.qsize
   powercap:        cpu.powercap_intel_rapl_zone
-  # powersupply:     powersupply.capacity
   pressure:        system.cpu_some_pressure
   procstat:        system.cpu
-  # slabinfo:        mem.slabmemory
   softirqs:        system.softirqs
   systemd_service: systemd.service.cpu.utilization
   uptime:          system.uptime
   usergroups:      usergroup.cpu_utilization
   users:           user.cpu_utilization
-  # vmstat:          mem.swapio
+  vmstat:          mem.swapio
   zfs:             zfs.arc_size
-  # zram:            mem.zram_usage
 netdata_collectors:
   - go.d:collector:chrony:local
   - go.d:collector:docker:local
@@ -118,6 +109,16 @@ netdata_collectors:
   - go.d:collector:x509check:domain_cert
   - go.d:collector:x509check:host_cert
   - go.d:collector:zfspool:zfspool
+netdata_zfspool_thresholds:
+  rpool: [ 95, 97, 98 ] #  40GB,  20GB,  10GB
+  bpool: [ 71, 77, 94 ] # 500MB, 400MB, 100MB
+  apoc: [ 96, 97, 98 ] # 300GB, 200GB, 100GB
+netdata_diskspace_blocklist:
+- /
+- /boot
+- /mnt/old_bionic
+- /mnt/old_services
+- /mnt/services
 
 smb_shares: []
 subid_users: []

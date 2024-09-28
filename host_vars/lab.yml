@@ -121,40 +121,33 @@ minio_users:
           3734653937633264376662383035363834623065396233366461
 
 netdata_contexts:
+  aer:             pci.rootport_aer_correctable
   apps:            app.cpu_utilization
   conntrack:       netfilter.conntrack_sockets
   containers:      cgroup.cpu_limit
   diskspace:       disk.space
   diskstatistics:  disk.io
-  #edac:            mem.edac_mc_errors
   entropy:         system.entropy
   extfrag:         mem.fragmentation_index_dma
   idlejitter:      system.idlejitter
   interrupts:      system.interrupts
   ipc:             system.ipc_semaphores
-  # ksm:             mem.ksm
   loadavg:         system.load
   md:              md.health
   meminfo:         system.ram
   netdev:          system.net
   netstat:         system.ip
-  # numa:            mem.numa_nodes
-  # pagetypeinfo:    mem.pagetype_global
-  # perf:            perf.cpu_cycles
   postfix:         postfix.qsize
   powercap:        cpu.powercap_intel_rapl_zone
-  # powersupply:     powersupply.capacity
   pressure:        system.cpu_some_pressure
   procstat:        system.cpu
-  # slabinfo:        mem.slabmemory
   softirqs:        system.softirqs
   systemd_service: systemd.service.cpu.utilization
   uptime:          system.uptime
   usergroups:      usergroup.cpu_utilization
   users:           user.cpu_utilization
-  # vmstat:          mem.swapio
+  vmstat:          mem.swapio
   zfs:             zfs.arc_size
-  # zram:            mem.zram_usage
 netdata_collectors:
   - go.d:collector:chrony:local
   - go.d:collector:docker:local
@@ -179,6 +172,25 @@ netdata_collectors:
   - go.d:collector:x509check:domain_cert
   - go.d:collector:x509check:host_cert
   - go.d:collector:zfspool:zfspool
+netdata_zfspool_thresholds:
+  rpool: [ 87, 94, 97 ] #  40GB,  20GB,  10GB
+  tank:  [ 96, 97, 99 ] # 700GB, 500GB, 150GB
+  mouse: [ 97, 97, 97 ] # 100GB, 100GB, 100GB
+  dozer: [ 91, 95, 97 ] # 300GB, 200GB, 100GB
+netdata_diskspace_blocklist:
+- /
+- /mnt/brumath
+- /mnt/data
+- /mnt/eckwersheim
+- /mnt/media
+- /mnt/minio
+- /mnt/old_bionic
+- /mnt/old_bionic_boot
+- /mnt/old_bionic_grub
+- /mnt/old_services
+- /mnt/old_vms
+- /mnt/scratch
+- /mnt/services
 
 smb_shares:
   - name: media
