@@ -59,6 +59,8 @@ minio_users:
 
 netdata_contexts: {}
 netdata_collectors: []
+netdata_zfspool_thresholds: {}
+netdata_diskspace_blocklist: []
 
 smb_shares: []
 

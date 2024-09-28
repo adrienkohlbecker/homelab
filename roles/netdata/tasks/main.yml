@@ -243,6 +243,17 @@
   tags:
     - netdata
 
+- name: Configure netdata alerts
+  import_role:
+    name: netdata
+    tasks_from: health_template
+  vars:
+    netdata_template_src: zfs_alerts_override.conf.j2
+    netdata_template_dest: zfs_alerts_override.conf
+    netdata_template_restart: "{{ not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) }}"
+  tags:
+    - netdata
+
 - name: Configure systemdunits metrics
   import_role:
     name: netdata

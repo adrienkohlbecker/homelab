@@ -1,0 +1,37 @@
+{% for pool, thresholds in netdata_zfspool_thresholds.items() %}
+    alarm: zfs_pool_space_utilization
+       on: zfspool.zfspool_{{ pool }}_space_utilization
+    class: Utilization
+     type: System
+component: File system
+     calc: $utilization
+    units: %
+    every: 1m
+     warn: $this > (($status >= $WARNING ) ? ({{ thresholds[0] }}) : ({{ thresholds[1] }}))
+     crit: $this > (($status >= $WARNING ) ? ({{ thresholds[1] }}) : ({{ thresholds[2] }}))
+    delay: down 1m multiplier 1.5 max 1h
+  summary: ZFS pool ${label:pool} space utilization
+     info: ZFS pool ${label:pool} is nearing capacity. Current space usage is above the threshold.
+       to: sysadmin
+
+{% endfor %}
+
+{% for mount in netdata_diskspace_blocklist %}
+    alarm: disk_space_usage
+          on: disk_space.{{ mount.replace('/', '_') }}
+       class: Utilization
+        type: System
+   component: Disk
+ host labels: _os=linux freebsd
+chart labels: mount_point=!/dev !/dev/* !/run !/run/* *
+         calc: 1
+        units: %
+        every: 1m
+         warn: $this > (($status >= $WARNING ) ? (80) : (90))
+         crit: ($this > (($status == $CRITICAL) ? (90) : (98))) && $avail < 5
+        delay: up 1m down 15m multiplier 1.5 max 1h
+      summary: Disk ${label:mount_point} space usage
+         info: Total space utilization of disk ${label:mount_point}
+           to: sysadmin
+
+{% endfor %}
