@@ -1,0 +1,59 @@
+# jinja2: lstrip_blocks: "True"
+# paperless.service #######################################################################
+[Unit]
+Description=paperless
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+Delegate=yes
+TimeoutSec=120
+RestartSec=5
+Type=notify
+NotifyAccess=all
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name paperless \
+    --log-driver journald \
+    --log-opt tag="paperless" \
+    --volume /mnt/services/paperless/data:/usr/src/paperless/data \
+    --volume /mnt/services/paperless/media:/usr/src/paperless/media \
+    --volume /mnt/services/paperless/consume:/usr/src/paperless/consume \
+    --volume /mnt/services/paperless/export:/usr/src/paperless/export \
+    --publish 127.0.0.1:8001:8000/tcp \
+    --env USERMAP_UID={{ paperless_user.uid }} \
+    --env USERMAP_GID={{ paperless_user.group }} \
+    --env PAPERLESS_REDIS="redis://{{ podman_default_network | ansible.utils.ipmath(1) }}:6379/1" \
+    --env PAPERLESS_OCR_LANGUAGES="eng fra nld" \
+    --env PAPERLESS_OCR_LANGUAGE=fra \
+    --env PAPERLESS_URL=https://paperless.{{ inventory_hostname }}.{{ domain }} \
+    --secret=paperless_secret_key,type=env,target=PAPERLESS_SECRET_KEY \
+    --health-cmd "echo todo" \
+    --health-startup-cmd "echo todo" \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    ghcr.io/paperless-ngx/paperless-ngx:2.12
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

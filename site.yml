@@ -105,6 +105,7 @@
     - healthchecks
     - spouse
     - redis
+    - paperless
 
 - name: Reboot check
   hosts: all:!bunk
