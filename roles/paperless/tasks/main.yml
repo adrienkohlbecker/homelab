@@ -1,0 +1,97 @@
+- name: Add paperless group
+  group:
+    name: paperless
+    system: true
+  become: true
+  tags:
+    - paperless
+    - _check_stage1
+    - _check_stage2
+
+- name: Add paperless user
+  user:
+    name: paperless
+    group: paperless
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  register: paperless_user
+  tags:
+    - paperless
+    - _check_stage1
+    - _check_stage2
+
+- name: Create configuration directory
+  when: not (ansible_check_mode and paperless_user.changed)
+  file:
+    dest: /mnt/services/paperless
+    state: directory
+    owner: paperless
+    group: paperless
+    mode: "0700"
+  become: true
+  tags:
+    - paperless
+    - _check_stage2
+
+- name: Create configuration directory
+  when: not (ansible_check_mode and paperless_user.changed)
+  file:
+    dest: /mnt/services/paperless/{{ item }}
+    state: directory
+    owner: paperless
+    group: paperless
+    mode: "0700"
+  with_items:
+    - data
+    - media
+    - consume
+    - export
+  become: true
+  tags:
+    - paperless
+    - _check_stage2
+
+- name: Create secret
+  containers.podman.podman_secret:
+    name: paperless_secret_key
+    data: "{{ paperless_secret_key }}"
+  register: paperless_secret_key
+  become: true
+  tags:
+    - paperless
+    - _check_stage2
+
+- name: Install paperless service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: paperless.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and paperless_user.changed) }}"
+  tags:
+    - paperless
+    - _check_stage2
+
+- name: Enable paperless service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: paperless
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or paperless_user.changed)) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed }}"
+  tags:
+    - paperless
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: paperless
+    nginx_proxy_pass: http://localhost:8001/
+  tags:
+    - paperless

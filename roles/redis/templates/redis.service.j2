@@ -35,6 +35,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/redis:/data \
     --user {{ redis_user.uid }}:{{ redis_user.group }} \
     --publish 127.0.0.1:6379:6379/tcp \
+    --publish {{ podman_default_network | ansible.utils.ipmath(1) }}:6379:6379/tcp \
     --health-cmd "redis-cli ping | grep PONG" \
     --health-startup-cmd "redis-cli ping | grep PONG" \
     --health-startup-interval "1s" \
