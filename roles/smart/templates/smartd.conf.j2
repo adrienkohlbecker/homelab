@@ -157,7 +157,7 @@
 # -d nvme,0xffffffff : use broadcast namespace id instead of namespace pointed to by symlink
 
 # TODO: once in noble (smartmontools 7.4, re-enable default arguments with -a and error log checking on nvme)
-DEFAULT -H -f -t -l selftest -C 197 -U 198 -n standby -m root -M exec /usr/share/smartmontools/smartd-runner -o on -S on -s (L/../01/./04:024|S/../.././02) -I 194 -I 190 -I 231 -I 9
+DEFAULT -H -f -t -l selftest -C 197+ -U 198+ -n standby -m root -M exec /usr/share/smartmontools/smartd-runner -o on -S on -s (L/../01/./04:024|S/../.././02) -I 194 -I 190 -I 231 -I 9
 
 {% for dev in ansible_devices.values() | map(attribute='links') | map(attribute='ids') | select | map('first') | sort %}
 {% if dev.startswith('nvme-') %}
