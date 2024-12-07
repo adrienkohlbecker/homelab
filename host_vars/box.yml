@@ -11,8 +11,7 @@ libvirt_default_network: 10.123.50.0/24
 
 sensor_modules: []
 
-home_subnet: 10.88.0.0/16
-podman_default_network: 10.87.0.0/16
+home_subnet: 192.5.0.0/16
 
 macvlan_enable_docker: true
 macvlan_parent: eth0
