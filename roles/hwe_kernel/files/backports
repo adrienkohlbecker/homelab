@@ -1,0 +1,15 @@
+Package: podman buildah containernetworking-plugins conmon slirp4netns libc6 libgpgme11t64 libsubid4 libc-bin golang-github-containers-common fuse-overlayfs libglib2.0-0t64 locales libfuse3-3 fuse3
+Pin: release n=noble
+Pin-Priority: 991
+
+Package: zfsutils-linux zfs-initramfs zfs-zed libc6 libzfs4linux libnvpair3linux libuutil3linux libzpool5linux libssl3t64 libc-bin libtirpc3t64 libtirpc-common locales
+Pin: release n=noble
+Pin-Priority: 991
+
+Package: *
+Pin: release n=jammy
+Pin-Priority: 900
+
+Package: *
+Pin: release o=Ubuntu
+Pin-Priority: -10
