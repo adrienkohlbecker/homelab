@@ -22,12 +22,8 @@
     Pin-Priority: -10
     EOF
 
-    apt-get update && apt-get install -y --no-install-recommends podman iptables
-
-    # in nested podman (such as when testing a playbook that builds a podman image, or executes a podman image),
-    # we need to ensure the default networks do not conflict otherwise the nested container has issues with TCP
-    sed -i 's?#default_subnet =.*?default_subnet = "{{ podman_default_network }}"?' /usr/share/containers/containers.conf
-    systemctl restart podman
+    apt-get update
+    apt-get install -y --no-install-recommends podman iptables
   args:
     executable: /bin/bash
     creates: /etc/apt/preferences.d/podman-noble-backport

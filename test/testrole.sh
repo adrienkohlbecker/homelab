@@ -62,7 +62,8 @@ err() {
 trap err ERR
 trap stop EXIT
 
-$PODMAN run --interactive --rm --publish 127.0.0.1::22 --detach --privileged --cidfile $WORKDIR/cid --timeout 600 homelab
+# run once: podman network create --subnet 192.5.0.0/16 homelab_net
+$PODMAN run --interactive --rm --publish 127.0.0.1::22 --detach --privileged --cidfile $WORKDIR/cid --timeout 600 --network homelab_net homelab
 
 while [ ! -f $WORKDIR/cid ]; do
   echo "."
