@@ -6,19 +6,12 @@
     deb {{ (ansible_architecture == "aarch64") | ternary('http://ports.ubuntu.com/ubuntu-ports', 'http://archive.ubuntu.com/ubuntu') }} noble main restricted universe multiverse
     deb {{ (ansible_architecture == "aarch64") | ternary('http://ports.ubuntu.com/ubuntu-ports', 'http://archive.ubuntu.com/ubuntu') }} noble-updates main restricted universe multiverse
     deb {{ (ansible_architecture == "aarch64") | ternary('http://ports.ubuntu.com/ubuntu-ports', 'http://archive.ubuntu.com/ubuntu') }} noble-security main restricted universe multiverse
-    deb {{ (ansible_architecture == "aarch64") | ternary('http://ports.ubuntu.com/ubuntu-ports', 'http://archive.ubuntu.com/ubuntu') }} mantic main restricted universe multiverse
-    deb {{ (ansible_architecture == "aarch64") | ternary('http://ports.ubuntu.com/ubuntu-ports', 'http://archive.ubuntu.com/ubuntu') }} mantic-updates main restricted universe multiverse
-    deb {{ (ansible_architecture == "aarch64") | ternary('http://ports.ubuntu.com/ubuntu-ports', 'http://archive.ubuntu.com/ubuntu') }} mantic-security main restricted universe multiverse
     EOF
 
     cat <<EOF >/etc/apt/preferences.d/podman-noble-backport
-    Package: podman libsubid4 buildah golang-github-containers-common container-network-stack netavark containernetworking-plugins libgpgme11t64 conmon libglib2.0-0t64
+    Package: podman buildah containernetworking-plugins conmon slirp4netns libc6 libgpgme11t64 libsubid4 libc-bin golang-github-containers-common fuse-overlayfs libglib2.0-0t64 locales libfuse3-3 fuse3
     Pin: release n=noble
     Pin-Priority: 991
-
-    Package: zfsutils-linux libnvpair3linux libuutil3linux libzfs4linux libzpool5linux libc6 libc-bin chrony tzdata-legacy libgnutls30 libgmp10 libp11-kit0 tzdata libglib2.0-0
-    Pin: release n=mantic
-    Pin-Priority: 990
 
     Package: *
     Pin: release n=jammy

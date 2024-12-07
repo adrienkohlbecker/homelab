@@ -10,29 +10,15 @@
     - _check_stage1
     - _check_stage2
 
-- name: Pin zfsutils-linux from mantic
+- name: Install apt pins
   copy:
-    src: zfsutils-mantic-backport
-    dest: /etc/apt/preferences.d/zfsutils-mantic-backport
+    src: backports
+    dest: /etc/apt/preferences.d/backports
     owner: root
     group: root
     mode: "0644"
     backup: true
   become: true
-  tags:
-    - hwe_kernel
-    - _check_stage1
-    - _check_stage2
-
-- name: Add mantic repository
-  apt_repository:
-    repo: "{{ item }}"
-  become: true
-  register: mantic_repository
-  loop:
-    - 'deb http://archive.ubuntu.com/ubuntu mantic main restricted universe multiverse # For zfsutils-linux userspace tools'
-    - 'deb http://archive.ubuntu.com/ubuntu mantic-updates main restricted universe multiverse # For zfsutils-linux userspace tools'
-    - 'deb http://archive.ubuntu.com/ubuntu mantic-security main restricted universe multiverse # For zfsutils-linux userspace tools'
   tags:
     - hwe_kernel
     - _check_stage1
@@ -44,44 +30,35 @@
   become: true
   register: noble_repository
   loop:
-    - 'deb http://archive.ubuntu.com/ubuntu noble main restricted universe multiverse # For zfsutils-linux userspace tools'
-    - 'deb http://archive.ubuntu.com/ubuntu noble-updates main restricted universe multiverse # For zfsutils-linux userspace tools'
-    - 'deb http://archive.ubuntu.com/ubuntu noble-security main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb {{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports", "http://archive.ubuntu.com/ubuntu") }} noble main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb {{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports", "http://archive.ubuntu.com/ubuntu") }} noble-updates main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb {{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports", "http://archive.ubuntu.com/ubuntu") }} noble-security main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb {{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports", "http://archive.ubuntu.com/ubuntu") }} noble-backports main restricted universe multiverse # For zfsutils-linux userspace tools'
   tags:
     - hwe_kernel
     - _check_stage2
-
-- name: Install tools from mantic
-  when: not (ansible_check_mode and mantic_repository.changed)
-  apt:
-    pkg:
-      - zfsutils-linux
-    state: latest
-    default_release: mantic
-    cache_valid_time: 3600
-  register: zfsutils_apt
-  become: true
-  tags:
-    - hwe_kernel
 
 - name: Install tools from noble
   when: not (ansible_check_mode and noble_repository.changed)
   apt:
     pkg:
+      - zfsutils-linux
+      - zfs-initramfs
+      - zfs-zed
       - podman
       - buildah
       - containernetworking-plugins
       - conmon
+      - slirp4netns
     state: latest
-    default_release: noble
     cache_valid_time: 3600
-  register: podman_apt
+  register: noble_apt
   become: true
   tags:
     - hwe_kernel
 
 - name: Ask to reboot
-  when: kernel_apt.changed or zfsutils_apt.changed or podman_apt.changed
+  when: kernel_apt.changed or noble_apt.changed
   file:
     path: /var/run/reboot-required
     state: touch
