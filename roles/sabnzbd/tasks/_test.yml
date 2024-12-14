@@ -12,6 +12,7 @@
   shell: |
     set -euo pipefail
     mkdir /mnt/{services,scratch,media}
+    ln -s /usr/bin/tail /usr/local/bin/sort_ini
   args:
     executable: /bin/bash
     creates: /mnt/services
