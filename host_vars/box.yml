@@ -65,3 +65,5 @@ smb_shares: []
 
 subid_users:
   - act_runner
+
+has_transcoding_acceleration: false
