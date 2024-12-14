@@ -13,6 +13,8 @@ PostDown = {{ own_peer.post_down }}
 {% endif %}
 {% if vpn_peer %}
 DNS = {{ vpn_peer.dns_address }}
+{% elif not own_peer.is_server %}
+DNS = 8.8.8.8, 8.8.4.4
 {% endif %}
 
 {% for peer in wireguard_peers if (peer.is_server or own_peer.is_server) and (peer.public_key != own_peer.public_key) %}
