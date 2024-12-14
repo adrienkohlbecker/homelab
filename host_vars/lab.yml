@@ -212,3 +212,5 @@ smb_shares:
 subid_users:
   - act_runner
   - marie
+
+has_transcoding_acceleration: true

@@ -54,7 +54,7 @@
   vars:
     systemd_unit_src: csplogger
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or csplogger_user.changed)) }}"
-    systemd_unit_start: "{{ not (docker_test and ansible_architecture == 'aarch64') }}"
+    systemd_unit_start: "{{ ansible_architecture == 'x86_64' }}"
     systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - csplogger
