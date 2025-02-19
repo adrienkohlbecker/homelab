@@ -19,6 +19,17 @@
     - _check_stage1
     - _check_stage2
 
+- name: Add render group
+  group:
+    name: render
+    system: true
+  become: true
+  register: render_group
+  tags:
+    - jellyfin
+    - _check_stage1
+    - _check_stage2
+
 - name: Add jellyfin user
   user:
     name: jellyfin

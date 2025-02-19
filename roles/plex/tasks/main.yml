@@ -19,6 +19,17 @@
     - _check_stage1
     - _check_stage2
 
+- name: Add render group
+  group:
+    name: render
+    system: true
+  become: true
+  register: render_group
+  tags:
+    - plex
+    - _check_stage1
+    - _check_stage2
+
 - name: Add plex user
   user:
     name: plex
