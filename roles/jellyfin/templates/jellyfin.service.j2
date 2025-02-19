@@ -44,7 +44,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8096/health" \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
-    docker.io/jellyfin/jellyfin:10.9.2
+    docker.io/jellyfin/jellyfin:10.10.6
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
