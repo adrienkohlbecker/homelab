@@ -100,6 +100,18 @@
     - podman
     - _check_stage2
 
+- name: Update containers permissions for netdata disk space monitoring
+  file:
+    dest: /var/lib/containers
+    state: directory
+    owner: root
+    group: root
+    mode: "0755" # defaults to 0700
+  become: true
+  tags:
+    - podman
+    - _check_stage2
+
 - name: Create mount point
   file:
     dest: /var/lib/containers/storage
