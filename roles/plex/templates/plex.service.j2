@@ -41,7 +41,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/data/Musique/Records:/records:ro \
     --volume /mnt/scratch/plex:/transcode \
     --publish 0.0.0.0:32400:32400/tcp \
-    {{ has_transcoding_acceleration | ternary('--device /dev/dri/:/dev/dri/', '') }} \
+    {{ has_transcoding_acceleration | ternary('--device /dev/dri/:/dev/dri/ --group-add="'~ render_group.gid ~'"', '') }} \
     --health-cmd         "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:32400/identity" \
     --health-startup-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:32400/identity" \
     --health-startup-interval "1s" \
