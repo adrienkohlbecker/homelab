@@ -195,6 +195,22 @@
     - _check_stage3
     - _check_stage4
 
+- name: Configure homeassistant covers
+  copy:
+    src: covers.yaml
+    dest: /mnt/services/homeassistant/covers.yaml
+    owner: homeassistant
+    group: homeassistant
+    mode: "0600"
+    backup: true
+  register: homeassistant_covers
+  become: true
+  tags:
+    - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
+
 - name: Create www directory
   file:
     dest: /mnt/services/homeassistant/www
@@ -355,7 +371,7 @@
   vars:
     systemd_unit_src: homeassistant
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or homeassistant_user.changed)) }}"
-    systemd_unit_restart: "{{ systemd_unit.changed or homeassistant_conf.changed or thermal_comfort_icons_installed.changed or thermal_comfort_installed.changed or homeassistant_automations.changed or homeassistant_macros.changed or homeassistant_sensors.changed or homeassistant_templates.changed }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or homeassistant_conf.changed or thermal_comfort_icons_installed.changed or thermal_comfort_installed.changed or homeassistant_automations.changed or homeassistant_macros.changed or homeassistant_sensors.changed or homeassistant_templates.changed or homeassistant_covers.changed }}"
   tags:
     - homeassistant
 
