@@ -286,6 +286,17 @@
     - _check_stage3
     - _check_stage4
 
+- name: Install unzip
+  apt:
+    pkg:
+      - unzip
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - homeassistant
+    - _check_stage3
+    - _check_stage4
+
 - name: Create thermal_comfort directory
   file:
     dest: /mnt/services/homeassistant/custom_components/thermal_comfort
@@ -298,16 +309,6 @@
   tags:
     - homeassistant
     - _check_stage3
-    - _check_stage4
-
-- name: Install unzip
-  apt:
-    pkg:
-      - unzip
-    cache_valid_time: 3600
-  become: true
-  tags:
-    - homeassistant
     - _check_stage4
 
 - name: Get stats of the thermal_comfort custom_component
@@ -353,6 +354,63 @@
         path: /tmp/thermal_comfort.zip
         state: absent
 
+- name: Create hacs directory
+  file:
+    dest: /mnt/services/homeassistant/custom_components/hacs
+    state: directory
+    owner: homeassistant
+    group: homeassistant
+    mode: "0755"
+  become: true
+  register: homeassistant_hacs_dir
+  tags:
+    - homeassistant
+    - _check_stage3
+    - _check_stage4
+
+- name: Get stats of the hacs custom_component
+  stat:
+    path: /mnt/services/homeassistant/custom_components/hacs/manifest.json
+  register: hacs_check
+  become: true
+  tags:
+    - homeassistant
+    - _check_stage4
+
+- name: Install hacs if needed
+  when: not hacs_check.stat.exists
+  become: true
+  tags:
+    - homeassistant
+    - _check_stage4
+  block:
+    - name: Download hacs
+      check_mode: false
+      get_url:
+        url: https://github.com/hacs/integration/releases/download/2.0.5/hacs.zip
+        checksum: sha256:97be6b824a4f38e683728cc6dd72367f6b8bad0a43428b1b3b987a3087adf413
+        dest: /tmp/hacs.zip
+        mode: "0644"
+        owner: root
+        group: root
+
+    - name: Install hacs
+      when: not (ansible_check_mode and homeassistant_hacs_dir.changed)
+      unarchive:
+        src: /tmp/hacs.zip
+        remote_src: true
+        dest: /mnt/services/homeassistant/custom_components/hacs
+        mode: "a+rX"
+        owner: homeassistant
+        group: homeassistant
+        list_files: true
+      register: hacs_installed
+
+    - name: Delete tar file
+      file:
+        path: /tmp/hacs.zip
+        state: absent
+
 - name: Install homeassistant service
   import_role:
     name: systemd_unit
@@ -371,7 +429,7 @@
   vars:
     systemd_unit_src: homeassistant
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or homeassistant_user.changed)) }}"
-    systemd_unit_restart: "{{ systemd_unit.changed or homeassistant_conf.changed or thermal_comfort_icons_installed.changed or thermal_comfort_installed.changed or homeassistant_automations.changed or homeassistant_macros.changed or homeassistant_sensors.changed or homeassistant_templates.changed or homeassistant_covers.changed }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or homeassistant_conf.changed or thermal_comfort_icons_installed.changed or thermal_comfort_installed.changed or hacs_installed.changed or homeassistant_automations.changed or homeassistant_macros.changed or homeassistant_sensors.changed or homeassistant_templates.changed or homeassistant_covers.changed }}"
   tags:
     - homeassistant
 
