@@ -330,8 +330,8 @@
     - name: Download thermal_comfort
       check_mode: false
       get_url:
-        url: https://github.com/dolezsa/thermal_comfort/releases/download/2.2.2/thermal_comfort.zip
-        checksum: sha256:55232e2d5dee0d37709132e953c786fa75d9011270b779cd2f492eb19195e1dc
+        url: https://github.com/dolezsa/thermal_comfort/releases/download/2.2.5/thermal_comfort.zip
+        checksum: sha256:c4ea4903f8f3ce787ddc4d0aef34397a1872431fa8e046589dc341bb8cbbcec9
         dest: /tmp/thermal_comfort.zip
         mode: "0644"
         owner: root
