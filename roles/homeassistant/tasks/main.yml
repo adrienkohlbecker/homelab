@@ -123,7 +123,7 @@
     dest: /mnt/services/homeassistant/automations.yaml
     owner: homeassistant
     group: homeassistant
-    mode: "0600"
+    mode: "0644"
     backup: true
   register: homeassistant_automations
   become: true
