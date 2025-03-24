@@ -1,0 +1,6 @@
+
+# {{ ansible_managed }}
+
+{% for username, item in mosquitto_accounts.items() %}
+{{ username }}:{{ item.password | mosquitto_passwd(salt=item.salt) }}
+{% endfor %}
