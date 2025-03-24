@@ -25,7 +25,7 @@ ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
     --cgroups=split \
-    --sdnotify=healthy \
+    --sdnotify=conmon \
     --detach \
     --replace \
     --rm \
@@ -44,10 +44,6 @@ ExecStart=/usr/bin/podman run \
     --env PAPERLESS_OCR_LANGUAGE=fra \
     --env PAPERLESS_URL=https://paperless.{{ inventory_hostname }}.{{ domain }} \
     --secret=paperless_secret_key,type=env,target=PAPERLESS_SECRET_KEY \
-    --health-cmd "echo todo" \
-    --health-startup-cmd "echo todo" \
-    --health-startup-interval "1s" \
-    --health-startup-timeout "5s" \
     ghcr.io/paperless-ngx/paperless-ngx:2.12
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
