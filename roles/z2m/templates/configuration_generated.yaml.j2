@@ -1,0 +1,1 @@
+{{ lookup('ansible.builtin.template', './configuration.yaml.j2') | from_yaml  | to_nice_yaml(indent=2, sort_keys=false) | regex_replace('^( *)\\-', '\\1  -', multiline=True) }}
