@@ -101,6 +101,7 @@
     - speedtest
     - filebrowser
     - mosquitto
+    - z2m
     - homeassistant
     - kuma
     - healthchecks

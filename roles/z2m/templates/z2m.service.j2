@@ -1,0 +1,50 @@
+# jinja2: lstrip_blocks: "True"
+# z2m.service #######################################################################
+[Unit]
+Description=z2m
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=1200
+StartLimitBurst=3
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+Delegate=yes
+TimeoutSec=240
+RestartSec=5
+Type=notify
+NotifyAccess=all
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name z2m \
+    --log-driver journald \
+    --log-opt tag="z2m" \
+    --volume /mnt/services/z2m:/app/data \
+    --user {{ z2m_user.uid }}:{{ z2m_user.group }} \
+    --publish 127.0.0.1:8081:8081/tcp \
+    --health-cmd         "wget --quiet --tries=1 --spider http://localhost:8081/ > /dev/null" \
+    --health-startup-cmd "wget --quiet --tries=1 --spider http://localhost:8081/ > /dev/null" \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    ghcr.io/koenkk/zigbee2mqtt:2.1.3
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 200
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

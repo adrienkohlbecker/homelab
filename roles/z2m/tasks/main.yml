@@ -1,0 +1,145 @@
+- name: Add z2m group
+  group:
+    name: z2m
+    system: true
+  become: true
+  tags:
+    - z2m
+    - _check_stage1
+    - _check_stage2
+
+- name: Add z2m user
+  user:
+    name: z2m
+    group: z2m
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  register: z2m_user
+  tags:
+    - z2m
+    - _check_stage1
+    - _check_stage2
+
+- name: Create configuration directory
+  when: not (ansible_check_mode and z2m_user.changed)
+  file:
+    dest: /mnt/services/z2m
+    state: directory
+    owner: z2m
+    group: z2m
+    mode: "0755"
+  become: true
+  tags:
+    - z2m
+    - _check_stage2
+
+- name: Configure z2m
+  template:
+    src: configuration_generated.yaml.j2
+    dest: /mnt/services/z2m/configuration.yaml
+    owner: z2m
+    group: z2m
+    mode: "0644"
+    backup: true
+  register: z2m_conf
+  become: true
+  tags:
+    - z2m
+    - _check_stage2
+
+- name: Check if devices.yaml exists
+  stat:
+    path: /mnt/services/z2m/devices.yaml
+  register: z2m_devices_check
+  become: true
+  tags:
+    - z2m
+    - _check_stage2
+
+- name: Configure z2m devices
+  when: not z2m_devices_check.stat.exists
+  copy:
+    src: devices.yaml
+    dest: /mnt/services/z2m/devices.yaml
+    owner: z2m
+    group: z2m
+    mode: "0644"
+    backup: true
+  register: z2m_devices
+  become: true
+  tags:
+    - z2m
+    - _check_stage2
+
+- name: Check if groups.yaml exists
+  stat:
+    path: /mnt/services/z2m/groups.yaml
+  register: z2m_groups_check
+  become: true
+  tags:
+    - z2m
+    - _check_stage2
+
+- name: Configure z2m groups
+  when: not z2m_groups_check.stat.exists
+  copy:
+    src: groups.yaml
+    dest: /mnt/services/z2m/groups.yaml
+    owner: z2m
+    group: z2m
+    mode: "0644"
+    backup: true
+  register: z2m_groups
+  become: true
+  tags:
+    - z2m
+    - _check_stage2
+
+- name: Configure z2m secrets
+  template:
+    src: secret.yaml.j2
+    dest: /mnt/services/z2m/secret.yaml
+    owner: z2m
+    group: z2m
+    mode: "0600"
+    backup: true
+  register: z2m_secret
+  become: true
+  tags:
+    - z2m
+    - _check_stage2
+
+- name: Install z2m service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: z2m.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and z2m_user.changed) }}"
+  tags:
+    - z2m
+    - _check_stage2
+
+- name: Enable z2m service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: z2m
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or z2m_user.changed)) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or z2m_conf.changed or z2m_secret.changed or z2m_devices.changed or z2m_groups.changed }}"
+  tags:
+    - z2m
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: z2m
+    nginx_proxy_pass: http://localhost:8081/
+  tags:
+    - z2m
