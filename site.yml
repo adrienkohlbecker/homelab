@@ -100,6 +100,7 @@
     - compta
     - speedtest
     - filebrowser
+    - mosquitto
     - homeassistant
     - kuma
     - healthchecks
