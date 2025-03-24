@@ -33,8 +33,9 @@ ExecStart=/usr/bin/podman run \
     --health-startup-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:4567/" \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
+    --stop-timeout 120 \
     localhost/compta:latest
-ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
 [Install]

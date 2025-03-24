@@ -44,8 +44,9 @@ ExecStart=/usr/bin/podman run \
     --env PAPERLESS_OCR_LANGUAGE=fra \
     --env PAPERLESS_URL=https://paperless.{{ inventory_hostname }}.{{ domain }} \
     --secret=paperless_secret_key,type=env,target=PAPERLESS_SECRET_KEY \
+    --stop-timeout 120 \
     ghcr.io/paperless-ngx/paperless-ngx:2.12
-ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id --time 60
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
 [Install]
