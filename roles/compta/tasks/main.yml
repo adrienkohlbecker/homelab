@@ -1,7 +1,6 @@
 - name: Install dependencies
   apt:
     package:
-      - ruby-bundler
       - git
     cache_valid_time: 3600
   register: compta_apt_deps
