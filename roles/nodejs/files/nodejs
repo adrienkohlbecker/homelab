@@ -1,7 +1,7 @@
 Package: nsolid
 Pin: origin deb.nodesource.com
-Pin-Priority: 901
+Pin-Priority: 600
 
 Package: nodejs
 Pin: origin deb.nodesource.com
-Pin-Priority: 901
+Pin-Priority: 600

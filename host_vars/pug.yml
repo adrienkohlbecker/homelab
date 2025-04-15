@@ -122,3 +122,6 @@ netdata_diskspace_blocklist:
 
 smb_shares: []
 subid_users: []
+
+has_transcoding_acceleration: true
+z2m_start_service: false

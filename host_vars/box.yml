@@ -67,3 +67,4 @@ subid_users:
   - act_runner
 
 has_transcoding_acceleration: false
+z2m_start_service: false

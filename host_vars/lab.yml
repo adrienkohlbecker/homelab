@@ -214,3 +214,4 @@ subid_users:
   - marie
 
 has_transcoding_acceleration: true
+z2m_start_service: true

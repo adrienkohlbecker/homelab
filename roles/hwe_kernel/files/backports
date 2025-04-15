@@ -8,7 +8,7 @@ Pin-Priority: 991
 
 Package: *
 Pin: release n=jammy
-Pin-Priority: 900
+Pin-Priority: 500
 
 Package: *
 Pin: release o=Ubuntu

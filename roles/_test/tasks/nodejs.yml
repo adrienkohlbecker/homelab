@@ -5,16 +5,6 @@
     wget -O nodesource_setup.sh https://deb.nodesource.com/setup_22.x
     bash nodesource_setup.sh
 
-    cat <<EOF >/etc/apt/preferences.d/nodejs
-      Package: nsolid
-      Pin: origin deb.nodesource.com
-      Pin-Priority: 901
-
-      Package: nodejs
-      Pin: origin deb.nodesource.com
-      Pin-Priority: 901
-    EOF
-
     apt-get install -y nodejs
   args:
     executable: /bin/bash

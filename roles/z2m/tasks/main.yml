@@ -131,6 +131,7 @@
     systemd_unit_src: z2m
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or z2m_user.changed)) }}"
     systemd_unit_restart: "{{ systemd_unit.changed or z2m_conf.changed or z2m_secret.changed or z2m_devices.changed or z2m_groups.changed }}"
+    systemd_unit_start: "{{ z2m_start_service }}"
   tags:
     - z2m
 
