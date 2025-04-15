@@ -12,7 +12,7 @@
 
 - name: Add repository key
   apt_key:
-    id: 6588FDD7B14721FE7C3115E6F9177B5265F56346
+    id: 6E155DC153906B73765A74A99DD4A74CECFA8F4F
     url: https://repo.netdata.cloud/netdatabot.gpg.key
     keyring: /etc/apt/trusted.gpg.d/netdata.gpg
   become: true
