@@ -73,6 +73,7 @@ wireguard_keys:
     private_key: changeme
 
 synology_endpoint: changeme
+certbot_production_certificates: false
 
 smtp_user: apikey
 postfix_smtp_password: changeme

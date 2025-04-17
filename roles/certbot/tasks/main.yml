@@ -48,7 +48,7 @@
     - certbot
 
 - name: Get certificates
-  command: certbot certonly --agree-tos -m {{ root_email }} --noninteractive {{ docker_test|ternary('--test-cert', '') }} --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini --dns-cloudflare-propagation-seconds 30 -d "{{ item }}" -d "*.{{ item }}"
+  command: certbot certonly --agree-tos -m {{ root_email }} --noninteractive {{ certbot_production_certificates|ternary('', '--test-cert') }} --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini --dns-cloudflare-propagation-seconds 30 -d "{{ item }}" -d "*.{{ item }}"
   args:
     creates: /etc/letsencrypt/live/{{ item }}/privkey.pem
   become: true
