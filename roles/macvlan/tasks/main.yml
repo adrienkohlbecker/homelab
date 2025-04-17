@@ -65,7 +65,3 @@
     systemd_unit_restart: "{{ systemd_unit.changed }}"
   tags:
     - macvlan
-
-- name: Configure docker network
-  include_tasks: docker.yml
-  when: macvlan_enable_docker

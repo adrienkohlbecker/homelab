@@ -1,5 +1,5 @@
 - name: docker | Create the macvlan docker network
-  when: not ansible_check_mode
+  when: not ansible_check_mode and macvlan_enable_docker
   docker_network:
     name: macvlan_net
     driver: macvlan
