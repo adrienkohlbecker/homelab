@@ -8,20 +8,10 @@
     - macvlan
     - _check_stage1
 
-- name: Compute network values
-  set_fact:
-    macvlan_parent_gateway: "{{ ansible_facts[macvlan_parent].ipv4.network | ansible.utils.ipmath(1) }}"
-    macvlan_parent_subnet: "{{ ansible_facts[macvlan_parent].ipv4.network }}/{{ ansible_facts[macvlan_parent].ipv4.prefix }}"
-    macvlan_host_ip: "{{ macvlan_subnet | ansible.utils.ipmath(1) }}"
-    macvlan_host_mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname) }}"
-  tags:
-    - macvlan
-    - _check_stage1
-
 - name: Check macvlan_subnet is valid
   assert:
     that: macvlan_subnet == macvlan_subnet | ansible.utils.ipaddr('net')
-    fail_msg: "macvlan_subnet is not in a valid range or has the wrong format (network/prefixlength)"
+    fail_msg: "macvlan_subnet '{{ macvlan_subnet }}' is not in a valid range or has the wrong format (network/prefixlength)"
     success_msg: "macvlan_subnet is valid"
   tags:
     - macvlan
@@ -30,7 +20,7 @@
 - name: Check macvlan_subnet is in parent subnet
   assert:
     that: macvlan_subnet == macvlan_subnet | ansible.utils.ipaddr(macvlan_parent_subnet)
-    fail_msg: "macvlan_subnet is not in a valid range"
+    fail_msg: "macvlan_subnet '{{ macvlan_subnet }}' is not within parent subnet '{{ macvlan_parent_subnet }}'"
     success_msg: "macvlan_subnet is valid"
   tags:
     - macvlan
@@ -39,7 +29,7 @@
 - name: Check macvlan_subnet is in home subnet
   assert:
     that: macvlan_subnet == macvlan_subnet | ansible.utils.ipaddr(home_subnet)
-    fail_msg: "macvlan_subnet is not in a valid range"
+    fail_msg: "macvlan_subnet '{{ macvlan_subnet }}' is not within home subnet '{{ home_subnet }}'"
     success_msg: "macvlan_subnet is valid"
   tags:
     - macvlan
