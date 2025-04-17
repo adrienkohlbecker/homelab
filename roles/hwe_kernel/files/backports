@@ -2,7 +2,7 @@ Package: podman buildah containernetworking-plugins conmon slirp4netns libc6 lib
 Pin: release n=noble
 Pin-Priority: 991
 
-Package: zfsutils-linux zfs-initramfs zfs-zed libc6 libzfs4linux libnvpair3linux libuutil3linux libzpool5linux libssl3t64 libc-bin libtirpc3t64 libtirpc-common locales
+Package: zfsutils-linux zfs-initramfs zfs-zed libc6 libzfs4linux libnvpair3linux libuutil3linux libzpool5linux libssl3t64 libc-bin libtirpc3t64 libtirpc-common locales chrony adduser tzdata-legacy libgnutls30t64 libnettle8t64 libgmp10 libhogweed6t64 libp11-kit0 libunistring5 tzdata
 Pin: release n=noble
 Pin-Priority: 991
 
