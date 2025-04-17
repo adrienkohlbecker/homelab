@@ -52,14 +52,12 @@
 - name: Download wolweb
   when: not (ansible_check_mode and wolweb_apt_deps.changed)
   git:
-    repo: git@github.com:adrienkohlbecker/wolweb.git
+    repo: https://github.com/adrienkohlbecker/wolweb.git
     dest: /opt/wolweb
     version: homelab
     force: true
-    accept_newhostkey: true
   register: wolweb_git
   become: true
-  become_flags: "--preserve-env=SSH_AUTH_SOCK"
   tags:
     - wolweb
     - _check_stage3
