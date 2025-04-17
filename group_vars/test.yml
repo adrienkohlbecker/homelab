@@ -1,0 +1,148 @@
+domain: fahm.dev
+home_subnet: 10.234.0.0/16
+site_subnets:
+  home: 10.234.0.0/21
+  brumath: 10.234.56.0/24
+  bonniers: 10.234.57.0/24
+external_ips:
+  pug: 10.234.0.3
+  box: 10.234.0.5
+  eaton: 10.234.0.4
+  lab: 10.234.0.2
+  udm: 10.234.0.1
+  marantz: 10.234.2.2
+  printer: 10.234.2.3
+  siglent: 10.234.2.4
+  tubeszb: 10.234.4.2
+  otgw: 10.234.4.3
+  bunk: 10.234.57.3
+  pihole: "{{ pihole_keepalived_ip }}"
+mac_addresses:
+  pug: 65:42:08:08:89:a5
+  lab_i210: 20:08:e9:30:e7:e9
+  lab_i225p1: 4c:4b:b9:1b:60:0c
+  lab_i225p2: d2:7d:10:e0:9c:68
+  pom: c3:9e:51:6a:35:81
+
+wireguard_peers:
+  - name: box
+    address: 10.234.128.5
+    endpoint:
+      local: "{{ external_ips.box }}:51820"
+      remote: home.{{ domain }}:51823
+    is_server: true
+    dns_address: "{{ external_ips.pihole }}"
+    site_subnet: "{{ site_subnets.home }}"
+    public_key: "{{ wireguard_keys.box.public_key }}"
+    private_key: "{{ wireguard_keys.box.private_key }}"
+
+wireguard_keys:
+  lab:
+    public_key: changeme
+    private_key: changeme
+  pug:
+    public_key: changeme
+    private_key: changeme
+  box:
+    public_key: box/yMi21GMzxe/6x1zhs/HPXL+LU6WlVUn1nrsmKlM=
+    private_key: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          36646265643538346362333563393537666466376561336436666139653761636530626362326335
+          3962663536646666306366646339653739363531333565650a336138653731333261363830343231
+          61313636333462373430316630656330393863623863643932666633626535623334303931383131
+          6432623864623639330a303164306565613665396365326662363731633938623165383966326334
+          32613532623064373433383537333963376439343865346631643639383936623838613639646162
+          3239303737633339643662383763383266653664333530343637
+  laptop:
+    public_key: changeme
+    private_key: changeme
+  phone:
+    public_key: changeme
+    private_key: changeme
+  ipad:
+    public_key: changeme
+    private_key: changeme
+  marie_laptop:
+    public_key: changeme
+    private_key: changeme
+  marie_phone:
+    public_key: changeme
+    private_key: changeme
+  bunk:
+    public_key: changeme
+    private_key: changeme
+
+synology_endpoint: changeme
+
+smtp_user: apikey
+postfix_smtp_password: changeme
+journald_exporter_key: changeme
+cloudflare_api_token: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          63303333663734613361366465633339613362363363326161383738643934353732383162303839
+          3038623839663262306361613931393463343738613266370a666232626431386263313531313465
+          62383365613665373833666665373136336337656462333761333631626333663337663337653836
+          6261623034313138360a313164366364396439383261643132366131343962373862353664383638
+          63376538616161313635373532653865636637613561653833303866616265643635356533393131
+          6138343161393434366531373031646463333266333262666138
+minio_root_user: minio
+minio_root_password: changeme
+influxdb_root_user: ak
+influxdb_root_password: changeme
+pihole_password: changeme
+pihole_keepalived_ip: changeme
+pihole_keepalived_password: changeme
+telegram_overseerr_bot_token: changeme
+telegram_netdata_bot_token: changeme
+telegram_personal_chat_id: changeme
+telegram_home_chat_id: changeme
+nut_upsmon_password: changeme
+otgw_admin_password: changeme
+sabnzbd_api_key: changeme
+sabnzbd_sendgrid_username: apikey
+sabnzbd_sendgrid_password: changeme
+sabnzbd_nzb_key: changeme
+sabnzbd_newsdemon_username: changeme
+sabnzbd_newsdemon_password: changeme
+sabnzbd_newsgroupdirect_username: changeme
+sabnzbd_newsgroupdirect_password: changeme
+sabnzbd_usenetfarm_username: changeme
+sabnzbd_usenetfarm_password: changeme
+radarr_api_key: changeme
+omdb_api_key: changeme
+sonarr_api_key: changeme
+headphones_api_key: changeme
+plex_token: changeme
+nzbgeek_api_key: changeme
+overseerr_api_key: changeme
+overseerr_vapid_private: changeme
+overseerr_vapid_public: changeme
+overseer_client_id: changeme
+plex_machine_id: changeme
+tautulli_api_key: changeme
+tautulli_jwt_secret: changeme
+tautulli_pms_token: changeme
+tautulli_pms_client_id: changeme
+tautulli_pms_uuid: changeme
+themoviedb_api_key: changeme
+gitea_jwt_secret: changeme
+gitea_internal_token: changeme
+gitea_sendgrid_password: changeme
+gitea_lfs_jwt_secret: changeme
+transmission_rpc_password: changeme
+samba_password: changeme
+gmail_app_password: changeme
+postgres_password: changeme
+healthchecks_password: changeme
+healthchecks_sendgrid_password: changeme
+gitea_runner_registration_token: changeme
+marie_samba_password: changeme
+paperless_secret_key: changeme
+z2m_network_key: changeme
+mosquitto_accounts:
+  z2m:
+    password: changeme
+    salt: changeme
+  homeassistant:
+    password: changeme
+    salt: changeme
