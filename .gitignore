@@ -1,3 +1,6 @@
 /wireguard
 /.vagrant
 __pycache__
+out.log
+.vscode
+.esphome
