@@ -57,13 +57,3 @@
     - "{{ inventory_hostname }}.{{ domain }}"
   tags:
     - certbot
-
-- name: Configure certificate metrics
-  import_role:
-    name: netdata
-    tasks_from: template
-  vars:
-    netdata_template_src: x509check.conf.j2
-    netdata_template_dest: go.d/x509check.conf
-  tags:
-    - certbot

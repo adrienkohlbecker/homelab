@@ -42,13 +42,3 @@
   become: true
   tags:
     - lm_sensors
-
-- name: Configure lm_sensors metrics
-  import_role:
-    name: netdata
-    tasks_from: copy
-  vars:
-    netdata_copy_src: sensors.conf
-    netdata_copy_dest: go.d/sensors.conf
-  tags:
-    - lm_sensors

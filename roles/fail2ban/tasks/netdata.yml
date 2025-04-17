@@ -1,0 +1,9 @@
+- name: Configure fail2ban metrics
+  import_role:
+    name: netdata
+    tasks_from: copy
+  vars:
+    netdata_copy_src: fail2ban.conf
+    netdata_copy_dest: go.d/fail2ban.conf
+  tags:
+    - fail2ban

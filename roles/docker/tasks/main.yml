@@ -159,3 +159,10 @@
     cron_entry: docker_clean
   tags:
     - docker
+
+- name: Configure macvlan network
+  import_role:
+    name: macvlan
+    tasks_from: docker
+  tags:
+    - docker

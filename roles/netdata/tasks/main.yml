@@ -298,3 +298,38 @@
     nginx_proxy_pass: http://127.0.0.1:19999/
   tags:
     - netdata
+
+- name: Install fail2ban metrics
+  import_role:
+    name: fail2ban
+    tasks_from: netdata
+  tags:
+    - netdata
+
+- name: Install smart metrics
+  import_role:
+    name: smart
+    tasks_from: netdata
+  tags:
+    - netdata
+
+- name: Install lm_sensors metrics
+  import_role:
+    name: lm_sensors
+    tasks_from: netdata
+  tags:
+    - netdata
+
+- name: Install certbot metrics
+  import_role:
+    name: certbot
+    tasks_from: netdata
+  tags:
+    - netdata
+
+- name: Install nginx metrics
+  import_role:
+    name: nginx
+    tasks_from: netdata
+  tags:
+    - netdata
