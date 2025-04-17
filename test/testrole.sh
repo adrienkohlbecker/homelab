@@ -84,7 +84,7 @@ done
 set -x
 
 if [ -f "$WORKDIR/_test.yml" ]; then
-  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$WORKDIR/_test.yml"
+  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/_test.yml"
 fi
 
 if [[ ${1:-} == "--checkmode" ]]; then
@@ -92,28 +92,28 @@ if [[ ${1:-} == "--checkmode" ]]; then
 
   LIST_TAGS=$(ansible-playbook "$WORKDIR/site.yml" --list-tags)
 
-  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$WORKDIR/site.yml" --check "$@"
+  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --check "$@"
 
   if [[ $LIST_TAGS == *"_check_stage1"* ]]; then
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$WORKDIR/site.yml" --tags _check_stage1 "$@"
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$WORKDIR/site.yml" --check "$@"
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --tags _check_stage1 "$@"
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --check "$@"
   fi
 
   if [[ $LIST_TAGS == *"_check_stage2"* ]]; then
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$WORKDIR/site.yml" --tags _check_stage2 "$@"
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$WORKDIR/site.yml" --check "$@"
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --tags _check_stage2 "$@"
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --check "$@"
   fi
 
   if [[ $LIST_TAGS == *"_check_stage3"* ]]; then
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$WORKDIR/site.yml" --tags _check_stage3 "$@"
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$WORKDIR/site.yml" --check "$@"
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --tags _check_stage3 "$@"
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --check "$@"
   fi
 
   if [[ $LIST_TAGS == *"_check_stage4"* ]]; then
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$WORKDIR/site.yml" --tags _check_stage4 "$@"
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$WORKDIR/site.yml" --check "$@"
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --tags _check_stage4 "$@"
+    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --check "$@"
   fi
 
 fi
 
-ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT --inventory test/inventory.ini "$WORKDIR/site.yml" "$@"
+ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" "$@"
