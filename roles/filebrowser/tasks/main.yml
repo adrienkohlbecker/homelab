@@ -28,14 +28,12 @@
 - name: Download filebrowser
   when: not (ansible_check_mode and filebrowser_apt_deps.changed)
   git:
-    repo: git@github.com:adrienkohlbecker/filebrowser.git
+    repo: https://github.com/adrienkohlbecker/filebrowser.git
     dest: /opt/filebrowser
     version: master
     force: true
-    accept_newhostkey: true
   register: filebrowser_git
   become: true
-  become_flags: "--preserve-env=SSH_AUTH_SOCK"
   tags:
     - filebrowser
     - _check_stage2
