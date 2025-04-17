@@ -29,6 +29,9 @@ netplan:
 
 hdparm_settings: {}
 
+docker_volsize: '{{ "1GB" | human_to_bytes }}'
+podman_volsize: '{{ "1GB" | human_to_bytes }}'
+
 rand_order: 3
 
 zfs_autobackup_source_host: box
