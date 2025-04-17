@@ -117,6 +117,7 @@ wireguard_keys:
           3132643535623761396664653364326336643132353365626530
 
 synology_endpoint: akohlbecker.synology.me
+certbot_production_certificates: true
 
 smtp_user: apikey
 postfix_smtp_password: !vault |
