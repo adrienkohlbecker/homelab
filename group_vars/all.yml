@@ -10,6 +10,10 @@ root_email: adrien.kohlbecker@gmail.com
 smtp_host: smtp.sendgrid.net
 smtp_port: 587
 
+macvlan_parent_gateway: "{{ ansible_facts[macvlan_parent].ipv4.network | ansible.utils.ipmath(1) }}"
+macvlan_parent_subnet: "{{ ansible_facts[macvlan_parent].ipv4.network }}/{{ ansible_facts[macvlan_parent].ipv4.prefix }}"
+macvlan_host_ip: "{{ macvlan_subnet | ansible.utils.ipmath(1) }}"
+macvlan_host_mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname) }}"
 
 # wireguard-vanity-keygen -c $NAME/
 wireguard_peers:
