@@ -1,0 +1,9 @@
+zfs_root: false
+home_subnet: 192.5.0.0/16
+netplan:
+  ethernets:
+    eth0:
+      link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
+      dhcp4: true
+      dhcp6: false

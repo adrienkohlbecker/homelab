@@ -1,6 +1,10 @@
-zfs_root: false
+zfs_root: true
 journald_storage: volatile
 grub_bootloader: true
+
+ssh_public_keys: |
+  ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA6NF8iallvQVp22WDkTkyrtvp9eWW6A8YVr+kz4TjGYe7gHzIw+niNltGEFHzD8+v1I2YJ6oXevct1YeS0o9HZyN1Q9qgCgzUFtdOKLv6IedplqoPkcmF0aYet2PkEDo3MlTBckFXPITAMzF8dJSIFo9D8HfdOV0IAdx4O7PtixWKn5y2hMNG0zQPyUecp4pzC6kivAIhyfHilFR61RGL+GPXQ2MWZWFYbAGjyiYJnAmCP3NOTd0jMZEnDkbUvxhMmBYSdETk1rRgm+R4LOzFUGaHqHDLKLX+FIPKcF96hrucXzcWyLbIbEgE98OHlnVYCzRdK8jlqm8tehUc9c9WhQ== vagrant insecure public key
+  ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key
 
 zfs_arc_max: 1073741824
 zfs_trim_pools: []
@@ -11,8 +15,6 @@ libvirt_default_network: 10.123.50.0/24
 
 sensor_modules: []
 
-home_subnet: 192.5.0.0/16
-
 macvlan_enable_docker: true
 macvlan_parent: eth0
 macvlan_subnet: '{{ home_subnet | ansible.utils.ipsubnet(27, 7) }}'
@@ -21,11 +23,23 @@ log2ram_size: 100M
 
 netplan:
   ethernets:
-    eth0:
+    nic0:
+      match:
+        name: ens256
+      set-name: eth0
+      link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
+      addresses:
+      - 10.234.0.5/24
+    nic1:
+      match:
+        name: ens160
+      set-name: eth1
       link-local: [] # do not setup random link local address when no dhcp is present
       wakeonlan: true
       dhcp4: true
       dhcp6: false
+      dhcp-identifier: mac
 
 hdparm_settings: {}
 
