@@ -1,0 +1,9 @@
+- name: Configure smart metrics
+  import_role:
+    name: netdata
+    tasks_from: copy
+  vars:
+    netdata_copy_src: smartctl.conf
+    netdata_copy_dest: go.d/smartctl.conf
+  tags:
+    - smart

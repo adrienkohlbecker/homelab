@@ -1,0 +1,9 @@
+- name: Configure web log metrics
+  import_role:
+    name: netdata
+    tasks_from: copy
+  vars:
+    netdata_copy_src: web_log.conf
+    netdata_copy_dest: go.d/web_log.conf
+  tags:
+    - nginx

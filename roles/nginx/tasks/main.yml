@@ -143,13 +143,3 @@
     nginx_site_reload: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
   tags:
     - nginx
-
-- name: Configure web log metrics
-  import_role:
-    name: netdata
-    tasks_from: copy
-  vars:
-    netdata_copy_src: web_log.conf
-    netdata_copy_dest: go.d/web_log.conf
-  tags:
-    - nginx
