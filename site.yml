@@ -36,8 +36,11 @@
     - zfs_autobackup
     - zfs_mount
     - podman
+    - avahi
     - samba
-    - wolweb
+    - certbot
+    - nginx
+    - services
 
 - name: Pug roles
   hosts: box,pug
@@ -60,9 +63,7 @@
 - name: Add more services
   hosts: all:!bunk
   roles:
-    - avahi
-    - certbot
-    - nginx
+    - wolweb
     - csplogger
     - keepalived
     - keepalived_exporter
@@ -71,7 +72,6 @@
     - nut_server
     - nut_monitor
     - netdata
-    - services
     - pihole
 
 - name: Lab roles
