@@ -12,7 +12,7 @@
 - name: Create zfs filesystem
   when: zfs_root
   zfs:
-    name: dozer/scratch
+    name: '{{ zfs_dozer_filesystem }}/scratch'
     state: present
     extra_zfs_properties:
       mountpoint: /mnt/scratch
@@ -21,13 +21,13 @@
   tags:
     - scratch
 
-- name: Set up mount service for dozer/scratch
+- name: Set up mount service for {{ zfs_dozer_filesystem }}/scratch
   when: zfs_root
   import_role:
     name: zfs_mount
     tasks_from: unit
   vars:
-    zfs_mount_dataset: dozer/scratch
+    zfs_mount_dataset: '{{ zfs_dozer_filesystem }}/scratch'
     zfs_mount_mountpoint: /mnt/scratch
   tags:
     - scratch

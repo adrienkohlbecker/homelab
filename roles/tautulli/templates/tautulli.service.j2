@@ -33,7 +33,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="tautulli" \
     --volume /mnt/services/tautulli:/config \
-    --volume "/mnt/services/plex/Library/Application Support/Plex Media Server/Logs:/plex_logs:ro" \
+    --volume "/mnt/services/plex:/plex:ro" \
     --env PUID={{ tautulli_user.uid }} \
     --env PGID={{ tautulli_user.group }} \
     --env TZ=Europe/Amsterdam \

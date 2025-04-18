@@ -43,7 +43,7 @@
     name: rpool/docker
     state: present
     extra_zfs_properties:
-      volsize: '{{ docker_volsize }}'
+      volsize: '{{ "20GB" | human_to_bytes }}'
   register: zfs_zvol_docker
   become: true
   tags:

@@ -55,7 +55,7 @@ source "vmware-iso" "ubuntu" {
 source "vmware-vmx" "ubuntu-box" {
   source_path = "${path.root}/vmx-ubuntu/packer-ubuntu.vmx"
 
-  disk_additional_size = [ 8192 ]
+  disk_additional_size = [ 65536 ]
 
   output_directory = "${path.root}/output-${source.name}"
 
@@ -77,7 +77,7 @@ source "vmware-vmx" "ubuntu-box" {
 source "vmware-vmx" "ubuntu-lab" {
   source_path = "${path.root}/vmx-ubuntu/packer-ubuntu.vmx"
 
-  disk_additional_size = [ 12288, 12288, 12288, 1024, 1024, 1536, 1536, 1024, 1024 ]
+  disk_additional_size = [ 65536, 65536, 65536, 1024, 1024, 1536, 1536, 1024, 1024 ]
 
   output_directory = "${path.root}/output-${source.name}"
 
@@ -115,7 +115,7 @@ source "vmware-vmx" "ubuntu-lab" {
 source "vmware-vmx" "ubuntu-pug" {
   source_path = "${path.root}/vmx-ubuntu/packer-ubuntu.vmx"
 
-  disk_additional_size = [ 8192, 1024, 1024 ]
+  disk_additional_size = [ 65536, 1024, 1024 ]
 
   output_directory = "${path.root}/output-${source.name}"
 

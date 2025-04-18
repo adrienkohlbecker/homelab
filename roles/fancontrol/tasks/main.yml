@@ -41,5 +41,6 @@
     systemd_unit_src: fancontrol
     systemd_unit_condition: "{{ not (ansible_check_mode and apt_fancontrol.changed) }}"
     systemd_unit_restart: "{{ fancontrol_cfg.changed or fancontrol_rm.changed }}"
+    systemd_unit_start: "{{ fancontrol_settings | length > 0 }}" # TODO: ensure we have some config in testing
   tags:
     - fancontrol

@@ -69,7 +69,7 @@
 - name: Create zfs filesystem
   when: zfs_root
   zfs:
-    name: dozer/minio
+    name: '{{ zfs_dozer_filesystem }}/minio'
     state: present
     extra_zfs_properties:
       mountpoint: /mnt/minio
@@ -78,13 +78,13 @@
   tags:
     - minio
 
-- name: Set up mount service for dozer/minio
+- name: Set up mount service for {{ zfs_dozer_filesystem }}/minio
   when: zfs_root
   import_role:
     name: zfs_mount
     tasks_from: unit
   vars:
-    zfs_mount_dataset: dozer/minio
+    zfs_mount_dataset: '{{ zfs_dozer_filesystem }}/minio'
     zfs_mount_mountpoint: /mnt/minio
   become: true
   tags:

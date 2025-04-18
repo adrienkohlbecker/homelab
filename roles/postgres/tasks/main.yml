@@ -48,7 +48,7 @@
       docker.io/postgres:16.3
       docker-ensure-initdb.sh
   args:
-    creates: /var/lib/postgresql/data/PG_VERSION
+    creates: /mnt/services/postgres/PG_VERSION
   become: true
   tags:
     - postgres

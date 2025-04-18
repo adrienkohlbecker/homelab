@@ -11,6 +11,8 @@ zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set
   - dozer/minio
   - tank/data
 zfs_has_bpool: false
+zfs_dozer_filesystem: dozer
+zfs_tank_filesystem: tank
 
 libvirt_default_network: 10.123.48.0/24
 

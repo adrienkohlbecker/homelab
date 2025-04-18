@@ -12,7 +12,7 @@
 - name: Create zfs filesystem
   when: zfs_root
   zfs:
-    name: tank/data
+    name: '{{ zfs_tank_filesystem }}/data'
     state: present
     extra_zfs_properties:
       mountpoint: /mnt/data
@@ -21,13 +21,13 @@
   tags:
     - data
 
-- name: Set up mount service for tank/data
+- name: Set up mount service for {{ zfs_tank_filesystem }}/data
   when: zfs_root
   import_role:
     name: zfs_mount
     tasks_from: unit
   vars:
-    zfs_mount_dataset: tank/data
+    zfs_mount_dataset: '{{ zfs_tank_filesystem }}/data'
     zfs_mount_mountpoint: /mnt/data
   tags:
     - data

@@ -59,5 +59,6 @@
     systemd_unit_src: smartmontools
     systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
     systemd_unit_restart: "{{ smartd_cfg.changed or smartmontools_cfg.changed }}"
+    systemd_unit_start: "{{ not vmware_test }}" # TODO: condition on systemd unit is skipping service due to virtualization
   tags:
     - smart
