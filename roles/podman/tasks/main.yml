@@ -130,7 +130,7 @@
     name: rpool/podman
     state: present
     extra_zfs_properties:
-      volsize: '{{ podman_volsize }}'
+      volsize: '{{ "20GB" | human_to_bytes }}'
   register: zfs_zvol_podman
   become: true
   tags:

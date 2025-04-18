@@ -1,4 +1,5 @@
 - name: site | Ensure directories exists
+  when: nginx_condition | default(true)
   file:
     state: directory
     path: "{{ item }}"
@@ -13,6 +14,7 @@
     - nginx_site
 
 - name: site | Configure nginx site
+  when: nginx_condition | default(true)
   template:
     src: site.conf.j2
     dest: /etc/nginx/sites-available/{{ nginx_subdomain }}
@@ -26,7 +28,7 @@
     - nginx_site
 
 - name: site | Enable nginx site
-  when: not (ansible_check_mode and nginx_static_conf.changed) # TODO add _check_stageX tag
+  when: (nginx_condition | default(true)) and not (ansible_check_mode and nginx_static_conf.changed) # TODO add _check_stageX tag
   file:
     src: /etc/nginx/sites-available/{{ nginx_subdomain }}
     dest: /etc/nginx/sites-enabled/{{ nginx_subdomain }}
@@ -37,7 +39,7 @@
     - nginx_site
 
 - name: site | Reload nginx config
-  when: (nginx_site_reload | default(true)) and (nginx_static_conf.changed or nginx_static_conf_enable.changed)
+  when: (nginx_condition | default(true)) and (nginx_site_reload | default(true)) and (nginx_static_conf.changed or nginx_static_conf_enable.changed)
   systemd:
     name: nginx
     state: reloaded

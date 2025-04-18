@@ -18,7 +18,7 @@
     - _check_stage1
 
 - name: Install eaton ipp if needed
-  when: '"ipp-linux" not in ansible_facts.packages or ansible_facts.packages["ipp-linux"][0].version != "1.73.175"'
+  when: ansible_architecture == "x86_64" and ("ipp-linux" not in ansible_facts.packages or ansible_facts.packages["ipp-linux"][0].version != "1.73.175")
   become: true
   tags:
     - eaton_ipp
@@ -53,7 +53,6 @@
       changed_when: false
 
     - name: Install ipp-linux
-      when: ansible_architecture == "x86_64"
       apt:
         deb: /tmp/ipp-linux.deb
       register: ipp_linux_installed
@@ -79,6 +78,7 @@
     name: nginx
     tasks_from: site
   vars:
+    nginx_condition: '{{ ansible_architecture == "x86_64" }}'
     nginx_subdomain: ipp
     nginx_proxy_pass: https://localhost:4680/
   tags:

@@ -2,6 +2,8 @@ zfs_root: true
 journald_storage: volatile
 grub_bootloader: true
 
+vmware_test: true
+
 ssh_public_keys: |
   ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA6NF8iallvQVp22WDkTkyrtvp9eWW6A8YVr+kz4TjGYe7gHzIw+niNltGEFHzD8+v1I2YJ6oXevct1YeS0o9HZyN1Q9qgCgzUFtdOKLv6IedplqoPkcmF0aYet2PkEDo3MlTBckFXPITAMzF8dJSIFo9D8HfdOV0IAdx4O7PtixWKn5y2hMNG0zQPyUecp4pzC6kivAIhyfHilFR61RGL+GPXQ2MWZWFYbAGjyiYJnAmCP3NOTd0jMZEnDkbUvxhMmBYSdETk1rRgm+R4LOzFUGaHqHDLKLX+FIPKcF96hrucXzcWyLbIbEgE98OHlnVYCzRdK8jlqm8tehUc9c9WhQ== vagrant insecure public key
   ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key
@@ -10,6 +12,8 @@ zfs_arc_max: 1073741824
 zfs_trim_pools: []
 zfs_mount_cache_datasets: [] # must list one dataset per pool. canmount must be set to "on" on this dataset
 zfs_has_bpool: false
+zfs_dozer_filesystem: rpool
+zfs_tank_filesystem: rpool
 
 libvirt_default_network: 10.123.50.0/24
 
@@ -42,9 +46,6 @@ netplan:
       dhcp-identifier: mac
 
 hdparm_settings: {}
-
-docker_volsize: '{{ "1GB" | human_to_bytes }}'
-podman_volsize: '{{ "1GB" | human_to_bytes }}'
 
 rand_order: 3
 

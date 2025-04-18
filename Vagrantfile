@@ -24,6 +24,8 @@ Vagrant.configure("2") do |config|
 
   config.vm.provider "vmware_desktop" do |vb|
     vb.gui = false
+    vb.memory = 4096
+    vb.cpus = 4
   end
 
   config.vm.provision "ansible" do |ansible|

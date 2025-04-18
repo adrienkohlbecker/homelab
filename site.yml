@@ -55,7 +55,7 @@
     - macvlan
     - docker
     - ipmi
-    - libvirt
+    #- libvirt # TODO: dnsmasq conflicts with pihole
     - vector
     - eaton_ipp
     - postgres
@@ -63,6 +63,7 @@
 - name: Add more services
   hosts: all:!bunk
   roles:
+    - netdata
     - wolweb
     - csplogger
     - keepalived
@@ -71,7 +72,6 @@
     - journald_exporter
     - nut_server
     - nut_monitor
-    - netdata
     - pihole
 
 - name: Lab roles
