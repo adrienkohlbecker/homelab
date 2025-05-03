@@ -1,6 +1,5 @@
 - name: Generate wireguard configuration files and QR codes
-  hosts: 127.0.0.1
-  connection: local
+  hosts: localhost
   tasks:
     - name: Create directory
       file:
