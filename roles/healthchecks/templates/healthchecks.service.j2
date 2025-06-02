@@ -46,8 +46,8 @@ ExecStart=/usr/bin/podman run \
     --env DEFAULT_FROM_EMAIL="healthchecks@{{ domain }}" \
     --env EMAIL_HOST="{{ smtp_host }}" \
     --env EMAIL_PORT="{{ smtp_port }}" \
-    --env EMAIL_HOST_USER="{{ smtp_user}}" \
-    --secret=healthchecks_sendgrid_password,type=env,target=EMAIL_HOST_PASSWORD \
+    --env EMAIL_HOST_USER="{{ healthchecks_smtp_user}}" \
+    --secret=healthchecks_smtp_password,type=env,target=EMAIL_HOST_PASSWORD \
     --env EMAIL_USE_TLS="True" \
     --env SITE_LOGO_URL=/static/img/logo.png \
     --env UWSGI_DISABLE_LOGGING=1 \
