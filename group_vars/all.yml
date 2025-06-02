@@ -19,17 +19,18 @@ macvlan_host_mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname) }}"
 # wireguard-vanity-keygen -c $NAME/
 wireguard_peers:
   - name: lab
-    address: 10.123.128.2
+    address: 10.123.64.2
     endpoint:
       local: "{{ external_ips.lab }}:51820"
       remote: "home.{{ domain }}:51821"
     is_server: true
     dns_address: "{{ external_ips.pihole }}"
     site_subnet: "{{ site_subnets.home }}"
+    allowed_ips: [ "{{ site_subnets.home }}" ]
     public_key: "{{ wireguard_keys.lab.public_key }}"
     private_key: "{{ wireguard_keys.lab.private_key }}"
   - name: pug
-    address: 10.123.128.3
+    address: 10.123.64.3
     endpoint:
       local: "{{ external_ips.pug }}:51820"
       remote: "home.{{ domain }}:51822"
@@ -39,7 +40,7 @@ wireguard_peers:
     public_key: "{{ wireguard_keys.pug.public_key }}"
     private_key: "{{ wireguard_keys.pug.private_key }}"
   - name: box
-    address: 10.123.128.5
+    address: 10.123.64.5
     endpoint:
       local: "{{ external_ips.box }}:51820"
       remote: home.{{ domain }}:51823
@@ -49,32 +50,32 @@ wireguard_peers:
     public_key: "{{ wireguard_keys.box.public_key }}"
     private_key: "{{ wireguard_keys.box.private_key }}"
   - name: laptop
-    address: 10.123.130.128
+    address: 10.123.66.128
     is_server: false
     public_key: "{{ wireguard_keys.laptop.public_key }}"
     private_key: "{{ wireguard_keys.laptop.private_key }}"
   - name: phone
-    address: 10.123.130.129
+    address: 10.123.66.129
     is_server: false
     public_key: "{{ wireguard_keys.phone.public_key }}"
     private_key: "{{ wireguard_keys.phone.private_key }}"
   - name: ipad
-    address: 10.123.130.130
+    address: 10.123.66.130
     is_server: false
     public_key: "{{ wireguard_keys.ipad.public_key }}"
     private_key: "{{ wireguard_keys.ipad.private_key }}"
   - name: marie_laptop
-    address: 10.123.130.131
+    address: 10.123.66.131
     is_server: false
     public_key: "{{ wireguard_keys.marie_laptop.public_key }}"
     private_key: "{{ wireguard_keys.marie_laptop.private_key }}"
   - name: marie_phone
-    address: 10.123.130.132
+    address: 10.123.66.132
     is_server: false
     public_key: "{{ wireguard_keys.marie_phone.public_key }}"
     private_key: "{{ wireguard_keys.marie_phone.private_key }}"
   - name: bunk
-    address: 10.123.185.3
+    address: 10.123.121.3
     endpoint:
       local: "{{ external_ips.bunk }}:51820"
       remote: "{{ synology_endpoint }}:51820"
@@ -82,6 +83,7 @@ wireguard_peers:
     post_down: iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ovs_eth0 -j MASQUERADE
     is_server: true
     site_subnet: "{{ site_subnets.bonniers }}"
+    allowed_ips: [ "{{ site_subnets.bonniers }}" ]
     dns_address: 10.123.57.1
     public_key: "{{ wireguard_keys.bunk.public_key }}"
     private_key: "{{ wireguard_keys.bunk.private_key }}"
