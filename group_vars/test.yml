@@ -76,7 +76,7 @@ synology_endpoint: changeme
 zfs_autobackup_offsite_address: changeme
 certbot_production_certificates: false
 
-smtp_user: apikey
+postfix_smtp_user: changeme
 postfix_smtp_password: changeme
 journald_exporter_key: changeme
 cloudflare_api_token: !vault |
@@ -101,8 +101,8 @@ telegram_home_chat_id: changeme
 nut_upsmon_password: changeme
 otgw_admin_password: changeme
 sabnzbd_api_key: changeme
-sabnzbd_sendgrid_username: apikey
-sabnzbd_sendgrid_password: changeme
+sabnzbd_smtp_username: apikey
+sabnzbd_smtp_password: changeme
 sabnzbd_nzb_key: changeme
 sabnzbd_newsdemon_username: changeme
 sabnzbd_newsdemon_password: changeme
@@ -129,14 +129,16 @@ tautulli_pms_uuid: changeme
 themoviedb_api_key: changeme
 gitea_jwt_secret: changeme
 gitea_internal_token: changeme
-gitea_sendgrid_password: changeme
+gitea_smtp_user: changeme
+gitea_smtp_password: changeme
 gitea_lfs_jwt_secret: changeme
 transmission_rpc_password: changeme
 samba_password: changeme
 gmail_app_password: changeme
 postgres_password: changeme
 healthchecks_password: changeme
-healthchecks_sendgrid_password: changeme
+healthchecks_smtp_user: changeme
+healthchecks_smtp_password: changeme
 gitea_runner_registration_token: changeme
 marie_samba_password: changeme
 paperless_secret_key: changeme

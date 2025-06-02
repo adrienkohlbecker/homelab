@@ -37,8 +37,8 @@ ENABLED = true
 SMTP_ADDR = {{ smtp_host }}
 SMTP_PORT = {{ smtp_port }}
 FROM = gitea@{{ domain }}
-USER = {{ smtp_user }}
-PASSWD = {{ gitea_sendgrid_password }}
+USER = {{ gitea_smtp_user }}
+PASSWD = {{ gitea_smtp_password }}
 
 [service]
 REGISTER_EMAIL_CONFIRM = true

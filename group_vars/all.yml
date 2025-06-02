@@ -8,7 +8,7 @@ ssh_public_keys: |
 nginx_csp_default: "data: blob: 'unsafe-inline' 'unsafe-eval' 'self'"
 
 root_email: adrien.kohlbecker@gmail.com
-smtp_host: smtp.sendgrid.net
+smtp_host: smtp.eu.mailgun.org
 smtp_port: 587
 
 macvlan_parent_gateway: "{{ ansible_facts[macvlan_parent].ipv4.network | ansible.utils.ipmath(1) }}"
