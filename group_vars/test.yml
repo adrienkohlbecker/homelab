@@ -26,7 +26,7 @@ mac_addresses:
 
 wireguard_peers:
   - name: box
-    address: 10.234.128.5
+    address: 10.234.64.5
     endpoint:
       local: "{{ external_ips.box }}:51820"
       remote: home.{{ domain }}:51823
@@ -73,7 +73,6 @@ wireguard_keys:
     private_key: changeme
 
 synology_endpoint: changeme
-zfs_autobackup_offsite_address: changeme
 certbot_production_certificates: false
 
 postfix_smtp_user: changeme

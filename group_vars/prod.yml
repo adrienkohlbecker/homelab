@@ -117,7 +117,6 @@ wireguard_keys:
           3132643535623761396664653364326336643132353365626530
 
 synology_endpoint: akohlbecker.synology.me
-zfs_autobackup_offsite_address: "{{ (wireguard_peers|selectattr('name', 'eq', 'bunk')|first).address}}"
 certbot_production_certificates: true
 
 postfix_smtp_user: postfix@{{domain}}
