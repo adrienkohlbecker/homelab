@@ -37,6 +37,7 @@ ExecStart=/usr/bin/podman run \
     --env TZ=Europe/Paris \
     --volume /mnt/services/sabnzbd:/config \
     --volume /mnt/services/sabnzbd/autoProcessMedia.cfg:/opt/nzbToMedia/autoProcessMedia.cfg \
+    --volume /mnt/services/sabnzbd/before_start.sh:/custom-cont-init.d/before_start.sh:ro \
     --volume /mnt/media:/media \
     --volume /mnt/scratch:/scratch \
     --volume /opt/nzbToMedia:/opt/nzbToMedia \

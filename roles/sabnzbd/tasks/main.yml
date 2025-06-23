@@ -104,6 +104,20 @@
     - sabnzbd
     - _check_stage2
 
+- name: Configure sabnzbd
+  copy:
+    src: before_start.sh
+    dest: /mnt/services/sabnzbd/before_start.sh
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+  register: sabnzbd_before_start
+  become: true
+  tags:
+    - sabnzbd
+    - _check_stage2
+
 - name: Create scratch directory
   file:
     dest: /mnt/scratch/sabnzbd
@@ -158,7 +172,7 @@
   vars:
     systemd_unit_src: sabnzbd
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed)) }}"
-    systemd_unit_restart: "{{ systemd_unit.changed or sabnzbd_conf.changed or sabnzbd_media_conf.changed }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or sabnzbd_conf.changed or sabnzbd_media_conf.changed or sabnzbd_before_start.changed }}"
   tags:
     - sabnzbd
 
