@@ -149,3 +149,5 @@ mosquitto_accounts:
   homeassistant:
     password: changeme
     salt: changeme
+overseerr_smtp_username: changeme
+overseerr_smtp_password: changeme
