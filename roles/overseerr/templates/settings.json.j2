@@ -6,7 +6,7 @@
   "apiKey": "{{ overseerr_api_key }}",
   "applicationTitle": "Overseerr",
   "applicationUrl": "https://overseer.{{ inventory_hostname }}.{{ domain }}",
-  "csrfProtection": false,
+  "csrfProtection": true,
   "cacheImages": true,
   "defaultPermissions": 32,
   "defaultQuotas": {
@@ -113,14 +113,16 @@
  "notifications": {
   "agents": {
    "email": {
-    "enabled": false,
+    "enabled": true,
     "options": {
-     "emailFrom": "",
-     "smtpHost": "",
-     "smtpPort": 587,
+     "emailFrom": "overseerr@fahm.fr",
+     "smtpHost": "{{ smtp_host }}",
+     "smtpPort": {{ smtp_port }},
      "secure": false,
      "ignoreTls": false,
-     "requireTls": false,
+     "requireTls": true,
+     "authUser": "{{ overseerr_smtp_username }}",
+     "authPass": "{{ overseerr_smtp_password }}",
      "allowSelfSigned": false,
      "senderName": "Overseerr"
     }
@@ -149,7 +151,7 @@
    },
    "telegram": {
     "enabled": true,
-    "types": 136,
+    "types": 8,
     "options": {
      "botAPI": "{{ telegram_overseerr_bot_token }}",
      "chatId": "{{ telegram_home_chat_id }}",

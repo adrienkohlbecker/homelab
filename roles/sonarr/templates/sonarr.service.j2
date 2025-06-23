@@ -44,7 +44,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --stop-timeout 120 \
-    docker.io/linuxserver/sonarr:4.0.4
+    docker.io/linuxserver/sonarr:4.0.15
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
