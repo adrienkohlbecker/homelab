@@ -2,6 +2,7 @@
   <name>default</name>
   <bridge name="virbr0"/>
   <forward/>
+  <dns enable="no" />
   <mac address="{{ libvirt_network_mac }}"/>
   <ip address="{{ libvirt_network_gateway }}" netmask="{{ libvirt_network_netmask }}">
     <dhcp>

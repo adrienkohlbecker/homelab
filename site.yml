@@ -55,7 +55,6 @@
     - macvlan
     - docker
     - ipmi
-    #- libvirt # TODO: dnsmasq conflicts with pihole
     - vector
     - eaton_ipp
     - postgres
@@ -73,6 +72,7 @@
     - nut_server
     - nut_monitor
     - pihole
+    - libvirt
 
 - name: Lab roles
   hosts: box,lab
