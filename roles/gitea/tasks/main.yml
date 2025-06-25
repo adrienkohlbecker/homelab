@@ -122,5 +122,8 @@
   vars:
     nginx_subdomain: gitea
     nginx_proxy_pass: http://localhost:3000/
+    nginx_location_conf: |
+      # Otherwise podman uploads return HTTP 413
+      client_max_body_size     0;
   tags:
     - gitea
