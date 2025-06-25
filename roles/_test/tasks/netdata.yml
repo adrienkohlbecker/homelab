@@ -2,9 +2,11 @@
   shell: |
     set -euo pipefail
 
+    apt-get install --yes --no-install-recommends wget
     wget -O /tmp/netdata-kickstart.sh https://get.netdata.cloud/kickstart.sh &&
     sh /tmp/netdata-kickstart.sh --no-updates --stable-channel --disable-telemetry --disable-cloud
     systemctl start netdata
+    apt-get purge --autoremove --yes wget
   args:
     executable: /bin/bash
     creates: /tmp/netdata-kickstart.sh
