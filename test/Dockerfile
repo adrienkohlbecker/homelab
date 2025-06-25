@@ -11,7 +11,7 @@ COPY ssh-keygen.service /etc/systemd/system/ssh-keygen.service
 RUN systemctl enable ssh-keygen.service
 
 RUN set -x \
- && mkdir /root/.ssh \
+ && mkdir -p /root/.ssh \
  && echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key" > /root/.ssh/authorized_keys \
  && chmod 0700 /root/.ssh \
  && chmod 0600 /root/.ssh/authorized_keys
@@ -23,10 +23,10 @@ RUN set -x \
 RUN set -x \
  && export DEBIAN_FRONTEND=noninteractive \
  && apt-get update \
- && apt-get install -y python3-apt \
- && apt-get install -y python3-requests \
- && apt-get install -y sudo \
- && apt-get install -y cron \
+ && apt-get install -y --no-install-recommends python3-apt \
+ && apt-get install -y --no-install-recommends python3-requests \
+ && apt-get install -y --no-install-recommends sudo \
+ && apt-get install -y --no-install-recommends cron \
  && rm -rf /var/lib/apt/lists/*
 
 # Ensure we have a working apt cache (keep the cleanup in other sections for easy reuse)

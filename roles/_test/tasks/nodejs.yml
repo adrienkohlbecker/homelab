@@ -2,10 +2,13 @@
   shell: |
     set -euo pipefail
 
+    apt-get install --yes --no-install-recommends wget
+
     wget -O nodesource_setup.sh https://deb.nodesource.com/setup_22.x
     bash nodesource_setup.sh
 
     apt-get install -y nodejs
+    apt-get purge --autoremove --yes wget
   args:
     executable: /bin/bash
     creates: /usr/bin/nodejs

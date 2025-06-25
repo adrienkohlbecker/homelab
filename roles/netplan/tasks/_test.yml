@@ -1,0 +1,9 @@
+- name: _test | Reload udev
+  shell: |
+    set -euo pipefail
+
+    apt-get install --yes udev
+    systemctl start systemd-udevd
+  args:
+    executable: /bin/bash
+  become: true

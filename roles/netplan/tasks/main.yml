@@ -2,7 +2,6 @@
   apt:
     pkg:
       - netplan.io
-      - udev
     cache_valid_time: 3600
   become: true
   tags:
