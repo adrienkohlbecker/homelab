@@ -7,6 +7,9 @@ frontend:
   themes: !include_dir_merge_named themes
   extra_module_url:
     - /local/thermal_comfort_icons.js
+    - /local/community/lovelace-card-mod/card-mod.js
+    - /local/community/clock-weather-card/clock-weather-card.js
+    - /local/community/meteo-france-weather-card/meteo-france-weather-card.js
 
 automation: !include automations.yaml
 script: !include scripts.yaml

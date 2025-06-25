@@ -1,0 +1,51 @@
+esphome:
+  name: esphome-somfy
+
+esp32:
+  board: wemos_d1_mini32
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  password: ""
+
+ota:
+  - platform: esphome
+    password: ""
+
+wifi:
+  ssid: "Canards IoT"
+  password: "Veni, vidi, vici."
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Esphome-Somfy Fallback Hotspot"
+    password: "CUC4qOs1g7iI"
+
+captive_portal:
+
+
+external_components:
+  - source:
+      type: git
+      url: https://github.com/Viproz/esphome-somfy
+    components: [ somfy ]
+    refresh: 1d
+
+cover:
+  - platform: somfy
+    name: "Living Room Left Shutter"
+    RemoteID: 10816722
+    device_class: shutter
+  - platform: somfy
+    name: "Living Room Middle Shutter"
+    RemoteID: 4829351
+    device_class: shutter
+  - platform: somfy
+    name: "Living Room Right Shutter"
+    RemoteID: 14691200
+    device_class: shutter

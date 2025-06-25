@@ -38,4 +38,4 @@ VOLUME /var/lib/docker
 
 EXPOSE 22
 
-CMD [ "/usr/sbin/init" ]
+CMD [ "/lib/systemd/systemd" ]
