@@ -26,5 +26,5 @@
     apt-get install -y --no-install-recommends podman iptables
   args:
     executable: /bin/bash
-    creates: /etc/apt/preferences.d/podman-noble-backport
+    creates: /usr/bin/podman
   become: true
