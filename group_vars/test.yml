@@ -151,3 +151,7 @@ mosquitto_accounts:
     salt: changeme
 overseerr_smtp_username: changeme
 overseerr_smtp_password: changeme
+bazarr_api_key: changeme
+bazarr_flask_secret_key: changeme
+bazarr_opensubtitles_com_username: changeme
+bazarr_opensubtitles_com_password: changeme
