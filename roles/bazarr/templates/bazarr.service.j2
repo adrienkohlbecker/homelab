@@ -1,0 +1,54 @@
+# jinja2: lstrip_blocks: "True"
+# bazarr.service #######################################################################
+[Unit]
+Description=bazarr
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service zfs_mount_mnt_media.service  zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service zfs_mount_mnt_media.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+Delegate=yes
+TimeoutSec=120
+RestartSec=5
+Type=notify
+NotifyAccess=all
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=conmon \
+    --detach \
+    --replace \
+    --rm \
+    --name bazarr \
+    --log-driver journald \
+    --log-opt tag="bazarr" \
+    --env PUID={{ bazarr_user.uid }} \
+    --env PGID={{ media_group.gid }} \
+    --env TZ=Europe/Paris \
+    --volume /mnt/services/bazarr:/config \
+    --volume /mnt/media:/media \
+    --publish 127.0.0.1:6767:6767/tcp \
+    --health-cmd         "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:6767/api/" \
+    --health-startup-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:6767/api/" \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    --stop-timeout 120 \
+    docker.io/linuxserver/bazarr:1.5.2
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}
