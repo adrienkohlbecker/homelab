@@ -41,7 +41,12 @@ XKBVARIANT="mac"
 XKBOPTIONS=""
 EOF
 
-apt-get install --yes dosfstools
+apt-get install --yes dosfstools zfs-initramfs zfsutils-linux linux-generic
+
+systemctl enable zfs.target
+systemctl enable zfs-import-cache
+systemctl enable zfs-mount
+systemctl enable zfs-import.target
 
 for disk in "${DISKS[@]}"; do
   mkdosfs -F 32 -s 1 -n EFI "${disk}-part1"
@@ -50,17 +55,6 @@ mkdir /boot/efi
 echo "$(blkid -s UUID | grep "$(readlink -f "${DISKS[0]}-part1")" | cut -d' ' -f2)" \
   /boot/efi vfat defaults 0 0 >>/etc/fstab
 mount /boot/efi
-
-if [ "$LAYOUT" = "" ]; then
-  mkdir /boot/efi/grub /boot/grub
-  echo /boot/efi/grub /boot/grub none defaults,bind 0 0 >>/etc/fstab
-  mount /boot/grub
-fi
-
-apt-get install --yes \
-  "grub-efi-$ARCH" "grub-efi-$ARCH-signed" linux-image-generic \
-  shim-signed zfs-initramfs
-apt-get purge --yes os-prober
 
 if [ "$LAYOUT" = "" ]; then
   mkswap -f "${DISKS[0]}-part2"
@@ -84,6 +78,8 @@ else
   echo "/dev/disk/by-uuid/$(blkid -s UUID -o value /dev/md0) none swap discard 0 0" >>/etc/fstab
 fi
 
+update-initramfs -c -k all
+
 cp /usr/share/systemd/tmp.mount /etc/systemd/system/
 systemctl enable tmp.mount
 
@@ -93,39 +89,30 @@ addgroup --system sambashare
 
 apt-get install --yes openssh-server
 
-grub-probe /boot
+apt-get install --yes curl
+mkdir -p /boot/efi/EFI/ZBM
+# curl -o /boot/efi/EFI/ZBM/VMLINUZ.EFI -L https://get.zfsbootmenu.org/efi
+curl -o /boot/efi/EFI/ZBM/VMLINUZ.EFI -L https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/3.0.1/zfsbootmenu-recovery-aarch64-v3.0.1-linux6.1.EFI
+cp /boot/efi/EFI/ZBM/VMLINUZ.EFI /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
 
-update-initramfs -c -k all
+apt-get install --yes refind
+cat /boot/refind_linux.conf
+rm -f /boot/refind_linux.conf
 
-sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=""/GRUB_CMDLINE_LINUX_DEFAULT="init_on_alloc=0"/' /etc/default/grub
-sed -i 's/GRUB_TIMEOUT_STYLE/#GRUB_TIMEOUT_STYLE/' /etc/default/grub
-sed -i 's/GRUB_TIMEOUT=0/GRUB_TIMEOUT=5\nGRUB_RECORDFAIL_TIMEOUT=5/' /etc/default/grub
-sed -i 's/#GRUB_TERMINAL=console/GRUB_TERMINAL=console/' /etc/default/grub
+cat <<EOF >>/boot/efi/EFI/refind/refind.conf
+menuentry "Ubuntu (ZBM)" {
+    loader /EFI/ZBM/VMLINUZ.EFI
+    options "quit loglevel=0 zbm.skip"
+}
 
-update-grub
+menuentry "Ubuntu (ZBM Menu)" {
+    loader /EFI/ZBM/VMLINUZ.EFI
+    options "quit loglevel=0 zbm.show"
+}
 
-umount /boot/efi
-for disk in "${DISKS[@]}"; do
-  mount "${disk}-part1" /boot/efi
-  grub-install --target="$ARCH_GRUB-efi" --efi-directory=/boot/efi --bootloader-id=ubuntu --recheck --no-floppy
-  umount /boot/efi
-done
-mount /boot/efi
-
-if [ "$LAYOUT" != "" ]; then
-  systemctl mask grub-initrd-fallback.service
-fi
-
-mkdir /etc/zfs/zfs-list.cache
-touch /etc/zfs/zfs-list.cache/bpool
-touch /etc/zfs/zfs-list.cache/rpool
-zed -F &
-zfs set canmount=on bpool/BOOT/jammy
-zfs set canmount=on rpool/ROOT/jammy
-sync
-sleep 2
-jobs -p | xargs kill
-sed -Ei "s|/chroot/?|/|" /etc/zfs/zfs-list.cache/*
+default_selection "Ubuntu (ZBM)"
+timeout 10
+EOF
 
 adduser --disabled-password --gecos "" "$USERNAME"
 echo -e "$USERNAME:$PASSWORD" | chpasswd -c SHA256

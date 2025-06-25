@@ -9,13 +9,13 @@ mkdir /chroot/run
 mount -t tmpfs tmpfs /chroot/run
 mkdir /chroot/run/lock
 
-debootstrap jammy /chroot
-
-mkdir /chroot/etc/zfs
-cp /etc/zfs/zpool.cache /chroot/etc/zfs/
+debootstrap noble /chroot
 
 hostname "$HOSTNAME"
 hostname >/chroot/etc/hostname
+
+cp /etc/hostid /chroot/etc
+cp /etc/resolv.conf /chroot/etc
 
 cat <<EOF >/chroot/etc/hosts
 127.0.0.1       localhost
@@ -39,6 +39,7 @@ network:
 EOF
 
 cp /etc/apt/sources.list /chroot/etc/apt/
+cp -R /etc/apt/sources.list.d /chroot/etc/apt/
 
 mount --make-private --rbind /dev /chroot/dev
 mount --make-private --rbind /proc /chroot/proc
