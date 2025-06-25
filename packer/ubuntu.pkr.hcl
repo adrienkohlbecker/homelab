@@ -18,8 +18,8 @@ source "vmware-iso" "ubuntu" {
   memory                = 2048
 
   guest_os_type         = "arm-ubuntu-64"
-  iso_checksum          = "sha256:74b8a9f71288ae0ac79075c2793a0284ef9b9729a3dcf41b693d95d724622b65"
-  iso_url               = "https://cdimage.ubuntu.com/releases/22.04.4/release/ubuntu-22.04.4-live-server-arm64.iso"
+  iso_checksum          = "file:https://cdimage.ubuntu.com/releases/24.04.2/release/SHA256SUMS"
+  iso_url               = "https://cdimage.ubuntu.com/releases/24.04.2/release/ubuntu-24.04.2-live-server-arm64.iso"
 
   disk_size         = 8192
   disk_adapter_type = "nvme"
@@ -38,10 +38,10 @@ source "vmware-iso" "ubuntu" {
   boot_wait             = "3s"
   boot_command = [
     "e<wait>",
-    "<down><down><down>",
-    "<end><bs><bs><bs><bs><bs><bs><bs><bs><bs><wait>",
-    "autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ---<wait>",
-    "<f10><wait>"
+    "<down><down><down><end>",
+    "<bs><bs><bs><bs><wait>",
+    " autoinstall ds=nocloud-net\\;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ ---",
+    "<wait><f10>"
   ]
   shutdown_command      = "sudo shutdown now"
 
@@ -65,7 +65,7 @@ source "vmware-vmx" "ubuntu-box" {
 
   shutdown_command      = "sudo shutdown now"
 
-  boot_wait             = "1m"
+  boot_wait             = "30s"
 
   # See https://github.com/hashicorp/packer-plugin-vmware/issues/119
   vmx_data = {
@@ -87,7 +87,7 @@ source "vmware-vmx" "ubuntu-lab" {
 
   shutdown_command      = "sudo shutdown now"
 
-  boot_wait             = "1m"
+  boot_wait             = "30s"
 
   # See https://github.com/hashicorp/packer-plugin-vmware/issues/119
   vmx_data = {
@@ -125,7 +125,7 @@ source "vmware-vmx" "ubuntu-pug" {
 
   shutdown_command      = "sudo shutdown now"
 
-  boot_wait             = "1m"
+  boot_wait             = "30s"
 
   # See https://github.com/hashicorp/packer-plugin-vmware/issues/119
   vmx_data = {
@@ -184,7 +184,7 @@ build {
   }
 
   provisioner "shell" {
-    inline = ["chmod +x /home/vagrant/*.sh", "sudo -HE /home/vagrant/provision.sh"]
+    inline = ["chmod +x /home/vagrant/*.sh", "sudo -HE /home/vagrant/provision2.sh"]
   }
 
   provisioner "shell-local" {
