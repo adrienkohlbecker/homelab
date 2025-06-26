@@ -19,14 +19,24 @@
 
 - name: Create getmail data directory
   file:
-    dest: "{{ item }}"
+    dest: /mnt/services/getmail
     state: directory
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0755"
   become: true
+  tags:
+    - getmail
+
+- name: Create getmail data directory
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0775"
+  become: true
   loop:
-    - /mnt/services/getmail
     - /mnt/services/getmail/cur
     - /mnt/services/getmail/new
     - /mnt/services/getmail/tmp

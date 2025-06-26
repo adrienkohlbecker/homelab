@@ -77,7 +77,7 @@ mkdir -p /chroot
 
 zpool create \
   -o ashift=12 \
-  -o autotrim=off \
+  -o autotrim=on \
   -o cachefile=/etc/zfs/zpool.cache \
   -o compatibility=grub2 \
   -o feature@livelist=enabled \
@@ -98,7 +98,7 @@ zpool create \
 
 zpool create \
   -o ashift=12 \
-  -o autotrim=off \
+  -o autotrim=on \
   -o compatibility=openzfs-2.1-linux \
   -O acltype=posixacl \
   -O atime=on \
