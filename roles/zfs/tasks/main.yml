@@ -136,16 +136,17 @@
   tags:
     - zfs
 
-- name: Set autotrim=off on trim datasets
-  community.general.zfs:
-    name: "{{ item }}"
-    state: present
-    extra_zfs_properties:
-      'autotrim': 'off'
-  loop: "{{ zfs_trim_pools }}"
-  become: true
-  tags:
-    - zfs
+# TODO this is a zpool property
+# - name: Set autotrim=on on trim datasets
+#   community.general.zfs:
+#     name: "{{ item }}"
+#     state: present
+#     extra_zfs_properties:
+#       'autotrim': 'on'
+#   loop: "{{ zfs_trim_pools }}"
+#   become: true
+#   tags:
+#     - zfs
 
 - name: Enable zed
   when: not (ansible_check_mode and zfs_apt.changed)

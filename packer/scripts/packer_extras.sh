@@ -7,7 +7,7 @@ ubuntu-lab)
 
   zpool create \
     -o ashift=12 \
-    -o autotrim=off \
+    -o autotrim=on \
     -o compatibility=openzfs-2.1-linux \
     -O acltype=posixacl \
     -O atime=on \
