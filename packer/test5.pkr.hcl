@@ -25,7 +25,7 @@ source "qemu" "ubuntu-test" {
   headless             = true
   http_directory       = "${path.root}/http"
   iso_checksum         = "file:/mnt/scratch/qemu/ubuntu-box/sha256sum"
-  iso_url              = "/mnt/scratch/qemu/ubuntu-box/packer-ubuntu-box"
+  iso_url              = "/mnt/scratch/qemu/ubuntu-box/packer-ubuntu-box-1"
   machine_type         = "q35"
   memory               = 4096
   net_device           = "virtio-net"

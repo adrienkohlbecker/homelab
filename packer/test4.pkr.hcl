@@ -60,12 +60,7 @@ build {
     inline_shebang = "/bin/bash"
     inline = [
       "set -euxo pipefail",
-      "rm /mnt/scratch/qemu/${source.name}/packer-${source.name}",
-      "mv /mnt/scratch/qemu/${source.name}/packer-${source.name}-1 /mnt/scratch/qemu/${source.name}/packer-${source.name}",
-      "mv /mnt/scratch/qemu/${source.name}/packer-${source.name}-2 /mnt/scratch/qemu/${source.name}/packer-${source.name}-1",
-      "mv /mnt/scratch/qemu/${source.name}/packer-${source.name}-3 /mnt/scratch/qemu/${source.name}/packer-${source.name}-2",
-      "mv /mnt/scratch/qemu/${source.name}/packer-${source.name}-4 /mnt/scratch/qemu/${source.name}/packer-${source.name}-3",
-      "touch /mnt/scratch/qemu/${source.name}/packer-${source.name}-4"
+      "truncate -s0 /mnt/scratch/qemu/${source.name}/packer-${source.name}"
     ]
   }
 
