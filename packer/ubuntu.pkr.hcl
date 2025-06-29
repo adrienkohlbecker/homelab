@@ -150,7 +150,15 @@ build {
 
   provisioner "shell" {
     execute_command = "echo 'vagrant' | sudo -S -H sh -c '{{ .Vars }} {{ .Path }}'"
-    scripts =  ["${path.root}/scripts/cleanup.sh"]
+    inline_shebang = "/bin/bash"
+    inline = [
+      "set -euxo pipefail",
+      # While building in VMWare, restart after installation causes change in IP address of the instance.
+      # This leads packer build to timeout awaiting SSH connection. To fix this issue, we can configure MAC address
+      # to be send as identifier in DHCP request
+      "sed -i \"s/dhcp4: true/&\n      dhcp-identifier: mac/\" /target/etc/netplan/00-installer-config.yaml"
+      "${path.root}/scripts/cleanup.sh"
+    ]
   }
 
   post-processors {

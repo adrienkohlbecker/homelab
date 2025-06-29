@@ -1,13 +1,18 @@
 #!/bin/bash
 set -euxo pipefail
 
+HOSTNAME=$PACKER_BUILD_NAME
+USERNAME=vagrant
+PASSWORD=vagrant
+SSH_KEY_PUB=$(cat /home/vagrant/.ssh/authorized_keys)
+
 case $PACKER_BUILD_NAME in
 ubuntu-pug | ubuntu-box)
-  DISKS=(/dev/disk/by-id/nvme-VMware_Virtual_NVMe_Disk_VMware_NVME_0000_2)
+  DISKS=(/dev/vdb)
   LAYOUT=""
   ;;
 ubuntu-lab)
-  DISKS=(/dev/disk/by-id/nvme-VMware_Virtual_NVMe_Disk_VMware_NVME_0000_2 /dev/disk/by-id/nvme-VMware_Virtual_NVMe_Disk_VMware_NVME_0000_3 /dev/disk/by-id/nvme-VMware_Virtual_NVMe_Disk_VMware_NVME_0000_4)
+  DISKS=(/dev/vdb /dev/vdc /dev/vdd)
   LAYOUT="mirror"
   ;;
 *)
@@ -16,31 +21,26 @@ ubuntu-lab)
   ;;
 esac
 
-MACHINE=$(uname -m)
-case $MACHINE in
-aarch64)
-  ARCH=arm64
-  ARCH_GRUB=arm64
-  ;;
-x86_64)
-  ARCH=amd64
-  ARCH_GRUB=x86_64
-  ;;
-*)
-  echo >&2 "Unknown machine name $MACHINE"
-  exit 1
-  ;;
-esac
-
-HOSTNAME=$PACKER_BUILD_NAME
-USERNAME=vagrant
-PASSWORD=vagrant
-SSH_KEY_PUB=$(cat /home/vagrant/.ssh/authorized_keys)
+# Ensure APT doesn't asks questions
 
 export DEBIAN_FRONTEND=noninteractive
 
+# Confirm EFI support:
+
+dmesg | grep -i efivars
+
+# Source /etc/os-release
+
+# Install helpers
+
 apt-get update
-apt-get install --yes debootstrap gdisk zfsutils-linux net-tools
+apt-get install --yes debootstrap gdisk zfsutils-linux
+
+# Generate /etc/hostid
+
+zgenhostid -f
+
+# Create partitions
 
 for disk in "${DISKS[@]}"; do
   zpool labelclear -f "$disk" || true
@@ -72,11 +72,9 @@ for disk in "${DISKS[@]}"; do
   sleep 2
 done
 
-mkdir -p /chroot
-zgenhostid -f 0x00bab10c
-
 # Create the zpool
-zpool create \
+
+zpool create -f \
   -o ashift=12 \
   -o autotrim=on \
   -o compatibility=openzfs-2.1-linux \
@@ -84,7 +82,7 @@ zpool create \
   -O atime=on \
   -O canmount=off \
   -O casesensitivity=sensitive \
-  -O compression=lz4 \
+  -O compression=zstd \
   -O dnodesize=auto \
   -O normalization=formD \
   -O overlay=off \
@@ -92,26 +90,65 @@ zpool create \
   -O utf8only=on \
   -O xattr=sa \
   -m none \
-  rpool $LAYOUT "${DISKS[@]/%/-part3}"
-
-sync
-sleep 2
+  rpool $LAYOUT "${DISKS[@]/%/3}"
 
 # Create initial file systems
-zfs create -o canmount=off -o mountpoint=none rpool/ROOT
-zfs create -o canmount=noauto -o mountpoint=/ rpool/ROOT/noble
+
+zfs create -o canmount=off    -o mountpoint=none rpool/ROOT
+zfs create -o canmount=noauto -o mountpoint=/    rpool/ROOT/noble
+
 zpool set bootfs=rpool/ROOT/noble rpool
 
+# Export, then re-import with a temporary mountpoint of /mnt
+
 zpool export rpool
-zpool import -N -R /chroot rpool
+zpool import -N -R /mnt rpool
 zfs mount rpool/ROOT/noble
 
+# Verify that everything is mounted correctly
+
+mount | grep mnt
+
 # Update device symlinks
+
 udevadm trigger
 
-# run this in a separate mount namespace to fix inability to export rpool ("pool is busy")
-unshare --mount env DISKS="${DISKS[*]}" HOSTNAME="$HOSTNAME" PASSWORD="$PASSWORD" ARCH="$ARCH" ARCH_GRUB="$ARCH_GRUB" USERNAME="$USERNAME" SSH_KEY_PUB="$SSH_KEY_PUB" LAYOUT="$LAYOUT" bash </home/vagrant/namespace.sh
+# Install Ubuntu
 
-mount | grep -v zfs | tac | awk '/\/chroot/ {print $3}' |
-  xargs -i{} umount -lf {}
-zpool export -a
+debootstrap noble /mnt
+
+# Copy files into the new install
+
+cp /etc/hostid /mnt/etc
+cp /etc/resolv.conf /mnt/etc
+
+# Configure networking
+
+apt-get install --yes net-tools
+
+IFACE=$(route | grep '^default' | grep -o '[^ ]*$')
+
+cat <<EOF >/mnt/etc/netplan/01-netcfg.yaml
+network:
+  version: 2
+  ethernets:
+    $IFACE:
+      dhcp4: true
+      dhcp-identifier: mac
+EOF
+
+# Chroot into the new OS
+
+mount -t proc proc /mnt/proc
+mount -t sysfs sys /mnt/sys
+mount -B /dev /mnt/dev
+mount -t devpts pts /mnt/dev/pts
+
+chroot /mnt env DISKS="${DISKS[*]}" LAYOUT="$LAYOUT" HOSTNAME="$HOSTNAME" USERNAME="$USERNAME" PASSWORD="$PASSWORD" SSH_KEY_PUB="$SSH_KEY_PUB" PACKER_BUILD_NAME="$PACKER_BUILD_NAME" bash </home/vagrant/chroot.sh
+
+# unmount everything
+umount -n -R /mnt
+
+# Export the zpool and reboot
+zpool export rpool
+reboot
