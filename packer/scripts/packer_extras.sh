@@ -7,7 +7,7 @@ ubuntu-lab)
 
   zpool create \
     -o ashift=12 \
-    -o autotrim=off \
+    -o autotrim=on \
     -o compatibility=openzfs-2.1-linux \
     -O acltype=posixacl \
     -O atime=on \
@@ -21,20 +21,20 @@ ubuntu-lab)
     -O utf8only=on \
     -O xattr=sa \
     -m none \
-    dozer mirror /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_01000000000000000001 /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_02000000000000000001
+    dozer mirror /dev/vde /dev/vdf
 
   sync
   sleep 2
 
-  sgdisk -p /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_01000000000000000001
-  sgdisk -p /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_02000000000000000001
+  sgdisk -p /dev/vde
+  sgdisk -p /dev/vdf
 
-  disk=/dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_03000000000000000001
+  disk=/dev/vdg
   sgdisk -n1:0:+1014M -t1:BF01 "$disk" # tank
   sgdisk -n2:0:-8M -t2:BF01 "$disk"    # mouse
   sgdisk -n3:0:0 -t2:BF07 "$disk"      # extra
   sgdisk -p "$disk"
-  disk=/dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_04000000000000000001
+  disk=/dev/vdh
   sgdisk -n1:0:+1014M -t1:BF01 "$disk" # tank
   sgdisk -n2:0:-8M -t2:BF01 "$disk"    # mouse
   sgdisk -n3:0:0 -t2:BF07 "$disk"      # extra
@@ -59,13 +59,13 @@ ubuntu-lab)
     -O utf8only=on \
     -O xattr=sa \
     -m none \
-    tank raidz2 /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_03000000000000000001-part1 /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_04000000000000000001-part1 /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_05000000000000000001 /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_06000000000000000001
+    tank raidz2 /dev/vdg1 /dev/vdh1 /dev/vdi /dev/vdj
 
   sync
   sleep 2
 
-  sgdisk -p /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_05000000000000000001
-  sgdisk -p /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_06000000000000000001
+  sgdisk -p /dev/vdi
+  sgdisk -p /dev/vdj
 
   zpool create \
     -o ashift=12 \
@@ -83,7 +83,7 @@ ubuntu-lab)
     -O utf8only=on \
     -O xattr=sa \
     -m none \
-    mouse mirror /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_03000000000000000001-part2 /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_04000000000000000001-part2
+    mouse mirror /dev/vdg2 /dev/vdh2
 
   sync
   sleep 2
@@ -107,7 +107,7 @@ ubuntu-pug)
     -O utf8only=on \
     -O xattr=sa \
     -m none \
-    apoc mirror /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_01000000000000000001 /dev/disk/by-id/ata-VMware_Virtual_SATA_Hard_Drive_02000000000000000001
+    apoc mirror /dev/vdc /dev/vdd
 
   sync
   sleep 2

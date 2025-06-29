@@ -5,11 +5,68 @@ read -r -a DISKS <<<"$DISKS"
 
 export DEBIAN_FRONTEND=noninteractive
 
-apt-get update
+case $(uname -m) in
+aarch64)
+  ARCH=arm64
+  UBUNTU_MIRROR="http://ports.ubuntu.com/ubuntu-ports/"
+  ZBM_URL="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/3.0.1/zfsbootmenu-recovery-aarch64-v3.0.1-linux6.1.EFI"
+  ZBM_SUM="8cbe5105ff0d005ff67a4ddcf0d91abed614b07fa281b682e5be5b2bf4929322"
+  ;;
+x86_64)
+  ARCH=amd64
+  UBUNTU_MIRROR="http://archive.ubuntu.com/ubuntu/"
+  ZBM_URL="https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.0.1/zfsbootmenu-recovery-x86_64-v3.0.1-linux6.12.EFI"
+  ZBM_SUM="375ef1a0505bbbd648572c16d83884d5147fa2435508b4717e2749aead676143"
+  ;;
+*)
+  echo >&2 "Unknown machine name $MACHINE"
+  exit 1
+  ;;
+esac
+
+# Set a hostname
+
+hostname "$HOSTNAME"
+echo "$HOSTNAME" >/etc/hostname
+
+cat <<EOF >/etc/hosts
+127.0.0.1       localhost
+127.0.1.1       $HOSTNAME
+::1             ip6-localhost ip6-loopback
+fe00::0         ip6-localnet
+ff00::0         ip6-mcastprefix
+ff02::1         ip6-allnodes
+ff02::2         ip6-allrouters
+EOF
+
+# Configure apt
+
+cat <<EOF >/etc/apt/sources.list
+# Uncomment the deb-src entries if you need source packages
+
+deb $UBUNTU_MIRROR noble main restricted universe multiverse
+# deb-src $UBUNTU_MIRROR noble main restricted universe multiverse
+
+deb $UBUNTU_MIRROR noble-updates main restricted universe multiverse
+# deb-src $UBUNTU_MIRROR noble-updates main restricted universe multiverse
+
+deb $UBUNTU_MIRROR noble-security main restricted universe multiverse
+# deb-src $UBUNTU_MIRROR noble-security main restricted universe multiverse
+
+deb $UBUNTU_MIRROR noble-backports main restricted universe multiverse
+# deb-src $UBUNTU_MIRROR noble-backports main restricted universe multiverse
+EOF
+
+# Configure locale
 
 locale-gen en_US.UTF-8
 update-locale --reset LANG=en_US.UTF-8
+
+# Configure timezone
+
 ln -fs /usr/share/zoneinfo/Etc/UTC /etc/localtime
+
+# Configure console
 
 cat <<EOF >/etc/default/console-setup
 # CONFIGURATION FILE FOR SETUPCON
@@ -20,15 +77,17 @@ ACTIVE_CONSOLES="/dev/tty[1-6]"
 
 CHARMAP="UTF-8"
 
-CODESET="Latin15"
-FONTFACE="Fixed"
-FONTSIZE="8x16"
+CODESET="Lat15"
+FONTFACE=""
+FONTSIZE=""
 
 VIDEOMODE=
 
 # The following is an example how to use a braille font
 # FONT='lat9w-08.psf.gz brl-8x8.psf'
 EOF
+
+# Configure keyboard
 
 cat <<EOF >/etc/default/keyboard
 # KEYBOARD CONFIGURATION FILE
@@ -39,28 +98,47 @@ XKBMODEL="pc105"
 XKBLAYOUT="fr"
 XKBVARIANT="mac"
 XKBOPTIONS=""
+
+BACKSPACE="guess"
 EOF
 
-apt-get install --yes dosfstools zfs-initramfs zfsutils-linux linux-generic
+# Update the repository cache
+
+apt-get update
+
+# Update system
+
+apt-get upgrade --yes
+
+# Install additional base packages
+# The --no-install-recommends flag is used here to avoid installing recommended, but not strictly needed, packages (including grub2).
+
+apt-get install --yes --no-install-recommends linux-generic
+
+# Install required packages
+
+apt-get install --yes dosfstools zfs-initramfs zfsutils-linux
+
+# Enable systemd ZFS services
 
 systemctl enable zfs.target
 systemctl enable zfs-import-cache
 systemctl enable zfs-mount
 systemctl enable zfs-import.target
 
-for disk in "${DISKS[@]}"; do
-  mkdosfs -F 32 -s 1 -n EFI "${disk}-part1"
-done
-mkdir /boot/efi
-echo "$(blkid -s UUID | grep "$(readlink -f "${DISKS[0]}-part1")" | cut -d' ' -f2)" \
-  /boot/efi vfat defaults 0 0 >>/etc/fstab
-mount /boot/efi
+# Rebuild the initramfs
+
+update-initramfs -c -k all
+
+# Set ZFSBootMenu properties on datasets
+
+zfs set org.zfsbootmenu:commandline="quiet" rpool/ROOT/noble
+
+# Create efi & swap
 
 if [ "$LAYOUT" = "" ]; then
-  mkswap -f "${DISKS[0]}-part2"
-  echo "$(blkid -s UUID | grep "$(readlink -f "${DISKS[0]}-part2")" | cut -d' ' -f2)" \
-    none swap discard 0 0 >>/etc/fstab
-  swapon -a
+  EFI_DEVICE="${DISKS[0]}1"
+  SWAP_DEVICE="${DISKS[0]}2"
 else
   if [ "$LAYOUT" = "mirror" ]; then
     level="mirror"
@@ -73,31 +151,58 @@ else
     exit 1
   fi
   apt-get install --yes mdadm
-  mdadm --create /dev/md0 --metadata=1.2 --level="$level" --raid-devices="${#DISKS[@]}" "${DISKS[@]/%/-part2}"
-  mkswap -f /dev/md0
-  echo "/dev/disk/by-uuid/$(blkid -s UUID -o value /dev/md0) none swap discard 0 0" >>/etc/fstab
+
+  # This configuration exploits the fact that, with version 1.0, mdraid metadata will be written to the end of each partition.
+  # Newer metadata versions would be written to the beginning of each partition, and the system firmware would fail to
+  # recognize each component as a valid EFI system partition.
+  mdadm --create /dev/md/efi --metadata=1.0 --level="$level" --raid-devices="${#DISKS[@]}" "${DISKS[@]/%/1}"
+  EFI_DEVICE=/dev/md/efi
+
+  mdadm --create /dev/md/swap --metadata=1.2 --level="$level" --raid-devices="${#DISKS[@]}" "${DISKS[@]/%/2}"
+  SWAP_DEVICE=/dev/md/swap
 fi
 
-update-initramfs -c -k all
+# Create EFI filesystem
 
-cp /usr/share/systemd/tmp.mount /etc/systemd/system/
-systemctl enable tmp.mount
+mkdosfs -F 32 -s 1 -n EFI $EFI_DEVICE
+echo "/dev/disk/by-uuid/$(blkid -s UUID -o value $EFI_DEVICE) /boot/efi vfat defaults 0 0" >>/etc/fstab
 
-addgroup --system lpadmin
-addgroup --system lxd
-addgroup --system sambashare
+# Create swap filesystem
 
-apt-get install --yes openssh-server
+mkswap -f $SWAP_DEVICE
+echo "/dev/disk/by-uuid/$(blkid -s UUID -o value $SWAP_DEVICE) none swap discard 0 0" >>/etc/fstab
+
+# Mount EFI filesystem
+
+mkdir -p /boot/efi
+mount /boot/efi
+
+# Install ZFSBootMenu
 
 apt-get install --yes curl
 mkdir -p /boot/efi/EFI/ZBM
-# curl -o /boot/efi/EFI/ZBM/VMLINUZ.EFI -L https://get.zfsbootmenu.org/efi
-curl -o /boot/efi/EFI/ZBM/VMLINUZ.EFI -L https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/3.0.1/zfsbootmenu-recovery-aarch64-v3.0.1-linux6.1.EFI
+curl -o /boot/efi/EFI/ZBM/VMLINUZ.EFI -L $ZBM_URL
+echo "$ZBM_SUM  /boot/efi/EFI/ZBM/VMLINUZ.EFI" | sha256sum -c -
 cp /boot/efi/EFI/ZBM/VMLINUZ.EFI /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
 
+# # Configure EFI boot entries
+
+# apt-get install --yes efibootmgr
+
+# efibootmgr -c -d "${DISKS[0]}" -p 1 \
+#   -L "ZFSBootMenu (Backup)" \
+#   -l '\EFI\ZBM\VMLINUZ-BACKUP.EFI'
+
+# efibootmgr -c -d "${DISKS[0]}" -p 1 \
+#   -L "ZFSBootMenu" \
+#   -l '\EFI\ZBM\VMLINUZ.EFI'
+
+# Configure rEFInd
+
+mountpoint -q /sys/firmware/efi/efivars || mount -t efivarfs efivarfs /sys/firmware/efi/efivars
 apt-get install --yes refind
-cat /boot/refind_linux.conf
-rm -f /boot/refind_linux.conf
+refind-install
+rm /boot/refind_linux.conf
 
 cat <<EOF >>/boot/efi/EFI/refind/refind.conf
 menuentry "Ubuntu (ZBM)" {
@@ -114,6 +219,36 @@ default_selection "Ubuntu (ZBM)"
 timeout 10
 EOF
 
+# Enable tmp mount
+
+cp /usr/share/systemd/tmp.mount /etc/systemd/system/
+systemctl enable tmp.mount
+
+# Ensure dhcp works after reboot
+
+# apt-get install --yes net-tools
+# IFACE=$(route | grep '^default' | grep -o '[^ ]*$')
+# cat <<EOF >/chroot/etc/netplan/01-netcfg.yaml
+# network:
+#   version: 2
+#   ethernets:
+#     $IFACE:
+#       dhcp4: true
+#       dhcp-identifier: mac
+# EOF
+
+# Add more packages
+
+apt-get install --yes openssh-server open-vm-tools
+
+# Add missing groups
+
+addgroup --system lpadmin
+addgroup --system lxd
+addgroup --system sambashare
+
+# Configure vagrant user
+
 adduser --disabled-password --gecos "" "$USERNAME"
 echo -e "$USERNAME:$PASSWORD" | chpasswd -c SHA256
 cp -a /etc/skel/. "/home/$USERNAME"
@@ -129,5 +264,3 @@ usermod -a -G adm,cdrom,dip,lpadmin,lxd,plugdev,sambashare,sudo "$USERNAME"
 echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >"/etc/sudoers.d/$USERNAME"
 chown root:root "/etc/sudoers.d/$USERNAME"
 chmod 400 "/etc/sudoers.d/$USERNAME"
-
-apt-get install --yes open-vm-tools
