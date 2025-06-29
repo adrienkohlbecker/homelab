@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euxo pipefail
 
-case $PACKER_BUILD_NAME in
+case $SOURCE_NAME in
 ubuntu-box) ;;
 ubuntu-lab)
 
@@ -114,7 +114,7 @@ ubuntu-pug)
 
   ;;
 *)
-  echo >&2 "Unknown build $PACKER_BUILD_NAME"
+  echo >&2 "Unknown build $SOURCE_NAME"
   exit 1
   ;;
 esac

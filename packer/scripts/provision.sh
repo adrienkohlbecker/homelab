@@ -1,12 +1,12 @@
 #!/bin/bash
 set -euxo pipefail
 
-HOSTNAME=$PACKER_BUILD_NAME
+HOSTNAME=$SOURCE_NAME
 USERNAME=vagrant
 PASSWORD=vagrant
 SSH_KEY_PUB=$(cat /home/vagrant/.ssh/authorized_keys)
 
-case $PACKER_BUILD_NAME in
+case $SOURCE_NAME in
 ubuntu-pug | ubuntu-box)
   DISKS=(/dev/vdb)
   LAYOUT=""
@@ -16,7 +16,7 @@ ubuntu-lab)
   LAYOUT="mirror"
   ;;
 *)
-  echo >&2 "Unknown build $PACKER_BUILD_NAME"
+  echo >&2 "Unknown build $SOURCE_NAME"
   exit 1
   ;;
 esac
@@ -61,7 +61,7 @@ for disk in "${DISKS[@]}"; do
   fi
 
   sgdisk -p "$disk"
-  if [ "$PACKER_BUILD_NAME" = "ubuntu-lab" ]; then
+  if [ "$SOURCE_NAME" = "ubuntu-lab" ]; then
     sgdisk -n5:-2G:0 -t5:BF01 "$disk" # metadata vdev (BF01 = Solaris /usr & Mac ZFS, default when doing zpool create)
   fi
   sgdisk -n3:0:0 -t3:BF00 "$disk" # rpool (BF00 = Solaris root)
@@ -144,7 +144,7 @@ mount -t sysfs sys /mnt/sys
 mount -B /dev /mnt/dev
 mount -t devpts pts /mnt/dev/pts
 
-chroot /mnt env DISKS="${DISKS[*]}" LAYOUT="$LAYOUT" HOSTNAME="$HOSTNAME" USERNAME="$USERNAME" PASSWORD="$PASSWORD" SSH_KEY_PUB="$SSH_KEY_PUB" PACKER_BUILD_NAME="$PACKER_BUILD_NAME" bash </home/vagrant/chroot.sh
+chroot /mnt env DISKS="${DISKS[*]}" LAYOUT="$LAYOUT" HOSTNAME="$HOSTNAME" USERNAME="$USERNAME" PASSWORD="$PASSWORD" SSH_KEY_PUB="$SSH_KEY_PUB" bash </home/vagrant/chroot.sh
 
 # unmount everything
 umount -n -R /mnt
