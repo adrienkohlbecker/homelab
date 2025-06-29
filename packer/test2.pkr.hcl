@@ -7,12 +7,20 @@ packer {
   }
 }
 
-source "qemu" "ubuntu-box" {
+locals {
+  disk_additional_size = {
+    "ubuntu-box" = ["40G"]
+    "ubuntu-lab" = [ "40G", "40G", "40G", "1G", "1G", "1.5G", "1.5G", "1G", "1G" ]
+    "ubuntu-pug" = [ "40G", "1G", "1G" ]
+  }
+}
+
+source "qemu" "ubuntu" {
   accelerator          = "kvm"
   boot_wait            = "10s"
   cpu_model            = "host"
   cpus                 = 2
-  disk_additional_size = ["40G"]
+  disk_additional_size = "${lookup(local.disk_additional_size, source.name, ["40G"])}"
   disk_cache           = "none"
   disk_compression     = true
   disk_detect_zeroes   = "unmap"
@@ -38,7 +46,15 @@ source "qemu" "ubuntu-box" {
 }
 
 build {
-  sources = ["source.qemu.ubuntu-box"]
+  source "qemu.ubuntu" {
+    name = "ubuntu-lab"
+  }
+  source "qemu.ubuntu" {
+    name = "ubuntu-box"
+  }
+  source "qemu.ubuntu" {
+    name = "ubuntu-pug"
+  }
 
   provisioner "file" {
     source      = "${path.root}/scripts/"
@@ -60,9 +76,7 @@ build {
     inline_shebang = "/bin/bash"
     inline = [
       "set -euxo pipefail",
-      "rm /mnt/scratch/qemu/${source.name}/packer-${source.name}",
-      "mv /mnt/scratch/qemu/${source.name}/packer-${source.name}-1 /mnt/scratch/qemu/${source.name}/packer-${source.name}",
-      "touch /mnt/scratch/qemu/${source.name}/packer-${source.name}-1"
+      "truncate -s0 /mnt/scratch/qemu/${source.name}/packer-${source.name}"
     ]
   }
 

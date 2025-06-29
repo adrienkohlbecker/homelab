@@ -60,17 +60,7 @@ build {
     inline_shebang = "/bin/bash"
     inline = [
       "set -euxo pipefail",
-      "rm /mnt/scratch/qemu/${source.name}/packer-${source.name}",
-      "mv /mnt/scratch/qemu/${source.name}/packer-${source.name}-1 /mnt/scratch/qemu/${source.name}/packer-${source.name}",
-      "mv /mnt/scratch/qemu/${source.name}/packer-${source.name}-2 /mnt/scratch/qemu/${source.name}/packer-${source.name}-1",
-      "mv /mnt/scratch/qemu/${source.name}/packer-${source.name}-3 /mnt/scratch/qemu/${source.name}/packer-${source.name}-2",
-      "mv /mnt/scratch/qemu/${source.name}/packer-${source.name}-4 /mnt/scratch/qemu/${source.name}/packer-${source.name}-3",
-      "mv /mnt/scratch/qemu/${source.name}/packer-${source.name}-5 /mnt/scratch/qemu/${source.name}/packer-${source.name}-4",
-      "mv /mnt/scratch/qemu/${source.name}/packer-${source.name}-6 /mnt/scratch/qemu/${source.name}/packer-${source.name}-5",
-      "mv /mnt/scratch/qemu/${source.name}/packer-${source.name}-7 /mnt/scratch/qemu/${source.name}/packer-${source.name}-6",
-      "mv /mnt/scratch/qemu/${source.name}/packer-${source.name}-8 /mnt/scratch/qemu/${source.name}/packer-${source.name}-7",
-      "mv /mnt/scratch/qemu/${source.name}/packer-${source.name}-9 /mnt/scratch/qemu/${source.name}/packer-${source.name}-8",
-      "touch /mnt/scratch/qemu/${source.name}/packer-${source.name}-9"
+      "truncate -s0 /mnt/scratch/qemu/${source.name}/packer-${source.name}"
     ]
   }
 
