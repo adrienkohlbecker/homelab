@@ -7,21 +7,21 @@ packer {
   }
 }
 
-locals {
-  qemu_binary      = "/usr/bin/qemu-system-aarch64"
-  output_directory = "${path.root}/artifacts"
-  machine_type     = "virt"
-  iso_checksum     = "file:https://cdimage.ubuntu.com/releases/24.04.2/release/SHA256SUMS"
-  iso_url          = "https://cdimage.ubuntu.com/releases/24.04.2/release/ubuntu-24.04.2-live-server-arm64.iso"
-}
-
 # locals {
-#   qemu_binary      = "/usr/bin/qemu-system-amd64"
-#   output_directory = "/mnt/scratch/qemu"
-#   machine_type     = "q35"
-#   iso_checksum     = "file:https://releases.ubuntu.com/24.04/SHA256SUMS"
-#   iso_url          = "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
+#   qemu_binary      = "/usr/bin/qemu-system-aarch64"
+#   output_directory = "${path.root}/artifacts"
+#   machine_type     = "virt"
+#   iso_checksum     = "file:https://cdimage.ubuntu.com/releases/24.04.2/release/SHA256SUMS"
+#   iso_url          = "https://cdimage.ubuntu.com/releases/24.04.2/release/ubuntu-24.04.2-live-server-arm64.iso"
 # }
+
+locals {
+  qemu_binary      = "/usr/bin/qemu-system-x86_64"
+  output_directory = "/mnt/scratch/qemu"
+  machine_type     = "q35"
+  iso_checksum     = "file:https://releases.ubuntu.com/24.04/SHA256SUMS"
+  iso_url          = "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-live-server-amd64.iso"
+}
 
 source "qemu" "ubuntu" {
   accelerator          = "kvm"
@@ -145,7 +145,7 @@ build {
     disk_image        = true
     efi_firmware_vars = "${local.output_directory}/ubuntu-box/efivars.fd"
     iso_checksum      = "file:${local.output_directory}/ubuntu-box/sha256sum"
-    iso_url           = "${local.output_directory}/ubuntu-box/packer-ubuntu-box-1"
+    iso_url           = "${local.output_directory}/ubuntu-box/packer-ubuntu-1"
   }
 
   provisioner "breakpoint" {
