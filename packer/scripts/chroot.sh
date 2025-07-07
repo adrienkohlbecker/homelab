@@ -44,17 +44,17 @@ EOF
 cat <<EOF >/etc/apt/sources.list
 # Uncomment the deb-src entries if you need source packages
 
-deb $UBUNTU_MIRROR noble main restricted universe multiverse
-# deb-src $UBUNTU_MIRROR noble main restricted universe multiverse
+deb $UBUNTU_MIRROR $UBUNTU_NAME main restricted universe multiverse
+# deb-src $UBUNTU_MIRROR $UBUNTU_NAME main restricted universe multiverse
 
-deb $UBUNTU_MIRROR noble-updates main restricted universe multiverse
-# deb-src $UBUNTU_MIRROR noble-updates main restricted universe multiverse
+deb $UBUNTU_MIRROR $UBUNTU_NAME-updates main restricted universe multiverse
+# deb-src $UBUNTU_MIRROR $UBUNTU_NAME-updates main restricted universe multiverse
 
-deb $UBUNTU_MIRROR noble-security main restricted universe multiverse
-# deb-src $UBUNTU_MIRROR noble-security main restricted universe multiverse
+deb $UBUNTU_MIRROR $UBUNTU_NAME-security main restricted universe multiverse
+# deb-src $UBUNTU_MIRROR $UBUNTU_NAME-security main restricted universe multiverse
 
-deb $UBUNTU_MIRROR noble-backports main restricted universe multiverse
-# deb-src $UBUNTU_MIRROR noble-backports main restricted universe multiverse
+deb $UBUNTU_MIRROR $UBUNTU_NAME-backports main restricted universe multiverse
+# deb-src $UBUNTU_MIRROR $UBUNTU_NAME-backports main restricted universe multiverse
 EOF
 
 # Configure locale
@@ -132,7 +132,7 @@ update-initramfs -c -k all
 
 # Set ZFSBootMenu properties on datasets
 
-zfs set org.zfsbootmenu:commandline="quiet" rpool/ROOT/noble
+zfs set org.zfsbootmenu:commandline="quiet" "rpool/ROOT/$UBUNTU_NAME"
 
 # Create efi & swap
 
@@ -167,10 +167,20 @@ fi
 mkdosfs -F 32 -s 1 -n EFI $EFI_DEVICE
 echo "/dev/disk/by-uuid/$(blkid -s UUID -o value $EFI_DEVICE) /boot/efi vfat defaults 0 0" >>/etc/fstab
 
+sync
+sleep 2
+
 # Create swap filesystem
 
 mkswap -f $SWAP_DEVICE
 echo "/dev/disk/by-uuid/$(blkid -s UUID -o value $SWAP_DEVICE) none swap discard 0 0" >>/etc/fstab
+
+sync
+sleep 2
+
+# Update device symlinks
+
+udevadm trigger
 
 # Mount EFI filesystem
 
