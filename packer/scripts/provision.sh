@@ -29,8 +29,6 @@ export DEBIAN_FRONTEND=noninteractive
 
 dmesg | grep -i efivars
 
-# Source /etc/os-release
-
 # Install helpers
 
 apt-get update
@@ -95,15 +93,15 @@ zpool create -f \
 # Create initial file systems
 
 zfs create -o canmount=off    -o mountpoint=none rpool/ROOT
-zfs create -o canmount=noauto -o mountpoint=/    rpool/ROOT/noble
+zfs create -o canmount=noauto -o mountpoint=/    "rpool/ROOT/$UBUNTU_NAME"
 
-zpool set bootfs=rpool/ROOT/noble rpool
+zpool set "bootfs=rpool/ROOT/$UBUNTU_NAME" rpool
 
 # Export, then re-import with a temporary mountpoint of /mnt
 
 zpool export rpool
 zpool import -N -R /mnt rpool
-zfs mount rpool/ROOT/noble
+zfs mount "rpool/ROOT/$UBUNTU_NAME"
 
 # Verify that everything is mounted correctly
 
@@ -115,7 +113,7 @@ udevadm trigger
 
 # Install Ubuntu
 
-debootstrap noble /mnt
+debootstrap "$UBUNTU_NAME" /mnt
 
 # Copy files into the new install
 
@@ -144,7 +142,7 @@ mount -t sysfs sys /mnt/sys
 mount -B /dev /mnt/dev
 mount -t devpts pts /mnt/dev/pts
 
-chroot /mnt env DISKS="${DISKS[*]}" LAYOUT="$LAYOUT" HOSTNAME="$HOSTNAME" USERNAME="$USERNAME" PASSWORD="$PASSWORD" SSH_KEY_PUB="$SSH_KEY_PUB" bash </home/vagrant/chroot.sh
+chroot /mnt env DISKS="${DISKS[*]}" LAYOUT="$LAYOUT" HOSTNAME="$HOSTNAME" USERNAME="$USERNAME" PASSWORD="$PASSWORD" SSH_KEY_PUB="$SSH_KEY_PUB" UBUNTU_NAME="$UBUNTU_NAME" bash </home/vagrant/chroot.sh
 
 # unmount everything
 umount -n -R /mnt
