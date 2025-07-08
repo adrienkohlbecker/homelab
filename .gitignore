@@ -4,4 +4,5 @@ __pycache__
 .vscode
 .esphome
 test/out.log
+test/out.log.prev
 test/out/

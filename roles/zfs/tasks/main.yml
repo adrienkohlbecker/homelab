@@ -4,6 +4,7 @@
       - zfsutils-linux
       - zfs-initramfs
       - zfs-zed
+      - cron # for cron module
     cache_valid_time: 3600
   register: zfs_apt
   become: true
@@ -38,7 +39,7 @@
     - zfs
 
 - name: Update grub
-  when: grub_bootloader and grub_cfg.changed and not docker_test
+  when: grub_bootloader and grub_cfg.changed
   command: update-grub
   changed_when: true
   become: true
@@ -92,6 +93,7 @@
     - zfs
 
 - name: Schedule the health script
+  when: not (ansible_check_mode and zfs_apt.changed)
   cron:
     name: zfs_health
     minute: 55
@@ -113,6 +115,7 @@
     - zfs
 
 - name: Schedule the trim script
+  when: not (ansible_check_mode and zfs_apt.changed)
   cron:
     name: zfs_trim_{{ item }}
     weekday: 4

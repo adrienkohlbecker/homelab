@@ -2,8 +2,10 @@
   apt:
     name:
       - python3-requests # for ansible docker module
+      - cron # for cron module
     cache_valid_time: 3600
   become: true
+  register: docker_apt_deps
   tags:
     - docker
     - _check_stage1
@@ -131,7 +133,7 @@
     - docker
 
 - name: Update grub
-  when: grub_bootloader and grub_cfg.changed and not docker_test
+  when: grub_bootloader and grub_cfg.changed
   command: update-grub
   changed_when: true
   become: true
@@ -151,6 +153,7 @@
     - docker
 
 - name: Schedule the clean script
+  when: not (ansible_check_mode and docker_apt_deps.changed)
   cron:
     name: docker_clean
     minute: '5'
