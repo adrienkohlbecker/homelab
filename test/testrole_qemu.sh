@@ -58,29 +58,11 @@ qemu-system-x86_64 \
 &
 TIMEOUT_PID=$!
 
-# SSH_CMD="ssh -i $SSH_KEY -p $PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SSH_USER@$SSH_HOST"
-
 stop() {
-  if [ "${KEEPAROUND:-}" = "1" ]; then
-    echo "Keeping VM around, ssh using:"
-    echo "> ssh -i $SSH_KEY -p $PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SSH_USER@$SSH_HOST"
-    echo "Then Ctrl+C or"
-    echo "> kill $TIMEOUT_PID"
-    trap 'kill $TIMEOUT_PID' INT
-  else
-    kill $TIMEOUT_PID || true
-  fi
+  kill $TIMEOUT_PID || true
   wait $TIMEOUT_PID || true
   rm -rf "$WORKDIR"
 }
-
-err() {
-  TMPFILE=test/out/$ROLE.journal.ansi
-  ssh -i $SSH_KEY -p $PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SSH_USER@$SSH_HOST env SYSTEMD_COLORS=true journalctl --pager-end --no-pager --priority info >$TMPFILE
-  echo "$TMPFILE"
-}
-
-trap err ERR
 trap stop EXIT
 
 while [ ! -f $WORKDIR/$IDFILE ]; do
@@ -108,6 +90,29 @@ while [ -z "$(socat -T2 stdout tcp:127.0.0.1:$PORT,connect-timeout=2,readbytes=1
   sleep 1
 done
 echo "SSH up"
+
+SSH_CMD="ssh -i $SSH_KEY -p $PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SSH_USER@$SSH_HOST"
+stop() {
+  if [ "${KEEPAROUND:-}" = "1" ]; then
+    echo "Keeping VM around, ssh using:"
+    echo "> $SSH_CMD"
+    echo "Then Ctrl+C or"
+    echo "> kill $TIMEOUT_PID"
+    trap 'kill $TIMEOUT_PID' INT
+  else
+    kill $TIMEOUT_PID || true
+  fi
+  wait $TIMEOUT_PID || true
+  rm -rf "$WORKDIR"
+}
+trap stop EXIT
+
+err() {
+  TMPFILE=test/out/$ROLE.journal.ansi
+  $SSH_CMD env SYSTEMD_COLORS=true journalctl --pager-end --no-pager --priority info >$TMPFILE
+  echo "$TMPFILE"
+}
+trap err ERR
 
 ANSIBLE_PLAYBOOK="ansible-playbook $ANSIBLE_ARGS -e ansible_ssh_port=$PORT -e ansible_ssh_host=$SSH_HOST -e ansible_ssh_user=$SSH_USER -e ansible_ssh_private_key_file=$SSH_KEY --inventory test/inventory.ini"
 
