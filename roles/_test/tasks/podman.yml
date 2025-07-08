@@ -27,6 +27,43 @@
     creates: /etc/apt/preferences.d/podman-noble-backport
   become: true
 
+- name: Create mount point
+  when: zfs_root
+  file:
+    dest: /var/lib/containers/storage
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Create podman zvol
+  when: zfs_root
+  zfs:
+    name: rpool/podman
+    state: present
+    extra_zfs_properties:
+      volsize: '{{ "20GB" | human_to_bytes }}'
+  become: true
+
+- name: Create a ext4 filesystem on podman zvol
+  when: zfs_root
+  filesystem:
+    fstype: ext4
+    dev: /dev/zvol/rpool/podman
+  become: true
+
+- name: Mount podman zvol
+  when: zfs_root
+  mount:
+    path: /var/lib/containers/storage
+    src: /dev/zvol/rpool/podman
+    fstype: ext4
+    opts: defaults,noatime
+    state: mounted
+    backup: true
+  become: true
+
 - name: _test | Install podman
   shell: |
     set -euo pipefail

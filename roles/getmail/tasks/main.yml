@@ -2,10 +2,13 @@
   apt:
     package:
       - getmail6
+      - cron # for cron module
     cache_valid_time: 3600
   become: true
+  register: getmail_apt
   tags:
     - getmail
+    - _check_stage1
 
 - name: Create getmail config directory
   file:
@@ -47,6 +50,7 @@
     - getmail
 
 - name: Schedule the snapshot script
+  when: not (ansible_check_mode and getmail_apt.changed)
   cron:
     name: getmail
     minute: 24

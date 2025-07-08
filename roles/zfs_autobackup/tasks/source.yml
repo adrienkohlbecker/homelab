@@ -30,7 +30,7 @@
     - zfs_autobackup
 
 - name: source | Get back up datasets
-  when: not docker_test
+  when: not docker_test and not qemu_test
   shell: set -euo pipefail; zfs get 'autobackup:bak' -t filesystem -H -s local -o name,value | awk -v FS='\t' '$2=="true" {print $1}'
   args:
     executable: /bin/bash
@@ -41,7 +41,7 @@
     - zfs_autobackup
 
 - name: source | Set permissions on backed up datasets
-  when: not docker_test
+  when: not docker_test and not qemu_test
   shell: set -euo pipefail; bfr=`zfs allow {{ item }} | md5sum | cut -f 1 -d " "`; zfs allow zfs_autobackup send,hold,release {{ item }}; aftr=`zfs allow {{ item }} | md5sum | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "permissions updated" || exit 1)
   args:
     executable: /bin/bash

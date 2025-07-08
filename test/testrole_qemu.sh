@@ -48,7 +48,7 @@ qemu-system-x86_64 \
 -drive "file=$WORKDIR/efivars.fd,if=pflash,unit=1,format=raw" \
 -netdev "user,id=user.0,hostfwd=tcp:$SSH_HOST:0-:22" \
 -machine "type=q35,accel=kvm" \
--smp "2" \
+-smp "4" \
 -name "packer-ubuntu" \
 -m "4096M" \
 -cpu "host" \

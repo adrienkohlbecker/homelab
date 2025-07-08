@@ -1,3 +1,15 @@
+- name: Install dependencies
+  apt:
+    package:
+      - cron # for cron module
+    cache_valid_time: 3600
+  become: true
+  register: pihole_apt_deps
+  tags:
+    - pihole
+    - _check_stage1
+    - _check_stage2
+
 - name: Add pihole group
   group:
     name: pihole
@@ -150,6 +162,7 @@
     - pihole
 
 - name: Schedule updating lists
+  when: not (ansible_check_mode and pihole_apt_deps.changed)
   cron:
     name: pihole_list_update
     hour: 0

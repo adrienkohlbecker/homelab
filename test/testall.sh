@@ -22,6 +22,7 @@ doit() {
 }
 export -f doit
 
+cp test/out.log test/out.log.prev
 PARALLEL="parallel --jobs 5 --joblog test/out.log --eta doit"
 if [[ ${1:-} == "--onlyfailed" ]]; then
   shift
