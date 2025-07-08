@@ -7,17 +7,17 @@ packer {
   }
 }
 
-# locals {
-#   ubuntu_name    = "jammy"
-#   ubuntu_release = "22.04"
-#   ubuntu_patch   = "22.04.5"
-# }
-
 locals {
-  ubuntu_name    = "noble"
-  ubuntu_release = "24.04"
-  ubuntu_patch   = "24.04.2"
+  ubuntu_name    = "jammy"
+  ubuntu_release = "22.04"
+  ubuntu_patch   = "22.04.5"
 }
+
+# locals {
+#   ubuntu_name    = "noble"
+#   ubuntu_release = "24.04"
+#   ubuntu_patch   = "24.04.2"
+# }
 
 # locals {
 #   qemu_binary      = "/usr/bin/qemu-system-aarch64"
@@ -136,8 +136,9 @@ build {
   }
 
   provisioner "shell" {
-    inline      = ["chmod +x /home/vagrant/*.sh", "sudo -HE /home/vagrant/provision.sh"]
-    pause_after = "30s"
+    inline            = ["chmod +x /home/vagrant/*.sh", "sudo -HE /home/vagrant/provision.sh"]
+    expect_disconnect = true
+    pause_after       = "30s"
     env = {
       "SOURCE_NAME" = "${source.name}"
       "UBUNTU_NAME" = "${local.ubuntu_name}"
