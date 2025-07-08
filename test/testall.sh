@@ -9,7 +9,7 @@ doit() {
     test/testrole.sh $1 --checkmode 2> >(
       while read line; do
         if [[ "$line" == "+"* ]]; then
-          echo -e "\e[2;30m$line\e[0m" >&2
+          echo -e "\e[0;30m$line\e[0m" >&2
         else
           echo -e "\e[0;41m$line\e[0m" >&2
         fi
