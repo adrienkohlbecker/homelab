@@ -20,27 +20,9 @@ libvirt_default_network: 10.123.50.0/24
 sensor_modules: []
 
 macvlan_enable_docker: true
-macvlan_parent: eth0
 macvlan_subnet: '{{ home_subnet | ansible.utils.ipsubnet(27, 7) }}'
 
 log2ram_size: 100M
-
-netplan:
-  ethernets:
-    nic0:
-      match:
-        name: ens256
-      set-name: eth0
-      link-local: [] # do not setup random link local address when no dhcp is present
-      addresses:
-      - 10.234.0.5/24
-    nic1:
-      match:
-        name: ens160
-      set-name: eth1
-      dhcp4: true
-      dhcp6: false
-      dhcp-identifier: mac
 
 hdparm_settings: {}
 
