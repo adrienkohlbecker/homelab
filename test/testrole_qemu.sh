@@ -7,18 +7,12 @@ shift
 source .venv/bin/activate
 
 IMAGEDIR=/mnt/scratch/qemu
-SSH_USER=root
+SSH_USER=vagrant
 SSH_KEY=packer/vagrant.key
 SSH_HOST=127.0.0.1
 UBUNTU_NAME=jammy
-ANSIBLE_ARGS="-e docker_test=true -e @host_vars/box-podman.yml"
-IDFILE=cid
-
-if [ "$(uname -o)" = "GNU/Linux" ]; then
-  PODMAN="sudo podman"
-else
-  PODMAN="podman"
-fi
+ANSIBLE_ARGS="-e qemu_test=true -e @host_vars/box-qemu.yml"
+IDFILE=pid
 
 WORKDIR=$(mktemp --directory --tmpdir=$IMAGEDIR)
 trap 'rm -rf $WORKDIR' EXIT
@@ -43,10 +37,24 @@ if [ -f "roles/$ROLE/tasks/_test.yml" ]; then
 EOF
 fi
 
-$PODMAN network inspect homelab_net > /dev/null || $PODMAN network create --subnet 192.5.0.0/16 homelab_net
+qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-box/packer-ubuntu-1" -F qcow2 $WORKDIR/packer-ubuntu-1 > /dev/null
+cp "$IMAGEDIR/$UBUNTU_NAME/ubuntu-box/efivars.fd" $WORKDIR/efivars.fd
 
+# -vnc "0.0.0.0:0" \
 timeout --kill-after=10s 10m \
-$PODMAN run --interactive --rm --publish 127.0.0.1::22 --privileged --cidfile $WORKDIR/$IDFILE --network homelab_net homelab:$UBUNTU_NAME \
+qemu-system-x86_64 \
+-drive "file=$WORKDIR/packer-ubuntu-1,if=virtio,cache=none,discard=unmap,format=qcow2,detect-zeroes=unmap" \
+-drive "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on" \
+-drive "file=$WORKDIR/efivars.fd,if=pflash,unit=1,format=raw" \
+-netdev "user,id=user.0,hostfwd=tcp:$SSH_HOST:0-:22" \
+-machine "type=q35,accel=kvm" \
+-smp "2" \
+-name "packer-ubuntu" \
+-m "4096M" \
+-cpu "host" \
+-display none \
+-device "virtio-net,netdev=user.0" \
+-pidfile "$WORKDIR/$IDFILE" \
 &
 TIMEOUT_PID=$!
 
@@ -57,10 +65,10 @@ stop() {
     echo "Keeping VM around, ssh using:"
     echo "> ssh -i $SSH_KEY -p $PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SSH_USER@$SSH_HOST"
     echo "Then Ctrl+C or"
-    echo "> $PODMAN stop --ignore --time 5 --cidfile $WORKDIR/$IDFILE"
-    trap '$PODMAN stop --ignore --time 5 --cidfile $WORKDIR/$IDFILE' INT
+    echo "> kill $TIMEOUT_PID"
+    trap 'kill $TIMEOUT_PID' INT
   else
-    $PODMAN stop --ignore --time 5 --cidfile $WORKDIR/$IDFILE
+    kill $TIMEOUT_PID || true
   fi
   wait $TIMEOUT_PID || true
   rm -rf "$WORKDIR"
@@ -68,7 +76,7 @@ stop() {
 
 err() {
   TMPFILE=test/out/$ROLE.journal.ansi
-  $PODMAN exec --tty "$(cat $WORKDIR/$IDFILE)" env SYSTEMD_COLORS=true journalctl --pager-end --no-pager --priority info >$TMPFILE
+  ssh -i $SSH_KEY -p $PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SSH_USER@$SSH_HOST env SYSTEMD_COLORS=true journalctl --pager-end --no-pager --priority info >$TMPFILE
   echo "$TMPFILE"
 }
 
@@ -88,8 +96,12 @@ echo "Booted"
 
 sleep 2
 
-ADDR=$($PODMAN port $(cat $WORKDIR/$IDFILE) 22)
-PORT="${ADDR#*:}"
+# lsof -i -P | grep 2096850
+# qemu-syst 2096850   ak   12u  IPv4 56342520      0t0  TCP *:5900 (LISTEN)
+# qemu-syst 2096850   ak   15u  IPv4 56351807      0t0  TCP localhost:45993 (LISTEN)
+# qemu-syst 2096850   ak   32u  IPv4 56346212      0t0  UDP *:52324
+# qemu-syst 2096850   ak   33u  IPv4 56346213      0t0  UDP *:35411
+PORT=$(lsof -i -P | grep "$(cat $WORKDIR/$IDFILE)" | grep TCP | grep -v "*:59" | cut -d':' -f2 | cut -d' ' -f1)
 
 while [ -z "$(socat -T2 stdout tcp:127.0.0.1:$PORT,connect-timeout=2,readbytes=1 2>/dev/null)" ]; do
   echo -n "."
