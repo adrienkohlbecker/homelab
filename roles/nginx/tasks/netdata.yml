@@ -5,5 +5,6 @@
   vars:
     netdata_copy_src: web_log.conf
     netdata_copy_dest: go.d/web_log.conf
+    netdata_copy_restart: "{{ netdata_restart }}"
   tags:
     - nginx

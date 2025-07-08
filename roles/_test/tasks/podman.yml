@@ -1,4 +1,5 @@
-- name: _test | Install podman
+- name: _test | Install podman repository
+  when: ansible_distribution_major_version == "22"
   shell: |
     set -euo pipefail
 
@@ -21,6 +22,14 @@
     Pin: release o=Ubuntu
     Pin-Priority: -10
     EOF
+  args:
+    executable: /bin/bash
+    creates: /etc/apt/preferences.d/podman-noble-backport
+  become: true
+
+- name: _test | Install podman
+  shell: |
+    set -euo pipefail
 
     apt-get update
     apt-get install -y --no-install-recommends podman iptables

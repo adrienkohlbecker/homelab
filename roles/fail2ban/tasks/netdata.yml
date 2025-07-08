@@ -5,5 +5,6 @@
   vars:
     netdata_copy_src: fail2ban.conf
     netdata_copy_dest: go.d/fail2ban.conf
+    netdata_copy_restart: "{{ netdata_restart }}"
   tags:
     - fail2ban

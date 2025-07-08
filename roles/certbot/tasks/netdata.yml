@@ -5,5 +5,6 @@
   vars:
     netdata_template_src: x509check.conf.j2
     netdata_template_dest: go.d/x509check.conf
+    netdata_template_restart: "{{ netdata_restart }}"
   tags:
     - certbot

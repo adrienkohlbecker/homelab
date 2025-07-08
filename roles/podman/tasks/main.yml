@@ -1,3 +1,14 @@
+- name: Install packages
+  apt:
+    name:
+      - man-db # to pass systemd-analyze verification
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - podman
+    - _check_stage1
+    - _check_stage2
+
 - name: Install podman
   import_role:
     name: apt_unit_masked

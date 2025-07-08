@@ -303,6 +303,8 @@
   import_role:
     name: fail2ban
     tasks_from: netdata
+  vars:
+    netdata_restart: "{{ not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
 
@@ -310,6 +312,8 @@
   import_role:
     name: smart
     tasks_from: netdata
+  vars:
+    netdata_restart: "{{ not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
 
@@ -317,6 +321,8 @@
   import_role:
     name: lm_sensors
     tasks_from: netdata
+  vars:
+    netdata_restart: "{{ not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
 
@@ -324,6 +330,8 @@
   import_role:
     name: certbot
     tasks_from: netdata
+  vars:
+    netdata_restart: "{{ not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
 
@@ -331,5 +339,7 @@
   import_role:
     name: nginx
     tasks_from: netdata
+  vars:
+    netdata_restart: "{{ not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
