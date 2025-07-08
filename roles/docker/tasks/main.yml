@@ -1,3 +1,14 @@
+- name: Install packages
+  apt:
+    name:
+      - python3-requests # for ansible docker module
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - docker
+    - _check_stage1
+    - _check_stage2
+
 - name: Install docker
   import_role:
     name: apt_unit_masked
@@ -94,6 +105,7 @@
     - docker
 
 - name: Ensure grub directory exists
+  when: grub_bootloader
   file:
     dest: /etc/default/grub.d/
     state: directory

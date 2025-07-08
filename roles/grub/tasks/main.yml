@@ -8,6 +8,17 @@
   tags:
     - grub
 
+- name: Create /boot/grub directory
+  file:
+    dest: /boot/grub
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - grub
+
 - name: Create /etc/default/grub.d directory
   file:
     dest: /etc/default/grub.d
