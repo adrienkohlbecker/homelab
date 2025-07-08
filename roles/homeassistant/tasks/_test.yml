@@ -20,7 +20,10 @@
       -e DOCKER_INFLUXDB_INIT_PASSWORD={{ influxdb_root_password }} \
       -e DOCKER_INFLUXDB_INIT_ORG=home \
       -e DOCKER_INFLUXDB_INIT_BUCKET=default \
+      --health-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8086/health" \
       docker.io/influxdb:2.7.6
+
+    timeout 60s podman wait --condition=healthy influxdb
   args:
     executable: /bin/bash
     creates: /mnt/services
