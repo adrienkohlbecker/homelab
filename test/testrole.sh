@@ -104,6 +104,8 @@ trap err ERR
 
 ANSIBLE_PLAYBOOK="ansible-playbook $ANSIBLE_ARGS -e ansible_ssh_port=$PORT -e ansible_ssh_host=$SSH_HOST -e ansible_ssh_user=$SSH_USER -e ansible_ssh_private_key_file=$SSH_KEY --inventory test/inventory.ini"
 
+set -x
+
 if [ -f "$WORKDIR/_test.yml" ]; then
   $ANSIBLE_PLAYBOOK "$WORKDIR/_test.yml"
 fi
