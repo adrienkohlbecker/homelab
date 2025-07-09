@@ -12,6 +12,8 @@ root_email: adrien.kohlbecker@gmail.com
 smtp_host: smtp.eu.mailgun.org
 smtp_port: 587
 
+ubuntu_mirror: '{{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports", "http://archive.ubuntu.com/ubuntu") }}'
+
 macvlan_parent_gateway: "{{ ansible_facts[macvlan_parent].ipv4.network | ansible.utils.ipmath(1) }}"
 macvlan_parent_subnet: "{{ ansible_facts[macvlan_parent].ipv4.network }}/{{ ansible_facts[macvlan_parent].ipv4.prefix }}"
 macvlan_host_ip: "{{ macvlan_subnet | ansible.utils.ipmath(1) }}"

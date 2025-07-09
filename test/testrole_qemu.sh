@@ -114,7 +114,15 @@ err() {
 }
 trap err ERR
 
-ANSIBLE_PLAYBOOK="ansible-playbook $ANSIBLE_ARGS -e ansible_ssh_port=$PORT -e ansible_ssh_host=$SSH_HOST -e ansible_ssh_user=$SSH_USER -e ansible_ssh_private_key_file=$SSH_KEY --inventory test/inventory.ini"
+$SSH_CMD sudo bash <<EOF
+truncate -s0 /etc/apt/sources.list
+echo "deb http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/ $UBUNTU_NAME main restricted universe multiverse" >> /etc/apt/sources.list
+echo "deb http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/ $UBUNTU_NAME-updates main restricted universe multiverse" >> /etc/apt/sources.list
+echo "deb http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/ $UBUNTU_NAME-security main restricted universe multiverse" >> /etc/apt/sources.list
+echo "deb http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/ $UBUNTU_NAME-backports main restricted universe multiverse" >> /etc/apt/sources.list
+EOF
+
+ANSIBLE_PLAYBOOK="ansible-playbook $ANSIBLE_ARGS -e ansible_ssh_port=$PORT -e ansible_ssh_host=$SSH_HOST -e ansible_ssh_user=$SSH_USER -e ansible_ssh_private_key_file=$SSH_KEY -e ubuntu_mirror=http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/ --inventory test/inventory.ini"
 
 set -x
 

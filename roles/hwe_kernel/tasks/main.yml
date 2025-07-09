@@ -32,10 +32,10 @@
   become: true
   register: noble_repository
   loop:
-    - 'deb {{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports", "http://archive.ubuntu.com/ubuntu") }} noble main restricted universe multiverse # For zfsutils-linux userspace tools'
-    - 'deb {{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports", "http://archive.ubuntu.com/ubuntu") }} noble-updates main restricted universe multiverse # For zfsutils-linux userspace tools'
-    - 'deb {{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports", "http://archive.ubuntu.com/ubuntu") }} noble-security main restricted universe multiverse # For zfsutils-linux userspace tools'
-    - 'deb {{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports", "http://archive.ubuntu.com/ubuntu") }} noble-backports main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb {{ ubuntu_mirror }} noble main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb {{ ubuntu_mirror }} noble-updates main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb {{ ubuntu_mirror }} noble-security main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb {{ ubuntu_mirror }} noble-backports main restricted universe multiverse # For zfsutils-linux userspace tools'
   tags:
     - hwe_kernel
     - _check_stage2
