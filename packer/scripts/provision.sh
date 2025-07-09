@@ -21,6 +21,21 @@ ubuntu-lab)
   ;;
 esac
 
+case $(uname -m) in
+aarch64)
+  UBUNTU_MIRROR="http://apt.lab.fahm.fr/ports.ubuntu.com/ubuntu-ports/"
+  UBUNTU_MIRROR_SECURITY="http://apt.lab.fahm.fr/ports.ubuntu.com/ubuntu-ports/"
+  ;;
+x86_64)
+  UBUNTU_MIRROR="http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/"
+  UBUNTU_MIRROR_SECURITY="http://apt.lab.fahm.fr/security.ubuntu.com/ubuntu/"
+  ;;
+*)
+  echo >&2 "Unknown machine name $MACHINE"
+  exit 1
+  ;;
+esac
+
 # Ensure APT doesn't asks questions
 
 export DEBIAN_FRONTEND=noninteractive
@@ -113,7 +128,7 @@ udevadm trigger
 
 # Install Ubuntu
 
-debootstrap "$UBUNTU_NAME" /mnt
+debootstrap "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR"
 
 # Copy files into the new install
 
@@ -142,7 +157,7 @@ mount -t sysfs sys /mnt/sys
 mount -B /dev /mnt/dev
 mount -t devpts pts /mnt/dev/pts
 
-chroot /mnt env DISKS="${DISKS[*]}" LAYOUT="$LAYOUT" HOSTNAME="$HOSTNAME" USERNAME="$USERNAME" PASSWORD="$PASSWORD" SSH_KEY_PUB="$SSH_KEY_PUB" UBUNTU_NAME="$UBUNTU_NAME" bash </home/vagrant/chroot.sh
+chroot /mnt env DISKS="${DISKS[*]}" LAYOUT="$LAYOUT" HOSTNAME="$HOSTNAME" USERNAME="$USERNAME" PASSWORD="$PASSWORD" SSH_KEY_PUB="$SSH_KEY_PUB" UBUNTU_NAME="$UBUNTU_NAME" UBUNTU_MIRROR="$UBUNTU_MIRROR" UBUNTU_MIRROR_SECURITY="$UBUNTU_MIRROR_SECURITY" bash </home/vagrant/chroot.sh
 
 # unmount everything
 umount -n -R /mnt

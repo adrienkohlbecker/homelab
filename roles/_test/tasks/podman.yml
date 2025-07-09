@@ -6,7 +6,8 @@
     cat <<EOF >/etc/apt/sources.list.d/noble.list
     deb {{ ubuntu_mirror }} noble main restricted universe multiverse
     deb {{ ubuntu_mirror }} noble-updates main restricted universe multiverse
-    deb {{ ubuntu_mirror }} noble-security main restricted universe multiverse
+    deb {{ ubuntu_mirror }} noble-backports main restricted universe multiverse
+    deb {{ ubuntu_mirror_security }} noble-security main restricted universe multiverse
     EOF
 
     cat <<EOF >/etc/apt/preferences.d/podman-noble-backport
