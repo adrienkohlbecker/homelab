@@ -124,7 +124,7 @@ EOF
 $SSH_CMD sudo apt-get purge --autoremove --yes snapd
 $SSH_CMD sudo apt-get update
 
-ANSIBLE_PLAYBOOK="ansible-playbook $ANSIBLE_ARGS -e ansible_ssh_port=$PORT -e ansible_ssh_host=$SSH_HOST -e ansible_ssh_user=$SSH_USER -e ansible_ssh_private_key_file=$SSH_KEY -e ubuntu_mirror=http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/ --inventory test/inventory.ini"
+ANSIBLE_PLAYBOOK="ansible-playbook $ANSIBLE_ARGS -e ansible_ssh_port=$PORT -e ansible_ssh_host=$SSH_HOST -e ansible_ssh_user=$SSH_USER -e ansible_ssh_private_key_file=$SSH_KEY -e ubuntu_mirror=http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/ -e ubuntu_mirror_security=http://apt.lab.fahm.fr/security.ubuntu.com/ubuntu/ --inventory test/inventory.ini"
 
 set -x
 

@@ -7,14 +7,10 @@ export DEBIAN_FRONTEND=noninteractive
 
 case $(uname -m) in
 aarch64)
-  ARCH=arm64
-  UBUNTU_MIRROR="http://ports.ubuntu.com/ubuntu-ports/"
   ZBM_URL="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/3.0.1/zfsbootmenu-recovery-aarch64-v3.0.1-linux6.1.EFI"
   ZBM_SUM="8cbe5105ff0d005ff67a4ddcf0d91abed614b07fa281b682e5be5b2bf4929322"
   ;;
 x86_64)
-  ARCH=amd64
-  UBUNTU_MIRROR="http://archive.ubuntu.com/ubuntu/"
   ZBM_URL="https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.0.1/zfsbootmenu-recovery-x86_64-v3.0.1-linux6.12.EFI"
   ZBM_SUM="375ef1a0505bbbd648572c16d83884d5147fa2435508b4717e2749aead676143"
   ;;
@@ -50,11 +46,11 @@ deb $UBUNTU_MIRROR $UBUNTU_NAME main restricted universe multiverse
 deb $UBUNTU_MIRROR $UBUNTU_NAME-updates main restricted universe multiverse
 # deb-src $UBUNTU_MIRROR $UBUNTU_NAME-updates main restricted universe multiverse
 
-deb $UBUNTU_MIRROR $UBUNTU_NAME-security main restricted universe multiverse
-# deb-src $UBUNTU_MIRROR $UBUNTU_NAME-security main restricted universe multiverse
-
 deb $UBUNTU_MIRROR $UBUNTU_NAME-backports main restricted universe multiverse
 # deb-src $UBUNTU_MIRROR $UBUNTU_NAME-backports main restricted universe multiverse
+
+deb $UBUNTU_MIRROR_SECURITY $UBUNTU_NAME-security main restricted universe multiverse
+# deb-src $UBUNTU_MIRROR_SECURITY $UBUNTU_NAME-security main restricted universe multiverse
 EOF
 
 # Configure locale
