@@ -16,7 +16,7 @@ case $(uname -s) in
   IMAGEDIR="$TMPDIR"
   PODMAN="podman"
   ;;
-"GNU/Linux")
+"Linux")
   IMAGEDIR=/mnt/qemu
   PODMAN="sudo podman"
 
