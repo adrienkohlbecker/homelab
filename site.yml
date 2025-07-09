@@ -83,6 +83,7 @@
     - scratch
     - data
     - media
+    - qemu_host
     - apt_cacher_ng
     - jellyfin
     - sort_ini
