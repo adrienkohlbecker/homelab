@@ -1,5 +1,8 @@
 server {
   listen              443 ssl http2;
+{% if nginx_enable_http is defined and nginx_enable_http %}
+  listen              80;
+{% endif %}
 
   server_name         {{ nginx_subdomain }} {{ nginx_subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_subdomain }}.{{ domain}};
 
@@ -65,10 +68,11 @@ server {
   {{ nginx_server_conf | trim | indent(2) }}
 {% endif %}
 }
-
+{% if nginx_enable_http is not defined or not nginx_enable_http %}
 server {
     listen      80;
     server_name {{ nginx_subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_subdomain }}.{{ domain}};
 
     return 301 https://$host$request_uri;
 }
+{% endif %}

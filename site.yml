@@ -83,6 +83,7 @@
     - scratch
     - data
     - media
+    - apt_cacher_ng
     - jellyfin
     - sort_ini
     - sabnzbd

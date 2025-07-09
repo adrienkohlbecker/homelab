@@ -1,0 +1,50 @@
+# jinja2: lstrip_blocks: "True"
+# apt_cacher_ng.service #######################################################################
+[Unit]
+Description=apt_cacher_ng
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+After=zfs_mount_mnt_scratch.service zfs_autosnapshot.target
+Requires=zfs_mount_mnt_scratch.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=on-failure
+Delegate=yes
+TimeoutSec=120
+RestartSec=5
+Type=notify
+NotifyAccess=all
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=conmon \
+    --detach \
+    --replace \
+    --rm \
+    --name apt_cacher_ng \
+    --log-driver journald \
+    --log-opt tag="apt_cacher_ng" \
+    --volume /mnt/scratch/apt_cacher_ng:/var/cache/apt-cacher-ng \
+    --publish 127.0.0.1:3142:3142/tcp \
+    --health-cmd "curl --head --request GET --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:3142/acng-doc/cache.png" \
+    --health-startup-cmd "curl --head --request GET --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:3142/acng-doc/cache.png" \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    --stop-timeout 120 \
+    docker.io/mbentley/apt-cacher-ng:latest-20250708
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}
