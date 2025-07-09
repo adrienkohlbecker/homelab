@@ -43,12 +43,13 @@ cp "$IMAGEDIR/$UBUNTU_NAME/ubuntu-box/efivars.fd" $WORKDIR/efivars.fd
 # -vnc "0.0.0.0:0" \
 timeout --kill-after=10s 10m \
 qemu-system-x86_64 \
--drive "file=$WORKDIR/packer-ubuntu-1,if=virtio,cache=none,discard=unmap,format=qcow2,detect-zeroes=unmap" \
+-drive "file=$WORKDIR/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap" \
 -drive "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on" \
 -drive "file=$WORKDIR/efivars.fd,if=pflash,unit=1,format=raw" \
 -netdev "user,id=user.0,hostfwd=tcp:$SSH_HOST:0-:22" \
+-object rng-random,id=rng0,filename=/dev/urandom -device virtio-rng-pci,rng=rng0 \
 -machine "type=q35,accel=kvm" \
--smp "4" \
+-smp "8,sockets=8" \
 -name "packer-ubuntu" \
 -m "4096M" \
 -cpu "host" \

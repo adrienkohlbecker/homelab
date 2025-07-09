@@ -43,11 +43,12 @@ qemu-img create -f qcow2 -b $IMAGEDIR/ubuntu-$UBUNTU_VERSION-minimal-cloudimg-am
 
 timeout --kill-after=10s 10m \
 qemu-system-x86_64 \
--drive "file=$WORKDIR/disk.img,if=virtio,cache=none,discard=unmap,format=qcow2,detect-zeroes=unmap" \
+-drive "file=$WORKDIR/disk.img,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap" \
 -drive "file=$WORKDIR/seed.img,if=virtio,format=raw" \
 -netdev "user,id=user.0,hostfwd=tcp:$SSH_HOST:0-:22" \
+-object rng-random,id=rng0,filename=/dev/urandom -device virtio-rng-pci,rng=rng0 \
 -machine "type=q35,accel=kvm" \
--smp "4" \
+-smp "8,sockets=8" \
 -name "packer-ubuntu" \
 -m "4096M" \
 -cpu "host" \
