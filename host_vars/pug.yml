@@ -119,6 +119,7 @@ netdata_diskspace_blocklist:
 - /mnt/old_bionic
 - /mnt/old_services
 - /mnt/services
+- /var/lib/libvirt/images
 
 smb_shares: []
 subid_users: []

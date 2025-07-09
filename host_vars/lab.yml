@@ -193,6 +193,7 @@ netdata_diskspace_blocklist:
 - /mnt/old_vms
 - /mnt/scratch
 - /mnt/services
+- /var/lib/libvirt/images
 
 smb_shares:
   - name: media

@@ -29,7 +29,7 @@ locals {
 
 locals {
   qemu_binary      = "/usr/bin/qemu-system-x86_64"
-  output_directory = "/mnt/scratch/qemu/${local.ubuntu_name}"
+  output_directory = "/mnt/qemu/${local.ubuntu_name}"
   machine_type     = "q35"
   iso_checksum     = "file:https://releases.ubuntu.com/${local.ubuntu_release}/SHA256SUMS"
   iso_url          = "https://releases.ubuntu.com/${local.ubuntu_release}/ubuntu-${local.ubuntu_patch}-live-server-amd64.iso"
