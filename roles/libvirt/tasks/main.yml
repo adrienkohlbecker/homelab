@@ -42,10 +42,11 @@
 - name: Create zfs filesystem
   when: zfs_root
   zfs:
-    name: rpool/vms
+    name: rpool/libvirt
     state: present
     extra_zfs_properties:
       mountpoint: /var/lib/libvirt/images
+      recordsize: 4k
   become: true
   tags:
     - libvirt
@@ -56,7 +57,7 @@
     name: zfs_mount
     tasks_from: unit
   vars:
-    zfs_mount_dataset: rpool/vms
+    zfs_mount_dataset: rpool/libvirt
     zfs_mount_mountpoint: /var/lib/libvirt/images
   tags:
     - libvirt

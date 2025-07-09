@@ -6,7 +6,7 @@ shift
 
 source .venv/bin/activate
 
-IMAGEDIR=/mnt/scratch/qemu
+IMAGEDIR=/mnt/qemu
 SSH_USER=ubuntu
 SSH_KEY=packer/vagrant.key
 SSH_HOST=127.0.0.1
