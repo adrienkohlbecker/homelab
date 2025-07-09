@@ -15,14 +15,14 @@ doit() {
         fi
       done
     )
-  ) &> test/out/$1.ansi || (
+  ) &>"test/out/$1.ansi" || (
     echo -e "\e[0;41m$1 failed\e[0m" >&2
     exit 1
   )
 }
 export -f doit
 
-cp test/out.log test/out.log.prev
+[ ! -f test/out.log ] || cp test/out.log test/out.log.prev
 PARALLEL="parallel --jobs 5 --joblog test/out.log --eta doit"
 if [[ ${1:-} == "--onlyfailed" ]]; then
   shift

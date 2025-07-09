@@ -4,9 +4,6 @@ set -euo pipefail
 ROLE=$1
 shift
 
-source .venv/bin/activate
-
-IMAGEDIR=/mnt/qemu
 SSH_USER=root
 SSH_KEY=packer/vagrant.key
 SSH_HOST=127.0.0.1
@@ -14,11 +11,37 @@ UBUNTU_NAME=jammy
 ANSIBLE_ARGS="-e docker_test=true -e @host_vars/box-podman.yml"
 IDFILE=cid
 
-if [ "$(uname -o)" = "GNU/Linux" ]; then
-  PODMAN="sudo podman"
-else
+case $(uname -s) in
+"Darwin")
+  IMAGEDIR="$TMPDIR"
   PODMAN="podman"
-fi
+  ;;
+"GNU/Linux")
+  IMAGEDIR=/mnt/qemu
+  PODMAN="sudo podman"
+
+  source .venv/bin/activate
+  ;;
+*)
+  echo >&2 "Unknown operating system"
+  exit 1
+  ;;
+esac
+
+case $(uname -m) in
+aarch64 | arm64)
+  UBUNTU_MIRROR="http://apt.lab.fahm.fr/ports.ubuntu.com/ubuntu-ports/"
+  UBUNTU_MIRROR_SECURITY="http://apt.lab.fahm.fr/ports.ubuntu.com/ubuntu-ports/"
+  ;;
+x86_64)
+  UBUNTU_MIRROR="http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/"
+  UBUNTU_MIRROR_SECURITY="http://apt.lab.fahm.fr/security.ubuntu.com/ubuntu/"
+  ;;
+*)
+  echo >&2 "Unknown machine name"
+  exit 1
+  ;;
+esac
 
 WORKDIR=$(mktemp --directory --tmpdir=$IMAGEDIR)
 trap 'rm -rf $WORKDIR' EXIT
@@ -43,11 +66,11 @@ if [ -f "roles/$ROLE/tasks/_test.yml" ]; then
 EOF
 fi
 
-$PODMAN network inspect homelab_net > /dev/null || $PODMAN network create --subnet 192.5.0.0/16 homelab_net
+$PODMAN network inspect homelab_net >/dev/null || $PODMAN network create --subnet 192.5.0.0/16 homelab_net
 
 timeout --kill-after=10s 10m \
-$PODMAN run --interactive --rm --publish 127.0.0.1::22 --privileged --cidfile $WORKDIR/$IDFILE --network homelab_net homelab:$UBUNTU_NAME \
-&
+  $PODMAN run --interactive --rm --publish 127.0.0.1::22 --privileged --cidfile $WORKDIR/$IDFILE --network homelab_net homelab:$UBUNTU_NAME \
+  &
 TIMEOUT_PID=$!
 
 stop() {
@@ -58,7 +81,7 @@ stop() {
 trap stop EXIT
 
 while [ ! -f $WORKDIR/$IDFILE ]; do
-  if ! kill -0 $TIMEOUT_PID &> /dev/null; then
+  if ! kill -0 $TIMEOUT_PID &>/dev/null; then
     echo "Launching VM failed"
     exit 1
   fi
@@ -104,13 +127,14 @@ trap err ERR
 
 $SSH_CMD sudo bash <<EOF
 truncate -s0 /etc/apt/sources.list
-echo "deb http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/ $UBUNTU_NAME main restricted universe multiverse" >> /etc/apt/sources.list
-echo "deb http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/ $UBUNTU_NAME-updates main restricted universe multiverse" >> /etc/apt/sources.list
-echo "deb http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/ $UBUNTU_NAME-security main restricted universe multiverse" >> /etc/apt/sources.list
-echo "deb http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/ $UBUNTU_NAME-backports main restricted universe multiverse" >> /etc/apt/sources.list
+echo "deb $UBUNTU_MIRROR $UBUNTU_NAME main restricted universe multiverse" >> /etc/apt/sources.list
+echo "deb $UBUNTU_MIRROR $UBUNTU_NAME-updates main restricted universe multiverse" >> /etc/apt/sources.list
+echo "deb $UBUNTU_MIRROR_SECURITY $UBUNTU_NAME-security main restricted universe multiverse" >> /etc/apt/sources.list
+echo "deb $UBUNTU_MIRROR $UBUNTU_NAME-backports main restricted universe multiverse" >> /etc/apt/sources.list
+apt-get update
 EOF
 
-ANSIBLE_PLAYBOOK="ansible-playbook $ANSIBLE_ARGS -e ansible_ssh_port=$PORT -e ansible_ssh_host=$SSH_HOST -e ansible_ssh_user=$SSH_USER -e ansible_ssh_private_key_file=$SSH_KEY -e ubuntu_mirror=http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/ -e ubuntu_mirror_security=http://apt.lab.fahm.fr/security.ubuntu.com/ubuntu/ --inventory test/inventory.ini"
+ANSIBLE_PLAYBOOK="ansible-playbook $ANSIBLE_ARGS -e ansible_ssh_port=$PORT -e ansible_ssh_host=$SSH_HOST -e ansible_ssh_user=$SSH_USER -e ansible_ssh_private_key_file=$SSH_KEY -e ubuntu_mirror=$UBUNTU_MIRROR -e ubuntu_mirror_security=$UBUNTU_MIRROR_SECURITY --inventory test/inventory.ini"
 
 set -x
 
