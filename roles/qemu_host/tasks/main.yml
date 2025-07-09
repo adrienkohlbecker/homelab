@@ -1,0 +1,33 @@
+- name: Create mount point
+  file:
+    dest: /mnt/qemu
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  become: true
+  tags:
+    - qemu_host
+
+- name: Create zfs filesystem
+  when: zfs_root
+  zfs:
+    name: rpool/qemu
+    state: present
+    extra_zfs_properties:
+      mountpoint: /mnt/qemu
+      recordsize: 4k
+  become: true
+  tags:
+    - qemu_host
+
+- name: Install zfs mount service
+  when: zfs_root
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    zfs_mount_dataset: rpool/qemu
+    zfs_mount_mountpoint: /mnt/qemu
+  tags:
+    - qemu_host
