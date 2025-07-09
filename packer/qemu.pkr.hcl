@@ -85,12 +85,6 @@ build {
     inline          = ["whoami"]
   }
 
-  provisioner "shell" {
-    execute_command = "{{ .Vars }} sudo -E bash '{{ .Path }}'"
-    scripts         = ["${path.root}/scripts/cleanup.sh"]
-    pause_after     = "2s"
-  }
-
   post-processor "checksum" {
     checksum_types = ["sha256"]
     output         = "${local.output_directory}/${source.name}/{{.ChecksumType}}sum"
@@ -151,7 +145,7 @@ build {
 
   provisioner "shell" {
     execute_command = "{{ .Vars }} sudo -HE bash '{{ .Path }}'"
-    scripts         = ["${path.root}/scripts/packer_extras.sh", "${path.root}/scripts/cleanup.sh"]
+    scripts         = ["${path.root}/scripts/packer_extras.sh"]
     pause_after     = "2s"
     env = {
       "SOURCE_NAME" = "${source.name}"

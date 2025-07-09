@@ -234,19 +234,6 @@ EOF
 cp /usr/share/systemd/tmp.mount /etc/systemd/system/
 systemctl enable tmp.mount
 
-# Ensure dhcp works after reboot
-
-# apt-get install --yes net-tools
-# IFACE=$(route | grep '^default' | grep -o '[^ ]*$')
-# cat <<EOF >/chroot/etc/netplan/01-netcfg.yaml
-# network:
-#   version: 2
-#   ethernets:
-#     $IFACE:
-#       dhcp4: true
-#       dhcp-identifier: mac
-# EOF
-
 # Add more packages
 
 apt-get install --yes openssh-server open-vm-tools qemu-guest-agent
