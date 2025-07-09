@@ -25,7 +25,7 @@ ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
     --cgroups=split \
-    --sdnotify=conmon \
+    --sdnotify=healthy \
     --detach \
     --replace \
     --rm \

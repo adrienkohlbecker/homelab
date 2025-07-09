@@ -72,11 +72,11 @@
     - nut_server
     - nut_monitor
     - pihole
-    - libvirt
 
 - name: Lab roles
   hosts: box,lab
   roles:
+    - libvirt
     - prometheus # for minio
     - minio
     - influxdb

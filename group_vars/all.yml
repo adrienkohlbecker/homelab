@@ -30,7 +30,6 @@ wireguard_peers:
     is_server: true
     dns_address: "{{ external_ips.pihole }}"
     site_subnet: "{{ site_subnets.home }}"
-    allowed_ips: [ "{{ site_subnets.home }}" ]
     public_key: "{{ wireguard_keys.lab.public_key }}"
     private_key: "{{ wireguard_keys.lab.private_key }}"
   - name: pug
