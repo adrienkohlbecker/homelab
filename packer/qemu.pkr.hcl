@@ -39,8 +39,8 @@ source "qemu" "ubuntu" {
   accelerator          = "kvm"
   boot_wait            = "10s"
   cpu_model            = "host"
-  cpus                 = 2
-  disk_cache           = "none"
+  sockets              = 8
+  disk_cache           = "unsafe"
   disk_compression     = false
   disk_detect_zeroes   = "unmap"
   disk_discard         = "unmap"
@@ -61,6 +61,10 @@ source "qemu" "ubuntu" {
   ssh_timeout          = "20m"
   ssh_username         = "vagrant"
   vnc_bind_address     = "0.0.0.0"
+  qemuargs = [
+    ["-object", "rng-random,id=rng0,filename=/dev/urandom"],
+    ["-device", "virtio-rng-pci,rng=rng0"],
+  ]
 }
 
 build {

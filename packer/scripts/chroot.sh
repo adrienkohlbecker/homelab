@@ -249,7 +249,7 @@ systemctl enable tmp.mount
 
 # Add more packages
 
-apt-get install --yes openssh-server open-vm-tools
+apt-get install --yes openssh-server open-vm-tools qemu-guest-agent
 
 # Add missing groups
 
