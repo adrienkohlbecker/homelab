@@ -121,10 +121,10 @@
      "secure": false,
      "ignoreTls": false,
      "requireTls": true,
-     "authUser": "{{ overseerr_smtp_username }}",
-     "authPass": "{{ overseerr_smtp_password }}",
      "allowSelfSigned": false,
-     "senderName": "Overseerr"
+     "senderName": "Overseerr",
+     "authUser": "{{ overseerr_smtp_username }}",
+     "authPass": "{{ overseerr_smtp_password }}"
     }
    },
    "discord": {
@@ -155,7 +155,7 @@
     "options": {
      "botAPI": "{{ telegram_overseerr_bot_token }}",
      "chatId": "{{ telegram_home_chat_id }}",
-     "sendSilently": false,
+     "sendSilently": true,
      "botUsername": "Overseer"
     }
    },
@@ -171,7 +171,8 @@
     "types": 0,
     "options": {
      "accessToken": "",
-     "userToken": ""
+     "userToken": "",
+     "sound": ""
     }
    },
    "webhook": {
@@ -205,6 +206,9 @@
   },
   "plex-watchlist-sync": {
    "schedule": "0 */10 * * * *"
+  },
+  "plex-refresh-token": {
+   "schedule": "0 0 5 * * *"
   },
   "radarr-scan": {
    "schedule": "0 0 4 * * *"

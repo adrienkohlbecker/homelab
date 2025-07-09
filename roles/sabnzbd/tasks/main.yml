@@ -108,8 +108,8 @@
   copy:
     src: before_start.sh
     dest: /mnt/services/sabnzbd/before_start.sh
-    owner: root
-    group: root
+    owner: "{{ sabnzbd_user.uid }}"
+    group: "{{ media_group.gid }}"
     mode: "0755"
     backup: true
   register: sabnzbd_before_start
