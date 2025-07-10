@@ -14,7 +14,7 @@ PartOf=zfs_autosnapshot.target
 
 [Service]
 Environment=PODMAN_SYSTEMD_UNIT=%n
-Restart=on-failure
+Restart=always
 Delegate=yes
 TimeoutSec=300
 RestartSec=5
