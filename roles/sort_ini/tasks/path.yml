@@ -1,7 +1,7 @@
 - name: path | Install sort_ini service
   import_role:
     name: systemd_unit
-    tasks_from: copy
+    tasks_from: template
   vars:
     systemd_unit_src: sort_ini.service
     systemd_unit_dest: sort_ini_{{ sort_ini_escaped_path }}.service

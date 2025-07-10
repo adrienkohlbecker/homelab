@@ -1,0 +1,9 @@
+[Unit]
+Description="Sort ini file {{ sort_ini_path }}"
+
+[Service]
+Type=oneshot
+RemainAfterExit=false
+ExecStartPre=/bin/sleep 5
+ExecStart=/usr/local/bin/sort_ini {{ sort_ini_path }}
+SyslogIdentifier=%N
