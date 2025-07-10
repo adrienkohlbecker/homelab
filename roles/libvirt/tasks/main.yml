@@ -46,7 +46,7 @@
     state: present
     extra_zfs_properties:
       mountpoint: /var/lib/libvirt/images
-      recordsize: 4k
+      recordsize: '4096'
   become: true
   tags:
     - libvirt

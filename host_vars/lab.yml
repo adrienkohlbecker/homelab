@@ -194,6 +194,7 @@ netdata_diskspace_blocklist:
 - /mnt/scratch
 - /mnt/services
 - /var/lib/libvirt/images
+- /mnt/qemu
 
 smb_shares:
   - name: media
