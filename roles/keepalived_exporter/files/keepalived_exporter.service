@@ -11,6 +11,7 @@ Restart=always
 TimeoutSec=70
 RestartSec=15
 Type=exec
+SyslogIdentifier=%N
 
 ExecStart=/usr/local/bin/keepalived_exporter -web.listen-address 127.0.0.1:9650
 

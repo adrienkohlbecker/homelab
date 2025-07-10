@@ -20,6 +20,7 @@ TimeoutSec=120
 RestartSec=5
 Type=notify
 NotifyAccess=all
+SyslogIdentifier=%N
 
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
