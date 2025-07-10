@@ -6,3 +6,4 @@ Type=oneshot
 RemainAfterExit=false
 ExecStartPre=/bin/sleep 5
 ExecStart=/usr/bin/bash -c "/usr/local/bin/sort_ini $(systemd-escape --unescape --path %i)"
+SyslogIdentifier=%N
