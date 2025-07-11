@@ -56,12 +56,12 @@
     - docker
     - ipmi
     - vector
-    - eaton_ipp
     - postgres
 
 - name: Add more services
   hosts: all:!bunk
   roles:
+    - eaton_ipp
     - netdata
     - wolweb
     - csplogger
