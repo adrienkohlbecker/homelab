@@ -3,7 +3,7 @@
 [Interface]
 # PublicKey = {{ own_peer.public_key }}
 PrivateKey = {{ own_peer.private_key }}
-Address = {{ own_peer.address }}/17
+Address = {{ own_peer.address }}/18
 ListenPort = {{ listen_port | default('51820') }}
 {% if 'post_up' in own_peer %}
 PostUp = {{ own_peer.post_up }}
