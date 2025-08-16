@@ -1,0 +1,62 @@
+- name: cmdline | Create zfsbootmenu etc directory
+  file:
+    dest: /etc/zfsbootmenu
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  register: zfsbootmenu_cmdline_directory
+  become: true
+
+- name: cmdline | Write contents
+  when: zfsbootmenu_cmdline_contents | length > 0
+  copy:
+    dest: /etc/zfsbootmenu/{{ zfsbootmenu_cmdline_file }}
+    content: "{{ zfsbootmenu_cmdline_contents }}\n"
+    mode: "0644"
+    owner: root
+    group: root
+    backup: true
+  become: true
+
+- name: cmdline | Write contents
+  when: zfsbootmenu_cmdline_contents | length == 0
+  file:
+    path: /etc/zfsbootmenu/{{ zfsbootmenu_cmdline_file }}
+    state: absent
+  become: true
+
+- name: cmdline | Get files
+  find:
+    paths: /etc/zfsbootmenu
+    file_type: file
+    excludes:
+      - "*~" # ansible backups
+  register: zfsbootmenu_cmdline_files
+  become: true
+
+- name: cmdline | Read files
+  slurp:
+    src: "{{ item }}"
+  loop: "{{ zfsbootmenu_cmdline_files.files | map(attribute='path') }}"
+  register: zfsbootmenu_cmdline_slurped
+  become: true
+
+- name: cmdline | Set commandline
+  zfs:
+    name: rpool/ROOT
+    state: present
+    extra_zfs_properties:
+      'org.zfsbootmenu:commandline': "{% for f in zfsbootmenu_cmdline_slurped.results %}{{ f['content'] | b64decode | replace('\n', ' ') | trim }}{% if not loop.last %} {% endif %}{% endfor %}"
+  become: true
+  register: zfsbootmenu_cmdline_properties
+
+- name: cmdline | Ask to reboot
+  when: zfsbootmenu_cmdline_properties.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true

@@ -1,7 +1,7 @@
 - name: Install HWE kernel
   apt:
     pkg:
-      - linux-generic-hwe-22.04
+      - linux-generic-hwe-{{ ansible_distribution_version }}
     cache_valid_time: 3600
   register: kernel_apt
   become: true
@@ -11,6 +11,7 @@
     - _check_stage2
 
 - name: Install apt pins
+  when: ansible_distribution_major_version == "22"
   copy:
     src: backports
     dest: /etc/apt/preferences.d/backports
@@ -25,21 +26,22 @@
     - _check_stage2
 
 - name: Add noble repository
+  when: ansible_distribution_major_version == "22"
   apt_repository:
     repo: "{{ item }}"
   become: true
   register: noble_repository
   loop:
-    - 'deb {{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports", "http://archive.ubuntu.com/ubuntu") }} noble main restricted universe multiverse # For zfsutils-linux userspace tools'
-    - 'deb {{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports", "http://archive.ubuntu.com/ubuntu") }} noble-updates main restricted universe multiverse # For zfsutils-linux userspace tools'
-    - 'deb {{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports", "http://archive.ubuntu.com/ubuntu") }} noble-security main restricted universe multiverse # For zfsutils-linux userspace tools'
-    - 'deb {{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports", "http://archive.ubuntu.com/ubuntu") }} noble-backports main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb {{ ubuntu_mirror }} noble main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb {{ ubuntu_mirror }} noble-updates main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb {{ ubuntu_mirror }} noble-backports main restricted universe multiverse # For zfsutils-linux userspace tools'
+    - 'deb {{ ubuntu_mirror_security }} noble-security main restricted universe multiverse # For zfsutils-linux userspace tools'
   tags:
     - hwe_kernel
     - _check_stage2
 
 - name: Install tools from noble
-  when: not (ansible_check_mode and noble_repository.changed)
+  when: ansible_distribution_major_version == "22" and not (ansible_check_mode and noble_repository.changed)
   apt:
     pkg:
       - zfsutils-linux

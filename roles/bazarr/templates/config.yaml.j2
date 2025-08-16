@@ -52,7 +52,7 @@ general:
   adaptive_searching: true
   adaptive_searching_delay: 3w
   adaptive_searching_delta: 1w
-  anti_captcha_provider: null
+  anti_captcha_provider: anti-captcha
   auto_update: false
   base_url: ''
   branch: master
@@ -68,6 +68,7 @@ general:
   enabled_integrations: []
   enabled_providers:
   - opensubtitlescom
+  - gestdown
   flask_secret_key: {{ bazarr_flask_secret_key }}
   hi_extension: hi
   ignore_ass_subs: false

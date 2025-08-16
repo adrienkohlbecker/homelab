@@ -4,34 +4,52 @@ set -euo pipefail
 ROLE=$1
 shift
 
-if [ "$(uname -o)" = "GNU/Linux" ]; then
-  PODMAN="sudo podman"
-else
-  PODMAN="podman"
-fi
+SSH_USER=root
+SSH_KEY=packer/vagrant.key
+SSH_HOST=127.0.0.1
+UBUNTU_NAME=jammy
+ANSIBLE_ARGS="-e docker_test=true -e @host_vars/box-podman.yml"
+IDFILE=cid
 
-WORKDIR=$(mktemp -d)
+case $(uname -s) in
+"Darwin")
+  IMAGEDIR="$TMPDIR"
+  PODMAN="podman"
+  ;;
+"Linux")
+  IMAGEDIR=/mnt/qemu
+  PODMAN="sudo podman"
+
+  source .venv/bin/activate
+  ;;
+*)
+  echo >&2 "Unknown operating system"
+  exit 1
+  ;;
+esac
+
+case $(uname -m) in
+aarch64 | arm64)
+  UBUNTU_MIRROR="http://apt.lab.fahm.fr/ports.ubuntu.com/ubuntu-ports/"
+  UBUNTU_MIRROR_SECURITY="http://apt.lab.fahm.fr/ports.ubuntu.com/ubuntu-ports/"
+  ;;
+x86_64)
+  UBUNTU_MIRROR="http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/"
+  UBUNTU_MIRROR_SECURITY="http://apt.lab.fahm.fr/security.ubuntu.com/ubuntu/"
+  ;;
+*)
+  echo >&2 "Unknown machine name"
+  exit 1
+  ;;
+esac
+
+WORKDIR=$(mktemp --directory --tmpdir=$IMAGEDIR)
 trap 'rm -rf $WORKDIR' EXIT
 
 cp -r group_vars "$WORKDIR"
 cp -r host_vars "$WORKDIR"
 cp -r wireguard "$WORKDIR"
-cp -r "roles/systemd_unit" "$WORKDIR"
-cp -r "roles/usergroup_immediate" "$WORKDIR"
-cp -r "roles/apt_unit_masked" "$WORKDIR"
-cp -r "roles/fail2ban" "$WORKDIR"
-cp -r "roles/smart" "$WORKDIR"
-cp -r "roles/lm_sensors" "$WORKDIR"
-cp -r "roles/certbot" "$WORKDIR"
-cp -r "roles/logrotate" "$WORKDIR"
-cp -r "roles/netdata" "$WORKDIR"
-cp -r "roles/macvlan" "$WORKDIR"
-cp -r "roles/nginx" "$WORKDIR"
-cp -r "roles/cron" "$WORKDIR"
-cp -r "roles/zfs_mount" "$WORKDIR"
-cp -r "roles/sort_ini" "$WORKDIR"
-cp -r "roles/_test" "$WORKDIR"
-cp -r "roles/$ROLE" "$WORKDIR"
+cp -r roles "$WORKDIR"
 
 cat <<EOF >"$WORKDIR/site.yml"
 - hosts: box
@@ -48,47 +66,80 @@ if [ -f "roles/$ROLE/tasks/_test.yml" ]; then
 EOF
 fi
 
+$PODMAN network inspect homelab_net >/dev/null || $PODMAN network create --subnet 192.5.0.0/16 homelab_net
+
+timeout --kill-after=10s 10m \
+  $PODMAN run --interactive --rm --publish 127.0.0.1::22 --privileged --cidfile $WORKDIR/$IDFILE --network homelab_net homelab:$UBUNTU_NAME \
+  &
+TIMEOUT_PID=$!
+
 stop() {
-  if [ "${KEEPAROUND:-}" = "1" ]; then
-    echo "ssh -i packer/vagrant.key -p $PORT root@localhost"
-    echo "$PODMAN stop --ignore --time 5 $(cat $WORKDIR/cid)"
-  else
-    $PODMAN stop --ignore --time 5 --cidfile $WORKDIR/cid
-  fi
+  $PODMAN stop --ignore --time 5 --cidfile $WORKDIR/$IDFILE
+  wait $TIMEOUT_PID || true
   rm -rf "$WORKDIR"
 }
-
-err() {
-  TMPFILE=$(mktemp)
-  $PODMAN exec --tty "$(cat $WORKDIR/cid)" journalctl --pager-end --no-pager --priority info >$TMPFILE
-  echo "$TMPFILE"
-}
-
-trap err ERR
 trap stop EXIT
 
-# run once: podman network create --subnet 192.5.0.0/16 homelab_net
-$PODMAN run --interactive --rm --publish 127.0.0.1::22 --detach --privileged --cidfile $WORKDIR/cid --timeout 600 --network homelab_net homelab
+while [ ! -f $WORKDIR/$IDFILE ]; do
+  if ! kill -0 $TIMEOUT_PID &>/dev/null; then
+    echo "Launching VM failed"
+    exit 1
+  fi
 
-while [ ! -f $WORKDIR/cid ]; do
-  echo "."
+  echo -n "."
   sleep 1
 done
+echo "Booted"
 
 sleep 2
 
-ADDR=$($PODMAN port $(cat $WORKDIR/cid) 22)
+ADDR=$($PODMAN port $(cat $WORKDIR/$IDFILE) 22)
 PORT="${ADDR#*:}"
 
 while [ -z "$(socat -T2 stdout tcp:127.0.0.1:$PORT,connect-timeout=2,readbytes=1 2>/dev/null)" ]; do
-  echo "."
+  echo -n "."
   sleep 1
 done
+echo "SSH up"
+
+SSH_CMD="ssh -i $SSH_KEY -p $PORT -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null $SSH_USER@$SSH_HOST"
+stop() {
+  if [ "${KEEPAROUND:-}" = "1" ]; then
+    echo "Keeping VM around, ssh using:"
+    echo "> $SSH_CMD"
+    echo "Then Ctrl+C or"
+    echo "> $PODMAN stop --ignore --time 5 --cidfile $WORKDIR/$IDFILE"
+    trap '$PODMAN stop --ignore --time 5 --cidfile $WORKDIR/$IDFILE' INT
+  else
+    $PODMAN stop --ignore --time 5 --cidfile $WORKDIR/$IDFILE
+  fi
+  wait $TIMEOUT_PID || true
+  rm -rf "$WORKDIR"
+}
+trap stop EXIT
+
+err() {
+  TMPFILE=test/out/$ROLE.journal.ansi
+  $PODMAN exec --tty "$(cat $WORKDIR/$IDFILE)" env SYSTEMD_COLORS=true journalctl --pager-end --no-pager --priority info >$TMPFILE
+  echo "$TMPFILE"
+}
+trap err ERR
+
+$SSH_CMD sudo bash <<EOF
+truncate -s0 /etc/apt/sources.list
+echo "deb $UBUNTU_MIRROR $UBUNTU_NAME main restricted universe multiverse" >> /etc/apt/sources.list
+echo "deb $UBUNTU_MIRROR $UBUNTU_NAME-updates main restricted universe multiverse" >> /etc/apt/sources.list
+echo "deb $UBUNTU_MIRROR_SECURITY $UBUNTU_NAME-security main restricted universe multiverse" >> /etc/apt/sources.list
+echo "deb $UBUNTU_MIRROR $UBUNTU_NAME-backports main restricted universe multiverse" >> /etc/apt/sources.list
+apt-get update
+EOF
+
+ANSIBLE_PLAYBOOK="ansible-playbook $ANSIBLE_ARGS -e ansible_ssh_port=$PORT -e ansible_ssh_host=$SSH_HOST -e ansible_ssh_user=$SSH_USER -e ansible_ssh_private_key_file=$SSH_KEY -e ubuntu_mirror=$UBUNTU_MIRROR -e ubuntu_mirror_security=$UBUNTU_MIRROR_SECURITY --inventory test/inventory.ini"
 
 set -x
 
 if [ -f "$WORKDIR/_test.yml" ]; then
-  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/_test.yml"
+  $ANSIBLE_PLAYBOOK "$WORKDIR/_test.yml"
 fi
 
 if [[ ${1:-} == "--checkmode" ]]; then
@@ -96,28 +147,28 @@ if [[ ${1:-} == "--checkmode" ]]; then
 
   LIST_TAGS=$(ansible-playbook "$WORKDIR/site.yml" --list-tags)
 
-  ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --check "$@"
+  $ANSIBLE_PLAYBOOK "$WORKDIR/site.yml" --check "$@"
 
   if [[ $LIST_TAGS == *"_check_stage1"* ]]; then
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --tags _check_stage1 "$@"
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --check "$@"
+    $ANSIBLE_PLAYBOOK "$WORKDIR/site.yml" --tags _check_stage1 "$@"
+    $ANSIBLE_PLAYBOOK "$WORKDIR/site.yml" --check "$@"
   fi
 
   if [[ $LIST_TAGS == *"_check_stage2"* ]]; then
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --tags _check_stage2 "$@"
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --check "$@"
+    $ANSIBLE_PLAYBOOK "$WORKDIR/site.yml" --tags _check_stage2 "$@"
+    $ANSIBLE_PLAYBOOK "$WORKDIR/site.yml" --check "$@"
   fi
 
   if [[ $LIST_TAGS == *"_check_stage3"* ]]; then
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --tags _check_stage3 "$@"
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --check "$@"
+    $ANSIBLE_PLAYBOOK "$WORKDIR/site.yml" --tags _check_stage3 "$@"
+    $ANSIBLE_PLAYBOOK "$WORKDIR/site.yml" --check "$@"
   fi
 
   if [[ $LIST_TAGS == *"_check_stage4"* ]]; then
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --tags _check_stage4 "$@"
-    ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" --check "$@"
+    $ANSIBLE_PLAYBOOK "$WORKDIR/site.yml" --tags _check_stage4 "$@"
+    $ANSIBLE_PLAYBOOK "$WORKDIR/site.yml" --check "$@"
   fi
 
 fi
 
-ansible-playbook -e docker_test=true -e ansible_ssh_port=$PORT -e "@host_vars/box-podman.yml" --inventory test/inventory.ini "$WORKDIR/site.yml" "$@"
+$ANSIBLE_PLAYBOOK "$WORKDIR/site.yml" "$@"

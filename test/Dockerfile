@@ -17,16 +17,12 @@ RUN set -x \
  && chmod 0600 /root/.ssh/authorized_keys
 
 # python3-apt: must be installed to use check mode. If run normally this module can auto-install it.
-# python3-requests: to use docker module in check mode
 # sudo: needed to use become_user
-# cron: Failed to find required executable "crontab" in paths:
 RUN set -x \
  && export DEBIAN_FRONTEND=noninteractive \
  && apt-get update \
  && apt-get install -y --no-install-recommends python3-apt \
- && apt-get install -y --no-install-recommends python3-requests \
  && apt-get install -y --no-install-recommends sudo \
- && apt-get install -y --no-install-recommends cron \
  && rm -rf /var/lib/apt/lists/*
 
 # Ensure we have a working apt cache (keep the cleanup in other sections for easy reuse)

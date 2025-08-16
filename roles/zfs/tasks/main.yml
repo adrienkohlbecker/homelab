@@ -4,6 +4,7 @@
       - zfsutils-linux
       - zfs-initramfs
       - zfs-zed
+      - cron # for cron module
     cache_valid_time: 3600
   register: zfs_apt
   become: true
@@ -34,6 +35,17 @@
     mode: "0644"
   register: grub_cfg
   become: true
+  tags:
+    - zfs
+
+- name: Disable init_on_alloc
+  when: not grub_bootloader
+  import_role:
+    name: zfsbootmenu
+    tasks_from: cmdline
+  vars:
+    zfsbootmenu_cmdline_file: zfs
+    zfsbootmenu_cmdline_contents: init_on_alloc=0
   tags:
     - zfs
 
@@ -92,6 +104,7 @@
     - zfs
 
 - name: Schedule the health script
+  when: not (ansible_check_mode and zfs_apt.changed)
   cron:
     name: zfs_health
     minute: 55
@@ -113,6 +126,7 @@
     - zfs
 
 - name: Schedule the trim script
+  when: not (ansible_check_mode and zfs_apt.changed)
   cron:
     name: zfs_trim_{{ item }}
     weekday: 4

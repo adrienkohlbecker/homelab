@@ -11,42 +11,13 @@
 
 - name: Configure nut upsmon.conf
   when: not (ansible_check_mode and apt_install_nut.changed)
-  lineinfile:
-    regexp: "{{ item.regexp }}"
-    line: "{{ item.line }}"
-    insertafter: "{{ item.insertafter | default('EOF') }}"
+  template:
+    src: upsmon.conf.j2
     dest: /etc/nut/upsmon.conf
     backup: true
     owner: root
     group: nut
     mode: "0640"
-  loop:
-    - regexp: ^MONITOR
-      line: MONITOR eaton@localhost 1 upsmon {{ nut_upsmon_password }} master
-      insertafter: ^# MONITOR
-    - regexp: ^NOTIFYCMD
-      line: NOTIFYCMD /usr/sbin/upssched
-      insertafter: ^# NOTIFYCMD
-    - regexp: ^(#\s*)?NOTIFYFLAG ONLINE
-      line: NOTIFYFLAG ONLINE SYSLOG+WALL+EXEC
-    - regexp: ^(#\s*)?NOTIFYFLAG ONBATT
-      line: NOTIFYFLAG ONBATT SYSLOG+WALL+EXEC
-    - regexp: ^(#\s*)?NOTIFYFLAG LOWBATT
-      line: NOTIFYFLAG LOWBATT SYSLOG+WALL+EXEC
-    - regexp: ^(#\s*)?NOTIFYFLAG FSD
-      line: NOTIFYFLAG FSD SYSLOG+WALL+EXEC
-    - regexp: ^(#\s*)?NOTIFYFLAG COMMOK
-      line: NOTIFYFLAG COMMOK SYSLOG+WALL+EXEC
-    - regexp: ^(#\s*)?NOTIFYFLAG COMMBAD
-      line: NOTIFYFLAG COMMBAD SYSLOG+WALL+EXEC
-    - regexp: ^(#\s*)?NOTIFYFLAG SHUTDOWN
-      line: NOTIFYFLAG SHUTDOWN SYSLOG+WALL+EXEC
-    - regexp: ^(#\s*)?NOTIFYFLAG REPLBATT
-      line: NOTIFYFLAG REPLBATT SYSLOG+WALL+EXEC
-    - regexp: ^(#\s*)?NOTIFYFLAG NOCOMM
-      line: NOTIFYFLAG NOCOMM SYSLOG+WALL+EXEC
-    - regexp: ^(#\s*)?NOTIFYFLAG NOPARENT
-      line: NOTIFYFLAG NOPARENT SYSLOG+WALL+EXEC
   become: true
   register: nut_upsmon_conf
   tags:
@@ -54,43 +25,15 @@
 
 - name: Configure nut upssched.conf
   when: not (ansible_check_mode and apt_install_nut.changed)
-  lineinfile:
-    regexp: "{{ item.regexp }}"
-    line: "{{ item.line }}"
+  copy:
+    src: upssched.conf
     dest: /etc/nut/upssched.conf
     backup: true
     owner: root
     group: nut
     mode: "0640"
-  loop:
-    - regexp: ^(# )?CMDSCRIPT
-      line: CMDSCRIPT /usr/local/bin/nut-notify
-    - regexp: ^(# )?PIPEFN
-      line: PIPEFN /run/nut/upssched/upssched.pipe
-    - regexp: ^(# )?LOCKFN
-      line: LOCKFN /run/nut/upssched/upssched.lock
-    - regexp: ^AT ONBATT
-      line: AT ONBATT * START-TIMER onbatt 60
-    - regexp: ^AT ONLINE
-      line: AT ONLINE * CANCEL-TIMER onbatt online
-    - regexp: ^AT LOWBATT
-      line: AT LOWBATT * EXECUTE lowbatt
-    - regexp: ^AT FSD
-      line: AT FSD * EXECUTE fsd
-    - regexp: ^AT COMMBAD
-      line: AT COMMBAD * START-TIMER commbad 30
-    - regexp: ^AT COMMOK
-      line: AT COMMOK * CANCEL-TIMER commbad commok
-    - regexp: ^AT NOCOMM
-      line: AT NOCOMM * EXECUTE nocomm
-    - regexp: ^AT SHUTDOWN
-      line: AT SHUTDOWN * EXECUTE powerdown
-    - regexp: ^AT REPLBATT
-      line: AT REPLBATT * EXECUTE replbatt
-    - regexp: ^AT NOPARENT
-      line: AT NOPARENT * EXECUTE noparent
   become: true
-  register: nut_upsmon_conf
+  register: nut_upssched_conf
   tags:
     - nut_monitor
 
@@ -114,6 +57,6 @@
   vars:
     systemd_unit_src: nut-client
     systemd_unit_condition: "{{ not (ansible_check_mode and apt_install_nut.changed) }}"
-    systemd_unit_restart: "{{ nut_upsmon_conf.changed }}"
+    systemd_unit_restart: "{{ nut_upsmon_conf.changed or nut_upssched_conf.changed }}"
   tags:
     - nut_monitor

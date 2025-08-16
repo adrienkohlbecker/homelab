@@ -14,12 +14,13 @@ PartOf=zfs_autosnapshot.target
 
 [Service]
 Environment=PODMAN_SYSTEMD_UNIT=%n
-Restart=on-failure
+Restart=always
 Delegate=yes
 TimeoutSec=240
 RestartSec=5
 Type=notify
 NotifyAccess=all
+SyslogIdentifier=%N
 
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \

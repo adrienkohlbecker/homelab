@@ -5,6 +5,7 @@ After=network.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
+SyslogIdentifier=%N
 
 ExecStart=/bin/ip link add mac0 link {{ macvlan_parent }} type macvlan mode bridge
 ExecStart=/bin/ip addr add {{ macvlan_host_ip }}/32 dev mac0

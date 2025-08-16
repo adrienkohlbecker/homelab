@@ -41,27 +41,24 @@
     - certbot
     - nginx
     - services
-
-- name: Pug roles
-  hosts: box,pug
-  roles:
-    - grub
+    - zfsbootmenu
 
 - name: Unused roles (dev box only)
   hosts: box
   roles:
+    - grub
     - log2ram
     - qemu_guest
     - macvlan
     - docker
     - ipmi
     - vector
-    - eaton_ipp
     - postgres
 
 - name: Add more services
   hosts: all:!bunk
   roles:
+    - eaton_ipp
     - netdata
     - wolweb
     - csplogger

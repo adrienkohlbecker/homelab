@@ -13,9 +13,8 @@
 
 - name: Configure nut nut.conf
   when: not (ansible_check_mode and apt_install_nut.changed)
-  lineinfile:
-    regexp: '^#?\s*MODE='
-    line: MODE=standalone
+  copy:
+    src: nut.conf
     dest: /etc/nut/nut.conf
     backup: true
     owner: root
@@ -28,34 +27,15 @@
 
 - name: Configure nut ups.conf
   when: not (ansible_check_mode and apt_install_nut.changed)
-  ini_file:
-    path: /etc/nut/ups.conf
-    section: eaton
-    option: "{{ item.option }}"
-    value: "{{ item.value | default(omit) }}"
-    allow_no_value: "{{ item.allow_no_value | default(omit) }}"
+  template:
+    src: ups.conf.j2
+    dest: /etc/nut/ups.conf
     owner: root
     group: nut
     mode: "0640"
-    ignore_spaces: true
     backup: true
-  loop:
-    - option: driver
-      value: snmp-ups
-    - option: port
-      value: "{{ external_ips.eaton }}"
-    - option: community
-      value: public
-    - option: snmp_version
-      value: v1
-    - option: pollfreq
-      value: 15
-    - option: ignorelb # UPS immediately shutds down when low battery is reached. Currently low battery is set to 5%
-      allow_no_value: true
-    - option: override.battery.charge.low
-      value: 20 # approx 8 minutes if the runtime at 100% is 40min
-    - option: override.battery.runtime.low
-      value: 300 # 5 minutes
+    # Todo: When on Python 3.13 (after noble)
+    # validate: python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True, allow_unnamed_section=True).read("%s")'
   register: nut_ups_conf
   become: true
   tags:
@@ -63,10 +43,8 @@
 
 - name: Configure nut upsd.conf
   when: not (ansible_check_mode and apt_install_nut.changed)
-  lineinfile:
-    regexp: '^LISTEN '
-    insertafter: '^#?\s*LISTEN <'
-    line: LISTEN 127.0.0.1 3493
+  copy:
+    src: upsd.conf
     dest: /etc/nut/upsd.conf
     backup: true
     owner: root
@@ -79,21 +57,14 @@
 
 - name: Configure nut upsd.users
   when: not (ansible_check_mode and apt_install_nut.changed)
-  lineinfile:
-    line: "{{ item.line }}"
-    insertafter: "{{ item.insertafter | default(omit) }}"
+  template:
+    src: upsd.users.j2
     dest: /etc/nut/upsd.users
     owner: root
     group: nut
     mode: "0640"
     backup: true
-  loop:
-    - line: '[upsmon]'
-    - line: password = {{ nut_upsmon_password }}
-      regex: ^password =
-      insertafter: '\[upsmon\]'
-    - line: upsmon master
-      insertafter: ^password =
+    validate: python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True).read("%s")'
   become: true
   register: nut_upsd_users
   tags:
@@ -125,10 +96,8 @@
 
 - name: Configure nut hosts.conf
   when: not (ansible_check_mode and apt_install_nut.changed)
-  lineinfile:
-    regexp: '^MONITOR '
-    insertafter: '^#?\s*MONITOR'
-    line: MONITOR eaton@localhost "Local UPS"
+  copy:
+    src: hosts.conf
     dest: /etc/nut/hosts.conf
     backup: true
     owner: root
@@ -140,8 +109,8 @@
 
 - name: Configure nut upsset.conf
   when: not (ansible_check_mode and apt_install_nut.changed)
-  lineinfile:
-    line: I_HAVE_SECURED_MY_CGI_DIRECTORY
+  copy:
+    src: upsset.conf
     dest: /etc/nut/upsset.conf
     backup: true
     owner: root
