@@ -1,6 +1,7 @@
 zfs_root: true
 journald_storage: volatile
 grub_bootloader: true
+nut_monitor_enabled: true
 
 vmware_test: true
 
