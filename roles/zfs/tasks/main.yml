@@ -38,6 +38,17 @@
   tags:
     - zfs
 
+- name: Disable init_on_alloc
+  when: not grub_bootloader
+  import_role:
+    name: zfsbootmenu
+    tasks_from: cmdline
+  vars:
+    zfsbootmenu_cmdline_file: zfs
+    zfsbootmenu_cmdline_contents: init_on_alloc=0
+  tags:
+    - zfs
+
 - name: Update grub
   when: grub_bootloader and grub_cfg.changed and not docker_test
   command: update-grub

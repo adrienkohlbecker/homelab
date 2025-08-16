@@ -41,6 +41,7 @@
     - certbot
     - nginx
     - services
+    - zfsbootmenu
 
 - name: Pug roles
   hosts: box,pug
