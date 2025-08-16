@@ -18,6 +18,7 @@ zfs_check_mount "$DATASET" "$MOUNTPOINT"
 
 LAST_SNAPSHOT=$(zfs list -t snapshot -o name -s creation -r "$DATASET" | grep "@bak-" | tail -1 | cut -d@ -f2)
 
+# --compress causes issues with "deflate" because the version on Synology NASes is too old
 f_trace rsync \
   --archive \
   --hard-links \
@@ -27,7 +28,6 @@ f_trace rsync \
   --sparse \
   --delete \
   --delete-excluded \
-  --compress \
   --timeout 60 \
   --devices \
   --specials \
