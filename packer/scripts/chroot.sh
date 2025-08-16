@@ -211,6 +211,9 @@ refind-install
 rm /boot/refind_linux.conf
 
 cat <<EOF >>/boot/efi/EFI/refind/refind.conf
+timeout 10
+default_selection "Ubuntu (ZBM)"
+
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/VMLINUZ.EFI
     options "quit loglevel=0 zbm.skip"
@@ -220,9 +223,6 @@ menuentry "Ubuntu (ZBM Menu)" {
     loader /EFI/ZBM/VMLINUZ.EFI
     options "quit loglevel=0 zbm.show"
 }
-
-default_selection "Ubuntu (ZBM)"
-timeout 10
 EOF
 
 # Enable tmp mount
