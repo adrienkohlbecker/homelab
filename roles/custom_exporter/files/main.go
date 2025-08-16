@@ -507,6 +507,10 @@ func getNetdataCollectorStatus() error {
 	}
 
 	for _, id := range netdataCollectors {
+		if id == "" {
+			continue
+		}
+
 		value, ok := metrics[id]
 		if !ok {
 			value = 0
