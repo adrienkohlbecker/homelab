@@ -42,6 +42,7 @@
     - nginx
     - services
     - zfsbootmenu
+    - refind
 
 - name: Unused roles (dev box only)
   hosts: box
