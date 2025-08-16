@@ -18,39 +18,23 @@
     - _check_stage1
 
 - name: Install eaton ipp if needed
-  when: ansible_architecture == "x86_64" and ("ipp-linux" not in ansible_facts.packages or ansible_facts.packages["ipp-linux"][0].version != "1.73.175")
+  when: ansible_architecture == "x86_64" and ("ipp-linux" not in ansible_facts.packages or ansible_facts.packages["ipp-linux"][0].version != "1.75.183")
   become: true
   tags:
     - eaton_ipp
     - _check_stage1
   block:
 
-    # Not sure why this is timing out...
-    # - name: Download ipp-linux deb
-    #   check_mode: false
-    #   timeout: 10
-    #   get_url:
-    #     url: https://www.eaton.com/content/dam/eaton/products/backup-power-ups-surge-it-power-distribution/power-management-software-connectivity/eaton-intelligent-power-protector/software/ippv1-73/ipp-linux_1.73.175-1_amd64.deb
-    #     http_agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.159 Safari/537.36
-    #     dest: /tmp/ipp-linux.deb
-    #     mode: '0644'
-    #     owner: root
-    #     group: root
-    #     checksum: sha256:9f7e86668a8d7d40fe959e13db6d8bf03ec7bb09002e4dfc03f2f81ad8a98ad3
-
-    - name: Copy eaton_ipp deb
+    - name: Download ipp-linux deb
       check_mode: false
-      copy:
-        src: ipp-linux_1.73.175-1_amd64.deb
+      timeout: 10
+      get_url:
+        url: https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/eaton_ipp/1.75/ipp-linux_1.75.183-1_amd64.deb
         dest: /tmp/ipp-linux.deb
-        mode: "0644"
+        mode: '0644'
         owner: root
         group: root
-      register: ipp_linux_downloaded
-
-    - name: Check shasum
-      command: echo "9f7e86668a8d7d40fe959e13db6d8bf03ec7bb09002e4dfc03f2f81ad8a98ad3 /tmp/ipp-linux.deb" | sha256sum --check --status
-      changed_when: false
+        checksum: sha256:https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/eaton_ipp/1.75/checksum.ipp-linux_1.75.183-1_amd64.deb.sha256
 
     - name: Install ipp-linux
       apt:
@@ -81,5 +65,9 @@
     nginx_condition: '{{ ansible_architecture == "x86_64" }}'
     nginx_subdomain: ipp
     nginx_proxy_pass: https://localhost:4680/
+    nginx_location_conf: |
+      # By default the header name is lowercase, and this app expects it in capitalized form, otherwise we can't login.
+      proxy_set_header Content-Type      $content_type;
+      proxy_set_header Cookie            $http_cookie;
   tags:
     - eaton_ipp

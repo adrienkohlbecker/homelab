@@ -1,5 +1,6 @@
 zfs_root: false
 home_subnet: 192.5.0.0/16
+macvlan_parent: eth0
 netplan:
   ethernets:
     eth0:

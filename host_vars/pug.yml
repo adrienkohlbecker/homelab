@@ -1,15 +1,14 @@
 zfs_root: true
 journald_storage: persistent
-grub_bootloader: true
+grub_bootloader: false
+nut_monitor_enabled: false
 
 zfs_arc_max: 8589934592
 zfs_trim_pools:
   - rpool
-  - bpool
 zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
   - rpool/ROOT/jammy
-  - bpool/BOOT/jammy
-zfs_has_bpool: true
+zfs_has_bpool: false
 
 libvirt_default_network: 10.123.49.0/24
 
@@ -104,14 +103,13 @@ netdata_collectors:
   - go.d:collector:smartctl:smartctl
   - go.d:collector:systemdunits:service-units
   - go.d:collector:upsd:local
-  - go.d:collector:web_log:nginx
+  - # go.d:collector:web_log:nginx # is down when no http requests have been made recently, let's skip alerting on this
   - go.d:collector:wireguard:wireguard
   - go.d:collector:x509check:domain_cert
   - go.d:collector:x509check:host_cert
   - go.d:collector:zfspool:zfspool
 netdata_zfspool_thresholds:
   rpool: [ 95, 97, 98 ] #  40GB,  20GB,  10GB
-  bpool: [ 71, 77, 94 ] # 500MB, 400MB, 100MB
   apoc: [ 96, 97, 98 ] # 300GB, 200GB, 100GB
 netdata_diskspace_blocklist:
 - /

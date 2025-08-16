@@ -76,7 +76,7 @@
 - name: Add authorized keys
   authorized_key:
     user: "{{ ansible_user }}"
-    key: "{{ ssh_public_keys }}"
+    key: "{{( ssh_public_keys + '\n' + (ssh_public_keys_additional | default(''))) | trim }}"
     exclusive: true
   tags:
     - user

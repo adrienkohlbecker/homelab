@@ -7,6 +7,7 @@
       - libvirt-daemon-system
       - ovmf
       - libhugetlbfs-bin
+      - cron # for cron module
     cache_valid_time: 3600
   become: true
   register: apt_install_libvirt
@@ -33,7 +34,7 @@
     state: directory
     owner: root
     group: root
-    mode: "0755"
+    mode: "0711"
   become: true
   tags:
     - libvirt
@@ -41,10 +42,11 @@
 - name: Create zfs filesystem
   when: zfs_root
   zfs:
-    name: rpool/vms
+    name: rpool/libvirt
     state: present
     extra_zfs_properties:
       mountpoint: /var/lib/libvirt/images
+      recordsize: '4096'
   become: true
   tags:
     - libvirt
@@ -55,7 +57,7 @@
     name: zfs_mount
     tasks_from: unit
   vars:
-    zfs_mount_dataset: rpool/vms
+    zfs_mount_dataset: rpool/libvirt
     zfs_mount_mountpoint: /var/lib/libvirt/images
   tags:
     - libvirt
@@ -167,6 +169,7 @@
     - libvirt
 
 - name: Schedule the backup
+  when: not (ansible_check_mode and apt_install_libvirt.changed)
   cron:
     name: virsh_backup
     minute: 5

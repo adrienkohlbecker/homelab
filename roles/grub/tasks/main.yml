@@ -8,6 +8,17 @@
   tags:
     - grub
 
+- name: Create /boot/grub directory
+  file:
+    dest: /boot/grub
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - grub
+
 - name: Create /etc/default/grub.d directory
   file:
     dest: /etc/default/grub.d
@@ -34,7 +45,7 @@
     - grub
 
 - name: Update grub
-  when: grub_cfg.changed and not docker_test
+  when: grub_bootloader and grub_cfg.changed and not docker_test
   command: update-grub
   changed_when: true
   become: true

@@ -6,6 +6,7 @@ After=local-fs.target
 Type=oneshot
 RemainAfterExit=true
 ExecStart=/usr/local/bin/zfs_check_mount {{ zfs_mount_dataset }} {{ zfs_mount_mountpoint }}
+SyslogIdentifier=%N
 
 [Install]
 WantedBy=multi-user.target

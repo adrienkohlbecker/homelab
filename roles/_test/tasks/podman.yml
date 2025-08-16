@@ -1,11 +1,13 @@
-- name: _test | Install podman
+- name: _test | Install podman repository
+  when: ansible_distribution_major_version == "22"
   shell: |
     set -euo pipefail
 
     cat <<EOF >/etc/apt/sources.list.d/noble.list
-    deb {{ (ansible_architecture == "aarch64") | ternary('http://ports.ubuntu.com/ubuntu-ports', 'http://archive.ubuntu.com/ubuntu') }} noble main restricted universe multiverse
-    deb {{ (ansible_architecture == "aarch64") | ternary('http://ports.ubuntu.com/ubuntu-ports', 'http://archive.ubuntu.com/ubuntu') }} noble-updates main restricted universe multiverse
-    deb {{ (ansible_architecture == "aarch64") | ternary('http://ports.ubuntu.com/ubuntu-ports', 'http://archive.ubuntu.com/ubuntu') }} noble-security main restricted universe multiverse
+    deb {{ ubuntu_mirror }} noble main restricted universe multiverse
+    deb {{ ubuntu_mirror }} noble-updates main restricted universe multiverse
+    deb {{ ubuntu_mirror }} noble-backports main restricted universe multiverse
+    deb {{ ubuntu_mirror_security }} noble-security main restricted universe multiverse
     EOF
 
     cat <<EOF >/etc/apt/preferences.d/podman-noble-backport
@@ -21,6 +23,51 @@
     Pin: release o=Ubuntu
     Pin-Priority: -10
     EOF
+  args:
+    executable: /bin/bash
+    creates: /etc/apt/preferences.d/podman-noble-backport
+  become: true
+
+- name: Create mount point
+  when: zfs_root
+  file:
+    dest: /var/lib/containers/storage
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: Create podman zvol
+  when: zfs_root
+  zfs:
+    name: rpool/podman
+    state: present
+    extra_zfs_properties:
+      volsize: '{{ "20GB" | human_to_bytes }}'
+  become: true
+
+- name: Create a ext4 filesystem on podman zvol
+  when: zfs_root
+  filesystem:
+    fstype: ext4
+    dev: /dev/zvol/rpool/podman
+  become: true
+
+- name: Mount podman zvol
+  when: zfs_root
+  mount:
+    path: /var/lib/containers/storage
+    src: /dev/zvol/rpool/podman
+    fstype: ext4
+    opts: defaults,noatime
+    state: mounted
+    backup: true
+  become: true
+
+- name: _test | Install podman
+  shell: |
+    set -euo pipefail
 
     apt-get update
     apt-get install -y --no-install-recommends podman iptables

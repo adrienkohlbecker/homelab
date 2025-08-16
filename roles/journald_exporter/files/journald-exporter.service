@@ -26,5 +26,6 @@ ProtectKernelModules=true
 ProtectKernelLogs=true
 ProtectControlGroups=true
 MemoryDenyWriteExecute=true
+SyslogIdentifier=%N
 SyslogLevel=warning
 SyslogLevelPrefix=false

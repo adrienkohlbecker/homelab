@@ -50,6 +50,7 @@
 -A FILTERS -p tcp --dport 80    -j ACCEPT                                     -m comment --comment "Allow HTTP"
 -A FILTERS -p tcp --dport 443   -j ACCEPT                                     -m comment --comment "Allow HTTPS"
 -A FILTERS -p tcp --dport 445   -j ACCEPT                                     -m comment --comment "Allow Samba"
+-A FILTERS -p tcp --dport 3493  -j ACCEPT                                     -m comment --comment "Allow nut"
 
 ##################################################
 #                   INPUT RULES                  #

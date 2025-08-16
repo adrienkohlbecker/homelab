@@ -7,6 +7,7 @@ Type=oneshot
 ExecStart=/usr/bin/ssh-keygen -A
 RemainAfterExit=true
 StandardOutput=journal
+SyslogIdentifier=%N
 
 [Install]
 WantedBy=multi-user.target
