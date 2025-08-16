@@ -1,7 +1,7 @@
 - name: Download zfsbootmenu
   get_url:
-    url: https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.0.1/zfsbootmenu-recovery-x86_64-v3.0.1-linux6.12.EFI
-    checksum: sha256:375ef1a0505bbbd648572c16d83884d5147fa2435508b4717e2749aead676143
+    url: https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.0.1/zfsbootmenu-recovery-x86_64-v3.0.1-linux6.1.EFI
+    checksum: sha256:3d4c55147964fdbc2b0042535d9ee117dc51bee82af045040d26ae9dfb9bdf0d
     dest: "{{ item }}"
     mode: "0755"
     owner: root
