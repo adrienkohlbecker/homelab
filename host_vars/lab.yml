@@ -69,22 +69,22 @@ zfs_autobackup_dest_dataset: tank/pug
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDp277oY86WuDWYdU4Xr8eBUMAZ7L089F5SjBhmZzRS8 root@pug
 
 fancontrol_settings: |
-  # hwmon12/pwm2 => CPU_FAN
-  # hwmon12/pwm1 => CHA_FAN1 => exhaust
-  # hwmon12/pwm3 => CHA_FAN2 => intake
-  # hwmon12/pwm4 => CHA_FAN3 => intake
-  # hwmon12/temp2_input => CPU temp
+  # hwmon11/pwm2 => CPU_FAN
+  # hwmon11/pwm1 => CHA_FAN1 => exhaust
+  # hwmon11/pwm3 => CHA_FAN2 => intake
+  # hwmon11/pwm4 => CHA_FAN3 => intake
+  # hwmon11/temp2_input => CPU temp
   # hwmon4/temp1_input => HDD temp?
   INTERVAL=10
-  DEVPATH=hwmon12=devices/platform/nct6775.656 hwmon4=devices/pci0000:00/0000:00:17.0/ata1/host0/target0:0:0/0:0:0:0
-  DEVNAME=hwmon12=nct6798 hwmon4=drivetemp
-  FCTEMPS=hwmon12/pwm2=hwmon12/temp2_input hwmon12/pwm1=hwmon12/temp2_input hwmon12/pwm4=hwmon4/temp1_input hwmon12/pwm3=hwmon4/temp1_input
-  FCFANS=hwmon12/pwm2=hwmon12/fan2_input hwmon12/pwm1=hwmon12/fan1_input hwmon12/pwm4=hwmon12/fan4_input hwmon12/pwm3=hwmon12/fan3_input
-  MINTEMP=hwmon12/pwm2=30 hwmon12/pwm1=30 hwmon12/pwm4=30 hwmon12/pwm3=30
-  MAXTEMP=hwmon12/pwm2=60 hwmon12/pwm1=60 hwmon12/pwm4=40 hwmon12/pwm3=40
-  MINSTART=hwmon12/pwm2=58 hwmon12/pwm1=46 hwmon12/pwm4=46 hwmon12/pwm3=46
-  MINSTOP=hwmon12/pwm2=28 hwmon12/pwm1=16 hwmon12/pwm4=16 hwmon12/pwm3=16
-  MINPWM=hwmon12/pwm2=28 hwmon12/pwm1=16 hwmon12/pwm4=16 hwmon12/pwm3=16
+  DEVPATH=hwmon11=devices/platform/nct6775.656 hwmon4=devices/pci0000:00/0000:00:17.0/ata1/host0/target0:0:0/0:0:0:0
+  DEVNAME=hwmon11=nct6798 hwmon4=drivetemp
+  FCTEMPS=hwmon11/pwm2=hwmon11/temp2_input hwmon11/pwm1=hwmon11/temp2_input hwmon11/pwm4=hwmon4/temp1_input hwmon11/pwm3=hwmon4/temp1_input
+  FCFANS=hwmon11/pwm2=hwmon11/fan2_input hwmon11/pwm1=hwmon11/fan1_input hwmon11/pwm4=hwmon11/fan4_input hwmon11/pwm3=hwmon11/fan3_input
+  MINTEMP=hwmon11/pwm2=30 hwmon11/pwm1=30 hwmon11/pwm4=30 hwmon11/pwm3=30
+  MAXTEMP=hwmon11/pwm2=60 hwmon11/pwm1=60 hwmon11/pwm4=40 hwmon11/pwm3=40
+  MINSTART=hwmon11/pwm2=58 hwmon11/pwm1=46 hwmon11/pwm4=46 hwmon11/pwm3=46
+  MINSTOP=hwmon11/pwm2=28 hwmon11/pwm1=16 hwmon11/pwm4=16 hwmon11/pwm3=16
+  MINPWM=hwmon11/pwm2=28 hwmon11/pwm1=16 hwmon11/pwm4=16 hwmon11/pwm3=16
 
 pihole_keepalived_role: MASTER
 pihole_keepalived_priority: 100
