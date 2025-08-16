@@ -105,7 +105,7 @@ netdata_collectors:
   - go.d:collector:smartctl:smartctl
   - go.d:collector:systemdunits:service-units
   - go.d:collector:upsd:local
-  - go.d:collector:web_log:nginx
+  - # go.d:collector:web_log:nginx # is down when no http requests have been made recently, let's skip alerting on this
   - go.d:collector:wireguard:wireguard
   - go.d:collector:x509check:domain_cert
   - go.d:collector:x509check:host_cert
