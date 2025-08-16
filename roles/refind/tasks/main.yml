@@ -73,3 +73,15 @@
   become: true
   tags:
     - refind
+
+- name: Configure refind
+  copy:
+    src: theme.conf
+    dest: /boot/efi/EFI/refind/themes/refind-theme-regular/theme.conf
+    owner: root
+    group: root
+    mode: "0644"
+    # backup: true # TODO: this fails?
+  become: true
+  tags:
+    - refind

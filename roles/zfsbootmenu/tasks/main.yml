@@ -2,15 +2,33 @@
   get_url:
     url: https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.0.1/zfsbootmenu-recovery-x86_64-v3.0.1-linux6.1.EFI
     checksum: sha256:3d4c55147964fdbc2b0042535d9ee117dc51bee82af045040d26ae9dfb9bdf0d
-    dest: "{{ item }}"
-    mode: "0755"
+    dest: /boot/efi/EFI/ZBM/VMLINUZ.EFI
+    mode: "0644"
     owner: root
     group: root
-  loop:
-    - /boot/efi/EFI/ZBM/VMLINUZ.EFI
-    - /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
   become: true
   register: zfsbootmenu_efi
+  tags:
+    - zfsbootmenu
+
+- name: Check if backup exists
+  stat:
+    path: /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
+  register: zfsbootmenu_efi_backup
+  become: true
+  tags:
+    - zfsbootmenu
+
+- name: Create backup the first time only
+  when: not zfsbootmenu_efi_backup.stat.exists
+  copy:
+    src: /boot/efi/EFI/ZBM/VMLINUZ.EFI
+    dest: /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
+    remote_src: true
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
   tags:
     - zfsbootmenu
 
