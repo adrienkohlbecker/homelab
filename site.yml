@@ -43,14 +43,10 @@
     - services
     - zfsbootmenu
 
-- name: Pug roles
-  hosts: box,pug
-  roles:
-    - grub
-
 - name: Unused roles (dev box only)
   hosts: box
   roles:
+    - grub
     - log2ram
     - qemu_guest
     - macvlan
