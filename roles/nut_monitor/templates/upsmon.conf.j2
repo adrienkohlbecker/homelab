@@ -82,7 +82,7 @@
 # MONITOR myups@bigserver 1 monmaster blah master
 # MONITOR su700@server.example.com 1 upsmon secretpass slave
 # MONITOR myups@localhost 1 upsmon pass master	(or slave)
-MONITOR eaton@localhost 1 upsmon {{ nut_upsmon_password }} master
+{% if nut_monitor_enabled|default(false) %}MONITOR eaton@localhost 1 upsmon {{ nut_upsmon_password }} master{% endif %}
 
 # --------------------------------------------------------------------------
 # MINSUPPLIES <num>
@@ -100,7 +100,7 @@ MONITOR eaton@localhost 1 upsmon {{ nut_upsmon_password }} master
 # for this to make sense!  See big-servers.txt in the docs subdirectory
 # for more information and ideas on how to use this feature.
 
-MINSUPPLIES 1
+MINSUPPLIES {% if nut_monitor_enabled|default(false) %}1{% else %}0{% endif %}
 
 # --------------------------------------------------------------------------
 # SHUTDOWNCMD "<command>"
