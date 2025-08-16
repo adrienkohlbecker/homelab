@@ -1,0 +1,48 @@
+- name: Download zfsbootmenu
+  get_url:
+    url: https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.0.1/zfsbootmenu-recovery-x86_64-v3.0.1-linux6.12.EFI
+    checksum: sha256:375ef1a0505bbbd648572c16d83884d5147fa2435508b4717e2749aead676143
+    dest: "{{ item }}"
+    mode: "0755"
+    owner: root
+    group: root
+  loop:
+    - /boot/efi/EFI/ZBM/VMLINUZ.EFI
+    - /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
+  become: true
+  register: zfsbootmenu_efi
+  tags:
+    - zfsbootmenu
+
+# TODO this is a zpool property
+# - name: Set bootfs on rpool
+#   zfs:
+#     name: rpool
+#     state: present
+#     extra_zfs_properties:
+#       'bootfs': 'rpool/ROOT/jammy'
+#   become: true
+#   tags:
+#     - zfsbootmenu
+
+- name: Set default command line
+  import_role:
+    name: zfsbootmenu
+    tasks_from: cmdline
+  vars:
+    zfsbootmenu_cmdline_file: default
+    zfsbootmenu_cmdline_contents: ''
+  tags:
+    - zfsbootmenu
+
+- name: Ask to reboot
+  when: zfsbootmenu_efi.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - zfsbootmenu

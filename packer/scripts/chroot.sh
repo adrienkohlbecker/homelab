@@ -128,7 +128,7 @@ update-initramfs -c -k all
 
 # Set ZFSBootMenu properties on datasets
 
-zfs set org.zfsbootmenu:commandline="quiet" "rpool/ROOT/$UBUNTU_NAME"
+zfs set org.zfsbootmenu:commandline="" "rpool/ROOT"
 
 # Create efi & swap
 

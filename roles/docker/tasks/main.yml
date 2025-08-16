@@ -132,6 +132,17 @@
   tags:
     - docker
 
+- name: Enable memory cgroup and swap accounting
+  when: not grub_bootloader
+  import_role:
+    name: zfsbootmenu
+    tasks_from: cmdline
+  vars:
+    zfsbootmenu_cmdline_file: docker
+    zfsbootmenu_cmdline_contents: cgroup_enable=memory swapaccount=1
+  tags:
+    - docker
+
 - name: Update grub
   when: grub_bootloader and grub_cfg.changed and not docker_test
   command: update-grub
