@@ -133,35 +133,27 @@ zfs set org.zfsbootmenu:commandline="" "rpool/ROOT"
 # Create efi & swap
 
 if [ "$LAYOUT" = "" ]; then
-  EFI_DEVICE="${DISKS[0]}1"
-  SWAP_DEVICE="${DISKS[0]}2"
+  EFI_DEVICE="/dev/disk/by-uuid/$(blkid -s UUID -o value "${DISKS[0]}1")"
+  SWAP_DEVICE="/dev/disk/by-uuid/$(blkid -s UUID -o value "${DISKS[0]}2")"
 else
-  if [ "$LAYOUT" = "mirror" ]; then
-    level="mirror"
-  elif [ "$LAYOUT" = "raidz" ]; then
-    level="raid5"
-  elif [ "$LAYOUT" = "raidz2" ]; then
-    level="raid6"
-  else
-    echo >&2 "Unexpected layout $LAYOUT"
-    exit 1
-  fi
   apt-get install --yes mdadm
 
   # This configuration exploits the fact that, with version 1.0, mdraid metadata will be written to the end of each partition.
   # Newer metadata versions would be written to the beginning of each partition, and the system firmware would fail to
   # recognize each component as a valid EFI system partition.
-  mdadm --create /dev/md/efi --metadata=1.0 --level="$level" --raid-devices="${#DISKS[@]}" "${DISKS[@]/%/1}"
+  mdadm --create /dev/md/efi --name=any:efi --metadata=1.0 --level="raid1" --raid-devices="${#DISKS[@]}" "${DISKS[@]/%/1}"
+  mdadm --detail --brief /dev/md/efi >> /etc/mdadm/mdadm.conf
   EFI_DEVICE=/dev/md/efi
 
-  mdadm --create /dev/md/swap --metadata=1.2 --level="$level" --raid-devices="${#DISKS[@]}" "${DISKS[@]/%/2}"
+  mdadm --create /dev/md/swap --name=any:swap --metadata=1.2 --level="raid0" --raid-devices="${#DISKS[@]}" "${DISKS[@]/%/2}"
+  mdadm --detail --brief /dev/md/swap >> /etc/mdadm/mdadm.conf
   SWAP_DEVICE=/dev/md/swap
 fi
 
 # Create EFI filesystem
 
 mkdosfs -F 32 -s 1 -n EFI $EFI_DEVICE
-echo "/dev/disk/by-uuid/$(blkid -s UUID -o value $EFI_DEVICE) /boot/efi vfat defaults 0 0" >>/etc/fstab
+echo "$EFI_DEVICE /boot/efi vfat defaults 0 0" >>/etc/fstab
 
 sync
 sleep 2
@@ -169,7 +161,7 @@ sleep 2
 # Create swap filesystem
 
 mkswap -f $SWAP_DEVICE
-echo "/dev/disk/by-uuid/$(blkid -s UUID -o value $SWAP_DEVICE) none swap discard 0 0" >>/etc/fstab
+echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 
 sync
 sleep 2
@@ -177,6 +169,10 @@ sleep 2
 # Update device symlinks
 
 udevadm trigger
+
+# Update initramfs
+
+update-initramfs -u -k all
 
 # Mount EFI filesystem
 
