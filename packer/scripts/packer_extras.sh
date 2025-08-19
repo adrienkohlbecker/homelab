@@ -9,16 +9,19 @@ ubuntu-lab)
     -o ashift=12 \
     -o autotrim=on \
     -o compatibility=openzfs-2.1-linux \
-    -O acltype=posixacl \
+    -O casesensitivity=insensitive \
+    -O normalization=formD \
+    -O utf8only=on \
+    -O acltype=posix \
     -O atime=on \
     -O canmount=off \
-    -O casesensitivity=sensitive \
     -O compression=zstd \
+    -O devices=off \
     -O dnodesize=auto \
-    -O normalization=formD \
+    -O exec=off \
     -O overlay=off \
     -O relatime=on \
-    -O utf8only=on \
+    -O setuid=off \
     -O xattr=sa \
     -m none \
     dozer mirror /dev/vde /dev/vdf
@@ -47,16 +50,19 @@ ubuntu-lab)
     -o ashift=12 \
     -o autotrim=off \
     -o compatibility=openzfs-2.1-linux \
-    -O acltype=posixacl \
+    -O casesensitivity=insensitive \
+    -O normalization=formD \
+    -O utf8only=on \
+    -O acltype=posix \
     -O atime=on \
     -O canmount=off \
-    -O casesensitivity=sensitive \
     -O compression=zstd \
+    -O devices=off \
     -O dnodesize=auto \
-    -O normalization=formD \
+    -O exec=off \
     -O overlay=off \
     -O relatime=on \
-    -O utf8only=on \
+    -O setuid=off \
     -O xattr=sa \
     -m none \
     tank raidz2 /dev/vdg1 /dev/vdh1 /dev/vdi /dev/vdj
@@ -71,16 +77,19 @@ ubuntu-lab)
     -o ashift=12 \
     -o autotrim=off \
     -o compatibility=openzfs-2.1-linux \
-    -O acltype=posixacl \
+    -O casesensitivity=insensitive \
+    -O normalization=formD \
+    -O utf8only=on \
+    -O acltype=posix \
     -O atime=on \
     -O canmount=off \
-    -O casesensitivity=sensitive \
     -O compression=zstd \
+    -O devices=off \
     -O dnodesize=auto \
-    -O normalization=formD \
+    -O exec=off \
     -O overlay=off \
     -O relatime=on \
-    -O utf8only=on \
+    -O setuid=off \
     -O xattr=sa \
     -m none \
     mouse mirror /dev/vdg2 /dev/vdh2
@@ -95,16 +104,19 @@ ubuntu-pug)
     -o ashift=12 \
     -o autotrim=off \
     -o compatibility=openzfs-2.1-linux \
-    -O acltype=posixacl \
+    -O casesensitivity=insensitive \
+    -O normalization=formD \
+    -O utf8only=on \
+    -O acltype=posix \
     -O atime=on \
     -O canmount=off \
-    -O casesensitivity=sensitive \
     -O compression=zstd \
+    -O devices=off \
     -O dnodesize=auto \
-    -O normalization=formD \
+    -O exec=off \
     -O overlay=off \
     -O relatime=on \
-    -O utf8only=on \
+    -O setuid=off \
     -O xattr=sa \
     -m none \
     apoc mirror /dev/vdc /dev/vdd

@@ -91,16 +91,16 @@ zpool create -f \
   -o ashift=12 \
   -o autotrim=on \
   -o compatibility=openzfs-2.1-linux \
-  -O acltype=posixacl \
+  -O casesensitivity=sensitive \
+  -O normalization=formD \
+  -O utf8only=on \
+  -O acltype=posix \
   -O atime=on \
   -O canmount=off \
-  -O casesensitivity=sensitive \
   -O compression=zstd \
   -O dnodesize=auto \
-  -O normalization=formD \
   -O overlay=off \
   -O relatime=on \
-  -O utf8only=on \
   -O xattr=sa \
   -m none \
   rpool $LAYOUT "${DISKS[@]/%/3}"
