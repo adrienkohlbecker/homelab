@@ -3,7 +3,7 @@
     url: https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.0.1/zfsbootmenu-recovery-x86_64-v3.0.1-linux6.1.EFI
     checksum: sha256:3d4c55147964fdbc2b0042535d9ee117dc51bee82af045040d26ae9dfb9bdf0d
     dest: /boot/efi/EFI/ZBM/VMLINUZ.EFI
-    mode: "0644"
+    mode: "0755"
     owner: root
     group: root
   become: true
@@ -25,7 +25,7 @@
     src: /boot/efi/EFI/ZBM/VMLINUZ.EFI
     dest: /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
     remote_src: true
-    mode: "0644"
+    mode: "0755"
     owner: root
     group: root
   become: true

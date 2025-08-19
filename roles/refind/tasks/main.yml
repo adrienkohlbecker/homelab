@@ -68,7 +68,7 @@
     dest: /boot/efi/EFI/refind/refind.conf
     owner: root
     group: root
-    mode: "0644"
+    mode: "0755"
     # backup: true # TODO: this fails?
   become: true
   tags:
@@ -80,7 +80,7 @@
     dest: /boot/efi/EFI/refind/themes/refind-theme-regular/theme.conf
     owner: root
     group: root
-    mode: "0644"
+    mode: "0755"
     # backup: true # TODO: this fails?
   become: true
   tags:

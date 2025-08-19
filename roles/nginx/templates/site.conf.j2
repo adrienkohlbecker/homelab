@@ -69,6 +69,7 @@ server {
 {% endif %}
 }
 {% if nginx_enable_http is not defined or not nginx_enable_http %}
+
 server {
     listen      80;
     server_name {{ nginx_subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_subdomain }}.{{ domain}};

@@ -16,7 +16,7 @@
     state: present
     extra_zfs_properties:
       mountpoint: /mnt/qemu
-      recordsize: 4k
+      recordsize: '4096'
   become: true
   tags:
     - qemu_host
