@@ -108,7 +108,8 @@
   cron:
     name: zfs_health
     minute: 55
-    job: /usr/local/bin/run_job hourly zfs_health /usr/local/bin/zfs_health
+    hour: 0
+    job: /usr/local/bin/run_job daily zfs_health /usr/local/bin/zfs_health
     user: root
     cron_file: ansible_zfs_health
     backup: true
