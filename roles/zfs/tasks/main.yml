@@ -90,6 +90,19 @@
   tags:
     - zfs
 
+- name: Copy the cull script
+  copy:
+    src: zfs_cull.sh
+    dest: /usr/local/bin/zfs_cull
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - zfs
+
 - name: Copy the health script
   copy:
     src: zfs_health.sh
