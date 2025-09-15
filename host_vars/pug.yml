@@ -52,8 +52,8 @@ fancontrol_settings: |
   DEVNAME=hwmon2=drivetemp hwmon4=nct6798
   FCTEMPS=hwmon4/pwm3=hwmon4/temp1_input hwmon4/pwm2=hwmon2/temp1_input
   FCFANS=hwmon4/pwm3=hwmon4/fan3_input hwmon4/pwm2=hwmon4/fan2_input
-  MINTEMP=hwmon4/pwm3=40 hwmon4/pwm2=30
-  MAXTEMP=hwmon4/pwm3=60 hwmon4/pwm2=45
+  MINTEMP=hwmon4/pwm3=40 hwmon4/pwm2=40
+  MAXTEMP=hwmon4/pwm3=60 hwmon4/pwm2=55
   MINSTART=hwmon4/pwm3=40 hwmon4/pwm2=120
   MINSTOP=hwmon4/pwm3=10 hwmon4/pwm2=90
   MINPWM=hwmon4/pwm3=10 hwmon4/pwm2=90
