@@ -429,3 +429,19 @@
       add_header Access-Control-Allow-Origin "https://brands.home-assistant.io";
   tags:
     - homeassistant
+
+- name: Install vscode editor
+  import_role:
+    name: vscode
+    tasks_from: module
+  vars:
+    vscode_user: "{{ homeassistant_user }}"
+    vscode_name: vscode_ha
+    vscode_path: vscode_ha
+    vscode_subdomain: vscode_ha
+    vscode_mount: /mnt/services/homeassistant
+    vscode_workspace: homeassistant
+    vscode_port: 3002
+    nginx_csp_frame_ancestors: https://homeassistant.{{ inventory_hostname }}.{{ domain }}/ 'self'
+  tags:
+    - homeassistant
