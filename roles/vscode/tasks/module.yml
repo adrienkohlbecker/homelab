@@ -1,0 +1,61 @@
+- name: Create configuration directory
+  when: not (ansible_check_mode and vscode_user.changed)
+  file:
+    dest: /mnt/services/{{ vscode_path }}
+    state: directory
+    owner: "{{ vscode_user.uid }}"
+    group: "{{ vscode_user.group }}"
+    mode: "0755"
+  become: true
+  tags:
+    - vscode
+    - _check_stage2
+
+- name: Configure workspace
+  when: not (ansible_check_mode and vscode_user.changed)
+  template:
+    src: workspace.json.j2
+    dest: /mnt/services/{{ vscode_path }}/{{ vscode_workspace }}.code-workspace
+    owner: "{{ vscode_user.uid }}"
+    group: "{{ vscode_user.group }}"
+    mode: "0644"
+    backup: true
+  register: vscode_workspace_file
+  become: true
+  tags:
+    - vscode
+    - _check_stage2
+
+- name: Install vscode service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: vscode.service
+    systemd_unit_dest: "{{ vscode_name }}.service"
+    systemd_unit_condition: "{{ not (ansible_check_mode and vscode_user.changed) }}"
+  tags:
+    - vscode
+    - _check_stage2
+
+- name: Enable vscode service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: vscode
+    systemd_unit_dest: "{{ vscode_name }}"
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or vscode_user.changed)) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or vscode_workspace_file.changed }}"
+  tags:
+    - vscode
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: "{{ vscode_subdomain }}"
+    nginx_proxy_pass: http://localhost:3002/
+  tags:
+    - vscode

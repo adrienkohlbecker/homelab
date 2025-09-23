@@ -10,7 +10,7 @@ server {
   add_header X-XSS-Protection          "1; mode=block" always;
   add_header X-Content-Type-Options    "nosniff" always;
   add_header Referrer-Policy           "same-origin" always;
-  add_header Content-Security-Policy   "{% if nginx_csp_additional is defined %}{{ nginx_csp_additional }}; {% endif %}default-src {% if nginx_csp_default_src is defined %}{{ nginx_csp_default_src }} {% endif %}{{ nginx_csp_default }}; frame-ancestors 'self'; report-uri https://csplogger.{{ inventory_hostname }}.{{ domain }}/log; report-to csp-endpoint;" always;
+  add_header Content-Security-Policy   "{% if nginx_csp_additional is defined %}{{ nginx_csp_additional }}; {% endif %}default-src {% if nginx_csp_default_src is defined %}{{ nginx_csp_default_src }} {% endif %}{{ nginx_csp_default }}; frame-ancestors {% if nginx_csp_frame_ancestors is defined %}{{ nginx_csp_frame_ancestors }}{% else %}'self'{% endif %}; report-uri https://csplogger.{{ inventory_hostname }}.{{ domain }}/log; report-to csp-endpoint;" always;
   add_header Permissions-Policy        "interest-cohort=()" always;
   add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
   add_header Reporting-Endpoints       'csp-endpoint="https://csplogger.{{ inventory_hostname }}.{{ domain }}/log"' always;
