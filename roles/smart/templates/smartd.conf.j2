@@ -163,7 +163,7 @@ DEFAULT -H -f -t -l selftest -C 197+ -U 198+ -n standby -m root -M exec /usr/sha
 {% if dev.startswith('nvme-') %}
 /dev/disk/by-id/{{ dev }} -d nvme,0xffffffff -W 0,60,80
 {% elif dev.startswith('ata-') %}
-/dev/disk/by-id/{{ dev }} -d ata -W 0,45,50 -l error
+/dev/disk/by-id/{{ dev }} -d ata -W 0,50,55 -l error
 {% endif %}
 {% endfor %}
 
