@@ -31,8 +31,9 @@
    {
     "id": "10",
     "name": "Live Music",
-    "enabled": false,
-    "type": "movie"
+    "enabled": true,
+    "type": "movie",
+    "lastScan": {{ overseerr_settings_json | json_query('plex.libraries[0].lastScan') or 0 }}
    },
    {
     "id": "1",
