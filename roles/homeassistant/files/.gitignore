@@ -3,3 +3,4 @@ macros.jinja
 sensors.yaml
 templates.yaml
 covers.yaml
+blueprints/
