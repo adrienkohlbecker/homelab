@@ -36,7 +36,7 @@ PATH = /mnt/services/gitea/data/lfs
 ENABLED = true
 SMTP_ADDR = {{ smtp_host }}
 SMTP_PORT = {{ smtp_port }}
-FROM = gitea@{{ domain }}
+FROM = {{ gitea_smtp_user }}
 USER = {{ gitea_smtp_user }}
 PASSWD = {{ gitea_smtp_password }}
 

@@ -44,7 +44,7 @@ ExecStart=/usr/bin/podman run \
     --env SUPERUSER_EMAIL={{ root_email }} \
     --secret=healthchecks_password,type=env,target=SUPERUSER_PASSWORD \
     --env DEBUG=False \
-    --env DEFAULT_FROM_EMAIL="healthchecks@{{ domain }}" \
+    --env DEFAULT_FROM_EMAIL="{{ healthchecks_smtp_user}}" \
     --env EMAIL_HOST="{{ smtp_host }}" \
     --env EMAIL_PORT="{{ smtp_port }}" \
     --env EMAIL_HOST_USER="{{ healthchecks_smtp_user}}" \
