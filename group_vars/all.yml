@@ -11,6 +11,7 @@ nginx_csp_default: "data: blob: 'unsafe-inline' 'unsafe-eval' 'self'"
 root_email: adrien.kohlbecker@gmail.com
 smtp_host: smtp.eu.mailgun.org
 smtp_port: 587
+email_domain: noreply.{{ domain }}
 
 ubuntu_mirror: '{{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports/", "http://archive.ubuntu.com/ubuntu/") }}'
 ubuntu_mirror_security: '{{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports/", "http://security.ubuntu.com/ubuntu/") }}'
