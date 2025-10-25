@@ -37,6 +37,12 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/pihole/dnsmasq:/etc/dnsmasq.d \
     --volume /var/log/pihole:/var/log/pihole \
     --env TZ="Europe/Paris" \
+    --env FTLCONF_dns_listeningMode=SINGLE \
+    --env FTLCONF_dns_reply_host_IPv4={{ ansible_facts.default_ipv4.address }} \
+    --env FTLCONF_dns_revServers="true,{{ home_subnet }},{{ home_subnet | ansible.utils.ipmath(1) }}" \
+    --env FTLCONF_dns_upstreams="{{ podman_default_network | ansible.utils.ipmath(1) }}#5053" \
+    --env FTLCONF_misc_etc_dnsmasq_d=true \
+    --env FTLCONF_webserver_api_pwhash="{{ pihole_password | hash('sha256') | hash('sha256') }}" \
     --env PIHOLE_UID={{ pihole_user.uid }} \
     --env PIHOLE_GID={{ pihole_user.group }} \
     --dns=127.0.0.1 \
