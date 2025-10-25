@@ -21,6 +21,7 @@
   become: true
   tags:
     - dnscrypt_proxy
+    - _check_stage1
 
 - name: Install dnscrypt-proxy socket override
   import_role:
@@ -32,12 +33,14 @@
     systemd_unit_verify: dnscrypt-proxy.socket
   tags:
     - dnscrypt_proxy
+    - _check_stage1
 
 - name: Save return value
   set_fact:
     socket_systemd_unit: '{{ systemd_unit }}'
   tags:
     - dnscrypt_proxy
+    - _check_stage1
 
 - name: Copy dnscrypt-proxy conf
   copy:
@@ -50,6 +53,7 @@
   register: dnscrypt_proxy_conf
   tags:
     - dnscrypt_proxy
+    - _check_stage1
 
 - name: Enable the service
   when: not (ansible_check_mode and apt_unit_masked.changed)

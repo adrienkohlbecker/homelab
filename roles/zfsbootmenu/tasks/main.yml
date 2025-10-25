@@ -1,4 +1,19 @@
+- name: Create ZBM directory
+  file:
+    dest: /boot/efi/EFI/ZBM/
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  register: zbm_directory
+  tags:
+    - _check_stage1
+    - _check_stage2
+    - zfsbootmenu
+
 - name: Download zfsbootmenu
+  when: not (ansible_check_mode and zbm_directory.changed)
   get_url:
     url: https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.0.1/zfsbootmenu-recovery-x86_64-v3.0.1-linux6.1.EFI
     checksum: sha256:3d4c55147964fdbc2b0042535d9ee117dc51bee82af045040d26ae9dfb9bdf0d
@@ -10,6 +25,7 @@
   register: zfsbootmenu_efi
   tags:
     - zfsbootmenu
+    - _check_stage2
 
 - name: Check if backup exists
   stat:
@@ -18,9 +34,10 @@
   become: true
   tags:
     - zfsbootmenu
+    - _check_stage2
 
 - name: Create backup the first time only
-  when: not zfsbootmenu_efi_backup.stat.exists
+  when: not (ansible_check_mode and (zbm_directory.changed or zfsbootmenu_efi.changed)) and not zfsbootmenu_efi_backup.stat.exists
   copy:
     src: /boot/efi/EFI/ZBM/VMLINUZ.EFI
     dest: /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI

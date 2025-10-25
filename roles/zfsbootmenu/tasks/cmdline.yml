@@ -43,6 +43,7 @@
   become: true
 
 - name: cmdline | Set commandline
+  when: zfs_root
   zfs:
     name: rpool/ROOT
     state: present
