@@ -109,15 +109,16 @@
   tags:
     - pihole
 
-- name: Configure pihole logrotate
-  import_role:
-    name: logrotate
-    tasks_from: compression
-  vars:
-    logrotate_item: /mnt/services/pihole/etc/logrotate
-    logrotate_condition: "{{ not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed)) }}"
-  tags:
-    - pihole
+# TODO: this is being overwritten on start by https://github.com/pi-hole/docker-pi-hole/blob/master/src/bash_functions.sh#L94
+# - name: Configure pihole logrotate
+#   import_role:
+#     name: logrotate
+#     tasks_from: compression
+#   vars:
+#     logrotate_item: /mnt/services/pihole/etc/logrotate
+#     logrotate_condition: "{{ not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed)) }}"
+#   tags:
+#     - pihole
 
 - name: Configure pihole
   template:
