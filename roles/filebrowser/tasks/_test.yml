@@ -8,11 +8,6 @@
     name: _test
     tasks_from: nginx
 
-- name: _test | Install nodejs
-  import_role:
-    name: _test
-    tasks_from: nodejs
-
 - name: _test | Setup dependencies
   shell: |
     set -euo pipefail
