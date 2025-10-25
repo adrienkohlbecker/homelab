@@ -91,6 +91,7 @@
     - _check_stage4
 
 - name: Install act_runner if needed
+  check_mode: false
   when: '"v0.2.10" not in act_runner_check.stderr'
   get_url:
     url: https://gitea.com/gitea/act_runner/releases/download/v0.2.10/act_runner-0.2.10-linux-{{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }}

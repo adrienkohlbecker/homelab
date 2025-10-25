@@ -116,6 +116,14 @@
   tags:
     - user
 
+- name: Fix git config
+  when: ansible_distribution_version == "22.04"
+  command: sed -i 's/zdiff3/diff3/' .gitconfig
+  args:
+    chdir: "{{ ansible_user_dir }}"
+  tags:
+    - user
+
 - name: Install dotfiles submodules
   command: git --git-dir={{ ansible_user_dir }}/.dotfiles --work-tree={{ ansible_user_dir }} submodule update --init --recursive
   args:

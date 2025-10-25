@@ -179,6 +179,34 @@
     - _check_stage3
     - _check_stage4
 
+- name: Create blueprints directory
+  file:
+    dest: /mnt/services/homeassistant/blueprints
+    state: directory
+    owner: homeassistant
+    group: homeassistant
+    mode: "0755"
+  become: true
+  tags:
+    - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
+
+- name: Create automation directory
+  file:
+    dest: /mnt/services/homeassistant/blueprints/automation
+    state: directory
+    owner: homeassistant
+    group: homeassistant
+    mode: "0755"
+  become: true
+  tags:
+    - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
+
 - name: Configure homeassistant blueprints
   copy:
     src: blueprints/automation/hvac_dry_mode.yaml

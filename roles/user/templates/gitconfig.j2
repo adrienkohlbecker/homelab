@@ -1,3 +1,7 @@
 [user]
   name = Adrien Kohlbecker
   email = {{ root_email }}
+{% if ansible_distribution_version == "22.04" %}
+[merge]
+  conflictstyle = diff3
+{% endif %}

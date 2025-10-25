@@ -6,6 +6,7 @@
   become: true
   tags:
     - refind
+    - _check_stage1
 
 - name: Remove default config
   file:
@@ -14,6 +15,7 @@
   become: true
   tags:
     - refind
+    - _check_stage1
 
 - name: Create theme directory
   file:
@@ -26,8 +28,10 @@
     - /boot/efi/EFI/refind/themes
     - /boot/efi/EFI/refind/themes/refind-theme-regular
   become: true
+  register: refind_theme_dir
   tags:
     - refind
+    - _check_stage1
 
 - name: Check if theme exists
   stat:
@@ -38,7 +42,7 @@
     - refind
 
 - name: Download theme
-  when: not refind_check.stat.exists
+  when: not (ansible_check_mode and refind_theme_dir.changed) and not refind_check.stat.exists
   unarchive:
     src: https://github.com/bobafetthotmail/refind-theme-regular/archive/26a82c33c67bbcaf1498a3c2e4d314b7cbe6cf50.tar.gz
     dest: /boot/efi/EFI/refind/themes/refind-theme-regular
