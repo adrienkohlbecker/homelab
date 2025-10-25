@@ -42,7 +42,7 @@
     state: directory
     owner: "{{ pihole_user.uid }}"
     group: "{{ pihole_user.group }}"
-    mode: "0775"
+    mode: "0755"
   become: true
   tags:
     - pihole
@@ -119,17 +119,15 @@
   tags:
     - pihole
 
-- name: Configure setupVars script
-  when: not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed))
+- name: Configure pihole
   template:
-    src: setupVars.conf.j2
-    dest: /mnt/services/pihole/etc/setupVars.conf
-    owner: root
-    group: root
-    mode: "0755"
+    src: pihole.toml.j2
+    dest: /mnt/services/pihole/etc/pihole.toml
+    owner: "{{ pihole_user.uid }}"
+    group: "{{ pihole_user.group }}"
+    mode: "0640"
     backup: true
-    validate: bash -n %s
-  register: pihole_setupvars
+  register: pihole_toml
   become: true
   tags:
     - pihole
@@ -148,7 +146,7 @@
     - pihole
 
 - name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and ((systemd_unit.changed and not systemd_started.changed) or logrotate_conf.changed or pihole_setupvars.changed or fahm_cfg.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and ((systemd_unit.changed and not systemd_started.changed) or pihole_toml.changed or fahm_cfg.changed)
   systemd:
     name: pihole
     state: restarted

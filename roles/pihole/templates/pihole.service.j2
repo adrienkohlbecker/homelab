@@ -37,11 +37,6 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/pihole/dnsmasq:/etc/dnsmasq.d \
     --volume /var/log/pihole:/var/log/pihole \
     --env TZ="Europe/Paris" \
-    --env VIRTUAL_HOST=pihole.{{ inventory_hostname }}.{{ domain }} \
-    --env FTLCONF_LOCAL_IPV4={{ ansible_facts.default_ipv4.address }} \
-    --env REV_SERVER=true \
-    --env REV_SERVER_TARGET={{ home_subnet | ansible.utils.ipmath(1) }} \
-    --env REV_SERVER_CIDR={{ home_subnet }} \
     --env PIHOLE_UID={{ pihole_user.uid }} \
     --env PIHOLE_GID={{ pihole_user.group }} \
     --dns=127.0.0.1 \
@@ -55,7 +50,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --stop-timeout 120 \
-    docker.io/pihole/pihole:2024.05.0
+    docker.io/pihole/pihole:2025.10.0
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
