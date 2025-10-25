@@ -37,15 +37,17 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/data:/srv/data:ro \
     --volume /mnt/media:/srv/media:ro \
     --volume /mnt/services:/srv/services:ro \
-    --volume /mnt/services/filebrowser/database.db:/database.db \
-    --volume /mnt/services/filebrowser/config.json:/.filebrowser.json \
+    --volume /mnt/services/filebrowser/database:/database \
+    --volume /mnt/services/filebrowser/config:/config \
     --publish 127.0.0.1:5890:5890/tcp \
+    --env PUID={{ filebrowser_user.uid }} \
+    --env PGID={{ filebrowser_user.group }}  \
     --health-cmd         "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:5890/health" \
     --health-startup-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:5890/health" \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --stop-timeout 120 \
-    docker.io/filebrowser/filebrowser:v2.30.0
+    docker.io/filebrowser/filebrowser:v2.44.2-s6
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
