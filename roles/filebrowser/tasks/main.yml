@@ -8,42 +8,55 @@
     - filebrowser
     - _check_stage1
 
-- name: Create configuration directory
-  file:
-    dest: /mnt/services/filebrowser
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
+- name: Add filebrowser group
+  group:
+    name: filebrowser
+    system: true
   become: true
   tags:
     - filebrowser
     - _check_stage1
+
+- name: Add filebrowser user
+  user:
+    name: filebrowser
+    group: filebrowser
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  register: filebrowser_user
+  tags:
+    - filebrowser
+    - _check_stage1
+
+- name: Create configuration directory
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: filebrowser
+    group: filebrowser
+    mode: "0775"
+  become: true
+  tags:
+    - filebrowser
+    - _check_stage1
+  with_items:
+    - /mnt/services/filebrowser
+    - /mnt/services/filebrowser/config
+    - /mnt/services/filebrowser/database
 
 - name: Configure filebrowser
   template:
-    src: config.json.j2
-    dest: /mnt/services/filebrowser/config.json
-    owner: root
-    group: root
-    mode: "0600"
+    src: settings.json.j2
+    dest: /mnt/services/filebrowser/config/settings.json
+    owner: filebrowser
+    group: filebrowser
+    mode: "0644"
     backup: true
     validate: jq . %s
   register: filebrowser_conf
-  become: true
-  tags:
-    - filebrowser
-    - _check_stage1
-
-- name: Ensure database file exists
-  file:
-    path: /mnt/services/filebrowser/database.db
-    state: touch
-    access_time: preserve
-    modification_time: preserve
-    owner: root
-    group: root
-    mode: "0644"
   become: true
   tags:
     - filebrowser
