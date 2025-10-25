@@ -69,6 +69,7 @@
     - journald_exporter
     - nut_server
     - nut_monitor
+    - dnscrypt_proxy
     - pihole
 
 - name: Lab roles

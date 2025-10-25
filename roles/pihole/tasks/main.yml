@@ -119,15 +119,17 @@
   tags:
     - pihole
 
-- name: Set web password
+- name: Configure setupVars script
   when: not (ansible_check_mode and (systemd_started.changed or systemd_unit.changed or pihole_user.changed))
-  lineinfile:
-    path: /mnt/services/pihole/etc/setupVars.conf
-    regexp: ^WEBPASSWORD=
-    line: WEBPASSWORD={{ pihole_password | hash('sha256') | hash('sha256') }}
-    validate: bash -n %s
+  template:
+    src: setupVars.conf.j2
+    dest: /mnt/services/pihole/etc/setupVars.conf
+    owner: root
+    group: root
+    mode: "0755"
     backup: true
-  register: pihole_webpassword
+    validate: bash -n %s
+  register: pihole_setupvars
   become: true
   tags:
     - pihole
@@ -146,7 +148,7 @@
     - pihole
 
 - name: Restart the service
-  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and ((systemd_unit.changed and not systemd_started.changed) or logrotate_conf.changed or pihole_webpassword.changed or fahm_cfg.changed)
+  when: not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) and ((systemd_unit.changed and not systemd_started.changed) or logrotate_conf.changed or pihole_setupvars.changed or fahm_cfg.changed)
   systemd:
     name: pihole
     state: restarted
