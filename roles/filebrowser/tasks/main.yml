@@ -2,99 +2,11 @@
   apt:
     pkg:
       - jq
-      - git
     cache_valid_time: 3600
   become: true
-  register: filebrowser_apt_deps
   tags:
     - filebrowser
     - _check_stage1
-    - _check_stage2
-    - _check_stage3
-
-- name: Create filebrowser directory
-  file:
-    dest: /opt/filebrowser
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - filebrowser
-    - _check_stage2
-    - _check_stage3
-
-- name: Download filebrowser
-  when: not (ansible_check_mode and filebrowser_apt_deps.changed)
-  git:
-    repo: https://github.com/adrienkohlbecker/filebrowser.git
-    dest: /opt/filebrowser
-    version: master
-    force: true
-  register: filebrowser_git
-  become: true
-  tags:
-    - filebrowser
-    - _check_stage2
-    - _check_stage3
-
-- name: Install packages based on package.json.
-  when: not (ansible_check_mode and (filebrowser_git.changed or filebrowser_apt_deps.changed))
-  npm:
-    path: /opt/filebrowser/frontend
-  register: filebrowser_npm
-  become: true
-  tags:
-    - filebrowser
-    - _check_stage3
-
-- name: Install pnpm
-  when: not (ansible_check_mode and (filebrowser_git.changed or filebrowser_apt_deps.changed))
-  command: npm install pnpm@latest-10
-  args:
-    chdir: /opt/filebrowser/frontend
-    creates: /opt/filebrowser/frontend/node_modules/pnpm
-  become: true
-  register: filebrowser_pnpm
-  tags:
-    - filebrowser
-    - _check_stage3
-
-- name: Build frontend
-  when: (filebrowser_git.changed or filebrowser_npm.changed or filebrowser_pnpm.changed) and not (ansible_check_mode and (filebrowser_git.changed or filebrowser_apt_deps.changed))
-  command: npm run build
-  args:
-    chdir: /opt/filebrowser/frontend
-    creates: /opt/filebrowser/frontend/dist/index.html
-  become: true
-  register: filebrowser_frontend
-  tags:
-    - filebrowser
-    - _check_stage3
-
-- name: Build backend
-  when: (filebrowser_git.changed or filebrowser_frontend.changed) and not (ansible_check_mode and (filebrowser_git.changed or filebrowser_apt_deps.changed))
-  command: podman run --rm -v /opt/filebrowser:/usr/src/myapp -w /usr/src/myapp docker.io/golang:1.23-alpine3.21 go build
-  become: true
-  register: filebrowser_backend
-  tags:
-    - filebrowser
-    - _check_stage3
-
-- name: Build a podman image
-  containers.podman.podman_image:
-    name: filebrowser:latest
-    path: /opt/filebrowser
-    build:
-      format: oci
-    state: build
-    force: "{{ filebrowser_backend.changed }}"
-  register: filebrowser_podman
-  become: true
-  tags:
-    - filebrowser
-    - _check_stage3
 
 - name: Create configuration directory
   file:
@@ -106,7 +18,7 @@
   become: true
   tags:
     - filebrowser
-    - _check_stage3
+    - _check_stage1
 
 - name: Configure filebrowser
   template:
@@ -121,7 +33,7 @@
   become: true
   tags:
     - filebrowser
-    - _check_stage3
+    - _check_stage1
 
 - name: Ensure database file exists
   file:
@@ -135,7 +47,7 @@
   become: true
   tags:
     - filebrowser
-    - _check_stage3
+    - _check_stage1
 
 - name: Install filebrowser service
   import_role:
@@ -145,7 +57,7 @@
     systemd_unit_src: filebrowser.service
   tags:
     - filebrowser
-    - _check_stage3
+    - _check_stage1
 
 - name: Enable filebrowser service
   import_role:
