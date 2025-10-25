@@ -2,15 +2,12 @@
   apt:
     pkg:
       - jq
-      - git
     cache_valid_time: 3600
   become: true
-  register: wolweb_apt_deps
   tags:
     - wolweb
     - _check_stage1
     - _check_stage2
-    - _check_stage3
 
 - name: Add wolweb group
   group:
@@ -19,8 +16,8 @@
   become: true
   tags:
     - wolweb
+    - _check_stage1
     - _check_stage2
-    - _check_stage3
 
 - name: Add wolweb user
   user:
@@ -34,47 +31,8 @@
   register: wolweb_user
   tags:
     - wolweb
+    - _check_stage1
     - _check_stage2
-    - _check_stage3
-
-- name: Create wolweb directory
-  file:
-    dest: /opt/wolweb
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - wolweb
-    - _check_stage3
-
-- name: Download wolweb
-  when: not (ansible_check_mode and wolweb_apt_deps.changed)
-  git:
-    repo: https://github.com/adrienkohlbecker/wolweb.git
-    dest: /opt/wolweb
-    version: homelab
-    force: true
-  register: wolweb_git
-  become: true
-  tags:
-    - wolweb
-    - _check_stage3
-
-- name: Build a podman image
-  containers.podman.podman_image:
-    name: wolweb:latest
-    path: /opt/wolweb
-    build:
-      format: oci
-    state: build
-    force: "{{ wolweb_git.changed }}"
-  register: wolweb_podman
-  become: true
-  tags:
-    - wolweb
-    - _check_stage3
 
 - name: Create configuration directory
   when: not (ansible_check_mode and wolweb_user.changed)
@@ -87,7 +45,7 @@
   become: true
   tags:
     - wolweb
-    - _check_stage3
+    - _check_stage2
 
 - name: Compute broadcast ip
   set_fact:
@@ -95,7 +53,7 @@
   become: true
   tags:
     - wolweb
-    - _check_stage3
+    - _check_stage2
 
 - name: Configure wolweb
   template:
@@ -110,7 +68,7 @@
   become: true
   tags:
     - wolweb
-    - _check_stage3
+    - _check_stage2
 
 - name: Configure wolweb
   template:
@@ -125,7 +83,7 @@
   become: true
   tags:
     - wolweb
-    - _check_stage3
+    - _check_stage2
 
 - name: Install wolweb service
   import_role:
@@ -136,7 +94,7 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and wolweb_user.changed) }}"
   tags:
     - wolweb
-    - _check_stage3
+    - _check_stage2
 
 - name: Enable wolweb service
   import_role:
