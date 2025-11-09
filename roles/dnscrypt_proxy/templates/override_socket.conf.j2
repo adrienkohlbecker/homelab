@@ -1,7 +1,5 @@
 [Socket]
 ListenStream=
-ListenStream=127.0.0.1:5053
-ListenStream={{ podman_default_network | ansible.utils.ipmath(1) }}:5053
+ListenStream=0.0.0.0:5053
 ListenDatagram=
-ListenDatagram=127.0.0.1:5053
-ListenDatagram={{ podman_default_network | ansible.utils.ipmath(1) }}:5053
+ListenDatagram=0.0.0.0:5053
