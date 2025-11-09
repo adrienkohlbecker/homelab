@@ -1,0 +1,54 @@
+# jinja2: lstrip_blocks: "True"
+# profilarr.service #######################################################################
+[Unit]
+Description=profilarr
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+After=zfs_mount_mnt_services.service zfs_autosnapshot.target
+Requires=zfs_mount_mnt_services.service
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=always
+Delegate=yes
+TimeoutSec=120
+RestartSec=5
+Type=notify
+NotifyAccess=all
+SyslogIdentifier=%N
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=conmon \
+    --detach \
+    --replace \
+    --rm \
+    --name profilarr \
+    --log-driver journald \
+    --log-opt tag="profilarr" \
+    --env PUID={{ profilarr_user.uid }} \
+    --env PGID={{ profilarr_user.group }} \
+    --env TZ=Europe/Paris \
+    --volume /mnt/services/profilarr:/config \
+    --publish 127.0.0.1:6868:6868/tcp \
+    --health-cmd         "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:6868/" \
+    --health-startup-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:6868/" \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    --stop-timeout 120 \
+    docker.io/santiagosayshey/profilarr:v1.1.3
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

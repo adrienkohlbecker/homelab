@@ -110,6 +110,7 @@
     - marie
     - redis
     - paperless
+    - profilarr
 
 - name: Reboot check
   hosts: all:!bunk
