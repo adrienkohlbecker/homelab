@@ -1,14 +1,8 @@
-from pyinfra.operations import apt, server
+from pyinfra.operations import apt
 
-apt.update(
-  name="Update apt repositories",
-  cache_time=3600,
-)
+from roles.bash import bash
 
-apt.packages(
-  name="Ensure the vim apt package is installed",
-  packages=["vim"],
-)
+bash.apply()
 
 if __name__ == "__main__":
     print("uv run pyinfra inventory.py deploy.py")
