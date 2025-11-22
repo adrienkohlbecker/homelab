@@ -7,8 +7,11 @@ Wants=network-online.target
 StartLimitInterval=600
 StartLimitBurst=3
 {% if zfs_root %}
-After=zfs_mount_mnt_services.service  zfs_autosnapshot.target
+{% if zfs_has_services_mount %}
+After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
+{% endif %}
+After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
 {% endif %}
 
