@@ -21,7 +21,7 @@
   tags:
     - data
 
-- name: Set up mount service for {{ zfs_tank_filesystem }}/data
+- name: Set up mount service for tank/data
   when: zfs_root
   import_role:
     name: zfs_mount

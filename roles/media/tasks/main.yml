@@ -41,7 +41,7 @@
   tags:
     - media
 
-- name: Set up mount service for {{ zfs_tank_filesystem }}/media
+- name: Set up mount service for tank/media
   when: zfs_root
   import_role:
     name: zfs_mount
