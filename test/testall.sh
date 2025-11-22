@@ -7,6 +7,40 @@ export LOG_FILE="test/out.log"
 mkdir -p "$OUT_DIR"
 rm -f "$OUT_DIR"/*.ansi
 
+ONLY_FAILED=0
+JOBS=5
+ROLE_ARGS=()
+
+# Flags:
+#   --onlyfailed : rerun only roles that failed in the last log
+#   --jobs N     : number of parallel workers (default: 5)
+#   --           : stop parsing and forward remaining args to testrole.sh
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --onlyfailed)
+      ONLY_FAILED=1
+      ;;
+    --jobs)
+      JOBS="${2:-}"
+      shift
+      ;;
+    --)
+      shift
+      ROLE_ARGS+=("$@")
+      break
+      ;;
+    *)
+      ROLE_ARGS+=("$1")
+      ;;
+  esac
+  shift
+done
+
+if [[ -z "${JOBS:-}" ]]; then
+  echo "Missing value for --jobs" >&2
+  exit 1
+fi
+
 colorize_stderr() {
   # ansible --check emits + for ok/changed lines; anything else is treated as error-ish
   while IFS= read -r line; do
@@ -21,11 +55,15 @@ export -f colorize_stderr
 
 run_role() {
   local script=$1
-  local role=$2
-  shift 2
+  shift
+
+  # Parallel appends the role name last; everything in between forwards to testrole.sh
+  local args=("$@")
+  local role="${args[-1]}"
+  unset 'args[${#args[@]}-1]'
 
   (
-    "$script" "$role" --checkmode "$@" 2> >(colorize_stderr)
+    "$script" "$role" --checkmode "${args[@]}" 2> >(colorize_stderr)
   ) &>"$OUT_DIR/$role.ansi" || {
     printf '\e[0;41m%s failed\e[0m\n' "$role" >&2
     exit 1
@@ -41,15 +79,14 @@ list_roles() {
   done | sort
 }
 
-PARALLEL=(parallel --jobs 5 --joblog "$LOG_FILE" --eta run_role test/testrole.sh)
-if [[ ${1:-} == "--onlyfailed" ]]; then
-  shift
-  test/showfailed.sh | "${PARALLEL[@]}" "$@"
+PARALLEL=(parallel --jobs "$JOBS" --joblog "$LOG_FILE" --eta run_role test/testrole.sh)
+if (( ONLY_FAILED )); then
+  test/showfailed.sh | "${PARALLEL[@]}" "${ROLE_ARGS[@]}"
 else
   mapfile -t roles < <(list_roles)
   if ((${#roles[@]} == 0)); then
     echo "No roles with tasks/main.yml found" >&2
     exit 1
   fi
-  printf '%s\n' "${roles[@]}" | "${PARALLEL[@]}" "$@"
+  printf '%s\n' "${roles[@]}" | "${PARALLEL[@]}" "${ROLE_ARGS[@]}"
 fi
