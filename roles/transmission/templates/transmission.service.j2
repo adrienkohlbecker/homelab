@@ -7,8 +7,19 @@ Wants=network-online.target
 StartLimitInterval=600
 StartLimitBurst=3
 {% if zfs_root %}
-After=zfs_mount_mnt_services.service zfs_mount_mnt_scratch.service zfs_mount_mnt_media.service  zfs_autosnapshot.target
-Requires=zfs_mount_mnt_services.service zfs_mount_mnt_scratch.service zfs_mount_mnt_media.service
+{% if zfs_has_services_mount %}
+After=zfs_mount_mnt_services.service
+Requires=zfs_mount_mnt_services.service
+{% endif %}
+{% if zfs_has_scratch_mount %}
+After=zfs_mount_mnt_scratch.service
+Requires=zfs_mount_mnt_scratch.service
+{% endif %}
+{% if zfs_has_media_mount %}
+After=zfs_mount_mnt_media.service
+Requires=zfs_mount_mnt_media.service
+{% endif %}
+After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
 {% endif %}
 
