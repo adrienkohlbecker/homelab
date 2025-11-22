@@ -4,9 +4,11 @@ set -euo pipefail
 mkdir -p test/out
 rm -f test/out/*.ansi
 
+TESTROLE="${TESTROLE:-testrole}"
+
 doit() {
   (
-    test/testrole.sh $1 --checkmode 2> >(
+    test/$TESTROLE.sh $1 --checkmode 2> >(
       while read line; do
         if [[ "$line" == "+"* ]]; then
           echo -e "\e[0;30m$line\e[0m" >&2
