@@ -5,3 +5,4 @@
 
 - name: _test | Trigger podman ip (TODO proper solution)
   command: podman run -ti --rm ubuntu whoami
+  become: true

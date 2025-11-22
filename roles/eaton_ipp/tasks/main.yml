@@ -27,7 +27,6 @@
 
     - name: Download ipp-linux deb
       check_mode: false
-      timeout: 10
       get_url:
         url: https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/eaton_ipp/1.75/ipp-linux_1.75.183-1_amd64.deb
         dest: /tmp/ipp-linux.deb

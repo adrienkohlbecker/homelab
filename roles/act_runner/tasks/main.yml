@@ -108,7 +108,7 @@
     - _check_stage4
 
 - name: Get registration token (test)
-  when: docker_test
+  when: docker_test or qemu_test
   command: /gitea actions generate-runner-token
   changed_when: true
   register: _test_runner_token
@@ -121,7 +121,7 @@
 
 - name: Register runner
   when: not vmware_test and not (ansible_check_mode and act_runner_user.changed) # TODO: registering fails
-  command: act_runner register -c /mnt/services/act_runner/config.yml --no-interactive --instance {{ docker_test | ternary('http://localhost:3000', 'https://gitea.' + inventory_hostname + '.' + domain) }} --token {{ docker_test | ternary((ansible_check_mode | ternary("TOKEN", _test_runner_token.stdout_lines[1])), gitea_runner_registration_token) }}
+  command: act_runner register -c /mnt/services/act_runner/config.yml --no-interactive --instance {{ docker_test or qemu_test | ternary('http://localhost:3000', 'https://gitea.' + inventory_hostname + '.' + domain) }} --token {{ docker_test or qemu_test | ternary((ansible_check_mode | ternary("TOKEN", _test_runner_token.stdout_lines[1])), gitea_runner_registration_token) }}
   args:
     creates: /mnt/services/act_runner/.runner
   timeout: 5

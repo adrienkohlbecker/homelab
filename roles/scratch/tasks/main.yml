@@ -1,14 +1,3 @@
-- name: Create mount point
-  file:
-    dest: /mnt/scratch
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - scratch
-
 - name: Create zfs filesystem
   when: zfs_root
   zfs:
@@ -17,6 +6,17 @@
     extra_zfs_properties:
       mountpoint: /mnt/scratch
       'autobackup:bak': 'false'
+  become: true
+  tags:
+    - scratch
+
+- name: Create mount point
+  file:
+    dest: /mnt/scratch
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
   become: true
   tags:
     - scratch
