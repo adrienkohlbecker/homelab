@@ -134,6 +134,9 @@ echo "deb $UBUNTU_MIRROR $UBUNTU_NAME-backports main restricted universe multive
 apt-get update
 EOF
 
+export ANSIBLE_DISPLAY_OK_HOSTS=true
+export ANSIBLE_DISPLAY_SKIPPED_HOSTS=true
+
 ANSIBLE_PLAYBOOK="ansible-playbook $ANSIBLE_ARGS -e ansible_ssh_port=$PORT -e ansible_ssh_host=$SSH_HOST -e ansible_ssh_user=$SSH_USER -e ansible_ssh_private_key_file=$SSH_KEY -e ubuntu_mirror=$UBUNTU_MIRROR -e ubuntu_mirror_security=$UBUNTU_MIRROR_SECURITY --inventory test/inventory.ini"
 
 set -x
