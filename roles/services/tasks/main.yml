@@ -1,14 +1,3 @@
-- name: Create data dir
-  file:
-    dest: /mnt/services
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - services
-
 - name: Create env.d directory
   file:
     dest: /etc/env.d
@@ -28,6 +17,17 @@
     extra_zfs_properties:
       mountpoint: /mnt/services
       autobackup:bak: "true"
+  become: true
+  tags:
+    - services
+
+- name: Create data dir
+  file:
+    dest: /mnt/services
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
   become: true
   tags:
     - services

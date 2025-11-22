@@ -55,17 +55,6 @@
   tags:
     - minio
 
-- name: Create data dir
-  file:
-    dest: /mnt/minio
-    state: directory
-    owner: minio-user
-    group: minio-user
-    mode: "0755"
-  become: true
-  tags:
-    - minio
-
 - name: Create zfs filesystem
   when: zfs_root
   zfs:
@@ -74,6 +63,17 @@
     extra_zfs_properties:
       mountpoint: /mnt/minio
       'autobackup:bak': 'true'
+  become: true
+  tags:
+    - minio
+
+- name: Create data dir
+  file:
+    dest: /mnt/minio
+    state: directory
+    owner: minio-user
+    group: minio-user
+    mode: "0755"
   become: true
   tags:
     - minio

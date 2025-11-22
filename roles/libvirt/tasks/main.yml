@@ -28,17 +28,6 @@
     - libvirt
     - _check_stage2
 
-- name: Create mount point
-  file:
-    dest: /var/lib/libvirt/images
-    state: directory
-    owner: root
-    group: root
-    mode: "0711"
-  become: true
-  tags:
-    - libvirt
-
 - name: Create zfs filesystem
   when: zfs_root
   zfs:
@@ -47,6 +36,17 @@
     extra_zfs_properties:
       mountpoint: /var/lib/libvirt/images
       recordsize: '4096'
+  become: true
+  tags:
+    - libvirt
+
+- name: Create mount point
+  file:
+    dest: /var/lib/libvirt/images
+    state: directory
+    owner: root
+    group: root
+    mode: "0711"
   become: true
   tags:
     - libvirt

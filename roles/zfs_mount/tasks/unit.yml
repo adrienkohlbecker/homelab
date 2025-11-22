@@ -1,11 +1,12 @@
-- name: Add test binary
-  when: docker_test
-  file:
-    state: touch
-    path: /usr/local/bin/zfs_check_mount
-    mode: '0755'
-    access_time: preserve
-    modification_time: preserve
+- name: Add check mount binary
+  copy:
+    src: zfs_check_mount.sh
+    dest: /usr/local/bin/zfs_check_mount
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+    validate: bash -n %s
   become: true
   tags:
     - zfs_mount
