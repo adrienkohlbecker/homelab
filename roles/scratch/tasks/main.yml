@@ -21,7 +21,7 @@
   tags:
     - scratch
 
-- name: Set up mount service for {{ zfs_dozer_filesystem }}/scratch
+- name: Set up mount service for dozer/scratch
   when: zfs_root
   import_role:
     name: zfs_mount

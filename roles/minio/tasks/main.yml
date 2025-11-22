@@ -78,7 +78,7 @@
   tags:
     - minio
 
-- name: Set up mount service for {{ zfs_dozer_filesystem }}/minio
+- name: Set up mount service for dozer/minio
   when: zfs_root
   import_role:
     name: zfs_mount
