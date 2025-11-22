@@ -1,35 +1,55 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-mkdir -p test/out
-rm -f test/out/*.ansi
+export OUT_DIR="test/out"
+export LOG_FILE="test/out.log"
 
-TESTROLE="${TESTROLE:-testrole}"
+mkdir -p "$OUT_DIR"
+rm -f "$OUT_DIR"/*.ansi
 
-doit() {
-  (
-    $1 $2 --checkmode 2> >(
-      while read line; do
-        if [[ "$line" == "+"* ]]; then
-          echo -e "\e[0;30m$line\e[0m" >&2
-        else
-          echo -e "\e[0;41m$line\e[0m" >&2
-        fi
-      done
-    )
-  ) &>"test/out/$2.ansi" || (
-    echo -e "\e[0;41m$2 failed\e[0m" >&2
-    exit 1
-  )
+colorize_stderr() {
+  # ansible --check emits + for ok/changed lines; anything else is treated as error-ish
+  while IFS= read -r line; do
+    if [[ $line == "+"* ]]; then
+      printf '\e[0;30m%s\e[0m\n' "$line" >&2
+    else
+      printf '\e[0;41m%s\e[0m\n' "$line" >&2
+    fi
+  done
 }
-export -f doit
+export -f colorize_stderr
 
-[ ! -f test/out.log ] || cp test/out.log test/out.log.prev
-PARALLEL="parallel --jobs 5 --joblog test/out.log --eta doit test/$TESTROLE.sh"
+run_role() {
+  local script=$1
+  local role=$2
+  shift 2
+
+  (
+    "$script" "$role" --checkmode "$@" 2> >(colorize_stderr)
+  ) &>"$OUT_DIR/$role.ansi" || {
+    printf '\e[0;41m%s failed\e[0m\n' "$role" >&2
+    exit 1
+  }
+}
+export -f run_role
+
+[ ! -f "$LOG_FILE" ] || cp "$LOG_FILE" "$LOG_FILE.prev"
+
+list_roles() {
+  for role_dir in roles/*; do
+    [[ -d $role_dir && -f $role_dir/tasks/main.yml ]] && basename "$role_dir"
+  done | sort
+}
+
+PARALLEL=(parallel --jobs 5 --joblog "$LOG_FILE" --eta run_role test/testrole.sh)
 if [[ ${1:-} == "--onlyfailed" ]]; then
   shift
-
-  test/showfailed.sh | $PARALLEL
+  test/showfailed.sh | "${PARALLEL[@]}" "$@"
 else
-  find roles -mindepth 3 -maxdepth 3 -wholename "roles/*/tasks/main.yml" -print0 | xargs -0 -n1 dirname | xargs -n1 dirname | xargs -n1 basename | sort | $PARALLEL
+  mapfile -t roles < <(list_roles)
+  if ((${#roles[@]} == 0)); then
+    echo "No roles with tasks/main.yml found" >&2
+    exit 1
+  fi
+  printf '%s\n' "${roles[@]}" | "${PARALLEL[@]}" "$@"
 fi
