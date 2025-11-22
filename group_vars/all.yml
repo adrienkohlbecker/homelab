@@ -1,6 +1,7 @@
 docker_test: false
 vmware_test: false
 qemu_test: false
+qemu_test_minimal: false
 
 zfs_has_services_mount: true
 zfs_has_scratch_mount: true
