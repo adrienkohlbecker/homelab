@@ -8,7 +8,7 @@ TESTROLE="${TESTROLE:-testrole}"
 
 doit() {
   (
-    test/$TESTROLE.sh $1 --checkmode 2> >(
+    $1 $2 --checkmode 2> >(
       while read line; do
         if [[ "$line" == "+"* ]]; then
           echo -e "\e[0;30m$line\e[0m" >&2
@@ -17,15 +17,15 @@ doit() {
         fi
       done
     )
-  ) &>"test/out/$1.ansi" || (
-    echo -e "\e[0;41m$1 failed\e[0m" >&2
+  ) &>"test/out/$2.ansi" || (
+    echo -e "\e[0;41m$2 failed\e[0m" >&2
     exit 1
   )
 }
 export -f doit
 
 [ ! -f test/out.log ] || cp test/out.log test/out.log.prev
-PARALLEL="parallel --jobs 5 --joblog test/out.log --eta doit"
+PARALLEL="parallel --jobs 5 --joblog test/out.log --eta doit test/$TESTROLE.sh"
 if [[ ${1:-} == "--onlyfailed" ]]; then
   shift
 
