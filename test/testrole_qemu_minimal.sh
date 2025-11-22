@@ -12,7 +12,7 @@ SSH_KEY=packer/vagrant.key
 SSH_HOST=127.0.0.1
 UBUNTU_NAME=jammy
 UBUNTU_VERSION=22.04
-ANSIBLE_ARGS="-e qemu_test=true -e @host_vars/box-qemu-minimal.yml"
+ANSIBLE_ARGS="-e {\"qemu_test\":true} -e @host_vars/box-qemu-minimal.yml"
 IDFILE=pid
 
 WORKDIR=$(mktemp --directory --tmpdir=$IMAGEDIR)

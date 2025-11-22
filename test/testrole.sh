@@ -8,7 +8,7 @@ SSH_USER=root
 SSH_KEY=packer/vagrant.key
 SSH_HOST=127.0.0.1
 UBUNTU_NAME=jammy
-ANSIBLE_ARGS="-e docker_test=true -e @host_vars/box-podman.yml"
+ANSIBLE_ARGS="-e {\"docker_test\":true} -e @host_vars/box-podman.yml"
 IDFILE=cid
 
 case $(uname -s) in
