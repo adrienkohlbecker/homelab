@@ -1,10 +1,10 @@
 zfs_root: false
 home_subnet: 10.0.2.0/24
-macvlan_parent: enp0s2
+macvlan_parent: enp0s3
 grub_bootloader: true
 netplan:
   ethernets:
-    enp0s2:
+    enp0s3:
       link-local: [] # do not setup random link local address when no dhcp is present
       wakeonlan: true
       dhcp4: true

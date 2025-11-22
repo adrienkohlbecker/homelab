@@ -114,10 +114,10 @@ else
 
   if (( USE_MINIMAL )); then
     SSH_USER=ubuntu
-    ANSIBLE_ARGS="-e {\"qemu_test\":true} -e @host_vars/box-qemu-minimal.yml"
+    ANSIBLE_ARGS="-e {\"qemu_test\":true,\"qemu_test_minimal\":true} -e @host_vars/box-qemu-minimal.yml"
   else
     SSH_USER=vagrant
-    ANSIBLE_ARGS="-e {\"qemu_test\":true} -e @host_vars/box-qemu.yml"
+    ANSIBLE_ARGS="-e {\"qemu_test\":true,\"qemu_test_minimal\":false} -e @host_vars/box-qemu.yml"
   fi
 fi
 

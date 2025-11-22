@@ -37,7 +37,7 @@
     - _check_stage2
 
 - name: Create backup the first time only
-  when: not (ansible_check_mode and (zbm_directory.changed or zfsbootmenu_efi.changed)) and not zfsbootmenu_efi_backup.stat.exists
+  when: not (ansible_check_mode and (zbm_directory.changed or zfsbootmenu_efi.changed)) and not zfsbootmenu_efi_backup.stat.exists and not qemu_test_minimal
   copy:
     src: /boot/efi/EFI/ZBM/VMLINUZ.EFI
     dest: /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
