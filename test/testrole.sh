@@ -286,6 +286,8 @@ echo "deb $UBUNTU_MIRROR $UBUNTU_NAME-backports main restricted universe multive
 apt-get update
 EOF
 if [[ "$BACKEND" == "qemu" && $USE_MINIMAL -eq 1 ]]; then
+  # Fixes systemd-analyze validation error:
+  # /lib/systemd/system/snapd.service:23: Unknown key name 'RestartMode' section 'Service', ignoring.
   $SSH_CMD sudo apt-get purge --autoremove --yes snapd
 fi
 
