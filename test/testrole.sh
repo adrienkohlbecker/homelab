@@ -5,6 +5,7 @@ BACKEND=podman
 RUN_CHECKMODE=0
 KEEP_VM=0
 QEMU_MACHINE=box
+QEMU_USE_VNC=0
 ROLE=""
 PASS_ARGS=()
 
@@ -13,6 +14,7 @@ PASS_ARGS=()
 #   --machine <name>      : qemu machine profile (minimal|box|lab|pug)
 #   --checkmode           : run playbook with --check and staged tag passes
 #   --keep                : leave the container/VM running for inspection
+#   --vnc                 : expose QEMU display via VNC (:0) with qxl video
 #   --                    : stop parsing and forward the rest to Ansible
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -25,6 +27,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --keep)
       KEEP_VM=1
+      ;;
+    --vnc)
+      QEMU_USE_VNC=1
       ;;
     --machine)
       QEMU_MACHINE=${2:-}
@@ -50,7 +55,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$ROLE" ]]; then
-  echo "Usage: $0 [--backend podman|qemu] [--machine minimal|box|lab|pug] [--checkmode] [--keep] <role> [ansible args...]" >&2
+  echo "Usage: $0 [--backend podman|qemu] [--machine minimal|box|lab|pug] [--checkmode] [--keep] [--vnc] <role> [ansible args...]" >&2
   exit 1
 fi
 
@@ -218,6 +223,11 @@ if [[ "$BACKEND" == "podman" ]]; then
   PORT="${ADDR#*:}"
 else
   QEMU_DRIVES=()
+  if (( QEMU_USE_VNC )); then
+    QEMU_DISPLAY_ARGS=(-display vnc=:0 -vga qxl)
+  else
+    QEMU_DISPLAY_ARGS=(-display none)
+  fi
   case "$QEMU_MACHINE" in
     minimal)
       cloud-localds "$WORKDIR/seed.img" test/minimal/user-data test/minimal/meta-data
@@ -294,7 +304,7 @@ else
     -name "packer-ubuntu" \
     -m "4096M" \
     -cpu "host" \
-    -display vnc=:0 -vga qxl \
+    "${QEMU_DISPLAY_ARGS[@]}" \
     -device "virtio-net,netdev=user.0" \
     -pidfile "$WORKDIR/$IDFILE" \
     &
