@@ -30,7 +30,6 @@
     systemctl disable systemd-resolved.service
     systemctl stop systemd-resolved
     echo "nameserver 1.1.1.1" > /etc/resolv.conf
-    echo "10.123.0.2 apt.lab.fahm.fr" >> /etc/hosts
   args:
     executable: /bin/bash
     removes: /etc/systemd/system/multi-user.target.wants/systemd-resolved.service

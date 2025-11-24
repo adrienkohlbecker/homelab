@@ -35,13 +35,13 @@ autoinstall:
         preserve_sources_list: false
         mirror-selection:
             primary:
-              - uri: "http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu"
+              - uri: "http://archive.ubuntu.com/ubuntu"
                 arches: [i386, amd64]
-              - uri: "http://apt.lab.fahm.fr/ports.ubuntu.com/ubuntu-ports"
+              - uri: "http://ports.ubuntu.com/ubuntu-ports"
                 arches: [s390x, arm64, armhf, powerpc, ppc64el, riscv64]
         fallback: abort
         security:
-          - uri:  "http://apt.lab.fahm.fr/security.ubuntu.com/ubuntu"
+          - uri:  "http://security.ubuntu.com/ubuntu"
             arches: [i386, amd64]
-          - uri: "http://apt.lab.fahm.fr/ports.ubuntu.com/ubuntu-ports"
+          - uri: "http://ports.ubuntu.com/ubuntu-ports"
             arches: [s390x, arm64, armhf, powerpc, ppc64el, riscv64]
