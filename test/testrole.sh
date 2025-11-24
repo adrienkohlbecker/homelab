@@ -67,12 +67,12 @@ ANSIBLE_ARGS=""
 
 case $(uname -m) in
 aarch64 | arm64)
-  UBUNTU_MIRROR="http://apt.lab.fahm.fr/ports.ubuntu.com/ubuntu-ports/"
-  UBUNTU_MIRROR_SECURITY="http://apt.lab.fahm.fr/ports.ubuntu.com/ubuntu-ports/"
+  UBUNTU_MIRROR="http://ports.ubuntu.com/ubuntu-ports/"
+  UBUNTU_MIRROR_SECURITY="http://ports.ubuntu.com/ubuntu-ports/"
   ;;
 x86_64)
-  UBUNTU_MIRROR="http://apt.lab.fahm.fr/archive.ubuntu.com/ubuntu/"
-  UBUNTU_MIRROR_SECURITY="http://apt.lab.fahm.fr/security.ubuntu.com/ubuntu/"
+  UBUNTU_MIRROR="http://archive.ubuntu.com/ubuntu/"
+  UBUNTU_MIRROR_SECURITY="http://security.ubuntu.com/ubuntu/"
   ;;
 *)
   echo >&2 "Unknown machine name"
