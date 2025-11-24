@@ -229,7 +229,7 @@ else
     -name "packer-ubuntu" \
     -m "4096M" \
     -cpu "host" \
-    -display none \
+    -display vnc=:0 -vga qxl \
     -device "virtio-net,netdev=user.0" \
     -pidfile "$WORKDIR/$IDFILE" \
     &
@@ -248,7 +248,7 @@ else
 
   sleep 2
 
-  PORT=$(lsof -i -P | grep "$(cat "$WORKDIR/$IDFILE")" | grep TCP | grep -v "*:59" | cut -d':' -f2 | cut -d' ' -f1)
+  PORT=$(lsof -i -P | grep "$(cat "$WORKDIR/$IDFILE")" | grep TCP | cut -d':' -f2 | cut -d' ' -f1 | grep -vE "^59")
 fi
 
 while [ -z "$(socat -T2 stdout tcp:127.0.0.1:$PORT,connect-timeout=2,readbytes=1 2>/dev/null)" ]; do
