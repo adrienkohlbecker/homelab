@@ -90,6 +90,7 @@ if [[ "$BACKEND" == "podman" ]]; then
   SSH_USER=root
   ANSIBLE_ARGS="-e {\"docker_test\":true} -e @host_vars/box-podman.yml"
   IDFILE=cid
+  INVENTORY_HOST=box
 
   case $(uname -s) in
   "Darwin")
