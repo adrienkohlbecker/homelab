@@ -4,13 +4,13 @@ set -euo pipefail
 BACKEND=podman
 RUN_CHECKMODE=0
 KEEP_VM=0
-USE_MINIMAL=0
+QEMU_MACHINE=box
 ROLE=""
 PASS_ARGS=()
 
 # Flags:
 #   --backend podman|qemu : pick container (podman, default) or VM (qemu)
-#   --minimal             : qemu minimal cloud image (ignored for podman)
+#   --machine <name>      : qemu machine profile (minimal|box|lab|pug)
 #   --checkmode           : run playbook with --check and staged tag passes
 #   --keep                : leave the container/VM running for inspection
 #   --                    : stop parsing and forward the rest to Ansible
@@ -20,17 +20,15 @@ while [[ $# -gt 0 ]]; do
       BACKEND=${2:-}
       shift
       ;;
-    --qemu)
-      BACKEND=qemu
-      ;;
     --checkmode)
       RUN_CHECKMODE=1
       ;;
     --keep)
       KEEP_VM=1
       ;;
-    --minimal)
-      USE_MINIMAL=1
+    --machine)
+      QEMU_MACHINE=${2:-}
+      shift
       ;;
     --)
       shift
@@ -52,7 +50,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$ROLE" ]]; then
-  echo "Usage: $0 [--backend podman|qemu] [--minimal] [--checkmode] [--keep] <role> [ansible args...]" >&2
+  echo "Usage: $0 [--backend podman|qemu] [--machine minimal|box|lab|pug] [--checkmode] [--keep] <role> [ansible args...]" >&2
   exit 1
 fi
 
@@ -112,13 +110,32 @@ else
   IMAGEDIR=/mnt/qemu
   IDFILE=pid
 
-  if (( USE_MINIMAL )); then
-    SSH_USER=ubuntu
-    ANSIBLE_ARGS="-e {\"qemu_test\":true,\"qemu_test_minimal\":true} -e @host_vars/box-qemu-minimal.yml"
-  else
-    SSH_USER=vagrant
-    ANSIBLE_ARGS="-e {\"qemu_test\":true,\"qemu_test_minimal\":false} -e @host_vars/box-qemu.yml"
-  fi
+  case "$QEMU_MACHINE" in
+    minimal)
+      SSH_USER=ubuntu
+      ANSIBLE_ARGS="-e {\"qemu_test\":true,\"qemu_test_minimal\":true} -e @host_vars/box-qemu-minimal.yml"
+      INVENTORY_HOST=box
+      ;;
+    box)
+      SSH_USER=vagrant
+      ANSIBLE_ARGS="-e {\"qemu_test\":true,\"qemu_test_minimal\":false} -e @host_vars/box-qemu.yml"
+      INVENTORY_HOST=box
+      ;;
+    lab)
+      SSH_USER=vagrant
+      ANSIBLE_ARGS="-e {\"qemu_test\":true,\"qemu_test_minimal\":false} -e @host_vars/lab-qemu.yml"
+      INVENTORY_HOST=lab
+      ;;
+    pug)
+      SSH_USER=vagrant
+      ANSIBLE_ARGS="-e {\"qemu_test\":true,\"qemu_test_minimal\":false} -e @host_vars/pug-qemu.yml"
+      INVENTORY_HOST=pug
+      ;;
+    *)
+      echo >&2 "Unknown qemu machine: $QEMU_MACHINE"
+      exit 1
+      ;;
+  esac
 fi
 
 WORKDIR=$(mktemp --directory --tmpdir=$IMAGEDIR)
@@ -160,13 +177,13 @@ cp -r roles "$WORKDIR"
 
 # Minimal playbook to run the single role; inject role _test if present.
 cat <<EOF >"$WORKDIR/site.yml"
-- hosts: box
+- hosts: $INVENTORY_HOST
   roles:
     - $ROLE
 EOF
 if [ -f "roles/$ROLE/tasks/_test.yml" ]; then
   cat <<EOF >>"$WORKDIR/_test.yml"
-- hosts: box
+- hosts: $INVENTORY_HOST
   tasks:
     - import_role:
         name: $ROLE
@@ -200,24 +217,71 @@ if [[ "$BACKEND" == "podman" ]]; then
   PORT="${ADDR#*:}"
 else
   QEMU_DRIVES=()
-  if (( USE_MINIMAL )); then
-    cloud-localds "$WORKDIR/seed.img" test/minimal/user-data test/minimal/meta-data
-    qemu-img create -f qcow2 -b "$IMAGEDIR/ubuntu-$UBUNTU_VERSION-minimal-cloudimg-amd64.img" -F qcow2 "$WORKDIR/disk.img" 20G >/dev/null
+  case "$QEMU_MACHINE" in
+    minimal)
+      cloud-localds "$WORKDIR/seed.img" test/minimal/user-data test/minimal/meta-data
+      qemu-img create -f qcow2 -b "$IMAGEDIR/ubuntu-$UBUNTU_VERSION-minimal-cloudimg-amd64.img" -F qcow2 "$WORKDIR/disk.img" 20G >/dev/null
 
-    QEMU_DRIVES+=(
-      -drive "file=$WORKDIR/disk.img,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-      -drive "file=$WORKDIR/seed.img,if=virtio,format=raw"
-    )
-  else
-    qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-box/packer-ubuntu-1" -F qcow2 "$WORKDIR/packer-ubuntu-1" >/dev/null
-    cp "$IMAGEDIR/$UBUNTU_NAME/ubuntu-box/efivars.fd" "$WORKDIR/efivars.fd"
+      QEMU_DRIVES+=(
+        -drive "file=$WORKDIR/disk.img,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
+        -drive "file=$WORKDIR/seed.img,if=virtio,format=raw"
+      )
+      ;;
+    box)
+      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/packer-ubuntu-1" -F qcow2 "$WORKDIR/packer-ubuntu-1" >/dev/null
+      cp "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/efivars.fd" "$WORKDIR/efivars.fd"
 
-    QEMU_DRIVES+=(
-      -drive "file=$WORKDIR/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-      -drive "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on"
-      -drive "file=$WORKDIR/efivars.fd,if=pflash,unit=1,format=raw"
-    )
-  fi
+      QEMU_DRIVES+=(
+        -drive "file=$WORKDIR/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
+        -drive "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on"
+        -drive "file=$WORKDIR/efivars.fd,if=pflash,unit=1,format=raw"
+      )
+      ;;
+    lab)
+      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/packer-ubuntu-1" -F qcow2 "$WORKDIR/packer-ubuntu-1" >/dev/null
+      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/packer-ubuntu-2" -F qcow2 "$WORKDIR/packer-ubuntu-2" >/dev/null
+      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/packer-ubuntu-3" -F qcow2 "$WORKDIR/packer-ubuntu-3" >/dev/null
+      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/packer-ubuntu-4" -F qcow2 "$WORKDIR/packer-ubuntu-4" >/dev/null
+      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/packer-ubuntu-5" -F qcow2 "$WORKDIR/packer-ubuntu-5" >/dev/null
+      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/packer-ubuntu-6" -F qcow2 "$WORKDIR/packer-ubuntu-6" >/dev/null
+      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/packer-ubuntu-7" -F qcow2 "$WORKDIR/packer-ubuntu-7" >/dev/null
+      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/packer-ubuntu-8" -F qcow2 "$WORKDIR/packer-ubuntu-8" >/dev/null
+      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/packer-ubuntu-9" -F qcow2 "$WORKDIR/packer-ubuntu-9" >/dev/null
+      cp "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/efivars.fd" "$WORKDIR/efivars.fd"
+
+      QEMU_DRIVES+=(
+        -drive "file=$WORKDIR/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
+        -drive "file=$WORKDIR/packer-ubuntu-2,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
+        -drive "file=$WORKDIR/packer-ubuntu-3,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
+        -drive "file=$WORKDIR/packer-ubuntu-4,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
+        -drive "file=$WORKDIR/packer-ubuntu-5,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
+        -drive "file=$WORKDIR/packer-ubuntu-6,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
+        -drive "file=$WORKDIR/packer-ubuntu-7,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
+        -drive "file=$WORKDIR/packer-ubuntu-8,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
+        -drive "file=$WORKDIR/packer-ubuntu-9,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
+        -drive "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on"
+        -drive "file=$WORKDIR/efivars.fd,if=pflash,unit=1,format=raw"
+      )
+      ;;
+    pug)
+      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/packer-ubuntu-1" -F qcow2 "$WORKDIR/packer-ubuntu-1" >/dev/null
+      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/packer-ubuntu-2" -F qcow2 "$WORKDIR/packer-ubuntu-2" >/dev/null
+      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/packer-ubuntu-3" -F qcow2 "$WORKDIR/packer-ubuntu-3" >/dev/null
+      cp "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$QEMU_MACHINE/efivars.fd" "$WORKDIR/efivars.fd"
+
+      QEMU_DRIVES+=(
+        -drive "file=$WORKDIR/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
+        -drive "file=$WORKDIR/packer-ubuntu-2,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
+        -drive "file=$WORKDIR/packer-ubuntu-3,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
+        -drive "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on"
+        -drive "file=$WORKDIR/efivars.fd,if=pflash,unit=1,format=raw"
+      )
+      ;;
+    *)
+      echo >&2 "Unknown qemu machine: $QEMU_MACHINE"
+      exit 1
+      ;;
+  esac
 
   timeout --kill-after=10s 10m \
     qemu-system-x86_64 \
@@ -285,7 +349,7 @@ echo "deb $UBUNTU_MIRROR_SECURITY $UBUNTU_NAME-security main restricted universe
 echo "deb $UBUNTU_MIRROR $UBUNTU_NAME-backports main restricted universe multiverse" >> /etc/apt/sources.list
 apt-get update
 EOF
-if [[ "$BACKEND" == "qemu" && $USE_MINIMAL -eq 1 ]]; then
+if [[ "$BACKEND" == "qemu" && "$QEMU_MACHINE" == "minimal" ]]; then
   # Fixes systemd-analyze validation error:
   # /lib/systemd/system/snapd.service:23: Unknown key name 'RestartMode' section 'Service', ignoring.
   $SSH_CMD sudo apt-get purge --autoremove --yes snapd
