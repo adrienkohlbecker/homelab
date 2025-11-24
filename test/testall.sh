@@ -10,6 +10,7 @@ rm -f "$OUT_DIR"/*.ansi
 ONLY_FAILED=0
 JOBS=5
 ROLE_ARGS=()
+PARALLEL_PID=""
 
 # Flags:
 #   --onlyfailed : rerun only roles that failed in the last log
@@ -53,6 +54,15 @@ colorize_stderr() {
 }
 export -f colorize_stderr
 
+cleanup() {
+  if [[ -n "${PARALLEL_PID:-}" ]]; then
+    pkill -TERM -P "$PARALLEL_PID" 2>/dev/null || true
+    kill "$PARALLEL_PID" 2>/dev/null || true
+    wait "$PARALLEL_PID" 2>/dev/null || true
+  fi
+}
+trap cleanup INT TERM EXIT
+
 run_role() {
   local script=$1
   shift
@@ -81,12 +91,20 @@ list_roles() {
 
 PARALLEL=(parallel --jobs "$JOBS" --joblog "$LOG_FILE" --eta run_role test/testrole.sh)
 if (( ONLY_FAILED )); then
-  test/showfailed.sh | "${PARALLEL[@]}" "${ROLE_ARGS[@]}"
+  mapfile -t roles < <(test/showfailed.sh)
+  if ((${#roles[@]} == 0)); then
+    echo "No failed roles recorded in $LOG_FILE" >&2
+    exit 0
+  fi
 else
   mapfile -t roles < <(list_roles)
   if ((${#roles[@]} == 0)); then
     echo "No roles with tasks/main.yml found" >&2
     exit 1
   fi
-  printf '%s\n' "${roles[@]}" | "${PARALLEL[@]}" "${ROLE_ARGS[@]}"
 fi
+
+"${PARALLEL[@]}" "${ROLE_ARGS[@]}" ::: "${roles[@]}" &
+PARALLEL_PID=$!
+wait "$PARALLEL_PID"
+PARALLEL_PID=""
