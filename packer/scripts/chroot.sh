@@ -133,8 +133,8 @@ zfs set org.zfsbootmenu:commandline="" "rpool/ROOT"
 # Create efi & swap
 
 if [ "$LAYOUT" = "" ]; then
-  EFI_DEVICE="/dev/disk/by-uuid/$(blkid -s UUID -o value "${DISKS[0]}1")"
-  SWAP_DEVICE="/dev/disk/by-uuid/$(blkid -s UUID -o value "${DISKS[0]}2")"
+  EFI_DEVICE="${DISKS[0]}1"
+  SWAP_DEVICE="${DISKS[0]}2"
 else
   apt-get install --yes mdadm
 
@@ -150,21 +150,27 @@ else
   SWAP_DEVICE=/dev/md/swap
 fi
 
-# Create EFI filesystem
+# Create filesystems
 
 mkdosfs -F 32 -s 1 -n EFI $EFI_DEVICE
-echo "$EFI_DEVICE /boot/efi vfat defaults 0 0" >>/etc/fstab
-
-sync
-sleep 2
-
-# Create swap filesystem
-
 mkswap -f $SWAP_DEVICE
-echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 
 sync
 sleep 2
+
+# Get UUIDs, they exist only after the filesystem has been created
+
+blkid
+
+if [ "$LAYOUT" = "" ]; then
+  EFI_DEVICE="/dev/disk/by-uuid/$(blkid -s UUID -o value "$EFI_DEVICE")"
+  SWAP_DEVICE="/dev/disk/by-uuid/$(blkid -s UUID -o value "$SWAP_DEVICE")"
+fi
+
+# Update fstab
+
+echo "$EFI_DEVICE /boot/efi vfat defaults 0 0" >>/etc/fstab
+echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 
 # Update device symlinks
 
@@ -187,18 +193,6 @@ curl -o /boot/efi/EFI/ZBM/VMLINUZ.EFI -L $ZBM_URL
 echo "$ZBM_SUM  /boot/efi/EFI/ZBM/VMLINUZ.EFI" | sha256sum -c -
 cp /boot/efi/EFI/ZBM/VMLINUZ.EFI /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
 
-# # Configure EFI boot entries
-
-# apt-get install --yes efibootmgr
-
-# efibootmgr -c -d "${DISKS[0]}" -p 1 \
-#   -L "ZFSBootMenu (Backup)" \
-#   -l '\EFI\ZBM\VMLINUZ-BACKUP.EFI'
-
-# efibootmgr -c -d "${DISKS[0]}" -p 1 \
-#   -L "ZFSBootMenu" \
-#   -l '\EFI\ZBM\VMLINUZ.EFI'
-
 # Configure rEFInd
 
 mountpoint -q /sys/firmware/efi/efivars || mount -t efivarfs efivarfs /sys/firmware/efi/efivars
@@ -220,6 +214,22 @@ menuentry "Ubuntu (ZBM Menu)" {
     options "quit loglevel=0 zbm.show"
 }
 EOF
+
+# # Configure EFI boot entries
+
+apt-get install --yes efibootmgr
+
+efibootmgr -c -d "${DISKS[0]}" -p 1 \
+  -L "ZFSBootMenu (Backup)" \
+  -l '\EFI\ZBM\VMLINUZ-BACKUP.EFI'
+
+efibootmgr -c -d "${DISKS[0]}" -p 1 \
+  -L "ZFSBootMenu" \
+  -l '\EFI\ZBM\VMLINUZ.EFI'
+
+efibootmgr -c -d "${DISKS[0]}" -p 1 \
+  -L "rEFInd" \
+  -l '\EFI\refind\refind_x64.efi'
 
 # Enable tmp mount
 
