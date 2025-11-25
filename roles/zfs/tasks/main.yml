@@ -11,6 +11,7 @@
   tags:
     - zfs
     - _check_stage1
+    - _check_stage2
 
 - name: Create /etc/default/grub.d directory
   when: grub_bootloader
@@ -23,6 +24,7 @@
   become: true
   tags:
     - zfs
+    - _check_stage2
 
 - name: Disable init_on_alloc
   when: grub_bootloader
@@ -37,6 +39,7 @@
   become: true
   tags:
     - zfs
+    - _check_stage2
 
 - name: Disable init_on_alloc
   when: not grub_bootloader
@@ -48,6 +51,7 @@
     zfsbootmenu_cmdline_contents: init_on_alloc=0
   tags:
     - zfs
+    - _check_stage2
 
 - name: Update grub
   when: grub_bootloader and grub_cfg.changed and not docker_test
@@ -56,6 +60,7 @@
   become: true
   tags:
     - zfs
+    - _check_stage2
 
 - name: Configure ARC
   template:
@@ -69,6 +74,7 @@
   become: true
   tags:
     - zfs
+    - _check_stage2
 
 - name: Update initramfs
   when: zfs_module_conf.changed
@@ -77,6 +83,7 @@
   changed_when: true
   tags:
     - zfs
+    - _check_stage2
 
 - name: Ask to reboot
   when: zfs_module_conf.changed
@@ -89,6 +96,7 @@
   become: true
   tags:
     - zfs
+    - _check_stage2
 
 - name: Copy the cull script
   copy:
@@ -102,6 +110,7 @@
   become: true
   tags:
     - zfs
+    - _check_stage2
 
 - name: Copy the health script
   copy:
@@ -115,6 +124,7 @@
   become: true
   tags:
     - zfs
+    - _check_stage2
 
 - name: Schedule the health script
   when: not (ansible_check_mode and zfs_apt.changed)
@@ -129,6 +139,7 @@
   become: true
   tags:
     - zfs
+    - _check_stage2
 
 - name: Monitor health script
   import_role:
@@ -138,6 +149,7 @@
     cron_entry: zfs_health
   tags:
     - zfs
+    - _check_stage2
 
 - name: Schedule the trim script
   when: not (ansible_check_mode and zfs_apt.changed)
@@ -154,6 +166,7 @@
   become: true
   tags:
     - zfs
+    - _check_stage2
 
 - name: Monitor trim scripts
   import_role:
@@ -163,6 +176,7 @@
     cron_entry: "{{ ['zfs_trim_'] | product(zfs_trim_pools) | map('join') | list }}"
   tags:
     - zfs
+    - _check_stage2
 
 # TODO this is a zpool property
 # - name: Set autotrim=on on trim datasets
@@ -175,6 +189,7 @@
 #   become: true
 #   tags:
 #     - zfs
+#     - _check_stage2
 
 - name: Enable zed
   when: not (ansible_check_mode and zfs_apt.changed)
@@ -184,6 +199,7 @@
   become: true
   tags:
     - zfs
+    - _check_stage2
 
 - name: Start zed
   when: not (ansible_check_mode and zfs_apt.changed)
@@ -193,6 +209,7 @@
   become: true
   tags:
     - zfs
+    - _check_stage2
 
 - name: Set properties on root dataset
   when: zfs_root
@@ -205,6 +222,7 @@
   become: true
   tags:
     - zfs
+    - _check_stage2
 
 - name: Setup mount generator
   import_tasks: mount_generator.yml

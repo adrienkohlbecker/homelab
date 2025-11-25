@@ -25,6 +25,26 @@ mac_addresses:
   pom: c3:9e:51:6a:35:81
 
 wireguard_peers:
+  - name: lab
+    address: 10.234.64.2
+    endpoint:
+      local: "{{ external_ips.lab }}:51820"
+      remote: home.{{ domain }}:51823
+    is_server: true
+    dns_address: "{{ external_ips.pihole }}"
+    site_subnet: "{{ site_subnets.home }}"
+    public_key: "{{ wireguard_keys.lab.public_key }}"
+    private_key: "{{ wireguard_keys.lab.private_key }}"
+  - name: pug
+    address: 10.234.64.3
+    endpoint:
+      local: "{{ external_ips.pug }}:51820"
+      remote: home.{{ domain }}:51823
+    is_server: true
+    dns_address: "{{ external_ips.pihole }}"
+    site_subnet: "{{ site_subnets.home }}"
+    public_key: "{{ wireguard_keys.pug.public_key }}"
+    private_key: "{{ wireguard_keys.pug.private_key }}"
   - name: box
     address: 10.234.64.5
     endpoint:
@@ -38,11 +58,25 @@ wireguard_peers:
 
 wireguard_keys:
   lab:
-    public_key: changeme
-    private_key: changeme
+    public_key: lab/Gyme66/cmHk0tP1TXGEse28slIO2Q3f+aweFOx0=
+    private_key: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          37303232396164376238663861643034663538303338666364633565663337393333383739363337
+          6263353939386234376337393463666636313265363232310a333130663064643366313366393134
+          63316531613264663436626561386233393331336665363565656235343931623762633035663537
+          6537336131303630320a343130343038633036646137383265383038613332373262326265636137
+          63313638653963323265623032626565356662663736383762306432333335633466643931333335
+          6136623536306139303164396532356163396332343036666535
   pug:
-    public_key: changeme
-    private_key: changeme
+    public_key: pug/tTDCCEIl1zwJZ7M9iotuU6yf2C59y8HBKVgarmM=
+    private_key: !vault |
+          $ANSIBLE_VAULT;1.1;AES256
+          62393761363065356138623038333561316631386437376136373438386238353430383263366265
+          6435623663623934363836343063333135346434346532320a336139393830343563383138396336
+          32613239303432356434623435303036353134636235306138613862356135393136626466306237
+          3734616535613862650a396565373465326664313863653561656466373430646131643966313062
+          66653732656637346662303766383330373464613361616535363334646163373064386662323639
+          3661316132356238396134306638663438356438353937326263
   box:
     public_key: box/yMi21GMzxe/6x1zhs/HPXL+LU6WlVUn1nrsmKlM=
     private_key: !vault |

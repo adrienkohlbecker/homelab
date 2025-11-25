@@ -201,7 +201,7 @@ refind-install
 rm /boot/refind_linux.conf
 
 cat <<EOF >>/boot/efi/EFI/refind/refind.conf
-timeout 10
+timeout 1
 default_selection "Ubuntu (ZBM)"
 
 menuentry "Ubuntu (ZBM)" {
