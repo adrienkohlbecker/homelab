@@ -1,0 +1,11 @@
+zfs_has_services_mount: false
+zfs_has_scratch_mount: false
+zfs_has_media_mount: false
+zfs_has_data_mount: false
+zfs_has_minio_mount: false
+
+z2m_start_service: false
+
+home_subnet: 10.0.2.0/24
+macvlan_subnet: '{{ home_subnet | ansible.utils.ipsubnet(27, 7) }}'
+macvlan_parent: enp0s3

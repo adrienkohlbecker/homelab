@@ -1,3 +1,17 @@
+- name: mount_generator | Create /etc/zfs/zfs-list.cache directory
+  file:
+    dest: /etc/zfs/zfs-list.cache
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  register: zfs_list_cache_directory
+  become: true
+  tags:
+    - zfs
+    - zfs_mount_generator
+    - _check_stage2
+
 - name: mount_generator | Enable zfs-mount-generator for pool
   file:
     path: /etc/zfs/zfs-list.cache/{{ item.split('/')[0] }}
@@ -12,6 +26,7 @@
   tags:
     - zfs
     - zfs_mount_generator
+    - _check_stage2
 
 - name: mount_generator | Configure symlink
   when: not (ansible_check_mode and zfs_apt.changed)
@@ -23,12 +38,27 @@
   tags:
     - zfs
     - zfs_mount_generator
+    - _check_stage2
+
+- name: Copy the mount cache script
+  copy:
+    src: zfs_update_mount_cache.sh
+    dest: /usr/local/bin/zfs_update_mount_cache
+    mode: "0755"
+    owner: root
+    group: root
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - zfs
+    - _check_stage2
 
 - name: mount_generator | Generate mount cache
-  shell: set -euo pipefail; [ $(zfs get -o value -pH canmount {{ item }}) = "on" ]; before=`md5sum /etc/zfs/zfs-list.cache/{{ item.split('/')[0] }} | cut -f 1 -d " "`; zfs set canmount=on {{ item }}; after=`md5sum /etc/zfs/zfs-list.cache/{{ item.split('/')[0] }} | cut -f 1 -d " "`; test $before = $after || ([ "$?" = 1 ] && echo "file updated" || exit 1)
+  when: not (ansible_check_mode and zfs_list_cache_directory.changed)
+  command: /usr/local/bin/zfs_update_mount_cache {{ item }} {{ item.split('/')[0] }}
   args:
     chdir: /etc/zfs/zfs-list.cache
-    executable: /bin/bash
   register: zfs_mount_cache_cmd
   changed_when: "'file updated' in zfs_mount_cache_cmd.stdout"
   with_items: "{{ zfs_mount_cache_datasets }}"

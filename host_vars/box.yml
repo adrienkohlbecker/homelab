@@ -21,8 +21,6 @@ sensor_modules: []
 macvlan_enable_docker: true
 macvlan_subnet: '{{ home_subnet | ansible.utils.ipsubnet(27, 7) }}'
 
-log2ram_size: 100M
-
 hdparm_settings: {}
 
 rand_order: 3

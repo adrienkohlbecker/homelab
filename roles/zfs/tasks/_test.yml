@@ -1,0 +1,10 @@
+- name: _test | Install bash helpers
+  import_role:
+    name: bash
+
+- name: Create zfs filesystem
+  zfs:
+    name: '{{ item }}'
+    state: present
+  become: true
+  with_items: '{{ zfs_mount_cache_datasets }}'

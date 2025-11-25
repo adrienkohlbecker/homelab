@@ -21,8 +21,6 @@ macvlan_enable_docker: false
 macvlan_parent: eth0
 macvlan_subnet: 10.123.1.32/27
 
-log2ram_size:
-
 netplan:
   ethernets:
     nic0:
