@@ -9,9 +9,9 @@ dependencies = [
     "ansible>=13.0.0",
     "ansible-lint>=25.11.0",
     "black>=25.11.0",
-
     # for ansible modules
     "jmespath>=1.0.1", # json_query
     "netaddr>=1.3.0", # ipmath
     "passlib>=1.7.4", # mosquitto_passwd
+    "dnspython>=2.8.0", # dig
 ]
