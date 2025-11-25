@@ -10,11 +10,13 @@ rm -f "$OUT_DIR"/*.ansi
 ONLY_FAILED=0
 JOBS=5
 ROLE_ARGS=()
+MACHINES=(container)
 PARALLEL_PID=""
 
 # Flags:
 #   --onlyfailed : rerun only roles that failed in the last log
 #   --jobs N     : number of parallel workers (default: 5)
+#   --machines X : comma-separated list of machine profiles (default: container)
 #   --           : stop parsing and forward remaining args to testrole.sh
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -24,6 +26,20 @@ while [[ $# -gt 0 ]]; do
     --jobs)
       JOBS="${2:-}"
       shift
+      ;;
+    --machines)
+      machines_arg="${2:-}"
+      shift
+      if [[ -z "$machines_arg" ]]; then
+        echo "Missing value for --machines" >&2
+        exit 1
+      fi
+      machines_arg=${machines_arg//,/ }
+      read -r -a MACHINES <<<"$machines_arg"
+      if ((${#MACHINES[@]} == 0)); then
+        echo "No machines provided to --machines" >&2
+        exit 1
+      fi
       ;;
     --)
       shift
@@ -70,12 +86,12 @@ run_role() {
   # Parallel appends the role name last; everything in between forwards to testrole.sh
   local args=("$@")
   local role="${args[-1]}"
-  unset 'args[${#args[@]}-1]'
+  local machine="${args[-2]}"
 
   (
-    "$script" "$role" --checkmode "${args[@]}" 2> >(colorize_stderr)
-  ) &>"$OUT_DIR/$role.ansi" || {
-    printf '\e[0;41m%s failed\e[0m\n' "$role" >&2
+    "$script" --checkmode "${args[@]}" 2> >(colorize_stderr)
+  ) &>"$OUT_DIR/$role.$machine.ansi" || {
+    printf '\e[0;41m%s failed\e[0m\n' "$role.$machine" >&2
     exit 1
   }
 }
@@ -89,7 +105,7 @@ list_roles() {
   done | sort
 }
 
-PARALLEL=(parallel --jobs "$JOBS" --joblog "$LOG_FILE" --eta run_role test/testrole.sh)
+PARALLEL=(parallel --jobs "$JOBS" --joblog "$LOG_FILE" --eta run_role test/testrole.sh --machine {1} {2})
 if (( ONLY_FAILED )); then
   mapfile -t roles < <(test/showfailed.sh)
   if ((${#roles[@]} == 0)); then
@@ -104,7 +120,7 @@ else
   fi
 fi
 
-"${PARALLEL[@]}" "${ROLE_ARGS[@]}" ::: "${roles[@]}" &
+"${PARALLEL[@]}" "${ROLE_ARGS[@]}" ::: "${MACHINES[@]}" ::: "${roles[@]}" &
 PARALLEL_PID=$!
 wait "$PARALLEL_PID"
 PARALLEL_PID=""
