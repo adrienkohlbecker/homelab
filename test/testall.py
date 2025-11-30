@@ -8,6 +8,7 @@ using GNU parallel for efficient test execution across multiple machine profiles
 
 import argparse
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -17,6 +18,7 @@ from typing import List
 OUT_DIR = Path("test/out")
 LOG_FILE = Path("test/out.log")
 LOG_FILE_PREV = Path("test/out.log.prev")
+_CHILD_PROCESS: subprocess.Popen | None = None
 
 
 def parse_args() -> argparse.Namespace:
@@ -127,11 +129,11 @@ def build_parallel_command(
         "--joblog",
         str(LOG_FILE),
         "--eta",
-        "test/run_role.sh",
-        "test/testrole.sh",
+        "test/testrole.py",
         "--machine",
         "{1}",
         "{2}",
+        "--checkmode",
     ]
 
     cmd.extend(role_args)
@@ -142,6 +144,27 @@ def build_parallel_command(
     cmd.extend(roles)
 
     return cmd
+
+
+def _install_signal_handlers() -> None:
+    """
+    Forward SIGINT/SIGTERM to the parallel subprocess and exit cleanly.
+
+    The handlers send the same signal to the process group created for GNU
+    parallel so every child role test receives it, then exit with 128+signal.
+    """
+
+    def _handler(signum: int, _: object) -> None:
+        if _CHILD_PROCESS and _CHILD_PROCESS.poll() is None:
+            try:
+                os.killpg(_CHILD_PROCESS.pid, signum)
+            except ProcessLookupError:
+                pass
+        # Use conventional 128+signal exit code.
+        sys.exit(128 + signum)
+
+    signal.signal(signal.SIGINT, _handler)
+    signal.signal(signal.SIGTERM, _handler)
 
 
 def main() -> int:
@@ -176,11 +199,20 @@ def main() -> int:
             LOG_FILE_PREV.unlink()
         LOG_FILE.rename(LOG_FILE_PREV)
 
+    _install_signal_handlers()
+
     parallel_cmd = build_parallel_command(machines, roles, args.role_args, args.jobs)
 
-    result = subprocess.run(parallel_cmd, check=False)
+    global _CHILD_PROCESS
+    _CHILD_PROCESS = subprocess.Popen(
+        parallel_cmd,
+        # preexec_fn runs in the child just before exec; setpgrp creates a new
+        # process group so SIGINT/SIGTERM from our handler propagate to all
+        # jobs, but we keep the same session to preserve the controlling TTY.
+        preexec_fn=os.setpgrp,
+    )
 
-    return result.returncode
+    return _CHILD_PROCESS.wait()
 
 if __name__ == "__main__":
     sys.exit(main())
