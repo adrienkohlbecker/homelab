@@ -4,7 +4,6 @@ set -euo pipefail
 PASS_ARGS=("$@")
 : "${ROLE:?ROLE is required}"
 
-WORKDIR=$(mktemp --directory --tmpdir=$IMAGEDIR)
 TIMEOUT_PID=""
 
 cleanup() {
@@ -31,35 +30,11 @@ cleanup() {
     fi
     wait $TIMEOUT_PID || true
   fi
-
-  rm -rf "$WORKDIR"
 }
 trap cleanup EXIT
 
-cp -r group_vars "$WORKDIR"
-cp -r host_vars "$WORKDIR"
-cp -r wireguard "$WORKDIR"
-cp -r roles "$WORKDIR"
-
-# Minimal playbook to run the single role; inject role _test if present.
-cat <<EOF >"$WORKDIR/site.yml"
-- hosts: $INVENTORY_HOST
-  roles:
-    - $ROLE
-EOF
-if [ -f "roles/$ROLE/tasks/_test.yml" ]; then
-  cat <<EOF >>"$WORKDIR/_test.yml"
-- hosts: $INVENTORY_HOST
-  tasks:
-    - import_role:
-        name: $ROLE
-        tasks_from: _test
-EOF
-fi
 
 if [[ "$MACHINE" == "container" ]]; then
-  $PODMAN network inspect homelab_net >/dev/null || $PODMAN network create --subnet 192.5.0.0/16 homelab_net
-
   # Start privileged systemd container so roles behave like a VM.
   timeout --kill-after=10s 10m \
     $PODMAN run --interactive --rm --publish 127.0.0.1::22 --privileged --cidfile $WORKDIR/$IDFILE --network homelab_net homelab:$UBUNTU_NAME \
@@ -82,81 +57,9 @@ if [[ "$MACHINE" == "container" ]]; then
   ADDR=$($PODMAN port "$(cat "$WORKDIR/$IDFILE")" 22)
   PORT="${ADDR#*:}"
 else
-  QEMU_DRIVES=()
-  if (( QEMU_USE_VNC )); then
-    QEMU_DISPLAY_ARGS=(-display vnc=:0 -vga qxl)
-  else
-    QEMU_DISPLAY_ARGS=(-display none)
-  fi
-  case "$MACHINE" in
-    minimal)
-      cloud-localds "$WORKDIR/seed.img" test/minimal/user-data test/minimal/meta-data
-      qemu-img create -f qcow2 -b "$IMAGEDIR/ubuntu-$UBUNTU_VERSION-minimal-cloudimg-amd64.img" -F qcow2 "$WORKDIR/disk.img" 20G >/dev/null
-
-      QEMU_DRIVES+=(
-        -drive "file=$WORKDIR/disk.img,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-        -drive "file=$WORKDIR/seed.img,if=virtio,format=raw"
-      )
-      ;;
-    box)
-      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/packer-ubuntu-1" -F qcow2 "$WORKDIR/packer-ubuntu-1" >/dev/null
-      cp "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/efivars.fd" "$WORKDIR/efivars.fd"
-
-      QEMU_DRIVES+=(
-        -drive "file=$WORKDIR/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-        -drive "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on"
-        -drive "file=$WORKDIR/efivars.fd,if=pflash,unit=1,format=raw"
-      )
-      ;;
-    lab)
-      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/packer-ubuntu-1" -F qcow2 "$WORKDIR/packer-ubuntu-1" >/dev/null
-      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/packer-ubuntu-2" -F qcow2 "$WORKDIR/packer-ubuntu-2" >/dev/null
-      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/packer-ubuntu-3" -F qcow2 "$WORKDIR/packer-ubuntu-3" >/dev/null
-      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/packer-ubuntu-4" -F qcow2 "$WORKDIR/packer-ubuntu-4" >/dev/null
-      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/packer-ubuntu-5" -F qcow2 "$WORKDIR/packer-ubuntu-5" >/dev/null
-      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/packer-ubuntu-6" -F qcow2 "$WORKDIR/packer-ubuntu-6" >/dev/null
-      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/packer-ubuntu-7" -F qcow2 "$WORKDIR/packer-ubuntu-7" >/dev/null
-      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/packer-ubuntu-8" -F qcow2 "$WORKDIR/packer-ubuntu-8" >/dev/null
-      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/packer-ubuntu-9" -F qcow2 "$WORKDIR/packer-ubuntu-9" >/dev/null
-      cp "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/efivars.fd" "$WORKDIR/efivars.fd"
-
-      QEMU_DRIVES+=(
-        -drive "file=$WORKDIR/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-        -drive "file=$WORKDIR/packer-ubuntu-2,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-        -drive "file=$WORKDIR/packer-ubuntu-3,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-        -drive "file=$WORKDIR/packer-ubuntu-4,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-        -drive "file=$WORKDIR/packer-ubuntu-5,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-        -drive "file=$WORKDIR/packer-ubuntu-6,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-        -drive "file=$WORKDIR/packer-ubuntu-7,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-        -drive "file=$WORKDIR/packer-ubuntu-8,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-        -drive "file=$WORKDIR/packer-ubuntu-9,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-        -drive "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on"
-        -drive "file=$WORKDIR/efivars.fd,if=pflash,unit=1,format=raw"
-      )
-      ;;
-    pug)
-      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/packer-ubuntu-1" -F qcow2 "$WORKDIR/packer-ubuntu-1" >/dev/null
-      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/packer-ubuntu-2" -F qcow2 "$WORKDIR/packer-ubuntu-2" >/dev/null
-      qemu-img create -f qcow2 -b "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/packer-ubuntu-3" -F qcow2 "$WORKDIR/packer-ubuntu-3" >/dev/null
-      cp "$IMAGEDIR/$UBUNTU_NAME/ubuntu-$MACHINE/efivars.fd" "$WORKDIR/efivars.fd"
-
-      QEMU_DRIVES+=(
-        -drive "file=$WORKDIR/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-        -drive "file=$WORKDIR/packer-ubuntu-2,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-        -drive "file=$WORKDIR/packer-ubuntu-3,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-        -drive "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on"
-        -drive "file=$WORKDIR/efivars.fd,if=pflash,unit=1,format=raw"
-      )
-      ;;
-    *)
-      echo >&2 "Unknown machine: $MACHINE"
-      exit 1
-      ;;
-  esac
-
   timeout --kill-after=10s 10m \
     qemu-system-x86_64 \
-    "${QEMU_DRIVES[@]}" \
+    $QEMU_DRIVES \
     -netdev "user,id=user.0,hostfwd=tcp:$SSH_HOST:0-:22" \
     -object rng-random,id=rng0,filename=/dev/urandom -device virtio-rng-pci,rng=rng0 \
     -machine "type=q35,accel=kvm" \
@@ -164,7 +67,7 @@ else
     -name "packer-ubuntu" \
     -m "4096M" \
     -cpu "host" \
-    "${QEMU_DISPLAY_ARGS[@]}" \
+    $QEMU_DISPLAY_ARGS \
     -device "virtio-net,netdev=user.0" \
     -pidfile "$WORKDIR/$IDFILE" \
     &
