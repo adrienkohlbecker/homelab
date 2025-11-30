@@ -15,3 +15,6 @@ dependencies = [
     "passlib>=1.7.4", # mosquitto_passwd
     "dnspython>=2.8.0", # dig
 ]
+
+[tool.black]
+line-length = 250

@@ -13,7 +13,9 @@ import asyncio
 import os
 import platform
 import shlex
+import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Tuple
 
@@ -187,10 +189,10 @@ def colorize_line(line: str) -> str:
     Lines starting with '+' (bash -x) are dimmed.
     All other lines are highlighted as errors.
     """
-    if line.startswith('+'):
-        return f'\033[0;30m{line}\033[0m'
+    if line.startswith("+"):
+        return f"\033[0;30m{line}\033[0m"
     else:
-        return f'\033[0;41m{line}\033[0m'
+        return f"\033[0;41m{line}\033[0m"
 
 
 async def process_line(
@@ -199,14 +201,11 @@ async def process_line(
     file_handle,
     file_lock: asyncio.Lock,
 ) -> None:
-    # Print immediately to appropriate stream
     output_line = colorize_line(line) if stream_name == "stderr" else line
-    if stream_name == "stdout":
-        sys.stdout.write(output_line + "\n")
-        sys.stdout.flush()
-    else:
-        sys.stderr.write(output_line + "\n")
-        sys.stderr.flush()
+
+    # Print immediately to stdout
+    sys.stdout.write(output_line + "\n")
+    sys.stdout.flush()
 
     # Write to log, keeping writes from both streams serialized.
     async with file_lock:
@@ -215,7 +214,7 @@ async def process_line(
 
 
 async def read_and_write_stream(
-    stream: asyncio.StreamReader,
+    stream: asyncio.StreamReader | None,
     stream_name: str,
     file_handle,
     file_lock: asyncio.Lock,
@@ -225,13 +224,16 @@ async def read_and_write_stream(
 
     The lock keeps multi-stream writes atomic so lines don't interleave.
     """
+    if stream == None:
+        return
+
     while True:
         try:
             line_bytes = await stream.readline()
             if not line_bytes:
                 break
 
-            line = line_bytes.decode('utf-8', errors='replace').rstrip('\n')
+            line = line_bytes.decode("utf-8", errors="replace").rstrip("\n")
             await process_line(line, stream_name, file_handle, file_lock)
 
         except Exception as e:
@@ -260,33 +262,178 @@ async def run_command(cmd: List[str], output_file: str, env: Dict[str, str]) -> 
             read_and_write_stream(process.stderr, "stderr", f, file_lock),
         )
 
-    return await process.wait()
+        return await process.wait()
 
 
-def main() -> int:
-    """Main entry point."""
-    parsed_args, pass_args = parse_args()
-    env = build_env(parsed_args, pass_args)
+def copy_files(workdir: str, role: str, inventory_host: str) -> None:
 
-    output_file = f"test/out/{parsed_args.role}.{parsed_args.machine}.ansi"
+    Path("group_vars").copy_into(workdir)
+    Path("host_vars").copy_into(workdir)
+    Path("wireguard").copy_into(workdir)
+    Path("roles").copy_into(workdir)
+
+    with open(f"{workdir}/site.yml", "w") as site_yml:
+        site_yml.write(
+            f"""
+- hosts: {inventory_host}
+  roles:
+    - {role}
+"""
+        )
+
+    if Path(f"roles/{role}/tasks/_test.yml").exists():
+        with open(f"{workdir}/_test.yml", "w") as test_yml:
+            test_yml.write(
+                f"""
+- hosts: {inventory_host}
+tasks:
+    - import_role:
+        name: {role}
+        tasks_from: _test
+    """
+            )
+
+
+async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
+
+    output_file = f"test/out/{env["ROLE"]}.{env["MACHINE"]}.ansi"
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
     cmd = ["test/testrole.sh", *pass_args]
 
+    with tempfile.TemporaryDirectory(dir=env["IMAGEDIR"]) as workdir:
+
+        env["WORKDIR"] = workdir
+        inventory_host = env["INVENTORY_HOST"]
+        role = env["ROLE"]
+        machine = env["MACHINE"]
+        imagedir = env["IMAGEDIR"]
+        ubuntu_version = env["UBUNTU_VERSION"]
+        ubuntu_name = env["UBUNTU_NAME"]
+
+        copy_files(workdir, role, inventory_host)
+
+        if machine == "container":
+            exitcode = await run_command(env["PODMAN"].split(" ") + ["network", "inspect", "homelab_net"], output_file, env)
+            if exitcode != 0:
+                exitcode = await run_command(env["PODMAN"].split(" ") + ["network", "create", "--subnet", "192.5.0.0/16", "homelab_net"], output_file, env)
+                if exitcode != 0:
+                    return exitcode
+
+        else:
+
+            if env["QEMU_USE_VNC"] == "1":
+                QEMU_DISPLAY_ARGS = ["-display", "vnc=:0", "-vga", "qxl"]
+            else:
+                QEMU_DISPLAY_ARGS = ["-display", "none"]
+
+            if machine == "minimal":
+                await run_command(["cloud-localds", f"{workdir}/seed.img", "test/minimal/user-data", "test/minimal/meta-data"], output_file, env)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/ubuntu-{ubuntu_version}-minimal-cloudimg-amd64.img", "-F", "qcow2", f"{workdir}/disk.img", "20G"], output_file, env)
+
+                QEMU_DRIVES = [
+                    "-drive",
+                    f"file={workdir}/disk.img,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
+                    "-drive",
+                    f"file={workdir}/seed.img,if=virtio,format=raw",
+                ]
+
+            elif machine == "box":
+
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-1", "-F", "qcow2", f"{workdir}/packer-ubuntu-1"], output_file, env)
+                await run_command(["cp", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/efivars.fd", f"{workdir}/efivars.fd"], output_file, env)
+
+                QEMU_DRIVES = [
+                    "-drive",
+                    f"file={workdir}/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
+                    "-drive",
+                    "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on",
+                    "-drive",
+                    f"file={workdir}/efivars.fd,if=pflash,unit=1,format=raw",
+                ]
+
+            elif machine == "lab":
+
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-1", "-F", "qcow2", f"{workdir}/packer-ubuntu-1"], output_file, env)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-2", "-F", "qcow2", f"{workdir}/packer-ubuntu-2"], output_file, env)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-3", "-F", "qcow2", f"{workdir}/packer-ubuntu-3"], output_file, env)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-4", "-F", "qcow2", f"{workdir}/packer-ubuntu-4"], output_file, env)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-5", "-F", "qcow2", f"{workdir}/packer-ubuntu-5"], output_file, env)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-6", "-F", "qcow2", f"{workdir}/packer-ubuntu-6"], output_file, env)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-7", "-F", "qcow2", f"{workdir}/packer-ubuntu-7"], output_file, env)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-8", "-F", "qcow2", f"{workdir}/packer-ubuntu-8"], output_file, env)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-9", "-F", "qcow2", f"{workdir}/packer-ubuntu-9"], output_file, env)
+                await run_command(["cp", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/efivars.fd", f"{workdir}/efivars.fd"], output_file, env)
+
+                QEMU_DRIVES = [
+                    "-drive",
+                    f"file={workdir}/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
+                    "-drive",
+                    f"file={workdir}/packer-ubuntu-2,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
+                    "-drive",
+                    f"file={workdir}/packer-ubuntu-3,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
+                    "-drive",
+                    f"file={workdir}/packer-ubuntu-4,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
+                    "-drive",
+                    f"file={workdir}/packer-ubuntu-5,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
+                    "-drive",
+                    f"file={workdir}/packer-ubuntu-6,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
+                    "-drive",
+                    f"file={workdir}/packer-ubuntu-7,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
+                    "-drive",
+                    f"file={workdir}/packer-ubuntu-8,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
+                    "-drive",
+                    f"file={workdir}/packer-ubuntu-9,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
+                    "-drive",
+                    "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on",
+                    "-drive",
+                    f"file={workdir}/efivars.fd,if=pflash,unit=1,format=raw",
+                ]
+
+            elif machine == "pug":
+
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-1", "-F", "qcow2", f"{workdir}/packer-ubuntu-1"], output_file, env)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-2", "-F", "qcow2", f"{workdir}/packer-ubuntu-2"], output_file, env)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-3", "-F", "qcow2", f"{workdir}/packer-ubuntu-3"], output_file, env)
+                await run_command(["cp", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/efivars.fd", f"{workdir}/efivars.fd"], output_file, env)
+
+                QEMU_DRIVES = [
+                    "-drive",
+                    f"file={workdir}/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
+                    "-drive",
+                    f"file={workdir}/packer-ubuntu-2,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
+                    "-drive",
+                    f"file={workdir}/packer-ubuntu-3,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
+                    "-drive",
+                    "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on",
+                    "-drive",
+                    f"file={workdir}/efivars.fd,if=pflash,unit=1,format=raw",
+                ]
+
+            else:
+                raise Exception(f"Unknown machine {machine}")
+
+            env["QEMU_DISPLAY_ARGS"] = shlex.join(QEMU_DISPLAY_ARGS)
+            env["QEMU_DRIVES"] = shlex.join(QEMU_DRIVES)
+
+        return await run_command(cmd, output_file, env)
+
+
+def main() -> int:
+    """Main entry point."""
+
+    parsed_args, pass_args = parse_args()
+    env = build_env(parsed_args, pass_args)
+
     try:
-        exit_code = asyncio.run(run_command(cmd, output_file, env))
+        exit_code = asyncio.run(run_test(env, pass_args))
 
         if exit_code != 0:
-            sys.stderr.write(
-                f"\033[0;41m{parsed_args.role}.{parsed_args.machine} failed\033[0m\n"
-            )
+            sys.stderr.write(f"\033[0;41m{env["ROLE"]}.{env["MACHINE"]} failed\033[0m\n")
             sys.stderr.flush()
 
         return exit_code
 
-    except FileNotFoundError:
-        print(f"Error: Script not found: {cmd[0]}", file=sys.stderr)
-        return 1
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
