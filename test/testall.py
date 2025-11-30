@@ -50,11 +50,11 @@ def parse_args() -> argparse.Namespace:
         help="Comma-separated list of machine profiles (default: container)",
     )
 
-    # Remaining arguments are forwarded to testrole.sh
+    # Remaining arguments are forwarded to testrole.py
     parser.add_argument(
         "role_args",
         nargs="*",
-        help="Additional arguments to forward to testrole.sh",
+        help="Additional arguments to forward to testrole.py",
     )
 
     return parser.parse_args()
