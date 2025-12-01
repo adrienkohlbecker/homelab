@@ -245,7 +245,7 @@ def copy_files(workdir: str, role: str, inventory_host: str) -> None:
             test_yml.write(
                 f"""
 - hosts: {inventory_host}
-tasks:
+  tasks:
     - import_role:
         name: {role}
         tasks_from: _test
@@ -307,6 +307,9 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: List[str]) -> int
     ssh_key = SSH_KEY
     ssh_host = SSH_HOST
     ubuntu_mirror, ubuntu_mirror_security = ubuntu_mirrors()
+    podman: List[str] = []
+    qemu_drives: List[str] = []
+    qemu_display_args: List[str] = []
 
     if machine == "container":
         ssh_user = "root"

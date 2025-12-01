@@ -119,9 +119,6 @@ def build_parallel_command(
     jobs: int,
 ) -> List[str]:
     """Construct the GNU parallel command invocation."""
-    os.environ["OUT_DIR"] = str(OUT_DIR)
-    os.environ["LOG_FILE"] = str(LOG_FILE)
-
     cmd = [
         "parallel",
         "--jobs",
