@@ -12,38 +12,42 @@ import argparse
 import asyncio
 import os
 import platform
+import re
 import shlex
+import signal
+import socket
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 UBUNTU_NAME = "jammy"
 UBUNTU_VERSION = "22.04"
 SSH_KEY = "packer/vagrant.key"
 SSH_HOST = "127.0.0.1"
 
-CONTAINER_ANSIBLE_ARGS = '-e {"docker_test":true} -e @host_vars/box-podman.yml'
-QEMU_MACHINE_ARGS: Dict[str, Tuple[str, str, str]] = {
+CONTAINER_ANSIBLE_ARGS = ["-e", '{"docker_test":true}', "-e", "@host_vars/box-podman.yml"]
+QEMU_MACHINE_ARGS: Dict[str, Tuple[str, List[str], str]] = {
     "minimal": (
         "ubuntu",
-        '-e {"qemu_test":true,"qemu_test_minimal":true} -e @host_vars/box-qemu-minimal.yml',
+        ["-e", '{"qemu_test":true,"qemu_test_minimal":true}', "-e", "@host_vars/box-qemu-minimal.yml"],
         "box",
     ),
     "box": (
         "vagrant",
-        '-e {"qemu_test":true,"qemu_test_minimal":false} -e @host_vars/box-qemu.yml',
+        ["-e", '{"qemu_test":true,"qemu_test_minimal":false}', "-e", "@host_vars/box-qemu.yml"],
         "box",
     ),
     "lab": (
         "vagrant",
-        '-e {"qemu_test":true,"qemu_test_minimal":false} -e @host_vars/lab-qemu.yml',
+        ["-e", '{"qemu_test":true,"qemu_test_minimal":false}', "-e", "@host_vars/lab-qemu.yml"],
         "lab",
     ),
     "pug": (
         "vagrant",
-        '-e {"qemu_test":true,"qemu_test_minimal":false} -e @host_vars/pug-qemu.yml',
+        ["-e", '{"qemu_test":true,"qemu_test_minimal":false}', "-e", "@host_vars/pug-qemu.yml"],
         "pug",
     ),
 }
@@ -70,11 +74,6 @@ def parse_args() -> tuple[argparse.Namespace, List[str]]:
         "--keep",
         action="store_true",
         help="Keep the machine running after the test",
-    )
-    parser.add_argument(
-        "--vnc",
-        action="store_true",
-        help="Enable VNC (only if using QEMU backend)",
     )
     parser.add_argument("role", help="Role name to test")
 
@@ -113,13 +112,15 @@ def apply_venv(env: Dict[str, str]) -> None:
     env["VIRTUAL_ENV"] = str(venv_bin.parent)
     env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")
 
+env_ansible_args = []
+
 
 def machine_env(machine: str) -> Dict[str, str]:
     """Return machine-specific environment overrides."""
     env: Dict[str, str] = {}
     if machine == "container":
         env["SSH_USER"] = "root"
-        env["ANSIBLE_ARGS"] = CONTAINER_ANSIBLE_ARGS
+        env["ANSIBLE_ARGS"] = shlex.join(CONTAINER_ANSIBLE_ARGS)
         env["IDFILE"] = "cid"
         env["INVENTORY_HOST"] = "box"
 
@@ -142,7 +143,7 @@ def machine_env(machine: str) -> Dict[str, str]:
             sys.exit(f"Unknown machine: {machine}")
 
         env["SSH_USER"] = ssh_user
-        env["ANSIBLE_ARGS"] = ansible_args
+        env["ANSIBLE_ARGS"] = shlex.join(ansible_args)
         env["INVENTORY_HOST"] = inventory_host
 
     return env
@@ -166,7 +167,6 @@ def build_env(
             "SSH_CMD": "",
             "RUN_CHECKMODE": "1" if args.checkmode else "0",
             "KEEP_VM": "1" if args.keep else "0",
-            "QEMU_USE_VNC": "1" if args.vnc else "0",
             "MACHINE": args.machine,
             "UBUNTU_MIRROR": ubuntu_mirror,
             "UBUNTU_MIRROR_SECURITY": ubuntu_mirror_security,
@@ -180,6 +180,12 @@ def build_env(
     apply_venv(env)
 
     return env
+
+
+def sleep_tick() -> None:
+    sys.stdout.write(".")
+    sys.stdout.flush()
+    time.sleep(1)
 
 
 def colorize_line(line: str) -> str:
@@ -241,7 +247,7 @@ async def read_and_write_stream(
             break
 
 
-async def run_command(cmd: List[str], output_file: str, env: Dict[str, str]) -> int:
+async def run_command(cmd: List[str], output_file: str, env: Dict[str, str], check: bool = True) -> int:
     """Run a command and handle its output streams concurrently."""
     with open(output_file, "w") as f:
         file_lock = asyncio.Lock()
@@ -262,7 +268,42 @@ async def run_command(cmd: List[str], output_file: str, env: Dict[str, str]) -> 
             read_and_write_stream(process.stderr, "stderr", f, file_lock),
         )
 
-        return await process.wait()
+        exitcode = await process.wait()
+        if check and exitcode != 0:
+            raise Exception("Command failed")
+        return exitcode
+
+
+def format_ssh_cmd(port: int, key: str, user: str, host: str, cmd: Optional[List[str]] = None) -> List[str]:
+    parts = ["ssh", "-i", key, "-p", str(port), "-o", "StrictHostKeyChecking=no", "-o", "UserKnownHostsFile=/dev/null", f"{user}@{host}"]
+    if cmd:
+        parts.append(shlex.join(cmd))
+    return parts
+
+
+def format_ansible_cmd(port: int, key: str, user: str, host: str, ubuntu_mirror: str, ubuntu_mirror_security: str, ansible_args: str, cmd: Optional[List[str]] = None) -> List[str]:
+    parts = [
+        "ansible-playbook",
+        "-e",
+        f"ansible_ssh_port={port}",
+        "-e",
+        f"ansible_ssh_host={host}",
+        "-e",
+        f"ansible_ssh_user={user}",
+        "-e",
+        f"ansible_ssh_private_key_file={key}",
+        "-e",
+        f"ubuntu_mirror={ubuntu_mirror}",
+        "-e",
+        f"ubuntu_mirror_security={ubuntu_mirror_security}",
+        "--inventory",
+        "test/inventory.ini",
+    ]
+    if ansible_args:
+        parts += shlex.split(ansible_args)
+    if cmd:
+        parts.append(shlex.join(cmd))
+    return parts
 
 
 def copy_files(workdir: str, role: str, inventory_host: str) -> None:
@@ -294,12 +335,23 @@ tasks:
             )
 
 
+def stop_machine(machine: str, podman: List[str], idfile: Path, timeout_proc: subprocess.Popen[bytes]):
+    if machine == "container":
+        # TODO ensure timeout_proc is also killed if podman stop fails for some reason
+        # TODO print this command to stdout
+        subprocess.run([*podman, "stop", "--ignore", "--time", "5", "--cidfile", str(idfile)], check=False)
+    else:
+        if timeout_proc and timeout_proc.poll() is None:
+            try:
+                timeout_proc.terminate()
+            except Exception:
+                pass
+
+
 async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
 
     output_file = f"test/out/{env["ROLE"]}.{env["MACHINE"]}.ansi"
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
-
-    cmd = ["test/testrole.sh", *pass_args]
 
     with tempfile.TemporaryDirectory(dir=env["IMAGEDIR"]) as workdir:
 
@@ -310,31 +362,30 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
         imagedir = env["IMAGEDIR"]
         ubuntu_version = env["UBUNTU_VERSION"]
         ubuntu_name = env["UBUNTU_NAME"]
+        idfile = Path(f"{workdir}/{env["IDFILE"]}")
+        podman = shlex.split(env.get("PODMAN", "podman"))
+        keep_vm = env["KEEP_VM"] == "1"
 
         copy_files(workdir, role, inventory_host)
 
         if machine == "container":
-            exitcode = await run_command(env["PODMAN"].split(" ") + ["network", "inspect", "homelab_net"], output_file, env)
+            exitcode = await run_command([*podman, "network", "inspect", "homelab_net"], output_file, env, check=False)
             if exitcode != 0:
-                exitcode = await run_command(env["PODMAN"].split(" ") + ["network", "create", "--subnet", "192.5.0.0/16", "homelab_net"], output_file, env)
-                if exitcode != 0:
-                    return exitcode
+                await run_command([*podman, "network", "create", "--subnet", "192.5.0.0/16", "homelab_net"], output_file, env)
 
         else:
 
-            if env["QEMU_USE_VNC"] == "1":
-                QEMU_DISPLAY_ARGS = ["-display", "vnc=:0", "-vga", "qxl"]
+            if keep_vm:
+                qemu_display_args = ["-display", "vnc=:0,to=99", "-vga", "std", "-usb", "-device", "usb-tablet", "-k", "fr"]
             else:
-                QEMU_DISPLAY_ARGS = ["-display", "none"]
+                qemu_display_args = ["-display", "none"]
 
             if machine == "minimal":
                 await run_command(["cloud-localds", f"{workdir}/seed.img", "test/minimal/user-data", "test/minimal/meta-data"], output_file, env)
                 await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/ubuntu-{ubuntu_version}-minimal-cloudimg-amd64.img", "-F", "qcow2", f"{workdir}/disk.img", "20G"], output_file, env)
 
-                QEMU_DRIVES = [
-                    "-drive",
+                qemu_drives = [
                     f"file={workdir}/disk.img,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
-                    "-drive",
                     f"file={workdir}/seed.img,if=virtio,format=raw",
                 ]
 
@@ -343,12 +394,9 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
                 await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-1", "-F", "qcow2", f"{workdir}/packer-ubuntu-1"], output_file, env)
                 await run_command(["cp", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/efivars.fd", f"{workdir}/efivars.fd"], output_file, env)
 
-                QEMU_DRIVES = [
-                    "-drive",
+                qemu_drives = [
                     f"file={workdir}/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
-                    "-drive",
                     "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on",
-                    "-drive",
                     f"file={workdir}/efivars.fd,if=pflash,unit=1,format=raw",
                 ]
 
@@ -365,28 +413,17 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
                 await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-9", "-F", "qcow2", f"{workdir}/packer-ubuntu-9"], output_file, env)
                 await run_command(["cp", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/efivars.fd", f"{workdir}/efivars.fd"], output_file, env)
 
-                QEMU_DRIVES = [
-                    "-drive",
+                qemu_drives = [
                     f"file={workdir}/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
-                    "-drive",
                     f"file={workdir}/packer-ubuntu-2,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
-                    "-drive",
                     f"file={workdir}/packer-ubuntu-3,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
-                    "-drive",
                     f"file={workdir}/packer-ubuntu-4,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
-                    "-drive",
                     f"file={workdir}/packer-ubuntu-5,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
-                    "-drive",
                     f"file={workdir}/packer-ubuntu-6,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
-                    "-drive",
                     f"file={workdir}/packer-ubuntu-7,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
-                    "-drive",
                     f"file={workdir}/packer-ubuntu-8,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
-                    "-drive",
                     f"file={workdir}/packer-ubuntu-9,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
-                    "-drive",
                     "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on",
-                    "-drive",
                     f"file={workdir}/efivars.fd,if=pflash,unit=1,format=raw",
                 ]
 
@@ -397,26 +434,193 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
                 await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-3", "-F", "qcow2", f"{workdir}/packer-ubuntu-3"], output_file, env)
                 await run_command(["cp", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/efivars.fd", f"{workdir}/efivars.fd"], output_file, env)
 
-                QEMU_DRIVES = [
-                    "-drive",
+                qemu_drives = [
                     f"file={workdir}/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
-                    "-drive",
                     f"file={workdir}/packer-ubuntu-2,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
-                    "-drive",
                     f"file={workdir}/packer-ubuntu-3,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
-                    "-drive",
                     "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on",
-                    "-drive",
                     f"file={workdir}/efivars.fd,if=pflash,unit=1,format=raw",
                 ]
 
             else:
                 raise Exception(f"Unknown machine {machine}")
 
-            env["QEMU_DISPLAY_ARGS"] = shlex.join(QEMU_DISPLAY_ARGS)
-            env["QEMU_DRIVES"] = shlex.join(QEMU_DRIVES)
+        if machine == "container":
+            cmd = [
+                "timeout",
+                "--kill-after=10s",
+                "10m",
+                *podman,
+                "run",
+                "--rm",
+                "--publish",
+                "127.0.0.1::22",
+                "--privileged",
+                "--cidfile",
+                str(idfile),
+                "--network",
+                "homelab_net",
+                f"homelab:{ubuntu_name}",
+            ]
+        else:
+            cmd = [
+                "timeout",
+                "--kill-after=10s",
+                "10m",
+                "qemu-system-x86_64",
+                *[arg for d in qemu_drives for arg in ("--drive", d)],
+                "-netdev",
+                f"user,id=user.0,hostfwd=tcp:{env['SSH_HOST']}:0-:22",
+                "-object",
+                "rng-random,id=rng0,filename=/dev/urandom",
+                "-device",
+                "virtio-rng-pci,rng=rng0",
+                "-machine",
+                "type=q35,accel=kvm",
+                "-smp",
+                "8,sockets=8",
+                "-name",
+                "packer-ubuntu",
+                "-m",
+                "4096M",
+                "-cpu",
+                "host",
+                *qemu_display_args,
+                "-device",
+                "virtio-net,netdev=user.0",
+                "-pidfile",
+                str(idfile),
+            ]
 
-        return await run_command(cmd, output_file, env)
+        timeout_proc = subprocess.Popen(cmd)  # TODO print command to stdout
+        port = 0
+
+        try:
+
+            while not idfile.exists():
+                if timeout_proc.poll() is not None:
+                    raise RuntimeError("Launching machine failed")
+                sleep_tick()
+
+            print("Booted")
+            time.sleep(2)
+
+            if machine == "container":
+                cid = idfile.read_text().strip()
+                if not cid:
+                    raise RuntimeError("Missing container ID; podman run may have failed")
+
+                addr = subprocess.check_output([*podman, "port", cid, "22"], text=True).strip()  # TODO: print this command
+                if ":" not in addr:
+                    raise RuntimeError(f"Unexpected podman port output: {addr}")
+
+                port = int(addr.rsplit(":", 1)[-1])
+            else:
+                pid = idfile.read_text().strip()
+                if not pid:
+                    raise RuntimeError("Missing qemu PID; pidfile is empty")
+
+                found = False
+                for _ in range(10):
+                    proc = subprocess.run(
+                        ["lsof", "-i", "-P", "-p", pid],
+                        capture_output=True,
+                        text=True,
+                    )  # TODO: pritn this command
+                    output = proc.stdout or ""
+                    for line in output.splitlines():
+                        fields = line.split()
+                        if fields[1] != pid or fields[7] != "TCP":
+                            continue
+                        match = re.search(r":(\d+)", line)
+                        if not match:
+                            continue
+                        port_str = match.group(1)
+                        if not port_str.startswith("59"):
+                            found = True
+                            port = int(port_str)
+                            break
+
+                    if found:
+                        break
+
+                    time.sleep(1)
+
+                if not found:
+                    raise RuntimeError("Unable to determine SSH port from qemu lsof output")
+
+            env["PORT"] = str(port)
+            host = env["SSH_HOST"]
+
+            while True:  # TODO: this should stop after a while
+                try:
+                    with socket.create_connection((host, port), timeout=2) as s:
+                        # Read the SSH banner which contains the version information
+                        if s.recv(1024).decode().strip() != "":
+                            break
+                except OSError:
+                    sleep_tick()
+
+            print("SSH up")
+
+            env["SSH_CMD"] = shlex.join(format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"]))
+            env["ANSIBLE_PLAYBOOK"] = shlex.join(format_ansible_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], env["UBUNTU_MIRROR"], env["UBUNTU_MIRROR_SECURITY"], env["ANSIBLE_ARGS"]))
+
+            await run_command(format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "truncate", "-s0", "/etc/apt/sources.list"]), output_file, env)
+            await run_command(
+                format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "bash", "-c", f'echo "deb {env["UBUNTU_MIRROR"]} {env["UBUNTU_NAME"]} main restricted universe multiverse" >> /etc/apt/sources.list']), output_file, env
+            )
+            await run_command(
+                format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "bash", "-c", f'echo "deb {env["UBUNTU_MIRROR"]} {env["UBUNTU_NAME"]}-updates main restricted universe multiverse" >> /etc/apt/sources.list']),
+                output_file,
+                env,
+            )
+            await run_command(
+                format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "bash", "-c", f'echo "deb {env["UBUNTU_MIRROR_SECURITY"]} {env["UBUNTU_NAME"]}-security main restricted universe multiverse" >> /etc/apt/sources.list']),
+                output_file,
+                env,
+            )
+            await run_command(
+                format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "bash", "-c", f'echo "deb {env["UBUNTU_MIRROR"]} {env["UBUNTU_NAME"]}-backports main restricted universe multiverse" >> /etc/apt/sources.list']),
+                output_file,
+                env,
+            )
+            await run_command(format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "cat", "/etc/apt/sources.list"]), output_file, env)
+            await run_command(format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "apt-get", "update"]), output_file, env)
+
+            if machine == "minimal":
+                # Fixes systemd-analyze validation error:
+                # /lib/systemd/system/snapd.service:23: Unknown key name 'RestartMode' section 'Service', ignoring.
+                await run_command(format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd"]), output_file, env)
+
+            env["ANSIBLE_DISPLAY_OK_HOSTS"] = "true"
+            env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] = "true"
+
+            cmd = ["test/testrole.sh", *pass_args]
+            return await run_command(cmd, output_file, env)
+
+        finally:
+
+            if keep_vm and port != 0:
+                ssh_cmd = shlex.join(format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], []))
+                if machine == "container":
+                    stop_cmd = f"{shlex.join(podman)} stop --ignore --time 5 --cidfile {idfile}"
+                else:
+                    stop_cmd = f"kill {timeout_proc.pid}"
+
+                print("Keeping VM around, ssh using:")
+                print(f"> {ssh_cmd}")
+                print("Then Ctrl+C or")
+                print(f"> {stop_cmd}")
+
+                signal.signal(signal.SIGINT, lambda *_: stop_machine(machine, podman, idfile, timeout_proc))
+            else:
+                stop_machine(machine, podman, idfile, timeout_proc)
+
+            try:
+                timeout_proc.wait()
+            except Exception:
+                pass
 
 
 def main() -> int:
