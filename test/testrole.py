@@ -103,102 +103,10 @@ def ubuntu_mirrors() -> Tuple[str, str]:
     sys.exit("Unknown machine name")
 
 
-def apply_venv(env: Dict[str, str]) -> None:
-    """Prefix PATH with the repo's virtualenv if it exists."""
-    venv_bin = Path(".venv/bin")
-    if not venv_bin.exists():
-        return
-
-    env["VIRTUAL_ENV"] = str(venv_bin.parent)
-    env["PATH"] = str(venv_bin) + os.pathsep + env.get("PATH", "")
-
-env_ansible_args = []
-
-
-def machine_env(machine: str) -> Dict[str, str]:
-    """Return machine-specific environment overrides."""
-    env: Dict[str, str] = {}
-    if machine == "container":
-        env["SSH_USER"] = "root"
-        env["ANSIBLE_ARGS"] = shlex.join(CONTAINER_ANSIBLE_ARGS)
-        env["IDFILE"] = "cid"
-        env["INVENTORY_HOST"] = "box"
-
-        system = platform.system()
-        if system == "Darwin":
-            env["IMAGEDIR"] = os.environ.get("TMPDIR", "/tmp")
-            env["PODMAN"] = "podman"
-        elif system == "Linux":
-            env["IMAGEDIR"] = "/mnt/qemu"
-            env["PODMAN"] = "sudo podman"
-        else:
-            sys.exit("Unknown operating system")
-    else:
-        env["IMAGEDIR"] = "/mnt/qemu"
-        env["IDFILE"] = "pid"
-
-        try:
-            ssh_user, ansible_args, inventory_host = QEMU_MACHINE_ARGS[machine]
-        except KeyError:
-            sys.exit(f"Unknown machine: {machine}")
-
-        env["SSH_USER"] = ssh_user
-        env["ANSIBLE_ARGS"] = shlex.join(ansible_args)
-        env["INVENTORY_HOST"] = inventory_host
-
-    return env
-
-
-def build_env(
-    args: argparse.Namespace,
-    pass_args: List[str],
-) -> Dict[str, str]:
-    """Assemble the environment expected by testrole.sh."""
-    ubuntu_mirror, ubuntu_mirror_security = ubuntu_mirrors()
-
-    env: Dict[str, str] = os.environ.copy()
-    env.update(
-        {
-            "SSH_KEY": SSH_KEY,
-            "SSH_HOST": SSH_HOST,
-            "UBUNTU_NAME": UBUNTU_NAME,
-            "UBUNTU_VERSION": UBUNTU_VERSION,
-            "PORT": "",
-            "SSH_CMD": "",
-            "RUN_CHECKMODE": "1" if args.checkmode else "0",
-            "KEEP_VM": "1" if args.keep else "0",
-            "MACHINE": args.machine,
-            "UBUNTU_MIRROR": ubuntu_mirror,
-            "UBUNTU_MIRROR_SECURITY": ubuntu_mirror_security,
-            "ROLE": args.role,
-            # Provide PASS_ARGS to the shell script as a convenience; the script
-            # still consumes them positionally.
-            "PASS_ARGS": " ".join(pass_args),
-        }
-    )
-    env.update(machine_env(args.machine))
-    apply_venv(env)
-
-    return env
-
-
 def sleep_tick() -> None:
     sys.stdout.write(".")
     sys.stdout.flush()
     time.sleep(1)
-
-
-def colorize_line(line: str) -> str:
-    """
-    Add ANSI color codes to a line based on content.
-
-    Lines starting with '+' (bash -x) are dimmed.
-    All other lines are highlighted as errors.
-    """
-    if line.startswith("+"):
-        return f"\033[0;30m{line}\033[0m"
-    else:
-        return f"\033[0;41m{line}\033[0m"
 
 
 async def process_line(
@@ -207,7 +115,7 @@ async def process_line(
     file_handle,
     file_lock: asyncio.Lock,
 ) -> None:
-    output_line = colorize_line(line) if stream_name == "stderr" else line
+    output_line = f"\033[0;41m{line}\033[0m" if stream_name == "stderr" else line
 
     # Print immediately to stdout
     sys.stdout.write(output_line + "\n")
@@ -224,6 +132,7 @@ async def read_and_write_stream(
     stream_name: str,
     file_handle,
     file_lock: asyncio.Lock,
+    capture: Optional[List[str]] = None,
 ) -> None:
     """
     Read a stream, echo it live, and write it to the log file with coloring.
@@ -240,6 +149,8 @@ async def read_and_write_stream(
                 break
 
             line = line_bytes.decode("utf-8", errors="replace").rstrip("\n")
+            if capture is not None:
+                capture.append(line)
             await process_line(line, stream_name, file_handle, file_lock)
 
         except Exception as e:
@@ -247,8 +158,13 @@ async def read_and_write_stream(
             break
 
 
-async def run_command(cmd: List[str], output_file: str, env: Dict[str, str], check: bool = True) -> int:
-    """Run a command and handle its output streams concurrently."""
+async def run_command(
+    cmd: List[str],
+    output_file: str,
+    check: bool = True,
+    captured_lines: Optional[List[str]] = None,
+) -> int | tuple[int, List[str]]:
+    """Run a command, stream output, and optionally return captured stdout."""
     with open(output_file, "w") as f:
         file_lock = asyncio.Lock()
 
@@ -260,11 +176,10 @@ async def run_command(cmd: List[str], output_file: str, env: Dict[str, str], che
             *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
-            env=env,
         )
 
         await asyncio.gather(
-            read_and_write_stream(process.stdout, "stdout", f, file_lock),
+            read_and_write_stream(process.stdout, "stdout", f, file_lock, captured_lines),
             read_and_write_stream(process.stderr, "stderr", f, file_lock),
         )
 
@@ -283,6 +198,9 @@ def format_ssh_cmd(port: int, key: str, user: str, host: str, cmd: Optional[List
 
 def format_ansible_cmd(port: int, key: str, user: str, host: str, ubuntu_mirror: str, ubuntu_mirror_security: str, ansible_args: str, cmd: Optional[List[str]] = None) -> List[str]:
     parts = [
+        "env",
+        "ANSIBLE_DISPLAY_OK_HOSTS=true",
+        "ANSIBLE_DISPLAY_SKIPPED_HOSTS=true",
         "ansible-playbook",
         "-e",
         f"ansible_ssh_port={port}",
@@ -302,7 +220,7 @@ def format_ansible_cmd(port: int, key: str, user: str, host: str, ubuntu_mirror:
     if ansible_args:
         parts += shlex.split(ansible_args)
     if cmd:
-        parts.append(shlex.join(cmd))
+        parts += cmd
     return parts
 
 
@@ -335,11 +253,11 @@ tasks:
             )
 
 
-def stop_machine(machine: str, podman: List[str], idfile: Path, timeout_proc: subprocess.Popen[bytes]):
+def stop_machine(machine: str, podman: List[str], workdir: str, idfile: str, timeout_proc: subprocess.Popen[bytes]):
     if machine == "container":
         # TODO ensure timeout_proc is also killed if podman stop fails for some reason
         # TODO print this command to stdout
-        subprocess.run([*podman, "stop", "--ignore", "--time", "5", "--cidfile", str(idfile)], check=False)
+        subprocess.run([*podman, "stop", "--ignore", "--time", "5", "--cidfile", f"{workdir}/{idfile}"], check=False)
     else:
         if timeout_proc and timeout_proc.poll() is None:
             try:
@@ -348,30 +266,87 @@ def stop_machine(machine: str, podman: List[str], idfile: Path, timeout_proc: su
                 pass
 
 
-async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
+def collect_journal(port: int, key: str, user: str, host: str, role: str, machine: str) -> None:
 
-    output_file = f"test/out/{env["ROLE"]}.{env["MACHINE"]}.ansi"
+    tmpfile = Path("test/out") / f"{role}.{machine}.journal.ansi"
+    tmpfile.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        cmd = format_ssh_cmd(
+            port,
+            key,
+            user,
+            host,
+            [
+                "env",
+                "SYSTEMD_COLORS=true",
+                "journalctl",
+                "--pager-end",
+                "--no-pager",
+                "--priority",
+                "info",
+            ],
+        )
+
+        with tmpfile.open("w") as handle:
+            subprocess.run(cmd, stdout=handle, stderr=subprocess.STDOUT, check=False)
+
+        print(tmpfile)
+    except Exception as exc:
+        print(f"Failed to collect journal: {exc}", file=sys.stderr)
+
+
+async def run_test(parsed_args: argparse.Namespace, pass_args: List[str]) -> int:
+
+    role = parsed_args.role
+    machine = parsed_args.machine
+    ubuntu_version = UBUNTU_VERSION
+    ubuntu_name = UBUNTU_NAME
+    keep_vm = parsed_args.keep
+    checkmode = parsed_args.checkmode
+    ssh_key = SSH_KEY
+    ssh_host = SSH_HOST
+    ubuntu_mirror, ubuntu_mirror_security = ubuntu_mirrors()
+
+    if machine == "container":
+        ssh_user = "root"
+        ansible_args = shlex.join(CONTAINER_ANSIBLE_ARGS)
+        idfile = "cid"
+        inventory_host = "box"
+
+        system = platform.system()
+        if system == "Darwin":
+            imagedir = os.environ.get("TMPDIR", "/tmp")
+            podman = ["podman"]
+        elif system == "Linux":
+            imagedir = "/mnt/qemu"
+            podman = ["sudo", "podman"]
+        else:
+            sys.exit("Unknown operating system")
+    else:
+        imagedir = "/mnt/qemu"
+        idfile = "pid"
+
+        try:
+            ssh_user, ansible_args, inventory_host = QEMU_MACHINE_ARGS[machine]
+        except KeyError:
+            sys.exit(f"Unknown machine: {machine}")
+
+        ssh_user = ssh_user
+        ansible_args = shlex.join(ansible_args)
+        inventory_host = inventory_host
+
+    output_file = f"test/out/{role}.{machine}.ansi"
     Path(output_file).parent.mkdir(parents=True, exist_ok=True)
 
-    with tempfile.TemporaryDirectory(dir=env["IMAGEDIR"]) as workdir:
-
-        env["WORKDIR"] = workdir
-        inventory_host = env["INVENTORY_HOST"]
-        role = env["ROLE"]
-        machine = env["MACHINE"]
-        imagedir = env["IMAGEDIR"]
-        ubuntu_version = env["UBUNTU_VERSION"]
-        ubuntu_name = env["UBUNTU_NAME"]
-        idfile = Path(f"{workdir}/{env["IDFILE"]}")
-        podman = shlex.split(env.get("PODMAN", "podman"))
-        keep_vm = env["KEEP_VM"] == "1"
+    with tempfile.TemporaryDirectory(dir=imagedir) as workdir:
 
         copy_files(workdir, role, inventory_host)
 
         if machine == "container":
-            exitcode = await run_command([*podman, "network", "inspect", "homelab_net"], output_file, env, check=False)
+            exitcode = await run_command([*podman, "network", "inspect", "homelab_net"], output_file, check=False)
             if exitcode != 0:
-                await run_command([*podman, "network", "create", "--subnet", "192.5.0.0/16", "homelab_net"], output_file, env)
+                await run_command([*podman, "network", "create", "--subnet", "192.5.0.0/16", "homelab_net"], output_file)
 
         else:
 
@@ -381,8 +356,8 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
                 qemu_display_args = ["-display", "none"]
 
             if machine == "minimal":
-                await run_command(["cloud-localds", f"{workdir}/seed.img", "test/minimal/user-data", "test/minimal/meta-data"], output_file, env)
-                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/ubuntu-{ubuntu_version}-minimal-cloudimg-amd64.img", "-F", "qcow2", f"{workdir}/disk.img", "20G"], output_file, env)
+                await run_command(["cloud-localds", f"{workdir}/seed.img", "test/minimal/user-data", "test/minimal/meta-data"], output_file)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/ubuntu-{ubuntu_version}-minimal-cloudimg-amd64.img", "-F", "qcow2", f"{workdir}/disk.img", "20G"], output_file)
 
                 qemu_drives = [
                     f"file={workdir}/disk.img,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
@@ -391,8 +366,8 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
 
             elif machine == "box":
 
-                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-1", "-F", "qcow2", f"{workdir}/packer-ubuntu-1"], output_file, env)
-                await run_command(["cp", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/efivars.fd", f"{workdir}/efivars.fd"], output_file, env)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-1", "-F", "qcow2", f"{workdir}/packer-ubuntu-1"], output_file)
+                await run_command(["cp", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/efivars.fd", f"{workdir}/efivars.fd"], output_file)
 
                 qemu_drives = [
                     f"file={workdir}/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
@@ -402,16 +377,16 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
 
             elif machine == "lab":
 
-                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-1", "-F", "qcow2", f"{workdir}/packer-ubuntu-1"], output_file, env)
-                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-2", "-F", "qcow2", f"{workdir}/packer-ubuntu-2"], output_file, env)
-                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-3", "-F", "qcow2", f"{workdir}/packer-ubuntu-3"], output_file, env)
-                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-4", "-F", "qcow2", f"{workdir}/packer-ubuntu-4"], output_file, env)
-                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-5", "-F", "qcow2", f"{workdir}/packer-ubuntu-5"], output_file, env)
-                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-6", "-F", "qcow2", f"{workdir}/packer-ubuntu-6"], output_file, env)
-                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-7", "-F", "qcow2", f"{workdir}/packer-ubuntu-7"], output_file, env)
-                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-8", "-F", "qcow2", f"{workdir}/packer-ubuntu-8"], output_file, env)
-                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-9", "-F", "qcow2", f"{workdir}/packer-ubuntu-9"], output_file, env)
-                await run_command(["cp", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/efivars.fd", f"{workdir}/efivars.fd"], output_file, env)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-1", "-F", "qcow2", f"{workdir}/packer-ubuntu-1"], output_file)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-2", "-F", "qcow2", f"{workdir}/packer-ubuntu-2"], output_file)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-3", "-F", "qcow2", f"{workdir}/packer-ubuntu-3"], output_file)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-4", "-F", "qcow2", f"{workdir}/packer-ubuntu-4"], output_file)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-5", "-F", "qcow2", f"{workdir}/packer-ubuntu-5"], output_file)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-6", "-F", "qcow2", f"{workdir}/packer-ubuntu-6"], output_file)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-7", "-F", "qcow2", f"{workdir}/packer-ubuntu-7"], output_file)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-8", "-F", "qcow2", f"{workdir}/packer-ubuntu-8"], output_file)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-9", "-F", "qcow2", f"{workdir}/packer-ubuntu-9"], output_file)
+                await run_command(["cp", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/efivars.fd", f"{workdir}/efivars.fd"], output_file)
 
                 qemu_drives = [
                     f"file={workdir}/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
@@ -429,10 +404,10 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
 
             elif machine == "pug":
 
-                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-1", "-F", "qcow2", f"{workdir}/packer-ubuntu-1"], output_file, env)
-                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-2", "-F", "qcow2", f"{workdir}/packer-ubuntu-2"], output_file, env)
-                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-3", "-F", "qcow2", f"{workdir}/packer-ubuntu-3"], output_file, env)
-                await run_command(["cp", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/efivars.fd", f"{workdir}/efivars.fd"], output_file, env)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-1", "-F", "qcow2", f"{workdir}/packer-ubuntu-1"], output_file)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-2", "-F", "qcow2", f"{workdir}/packer-ubuntu-2"], output_file)
+                await run_command(["qemu-img", "create", "-f", "qcow2", "-b", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/packer-ubuntu-3", "-F", "qcow2", f"{workdir}/packer-ubuntu-3"], output_file)
+                await run_command(["cp", f"{imagedir}/{ubuntu_name}/ubuntu-{machine}/efivars.fd", f"{workdir}/efivars.fd"], output_file)
 
                 qemu_drives = [
                     f"file={workdir}/packer-ubuntu-1,if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap",
@@ -457,7 +432,7 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
                 "127.0.0.1::22",
                 "--privileged",
                 "--cidfile",
-                str(idfile),
+                f"{workdir}/{idfile}",
                 "--network",
                 "homelab_net",
                 f"homelab:{ubuntu_name}",
@@ -470,7 +445,7 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
                 "qemu-system-x86_64",
                 *[arg for d in qemu_drives for arg in ("--drive", d)],
                 "-netdev",
-                f"user,id=user.0,hostfwd=tcp:{env['SSH_HOST']}:0-:22",
+                f"user,id=user.0,hostfwd=tcp:{ssh_host}:0-:22",
                 "-object",
                 "rng-random,id=rng0,filename=/dev/urandom",
                 "-device",
@@ -489,7 +464,7 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
                 "-device",
                 "virtio-net,netdev=user.0",
                 "-pidfile",
-                str(idfile),
+                f"{workdir}/{idfile}",
             ]
 
         timeout_proc = subprocess.Popen(cmd)  # TODO print command to stdout
@@ -497,7 +472,7 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
 
         try:
 
-            while not idfile.exists():
+            while not Path(f"{workdir}/{idfile}").exists():
                 if timeout_proc.poll() is not None:
                     raise RuntimeError("Launching machine failed")
                 sleep_tick()
@@ -506,7 +481,7 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
             time.sleep(2)
 
             if machine == "container":
-                cid = idfile.read_text().strip()
+                cid = Path(f"{workdir}/{idfile}").read_text().strip()
                 if not cid:
                     raise RuntimeError("Missing container ID; podman run may have failed")
 
@@ -516,7 +491,7 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
 
                 port = int(addr.rsplit(":", 1)[-1])
             else:
-                pid = idfile.read_text().strip()
+                pid = Path(f"{workdir}/{idfile}").read_text().strip()
                 if not pid:
                     raise RuntimeError("Missing qemu PID; pidfile is empty")
 
@@ -526,7 +501,7 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
                         ["lsof", "-i", "-P", "-p", pid],
                         capture_output=True,
                         text=True,
-                    )  # TODO: pritn this command
+                    )  # TODO: print this command
                     output = proc.stdout or ""
                     for line in output.splitlines():
                         fields = line.split()
@@ -549,12 +524,9 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
                 if not found:
                     raise RuntimeError("Unable to determine SSH port from qemu lsof output")
 
-            env["PORT"] = str(port)
-            host = env["SSH_HOST"]
-
             while True:  # TODO: this should stop after a while
                 try:
-                    with socket.create_connection((host, port), timeout=2) as s:
+                    with socket.create_connection((ssh_host, port), timeout=2) as s:
                         # Read the SSH banner which contains the version information
                         if s.recv(1024).decode().strip() != "":
                             break
@@ -563,48 +535,71 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
 
             print("SSH up")
 
-            env["SSH_CMD"] = shlex.join(format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"]))
-            env["ANSIBLE_PLAYBOOK"] = shlex.join(format_ansible_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], env["UBUNTU_MIRROR"], env["UBUNTU_MIRROR_SECURITY"], env["ANSIBLE_ARGS"]))
-
-            await run_command(format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "truncate", "-s0", "/etc/apt/sources.list"]), output_file, env)
+            await run_command(format_ssh_cmd(port, ssh_key, ssh_user, ssh_host, ["sudo", "truncate", "-s0", "/etc/apt/sources.list"]), output_file)
+            await run_command(format_ssh_cmd(port, ssh_key, ssh_user, ssh_host, ["sudo", "bash", "-c", f'echo "deb {ubuntu_mirror} {ubuntu_name} main restricted universe multiverse" >> /etc/apt/sources.list']), output_file)
             await run_command(
-                format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "bash", "-c", f'echo "deb {env["UBUNTU_MIRROR"]} {env["UBUNTU_NAME"]} main restricted universe multiverse" >> /etc/apt/sources.list']), output_file, env
-            )
-            await run_command(
-                format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "bash", "-c", f'echo "deb {env["UBUNTU_MIRROR"]} {env["UBUNTU_NAME"]}-updates main restricted universe multiverse" >> /etc/apt/sources.list']),
+                format_ssh_cmd(port, ssh_key, ssh_user, ssh_host, ["sudo", "bash", "-c", f'echo "deb {ubuntu_mirror} {ubuntu_name}-updates main restricted universe multiverse" >> /etc/apt/sources.list']),
                 output_file,
-                env,
             )
             await run_command(
-                format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "bash", "-c", f'echo "deb {env["UBUNTU_MIRROR_SECURITY"]} {env["UBUNTU_NAME"]}-security main restricted universe multiverse" >> /etc/apt/sources.list']),
+                format_ssh_cmd(port, ssh_key, ssh_user, ssh_host, ["sudo", "bash", "-c", f'echo "deb {ubuntu_mirror_security} {ubuntu_name}-security main restricted universe multiverse" >> /etc/apt/sources.list']),
                 output_file,
-                env,
             )
             await run_command(
-                format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "bash", "-c", f'echo "deb {env["UBUNTU_MIRROR"]} {env["UBUNTU_NAME"]}-backports main restricted universe multiverse" >> /etc/apt/sources.list']),
+                format_ssh_cmd(port, ssh_key, ssh_user, ssh_host, ["sudo", "bash", "-c", f'echo "deb {ubuntu_mirror} {ubuntu_name}-backports main restricted universe multiverse" >> /etc/apt/sources.list']),
                 output_file,
-                env,
             )
-            await run_command(format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "cat", "/etc/apt/sources.list"]), output_file, env)
-            await run_command(format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "apt-get", "update"]), output_file, env)
+            await run_command(format_ssh_cmd(port, ssh_key, ssh_user, ssh_host, ["sudo", "cat", "/etc/apt/sources.list"]), output_file)
+            await run_command(format_ssh_cmd(port, ssh_key, ssh_user, ssh_host, ["sudo", "apt-get", "update"]), output_file)
 
             if machine == "minimal":
                 # Fixes systemd-analyze validation error:
                 # /lib/systemd/system/snapd.service:23: Unknown key name 'RestartMode' section 'Service', ignoring.
-                await run_command(format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], ["sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd"]), output_file, env)
+                await run_command(format_ssh_cmd(port, ssh_key, ssh_user, ssh_host, ["sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd"]), output_file)
 
-            env["ANSIBLE_DISPLAY_OK_HOSTS"] = "true"
-            env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] = "true"
+            try:
 
-            cmd = ["test/testrole.sh", *pass_args]
-            return await run_command(cmd, output_file, env)
+                site_yml = Path(workdir) / "site.yml"
+                test_yml = Path(workdir) / "_test.yml"
+                if test_yml.exists():
+                    await run_command(format_ansible_cmd(port, ssh_key, ssh_user, ssh_host, ubuntu_mirror, ubuntu_mirror_security, ansible_args, [str(test_yml)]), output_file)
+
+                if checkmode:
+                    list_tags: List[str] = []
+                    await run_command(format_ansible_cmd(port, ssh_key, ssh_user, ssh_host, ubuntu_mirror, ubuntu_mirror_security, ansible_args, [str(site_yml), "--list-tags"]), output_file, captured_lines=list_tags)
+
+                    await run_command(format_ansible_cmd(port, ssh_key, ssh_user, ssh_host, ubuntu_mirror, ubuntu_mirror_security, ansible_args, [str(site_yml), "--check", *pass_args]), output_file)
+
+                    for stage in ["_check_stage1", "_check_stage2", "_check_stage3", "_check_stage4"]:
+                        if stage not in "\n".join(list_tags):
+                            continue
+
+                        await run_command(
+                            format_ansible_cmd(port, ssh_key, ssh_user, ssh_host, ubuntu_mirror, ubuntu_mirror_security, ansible_args, [str(site_yml), "--tags", stage, *pass_args]),
+                            output_file,
+                        )
+                        await run_command(
+                            format_ansible_cmd(port, ssh_key, ssh_user, ssh_host, ubuntu_mirror, ubuntu_mirror_security, ansible_args, [str(site_yml), "--check", *pass_args]),
+                            output_file,
+                        )
+
+                await run_command(format_ansible_cmd(port, ssh_key, ssh_user, ssh_host, ubuntu_mirror, ubuntu_mirror_security, ansible_args, [str(site_yml), *pass_args]), output_file)
+                return 0
+
+            except subprocess.CalledProcessError as exc:
+                collect_journal(port, ssh_key, ssh_user, ssh_host, role, machine)
+                return exc.returncode or 1
+            except Exception as exc:
+                collect_journal(port, ssh_key, ssh_user, ssh_host, role, machine)
+                print(f"Error: {exc}", file=sys.stderr)
+                return 1
 
         finally:
 
             if keep_vm and port != 0:
-                ssh_cmd = shlex.join(format_ssh_cmd(port, env["SSH_KEY"], env["SSH_USER"], env["SSH_HOST"], []))
+                ssh_cmd = shlex.join(format_ssh_cmd(port, ssh_key, ssh_user, ssh_host, []))
                 if machine == "container":
-                    stop_cmd = f"{shlex.join(podman)} stop --ignore --time 5 --cidfile {idfile}"
+                    stop_cmd = f"{shlex.join(podman)} stop --ignore --time 5 --cidfile {workdir}/{idfile}"
                 else:
                     stop_cmd = f"kill {timeout_proc.pid}"
 
@@ -613,9 +608,9 @@ async def run_test(env: Dict[str, str], pass_args: List[str]) -> int:
                 print("Then Ctrl+C or")
                 print(f"> {stop_cmd}")
 
-                signal.signal(signal.SIGINT, lambda *_: stop_machine(machine, podman, idfile, timeout_proc))
+                signal.signal(signal.SIGINT, lambda *_: stop_machine(machine, podman, workdir, idfile, timeout_proc))
             else:
-                stop_machine(machine, podman, idfile, timeout_proc)
+                stop_machine(machine, podman, workdir, idfile, timeout_proc)
 
             try:
                 timeout_proc.wait()
@@ -627,13 +622,12 @@ def main() -> int:
     """Main entry point."""
 
     parsed_args, pass_args = parse_args()
-    env = build_env(parsed_args, pass_args)
 
     try:
-        exit_code = asyncio.run(run_test(env, pass_args))
+        exit_code = asyncio.run(run_test(parsed_args, pass_args))
 
         if exit_code != 0:
-            sys.stderr.write(f"\033[0;41m{env["ROLE"]}.{env["MACHINE"]} failed\033[0m\n")
+            sys.stderr.write(f"\033[0;41mROLE.MACHINE failed\033[0m\n")  # TODO fix env
             sys.stderr.flush()
 
         return exit_code
