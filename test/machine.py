@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-import asyncio
 from ctypes import ArgumentError
 import os
 import platform
@@ -78,7 +77,6 @@ class Machine:
     imagedir: str
     proc: Optional[subprocess.Popen[bytes]]
     workdir: tempfile.TemporaryDirectory[str]
-    output_file: Path
     journal_file: Path
     keep_vm: bool
     role: str
@@ -110,7 +108,6 @@ class Machine:
         out_dir = Path("test/out")
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        self.output_file = out_dir / f"{role}.{machine}.ansi"
         self.journal_file = out_dir / f"{role}.{machine}.journal.ansi"
         self.proc = None
         self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
@@ -165,7 +162,6 @@ class Machine:
 
         return await run_command(
             self.format_ssh_cmd(*cmd),
-            self.output_file,
             check=check,
             captured_lines=captured_lines,
         )
@@ -175,7 +171,6 @@ class Machine:
 
         return await run_command(
             self.format_ansible_cmd(*cmd),
-            self.output_file,
             check=check,
             captured_lines=captured_lines,
         )
@@ -218,9 +213,7 @@ class Machine:
         """Start the VM/container under a timeout wrapper."""
 
         cmd = ["timeout", "--kill-after=10s", "10m", *self._boot_command()]
-
-        with open(self.output_file, "w") as f:
-            await print_cmd_line(cmd, f, asyncio.Lock())
+        await print_cmd_line(cmd)
 
         self.proc = subprocess.Popen(cmd)
 
@@ -272,9 +265,8 @@ class Machine:
             )
 
             with self.journal_file.open("w") as handle:
-                with open(self.output_file, "w") as f:
-                    await print_cmd_line(cmd, f, asyncio.Lock())
-                    subprocess.run(cmd, stdout=handle, stderr=f, check=True)
+                await print_cmd_line(cmd)
+                subprocess.run(cmd, stdout=handle, stderr=sys.stdout, check=True)  # TODO colorize stderr
 
             print(f"Systemd journal: {self.journal_file}")
 
@@ -351,7 +343,6 @@ class QemuMachine(Machine):
         if self.machine == "minimal":
             await run_command(
                 ["cloud-localds", f"{self.workdir.name}/seed.img", "test/minimal/user-data", "test/minimal/meta-data"],
-                self.output_file,
             )
             await self._create_overlay(
                 f"{self.imagedir}/ubuntu-{UBUNTU_VERSION}-minimal-cloudimg-amd64.img",
@@ -379,14 +370,13 @@ class QemuMachine(Machine):
         args = ["qemu-img", "create", "-f", "qcow2", "-b", src, "-F", "qcow2", dest]
         if size:
             args.append(size)
-        await run_command(args, self.output_file)
+        await run_command(args)
 
     async def _copy_efivars(self) -> None:
         """Copy EFI vars for UEFI boots into the working directory."""
 
         await run_command(
             ["cp", f"{self.imagedir}/{UBUNTU_NAME}/ubuntu-{self.machine}/efivars.fd", f"{self.workdir.name}/efivars.fd"],
-            self.output_file,
         )
 
     async def _create_overlay_series(self, count: int) -> None:
@@ -454,7 +444,7 @@ class QemuMachine(Machine):
 
         for _ in range(10):
             lines: List[str] = []
-            await run_command(["lsof", "-i", "-P", "-p", pid], self.output_file, captured_lines=lines)
+            await run_command(["lsof", "-i", "-P", "-p", pid], captured_lines=lines)
 
             for line in lines:
                 # Ignore unrelated descriptors and VNC forwards (59xx range).
@@ -511,9 +501,9 @@ class PodmanMachine(Machine):
 
         await super().prepare()
 
-        exitcode = await run_command([*self.podman, "network", "inspect", "homelab_net"], self.output_file, check=False)
+        exitcode = await run_command([*self.podman, "network", "inspect", "homelab_net"], check=False)
         if exitcode != 0:
-            await run_command([*self.podman, "network", "create", "--subnet", "192.5.0.0/16", "homelab_net"], self.output_file)
+            await run_command([*self.podman, "network", "create", "--subnet", "192.5.0.0/16", "homelab_net"])
 
     def _boot_command(self) -> List[str]:
         """Return the podman run command that exposes SSH on a random host port."""
@@ -540,7 +530,7 @@ class PodmanMachine(Machine):
             raise RuntimeError("Missing container ID; podman run may have failed")
 
         lines = []
-        await run_command([*self.podman, "port", cid, "22"], self.output_file, captured_lines=lines)
+        await run_command([*self.podman, "port", cid, "22"], captured_lines=lines)
 
         addr = "\n".join(lines).strip()
         if ":" not in addr:
