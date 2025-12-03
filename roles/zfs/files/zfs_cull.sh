@@ -11,4 +11,4 @@ if [ -z "$POOL_REGEX" ] || [ -z "$SNAPSHOT_PREFIX" ]; then
   f_fail "Usage: zfs_cull POOL_REGEX SNAPSHOT_PREFIX"
 fi
 
-zfs list -t snapshot | grep "$POOL_REGEX" | grep "$SNAPSHOT_PREFIX" | cut -d' ' -f1 | sort | uniq | xargs -r -t -n1 zfs destroy
+zfs list -t snapshot | grep -E "$POOL_REGEX" | grep "$SNAPSHOT_PREFIX" | cut -d' ' -f1 | sort | uniq | xargs -r -t -n1 zfs destroy
