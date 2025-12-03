@@ -8,6 +8,7 @@ using GNU parallel for efficient test execution across multiple machine profiles
 
 import argparse
 import os
+import shlex
 import signal
 import subprocess
 import sys
@@ -119,19 +120,7 @@ def build_parallel_command(
     jobs: int,
 ) -> List[str]:
     """Construct the GNU parallel command invocation."""
-    cmd = [
-        "parallel",
-        "--jobs",
-        str(jobs),
-        "--joblog",
-        str(LOG_FILE),
-        "--eta",
-        "test/testrole.py",
-        "--machine",
-        "{1}",
-        "{2}",
-        "--checkmode",
-    ]
+    cmd = ["parallel", "--jobs", str(jobs), "--joblog", str(LOG_FILE), "--eta", "test/testrole.py", "--machine", "{1}", "{2}", "--checkmode", ">", "test/out/{2}.{1}.ansi"]
 
     cmd.extend(role_args)
 
@@ -140,7 +129,7 @@ def build_parallel_command(
     cmd.append(":::")  # Role list follows
     cmd.extend(roles)
 
-    return cmd
+    return ["bash", "-c", shlex.join(cmd)]
 
 
 def _install_signal_handlers() -> None:
@@ -199,6 +188,7 @@ def main() -> int:
     _install_signal_handlers()
 
     parallel_cmd = build_parallel_command(machines, roles, args.role_args, args.jobs)
+    print(shlex.join(parallel_cmd))
 
     global _CHILD_PROCESS
     _CHILD_PROCESS = subprocess.Popen(
