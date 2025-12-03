@@ -466,17 +466,14 @@ class QemuMachine(Machine):
 
 class PodmanMachine(Machine):
     """Start privileged Podman containers that mimic SSH hosts."""
-    podman: List[str]
 
     def __init__(self, machine: str, role: str, keep_vm: bool):
         """Podman-backed machine wrapper used by integration tests."""
         system = platform.system()
         if system == "Darwin":
             imagedir = os.environ.get("TMPDIR", "/tmp")
-            self.podman = ["podman"]
         elif system == "Linux":
             imagedir = "/mnt/qemu"
-            self.podman = ["sudo", "podman"]
         else:
             raise AttributeError("Unknown operating system")
 
@@ -497,15 +494,15 @@ class PodmanMachine(Machine):
 
         await super().prepare()
 
-        exitcode = await run_command([*self.podman, "network", "inspect", "homelab_net"], check=False)
+        exitcode = await run_command(["podman", "network", "inspect", "homelab_net"], check=False)
         if exitcode != 0:
-            await run_command([*self.podman, "network", "create", "--subnet", "192.5.0.0/16", "homelab_net"])
+            await run_command(["podman", "network", "create", "--subnet", "192.5.0.0/16", "homelab_net"])
 
     def _boot_command(self) -> List[str]:
         """Return the podman run command that exposes SSH on a random host port."""
 
         return [
-            *self.podman,
+            "podman",
             "run",
             "--rm",
             "--timeout",
@@ -528,7 +525,7 @@ class PodmanMachine(Machine):
             raise RuntimeError("Missing container ID; podman run may have failed")
 
         lines = []
-        await run_command([*self.podman, "port", cid, "22"], captured_lines=lines)
+        await run_command(["podman", "port", cid, "22"], captured_lines=lines)
 
         addr = "\n".join(lines).strip()
         if ":" not in addr:
