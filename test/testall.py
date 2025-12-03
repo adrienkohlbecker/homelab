@@ -29,7 +29,7 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--onlyfailed",
+        "--only-failed",
         action="store_true",
         help="Rerun only roles that failed in the last log",
     )
@@ -179,7 +179,7 @@ def main() -> int:
 
     setup_output_dir()
 
-    if args.onlyfailed:
+    if args.only_failed:
         roles = get_failed_roles()
         if not roles:
             print(f"No failed roles recorded in {LOG_FILE}", file=sys.stderr)
