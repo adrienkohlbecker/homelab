@@ -10,7 +10,9 @@ log streaming.
 
 import argparse
 import asyncio
+import signal
 import sys
+import shlex
 import tempfile
 from pathlib import Path
 from typing import List
@@ -134,7 +136,12 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: List[str]) -> Non
             raise exc
 
     finally:
-        m.stop()
+        if keep_vm:
+            m.print_ssh_instructions()
+            await m.wait()
+
+        print("Stopping machine...")
+        await m.stop()
 
 
 def main() -> int:
@@ -142,13 +149,26 @@ def main() -> int:
 
     parsed_args, pass_args = parse_args()
 
-    try:
-        asyncio.run(run_test(parsed_args, pass_args))
+    async def _run_with_signals() -> int:
+        loop = asyncio.get_running_loop()
+        current = asyncio.current_task(loop)
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            if not current:
+                raise RuntimeError("No current task")
+            loop.add_signal_handler(sig, current.cancel)
+        await run_test(parsed_args, pass_args)
         return 0
+
+    try:
+        return asyncio.run(_run_with_signals())
     except CommandFailedException as exc:
         sys.stderr.write(f"\033[0;41m{parsed_args.role}.{parsed_args.machine} failed\033[0m\n")
         sys.stderr.flush()
         return 1
+    except asyncio.CancelledError:
+        sys.stderr.write("\nInterrupted, shutting down...\n")
+        sys.stderr.flush()
+        return 130
 
 
 if __name__ == "__main__":

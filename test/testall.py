@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """
-Test runner for Ansible roles using GNU parallel.
+Test runner for Ansible roles using native asyncio parallelism.
 
-This script discovers roles, builds test commands, and executes them in parallel
-using GNU parallel for efficient test execution across multiple machine profiles.
+This script discovers roles, builds test commands, and executes them concurrently
+without relying on GNU parallel. Output for each machine/role run is captured in
+`test/out/<machine>.<role>.ansi`, and a concise job log is written to
+`test/out.log`.
 """
 
 import argparse
-import os
-import shlex
+import asyncio
 import signal
-import subprocess
 import sys
+import time
+from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import List, Sequence
 
 from machine import OUT_DIR
 
@@ -21,10 +23,20 @@ LOG_FILE = Path("test/out.log")
 LOG_FILE_PREV = Path("test/out.log.prev")
 
 
+@dataclass
+class JobResult:
+    """Holds the outcome of a single role test."""
+
+    machine: str
+    role: str
+    runtime: float
+    exitval: int
+
+
 def parse_args() -> argparse.Namespace:
     """Parse CLI arguments for selecting machines, roles, and concurrency."""
     parser = argparse.ArgumentParser(
-        description="Run Ansible role tests in parallel",
+        description="Run Ansible role tests concurrently",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
@@ -83,52 +95,131 @@ def list_roles() -> List[str]:
 
 def get_failed_roles() -> List[str]:
     """
-    Parse the previous parallel job log for failed roles.
-
-    The parallel job log format is tab-separated with the exit code in column 7
-    and the executed command (with role name at the end) in the final column.
+    Parse the previous job log for failed roles.
     """
     if not LOG_FILE.exists():
         return []
 
     failed_roles: List[str] = []
 
-    # Skip the header row and capture rows with a non-zero exit code.
     with LOG_FILE.open(encoding="utf-8") as log_file:
         for line_no, raw_line in enumerate(log_file):
             if line_no == 0:
-                continue
+                continue  # header
+
             fields = raw_line.rstrip("\n").split("\t")
-            if len(fields) < 7 or fields[6] == "0":
+            if len(fields) < 4:
                 continue
 
-            # Parallel writes the invoked command as the last column; the role
-            # name is the final token in that command.
-            command = fields[-1].strip()
-            role = command.split()[-1] if command else ""
-            if role:
+            role, _machine, _runtime, exitval = fields[:4]
+            if exitval != "0":
                 failed_roles.append(role)
 
     return list(dict.fromkeys(failed_roles))
 
 
-def build_parallel_command(
-    machines: List[str],
-    roles: List[str],
-    role_args: List[str],
+def _rotate_joblog() -> None:
+    """Rotate the job log, preserving the previous run for inspection."""
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    if LOG_FILE.exists():
+        if LOG_FILE_PREV.exists():
+            LOG_FILE_PREV.unlink()
+        LOG_FILE.rename(LOG_FILE_PREV)
+
+
+async def _run_role(
+    seq: int,
+    machine: str,
+    role: str,
+    role_args: Sequence[str],
+    semaphore: asyncio.Semaphore,
+) -> JobResult:
+    """Execute a single role test while respecting the concurrency limit."""
+    cmd = ["test/testrole.py", "--machine", machine, role, "--checkmode", *role_args]
+    log_path = OUT_DIR / f"{machine}.{role}.ansi"
+
+    async with semaphore:
+        start_time = time.time()
+        print(f"[{seq}] {machine}:{role} starting")
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with log_path.open("w") as log_handle:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=log_handle,
+                stderr=sys.stderr,
+            )
+
+            try:
+                await proc.wait()
+            except asyncio.CancelledError:
+                proc.terminate()
+                async with asyncio.timeout(10):
+                    try:
+                        await proc.wait()
+                    except asyncio.TimeoutError:
+                        proc.kill()
+                        await proc.wait()
+                raise
+
+        runtime = time.time() - start_time
+        exitval = proc.returncode if proc.returncode is not None else 0
+        if exitval < 0:
+            exitval = 128 + (-exitval)
+        status = "ok" if exitval == 0 else "fail"
+        print(f"[{seq}] {machine}:{role} {status} ({runtime:.1f}s)")
+
+    return JobResult(
+        machine=machine,
+        role=role,
+        runtime=runtime,
+        exitval=exitval,
+    )
+
+
+async def run_all(
+    machines: Sequence[str],
+    roles: Sequence[str],
+    role_args: Sequence[str],
     jobs: int,
-) -> List[str]:
-    """Construct the GNU parallel command invocation."""
-    cmd = ["parallel", "--jobs", str(jobs), "--joblog", str(LOG_FILE), "--eta", "test/testrole.py", "--machine", "{1}", "{2}", "--checkmode", ">", "{OUT_DIR}/{2}.{1}.ansi"]
+) -> List[JobResult]:
+    """Run every role/machine combination concurrently."""
+    semaphore = asyncio.Semaphore(jobs)
+    results: List[JobResult] = []
 
-    cmd.extend(role_args)
+    loop = asyncio.get_running_loop()
+    current = asyncio.current_task(loop)
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        if not current:
+            raise RuntimeError("No current task")
+        loop.add_signal_handler(sig, current.cancel)
 
-    cmd.append(":::")  # Machine list follows
-    cmd.extend(machines)
-    cmd.append(":::")  # Role list follows
-    cmd.extend(roles)
+    async def run_and_store(seq: int, machine: str, role: str) -> None:
+        result = await _run_role(seq, machine, role, role_args, semaphore)
+        results.append(result)
 
-    return ["bash", "-c", shlex.join(cmd)]
+    try:
+        async with asyncio.TaskGroup() as tg:
+            seq = 1
+            for machine in machines:
+                for role in roles:
+                    tg.create_task(run_and_store(seq, machine, role))
+                    seq += 1
+    except asyncio.CancelledError:
+        # TaskGroup already cancelled children; propagate the interrupt
+        raise
+
+    return results
+
+
+def _write_joblog(results: List[JobResult]) -> None:
+    """Write a compact job log with role, machine, runtime, and exit code."""
+    with LOG_FILE.open("w", encoding="utf-8") as handle:
+        handle.write("Role\tMachine\tRuntime\tExitval\n")
+
+        for result in results:
+            handle.write(f"{result.role}\t{result.machine}\t{result.runtime:.3f}\t{result.exitval}\n")
+
 
 def main() -> int:
     """Entry point for running tests."""
@@ -156,16 +247,23 @@ def main() -> int:
             print("No roles with tasks/main.yml found", file=sys.stderr)
             return 1
 
-    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    if LOG_FILE.exists():
-        if LOG_FILE_PREV.exists():
-            LOG_FILE_PREV.unlink()
-        LOG_FILE.rename(LOG_FILE_PREV)
+    try:
+        results = asyncio.run(run_all(machines, roles, args.role_args, args.jobs))
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        print("\nInterrupted, cancelling remaining jobs...", file=sys.stderr)
+        return 130
 
-    parallel_cmd = build_parallel_command(machines, roles, args.role_args, args.jobs)
-    print(shlex.join(parallel_cmd))
+    _rotate_joblog()
+    _write_joblog(results)
 
-    return subprocess.check_call(parallel_cmd)
+    failures = [result for result in results if result.exitval != 0]
+    if failures:
+        failed_list = ", ".join({f.role for f in failures})
+        print(f"Failures: {failed_list}", file=sys.stderr)
+        return 1
+
+    return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())
