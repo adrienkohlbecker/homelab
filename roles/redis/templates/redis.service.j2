@@ -44,6 +44,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-cmd "redis-cli ping | grep PONG" \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
+    --health-start-period "100s" \
     --stop-timeout 120 \
     docker.io/redis:7.4 \
     redis-server --save 60 1 --loglevel warning

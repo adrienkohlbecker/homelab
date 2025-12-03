@@ -41,6 +41,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-cmd "/bin/bash -c "'"'"exec 3<>/dev/tcp/127.0.0.1/3142; echo -e 'GET /acng-doc/cache.png HTTP/1.1\r\nhost: http://localhost\r\nConnection: close\r\n\r\n' >&3; grep 'HTTP/1.1 200 OK' <&3"'"' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
+    --health-start-period "100s" \
     --stop-timeout 120 \
     docker.io/mbentley/apt-cacher-ng:latest-20250708
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id

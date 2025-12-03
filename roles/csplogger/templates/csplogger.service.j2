@@ -44,6 +44,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-interval "45s" \
+    --health-start-period "100s" \
     --stop-timeout 120 \
     docker.io/giuliocomi/csplogger@sha256:5460b64fa6cb0471cb5a254d7f63719782de463fd155ba1f17b74a275f3249f8
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
