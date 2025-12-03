@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 
-from ctypes import ArgumentError
 import os
 import platform
 import re
 import shlex
 import signal
 import socket
-import subprocess
 import sys
 import tempfile
 import time
+import asyncio
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -76,7 +75,7 @@ class Machine:
     inventory_host: str
     idfile: str
     imagedir: str
-    proc: Optional[subprocess.Popen[bytes]]
+    proc: Optional[asyncio.subprocess.Process]
     workdir: tempfile.TemporaryDirectory[str]
     journal_file: Path
     keep_vm: bool
@@ -106,9 +105,9 @@ class Machine:
         self.keep_vm = keep_vm
         self.role = role
 
-        out_dir.mkdir(parents=True, exist_ok=True)
+        OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-        self.journal_file = out_dir / f"{role}.{machine}.journal.ansi"
+        self.journal_file = OUT_DIR / f"{role}.{machine}.journal.ansi"
         self.proc = None
         self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
 
@@ -212,19 +211,22 @@ class Machine:
     async def boot(self) -> None:
         """Start the VM/container under a timeout wrapper."""
 
-        cmd = ["timeout", "--kill-after=10s", "10m", *self._boot_command()]
+        cmd = self._boot_command()
         await print_cmd_line(cmd)
 
-        self.proc = subprocess.Popen(cmd)
+        self.proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
 
     def ensure_booted(self) -> None:
         """Block until the hypervisor writes the PID/CID file or the launch fails."""
 
         deadline = time.monotonic() + IDFILE_TIMEOUT
         id_path = Path(f"{self.workdir.name}/{self.idfile}")
-
         while not id_path.exists():
-            if self.proc and self.proc.poll() is not None:
+            if self.proc and self.proc.returncode is not None:
                 raise RuntimeError("Launching machine failed")
             if time.monotonic() > deadline:
                 raise TimeoutError(f"PID file {id_path} not created within {IDFILE_TIMEOUT}s")
@@ -253,61 +255,52 @@ class Machine:
     async def collect_journal(self) -> None:
         """Fetch systemd journal for debugging when a run fails."""
 
-        try:
-            cmd = self.format_ssh_cmd(
-                "env",
-                "SYSTEMD_COLORS=true",
-                "journalctl",
-                "--pager-end",
-                "--no-pager",
-                "--priority",
-                "info",
-            )
+        cmd = self.format_ssh_cmd(
+            "env",
+            "SYSTEMD_COLORS=true",
+            "journalctl",
+            "--pager-end",
+            "--no-pager",
+            "--priority",
+            "info",
+        )
 
-            with self.journal_file.open("w") as handle:
-                await print_cmd_line(cmd)
-                subprocess.run(cmd, stdout=handle, stderr=sys.stdout, check=True)  # TODO colorize stderr
+        with self.journal_file.open("w") as handle:
+            await print_cmd_line(cmd)
+            proc = await asyncio.create_subprocess_exec(*cmd, stdout=handle, stderr=sys.stdout)
+            exitcode = await proc.wait()
+            if exitcode != 0:
+                print(f"Failed to collect journal: {exitcode}", file=sys.stdout)
+                return
 
-            print(f"Systemd journal: {self.journal_file}")
+        print(f"Systemd journal: {self.journal_file}")
 
-        except subprocess.CalledProcessError as exc:
-            print(f"Failed to collect journal: {exc}", file=sys.stderr)
+    def print_ssh_instructions(self) -> None:
+        ssh_cmd = shlex.join(self.format_ssh_cmd())
+        print("Keeping VM around, ssh using:")
+        print(f"> {ssh_cmd}")
+        print("Then Ctrl+C to stop the machine")
 
-    def stop(self) -> None:
-        """Stop the VM/container, optionally leaving it running for manual inspection."""
-
-        if self.keep_vm and self.ssh_port != 0:
-            ssh_cmd = shlex.join(self.format_ssh_cmd())
-            stop_cmd = shlex.join(self._stop_cmd())
-
-            print("Keeping VM around, ssh using:")
-            print(f"> {ssh_cmd}")
-            print("Then Ctrl+C or")
-            print(f"> {stop_cmd}")
-
-            signal.signal(signal.SIGINT, lambda *_: self._stop_machine())
-        else:
-            self._stop_machine()
-
+    async def wait(self) -> None:
         if self.proc:
+            await self.proc.wait()
+
+    async def stop(self) -> None:
+        """Stop the VM/container"""
+
+        if self.proc and self.proc.returncode is None:
             try:
-                self.proc.wait()
+                self.proc.send_signal(signal.SIGINT)
+                async with asyncio.timeout(9):
+                    try:
+                        await self.proc.wait()
+                    except asyncio.TimeoutError:
+                        self.proc.kill()
+                        await self.proc.wait()
             except Exception:
                 pass
 
         self.workdir.cleanup()
-
-    def _stop_machine(self) -> None:
-        if self.proc and self.proc.poll() is None:
-            try:
-                self.proc.terminate()
-            except Exception:
-                pass
-
-    def _stop_cmd(self) -> List[str]:
-        if not self.proc:
-            raise RuntimeError("Process not started; cannot stop")
-        return ["kill", str(self.proc.pid)]
 
 
 class QemuMachine(Machine):
@@ -411,6 +404,9 @@ class QemuMachine(Machine):
             display_args = ["-display", "none"]
 
         return [
+            "timeout",
+            "--kill-after=10s",
+            "10m",
             "qemu-system-x86_64",
             *[arg for drive in self.drives for arg in ("--drive", drive)],
             "-netdev",
@@ -512,6 +508,8 @@ class PodmanMachine(Machine):
             *self.podman,
             "run",
             "--rm",
+            "--timeout",
+            "600",
             "--publish",
             "127.0.0.1::22",
             "--privileged",
