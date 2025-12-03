@@ -93,14 +93,14 @@ def list_roles() -> List[str]:
     ]
 
 
-def get_failed_roles() -> List[str]:
+def get_failed_roles() -> List[List[str]]:
     """
     Parse the previous job log for failed roles.
     """
     if not LOG_FILE.exists():
         return []
 
-    failed_roles: List[str] = []
+    failed_roles: List[List[str]] = []
 
     with LOG_FILE.open(encoding="utf-8") as log_file:
         for line_no, raw_line in enumerate(log_file):
@@ -111,11 +111,11 @@ def get_failed_roles() -> List[str]:
             if len(fields) < 4:
                 continue
 
-            role, _machine, _runtime, exitval = fields[:4]
+            role, machine, _runtime, exitval = fields[:4]
             if exitval != "0":
-                failed_roles.append(role)
+                failed_roles.append([machine, role])
 
-    return list(dict.fromkeys(failed_roles))
+    return failed_roles
 
 
 def _rotate_joblog() -> None:
@@ -178,8 +178,7 @@ async def _run_role(
 
 
 async def run_all(
-    machines: Sequence[str],
-    roles: Sequence[str],
+    machine_roles: List[List[str]],
     role_args: Sequence[str],
     jobs: int,
 ) -> List[JobResult]:
@@ -201,10 +200,9 @@ async def run_all(
     try:
         async with asyncio.TaskGroup() as tg:
             seq = 1
-            for machine in machines:
-                for role in roles:
-                    tg.create_task(run_and_store(seq, machine, role))
-                    seq += 1
+            for machine_role in machine_roles:
+                tg.create_task(run_and_store(seq, machine_role[0], machine_role[1]))
+                seq += 1
     except asyncio.CancelledError:
         # TaskGroup already cancelled children; propagate the interrupt
         raise
@@ -225,30 +223,31 @@ def main() -> int:
     """Entry point for running tests."""
     args = parse_args()
 
-    machines = [m.strip() for m in args.machines.split(",") if m.strip()]
-    if not machines:
-        print("Error: No machines provided to --machines", file=sys.stderr)
-        return 1
-
     if args.jobs < 1:
         print("Error: --jobs must be at least 1", file=sys.stderr)
         return 1
 
-    setup_output_dir()
-
     if args.only_failed:
-        roles = get_failed_roles()
-        if not roles:
+        machine_roles = get_failed_roles()
+        if not machine_roles:
             print(f"No failed roles recorded in {LOG_FILE}", file=sys.stderr)
             return 0
     else:
+        machines = [m.strip() for m in args.machines.split(",") if m.strip()]
+        if not machines:
+            print("Error: No machines provided to --machines", file=sys.stderr)
+            return 1
+
         roles = list_roles()
         if not roles:
             print("No roles with tasks/main.yml found", file=sys.stderr)
             return 1
+        machine_roles = [[machine, role] for role in roles for machine in machines]
+
+    setup_output_dir()
 
     try:
-        results = asyncio.run(run_all(machines, roles, args.role_args, args.jobs))
+        results = asyncio.run(run_all(machine_roles, args.role_args, args.jobs))
     except (KeyboardInterrupt, asyncio.CancelledError):
         print("\nInterrupted, cancelling remaining jobs...", file=sys.stderr)
         return 130
