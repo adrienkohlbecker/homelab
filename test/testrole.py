@@ -21,11 +21,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
-
-from black.output import out
-from test.test_typing import Self
 
 UBUNTU_NAME = "jammy"
 UBUNTU_VERSION = "22.04"
@@ -262,7 +258,7 @@ class Machine:
 
     async def ssh_command(
         self,
-        *cmd: str,
+        *cmd: str,  # TODO do the splat parameters work in this position?
         check: bool = True,
         captured_lines: Optional[List[str]] = None,
     ) -> int:
@@ -270,7 +266,7 @@ class Machine:
 
     async def ansible_command(
         self,
-        *cmd: str,
+        *cmd: str,  # TODO do the splat parameters work in this position?
         check: bool = True,
         captured_lines: Optional[List[str]] = None,
     ) -> int:
