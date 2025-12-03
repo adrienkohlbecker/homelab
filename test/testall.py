@@ -15,11 +15,10 @@ import sys
 from pathlib import Path
 from typing import List
 
+from machine import OUT_DIR
 
-OUT_DIR = Path("test/out")
 LOG_FILE = Path("test/out.log")
 LOG_FILE_PREV = Path("test/out.log.prev")
-_CHILD_PROCESS: subprocess.Popen | None = None
 
 
 def parse_args() -> argparse.Namespace:
@@ -120,7 +119,7 @@ def build_parallel_command(
     jobs: int,
 ) -> List[str]:
     """Construct the GNU parallel command invocation."""
-    cmd = ["parallel", "--jobs", str(jobs), "--joblog", str(LOG_FILE), "--eta", "test/testrole.py", "--machine", "{1}", "{2}", "--checkmode", ">", "test/out/{2}.{1}.ansi"]
+    cmd = ["parallel", "--jobs", str(jobs), "--joblog", str(LOG_FILE), "--eta", "test/testrole.py", "--machine", "{1}", "{2}", "--checkmode", ">", "{OUT_DIR}/{2}.{1}.ansi"]
 
     cmd.extend(role_args)
 
@@ -130,28 +129,6 @@ def build_parallel_command(
     cmd.extend(roles)
 
     return ["bash", "-c", shlex.join(cmd)]
-
-
-def _install_signal_handlers() -> None:
-    """
-    Forward SIGINT/SIGTERM to the parallel subprocess and exit cleanly.
-
-    The handlers send the same signal to the process group created for GNU
-    parallel so every child role test receives it, then exit with 128+signal.
-    """
-
-    def _handler(signum: int, _: object) -> None:
-        if _CHILD_PROCESS and _CHILD_PROCESS.poll() is None:
-            try:
-                os.killpg(_CHILD_PROCESS.pid, signum)
-            except ProcessLookupError:
-                pass
-        # Use conventional 128+signal exit code.
-        sys.exit(128 + signum)
-
-    signal.signal(signal.SIGINT, _handler)
-    signal.signal(signal.SIGTERM, _handler)
-
 
 def main() -> int:
     """Entry point for running tests."""
@@ -185,21 +162,10 @@ def main() -> int:
             LOG_FILE_PREV.unlink()
         LOG_FILE.rename(LOG_FILE_PREV)
 
-    _install_signal_handlers()
-
     parallel_cmd = build_parallel_command(machines, roles, args.role_args, args.jobs)
     print(shlex.join(parallel_cmd))
 
-    global _CHILD_PROCESS
-    _CHILD_PROCESS = subprocess.Popen(
-        parallel_cmd,
-        # preexec_fn runs in the child just before exec; setpgrp creates a new
-        # process group so SIGINT/SIGTERM from our handler propagate to all
-        # jobs, but we keep the same session to preserve the controlling TTY.
-        preexec_fn=os.setpgrp,
-    )
-
-    return _CHILD_PROCESS.wait()
+    return subprocess.check_call(parallel_cmd)
 
 if __name__ == "__main__":
     sys.exit(main())
