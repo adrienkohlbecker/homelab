@@ -16,6 +16,7 @@ from typing import Dict, Iterable, List, Optional, Tuple
 
 from utils import run_command, sleep_tick, print_cmd_line
 
+OUT_DIR = Path("test/out")
 UBUNTU_NAME = "jammy"
 UBUNTU_VERSION = "22.04"
 SSH_KEY = "packer/vagrant.key"
@@ -105,7 +106,6 @@ class Machine:
         self.keep_vm = keep_vm
         self.role = role
 
-        out_dir = Path("test/out")
         out_dir.mkdir(parents=True, exist_ok=True)
 
         self.journal_file = out_dir / f"{role}.{machine}.journal.ansi"
