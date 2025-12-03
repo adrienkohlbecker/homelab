@@ -62,6 +62,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:32400/identity" \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
+    --health-start-period "100s" \
     --stop-timeout 120 \
     docker.io/plexinc/pms-docker:1.40.2.8395-c67dce28e
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id

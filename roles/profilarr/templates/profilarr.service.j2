@@ -45,6 +45,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-cmd "python -c 'import urllib.request as u; u.urlopen(\"http://localhost:6868/\", timeout=1)'" \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
+    --health-start-period "100s" \
     --stop-timeout 120 \
     docker.io/santiagosayshey/profilarr:v1.1.3
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id

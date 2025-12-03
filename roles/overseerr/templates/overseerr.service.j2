@@ -50,6 +50,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-cmd "curl --get --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:5055/api/v1/status" \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
+    --health-start-period "100s" \
     --stop-timeout 120 \
     docker.io/linuxserver/overseerr:1.34.0
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id

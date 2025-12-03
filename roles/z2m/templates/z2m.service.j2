@@ -43,6 +43,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-cmd "wget --quiet --tries=1 --spider http://localhost:8081/ > /dev/null" \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
+    --health-start-period "100s" \
     --stop-timeout 240 \
     ghcr.io/koenkk/zigbee2mqtt:2.6.2
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
