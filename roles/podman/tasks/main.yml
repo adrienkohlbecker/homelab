@@ -14,7 +14,9 @@
     name: apt_unit_masked
     tasks_from: apt
   vars:
-    apt_unit_masked_pkg: podman
+    apt_unit_masked_pkg:
+      - podman
+      - aardvark-dns
     apt_unit_masked_unit:
       - podman.service
       - podman.socket

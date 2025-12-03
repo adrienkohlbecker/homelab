@@ -52,6 +52,8 @@
       - containernetworking-plugins
       - conmon
       - slirp4netns
+      - netavark
+      - aardvark-dns
     state: latest
     cache_valid_time: 3600
   register: noble_apt

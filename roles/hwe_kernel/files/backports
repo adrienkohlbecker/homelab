@@ -1,4 +1,4 @@
-Package: podman buildah containernetworking-plugins conmon slirp4netns libc6 libgpgme11t64 libsubid4 libc-bin golang-github-containers-common fuse-overlayfs libglib2.0-0t64 locales libfuse3-3 fuse3
+Package: podman buildah containernetworking-plugins conmon slirp4netns libc6 libgpgme11t64 libsubid4 libc-bin golang-github-containers-common fuse-overlayfs libglib2.0-0t64 locales libfuse3-3 fuse3 netavark aardvark-dns
 Pin: release n=noble
 Pin-Priority: 991
 
