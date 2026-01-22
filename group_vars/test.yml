@@ -1,4 +1,4 @@
-domain: fahm.dev
+domain: mhaf.fr
 home_subnet: 10.234.0.0/16
 site_subnets:
   home: 10.234.0.0/21
