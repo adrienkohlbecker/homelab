@@ -19,7 +19,7 @@ resource "cloudflare_zone" "fahm_dev" {
   account = {
     id = "${data.cloudflare_account.main.account_id}"
   }
-  name = "fahm.dev"
+  name = "mhaf.fr"
   type = "full"
 }
 
@@ -33,8 +33,8 @@ resource "cloudflare_zone" "fahm_fr" {
 
 resource "cloudflare_dns_record" "star_box_fahm_dev" {
   zone_id = "${cloudflare_zone.fahm_dev.id}"
-  content = "box.fahm.dev"
-  name = "*.box.fahm.dev"
+  content = "box.mhaf.fr"
+  name = "*.box.mhaf.fr"
   proxied = false
   ttl = 1
   type = "CNAME"
@@ -43,7 +43,7 @@ resource "cloudflare_dns_record" "star_box_fahm_dev" {
 resource "cloudflare_dns_record" "box_fahm_dev" {
   zone_id = "${cloudflare_zone.fahm_dev.id}"
   content = "10.234.0.5"
-  name = "box.fahm.dev"
+  name = "box.mhaf.fr"
   proxied = false
   ttl = 1
   type = "A"
