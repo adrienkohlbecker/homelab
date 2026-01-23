@@ -20,6 +20,7 @@
   shell: |
     set -euo pipefail
     sed -i 's/^bind.*/bind 0.0.0.0/' /etc/redis/redis.conf
+    sed -i 's/^protected-mode.*/protected-mode no/' /etc/redis/redis.conf
     systemctl restart redis
   args:
     executable: /bin/bash
