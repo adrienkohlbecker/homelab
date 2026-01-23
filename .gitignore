@@ -3,6 +3,6 @@
 __pycache__
 .vscode
 .esphome
-test/out.log
-test/out.log.prev
+test/out.tsv
+test/out.tsv.prev
 test/out/
