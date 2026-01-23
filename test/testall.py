@@ -177,6 +177,8 @@ async def _run_role(
         if exitval < 0:
             exitval = 128 + (-exitval)
         status = "ok" if exitval == 0 else "fail"
+        if exitval == 0 and log_path.exists():
+            log_path.unlink()
         print(f"[{seq}] {machine}:{release}:{role} {status} ({runtime:.1f}s)")
 
     return JobResult(
@@ -274,7 +276,10 @@ def main() -> int:
 
     failures = [result for result in results if result.exitval != 0]
     if failures:
-        failed_list = ", ".join({f.role for f in failures})
+        failed_list = ", ".join(
+            f"{result.machine}:{result.release}:{result.role}"
+            for result in sorted(failures, key=lambda res: (res.machine, res.release, res.role))
+        )
         print(f"Failures: {failed_list}", file=sys.stderr)
         return 1
 
