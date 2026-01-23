@@ -14,12 +14,22 @@
     name: apt_unit_masked
     tasks_from: apt
   vars:
-    apt_unit_masked_pkg:
-      - podman
-      - aardvark-dns
+    apt_unit_masked_pkg: podman
     apt_unit_masked_unit:
       - podman.service
       - podman.socket
+  tags:
+    - podman
+    - _check_stage1
+    - _check_stage2
+
+- name: Install aardvark dns
+  when: ansible_distribution_major_version == "24"
+  apt:
+    pkg:
+      - aardvark-dns
+    cache_valid_time: 3600
+  become: true
   tags:
     - podman
     - _check_stage1

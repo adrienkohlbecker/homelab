@@ -43,7 +43,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
     --stop-timeout 120 \
-    docker.io/mbentley/apt-cacher-ng:latest-20250708
+    docker.io/mbentley/apt-cacher-ng:latest-20260123
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
