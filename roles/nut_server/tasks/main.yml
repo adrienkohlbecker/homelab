@@ -26,7 +26,7 @@
     - nut_server
 
 - name: Configure nut ups.conf
-  when: not (ansible_check_mode and apt_install_nut.changed)
+  when: not (ansible_check_mode and apt_install_nut.changed) and (ansible_distribution_major_version == "22" or ansible_distribution_major_version == "24")
   template:
     src: ups.conf.j2
     dest: /etc/nut/ups.conf
@@ -34,8 +34,21 @@
     group: nut
     mode: "0640"
     backup: true
-    # Todo: When on Python 3.13 (after noble)
-    # validate: python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True, allow_unnamed_section=True).read("%s")'
+  register: nut_ups_conf
+  become: true
+  tags:
+    - nut_server
+
+- name: Configure nut ups.conf
+  when: not (ansible_check_mode and apt_install_nut.changed) and (ansible_distribution_major_version != "22" and ansible_distribution_major_version != "24")
+  template:
+    src: ups.conf.j2
+    dest: /etc/nut/ups.conf
+    owner: root
+    group: nut
+    mode: "0640"
+    backup: true
+    validate: python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True, allow_unnamed_section=True).read("%s")'
   register: nut_ups_conf
   become: true
   tags:
@@ -75,7 +88,7 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: nut-driver
+    systemd_unit_src: '{{ "nut-driver@eaton" if ansible_distribution_major_version != "22" else "nut-driver" }}'
     systemd_unit_condition: "{{ not (ansible_check_mode and apt_install_nut.changed) }}"
     systemd_unit_restart: "{{ nut_nut_conf.changed or nut_ups_conf.changed }}"
     systemd_unit_start: "{{ not docker_test and not qemu_test }}"
