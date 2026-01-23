@@ -108,7 +108,7 @@ class Machine:
 
         OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-        self.journal_file = OUT_DIR / f"{role}.{machine}.journal.ansi"
+        self.journal_file = OUT_DIR / f"{machine}.{role}.journal.ansi"
         self.proc = None
         self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
 
