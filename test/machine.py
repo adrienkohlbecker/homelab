@@ -16,11 +16,11 @@ from typing import Dict, Iterable, List, Optional, Tuple
 from utils import run_command, sleep_tick, print_cmd_line
 
 OUT_DIR = Path("test/out")
-UBUNTU_NAME = "jammy"
-UBUNTU_VERSION = "22.04"
 SSH_KEY = "packer/vagrant.key"
 SSH_HOST = "127.0.0.1"
 MACHINE_TIMEOUT = str(15 * 60)
+DEFAULT_MACHINE = "container"
+DEFAULT_RELEASE = "22"
 
 CONTAINER_ANSIBLE_ARGS = ["-e", '{"docker_test":true}', "-e", "@host_vars/box-podman.yml"]
 QEMU_MACHINE_ARGS: Dict[str, Tuple[str, List[str], str]] = {
@@ -81,6 +81,8 @@ class Machine:
     journal_file: Path
     keep_vm: bool
     role: str
+    ubuntu_name: str
+    ubuntu_version: str
 
     def __init__(
         self,
@@ -91,6 +93,7 @@ class Machine:
         idfile: str,
         imagedir: str,
         machine: str,
+        release: str,
         role: str,
         keep_vm: bool,
     ):
@@ -106,9 +109,18 @@ class Machine:
         self.keep_vm = keep_vm
         self.role = role
 
+        if release == "22":
+            self.ubuntu_name = "jammy"
+            self.ubuntu_version = "22.04"
+        elif release == "24":
+            self.ubuntu_name = "noble"
+            self.ubuntu_version = "24.04"
+        else:
+            raise AttributeError(f"Unknown ubuntu version: {release}")
+
         OUT_DIR.mkdir(parents=True, exist_ok=True)
 
-        self.journal_file = OUT_DIR / f"{machine}.{role}.journal.ansi"
+        self.journal_file = OUT_DIR / f"{machine}.{release}.{role}.journal.ansi"
         self.proc = None
         self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
 
@@ -309,7 +321,7 @@ class QemuMachine(Machine):
     machine: str
     drives: List[str]
 
-    def __init__(self, machine: str, role: str, keep_vm: bool):
+    def __init__(self, machine: str, release: str, role: str, keep_vm: bool):
         """QEMU-backed machine wrapper used by integration tests."""
         try:
             ssh_user, ansible_args, inventory_host = QEMU_MACHINE_ARGS[machine]
@@ -325,6 +337,7 @@ class QemuMachine(Machine):
             idfile="pid",
             imagedir="/mnt/qemu",
             machine=machine,
+            release=release,
             role=role,
             keep_vm=keep_vm,
         )
@@ -339,7 +352,7 @@ class QemuMachine(Machine):
                 ["cloud-localds", f"{self.workdir.name}/seed.img", "test/minimal/user-data", "test/minimal/meta-data"],
             )
             await self._create_overlay(
-                f"{self.imagedir}/ubuntu-{UBUNTU_VERSION}-minimal-cloudimg-amd64.img",
+                f"{self.imagedir}/ubuntu-{self.ubuntu_version}-minimal-cloudimg-amd64.img",
                 f"{self.workdir.name}/disk.img",
                 size="20G",
             )
@@ -370,7 +383,7 @@ class QemuMachine(Machine):
         """Copy EFI vars for UEFI boots into the working directory."""
 
         await run_command(
-            ["cp", f"{self.imagedir}/{UBUNTU_NAME}/ubuntu-{self.machine}/efivars.fd", f"{self.workdir.name}/efivars.fd"],
+            ["cp", f"{self.imagedir}/{self.ubuntu_name}/ubuntu-{self.machine}/efivars.fd", f"{self.workdir.name}/efivars.fd"],
         )
 
     async def _create_overlay_series(self, count: int) -> None:
@@ -378,7 +391,7 @@ class QemuMachine(Machine):
 
         for idx in range(1, count + 1):
             await self._create_overlay(
-                f"{self.imagedir}/{UBUNTU_NAME}/ubuntu-{self.machine}/packer-ubuntu-{idx}",
+                f"{self.imagedir}/{self.ubuntu_name}/ubuntu-{self.machine}/packer-ubuntu-{idx}",
                 f"{self.workdir.name}/packer-ubuntu-{idx}",
             )
 
@@ -468,7 +481,7 @@ class QemuMachine(Machine):
 class PodmanMachine(Machine):
     """Start privileged Podman containers that mimic SSH hosts."""
 
-    def __init__(self, machine: str, role: str, keep_vm: bool):
+    def __init__(self, machine: str, release: str, role: str, keep_vm: bool):
         """Podman-backed machine wrapper used by integration tests."""
         system = platform.system()
         if system == "Darwin":
@@ -486,6 +499,7 @@ class PodmanMachine(Machine):
             idfile="cid",
             imagedir=imagedir,
             machine=machine,
+            release=release,
             role=role,
             keep_vm=keep_vm,
         )
@@ -515,7 +529,7 @@ class PodmanMachine(Machine):
             f"{self.workdir.name}/{self.idfile}",
             "--network",
             "homelab_net",
-            f"homelab:{UBUNTU_NAME}",
+            f"homelab:{self.ubuntu_name}",
         ]
 
     async def _find_ssh_port(self) -> None:

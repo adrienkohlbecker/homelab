@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Sequence
 
-from machine import OUT_DIR
+from machine import OUT_DIR, DEFAULT_MACHINE, DEFAULT_RELEASE
 
 LOG_FILE = Path("test/out.log")
 LOG_FILE_PREV = Path("test/out.log.prev")
@@ -28,6 +28,7 @@ class JobResult:
     """Holds the outcome of a single role test."""
 
     machine: str
+    release: str
     role: str
     runtime: float
     exitval: int
@@ -57,9 +58,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--machines",
         type=str,
-        default="container",
+        default=DEFAULT_MACHINE,
         metavar="X",
-        help="Comma-separated list of machine profiles (default: container)",
+        help=f"Comma-separated list of machine profiles (default: {DEFAULT_MACHINE})",
+    )
+
+    parser.add_argument(
+        "--releases",
+        type=str,
+        default=DEFAULT_RELEASE,
+        metavar="X",
+        help=f"Comma-separated list of ubuntu major versions (default: {DEFAULT_RELEASE})",
     )
 
     # Remaining arguments are forwarded to testrole.py
@@ -111,9 +120,9 @@ def get_failed_roles() -> List[List[str]]:
             if len(fields) < 4:
                 continue
 
-            role, machine, _runtime, exitval = fields[:4]
+            role, release, machine, _runtime, exitval = fields[:5]
             if exitval != "0":
-                failed_roles.append([machine, role])
+                failed_roles.append([machine, release, role])
 
     return failed_roles
 
@@ -130,13 +139,14 @@ def _rotate_joblog() -> None:
 async def _run_role(
     seq: int,
     machine: str,
+    release: str,
     role: str,
     role_args: Sequence[str],
     semaphore: asyncio.Semaphore,
 ) -> JobResult:
     """Execute a single role test while respecting the concurrency limit."""
-    cmd = ["test/testrole.py", "--machine", machine, role, "--checkmode", *role_args]
-    log_path = OUT_DIR / f"{machine}.{role}.ansi"
+    cmd = ["test/testrole.py", "--machine", machine, "--release", release, role, "--checkmode", *role_args]
+    log_path = OUT_DIR / f"{machine}.{release}.{role}.ansi"
 
     async with semaphore:
         start_time = time.time()
@@ -167,10 +177,11 @@ async def _run_role(
         if exitval < 0:
             exitval = 128 + (-exitval)
         status = "ok" if exitval == 0 else "fail"
-        print(f"[{seq}] {machine}:{role} {status} ({runtime:.1f}s)")
+        print(f"[{seq}] {machine}:{release}:{role} {status} ({runtime:.1f}s)")
 
     return JobResult(
         machine=machine,
+        release=release,
         role=role,
         runtime=runtime,
         exitval=exitval,
@@ -193,15 +204,15 @@ async def run_all(
             raise RuntimeError("No current task")
         loop.add_signal_handler(sig, current.cancel)
 
-    async def run_and_store(seq: int, machine: str, role: str) -> None:
-        result = await _run_role(seq, machine, role, role_args, semaphore)
+    async def run_and_store(seq: int, machine: str, release: str, role: str) -> None:
+        result = await _run_role(seq, machine, release, role, role_args, semaphore)
         results.append(result)
 
     try:
         async with asyncio.TaskGroup() as tg:
             seq = 1
             for machine_role in machine_roles:
-                tg.create_task(run_and_store(seq, machine_role[0], machine_role[1]))
+                tg.create_task(run_and_store(seq, machine_role[0], machine_role[1], machine_role[2]))
                 seq += 1
     except asyncio.CancelledError:
         # TaskGroup already cancelled children; propagate the interrupt
@@ -213,10 +224,10 @@ async def run_all(
 def _write_joblog(results: List[JobResult]) -> None:
     """Write a compact job log with role, machine, runtime, and exit code."""
     with LOG_FILE.open("w", encoding="utf-8") as handle:
-        handle.write("Role\tMachine\tRuntime\tExitval\n")
+        handle.write("Role\tRelease\tMachine\tRuntime\tExitval\n")
 
         for result in results:
-            handle.write(f"{result.role}\t{result.machine}\t{result.runtime:.3f}\t{result.exitval}\n")
+            handle.write(f"{result.role}\t{result.release}\t{result.machine}\t{result.runtime:.3f}\t{result.exitval}\n")
 
 
 def main() -> int:
@@ -238,11 +249,17 @@ def main() -> int:
             print("Error: No machines provided to --machines", file=sys.stderr)
             return 1
 
+        releases = [m.strip() for m in args.releases.split(",") if m.strip()]
+        if not releases:
+            print("Error: No releases provided to --releases", file=sys.stderr)
+            return 1
+
         roles = list_roles()
         if not roles:
             print("No roles with tasks/main.yml found", file=sys.stderr)
             return 1
-        machine_roles = [[machine, role] for role in roles for machine in machines]
+
+        machine_roles = [[machine, release, role] for role in roles for release in releases for machine in machines]
 
     setup_output_dir()
 
