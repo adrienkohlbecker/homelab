@@ -12,12 +12,10 @@ import argparse
 import asyncio
 import signal
 import sys
-import shlex
-import tempfile
 from pathlib import Path
 from typing import List
 
-from machine import Machine, ubuntu_mirrors, PodmanMachine, QemuMachine, UBUNTU_NAME
+from machine import Machine, ubuntu_mirrors, PodmanMachine, QemuMachine, DEFAULT_MACHINE, DEFAULT_RELEASE
 from utils import CommandFailedException
 
 
@@ -29,7 +27,7 @@ def parse_args() -> tuple[argparse.Namespace, List[str]]:
     )
     parser.add_argument(
         "--machine",
-        default="container",
+        default=DEFAULT_MACHINE,
         choices=["container", "minimal", "box", "lab", "pug"],
         help="Machine profile to run against",
     )
@@ -42,6 +40,12 @@ def parse_args() -> tuple[argparse.Namespace, List[str]]:
         "--keep",
         action="store_true",
         help="Keep the machine running after the test",
+    )
+    parser.add_argument(
+        "--release",
+        default=DEFAULT_RELEASE,
+        choices=["22", "24"],
+        help="Ubuntu version to run against",
     )
     parser.add_argument("role", help="Role name to test")
 
@@ -58,19 +62,36 @@ def parse_args() -> tuple[argparse.Namespace, List[str]]:
 async def _configure_apt_sources(m: Machine) -> None:
     """Rewrite apt sources to use local mirrors and refresh package metadata."""
     ubuntu_mirror, ubuntu_mirror_security = ubuntu_mirrors()
-    sources = [
-        f"deb {ubuntu_mirror} {UBUNTU_NAME} main restricted universe multiverse",
-        f"deb {ubuntu_mirror} {UBUNTU_NAME}-updates main restricted universe multiverse",
-        f"deb {ubuntu_mirror_security} {UBUNTU_NAME}-security main restricted universe multiverse",
-        f"deb {ubuntu_mirror} {UBUNTU_NAME}-backports main restricted universe multiverse",
-    ]
+    if m.ubuntu_name == "jammy":
+        sources = [
+            f"deb {ubuntu_mirror} {m.ubuntu_name} main restricted universe multiverse",
+            f"deb {ubuntu_mirror} {m.ubuntu_name}-updates main restricted universe multiverse",
+            f"deb {ubuntu_mirror_security} {m.ubuntu_name}-security main restricted universe multiverse",
+            f"deb {ubuntu_mirror} {m.ubuntu_name}-backports main restricted universe multiverse",
+        ]
+        path = "/etc/apt/sources.list"
+    else:
+        sources = [
+            f"Types: deb",
+            f"URIs: {ubuntu_mirror}",
+            f"Suites: {m.ubuntu_name} {m.ubuntu_name}-updates {m.ubuntu_name}-backports",
+            f"Components: main universe restricted multiverse",
+            f"Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg",
+            f"",
+            f"Types: deb",
+            f"URIs: {ubuntu_mirror_security}",
+            f"Suites: {m.ubuntu_name}-security",
+            f"Components: main universe restricted multiverse",
+            f"Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg",
+        ]
+        path = "/etc/apt/sources.list.d/ubuntu.sources"
 
     if not ubuntu_mirror or not ubuntu_mirror_security:
         raise RuntimeError("Ubuntu mirror URLs are required to configure apt sources.")
 
     # Use one shell to avoid repeatedly opening the file and keep quoting simple.
     printf_args = " ".join(f'"{line}"' for line in sources)
-    await m.ssh_command("sudo", "bash", "-c", f"printf '%s\\n' {printf_args} > /etc/apt/sources.list")
+    await m.ssh_command("sudo", "bash", "-c", f"printf '%s\\n' {printf_args} > {path}")
     await m.ssh_command("sudo", "apt-get", "update")
 
 
@@ -97,11 +118,12 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: List[str]) -> Non
     role = parsed_args.role
     keep_vm = parsed_args.keep
     checkmode = parsed_args.checkmode
+    release = parsed_args.release
 
     if machine == "container":
-        m = PodmanMachine(machine, role, keep_vm)
+        m = PodmanMachine(machine, release, role, keep_vm)
     else:
-        m = QemuMachine(machine, role, keep_vm)
+        m = QemuMachine(machine, release, role, keep_vm)
 
     await m.prepare()
     await m.boot()
