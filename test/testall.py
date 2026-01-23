@@ -17,6 +17,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Sequence
 
+from tabulate import tabulate
+
 from machine import OUT_DIR, DEFAULT_MACHINE, DEFAULT_RELEASE
 
 LOG_FILE = Path("test/out.tsv")
@@ -30,6 +32,7 @@ class JobResult:
     machine: str
     release: str
     role: str
+    log_path: Path
     runtime: float
     exitval: int
 
@@ -185,6 +188,7 @@ async def _run_role(
         machine=machine,
         release=release,
         role=role,
+        log_path=log_path,
         runtime=runtime,
         exitval=exitval,
     )
@@ -232,6 +236,28 @@ def _write_joblog(results: List[JobResult]) -> None:
             handle.write(f"{result.role}\t{result.release}\t{result.machine}\t{result.runtime:.3f}\t{result.exitval}\n")
 
 
+def _print_failure_table(failures: List[JobResult]) -> None:
+    """Render a simple table of failed runs with log file paths."""
+    rows = [
+        [
+            result.machine,
+            result.release,
+            result.role,
+            str(result.log_path),
+        ]
+        for result in sorted(failures, key=lambda res: (res.machine, res.release, res.role))
+    ]
+
+    print("\nFailure summary:", file=sys.stderr)
+    print(
+        tabulate(
+            rows,
+            headers=["Machine", "Release", "Role", "Log"],
+        ),
+        file=sys.stderr,
+    )
+
+
 def main() -> int:
     """Entry point for running tests."""
     args = parse_args()
@@ -276,11 +302,7 @@ def main() -> int:
 
     failures = [result for result in results if result.exitval != 0]
     if failures:
-        failed_list = ", ".join(
-            f"{result.machine}:{result.release}:{result.role}"
-            for result in sorted(failures, key=lambda res: (res.machine, res.release, res.role))
-        )
-        print(f"Failures: {failed_list}", file=sys.stderr)
+        _print_failure_table(failures)
         return 1
 
     return 0

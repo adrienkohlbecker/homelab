@@ -111,14 +111,8 @@ async def _run_checkmode(site_yml: str, m: Machine, pass_args: List[str]) -> Non
         await m.ansible_command(site_yml, "--check", *pass_args)
 
 
-async def run_test(parsed_args: argparse.Namespace, pass_args: List[str]) -> None:
+async def run_test(machine: str, release: str, role: str, keep_vm: bool, checkmode: bool, pass_args: List[str]) -> None:
     """Provision a machine, run the role under test, and stream output."""
-
-    machine = parsed_args.machine
-    role = parsed_args.role
-    keep_vm = parsed_args.keep
-    checkmode = parsed_args.checkmode
-    release = parsed_args.release
 
     if machine == "container":
         m = PodmanMachine(machine, release, role, keep_vm)
@@ -171,6 +165,12 @@ def main() -> int:
 
     parsed_args, pass_args = parse_args()
 
+    machine = parsed_args.machine
+    release = parsed_args.release
+    role = parsed_args.role
+    keep_vm = parsed_args.keep
+    checkmode = parsed_args.checkmode
+
     async def _run_with_signals() -> int:
         loop = asyncio.get_running_loop()
         current = asyncio.current_task(loop)
@@ -178,7 +178,7 @@ def main() -> int:
             if not current:
                 raise RuntimeError("No current task")
             loop.add_signal_handler(sig, current.cancel)
-        await run_test(parsed_args, pass_args)
+        await run_test(machine, release, role, keep_vm, checkmode, pass_args)
         return 0
 
     try:
