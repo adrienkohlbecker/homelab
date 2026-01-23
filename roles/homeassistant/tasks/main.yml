@@ -179,6 +179,26 @@
     - _check_stage3
     - _check_stage4
 
+- name: Ensure files exist
+  file:
+    path: /mnt/services/homeassistant/{{ item }}
+    owner: homeassistant
+    group: homeassistant
+    mode: "0600"
+    state: touch
+  register: homeassistant_files
+  become: true
+  with_items:
+    - automations.yaml
+    - covers.yaml
+    - scripts.yaml
+    - scenes.yaml
+  tags:
+    - homeassistant
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
+
 - name: Create blueprints directory
   file:
     dest: /mnt/services/homeassistant/blueprints

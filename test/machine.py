@@ -20,6 +20,7 @@ UBUNTU_NAME = "jammy"
 UBUNTU_VERSION = "22.04"
 SSH_KEY = "packer/vagrant.key"
 SSH_HOST = "127.0.0.1"
+MACHINE_TIMEOUT = str(15 * 60)
 
 CONTAINER_ANSIBLE_ARGS = ["-e", '{"docker_test":true}', "-e", "@host_vars/box-podman.yml"]
 QEMU_MACHINE_ARGS: Dict[str, Tuple[str, List[str], str]] = {
@@ -406,7 +407,7 @@ class QemuMachine(Machine):
         return [
             "timeout",
             "--kill-after=10s",
-            "10m",
+            MACHINE_TIMEOUT,
             "qemu-system-x86_64",
             *[arg for drive in self.drives for arg in ("--drive", drive)],
             "-netdev",
@@ -506,7 +507,7 @@ class PodmanMachine(Machine):
             "run",
             "--rm",
             "--timeout",
-            "600",
+            MACHINE_TIMEOUT,
             "--publish",
             "127.0.0.1::22",
             "--privileged",

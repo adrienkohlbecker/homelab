@@ -220,6 +220,7 @@
     - netdata
 
 - name: Mount debugfs
+  when: not docker_test
   mount:
     path: /sys/kernel/debug
     src: /debugfs
