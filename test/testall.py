@@ -5,7 +5,7 @@ Test runner for Ansible roles using native asyncio parallelism.
 This script discovers roles, builds test commands, and executes them concurrently
 without relying on GNU parallel. Output for each machine/role run is captured in
 `test/out/<machine>.<role>.ansi`, and a concise job log is written to
-`test/out.log`.
+`test/out.tsv`.
 """
 
 import argparse
@@ -19,8 +19,8 @@ from typing import List, Sequence
 
 from machine import OUT_DIR, DEFAULT_MACHINE, DEFAULT_RELEASE
 
-LOG_FILE = Path("test/out.log")
-LOG_FILE_PREV = Path("test/out.log.prev")
+LOG_FILE = Path("test/out.tsv")
+LOG_FILE_PREV = Path("test/out.tsv.prev")
 
 
 @dataclass
@@ -150,7 +150,7 @@ async def _run_role(
 
     async with semaphore:
         start_time = time.time()
-        print(f"[{seq}] {machine}:{role} starting")
+        print(f"[{seq}] {machine}:{release}:{role} starting")
         log_path.parent.mkdir(parents=True, exist_ok=True)
 
         with log_path.open("w") as log_handle:
