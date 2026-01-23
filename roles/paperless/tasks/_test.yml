@@ -15,3 +15,12 @@
     install_recommends: false
     cache_valid_time: 3600
   become: true
+
+- name: _test | Setup redis
+  shell: |
+    set -euo pipefail
+    sed -i 's/^bind.*/bind 0.0.0.0/' /etc/redis/redis.conf
+    systemctl restart redis
+  args:
+    executable: /bin/bash
+  become: true
