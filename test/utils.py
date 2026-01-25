@@ -2,11 +2,12 @@
 
 import asyncio
 import shlex
+import signal
 import sys
 import time
 from io import TextIOWrapper
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 
 class CommandFailedException(Exception):
@@ -26,6 +27,19 @@ def sleep_tick() -> None:
     sys.stdout.write(".")
     sys.stdout.flush()
     time.sleep(1)
+
+
+def install_cancel_signals(
+    signals_to_handle: Sequence[signal.Signals] = (signal.SIGINT, signal.SIGTERM),
+) -> None:
+    """Arrange for incoming signals to cancel the current asyncio task."""
+    loop = asyncio.get_running_loop()
+    current = asyncio.current_task(loop)
+    if not current:
+        raise RuntimeError("No current asyncio task to cancel")
+
+    for sig in signals_to_handle:
+        loop.add_signal_handler(sig, current.cancel)
 
 
 def _colorize(line: str, stream_name: str) -> str:

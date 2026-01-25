@@ -10,7 +10,6 @@ without relying on GNU parallel. Output for each machine/role run is captured in
 
 import argparse
 import asyncio
-import signal
 import sys
 import time
 from dataclasses import dataclass
@@ -20,6 +19,7 @@ from typing import List, Sequence
 from tabulate import tabulate
 
 from machine import OUT_DIR, DEFAULT_MACHINE, DEFAULT_RELEASE
+from utils import install_cancel_signals
 
 LOG_FILE = Path("test/out.tsv")
 LOG_FILE_PREV = Path("test/out.tsv.prev")
@@ -160,7 +160,7 @@ async def _run_role(
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=log_handle,
-                stderr=sys.stderr,
+                stderr=log_handle,
             )
 
             try:
@@ -179,7 +179,7 @@ async def _run_role(
         exitval = proc.returncode if proc.returncode is not None else 0
         if exitval < 0:
             exitval = 128 + (-exitval)
-        status = "ok" if exitval == 0 else "fail"
+        status = "ok" if exitval == 0 else "\033[0;41mfail\033[0m"
         if exitval == 0 and log_path.exists():
             log_path.unlink()
         print(f"[{seq}] {machine}:{release}:{role} {status} ({runtime:.1f}s)")
@@ -203,12 +203,7 @@ async def run_all(
     semaphore = asyncio.Semaphore(jobs)
     results: List[JobResult] = []
 
-    loop = asyncio.get_running_loop()
-    current = asyncio.current_task(loop)
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        if not current:
-            raise RuntimeError("No current task")
-        loop.add_signal_handler(sig, current.cancel)
+    install_cancel_signals()
 
     async def run_and_store(seq: int, machine: str, release: str, role: str) -> None:
         result = await _run_role(seq, machine, release, role, role_args, semaphore)

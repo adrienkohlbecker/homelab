@@ -10,13 +10,12 @@ log streaming.
 
 import argparse
 import asyncio
-import signal
 import sys
 from pathlib import Path
 from typing import List
 
 from machine import Machine, ubuntu_mirrors, PodmanMachine, QemuMachine, DEFAULT_MACHINE, DEFAULT_RELEASE
-from utils import CommandFailedException
+from utils import CommandFailedException, install_cancel_signals
 
 
 def parse_args() -> tuple[argparse.Namespace, List[str]]:
@@ -172,12 +171,7 @@ def main() -> int:
     checkmode = parsed_args.checkmode
 
     async def _run_with_signals() -> int:
-        loop = asyncio.get_running_loop()
-        current = asyncio.current_task(loop)
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            if not current:
-                raise RuntimeError("No current task")
-            loop.add_signal_handler(sig, current.cancel)
+        install_cancel_signals()
         await run_test(machine, release, role, keep_vm, checkmode, pass_args)
         return 0
 
