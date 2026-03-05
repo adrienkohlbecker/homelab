@@ -36,7 +36,8 @@ ExecStart=/usr/bin/podman run \
     --name homeassistant \
     --log-driver journald \
     --log-opt tag="homeassistant" \
-    --user {{ homeassistant_user.uid }}:{{ homeassistant_user.group }}  \
+    --user root \
+    --userns keep-id:uid={{ homeassistant_user.uid }},gid={{ homeassistant_user.group }} \
     --env TZ=Europe/Amsterdam \
     --volume /mnt/services/homeassistant:/config \
     --publish 127.0.0.1:8123:8123/tcp \
@@ -48,7 +49,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
     --stop-timeout 120 \
-    ghcr.io/home-assistant/home-assistant:2025.11.3
+    ghcr.io/home-assistant/home-assistant:2026.3.0
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
