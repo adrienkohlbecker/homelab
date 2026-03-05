@@ -184,8 +184,10 @@
     path: /mnt/services/homeassistant/{{ item }}
     owner: homeassistant
     group: homeassistant
-    mode: "0600"
+    mode: "0644"
     state: touch
+    modification_time: preserve
+    access_time: preserve
   register: homeassistant_files
   become: true
   with_items:

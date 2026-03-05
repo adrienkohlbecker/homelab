@@ -30,21 +30,21 @@ http:
   trusted_proxies:
     - <<< podman_default_network | ansible.utils.ipmath(1) >>> # podman host IP
 
-influxdb:
-  api_version: 2
-  host: influxdb.<<< inventory_hostname >>>.<<< domain >>>
-  port: 443
-  ssl: true
-  verify_ssl: true
-  token: <<< homeassistant_influxdb_auth.stdout >>>
-  organization: <<< homeassistant_influxdb_org.stdout >>>
-  bucket: homeassistant
-  max_retries: 3
-  measurement_attr: domain__device_class
-  tags_attributes:
-    - unit_of_measurement
-    - device_class
-    - state_class
-    - friendly_name
-    - hidden
-    - area
+# influxdb:
+#   api_version: 2
+#   host: influxdb.<<< inventory_hostname >>>.<<< domain >>>
+#   port: 443
+#   ssl: true
+#   verify_ssl: true
+#   token: <<< homeassistant_influxdb_auth.stdout >>>
+#   organization: <<< homeassistant_influxdb_org.stdout >>>
+#   bucket: homeassistant
+#   max_retries: 3
+#   measurement_attr: domain__device_class
+#   tags_attributes:
+#     - unit_of_measurement
+#     - device_class
+#     - state_class
+#     - friendly_name
+#     - hidden
+#     - area
