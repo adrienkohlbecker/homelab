@@ -38,6 +38,8 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="homeassistant" \
     --user root \
     --userns keep-id:uid={{ homeassistant_user.uid }},gid={{ homeassistant_user.group }} \
+    --network=podman \
+    --network=iot_macvlan \
     --env TZ=Europe/Amsterdam \
     --volume /mnt/services/homeassistant:/config \
     --publish 127.0.0.1:8123:8123/tcp \

@@ -1,3 +1,18 @@
+- name: Create internal podman network
+  containers.podman.podman_network:
+    name: iot_macvlan
+    subnet: 10.123.4.100/30
+    driver: macvlan
+    opt:
+      parent: iot
+  become: true
+  tags:
+    - homeassistant
+    - _check_stage1
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
+
 - name: Add homeassistant group
   group:
     name: homeassistant
