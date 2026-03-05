@@ -57,6 +57,11 @@ netplan:
       wakeonlan: true
       dhcp4: true
       dhcp6: false
+  vlans:
+    iot:
+      id: 4
+      link: nic0
+      addresses: [ "10.123.4.102/24" ]
 
 hdparm_settings: {}
 
