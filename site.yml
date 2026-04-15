@@ -111,6 +111,7 @@
     - redis
     - paperless
     - profilarr
+    - openproject
 
 - name: Reboot check
   hosts: all:!bunk
