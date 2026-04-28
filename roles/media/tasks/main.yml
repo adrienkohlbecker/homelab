@@ -26,6 +26,7 @@
     extra_zfs_properties:
       mountpoint: /mnt/media
       'autobackup:bak': 'false'
+      recordsize: 1M
   become: true
   tags:
     - media

@@ -3,7 +3,8 @@ journald_storage: persistent
 grub_bootloader: false
 nut_monitor_enabled: false
 
-zfs_arc_max: 8589934592
+zfs_arc_min: 1073741824
+zfs_arc_max: 4294967296
 zfs_trim_pools:
   - rpool
 zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
