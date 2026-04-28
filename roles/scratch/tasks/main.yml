@@ -18,7 +18,7 @@
     extra_zfs_properties:
       mountpoint: /mnt/scratch/smallio
       'autobackup:bak': 'false'
-      recordsize: 16K
+      recordsize: '16384'
       compression: 'off'
       sync: disabled
   become: true
@@ -33,7 +33,7 @@
     extra_zfs_properties:
       mountpoint: /mnt/scratch/bigio
       'autobackup:bak': 'false'
-      recordsize: 1M
+      recordsize: '1048576'
       compression: 'off'
       sync: disabled
   become: true

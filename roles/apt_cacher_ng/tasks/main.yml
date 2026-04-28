@@ -2,8 +2,8 @@
   file:
     dest: /mnt/scratch/misc/apt_cacher_ng
     state: directory
-    owner: 101 # todo container should have its own user
-    group: 102
+    owner: 100 # todo container should have its own user
+    group: 101
     mode: "0755"
   become: true
   register: apt_cacher_ng_dir
