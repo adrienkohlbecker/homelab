@@ -73,7 +73,6 @@ for disk in "${DISKS[@]}"; do
     sgdisk -n2:0:+500M -t2:FD00 "$disk" # Swap (FD00 = Linux RAID)
   fi
 
-  sgdisk -p "$disk"
   if [ "$SOURCE_NAME" = "ubuntu-lab" ]; then
     sgdisk -n5:-2G:0 -t5:BF01 "$disk" # metadata vdev (BF01 = Solaris /usr & Mac ZFS, default when doing zpool create)
   fi
