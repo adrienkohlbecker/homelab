@@ -107,8 +107,8 @@ netdata_collectors:
   - go.d:collector:x509check:host_cert
   - go.d:collector:zfspool:zfspool
 netdata_zfspool_thresholds:
-  rpool: [ 95, 97, 98 ] #  40GB,  20GB,  10GB
-  apoc: [ 96, 97, 98 ] # 300GB, 200GB, 100GB
+  rpool: [ 85, 90, 95 ] #  464GiB => 70GiB, 47GiB, 24GiB
+  apoc: [ 85, 90, 95 ] # 9,312GiB => 464GiB => 1,397GiB, 932GiB, 467GiB
 netdata_diskspace_blocklist:
 - /
 - /boot

@@ -182,10 +182,10 @@ netdata_collectors:
   - go.d:collector:x509check:host_cert
   - go.d:collector:zfspool:zfspool
 netdata_zfspool_thresholds:
-  rpool: [ 87, 94, 97 ] #  40GB,  20GB,  10GB
-  tank:  [ 96, 97, 99 ] # 700GB, 500GB, 150GB
-  mouse: [ 97, 97, 97 ] # 100GB, 100GB, 100GB
-  dozer: [ 91, 95, 97 ] # 300GB, 200GB, 100GB
+  rpool: [ 85, 90, 95 ] # 318 GiB => 48GiB, 32GiB, 16GiB
+  tank:  [ 85, 90, 95 ] # 37,120 GiB => 5,568GiB, 3,712GiB, 1,856GiB
+  mouse: [ 85, 90, 95 ] # 3712 GiB => 557GiB, 372GiB, 186GiB
+  dozer: [ 85, 90, 95 ] # 3712 GiB => 557GiB, 372GiB, 186GiB
 netdata_diskspace_blocklist:
 - /
 - /mnt/brumath
