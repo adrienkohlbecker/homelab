@@ -61,7 +61,7 @@
 
 - name: Create scratch directory
   file:
-    dest: /mnt/scratch/transmission
+    dest: /mnt/scratch/smallio/transmission
     state: directory
     owner: transmission
     group: media
