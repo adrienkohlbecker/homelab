@@ -12,8 +12,8 @@ After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
 {% endif %}
 {% if zfs_has_scratch_mount %}
-After=zfs_mount_mnt_scratch.service
-Requires=zfs_mount_mnt_scratch.service
+After=zfs_mount_mnt_scratch_bigio.service
+Requires=zfs_mount_mnt_scratch_bigio.service
 {% endif %}
 {% if zfs_has_media_mount %}
 After=zfs_mount_mnt_media.service
@@ -55,7 +55,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/media:/media \
     --volume "/mnt/data/MacbookPro/Music/iTunes/iTunes Media/Music:/itunes:ro" \
     --volume /mnt/data/Musique/Records:/records:ro \
-    --volume /mnt/scratch/plex:/transcode \
+    --volume /mnt/scratch/bigio/plex:/transcode \
     --publish 0.0.0.0:32400:32400/tcp \
     {{ has_transcoding_acceleration | ternary('--device /dev/dri/:/dev/dri/ --group-add="'~ render_group.gid ~'"', '') }} \
     --health-cmd         "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:32400/identity" \

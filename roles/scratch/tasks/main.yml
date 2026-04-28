@@ -10,9 +10,84 @@
   tags:
     - scratch
 
+- name: Create zfs filesystem
+  when: zfs_root
+  zfs:
+    name: '{{ zfs_dozer_filesystem }}/scratch/smallio'
+    state: present
+    extra_zfs_properties:
+      mountpoint: /mnt/scratch/smallio
+      'autobackup:bak': 'false'
+      recordsize: 16K
+      compression: 'off'
+      sync: disabled
+  become: true
+  tags:
+    - scratch
+
+- name: Create zfs filesystem
+  when: zfs_root
+  zfs:
+    name: '{{ zfs_dozer_filesystem }}/scratch/bigio'
+    state: present
+    extra_zfs_properties:
+      mountpoint: /mnt/scratch/bigio
+      'autobackup:bak': 'false'
+      recordsize: 1M
+      compression: 'off'
+      sync: disabled
+  become: true
+  tags:
+    - scratch
+
+- name: Create zfs filesystem
+  when: zfs_root
+  zfs:
+    name: '{{ zfs_dozer_filesystem }}/scratch/misc'
+    state: present
+    extra_zfs_properties:
+      mountpoint: /mnt/scratch/misc
+      'autobackup:bak': 'false'
+  become: true
+  tags:
+    - scratch
+
 - name: Create mount point
   file:
     dest: /mnt/scratch
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - scratch
+
+- name: Create mount point
+  file:
+    dest: /mnt/scratch/smallio
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - scratch
+
+- name: Create mount point
+  file:
+    dest: /mnt/scratch/bigio
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - scratch
+
+- name: Create mount point
+  file:
+    dest: /mnt/scratch/misc
     state: directory
     owner: root
     group: root
@@ -29,5 +104,39 @@
   vars:
     zfs_mount_dataset: '{{ zfs_dozer_filesystem }}/scratch'
     zfs_mount_mountpoint: /mnt/scratch
+  tags:
+    - scratch
+
+- name: Set up mount service for dozer/scratch/smallio
+  when: zfs_root
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    zfs_mount_dataset: '{{ zfs_dozer_filesystem }}/scratch/smallio'
+    zfs_mount_mountpoint: /mnt/scratch/smallio
+  tags:
+    - scratch
+
+
+- name: Set up mount service for dozer/scratch/bigio
+  when: zfs_root
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    zfs_mount_dataset: '{{ zfs_dozer_filesystem }}/scratch/bigio'
+    zfs_mount_mountpoint: /mnt/scratch/bigio
+  tags:
+    - scratch
+
+- name: Set up mount service for dozer/scratch/misc
+  when: zfs_root
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    zfs_mount_dataset: '{{ zfs_dozer_filesystem }}/scratch/misc'
+    zfs_mount_mountpoint: /mnt/scratch/misc
   tags:
     - scratch
