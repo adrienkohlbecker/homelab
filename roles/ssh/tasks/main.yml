@@ -1,7 +1,7 @@
 - name: Configure sshd
   copy:
     src: sshd_config
-    dest: /etc/ssh/sshd_config.d/config
+    dest: /etc/ssh/sshd_config.d/config.conf
     owner: root
     group: root
     mode: "0644"
@@ -11,8 +11,19 @@
   tags:
     - ssh
 
+- name: Setup sftp
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^(#? ?)Subsystem(\s+)sftp(\s+)(.*)$'
+    line: '# Subsystem\2sftp\3\4'
+    backrefs: true
+  register: sshd_config_sftp
+  become: true
+  tags:
+    - ssh
+
 - name: Restart ssh
-  when: sshd_config.changed
+  when: sshd_config.changed or sshd_config_sftp.changed
   systemd:
     name: ssh
     state: restarted
