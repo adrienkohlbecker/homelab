@@ -10,8 +10,9 @@ import signal
 import sys
 import tempfile
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Self, Tuple
+from typing import Self
 
 from utils import run_command, sleep_tick, print_cmd_line
 
@@ -23,7 +24,7 @@ SSH_HOST = "127.0.0.1"
 MACHINE_TIMEOUT = str(15 * 60)
 
 CONTAINER_ANSIBLE_ARGS = ["-e", '{"docker_test":true}', "-e", "@host_vars/box-podman.yml"]
-QEMU_MACHINE_ARGS: Dict[str, Tuple[str, List[str], str]] = {
+QEMU_MACHINE_ARGS: dict[str, tuple[str, list[str], str]] = {
     "minimal": (
         "ubuntu",
         ["-e", '{"qemu_test":true,"qemu_test_minimal":true}', "-e", "@host_vars/box-qemu-minimal.yml"],
@@ -50,7 +51,7 @@ SSH_WAIT_TIMEOUT = 120
 IDFILE_TIMEOUT = 60
 
 
-def ubuntu_mirrors() -> Tuple[str, str]:
+def ubuntu_mirrors() -> tuple[str, str]:
     """Return archive and security mirrors for the current CPU architecture."""
     arch = platform.machine().lower()
     if arch in {"aarch64", "arm64"}:
@@ -72,11 +73,11 @@ class Machine:
     ssh_port: int
     ssh_user: str
     ssh_key: str
-    ansible_args: List[str]
+    ansible_args: list[str]
     inventory_host: str
     idfile: str
     imagedir: str
-    proc: Optional[asyncio.subprocess.Process]
+    proc: asyncio.subprocess.Process | None
     workdir: tempfile.TemporaryDirectory[str]
     journal_file: Path
     keep_vm: bool
@@ -86,7 +87,7 @@ class Machine:
         self,
         ssh_port: int,
         ssh_user: str,
-        ansible_args: List[str],
+        ansible_args: list[str],
         inventory_host: str,
         idfile: str,
         imagedir: str,
@@ -112,7 +113,7 @@ class Machine:
         self.proc = None
         self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
 
-    def format_ssh_cmd(self, *cmd: str) -> List[str]:
+    def format_ssh_cmd(self, *cmd: str) -> list[str]:
         """Return an ssh invocation pinned to this instance."""
 
         base = [
@@ -129,7 +130,7 @@ class Machine:
         ]
         return [*base, shlex.join(cmd)] if cmd else base
 
-    def format_ansible_cmd(self, *cmd: str) -> List[str]:
+    def format_ansible_cmd(self, *cmd: str) -> list[str]:
         """Build an ansible-playbook command pinned to this machine's SSH details."""
         ubuntu_mirror, ubuntu_mirror_security = ubuntu_mirrors()
         parts = [
@@ -157,7 +158,7 @@ class Machine:
             parts += cmd
         return parts
 
-    async def ssh_command(self, *cmd: str, check: bool = True, captured_lines: Optional[List[str]] = None) -> int:
+    async def ssh_command(self, *cmd: str, check: bool = True, captured_lines: list[str] | None = None) -> int:
         """Execute an SSH command and stream output into the role log."""
 
         return await run_command(
@@ -166,7 +167,7 @@ class Machine:
             captured_lines=captured_lines,
         )
 
-    async def ansible_command(self, *cmd: str, check: bool = True, captured_lines: Optional[List[str]] = None) -> int:
+    async def ansible_command(self, *cmd: str, check: bool = True, captured_lines: list[str] | None = None) -> int:
         """Execute ansible-playbook with machine-specific SSH overrides."""
 
         return await run_command(
@@ -203,7 +204,7 @@ class Machine:
 """
             )
 
-    def _boot_command(self) -> List[str]:
+    def _boot_command(self) -> list[str]:
         raise NotImplementedError
 
     async def _find_ssh_port(self) -> None:
@@ -338,7 +339,7 @@ class Machine:
 class QemuMachine(Machine):
     """Start disposable QEMU guests for role-level integration tests."""
     machine: str
-    drives: List[str]
+    drives: list[str]
 
     def __init__(self, machine: str, role: str, keep_vm: bool):
         """QEMU-backed machine wrapper used by integration tests."""
@@ -389,7 +390,7 @@ class QemuMachine(Machine):
         await self._copy_efivars()
         self.drives = [*self._virtio_drive_series(disk_count), *self._uefi_drives()]
 
-    async def _create_overlay(self, src: str, dest: str, size: Optional[str] = None) -> None:
+    async def _create_overlay(self, src: str, dest: str, size: str | None = None) -> None:
         """Create a qcow2 overlay pointing at *src* with optional resize."""
 
         args = ["qemu-img", "create", "-f", "qcow2", "-b", src, "-F", "qcow2", dest]
@@ -421,13 +422,13 @@ class QemuMachine(Machine):
     def _virtio_drive_series(self, count: int) -> Iterable[str]:
         return (self._virtio_drive(f"{self.workdir.name}/packer-ubuntu-{idx}") for idx in range(1, count + 1))
 
-    def _uefi_drives(self) -> List[str]:
+    def _uefi_drives(self) -> list[str]:
         return [
             "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on",
             f"file={self.workdir.name}/efivars.fd,if=pflash,unit=1,format=raw",
         ]
 
-    def _boot_command(self) -> List[str]:
+    def _boot_command(self) -> list[str]:
         """Assemble qemu-system-x86_64 command line for the prepared disks."""
 
         if self.keep_vm:
@@ -470,7 +471,7 @@ class QemuMachine(Machine):
         if not pid:
             raise RuntimeError("Missing qemu PID; pidfile is empty")
 
-        lines: List[str] = []
+        lines: list[str] = []
         for _ in range(10):
             lines = []
             await run_command(["lsof", "-i", "-P", "-p", pid], captured_lines=lines)
@@ -534,7 +535,7 @@ class PodmanMachine(Machine):
         if exitcode != 0:
             await run_command(["podman", "network", "create", "--subnet", "192.5.0.0/16", "homelab_net"])
 
-    def _boot_command(self) -> List[str]:
+    def _boot_command(self) -> list[str]:
         """Return the podman run command that exposes SSH on a random host port."""
 
         return [

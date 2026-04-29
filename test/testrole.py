@@ -13,8 +13,8 @@ import asyncio
 import contextlib
 import signal
 import sys
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator, List
 
 from machine import Machine, ubuntu_mirrors, PodmanMachine, QemuMachine, UBUNTU_NAME
 from utils import CommandFailedException
@@ -34,7 +34,7 @@ def cancel_on_signal(task: asyncio.Task[object]) -> Iterator[None]:
             loop.remove_signal_handler(sig)
 
 
-def parse_args() -> tuple[argparse.Namespace, List[str]]:
+def parse_args() -> tuple[argparse.Namespace, list[str]]:
     """Parse CLI arguments; unknown args are forwarded to Ansible."""
     parser = argparse.ArgumentParser(
         description="Run a single role test",
@@ -84,9 +84,9 @@ async def _configure_apt_sources(m: Machine) -> None:
     await m.ssh_command("sudo", "apt-get", "update")
 
 
-async def _run_checkmode(site_yml: str, m: Machine, pass_args: List[str]) -> None:
+async def _run_checkmode(site_yml: str, m: Machine, pass_args: list[str]) -> None:
     """Run check mode and staged tags when requested."""
-    list_tags: List[str] = []
+    list_tags: list[str] = []
     await m.ansible_command(site_yml, "--list-tags", captured_lines=list_tags)
 
     await m.ansible_command(site_yml, "--check", *pass_args)
@@ -100,7 +100,7 @@ async def _run_checkmode(site_yml: str, m: Machine, pass_args: List[str]) -> Non
         await m.ansible_command(site_yml, "--check", *pass_args)
 
 
-async def run_test(parsed_args: argparse.Namespace, pass_args: List[str]) -> None:
+async def run_test(parsed_args: argparse.Namespace, pass_args: list[str]) -> None:
     """Provision a machine, run the role under test, and stream output."""
 
     machine = parsed_args.machine
