@@ -19,12 +19,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
-
-class MachineRole(NamedTuple):
-    """A (machine, role) pair to run."""
-    machine: str
-    role: str
-
 from machine import DEFAULT_UBUNTU, OUT_DIR, UBUNTU_RELEASES
 from utils import cancel_on_signal
 
@@ -32,11 +26,19 @@ LOG_FILE = Path("test/out.log")
 LOG_FILE_PREV = Path("test/out.log.prev")
 
 
+class MachineRole(NamedTuple):
+    """A (machine, ubuntu, role) triple to run."""
+    machine: str
+    ubuntu_name: str
+    role: str
+
+
 @dataclass(frozen=True)
 class JobResult:
     """Holds the outcome of a single role test."""
 
     machine: str
+    ubuntu_name: str
     role: str
     runtime: float
     exitval: int
@@ -73,9 +75,10 @@ def parse_args() -> argparse.Namespace:
 
     parser.add_argument(
         "--ubuntu",
+        type=str,
         default=DEFAULT_UBUNTU,
-        choices=sorted(UBUNTU_RELEASES),
-        help="Ubuntu codename of the target image",
+        metavar="X",
+        help=f"Comma-separated list of Ubuntu codenames (default: {DEFAULT_UBUNTU})",
     )
 
     parser.add_argument(
@@ -136,12 +139,12 @@ def get_failed_roles() -> list[MachineRole]:
                 continue  # header
 
             fields = raw_line.rstrip("\n").split("\t")
-            if len(fields) < 4:
+            if len(fields) < 5:
                 continue
 
-            role, machine, _runtime, exitval = fields[:4]
+            role, ubuntu_name, machine, _runtime, exitval = fields[:5]
             if exitval != "0":
-                failed_roles.append(MachineRole(machine=machine, role=role))
+                failed_roles.append(MachineRole(machine=machine, ubuntu_name=ubuntu_name, role=role))
 
     return failed_roles
 
@@ -158,10 +161,10 @@ def _rotate_joblog() -> None:
 async def _run_role(
     seq: int,
     machine: str,
+    ubuntu_name: str,
     role: str,
     role_args: Sequence[str],
     semaphore: asyncio.Semaphore,
-    ubuntu_name: str,
     checkmode: bool,
     idempotence: bool,
 ) -> JobResult:
@@ -175,11 +178,11 @@ async def _run_role(
         role,
         *role_args,
     ]
-    log_path = OUT_DIR / f"{machine}.{role}.ansi"
+    log_path = OUT_DIR / f"{machine}.{ubuntu_name}.{role}.ansi"
 
     async with semaphore:
         start_time = time.time()
-        print(f"[{seq}] {machine}:{role} starting")
+        print(f"[{seq}] {machine}:{ubuntu_name}:{role} starting")
 
         with log_path.open("w") as log_handle:
             proc = await asyncio.create_subprocess_exec(
@@ -220,10 +223,11 @@ async def _run_role(
         if exitval < 0:
             exitval = 128 - exitval
         status = "ok" if exitval == 0 else "fail"
-        print(f"[{seq}] {machine}:{role} {status} ({runtime:.1f}s)")
+        print(f"[{seq}] {machine}:{ubuntu_name}:{role} {status} ({runtime:.1f}s)")
 
     return JobResult(
         machine=machine,
+        ubuntu_name=ubuntu_name,
         role=role,
         runtime=runtime,
         exitval=exitval,
@@ -234,7 +238,6 @@ async def run_all(
     machine_roles: list[MachineRole],
     role_args: Sequence[str],
     jobs: int,
-    ubuntu_name: str,
     checkmode: bool,
     idempotence: bool,
 ) -> list[JobResult]:
@@ -248,21 +251,23 @@ async def run_all(
         async with asyncio.TaskGroup() as tg:
             tasks = [
                 tg.create_task(
-                    _run_role(seq, machine, role, role_args, semaphore, ubuntu_name, checkmode, idempotence)
+                    _run_role(seq, machine, ubuntu_name, role, role_args, semaphore, checkmode, idempotence)
                 )
-                for seq, (machine, role) in enumerate(machine_roles, start=1)
+                for seq, (machine, ubuntu_name, role) in enumerate(machine_roles, start=1)
             ]
 
     return [t.result() for t in tasks]
 
 
 def _write_joblog(results: list[JobResult]) -> None:
-    """Write a compact job log with role, machine, runtime, and exit code."""
+    """Write a compact job log with role, ubuntu, machine, runtime, and exit code."""
     with LOG_FILE.open("w", encoding="utf-8") as handle:
-        handle.write("Role\tMachine\tRuntime\tExitval\n")
+        handle.write("Role\tUbuntu\tMachine\tRuntime\tExitval\n")
 
         for result in results:
-            handle.write(f"{result.role}\t{result.machine}\t{result.runtime:.3f}\t{result.exitval}\n")
+            handle.write(
+                f"{result.role}\t{result.ubuntu_name}\t{result.machine}\t{result.runtime:.3f}\t{result.exitval}\n"
+            )
 
 
 def main() -> int:
@@ -284,17 +289,34 @@ def main() -> int:
             print("Error: No machines provided to --machines", file=sys.stderr)
             return 1
 
+        ubuntus = [u.strip() for u in args.ubuntu.split(",") if u.strip()]
+        if not ubuntus:
+            print("Error: No codenames provided to --ubuntu", file=sys.stderr)
+            return 1
+        for u in ubuntus:
+            if u not in UBUNTU_RELEASES:
+                print(
+                    f"Error: unknown Ubuntu codename '{u}'; valid: {sorted(UBUNTU_RELEASES)}",
+                    file=sys.stderr,
+                )
+                return 1
+
         roles = list_roles()
         if not roles:
             print("No roles with tasks/main.yml found", file=sys.stderr)
             return 1
-        machine_roles = [MachineRole(machine, role) for role in roles for machine in machines]
+        machine_roles = [
+            MachineRole(machine, ubuntu_name, role)
+            for role in roles
+            for ubuntu_name in ubuntus
+            for machine in machines
+        ]
 
     setup_output_dir()
 
     try:
         results = asyncio.run(
-            run_all(machine_roles, args.role_args, args.jobs, args.ubuntu, args.checkmode, args.idempotence)
+            run_all(machine_roles, args.role_args, args.jobs, args.checkmode, args.idempotence)
         )
     except asyncio.CancelledError:
         print("\nInterrupted, shutting down...", file=sys.stderr)
@@ -305,7 +327,9 @@ def main() -> int:
 
     failures = [result for result in results if result.exitval != 0]
     if failures:
-        failed_list = ", ".join(dict.fromkeys(f.role for f in failures))
+        failed_list = ", ".join(
+            dict.fromkeys(f"{f.machine}:{f.ubuntu_name}:{f.role}" for f in failures)
+        )
         print(f"Failures: {failed_list}", file=sys.stderr)
         return 1
 
