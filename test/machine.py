@@ -98,7 +98,7 @@ class Machine:
                 f"Unknown Ubuntu release '{self.ubuntu_name}'; known: {sorted(UBUNTU_RELEASES)}"
             )
         OUT_DIR.mkdir(parents=True, exist_ok=True)
-        self.journal_file = OUT_DIR / f"{self.role}.{self.machine}.journal.ansi"
+        self.journal_file = OUT_DIR / f"{self.machine}.{self.ubuntu_name}.{self.role}.journal.ansi"
         self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
 
     @property
