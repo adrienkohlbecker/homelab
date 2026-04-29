@@ -103,11 +103,17 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: List[str]) -> Non
     else:
         m = QemuMachine(machine, role, keep_vm)
 
+    loop = asyncio.get_running_loop()
+    current = asyncio.current_task()
+    assert current is not None
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, current.cancel)
+
     await m.prepare()
     await m.boot()
 
     try:
-        m.ensure_booted()
+        await m.ensure_booted()
         print("Booted")
 
         await m.ensure_ssh()
@@ -132,11 +138,12 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: List[str]) -> Non
             await m.ansible_command(site_yml, *pass_args)
 
         except CommandFailedException as exc:
+            print("Command failed")
             await m.collect_journal()
             raise exc
 
     finally:
-        if keep_vm:
+        if keep_vm and not current.cancelling():
             m.print_ssh_instructions()
             await m.wait()
 
@@ -149,19 +156,11 @@ def main() -> int:
 
     parsed_args, pass_args = parse_args()
 
-    async def _run_with_signals() -> int:
-        loop = asyncio.get_running_loop()
-        current = asyncio.current_task(loop)
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            if not current:
-                raise RuntimeError("No current task")
-            loop.add_signal_handler(sig, current.cancel)
-        await run_test(parsed_args, pass_args)
-        return 0
-
     try:
-        return asyncio.run(_run_with_signals())
+        asyncio.run(run_test(parsed_args, pass_args))
+        return 0
     except CommandFailedException as exc:
+        print(exc.args)
         sys.stderr.write(f"\033[0;41m{parsed_args.role}.{parsed_args.machine} failed\033[0m\n")
         sys.stderr.flush()
         return 1
