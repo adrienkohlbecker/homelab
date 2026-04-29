@@ -9,8 +9,8 @@
 
 - name: _test | Install gitea
   get_url:
-    url: https://dl.gitea.com/gitea/1.21.11/gitea-1.21.11-linux-{{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }}
-    checksum: sha256:{{ (ansible_architecture == "aarch64") | ternary('1bdbb3507067b3db9c2178be0bc038c2549fddb4eafff96d4a7c0010c7d1e404', '238056fa4616633a9ec5a358aac75275bd3f271d5e5238af3dd5f22c713fe97e') }}
+    url: "{{ act_runner_test_gitea_release[ansible_architecture].url }}"
+    checksum: "sha256:{{ act_runner_test_gitea_release[ansible_architecture].sha256 }}"
     dest: /gitea
     mode: "0755"
     owner: root
