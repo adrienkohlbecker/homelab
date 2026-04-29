@@ -18,8 +18,11 @@ from typing import Self
 from utils import CommandResult, run_command, sleep_tick, print_cmd_line
 
 OUT_DIR = Path("test/out")
-UBUNTU_NAME = "jammy"
-UBUNTU_VERSION = "22.04"
+UBUNTU_RELEASES: dict[str, str] = {
+    "jammy": "22.04",
+    "noble": "24.04",
+}
+DEFAULT_UBUNTU = "jammy"
 SSH_KEY = "packer/vagrant.key"
 SSH_HOST = "127.0.0.1"
 MACHINE_TIMEOUT = "900"  # 15 minutes; passed as a string to coreutils `timeout` and `podman --timeout`.
@@ -81,6 +84,7 @@ class Machine:
     machine: str
     role: str
     keep_vm: bool
+    ubuntu_name: str
 
     ssh_host: str = dataclasses.field(default=SSH_HOST, init=False)
     ssh_key: str = dataclasses.field(default=SSH_KEY, init=False)
@@ -89,9 +93,18 @@ class Machine:
     workdir: tempfile.TemporaryDirectory[str] = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
+        if self.ubuntu_name not in UBUNTU_RELEASES:
+            raise ValueError(
+                f"Unknown Ubuntu release '{self.ubuntu_name}'; known: {sorted(UBUNTU_RELEASES)}"
+            )
         OUT_DIR.mkdir(parents=True, exist_ok=True)
         self.journal_file = OUT_DIR / f"{self.role}.{self.machine}.journal.ansi"
         self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
+
+    @property
+    def ubuntu_version(self) -> str:
+        """Numeric version (e.g. "22.04") for the configured release."""
+        return UBUNTU_RELEASES[self.ubuntu_name]
 
     def format_ssh_cmd(self, *cmd: str) -> list[str]:
         """Return an ssh invocation pinned to this instance."""
@@ -312,7 +325,7 @@ class QemuMachine(Machine):
     """Start disposable QEMU guests for role-level integration tests."""
     drives: list[str]
 
-    def __init__(self, machine: str, role: str, keep_vm: bool):
+    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str):
         """QEMU-backed machine wrapper used by integration tests."""
         try:
             ssh_user, ansible_args, inventory_host = QEMU_MACHINE_ARGS[machine]
@@ -329,6 +342,7 @@ class QemuMachine(Machine):
             machine=machine,
             role=role,
             keep_vm=keep_vm,
+            ubuntu_name=ubuntu_name,
         )
 
     async def prepare(self) -> None:
@@ -341,7 +355,7 @@ class QemuMachine(Machine):
                 ["cloud-localds", f"{self.workdir.name}/seed.img", "test/minimal/user-data", "test/minimal/meta-data"],
             )
             await self._create_overlay(
-                f"{self.imagedir}/ubuntu-{UBUNTU_VERSION}-minimal-cloudimg-amd64.img",
+                f"{self.imagedir}/ubuntu-{self.ubuntu_version}-minimal-cloudimg-amd64.img",
                 f"{self.workdir.name}/disk.img",
                 size="20G",
             )
@@ -372,7 +386,7 @@ class QemuMachine(Machine):
         """Copy EFI vars for UEFI boots into the working directory."""
 
         await run_command(
-            ["cp", f"{self.imagedir}/{UBUNTU_NAME}/ubuntu-{self.machine}/efivars.fd", f"{self.workdir.name}/efivars.fd"],
+            ["cp", f"{self.imagedir}/{self.ubuntu_name}/ubuntu-{self.machine}/efivars.fd", f"{self.workdir.name}/efivars.fd"],
         )
 
     async def _create_overlay_series(self, count: int) -> None:
@@ -380,7 +394,7 @@ class QemuMachine(Machine):
 
         for idx in range(1, count + 1):
             await self._create_overlay(
-                f"{self.imagedir}/{UBUNTU_NAME}/ubuntu-{self.machine}/packer-ubuntu-{idx}",
+                f"{self.imagedir}/{self.ubuntu_name}/ubuntu-{self.machine}/packer-ubuntu-{idx}",
                 f"{self.workdir.name}/packer-ubuntu-{idx}",
             )
 
@@ -473,7 +487,7 @@ class QemuMachine(Machine):
 class PodmanMachine(Machine):
     """Start privileged Podman containers that mimic SSH hosts."""
 
-    def __init__(self, machine: str, role: str, keep_vm: bool):
+    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str):
         """Podman-backed machine wrapper used by integration tests."""
         system = platform.system()
         if system == "Darwin":
@@ -493,6 +507,7 @@ class PodmanMachine(Machine):
             machine=machine,
             role=role,
             keep_vm=keep_vm,
+            ubuntu_name=ubuntu_name,
         )
 
     async def prepare(self) -> None:
@@ -520,7 +535,7 @@ class PodmanMachine(Machine):
             f"{self.workdir.name}/{self.idfile}",
             "--network",
             "homelab_net",
-            f"homelab:{UBUNTU_NAME}",
+            f"homelab:{self.ubuntu_name}",
         ]
 
     async def _find_ssh_port(self) -> None:
