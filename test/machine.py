@@ -247,14 +247,18 @@ class Machine:
                 banner = banner_bytes.decode().strip()
                 if banner:
                     return
-            except (OSError, asyncio.TimeoutError):
+            except (OSError, TimeoutError):
+                # Connect refused/reset or no banner within 2s -- expected
+                # while sshd is still coming up; retry after the tick.
                 pass
             finally:
                 if writer is not None:
                     writer.close()
                     try:
-                        await writer.wait_closed()
-                    except OSError:
+                        await asyncio.wait_for(writer.wait_closed(), timeout=1)
+                    except (OSError, TimeoutError):
+                        # Half-open peer or already-broken transport: don't
+                        # let a stuck close stall the polling loop.
                         pass
 
             if time.monotonic() > deadline:
