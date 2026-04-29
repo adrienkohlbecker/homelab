@@ -1,5 +1,4 @@
 act_runner_version: "0.2.10"
-
 act_runner_release:
   x86_64:
     url: "https://gitea.com/gitea/act_runner/releases/download/v{{ act_runner_version }}/act_runner-{{ act_runner_version }}-linux-amd64"
