@@ -5,6 +5,38 @@
     enabled: true
   become: true
 
+# Read podman image refs straight from the unit's ExecStart* via systemctl
+# show, so each .service file remains the single source of truth -- the
+# playbook never restates the image. Pre-pulling here moves a slow network
+# fetch out of `systemctl start`'s TimeoutStartSec window and into a normal
+# ansible task with no fixed deadline.
+- name: Detect podman images referenced by the unit
+  when:
+    - systemd_unit_condition | default(true)
+    - not ansible_check_mode
+  shell:
+    cmd: >
+      systemctl show {{ systemd_unit_dest | default(systemd_unit_src) }}
+      -p ExecStart -p ExecStartPre -p ExecStartPost --no-pager
+      | grep -oE 'argv\[\]=[^;]+'
+      | awk '/podman run/ { print $NF }'
+      | sort -u
+    executable: /bin/bash
+  register: systemd_unit_podman_images
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: Pre-pull podman images referenced by the unit
+  when:
+    - systemd_unit_condition | default(true)
+    - not ansible_check_mode
+    - (systemd_unit_podman_images.stdout_lines | default([])) | length > 0
+  containers.podman.podman_image:
+    name: "{{ item }}"
+  loop: "{{ systemd_unit_podman_images.stdout_lines }}"
+  become: true
+
 - name: Start the service
   when: (systemd_unit_condition | default(true)) and (systemd_unit_start | default(true))
   systemd:
