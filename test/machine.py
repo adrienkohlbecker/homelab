@@ -482,6 +482,54 @@ class QemuMachine(Machine):
             f"{self.workdir.name}/{self.idfile}",
         ]
 
+    async def stop(self) -> None:
+        """Kill qemu via its pidfile, then drain the timeout wrapper.
+
+        Signaling self.proc (the `timeout` wrapper) normally forwards SIGINT
+        to qemu, but if the wrapper is SIGKILL'd (the 9s escalation path) or
+        testrole.py dies before stop() runs, qemu reparents to init with no
+        recovery path -- SIGKILL can't be caught and forwarded. Kill qemu
+        directly via its pidfile so cleanup works regardless of the wrapper's
+        fate.
+        """
+        pid_path = Path(f"{self.workdir.name}/{self.idfile}")
+        pid: int | None = None
+        if pid_path.exists():
+            with contextlib.suppress(ValueError):
+                pid = int(pid_path.read_text().strip())
+
+        try:
+            if pid is not None:
+                # Shield against nested cancellation; without it a second
+                # SIGINT mid-cleanup would leave qemu running.
+                await asyncio.shield(self._terminate_qemu(pid))
+            if self.proc and self.proc.returncode is None:
+                try:
+                    async with asyncio.timeout(5):
+                        await self.proc.wait()
+                except TimeoutError:
+                    with contextlib.suppress(ProcessLookupError):
+                        self.proc.kill()
+                    await self.proc.wait()
+        finally:
+            self.workdir.cleanup()
+
+    async def _terminate_qemu(self, pid: int) -> None:
+        """SIGTERM qemu, poll briefly, escalate to SIGKILL if it lingers."""
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(pid, signal.SIGTERM)
+
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            try:
+                os.kill(pid, 0)
+            except ProcessLookupError:
+                return
+            await asyncio.sleep(0.2)
+
+        with contextlib.suppress(ProcessLookupError):
+            os.kill(pid, signal.SIGKILL)
+
     async def _find_ssh_port(self) -> None:
         """Parse lsof output from the QEMU pidfile to extract forwarded SSH port."""
         pid = Path(f"{self.workdir.name}/{self.idfile}").read_text().strip()
