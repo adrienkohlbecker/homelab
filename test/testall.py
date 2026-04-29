@@ -154,12 +154,15 @@ async def _run_role(
                 await proc.wait()
             except asyncio.CancelledError:
                 proc.terminate()
-                async with asyncio.timeout(10):
-                    try:
+                try:
+                    async with asyncio.timeout(10):
                         await proc.wait()
-                    except asyncio.TimeoutError:
-                        proc.kill()
-                        await proc.wait()
+                except TimeoutError:
+                    # asyncio.timeout() converts the inner CancelledError into
+                    # TimeoutError on __aexit__; only here can we tell the wait
+                    # actually timed out and escalate to SIGKILL.
+                    proc.kill()
+                    await proc.wait()
                 raise
 
         runtime = time.time() - start_time
