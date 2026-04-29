@@ -25,7 +25,7 @@ class MachineRole(NamedTuple):
     machine: str
     role: str
 
-from machine import OUT_DIR
+from machine import DEFAULT_UBUNTU, OUT_DIR, UBUNTU_RELEASES
 from utils import cancel_on_signal
 
 LOG_FILE = Path("test/out.log")
@@ -69,6 +69,13 @@ def parse_args() -> argparse.Namespace:
         default="container",
         metavar="X",
         help="Comma-separated list of machine profiles (default: container)",
+    )
+
+    parser.add_argument(
+        "--ubuntu",
+        default=DEFAULT_UBUNTU,
+        choices=sorted(UBUNTU_RELEASES),
+        help="Ubuntu codename of the target image",
     )
 
     # Remaining arguments are forwarded to testrole.py
@@ -140,9 +147,17 @@ async def _run_role(
     role: str,
     role_args: Sequence[str],
     semaphore: asyncio.Semaphore,
+    ubuntu_name: str,
 ) -> JobResult:
     """Execute a single role test while respecting the concurrency limit."""
-    cmd = ["test/testrole.py", "--machine", machine, role, "--checkmode", *role_args]
+    cmd = [
+        "test/testrole.py",
+        "--machine", machine,
+        "--ubuntu", ubuntu_name,
+        "--checkmode",
+        role,
+        *role_args,
+    ]
     log_path = OUT_DIR / f"{machine}.{role}.ansi"
 
     async with semaphore:
@@ -202,6 +217,7 @@ async def run_all(
     machine_roles: list[MachineRole],
     role_args: Sequence[str],
     jobs: int,
+    ubuntu_name: str,
 ) -> list[JobResult]:
     """Run every role/machine combination concurrently."""
     semaphore = asyncio.Semaphore(jobs)
@@ -212,7 +228,7 @@ async def run_all(
     with cancel_on_signal(task):
         async with asyncio.TaskGroup() as tg:
             tasks = [
-                tg.create_task(_run_role(seq, machine, role, role_args, semaphore))
+                tg.create_task(_run_role(seq, machine, role, role_args, semaphore, ubuntu_name))
                 for seq, (machine, role) in enumerate(machine_roles, start=1)
             ]
 
@@ -256,7 +272,7 @@ def main() -> int:
     setup_output_dir()
 
     try:
-        results = asyncio.run(run_all(machine_roles, args.role_args, args.jobs))
+        results = asyncio.run(run_all(machine_roles, args.role_args, args.jobs, args.ubuntu))
     except asyncio.CancelledError:
         print("\nInterrupted, shutting down...", file=sys.stderr)
         return 130

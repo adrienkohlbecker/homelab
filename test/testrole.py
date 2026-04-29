@@ -13,7 +13,14 @@ import asyncio
 import sys
 from pathlib import Path
 
-from machine import Machine, ubuntu_mirrors, PodmanMachine, QemuMachine, UBUNTU_NAME
+from machine import (
+    DEFAULT_UBUNTU,
+    Machine,
+    PodmanMachine,
+    QemuMachine,
+    UBUNTU_RELEASES,
+    ubuntu_mirrors,
+)
 from utils import CommandFailedException, cancel_on_signal
 
 
@@ -46,6 +53,12 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         metavar="SECONDS",
         help="Abort the test if it doesn't complete within this many seconds",
     )
+    parser.add_argument(
+        "--ubuntu",
+        default=DEFAULT_UBUNTU,
+        choices=sorted(UBUNTU_RELEASES),
+        help="Ubuntu codename of the target image",
+    )
     parser.add_argument("role", help="Role name to test")
 
     args, pass_args = parser.parse_known_args()
@@ -61,11 +74,12 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
 async def _configure_apt_sources(m: Machine) -> None:
     """Rewrite apt sources to use local mirrors and refresh package metadata."""
     ubuntu_mirror, ubuntu_mirror_security = ubuntu_mirrors()
+    name = m.ubuntu_name
     sources = [
-        f"deb {ubuntu_mirror} {UBUNTU_NAME} main restricted universe multiverse",
-        f"deb {ubuntu_mirror} {UBUNTU_NAME}-updates main restricted universe multiverse",
-        f"deb {ubuntu_mirror_security} {UBUNTU_NAME}-security main restricted universe multiverse",
-        f"deb {ubuntu_mirror} {UBUNTU_NAME}-backports main restricted universe multiverse",
+        f"deb {ubuntu_mirror} {name} main restricted universe multiverse",
+        f"deb {ubuntu_mirror} {name}-updates main restricted universe multiverse",
+        f"deb {ubuntu_mirror_security} {name}-security main restricted universe multiverse",
+        f"deb {ubuntu_mirror} {name}-backports main restricted universe multiverse",
     ]
 
     # Use one shell to avoid repeatedly opening the file and keep quoting simple.
@@ -97,11 +111,12 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: list[str]) -> Non
     keep_vm = parsed_args.keep
     checkmode = parsed_args.checkmode
     timeout = parsed_args.timeout
+    ubuntu_name = parsed_args.ubuntu
 
     if machine == "container":
-        m: Machine = PodmanMachine(machine, role, keep_vm)
+        m: Machine = PodmanMachine(machine, role, keep_vm, ubuntu_name=ubuntu_name)
     else:
-        m = QemuMachine(machine, role, keep_vm)
+        m = QemuMachine(machine, role, keep_vm, ubuntu_name=ubuntu_name)
 
     task = asyncio.current_task()
     assert task is not None
