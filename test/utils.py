@@ -1,8 +1,11 @@
 #!/usr/bin/env -S uv run
 
 import asyncio
+import contextlib
 import shlex
+import signal
 import sys
+from collections.abc import Iterator
 from typing import NamedTuple
 
 
@@ -29,6 +32,20 @@ async def sleep_tick() -> None:
     sys.stdout.write(".")
     sys.stdout.flush()
     await asyncio.sleep(1)
+
+
+@contextlib.contextmanager
+def cancel_on_signal(task: asyncio.Task[object]) -> Iterator[None]:
+    """Cancel *task* on SIGINT/SIGTERM for the duration of the with-block."""
+    loop = asyncio.get_running_loop()
+    signals = (signal.SIGINT, signal.SIGTERM)
+    for sig in signals:
+        loop.add_signal_handler(sig, task.cancel)
+    try:
+        yield
+    finally:
+        for sig in signals:
+            loop.remove_signal_handler(sig)
 
 
 def _colorize(line: str, stream_name: str) -> str:

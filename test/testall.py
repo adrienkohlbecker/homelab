@@ -11,7 +11,6 @@ without relying on GNU parallel. Output for each machine/role run is captured in
 import argparse
 import asyncio
 import contextlib
-import signal
 import sys
 import time
 from dataclasses import dataclass
@@ -19,6 +18,7 @@ from pathlib import Path
 from typing import List, Sequence
 
 from machine import OUT_DIR
+from utils import cancel_on_signal
 
 LOG_FILE = Path("test/out.log")
 LOG_FILE_PREV = Path("test/out.log.prev")
@@ -196,26 +196,19 @@ async def run_all(
     semaphore = asyncio.Semaphore(jobs)
     results: List[JobResult] = []
 
-    loop = asyncio.get_running_loop()
-    current = asyncio.current_task(loop)
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        if not current:
-            raise RuntimeError("No current task")
-        loop.add_signal_handler(sig, current.cancel)
+    task = asyncio.current_task()
+    assert task is not None
 
     async def run_and_store(seq: int, machine: str, role: str) -> None:
         result = await _run_role(seq, machine, role, role_args, semaphore)
         results.append(result)
 
-    try:
+    with cancel_on_signal(task):
         async with asyncio.TaskGroup() as tg:
             seq = 1
             for machine_role in machine_roles:
                 tg.create_task(run_and_store(seq, machine_role[0], machine_role[1]))
                 seq += 1
-    except asyncio.CancelledError:
-        # TaskGroup already cancelled children; propagate the interrupt
-        raise
 
     return results
 

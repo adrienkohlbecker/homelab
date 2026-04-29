@@ -10,28 +10,11 @@ log streaming.
 
 import argparse
 import asyncio
-import contextlib
-import signal
 import sys
-from collections.abc import Iterator
 from pathlib import Path
 
 from machine import Machine, ubuntu_mirrors, PodmanMachine, QemuMachine, UBUNTU_NAME
-from utils import CommandFailedException
-
-
-@contextlib.contextmanager
-def cancel_on_signal(task: asyncio.Task[object]) -> Iterator[None]:
-    """Cancel *task* on SIGINT/SIGTERM for the duration of the with-block."""
-    loop = asyncio.get_running_loop()
-    signals = (signal.SIGINT, signal.SIGTERM)
-    for sig in signals:
-        loop.add_signal_handler(sig, task.cancel)
-    try:
-        yield
-    finally:
-        for sig in signals:
-            loop.remove_signal_handler(sig)
+from utils import CommandFailedException, cancel_on_signal
 
 
 def parse_args() -> tuple[argparse.Namespace, list[str]]:
