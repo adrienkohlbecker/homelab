@@ -216,7 +216,10 @@ class Machine:
 
         # Inherit stdout/stderr so qemu/podman diagnostics surface live and the
         # kernel pipe buffer can never fill up and deadlock the guest.
-        self.proc = await asyncio.create_subprocess_exec(*cmd)
+        # start_new_session=True puts the child in its own process group so
+        # terminal SIGINT only hits the python parent; we drive child
+        # shutdown explicitly through Machine.stop().
+        self.proc = await asyncio.create_subprocess_exec(*cmd, start_new_session=True)
 
     async def ensure_booted(self) -> None:
         """Block until the hypervisor writes the PID/CID file or the launch fails."""
