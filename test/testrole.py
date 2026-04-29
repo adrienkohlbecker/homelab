@@ -143,6 +143,13 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: List[str]) -> Non
             raise exc
 
     finally:
+        # Skip the keep-around path when the run was interrupted: the user
+        # signalled they want out, not an SSH prompt. cancelling() is non-zero
+        # whenever a SIGINT/SIGTERM-driven cancel is in flight. There is a
+        # small race where a fresh Ctrl+C between this check and m.wait()
+        # still prints the instructions; the cancel will then unwind through
+        # m.wait() and m.stop() runs as usual, so the worst case is one
+        # spurious banner.
         if keep_vm and not current.cancelling():
             m.print_ssh_instructions()
             await m.wait()
