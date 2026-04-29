@@ -170,9 +170,14 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: list[str]) -> Non
                         await m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")
 
                     try:
-                        test_yml = f"{m.workdir.name}/_test.yml"
-                        if Path(test_yml).exists():
-                            await m.ansible_command(test_yml)
+                        # Run pre-role fixture playbook(s). _setup is the new
+                        # name; _test is the legacy alias still used by most
+                        # roles. Roles that have both shouldn't, but if they
+                        # do _test runs first to match historical ordering.
+                        for hook in ("_test", "_setup"):
+                            hook_yml = f"{m.workdir.name}/{hook}.yml"
+                            if Path(hook_yml).exists():
+                                await m.ansible_command(hook_yml)
 
                         site_yml = f"{m.workdir.name}/site.yml"
                         if checkmode:
@@ -182,6 +187,11 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: list[str]) -> Non
 
                         if idempotence:
                             await _verify_idempotence(site_yml, m, pass_args)
+
+                        # Post-role assertions, if the role declares any.
+                        verify_yml = f"{m.workdir.name}/_verify.yml"
+                        if Path(verify_yml).exists():
+                            await m.ansible_command(verify_yml)
 
                     except CommandFailedException:
                         print("Command failed")

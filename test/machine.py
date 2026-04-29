@@ -162,7 +162,7 @@ class Machine:
         return await run_command(self.format_ansible_cmd(*cmd), check=check)
 
     async def prepare(self) -> None:
-        """Stage a temporary workdir with inventory snippets and optional role test hook."""
+        """Stage a temporary workdir with inventory snippets and optional role test hooks."""
 
         Path("group_vars").copy_into(self.workdir.name)
         Path("host_vars").copy_into(self.workdir.name)
@@ -178,16 +178,20 @@ class Machine:
 """
         )
 
-        if Path(f"roles/{self.role}/tasks/_test.yml").exists():
-            Path(f"{self.workdir.name}/_test.yml").write_text(
-                f"""
+        # Per-role hook playbooks. _setup runs before the role apply; _verify
+        # runs after. _test is the legacy name for setup-style hooks; many
+        # roles still use it, so keep both working.
+        for hook in ("_test", "_setup", "_verify"):
+            if Path(f"roles/{self.role}/tasks/{hook}.yml").exists():
+                Path(f"{self.workdir.name}/{hook}.yml").write_text(
+                    f"""
 - hosts: {self.inventory_host}
   tasks:
     - import_role:
         name: {self.role}
-        tasks_from: _test
+        tasks_from: {hook}
 """
-            )
+                )
 
     def _boot_command(self) -> list[str]:
         raise NotImplementedError
