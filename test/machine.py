@@ -1,5 +1,7 @@
 #!/usr/bin/env -S uv run
 
+import asyncio
+import contextlib
 import os
 import platform
 import re
@@ -8,7 +10,6 @@ import signal
 import sys
 import tempfile
 import time
-import asyncio
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -315,26 +316,21 @@ class Machine:
         """Stop the VM/container"""
 
         if self.proc and self.proc.returncode is None:
-            try:
+            # Race: the process may exit between any of these steps. send_signal
+            # and kill can both raise ProcessLookupError; proc.wait() returns
+            # immediately for an already-exited process so suppression is safe.
+            with contextlib.suppress(ProcessLookupError):
                 self.proc.send_signal(signal.SIGINT)
-            except ProcessLookupError:
-                # Race: the process exited between our returncode check and
-                # the signal call. Nothing to stop, fall through to cleanup.
-                pass
-            else:
-                try:
-                    async with asyncio.timeout(9):
-                        await self.proc.wait()
-                except TimeoutError:
-                    # asyncio.timeout() converts the inner CancelledError into
-                    # TimeoutError on __aexit__; only here can we tell the wait
-                    # actually timed out and escalate to SIGKILL.
-                    try:
-                        self.proc.kill()
-                    except ProcessLookupError:
-                        # Process died during the 9s graceful window after all.
-                        pass
+            try:
+                async with asyncio.timeout(9):
                     await self.proc.wait()
+            except TimeoutError:
+                # asyncio.timeout() converts the inner CancelledError into
+                # TimeoutError on __aexit__; only here can we tell the wait
+                # actually timed out and escalate to SIGKILL.
+                with contextlib.suppress(ProcessLookupError):
+                    self.proc.kill()
+                await self.proc.wait()
 
         self.workdir.cleanup()
 
