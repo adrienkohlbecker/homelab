@@ -214,11 +214,9 @@ class Machine:
         cmd = self._boot_command()
         await print_cmd_line(cmd)
 
-        self.proc = await asyncio.create_subprocess_exec(
-            *cmd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        # Inherit stdout/stderr so qemu/podman diagnostics surface live and the
+        # kernel pipe buffer can never fill up and deadlock the guest.
+        self.proc = await asyncio.create_subprocess_exec(*cmd)
 
     async def ensure_booted(self) -> None:
         """Block until the hypervisor writes the PID/CID file or the launch fails."""
