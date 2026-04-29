@@ -4,6 +4,10 @@
 Description=act_runner
 After=network-online.target
 Wants=network-online.target
+# act_runner connects to the rootless podman.socket inside the act_runner
+# user manager; wait for that user manager to be up before starting.
+After=user@{{ act_runner_user.uid }}.service
+Requires=user@{{ act_runner_user.uid }}.service
 StartLimitInterval=600
 StartLimitBurst=3
 {% if zfs_root %}
@@ -30,6 +34,8 @@ Type=simple
 User=act_runner
 Group=act_runner
 WorkingDirectory=/mnt/services/act_runner/
+# Wait for the act_runner user manager to bring podman.socket up.
+ExecStartPre=/bin/sh -c 'until [ -S /run/user/{{ act_runner_user.uid }}/podman/podman.sock ]; do sleep 1; done'
 ExecStart=/usr/local/bin/act_runner daemon --config /mnt/services/act_runner/config.yml
 ExecReload=/bin/kill -s HUP $MAINPID
 
