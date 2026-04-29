@@ -22,7 +22,7 @@ UBUNTU_NAME = "jammy"
 UBUNTU_VERSION = "22.04"
 SSH_KEY = "packer/vagrant.key"
 SSH_HOST = "127.0.0.1"
-MACHINE_TIMEOUT = str(15 * 60)
+MACHINE_TIMEOUT = "900"  # 15 minutes; passed as a string to coreutils `timeout` and `podman --timeout`.
 
 CONTAINER_ANSIBLE_ARGS = ["-e", '{"docker_test":true}', "-e", "@host_vars/box-podman.yml"]
 QEMU_MACHINE_ARGS: dict[str, tuple[str, list[str], str]] = {
