@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import dataclasses
 import os
 import platform
 import re
@@ -67,50 +68,29 @@ def ubuntu_mirrors() -> tuple[str, str]:
     raise SystemExit("Unknown machine name")
 
 
+@dataclasses.dataclass
 class Machine:
     """Base runner that wraps a test target reachable over SSH and Ansible."""
-    ssh_host: str
+
     ssh_port: int
     ssh_user: str
-    ssh_key: str
     ansible_args: list[str]
     inventory_host: str
     idfile: str
     imagedir: str
-    proc: asyncio.subprocess.Process | None
-    workdir: tempfile.TemporaryDirectory[str]
-    journal_file: Path
-    keep_vm: bool
+    machine: str
     role: str
+    keep_vm: bool
 
-    def __init__(
-        self,
-        ssh_port: int,
-        ssh_user: str,
-        ansible_args: list[str],
-        inventory_host: str,
-        idfile: str,
-        imagedir: str,
-        machine: str,
-        role: str,
-        keep_vm: bool,
-    ):
-        """Initialize a machine wrapper with SSH and Ansible settings."""
-        self.ssh_host = SSH_HOST
-        self.ssh_key = SSH_KEY
-        self.ssh_port = ssh_port
-        self.ssh_user = ssh_user
-        self.ansible_args = ansible_args
-        self.inventory_host = inventory_host
-        self.idfile = idfile
-        self.imagedir = imagedir
-        self.keep_vm = keep_vm
-        self.role = role
+    ssh_host: str = dataclasses.field(default=SSH_HOST, init=False)
+    ssh_key: str = dataclasses.field(default=SSH_KEY, init=False)
+    proc: asyncio.subprocess.Process | None = dataclasses.field(default=None, init=False)
+    journal_file: Path = dataclasses.field(init=False)
+    workdir: tempfile.TemporaryDirectory[str] = dataclasses.field(init=False)
 
+    def __post_init__(self) -> None:
         OUT_DIR.mkdir(parents=True, exist_ok=True)
-
-        self.journal_file = OUT_DIR / f"{role}.{machine}.journal.ansi"
-        self.proc = None
+        self.journal_file = OUT_DIR / f"{self.role}.{self.machine}.journal.ansi"
         self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
 
     def format_ssh_cmd(self, *cmd: str) -> list[str]:
@@ -338,7 +318,6 @@ class Machine:
 
 class QemuMachine(Machine):
     """Start disposable QEMU guests for role-level integration tests."""
-    machine: str
     drives: list[str]
 
     def __init__(self, machine: str, role: str, keep_vm: bool):
@@ -348,7 +327,6 @@ class QemuMachine(Machine):
         except KeyError:
             raise AttributeError(f"Unknown machine: {machine}") from None
 
-        self.machine = machine
         super().__init__(
             ssh_port=0,
             ssh_user=ssh_user,
