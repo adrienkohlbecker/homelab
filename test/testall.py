@@ -180,9 +180,13 @@ async def _run_role(
                 raise
 
         runtime = time.time() - start_time
-        exitval = proc.returncode if proc.returncode is not None else 0
+        # proc.returncode is always set after a successful proc.wait(); a
+        # negative value means killed-by-signal N -- normalize to shell's
+        # 128+N convention.
+        exitval = proc.returncode
+        assert exitval is not None
         if exitval < 0:
-            exitval = 128 + (-exitval)
+            exitval = 128 - exitval
         status = "ok" if exitval == 0 else "fail"
         print(f"[{seq}] {machine}:{role} {status} ({runtime:.1f}s)")
 
