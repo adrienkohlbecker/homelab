@@ -3,7 +3,6 @@
 import asyncio
 import shlex
 import sys
-from typing import List, Optional
 
 
 class CommandFailedException(Exception):
@@ -38,12 +37,12 @@ def _write_line(line: str, stream_name: str) -> None:
     sys.stdout.flush()
 
 
-def print_cmd_line(cmd: List[str]) -> None:
+def print_cmd_line(cmd: list[str]) -> None:
     """Log the command being executed in a distinct color."""
     _write_line(f"$ {shlex.join(cmd)}", "cmd")
 
 
-async def read_and_write_stream(stream: asyncio.StreamReader | None, stream_name: str, capture: Optional[List[str]] = None) -> None:
+async def read_and_write_stream(stream: asyncio.StreamReader | None, stream_name: str, capture: list[str] | None = None) -> None:
     """Relay a process stream to stdout and the log, optionally capturing it."""
     if stream is None:
         return
@@ -60,9 +59,9 @@ async def read_and_write_stream(stream: asyncio.StreamReader | None, stream_name
 
 
 async def run_command(
-    cmd: List[str],
+    cmd: list[str],
     check: bool = True,
-    captured_lines: Optional[List[str]] = None,
+    captured_lines: list[str] | None = None,
 ) -> int:
     """
     Execute a subprocess, stream its output live and colorized.
