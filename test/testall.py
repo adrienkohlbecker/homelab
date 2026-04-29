@@ -3,9 +3,9 @@
 Test runner for Ansible roles using native asyncio parallelism.
 
 This script discovers roles, builds test commands, and executes them concurrently
-without relying on GNU parallel. Output for each machine/role run is captured in
-`test/out/<machine>.<role>.ansi`, and a concise job log is written to
-`test/out.log`.
+without relying on GNU parallel. Output for each machine/ubuntu/role run is
+captured in `test/out/<machine>.<ubuntu>.<role>.ansi`, and a concise job log is
+written to `test/out.tsv`.
 """
 
 import argparse
@@ -22,8 +22,8 @@ from typing import NamedTuple
 from machine import DEFAULT_UBUNTU, OUT_DIR, UBUNTU_RELEASES
 from utils import cancel_on_signal
 
-LOG_FILE = Path("test/out.log")
-LOG_FILE_PREV = Path("test/out.log.prev")
+LOG_FILE = Path("test/out.tsv")
+LOG_FILE_PREV = Path("test/out.tsv.prev")
 
 
 class MachineRole(NamedTuple):
