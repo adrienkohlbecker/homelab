@@ -10,6 +10,7 @@ log streaming.
 
 import argparse
 import asyncio
+import re
 import sys
 from pathlib import Path
 
@@ -21,7 +22,7 @@ from machine import (
     UBUNTU_RELEASES,
     ubuntu_mirrors,
 )
-from utils import CommandFailedException, cancel_on_signal
+from utils import CommandFailedException, IdempotenceFailedException, cancel_on_signal
 
 
 def parse_args() -> tuple[argparse.Namespace, list[str]]:
@@ -60,6 +61,12 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         choices=sorted(UBUNTU_RELEASES),
         help="Ubuntu codename of the target image",
     )
+    parser.add_argument(
+        "--idempotence",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Re-run the role and fail if any task reports changed (default: on)",
+    )
     parser.add_argument("role", help="Role name to test")
 
     args, pass_args = parser.parse_known_args()
@@ -89,6 +96,25 @@ async def _configure_apt_sources(m: Machine) -> None:
     await m.ssh_command("sudo", "apt-get", "update")
 
 
+_RECAP_CHANGED_RE = re.compile(r"\bchanged=(\d+)")
+
+
+def _count_changed_tasks(stdout: list[str]) -> int:
+    """Sum `changed=N` across every PLAY RECAP host line in the output."""
+    return sum(int(match.group(1)) for line in stdout for match in [_RECAP_CHANGED_RE.search(line)] if match)
+
+
+async def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -> None:
+    """Re-run the role and fail if any task reports changed."""
+    print("Verifying idempotence (re-running the role)...")
+    result = await m.ansible_command(site_yml, *pass_args)
+    changed = _count_changed_tasks(result.stdout)
+    if changed > 0:
+        raise IdempotenceFailedException(
+            f"Role is not idempotent: {changed} task(s) reported changed on the second run"
+        )
+
+
 async def _run_checkmode(site_yml: str, m: Machine, pass_args: list[str]) -> None:
     """Run check mode and staged tags when requested."""
     list_tags = await m.ansible_command(site_yml, "--list-tags")
@@ -111,6 +137,7 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: list[str]) -> Non
     role = parsed_args.role
     keep_vm = parsed_args.keep
     checkmode = parsed_args.checkmode
+    idempotence = parsed_args.idempotence
     timeout = parsed_args.timeout
     ubuntu_name = parsed_args.ubuntu
 
@@ -153,9 +180,15 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: list[str]) -> Non
 
                         await m.ansible_command(site_yml, *pass_args)
 
+                        if idempotence:
+                            await _verify_idempotence(site_yml, m, pass_args)
+
                     except CommandFailedException:
                         print("Command failed")
                         await m.collect_journal()
+                        raise
+                    except IdempotenceFailedException:
+                        print("Idempotence check failed")
                         raise
 
             finally:
@@ -183,6 +216,11 @@ def main() -> int:
         sys.stderr.write(f"\033[0;41m{parsed_args.role}.{parsed_args.machine} failed\033[0m\n")
         sys.stderr.flush()
         return 1
+    except IdempotenceFailedException as exc:
+        print(exc, file=sys.stderr)
+        sys.stderr.write(f"\033[0;41m{parsed_args.role}.{parsed_args.machine} not idempotent\033[0m\n")
+        sys.stderr.flush()
+        return 125
     except TimeoutError:
         sys.stderr.write(
             f"\033[0;41m{parsed_args.role}.{parsed_args.machine} timed out after {parsed_args.timeout}s\033[0m\n"
