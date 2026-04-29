@@ -286,10 +286,7 @@ transforms:
       }
 
       . = {}
-      .message, err = "<{{ priority }}>{{ version }} {{ time }} {{ host }} {{ appname }} {{ pid }} {{ msgid }} {{ message }}"
-      if err != null {
-        log("Unable to template messge: " + err, level: "error")
-      }
+      .message = "<{{ priority }}>{{ version }} {{ time }} {{ host }} {{ appname }} {{ pid }} {{ msgid }} {{ message }}"
 
 #   clef:
 #     type: remap
