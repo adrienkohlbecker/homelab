@@ -11,7 +11,7 @@ import sys
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Self, Tuple
 
 from utils import run_command, sleep_tick, print_cmd_line
 
@@ -303,7 +303,7 @@ class Machine:
         if self.proc:
             await self.proc.wait()
 
-    async def __aenter__(self) -> "Machine":
+    async def __aenter__(self) -> Self:
         await self.prepare()
         await self.boot()
         return self
