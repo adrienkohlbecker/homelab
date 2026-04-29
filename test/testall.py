@@ -256,8 +256,8 @@ def main() -> int:
 
     try:
         results = asyncio.run(run_all(machine_roles, args.role_args, args.jobs))
-    except (KeyboardInterrupt, asyncio.CancelledError):
-        print("\nInterrupted, cancelling remaining jobs...", file=sys.stderr)
+    except asyncio.CancelledError:
+        print("\nInterrupted, shutting down...", file=sys.stderr)
         return 130
 
     _rotate_joblog()
