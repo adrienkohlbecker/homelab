@@ -282,15 +282,15 @@ class Machine:
             "--priority",
             "info",
         )
+        print_cmd_line(cmd)
 
         with self.journal_file.open("w") as handle:
-            print_cmd_line(cmd)
             proc = await asyncio.create_subprocess_exec(*cmd, stdout=handle, stderr=sys.stdout)
             exitcode = await proc.wait()
-            if exitcode != 0:
-                print(f"Failed to collect journal: {exitcode}", file=sys.stdout)
-                return
 
+        if exitcode != 0:
+            print(f"Failed to collect journal: exit code {exitcode}")
+            return
         print(f"Systemd journal: {self.journal_file}")
 
     def print_ssh_instructions(self) -> None:
