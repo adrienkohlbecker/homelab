@@ -32,7 +32,7 @@ LOG_FILE = Path("test/out.log")
 LOG_FILE_PREV = Path("test/out.log.prev")
 
 
-@dataclass
+@dataclass(frozen=True)
 class JobResult:
     """Holds the outcome of a single role test."""
 
