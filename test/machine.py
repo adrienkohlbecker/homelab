@@ -279,6 +279,17 @@ class Machine:
             return
         print(f"Systemd journal: {self.journal_file}")
 
+    def print_journal_tail(self, n: int = 50) -> None:
+        """Print the last *n* lines of the saved journal to stdout."""
+        if not self.journal_file.exists():
+            return
+        lines = self.journal_file.read_text(errors="replace").splitlines()
+        tail = lines[-n:]
+        print(f"--- last {len(tail)} lines of {self.journal_file} ---")
+        for line in tail:
+            print(line)
+        print(f"--- end {self.journal_file} ---")
+
     def print_ssh_instructions(self) -> None:
         ssh_cmd = shlex.join(self.format_ssh_cmd())
         print("Keeping VM around, ssh using:")
