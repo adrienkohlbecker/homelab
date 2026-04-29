@@ -15,7 +15,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Self
 
-from utils import run_command, sleep_tick, print_cmd_line
+from utils import CommandResult, run_command, sleep_tick, print_cmd_line
 
 OUT_DIR = Path("test/out")
 UBUNTU_NAME = "jammy"
@@ -138,23 +138,15 @@ class Machine:
             parts += cmd
         return parts
 
-    async def ssh_command(self, *cmd: str, check: bool = True, captured_lines: list[str] | None = None) -> int:
+    async def ssh_command(self, *cmd: str, check: bool = True) -> CommandResult:
         """Execute an SSH command and stream output into the role log."""
 
-        return await run_command(
-            self.format_ssh_cmd(*cmd),
-            check=check,
-            captured_lines=captured_lines,
-        )
+        return await run_command(self.format_ssh_cmd(*cmd), check=check)
 
-    async def ansible_command(self, *cmd: str, check: bool = True, captured_lines: list[str] | None = None) -> int:
+    async def ansible_command(self, *cmd: str, check: bool = True) -> CommandResult:
         """Execute ansible-playbook with machine-specific SSH overrides."""
 
-        return await run_command(
-            self.format_ansible_cmd(*cmd),
-            check=check,
-            captured_lines=captured_lines,
-        )
+        return await run_command(self.format_ansible_cmd(*cmd), check=check)
 
     async def prepare(self) -> None:
         """Stage a temporary workdir with inventory snippets and optional role test hook."""
@@ -451,8 +443,7 @@ class QemuMachine(Machine):
 
         lines: list[str] = []
         for _ in range(10):
-            lines = []
-            await run_command(["lsof", "-i", "-P", "-p", pid], captured_lines=lines)
+            lines = (await run_command(["lsof", "-i", "-P", "-p", pid])).stdout
 
             for line in lines:
                 # Ignore unrelated descriptors and VNC forwards (59xx range).
@@ -509,8 +500,8 @@ class PodmanMachine(Machine):
 
         await super().prepare()
 
-        exitcode = await run_command(["podman", "network", "inspect", "homelab_net"], check=False)
-        if exitcode != 0:
+        result = await run_command(["podman", "network", "inspect", "homelab_net"], check=False)
+        if result.exitcode != 0:
             await run_command(["podman", "network", "create", "--subnet", "192.5.0.0/16", "homelab_net"])
 
     def _boot_command(self) -> list[str]:
@@ -539,10 +530,8 @@ class PodmanMachine(Machine):
         if not cid:
             raise RuntimeError("Missing container ID; podman run may have failed")
 
-        lines = []
-        await run_command(["podman", "port", cid, "22"], captured_lines=lines)
-
-        addr = "\n".join(lines).strip()
+        result = await run_command(["podman", "port", cid, "22"])
+        addr = "\n".join(result.stdout).strip()
         if ":" not in addr:
             raise RuntimeError(f"Unexpected podman port output: {addr}")
 
