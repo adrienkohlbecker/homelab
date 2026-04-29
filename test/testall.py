@@ -266,7 +266,7 @@ def main() -> int:
 
     failures = [result for result in results if result.exitval != 0]
     if failures:
-        failed_list = ", ".join({f.role for f in failures})
+        failed_list = ", ".join(dict.fromkeys(f.role for f in failures))
         print(f"Failures: {failed_list}", file=sys.stderr)
         return 1
 
