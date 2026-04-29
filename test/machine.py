@@ -302,6 +302,15 @@ class Machine:
         if self.proc:
             await self.proc.wait()
 
+    async def __aenter__(self) -> "Machine":
+        await self.prepare()
+        await self.boot()
+        return self
+
+    async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+        print("Stopping machine...")
+        await self.stop()
+
     async def stop(self) -> None:
         """Stop the VM/container"""
 
