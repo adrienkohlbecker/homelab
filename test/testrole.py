@@ -10,15 +10,28 @@ log streaming.
 
 import argparse
 import asyncio
+import contextlib
 import signal
 import sys
-import shlex
-import tempfile
 from pathlib import Path
-from typing import List
+from typing import Iterator, List
 
 from machine import Machine, ubuntu_mirrors, PodmanMachine, QemuMachine, UBUNTU_NAME
 from utils import CommandFailedException
+
+
+@contextlib.contextmanager
+def cancel_on_signal(task: asyncio.Task[object]) -> Iterator[None]:
+    """Cancel *task* on SIGINT/SIGTERM for the duration of the with-block."""
+    loop = asyncio.get_running_loop()
+    signals = (signal.SIGINT, signal.SIGTERM)
+    for sig in signals:
+        loop.add_signal_handler(sig, task.cancel)
+    try:
+        yield
+    finally:
+        for sig in signals:
+            loop.remove_signal_handler(sig)
 
 
 def parse_args() -> tuple[argparse.Namespace, List[str]]:
@@ -99,67 +112,55 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: List[str]) -> Non
     checkmode = parsed_args.checkmode
 
     if machine == "container":
-        m = PodmanMachine(machine, role, keep_vm)
+        m: Machine = PodmanMachine(machine, role, keep_vm)
     else:
         m = QemuMachine(machine, role, keep_vm)
 
-    loop = asyncio.get_running_loop()
-    current = asyncio.current_task()
-    assert current is not None
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, current.cancel)
+    task = asyncio.current_task()
+    assert task is not None
 
-    try:
-        await m.prepare()
-        await m.boot()
+    with cancel_on_signal(task):
+        async with m:
+            try:
+                await m.ensure_booted()
+                print("Booted")
 
-        await m.ensure_booted()
-        print("Booted")
+                await m.ensure_ssh()
+                print("SSH up")
 
-        await m.ensure_ssh()
-        print("SSH up")
+                await _configure_apt_sources(m)
 
-        await _configure_apt_sources(m)
+                if machine == "minimal":
+                    # Fixes systemd-analyze validation error:
+                    # /lib/systemd/system/snapd.service:23: Unknown key name 'RestartMode' section 'Service', ignoring.
+                    await m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")
 
-        if machine == "minimal":
-            # Fixes systemd-analyze validation error:
-            # /lib/systemd/system/snapd.service:23: Unknown key name 'RestartMode' section 'Service', ignoring.
-            await m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")
+                try:
+                    test_yml = f"{m.workdir.name}/_test.yml"
+                    if Path(test_yml).exists():
+                        await m.ansible_command(test_yml)
 
-        try:
-            test_yml = f"{m.workdir.name}/_test.yml"
-            if Path(test_yml).exists():
-                await m.ansible_command(test_yml)
+                    site_yml = f"{m.workdir.name}/site.yml"
+                    if checkmode:
+                        await _run_checkmode(site_yml, m, pass_args)
 
-            site_yml = f"{m.workdir.name}/site.yml"
-            if checkmode:
-                await _run_checkmode(site_yml, m, pass_args)
+                    await m.ansible_command(site_yml, *pass_args)
 
-            await m.ansible_command(site_yml, *pass_args)
+                except CommandFailedException:
+                    print("Command failed")
+                    await m.collect_journal()
+                    raise
 
-        except CommandFailedException as exc:
-            print("Command failed")
-            await m.collect_journal()
-            raise exc
-
-    finally:
-        try:
-            # Skip the keep-around path when the run was interrupted: the user
-            # signalled they want out, not an SSH prompt. cancelling() is
-            # non-zero whenever a SIGINT/SIGTERM-driven cancel is in flight.
-            # There is a small race where a fresh Ctrl+C between this check
-            # and m.wait() still prints the instructions; the cancel then
-            # unwinds through m.wait() into the inner finally, so the worst
-            # case is one spurious banner.
-            if keep_vm and not current.cancelling():
-                m.print_ssh_instructions()
-                await m.wait()
-        finally:
-            # Inner finally ensures m.stop() runs even when m.wait() above
-            # raises CancelledError -- otherwise the unwinding exception
-            # would skip the rest of the outer finally and leak the VM.
-            print("Stopping machine...")
-            await m.stop()
+            finally:
+                # keep_vm runs on success and on CommandFailedException, but
+                # not on cancellation -- cancelling() is non-zero only when a
+                # SIGINT/SIGTERM-driven cancel is in flight, in which case the
+                # user wants out, not an SSH prompt. If a fresh Ctrl+C lands
+                # between the check and m.wait(), CancelledError unwinds out
+                # through `async with m`'s __aexit__, so m.stop() still runs.
+                if keep_vm and not task.cancelling():
+                    m.print_ssh_instructions()
+                    await m.wait()
 
 
 def main() -> int:
