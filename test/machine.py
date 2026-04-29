@@ -5,7 +5,6 @@ import platform
 import re
 import shlex
 import signal
-import socket
 import sys
 import tempfile
 import time
@@ -221,7 +220,7 @@ class Machine:
             stderr=asyncio.subprocess.PIPE,
         )
 
-    def ensure_booted(self) -> None:
+    async def ensure_booted(self) -> None:
         """Block until the hypervisor writes the PID/CID file or the launch fails."""
 
         deadline = time.monotonic() + IDFILE_TIMEOUT
@@ -231,7 +230,7 @@ class Machine:
                 raise RuntimeError("Launching machine failed")
             if time.monotonic() > deadline:
                 raise TimeoutError(f"PID file {id_path} not created within {IDFILE_TIMEOUT}s")
-            sleep_tick()
+            await sleep_tick()
 
     async def ensure_ssh(self) -> None:
         """Resolve SSH port then wait for the daemon banner to appear."""
@@ -240,18 +239,30 @@ class Machine:
 
         deadline = time.monotonic() + SSH_WAIT_TIMEOUT
         while True:
+            writer: Optional[asyncio.StreamWriter] = None
             try:
-                with socket.create_connection((self.ssh_host, self.ssh_port), timeout=2) as s:
-                    banner = s.recv(1024).decode().strip()
-                    if banner:
-                        return
-            except OSError:
+                reader, writer = await asyncio.wait_for(
+                    asyncio.open_connection(self.ssh_host, self.ssh_port),
+                    timeout=2,
+                )
+                banner_bytes = await asyncio.wait_for(reader.read(1024), timeout=2)
+                banner = banner_bytes.decode().strip()
+                if banner:
+                    return
+            except (OSError, asyncio.TimeoutError):
                 pass
+            finally:
+                if writer is not None:
+                    writer.close()
+                    try:
+                        await writer.wait_closed()
+                    except OSError:
+                        pass
 
             if time.monotonic() > deadline:
                 raise TimeoutError("SSH daemon did not become ready in time")
 
-            sleep_tick()
+            await sleep_tick()
 
     async def collect_journal(self) -> None:
         """Fetch systemd journal for debugging when a run fails."""
@@ -460,7 +471,7 @@ class QemuMachine(Machine):
                 self.ssh_port = int(port_str)
                 return
 
-            sleep_tick()
+            await sleep_tick()
 
         raise RuntimeError("Unable to determine SSH port from qemu lsof output")
 

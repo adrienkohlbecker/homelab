@@ -3,7 +3,6 @@
 import asyncio
 import shlex
 import sys
-import time
 from io import TextIOWrapper
 from pathlib import Path
 from typing import List, Optional
@@ -21,11 +20,11 @@ STREAM_COLORS = {
 }
 
 
-def sleep_tick() -> None:
+async def sleep_tick() -> None:
     """Emit a single dot per second while a long-running task progresses."""
     sys.stdout.write(".")
     sys.stdout.flush()
-    time.sleep(1)
+    await asyncio.sleep(1)
 
 
 def _colorize(line: str, stream_name: str) -> str:
