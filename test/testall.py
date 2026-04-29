@@ -14,9 +14,10 @@ import contextlib
 import signal
 import sys
 import time
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, NamedTuple, Sequence
+from typing import NamedTuple
 
 
 class MachineRole(NamedTuple):
@@ -88,7 +89,7 @@ def setup_output_dir() -> None:
         ansi_file.unlink()
 
 
-def list_roles() -> List[str]:
+def list_roles() -> list[str]:
     """Return roles that define tasks/main.yml."""
     roles_dir = Path("roles")
     if not roles_dir.exists():
@@ -101,12 +102,12 @@ def list_roles() -> List[str]:
     ]
 
 
-def get_failed_roles() -> List[MachineRole]:
+def get_failed_roles() -> list[MachineRole]:
     """Parse the previous job log for failed roles."""
     if not LOG_FILE.exists():
         return []
 
-    failed_roles: List[MachineRole] = []
+    failed_roles: list[MachineRole] = []
 
     with LOG_FILE.open(encoding="utf-8") as log_file:
         for line_no, raw_line in enumerate(log_file):
@@ -198,10 +199,10 @@ async def _run_role(
 
 
 async def run_all(
-    machine_roles: List[MachineRole],
+    machine_roles: list[MachineRole],
     role_args: Sequence[str],
     jobs: int,
-) -> List[JobResult]:
+) -> list[JobResult]:
     """Run every role/machine combination concurrently."""
     semaphore = asyncio.Semaphore(jobs)
 
@@ -218,7 +219,7 @@ async def run_all(
     return [t.result() for t in tasks]
 
 
-def _write_joblog(results: List[JobResult]) -> None:
+def _write_joblog(results: list[JobResult]) -> None:
     """Write a compact job log with role, machine, runtime, and exit code."""
     with LOG_FILE.open("w", encoding="utf-8") as handle:
         handle.write("Role\tMachine\tRuntime\tExitval\n")
