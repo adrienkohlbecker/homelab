@@ -37,8 +37,8 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="homeassistant" \
     --user root \
-    --userns keep-id:uid={{ homeassistant_user.uid }},gid={{ homeassistant_user.group }} \
 {% if not docker_test %}
+    --userns keep-id:uid={{ homeassistant_user.uid }},gid={{ homeassistant_user.group }} \
     --network=podman \
     --network=iot_macvlan \
 {% endif %}
