@@ -58,21 +58,14 @@ async def read_and_write_stream(stream: asyncio.StreamReader | None, stream_name
         return
 
     while True:
-        try:
-            line_bytes = await stream.readline()
-            if not line_bytes:
-                break
-
-            line = line_bytes.decode("utf-8", errors="replace").rstrip("\n")
-            if capture is not None:
-                capture.append(line)
-            await _write_line(line, stream_name)
-
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:  # keep log noise explicit if decoding fails
-            print(f"Error reading {stream_name}: {exc}", file=sys.stderr)
+        line_bytes = await stream.readline()
+        if not line_bytes:
             break
+
+        line = line_bytes.decode("utf-8", errors="replace").rstrip("\n")
+        if capture is not None:
+            capture.append(line)
+        await _write_line(line, stream_name)
 
 
 async def run_command(
