@@ -11,6 +11,7 @@ without relying on GNU parallel. Output for each machine/role run is captured in
 import argparse
 import asyncio
 import contextlib
+import signal
 import sys
 import time
 from dataclasses import dataclass
@@ -158,8 +159,10 @@ async def _run_role(
                 # subprocess behind unless we tear it down here.
                 with contextlib.suppress(ProcessLookupError):
                     # Race: the testrole child may have exited on its own
-                    # between the wait and our terminate.
-                    proc.terminate()
+                    # between the wait and our signal. SIGINT mirrors what
+                    # Machine.stop() sends to its qemu/podman child, so the
+                    # whole chain reacts to the same signal.
+                    proc.send_signal(signal.SIGINT)
                 try:
                     async with asyncio.timeout(10):
                         await proc.wait()
