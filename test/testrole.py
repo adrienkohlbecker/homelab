@@ -39,6 +39,13 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         action="store_true",
         help="Keep the machine running after the test",
     )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=30 * 60,
+        metavar="SECONDS",
+        help="Abort the test if it doesn't complete within this many seconds",
+    )
     parser.add_argument("role", help="Role name to test")
 
     args, pass_args = parser.parse_known_args()
@@ -89,6 +96,7 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: list[str]) -> Non
     role = parsed_args.role
     keep_vm = parsed_args.keep
     checkmode = parsed_args.checkmode
+    timeout = parsed_args.timeout
 
     if machine == "container":
         m: Machine = PodmanMachine(machine, role, keep_vm)
@@ -101,34 +109,38 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: list[str]) -> Non
     with cancel_on_signal(task):
         async with m:
             try:
-                await m.ensure_booted()
-                print("Booted")
+                # Bound the test body with a deadline so a stuck apt/ansible
+                # task can't run forever. The keep_vm wait below is outside
+                # the timeout on purpose -- it's interactive, not work.
+                async with asyncio.timeout(timeout):
+                    await m.ensure_booted()
+                    print("Booted")
 
-                await m.ensure_ssh()
-                print("SSH up")
+                    await m.ensure_ssh()
+                    print("SSH up")
 
-                await _configure_apt_sources(m)
+                    await _configure_apt_sources(m)
 
-                if machine == "minimal":
-                    # Fixes systemd-analyze validation error:
-                    # /lib/systemd/system/snapd.service:23: Unknown key name 'RestartMode' section 'Service', ignoring.
-                    await m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")
+                    if machine == "minimal":
+                        # Fixes systemd-analyze validation error:
+                        # /lib/systemd/system/snapd.service:23: Unknown key name 'RestartMode' section 'Service', ignoring.
+                        await m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")
 
-                try:
-                    test_yml = f"{m.workdir.name}/_test.yml"
-                    if Path(test_yml).exists():
-                        await m.ansible_command(test_yml)
+                    try:
+                        test_yml = f"{m.workdir.name}/_test.yml"
+                        if Path(test_yml).exists():
+                            await m.ansible_command(test_yml)
 
-                    site_yml = f"{m.workdir.name}/site.yml"
-                    if checkmode:
-                        await _run_checkmode(site_yml, m, pass_args)
+                        site_yml = f"{m.workdir.name}/site.yml"
+                        if checkmode:
+                            await _run_checkmode(site_yml, m, pass_args)
 
-                    await m.ansible_command(site_yml, *pass_args)
+                        await m.ansible_command(site_yml, *pass_args)
 
-                except CommandFailedException:
-                    print("Command failed")
-                    await m.collect_journal()
-                    raise
+                    except CommandFailedException:
+                        print("Command failed")
+                        await m.collect_journal()
+                        raise
 
             finally:
                 # keep_vm runs on success and on CommandFailedException, but
@@ -155,6 +167,12 @@ def main() -> int:
         sys.stderr.write(f"\033[0;41m{parsed_args.role}.{parsed_args.machine} failed\033[0m\n")
         sys.stderr.flush()
         return 1
+    except TimeoutError:
+        sys.stderr.write(
+            f"\033[0;41m{parsed_args.role}.{parsed_args.machine} timed out after {parsed_args.timeout}s\033[0m\n"
+        )
+        sys.stderr.flush()
+        return 124  # GNU `timeout`'s exit code for "command timed out"
     except asyncio.CancelledError:
         sys.stderr.write("\nInterrupted, shutting down...\n")
         sys.stderr.flush()
