@@ -3,8 +3,9 @@
 Test runner for Ansible roles using native asyncio parallelism.
 
 This script discovers roles, builds test commands, and executes them concurrently
-without relying on GNU parallel. Output for each machine/ubuntu/role run is
-captured in `test/out/<machine>.<ubuntu>.<role>.ansi`, and a concise job log is
+without relying on GNU parallel. Each child testrole.py tees its own transcript
+to `test/out/<machine>.<ubuntu>.<role>.output.ansi`; testall drops that file on
+success and reports it in the failure table otherwise. A concise job log is
 written to `test/out.tsv`.
 """
 
@@ -191,46 +192,48 @@ async def _run_role(
         role,
         *role_args,
     ]
-    log_path = OUT_DIR / f"{machine}.{ubuntu_name}.{role}.ansi"
+    # testrole.py tees its full transcript here via utils.tee_output, so we
+    # don't need to capture stdout/stderr ourselves -- just point at the same
+    # path so we can drop it on success / surface it in the failure table.
+    log_path = OUT_DIR / f"{machine}.{ubuntu_name}.{role}.output.ansi"
 
     async with semaphore:
         start_time = time.time()
         print(f"[{seq}] {machine}:{ubuntu_name}:{role} starting")
 
-        with log_path.open("w") as log_handle:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=log_handle,
-                stderr=log_handle,
-            )
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
 
+        try:
+            await proc.wait()
+        except BaseException:
+            # Any failure (cancellation, reader error, etc.) leaves the
+            # subprocess behind unless we tear it down here.
+            with contextlib.suppress(ProcessLookupError):
+                # Race: the testrole child may have exited on its own
+                # between the wait and our signal. SIGINT mirrors what
+                # Machine.stop() sends to its qemu/podman child, so the
+                # whole chain reacts to the same signal.
+                proc.send_signal(signal.SIGINT)
             try:
-                await proc.wait()
-            except BaseException:
-                # Any failure (cancellation, reader error, etc.) leaves the
-                # subprocess behind unless we tear it down here.
-                with contextlib.suppress(ProcessLookupError):
-                    # Race: the testrole child may have exited on its own
-                    # between the wait and our signal. SIGINT mirrors what
-                    # Machine.stop() sends to its qemu/podman child, so the
-                    # whole chain reacts to the same signal.
-                    proc.send_signal(signal.SIGINT)
-                try:
-                    # 30s gives Machine.stop() enough headroom for its own
-                    # graceful->SIGKILL escalation (~10-15s worst case for
-                    # podman rm --time 5 + drain, similar for qemu) without
-                    # SIGKILL'ing testrole.py mid-cleanup and leaking the
-                    # container/VM.
-                    async with asyncio.timeout(30):
-                        await proc.wait()
-                except TimeoutError:
-                    # asyncio.timeout() converts the inner CancelledError into
-                    # TimeoutError on __aexit__; only here can we tell the wait
-                    # actually timed out and escalate to SIGKILL.
-                    with contextlib.suppress(ProcessLookupError):
-                        proc.kill()
+                # 30s gives Machine.stop() enough headroom for its own
+                # graceful->SIGKILL escalation (~10-15s worst case for
+                # podman rm --time 5 + drain, similar for qemu) without
+                # SIGKILL'ing testrole.py mid-cleanup and leaking the
+                # container/VM.
+                async with asyncio.timeout(30):
                     await proc.wait()
-                raise
+            except TimeoutError:
+                # asyncio.timeout() converts the inner CancelledError into
+                # TimeoutError on __aexit__; only here can we tell the wait
+                # actually timed out and escalate to SIGKILL.
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()
+                await proc.wait()
+            raise
 
         runtime = time.time() - start_time
         # proc.returncode is always set after a successful proc.wait(); a
