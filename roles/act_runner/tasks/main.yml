@@ -212,6 +212,7 @@
   register: act_runner_linger
   tags:
     - act_runner
+    - _check_stage3
     - _check_stage4
 
 - name: Enable rootless podman socket
@@ -224,6 +225,7 @@
   become_user: act_runner
   tags:
     - act_runner
+    - _check_stage4
 
 - name: Start rootless podman socket
   when: not (ansible_check_mode and (act_runner_user.changed or act_runner_linger.changed))
@@ -235,6 +237,7 @@
   become_user: act_runner
   tags:
     - act_runner
+    - _check_stage4
 
 - name: Install act_runner service
   import_role:
@@ -245,7 +248,6 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and act_runner_user.changed) }}"
   tags:
     - act_runner
-    - _check_stage3
     - _check_stage4
 
 - name: Enable act_runner service
@@ -258,4 +260,3 @@
     systemd_unit_restart: "{{ systemd_unit.changed or act_runner_conf.changed or act_runner_registration.changed or act_runner_json_conf.changed }}"
   tags:
     - act_runner
-    - _check_stage4
