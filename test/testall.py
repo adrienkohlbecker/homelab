@@ -16,7 +16,13 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List, Sequence
+from typing import List, NamedTuple, Sequence
+
+
+class MachineRole(NamedTuple):
+    """A (machine, role) pair to run."""
+    machine: str
+    role: str
 
 from machine import OUT_DIR
 from utils import cancel_on_signal
@@ -95,14 +101,12 @@ def list_roles() -> List[str]:
     ]
 
 
-def get_failed_roles() -> List[List[str]]:
-    """
-    Parse the previous job log for failed roles.
-    """
+def get_failed_roles() -> List[MachineRole]:
+    """Parse the previous job log for failed roles."""
     if not LOG_FILE.exists():
         return []
 
-    failed_roles: List[List[str]] = []
+    failed_roles: List[MachineRole] = []
 
     with LOG_FILE.open(encoding="utf-8") as log_file:
         for line_no, raw_line in enumerate(log_file):
@@ -115,7 +119,7 @@ def get_failed_roles() -> List[List[str]]:
 
             role, machine, _runtime, exitval = fields[:4]
             if exitval != "0":
-                failed_roles.append([machine, role])
+                failed_roles.append(MachineRole(machine=machine, role=role))
 
     return failed_roles
 
@@ -191,7 +195,7 @@ async def _run_role(
 
 
 async def run_all(
-    machine_roles: List[List[str]],
+    machine_roles: List[MachineRole],
     role_args: Sequence[str],
     jobs: int,
 ) -> List[JobResult]:
@@ -209,8 +213,8 @@ async def run_all(
     with cancel_on_signal(task):
         async with asyncio.TaskGroup() as tg:
             seq = 1
-            for machine_role in machine_roles:
-                tg.create_task(run_and_store(seq, machine_role[0], machine_role[1]))
+            for machine, role in machine_roles:
+                tg.create_task(run_and_store(seq, machine, role))
                 seq += 1
 
     return results
@@ -248,7 +252,7 @@ def main() -> int:
         if not roles:
             print("No roles with tasks/main.yml found", file=sys.stderr)
             return 1
-        machine_roles = [[machine, role] for role in roles for machine in machines]
+        machine_roles = [MachineRole(machine, role) for role in roles for machine in machines]
 
     setup_output_dir()
 
