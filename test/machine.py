@@ -470,8 +470,9 @@ class QemuMachine(Machine):
         if not pid:
             raise RuntimeError("Missing qemu PID; pidfile is empty")
 
+        lines: List[str] = []
         for _ in range(10):
-            lines: List[str] = []
+            lines = []
             await run_command(["lsof", "-i", "-P", "-p", pid], captured_lines=lines)
 
             for line in lines:
