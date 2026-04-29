@@ -33,6 +33,13 @@ RUN apt-get update
 VOLUME /var/lib/containers
 VOLUME /var/lib/docker
 
+# Provide a subordinate UID/GID range so nested podman can build user
+# namespaces (e.g. for `--userns keep-id`). Without these entries
+# storage-chown-by-maps fails with EINVAL on any chown to a non-zero
+# UID when remapping image layers.
+RUN echo 'root:1:65535' >> /etc/subuid \
+ && echo 'root:1:65535' >> /etc/subgid
+
 EXPOSE 22
 
 CMD [ "/lib/systemd/systemd" ]
