@@ -3,8 +3,6 @@
 import asyncio
 import shlex
 import sys
-from io import TextIOWrapper
-from pathlib import Path
 from typing import List, Optional
 
 
@@ -33,23 +31,16 @@ def _colorize(line: str, stream_name: str) -> str:
     return template.format(line=line) if template else line
 
 
-async def _write_line(line: str, stream_name: str) -> None:
-    """
-    Echo a line to stdout and serialize writes to the shared log file.
-
-    File writes are guarded by a lock because stdout and stderr are read
-    concurrently and we do not want interleaved lines in the ANSI log.
-    """
+def _write_line(line: str, stream_name: str) -> None:
+    """Echo a line to stdout, colorized by stream name."""
     output_line = _colorize(line, stream_name)
     sys.stdout.write(output_line + "\n")
     sys.stdout.flush()
 
 
-async def print_cmd_line(cmd: List[str]) -> None:
-    """
-    Log the command being executed in a distinct color.
-    """
-    await _write_line(f"$ {shlex.join(cmd)}", "cmd")
+def print_cmd_line(cmd: List[str]) -> None:
+    """Log the command being executed in a distinct color."""
+    _write_line(f"$ {shlex.join(cmd)}", "cmd")
 
 
 async def read_and_write_stream(stream: asyncio.StreamReader | None, stream_name: str, capture: Optional[List[str]] = None) -> None:
@@ -65,7 +56,7 @@ async def read_and_write_stream(stream: asyncio.StreamReader | None, stream_name
         line = line_bytes.decode("utf-8", errors="replace").rstrip("\n")
         if capture is not None:
             capture.append(line)
-        await _write_line(line, stream_name)
+        _write_line(line, stream_name)
 
 
 async def run_command(
@@ -84,7 +75,7 @@ async def run_command(
     Returns:
         The process exit code when check is False.
     """
-    await print_cmd_line(cmd)
+    print_cmd_line(cmd)
 
     process = await asyncio.create_subprocess_exec(
         *cmd,

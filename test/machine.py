@@ -212,7 +212,7 @@ class Machine:
         """Start the VM/container under a timeout wrapper."""
 
         cmd = self._boot_command()
-        await print_cmd_line(cmd)
+        print_cmd_line(cmd)
 
         # Inherit stdout/stderr so qemu/podman diagnostics surface live and the
         # kernel pipe buffer can never fill up and deadlock the guest.
@@ -276,7 +276,7 @@ class Machine:
         )
 
         with self.journal_file.open("w") as handle:
-            await print_cmd_line(cmd)
+            print_cmd_line(cmd)
             proc = await asyncio.create_subprocess_exec(*cmd, stdout=handle, stderr=sys.stdout)
             exitcode = await proc.wait()
             if exitcode != 0:
