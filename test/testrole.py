@@ -78,9 +78,6 @@ async def _configure_apt_sources(m: Machine) -> None:
         f"deb {ubuntu_mirror} {UBUNTU_NAME}-backports main restricted universe multiverse",
     ]
 
-    if not ubuntu_mirror or not ubuntu_mirror_security:
-        raise RuntimeError("Ubuntu mirror URLs are required to configure apt sources.")
-
     # Use one shell to avoid repeatedly opening the file and keep quoting simple.
     printf_args = " ".join(f'"{line}"' for line in sources)
     await m.ssh_command("sudo", "bash", "-c", f"printf '%s\\n' {printf_args} > /etc/apt/sources.list")
