@@ -169,7 +169,7 @@ def main() -> int:
         asyncio.run(run_test(parsed_args, pass_args))
         return 0
     except CommandFailedException as exc:
-        print(exc.args)
+        print(exc, file=sys.stderr)
         sys.stderr.write(f"\033[0;41m{parsed_args.role}.{parsed_args.machine} failed\033[0m\n")
         sys.stderr.flush()
         return 1
