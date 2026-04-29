@@ -110,7 +110,8 @@
 - name: Get registration token (test)
   when: docker_test or qemu_test
   command: /gitea actions generate-runner-token
-  changed_when: true
+  args:
+    creates: /mnt/services/act_runner/.runner
   register: _test_runner_token
   become: true
   tags:
@@ -119,9 +120,38 @@
     - _check_stage3
     - _check_stage4
 
+- name: Compute registration parameters
+  set_fact:
+    act_runner_instance: >-
+      {{
+        'http://localhost:3000'
+        if (docker_test or qemu_test)
+        else 'https://gitea.' + inventory_hostname + '.' + domain
+      }}
+    act_runner_token: >-
+      {%- if not (docker_test or qemu_test) -%}
+        {{ gitea_runner_registration_token }}
+      {%- elif ansible_check_mode -%}
+        TOKEN
+      {%- elif _test_runner_token.stdout_lines is defined -%}
+        {{ _test_runner_token.stdout_lines[1] }}
+      {%- else -%}
+        UNUSED
+      {%- endif -%}
+  tags:
+    - act_runner
+    - _check_stage2
+    - _check_stage3
+    - _check_stage4
+
 - name: Register runner
   when: not (ansible_check_mode and act_runner_user.changed) # TODO: registering fails
-  command: act_runner register -c /mnt/services/act_runner/config.yml --no-interactive --instance {{ (docker_test or qemu_test) | ternary('http://localhost:3000', 'https://gitea.' + inventory_hostname + '.' + domain) }} --token {{ (docker_test or qemu_test) | ternary((ansible_check_mode | ternary("TOKEN", _test_runner_token.stdout_lines[1])), gitea_runner_registration_token) }}
+  command: >-
+    act_runner register
+    -c /mnt/services/act_runner/config.yml
+    --no-interactive
+    --instance {{ act_runner_instance }}
+    --token {{ act_runner_token }}
   args:
     creates: /mnt/services/act_runner/.runner
   become: true
