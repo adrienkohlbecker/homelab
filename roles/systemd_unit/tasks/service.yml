@@ -16,7 +16,11 @@
     - systemd_unit_condition | default(true)
     - not ansible_check_mode
   slurp:
-    src: /etc/systemd/system/{{ systemd_unit_dest | default(systemd_unit_src) }}
+    # Some callers pass `foo` (relying on systemd's name resolution) and
+    # others pass `foo.service`; the file on disk always has the suffix.
+    src: "/etc/systemd/system/{{ _name if _name.endswith('.service') else _name ~ '.service' }}"
+  vars:
+    _name: "{{ systemd_unit_dest | default(systemd_unit_src) }}"
   register: systemd_unit_content
   become: true
 
