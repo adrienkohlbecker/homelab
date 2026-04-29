@@ -22,7 +22,7 @@ from typing import NamedTuple
 from tabulate import tabulate
 
 from build_image import build_image
-from machine import DEFAULT_UBUNTU, OUT_DIR, UBUNTU_RELEASES
+from machine import DEFAULT_UBUNTU, OUT_DIR, UBUNTU_RELEASES, ensure_podman_network
 from utils import cancel_on_signal
 
 LOG_FILE = Path("test/out.tsv")
@@ -262,6 +262,13 @@ async def run_all(
 
     task = asyncio.current_task()
     assert task is not None
+
+    # Provision shared podman state once up front. Doing it here (instead of
+    # letting each child testrole.py race in PodmanMachine.prepare()) means
+    # the per-worker inspect calls find the network already present and skip
+    # the racy create.
+    if any(mr.machine == "container" for mr in machine_roles):
+        await ensure_podman_network()
 
     with cancel_on_signal(task):
         async with asyncio.TaskGroup() as tg:

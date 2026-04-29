@@ -54,6 +54,24 @@ QEMU_MACHINE_ARGS: dict[str, tuple[str, list[str], str]] = {
 SSH_WAIT_TIMEOUT = 120
 IDFILE_TIMEOUT = 60
 
+PODMAN_NETWORK = "homelab_net"
+PODMAN_NETWORK_SUBNET = "192.5.0.0/16"
+
+
+async def ensure_podman_network() -> None:
+    """Create the shared podman network if it doesn't exist.
+
+    Call this once before launching parallel test workers — otherwise multiple
+    PodmanMachine.prepare() calls race on the inspect-then-create check and all
+    but the first lose with "network already exists".
+    """
+    result = await run_command(["podman", "network", "inspect", PODMAN_NETWORK], check=False)
+    if result.exitcode == 0:
+        return
+    await run_command(
+        ["podman", "network", "create", "--subnet", PODMAN_NETWORK_SUBNET, PODMAN_NETWORK],
+    )
+
 
 def ubuntu_mirrors() -> tuple[str, str]:
     """Return archive and security mirrors for the current CPU architecture."""
@@ -530,9 +548,7 @@ class PodmanMachine(Machine):
 
         await super().prepare()
 
-        result = await run_command(["podman", "network", "inspect", "homelab_net"], check=False)
-        if result.exitcode != 0:
-            await run_command(["podman", "network", "create", "--subnet", "192.5.0.0/16", "homelab_net"])
+        await ensure_podman_network()
 
     def _boot_command(self) -> list[str]:
         """Return the podman run command that exposes SSH on a random host port."""
@@ -549,7 +565,7 @@ class PodmanMachine(Machine):
             "--cidfile",
             f"{self.workdir.name}/{self.idfile}",
             "--network",
-            "homelab_net",
+            PODMAN_NETWORK,
             f"homelab:{self.ubuntu_name}",
         ]
 
