@@ -86,13 +86,12 @@ async def _configure_apt_sources(m: Machine) -> None:
 
 async def _run_checkmode(site_yml: str, m: Machine, pass_args: list[str]) -> None:
     """Run check mode and staged tags when requested."""
-    list_tags: list[str] = []
-    await m.ansible_command(site_yml, "--list-tags", captured_lines=list_tags)
+    list_tags = await m.ansible_command(site_yml, "--list-tags")
 
     await m.ansible_command(site_yml, "--check", *pass_args)
 
     # Some roles split expensive checks into stages; run only those that exist.
-    available_tags = "\n".join(list_tags)
+    available_tags = "\n".join(list_tags.stdout)
     for stage in ["_check_stage1", "_check_stage2", "_check_stage3", "_check_stage4"]:
         if stage not in available_tags:
             continue

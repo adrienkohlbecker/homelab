@@ -3,11 +3,18 @@
 import asyncio
 import shlex
 import sys
+from typing import NamedTuple
 
 
 class CommandFailedException(Exception):
     """Raised when a subprocess exits with a non-zero status."""
     pass
+
+
+class CommandResult(NamedTuple):
+    """Outcome of a subprocess invocation."""
+    exitcode: int
+    stdout: list[str]
 
 
 # ANSI colors keyed by logical stream name for simple lookups.
@@ -42,8 +49,8 @@ def print_cmd_line(cmd: list[str]) -> None:
     _write_line(f"$ {shlex.join(cmd)}", "cmd")
 
 
-async def read_and_write_stream(stream: asyncio.StreamReader | None, stream_name: str, capture: list[str] | None = None) -> None:
-    """Relay a process stream to stdout and the log, optionally capturing it."""
+async def read_and_write_stream(stream: asyncio.StreamReader | None, stream_name: str, capture: list[str]) -> None:
+    """Relay a process stream to stdout and the log, capturing each line."""
     if stream is None:
         return
 
@@ -53,26 +60,20 @@ async def read_and_write_stream(stream: asyncio.StreamReader | None, stream_name
             break
 
         line = line_bytes.decode("utf-8", errors="replace").rstrip("\n")
-        if capture is not None:
-            capture.append(line)
+        capture.append(line)
         _write_line(line, stream_name)
 
 
-async def run_command(
-    cmd: list[str],
-    check: bool = True,
-    captured_lines: list[str] | None = None,
-) -> int:
+async def run_command(cmd: list[str], check: bool = True) -> CommandResult:
     """
     Execute a subprocess, stream its output live and colorized.
 
     Args:
         cmd: Command and arguments to execute.
         check: If True, raise CommandFailedException on non-zero exit.
-        captured_lines: Optional list populated with stdout lines (uncolored).
 
     Returns:
-        The process exit code when check is False.
+        CommandResult with the exit code and captured stdout lines.
     """
     print_cmd_line(cmd)
 
@@ -82,14 +83,16 @@ async def run_command(
         stderr=asyncio.subprocess.PIPE,
     )
 
+    stdout: list[str] = []
+    stderr: list[str] = []
     try:
         # Read stdout/stderr concurrently while the process executes. Use a
         # TaskGroup so a failure in either reader cancels the other and any
         # additional errors aggregate into an ExceptionGroup instead of being
         # silently dropped (as asyncio.gather would).
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(read_and_write_stream(process.stdout, "stdout", captured_lines))
-            tg.create_task(read_and_write_stream(process.stderr, "stderr"))
+            tg.create_task(read_and_write_stream(process.stdout, "stdout", stdout))
+            tg.create_task(read_and_write_stream(process.stderr, "stderr", stderr))
         exitcode = await process.wait()
     except BaseException:
         # Any failure (cancellation, reader error, etc.) leaves the subprocess
@@ -104,4 +107,4 @@ async def run_command(
 
     if check and exitcode != 0:
         raise CommandFailedException(f"Command failed with exit code {exitcode}")
-    return exitcode
+    return CommandResult(exitcode=exitcode, stdout=stdout)
