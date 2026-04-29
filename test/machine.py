@@ -614,6 +614,13 @@ class PodmanMachine(Machine):
             f"{self.workdir.name}/{self.idfile}",
             "--network",
             PODMAN_NETWORK,
+            # Bypass aardvark-dns and the host's single upstream resolver,
+            # which we've seen drop queries under parallel container load
+            # (transient "Temporary failure in name resolution" mid-test).
+            "--dns",
+            "1.1.1.1",
+            "--dns",
+            "1.0.0.1",
             f"homelab:{self.ubuntu_name}",
         ]
 
