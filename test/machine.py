@@ -301,14 +301,24 @@ class Machine:
         if self.proc and self.proc.returncode is None:
             try:
                 self.proc.send_signal(signal.SIGINT)
-                async with asyncio.timeout(9):
-                    try:
-                        await self.proc.wait()
-                    except asyncio.TimeoutError:
-                        self.proc.kill()
-                        await self.proc.wait()
-            except Exception:
+            except ProcessLookupError:
+                # Race: the process exited between our returncode check and
+                # the signal call. Nothing to stop, fall through to cleanup.
                 pass
+            else:
+                try:
+                    async with asyncio.timeout(9):
+                        await self.proc.wait()
+                except TimeoutError:
+                    # asyncio.timeout() converts the inner CancelledError into
+                    # TimeoutError on __aexit__; only here can we tell the wait
+                    # actually timed out and escalate to SIGKILL.
+                    try:
+                        self.proc.kill()
+                    except ProcessLookupError:
+                        # Process died during the 9s graceful window after all.
+                        pass
+                    await self.proc.wait()
 
         self.workdir.cleanup()
 
