@@ -216,7 +216,12 @@ async def _run_role(
                     # whole chain reacts to the same signal.
                     proc.send_signal(signal.SIGINT)
                 try:
-                    async with asyncio.timeout(10):
+                    # 30s gives Machine.stop() enough headroom for its own
+                    # graceful->SIGKILL escalation (~10-15s worst case for
+                    # podman rm --time 5 + drain, similar for qemu) without
+                    # SIGKILL'ing testrole.py mid-cleanup and leaking the
+                    # container/VM.
+                    async with asyncio.timeout(30):
                         await proc.wait()
                 except TimeoutError:
                     # asyncio.timeout() converts the inner CancelledError into
