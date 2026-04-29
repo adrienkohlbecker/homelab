@@ -10,6 +10,7 @@ without relying on GNU parallel. Output for each machine/role run is captured in
 
 import argparse
 import asyncio
+import contextlib
 import signal
 import sys
 import time
@@ -152,8 +153,13 @@ async def _run_role(
 
             try:
                 await proc.wait()
-            except asyncio.CancelledError:
-                proc.terminate()
+            except BaseException:
+                # Any failure (cancellation, reader error, etc.) leaves the
+                # subprocess behind unless we tear it down here.
+                with contextlib.suppress(ProcessLookupError):
+                    # Race: the testrole child may have exited on its own
+                    # between the wait and our terminate.
+                    proc.terminate()
                 try:
                     async with asyncio.timeout(10):
                         await proc.wait()
@@ -161,7 +167,8 @@ async def _run_role(
                     # asyncio.timeout() converts the inner CancelledError into
                     # TimeoutError on __aexit__; only here can we tell the wait
                     # actually timed out and escalate to SIGKILL.
-                    proc.kill()
+                    with contextlib.suppress(ProcessLookupError):
+                        proc.kill()
                     await proc.wait()
                 raise
 
