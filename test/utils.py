@@ -99,8 +99,14 @@ async def run_command(
             read_and_write_stream(process.stderr, "stderr"),
         )
         exitcode = await process.wait()
-    except asyncio.CancelledError:
-        process.kill()
+    except BaseException:
+        # Any failure (cancellation, reader error, etc.) leaves the subprocess
+        # behind unless we tear it down here.
+        try:
+            process.kill()
+        except ProcessLookupError:
+            # Process already exited on its own; nothing to kill.
+            pass
         await process.wait()
         raise
 
