@@ -83,16 +83,35 @@ async def _configure_apt_sources(m: Machine) -> None:
     """Rewrite apt sources to use local mirrors and refresh package metadata."""
     ubuntu_mirror, ubuntu_mirror_security = ubuntu_mirrors()
     name = m.ubuntu_name
-    sources = [
-        f"deb {ubuntu_mirror} {name} main restricted universe multiverse",
-        f"deb {ubuntu_mirror} {name}-updates main restricted universe multiverse",
-        f"deb {ubuntu_mirror_security} {name}-security main restricted universe multiverse",
-        f"deb {ubuntu_mirror} {name}-backports main restricted universe multiverse",
-    ]
+    if name == "jammy":
+        # Legacy one-line-per-source list at /etc/apt/sources.list.
+        sources = [
+            f"deb {ubuntu_mirror} {name} main restricted universe multiverse",
+            f"deb {ubuntu_mirror} {name}-updates main restricted universe multiverse",
+            f"deb {ubuntu_mirror_security} {name}-security main restricted universe multiverse",
+            f"deb {ubuntu_mirror} {name}-backports main restricted universe multiverse",
+        ]
+        path = "/etc/apt/sources.list"
+    else:
+        # Noble and beyond ship deb822-style sources.
+        sources = [
+            "Types: deb",
+            f"URIs: {ubuntu_mirror}",
+            f"Suites: {name} {name}-updates {name}-backports",
+            "Components: main universe restricted multiverse",
+            "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg",
+            "",
+            "Types: deb",
+            f"URIs: {ubuntu_mirror_security}",
+            f"Suites: {name}-security",
+            "Components: main universe restricted multiverse",
+            "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg",
+        ]
+        path = "/etc/apt/sources.list.d/ubuntu.sources"
 
     # Use one shell to avoid repeatedly opening the file and keep quoting simple.
     printf_args = " ".join(f'"{line}"' for line in sources)
-    await m.ssh_command("sudo", "bash", "-c", f"printf '%s\\n' {printf_args} > /etc/apt/sources.list")
+    await m.ssh_command("sudo", "bash", "-c", f"printf '%s\\n' {printf_args} > {path}")
     await m.ssh_command("sudo", "apt-get", "update")
 
 
