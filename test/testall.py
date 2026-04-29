@@ -147,7 +147,6 @@ async def _run_role(
     async with semaphore:
         start_time = time.time()
         print(f"[{seq}] {machine}:{role} starting")
-        log_path.parent.mkdir(parents=True, exist_ok=True)
 
         with log_path.open("w") as log_handle:
             proc = await asyncio.create_subprocess_exec(
