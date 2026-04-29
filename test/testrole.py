@@ -14,6 +14,7 @@ import re
 import sys
 from pathlib import Path
 
+from build_image import build_image
 from machine import (
     DEFAULT_UBUNTU,
     Machine,
@@ -66,6 +67,12 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Re-run the role and fail if any task reports changed (default: on)",
+    )
+    parser.add_argument(
+        "--build-image",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Rebuild the homelab:<codename> container image before booting (default: on; container machine only)",
     )
     parser.add_argument("role", help="Role name to test")
 
@@ -237,6 +244,11 @@ def main() -> int:
     """CLI entry point for running a single role test."""
 
     parsed_args, pass_args = parse_args()
+
+    if parsed_args.build_image and parsed_args.machine == "container":
+        rc = build_image(parsed_args.ubuntu)
+        if rc != 0:
+            return rc
 
     try:
         asyncio.run(run_test(parsed_args, pass_args))

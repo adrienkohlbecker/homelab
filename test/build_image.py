@@ -15,6 +15,27 @@ from machine import UBUNTU_RELEASES
 DOCKERFILE = Path("test/Dockerfile")
 
 
+def build_image(codename: str, builder: str = "podman") -> int:
+    """Build homelab:<codename>. Returns the builder's exit code."""
+    if codename not in UBUNTU_RELEASES:
+        raise ValueError(
+            f"Unknown Ubuntu codename '{codename}'; valid: {sorted(UBUNTU_RELEASES)}"
+        )
+    if not DOCKERFILE.exists():
+        raise FileNotFoundError(f"{DOCKERFILE} not found (run from the repo root)")
+
+    version = UBUNTU_RELEASES[codename]
+    cmd = [
+        builder, "build",
+        "--build-arg", f"UBUNTU_VERSION={version}",
+        "--tag", f"homelab:{codename}",
+        "-f", str(DOCKERFILE),
+        str(DOCKERFILE.parent),
+    ]
+    print(f"==> Building homelab:{codename} (ubuntu:{version})")
+    return subprocess.run(cmd).returncode
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Build homelab:<codename> images for the configured Ubuntu releases.",
@@ -51,23 +72,10 @@ def main() -> int:
             )
             return 1
 
-    if not DOCKERFILE.exists():
-        print(f"Error: {DOCKERFILE} not found (run from the repo root)", file=sys.stderr)
-        return 1
-
     for codename in codenames:
-        version = UBUNTU_RELEASES[codename]
-        cmd = [
-            args.builder, "build",
-            "--build-arg", f"UBUNTU_VERSION={version}",
-            "--tag", f"homelab:{codename}",
-            "-f", str(DOCKERFILE),
-            str(DOCKERFILE.parent),
-        ]
-        print(f"\n==> Building homelab:{codename} (ubuntu:{version})")
-        result = subprocess.run(cmd)
-        if result.returncode != 0:
-            return result.returncode
+        rc = build_image(codename, builder=args.builder)
+        if rc != 0:
+            return rc
 
     return 0
 

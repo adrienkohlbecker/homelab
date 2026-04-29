@@ -21,6 +21,7 @@ from typing import NamedTuple
 
 from tabulate import tabulate
 
+from build_image import build_image
 from machine import DEFAULT_UBUNTU, OUT_DIR, UBUNTU_RELEASES
 from utils import cancel_on_signal
 
@@ -96,6 +97,13 @@ def parse_args() -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Re-run each role and fail if any task reports changed (default: on)",
+    )
+
+    parser.add_argument(
+        "--build-image",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Rebuild the homelab:<codename> container image(s) before running (default: on)",
     )
 
     # Remaining arguments are forwarded to testrole.py
@@ -178,6 +186,8 @@ async def _run_role(
         "--ubuntu", ubuntu_name,
         "--checkmode" if checkmode else "--no-checkmode",
         "--idempotence" if idempotence else "--no-idempotence",
+        # testall builds images upfront; tell each child to skip the rebuild.
+        "--no-build-image",
         role,
         *role_args,
     ]
@@ -329,6 +339,15 @@ def main() -> int:
         ]
 
     setup_output_dir()
+
+    if args.build_image:
+        needs_image = any(mr.machine == "container" for mr in machine_roles)
+        if needs_image:
+            for codename in dict.fromkeys(mr.ubuntu_name for mr in machine_roles):
+                rc = build_image(codename)
+                if rc != 0:
+                    print(f"Image build failed for homelab:{codename}", file=sys.stderr)
+                    return rc
 
     try:
         results = asyncio.run(
