@@ -38,8 +38,9 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     )
     parser.add_argument(
         "--checkmode",
-        action="store_true",
-        help="Run ansible in check mode before the test",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run ansible in check mode before the test (default: on; --no-checkmode disables)",
     )
     parser.add_argument(
         "--keep",

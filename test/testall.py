@@ -78,6 +78,13 @@ def parse_args() -> argparse.Namespace:
         help="Ubuntu codename of the target image",
     )
 
+    parser.add_argument(
+        "--checkmode",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Run ansible in check mode before each test (default: on; --no-checkmode disables)",
+    )
+
     # Remaining arguments are forwarded to testrole.py
     parser.add_argument(
         "role_args",
@@ -148,13 +155,14 @@ async def _run_role(
     role_args: Sequence[str],
     semaphore: asyncio.Semaphore,
     ubuntu_name: str,
+    checkmode: bool,
 ) -> JobResult:
     """Execute a single role test while respecting the concurrency limit."""
     cmd = [
         "test/testrole.py",
         "--machine", machine,
         "--ubuntu", ubuntu_name,
-        "--checkmode",
+        "--checkmode" if checkmode else "--no-checkmode",
         role,
         *role_args,
     ]
@@ -218,6 +226,7 @@ async def run_all(
     role_args: Sequence[str],
     jobs: int,
     ubuntu_name: str,
+    checkmode: bool,
 ) -> list[JobResult]:
     """Run every role/machine combination concurrently."""
     semaphore = asyncio.Semaphore(jobs)
@@ -228,7 +237,7 @@ async def run_all(
     with cancel_on_signal(task):
         async with asyncio.TaskGroup() as tg:
             tasks = [
-                tg.create_task(_run_role(seq, machine, role, role_args, semaphore, ubuntu_name))
+                tg.create_task(_run_role(seq, machine, role, role_args, semaphore, ubuntu_name, checkmode))
                 for seq, (machine, role) in enumerate(machine_roles, start=1)
             ]
 
@@ -272,7 +281,7 @@ def main() -> int:
     setup_output_dir()
 
     try:
-        results = asyncio.run(run_all(machine_roles, args.role_args, args.jobs, args.ubuntu))
+        results = asyncio.run(run_all(machine_roles, args.role_args, args.jobs, args.ubuntu, args.checkmode))
     except asyncio.CancelledError:
         print("\nInterrupted, shutting down...", file=sys.stderr)
         return 130
