@@ -186,6 +186,7 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: list[str]) -> Non
                     except CommandFailedException:
                         print("Command failed")
                         await m.collect_journal()
+                        m.print_journal_tail()
                         raise
                     except IdempotenceFailedException:
                         print("Idempotence check failed")
