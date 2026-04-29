@@ -201,23 +201,18 @@ async def run_all(
 ) -> List[JobResult]:
     """Run every role/machine combination concurrently."""
     semaphore = asyncio.Semaphore(jobs)
-    results: List[JobResult] = []
 
     task = asyncio.current_task()
     assert task is not None
 
-    async def run_and_store(seq: int, machine: str, role: str) -> None:
-        result = await _run_role(seq, machine, role, role_args, semaphore)
-        results.append(result)
-
     with cancel_on_signal(task):
         async with asyncio.TaskGroup() as tg:
-            seq = 1
-            for machine, role in machine_roles:
-                tg.create_task(run_and_store(seq, machine, role))
-                seq += 1
+            tasks = [
+                tg.create_task(_run_role(seq, machine, role, role_args, semaphore))
+                for seq, (machine, role) in enumerate(machine_roles, start=1)
+            ]
 
-    return results
+    return [t.result() for t in tasks]
 
 
 def _write_joblog(results: List[JobResult]) -> None:
