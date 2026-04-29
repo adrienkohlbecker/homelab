@@ -8,6 +8,25 @@
     name: _test
     tasks_from: nginx
 
+- name: _test | Create dummy iot interface
+  # The role's macvlan network uses `iot` as its parent. Production hosts
+  # have a real iot VLAN; test environments don't, so stand up a dummy
+  # interface with the same name to satisfy the macvlan creation.
+  shell: |
+    set -euo pipefail
+    if ip link show iot >/dev/null 2>&1; then
+      echo "exists"
+    else
+      ip link add iot type dummy
+      ip link set iot up
+      echo "created"
+    fi
+  args:
+    executable: /bin/bash
+  register: iot_setup
+  changed_when: '"created" in iot_setup.stdout'
+  become: true
+
 - name: _test | Setup dependencies
   shell: |
     set -euo pipefail

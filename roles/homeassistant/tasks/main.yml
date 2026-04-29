@@ -1,5 +1,4 @@
 - name: Create internal podman network
-  when: not docker_test
   containers.podman.podman_network:
     name: iot_macvlan
     subnet: 10.123.4.100/30
