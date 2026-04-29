@@ -240,35 +240,35 @@ class Machine:
         await self._find_ssh_port()
 
         deadline = time.monotonic() + SSH_WAIT_TIMEOUT
-        while True:
-            writer: Optional[asyncio.StreamWriter] = None
-            try:
-                reader, writer = await asyncio.wait_for(
-                    asyncio.open_connection(self.ssh_host, self.ssh_port),
-                    timeout=2,
-                )
-                banner_bytes = await asyncio.wait_for(reader.read(1024), timeout=2)
-                banner = banner_bytes.decode().strip()
-                if banner:
-                    return
-            except (OSError, TimeoutError):
-                # Connect refused/reset or no banner within 2s -- expected
-                # while sshd is still coming up; retry after the tick.
-                pass
-            finally:
-                if writer is not None:
-                    writer.close()
-                    try:
-                        await asyncio.wait_for(writer.wait_closed(), timeout=1)
-                    except (OSError, TimeoutError):
-                        # Half-open peer or already-broken transport: don't
-                        # let a stuck close stall the polling loop.
-                        pass
-
+        while not await self._ssh_banner_ready():
             if time.monotonic() > deadline:
                 raise TimeoutError("SSH daemon did not become ready in time")
-
             await sleep_tick()
+
+    async def _ssh_banner_ready(self) -> bool:
+        """Probe the SSH port once. Return True iff a non-empty banner arrives."""
+
+        try:
+            reader, writer = await asyncio.wait_for(
+                asyncio.open_connection(self.ssh_host, self.ssh_port),
+                timeout=2,
+            )
+        except (OSError, TimeoutError):
+            # sshd not yet accepting connections; caller will retry.
+            return False
+
+        try:
+            banner_bytes = await asyncio.wait_for(reader.read(1024), timeout=2)
+            return bool(banner_bytes.decode().strip())
+        except (OSError, TimeoutError):
+            # Connected but no banner in time; treat as not-ready.
+            return False
+        finally:
+            writer.close()
+            with contextlib.suppress(OSError, TimeoutError):
+                # Half-open peer or already-broken transport: don't let a
+                # stuck close stall the polling loop.
+                await asyncio.wait_for(writer.wait_closed(), timeout=1)
 
     async def collect_journal(self) -> None:
         """Fetch systemd journal for debugging when a run fails."""
