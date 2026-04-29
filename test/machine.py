@@ -569,6 +569,44 @@ class PodmanMachine(Machine):
             f"homelab:{self.ubuntu_name}",
         ]
 
+    async def stop(self) -> None:
+        """Tear down the container via cidfile, then drain the foreground client.
+
+        Rootless podman containers are supervised by `conmon`, which detaches
+        from the foreground `podman run` client. Signaling the client alone
+        (the base-class default) doesn't reliably stop the container -- if
+        the client is SIGKILL'd or testrole.py is interrupted before cleanup
+        finishes, conmon and the container survive reparented to init.
+        Talking to conmon directly through `podman rm --force <cid>` works
+        regardless of the client's state.
+        """
+        cid_path = Path(f"{self.workdir.name}/{self.idfile}")
+        cid = cid_path.read_text().strip() if cid_path.exists() else None
+
+        try:
+            if cid:
+                # asyncio.shield prevents a second SIGINT from cancelling the
+                # rm mid-flight; without it, nested cancellation leaks the
+                # container.
+                await asyncio.shield(
+                    run_command(
+                        ["podman", "rm", "--force", "--time", "5", cid],
+                        check=False,
+                    )
+                )
+            if self.proc and self.proc.returncode is None:
+                # With the container gone, the client should exit on its own;
+                # give it a brief grace period before escalating.
+                try:
+                    async with asyncio.timeout(5):
+                        await self.proc.wait()
+                except TimeoutError:
+                    with contextlib.suppress(ProcessLookupError):
+                        self.proc.kill()
+                    await self.proc.wait()
+        finally:
+            self.workdir.cleanup()
+
     async def _find_ssh_port(self) -> None:
         """Ask podman for the forwarded SSH port and store it on the instance."""
 
