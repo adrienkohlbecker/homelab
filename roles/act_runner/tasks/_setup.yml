@@ -3,8 +3,67 @@
     pkg:
       - podman
       - git
+      # podman's rootless mode shells out to newuidmap/newgidmap (in uidmap)
+      # to read the subuid/subgid ranges. uidmap is only a Recommends of
+      # podman, so install_recommends:false leaves it out -- pull it in
+      # explicitly so podman can start under act_runner.
+      - uidmap
     install_recommends: false
     cache_valid_time: 3600
+  become: true
+
+# In production, host-wide subuid/subgid allocation happens in the `subid` role
+# (driven by host_vars `subid_users`). The role-only test harness doesn't apply
+# that role, so we pre-seed an entry for act_runner here -- without it, rootless
+# podman refuses to start with "no subuid ranges found for user act_runner".
+- name: _test | Pre-allocate subuid for act_runner
+  lineinfile:
+    path: /etc/subuid
+    line: "act_runner:100000:65536"
+    regexp: "^act_runner:"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _test | Pre-allocate subgid for act_runner
+  lineinfile:
+    path: /etc/subgid
+    line: "act_runner:100000:65536"
+    regexp: "^act_runner:"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+# Podman-in-podman: when the test target is itself a container, the host
+# filesystem is already overlayfs and rootless podman can't stack another
+# overlay on top. Install fuse-overlayfs and point rootless storage at it.
+# Skipped for QEMU targets where the kernel overlay driver works fine.
+- name: _test | Install fuse-overlayfs for nested rootless podman
+  when: docker_test | default(false)
+  apt:
+    pkg:
+      - fuse-overlayfs
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
+- name: _test | Configure rootless storage to use fuse-overlayfs
+  when: docker_test | default(false)
+  copy:
+    dest: /etc/containers/storage.conf
+    content: |
+      [storage]
+      driver = "overlay"
+
+      [storage.options]
+      mount_program = "/usr/bin/fuse-overlayfs"
+    owner: root
+    group: root
+    mode: "0644"
   become: true
 
 - name: _test | Install gitea
