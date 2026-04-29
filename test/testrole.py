@@ -18,12 +18,13 @@ from build_image import build_image
 from machine import (
     DEFAULT_UBUNTU,
     Machine,
+    OUT_DIR,
     PodmanMachine,
     QemuMachine,
     UBUNTU_RELEASES,
     ubuntu_mirrors,
 )
-from utils import CommandFailedException, IdempotenceFailedException, cancel_on_signal
+from utils import CommandFailedException, IdempotenceFailedException, cancel_on_signal, tee_output
 
 
 def parse_args() -> tuple[argparse.Namespace, list[str]]:
@@ -250,29 +251,31 @@ def main() -> int:
         if rc != 0:
             return rc
 
-    try:
-        asyncio.run(run_test(parsed_args, pass_args))
-        return 0
-    except CommandFailedException as exc:
-        print(exc, file=sys.stderr)
-        sys.stderr.write(f"\033[0;41m{parsed_args.role}.{parsed_args.machine} failed\033[0m\n")
-        sys.stderr.flush()
-        return 1
-    except IdempotenceFailedException as exc:
-        print(exc, file=sys.stderr)
-        sys.stderr.write(f"\033[0;41m{parsed_args.role}.{parsed_args.machine} not idempotent\033[0m\n")
-        sys.stderr.flush()
-        return 125
-    except TimeoutError:
-        sys.stderr.write(
-            f"\033[0;41m{parsed_args.role}.{parsed_args.machine} timed out after {parsed_args.timeout}s\033[0m\n"
-        )
-        sys.stderr.flush()
-        return 124  # GNU `timeout`'s exit code for "command timed out"
-    except asyncio.CancelledError:
-        sys.stderr.write("\nInterrupted, shutting down...\n")
-        sys.stderr.flush()
-        return 130
+    output_path = OUT_DIR / f"{parsed_args.machine}.{parsed_args.ubuntu}.{parsed_args.role}.output.ansi"
+    with tee_output(output_path):
+        try:
+            asyncio.run(run_test(parsed_args, pass_args))
+            return 0
+        except CommandFailedException as exc:
+            print(exc, file=sys.stderr)
+            sys.stderr.write(f"\033[0;41m{parsed_args.role}.{parsed_args.machine} failed\033[0m\n")
+            sys.stderr.flush()
+            return 1
+        except IdempotenceFailedException as exc:
+            print(exc, file=sys.stderr)
+            sys.stderr.write(f"\033[0;41m{parsed_args.role}.{parsed_args.machine} not idempotent\033[0m\n")
+            sys.stderr.flush()
+            return 125
+        except TimeoutError:
+            sys.stderr.write(
+                f"\033[0;41m{parsed_args.role}.{parsed_args.machine} timed out after {parsed_args.timeout}s\033[0m\n"
+            )
+            sys.stderr.flush()
+            return 124  # GNU `timeout`'s exit code for "command timed out"
+        except asyncio.CancelledError:
+            sys.stderr.write("\nInterrupted, shutting down...\n")
+            sys.stderr.flush()
+            return 130
 
 
 if __name__ == "__main__":
