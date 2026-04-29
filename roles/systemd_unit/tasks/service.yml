@@ -5,23 +5,19 @@
     enabled: true
   become: true
 
-# Read podman image refs straight from the unit's ExecStart* lines, so each
-# .service file remains the single source of truth -- the playbook never
-# restates the image. Pre-pulling here moves a slow network fetch out of
-# `systemctl start`'s TimeoutStartSec window and into a normal ansible task
-# with no fixed deadline. Parsing happens controller-side via the
-# extract_podman_images Jinja filter so nothing is copied to the target host.
-- name: Read unit file for image detection
+# Each .service file is the single source of truth for its podman image;
+# the extract_podman_image module asks systemd over D-Bus for the parsed
+# ExecStart* and pulls the image out of any `podman run` invocation. Pre-
+# pulling here moves a slow network fetch out of `systemctl start`'s
+# TimeoutStartSec window and into a normal ansible task with no fixed
+# deadline.
+- name: Detect podman images referenced by the unit
   when:
     - systemd_unit_condition | default(true)
     - not ansible_check_mode
-  slurp:
-    # Some callers pass `foo` (relying on systemd's name resolution) and
-    # others pass `foo.service`; the file on disk always has the suffix.
-    src: "/etc/systemd/system/{{ _name if _name.endswith('.service') else _name ~ '.service' }}"
-  vars:
-    _name: "{{ systemd_unit_dest | default(systemd_unit_src) }}"
-  register: systemd_unit_content
+  extract_podman_image:
+    name: "{{ systemd_unit_dest | default(systemd_unit_src) }}"
+  register: systemd_unit_podman_images
   become: true
 
 - name: Pre-pull podman images referenced by the unit
@@ -30,7 +26,7 @@
     - not ansible_check_mode
   containers.podman.podman_image:
     name: "{{ item }}"
-  loop: "{{ (systemd_unit_content.content | b64decode) | extract_podman_images }}"
+  loop: "{{ systemd_unit_podman_images.images | default([]) }}"
   become: true
 
 - name: Start the service
