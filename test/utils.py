@@ -6,7 +6,8 @@ import shlex
 import signal
 import sys
 from collections.abc import Iterator
-from typing import NamedTuple
+from pathlib import Path
+from typing import NamedTuple, TextIO
 
 
 class CommandFailedException(Exception):
@@ -30,6 +31,24 @@ STREAM_COLORS = {
     "stderr": "\033[0;41m{line}\033[0m",
     "cmd": "\033[0;36m{line}\033[0m",
 }
+
+# Optional file that mirrors every line written via _write_line / print_cmd_line.
+# Set with tee_output() so callers can keep a transcript of a run alongside the
+# systemd journal in test/out/.
+_OUTPUT_LOG: TextIO | None = None
+
+
+@contextlib.contextmanager
+def tee_output(path: Path) -> Iterator[None]:
+    """Mirror every _write_line / print_cmd_line call into *path* for the duration of the with-block."""
+    global _OUTPUT_LOG
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w") as handle:
+        _OUTPUT_LOG = handle
+        try:
+            yield
+        finally:
+            _OUTPUT_LOG = None
 
 
 async def sleep_tick() -> None:
@@ -60,10 +79,13 @@ def _colorize(line: str, stream_name: str) -> str:
 
 
 def _write_line(line: str, stream_name: str) -> None:
-    """Echo a line to stdout, colorized by stream name."""
+    """Echo a line to stdout (and the active tee target, if any), colorized by stream name."""
     output_line = _colorize(line, stream_name)
     sys.stdout.write(output_line + "\n")
     sys.stdout.flush()
+    if _OUTPUT_LOG is not None:
+        _OUTPUT_LOG.write(output_line + "\n")
+        _OUTPUT_LOG.flush()
 
 
 def print_cmd_line(cmd: list[str]) -> None:
