@@ -109,10 +109,10 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: List[str]) -> Non
     for sig in (signal.SIGINT, signal.SIGTERM):
         loop.add_signal_handler(sig, current.cancel)
 
-    await m.prepare()
-    await m.boot()
-
     try:
+        await m.prepare()
+        await m.boot()
+
         await m.ensure_booted()
         print("Booted")
 
