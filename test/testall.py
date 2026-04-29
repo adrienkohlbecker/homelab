@@ -19,6 +19,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import NamedTuple
 
+from tabulate import tabulate
+
 from machine import DEFAULT_UBUNTU, OUT_DIR, UBUNTU_RELEASES
 from utils import cancel_on_signal
 
@@ -40,6 +42,7 @@ class JobResult:
     machine: str
     ubuntu_name: str
     role: str
+    log_path: Path
     runtime: float
     exitval: int
 
@@ -188,7 +191,7 @@ async def _run_role(
             proc = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=log_handle,
-                stderr=sys.stderr,
+                stderr=log_handle,
             )
 
             try:
@@ -222,13 +225,16 @@ async def _run_role(
         assert exitval is not None
         if exitval < 0:
             exitval = 128 - exitval
-        status = "ok" if exitval == 0 else "fail"
+        status = "ok" if exitval == 0 else "\033[0;41mfail\033[0m"
+        if exitval == 0 and log_path.exists():
+            log_path.unlink()
         print(f"[{seq}] {machine}:{ubuntu_name}:{role} {status} ({runtime:.1f}s)")
 
     return JobResult(
         machine=machine,
         ubuntu_name=ubuntu_name,
         role=role,
+        log_path=log_path,
         runtime=runtime,
         exitval=exitval,
     )
@@ -257,6 +263,16 @@ async def run_all(
             ]
 
     return [t.result() for t in tasks]
+
+
+def _print_failure_table(failures: list[JobResult]) -> None:
+    """Render a table of failed runs with their log file paths."""
+    rows = [
+        [result.machine, result.ubuntu_name, result.role, str(result.log_path)]
+        for result in sorted(failures, key=lambda r: (r.machine, r.ubuntu_name, r.role))
+    ]
+    print("\nFailure summary:", file=sys.stderr)
+    print(tabulate(rows, headers=["Machine", "Ubuntu", "Role", "Log"]), file=sys.stderr)
 
 
 def _write_joblog(results: list[JobResult]) -> None:
@@ -327,10 +343,7 @@ def main() -> int:
 
     failures = [result for result in results if result.exitval != 0]
     if failures:
-        failed_list = ", ".join(
-            dict.fromkeys(f"{f.machine}:{f.ubuntu_name}:{f.role}" for f in failures)
-        )
-        print(f"Failures: {failed_list}", file=sys.stderr)
+        _print_failure_table(failures)
         return 1
 
     return 0
