@@ -84,11 +84,13 @@ async def run_command(
     )
 
     try:
-        # Read stdout/stderr concurrently while the process executes.
-        await asyncio.gather(
-            read_and_write_stream(process.stdout, "stdout", captured_lines),
-            read_and_write_stream(process.stderr, "stderr"),
-        )
+        # Read stdout/stderr concurrently while the process executes. Use a
+        # TaskGroup so a failure in either reader cancels the other and any
+        # additional errors aggregate into an ExceptionGroup instead of being
+        # silently dropped (as asyncio.gather would).
+        async with asyncio.TaskGroup() as tg:
+            tg.create_task(read_and_write_stream(process.stdout, "stdout", captured_lines))
+            tg.create_task(read_and_write_stream(process.stderr, "stderr"))
         exitcode = await process.wait()
     except BaseException:
         # Any failure (cancellation, reader error, etc.) leaves the subprocess
