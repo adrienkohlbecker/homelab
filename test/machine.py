@@ -423,7 +423,7 @@ class Machine:
             # (single FD, kernel FIFO); stderr lines land in the main log in
             # source order. The two streams go to different destinations so
             # there's no cross-stream interleave to worry about here.
-            await read_and_write_stream(proc.stderr, "stderr", [])
+            await read_and_write_stream(proc.stderr, "red", [])
             exitcode = await proc.wait()
 
         if exitcode != 0:

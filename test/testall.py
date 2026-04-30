@@ -33,7 +33,7 @@ from machine import (
     UBUNTU_RELEASES,
     ensure_podman_network,
 )
-from utils import STREAM_COLORS, cancel_on_signal, terminate_subprocess
+from utils import cancel_on_signal, colorize, terminate_subprocess
 
 LOG_FILE = Path("test/out.tsv")
 LOG_FILE_PREV = Path("test/out.tsv.prev")
@@ -288,7 +288,7 @@ async def _run_role(
         assert exitval is not None
         if exitval < 0:
             exitval = 128 - exitval
-        status = "ok" if exitval == 0 else STREAM_COLORS["stderr"].format(line="fail")
+        status = "ok" if exitval == 0 else colorize("fail", "red")
         # Per-run log cleanup is testrole's responsibility now (--no-keep-logs above).
         print(f"[{seq}] {machine}:{ubuntu_name}:{role} {status} ({runtime:.1f}s)")
 

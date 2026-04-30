@@ -36,10 +36,10 @@ class CommandResult(NamedTuple):
     stderr: list[str]
 
 
-# ANSI colors keyed by logical stream name for simple lookups.
-STREAM_COLORS = {
-    "stderr": "\033[0;41m{line}\033[0m",
-    "cmd": "\033[0;36m{line}\033[0m",
+# Templates expand `{line}` between an ANSI prefix and reset.
+COLORS = {
+    "red": "\033[0;41m{line}\033[0m",
+    "cyan": "\033[0;36m{line}\033[0m",
 }
 
 # Optional file that mirrors every line written via _write_line / print_cmd_line.
@@ -81,9 +81,9 @@ def cancel_on_signal(task: asyncio.Task[object]) -> Iterator[None]:
             loop.remove_signal_handler(sig)
 
 
-def _colorize(line: str, stream_name: str) -> str:
-    """Return the line wrapped in ANSI codes when a color is configured."""
-    template = STREAM_COLORS.get(stream_name)
+def colorize(line: str, color: str | None) -> str:
+    """Return the line wrapped in ANSI codes when *color* is a known key."""
+    template = COLORS.get(color) if color else None
     return template.format(line=line) if template else line
 
 
@@ -96,14 +96,14 @@ def _emit(text: str) -> None:
         _OUTPUT_LOG.flush()
 
 
-def _write_line(line: str, stream_name: str) -> None:
-    """Echo a line to stdout (and the active tee target, if any), colorized by stream name."""
-    _emit(_colorize(line, stream_name) + "\n")
+def _write_line(line: str, color: str | None) -> None:
+    """Echo a line to stdout (and the active tee target, if any), optionally colorized."""
+    _emit(colorize(line, color) + "\n")
 
 
 def print_cmd_line(cmd: list[str]) -> None:
     """Log the command being executed in a distinct color."""
-    _write_line(f"$ {shlex.join(cmd)}", "cmd")
+    _write_line(f"$ {shlex.join(cmd)}", "cyan")
 
 
 def print_line(line: str, stderr: bool = False) -> None:
@@ -113,12 +113,12 @@ def print_line(line: str, stderr: bool = False) -> None:
     mirroring print()'s behavior otherwise. Pass stderr=True to render the
     line with the red error highlight used for subprocess stderr.
     """
-    _write_line(line, "stderr" if stderr else "stdout")
+    _write_line(line, "red" if stderr else None)
 
 
 async def read_and_write_stream(
     stream: asyncio.StreamReader | None,
-    stream_name: str,
+    color: str | None,
     capture: list[str],
     *,
     quiet: bool = False,
@@ -140,7 +140,7 @@ async def read_and_write_stream(
         line = line_bytes.decode("utf-8", errors="replace").rstrip("\n")
         capture.append(line)
         if not quiet:
-            _write_line(line, stream_name)
+            _write_line(line, color)
 
 
 async def terminate_subprocess(
@@ -211,8 +211,8 @@ async def run_command(cmd: list[str], check: bool = True, quiet: bool = False) -
         # use stderr=asyncio.subprocess.STDOUT, which costs the per-stream
         # color tagging.
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(read_and_write_stream(process.stdout, "stdout", stdout, quiet=quiet))
-            tg.create_task(read_and_write_stream(process.stderr, "stderr", stderr, quiet=quiet))
+            tg.create_task(read_and_write_stream(process.stdout, None, stdout, quiet=quiet))
+            tg.create_task(read_and_write_stream(process.stderr, "red", stderr, quiet=quiet))
         exitcode = await process.wait()
     except BaseException:
         # Any failure (cancellation, reader error, etc.) leaves the subprocess
