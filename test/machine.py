@@ -764,6 +764,8 @@ class PodmanMachine(Machine):
             "--rm",
             "--timeout",
             MACHINE_TIMEOUT,
+            "--systemd",
+            "always",
             "--publish",
             "127.0.0.1::22",
             "--privileged",
