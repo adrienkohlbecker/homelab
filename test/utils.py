@@ -178,7 +178,14 @@ async def terminate_subprocess(
     await proc.wait()
 
 
-async def run_command(cmd: list[str], check: bool = True, quiet: bool = False) -> CommandResult:
+async def run_command(
+    cmd: list[str],
+    check: bool = True,
+    quiet: bool = False,
+    *,
+    cleanup_grace_seconds: float = 0.0,
+    cleanup_signal: int = signal.SIGKILL,
+) -> CommandResult:
     """
     Execute a subprocess, stream its output live and colorized.
 
@@ -188,6 +195,12 @@ async def run_command(cmd: list[str], check: bool = True, quiet: bool = False) -
         quiet: If True, capture output without echoing it -- for probe
             commands (podman inspect, lsof) whose output is parsed, not
             displayed. The cmd line itself is also not printed.
+        cleanup_grace_seconds: Grace window when the call is cancelled or
+            its readers fail. Pair with cleanup_signal=SIGINT for commands
+            that need to run their own teardown (default is immediate KILL).
+        cleanup_signal: Signal sent to the child when the call is cancelled
+            or its readers fail. SIGKILL by default; use SIGINT (with a
+            non-zero grace) when the child needs to release resources.
 
     Returns:
         CommandResult with the exit code and captured stdout/stderr lines.
@@ -223,7 +236,11 @@ async def run_command(cmd: list[str], check: bool = True, quiet: bool = False) -
     except BaseException:
         # Any failure (cancellation, reader error, etc.) leaves the subprocess
         # behind unless we tear it down here.
-        await terminate_subprocess(process)
+        await terminate_subprocess(
+            process,
+            grace_seconds=cleanup_grace_seconds,
+            initial_signal=cleanup_signal,
+        )
         raise
 
     if check and exitcode != 0:
