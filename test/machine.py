@@ -8,6 +8,7 @@ import fcntl
 import os
 import platform
 import shlex
+import shutil
 import signal
 import tempfile
 import time
@@ -550,6 +551,11 @@ class QemuMachine(Machine):
         await super().prepare()
 
         if self.machine == "minimal":
+            if shutil.which("cloud-localds") is None:
+                raise RuntimeError(
+                    "cloud-localds not found in PATH — install cloud-image-utils "
+                    "(`apt install cloud-image-utils`) to use the minimal machine."
+                )
             await run_command(
                 ["cloud-localds", f"{self.workdir.name}/seed.img", "test/minimal/user-data", "test/minimal/meta-data"],
             )
