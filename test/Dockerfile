@@ -1,5 +1,5 @@
 ARG UBUNTU_VERSION="22.04"
-FROM ubuntu:${UBUNTU_VERSION}
+FROM docker.io/library/ubuntu:${UBUNTU_VERSION}
 
 RUN set -x \
  && export DEBIAN_FRONTEND=noninteractive \
