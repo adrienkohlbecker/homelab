@@ -65,6 +65,7 @@ IDFILE_TIMEOUT = 60
 
 PODMAN_NETWORK = "homelab_net"
 PODMAN_NETWORK_SUBNET = "192.5.0.0/16"
+PODMAN_NETWORK_LOCK = OUT_DIR / "podman_network.lock"
 
 MEMORY_TSV = OUT_DIR / "memory.tsv"
 MEMORY_TSV_LOCK = OUT_DIR / "memory.tsv.lock"
@@ -120,16 +121,19 @@ def upsert_memory_row(role: str, ubuntu: str, machine: str, peak_kb: int) -> Non
 async def ensure_podman_network() -> None:
     """Create the shared podman network if it doesn't exist.
 
-    Call this once before launching parallel test workers — otherwise multiple
-    PodmanMachine.prepare() calls race on the inspect-then-create check and all
-    but the first lose with "network already exists".
+    Safe under concurrent callers: a flock serialises the inspect-then-create
+    so parallel PodmanMachine.prepare() calls don't race and lose with
+    "network already exists".
     """
-    result = await run_command(["podman", "network", "inspect", PODMAN_NETWORK], check=False)
-    if result.exitcode == 0:
-        return
-    await run_command(
-        ["podman", "network", "create", "--subnet", PODMAN_NETWORK_SUBNET, PODMAN_NETWORK],
-    )
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    with PODMAN_NETWORK_LOCK.open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        result = await run_command(["podman", "network", "inspect", PODMAN_NETWORK], check=False)
+        if result.exitcode == 0:
+            return
+        await run_command(
+            ["podman", "network", "create", "--subnet", PODMAN_NETWORK_SUBNET, PODMAN_NETWORK],
+        )
 
 
 def ubuntu_mirrors() -> tuple[str, str]:
