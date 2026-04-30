@@ -107,18 +107,18 @@ def print_cmd_line(cmd: list[str]) -> None:
     _write_line(f"$ {shlex.join(cmd)}", "cyan")
 
 
-def print_line(line: str, stderr: bool = False) -> None:
+def print_line(line: str, error: bool = False) -> None:
     """Log a free-form message through the same path as subprocess output.
 
     Routes through _write_line so the active tee_output target captures it,
-    mirroring print()'s behavior otherwise. Pass stderr=True to render the
-    line with the red error highlight used for subprocess stderr.
+    mirroring print()'s behavior otherwise. Pass error=True to render the
+    line with the red highlight used for subprocess stderr.
     """
-    _write_line(line, "red" if stderr else None)
+    _write_line(line, "red" if error else None)
 
 
 async def read_and_write_stream(
-    stream: asyncio.StreamReader | None,
+    stream: asyncio.StreamReader,
     color: str | None,
     capture: list[str],
     *,
@@ -130,9 +130,6 @@ async def read_and_write_stream(
     probe-style commands whose JSON/structured output would drown the
     transcript.
     """
-    if stream is None:
-        return
-
     while True:
         line_bytes = await stream.readline()
         if not line_bytes:
@@ -196,6 +193,7 @@ async def run_command(cmd: list[str], check: bool = True, quiet: bool = False) -
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
+    assert process.stdout is not None and process.stderr is not None
 
     stdout: list[str] = []
     stderr: list[str] = []

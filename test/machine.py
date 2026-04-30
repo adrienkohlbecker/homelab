@@ -416,6 +416,7 @@ class Machine:
             proc = await asyncio.create_subprocess_exec(
                 *cmd, stdout=handle, stderr=asyncio.subprocess.PIPE,
             )
+            assert proc.stderr is not None
             # stderr only -- stdout is already going to the journal file. Read
             # to EOF before waiting so a chatty stderr can't deadlock the child
             # by filling the pipe buffer.

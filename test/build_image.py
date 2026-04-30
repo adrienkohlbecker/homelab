@@ -65,13 +65,13 @@ def main() -> int:
 
     codenames = [u.strip() for u in args.ubuntu.split(",") if u.strip()]
     if not codenames:
-        print_line("Error: --ubuntu must list at least one codename", stderr=True)
+        print_line("Error: --ubuntu must list at least one codename", error=True)
         return 1
     for codename in codenames:
         if codename not in UBUNTU_RELEASES:
             print_line(
                 f"Error: unknown Ubuntu codename '{codename}'; valid: {sorted(UBUNTU_RELEASES)}",
-                stderr=True,
+                error=True,
             )
             return 1
 
