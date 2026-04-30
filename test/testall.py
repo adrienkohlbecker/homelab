@@ -345,12 +345,33 @@ async def run_all(
         # it here so the caller can see the partial results below.
         cancelled = True
 
-    results = [
-        t.result()
-        for t in tasks
-        if t.done() and not t.cancelled() and t.exception() is None
-    ]
+    # Build a result for every (machine, ubuntu, role) so a follow-up
+    # `testall.py --only-failed` retries anything that didn't pass -- whether
+    # it ran to completion, was cancelled mid-run, or never got the chance
+    # to start (cancel hit before / during TaskGroup setup).
+    results: list[JobResult] = []
+    for mr, t in zip(machine_roles, tasks, strict=False):
+        if t.done() and not t.cancelled() and t.exception() is None:
+            results.append(t.result())
+        else:
+            results.append(_cancelled_result(mr))
+    for mr in machine_roles[len(tasks):]:
+        results.append(_cancelled_result(mr))
     return results, cancelled
+
+
+def _cancelled_result(mr: MachineRole) -> JobResult:
+    """Synthetic JobResult for a job interrupted before it could record its own."""
+    return JobResult(
+        machine=mr.machine,
+        ubuntu_name=mr.ubuntu_name,
+        role=mr.role,
+        runtime=0.0,
+        # 130 = 128 + SIGINT, matching what testrole.py emits when it gets
+        # cancelled itself, and what main() returns from this script.
+        exitval=130,
+        started_at="",
+    )
 
 
 def _print_failure_table(failures: list[JobResult]) -> None:
@@ -491,9 +512,13 @@ def main() -> int:
         _write_joblog(results)
 
     if cancelled:
-        msg = f"\nInterrupted, shutting down ({len(results)}/{len(machine_roles)} completed)"
-        if results:
-            msg += f"; partial joblog written to {LOG_FILE}"
+        # Synthesized cancellation entries have empty started_at; everything
+        # else actually ran (whether it passed or failed).
+        completed = sum(1 for r in results if r.started_at)
+        msg = (
+            f"\nInterrupted, shutting down ({completed}/{len(machine_roles)} completed); "
+            f"joblog written to {LOG_FILE} -- rerun with --only-failed to retry the rest"
+        )
         print(msg, file=sys.stderr)
         return 130
 
