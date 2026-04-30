@@ -1,6 +1,7 @@
 #!/usr/bin/env -S uv run
 
 import asyncio
+import collections
 import contextlib
 import dataclasses
 import fcntl
@@ -434,8 +435,12 @@ class Machine:
     def _print_file_tail(self, path: Path, n: int) -> None:
         if not path.exists():
             return
-        lines = path.read_text(errors="replace").splitlines()
-        tail = lines[-n:]
+        # Stream through a bounded deque so a multi-MB boot log (panic loop,
+        # chatty cloud-init) doesn't get fully loaded into memory just to
+        # slice off the last N lines.
+        with path.open("r", errors="replace") as handle:
+            tail = list(collections.deque(handle, maxlen=n))
+        tail = [line.rstrip("\n") for line in tail]
         print_line(f"--- last {len(tail)} lines of {path} ---")
         for line in tail:
             print_line(line)
