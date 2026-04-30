@@ -12,7 +12,16 @@ from typing import NamedTuple, TextIO
 
 class CommandFailedException(Exception):
     """Raised when a subprocess exits with a non-zero status."""
-    pass
+
+    def __init__(self, cmd: list[str], exitcode: int, stderr: list[str]) -> None:
+        self.cmd = cmd
+        self.exitcode = exitcode
+        self.stderr = stderr
+        tail = "\n".join(stderr[-20:])
+        suffix = f"\n--- stderr tail ---\n{tail}" if tail else ""
+        super().__init__(
+            f"Command failed with exit code {exitcode}: {shlex.join(cmd)}{suffix}"
+        )
 
 
 class IdempotenceFailedException(Exception):
@@ -24,6 +33,7 @@ class CommandResult(NamedTuple):
     """Outcome of a subprocess invocation."""
     exitcode: int
     stdout: list[str]
+    stderr: list[str]
 
 
 # ANSI colors keyed by logical stream name for simple lookups.
@@ -160,7 +170,7 @@ async def run_command(cmd: list[str], check: bool = True) -> CommandResult:
         check: If True, raise CommandFailedException on non-zero exit.
 
     Returns:
-        CommandResult with the exit code and captured stdout lines.
+        CommandResult with the exit code and captured stdout/stderr lines.
     """
     print_cmd_line(cmd)
 
@@ -195,5 +205,5 @@ async def run_command(cmd: list[str], check: bool = True) -> CommandResult:
         raise
 
     if check and exitcode != 0:
-        raise CommandFailedException(f"Command failed with exit code {exitcode}")
-    return CommandResult(exitcode=exitcode, stdout=stdout)
+        raise CommandFailedException(cmd, exitcode, stderr)
+    return CommandResult(exitcode=exitcode, stdout=stdout, stderr=stderr)
