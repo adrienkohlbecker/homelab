@@ -126,6 +126,11 @@ class Machine:
         OUT_DIR.mkdir(parents=True, exist_ok=True)
         self.journal_file = OUT_DIR / f"{self.machine}.{self.ubuntu_name}.{self.role}.journal.ansi"
         self.boot_file = OUT_DIR / f"{self.machine}.{self.ubuntu_name}.{self.role}.boot.ansi"
+        # Drop stale artifacts from a previous run. boot_file gets truncated by
+        # boot()'s "wb" open, but journal_file only gets written on failure --
+        # a passing run would otherwise leave yesterday's failure journal in
+        # place and mislead anyone tailing it.
+        self.journal_file.unlink(missing_ok=True)
         self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
 
     @property
