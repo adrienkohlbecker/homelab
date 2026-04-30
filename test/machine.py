@@ -388,7 +388,6 @@ class Machine:
             "env",
             "SYSTEMD_COLORS=true",
             "journalctl",
-            "--pager-end",
             "--no-pager",
             "--priority",
             "info",
