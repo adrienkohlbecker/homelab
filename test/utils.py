@@ -116,8 +116,19 @@ def print_line(line: str, stderr: bool = False) -> None:
     _write_line(line, "stderr" if stderr else "stdout")
 
 
-async def read_and_write_stream(stream: asyncio.StreamReader | None, stream_name: str, capture: list[str]) -> None:
-    """Relay a process stream to stdout and the log, capturing each line."""
+async def read_and_write_stream(
+    stream: asyncio.StreamReader | None,
+    stream_name: str,
+    capture: list[str],
+    *,
+    quiet: bool = False,
+) -> None:
+    """Relay a process stream to stdout and the log, capturing each line.
+
+    When *quiet* is True the line is captured but not echoed -- useful for
+    probe-style commands whose JSON/structured output would drown the
+    transcript.
+    """
     if stream is None:
         return
 
@@ -128,7 +139,8 @@ async def read_and_write_stream(stream: asyncio.StreamReader | None, stream_name
 
         line = line_bytes.decode("utf-8", errors="replace").rstrip("\n")
         capture.append(line)
-        _write_line(line, stream_name)
+        if not quiet:
+            _write_line(line, stream_name)
 
 
 async def terminate_subprocess(
@@ -161,18 +173,22 @@ async def terminate_subprocess(
     await proc.wait()
 
 
-async def run_command(cmd: list[str], check: bool = True) -> CommandResult:
+async def run_command(cmd: list[str], check: bool = True, quiet: bool = False) -> CommandResult:
     """
     Execute a subprocess, stream its output live and colorized.
 
     Args:
         cmd: Command and arguments to execute.
         check: If True, raise CommandFailedException on non-zero exit.
+        quiet: If True, capture output without echoing it -- for probe
+            commands (podman inspect, lsof) whose output is parsed, not
+            displayed. The cmd line itself is also not printed.
 
     Returns:
         CommandResult with the exit code and captured stdout/stderr lines.
     """
-    print_cmd_line(cmd)
+    if not quiet:
+        print_cmd_line(cmd)
 
     process = await asyncio.create_subprocess_exec(
         *cmd,
@@ -195,8 +211,8 @@ async def run_command(cmd: list[str], check: bool = True) -> CommandResult:
         # use stderr=asyncio.subprocess.STDOUT, which costs the per-stream
         # color tagging.
         async with asyncio.TaskGroup() as tg:
-            tg.create_task(read_and_write_stream(process.stdout, "stdout", stdout))
-            tg.create_task(read_and_write_stream(process.stderr, "stderr", stderr))
+            tg.create_task(read_and_write_stream(process.stdout, "stdout", stdout, quiet=quiet))
+            tg.create_task(read_and_write_stream(process.stderr, "stderr", stderr, quiet=quiet))
         exitcode = await process.wait()
     except BaseException:
         # Any failure (cancellation, reader error, etc.) leaves the subprocess
