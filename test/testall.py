@@ -39,6 +39,19 @@ LOG_FILE = Path("test/out.tsv")
 LOG_FILE_PREV = Path("test/out.tsv.prev")
 JOBLOG_FIELDS = ["Role", "Ubuntu", "Machine", "Runtime", "Exitval", "Started"]
 
+# Flags testall.py controls per child invocation. If a user passes any of
+# them through role_args, testrole.py's argparse last-wins would silently
+# flip the meaning -- reject up front so the conflict is obvious.
+TESTROLE_OWNED_FLAGS = frozenset({
+    "--machine",
+    "--ubuntu",
+    "--checkmode", "--no-checkmode",
+    "--idempotence", "--no-idempotence",
+    "--build-image", "--no-build-image",
+    "--keep-logs", "--no-keep-logs",
+    "--keep",
+})
+
 
 class MachineRole(NamedTuple):
     """A (machine, ubuntu, role) triple to run."""
@@ -115,6 +128,28 @@ def parse_args() -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Rebuild the homelab:<codename> container image(s) before running (default: on)",
+    )
+
+    parser.add_argument(
+        "--role",
+        type=str,
+        default="",
+        metavar="X",
+        help="Comma-separated list of roles to run (default: all roles with tasks/main.yml)",
+    )
+
+    parser.add_argument(
+        "--exclude",
+        type=str,
+        default="",
+        metavar="X",
+        help="Comma-separated list of roles to exclude",
+    )
+
+    parser.add_argument(
+        "--list",
+        action="store_true",
+        help="Print the resolved (machine, ubuntu, role) plan and exit",
     )
 
     # Remaining arguments are forwarded to testrole.py
@@ -356,6 +391,15 @@ def main() -> int:
         print("Error: --jobs must be at least 1", file=sys.stderr)
         return 1
 
+    conflicts = [a for a in args.role_args if a in TESTROLE_OWNED_FLAGS]
+    if conflicts:
+        print(
+            f"Error: testall.py controls these flags itself; pass them to testall instead "
+            f"of forwarding via role_args: {conflicts}",
+            file=sys.stderr,
+        )
+        return 1
+
     if args.only_failed:
         if args.machines != "container" or args.ubuntu != DEFAULT_UBUNTU:
             print(
@@ -402,6 +446,21 @@ def main() -> int:
             for ubuntu_name in ubuntus
             for machine in machines
         ]
+
+    if args.role:
+        wanted = {r.strip() for r in args.role.split(",") if r.strip()}
+        machine_roles = [mr for mr in machine_roles if mr.role in wanted]
+    if args.exclude:
+        excluded = {r.strip() for r in args.exclude.split(",") if r.strip()}
+        machine_roles = [mr for mr in machine_roles if mr.role not in excluded]
+    if not machine_roles:
+        print("No roles match --role/--exclude filters", file=sys.stderr)
+        return 0
+
+    if args.list:
+        for mr in machine_roles:
+            print(f"{mr.machine}\t{mr.ubuntu_name}\t{mr.role}")
+        return 0
 
     setup_output_dir()
 
