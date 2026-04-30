@@ -114,6 +114,7 @@ class Machine:
     ssh_host: str = dataclasses.field(default=SSH_HOST, init=False)
     ssh_key: str = dataclasses.field(default=SSH_KEY, init=False)
     proc: asyncio.subprocess.Process | None = dataclasses.field(default=None, init=False)
+    output_file: Path = dataclasses.field(init=False)
     journal_file: Path = dataclasses.field(init=False)
     boot_file: Path = dataclasses.field(init=False)
     workdir: tempfile.TemporaryDirectory[str] = dataclasses.field(init=False)
@@ -124,13 +125,15 @@ class Machine:
                 f"Unknown Ubuntu release '{self.ubuntu_name}'; known: {sorted(UBUNTU_RELEASES)}"
             )
         OUT_DIR.mkdir(parents=True, exist_ok=True)
-        self.journal_file = OUT_DIR / f"{self.machine}.{self.ubuntu_name}.{self.role}.journal.ansi"
-        self.boot_file = OUT_DIR / f"{self.machine}.{self.ubuntu_name}.{self.role}.boot.ansi"
-        # Drop stale artifacts from a previous run. boot_file gets truncated by
-        # boot()'s "wb" open, but journal_file only gets written on failure --
-        # a passing run would otherwise leave yesterday's failure journal in
-        # place and mislead anyone tailing it.
-        self.journal_file.unlink(missing_ok=True)
+        prefix = f"{self.machine}.{self.ubuntu_name}.{self.role}"
+        self.output_file = OUT_DIR / f"{prefix}.output.ansi"
+        self.journal_file = OUT_DIR / f"{prefix}.journal.ansi"
+        self.boot_file = OUT_DIR / f"{prefix}.boot.ansi"
+        # Drop any stale artifacts from a previous run before the new run
+        # starts writing. tee_output and boot() will recreate fresh files
+        # immediately after this; cleaning here also covers cases where a
+        # previous run was killed before either writer ran.
+        self.cleanup_logs()
         self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
 
     @property
@@ -348,6 +351,11 @@ class Machine:
     def print_boot_tail(self, n: int = 50) -> None:
         """Print the last *n* lines of the boot subprocess log to stdout."""
         self._print_file_tail(self.boot_file, n)
+
+    def cleanup_logs(self) -> None:
+        """Remove all per-run log artifacts (output, boot, journal)."""
+        for path in (self.output_file, self.boot_file, self.journal_file):
+            path.unlink(missing_ok=True)
 
     def _print_file_tail(self, path: Path, n: int) -> None:
         if not path.exists():

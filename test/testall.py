@@ -6,7 +6,7 @@ This script discovers roles, builds test commands, and executes them concurrentl
 without relying on GNU parallel. Each child testrole.py tees its own transcript
 to `test/out/<machine>.<ubuntu>.<role>.output.ansi` and, when invoked with
 --no-keep-logs (as testall does), drops its output/boot/journal logs on a
-clean pass. testall surfaces the surviving log path in the failure table. A
+clean pass; failed runs leave them in place under that predictable path. A
 concise job log is written to `test/out.tsv`.
 """
 
@@ -45,7 +45,6 @@ class JobResult:
     machine: str
     ubuntu_name: str
     role: str
-    log_path: Path
     runtime: float
     exitval: int
 
@@ -196,10 +195,9 @@ async def _run_role(
         role,
         *role_args,
     ]
-    # testrole.py tees its full transcript here via utils.tee_output, so we
-    # don't need to capture stdout/stderr ourselves -- just point at the same
-    # path so we can drop it on success / surface it in the failure table.
-    log_path = OUT_DIR / f"{machine}.{ubuntu_name}.{role}.output.ansi"
+    # testrole.py tees its full transcript via utils.tee_output and owns the
+    # file's lifecycle (drops it on success, keeps it on failure under a
+    # known path), so testall doesn't need to track or surface log paths.
 
     async with semaphore:
         start_time = time.time()
@@ -255,7 +253,6 @@ async def _run_role(
         machine=machine,
         ubuntu_name=ubuntu_name,
         role=role,
-        log_path=log_path,
         runtime=runtime,
         exitval=exitval,
     )
@@ -294,13 +291,13 @@ async def run_all(
 
 
 def _print_failure_table(failures: list[JobResult]) -> None:
-    """Render a table of failed runs with their log file paths."""
+    """Render a table of failed runs."""
     rows = [
-        [result.machine, result.ubuntu_name, result.role, str(result.log_path)]
+        [result.machine, result.ubuntu_name, result.role]
         for result in sorted(failures, key=lambda r: (r.machine, r.ubuntu_name, r.role))
     ]
     print("\nFailure summary:", file=sys.stderr)
-    print(tabulate(rows, headers=["Machine", "Ubuntu", "Role", "Log"]), file=sys.stderr)
+    print(tabulate(rows, headers=["Machine", "Ubuntu", "Role"]), file=sys.stderr)
 
 
 def _write_joblog(results: list[JobResult]) -> None:
