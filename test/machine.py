@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import dataclasses
+import fcntl
 import os
 import platform
 import re
@@ -10,7 +11,7 @@ import shlex
 import signal
 import tempfile
 import time
-from collections.abc import Iterable
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Self
 
@@ -64,6 +65,56 @@ IDFILE_TIMEOUT = 60
 
 PODMAN_NETWORK = "homelab_net"
 PODMAN_NETWORK_SUBNET = "192.5.0.0/16"
+
+MEMORY_TSV = OUT_DIR / "memory.tsv"
+MEMORY_TSV_LOCK = OUT_DIR / "memory.tsv.lock"
+MEMORY_TSV_HEADER = "Role\tUbuntu\tMachine\tPeakKB"
+
+
+@contextlib.contextmanager
+def _memory_tsv_lock() -> Iterator[None]:
+    """Cross-process exclusive lock guarding memory.tsv read-modify-write."""
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    with MEMORY_TSV_LOCK.open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        yield
+        # flock is released when the fd closes on with-block exit
+
+
+def _read_memory_rows() -> dict[tuple[str, str, str], int]:
+    if not MEMORY_TSV.exists():
+        return {}
+    rows: dict[tuple[str, str, str], int] = {}
+    for line in MEMORY_TSV.read_text().splitlines()[1:]:
+        parts = line.split("\t")
+        if len(parts) == 4:
+            rows[(parts[0], parts[1], parts[2])] = int(parts[3])
+    return rows
+
+
+def _write_memory_rows(rows: dict[tuple[str, str, str], int]) -> None:
+    lines = [MEMORY_TSV_HEADER]
+    for key in sorted(rows):
+        lines.append(f"{key[0]}\t{key[1]}\t{key[2]}\t{rows[key]}")
+    # Write to a temp sibling and rename so a concurrent reader either sees
+    # the prior file or the new one, never a half-written file.
+    tmp = MEMORY_TSV.with_suffix(MEMORY_TSV.suffix + ".tmp")
+    tmp.write_text("\n".join(lines) + "\n")
+    tmp.replace(MEMORY_TSV)
+
+
+def upsert_memory_row(role: str, ubuntu: str, machine: str, peak_kb: int) -> None:
+    """Insert/update one row in memory.tsv, safe under concurrent writers.
+
+    Multiple parallel testrole.py workers call this when their QEMU run
+    completes; flock serialises the read-modify-write so updates aren't lost.
+    """
+    with _memory_tsv_lock():
+        rows = _read_memory_rows()
+        rows[(role, ubuntu, machine)] = peak_kb
+        _write_memory_rows(rows)
+
+
 
 
 async def ensure_podman_network() -> None:
