@@ -812,6 +812,10 @@ class PodmanMachine(Machine):
         cid_path = Path(f"{self.workdir.name}/{self.idfile}")
         cid = cid_path.read_text().strip() if cid_path.exists() else None
 
+        if cid:
+            # Snapshot cgroup memory.peak before rm tears the cgroup down.
+            self.peak_rss_kb = await self._read_container_peak_kb(cid)
+
         try:
             if cid:
                 # asyncio.shield prevents a second SIGINT from cancelling the
@@ -825,6 +829,29 @@ class PodmanMachine(Machine):
                 )
         finally:
             await super().stop()
+
+    async def _read_container_peak_kb(self, cid: str) -> int:
+        """Return the cgroup-tracked peak memory in kB for the container.
+
+        Reads memory.peak (cgroup v2; kernel-tracked high-water mark for the
+        whole container, not just PID 1). Returns 0 on cgroup v1 hosts or any
+        other failure — the caller already treats 0 as "no measurement".
+        """
+        inspect = await run_command(
+            ["podman", "inspect", "--format", "{{.State.CgroupPath}}", cid],
+            check=False,
+        )
+        if inspect.exitcode != 0:
+            return 0
+        cgroup_path = "\n".join(inspect.stdout).strip()
+        if not cgroup_path:
+            return 0
+
+        peak_file = Path("/sys/fs/cgroup") / cgroup_path.lstrip("/") / "memory.peak"
+        try:
+            return int(peak_file.read_text().strip()) // 1024
+        except (FileNotFoundError, PermissionError, ValueError):
+            return 0
 
     async def _find_ssh_port(self) -> None:
         """Ask podman for the forwarded SSH port and store it on the instance."""
