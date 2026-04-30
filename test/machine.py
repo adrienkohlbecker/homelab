@@ -245,11 +245,15 @@ class Machine:
         with self.boot_file.open("wb") as handle:
             self.proc = await asyncio.create_subprocess_exec(
                 *cmd,
+                stdin=asyncio.subprocess.DEVNULL,
                 stdout=handle,
                 stderr=asyncio.subprocess.STDOUT,
                 start_new_session=True,
             )
         # Parent's handle can close once the child holds its own dup'd FD.
+        # stdin=DEVNULL keeps qemu's `-serial stdio` (and any podman quirk)
+        # from competing with the parent terminal for keystrokes, especially
+        # under parallel testall.py runs.
 
     async def ensure_booted(self) -> None:
         """Block until the hypervisor writes the PID/CID file or the launch fails."""
@@ -524,6 +528,12 @@ class QemuMachine(Machine):
             "-cpu",
             "host",
             *display_args,
+            # Wire the guest's first serial port (ttyS0, where Ubuntu's kernel
+            # cmdline points "console=") to qemu's stdio. With Machine.boot()
+            # redirecting stdout to boot_file, this lands the kernel ring
+            # buffer + early systemd output in the per-machine boot log.
+            "-serial",
+            "stdio",
             "-device",
             "virtio-net,netdev=user.0",
             "-pidfile",
