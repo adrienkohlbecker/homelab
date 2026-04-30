@@ -766,6 +766,8 @@ class PodmanMachine(Machine):
             MACHINE_TIMEOUT,
             "--systemd",
             "always",
+            "--hostname",
+            self.inventory_host,
             "--publish",
             "127.0.0.1::22",
             "--privileged",
