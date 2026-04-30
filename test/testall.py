@@ -320,13 +320,16 @@ async def run_all(
 
 
 def _print_failure_table(failures: list[JobResult]) -> None:
-    """Render a table of failed runs."""
+    """Render a table of failed runs with exit codes and runtime."""
     rows = [
-        [result.machine, result.ubuntu_name, result.role]
-        for result in sorted(failures, key=lambda r: (r.machine, r.ubuntu_name, r.role))
+        [r.machine, r.ubuntu_name, r.role, r.exitval, f"{r.runtime:.1f}s"]
+        for r in sorted(failures, key=lambda r: (r.machine, r.ubuntu_name, r.role))
     ]
     print("\nFailure summary:", file=sys.stderr)
-    print(tabulate(rows, headers=["Machine", "Ubuntu", "Role"]), file=sys.stderr)
+    print(
+        tabulate(rows, headers=["Machine", "Ubuntu", "Role", "Exit", "Runtime"]),
+        file=sys.stderr,
+    )
 
 
 def _write_joblog(results: list[JobResult]) -> None:
@@ -419,9 +422,11 @@ def main() -> int:
                 print("\nInterrupted during image build, shutting down...", file=sys.stderr)
                 return 130
 
+    test_start = time.time()
     results, cancelled = asyncio.run(
         run_all(machine_roles, args.role_args, args.jobs, args.checkmode, args.idempotence)
     )
+    wall_clock = time.time() - test_start
 
     if results:
         _rotate_joblog()
@@ -438,6 +443,15 @@ def main() -> int:
     if failures:
         _print_failure_table(failures)
         return 1
+
+    if results:
+        longest = max(results, key=lambda r: r.runtime)
+        print(
+            f"\n{len(results)} role(s) passed in {wall_clock:.0f}s wall clock "
+            f"(parallelism={args.jobs}, longest: {longest.role} on "
+            f"{longest.machine}:{longest.ubuntu_name} at {longest.runtime:.0f}s)",
+            file=sys.stderr,
+        )
 
     return 0
 
