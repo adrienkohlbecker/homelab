@@ -17,6 +17,7 @@ from pathlib import Path
 from build_image import build_image
 from machine import (
     DEFAULT_UBUNTU,
+    MACHINE_CHOICES,
     Machine,
     OUT_DIR,
     PodmanMachine,
@@ -35,7 +36,7 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     parser.add_argument(
         "--machine",
         default="container",
-        choices=["container", "minimal", "box", "lab", "pug"],
+        choices=MACHINE_CHOICES,
         help="Machine profile to run against",
     )
     parser.add_argument(

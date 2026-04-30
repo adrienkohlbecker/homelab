@@ -57,6 +57,7 @@ QEMU_MACHINE_ARGS: dict[str, tuple[str, list[str], str]] = {
         "pug",
     ),
 }
+MACHINE_CHOICES: tuple[str, ...] = ("container", *QEMU_MACHINE_ARGS)
 
 SSH_WAIT_TIMEOUT = 120
 IDFILE_TIMEOUT = 60

@@ -26,7 +26,13 @@ from typing import NamedTuple
 from tabulate import tabulate
 
 from build_image import build_image
-from machine import DEFAULT_UBUNTU, OUT_DIR, UBUNTU_RELEASES, ensure_podman_network
+from machine import (
+    DEFAULT_UBUNTU,
+    MACHINE_CHOICES,
+    OUT_DIR,
+    UBUNTU_RELEASES,
+    ensure_podman_network,
+)
 from utils import STREAM_COLORS, cancel_on_signal
 
 LOG_FILE = Path("test/out.tsv")
@@ -268,30 +274,49 @@ async def run_all(
     jobs: int,
     checkmode: bool,
     idempotence: bool,
-) -> list[JobResult]:
-    """Run every role/machine combination concurrently."""
+) -> tuple[list[JobResult], bool]:
+    """Run every role/machine combination concurrently.
+
+    Returns (results, cancelled). On cancellation, results contains only the
+    jobs that finished before the cancel cascade fired so the caller can still
+    persist a partial joblog.
+    """
     semaphore = asyncio.Semaphore(jobs)
 
     task = asyncio.current_task()
     assert task is not None
 
-    # Provision shared podman state once up front. Doing it here (instead of
-    # letting each child testrole.py race in PodmanMachine.prepare()) means
-    # the per-worker inspect calls find the network already present and skip
-    # the racy create.
-    if any(mr.machine == "container" for mr in machine_roles):
-        await ensure_podman_network()
+    tasks: list[asyncio.Task[JobResult]] = []
+    cancelled = False
+    try:
+        with cancel_on_signal(task):
+            # Provision shared podman state once up front. Doing it here
+            # (instead of letting each child testrole.py race in
+            # PodmanMachine.prepare()) means the per-worker inspect calls find
+            # the network already present and skip the racy create. Inside
+            # cancel_on_signal so a Ctrl+C during the network setup is caught
+            # alongside cancellation during the actual run.
+            if any(mr.machine == "container" for mr in machine_roles):
+                await ensure_podman_network()
+            async with asyncio.TaskGroup() as tg:
+                tasks = [
+                    tg.create_task(
+                        _run_role(seq, mr.machine, mr.ubuntu_name, mr.role, role_args, semaphore, checkmode, idempotence)
+                    )
+                    for seq, mr in enumerate(machine_roles, start=1)
+                ]
+    except asyncio.CancelledError:
+        # When the parent task is cancelled, TaskGroup cascades cancellation
+        # into every child and re-raises bare CancelledError on exit. Swallow
+        # it here so the caller can see the partial results below.
+        cancelled = True
 
-    with cancel_on_signal(task):
-        async with asyncio.TaskGroup() as tg:
-            tasks = [
-                tg.create_task(
-                    _run_role(seq, mr.machine, mr.ubuntu_name, mr.role, role_args, semaphore, checkmode, idempotence)
-                )
-                for seq, mr in enumerate(machine_roles, start=1)
-            ]
-
-    return [t.result() for t in tasks]
+    results = [
+        t.result()
+        for t in tasks
+        if t.done() and not t.cancelled() and t.exception() is None
+    ]
+    return results, cancelled
 
 
 def _print_failure_table(failures: list[JobResult]) -> None:
@@ -329,6 +354,12 @@ def main() -> int:
         return 1
 
     if args.only_failed:
+        if args.machines != "container" or args.ubuntu != DEFAULT_UBUNTU:
+            print(
+                "Warning: --machines/--ubuntu are ignored with --only-failed; "
+                "the machine and ubuntu of each rerun come from the prior joblog",
+                file=sys.stderr,
+            )
         machine_roles = get_failed_roles()
         if not machine_roles:
             print(f"No failed roles recorded in {LOG_FILE}", file=sys.stderr)
@@ -338,6 +369,13 @@ def main() -> int:
         if not machines:
             print("Error: No machines provided to --machines", file=sys.stderr)
             return 1
+        for m in machines:
+            if m not in MACHINE_CHOICES:
+                print(
+                    f"Error: unknown machine profile '{m}'; valid: {list(MACHINE_CHOICES)}",
+                    file=sys.stderr,
+                )
+                return 1
 
         ubuntus = [u.strip() for u in args.ubuntu.split(",") if u.strip()]
         if not ubuntus:
@@ -367,22 +405,34 @@ def main() -> int:
     if args.build_image:
         needs_image = any(mr.machine == "container" for mr in machine_roles)
         if needs_image:
-            for codename in dict.fromkeys(mr.ubuntu_name for mr in machine_roles):
-                rc = build_image(codename)
-                if rc != 0:
-                    print(f"Image build failed for homelab:{codename}", file=sys.stderr)
-                    return rc
+            try:
+                for codename in dict.fromkeys(mr.ubuntu_name for mr in machine_roles):
+                    rc = build_image(codename)
+                    if rc != 0:
+                        print(f"Image build failed for homelab:{codename}", file=sys.stderr)
+                        return rc
+            except KeyboardInterrupt:
+                # build_image() runs its own asyncio.run(); SIGINT during a
+                # build raises KeyboardInterrupt out of it. Translate that
+                # into the same exit code as a cancelled run rather than
+                # surfacing a stack trace.
+                print("\nInterrupted during image build, shutting down...", file=sys.stderr)
+                return 130
 
-    try:
-        results = asyncio.run(
-            run_all(machine_roles, args.role_args, args.jobs, args.checkmode, args.idempotence)
-        )
-    except asyncio.CancelledError:
-        print("\nInterrupted, shutting down...", file=sys.stderr)
+    results, cancelled = asyncio.run(
+        run_all(machine_roles, args.role_args, args.jobs, args.checkmode, args.idempotence)
+    )
+
+    if results:
+        _rotate_joblog()
+        _write_joblog(results)
+
+    if cancelled:
+        msg = f"\nInterrupted, shutting down ({len(results)}/{len(machine_roles)} completed)"
+        if results:
+            msg += f"; partial joblog written to {LOG_FILE}"
+        print(msg, file=sys.stderr)
         return 130
-
-    _rotate_joblog()
-    _write_joblog(results)
 
     failures = [result for result in results if result.exitval != 0]
     if failures:
