@@ -161,14 +161,18 @@ async def _run_checkmode(site_yml: str, m: Machine, pass_args: list[str]) -> Non
         await m.ansible_command(site_yml, "--check", *pass_args)
 
 
-async def run_test(m: Machine, parsed_args: argparse.Namespace, pass_args: list[str]) -> None:
+async def run_test(
+    m: Machine,
+    pass_args: list[str],
+    *,
+    checkmode: bool,
+    idempotence: bool,
+    timeout: int,
+) -> None:
     """Provision a machine, run the role under test, and stream output."""
 
     machine = m.machine
     keep_vm = m.keep_vm
-    checkmode = parsed_args.checkmode
-    idempotence = parsed_args.idempotence
-    timeout = parsed_args.timeout
 
     task = asyncio.current_task()
     assert task is not None
@@ -260,7 +264,13 @@ def main() -> int:
 
         if rc == 0:
             try:
-                asyncio.run(run_test(m, parsed_args, pass_args))
+                asyncio.run(run_test(
+                    m,
+                    pass_args,
+                    checkmode=parsed_args.checkmode,
+                    idempotence=parsed_args.idempotence,
+                    timeout=parsed_args.timeout,
+                ))
             except CommandFailedException as exc:
                 print_line(str(exc), stderr=True)
                 print_line(f"{parsed_args.role}.{parsed_args.machine} failed", stderr=True)
