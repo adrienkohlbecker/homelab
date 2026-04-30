@@ -23,6 +23,7 @@ from utils import (
     read_and_write_stream,
     run_command,
     sleep_tick,
+    terminate_subprocess,
 )
 
 OUT_DIR = Path("test/out")
@@ -476,26 +477,19 @@ class Machine:
             self.print_boot_tail()
 
     async def stop(self) -> None:
-        """Stop the VM/container"""
+        """Drain the boot subprocess and free temp resources.
 
-        if self.proc and self.proc.returncode is None:
-            # Race: the process may exit between any of these steps. send_signal
-            # and kill can both raise ProcessLookupError; proc.wait() returns
-            # immediately for an already-exited process so suppression is safe.
-            with contextlib.suppress(ProcessLookupError):
-                self.proc.send_signal(signal.SIGINT)
-            try:
-                async with asyncio.timeout(9):
-                    await self.proc.wait()
-            except TimeoutError:
-                # asyncio.timeout() converts the inner CancelledError into
-                # TimeoutError on __aexit__; only here can we tell the wait
-                # actually timed out and escalate to SIGKILL.
-                with contextlib.suppress(ProcessLookupError):
-                    self.proc.kill()
-                await self.proc.wait()
-
-        self.workdir.cleanup()
+        Subclasses perform hypervisor-specific cleanup (qemu kill, podman rm)
+        before delegating here, so this final drain only sees a process
+        that's already on its way out.
+        """
+        try:
+            if self.proc and self.proc.returncode is None:
+                await terminate_subprocess(
+                    self.proc, grace_seconds=5, initial_signal=signal.SIGINT,
+                )
+        finally:
+            self.workdir.cleanup()
 
 
 class QemuMachine(Machine):
@@ -643,11 +637,10 @@ class QemuMachine(Machine):
         """Kill qemu via its pidfile, then drain the timeout wrapper.
 
         Signaling self.proc (the `timeout` wrapper) normally forwards SIGINT
-        to qemu, but if the wrapper is SIGKILL'd (the 9s escalation path) or
-        testrole.py dies before stop() runs, qemu reparents to init with no
-        recovery path -- SIGKILL can't be caught and forwarded. Kill qemu
-        directly via its pidfile so cleanup works regardless of the wrapper's
-        fate.
+        to qemu, but if the wrapper is SIGKILL'd or testrole.py dies before
+        stop() runs, qemu reparents to init with no recovery path -- SIGKILL
+        can't be caught and forwarded. Kill qemu directly via its pidfile so
+        cleanup works regardless of the wrapper's fate.
         """
         pid_path = Path(f"{self.workdir.name}/{self.idfile}")
         pid: int | None = None
@@ -656,24 +649,18 @@ class QemuMachine(Machine):
                 pid = int(pid_path.read_text().strip())
 
         try:
-            if pid is not None:
-                # Shield against nested cancellation; without it a second
-                # SIGINT mid-cleanup would leave qemu running.
-                await asyncio.shield(self._terminate_qemu(pid))
-            if self.proc and self.proc.returncode is None:
-                try:
-                    async with asyncio.timeout(5):
-                        await self.proc.wait()
-                except TimeoutError:
-                    with contextlib.suppress(ProcessLookupError):
-                        self.proc.kill()
-                    await self.proc.wait()
+            try:
+                if pid is not None:
+                    # Shield against nested cancellation; without it a second
+                    # SIGINT mid-cleanup would leave qemu running.
+                    await asyncio.shield(self._terminate_qemu(pid))
+            finally:
+                await super().stop()
         finally:
             if self._sampler_task is not None:
                 self._sampler_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
                     await self._sampler_task
-            self.workdir.cleanup()
 
     async def _terminate_qemu(self, pid: int) -> None:
         """SIGTERM qemu, poll briefly, escalate to SIGKILL if it lingers."""
@@ -816,18 +803,8 @@ class PodmanMachine(Machine):
                         check=False,
                     )
                 )
-            if self.proc and self.proc.returncode is None:
-                # With the container gone, the client should exit on its own;
-                # give it a brief grace period before escalating.
-                try:
-                    async with asyncio.timeout(5):
-                        await self.proc.wait()
-                except TimeoutError:
-                    with contextlib.suppress(ProcessLookupError):
-                        self.proc.kill()
-                    await self.proc.wait()
         finally:
-            self.workdir.cleanup()
+            await super().stop()
 
     async def _find_ssh_port(self) -> None:
         """Ask podman for the forwarded SSH port and store it on the instance."""
