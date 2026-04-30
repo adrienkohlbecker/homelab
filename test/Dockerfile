@@ -42,4 +42,4 @@ RUN echo 'root:1:65535' >> /etc/subuid \
 
 EXPOSE 22
 
-CMD [ "/lib/systemd/systemd" ]
+CMD [ "/sbin/init" ]
