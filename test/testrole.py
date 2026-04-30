@@ -74,6 +74,12 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         default=True,
         help="Rebuild the homelab:<codename> container image before booting (default: on; container machine only)",
     )
+    parser.add_argument(
+        "--keep-logs",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Keep output/boot/journal logs after a successful run (default: on; --no-keep-logs deletes them, used by testall.py)",
+    )
     parser.add_argument("role", help="Role name to test")
 
     args, pass_args = parser.parse_known_args()
@@ -246,32 +252,44 @@ def main() -> int:
     parsed_args, pass_args = parse_args()
 
     output_path = OUT_DIR / f"{parsed_args.machine}.{parsed_args.ubuntu}.{parsed_args.role}.output.ansi"
+
     with tee_output(output_path):
         if parsed_args.build_image and parsed_args.machine == "container":
             rc = build_image(parsed_args.ubuntu)
-            if rc != 0:
-                return rc
+        else:
+            rc = 0
 
-        try:
-            asyncio.run(run_test(parsed_args, pass_args))
-            return 0
-        except CommandFailedException as exc:
-            print_line(str(exc), stderr=True)
-            print_line(f"{parsed_args.role}.{parsed_args.machine} failed", stderr=True)
-            return 1
-        except IdempotenceFailedException as exc:
-            print_line(str(exc), stderr=True)
-            print_line(f"{parsed_args.role}.{parsed_args.machine} not idempotent", stderr=True)
-            return 125
-        except TimeoutError:
-            print_line(
-                f"{parsed_args.role}.{parsed_args.machine} timed out after {parsed_args.timeout}s",
-                stderr=True,
-            )
-            return 124  # GNU `timeout`'s exit code for "command timed out"
-        except asyncio.CancelledError:
-            print_line("\nInterrupted, shutting down...")
-            return 130
+        if rc == 0:
+            try:
+                asyncio.run(run_test(parsed_args, pass_args))
+            except CommandFailedException as exc:
+                print_line(str(exc), stderr=True)
+                print_line(f"{parsed_args.role}.{parsed_args.machine} failed", stderr=True)
+                rc = 1
+            except IdempotenceFailedException as exc:
+                print_line(str(exc), stderr=True)
+                print_line(f"{parsed_args.role}.{parsed_args.machine} not idempotent", stderr=True)
+                rc = 125
+            except TimeoutError:
+                print_line(
+                    f"{parsed_args.role}.{parsed_args.machine} timed out after {parsed_args.timeout}s",
+                    stderr=True,
+                )
+                rc = 124  # GNU `timeout`'s exit code for "command timed out"
+            except asyncio.CancelledError:
+                print_line("\nInterrupted, shutting down...")
+                rc = 130
+
+    # Drop per-run logs only on a clean pass when the caller (typically
+    # testall.py) opted out of keeping them. We wait until tee_output has
+    # released the file before unlinking to keep the lifecycle obvious.
+    if rc == 0 and not parsed_args.keep_logs:
+        boot_path = OUT_DIR / f"{parsed_args.machine}.{parsed_args.ubuntu}.{parsed_args.role}.boot.ansi"
+        journal_path = OUT_DIR / f"{parsed_args.machine}.{parsed_args.ubuntu}.{parsed_args.role}.journal.ansi"
+        for path in (output_path, boot_path, journal_path):
+            path.unlink(missing_ok=True)
+
+    return rc
 
 
 if __name__ == "__main__":

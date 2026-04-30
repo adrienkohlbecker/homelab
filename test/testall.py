@@ -4,9 +4,10 @@ Test runner for Ansible roles using native asyncio parallelism.
 
 This script discovers roles, builds test commands, and executes them concurrently
 without relying on GNU parallel. Each child testrole.py tees its own transcript
-to `test/out/<machine>.<ubuntu>.<role>.output.ansi`; testall drops that file on
-success and reports it in the failure table otherwise. A concise job log is
-written to `test/out.tsv`.
+to `test/out/<machine>.<ubuntu>.<role>.output.ansi` and, when invoked with
+--no-keep-logs (as testall does), drops its output/boot/journal logs on a
+clean pass. testall surfaces the surviving log path in the failure table. A
+concise job log is written to `test/out.tsv`.
 """
 
 import argparse
@@ -189,6 +190,9 @@ async def _run_role(
         "--idempotence" if idempotence else "--no-idempotence",
         # testall builds images upfront; tell each child to skip the rebuild.
         "--no-build-image",
+        # Let testrole drop its own logs on a clean pass so we don't leak
+        # noise files into test/out/ for green roles.
+        "--no-keep-logs",
         role,
         *role_args,
     ]
@@ -244,8 +248,7 @@ async def _run_role(
         if exitval < 0:
             exitval = 128 - exitval
         status = "ok" if exitval == 0 else "\033[0;41mfail\033[0m"
-        if exitval == 0 and log_path.exists():
-            log_path.unlink()
+        # Per-run log cleanup is testrole's responsibility now (--no-keep-logs above).
         print(f"[{seq}] {machine}:{ubuntu_name}:{role} {status} ({runtime:.1f}s)")
 
     return JobResult(
