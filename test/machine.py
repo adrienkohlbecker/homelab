@@ -6,7 +6,6 @@ import dataclasses
 import fcntl
 import os
 import platform
-import re
 import shlex
 import signal
 import tempfile
@@ -693,25 +692,34 @@ class QemuMachine(Machine):
         if not pid:
             raise RuntimeError("Missing qemu PID; pidfile is empty")
 
+        # -sTCP:LISTEN drops ESTABLISHED rows so we never pick up a guest's
+        # outbound connection by accident. -n avoids DNS reverse-lookup
+        # latency on every poll.
+        lsof_cmd = ["lsof", "-iTCP", "-sTCP:LISTEN", "-P", "-n", "-p", pid]
+
         lines: list[str] = []
         for _ in range(10):
-            lines = (await run_command(["lsof", "-i", "-P", "-p", pid])).stdout
+            lines = (await run_command(lsof_cmd)).stdout
 
             for line in lines:
-                # Ignore unrelated descriptors and VNC forwards (59xx range).
                 fields = line.split()
-                if len(fields) < 8 or fields[1] != pid or fields[7] != "TCP":
+                # Data rows: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME [STATE]
+                if len(fields) < 9 or fields[1] != pid or fields[7] != "TCP":
                     continue
 
-                match = re.search(r":(\d+)", line)
-                if not match:
+                # NAME column carries "host:port" for LISTEN sockets;
+                # rsplit handles IPv4 (127.0.0.1:port) and IPv6 ([::]:port).
+                addr = fields[8]
+                if ":" not in addr:
+                    continue
+                port = int(addr.rsplit(":", 1)[-1])
+
+                # VNC displays :0..:99 listen on 5900..5999 — skip those when
+                # --keep adds -display vnc.
+                if 5900 <= port <= 5999:
                     continue
 
-                port_str = match.group(1)
-                if port_str.startswith("59"):
-                    continue
-
-                self.ssh_port = int(port_str)
+                self.ssh_port = port
                 return
 
             await sleep_tick()
