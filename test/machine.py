@@ -13,7 +13,7 @@ import tempfile
 import time
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Self
+from typing import NamedTuple, Self
 
 from utils import (
     CommandResult,
@@ -36,29 +36,42 @@ SSH_KEY = "packer/vagrant.key"
 SSH_HOST = "127.0.0.1"
 
 CONTAINER_ANSIBLE_ARGS = ["-e", '{"docker_test":true}', "-e", "@host_vars/box-podman.yml"]
-QEMU_MACHINE_ARGS: dict[str, tuple[str, list[str], str]] = {
-    "minimal": (
-        "ubuntu",
-        ["-e", '{"qemu_test":true,"qemu_test_minimal":true}', "-e", "@host_vars/box-qemu-minimal.yml"],
-        "box",
+
+
+class QemuMachineSpec(NamedTuple):
+    ssh_user: str
+    ansible_args: list[str]
+    inventory_host: str
+    disk_count: int  # number of packer-ubuntu-N overlays to stage; 0 for cloud-init seed disk
+
+
+QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
+    "minimal": QemuMachineSpec(
+        ssh_user="ubuntu",
+        ansible_args=["-e", '{"qemu_test":true,"qemu_test_minimal":true}', "-e", "@host_vars/box-qemu-minimal.yml"],
+        inventory_host="box",
+        disk_count=0,
     ),
-    "box": (
-        "vagrant",
-        ["-e", '{"qemu_test":true,"qemu_test_minimal":false}', "-e", "@host_vars/box-qemu.yml"],
-        "box",
+    "box": QemuMachineSpec(
+        ssh_user="vagrant",
+        ansible_args=["-e", '{"qemu_test":true,"qemu_test_minimal":false}', "-e", "@host_vars/box-qemu.yml"],
+        inventory_host="box",
+        disk_count=1,
     ),
-    "lab": (
-        "vagrant",
-        ["-e", '{"qemu_test":true,"qemu_test_minimal":false}', "-e", "@host_vars/lab-qemu.yml"],
-        "lab",
+    "lab": QemuMachineSpec(
+        ssh_user="vagrant",
+        ansible_args=["-e", '{"qemu_test":true,"qemu_test_minimal":false}', "-e", "@host_vars/lab-qemu.yml"],
+        inventory_host="lab",
+        disk_count=9,
     ),
-    "pug": (
-        "vagrant",
-        ["-e", '{"qemu_test":true,"qemu_test_minimal":false}', "-e", "@host_vars/pug-qemu.yml"],
-        "pug",
+    "pug": QemuMachineSpec(
+        ssh_user="vagrant",
+        ansible_args=["-e", '{"qemu_test":true,"qemu_test_minimal":false}', "-e", "@host_vars/pug-qemu.yml"],
+        inventory_host="pug",
+        disk_count=3,
     ),
 }
-MACHINE_CHOICES: tuple[str, ...] = ("container", *QEMU_MACHINE_ARGS)
+MACHINE_CHOICES: tuple[str, ...] = ("container", *QEMU_MACHINE_SPECS)
 
 SSH_WAIT_TIMEOUT = 120
 IDFILE_TIMEOUT = 60
@@ -512,15 +525,16 @@ class QemuMachine(Machine):
     def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int):
         """QEMU-backed machine wrapper used by integration tests."""
         try:
-            ssh_user, ansible_args, inventory_host = QEMU_MACHINE_ARGS[machine]
+            spec = QEMU_MACHINE_SPECS[machine]
         except KeyError:
             raise AttributeError(f"Unknown machine: {machine}") from None
 
+        self._spec = spec
         super().__init__(
             ssh_port=0,
-            ssh_user=ssh_user,
-            ansible_args=ansible_args,
-            inventory_host=inventory_host,
+            ssh_user=spec.ssh_user,
+            ansible_args=spec.ansible_args,
+            inventory_host=spec.inventory_host,
             idfile="pid",
             imagedir="/mnt/qemu",
             machine=machine,
@@ -550,10 +564,7 @@ class QemuMachine(Machine):
             ]
             return
 
-        overlay_counts = {"box": 1, "lab": 9, "pug": 3}
-        disk_count = overlay_counts.get(self.machine)
-        if disk_count is None:
-            raise AttributeError(f"Unknown machine {self.machine}")
+        disk_count = self._spec.disk_count
 
         await self._create_overlay_series(disk_count)
         await self._copy_efivars()
