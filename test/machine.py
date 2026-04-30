@@ -118,6 +118,7 @@ class Machine:
     journal_file: Path = dataclasses.field(init=False)
     boot_file: Path = dataclasses.field(init=False)
     workdir: tempfile.TemporaryDirectory[str] = dataclasses.field(init=False)
+    peak_rss_kb: int = dataclasses.field(default=0, init=False)
 
     def __post_init__(self) -> None:
         if self.ubuntu_name not in UBUNTU_RELEASES:
@@ -233,6 +234,19 @@ class Machine:
 
     async def _find_ssh_port(self) -> None:
         raise NotImplementedError
+
+    async def _sample_peak_rss(self, pid: int) -> None:
+        status_path = Path(f"/proc/{pid}/status")
+        with contextlib.suppress(asyncio.CancelledError):
+            while True:
+                try:
+                    for line in status_path.read_text().splitlines():
+                        if line.startswith("VmRSS:"):
+                            self.peak_rss_kb = max(self.peak_rss_kb, int(line.split()[1]))
+                            break
+                except FileNotFoundError:
+                    return
+                await asyncio.sleep(0.5)
 
     async def boot(self) -> None:
         """Start the VM/container under a timeout wrapper."""
@@ -422,6 +436,7 @@ class Machine:
 class QemuMachine(Machine):
     """Start disposable QEMU guests for role-level integration tests."""
     drives: list[str]
+    _sampler_task: asyncio.Task[None] | None
 
     def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str):
         """QEMU-backed machine wrapper used by integration tests."""
@@ -442,6 +457,7 @@ class QemuMachine(Machine):
             keep_vm=keep_vm,
             ubuntu_name=ubuntu_name,
         )
+        self._sampler_task = None
 
     async def prepare(self) -> None:
         """Create overlay images and seed data required for the selected QEMU template."""
@@ -553,6 +569,11 @@ class QemuMachine(Machine):
             f"{self.workdir.name}/{self.idfile}",
         ]
 
+    async def ensure_booted(self) -> None:
+        await super().ensure_booted()
+        pid = int(Path(f"{self.workdir.name}/{self.idfile}").read_text().strip())
+        self._sampler_task = asyncio.create_task(self._sample_peak_rss(pid))
+
     async def stop(self) -> None:
         """Kill qemu via its pidfile, then drain the timeout wrapper.
 
@@ -583,6 +604,10 @@ class QemuMachine(Machine):
                         self.proc.kill()
                     await self.proc.wait()
         finally:
+            if self._sampler_task is not None:
+                self._sampler_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._sampler_task
             self.workdir.cleanup()
 
     async def _terminate_qemu(self, pid: int) -> None:
