@@ -308,11 +308,15 @@ def main() -> int:
         return 1
 
     machine_cls = PodmanMachine if parsed_args.machine == "container" else QemuMachine
+    # Inner timeout/podman --timeout is a last-resort cleanup if Python dies;
+    # it must outlast the Python deadline so testrole's own timer fires first
+    # and we get a clean rc=124 + stop(). 60s grace covers normal teardown.
     m: Machine = machine_cls(
         machine=parsed_args.machine,
         role=parsed_args.role,
         keep_vm=parsed_args.keep,
         ubuntu_name=parsed_args.ubuntu,
+        machine_timeout=parsed_args.timeout + 60,
     )
 
     rc = 0
