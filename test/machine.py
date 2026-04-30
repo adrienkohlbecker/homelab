@@ -298,19 +298,6 @@ class Machine:
     async def _find_ssh_port(self) -> None:
         raise NotImplementedError
 
-    async def _sample_peak_rss(self, pid: int) -> None:
-        status_path = Path(f"/proc/{pid}/status")
-        with contextlib.suppress(asyncio.CancelledError):
-            while True:
-                try:
-                    for line in status_path.read_text().splitlines():
-                        if line.startswith("VmRSS:"):
-                            self.peak_rss_kb = max(self.peak_rss_kb, int(line.split()[1]))
-                            break
-                except FileNotFoundError:
-                    return
-                await asyncio.sleep(0.5)
-
     async def boot(self) -> None:
         """Start the VM/container under a timeout wrapper."""
 
@@ -492,10 +479,25 @@ class Machine:
             self.workdir.cleanup()
 
 
+def _read_vm_hwm(pid: int) -> int:
+    """Return the kernel-tracked peak RSS in kB for *pid*, or 0 if unreadable.
+
+    VmHWM ("high-water mark") in /proc/<pid>/status is monotonic and maintained
+    by the kernel, so a single read at process exit gives the exact peak —
+    no sampling loop required.
+    """
+    try:
+        for line in Path(f"/proc/{pid}/status").read_text().splitlines():
+            if line.startswith("VmHWM:"):
+                return int(line.split()[1])
+    except (FileNotFoundError, ProcessLookupError, ValueError):
+        pass
+    return 0
+
+
 class QemuMachine(Machine):
     """Start disposable QEMU guests for role-level integration tests."""
     drives: list[str]
-    _sampler_task: asyncio.Task[None] | None
 
     def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str):
         """QEMU-backed machine wrapper used by integration tests."""
@@ -516,7 +518,6 @@ class QemuMachine(Machine):
             keep_vm=keep_vm,
             ubuntu_name=ubuntu_name,
         )
-        self._sampler_task = None
 
     async def prepare(self) -> None:
         """Create overlay images and seed data required for the selected QEMU template."""
@@ -628,11 +629,6 @@ class QemuMachine(Machine):
             f"{self.workdir.name}/{self.idfile}",
         ]
 
-    async def ensure_booted(self) -> None:
-        await super().ensure_booted()
-        pid = int(Path(f"{self.workdir.name}/{self.idfile}").read_text().strip())
-        self._sampler_task = asyncio.create_task(self._sample_peak_rss(pid))
-
     async def stop(self) -> None:
         """Kill qemu via its pidfile, then drain the timeout wrapper.
 
@@ -648,19 +644,20 @@ class QemuMachine(Machine):
             with contextlib.suppress(ValueError):
                 pid = int(pid_path.read_text().strip())
 
+        if pid is not None:
+            # Snapshot kernel-tracked peak RSS before we kill qemu. VmHWM is
+            # monotonic so a single read is exact; doing it here also covers
+            # the --keep case where the user's interactive session can have
+            # added to the high-water mark after the test body finished.
+            self.peak_rss_kb = _read_vm_hwm(pid)
+
         try:
-            try:
-                if pid is not None:
-                    # Shield against nested cancellation; without it a second
-                    # SIGINT mid-cleanup would leave qemu running.
-                    await asyncio.shield(self._terminate_qemu(pid))
-            finally:
-                await super().stop()
+            if pid is not None:
+                # Shield against nested cancellation; without it a second
+                # SIGINT mid-cleanup would leave qemu running.
+                await asyncio.shield(self._terminate_qemu(pid))
         finally:
-            if self._sampler_task is not None:
-                self._sampler_task.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await self._sampler_task
+            await super().stop()
 
     async def _terminate_qemu(self, pid: int) -> None:
         """SIGTERM qemu, poll briefly, escalate to SIGKILL if it lingers."""
