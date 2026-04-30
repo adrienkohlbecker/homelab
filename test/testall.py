@@ -13,11 +13,13 @@ concise job log is written to `test/out.tsv`.
 import argparse
 import asyncio
 import contextlib
+import csv
 import signal
 import sys
 import time
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import NamedTuple
 
@@ -25,10 +27,11 @@ from tabulate import tabulate
 
 from build_image import build_image
 from machine import DEFAULT_UBUNTU, OUT_DIR, UBUNTU_RELEASES, ensure_podman_network
-from utils import cancel_on_signal
+from utils import STREAM_COLORS, cancel_on_signal
 
 LOG_FILE = Path("test/out.tsv")
 LOG_FILE_PREV = Path("test/out.tsv.prev")
+JOBLOG_FIELDS = ["Role", "Ubuntu", "Machine", "Runtime", "Exitval", "Started"]
 
 
 class MachineRole(NamedTuple):
@@ -47,6 +50,7 @@ class JobResult:
     role: str
     runtime: float
     exitval: int
+    started_at: str
 
 
 def parse_args() -> argparse.Namespace:
@@ -145,18 +149,16 @@ def get_failed_roles() -> list[MachineRole]:
 
     failed_roles: list[MachineRole] = []
 
-    with LOG_FILE.open(encoding="utf-8") as log_file:
-        for line_no, raw_line in enumerate(log_file):
-            if line_no == 0:
-                continue  # header
-
-            fields = raw_line.rstrip("\n").split("\t")
-            if len(fields) < 5:
-                continue
-
-            role, ubuntu_name, machine, _runtime, exitval = fields[:5]
-            if exitval != "0":
-                failed_roles.append(MachineRole(machine=machine, ubuntu_name=ubuntu_name, role=role))
+    with LOG_FILE.open(encoding="utf-8", newline="") as log_file:
+        for row in csv.DictReader(log_file, delimiter="\t"):
+            if row["Exitval"] != "0":
+                failed_roles.append(
+                    MachineRole(
+                        machine=row["Machine"],
+                        ubuntu_name=row["Ubuntu"],
+                        role=row["Role"],
+                    )
+                )
 
     return failed_roles
 
@@ -201,6 +203,7 @@ async def _run_role(
 
     async with semaphore:
         start_time = time.time()
+        started_at = datetime.fromtimestamp(start_time, tz=UTC).isoformat(timespec="seconds")
         print(f"[{seq}] {machine}:{ubuntu_name}:{role} starting")
 
         proc = await asyncio.create_subprocess_exec(
@@ -245,7 +248,7 @@ async def _run_role(
         assert exitval is not None
         if exitval < 0:
             exitval = 128 - exitval
-        status = "ok" if exitval == 0 else "\033[0;41mfail\033[0m"
+        status = "ok" if exitval == 0 else STREAM_COLORS["stderr"].format(line="fail")
         # Per-run log cleanup is testrole's responsibility now (--no-keep-logs above).
         print(f"[{seq}] {machine}:{ubuntu_name}:{role} {status} ({runtime:.1f}s)")
 
@@ -255,6 +258,7 @@ async def _run_role(
         role=role,
         runtime=runtime,
         exitval=exitval,
+        started_at=started_at,
     )
 
 
@@ -282,9 +286,9 @@ async def run_all(
         async with asyncio.TaskGroup() as tg:
             tasks = [
                 tg.create_task(
-                    _run_role(seq, machine, ubuntu_name, role, role_args, semaphore, checkmode, idempotence)
+                    _run_role(seq, mr.machine, mr.ubuntu_name, mr.role, role_args, semaphore, checkmode, idempotence)
                 )
-                for seq, (machine, ubuntu_name, role) in enumerate(machine_roles, start=1)
+                for seq, mr in enumerate(machine_roles, start=1)
             ]
 
     return [t.result() for t in tasks]
@@ -301,14 +305,19 @@ def _print_failure_table(failures: list[JobResult]) -> None:
 
 
 def _write_joblog(results: list[JobResult]) -> None:
-    """Write a compact job log with role, ubuntu, machine, runtime, and exit code."""
-    with LOG_FILE.open("w", encoding="utf-8") as handle:
-        handle.write("Role\tUbuntu\tMachine\tRuntime\tExitval\n")
-
+    """Write a compact job log with role, ubuntu, machine, runtime, exit code, and start time."""
+    with LOG_FILE.open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=JOBLOG_FIELDS, delimiter="\t")
+        writer.writeheader()
         for result in results:
-            handle.write(
-                f"{result.role}\t{result.ubuntu_name}\t{result.machine}\t{result.runtime:.3f}\t{result.exitval}\n"
-            )
+            writer.writerow({
+                "Role": result.role,
+                "Ubuntu": result.ubuntu_name,
+                "Machine": result.machine,
+                "Runtime": f"{result.runtime:.3f}",
+                "Exitval": result.exitval,
+                "Started": result.started_at,
+            })
 
 
 def main() -> int:
