@@ -34,7 +34,6 @@ UBUNTU_RELEASES: dict[str, str] = {
 DEFAULT_UBUNTU = "jammy"
 SSH_KEY = "packer/vagrant.key"
 SSH_HOST = "127.0.0.1"
-MACHINE_TIMEOUT_SECONDS = 900  # 15 minutes; stringified at use sites for coreutils `timeout` and `podman --timeout`.
 
 CONTAINER_ANSIBLE_ARGS = ["-e", '{"docker_test":true}', "-e", "@host_vars/box-podman.yml"]
 QEMU_MACHINE_ARGS: dict[str, tuple[str, list[str], str]] = {
@@ -167,6 +166,7 @@ class Machine:
     role: str
     keep_vm: bool
     ubuntu_name: str
+    machine_timeout: int
 
     ssh_host: str = dataclasses.field(default=SSH_HOST, init=False)
     ssh_key: str = dataclasses.field(default=SSH_KEY, init=False)
@@ -198,6 +198,16 @@ class Machine:
     def ubuntu_version(self) -> str:
         """Numeric version (e.g. "22.04") for the configured release."""
         return UBUNTU_RELEASES[self.ubuntu_name]
+
+    @property
+    def wrapper_timeout(self) -> int:
+        """Last-resort timeout passed to coreutils `timeout` / podman --timeout.
+
+        0 disables the wrapper (`timeout 0` runs forever, podman --timeout 0
+        is "no timeout") so an interactive --keep session isn't cut short.
+        Otherwise it tracks the Python --timeout plus a small grace window.
+        """
+        return 0 if self.keep_vm else self.machine_timeout
 
     def format_ssh_cmd(self, *cmd: str) -> list[str]:
         """Return an ssh invocation pinned to this instance."""
@@ -499,7 +509,7 @@ class QemuMachine(Machine):
     """Start disposable QEMU guests for role-level integration tests."""
     drives: list[str]
 
-    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str):
+    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int):
         """QEMU-backed machine wrapper used by integration tests."""
         try:
             ssh_user, ansible_args, inventory_host = QEMU_MACHINE_ARGS[machine]
@@ -517,6 +527,7 @@ class QemuMachine(Machine):
             role=role,
             keep_vm=keep_vm,
             ubuntu_name=ubuntu_name,
+            machine_timeout=machine_timeout,
         )
 
     async def prepare(self) -> None:
@@ -597,7 +608,7 @@ class QemuMachine(Machine):
         return [
             "timeout",
             "--kill-after=10s",
-            str(MACHINE_TIMEOUT_SECONDS),
+            str(self.wrapper_timeout),
             "qemu-system-x86_64",
             *[arg for drive in self.drives for arg in ("--drive", drive)],
             "-netdev",
@@ -722,7 +733,7 @@ class QemuMachine(Machine):
 class PodmanMachine(Machine):
     """Start privileged Podman containers that mimic SSH hosts."""
 
-    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str):
+    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int):
         """Podman-backed machine wrapper used by integration tests."""
         system = platform.system()
         if system == "Darwin":
@@ -743,6 +754,7 @@ class PodmanMachine(Machine):
             role=role,
             keep_vm=keep_vm,
             ubuntu_name=ubuntu_name,
+            machine_timeout=machine_timeout,
         )
 
     async def prepare(self) -> None:
@@ -760,7 +772,7 @@ class PodmanMachine(Machine):
             "run",
             "--rm",
             "--timeout",
-            str(MACHINE_TIMEOUT_SECONDS),
+            str(self.wrapper_timeout),
             "--systemd",
             "always",
             "--hostname",
