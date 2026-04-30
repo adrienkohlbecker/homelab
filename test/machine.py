@@ -34,7 +34,7 @@ UBUNTU_RELEASES: dict[str, str] = {
 DEFAULT_UBUNTU = "jammy"
 SSH_KEY = "packer/vagrant.key"
 SSH_HOST = "127.0.0.1"
-MACHINE_TIMEOUT = "900"  # 15 minutes; passed as a string to coreutils `timeout` and `podman --timeout`.
+MACHINE_TIMEOUT_SECONDS = 900  # 15 minutes; stringified at use sites for coreutils `timeout` and `podman --timeout`.
 
 CONTAINER_ANSIBLE_ARGS = ["-e", '{"docker_test":true}', "-e", "@host_vars/box-podman.yml"]
 QEMU_MACHINE_ARGS: dict[str, tuple[str, list[str], str]] = {
@@ -597,7 +597,7 @@ class QemuMachine(Machine):
         return [
             "timeout",
             "--kill-after=10s",
-            MACHINE_TIMEOUT,
+            str(MACHINE_TIMEOUT_SECONDS),
             "qemu-system-x86_64",
             *[arg for drive in self.drives for arg in ("--drive", drive)],
             "-netdev",
@@ -760,7 +760,7 @@ class PodmanMachine(Machine):
             "run",
             "--rm",
             "--timeout",
-            MACHINE_TIMEOUT,
+            str(MACHINE_TIMEOUT_SECONDS),
             "--systemd",
             "always",
             "--hostname",
