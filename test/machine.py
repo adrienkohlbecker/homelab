@@ -211,6 +211,12 @@ class Machine:
             "StrictHostKeyChecking=no",
             "-o",
             "UserKnownHostsFile=/dev/null",
+            "-o",
+            "ConnectTimeout=10",
+            "-o",
+            "LogLevel=ERROR",
+            "-o",
+            "BatchMode=yes",
             f"{self.ssh_user}@{self.ssh_host}",
         ]
         return [*base, shlex.join(cmd)] if cmd else base
