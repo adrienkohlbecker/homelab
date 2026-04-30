@@ -24,8 +24,7 @@ from machine import (
     UBUNTU_RELEASES,
     ubuntu_mirrors,
 )
-from utils import CommandFailedException, IdempotenceFailedException, cancel_on_signal, tee_output
-
+from utils import CommandFailedException, IdempotenceFailedException, cancel_on_signal, print_line, tee_output
 
 def parse_args() -> tuple[argparse.Namespace, list[str]]:
     """Parse CLI arguments; unknown args are forwarded to Ansible."""
@@ -133,7 +132,7 @@ def _count_changed_tasks(stdout: list[str]) -> int:
 
 async def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -> None:
     """Re-run the role and fail if any task reports changed."""
-    print("Verifying idempotence (re-running the role)...")
+    print_line("Verifying idempotence (re-running the role)...")
     result = await m.ansible_command(site_yml, *pass_args)
     changed = _count_changed_tasks(result.stdout)
     if changed > 0:
@@ -184,10 +183,10 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: list[str]) -> Non
                 # the timeout on purpose -- it's interactive, not work.
                 async with asyncio.timeout(timeout):
                     await m.ensure_booted()
-                    print("Booted")
+                    print_line("Booted")
 
                     await m.ensure_ssh()
-                    print("SSH up")
+                    print_line("SSH up")
 
                     await _configure_apt_sources(m)
 
@@ -221,12 +220,12 @@ async def run_test(parsed_args: argparse.Namespace, pass_args: list[str]) -> Non
                             await m.ansible_command(verify_yml)
 
                     except CommandFailedException:
-                        print("Command failed")
+                        print_line("Command failed")
                         await m.collect_journal()
                         m.print_journal_tail()
                         raise
                     except IdempotenceFailedException:
-                        print("Idempotence check failed")
+                        print_line("Idempotence check failed")
                         raise
 
             finally:
@@ -246,35 +245,32 @@ def main() -> int:
 
     parsed_args, pass_args = parse_args()
 
-    if parsed_args.build_image and parsed_args.machine == "container":
-        rc = build_image(parsed_args.ubuntu)
-        if rc != 0:
-            return rc
-
     output_path = OUT_DIR / f"{parsed_args.machine}.{parsed_args.ubuntu}.{parsed_args.role}.output.ansi"
     with tee_output(output_path):
+        if parsed_args.build_image and parsed_args.machine == "container":
+            rc = build_image(parsed_args.ubuntu)
+            if rc != 0:
+                return rc
+
         try:
             asyncio.run(run_test(parsed_args, pass_args))
             return 0
         except CommandFailedException as exc:
-            print(exc, file=sys.stderr)
-            sys.stderr.write(f"\033[0;41m{parsed_args.role}.{parsed_args.machine} failed\033[0m\n")
-            sys.stderr.flush()
+            print_line(str(exc), stderr=True)
+            print_line(f"{parsed_args.role}.{parsed_args.machine} failed", stderr=True)
             return 1
         except IdempotenceFailedException as exc:
-            print(exc, file=sys.stderr)
-            sys.stderr.write(f"\033[0;41m{parsed_args.role}.{parsed_args.machine} not idempotent\033[0m\n")
-            sys.stderr.flush()
+            print_line(str(exc), stderr=True)
+            print_line(f"{parsed_args.role}.{parsed_args.machine} not idempotent", stderr=True)
             return 125
         except TimeoutError:
-            sys.stderr.write(
-                f"\033[0;41m{parsed_args.role}.{parsed_args.machine} timed out after {parsed_args.timeout}s\033[0m\n"
+            print_line(
+                f"{parsed_args.role}.{parsed_args.machine} timed out after {parsed_args.timeout}s",
+                stderr=True,
             )
-            sys.stderr.flush()
             return 124  # GNU `timeout`'s exit code for "command timed out"
         except asyncio.CancelledError:
-            sys.stderr.write("\nInterrupted, shutting down...\n")
-            sys.stderr.flush()
+            print_line("\nInterrupted, shutting down...")
             return 130
 
 
