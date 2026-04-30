@@ -18,7 +18,6 @@ from build_image import build_image
 from machine import (
     DEFAULT_UBUNTU,
     Machine,
-    OUT_DIR,
     PodmanMachine,
     QemuMachine,
     UBUNTU_RELEASES,
@@ -162,21 +161,14 @@ async def _run_checkmode(site_yml: str, m: Machine, pass_args: list[str]) -> Non
         await m.ansible_command(site_yml, "--check", *pass_args)
 
 
-async def run_test(parsed_args: argparse.Namespace, pass_args: list[str]) -> None:
+async def run_test(m: Machine, parsed_args: argparse.Namespace, pass_args: list[str]) -> None:
     """Provision a machine, run the role under test, and stream output."""
 
-    machine = parsed_args.machine
-    role = parsed_args.role
-    keep_vm = parsed_args.keep
+    machine = m.machine
+    keep_vm = m.keep_vm
     checkmode = parsed_args.checkmode
     idempotence = parsed_args.idempotence
     timeout = parsed_args.timeout
-    ubuntu_name = parsed_args.ubuntu
-
-    if machine == "container":
-        m: Machine = PodmanMachine(machine, role, keep_vm, ubuntu_name=ubuntu_name)
-    else:
-        m = QemuMachine(machine, role, keep_vm, ubuntu_name=ubuntu_name)
 
     task = asyncio.current_task()
     assert task is not None
@@ -251,9 +243,16 @@ def main() -> int:
 
     parsed_args, pass_args = parse_args()
 
-    output_path = OUT_DIR / f"{parsed_args.machine}.{parsed_args.ubuntu}.{parsed_args.role}.output.ansi"
+    if parsed_args.machine == "container":
+        m: Machine = PodmanMachine(
+            parsed_args.machine, parsed_args.role, parsed_args.keep, ubuntu_name=parsed_args.ubuntu,
+        )
+    else:
+        m = QemuMachine(
+            parsed_args.machine, parsed_args.role, parsed_args.keep, ubuntu_name=parsed_args.ubuntu,
+        )
 
-    with tee_output(output_path):
+    with tee_output(m.output_file):
         if parsed_args.build_image and parsed_args.machine == "container":
             rc = build_image(parsed_args.ubuntu)
         else:
@@ -261,7 +260,7 @@ def main() -> int:
 
         if rc == 0:
             try:
-                asyncio.run(run_test(parsed_args, pass_args))
+                asyncio.run(run_test(m, parsed_args, pass_args))
             except CommandFailedException as exc:
                 print_line(str(exc), stderr=True)
                 print_line(f"{parsed_args.role}.{parsed_args.machine} failed", stderr=True)
@@ -284,10 +283,7 @@ def main() -> int:
     # testall.py) opted out of keeping them. We wait until tee_output has
     # released the file before unlinking to keep the lifecycle obvious.
     if rc == 0 and not parsed_args.keep_logs:
-        boot_path = OUT_DIR / f"{parsed_args.machine}.{parsed_args.ubuntu}.{parsed_args.role}.boot.ansi"
-        journal_path = OUT_DIR / f"{parsed_args.machine}.{parsed_args.ubuntu}.{parsed_args.role}.journal.ansi"
-        for path in (output_path, boot_path, journal_path):
-            path.unlink(missing_ok=True)
+        m.cleanup_logs()
 
     return rc
 
