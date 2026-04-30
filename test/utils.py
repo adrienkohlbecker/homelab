@@ -121,6 +121,36 @@ async def read_and_write_stream(stream: asyncio.StreamReader | None, stream_name
         _write_line(line, stream_name)
 
 
+async def terminate_subprocess(
+    proc: asyncio.subprocess.Process,
+    *,
+    grace_seconds: float = 0.0,
+    initial_signal: int = signal.SIGKILL,
+) -> None:
+    """Stop *proc*, escalating to SIGKILL after *grace_seconds* if needed.
+
+    Default (grace=0, signal=SIGKILL) is the immediate-kill-and-drain used
+    when a caller's own coroutine has failed and just needs the child gone.
+    Pass a non-zero grace and signal=SIGINT for graceful shutdown -- useful
+    when the child runs its own cleanup (qemu/podman teardown, log drain,
+    etc.) and SIGKILL would leak resources.
+    """
+    with contextlib.suppress(ProcessLookupError):
+        proc.send_signal(initial_signal)
+    if grace_seconds > 0:
+        try:
+            async with asyncio.timeout(grace_seconds):
+                await proc.wait()
+            return
+        except TimeoutError:
+            # asyncio.timeout converts the inner CancelledError into
+            # TimeoutError; only here can we tell the wait actually timed
+            # out and escalate.
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+    await proc.wait()
+
+
 async def run_command(cmd: list[str], check: bool = True) -> CommandResult:
     """
     Execute a subprocess, stream its output live and colorized.
@@ -161,12 +191,7 @@ async def run_command(cmd: list[str], check: bool = True) -> CommandResult:
     except BaseException:
         # Any failure (cancellation, reader error, etc.) leaves the subprocess
         # behind unless we tear it down here.
-        try:
-            process.kill()
-        except ProcessLookupError:
-            # Process already exited on its own; nothing to kill.
-            pass
-        await process.wait()
+        await terminate_subprocess(process)
         raise
 
     if check and exitcode != 0:

@@ -33,11 +33,12 @@ from machine import (
     UBUNTU_RELEASES,
     ensure_podman_network,
 )
-from utils import STREAM_COLORS, cancel_on_signal
+from utils import STREAM_COLORS, cancel_on_signal, terminate_subprocess
 
 LOG_FILE = Path("test/out.tsv")
 LOG_FILE_PREV = Path("test/out.tsv.prev")
 JOBLOG_FIELDS = ["Role", "Ubuntu", "Machine", "Runtime", "Exitval", "Started"]
+LIVENESS_TICK_SECONDS = 300.0  # 5 minutes
 
 # Flags testall.py controls per child invocation. If a user passes any of
 # them through role_args, testrole.py's argparse last-wins would silently
@@ -213,6 +214,14 @@ def _rotate_joblog() -> None:
         LOG_FILE.rename(LOG_FILE_PREV)
 
 
+async def _emit_liveness(seq: int, machine: str, ubuntu_name: str, role: str, start_time: float) -> None:
+    """Print a periodic 'still running' message until cancelled."""
+    while True:
+        await asyncio.sleep(LIVENESS_TICK_SECONDS)
+        elapsed_min = (time.time() - start_time) / 60.0
+        print(f"[{seq}] {machine}:{ubuntu_name}:{role} still running, {elapsed_min:.0f}m elapsed")
+
+
 async def _run_role(
     seq: int,
     machine: str,
@@ -252,34 +261,24 @@ async def _run_role(
             stdout=asyncio.subprocess.DEVNULL,
             stderr=asyncio.subprocess.DEVNULL,
         )
+        liveness = asyncio.create_task(_emit_liveness(seq, machine, ubuntu_name, role, start_time))
 
         try:
-            await proc.wait()
-        except BaseException:
-            # Any failure (cancellation, reader error, etc.) leaves the
-            # subprocess behind unless we tear it down here.
-            with contextlib.suppress(ProcessLookupError):
-                # Race: the testrole child may have exited on its own
-                # between the wait and our signal. SIGINT mirrors what
-                # Machine.stop() sends to its qemu/podman child, so the
-                # whole chain reacts to the same signal.
-                proc.send_signal(signal.SIGINT)
             try:
+                await proc.wait()
+            except BaseException:
                 # 30s gives Machine.stop() enough headroom for its own
                 # graceful->SIGKILL escalation (~10-15s worst case for
                 # podman rm --time 5 + drain, similar for qemu) without
                 # SIGKILL'ing testrole.py mid-cleanup and leaking the
-                # container/VM.
-                async with asyncio.timeout(30):
-                    await proc.wait()
-            except TimeoutError:
-                # asyncio.timeout() converts the inner CancelledError into
-                # TimeoutError on __aexit__; only here can we tell the wait
-                # actually timed out and escalate to SIGKILL.
-                with contextlib.suppress(ProcessLookupError):
-                    proc.kill()
-                await proc.wait()
-            raise
+                # container/VM. SIGINT mirrors what Machine.stop() sends to
+                # its qemu/podman child so the whole chain reacts the same.
+                await terminate_subprocess(proc, grace_seconds=30, initial_signal=signal.SIGINT)
+                raise
+        finally:
+            liveness.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await liveness
 
         runtime = time.time() - start_time
         # proc.returncode is always set after a successful proc.wait(); a
