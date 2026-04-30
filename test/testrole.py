@@ -18,6 +18,7 @@ from build_image import build_image
 from machine import (
     DEFAULT_UBUNTU,
     Machine,
+    OUT_DIR,
     PodmanMachine,
     QemuMachine,
     UBUNTU_RELEASES,
@@ -242,6 +243,24 @@ async def run_test(
                     await m.wait()
 
 
+MEMORY_TSV = OUT_DIR / "memory.tsv"
+MEMORY_TSV_HEADER = "Role\tUbuntu\tMachine\tPeakKB"
+
+
+def _upsert_memory_row(role: str, ubuntu: str, machine: str, peak_kb: int) -> None:
+    rows: dict[tuple[str, str, str], int] = {}
+    if MEMORY_TSV.exists():
+        for line in MEMORY_TSV.read_text().splitlines()[1:]:
+            parts = line.split("\t")
+            if len(parts) == 4:
+                rows[(parts[0], parts[1], parts[2])] = int(parts[3])
+    rows[(role, ubuntu, machine)] = peak_kb
+    lines = [MEMORY_TSV_HEADER]
+    for key in sorted(rows):
+        lines.append(f"{key[0]}\t{key[1]}\t{key[2]}\t{rows[key]}")
+    MEMORY_TSV.write_text("\n".join(lines) + "\n")
+
+
 def main() -> int:
     """CLI entry point for running a single role test."""
 
@@ -271,6 +290,8 @@ def main() -> int:
                     idempotence=parsed_args.idempotence,
                     timeout=parsed_args.timeout,
                 ))
+                if parsed_args.machine != "container":
+                    _upsert_memory_row(parsed_args.role, parsed_args.ubuntu, parsed_args.machine, m.peak_rss_kb)
             except CommandFailedException as exc:
                 print_line(str(exc), stderr=True)
                 print_line(f"{parsed_args.role}.{parsed_args.machine} failed", stderr=True)
