@@ -303,7 +303,7 @@ def main() -> int:
     if not role_main.exists():
         print_line(
             f"Error: role '{parsed_args.role}' not found at {role_main}",
-            stderr=True,
+            error=True,
         )
         return 1
 
@@ -328,12 +328,12 @@ def main() -> int:
                 # build_image() runs its own asyncio.run(); SIGINT during a
                 # build raises KeyboardInterrupt out of it. Translate into
                 # the same exit code as a cancelled test run.
-                print_line("\nInterrupted during image build, shutting down...", stderr=True)
+                print_line("\nInterrupted during image build, shutting down...", error=True)
                 return 130
             if rc != 0:
                 print_line(
                     f"{parsed_args.role}.{parsed_args.machine} build failed",
-                    stderr=True,
+                    error=True,
                 )
                 return rc
 
@@ -346,17 +346,17 @@ def main() -> int:
                 timeout=parsed_args.timeout,
             ))
         except CommandFailedException as exc:
-            print_line(str(exc), stderr=True)
-            print_line(f"{parsed_args.role}.{parsed_args.machine} failed", stderr=True)
+            print_line(str(exc), error=True)
+            print_line(f"{parsed_args.role}.{parsed_args.machine} failed", error=True)
             rc = 1
         except IdempotenceFailedException as exc:
-            print_line(str(exc), stderr=True)
-            print_line(f"{parsed_args.role}.{parsed_args.machine} not idempotent", stderr=True)
+            print_line(str(exc), error=True)
+            print_line(f"{parsed_args.role}.{parsed_args.machine} not idempotent", error=True)
             rc = 125
         except TimeoutError:
             print_line(
                 f"{parsed_args.role}.{parsed_args.machine} timed out after {parsed_args.timeout}s",
-                stderr=True,
+                error=True,
             )
             rc = 124  # GNU `timeout`'s exit code for "command timed out"
         except asyncio.CancelledError:
