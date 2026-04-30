@@ -14,7 +14,15 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Self
 
-from utils import CommandResult, read_and_write_stream, run_command, sleep_tick, print_cmd_line, print_line
+from utils import (
+    CommandResult,
+    IdempotenceFailedException,
+    print_cmd_line,
+    print_line,
+    read_and_write_stream,
+    run_command,
+    sleep_tick,
+)
 
 OUT_DIR = Path("test/out")
 UBUNTU_RELEASES: dict[str, str] = {
@@ -107,6 +115,7 @@ class Machine:
     ssh_key: str = dataclasses.field(default=SSH_KEY, init=False)
     proc: asyncio.subprocess.Process | None = dataclasses.field(default=None, init=False)
     journal_file: Path = dataclasses.field(init=False)
+    boot_file: Path = dataclasses.field(init=False)
     workdir: tempfile.TemporaryDirectory[str] = dataclasses.field(init=False)
 
     def __post_init__(self) -> None:
@@ -116,6 +125,7 @@ class Machine:
             )
         OUT_DIR.mkdir(parents=True, exist_ok=True)
         self.journal_file = OUT_DIR / f"{self.machine}.{self.ubuntu_name}.{self.role}.journal.ansi"
+        self.boot_file = OUT_DIR / f"{self.machine}.{self.ubuntu_name}.{self.role}.boot.ansi"
         self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
 
     @property
@@ -222,12 +232,24 @@ class Machine:
         cmd = self._boot_command()
         print_cmd_line(cmd)
 
-        # Inherit stdout/stderr so qemu/podman diagnostics surface live and the
-        # kernel pipe buffer can never fill up and deadlock the guest.
+        # Redirect both streams into a per-machine boot log so the chatty
+        # systemd init / qemu console doesn't drown out the test transcript.
+        # The kernel writes straight to disk, so no pipe buffer to drain.
+        # stderr=STDOUT merges FD 2 onto FD 1 in the kernel before any write
+        # happens, so the on-disk order is exactly the syscall order across
+        # both streams -- the price is that we can no longer tell which line
+        # came from stderr (no per-stream coloring).
         # start_new_session=True puts the child in its own process group so
         # terminal SIGINT only hits the python parent; we drive child
         # shutdown explicitly through Machine.stop().
-        self.proc = await asyncio.create_subprocess_exec(*cmd, start_new_session=True)
+        with self.boot_file.open("wb") as handle:
+            self.proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=handle,
+                stderr=asyncio.subprocess.STDOUT,
+                start_new_session=True,
+            )
+        # Parent's handle can close once the child holds its own dup'd FD.
 
     async def ensure_booted(self) -> None:
         """Block until the hypervisor writes the PID/CID file or the launch fails."""
@@ -298,6 +320,10 @@ class Machine:
             # stderr only -- stdout is already going to the journal file. Read
             # to EOF before waiting so a chatty stderr can't deadlock the child
             # by filling the pipe buffer.
+            # Ordering: stdout lines land in journal_file in source order
+            # (single FD, kernel FIFO); stderr lines land in the main log in
+            # source order. The two streams go to different destinations so
+            # there's no cross-stream interleave to worry about here.
             await read_and_write_stream(proc.stderr, "stderr", [])
             exitcode = await proc.wait()
 
@@ -308,14 +334,21 @@ class Machine:
 
     def print_journal_tail(self, n: int = 50) -> None:
         """Print the last *n* lines of the saved journal to stdout."""
-        if not self.journal_file.exists():
+        self._print_file_tail(self.journal_file, n)
+
+    def print_boot_tail(self, n: int = 50) -> None:
+        """Print the last *n* lines of the boot subprocess log to stdout."""
+        self._print_file_tail(self.boot_file, n)
+
+    def _print_file_tail(self, path: Path, n: int) -> None:
+        if not path.exists():
             return
-        lines = self.journal_file.read_text(errors="replace").splitlines()
+        lines = path.read_text(errors="replace").splitlines()
         tail = lines[-n:]
-        print_line(f"--- last {len(tail)} lines of {self.journal_file} ---")
+        print_line(f"--- last {len(tail)} lines of {path} ---")
         for line in tail:
             print_line(line)
-        print_line(f"--- end {self.journal_file} ---")
+        print_line(f"--- end {path} ---")
 
     def print_ssh_instructions(self) -> None:
         ssh_cmd = shlex.join(self.format_ssh_cmd())
@@ -335,6 +368,16 @@ class Machine:
     async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
         print_line("Stopping machine...")
         await self.stop()
+        # Surface the tail of the boot/console log on infra-shaped failures so
+        # the main transcript ends with the most likely diagnostic. Cancellation
+        # is the user wanting out; idempotence checks fail at the role layer
+        # and the boot log won't help.
+        if (
+            isinstance(exc_type, type)
+            and issubclass(exc_type, BaseException)
+            and not issubclass(exc_type, (asyncio.CancelledError, IdempotenceFailedException))
+        ):
+            self.print_boot_tail()
 
     async def stop(self) -> None:
         """Stop the VM/container"""
