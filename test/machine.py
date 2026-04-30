@@ -8,14 +8,13 @@ import platform
 import re
 import shlex
 import signal
-import sys
 import tempfile
 import time
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Self
 
-from utils import CommandResult, run_command, sleep_tick, print_cmd_line
+from utils import CommandResult, read_and_write_stream, run_command, sleep_tick, print_cmd_line, print_line
 
 OUT_DIR = Path("test/out")
 UBUNTU_RELEASES: dict[str, str] = {
@@ -293,13 +292,19 @@ class Machine:
         print_cmd_line(cmd)
 
         with self.journal_file.open("w") as handle:
-            proc = await asyncio.create_subprocess_exec(*cmd, stdout=handle, stderr=sys.stdout)
+            proc = await asyncio.create_subprocess_exec(
+                *cmd, stdout=handle, stderr=asyncio.subprocess.PIPE,
+            )
+            # stderr only -- stdout is already going to the journal file. Read
+            # to EOF before waiting so a chatty stderr can't deadlock the child
+            # by filling the pipe buffer.
+            await read_and_write_stream(proc.stderr, "stderr", [])
             exitcode = await proc.wait()
 
         if exitcode != 0:
-            print(f"Failed to collect journal: exit code {exitcode}")
+            print_line(f"Failed to collect journal: exit code {exitcode}")
             return
-        print(f"Systemd journal: {self.journal_file}")
+        print_line(f"Systemd journal: {self.journal_file}")
 
     def print_journal_tail(self, n: int = 50) -> None:
         """Print the last *n* lines of the saved journal to stdout."""
@@ -307,16 +312,16 @@ class Machine:
             return
         lines = self.journal_file.read_text(errors="replace").splitlines()
         tail = lines[-n:]
-        print(f"--- last {len(tail)} lines of {self.journal_file} ---")
+        print_line(f"--- last {len(tail)} lines of {self.journal_file} ---")
         for line in tail:
-            print(line)
-        print(f"--- end {self.journal_file} ---")
+            print_line(line)
+        print_line(f"--- end {self.journal_file} ---")
 
     def print_ssh_instructions(self) -> None:
         ssh_cmd = shlex.join(self.format_ssh_cmd())
-        print("Keeping VM around, ssh using:")
-        print(f"> {ssh_cmd}")
-        print("Then Ctrl+C to stop the machine")
+        print_line("Keeping VM around, ssh using:")
+        print_line(f"> {ssh_cmd}")
+        print_line("Then Ctrl+C to stop the machine")
 
     async def wait(self) -> None:
         if self.proc:
@@ -328,7 +333,7 @@ class Machine:
         return self
 
     async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
-        print("Stopping machine...")
+        print_line("Stopping machine...")
         await self.stop()
 
     async def stop(self) -> None:

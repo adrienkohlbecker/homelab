@@ -6,11 +6,12 @@ in sync with the test harness. Run from the repo root.
 """
 
 import argparse
-import subprocess
+import asyncio
 import sys
 from pathlib import Path
 
 from machine import UBUNTU_RELEASES
+from utils import print_line, run_command
 
 DOCKERFILE = Path("test/Dockerfile")
 
@@ -32,8 +33,10 @@ def build_image(codename: str, builder: str = "podman") -> int:
         "-f", str(DOCKERFILE),
         str(DOCKERFILE.parent),
     ]
-    print(f"==> Building homelab:{codename} (ubuntu:{version})")
-    return subprocess.run(cmd).returncode
+    print_line(f"==> Building homelab:{codename} (ubuntu:{version})")
+    # Stream through run_command so each line goes via _write_line and is
+    # picked up by an active tee_output target.
+    return asyncio.run(run_command(cmd, check=False)).exitcode
 
 
 def parse_args() -> argparse.Namespace:
@@ -62,13 +65,13 @@ def main() -> int:
 
     codenames = [u.strip() for u in args.ubuntu.split(",") if u.strip()]
     if not codenames:
-        print("Error: --ubuntu must list at least one codename", file=sys.stderr)
+        print_line("Error: --ubuntu must list at least one codename", stderr=True)
         return 1
     for codename in codenames:
         if codename not in UBUNTU_RELEASES:
-            print(
+            print_line(
                 f"Error: unknown Ubuntu codename '{codename}'; valid: {sorted(UBUNTU_RELEASES)}",
-                file=sys.stderr,
+                stderr=True,
             )
             return 1
 

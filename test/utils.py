@@ -53,8 +53,7 @@ def tee_output(path: Path) -> Iterator[None]:
 
 async def sleep_tick() -> None:
     """Emit a single dot per second while a long-running task progresses."""
-    sys.stdout.write(".")
-    sys.stdout.flush()
+    _emit(".")
     await asyncio.sleep(1)
 
 
@@ -78,19 +77,33 @@ def _colorize(line: str, stream_name: str) -> str:
     return template.format(line=line) if template else line
 
 
-def _write_line(line: str, stream_name: str) -> None:
-    """Echo a line to stdout (and the active tee target, if any), colorized by stream name."""
-    output_line = _colorize(line, stream_name)
-    sys.stdout.write(output_line + "\n")
+def _emit(text: str) -> None:
+    """Write *text* verbatim to stdout and the active tee target, if any."""
+    sys.stdout.write(text)
     sys.stdout.flush()
     if _OUTPUT_LOG is not None:
-        _OUTPUT_LOG.write(output_line + "\n")
+        _OUTPUT_LOG.write(text)
         _OUTPUT_LOG.flush()
+
+
+def _write_line(line: str, stream_name: str) -> None:
+    """Echo a line to stdout (and the active tee target, if any), colorized by stream name."""
+    _emit(_colorize(line, stream_name) + "\n")
 
 
 def print_cmd_line(cmd: list[str]) -> None:
     """Log the command being executed in a distinct color."""
     _write_line(f"$ {shlex.join(cmd)}", "cmd")
+
+
+def print_line(line: str, stderr: bool = False) -> None:
+    """Log a free-form message through the same path as subprocess output.
+
+    Routes through _write_line so the active tee_output target captures it,
+    mirroring print()'s behavior otherwise. Pass stderr=True to render the
+    line with the red error highlight used for subprocess stderr.
+    """
+    _write_line(line, "stderr" if stderr else "stdout")
 
 
 async def read_and_write_stream(stream: asyncio.StreamReader | None, stream_name: str, capture: list[str]) -> None:
