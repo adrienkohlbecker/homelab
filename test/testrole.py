@@ -363,11 +363,11 @@ def main() -> int:
             print_line("\nInterrupted, shutting down...")
             rc = 130
         finally:
-            # Record peak RSS for QEMU runs even on failure -- a timed-out
-            # run is often the most interesting reading. peak_rss_kb stays
-            # 0 if the sampler never got going (e.g., boot failed before
-            # ensure_booted), in which case we have nothing useful to log.
-            if parsed_args.machine != "container" and m.peak_rss_kb > 0:
+            # Record peak RSS even on failure -- a timed-out run is often the
+            # most interesting reading. peak_rss_kb stays 0 when the read
+            # failed (cgroup v1 host, qemu died before stop, etc.), in which
+            # case we have nothing useful to log.
+            if m.peak_rss_kb > 0:
                 upsert_memory_row(
                     parsed_args.role, parsed_args.ubuntu, parsed_args.machine, m.peak_rss_kb,
                 )
