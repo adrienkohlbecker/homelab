@@ -11,7 +11,7 @@ import shlex
 import signal
 import tempfile
 import time
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from pathlib import Path
 from typing import NamedTuple, Self
 
@@ -564,11 +564,17 @@ class QemuMachine(Machine):
             ]
             return
 
-        disk_count = self._spec.disk_count
-
-        await self._create_overlay_series(disk_count)
+        for idx in range(1, self._spec.disk_count + 1):
+            await self._create_overlay(
+                f"{self.imagedir}/{self.ubuntu_name}/ubuntu-{self.machine}/packer-ubuntu-{idx}",
+                f"{self.workdir.name}/packer-ubuntu-{idx}",
+            )
         await self._copy_efivars()
-        self.drives = [*self._virtio_drive_series(disk_count), *self._uefi_drives()]
+        self.drives = [
+            *(self._virtio_drive(f"{self.workdir.name}/packer-ubuntu-{idx}")
+              for idx in range(1, self._spec.disk_count + 1)),
+            *self._uefi_drives(),
+        ]
 
     async def _create_overlay(self, src: str, dest: str, size: str | None = None) -> None:
         """Create a qcow2 overlay pointing at *src* with optional resize."""
@@ -585,22 +591,10 @@ class QemuMachine(Machine):
             ["cp", f"{self.imagedir}/{self.ubuntu_name}/ubuntu-{self.machine}/efivars.fd", f"{self.workdir.name}/efivars.fd"],
         )
 
-    async def _create_overlay_series(self, count: int) -> None:
-        """Create a numbered set of overlays (packer-ubuntu-1..count)."""
-
-        for idx in range(1, count + 1):
-            await self._create_overlay(
-                f"{self.imagedir}/{self.ubuntu_name}/ubuntu-{self.machine}/packer-ubuntu-{idx}",
-                f"{self.workdir.name}/packer-ubuntu-{idx}",
-            )
-
     def _virtio_drive(self, path: str) -> str:
         """Return a virtio drive string with sensible cache/discard flags."""
 
         return f"file={path},if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
-
-    def _virtio_drive_series(self, count: int) -> Iterable[str]:
-        return (self._virtio_drive(f"{self.workdir.name}/packer-ubuntu-{idx}") for idx in range(1, count + 1))
 
     def _uefi_drives(self) -> list[str]:
         return [
