@@ -135,7 +135,7 @@ async def read_and_write_stream(
         if not line_bytes:
             break
 
-        line = line_bytes.decode("utf-8", errors="replace").rstrip("\n")
+        line = line_bytes.decode("utf-8", errors="replace").rstrip("\r\n")
         capture.append(line)
         if not quiet:
             _write_line(line, color)
