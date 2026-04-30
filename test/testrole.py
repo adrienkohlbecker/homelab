@@ -10,7 +10,9 @@ log streaming.
 
 import argparse
 import asyncio
+import contextlib
 import re
+import shlex
 import sys
 from pathlib import Path
 
@@ -26,6 +28,14 @@ from machine import (
     upsert_memory_row,
 )
 from utils import CommandFailedException, IdempotenceFailedException, cancel_on_signal, print_line, tee_output
+
+def _positive_int(value: str) -> int:
+    """argparse type for flags that must be a positive integer."""
+    n = int(value)
+    if n <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {n}")
+    return n
+
 
 def parse_args() -> tuple[argparse.Namespace, list[str]]:
     """Parse CLI arguments; unknown args are forwarded to Ansible."""
@@ -52,7 +62,7 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     )
     parser.add_argument(
         "--timeout",
-        type=int,
+        type=_positive_int,
         default=30 * 60,
         metavar="SECONDS",
         help="Abort the test if it doesn't complete within this many seconds",
@@ -85,9 +95,10 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
 
     args, pass_args = parser.parse_known_args()
 
-    # argparse leaves the literal "--" in the remainder; drop it to mirror the
-    # old shell parsing behavior.
-    if pass_args and pass_args[0] == "--":
+    # argparse can leave one or more literal "--" tokens at the head of the
+    # remainder depending on positional/optional interleaving; strip them all
+    # to mirror the old shell parsing behavior.
+    while pass_args and pass_args[0] == "--":
         pass_args = pass_args[1:]
 
     return args, pass_args
@@ -123,8 +134,9 @@ async def _configure_apt_sources(m: Machine) -> None:
         ]
         path = "/etc/apt/sources.list.d/ubuntu.sources"
 
-    # Use one shell to avoid repeatedly opening the file and keep quoting simple.
-    printf_args = " ".join(f'"{line}"' for line in sources)
+    # Use one shell to avoid repeatedly opening the file. shlex.quote each
+    # line so any future $/`/\ in mirror URLs isn't expanded by bash.
+    printf_args = " ".join(shlex.quote(line) for line in sources)
     await m.ssh_command("sudo", "bash", "-c", f"printf '%s\\n' {printf_args} > {path}")
     await m.ssh_command("sudo", "apt-get", "update")
 
@@ -134,7 +146,7 @@ _RECAP_CHANGED_RE = re.compile(r"\bchanged=(\d+)")
 
 def _count_changed_tasks(stdout: list[str]) -> int:
     """Sum `changed=N` across every PLAY RECAP host line in the output."""
-    return sum(int(match.group(1)) for line in stdout for match in [_RECAP_CHANGED_RE.search(line)] if match)
+    return sum(int(m.group(1)) for line in stdout if (m := _RECAP_CHANGED_RE.search(line)))
 
 
 async def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -> None:
@@ -148,17 +160,25 @@ async def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -
         )
 
 
+_STAGE_TAG_RE = re.compile(r"\b_check_stage(\d+)\b")
+
+
 async def _run_checkmode(site_yml: str, m: Machine, pass_args: list[str]) -> None:
     """Run check mode and staged tags when requested."""
-    list_tags = await m.ansible_command(site_yml, "--list-tags")
+    # Forward pass_args so --list-tags sees the same variable universe as
+    # the --check / --tags runs below; otherwise a -e flag that gates a
+    # tagged task would make the lists disagree.
+    list_tags = await m.ansible_command(site_yml, "--list-tags", *pass_args)
 
     await m.ansible_command(site_yml, "--check", *pass_args)
 
-    # Some roles split expensive checks into stages; run only those that exist.
+    # Some roles split expensive checks into stages; auto-discover every
+    # _check_stageN tag and run them in numeric order so adding more stages
+    # later doesn't need a code change.
     available_tags = "\n".join(list_tags.stdout)
-    for stage in ["_check_stage1", "_check_stage2", "_check_stage3", "_check_stage4"]:
-        if stage not in available_tags:
-            continue
+    stages = sorted({int(n) for n in _STAGE_TAG_RE.findall(available_tags)})
+    for n in stages:
+        stage = f"_check_stage{n}"
         await m.ansible_command(site_yml, "--tags", stage, *pass_args)
         await m.ansible_command(site_yml, "--check", *pass_args)
 
@@ -173,33 +193,37 @@ async def run_test(
 ) -> None:
     """Provision a machine, run the role under test, and stream output."""
 
-    machine = m.machine
-    keep_vm = m.keep_vm
-
     task = asyncio.current_task()
     assert task is not None
 
+    # When --keep is set and the deadline fires, we absorb the resulting
+    # cancel so async with m doesn't tear down the VM and the user can
+    # still SSH in to debug. We re-surface TimeoutError after the wait so
+    # main() reports rc=124 regardless.
+    timer_absorbed = False
+
     with cancel_on_signal(task):
-        async with m:
-            try:
-                # Bound the test body with a deadline so a stuck apt/ansible
-                # task can't run forever. The keep_vm wait below is outside
-                # the timeout on purpose -- it's interactive, not work.
-                async with asyncio.timeout(timeout):
-                    await m.ensure_booted()
-                    print_line("Booted")
-
-                    await m.ensure_ssh()
-                    print_line("SSH up")
-
-                    await _configure_apt_sources(m)
-
-                    if machine == "minimal":
-                        # Fixes systemd-analyze validation error:
-                        # /lib/systemd/system/snapd.service:23: Unknown key name 'RestartMode' section 'Service', ignoring.
-                        await m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")
-
+        # Bound the whole test (prepare, boot, body) with a deadline so a
+        # stuck qemu-img / apt / ansible task can't run forever. The keep_vm
+        # wait below disables the deadline via reschedule(None) once the
+        # body finishes -- the SSH session is interactive, not work.
+        async with asyncio.timeout(timeout) as timeout_cm:
+            async with m:
+                try:
                     try:
+                        await m.ensure_booted()
+                        print_line("Booted")
+
+                        await m.ensure_ssh()
+                        print_line("SSH up")
+
+                        await _configure_apt_sources(m)
+
+                        if m.machine == "minimal":
+                            # Fixes systemd-analyze validation error:
+                            # /lib/systemd/system/snapd.service:23: Unknown key name 'RestartMode' section 'Service', ignoring.
+                            await m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")
+
                         # Run pre-role fixture playbook(s). _setup is the new
                         # name; _test is the legacy alias still used by most
                         # roles. Roles that have both shouldn't, but if they
@@ -225,23 +249,49 @@ async def run_test(
 
                     except CommandFailedException:
                         print_line("Command failed")
-                        await m.collect_journal()
-                        m.print_journal_tail()
+                        # Best-effort: a journal-collection failure must not
+                        # shadow the underlying CommandFailedException.
+                        with contextlib.suppress(Exception):
+                            await m.collect_journal()
+                            m.print_journal_tail()
                         raise
                     except IdempotenceFailedException:
                         print_line("Idempotence check failed")
                         raise
+                    except asyncio.CancelledError:
+                        # The deadline fired (asyncio.timeout cancels the task
+                        # to surface TimeoutError). With --keep we want the VM
+                        # to stay up for debugging, so absorb the cancel and
+                        # fall through to the keep_vm wait below.
+                        if m.keep_vm and timeout_cm.expired() and task.cancelling():
+                            task.uncancel()
+                            timer_absorbed = True
+                            print_line(
+                                f"Timed out after {timeout}s; --keep set, dropping to SSH for debug",
+                            )
+                        else:
+                            raise
 
-            finally:
-                # keep_vm runs on success and on CommandFailedException, but
-                # not on cancellation -- cancelling() is non-zero only when a
-                # SIGINT/SIGTERM-driven cancel is in flight, in which case the
-                # user wants out, not an SSH prompt. If a fresh Ctrl+C lands
-                # between the check and m.wait(), CancelledError unwinds out
-                # through `async with m`'s __aexit__, so m.stop() still runs.
-                if keep_vm and not task.cancelling():
-                    m.print_ssh_instructions()
-                    await m.wait()
+                finally:
+                    # keep_vm waits for the user on success, CommandFailedException,
+                    # IdempotenceFailedException, and (after absorbing the timer
+                    # above) on TimeoutError. It does NOT run on user-driven
+                    # cancellation -- Ctrl+C means out, not an SSH prompt.
+                    # reschedule(None) makes the wait unbounded; on a fired
+                    # timer the cm rejects reschedule, but the timer is already
+                    # spent so the wait remains effectively unbounded anyway.
+                    if m.keep_vm and not task.cancelling():
+                        with contextlib.suppress(RuntimeError):
+                            timeout_cm.reschedule(None)
+                        m.print_ssh_instructions()
+                        await m.wait()
+
+    if timer_absorbed:
+        # Re-surface the timeout we silenced so main() reports rc=124. If a
+        # user Ctrl+C broke the wait above, asyncio.timeout's __aexit__ has
+        # already converted that cancel into TimeoutError before reaching
+        # this line, so the manual raise only covers natural exits.
+        raise TimeoutError(f"Test timed out after {timeout}s")
 
 
 def main() -> int:
@@ -249,49 +299,74 @@ def main() -> int:
 
     parsed_args, pass_args = parse_args()
 
-    if parsed_args.machine == "container":
-        m: Machine = PodmanMachine(
-            parsed_args.machine, parsed_args.role, parsed_args.keep, ubuntu_name=parsed_args.ubuntu,
+    role_main = Path(f"roles/{parsed_args.role}/tasks/main.yml")
+    if not role_main.exists():
+        print_line(
+            f"Error: role '{parsed_args.role}' not found at {role_main}",
+            stderr=True,
         )
-    else:
-        m = QemuMachine(
-            parsed_args.machine, parsed_args.role, parsed_args.keep, ubuntu_name=parsed_args.ubuntu,
-        )
+        return 1
 
+    machine_cls = PodmanMachine if parsed_args.machine == "container" else QemuMachine
+    m: Machine = machine_cls(
+        machine=parsed_args.machine,
+        role=parsed_args.role,
+        keep_vm=parsed_args.keep,
+        ubuntu_name=parsed_args.ubuntu,
+    )
+
+    rc = 0
     with tee_output(m.output_file):
         if parsed_args.build_image and parsed_args.machine == "container":
-            rc = build_image(parsed_args.ubuntu)
-        else:
-            rc = 0
-
-        if rc == 0:
             try:
-                asyncio.run(run_test(
-                    m,
-                    pass_args,
-                    checkmode=parsed_args.checkmode,
-                    idempotence=parsed_args.idempotence,
-                    timeout=parsed_args.timeout,
-                ))
-                if parsed_args.machine != "container":
-                    upsert_memory_row(parsed_args.role, parsed_args.ubuntu, parsed_args.machine, m.peak_rss_kb)
-            except CommandFailedException as exc:
-                print_line(str(exc), stderr=True)
-                print_line(f"{parsed_args.role}.{parsed_args.machine} failed", stderr=True)
-                rc = 1
-            except IdempotenceFailedException as exc:
-                print_line(str(exc), stderr=True)
-                print_line(f"{parsed_args.role}.{parsed_args.machine} not idempotent", stderr=True)
-                rc = 125
-            except TimeoutError:
+                rc = build_image(parsed_args.ubuntu)
+            except KeyboardInterrupt:
+                # build_image() runs its own asyncio.run(); SIGINT during a
+                # build raises KeyboardInterrupt out of it. Translate into
+                # the same exit code as a cancelled test run.
+                print_line("\nInterrupted during image build, shutting down...", stderr=True)
+                return 130
+            if rc != 0:
                 print_line(
-                    f"{parsed_args.role}.{parsed_args.machine} timed out after {parsed_args.timeout}s",
+                    f"{parsed_args.role}.{parsed_args.machine} build failed",
                     stderr=True,
                 )
-                rc = 124  # GNU `timeout`'s exit code for "command timed out"
-            except asyncio.CancelledError:
-                print_line("\nInterrupted, shutting down...")
-                rc = 130
+                return rc
+
+        try:
+            asyncio.run(run_test(
+                m,
+                pass_args,
+                checkmode=parsed_args.checkmode,
+                idempotence=parsed_args.idempotence,
+                timeout=parsed_args.timeout,
+            ))
+        except CommandFailedException as exc:
+            print_line(str(exc), stderr=True)
+            print_line(f"{parsed_args.role}.{parsed_args.machine} failed", stderr=True)
+            rc = 1
+        except IdempotenceFailedException as exc:
+            print_line(str(exc), stderr=True)
+            print_line(f"{parsed_args.role}.{parsed_args.machine} not idempotent", stderr=True)
+            rc = 125
+        except TimeoutError:
+            print_line(
+                f"{parsed_args.role}.{parsed_args.machine} timed out after {parsed_args.timeout}s",
+                stderr=True,
+            )
+            rc = 124  # GNU `timeout`'s exit code for "command timed out"
+        except asyncio.CancelledError:
+            print_line("\nInterrupted, shutting down...")
+            rc = 130
+        finally:
+            # Record peak RSS for QEMU runs even on failure -- a timed-out
+            # run is often the most interesting reading. peak_rss_kb stays
+            # 0 if the sampler never got going (e.g., boot failed before
+            # ensure_booted), in which case we have nothing useful to log.
+            if parsed_args.machine != "container" and m.peak_rss_kb > 0:
+                upsert_memory_row(
+                    parsed_args.role, parsed_args.ubuntu, parsed_args.machine, m.peak_rss_kb,
+                )
 
     # Drop per-run logs only on a clean pass when the caller (typically
     # testall.py) opted out of keeping them. We wait until tee_output has
