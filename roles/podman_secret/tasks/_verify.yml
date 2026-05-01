@@ -6,10 +6,11 @@
     podman_secret_name: podman_secret_test
     podman_secret_data: alpha
 
-- name: _verify | scenario 1 — assert created
+- name: _verify | scenario 1 — assert created and not pre-existing
   assert:
     that:
       - podman_secret_test_rotated
+      - not podman_secret_test_existed_before
 
 - name: _verify | scenario 2 — re-run with same data
   import_role:
@@ -19,10 +20,11 @@
     podman_secret_name: podman_secret_test
     podman_secret_data: alpha
 
-- name: _verify | scenario 2 — assert NOT rotated
+- name: _verify | scenario 2 — assert NOT rotated and pre-existing
   assert:
     that:
       - not podman_secret_test_rotated
+      - podman_secret_test_existed_before
 
 - name: _verify | scenario 3 — re-run with new data
   import_role:
@@ -32,10 +34,11 @@
     podman_secret_name: podman_secret_test
     podman_secret_data: beta
 
-- name: _verify | scenario 3 — assert rotated
+- name: _verify | scenario 3 — assert rotated and pre-existing
   assert:
     that:
       - podman_secret_test_rotated
+      - podman_secret_test_existed_before
 
 - name: _verify | inspect label on rotated secret
   containers.podman.podman_secret_info:

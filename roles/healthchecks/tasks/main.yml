@@ -60,6 +60,30 @@
     - healthchecks
     - _check_stage2
 
+# linuxserver/healthchecks honors SUPERUSER_PASSWORD only when creating the
+# Django superuser for the first time. After bootstrap, vault rotations get
+# baked into the podman secret but the running app keeps the old password
+# silently. Detect that case here and force the operator to do the rotation
+# in-band; re-running the play afterwards will be clean.
+- name: Fail if superuser password rotated post-bootstrap
+  fail:
+    msg: |
+      healthchecks_password changed in vault. The podman secret has been
+      updated, but linuxserver/healthchecks bakes SUPERUSER_PASSWORD into
+      the Django user record only at first creation, so the running app
+      still has the old password.
+
+      To complete the rotation, run on the target host:
+
+        podman exec -it healthchecks \
+          python manage.py changepassword {{ root_email }}
+
+      Then re-run this play.
+  when: healthchecks_password_rotated and healthchecks_password_existed_before
+  tags:
+    - healthchecks
+    - _check_stage2
+
 - name: Create healthchecks SMTP password secret
   import_role:
     name: podman_secret
