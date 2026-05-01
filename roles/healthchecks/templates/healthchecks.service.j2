@@ -42,6 +42,7 @@ ExecStart=/usr/bin/podman run \
     --env PGID={{ healthchecks_user.group }}  \
     --env RP_ID=healthchecks.{{ inventory_hostname }}.{{ domain }} \
     --env SITE_ROOT=https://healthchecks.{{ inventory_hostname }}.{{ domain }} \
+    --env ALLOWED_HOSTS=healthchecks.{{ inventory_hostname }}.{{ domain }},localhost \
     --env SITE_NAME=Healthchecks \
     --env ADMINS={{ root_email }} \
     --env SUPERUSER_EMAIL={{ root_email }} \
