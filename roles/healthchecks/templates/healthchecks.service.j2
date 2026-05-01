@@ -37,6 +37,12 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="healthchecks" \
     --security-opt=no-new-privileges \
+{% if not docker_test %}
+    --uidmap=0:0:65536 \
+    --uidmap=+0:{{ healthchecks_user.uid }}:1 \
+    --gidmap=0:0:65536 \
+    --gidmap=+0:{{ healthchecks_user.group }}:1 \
+{% endif %}
     --volume /mnt/services/healthchecks:/config \
     --volume /mnt/services/healthchecks/logo.png:/app/healthchecks/static-collected/img/logo.png:ro \
     --env PUID={{ healthchecks_user.uid }} \
