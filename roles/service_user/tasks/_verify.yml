@@ -1,0 +1,64 @@
+- name: _verify | provision a test service user
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_name: service_user_test
+
+- name: _verify | user record fact is exposed
+  assert:
+    that:
+      - service_user_test_user is defined
+      - service_user_test_user.uid is defined
+      - service_user_test_user.group is defined
+
+- name: _verify | system user exists with the expected attributes
+  command: getent passwd service_user_test
+  register: _verify_passwd
+  changed_when: false
+  become: true
+
+- name: _verify | passwd entry is a system user with nologin shell and /nonexistent home
+  assert:
+    that:
+      - "':/nonexistent:/usr/sbin/nologin' in _verify_passwd.stdout"
+
+- name: _verify | system group exists
+  command: getent group service_user_test
+  changed_when: false
+  become: true
+
+- name: _verify | config directory exists with correct ownership
+  stat:
+    path: /mnt/services/service_user_test
+  register: _verify_dir
+  become: true
+
+- name: _verify | dir attributes
+  assert:
+    that:
+      - _verify_dir.stat.exists
+      - _verify_dir.stat.isdir
+      - _verify_dir.stat.pw_name == 'service_user_test'
+      - _verify_dir.stat.gr_name == 'service_user_test'
+      - _verify_dir.stat.mode == '0755'
+
+- name: _verify | cleanup test config dir
+  file:
+    path: /mnt/services/service_user_test
+    state: absent
+  become: true
+
+- name: _verify | cleanup test user
+  user:
+    name: service_user_test
+    state: absent
+    remove: true
+    force: true
+  become: true
+
+- name: _verify | cleanup test group
+  group:
+    name: service_user_test
+    state: absent
+  become: true
