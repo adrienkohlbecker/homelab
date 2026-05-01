@@ -30,7 +30,7 @@
     createhome: false
     system: true
     shell: /bin/bash
-    home: /mnt/scratch/misc/act_runner
+    home: /mnt/scratch/act_runner
   become: true
   register: act_runner_user
   tags:
@@ -51,9 +51,9 @@
   become: true
   loop:
     - /mnt/services/act_runner
-    - /mnt/scratch/misc/act_runner
-    - /mnt/scratch/misc/act_runner/cache
-    - /mnt/scratch/misc/act_runner/workdir
+    - /mnt/scratch/act_runner
+    - /mnt/scratch/act_runner/cache
+    - /mnt/scratch/act_runner/workdir
   tags:
     - act_runner
     - _check_stage2

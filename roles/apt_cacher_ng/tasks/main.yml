@@ -1,6 +1,6 @@
 - name: Create apt_cacher_ng directory
   file:
-    dest: /mnt/scratch/misc/apt_cacher_ng
+    dest: /mnt/scratch/apt_cacher_ng
     state: directory
     owner: 100 # todo container should have its own user
     group: 101

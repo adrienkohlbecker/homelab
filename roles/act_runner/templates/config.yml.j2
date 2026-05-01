@@ -39,7 +39,7 @@ cache:
   enabled: true
   # The directory to store the cache data.
   # If it's empty, the cache data will be stored in $HOME/.cache/actcache.
-  dir: /mnt/scratch/misc/act_runner/cache
+  dir: /mnt/scratch/act_runner/cache
   # The host of the cache server.
   # It's not for the address to listen, but the address to connect from job containers.
   # So 0.0.0.0 is a bad choice, leave it empty to detect automatically.
@@ -90,4 +90,4 @@ container:
 host:
   # The parent directory of a job's working directory.
   # If it's empty, $HOME/.cache/act/ will be used.
-  workdir_parent: /mnt/scratch/misc/act_runner/workdir
+  workdir_parent: /mnt/scratch/act_runner/workdir

@@ -62,7 +62,7 @@
 - name: Create scratch directory
   when: not (ansible_check_mode and jellyfin_user.changed)
   file:
-    dest: /mnt/scratch/bigio/jellyfin
+    dest: /mnt/scratch/jellyfin
     state: directory
     owner: "{{ jellyfin_user.uid }}"
     group: media
@@ -75,7 +75,7 @@
 - name: Create transcodes directory
   when: not (ansible_check_mode and jellyfin_user.changed)
   file:
-    dest: /mnt/scratch/bigio/jellyfin/transcodes
+    dest: /mnt/scratch/jellyfin/transcodes
     state: directory
     owner: "{{ jellyfin_user.uid }}"
     group: media
@@ -88,7 +88,7 @@
 - name: Create scratch directory
   when: not (ansible_check_mode and jellyfin_user.changed)
   file:
-    dest: /mnt/scratch/misc/jellyfin
+    dest: /mnt/scratch/jellyfin
     state: directory
     owner: "{{ jellyfin_user.uid }}"
     group: media
@@ -101,7 +101,7 @@
 - name: Create cache directory
   when: not (ansible_check_mode and jellyfin_user.changed)
   file:
-    dest: /mnt/scratch/misc/jellyfin/cache
+    dest: /mnt/scratch/jellyfin/cache
     state: directory
     owner: "{{ jellyfin_user.uid }}"
     group: media

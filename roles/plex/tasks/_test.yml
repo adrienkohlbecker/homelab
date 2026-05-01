@@ -19,7 +19,7 @@
 - name: _test | Setup dependencies
   shell: |
     set -euo pipefail
-    mkdir /mnt/{services,scratch,scratch/bigio,media,data}
+    mkdir /mnt/{services,scratch,media,data}
     mkdir -p "/mnt/data/MacbookPro/Music/iTunes/iTunes Media/Music"
     mkdir -p /mnt/data/Musique/Records
   args:

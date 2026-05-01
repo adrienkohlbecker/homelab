@@ -72,9 +72,9 @@
     - sabnzbd
     - _check_stage2
   loop:
-    - /mnt/scratch/smallio/sonarr
-    - /mnt/scratch/smallio/radarr
-    - /mnt/scratch/smallio/headphones
+    - /mnt/scratch/sonarr
+    - /mnt/scratch/radarr
+    - /mnt/scratch/headphones
 
 - name: Configure sabnzbd
   template:
@@ -121,7 +121,7 @@
 
 - name: Create scratch directory
   file:
-    dest: /mnt/scratch/smallio/sabnzbd
+    dest: /mnt/scratch/sabnzbd
     state: directory
     owner: sabnzbd
     group: media

@@ -12,8 +12,8 @@ After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
 {% endif %}
 {% if zfs_has_scratch_mount %}
-After=zfs_mount_mnt_scratch_bigio.service zfs_mount_mnt_scratch_misc.service
-Requires=zfs_mount_mnt_scratch_bigio.service zfs_mount_mnt_scratch_misc.service
+After=zfs_mount_mnt_scratch.service
+Requires=zfs_mount_mnt_scratch.service
 {% endif %}
 {% if zfs_has_media_mount %}
 After=zfs_mount_mnt_media.service
@@ -46,9 +46,9 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="jellyfin" \
     --volume /mnt/services/jellyfin:/config \
-    --volume /mnt/scratch/bigio/jellyfin/transcodes:/config/transcodes \
+    --volume /mnt/scratch/jellyfin/transcodes:/config/transcodes \
     --volume /var/log/jellyfin:/config/log \
-    --volume /mnt/scratch/misc/jellyfin/cache:/cache \
+    --volume /mnt/scratch/jellyfin/cache:/cache \
     --volume /mnt/media:/media \
     {{ has_transcoding_acceleration | ternary('--device /dev/dri/:/dev/dri/ --group-add="'~ render_group.gid ~'"', '') }} \
     --publish 127.0.0.1:8096:8096/tcp \

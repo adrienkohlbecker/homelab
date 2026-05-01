@@ -8,8 +8,8 @@ StartLimitInterval=600
 StartLimitBurst=3
 {% if zfs_root %}
 {% if zfs_has_scratch_mount %}
-After=zfs_mount_mnt_scratch_misc.service
-Requires=zfs_mount_mnt_scratch_misc.service
+After=zfs_mount_mnt_scratch.service
+Requires=zfs_mount_mnt_scratch.service
 {% endif %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
@@ -35,7 +35,7 @@ ExecStart=/usr/bin/podman run \
     --name apt_cacher_ng \
     --log-driver journald \
     --log-opt tag="apt_cacher_ng" \
-    --volume /mnt/scratch/misc/apt_cacher_ng:/var/cache/apt-cacher-ng \
+    --volume /mnt/scratch/apt_cacher_ng:/var/cache/apt-cacher-ng \
     --publish 127.0.0.1:3142:3142/tcp \
     --health-cmd "/bin/bash -c "'"'"exec 3<>/dev/tcp/127.0.0.1/3142; echo -e 'GET /acng-doc/cache.png HTTP/1.1\r\nhost: http://localhost\r\nConnection: close\r\n\r\n' >&3; grep 'HTTP/1.1 200 OK' <&3"'"' \
     --health-startup-cmd "/bin/bash -c "'"'"exec 3<>/dev/tcp/127.0.0.1/3142; echo -e 'GET /acng-doc/cache.png HTTP/1.1\r\nhost: http://localhost\r\nConnection: close\r\n\r\n' >&3; grep 'HTTP/1.1 200 OK' <&3"'"' \
