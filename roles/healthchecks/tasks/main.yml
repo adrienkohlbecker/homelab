@@ -37,13 +37,13 @@
     - _check_stage2
 
 - name: Copy healthchecks logo
+  when: not (ansible_check_mode and healthchecks_user.changed)
   copy:
     src: logo.png
-    dest: /opt/healthchecks.png
+    dest: /mnt/services/healthchecks/logo.png
     owner: healthchecks
     group: healthchecks
     mode: "0644"
-    backup: true
   become: true
   tags:
     - healthchecks
