@@ -16,6 +16,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import NamedTuple, Self
 
+from setup_mitogen import ensure_mitogen_symlink
 from utils import (
     CommandResult,
     IdempotenceFailedException,
@@ -26,6 +27,12 @@ from utils import (
     sleep_tick,
     terminate_subprocess,
 )
+
+# Repair the .ansible-mitogen-strategy symlink at module-import time so every
+# testrole.py / testall.py invocation refreshes it after a `uv sync` Python
+# bump. Direct ansible runs by the user share the same symlink; if it's
+# dangling, ansible-playbook fails loudly with "Invalid play strategy".
+ensure_mitogen_symlink()
 
 OUT_DIR = Path("test/out")
 UBUNTU_RELEASES: dict[str, str] = {
