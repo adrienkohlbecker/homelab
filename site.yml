@@ -112,6 +112,7 @@
     - paperless
     - profilarr
     - openproject
+    - nexus
 
 - name: Reboot check
   hosts: all:!bunk
