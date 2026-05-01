@@ -28,6 +28,16 @@
         daemon_reload: true
       become: true
 
+    # Expose the install result under a per-unit fact so callers can avoid
+    # the ambiguous shared `systemd_unit` register (which is also the role
+    # name and would be clobbered by a second template/copy call in the
+    # same play). New callers should reference <basename>_<type>_result —
+    # e.g. healthchecks.service → healthchecks_service_result, and
+    # podman.socket / podman.service yield distinct facts.
+    - name: template | Record install result for {{ systemd_unit_src }}
+      set_fact:
+        "{{ (systemd_unit_dest | default(systemd_unit_src)) | replace('.', '_') }}_result": "{{ systemd_unit }}"
+
   rescue:
     - name: template | Copy backup file to original
       when: '"backup_file" in systemd_unit'
