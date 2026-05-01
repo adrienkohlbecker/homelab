@@ -1,0 +1,125 @@
+# Tests for the extract_podman_image module. Each scenario installs a fake
+# unit, runs the module, asserts, and cleans up. systemctl daemon-reload +
+# systemctl show forces systemd to parse the unit so its ExecStart properties
+# show up on the bus where the module can read them.
+
+- name: _verify | install unit with single podman ExecStart
+  copy:
+    dest: /etc/systemd/system/extract_podman_image_test.service
+    content: |
+      [Unit]
+      Description=extract_podman_image_test
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/podman run --rm docker.io/library/alpine:3.19 true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify | reload systemd so the new unit lands on the bus
+  systemd:
+    daemon_reload: true
+  become: true
+
+- name: _verify | force systemd to load the unit so ExecStart is queryable
+  command: systemctl show extract_podman_image_test.service
+  changed_when: false
+  become: true
+
+- name: _verify | extract image from normal unit
+  extract_podman_image:
+    name: extract_podman_image_test
+  register: _verify_normal
+  become: true
+
+- name: _verify | normal unit yields the single image and no unresolved argvs
+  assert:
+    that:
+      - _verify_normal.images == ["docker.io/library/alpine:3.19"]
+      - _verify_normal.unresolved == []
+
+- name: _verify | replace with a non-podman unit
+  copy:
+    dest: /etc/systemd/system/extract_podman_image_test.service
+    content: |
+      [Unit]
+      Description=extract_podman_image_test
+      [Service]
+      Type=oneshot
+      ExecStart=/bin/true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify | reload systemd
+  systemd:
+    daemon_reload: true
+  become: true
+
+- name: _verify | force load
+  command: systemctl show extract_podman_image_test.service
+  changed_when: false
+  become: true
+
+- name: _verify | non-podman unit returns empty images and no unresolved argvs
+  extract_podman_image:
+    name: extract_podman_image_test
+  register: _verify_nonpodman
+  become: true
+
+- name: _verify | non-podman unit yields empty result
+  assert:
+    that:
+      - _verify_nonpodman.images == []
+      - _verify_nonpodman.unresolved == []
+
+- name: _verify | replace with a podman argv that has no positional image
+  copy:
+    dest: /etc/systemd/system/extract_podman_image_test.service
+    content: |
+      [Unit]
+      Description=extract_podman_image_test
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/bin/podman run --rm
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify | reload systemd
+  systemd:
+    daemon_reload: true
+  become: true
+
+- name: _verify | force load
+  command: systemctl show extract_podman_image_test.service
+  changed_when: false
+  become: true
+
+- name: _verify | unresolvable podman argv fails the play
+  extract_podman_image:
+    name: extract_podman_image_test
+  register: _verify_unresolvable
+  become: true
+  ignore_errors: true
+
+- name: _verify | unresolvable case surfaces a fail with the expected msg
+  assert:
+    that:
+      - _verify_unresolvable.failed
+      - "'no resolvable image' in _verify_unresolvable.msg"
+      - _verify_unresolvable.argvs | length == 1
+
+- name: _verify | cleanup test unit file
+  file:
+    path: /etc/systemd/system/extract_podman_image_test.service
+    state: absent
+  become: true
+
+- name: _verify | final daemon_reload
+  systemd:
+    daemon_reload: true
+  become: true
