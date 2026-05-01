@@ -63,7 +63,8 @@ ExecStart=/usr/bin/podman run \
     --env EMAIL_HOST="{{ smtp_host }}" \
     --env EMAIL_PORT="{{ smtp_port }}" \
     --env EMAIL_HOST_USER="{{ healthchecks_smtp_user}}" \
-    --secret=healthchecks_smtp_password,type=env,target=EMAIL_HOST_PASSWORD \
+    --secret=healthchecks_smtp_password,type=mount,target=email_host_password \
+    --env EMAIL_HOST_PASSWORD_FILE=/run/secrets/email_host_password \
     --env EMAIL_USE_TLS="{{ 'False' if smtp_port | int == 465 else 'True' }}" \
     --env EMAIL_USE_SSL="{{ 'True' if smtp_port | int == 465 else 'False' }}" \
     --env SITE_LOGO_URL=/static/img/logo.png \
