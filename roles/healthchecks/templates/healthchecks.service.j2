@@ -22,6 +22,10 @@ Delegate=yes
 TimeoutSec=120
 RestartSec=5
 Type=notify
+# Has to be `all`, not `main`. With --detach below podman exits as soon as
+# the container is handed off to conmon, and conmon — not podman — is the
+# process that watches the healthcheck and sends READY=1. conmon is never
+# MainPID, so NotifyAccess=main causes the unit to hang in `activating`.
 NotifyAccess=all
 SyslogIdentifier=%N
 
