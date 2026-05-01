@@ -1,0 +1,55 @@
+- name: _verify | scenario 1 — create new secret
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_name: podman_secret_test
+    podman_secret_data: alpha
+
+- name: _verify | scenario 1 — assert created
+  assert:
+    that:
+      - podman_secret_test_rotated
+
+- name: _verify | scenario 2 — re-run with same data
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_name: podman_secret_test
+    podman_secret_data: alpha
+
+- name: _verify | scenario 2 — assert NOT rotated
+  assert:
+    that:
+      - not podman_secret_test_rotated
+
+- name: _verify | scenario 3 — re-run with new data
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_name: podman_secret_test
+    podman_secret_data: beta
+
+- name: _verify | scenario 3 — assert rotated
+  assert:
+    that:
+      - podman_secret_test_rotated
+
+- name: _verify | inspect label on rotated secret
+  containers.podman.podman_secret_info:
+    name: podman_secret_test
+  register: _verify_secret_info
+  become: true
+
+- name: _verify | label matches new data hash
+  assert:
+    that:
+      - _verify_secret_info.secrets[0].Spec.Labels.data_sha256 == ('beta' | hash('sha256'))
+
+- name: _verify | cleanup test secret
+  containers.podman.podman_secret:
+    name: podman_secret_test
+    state: absent
+  become: true

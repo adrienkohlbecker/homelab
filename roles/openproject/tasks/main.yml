@@ -62,12 +62,13 @@
     - openproject
     - _check_stage2
 
-- name: Create secret
-  containers.podman.podman_secret:
-    name: openproject_secret_key
-    data: "{{ openproject_secret_key }}"
-  register: openproject_secret_key
-  become: true
+- name: Create openproject secret key
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_name: openproject_secret_key
+    podman_secret_data: "{{ openproject_secret_key }}"
   tags:
     - openproject
     - _check_stage2
@@ -90,7 +91,7 @@
   vars:
     systemd_unit_src: openproject
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or openproject_user.changed)) }}"
-    systemd_unit_restart: "{{ systemd_unit.changed }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or openproject_secret_key_rotated }}"
   tags:
     - openproject
 
