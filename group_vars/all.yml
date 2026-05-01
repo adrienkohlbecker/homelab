@@ -20,6 +20,13 @@ smtp_host: smtp.eu.mailgun.org
 smtp_port: 587
 email_domain: noreply.{{ domain }}
 
+# Loopback ports each podman service publishes on the host. Single source of
+# truth for both the unit template's --publish flag and the nginx proxy_pass.
+# Migrate roles to consume from here as they get touched; for collisions, this
+# is the place to grep.
+service_ports:
+  healthchecks: 8000
+
 ubuntu_mirror: '{{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports/", "http://archive.ubuntu.com/ubuntu/") }}'
 ubuntu_mirror_security: '{{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports/", "http://security.ubuntu.com/ubuntu/") }}'
 

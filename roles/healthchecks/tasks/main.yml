@@ -96,6 +96,6 @@
     tasks_from: site
   vars:
     nginx_subdomain: healthchecks
-    nginx_proxy_pass: http://localhost:8000/
+    nginx_proxy_pass: http://localhost:{{ service_ports.healthchecks }}/
   tags:
     - healthchecks
