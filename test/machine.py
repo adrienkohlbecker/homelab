@@ -130,8 +130,6 @@ def upsert_memory_row(role: str, ubuntu: str, machine: str, peak_kb: int) -> Non
         _write_memory_rows(rows)
 
 
-
-
 async def ensure_podman_network() -> None:
     """Create the shared podman network if it doesn't exist.
 
@@ -150,18 +148,32 @@ async def ensure_podman_network() -> None:
         )
 
 
-def ubuntu_mirrors() -> tuple[str, str]:
-    """Return archive and security mirrors for the current CPU architecture."""
+def ubuntu_mirrors(upstream: bool = False) -> tuple[str, str]:
+    """Return archive and security mirrors for the current CPU architecture.
+
+    With upstream=True, return Ubuntu's public mirrors instead of the local
+    Nexus cache — useful when the lab mirror is unreachable.
+    """
     arch = platform.machine().lower()
     if arch in {"aarch64", "arm64"}:
+        if upstream:
+            return (
+                "http://ports.ubuntu.com/ubuntu-ports/",
+                "http://ports.ubuntu.com/ubuntu-ports/",
+            )
         return (
-            "http://ports.ubuntu.com/ubuntu-ports/",
-            "http://ports.ubuntu.com/ubuntu-ports/",
+            "http://nexus.lab.fahm.fr/repository/ubuntu-ports/",
+            "http://nexus.lab.fahm.fr/repository/ubuntu-ports/",
         )
     if arch == "x86_64":
+        if upstream:
+            return (
+                "http://archive.ubuntu.com/ubuntu/",
+                "http://security.ubuntu.com/ubuntu/",
+            )
         return (
-            "http://archive.ubuntu.com/ubuntu/",
-            "http://security.ubuntu.com/ubuntu/",
+            "http://nexus.lab.fahm.fr/repository/ubuntu-archive/",
+            "http://nexus.lab.fahm.fr/repository/ubuntu-security/",
         )
     raise SystemExit("Unknown machine name")
 
@@ -181,6 +193,7 @@ class Machine:
     keep_vm: bool
     ubuntu_name: str
     machine_timeout: int
+    upstream_mirrors: bool = False
 
     ssh_host: str = dataclasses.field(default=SSH_HOST, init=False)
     ssh_key: str = dataclasses.field(default=SSH_KEY, init=False)
@@ -248,7 +261,7 @@ class Machine:
 
     def format_ansible_cmd(self, *cmd: str) -> list[str]:
         """Build an ansible-playbook command pinned to this machine's SSH details."""
-        ubuntu_mirror, ubuntu_mirror_security = ubuntu_mirrors()
+        ubuntu_mirror, ubuntu_mirror_security = ubuntu_mirrors(upstream=self.upstream_mirrors)
         parts = [
             "env",
             "ANSIBLE_DISPLAY_OK_HOSTS=true",
@@ -524,7 +537,7 @@ class QemuMachine(Machine):
     """Start disposable QEMU guests for role-level integration tests."""
     drives: list[str]
 
-    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int):
+    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int, upstream_mirrors: bool = False):
         """QEMU-backed machine wrapper used by integration tests."""
         try:
             spec = QEMU_MACHINE_SPECS[machine]
@@ -544,6 +557,7 @@ class QemuMachine(Machine):
             keep_vm=keep_vm,
             ubuntu_name=ubuntu_name,
             machine_timeout=machine_timeout,
+            upstream_mirrors=upstream_mirrors,
         )
 
     async def prepare(self) -> None:
@@ -745,7 +759,7 @@ class QemuMachine(Machine):
 class PodmanMachine(Machine):
     """Start privileged Podman containers that mimic SSH hosts."""
 
-    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int):
+    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int, upstream_mirrors: bool = False):
         """Podman-backed machine wrapper used by integration tests."""
         system = platform.system()
         if system == "Darwin":
@@ -767,6 +781,7 @@ class PodmanMachine(Machine):
             keep_vm=keep_vm,
             ubuntu_name=ubuntu_name,
             machine_timeout=machine_timeout,
+            upstream_mirrors=upstream_mirrors,
         )
 
     async def prepare(self) -> None:
