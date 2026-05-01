@@ -58,7 +58,7 @@ ExecStart=/usr/bin/podman run \
     --env SITE_LOGO_URL=/static/img/logo.png \
     --env UWSGI_DISABLE_LOGGING=1 \
     --env UWSGI_HOOK_MASTER_START="unix_signal:15 gracefully_kill_them_all" \
-    --publish 127.0.0.1:8000:8000/tcp \
+    --publish 127.0.0.1:{{ service_ports.healthchecks }}:8000/tcp \
     --health-cmd "curl --head --request GET --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8000/" \
     --health-startup-cmd "curl --head --request GET --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8000/" \
     --health-startup-interval "1s" \
