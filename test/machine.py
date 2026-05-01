@@ -283,10 +283,19 @@ class Machine:
     def format_ansible_cmd(self, *cmd: str) -> list[str]:
         """Build an ansible-playbook command pinned to this machine's SSH details."""
         ubuntu_mirror, ubuntu_mirror_security = ubuntu_mirrors(upstream=self.upstream_mirrors)
+        # Fact cache lives inside the per-run workdir, so the ~9 ansible-playbook
+        # invocations in one test share gathered facts (saves ~0.9s per replay)
+        # without leaking facts across runs that target a freshly-spawned host
+        # (different IP, different cgroup, different filesystem).
+        fact_cache = f"{self.workdir.name}/facts"
         parts = [
             "env",
             "ANSIBLE_DISPLAY_OK_HOSTS=true",
             "ANSIBLE_DISPLAY_SKIPPED_HOSTS=true",
+            "ANSIBLE_GATHERING=smart",
+            "ANSIBLE_FACT_CACHING=jsonfile",
+            f"ANSIBLE_FACT_CACHING_CONNECTION={fact_cache}",
+            "ANSIBLE_FACT_CACHING_TIMEOUT=7200",
             "ansible-playbook",
             "-e",
             f"ansible_ssh_port={self.ssh_port}",
