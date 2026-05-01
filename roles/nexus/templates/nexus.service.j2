@@ -1,0 +1,62 @@
+# jinja2: lstrip_blocks: "True"
+# nexus.service #######################################################################
+[Unit]
+Description=nexus
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+{% if zfs_has_services_mount %}
+After=zfs_mount_mnt_services.service
+Requires=zfs_mount_mnt_services.service
+{% endif %}
+After=zfs_autosnapshot.target
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=always
+Delegate=yes
+TimeoutSec=240
+RestartSec=5
+Type=notify
+NotifyAccess=all
+SyslogIdentifier=%N
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name nexus \
+    --log-driver journald \
+    --log-opt tag="nexus" \
+    --env INSTALL4J_ADD_VM_PARAMS="-Xms4G -Xmx4G -XX:MaxDirectMemorySize=2g -Djava.util.prefs.userRoot=/user-root" \
+    --env NEXUS_SECRETS_KEY_FILE=/user-root/encryption.json \
+    --uidmap=0:0:65536 \
+    --uidmap=+200:{{ nexus_user.uid }}:1 \
+    --gidmap=0:0:65536 \
+    --gidmap=+200:{{ nexus_user.group }}:1 \
+    --volume /mnt/services/nexus/data:/nexus-data \
+    --volume /mnt/services/nexus/user:/user-root \
+    --publish 127.0.0.1:8082:8081/tcp \
+    --health-cmd         "wget --quiet --tries=1 --spider http://localhost:8081/service/rest/v1/status/writable > /dev/null" \
+    --health-startup-cmd "wget --quiet --tries=1 --spider http://localhost:8081/service/rest/v1/status/writable > /dev/null" \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    --health-start-period "100s" \
+    --stop-timeout 120 \
+    nexus.lab.fahm.fr/docker.io/sonatype/nexus3:3.91.1
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

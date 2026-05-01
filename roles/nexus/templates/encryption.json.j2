@@ -1,0 +1,14 @@
+{
+  "active": "my-key",
+  "keys": [
+    {
+      "id": "my-key",
+      "key": "{{ nexus_encryption_key }}"
+    }
+  ],
+  "fixedEncryption": {
+    "keyId": "my-key",
+    "salt": "{{ nexus_encryption_salt }}",
+    "iv": "{{ nexus_encryption_iv }}"
+  }
+}
