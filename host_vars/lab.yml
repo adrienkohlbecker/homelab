@@ -199,9 +199,7 @@ netdata_diskspace_blocklist:
 - /mnt/old_bionic_grub
 - /mnt/old_services
 - /mnt/old_vms
-- /mnt/scratch/smallio
-- /mnt/scratch/bigio
-- /mnt/scratch/misc
+- /mnt/scratch
 - /mnt/services
 - /var/lib/libvirt/images
 - /mnt/qemu

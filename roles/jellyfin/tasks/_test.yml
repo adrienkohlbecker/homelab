@@ -11,7 +11,7 @@
 - name: _test | Setup dependencies
   shell: |
     set -euo pipefail
-    mkdir /mnt/{services,scratch,scratch/bigio,scratch/misc,media}
+    mkdir /mnt/{services,scratch,media}
   args:
     executable: /bin/bash
     creates: /mnt/services

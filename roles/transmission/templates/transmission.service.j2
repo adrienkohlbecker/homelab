@@ -12,8 +12,8 @@ After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
 {% endif %}
 {% if zfs_has_scratch_mount %}
-After=zfs_mount_mnt_scratch_smallio.service
-Requires=zfs_mount_mnt_scratch_smallio.service
+After=zfs_mount_mnt_scratch.service
+Requires=zfs_mount_mnt_scratch.service
 {% endif %}
 {% if zfs_has_media_mount %}
 After=zfs_mount_mnt_media.service
@@ -50,7 +50,7 @@ ExecStart=/usr/bin/podman run \
     --env-file /etc/default/transmission \
     --volume /mnt/services/transmission:/config \
     --volume /mnt/media/Torrents:/downloads/complete \
-    --volume /mnt/scratch/smallio/transmission:/downloads/incomplete \
+    --volume /mnt/scratch/transmission:/downloads/incomplete \
     --volume /usr/local/bin/transmission_healthcheck:/usr/local/bin/transmission_healthcheck \
     --publish 127.0.0.1:9091:9091/tcp \
     --publish 0.0.0.0:51413:51413/tcp \
