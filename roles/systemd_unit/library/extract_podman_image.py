@@ -96,6 +96,16 @@ def _parse_run_help():
     return flags_no_value
 
 
+def is_podman_run(argv):
+    """True iff argv looks like a `podman run ...` invocation."""
+    return (
+        len(argv) >= 3
+        and argv[1] == "run"
+        and isinstance(argv[0], str)
+        and argv[0].rsplit("/", 1)[-1] == "podman"
+    )
+
+
 def find_image(argv, flags_no_value):
     """Return the image arg from a `podman run ...` argv, or None.
 
@@ -104,9 +114,7 @@ def find_image(argv, flags_no_value):
     `redis-server --save 60 1 --loglevel warning`) still resolve to the image
     rather than to some trailing CMD arg.
     """
-    if len(argv) < 3 or argv[1] != "run":
-        return None
-    if not isinstance(argv[0], str) or argv[0].rsplit("/", 1)[-1] != "podman":
+    if not is_podman_run(argv):
         return None
 
     i = 2
@@ -148,12 +156,15 @@ def _get_property(unit_path, prop):
 
 
 def extract_images(name):
+    """Return (images, unresolved). `unresolved` lists podman-run argvs we
+    saw but couldn't extract an image from — typically a parser drift."""
     if not name.endswith(".service"):
         name = name + ".service"
     unit_path = bus_label_escape(name)
     flags_no_value = _parse_run_help()
 
     images = set()
+    unresolved = []
     for prop in _EXEC_PROPS:
         obj = _get_property(unit_path, prop)
         if not obj:
@@ -162,12 +173,14 @@ def extract_images(name):
             if not isinstance(entry, list) or len(entry) < 2:
                 continue
             argv = entry[1]
-            if not isinstance(argv, list):
+            if not isinstance(argv, list) or not is_podman_run(argv):
                 continue
             image = find_image(argv, flags_no_value)
             if image is not None:
                 images.add(image)
-    return sorted(images)
+            else:
+                unresolved.append(" ".join(str(a) for a in argv))
+    return sorted(images), unresolved
 
 
 def main():
@@ -175,8 +188,23 @@ def main():
         argument_spec=dict(name=dict(type="str", required=True)),
         supports_check_mode=True,
     )
-    images = extract_images(module.params["name"])
-    module.exit_json(changed=False, images=images)
+    images, unresolved = extract_images(module.params["name"])
+    # If we saw `podman run` argvs but couldn't pull an image out of any of
+    # them, the schema-aware walker has drifted from podman's flag set.
+    # Fail the play rather than silently skipping pre-pull and falling back
+    # to a slow `podman pull` inside `systemctl start`'s TimeoutStartSec.
+    if unresolved:
+        module.fail_json(
+            msg=(
+                f"extract_podman_image: {module.params['name']} has "
+                f"{len(unresolved)} `podman run` ExecStart line(s) with no "
+                f"resolvable image — the argv walker is out of sync with "
+                f"podman's flag set. Update the parser before pre-pull "
+                f"silently regresses."
+            ),
+            argvs=unresolved,
+        )
+    module.exit_json(changed=False, images=images, unresolved=unresolved)
 
 
 if __name__ == "__main__":
