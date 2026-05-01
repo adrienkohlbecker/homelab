@@ -65,7 +65,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
     --stop-timeout 120 \
-    docker.io/linuxserver/healthchecks:3.3.20240603
+    docker.io/linuxserver/healthchecks:4.2.20260428
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
