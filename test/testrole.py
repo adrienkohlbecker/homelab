@@ -91,6 +91,12 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         default=True,
         help="Keep output/boot/journal logs after a successful run (default: on; --no-keep-logs deletes them, used by testall.py)",
     )
+    parser.add_argument(
+        "--upstream-mirrors",
+        action="store_true",
+        default=False,
+        help="Use Ubuntu's public mirrors instead of the local Nexus cache (escape hatch when the lab mirror is unreachable)",
+    )
     parser.add_argument("role", help="Role name to test")
 
     args, pass_args = parser.parse_known_args()
@@ -106,7 +112,7 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
 
 async def _configure_apt_sources(m: Machine) -> None:
     """Rewrite apt sources to use local mirrors and refresh package metadata."""
-    ubuntu_mirror, ubuntu_mirror_security = ubuntu_mirrors()
+    ubuntu_mirror, ubuntu_mirror_security = ubuntu_mirrors(upstream=m.upstream_mirrors)
     name = m.ubuntu_name
     if name == "jammy":
         # Legacy one-line-per-source list at /etc/apt/sources.list.
@@ -317,6 +323,7 @@ def main() -> int:
         keep_vm=parsed_args.keep,
         ubuntu_name=parsed_args.ubuntu,
         machine_timeout=parsed_args.timeout + 60,
+        upstream_mirrors=parsed_args.upstream_mirrors,
     )
 
     rc = 0
