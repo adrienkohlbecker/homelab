@@ -36,6 +36,7 @@ ExecStart=/usr/bin/podman run \
     --name healthchecks \
     --log-driver journald \
     --log-opt tag="healthchecks" \
+    --security-opt=no-new-privileges \
     --volume /mnt/services/healthchecks:/config \
     --volume /mnt/services/healthchecks/logo.png:/app/healthchecks/static-collected/img/logo.png:ro \
     --env PUID={{ healthchecks_user.uid }} \
