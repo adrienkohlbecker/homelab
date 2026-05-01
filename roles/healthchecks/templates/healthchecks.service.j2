@@ -37,7 +37,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="healthchecks" \
     --volume /mnt/services/healthchecks:/config \
-    --volume /opt/healthchecks.png:/app/healthchecks/static-collected/img/logo.png \
+    --volume /mnt/services/healthchecks/logo.png:/app/healthchecks/static-collected/img/logo.png:ro \
     --env PUID={{ healthchecks_user.uid }} \
     --env PGID={{ healthchecks_user.group }}  \
     --env RP_ID=healthchecks.{{ inventory_hostname }}.{{ domain }} \
