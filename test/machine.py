@@ -178,6 +178,20 @@ def ubuntu_mirrors(upstream: bool = False) -> tuple[str, str]:
     raise SystemExit("Unknown machine name")
 
 
+def podman_registry_mirrors(upstream: bool = False) -> dict[str, str]:
+    """Return upstream registry → pull-through mirror endpoint for podman.
+
+    With upstream=True, return an empty mapping so callers skip writing a
+    registries.conf drop-in and let podman pull straight from the upstream.
+    """
+    if upstream:
+        return {}
+    return {
+        "docker.io": "nexus.lab.fahm.fr/docker.io",
+        "ghcr.io": "nexus.lab.fahm.fr/ghcr.io",
+    }
+
+
 @dataclasses.dataclass
 class Machine:
     """Base runner that wraps a test target reachable over SSH and Ansible."""
