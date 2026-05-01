@@ -1,5 +1,13 @@
 # Note: with ubuntu 24.04, may be able to use `validate: systemd-analyze verify %s:foo.service`,
 # although it won't fail for warnings like undefined keys?
+#
+# The rescue block below is rare-but-load-bearing. systemd-analyze verify
+# catches most syntax problems before daemon-reload, but a malformed unit
+# that slips past validate would otherwise leave a broken file on disk
+# that breaks the next daemon-reload for the whole host. Restoring the
+# .backup_file (or deleting the freshly-added unit) keeps the host in its
+# previous-known-good state when the install fails. Don't trim this as
+# "overengineering" — measure first.
 - name: Systemd service
   block:
     - name: Copy the unit file
