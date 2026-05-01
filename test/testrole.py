@@ -24,6 +24,7 @@ from machine import (
     PodmanMachine,
     QemuMachine,
     UBUNTU_RELEASES,
+    podman_registry_mirrors,
     ubuntu_mirrors,
     upsert_memory_row,
 )
@@ -95,7 +96,7 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         "--upstream-mirrors",
         action="store_true",
         default=False,
-        help="Use Ubuntu's public mirrors instead of the local Nexus cache (escape hatch when the lab mirror is unreachable)",
+        help="Use public apt/podman mirrors instead of the local Nexus cache (escape hatch when the lab mirror is unreachable)",
     )
     parser.add_argument("role", help="Role name to test")
 
@@ -145,6 +146,27 @@ async def _configure_apt_sources(m: Machine) -> None:
     printf_args = " ".join(shlex.quote(line) for line in sources)
     await m.ssh_command("sudo", "bash", "-c", f"printf '%s\\n' {printf_args} > {path}")
     await m.ssh_command("sudo", "apt-get", "update")
+
+
+async def _configure_podman_registries(m: Machine) -> None:
+    """Drop in a registries.conf snippet that routes podman pulls through the lab Nexus."""
+    mirrors = podman_registry_mirrors(upstream=m.upstream_mirrors)
+    if not mirrors:
+        return
+    lines: list[str] = []
+    for upstream, mirror in mirrors.items():
+        lines += [
+            "[[registry]]",
+            f'location = "{upstream}"',
+            "",
+            "[[registry.mirror]]",
+            f'location = "{mirror}"',
+            "",
+        ]
+    path = "/etc/containers/registries.conf.d/homelab-mirrors.conf"
+    printf_args = " ".join(shlex.quote(line) for line in lines)
+    await m.ssh_command("sudo", "mkdir", "-p", "/etc/containers/registries.conf.d")
+    await m.ssh_command("sudo", "bash", "-c", f"printf '%s\\n' {printf_args} > {path}")
 
 
 _RECAP_CHANGED_RE = re.compile(r"\bchanged=(\d+)")
@@ -224,6 +246,7 @@ async def run_test(
                         print_line("SSH up")
 
                         await _configure_apt_sources(m)
+                        await _configure_podman_registries(m)
 
                         if m.machine == "minimal":
                             # Fixes systemd-analyze validation error:
