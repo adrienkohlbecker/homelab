@@ -1,0 +1,37 @@
+- name: Add {{ service_user_name }} group
+  group:
+    name: "{{ service_user_name }}"
+    system: true
+  become: true
+  tags:
+    - _check_stage1
+
+- name: Add {{ service_user_name }} user
+  user:
+    name: "{{ service_user_name }}"
+    group: "{{ service_user_name }}"
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  register: service_user_result
+  tags:
+    - _check_stage1
+
+# Capture the user record under a per-service fact so successive calls in
+# the same play don't clobber a shared register, and so callers can
+# reference {{ <name>_user.uid }} / .group in their templates.
+- name: Record user record for {{ service_user_name }}
+  set_fact:
+    "{{ service_user_name }}_user": "{{ service_user_result }}"
+
+- name: Create configuration directory for {{ service_user_name }}
+  when: not (ansible_check_mode and service_user_result.changed)
+  file:
+    dest: /mnt/services/{{ service_user_name }}
+    state: directory
+    owner: "{{ service_user_name }}"
+    group: "{{ service_user_name }}"
+    mode: "0755"
+  become: true
