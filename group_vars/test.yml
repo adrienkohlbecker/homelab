@@ -191,3 +191,6 @@ bazarr_flask_secret_key: changeme
 bazarr_opensubtitles_com_username: changeme
 bazarr_opensubtitles_com_password: changeme
 openproject_secret_key: changeme
+nexus_encryption_key: changeme
+nexus_encryption_salt: changeme
+nexus_encryption_iv: changeme

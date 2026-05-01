@@ -1,0 +1,88 @@
+- name: Add nexus group
+  group:
+    name: nexus
+    system: true
+  become: true
+  tags:
+    - nexus
+    - _check_stage1
+    - _check_stage2
+
+- name: Add nexus user
+  user:
+    name: nexus
+    group: nexus
+    createhome: false
+    system: true
+    shell: /usr/sbin/nologin
+    home: /nonexistent
+  become: true
+  register: nexus_user
+  tags:
+    - nexus
+    - _check_stage1
+    - _check_stage2
+
+- name: Create configuration directory
+  when: not (ansible_check_mode and nexus_user.changed)
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: nexus
+    group: nexus
+    mode: "0755"
+  become: true
+  with_items:
+    - /mnt/services/nexus
+    - /mnt/services/nexus/data
+    - /mnt/services/nexus/user
+  tags:
+    - nexus
+    - _check_stage2
+
+- name: Configure nexus encryption
+  template:
+    src: encryption.json.j2
+    dest: /mnt/services/nexus/user/encryption.json
+    owner: nexus
+    group: nexus
+    mode: "0600"
+    backup: true
+  register: nexus_encryption_json
+  become: true
+  tags:
+    - nexus
+    - _check_stage2
+
+- name: Install nexus service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: nexus.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and nexus_user.changed) }}"
+  tags:
+    - nexus
+    - _check_stage2
+
+- name: Enable nexus service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: nexus
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or nexus_user.changed or nexus_encryption_json.changed)) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed }}"
+  tags:
+    - nexus
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: nexus
+    nginx_proxy_pass: http://localhost:8082/
+    nginx_enable_http: true
+  tags:
+    - nexus
