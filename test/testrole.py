@@ -139,6 +139,12 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         default=False,
         help="Print harness phase timings and enable ansible's profile_tasks callback for per-task timing",
     )
+    parser.add_argument(
+        "--commit",
+        metavar="IMAGE_TAG",
+        default=None,
+        help="On success, podman-commit the container to IMAGE_TAG before teardown (container machine only). Used by build_image.py to bake homelab-service:<release> via the _bake role.",
+    )
     parser.add_argument("role", help="Role name to test")
 
     args, pass_args = parser.parse_known_args()
@@ -377,11 +383,27 @@ def main() -> int:
         )
         return 1
 
+    if parsed_args.commit and parsed_args.machine != "container":
+        print_line("Error: --commit only supported with --machine container", error=True)
+        return 1
+
+    # Cache short-circuit: if --commit's target image already carries the
+    # current bake-hash label, the inputs haven't changed since it was
+    # built, so skip the whole run. Lets build_image.py call this every
+    # time without paying for a rebake.
+    if parsed_args.commit:
+        from machine import _bake_inputs_hash, existing_image_hash
+        want = _bake_inputs_hash()
+        have = asyncio.run(existing_image_hash(parsed_args.commit))
+        if have == want:
+            print_line(f"==> {parsed_args.commit} cache hit (hash={want[:12]}); skipping bake")
+            return 0
+
     machine_cls = PodmanMachine if parsed_args.machine == "container" else QemuMachine
     # Inner timeout/podman --timeout is a last-resort cleanup if Python dies;
     # it must outlast the Python deadline so testrole's own timer fires first
     # and we get a clean rc=124 + stop(). 60s grace covers normal teardown.
-    m: Machine = machine_cls(
+    machine_kwargs: dict = dict(
         machine=parsed_args.machine,
         role=parsed_args.role,
         keep_vm=parsed_args.keep,
@@ -389,6 +411,9 @@ def main() -> int:
         machine_timeout=parsed_args.timeout + 60,
         upstream_mirrors=parsed_args.upstream_mirrors,
     )
+    if parsed_args.commit:
+        machine_kwargs["commit_image"] = parsed_args.commit
+    m: Machine = machine_cls(**machine_kwargs)
 
     rc = 0
     with tee_output(m.output_file):

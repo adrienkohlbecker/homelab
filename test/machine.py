@@ -786,10 +786,60 @@ class QemuMachine(Machine):
         )
 
 
+def is_service_role(role: str) -> bool:
+    """True if the role's _test.yml imports `_test/podman` or `_test/nginx`.
+
+    Drives PodmanMachine's image pick: service roles use the pre-baked
+    `homelab-service:<release>` so their _test imports skip via the
+    existing `creates:` sentinels.
+    """
+    test_yml = Path(f"roles/{role}/tasks/_test.yml")
+    if not test_yml.exists():
+        return False
+    text = test_yml.read_text()
+    return "tasks_from: podman" in text or "tasks_from: nginx" in text
+
+
+BAKE_HASH_LABEL = "homelab.bake-hash"
+_BAKE_HASH_INPUTS = (
+    Path("test/Dockerfile"),
+    Path("roles/_bake/tasks/main.yml"),
+    Path("roles/_test/tasks/podman.yml"),
+    Path("roles/_test/tasks/nginx.yml"),
+)
+
+
+def _bake_inputs_hash() -> str:
+    """sha256 over the files that drive the homelab-service bake.
+
+    Used to label the committed image and to short-circuit a rebake when
+    nothing relevant has changed.
+    """
+    import hashlib
+    h = hashlib.sha256()
+    for p in _BAKE_HASH_INPUTS:
+        h.update(p.read_bytes())
+    return h.hexdigest()
+
+
+async def existing_image_hash(tag: str) -> str | None:
+    """Return the bake-hash label on *tag*, or None if missing/unlabeled."""
+    res = await run_command(
+        ["podman", "image", "inspect", "--format",
+         "{{ index .Config.Labels \"" + BAKE_HASH_LABEL + "\" }}", tag],
+        check=False, quiet=True,
+    )
+    if res.exitcode != 0:
+        return None
+    return "\n".join(res.stdout).strip() or None
+
+
 class PodmanMachine(Machine):
     """Start privileged Podman containers that mimic SSH hosts."""
 
-    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int, upstream_mirrors: bool = False):
+    commit_image: str | None
+
+    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int, upstream_mirrors: bool = False, commit_image: str | None = None):
         """Podman-backed machine wrapper used by integration tests."""
         system = platform.system()
         if system == "Darwin":
@@ -813,6 +863,13 @@ class PodmanMachine(Machine):
             machine_timeout=machine_timeout,
             upstream_mirrors=upstream_mirrors,
         )
+        self.commit_image = commit_image
+
+    @property
+    def image_tag(self) -> str:
+        """`homelab-service:<release>` for podman-service roles, else `homelab:<release>`."""
+        repo = "homelab-service" if is_service_role(self.role) else "homelab"
+        return f"{repo}:{self.ubuntu_name}"
 
     async def prepare(self) -> None:
         """Create podman network if missing and stage working dir."""
@@ -841,7 +898,7 @@ class PodmanMachine(Machine):
             f"{self.workdir.name}/{self.idfile}",
             "--network",
             PODMAN_NETWORK,
-            f"homelab:{self.ubuntu_name}",
+            self.image_tag,
         ]
 
     async def stop(self) -> None:
@@ -863,6 +920,19 @@ class PodmanMachine(Machine):
             self.peak_rss_kb = await self._read_container_peak_kb(cid)
 
         try:
+            if cid and self.commit_image:
+                # Commit the live container as the configured image before
+                # rm tears it down. shield: a second SIGINT can't half-bake
+                # the image. The bake-hash label lets future runs cache-hit.
+                bake_hash = _bake_inputs_hash()
+                await asyncio.shield(
+                    run_command(
+                        ["podman", "commit",
+                         "--change", f"LABEL homelab.bake-hash={bake_hash}",
+                         cid, self.commit_image],
+                        check=False,
+                    )
+                )
             if cid:
                 # asyncio.shield prevents a second SIGINT from cancelling the
                 # rm mid-flight; without it, nested cancellation leaks the
