@@ -1,0 +1,10 @@
+Global:
+  InitCPIO: true
+Components:
+  Enabled: false
+EFI:
+  Enabled: true
+  Versions: false
+Kernel:
+  Prefix: zfsbootmenu
+  CommandLine: zfsbootmenu ro quiet loglevel=0 nomodeset

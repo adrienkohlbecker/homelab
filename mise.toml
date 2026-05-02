@@ -1,6 +1,7 @@
 [vars]
 packer_flags = "-timestamp-ui -warn-on-undeclared-var --on-error=ask"
 qemu_dir = '{% if os() == "macos" %}{{config_root}}/packer/artifacts{% else %}/mnt/qemu{% endif %}'
+zbm_version = "v3.1.0"
 
 [env]
 CLOUDFLARE_EMAIL = "op://Lab/seckvi7vjb6ahgtt7w4l3r73zq/username"
@@ -54,6 +55,47 @@ usage = '''
 flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
 '''
 run = 'rm -rf "{{vars.qemu_dir}}/${usage_ubuntu}"/*.new'
+
+[tasks."zbm:builder-image"]
+description = "Build the zbm-builder container image locally for the target arch"
+usage = '''
+flag "--arch <name>" help="Target arch: x86_64 or aarch64" default="x86_64"
+'''
+# Clones zfsbootmenu at the pinned tag, builds upstream's
+# releng/docker/Dockerfile with --platform set per-arch, tags as
+# localhost/zbm-builder:<version>-<arch>. Re-run when zbm_version changes.
+run = [
+  'set -euo pipefail',
+  'arch="${usage_arch}"',
+  'case "$arch" in x86_64) platform=linux/amd64 ;; aarch64) platform=linux/arm64 ;; *) echo "unknown arch: $arch" >&2; exit 1 ;; esac',
+  'src_dir="{{config_root}}/zbm-build/src"',
+  'rm -rf "$src_dir"',
+  'mkdir -p "$(dirname "$src_dir")"',
+  'git clone --depth 1 --branch {{vars.zbm_version}} https://github.com/zbm-dev/zfsbootmenu.git "$src_dir"',
+  'podman build --platform="$platform" --tag "localhost/zbm-builder:{{vars.zbm_version}}-${arch}" "$src_dir/releng/docker"',
+]
+
+[tasks."zbm:build"]
+description = "Build a ZFSBootMenu UEFI binary via the local builder container"
+usage = '''
+flag "--arch <name>" help="Target arch: x86_64 or aarch64" default="x86_64"
+'''
+# Runs localhost/zbm-builder:<version>-<arch> with zbm/ bind-mounted at
+# /build (config.yaml lives there, read-only) and zbm-build/<arch>/ at
+# /output. The container's build-init.sh fetches zfsbootmenu at -t and
+# emits zfsbootmenu.EFI; we rename to a versioned, arch-tagged filename
+# suitable for upload to Gitea releases.
+run = [
+  'set -euo pipefail',
+  'arch="${usage_arch}"',
+  'case "$arch" in x86_64) platform=linux/amd64 ;; aarch64) platform=linux/arm64 ;; *) echo "unknown arch: $arch" >&2; exit 1 ;; esac',
+  'out_dir="{{config_root}}/zbm-build/${arch}"',
+  'mkdir -p "$out_dir"',
+  'rm -f "$out_dir"/*.EFI',
+  'podman run --rm --platform="$platform" -v "{{config_root}}/zbm:/build:ro" -v "$out_dir:/output" "localhost/zbm-builder:{{vars.zbm_version}}-${arch}" -o /output -t {{vars.zbm_version}}',
+  'mv "$out_dir/zfsbootmenu.EFI" "$out_dir/zfsbootmenu-{{vars.zbm_version}}-${arch}.EFI"',
+  'sha256sum "$out_dir/zfsbootmenu-{{vars.zbm_version}}-${arch}.EFI"',
+]
 
 [tasks.lint]
 description = "Run all linters"
