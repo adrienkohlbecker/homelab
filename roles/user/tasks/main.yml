@@ -208,6 +208,94 @@
   tags:
     - user
 
+- name: Check installed mise version
+  command: "{{ ansible_user_dir }}/.local/share/mise/bin/mise --version"
+  register: mise_check
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  tags:
+    - user
+
+- name: Create mise parent directory
+  when: mise_version not in mise_check.stdout
+  file:
+    path: "{{ ansible_user_dir }}/.local/share"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  register: directory_mise
+  tags:
+    - user
+
+- name: Download mise archive
+  when: mise_version not in mise_check.stdout
+  check_mode: false
+  get_url:
+    url: "{{ mise_release[ansible_architecture].url }}"
+    checksum: "sha256:{{ mise_release[ansible_architecture].sha256 }}"
+    dest: /tmp/mise-{{ mise_version }}.tar.gz
+    mode: "0644"
+  tags:
+    - user
+
+- name: Install mise binary
+  when: not (ansible_check_mode and directory_mise.changed) and mise_version not in mise_check.stdout
+  unarchive:
+    src: /tmp/mise-{{ mise_version }}.tar.gz
+    remote_src: true
+    dest: "{{ ansible_user_dir }}/.local/share"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  tags:
+    - user
+
+- name: Create ~/.local/bin directory
+  file:
+    path: "{{ ansible_user_dir }}/.local/bin"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  tags:
+    - user
+
+- name: Symlink mise binary into ~/.local/bin
+  file:
+    src: "{{ ansible_user_dir }}/.local/share/mise/bin/mise"
+    dest: "{{ ansible_user_dir }}/.local/bin/mise"
+    state: link
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+  tags:
+    - user
+
+- name: Create mise completions directory
+  when: mise_version not in mise_check.stdout
+  file:
+    path: "{{ ansible_user_dir }}/.local/share/mise/completions"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  tags:
+    - user
+
+- name: Generate mise zsh completions
+  when: mise_version not in mise_check.stdout
+  shell: "{{ ansible_user_dir }}/.local/share/mise/bin/mise completion zsh > {{ ansible_user_dir }}/.local/share/mise/completions/_mise"
+  tags:
+    - user
+
+- name: Delete mise archive
+  when: mise_version not in mise_check.stdout
+  file:
+    path: /tmp/mise-{{ mise_version }}.tar.gz
+    state: absent
+  tags:
+    - user
+
 - name: Add 1password repository key
   when: not (ansible_check_mode and apt_install_gpg.changed)
   apt_key:

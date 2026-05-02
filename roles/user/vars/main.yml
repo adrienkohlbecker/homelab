@@ -6,3 +6,12 @@ asdf_release:
   aarch64:
     url: "{{ mirror_github }}/asdf-vm/asdf/releases/download/v{{ asdf_version }}/asdf-v{{ asdf_version }}-linux-arm64.tar.gz"
     md5: "8cd37cd45d3c12fadbb05dec54a4d75a"
+
+mise_version: "2026.4.28"
+mise_release:
+  x86_64:
+    url: "{{ mirror_github }}/jdx/mise/releases/download/v{{ mise_version }}/mise-v{{ mise_version }}-linux-x64.tar.gz"
+    sha256: "ea7461398ca944029e9a4bd8ee25c94dc5c33bea78926f4c9fd7409e73b29b39"
+  aarch64:
+    url: "{{ mirror_github }}/jdx/mise/releases/download/v{{ mise_version }}/mise-v{{ mise_version }}-linux-arm64.tar.gz"
+    sha256: "3d8a3570e520136424e781208249abab456c3705f684efd21a4c65a6af565b42"
