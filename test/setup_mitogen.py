@@ -28,9 +28,7 @@ def ensure_mitogen_symlink(repo_root: Path | None = None) -> Path:
 
     target = Path(ansible_mitogen.__file__).resolve().parent / "plugins" / "strategy"
     if not target.is_dir():
-        raise RuntimeError(
-            f"ansible_mitogen is installed but {target} is missing -- mitogen package layout changed?"
-        )
+        raise RuntimeError(f"ansible_mitogen is installed but {target} is missing -- mitogen package layout changed?")
 
     link = repo_root / SYMLINK_NAME
     # readlink() races on concurrent runs; the unlink+symlink dance below

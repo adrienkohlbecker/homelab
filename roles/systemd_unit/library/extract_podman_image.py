@@ -55,16 +55,12 @@ _EXEC_PROPS = ("ExecStart", "ExecStartPre", "ExecStartPost")
 # token (anything non-whitespace -- `string`, `strings`, `int`, `ARCH`,
 # `<number>[<unit>]`, etc.), then a 2+ space gap before the description.
 # A type token's presence means the option takes a value; absence => flag.
-_HELP_LINE = re.compile(
-    r"^\s+(?:-(\w),\s+)?(--[\w-]+)(\s+(\S+))?\s{2,}"
-)
+_HELP_LINE = re.compile(r"^\s+(?:-(\w),\s+)?(--[\w-]+)(\s+(\S+))?\s{2,}")
 
 
 def bus_label_escape(name):
     """Escape per systemd's bus_label_escape: only ASCII alphanumerics survive."""
-    return "".join(
-        c if c.isascii() and c.isalnum() else f"_{ord(c):02x}" for c in name
-    )
+    return "".join(c if c.isascii() and c.isalnum() else f"_{ord(c):02x}" for c in name)
 
 
 def _parse_run_help():
@@ -79,7 +75,9 @@ def _parse_run_help():
     try:
         result = subprocess.run(
             ["podman", "run", "--help"],
-            capture_output=True, text=True, check=False,
+            capture_output=True,
+            text=True,
+            check=False,
         )
     except (OSError, subprocess.SubprocessError):
         return flags_no_value
@@ -98,12 +96,7 @@ def _parse_run_help():
 
 def is_podman_run(argv):
     """True iff argv looks like a `podman run ...` invocation."""
-    return (
-        len(argv) >= 3
-        and argv[1] == "run"
-        and isinstance(argv[0], str)
-        and argv[0].rsplit("/", 1)[-1] == "podman"
-    )
+    return len(argv) >= 3 and argv[1] == "run" and isinstance(argv[0], str) and argv[0].rsplit("/", 1)[-1] == "podman"
 
 
 def find_image(argv, flags_no_value):
@@ -139,13 +132,17 @@ def find_image(argv, flags_no_value):
 def _get_property(unit_path, prop):
     result = subprocess.run(
         [
-            "busctl", "--json=short", "get-property",
+            "busctl",
+            "--json=short",
+            "get-property",
             "org.freedesktop.systemd1",
             f"/org/freedesktop/systemd1/unit/{unit_path}",
             "org.freedesktop.systemd1.Service",
             prop,
         ],
-        capture_output=True, text=True, check=False,
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if result.returncode != 0:
         return None

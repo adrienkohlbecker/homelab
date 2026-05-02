@@ -19,18 +19,18 @@ class CommandFailedException(Exception):
         self.stderr = stderr
         tail = "\n".join(stderr[-20:])
         suffix = f"\n--- stderr tail ---\n{tail}" if tail else ""
-        super().__init__(
-            f"Command failed with exit code {exitcode}: {shlex.join(cmd)}{suffix}"
-        )
+        super().__init__(f"Command failed with exit code {exitcode}: {shlex.join(cmd)}{suffix}")
 
 
 class IdempotenceFailedException(Exception):
     """Raised when re-running an ansible play reports changed tasks."""
+
     pass
 
 
 class CommandResult(NamedTuple):
     """Outcome of a subprocess invocation."""
+
     exitcode: int
     stdout: list[str]
     stderr: list[str]
@@ -158,10 +158,7 @@ async def terminate_subprocess(
     if grace_seconds <= 0 and initial_signal != signal.SIGKILL:
         # Without a deadline, the final wait() is unbounded -- a child that
         # ignores the signal would hang us forever.
-        raise ValueError(
-            f"grace_seconds must be > 0 when initial_signal is not SIGKILL "
-            f"(got grace_seconds={grace_seconds}, signal={initial_signal})"
-        )
+        raise ValueError(f"grace_seconds must be > 0 when initial_signal is not SIGKILL " f"(got grace_seconds={grace_seconds}, signal={initial_signal})")
     with contextlib.suppress(ProcessLookupError):
         proc.send_signal(initial_signal)
     if grace_seconds > 0:

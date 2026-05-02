@@ -16,12 +16,12 @@ locals {
   }
 
   raw_proxies = {
-    "github"            = "https://github.com/"
-    "minio"             = "https://dl.min.io/"
-    "gitea-dl"          = "https://dl.gitea.com/"
-    "gitea-com"         = "https://gitea.com/"
-    "gitea-lab"         = "https://gitea.lab.fahm.fr/"
-    "keyserver-ubuntu"  = "https://keyserver.ubuntu.com/"
+    "github"           = "https://github.com/"
+    "minio"            = "https://dl.min.io/"
+    "gitea-dl"         = "https://dl.gitea.com/"
+    "gitea-com"        = "https://gitea.com/"
+    "gitea-lab"        = "https://gitea.lab.fahm.fr/"
+    "keyserver-ubuntu" = "https://keyserver.ubuntu.com/"
   }
 
   docker_proxies = {

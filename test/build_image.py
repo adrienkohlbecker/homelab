@@ -19,18 +19,20 @@ DOCKERFILE = Path("test/Dockerfile")
 def build_image(codename: str, builder: str = "podman") -> int:
     """Build homelab:<codename> + bake homelab-service:<codename>. Returns exit code."""
     if codename not in UBUNTU_RELEASES:
-        raise ValueError(
-            f"Unknown Ubuntu codename '{codename}'; valid: {sorted(UBUNTU_RELEASES)}"
-        )
+        raise ValueError(f"Unknown Ubuntu codename '{codename}'; valid: {sorted(UBUNTU_RELEASES)}")
     if not DOCKERFILE.exists():
         raise FileNotFoundError(f"{DOCKERFILE} not found (run from the repo root)")
 
     version = UBUNTU_RELEASES[codename]
     cmd = [
-        builder, "build",
-        "--build-arg", f"UBUNTU_VERSION={version}",
-        "--tag", f"homelab:{codename}",
-        "-f", str(DOCKERFILE),
+        builder,
+        "build",
+        "--build-arg",
+        f"UBUNTU_VERSION={version}",
+        "--tag",
+        f"homelab:{codename}",
+        "-f",
+        str(DOCKERFILE),
         str(DOCKERFILE.parent),
     ]
     print_line(f"==> Building homelab:{codename} (ubuntu:{version})")
@@ -43,13 +45,16 @@ def build_image(codename: str, builder: str = "podman") -> int:
     # automatically when the inputs hash matches the existing image's
     # label, so this is cheap on warm runs.
     bake_cmd = [
-        "test/testrole.py", "_bake",
-        "--ubuntu", codename,
+        "test/testrole.py",
+        "_bake",
+        "--ubuntu",
+        codename,
         "--no-build-image",
         "--no-checkmode",
         "--no-idempotence",
         "--no-keep-logs",
-        "--commit", f"homelab-service:{codename}",
+        "--commit",
+        f"homelab-service:{codename}",
     ]
     return asyncio.run(run_command(bake_cmd, check=False)).exitcode
 

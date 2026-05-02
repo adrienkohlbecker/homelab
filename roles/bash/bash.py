@@ -6,6 +6,7 @@ from pyinfra_roles.helpers import file_put_with_validation
 
 ROLE_ROOT = Path(__file__).resolve().parents[0]
 
+
 def apply() -> None:
     file_put_with_validation(
         remote_path="/usr/local/lib/functions.sh",
