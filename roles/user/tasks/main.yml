@@ -29,15 +29,19 @@
   apt:
     pkg:
       - 1password-cli
+      - attr
       - ccze
       - curl
+      - fdupes
       - git
+      - git-lfs
       - gparted
       - htop
       - iotop
-      - iperf
+      - iperf3
       - jq
       - lsof
+      - make
       - man-db
       - moreutils
       - mosh
@@ -45,9 +49,13 @@
       - nmon
       - nnn
       - nvme-cli
+      - pandoc
+      - pass
       - progress
+      - rsync
       - screen
       - socat
+      - strace
       - stress
       - sysstat
       - telnet
