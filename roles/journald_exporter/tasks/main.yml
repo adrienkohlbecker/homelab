@@ -90,7 +90,7 @@
     nginx_location_conf: |
       # bypass http auth
       proxy_set_header Authorization "Basic {{ ("metrics:" + journald_exporter_key) | b64encode }}";
-      # overide content type so metrics can be viewed in a browser
+      # override content type so metrics can be viewed in a browser
       proxy_hide_header Content-Type;
       add_header Content-Type "text/plain; charset=UTF-8";
     nginx_permissions: "0600"
