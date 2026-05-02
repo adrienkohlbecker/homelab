@@ -264,6 +264,15 @@ class Machine:
             "LogLevel=ERROR",
             "-o",
             "BatchMode=yes",
+            # The wait-for-ready loop runs before ansible-playbook does, so
+            # whichever of these creates the ControlMaster (per the user's
+            # ~/.ssh/config Host *: ControlMaster auto) decides whether the
+            # master has an agent-forwarding channel. Without `-A` here, the
+            # master comes up without one, and ansible's later ForwardAgent=yes
+            # silently reuses the agent-less master -- breaking roles that
+            # ssh out to git@github.com from the test target.
+            "-o",
+            "ForwardAgent=yes",
             f"{self.ssh_user}@{self.ssh_host}",
         ]
         return [*base, shlex.join(cmd)] if cmd else base
