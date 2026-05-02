@@ -7,14 +7,15 @@
 `roles/<role>/<role>.py` hosts pyinfra ports of Ansible roles. Keep the function signature close to the original variable naming (`ansible_user`, `ansible_user_dir`, etc.) so deploy files can pass the same data that Ansible normally injects. Put any shared helpers inside `pyinfra_roles/` and ensure they handle both static files on disk and in-memory streams (see `file_put_with_validation`). Run ports via `uv run pyinfra inventory.py main.py` while iterating, and remember to keep sudo handling explicit by threading `_sudo` kwargs through helpers.
 
 ## Build, Test, and Development Commands
-- Bootstrap tools: `python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt`.
-- Configure everything: `ansible-playbook -i hosts.ini site.yml --limit prod` (set `--tags` to narrow scope).
-- Focus on one service or host: `ansible-playbook -i hosts.ini wireguard.yml -l lab --tags wireguard`.
-- Manage DNS: `cd terraform && terraform init && terraform plan` before `terraform apply`.
-- Refresh the integration image when the base OS changes: `cd packer && packer build qemu.pkr.hcl`.
+- Bootstrap tools: install [mise](https://mise.jdx.dev), `mise trust`, then `mise install` from the repo root — pins terraform, packer, python, uv, and shellcheck. `python.uv_venv_auto` auto-creates and sources `.venv`, so `uv sync` populates Python deps (ansible, ansible-lint, black, yamllint) on first directory entry. 1Password CLI must be signed in for the `op://` env vars in `mise.toml` to resolve.
+- Configure everything: `ansible-playbook site.yml --limit prod` (`ansible.cfg` already points at `hosts.ini`; set `--tags` to narrow scope).
+- Focus on one service or host: `ansible-playbook wireguard.yml -l lab --tags wireguard`.
+- Manage DNS: `mise run tf:init`, `mise run tf:plan`, then `mise run tf:apply` — each `cd`s into `terraform/` and forwards extra args (use `--` for flags mise might intercept, e.g. `mise run tf:plan -- -refresh=false`).
+- Refresh the integration image when the base OS changes: `mise run packer:build base` (or `box`/`lab`/`pug`); `--ubuntu noble` targets a different release. `mise run packer:all` builds base then box/lab/pug in parallel.
+- Lint everything: `mise run lint` runs ansible-lint, ansible syntax-check, terraform/packer fmt -check, black --check, yamllint, and shellcheck in parallel; `mise run fmt` applies fixes (ansible-lint --fix, terraform/packer fmt, black, and `mise fmt` for `mise.toml` itself).
 
 ## Coding Style & Naming Conventions
-Use two-space YAML indentation and descriptive `name` values. Namespace variables per role (e.g., `samba_share_path`). Shell helpers in `packer/scripts/` should be Bash with `set -euo pipefail`. Before committing, run `ansible-playbook --syntax-check site.yml`, `terraform fmt`, and `packer fmt` to avoid churn.
+Use two-space YAML indentation and descriptive `name` values. Namespace variables per role (e.g., `samba_share_path`). Shell helpers in `packer/scripts/` should be Bash with `set -euo pipefail`. Before committing, run `mise run lint` (or `mise run fmt` to autofix the formatters) to avoid churn.
 
 ### Role Conventions
 - Centralize downloadable artifact metadata in `roles/<role>/vars/main.yml`. Keep the full URL **adjacent to its sha256** keyed by `ansible_architecture` (`x86_64` / `aarch64`), so a human auditing a checksum can see exactly which URL it pins without recomposing it from a version constant.

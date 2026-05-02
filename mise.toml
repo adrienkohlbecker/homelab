@@ -87,7 +87,13 @@ run = "git ls-files -z '*.sh' | xargs -0 shellcheck"
 
 [tasks.fmt]
 description = "Apply all formatters"
-depends = ["fmt:ansible", "fmt:terraform", "fmt:packer", "fmt:python"]
+depends = [
+  "fmt:ansible",
+  "fmt:terraform",
+  "fmt:packer",
+  "fmt:python",
+  "fmt:mise",
+]
 
 [tasks."fmt:ansible"]
 description = "Apply ansible-lint fixes"
@@ -104,6 +110,10 @@ run = "packer fmt -recursive packer"
 [tasks."fmt:python"]
 description = "Format Python files (black)"
 run = "black ."
+
+[tasks."fmt:mise"]
+description = "Format mise.toml"
+run = "mise fmt"
 
 [tasks."tf:init"]
 description = "terraform init (forwards args)"
