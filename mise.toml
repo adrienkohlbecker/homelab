@@ -1,5 +1,6 @@
 [vars]
 packer_flags = "-timestamp-ui -warn-on-undeclared-var --on-error=ask"
+qemu_dir = '{% if os() == "macos" %}{{config_root}}/packer/artifacts{% else %}/mnt/qemu{% endif %}'
 
 [env]
 CLOUDFLARE_EMAIL = "op://Lab/seckvi7vjb6ahgtt7w4l3r73zq/username"
@@ -20,6 +21,11 @@ typos = "1.46.0"
 [settings]
 python.uv_venv_auto = "create|source"
 
+[tasks."packer:init"]
+description = "packer init (forwards args)"
+dir = "{{config_root}}/packer"
+run = 'packer init "$@" .'
+
 [tasks."packer:build"]
 description = "Build a packer image variant"
 interactive = true
@@ -28,8 +34,8 @@ arg "<variant>" help="Variant: base, zfs, or zfs-lab"
 flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
 '''
 run = [
-  'rm -rf "/mnt/qemu/${usage_ubuntu}/ubuntu-${usage_variant}.new"',
-  'arch=$(uname -m | sed s/arm64/aarch64/); packer build {{vars.packer_flags}} -var ubuntu_name="${usage_ubuntu}" -var arch="$arch" -var output_directory="/mnt/qemu/${usage_ubuntu}" -only=qemu.ubuntu-${usage_variant} packer',
+  'rm -rf "{{vars.qemu_dir}}/${usage_ubuntu}/ubuntu-${usage_variant}.new"',
+  'arch=$(uname -m | sed s/arm64/aarch64/); packer build {{vars.packer_flags}} -var ubuntu_name="${usage_ubuntu}" -var arch="$arch" -var output_directory="{{vars.qemu_dir}}/${usage_ubuntu}" -only=qemu.ubuntu-${usage_variant} packer',
 ]
 
 [tasks."packer:all"]
@@ -47,7 +53,7 @@ description = "Remove .new build artifacts"
 usage = '''
 flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
 '''
-run = 'rm -rf "/mnt/qemu/${usage_ubuntu}"/*.new'
+run = 'rm -rf "{{vars.qemu_dir}}/${usage_ubuntu}"/*.new'
 
 [tasks.lint]
 description = "Run all linters"
