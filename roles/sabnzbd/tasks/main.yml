@@ -128,14 +128,41 @@
   tags:
     - sabnzbd
 
+- name: Read installed nzbToMedia version
+  ansible.builtin.slurp:
+    src: /opt/nzbToMedia/.version
+  register: sabnzbd_nzbtomedia_installed
+  failed_when: false
+  changed_when: false
+  tags:
+    - sabnzbd
+
 - name: Download nzbToMedia
-  when: not (ansible_check_mode and sabnzbd_user.changed)
-  git:
-    repo: https://github.com/clinton-hall/nzbToMedia.git
+  when:
+    - not (ansible_check_mode and sabnzbd_user.changed)
+    - (sabnzbd_nzbtomedia_installed.content | default('') | b64decode | trim) != '12.1.13'
+  ansible.builtin.unarchive:
+    src: https://github.com/clinton-hall/nzbToMedia/archive/refs/tags/12.1.13.tar.gz
     dest: /opt/nzbToMedia
-    version: 12.1.13
+    remote_src: true
+    extra_opts:
+      - --strip-components=1
   become: true
   become_user: sabnzbd
+  tags:
+    - sabnzbd
+
+- name: Write nzbToMedia version stamp
+  when:
+    - not (ansible_check_mode and sabnzbd_user.changed)
+    - (sabnzbd_nzbtomedia_installed.content | default('') | b64decode | trim) != '12.1.13'
+  ansible.builtin.copy:
+    content: "12.1.13"
+    dest: /opt/nzbToMedia/.version
+    owner: sabnzbd
+    group: media
+    mode: "0644"
+  become: true
   tags:
     - sabnzbd
 
