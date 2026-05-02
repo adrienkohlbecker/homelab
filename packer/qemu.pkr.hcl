@@ -200,6 +200,11 @@ build {
     }
   }
 
+  provisioner "shell" {
+    execute_command = "{{ .Vars }} sudo -E bash '{{ .Path }}'"
+    inline          = ["whoami"]
+  }
+
   post-processor "shell-local" {
     inline_shebang = "/bin/bash"
     inline = [
