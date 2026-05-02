@@ -7,27 +7,9 @@
   tags:
     - user
 
-- name: Add 1password repository key
-  when: not (ansible_check_mode and apt_install_gpg.changed)
-  apt_key:
-    id: AC2D62742012EA22
-    url: https://downloads.1password.com/linux/keys/1password.asc
-    keyring: /etc/apt/trusted.gpg.d/1password.gpg
-  become: true
-  tags:
-    - user
-
-- name: Add 1password repository
-  apt_repository:
-    repo: deb [arch={{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }} signed-by=/etc/apt/trusted.gpg.d/1password.gpg] https://downloads.1password.com/linux/debian/{{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }} stable main
-  become: true
-  tags:
-    - user
-
 - name: Install packages
   apt:
     pkg:
-      - 1password-cli
       - attr
       - ccze
       - curl
@@ -222,5 +204,33 @@
   file:
     path: /tmp/asdf-{{ asdf_version }}.tar.gz
     state: absent
+  tags:
+    - user
+
+- name: Add 1password repository key
+  when: not (ansible_check_mode and apt_install_gpg.changed)
+  apt_key:
+    id: AC2D62742012EA22
+    url: https://downloads.1password.com/linux/keys/1password.asc
+    keyring: /etc/apt/trusted.gpg.d/1password.gpg
+  become: true
+  tags:
+    - user
+
+- name: Add 1password repository
+  apt_repository:
+    repo: deb [arch={{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }} signed-by=/etc/apt/trusted.gpg.d/1password.gpg] https://downloads.1password.com/linux/debian/{{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }} stable main
+  become: true
+  register: apt_repository_1password
+  tags:
+    - user
+
+- name: Install packages
+  when: not (ansible_check_mode and apt_repository_1password.changed)
+  apt:
+    pkg:
+      - 1password-cli
+    cache_valid_time: 3600
+  become: true
   tags:
     - user
