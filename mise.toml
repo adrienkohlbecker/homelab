@@ -73,6 +73,12 @@ description = "Build the zbm-builder container image locally for the host arch"
 # yielding "Operation not permitted" on unpack. The relaxation
 # applies to the build process only; the resulting image runs with
 # the default profile.
+#
+# XBPS_REPOS points at the Void Linux Frankfurt mirror because the
+# upstream-default Fastly CDN throttles to <100 kB/s from this ISP,
+# making the xbps-install layer painfully slow. Frankfurt is a Tier 1
+# mirror with EU-local capacity. Override per-invocation with a
+# different mirror by editing the --build-arg below if needed.
 run = '''
 set -eu
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
@@ -84,7 +90,7 @@ src_dir="{{config_root}}/zbm-build/src"
 rm -rf "$src_dir"
 mkdir -p "$(dirname "$src_dir")"
 git clone --depth 1 --branch v{{vars.zbm_version}} https://github.com/zbm-dev/zfsbootmenu.git "$src_dir"
-podman build --security-opt seccomp=unconfined --tag "localhost/zbm-builder:v{{vars.zbm_version}}-${arch}" -f "{{config_root}}/zbm/Dockerfile" "$src_dir/releng/docker"
+podman build --security-opt seccomp=unconfined --build-arg XBPS_REPOS=https://repo-de.voidlinux.org/current --tag "localhost/zbm-builder:v{{vars.zbm_version}}-${arch}" -f "{{config_root}}/zbm/Dockerfile" "$src_dir/releng/docker"
 '''
 
 [tasks."zbm:build"]
@@ -101,7 +107,9 @@ out_dir="{{config_root}}/zbm-build/${arch}"
 mkdir -p "$out_dir"
 rm -f "$out_dir"/*.EFI
 podman run --rm -v "{{config_root}}/zbm:/build:ro" -v "$out_dir:/output" "localhost/zbm-builder:v{{vars.zbm_version}}-${arch}" -o /output -t v{{vars.zbm_version}}
-mv "$out_dir/vmlinuz.EFI" "$out_dir/zfsbootmenu-v{{vars.zbm_version}}-${arch}.EFI"
+# x86_64 emits vmlinuz.EFI (gzipped kernel); aarch64 emits vmlinux.EFI
+# (uncompressed). Glob covers both.
+mv "$out_dir"/vmlin*.EFI "$out_dir/zfsbootmenu-v{{vars.zbm_version}}-${arch}.EFI"
 sha256sum "$out_dir/zfsbootmenu-v{{vars.zbm_version}}-${arch}.EFI"
 '''
 
