@@ -5,8 +5,6 @@
   become: true
   tags:
     - openproject
-    - _check_stage1
-    - _check_stage2
 
 - name: Add openproject user
   user:
@@ -20,8 +18,6 @@
   register: openproject_user
   tags:
     - openproject
-    - _check_stage1
-    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and openproject_user.changed)
@@ -34,7 +30,6 @@
   become: true
   tags:
     - openproject
-    - _check_stage2
 
 - name: Create pgdata directory
   when: not (ansible_check_mode and openproject_user.changed)
@@ -47,7 +42,6 @@
   become: true
   tags:
     - openproject
-    - _check_stage2
 
 - name: Create assets directory
   when: not (ansible_check_mode and openproject_user.changed)
@@ -60,7 +54,6 @@
   become: true
   tags:
     - openproject
-    - _check_stage2
 
 - name: Create openproject secret key
   import_role:
@@ -71,7 +64,6 @@
     podman_secret_data: "{{ openproject_secret_key }}"
   tags:
     - openproject
-    - _check_stage2
 
 - name: Install openproject service
   import_role:
@@ -82,7 +74,6 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and openproject_user.changed) }}"
   tags:
     - openproject
-    - _check_stage2
 
 - name: Enable openproject service
   import_role:

@@ -5,8 +5,6 @@
   become: true
   tags:
     - headphones
-    - _check_stage1
-    - _check_stage2
 
 - name: Add media group
   group:
@@ -16,8 +14,6 @@
   register: media_group
   tags:
     - headphones
-    - _check_stage1
-    - _check_stage2
 
 - name: Add headphones user
   user:
@@ -32,8 +28,6 @@
   register: headphones_user
   tags:
     - headphones
-    - _check_stage1
-    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and headphones_user.changed)
@@ -46,7 +40,6 @@
   become: true
   tags:
     - headphones
-    - _check_stage2
 
 - name: Configure headphones
   template:
@@ -60,7 +53,6 @@
   become: true
   tags:
     - headphones
-    - _check_stage2
 
 - name: Install headphones service
   import_role:
@@ -71,7 +63,6 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and headphones_user.changed) }}"
   tags:
     - headphones
-    - _check_stage2
 
 - name: Enable headphones service
   import_role:

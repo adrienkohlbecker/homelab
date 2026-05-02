@@ -7,8 +7,6 @@
   register: apt_install_powertop
   tags:
     - powertop
-    - _check_stage1
-    - _check_stage2
 
 - name: Install powertop service
   import_role:
@@ -18,7 +16,6 @@
     systemd_unit_src: powertop.service
   tags:
     - powertop
-    - _check_stage2
 
 - name: Enable powertop service
   import_role:

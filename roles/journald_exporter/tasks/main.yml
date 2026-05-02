@@ -10,7 +10,6 @@
   become: true
   tags:
     - journald_exporter
-    - _check_stage1
 
 - name: Add journald-exporter user
   user:
@@ -22,7 +21,6 @@
   become: true
   tags:
     - journald_exporter
-    - _check_stage1
 
 - name: Create configuration directory
   file:
@@ -34,7 +32,6 @@
   become: true
   tags:
     - journald_exporter
-    - _check_stage1
 
 - name: Create keys directory
   file:
@@ -46,7 +43,6 @@
   become: true
   tags:
     - journald_exporter
-    - _check_stage1
 
 - name: Create key
   copy:
@@ -58,7 +54,6 @@
   become: true
   tags:
     - journald_exporter
-    - _check_stage1
 
 - name: Install journald-exporter service
   import_role:
@@ -68,7 +63,6 @@
     systemd_unit_src: journald-exporter.service
   tags:
     - journald_exporter
-    - _check_stage1
 
 - name: Enable journald_exporter service
   import_role:

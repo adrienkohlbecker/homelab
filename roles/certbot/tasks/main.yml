@@ -8,7 +8,6 @@
   register: apt_install_certbot
   tags:
     - certbot
-    - _check_stage1
 
 - name: Create config directory
   file:

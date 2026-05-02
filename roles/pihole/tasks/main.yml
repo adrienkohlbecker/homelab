@@ -7,8 +7,6 @@
   register: pihole_apt_deps
   tags:
     - pihole
-    - _check_stage1
-    - _check_stage2
 
 - name: Add pihole group
   group:
@@ -17,8 +15,6 @@
   become: true
   tags:
     - pihole
-    - _check_stage1
-    - _check_stage2
 
 - name: Add pihole user
   user:
@@ -32,8 +28,6 @@
   become: true
   tags:
     - pihole
-    - _check_stage1
-    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and pihole_user.changed)
@@ -46,7 +40,6 @@
   become: true
   tags:
     - pihole
-    - _check_stage2
 
 - name: Create configuration directory
   file:
@@ -58,7 +51,6 @@
   become: true
   tags:
     - pihole
-    - _check_stage2
 
 - name: Configure dnsmasq
   template:
@@ -72,7 +64,6 @@
   become: true
   tags:
     - pihole
-    - _check_stage2
 
 - name: Create log directory
   when: not (ansible_check_mode and pihole_user.changed)
@@ -85,7 +76,6 @@
   become: true
   tags:
     - pihole
-    - _check_stage2
 
 - name: Install pihole service
   import_role:
@@ -96,7 +86,6 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and pihole_user.changed) }}"
   tags:
     - pihole
-    - _check_stage2
 
 - name: Enable pihole service
   import_role:

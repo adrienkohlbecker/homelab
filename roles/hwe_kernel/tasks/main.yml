@@ -8,8 +8,6 @@
   become: true
   tags:
     - hwe_kernel
-    - _check_stage1
-    - _check_stage2
 
 - name: Install apt pins
   when: ansible_distribution_major_version == "22"
@@ -23,8 +21,6 @@
   become: true
   tags:
     - hwe_kernel
-    - _check_stage1
-    - _check_stage2
 
 - name: Add noble repository
   when: ansible_distribution_major_version == "22"
@@ -39,7 +35,6 @@
     - 'deb {{ ubuntu_mirror_security }} noble-security main restricted universe multiverse # For zfsutils-linux userspace tools'
   tags:
     - hwe_kernel
-    - _check_stage2
 
 - name: Install tools from noble
   when: ansible_distribution_major_version == "22" and not (ansible_check_mode and noble_repository.changed)

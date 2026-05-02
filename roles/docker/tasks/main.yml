@@ -8,8 +8,6 @@
   register: docker_apt_deps
   tags:
     - docker
-    - _check_stage1
-    - _check_stage2
 
 - name: Install docker
   import_role:
@@ -20,8 +18,6 @@
     apt_unit_masked_unit: docker.service
   tags:
     - docker
-    - _check_stage1
-    - _check_stage2
 
 - name: Copy the docker config
   template:
@@ -36,7 +32,6 @@
   become: true
   tags:
     - docker
-    - _check_stage2
 
 - name: Create mount point
   file:
@@ -48,7 +43,6 @@
   become: true
   tags:
     - docker
-    - _check_stage2
 
 - name: Create docker zvol
   when: zfs_root
@@ -61,7 +55,6 @@
   become: true
   tags:
     - docker
-    - _check_stage2
 
 - name: Create a ext4 filesystem on docker zvol
   when: not (ansible_check_mode and zfs_zvol_docker.changed) and zfs_root

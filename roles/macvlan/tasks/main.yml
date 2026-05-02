@@ -6,7 +6,6 @@
   become: true
   tags:
     - macvlan
-    - _check_stage1
 
 - name: Check macvlan_subnet is valid
   assert:
@@ -15,7 +14,6 @@
     success_msg: "macvlan_subnet is valid"
   tags:
     - macvlan
-    - _check_stage1
 
 - name: Check macvlan_subnet is in parent subnet
   assert:
@@ -24,7 +22,6 @@
     success_msg: "macvlan_subnet is valid"
   tags:
     - macvlan
-    - _check_stage1
 
 - name: Check macvlan_subnet is in home subnet
   assert:
@@ -33,7 +30,6 @@
     success_msg: "macvlan_subnet is valid"
   tags:
     - macvlan
-    - _check_stage1
 
 - name: Install mac0 service
   import_role:
@@ -43,7 +39,6 @@
     systemd_unit_src: mac0.service
   tags:
     - macvlan
-    - _check_stage1
 
 - name: Enable mac0 service
   import_role:

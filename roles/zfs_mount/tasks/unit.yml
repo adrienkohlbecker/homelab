@@ -10,7 +10,6 @@
   become: true
   tags:
     - zfs_mount
-    - _check_stage1
 
 - name: unit | Install systemd mount service
   import_role:
@@ -21,7 +20,6 @@
     systemd_unit_dest: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', '/root') | replace('/', '_') }}.service
   tags:
     - zfs_mount
-    - _check_stage1
 
 - name: unit | Enable zfs_mount service
   import_role:
