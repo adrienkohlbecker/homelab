@@ -106,8 +106,8 @@ zpool create -f \
 
 # Create initial file systems
 
-zfs create -o canmount=off    -o mountpoint=none rpool/ROOT
-zfs create -o canmount=noauto -o mountpoint=/    "rpool/ROOT/$UBUNTU_NAME"
+zfs create -o canmount=off -o mountpoint=none rpool/ROOT
+zfs create -o canmount=noauto -o mountpoint=/ "rpool/ROOT/$UBUNTU_NAME"
 
 zpool set "bootfs=rpool/ROOT/$UBUNTU_NAME" rpool
 

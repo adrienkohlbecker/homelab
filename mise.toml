@@ -13,6 +13,7 @@ packer = "1.15.3"
 python = "3.14"
 uv = "0.9.26"
 shellcheck = "0.11.0"
+shfmt = "3.13.1"
 
 [settings]
 python.uv_venv_auto = "create|source"
@@ -57,6 +58,7 @@ depends = [
   "lint:ruff",
   "lint:yaml",
   "lint:shell",
+  "lint:shfmt",
 ]
 
 [tasks."lint:ansible"]
@@ -91,6 +93,10 @@ run = "git ls-files -z '*.yml' '*.yaml' | xargs -0 yamllint"
 description = "Run shellcheck on tracked shell scripts"
 run = "git ls-files -z '*.sh' | xargs -0 shellcheck"
 
+[tasks."lint:shfmt"]
+description = "Check shell script formatting (shfmt)"
+run = "git ls-files -z '*.sh' | xargs -0 shfmt -i 2 -d"
+
 [tasks.fmt]
 description = "Apply all formatters"
 depends = [
@@ -99,6 +105,7 @@ depends = [
   "fmt:packer",
   "fmt:python",
   "fmt:mise",
+  "fmt:shfmt",
 ]
 
 [tasks."fmt:ansible"]
@@ -120,6 +127,10 @@ run = "black ."
 [tasks."fmt:mise"]
 description = "Format mise.toml"
 run = "mise fmt"
+
+[tasks."fmt:shfmt"]
+description = "Format shell scripts (shfmt)"
+run = "git ls-files -z '*.sh' | xargs -0 shfmt -i 2 -w"
 
 [tasks."tf:init"]
 description = "terraform init (forwards args)"
