@@ -625,10 +625,12 @@ class QemuMachine(Machine):
             raise AttributeError(f"Unknown machine: {machine}") from None
 
         # Mirror PodmanMachine's per-platform image cache: /mnt/qemu on
-        # Linux dev hosts, TMPDIR on Mac (where /mnt/qemu doesn't exist).
+        # Linux dev hosts, <repo>/packer/artifacts on Mac (matches mise.toml's
+        # qemu_dir — /mnt/qemu doesn't exist on Mac).
         system = platform.system()
         if system == "Darwin":
-            imagedir = os.environ.get("TMPDIR", "/tmp")
+            imagedir = str(Path("packer/artifacts").resolve())
+            Path(imagedir).mkdir(parents=True, exist_ok=True)
         elif system == "Linux":
             imagedir = "/mnt/qemu"
         else:
@@ -817,10 +819,15 @@ class QemuMachine(Machine):
         machine_type = "q35" if self.host_arch == "x86_64" else "virt"
 
         if self.keep_vm:
-            # virtio-gpu-pci + qemu-xhci are PCI virtio devices supported on
-            # both x86_64 q35 and aarch64 virt; modern Ubuntu kernels carry
-            # virtio-gpu in-tree, so we don't need legacy `-vga std` / `-usb`.
-            display_args = ["-display", "vnc=:0,to=99", "-device", "virtio-gpu-pci", "-device", "qemu-xhci", "-device", "usb-tablet", "-k", "fr"]
+            # q35 already has std VGA, PS/2 keyboard, and ICH9 USB controllers
+            # by default, so we only add usb-tablet there (absolute-coordinate
+            # mouse for VNC). aarch64 virt has no default graphics or input
+            # devices, so it needs the full virtio-gpu + xhci + usb-kbd set.
+            if self.host_arch == "aarch64":
+                arch_devices = ["-device", "virtio-gpu-pci", "-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"]
+            else:
+                arch_devices = ["-device", "usb-tablet"]
+            display_args = ["-display", "vnc=:0,to=99", *arch_devices, "-k", "fr"]
         else:
             display_args = ["-display", "none"]
 
@@ -1005,7 +1012,8 @@ class PodmanMachine(Machine):
         """Podman-backed machine wrapper used by integration tests."""
         system = platform.system()
         if system == "Darwin":
-            imagedir = os.environ.get("TMPDIR", "/tmp")
+            imagedir = str(Path("packer/artifacts").resolve())
+            Path(imagedir).mkdir(parents=True, exist_ok=True)
         elif system == "Linux":
             imagedir = "/mnt/qemu"
         else:
