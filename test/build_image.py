@@ -17,7 +17,7 @@ DOCKERFILE = Path("test/Dockerfile")
 
 
 def build_image(codename: str, builder: str = "podman") -> int:
-    """Build homelab:<codename>. Returns the builder's exit code."""
+    """Build homelab:<codename> + bake homelab-service:<codename>. Returns exit code."""
     if codename not in UBUNTU_RELEASES:
         raise ValueError(
             f"Unknown Ubuntu codename '{codename}'; valid: {sorted(UBUNTU_RELEASES)}"
@@ -34,9 +34,24 @@ def build_image(codename: str, builder: str = "podman") -> int:
         str(DOCKERFILE.parent),
     ]
     print_line(f"==> Building homelab:{codename} (ubuntu:{version})")
-    # Stream through run_command so each line goes via _write_line and is
-    # picked up by an active tee_output target.
-    return asyncio.run(run_command(cmd, check=False)).exitcode
+    rc = asyncio.run(run_command(cmd, check=False)).exitcode
+    if rc != 0 or builder != "podman":
+        return rc
+
+    # Bake the service variant by running the _bake role through the
+    # harness itself (--commit captures the post-converge state). Skips
+    # automatically when the inputs hash matches the existing image's
+    # label, so this is cheap on warm runs.
+    bake_cmd = [
+        "test/testrole.py", "_bake",
+        "--ubuntu", codename,
+        "--no-build-image",
+        "--no-checkmode",
+        "--no-idempotence",
+        "--no-keep-logs",
+        "--commit", f"homelab-service:{codename}",
+    ]
+    return asyncio.run(run_command(bake_cmd, check=False)).exitcode
 
 
 def parse_args() -> argparse.Namespace:
