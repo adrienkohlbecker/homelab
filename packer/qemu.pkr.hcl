@@ -41,7 +41,41 @@ locals {
   # x86_64 host is Linux + KVM; aarch64 host is arm Mac + HVF in this stack.
   # If arm64 Linux ever joins the mix, swap in an explicit OS knob here.
   accelerator = var.arch == "x86_64" ? "kvm" : "hvf"
-  iso_arch    = var.arch == "x86_64" ? "amd64" : "arm64"
+  # EFI firmware paths follow the same Linux/Mac split as accelerator.
+  # Linux: ovmf package. Mac: Homebrew qemu (aarch64 code + arm vars).
+  efi_firmware_code = var.arch == "x86_64" ? "/usr/share/OVMF/OVMF_CODE.fd" : "/opt/homebrew/share/qemu/edk2-aarch64-code.fd"
+  efi_firmware_vars = var.arch == "x86_64" ? "/usr/share/OVMF/OVMF_VARS.fd" : "/opt/homebrew/share/qemu/edk2-arm-vars.fd"
+  iso_arch          = var.arch == "x86_64" ? "amd64" : "arm64"
+  # qemu's `virt` machine has no default graphics or input devices, so
+  # without these the VNC display falls back to the HMP monitor and packer's
+  # boot_command keystrokes get parsed as monitor commands. q35 already
+  # ships with a std VGA and PS/2 keyboard, so this is aarch64-only.
+  arch_qemuargs = var.arch == "aarch64" ? [
+    ["-device", "virtio-gpu-pci"],
+    ["-device", "qemu-xhci"],
+    ["-device", "usb-kbd"],
+    ["-device", "usb-tablet"],
+  ] : []
+  # x86_64 BIOS-style: drop into the GRUB shell with `c` and retype the
+  # linux/initrd/boot lines, with autoinstall args inline.
+  # arm64 EFI: GRUB shows a graphical menu instead. Press `e` to edit the
+  # highlighted "Try or Install Ubuntu Server" entry; cursor lands on the
+  # `setparams` line. The first <down> after entering edit mode is
+  # consistently swallowed (extra <wait>s don't help, so it's a state
+  # transition, not a timing issue), so we send three <down>s to land on
+  # the `linux` line (rows: setparams, set gfxpayload=keep, linux). <end>
+  # jumps past the existing `---` separator, append the autoinstall args,
+  # then Ctrl-X to boot.
+  boot_command = var.arch == "x86_64" ? [
+    "c<wait>linux /casper/vmlinuz --- autoinstall ds=\"nocloud;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/\"<enter><wait>",
+    "initrd /casper/initrd<enter><wait>",
+    "boot<enter><wait>"
+    ] : [
+    "<wait>e<wait2>",
+    "<down><wait><down><wait><down><wait><end><wait>",
+    " autoinstall ds=\"nocloud;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/\"<wait>",
+    "<leftCtrlOn>x<leftCtrlOff>"
+  ]
   # x86_64 server ISOs live on releases.ubuntu.com keyed by codename;
   # arm64 server ISOs live on cdimage.ubuntu.com keyed by patch version.
   iso_base_url = var.arch == "x86_64" ? "https://releases.ubuntu.com/${local.ubuntu_release}" : "https://cdimage.ubuntu.com/releases/${local.ubuntu_patch}/release"
@@ -61,6 +95,8 @@ source "qemu" "ubuntu" {
   disk_interface       = "virtio"
   disk_size            = "40G"
   efi_boot             = true
+  efi_firmware_code    = "${local.efi_firmware_code}"
+  efi_firmware_vars    = "${local.efi_firmware_vars}"
   format               = "qcow2"
   headless             = true
   http_directory       = "${path.root}/http"
@@ -75,22 +111,22 @@ source "qemu" "ubuntu" {
   ssh_timeout          = "20m"
   ssh_username         = "vagrant"
   vnc_bind_address     = "0.0.0.0"
-  qemuargs = [
+  qemuargs = concat([
     ["-object", "rng-random,id=rng0,filename=/dev/urandom"],
     ["-device", "virtio-rng-pci,rng=rng0"],
-  ]
+  ], local.arch_qemuargs)
 }
 
 build {
 
   source "qemu.ubuntu" {
     name          = "ubuntu-base"
-    boot_command  = ["c<wait>linux /casper/vmlinuz --- autoinstall ds=\"nocloud;s=http://{{ .HTTPIP }}:{{ .HTTPPort }}/\"<enter><wait>", "initrd /casper/initrd<enter><wait>", "boot<enter><wait>"]
+    boot_command  = local.boot_command
     iso_checksum  = "${local.iso_checksum}"
     iso_url       = "${local.iso_url}"
-    host_port_max = 2222
+    host_port_max = 2231
     host_port_min = 2222
-    vnc_port_max  = 5900
+    vnc_port_max  = 5909
     vnc_port_min  = 5900
   }
 
@@ -126,10 +162,10 @@ build {
     disk_image           = true
     iso_checksum         = "file:${var.output_directory}/ubuntu-base/sha256sum"
     iso_url              = "${var.output_directory}/ubuntu-base/packer-ubuntu"
-    host_port_max        = 2223
-    host_port_min        = 2223
-    vnc_port_max         = 5901
-    vnc_port_min         = 5901
+    host_port_max        = 2241
+    host_port_min        = 2232
+    vnc_port_max         = 5919
+    vnc_port_min         = 5910
   }
 
   # ubuntu-zfs-lab: mdadm-EFI + mdadm-swap + 3-disk mirror rpool. Consumed
@@ -143,10 +179,10 @@ build {
     disk_image           = true
     iso_checksum         = "file:${var.output_directory}/ubuntu-base/sha256sum"
     iso_url              = "${var.output_directory}/ubuntu-base/packer-ubuntu"
-    host_port_max        = 2224
-    host_port_min        = 2224
-    vnc_port_max         = 5902
-    vnc_port_min         = 5902
+    host_port_max        = 2251
+    host_port_min        = 2242
+    vnc_port_max         = 5929
+    vnc_port_min         = 5920
   }
 
   provisioner "file" {
