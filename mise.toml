@@ -1,7 +1,7 @@
 [vars]
 packer_flags = "-timestamp-ui -warn-on-undeclared-var --on-error=ask"
 qemu_dir = '{% if os() == "macos" %}{{config_root}}/packer/artifacts{% else %}/mnt/qemu{% endif %}'
-zbm_version = "v3.1.0"
+zbm_version = "3.1.0"
 
 [env]
 CLOUDFLARE_EMAIL = "op://Lab/seckvi7vjb6ahgtt7w4l3r73zq/username"
@@ -57,16 +57,15 @@ flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
 run = 'rm -rf "{{vars.qemu_dir}}/${usage_ubuntu}"/*.new'
 
 [tasks."zbm:builder-image"]
-description = "Build the zbm-builder container image locally for the target arch"
-usage = '''
-flag "--arch <name>" help="Target arch: x86_64 or aarch64" default="x86_64"
-'''
+description = "Build the zbm-builder container image locally for the host arch"
 # Clones zfsbootmenu at the pinned tag, then builds zbm/Dockerfile
 # (a podman-compatible vendored copy of upstream's
-# releng/docker/Dockerfile) using the upstream releng/docker context
-# so build-init.sh remains COPYable. --platform is set per-arch and
-# the image is tagged localhost/zbm-builder:<version>-<arch>. Re-run
-# when zbm_version changes.
+# releng/docker/Dockerfile) against the upstream releng/docker context
+# so build-init.sh remains COPYable. The image always targets the host
+# arch (no cross-build): run on Mac arm for an aarch64 image, on the
+# Linux x86_64 dev host for an amd64 image. Tagged
+# localhost/zbm-builder:<version>-<arch>. Re-run when zbm_version
+# changes.
 #
 # --security-opt seccomp=unconfined is needed because xbps-install
 # sets file capabilities/xattrs on extracted files (e.g. libelf.so.1)
@@ -76,71 +75,55 @@ flag "--arch <name>" help="Target arch: x86_64 or aarch64" default="x86_64"
 # the default profile.
 run = '''
 set -eu
-arch="${usage_arch}"
+arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 case "$arch" in
-  x86_64) platform=linux/amd64 ;;
-  aarch64) platform=linux/arm64 ;;
-  *) echo "unknown arch: $arch" >&2; exit 1 ;;
+  x86_64|aarch64) ;;
+  *) echo "unsupported host arch: $arch" >&2; exit 1 ;;
 esac
 src_dir="{{config_root}}/zbm-build/src"
 rm -rf "$src_dir"
 mkdir -p "$(dirname "$src_dir")"
-git clone --depth 1 --branch {{vars.zbm_version}} https://github.com/zbm-dev/zfsbootmenu.git "$src_dir"
-podman build --platform="$platform" --security-opt seccomp=unconfined --tag "localhost/zbm-builder:{{vars.zbm_version}}-${arch}" -f "{{config_root}}/zbm/Dockerfile" "$src_dir/releng/docker"
+git clone --depth 1 --branch v{{vars.zbm_version}} https://github.com/zbm-dev/zfsbootmenu.git "$src_dir"
+podman build --security-opt seccomp=unconfined --tag "localhost/zbm-builder:v{{vars.zbm_version}}-${arch}" -f "{{config_root}}/zbm/Dockerfile" "$src_dir/releng/docker"
 '''
 
 [tasks."zbm:build"]
 description = "Build a ZFSBootMenu UEFI binary via the local builder container"
-usage = '''
-flag "--arch <name>" help="Target arch: x86_64 or aarch64" default="x86_64"
-'''
 # Runs localhost/zbm-builder:<version>-<arch> with zbm/ bind-mounted at
 # /build (config.yaml lives there, read-only) and zbm-build/<arch>/ at
 # /output. The container's build-init.sh fetches zfsbootmenu at -t and
-# emits zfsbootmenu.EFI; we rename to a versioned, arch-tagged filename
+# emits vmlinuz.EFI; we rename to a versioned, arch-tagged filename
 # suitable for upload to Gitea releases.
 run = '''
 set -eu
-arch="${usage_arch}"
-case "$arch" in
-  x86_64) platform=linux/amd64 ;;
-  aarch64) platform=linux/arm64 ;;
-  *) echo "unknown arch: $arch" >&2; exit 1 ;;
-esac
+arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 out_dir="{{config_root}}/zbm-build/${arch}"
 mkdir -p "$out_dir"
 rm -f "$out_dir"/*.EFI
-podman run --rm --platform="$platform" -v "{{config_root}}/zbm:/build:ro" -v "$out_dir:/output" "localhost/zbm-builder:{{vars.zbm_version}}-${arch}" -o /output -t {{vars.zbm_version}}
-mv "$out_dir/vmlinuz.EFI" "$out_dir/zfsbootmenu-{{vars.zbm_version}}-${arch}.EFI"
-sha256sum "$out_dir/zfsbootmenu-{{vars.zbm_version}}-${arch}.EFI"
+podman run --rm -v "{{config_root}}/zbm:/build:ro" -v "$out_dir:/output" "localhost/zbm-builder:v{{vars.zbm_version}}-${arch}" -o /output -t v{{vars.zbm_version}}
+mv "$out_dir/vmlinuz.EFI" "$out_dir/zfsbootmenu-v{{vars.zbm_version}}-${arch}.EFI"
+sha256sum "$out_dir/zfsbootmenu-v{{vars.zbm_version}}-${arch}.EFI"
 '''
 
 [tasks."zbm:upload"]
 description = "Upload the built ZFSBootMenu EFI to Gitea generic packages"
-usage = '''
-flag "--arch <name>" help="Target arch: x86_64 or aarch64" default="x86_64"
-'''
 # Generates a .sha256sum sidecar next to the .EFI, then PUTs both to
 # gitea.lab.fahm.fr's generic package repo at
-# adrienkohlbecker/zfsbootmenu/<version-no-v>. The package upload token
+# adrienkohlbecker/zfsbootmenu/<zbm_version>. The package upload token
 # is read from 1Password at runtime; the URL filenames match the local
 # filenames so reuploads overwrite cleanly.
 run = '''
 set -eu
-arch="${usage_arch}"
-case "$arch" in
-  x86_64|aarch64) ;;
-  *) echo "unknown arch: $arch" >&2; exit 1 ;;
-esac
+arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 out_dir="{{config_root}}/zbm-build/${arch}"
-file_name="zfsbootmenu-{{vars.zbm_version}}-${arch}.EFI"
+file_name="zfsbootmenu-v{{vars.zbm_version}}-${arch}.EFI"
 sum_name="${file_name}.sha256sum"
 ( cd "$out_dir" && sha256sum "$file_name" ) > "${out_dir}/${sum_name}"
-pkg_version="$(echo {{vars.zbm_version}} | sed 's/^v//')"
+username="$(op read 'op://Lab/Gitea package upload token/username')"
 token="$(op read 'op://Lab/Gitea package upload token/password')"
-base_url="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/${pkg_version}"
+base_url="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/{{vars.zbm_version}}"
 for f in "$file_name" "$sum_name"; do
-  curl --fail-with-body --user "adrienkohlbecker:${token}" --upload-file "${out_dir}/${f}" "${base_url}/${f}"
+  curl --fail-with-body --user "${username}:${token}" --upload-file "${out_dir}/${f}" "${base_url}/${f}"
 done
 '''
 
