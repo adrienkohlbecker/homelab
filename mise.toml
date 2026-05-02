@@ -19,6 +19,7 @@ python.uv_venv_auto = "create|source"
 
 [tasks."packer:build"]
 description = "Build a packer image variant"
+interactive = true
 usage = '''
 arg "<variant>" help="Variant: base, box, lab, or pug"
 flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
