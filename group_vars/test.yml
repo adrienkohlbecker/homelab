@@ -1,5 +1,5 @@
 domain: mhaf.fr
-nexus_url: https://nexus.lab.fahm.fr
+nexus_url: nexus.lab.fahm.fr
 home_subnet: 10.234.0.0/16
 site_subnets:
   home: 10.234.0.0/21
