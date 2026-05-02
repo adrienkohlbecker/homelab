@@ -5,24 +5,6 @@ read -r -a DISKS <<<"$DISKS"
 
 export DEBIAN_FRONTEND=noninteractive
 
-case $(uname -m) in
-x86_64)
-  ZBM_URL="https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.0.1/zfsbootmenu-recovery-x86_64-v3.0.1-linux6.12.EFI"
-  ZBM_SUM="375ef1a0505bbbd648572c16d83884d5147fa2435508b4717e2749aead676143"
-  ;;
-aarch64)
-  # ZFSBootMenu ships no official aarch64 prebuilt EFI binaries (v3.0.1 is
-  # x86_64-only; v3.1.0+ supports aarch64 only via build-from-source). We
-  # don't run a ZBM build pipeline. See AGENTS.md "Test Environment Design".
-  echo >&2 "ZFSBootMenu has no official aarch64 prebuilts; arm64 builds are not supported"
-  exit 1
-  ;;
-*)
-  echo >&2 "Unknown machine name $(uname -m)"
-  exit 1
-  ;;
-esac
-
 # Set a hostname
 
 hostname "$HOSTNAME"
@@ -190,10 +172,14 @@ mount /boot/efi
 
 # Install ZFSBootMenu
 
+ZBM_VERSION="3.1.0"
+ZBM_URL="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/$ZBM_VERSION/zfsbootmenu-v$ZBM_VERSION-$(uname -m).EFI"
+
 apt-get install --yes curl
 mkdir -p /boot/efi/EFI/ZBM
-curl -o /boot/efi/EFI/ZBM/VMLINUZ.EFI -L $ZBM_URL
-echo "$ZBM_SUM  /boot/efi/EFI/ZBM/VMLINUZ.EFI" | sha256sum -c -
+curl -fL -o /boot/efi/EFI/ZBM/VMLINUZ.EFI "$ZBM_URL"
+EXPECTED_SUM="$(curl -fsSL "$ZBM_URL.sha256sum" | awk '{print $1}')"
+echo "$EXPECTED_SUM  /boot/efi/EFI/ZBM/VMLINUZ.EFI" | sha256sum -c -
 cp /boot/efi/EFI/ZBM/VMLINUZ.EFI /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
 
 # Configure rEFInd
