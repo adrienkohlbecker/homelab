@@ -70,12 +70,7 @@
     set -euo pipefail
 
     apt-get update
-    # fuse-overlayfs is a recommended dep of podman; without it nested
-    # rootless podman falls back to kernel overlay, where chown across
-    # layers fails with EINVAL (e.g. \`storage-chown-by-maps: lchown
-    # etc/shadow: invalid argument\` when remapping image layers for
-    # \`--userns keep-id\`). uidmap provides newuidmap/newgidmap.
-    apt-get install -y --no-install-recommends podman iptables fuse-overlayfs uidmap
+    apt-get install -y podman
   args:
     executable: /bin/bash
     creates: /usr/bin/podman
