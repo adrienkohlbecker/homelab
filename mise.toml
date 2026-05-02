@@ -115,6 +115,35 @@ mv "$out_dir/vmlinuz.EFI" "$out_dir/zfsbootmenu-{{vars.zbm_version}}-${arch}.EFI
 sha256sum "$out_dir/zfsbootmenu-{{vars.zbm_version}}-${arch}.EFI"
 '''
 
+[tasks."zbm:upload"]
+description = "Upload the built ZFSBootMenu EFI to Gitea generic packages"
+usage = '''
+flag "--arch <name>" help="Target arch: x86_64 or aarch64" default="x86_64"
+'''
+# Generates a .sha256sum sidecar next to the .EFI, then PUTs both to
+# gitea.lab.fahm.fr's generic package repo at
+# adrienkohlbecker/zfsbootmenu/<version-no-v>. The package upload token
+# is read from 1Password at runtime; the URL filenames match the local
+# filenames so reuploads overwrite cleanly.
+run = '''
+set -eu
+arch="${usage_arch}"
+case "$arch" in
+  x86_64|aarch64) ;;
+  *) echo "unknown arch: $arch" >&2; exit 1 ;;
+esac
+out_dir="{{config_root}}/zbm-build/${arch}"
+file_name="zfsbootmenu-{{vars.zbm_version}}-${arch}.EFI"
+sum_name="${file_name}.sha256sum"
+( cd "$out_dir" && sha256sum "$file_name" ) > "${out_dir}/${sum_name}"
+pkg_version="$(echo {{vars.zbm_version}} | sed 's/^v//')"
+token="$(op read 'op://Lab/Gitea package upload token/password')"
+base_url="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/${pkg_version}"
+for f in "$file_name" "$sum_name"; do
+  curl --fail-with-body --user "adrienkohlbecker:${token}" --upload-file "${out_dir}/${f}" "${base_url}/${f}"
+done
+'''
+
 [tasks.lint]
 description = "Run all linters"
 depends = [
