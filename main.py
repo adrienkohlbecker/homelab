@@ -1,5 +1,3 @@
-from pyinfra.operations import apt
-
 from roles.bash import bash
 from roles.user import user
 
