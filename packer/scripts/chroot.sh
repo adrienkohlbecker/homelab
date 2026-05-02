@@ -174,13 +174,22 @@ mount /boot/efi
 
 ZBM_VERSION="3.1.0"
 ZBM_URL="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/$ZBM_VERSION/zfsbootmenu-v$ZBM_VERSION-$(uname -m).EFI"
+# ZBM names its EFI output after the underlying kernel image: vmlinuz on
+# x86_64 (compressed), vmlinux on aarch64 (uncompressed). Match upstream
+# so the local copy preserves the convention. rEFInd ships its loader as
+# refind_x64.efi on x86_64 and refind_aa64.efi on aarch64.
+case $(uname -m) in
+x86_64) ZBM_NAME=VMLINUZ; REFIND_NAME=refind_x64.efi ;;
+aarch64) ZBM_NAME=VMLINUX; REFIND_NAME=refind_aa64.efi ;;
+*) echo >&2 "Unknown machine name $(uname -m)" && exit 1 ;;
+esac
 
 apt-get install --yes curl
 mkdir -p /boot/efi/EFI/ZBM
-curl -fL -o /boot/efi/EFI/ZBM/VMLINUZ.EFI "$ZBM_URL"
+curl -fL -o "/boot/efi/EFI/ZBM/${ZBM_NAME}.EFI" "$ZBM_URL"
 EXPECTED_SUM="$(curl -fsSL "$ZBM_URL.sha256sum" | awk '{print $1}')"
-echo "$EXPECTED_SUM  /boot/efi/EFI/ZBM/VMLINUZ.EFI" | sha256sum -c -
-cp /boot/efi/EFI/ZBM/VMLINUZ.EFI /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI
+echo "$EXPECTED_SUM  /boot/efi/EFI/ZBM/${ZBM_NAME}.EFI" | sha256sum -c -
+cp "/boot/efi/EFI/ZBM/${ZBM_NAME}.EFI" "/boot/efi/EFI/ZBM/${ZBM_NAME}-BACKUP.EFI"
 
 # Configure rEFInd
 
@@ -194,12 +203,12 @@ timeout 1
 default_selection "Ubuntu (ZBM)"
 
 menuentry "Ubuntu (ZBM)" {
-    loader /EFI/ZBM/VMLINUZ.EFI
+    loader /EFI/ZBM/${ZBM_NAME}.EFI
     options "quit loglevel=0 zbm.skip"
 }
 
 menuentry "Ubuntu (ZBM Menu)" {
-    loader /EFI/ZBM/VMLINUZ.EFI
+    loader /EFI/ZBM/${ZBM_NAME}.EFI
     options "quit loglevel=0 zbm.show"
 }
 EOF
@@ -210,15 +219,15 @@ apt-get install --yes efibootmgr
 
 efibootmgr -c -d "${DISKS[0]}" -p 1 \
   -L "ZFSBootMenu (Backup)" \
-  -l '\EFI\ZBM\VMLINUZ-BACKUP.EFI'
+  -l "\\EFI\\ZBM\\${ZBM_NAME}-BACKUP.EFI"
 
 efibootmgr -c -d "${DISKS[0]}" -p 1 \
   -L "ZFSBootMenu" \
-  -l '\EFI\ZBM\VMLINUZ.EFI'
+  -l "\\EFI\\ZBM\\${ZBM_NAME}.EFI"
 
 efibootmgr -c -d "${DISKS[0]}" -p 1 \
   -L "rEFInd" \
-  -l '\EFI\refind\refind_x64.efi'
+  -l "\\EFI\\refind\\${REFIND_NAME}"
 
 # Enable tmp mount
 
