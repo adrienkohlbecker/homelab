@@ -7,3 +7,4 @@ test/out.tsv
 test/out.tsv.prev
 test/out/
 /.ansible-mitogen-strategy
+/packer/artifacts
