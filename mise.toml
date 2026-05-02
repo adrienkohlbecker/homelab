@@ -61,19 +61,33 @@ description = "Build the zbm-builder container image locally for the target arch
 usage = '''
 flag "--arch <name>" help="Target arch: x86_64 or aarch64" default="x86_64"
 '''
-# Clones zfsbootmenu at the pinned tag, builds upstream's
-# releng/docker/Dockerfile with --platform set per-arch, tags as
-# localhost/zbm-builder:<version>-<arch>. Re-run when zbm_version changes.
-run = [
-  'set -eu',
-  'arch="${usage_arch}"',
-  'case "$arch" in x86_64) platform=linux/amd64 ;; aarch64) platform=linux/arm64 ;; *) echo "unknown arch: $arch" >&2; exit 1 ;; esac',
-  'src_dir="{{config_root}}/zbm-build/src"',
-  'rm -rf "$src_dir"',
-  'mkdir -p "$(dirname "$src_dir")"',
-  'git clone --depth 1 --branch {{vars.zbm_version}} https://github.com/zbm-dev/zfsbootmenu.git "$src_dir"',
-  'podman build --platform="$platform" --tag "localhost/zbm-builder:{{vars.zbm_version}}-${arch}" "$src_dir/releng/docker"',
-]
+# Clones zfsbootmenu at the pinned tag, then builds zbm/Dockerfile
+# (a podman-compatible vendored copy of upstream's
+# releng/docker/Dockerfile) using the upstream releng/docker context
+# so build-init.sh remains COPYable. --platform is set per-arch and
+# the image is tagged localhost/zbm-builder:<version>-<arch>. Re-run
+# when zbm_version changes.
+#
+# --security-opt seccomp=unconfined is needed because xbps-install
+# sets file capabilities/xattrs on extracted files (e.g. libelf.so.1)
+# via syscalls that the default rootless seccomp profile blocks,
+# yielding "Operation not permitted" on unpack. The relaxation
+# applies to the build process only; the resulting image runs with
+# the default profile.
+run = '''
+set -eu
+arch="${usage_arch}"
+case "$arch" in
+  x86_64) platform=linux/amd64 ;;
+  aarch64) platform=linux/arm64 ;;
+  *) echo "unknown arch: $arch" >&2; exit 1 ;;
+esac
+src_dir="{{config_root}}/zbm-build/src"
+rm -rf "$src_dir"
+mkdir -p "$(dirname "$src_dir")"
+git clone --depth 1 --branch {{vars.zbm_version}} https://github.com/zbm-dev/zfsbootmenu.git "$src_dir"
+podman build --platform="$platform" --security-opt seccomp=unconfined --tag "localhost/zbm-builder:{{vars.zbm_version}}-${arch}" -f "{{config_root}}/zbm/Dockerfile" "$src_dir/releng/docker"
+'''
 
 [tasks."zbm:build"]
 description = "Build a ZFSBootMenu UEFI binary via the local builder container"
@@ -85,17 +99,21 @@ flag "--arch <name>" help="Target arch: x86_64 or aarch64" default="x86_64"
 # /output. The container's build-init.sh fetches zfsbootmenu at -t and
 # emits zfsbootmenu.EFI; we rename to a versioned, arch-tagged filename
 # suitable for upload to Gitea releases.
-run = [
-  'set -eu',
-  'arch="${usage_arch}"',
-  'case "$arch" in x86_64) platform=linux/amd64 ;; aarch64) platform=linux/arm64 ;; *) echo "unknown arch: $arch" >&2; exit 1 ;; esac',
-  'out_dir="{{config_root}}/zbm-build/${arch}"',
-  'mkdir -p "$out_dir"',
-  'rm -f "$out_dir"/*.EFI',
-  'podman run --rm --platform="$platform" -v "{{config_root}}/zbm:/build:ro" -v "$out_dir:/output" "localhost/zbm-builder:{{vars.zbm_version}}-${arch}" -o /output -t {{vars.zbm_version}}',
-  'mv "$out_dir/vmlinuz.EFI" "$out_dir/zfsbootmenu-{{vars.zbm_version}}-${arch}.EFI"',
-  'sha256sum "$out_dir/zfsbootmenu-{{vars.zbm_version}}-${arch}.EFI"',
-]
+run = '''
+set -eu
+arch="${usage_arch}"
+case "$arch" in
+  x86_64) platform=linux/amd64 ;;
+  aarch64) platform=linux/arm64 ;;
+  *) echo "unknown arch: $arch" >&2; exit 1 ;;
+esac
+out_dir="{{config_root}}/zbm-build/${arch}"
+mkdir -p "$out_dir"
+rm -f "$out_dir"/*.EFI
+podman run --rm --platform="$platform" -v "{{config_root}}/zbm:/build:ro" -v "$out_dir:/output" "localhost/zbm-builder:{{vars.zbm_version}}-${arch}" -o /output -t {{vars.zbm_version}}
+mv "$out_dir/vmlinuz.EFI" "$out_dir/zfsbootmenu-{{vars.zbm_version}}-${arch}.EFI"
+sha256sum "$out_dir/zfsbootmenu-{{vars.zbm_version}}-${arch}.EFI"
+'''
 
 [tasks.lint]
 description = "Run all linters"
