@@ -19,11 +19,16 @@ RUN set -x \
 
 # python3-apt: must be installed to use check mode. If run normally this module can auto-install it.
 # sudo: needed to use become_user
+# iproute2: ansible's setup module reads `ip` to populate networking facts
+# (interfaces, ipv4 addresses). Without it, `ansible_facts.eth0` is missing
+# and roles that compute from `ansible_facts[macvlan_parent].ipv4.*` fail
+# at template-resolution time before they can install iproute2 themselves.
 RUN set -x \
  && export DEBIAN_FRONTEND=noninteractive \
  && apt-get update \
  && apt-get install -y --no-install-recommends python3-apt \
  && apt-get install -y --no-install-recommends sudo \
+ && apt-get install -y --no-install-recommends iproute2 \
  && rm -rf /var/lib/apt/lists/*
 
 # Ensure we have a working apt cache (keep the cleanup in other sections for easy reuse)
