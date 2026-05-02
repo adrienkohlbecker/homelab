@@ -111,11 +111,11 @@ netdata_zfspool_thresholds:
   rpool: [ 85, 90, 95 ] #  464GiB => 70GiB, 47GiB, 24GiB
   apoc: [ 85, 90, 95 ] # 9,312GiB => 464GiB => 1,397GiB, 932GiB, 467GiB
 netdata_diskspace_blocklist:
-- /
-- /boot
-- /mnt/old_bionic
-- /mnt/old_services
-- /mnt/services
+  - /
+  - /boot
+  - /mnt/old_bionic
+  - /mnt/old_services
+  - /mnt/services
 
 smb_shares: []
 subid_users: []

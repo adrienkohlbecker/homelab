@@ -188,21 +188,21 @@ netdata_zfspool_thresholds:
   mouse: [ 85, 90, 95 ] # 3712 GiB => 557GiB, 372GiB, 186GiB
   dozer: [ 85, 90, 95 ] # 3712 GiB => 557GiB, 372GiB, 186GiB
 netdata_diskspace_blocklist:
-- /
-- /mnt/brumath
-- /mnt/data
-- /mnt/eckwersheim
-- /mnt/media
-- /mnt/minio
-- /mnt/old_bionic
-- /mnt/old_bionic_boot
-- /mnt/old_bionic_grub
-- /mnt/old_services
-- /mnt/old_vms
-- /mnt/scratch
-- /mnt/services
-- /var/lib/libvirt/images
-- /mnt/qemu
+  - /
+  - /mnt/brumath
+  - /mnt/data
+  - /mnt/eckwersheim
+  - /mnt/media
+  - /mnt/minio
+  - /mnt/old_bionic
+  - /mnt/old_bionic_boot
+  - /mnt/old_bionic_grub
+  - /mnt/old_services
+  - /mnt/old_vms
+  - /mnt/scratch
+  - /mnt/services
+  - /var/lib/libvirt/images
+  - /mnt/qemu
 
 smb_shares:
   - name: media
