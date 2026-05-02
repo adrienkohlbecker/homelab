@@ -16,7 +16,7 @@
     - name: client | Download mcli deb
       check_mode: false
       get_url:
-        url: https://dl.min.io/client/mc/release/linux-{{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64')}}/archive/mcli_20220610222912.0.0_{{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64')}}.deb
+        url: "{{ mirror_minio }}/client/mc/release/linux-{{ (ansible_architecture == 'aarch64') | ternary('arm64', 'amd64') }}/archive/mcli_20220610222912.0.0_{{ (ansible_architecture == 'aarch64') | ternary('arm64', 'amd64') }}.deb"
         dest: /tmp/mcli.deb
         mode: '0644'
         owner: root

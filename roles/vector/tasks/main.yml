@@ -22,7 +22,7 @@
 
 - name: Add repository
   apt_repository:
-    repo: deb [signed-by=/etc/apt/trusted.gpg.d/vector.gpg] https://apt.vector.dev stable vector-0
+    repo: deb [signed-by=/etc/apt/trusted.gpg.d/vector.gpg] {{ mirror_apt_vector }} stable vector-0
   register: apt_repository_vector
   become: true
   tags:

@@ -27,8 +27,30 @@ email_domain: noreply.{{ domain }}
 service_ports:
   healthchecks: 8000
 
-ubuntu_mirror: '{{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports/", "http://archive.ubuntu.com/ubuntu/") }}'
-ubuntu_mirror_security: '{{ (ansible_architecture == "aarch64") | ternary("http://ports.ubuntu.com/ubuntu-ports/", "http://security.ubuntu.com/ubuntu/") }}'
+# Sonatype Nexus pull-through cache. Empty = use upstream URLs directly.
+# Overridden in group_vars/test.yml to route fetches through nexus.lab.fahm.fr.
+nexus_url: ""
+
+mirror_apt_ubuntu_archive: '{{ nexus_url ~ "/repository/ubuntu-archive" if nexus_url else "http://archive.ubuntu.com/ubuntu" }}'
+mirror_apt_ubuntu_security: '{{ nexus_url ~ "/repository/ubuntu-security" if nexus_url else "http://security.ubuntu.com/ubuntu" }}'
+mirror_apt_ubuntu_ports: '{{ nexus_url ~ "/repository/ubuntu-ports" if nexus_url else "http://ports.ubuntu.com/ubuntu-ports" }}'
+mirror_apt_azlux: '{{ nexus_url ~ "/repository/azlux-debian" if nexus_url else "https://packages.azlux.fr/debian" }}'
+mirror_apt_nodesource: '{{ nexus_url ~ "/repository/nodesource-node22" if nexus_url else "https://deb.nodesource.com/node_22.x" }}'
+mirror_apt_vector: '{{ nexus_url ~ "/repository/vector" if nexus_url else "https://apt.vector.dev" }}'
+mirror_apt_netdata: '{{ nexus_url ~ "/repository/netdata" if nexus_url else "https://repo.netdata.cloud/repos/stable/ubuntu" }}'
+# 1password apt proxy targets amd64; aarch64 falls back to upstream.
+mirror_apt_1password: '{{ nexus_url ~ "/repository/1password" if (nexus_url and ansible_architecture != "aarch64") else "https://downloads.1password.com/linux/debian/" ~ ((ansible_architecture == "aarch64") | ternary("arm64", "amd64")) }}'
+
+mirror_github: '{{ nexus_url ~ "/repository/github" if nexus_url else "https://github.com" }}'
+mirror_minio: '{{ nexus_url ~ "/repository/minio" if nexus_url else "https://dl.min.io" }}'
+mirror_gitea_dl: '{{ nexus_url ~ "/repository/gitea-dl" if nexus_url else "https://dl.gitea.com" }}'
+mirror_gitea_com: '{{ nexus_url ~ "/repository/gitea-com" if nexus_url else "https://gitea.com" }}'
+mirror_gitea_lab: '{{ nexus_url ~ "/repository/gitea-lab" if nexus_url else "https://gitea.lab.fahm.fr" }}'
+mirror_keyserver_ubuntu: '{{ nexus_url ~ "/repository/keyserver-ubuntu" if nexus_url else "https://keyserver.ubuntu.com" }}'
+mirror_pypi: '{{ nexus_url ~ "/repository/pypi" if nexus_url else "https://pypi.org" }}'
+
+ubuntu_mirror: '{{ (ansible_architecture == "aarch64") | ternary(mirror_apt_ubuntu_ports ~ "/", mirror_apt_ubuntu_archive ~ "/") }}'
+ubuntu_mirror_security: '{{ (ansible_architecture == "aarch64") | ternary(mirror_apt_ubuntu_ports ~ "/", mirror_apt_ubuntu_security ~ "/") }}'
 
 macvlan_parent_gateway: "{{ ansible_facts[macvlan_parent].ipv4.network | ansible.utils.ipmath(1) }}"
 macvlan_parent_subnet: "{{ ansible_facts[macvlan_parent].ipv4.network }}/{{ ansible_facts[macvlan_parent].ipv4.prefix }}"

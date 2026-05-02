@@ -19,7 +19,7 @@
 
 - name: Add repository
   apt_repository:
-    repo: deb [signed-by=/etc/apt/trusted.gpg.d/netdata.gpg] https://repo.netdata.cloud/repos/stable/ubuntu/ {{ ansible_distribution_release }}/
+    repo: deb [signed-by=/etc/apt/trusted.gpg.d/netdata.gpg] {{ mirror_apt_netdata }}/ {{ ansible_distribution_release }}/
   register: apt_repository_netdata
   become: true
   tags:
