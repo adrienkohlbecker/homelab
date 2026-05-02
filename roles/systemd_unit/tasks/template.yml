@@ -44,7 +44,7 @@
     # podman.socket / podman.service yield distinct facts.
     - name: template | Record install result for {{ systemd_unit_src }}
       set_fact:
-        "{{ (systemd_unit_dest | default(systemd_unit_src)) | replace('.', '_') }}_result": "{{ systemd_unit }}"
+        "{{ (systemd_unit_dest | default(systemd_unit_src)) | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ systemd_unit }}"
 
   rescue:
     - name: template | Copy backup file to original
