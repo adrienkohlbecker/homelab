@@ -131,3 +131,71 @@
     creates: "{{ ansible_user_dir }}/.zsh/pure/readme.md"
   tags:
     - user
+
+- name: Check installed asdf version
+  command: "{{ ansible_user_dir }}/.asdf/bin/asdf --version"
+  register: asdf_check
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  tags:
+    - user
+
+- name: Create asdf bin directory
+  when: asdf_version not in asdf_check.stdout
+  file:
+    path: "{{ ansible_user_dir }}/.asdf/bin"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  tags:
+    - user
+
+- name: Download asdf archive
+  when: asdf_version not in asdf_check.stdout
+  check_mode: false
+  get_url:
+    url: "{{ asdf_release[ansible_architecture].url }}"
+    checksum: "md5:{{ asdf_release[ansible_architecture].md5 }}"
+    dest: /tmp/asdf-{{ asdf_version }}.tar.gz
+    mode: "0644"
+  tags:
+    - user
+
+- name: Install asdf binary
+  when: asdf_version not in asdf_check.stdout
+  unarchive:
+    src: /tmp/asdf-{{ asdf_version }}.tar.gz
+    remote_src: true
+    dest: "{{ ansible_user_dir }}/.asdf/bin"
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  tags:
+    - user
+
+- name: Create asdf completions directory
+  when: asdf_version not in asdf_check.stdout
+  file:
+    path: "{{ ansible_user_dir }}/.asdf/completions"
+    state: directory
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0755"
+  tags:
+    - user
+
+- name: Generate asdf zsh completions
+  when: asdf_version not in asdf_check.stdout
+  shell: "{{ ansible_user_dir }}/.asdf/bin/asdf completion zsh > {{ ansible_user_dir }}/.asdf/completions/_asdf"
+  tags:
+    - user
+
+- name: Delete asdf archive
+  when: asdf_version not in asdf_check.stdout
+  file:
+    path: /tmp/asdf-{{ asdf_version }}.tar.gz
+    state: absent
+  tags:
+    - user
