@@ -14,6 +14,7 @@ import contextlib
 import re
 import shlex
 import sys
+import time
 from pathlib import Path
 
 from build_image import build_image
@@ -29,6 +30,40 @@ from machine import (
     upsert_memory_row,
 )
 from utils import CommandFailedException, IdempotenceFailedException, cancel_on_signal, print_line, tee_output
+
+# Benchmark mode: harness phase timings + per-task ansible profiling. Off by
+# default; flip on with --benchmark when investigating why a role is slow.
+_BENCHMARK = False
+_PHASE_TIMINGS: list[tuple[str, float]] = []
+
+
+@contextlib.asynccontextmanager
+async def _phase(label: str):
+    if not _BENCHMARK:
+        yield
+        return
+    t0 = time.monotonic()
+    try:
+        yield
+    finally:
+        dt = time.monotonic() - t0
+        _PHASE_TIMINGS.append((label, dt))
+        print_line(f"[phase] {label}: {dt:.1f}s")
+
+
+def _print_phase_summary() -> None:
+    if not _BENCHMARK or not _PHASE_TIMINGS:
+        return
+    total = sum(dt for _, dt in _PHASE_TIMINGS)
+    print_line("=" * 60)
+    print_line("PHASE TIMINGS")
+    print_line("=" * 60)
+    width = max(len(label) for label, _ in _PHASE_TIMINGS)
+    for label, dt in _PHASE_TIMINGS:
+        pct = (dt / total * 100) if total > 0 else 0.0
+        print_line(f"  {label:<{width}}  {dt:6.1f}s  ({pct:4.1f}%)")
+    print_line(f"  {'TOTAL':<{width}}  {total:6.1f}s")
+    print_line("=" * 60)
 
 def _positive_int(value: str) -> int:
     """argparse type for flags that must be a positive integer."""
@@ -97,6 +132,12 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         action="store_true",
         default=False,
         help="Use public apt/podman mirrors instead of the local Nexus cache (escape hatch when the lab mirror is unreachable)",
+    )
+    parser.add_argument(
+        "--benchmark",
+        action="store_true",
+        default=False,
+        help="Print harness phase timings and enable ansible's profile_tasks callback for per-task timing",
     )
     parser.add_argument("role", help="Role name to test")
 
@@ -180,7 +221,8 @@ def _count_changed_tasks(stdout: list[str]) -> int:
 async def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -> None:
     """Re-run the role and fail if any task reports changed."""
     print_line("Verifying idempotence (re-running the role)...")
-    result = await m.ansible_command(site_yml, *pass_args)
+    async with _phase("idempotence rerun"):
+        result = await m.ansible_command(site_yml, *pass_args)
     changed = _count_changed_tasks(result.stdout)
     if changed > 0:
         raise IdempotenceFailedException(
@@ -196,9 +238,11 @@ async def _run_checkmode(site_yml: str, m: Machine, pass_args: list[str]) -> Non
     # Forward pass_args so --list-tags sees the same variable universe as
     # the --check / --tags runs below; otherwise a -e flag that gates a
     # tagged task would make the lists disagree.
-    list_tags = await m.ansible_command(site_yml, "--list-tags", *pass_args)
+    async with _phase("checkmode list-tags"):
+        list_tags = await m.ansible_command(site_yml, "--list-tags", *pass_args)
 
-    await m.ansible_command(site_yml, "--check", *pass_args)
+    async with _phase("checkmode --check (full)"):
+        await m.ansible_command(site_yml, "--check", *pass_args)
 
     # Some roles split expensive checks into stages; auto-discover every
     # _check_stageN tag and run them in numeric order so adding more stages
@@ -207,8 +251,10 @@ async def _run_checkmode(site_yml: str, m: Machine, pass_args: list[str]) -> Non
     stages = sorted({int(n) for n in _STAGE_TAG_RE.findall(available_tags)})
     for n in stages:
         stage = f"_check_stage{n}"
-        await m.ansible_command(site_yml, "--tags", stage, *pass_args)
-        await m.ansible_command(site_yml, "--check", *pass_args)
+        async with _phase(f"checkmode stage{n} apply"):
+            await m.ansible_command(site_yml, "--tags", stage, *pass_args)
+        async with _phase(f"checkmode stage{n} --check"):
+            await m.ansible_command(site_yml, "--check", *pass_args)
 
 
 async def run_test(
@@ -239,14 +285,18 @@ async def run_test(
             async with m:
                 try:
                     try:
-                        await m.ensure_booted()
+                        async with _phase("boot"):
+                            await m.ensure_booted()
                         print_line("Booted")
 
-                        await m.ensure_ssh()
+                        async with _phase("ssh wait"):
+                            await m.ensure_ssh()
                         print_line("SSH up")
 
-                        await _configure_apt_sources(m)
-                        await _configure_podman_registries(m)
+                        async with _phase("apt sources + update"):
+                            await _configure_apt_sources(m)
+                        async with _phase("podman registries"):
+                            await _configure_podman_registries(m)
 
                         if m.machine == "minimal":
                             # Fixes systemd-analyze validation error:
@@ -260,13 +310,15 @@ async def run_test(
                         for hook in ("_test", "_setup"):
                             hook_yml = f"{m.workdir.name}/{hook}.yml"
                             if Path(hook_yml).exists():
-                                await m.ansible_command(hook_yml)
+                                async with _phase(f"hook {hook}.yml"):
+                                    await m.ansible_command(hook_yml)
 
                         site_yml = f"{m.workdir.name}/site.yml"
                         if checkmode:
                             await _run_checkmode(site_yml, m, pass_args)
 
-                        await m.ansible_command(site_yml, *pass_args)
+                        async with _phase("main apply"):
+                            await m.ansible_command(site_yml, *pass_args)
 
                         if idempotence:
                             await _verify_idempotence(site_yml, m, pass_args)
@@ -274,7 +326,8 @@ async def run_test(
                         # Post-role assertions, if the role declares any.
                         verify_yml = f"{m.workdir.name}/_verify.yml"
                         if Path(verify_yml).exists():
-                            await m.ansible_command(verify_yml)
+                            async with _phase("verify.yml"):
+                                await m.ansible_command(verify_yml)
 
                     except CommandFailedException:
                         print_line("Command failed")
@@ -328,6 +381,15 @@ def main() -> int:
 
     parsed_args, pass_args = parse_args()
 
+    if parsed_args.benchmark:
+        global _BENCHMARK
+        _BENCHMARK = True
+        # profile_tasks tags every TASK header with elapsed time and prints a
+        # TASKS RECAP at end of each play; env var picks it up for every
+        # ansible-playbook subprocess without editing ansible.cfg.
+        import os
+        os.environ["ANSIBLE_CALLBACKS_ENABLED"] = "profile_tasks"
+
     role_main = Path(f"roles/{parsed_args.role}/tasks/main.yml")
     if not role_main.exists():
         print_line(
@@ -352,6 +414,7 @@ def main() -> int:
     rc = 0
     with tee_output(m.output_file):
         if parsed_args.build_image and parsed_args.machine == "container":
+            build_t0 = time.monotonic()
             try:
                 rc = build_image(parsed_args.ubuntu)
             except KeyboardInterrupt:
@@ -360,6 +423,8 @@ def main() -> int:
                 # the same exit code as a cancelled test run.
                 print_line("\nInterrupted during image build, shutting down...", error=True)
                 return 130
+            if _BENCHMARK:
+                _PHASE_TIMINGS.append(("image build", time.monotonic() - build_t0))
             if rc != 0:
                 print_line(
                     f"{parsed_args.role}.{parsed_args.machine} build failed",
@@ -401,6 +466,7 @@ def main() -> int:
                 upsert_memory_row(
                     parsed_args.role, parsed_args.ubuntu, parsed_args.machine, m.peak_rss_kb,
                 )
+            _print_phase_summary()
 
     # Drop per-run logs only on a clean pass when the caller (typically
     # testall.py) opted out of keeping them. We wait until tee_output has
