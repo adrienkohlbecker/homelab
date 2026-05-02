@@ -62,6 +62,7 @@ def _print_phase_summary() -> None:
     print_line(f"  {'TOTAL':<{width}}  {total:6.1f}s")
     print_line("=" * 60)
 
+
 def _positive_int(value: str) -> int:
     """argparse type for flags that must be a positive integer."""
     n = int(value)
@@ -170,9 +171,7 @@ async def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -
         result = await m.ansible_command(site_yml, *pass_args)
     changed = _count_changed_tasks(result.stdout)
     if changed > 0:
-        raise IdempotenceFailedException(
-            f"Role is not idempotent: {changed} task(s) reported changed on the second run"
-        )
+        raise IdempotenceFailedException(f"Role is not idempotent: {changed} task(s) reported changed on the second run")
 
 
 async def _run_checkmode(site_yml: str, m: Machine, pass_args: list[str]) -> None:
@@ -315,6 +314,7 @@ def main() -> int:
         # TASKS RECAP at end of each play; env var picks it up for every
         # ansible-playbook subprocess without editing ansible.cfg.
         import os
+
         os.environ["ANSIBLE_CALLBACKS_ENABLED"] = "profile_tasks"
 
     role_main = Path(f"roles/{parsed_args.role}/tasks/main.yml")
@@ -335,6 +335,7 @@ def main() -> int:
     # time without paying for a rebake.
     if parsed_args.commit:
         from machine import _bake_inputs_hash, existing_image_hash
+
         want = _bake_inputs_hash()
         have = asyncio.run(existing_image_hash(parsed_args.commit))
         if have == want:
@@ -379,13 +380,15 @@ def main() -> int:
                 return rc
 
         try:
-            asyncio.run(run_test(
-                m,
-                pass_args,
-                checkmode=parsed_args.checkmode,
-                idempotence=parsed_args.idempotence,
-                timeout=parsed_args.timeout,
-            ))
+            asyncio.run(
+                run_test(
+                    m,
+                    pass_args,
+                    checkmode=parsed_args.checkmode,
+                    idempotence=parsed_args.idempotence,
+                    timeout=parsed_args.timeout,
+                )
+            )
         except CommandFailedException as exc:
             print_line(str(exc), error=True)
             print_line(f"{parsed_args.role}.{parsed_args.machine} failed", error=True)
@@ -410,7 +413,10 @@ def main() -> int:
             # case we have nothing useful to log.
             if m.peak_rss_kb > 0:
                 upsert_memory_row(
-                    parsed_args.role, parsed_args.ubuntu, parsed_args.machine, m.peak_rss_kb,
+                    parsed_args.role,
+                    parsed_args.ubuntu,
+                    parsed_args.machine,
+                    m.peak_rss_kb,
                 )
             _print_phase_summary()
 

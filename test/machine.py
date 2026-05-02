@@ -183,9 +183,7 @@ class Machine:
 
     def __post_init__(self) -> None:
         if self.ubuntu_name not in UBUNTU_RELEASES:
-            raise ValueError(
-                f"Unknown Ubuntu release '{self.ubuntu_name}'; known: {sorted(UBUNTU_RELEASES)}"
-            )
+            raise ValueError(f"Unknown Ubuntu release '{self.ubuntu_name}'; known: {sorted(UBUNTU_RELEASES)}")
         OUT_DIR.mkdir(parents=True, exist_ok=True)
         prefix = f"{self.machine}.{self.ubuntu_name}.{self.role}"
         self.output_file = OUT_DIR / f"{prefix}.output.ansi"
@@ -427,7 +425,9 @@ class Machine:
 
         with self.journal_file.open("w") as handle:
             proc = await asyncio.create_subprocess_exec(
-                *cmd, stdout=handle, stderr=asyncio.subprocess.PIPE,
+                *cmd,
+                stdout=handle,
+                stderr=asyncio.subprocess.PIPE,
             )
             assert proc.stderr is not None
             # stderr only -- stdout is already going to the journal file. Read
@@ -494,11 +494,7 @@ class Machine:
         # the main transcript ends with the most likely diagnostic. Cancellation
         # is the user wanting out; idempotence checks fail at the role layer
         # and the boot log won't help.
-        if (
-            isinstance(exc_type, type)
-            and issubclass(exc_type, BaseException)
-            and not issubclass(exc_type, (asyncio.CancelledError, IdempotenceFailedException))
-        ):
+        if isinstance(exc_type, type) and issubclass(exc_type, BaseException) and not issubclass(exc_type, (asyncio.CancelledError, IdempotenceFailedException)):
             self.print_boot_tail()
 
     async def stop(self) -> None:
@@ -511,7 +507,9 @@ class Machine:
         try:
             if self.proc and self.proc.returncode is None:
                 await terminate_subprocess(
-                    self.proc, grace_seconds=5, initial_signal=signal.SIGINT,
+                    self.proc,
+                    grace_seconds=5,
+                    initial_signal=signal.SIGINT,
                 )
         finally:
             self.workdir.cleanup()
@@ -535,6 +533,7 @@ def _read_vm_hwm(pid: int) -> int:
 
 class QemuMachine(Machine):
     """Start disposable QEMU guests for role-level integration tests."""
+
     drives: list[str]
 
     def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int, upstream_mirrors: bool = False):
@@ -567,10 +566,7 @@ class QemuMachine(Machine):
 
         if self.machine == "minimal":
             if shutil.which("cloud-localds") is None:
-                raise RuntimeError(
-                    "cloud-localds not found in PATH — install cloud-image-utils "
-                    "(`apt install cloud-image-utils`) to use the minimal machine."
-                )
+                raise RuntimeError("cloud-localds not found in PATH — install cloud-image-utils " "(`apt install cloud-image-utils`) to use the minimal machine.")
             await run_command(
                 ["cloud-localds", f"{self.workdir.name}/seed.img", "test/minimal/user-data", "test/minimal/meta-data"],
             )
@@ -592,8 +588,7 @@ class QemuMachine(Machine):
             )
         await self._copy_efivars()
         self.drives = [
-            *(self._virtio_drive(f"{self.workdir.name}/packer-ubuntu-{idx}")
-              for idx in range(1, self._spec.disk_count + 1)),
+            *(self._virtio_drive(f"{self.workdir.name}/packer-ubuntu-{idx}") for idx in range(1, self._spec.disk_count + 1)),
             *self._uefi_drives(),
         ]
 
@@ -751,9 +746,7 @@ class QemuMachine(Machine):
             await sleep_tick()
 
         lsof_dump = "\n".join(lines) if lines else "<no output>"
-        raise RuntimeError(
-            f"Unable to determine SSH port from qemu lsof output (pid {pid}):\n{lsof_dump}"
-        )
+        raise RuntimeError(f"Unable to determine SSH port from qemu lsof output (pid {pid}):\n{lsof_dump}")
 
 
 def is_service_role(role: str) -> bool:
@@ -786,6 +779,7 @@ def _bake_inputs_hash() -> str:
     nothing relevant has changed.
     """
     import hashlib
+
     h = hashlib.sha256()
     for p in _BAKE_HASH_INPUTS:
         h.update(p.read_bytes())
@@ -795,9 +789,9 @@ def _bake_inputs_hash() -> str:
 async def existing_image_hash(tag: str) -> str | None:
     """Return the bake-hash label on *tag*, or None if missing/unlabeled."""
     res = await run_command(
-        ["podman", "image", "inspect", "--format",
-         "{{ index .Config.Labels \"" + BAKE_HASH_LABEL + "\" }}", tag],
-        check=False, quiet=True,
+        ["podman", "image", "inspect", "--format", '{{ index .Config.Labels "' + BAKE_HASH_LABEL + '" }}', tag],
+        check=False,
+        quiet=True,
     )
     if res.exitcode != 0:
         return None
@@ -897,9 +891,7 @@ class PodmanMachine(Machine):
                 bake_hash = _bake_inputs_hash()
                 await asyncio.shield(
                     run_command(
-                        ["podman", "commit",
-                         "--change", f"LABEL homelab.bake-hash={bake_hash}",
-                         cid, self.commit_image],
+                        ["podman", "commit", "--change", f"LABEL homelab.bake-hash={bake_hash}", cid, self.commit_image],
                         check=False,
                     )
                 )
