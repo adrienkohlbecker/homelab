@@ -3,5 +3,5 @@
 source /usr/local/lib/functions.sh
 
 for domain in $(virsh list --all --name); do
-  virsh dumpxml "$domain" > "/var/lib/libvirt/images/$domain.xml"
+  virsh dumpxml "$domain" >"/var/lib/libvirt/images/$domain.xml"
 done
