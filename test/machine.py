@@ -50,7 +50,18 @@ class QemuMachineSpec(NamedTuple):
     ssh_user: str
     ansible_args: list[str]
     inventory_host: str
-    disk_count: int  # number of packer-ubuntu-N overlays to stage; 0 for cloud-init seed disk
+    # Packer image directory under /mnt/qemu/<ubuntu_name>/. None means the
+    # variant uses an Ubuntu cloud image instead (minimal).
+    packer_image: str | None
+    # Sizes of additional empty qcow2 disks attached at boot beyond the OS
+    # disk, e.g. ["1G", "1G"] for pug. The OS disk is always vda; these get
+    # vdb, vdc, ... in attachment order. The disk_setup_script consumes them
+    # by position.
+    extra_disks: list[str]
+    # Path to a shell script under test/disks/ run via SSH+sudo after the VM
+    # is reachable, before any role/_setup playbook. Receives the extra disk
+    # devices as positional args. None means no setup needed.
+    disk_setup_script: str | None
 
 
 QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
@@ -58,28 +69,51 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         ssh_user="ubuntu",
         ansible_args=["-e", '{"qemu_test":true,"qemu_test_minimal":true}', "-e", "@host_vars/box-qemu-minimal.yml"],
         inventory_host="box",
-        disk_count=0,
+        packer_image=None,
+        extra_disks=[],
+        disk_setup_script=None,
     ),
     "box": QemuMachineSpec(
         ssh_user="vagrant",
         ansible_args=["-e", '{"qemu_test":true,"qemu_test_minimal":false}', "-e", "@host_vars/box-qemu.yml"],
         inventory_host="box",
-        disk_count=1,
+        packer_image="ubuntu-zfs",
+        extra_disks=[],
+        disk_setup_script=None,
     ),
     "lab": QemuMachineSpec(
         ssh_user="vagrant",
         ansible_args=["-e", '{"qemu_test":true,"qemu_test_minimal":false}', "-e", "@host_vars/lab-qemu.yml"],
         inventory_host="lab",
-        disk_count=9,
+        # ubuntu-zfs-lab brings the 3-disk mirror rpool baked in (matches
+        # the lab-class prod host). Extras below add the dozer/tank/mouse
+        # disks layered on top by test/disks/lab.sh.
+        packer_image="ubuntu-zfs-lab",
+        # Six disks: dozer mirror legs (1G ×2), tank/mouse shared hosts
+        # (1.5G ×2 — partitioned at test time), plus two whole-disk tank
+        # raidz2 vdevs (1G ×2). Sizes match the previous packer-baked layout.
+        extra_disks=["1G", "1G", "1.5G", "1.5G", "1G", "1G"],
+        disk_setup_script="test/disks/lab.sh",
     ),
     "pug": QemuMachineSpec(
         ssh_user="vagrant",
         ansible_args=["-e", '{"qemu_test":true,"qemu_test_minimal":false}', "-e", "@host_vars/pug-qemu.yml"],
         inventory_host="pug",
-        disk_count=3,
+        packer_image="ubuntu-zfs",
+        extra_disks=["1G", "1G"],
+        disk_setup_script="test/disks/pug.sh",
     ),
 }
 MACHINE_CHOICES: tuple[str, ...] = ("container", *QEMU_MACHINE_SPECS)
+
+# Number of qcow2 disks each packer image stages as part of the OS install.
+# ubuntu-zfs is single-rpool, ubuntu-zfs-lab is a 3-disk mirror rpool. The
+# prepare() code overlays packer-ubuntu-1..N for the OS, then attaches the
+# variant's extra_disks starting at vd[a+N].
+_PACKER_IMAGE_OS_DISKS: dict[str, int] = {
+    "ubuntu-zfs": 1,
+    "ubuntu-zfs-lab": 3,
+}
 
 SSH_WAIT_TIMEOUT = 120
 IDFILE_TIMEOUT = 60
@@ -234,6 +268,32 @@ class Machine:
         ]
         return [*base, shlex.join(cmd)] if cmd else base
 
+    def format_scp_cmd(self, local: str, remote: str) -> list[str]:
+        """Return an scp invocation pinned to this instance.
+
+        Uses the same `-o` flags as `format_ssh_cmd`; only the port flag
+        differs (scp uses `-P`, ssh uses `-p`).
+        """
+        return [
+            "scp",
+            "-i",
+            self.ssh_key,
+            "-P",
+            str(self.ssh_port),
+            "-o",
+            "StrictHostKeyChecking=no",
+            "-o",
+            "UserKnownHostsFile=/dev/null",
+            "-o",
+            "ConnectTimeout=10",
+            "-o",
+            "LogLevel=ERROR",
+            "-o",
+            "BatchMode=yes",
+            local,
+            f"{self.ssh_user}@{self.ssh_host}:{remote}",
+        ]
+
     def format_ansible_cmd(self, *cmd: str) -> list[str]:
         """Build an ansible-playbook command pinned to this machine's SSH details."""
         # Fact cache lives inside the per-run workdir, so the ~9 ansible-playbook
@@ -280,6 +340,15 @@ class Machine:
         """Execute ansible-playbook with machine-specific SSH overrides."""
 
         return await run_command(self.format_ansible_cmd(*cmd), check=check)
+
+    async def run_disk_setup(self) -> None:
+        """Run the variant's post-boot disk-setup script over SSH, if any.
+
+        Default no-op for machines that don't carry extra disks (container,
+        minimal, box). QemuMachine overrides for variants whose spec sets a
+        disk_setup_script (lab, pug).
+        """
+        return
 
     async def prepare(self) -> None:
         """Stage a temporary workdir with inventory snippets and optional role test hooks."""
@@ -535,6 +604,9 @@ class QemuMachine(Machine):
     """Start disposable QEMU guests for role-level integration tests."""
 
     drives: list[str]
+    # Device paths (e.g. ["/dev/vdb", "/dev/vdc"]) for disks attached beyond
+    # the OS disk. Populated by prepare() and consumed by run_disk_setup().
+    _extra_disk_devices: list[str]
 
     def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int, upstream_mirrors: bool = False):
         """QEMU-backed machine wrapper used by integration tests."""
@@ -543,6 +615,30 @@ class QemuMachine(Machine):
         except KeyError:
             raise AttributeError(f"Unknown machine: {machine}") from None
 
+        # Mirror PodmanMachine's per-platform image cache: /mnt/qemu on
+        # Linux dev hosts, TMPDIR on Mac (where /mnt/qemu doesn't exist).
+        system = platform.system()
+        if system == "Darwin":
+            imagedir = os.environ.get("TMPDIR", "/tmp")
+        elif system == "Linux":
+            imagedir = "/mnt/qemu"
+        else:
+            raise AttributeError(f"Unknown operating system: {system}")
+
+        # ZFS-rooted variants (box / lab / pug) consume packer-built qcow2s
+        # that only exist for x86_64 — ZBM has no official aarch64 prebuilts
+        # (see AGENTS.md "Test Environment Design") and we don't run a ZBM
+        # build pipeline. Fail fast on arm64 hosts rather than emit a
+        # confusing "missing qcow2" later in prepare().
+        host_arch = platform.machine()
+        if spec.packer_image is not None and host_arch not in ("x86_64", "amd64"):
+            raise RuntimeError(
+                f"Machine variant {machine!r} requires an x86_64 host (current: {host_arch}). "
+                "ZFS-rooted variants depend on packer-built images that exist only for x86_64; "
+                "ZBM ships no official aarch64 prebuilts. On arm Mac use --machine container or "
+                '--machine minimal (cloud image, arch-portable). See AGENTS.md "Test Environment Design".'
+            )
+
         self._spec = spec
         super().__init__(
             ssh_port=0,
@@ -550,7 +646,7 @@ class QemuMachine(Machine):
             ansible_args=spec.ansible_args,
             inventory_host=spec.inventory_host,
             idfile="pid",
-            imagedir="/mnt/qemu",
+            imagedir=imagedir,
             machine=machine,
             role=role,
             keep_vm=keep_vm,
@@ -559,10 +655,21 @@ class QemuMachine(Machine):
             upstream_mirrors=upstream_mirrors,
         )
 
+    @property
+    def host_arch(self) -> str:
+        """'x86_64' or 'aarch64' — used for qemu binary, cloud image suffix, etc."""
+        m = platform.machine()
+        if m in ("x86_64", "amd64"):
+            return "x86_64"
+        if m in ("aarch64", "arm64"):
+            return "aarch64"
+        raise RuntimeError(f"Unsupported host architecture: {m}")
+
     async def prepare(self) -> None:
         """Create overlay images and seed data required for the selected QEMU template."""
 
         await super().prepare()
+        self._extra_disk_devices = []
 
         if self.machine == "minimal":
             if shutil.which("cloud-localds") is None:
@@ -570,8 +677,9 @@ class QemuMachine(Machine):
             await run_command(
                 ["cloud-localds", f"{self.workdir.name}/seed.img", "test/minimal/user-data", "test/minimal/meta-data"],
             )
+            cloud_arch = "amd64" if self.host_arch == "x86_64" else "arm64"
             await self._create_overlay(
-                f"{self.imagedir}/ubuntu-{self.ubuntu_version}-minimal-cloudimg-amd64.img",
+                f"{self.imagedir}/ubuntu-{self.ubuntu_version}-minimal-cloudimg-{cloud_arch}.img",
                 f"{self.workdir.name}/disk.img",
                 size="20G",
             )
@@ -579,18 +687,57 @@ class QemuMachine(Machine):
                 self._virtio_drive(f"{self.workdir.name}/disk.img"),
                 f"file={self.workdir.name}/seed.img,if=virtio,format=raw",
             ]
+            # aarch64's `virt` machine boots only via UEFI; x86_64's q35 falls
+            # back to SeaBIOS off the same disk, so no flash is needed there.
+            if self.host_arch == "aarch64":
+                self.drives += await self._aarch64_uefi_drives()
             return
 
-        for idx in range(1, self._spec.disk_count + 1):
-            await self._create_overlay(
-                f"{self.imagedir}/{self.ubuntu_name}/ubuntu-{self.machine}/packer-ubuntu-{idx}",
-                f"{self.workdir.name}/packer-ubuntu-{idx}",
-            )
-        await self._copy_efivars()
+        # ZFS variants pick a packer image (ubuntu-zfs or ubuntu-zfs-lab),
+        # overlay its OS disks, and attach extra empty qcow2s on top for
+        # the per-variant disk-setup script to format. See AGENTS.md
+        # "Test Environment Design".
+        packer_image = self._spec.packer_image
+        assert packer_image is not None, f"non-minimal variant {self.machine!r} must declare packer_image"
+        image_dir = f"{self.imagedir}/{self.ubuntu_name}/{packer_image}"
+        os_disk_count = _PACKER_IMAGE_OS_DISKS[packer_image]
+
+        os_disk_paths: list[str] = []
+        for idx in range(1, os_disk_count + 1):
+            dest = f"{self.workdir.name}/packer-ubuntu-{idx}"
+            await self._create_overlay(f"{image_dir}/packer-ubuntu-{idx}", dest)
+            os_disk_paths.append(dest)
+
+        # Empty qcow2 disks for the variant's extra pools. test/disks/<variant>.sh
+        # partitions / zpool-creates them after the VM boots.
+        extra_paths: list[str] = []
+        for idx, size in enumerate(self._spec.extra_disks, start=os_disk_count + 1):
+            path = f"{self.workdir.name}/packer-ubuntu-{idx}"
+            await run_command(["qemu-img", "create", "-f", "qcow2", path, size])
+            extra_paths.append(path)
+
+        # OS disks take vda..vd[a+N-1]; extras attach right after, in spec order.
+        self._extra_disk_devices = [f"/dev/vd{chr(ord('a') + os_disk_count + i)}" for i in range(len(extra_paths))]
+
+        await self._copy_efivars_from(image_dir)
         self.drives = [
-            *(self._virtio_drive(f"{self.workdir.name}/packer-ubuntu-{idx}") for idx in range(1, self._spec.disk_count + 1)),
+            *(self._virtio_drive(path) for path in os_disk_paths),
+            *(self._virtio_drive(path) for path in extra_paths),
             *self._uefi_drives(),
         ]
+
+    async def run_disk_setup(self) -> None:
+        """Push test/disks/<variant>.sh to the VM and run it via sudo.
+
+        Receives the extra disk devices as positional args. The script is
+        idempotent (skips already-existing pools) so --keep re-runs work.
+        """
+        script_path = self._spec.disk_setup_script
+        if not script_path or not self._extra_disk_devices:
+            return
+        remote_path = "/tmp/disk_setup.sh"
+        await run_command(self.format_scp_cmd(script_path, remote_path))
+        await self.ssh_command("sudo", "bash", remote_path, *self._extra_disk_devices)
 
     async def _create_overlay(self, src: str, dest: str, size: str | None = None) -> None:
         """Create a qcow2 overlay pointing at *src* with optional resize."""
@@ -600,11 +747,11 @@ class QemuMachine(Machine):
             args.append(size)
         await run_command(args)
 
-    async def _copy_efivars(self) -> None:
-        """Copy EFI vars for UEFI boots into the working directory."""
+    async def _copy_efivars_from(self, image_dir: str) -> None:
+        """Copy EFI vars for UEFI boots from *image_dir* into the workdir."""
 
         await run_command(
-            ["cp", f"{self.imagedir}/{self.ubuntu_name}/ubuntu-{self.machine}/efivars.fd", f"{self.workdir.name}/efivars.fd"],
+            ["cp", f"{image_dir}/efivars.fd", f"{self.workdir.name}/efivars.fd"],
         )
 
     def _virtio_drive(self, path: str) -> str:
@@ -613,16 +760,58 @@ class QemuMachine(Machine):
         return f"file={path},if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
 
     def _uefi_drives(self) -> list[str]:
+        """OVMF flash for x86_64 ZFS variants. The packer build ships an
+        efivars.fd template alongside the qcow2 disks; we pflash both that
+        and OVMF_CODE.fd from the host. arm64 variants don't run this path
+        (gated to x86_64) — minimal-on-aarch64 uses _aarch64_uefi_drives.
+        """
         return [
             "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on",
             f"file={self.workdir.name}/efivars.fd,if=pflash,unit=1,format=raw",
         ]
 
+    async def _aarch64_uefi_drives(self) -> list[str]:
+        """UEFI pflash drives for the aarch64 minimal variant.
+
+        arm64 `virt` machines have no built-in firmware; without a flash
+        pair the guest never boots. The CODE blob comes from the host
+        (Homebrew QEMU on Mac, qemu-efi-aarch64 on Debian/Ubuntu); the VARS
+        blob is a fresh 64 MiB pflash file per run.
+        """
+        candidates = [
+            # Homebrew QEMU on macOS:
+            "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
+            "/usr/local/share/qemu/edk2-aarch64-code.fd",
+            # Debian / Ubuntu (qemu-efi-aarch64 package):
+            "/usr/share/AAVMF/AAVMF_CODE.fd",
+            "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
+        ]
+        code_path = next((p for p in candidates if Path(p).exists()), None)
+        if code_path is None:
+            raise RuntimeError(f"No aarch64 UEFI firmware found in {candidates}. " "Install via `brew install qemu` (Mac) or `apt install qemu-efi-aarch64` (Linux).")
+        vars_path = f"{self.workdir.name}/AAVMF_VARS.fd"
+        await run_command(["truncate", "-s", "64M", vars_path])
+        return [
+            f"file={code_path},if=pflash,unit=0,format=raw,readonly=on",
+            f"file={vars_path},if=pflash,unit=1,format=raw",
+        ]
+
     def _boot_command(self) -> list[str]:
-        """Assemble qemu-system-x86_64 command line for the prepared disks."""
+        """Assemble the qemu command line for the prepared disks.
+
+        Arch- and OS-aware: qemu-system-{x86_64,aarch64} per host arch,
+        accel=kvm on Linux / hvf on Mac, machine type q35 (x86_64) or virt
+        (aarch64). Display hardware (virtio-gpu-pci + qemu-xhci) works
+        identically on both arches.
+        """
+        accel = "hvf" if platform.system() == "Darwin" else "kvm"
+        machine_type = "q35" if self.host_arch == "x86_64" else "virt"
 
         if self.keep_vm:
-            display_args = ["-display", "vnc=:0,to=99", "-vga", "std", "-usb", "-device", "usb-tablet", "-k", "fr"]
+            # virtio-gpu-pci + qemu-xhci are PCI virtio devices supported on
+            # both x86_64 q35 and aarch64 virt; modern Ubuntu kernels carry
+            # virtio-gpu in-tree, so we don't need legacy `-vga std` / `-usb`.
+            display_args = ["-display", "vnc=:0,to=99", "-device", "virtio-gpu-pci", "-device", "qemu-xhci", "-device", "usb-tablet", "-k", "fr"]
         else:
             display_args = ["-display", "none"]
 
@@ -630,7 +819,7 @@ class QemuMachine(Machine):
             "timeout",
             "--kill-after=10s",
             str(self.wrapper_timeout),
-            "qemu-system-x86_64",
+            f"qemu-system-{self.host_arch}",
             *[arg for drive in self.drives for arg in ("--drive", drive)],
             "-netdev",
             f"user,id=user.0,hostfwd=tcp:{self.ssh_host}:0-:22",
@@ -639,7 +828,7 @@ class QemuMachine(Machine):
             "-device",
             "virtio-rng-pci,rng=rng0",
             "-machine",
-            "type=q35,accel=kvm",
+            f"type={machine_type},accel={accel}",
             "-smp",
             "8,sockets=8",
             "-name",

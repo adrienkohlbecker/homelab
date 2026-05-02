@@ -15,6 +15,16 @@ variable "output_directory" {
   type = string
 }
 
+variable "arch" {
+  type        = string
+  default     = "x86_64"
+  description = "Host arch for the build (x86_64 or aarch64). mise.toml resolves this from `uname -m`."
+  validation {
+    condition     = contains(["x86_64", "aarch64"], var.arch)
+    error_message = "Arch must be one of: x86_64, aarch64."
+  }
+}
+
 locals {
   ubuntu_versions = {
     jammy = { release = "22.04", patch = "22.04.5" }
@@ -22,23 +32,25 @@ locals {
   }
   ubuntu_release = local.ubuntu_versions[var.ubuntu_name].release
   ubuntu_patch   = local.ubuntu_versions[var.ubuntu_name].patch
-}
 
-# arm64 alternative:
-#   qemu_binary  = "/usr/bin/qemu-system-aarch64"
-#   machine_type = "virt"
-#   iso_checksum = "file:https://cdimage.ubuntu.com/releases/${local.ubuntu_patch}/release/SHA256SUMS"
-#   iso_url      = "https://cdimage.ubuntu.com/releases/${local.ubuntu_patch}/release/ubuntu-${local.ubuntu_patch}-live-server-arm64.iso"
-
-locals {
-  qemu_binary  = "/usr/bin/qemu-system-x86_64"
-  machine_type = "q35"
-  iso_checksum = "file:https://releases.ubuntu.com/${local.ubuntu_release}/SHA256SUMS"
-  iso_url      = "https://releases.ubuntu.com/${local.ubuntu_release}/ubuntu-${local.ubuntu_patch}-live-server-amd64.iso"
+  # Search PATH for qemu-system-{arch}; lets the same template work on
+  # Linux (`/usr/bin/qemu-system-x86_64`) and Mac (`/opt/homebrew/bin/...`)
+  # without per-OS path hacks.
+  qemu_binary  = "qemu-system-${var.arch}"
+  machine_type = var.arch == "x86_64" ? "q35" : "virt"
+  # x86_64 host is Linux + KVM; aarch64 host is arm Mac + HVF in this stack.
+  # If arm64 Linux ever joins the mix, swap in an explicit OS knob here.
+  accelerator = var.arch == "x86_64" ? "kvm" : "hvf"
+  iso_arch    = var.arch == "x86_64" ? "amd64" : "arm64"
+  # x86_64 server ISOs live on releases.ubuntu.com keyed by codename;
+  # arm64 server ISOs live on cdimage.ubuntu.com keyed by patch version.
+  iso_base_url = var.arch == "x86_64" ? "https://releases.ubuntu.com/${local.ubuntu_release}" : "https://cdimage.ubuntu.com/releases/${local.ubuntu_patch}/release"
+  iso_checksum = "file:${local.iso_base_url}/SHA256SUMS"
+  iso_url      = "${local.iso_base_url}/ubuntu-${local.ubuntu_patch}-live-server-${local.iso_arch}.iso"
 }
 
 source "qemu" "ubuntu" {
-  accelerator          = "kvm"
+  accelerator          = "${local.accelerator}"
   boot_wait            = "10s"
   cpu_model            = "host"
   sockets              = 8
@@ -105,8 +117,11 @@ build {
 
 build {
 
+  # ubuntu-zfs: single-disk rpool. Consumed by the box and pug test
+  # variants. Per-variant differences (extra pools like apoc) are created
+  # at test boot via test/disks/<variant>.sh, not baked here.
   source "qemu.ubuntu" {
-    name                 = "ubuntu-box"
+    name                 = "ubuntu-zfs"
     disk_additional_size = ["40G"]
     disk_image           = true
     iso_checksum         = "file:${var.output_directory}/ubuntu-base/sha256sum"
@@ -116,27 +131,22 @@ build {
     vnc_port_max         = 5901
     vnc_port_min         = 5901
   }
+
+  # ubuntu-zfs-lab: mdadm-EFI + mdadm-swap + 3-disk mirror rpool. Consumed
+  # by the lab test variant; matches the lab-class prod host shape. Also
+  # serves as the multi-disk regression for provision.sh / chroot.sh and
+  # as a copy-paste reference for provisioning new lab-class prod hosts.
+  # See AGENTS.md "Test Environment Design".
   source "qemu.ubuntu" {
-    name                 = "ubuntu-lab"
+    name                 = "ubuntu-zfs-lab"
+    disk_additional_size = ["40G", "40G", "40G"]
     disk_image           = true
-    disk_additional_size = ["40G", "40G", "40G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
     iso_checksum         = "file:${var.output_directory}/ubuntu-base/sha256sum"
     iso_url              = "${var.output_directory}/ubuntu-base/packer-ubuntu"
     host_port_max        = 2224
     host_port_min        = 2224
     vnc_port_max         = 5902
     vnc_port_min         = 5902
-  }
-  source "qemu.ubuntu" {
-    name                 = "ubuntu-pug"
-    disk_image           = true
-    disk_additional_size = ["40G", "1G", "1G"]
-    iso_checksum         = "file:${var.output_directory}/ubuntu-base/sha256sum"
-    iso_url              = "${var.output_directory}/ubuntu-base/packer-ubuntu"
-    host_port_max        = 2225
-    host_port_min        = 2225
-    vnc_port_max         = 5903
-    vnc_port_min         = 5903
   }
 
   provisioner "file" {
@@ -148,16 +158,6 @@ build {
     inline            = ["chmod +x /home/vagrant/*.sh", "sudo -HE /home/vagrant/provision.sh"]
     expect_disconnect = true
     pause_after       = "30s"
-    env = {
-      "SOURCE_NAME" = "${source.name}"
-      "UBUNTU_NAME" = "${var.ubuntu_name}"
-    }
-  }
-
-  provisioner "shell" {
-    execute_command = "{{ .Vars }} sudo -HE bash '{{ .Path }}'"
-    scripts         = ["${path.root}/scripts/packer_extras.sh"]
-    pause_after     = "2s"
     env = {
       "SOURCE_NAME" = "${source.name}"
       "UBUNTU_NAME" = "${var.ubuntu_name}"

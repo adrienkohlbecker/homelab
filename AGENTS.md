@@ -11,7 +11,7 @@
 - Configure everything: `ansible-playbook site.yml --limit prod` (`ansible.cfg` already points at `hosts.ini`; set `--tags` to narrow scope).
 - Focus on one service or host: `ansible-playbook wireguard.yml -l lab --tags wireguard`.
 - Manage DNS: `mise run tf:init`, `mise run tf:plan`, then `mise run tf:apply` — each `cd`s into `terraform/` and forwards extra args (use `--` for flags mise might intercept, e.g. `mise run tf:plan -- -refresh=false`).
-- Refresh the integration image when the base OS changes: `mise run packer:build base` (or `box`/`lab`/`pug`); `--ubuntu noble` targets a different release. `mise run packer:all` builds base then box/lab/pug in parallel.
+- Refresh the integration image when the base OS changes: `mise run packer:build base` (or `zfs`/`zfs-lab`); `--ubuntu noble` targets a different release. `mise run packer:all` builds base then `zfs` + `zfs-lab` in parallel. `ubuntu-zfs` is consumed by `box`/`pug` test variants; `ubuntu-zfs-lab` (3-disk mirror rpool) is consumed by the `lab` test variant and matches the lab-class prod host shape. See "Test Environment Design" below.
 - Lint everything: `mise run lint` runs ansible-lint, ansible syntax-check, terraform/packer fmt -check, black --check, yamllint, and shellcheck in parallel; `mise run fmt` applies fixes (ansible-lint --fix, terraform/packer fmt, black, and `mise fmt` for `mise.toml` itself).
 
 ## Coding Style & Naming Conventions
@@ -43,8 +43,22 @@ The harness lives in `test/` (Python, asyncio-based; the previous `*.sh` shims a
 - `test/testrole.py <role>` boots a Podman container by default and applies the role end-to-end. Pass `--machine {minimal,box,lab,pug}` to use a QEMU VM instead, `--ubuntu noble` to target a different release codename, `--keep` to leave the machine running for SSH debugging, and `--timeout SECONDS` to bound the run (default 30 min). The default flow runs check-mode, applies the role, runs it a second time to verify idempotence, then runs `_verify.yml` if present. Disable phases with `--no-checkmode` or `--no-idempotence` for tight dev loops; `--benchmark` adds harness phase timings + ansible's `profile_tasks` callback when investigating slowness. Output is colorized and written to `test/out/<machine>.<role>.ansi`; on failure the systemd journal is collected and the last 50 lines are tailed to stdout.
 - `test/testall.py` fans out role × machine combinations across N concurrent workers (`--jobs N`, default 5). It accepts the same `--ubuntu`, `--checkmode`, `--idempotence` flags and forwards them. `--only-failed` rereads `test/out.log` and reruns just the failing rows. The joblog is tab-separated (`Role\tMachine\tRuntime\tExitval`) with the previous run preserved at `test/out.log.prev`.
 - Exit codes are meaningful: `0` success, `1` converge failure, `124` per-test timeout, `125` idempotence failure, `130` user-cancelled. The joblog records the integer so you can sort/filter by failure mode.
-- Keep the `homelab_net` Podman network and the `homelab:<release>` container image (and `packer-ubuntu-N` qcow2 overlays for the QEMU profiles) available locally, or rebuild them with the Packer command above. The QEMU profiles correspond to disk topologies: `minimal` (single cloud-init disk), `box` (1 disk), `pug` (3 disks), `lab` (9 disks).
+- Keep the `homelab_net` Podman network and the `homelab:<release>` container image available locally, plus the `ubuntu-zfs` / `ubuntu-zfs-lab` qcow2 trees under `/mnt/qemu/<codename>/` for the QEMU profiles. Rebuild any of them with the Packer commands above. Profiles correspond to host roles: `minimal` (vanilla cloud image, arch-portable), `box` (single-disk ZFS rpool), `pug` (single rpool + 2 disks formatted into `apoc` by `test/disks/pug.sh` at boot), `lab` (3-disk mirror rpool + 6 disks formatted into `dozer`/`tank`/`mouse` by `test/disks/lab.sh` at boot). On arm Mac only `container` and `minimal` are supported — see "Test Environment Design" below for why.
 - Include `ansible-playbook ... --check` and Terraform `plan` snippets in reviews so idempotence and drift are obvious.
+
+### Test Environment Design
+
+The harness has five variants — `container`, `minimal`, `box`, `lab`, `pug` — chosen by deliberately collapsing axes that don't vary in this stack:
+
+- **Bootloader / EFI**: ZFSBootMenu via rEFInd, EFI-booted, on every prod host. `chroot.sh` installs `linux-generic` with `--no-install-recommends` to skip grub2 and registers ZBM via `efibootmgr`. No GRUB anywhere — don't add it as a test variant.
+- **Filesystem**: ZFS-on-root via debootstrap for the prod-shaped variants. `minimal` is ext4 only because Ubuntu cloud images ship that way — it's a "stranger baseline" that catches role assumptions about ZFS / vagrant / packer-baked state, not a config under test. No prod host runs ext4.
+- **Architecture**: x86_64 on Linux dev hosts (KVM); arm64 supported on Mac (HVF) for `container` and `minimal` only. ZBM has no official aarch64 prebuilts (v3.0.1 is x86_64-only; v3.1.0+ supports aarch64 only via build-from-source) and we don't run a ZBM build pipeline, so the ZFS-rooted variants (`box`/`lab`/`pug`) are gated on `platform.machine() == "x86_64"`. Reconsider only if arm64 prod hosts arrive.
+- **Disk topology**: the only axis that genuinely varies between VM variants. `box` = 1 extra disk, `pug` = 3, `lab` = 9. Extra-pool layouts (`apoc`, `dozer`, `tank`, `mouse`) live in `test/disks/<variant>.sh` and run after the VM boots, not at packer time, so editing them doesn't trigger an image rebuild.
+
+Two packer images, both first-class:
+
+- `ubuntu-zfs` — single-disk rpool. Consumed by the `box` and `pug` test variants.
+- `ubuntu-zfs-lab` — mdadm-EFI + mdadm-swap + 3-disk mirror rpool. Consumed by the `lab` test variant; matches the lab-class prod host shape. Doubles as the multi-disk regression for `chroot.sh` / `provision.sh` (both images must build clean on every `mise run packer:all`) and as a copy-paste reference for provisioning new lab-class hosts.
 
 ## Commit & Pull Request Guidelines
 History favors short, imperative subjects such as “Fix dnscrypt” or “Add profilarr”; prefix with a role when it helps clarity (`wireguard: rotate peers`). Each PR should summarize the motivation, list impacted hosts or roles, and link related issues. Mention which commands were run (`test/testrole.py`, `test/testall.py`, `terraform plan`, screenshots when relevant) and flag inventory, vault, or DNS updates so reviewers can re-run `vault.sh`.
