@@ -96,3 +96,23 @@ run = "packer fmt -recursive packer"
 [tasks."fmt:python"]
 description = "Format Python files (black)"
 run = "black ."
+
+[tasks."tf:init"]
+description = "terraform init (forwards args)"
+dir = "{{config_root}}/terraform"
+run = 'terraform init "$@"'
+
+[tasks."tf:plan"]
+description = "terraform plan (forwards args)"
+dir = "{{config_root}}/terraform"
+run = 'terraform plan "$@"'
+
+[tasks."tf:apply"]
+description = "terraform apply (forwards args)"
+dir = "{{config_root}}/terraform"
+run = 'terraform apply "$@"'
+
+[tasks."tf:validate"]
+description = "terraform validate (forwards args)"
+dir = "{{config_root}}/terraform"
+run = 'terraform validate "$@"'
