@@ -65,7 +65,7 @@ flag "--arch <name>" help="Target arch: x86_64 or aarch64" default="x86_64"
 # releng/docker/Dockerfile with --platform set per-arch, tags as
 # localhost/zbm-builder:<version>-<arch>. Re-run when zbm_version changes.
 run = [
-  'set -euo pipefail',
+  'set -eu',
   'arch="${usage_arch}"',
   'case "$arch" in x86_64) platform=linux/amd64 ;; aarch64) platform=linux/arm64 ;; *) echo "unknown arch: $arch" >&2; exit 1 ;; esac',
   'src_dir="{{config_root}}/zbm-build/src"',
@@ -86,14 +86,14 @@ flag "--arch <name>" help="Target arch: x86_64 or aarch64" default="x86_64"
 # emits zfsbootmenu.EFI; we rename to a versioned, arch-tagged filename
 # suitable for upload to Gitea releases.
 run = [
-  'set -euo pipefail',
+  'set -eu',
   'arch="${usage_arch}"',
   'case "$arch" in x86_64) platform=linux/amd64 ;; aarch64) platform=linux/arm64 ;; *) echo "unknown arch: $arch" >&2; exit 1 ;; esac',
   'out_dir="{{config_root}}/zbm-build/${arch}"',
   'mkdir -p "$out_dir"',
   'rm -f "$out_dir"/*.EFI',
   'podman run --rm --platform="$platform" -v "{{config_root}}/zbm:/build:ro" -v "$out_dir:/output" "localhost/zbm-builder:{{vars.zbm_version}}-${arch}" -o /output -t {{vars.zbm_version}}',
-  'mv "$out_dir/zfsbootmenu.EFI" "$out_dir/zfsbootmenu-{{vars.zbm_version}}-${arch}.EFI"',
+  'mv "$out_dir/vmlinuz.EFI" "$out_dir/zfsbootmenu-{{vars.zbm_version}}-${arch}.EFI"',
   'sha256sum "$out_dir/zfsbootmenu-{{vars.zbm_version}}-${arch}.EFI"',
 ]
 
