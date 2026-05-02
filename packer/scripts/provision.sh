@@ -7,11 +7,11 @@ PASSWORD=vagrant
 SSH_KEY_PUB=$(cat /home/vagrant/.ssh/authorized_keys)
 
 case $SOURCE_NAME in
-ubuntu-pug | ubuntu-box)
+ubuntu-zfs)
   DISKS=(/dev/vdb)
   LAYOUT=""
   ;;
-ubuntu-lab)
+ubuntu-zfs-lab)
   DISKS=(/dev/vdb /dev/vdc /dev/vdd)
   LAYOUT="mirror"
   ;;
@@ -73,7 +73,7 @@ for disk in "${DISKS[@]}"; do
     sgdisk -n2:0:+500M -t2:FD00 "$disk" # Swap (FD00 = Linux RAID)
   fi
 
-  if [ "$SOURCE_NAME" = "ubuntu-lab" ]; then
+  if [ "$SOURCE_NAME" = "ubuntu-zfs-lab" ]; then
     sgdisk -n5:-2G:0 -t5:BF01 "$disk" # metadata vdev (BF01 = Solaris /usr & Mac ZFS, default when doing zpool create)
   fi
   sgdisk -n3:0:0 -t3:BF00 "$disk" # rpool (BF00 = Solaris root)

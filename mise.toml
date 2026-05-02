@@ -24,22 +24,22 @@ python.uv_venv_auto = "create|source"
 description = "Build a packer image variant"
 interactive = true
 usage = '''
-arg "<variant>" help="Variant: base, box, lab, or pug"
+arg "<variant>" help="Variant: base, zfs, or zfs-lab"
 flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
 '''
 run = [
   'rm -rf "/mnt/qemu/${usage_ubuntu}/ubuntu-${usage_variant}.new"',
-  'packer build {{vars.packer_flags}} -var ubuntu_name="${usage_ubuntu}" -var output_directory="/mnt/qemu/${usage_ubuntu}" -only=qemu.ubuntu-${usage_variant} packer',
+  'arch=$(uname -m | sed s/arm64/aarch64/); packer build {{vars.packer_flags}} -var ubuntu_name="${usage_ubuntu}" -var arch="$arch" -var output_directory="/mnt/qemu/${usage_ubuntu}" -only=qemu.ubuntu-${usage_variant} packer',
 ]
 
 [tasks."packer:all"]
-description = "Build ubuntu-base, then ubuntu-box/lab/pug in parallel"
+description = "Build ubuntu-base, then ubuntu-zfs and ubuntu-zfs-lab in parallel"
 usage = '''
 flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
 '''
 run = [
   'mise run packer:build base --ubuntu "${usage_ubuntu}"',
-  'mise run packer:build box --ubuntu "${usage_ubuntu}" ::: packer:build lab --ubuntu "${usage_ubuntu}" ::: packer:build pug --ubuntu "${usage_ubuntu}"',
+  'mise run packer:build zfs --ubuntu "${usage_ubuntu}" ::: packer:build zfs-lab --ubuntu "${usage_ubuntu}"',
 ]
 
 [tasks."packer:clean"]
