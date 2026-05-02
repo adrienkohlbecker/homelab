@@ -8,3 +8,4 @@ test/out.tsv.prev
 test/out/
 /.ansible-mitogen-strategy
 /packer/artifacts
+/zbm-build
