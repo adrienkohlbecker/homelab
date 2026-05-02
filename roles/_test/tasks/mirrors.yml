@@ -63,13 +63,13 @@
       location = "docker.io"
 
       [[registry.mirror]]
-      location = "{{ nexus_url | urlsplit('hostname') }}/docker.io"
+      location = "{{ nexus_url }}/docker.io"
 
       [[registry]]
       location = "ghcr.io"
 
       [[registry.mirror]]
-      location = "{{ nexus_url | urlsplit('hostname') }}/ghcr.io"
+      location = "{{ nexus_url }}/ghcr.io"
   become: true
 
 - name: _test | Remove podman registry mirrors when no proxy
