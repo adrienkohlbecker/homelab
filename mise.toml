@@ -14,6 +14,7 @@ python = "3.14"
 uv = "0.9.26"
 shellcheck = "0.11.0"
 shfmt = "3.13.1"
+tflint = "0.62.0"
 
 [settings]
 python.uv_venv_auto = "create|source"
@@ -53,6 +54,7 @@ depends = [
   "lint:ansible",
   "lint:syntax",
   "lint:terraform",
+  "lint:tflint",
   "lint:packer",
   "lint:python",
   "lint:ruff",
@@ -72,6 +74,11 @@ run = "ansible-playbook --syntax-check site.yml"
 [tasks."lint:terraform"]
 description = "Check Terraform formatting"
 run = "terraform fmt -check -recursive terraform"
+
+[tasks."lint:tflint"]
+description = "Run tflint static analysis"
+dir = "{{config_root}}/terraform"
+run = "tflint"
 
 [tasks."lint:packer"]
 description = "Check Packer formatting"
