@@ -142,11 +142,11 @@ else
   # Newer metadata versions would be written to the beginning of each partition, and the system firmware would fail to
   # recognize each component as a valid EFI system partition.
   mdadm --create /dev/md/efi --name=any:efi --metadata=1.0 --level="raid1" --raid-devices="${#DISKS[@]}" "${DISKS[@]/%/1}"
-  mdadm --detail --brief /dev/md/efi >> /etc/mdadm/mdadm.conf
+  mdadm --detail --brief /dev/md/efi >>/etc/mdadm/mdadm.conf
   EFI_DEVICE=/dev/md/efi
 
   mdadm --create /dev/md/swap --name=any:swap --metadata=1.2 --level="raid0" --raid-devices="${#DISKS[@]}" "${DISKS[@]/%/2}"
-  mdadm --detail --brief /dev/md/swap >> /etc/mdadm/mdadm.conf
+  mdadm --detail --brief /dev/md/swap >>/etc/mdadm/mdadm.conf
   SWAP_DEVICE=/dev/md/swap
 fi
 
