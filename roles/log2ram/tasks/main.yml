@@ -19,7 +19,7 @@
 
 - name: Add repository
   apt_repository:
-    repo: deb [signed-by=/etc/apt/trusted.gpg.d/log2ram.gpg] http://packages.azlux.fr/debian/ bookworm main
+    repo: deb [signed-by=/etc/apt/trusted.gpg.d/log2ram.gpg] {{ mirror_apt_azlux }}/ bookworm main
   become: true
   register: apt_repository_log2ram
   tags:

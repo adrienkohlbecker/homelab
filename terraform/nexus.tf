@@ -21,8 +21,6 @@ locals {
     "gitea-dl"          = "https://dl.gitea.com/"
     "gitea-com"         = "https://gitea.com/"
     "gitea-lab"         = "https://gitea.lab.fahm.fr/"
-    "netdata-installer" = "https://get.netdata.cloud/"
-    "datadog-keys"      = "https://keys.datadoghq.com/"
     "keyserver-ubuntu"  = "https://keyserver.ubuntu.com/"
   }
 

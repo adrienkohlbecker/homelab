@@ -1,0 +1,129 @@
+- name: _test | Configure apt sources (jammy)
+  when: ansible_distribution_release == "jammy"
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list
+    mode: "0644"
+    owner: root
+    group: root
+    content: |
+      deb {{ ubuntu_mirror }} {{ ansible_distribution_release }} main restricted universe multiverse
+      deb {{ ubuntu_mirror }} {{ ansible_distribution_release }}-updates main restricted universe multiverse
+      deb {{ ubuntu_mirror_security }} {{ ansible_distribution_release }}-security main restricted universe multiverse
+      deb {{ ubuntu_mirror }} {{ ansible_distribution_release }}-backports main restricted universe multiverse
+  become: true
+  register: _test_apt_sources_jammy
+
+- name: _test | Configure apt sources (deb822)
+  when: ansible_distribution_release != "jammy"
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/ubuntu.sources
+    mode: "0644"
+    owner: root
+    group: root
+    content: |
+      Types: deb
+      URIs: {{ ubuntu_mirror }}
+      Suites: {{ ansible_distribution_release }} {{ ansible_distribution_release }}-updates {{ ansible_distribution_release }}-backports
+      Components: main universe restricted multiverse
+      Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+      Types: deb
+      URIs: {{ ubuntu_mirror_security }}
+      Suites: {{ ansible_distribution_release }}-security
+      Components: main universe restricted multiverse
+      Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+  become: true
+  register: _test_apt_sources_deb822
+
+- name: _test | Refresh apt cache after rewriting sources
+  when: _test_apt_sources_jammy.changed or _test_apt_sources_deb822.changed
+  ansible.builtin.apt:
+    update_cache: true
+  become: true
+
+- name: _test | Ensure /etc/containers/registries.conf.d exists
+  when: nexus_url | length > 0
+  ansible.builtin.file:
+    path: /etc/containers/registries.conf.d
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: _test | Configure podman registry mirrors
+  when: nexus_url | length > 0
+  ansible.builtin.copy:
+    dest: /etc/containers/registries.conf.d/homelab-mirrors.conf
+    mode: "0644"
+    owner: root
+    group: root
+    content: |
+      [[registry]]
+      location = "docker.io"
+
+      [[registry.mirror]]
+      location = "{{ nexus_url | urlsplit('hostname') }}/docker.io"
+
+      [[registry]]
+      location = "ghcr.io"
+
+      [[registry.mirror]]
+      location = "{{ nexus_url | urlsplit('hostname') }}/ghcr.io"
+  become: true
+
+- name: _test | Remove podman registry mirrors when no proxy
+  when: not (nexus_url | length > 0)
+  ansible.builtin.file:
+    path: /etc/containers/registries.conf.d/homelab-mirrors.conf
+    state: absent
+  become: true
+
+- name: _test | Configure pip
+  when: nexus_url | length > 0
+  ansible.builtin.copy:
+    dest: /etc/pip.conf
+    mode: "0644"
+    owner: root
+    group: root
+    content: |
+      [global]
+      index-url = {{ mirror_pypi }}/simple/
+  become: true
+
+- name: _test | Remove pip config when no proxy
+  when: not (nexus_url | length > 0)
+  ansible.builtin.file:
+    path: /etc/pip.conf
+    state: absent
+  become: true
+
+- name: _test | Ensure /etc/uv exists
+  when: nexus_url | length > 0
+  ansible.builtin.file:
+    path: /etc/uv
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: _test | Configure uv
+  when: nexus_url | length > 0
+  ansible.builtin.copy:
+    dest: /etc/uv/uv.toml
+    mode: "0644"
+    owner: root
+    group: root
+    content: |
+      [[index]]
+      url = "{{ mirror_pypi }}/simple/"
+      default = true
+  become: true
+
+- name: _test | Remove uv config when no proxy
+  when: not (nexus_url | length > 0)
+  ansible.builtin.file:
+    path: /etc/uv/uv.toml
+    state: absent
+  become: true

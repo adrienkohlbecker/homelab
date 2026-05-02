@@ -12,7 +12,6 @@ import argparse
 import asyncio
 import contextlib
 import re
-import shlex
 import sys
 import time
 from pathlib import Path
@@ -25,8 +24,6 @@ from machine import (
     PodmanMachine,
     QemuMachine,
     UBUNTU_RELEASES,
-    podman_registry_mirrors,
-    ubuntu_mirrors,
     upsert_memory_row,
 )
 from utils import CommandFailedException, IdempotenceFailedException, cancel_on_signal, print_line, tee_output
@@ -158,64 +155,6 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     return args, pass_args
 
 
-async def _configure_apt_sources(m: Machine) -> None:
-    """Rewrite apt sources to use local mirrors and refresh package metadata."""
-    ubuntu_mirror, ubuntu_mirror_security = ubuntu_mirrors(upstream=m.upstream_mirrors)
-    name = m.ubuntu_name
-    if name == "jammy":
-        # Legacy one-line-per-source list at /etc/apt/sources.list.
-        sources = [
-            f"deb {ubuntu_mirror} {name} main restricted universe multiverse",
-            f"deb {ubuntu_mirror} {name}-updates main restricted universe multiverse",
-            f"deb {ubuntu_mirror_security} {name}-security main restricted universe multiverse",
-            f"deb {ubuntu_mirror} {name}-backports main restricted universe multiverse",
-        ]
-        path = "/etc/apt/sources.list"
-    else:
-        # Noble and beyond ship deb822-style sources.
-        sources = [
-            "Types: deb",
-            f"URIs: {ubuntu_mirror}",
-            f"Suites: {name} {name}-updates {name}-backports",
-            "Components: main universe restricted multiverse",
-            "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg",
-            "",
-            "Types: deb",
-            f"URIs: {ubuntu_mirror_security}",
-            f"Suites: {name}-security",
-            "Components: main universe restricted multiverse",
-            "Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg",
-        ]
-        path = "/etc/apt/sources.list.d/ubuntu.sources"
-
-    # Use one shell to avoid repeatedly opening the file. shlex.quote each
-    # line so any future $/`/\ in mirror URLs isn't expanded by bash.
-    printf_args = " ".join(shlex.quote(line) for line in sources)
-    await m.ssh_command("sudo", "bash", "-c", f"printf '%s\\n' {printf_args} > {path}")
-    await m.ssh_command("sudo", "apt-get", "update")
-
-
-async def _configure_podman_registries(m: Machine) -> None:
-    """Drop in a registries.conf snippet that routes podman pulls through the lab Nexus."""
-    mirrors = podman_registry_mirrors(upstream=m.upstream_mirrors)
-    if not mirrors:
-        return
-    lines: list[str] = []
-    for upstream, mirror in mirrors.items():
-        lines += [
-            "[[registry]]",
-            f'location = "{upstream}"',
-            "",
-            "[[registry.mirror]]",
-            f'location = "{mirror}"',
-            "",
-        ]
-    path = "/etc/containers/registries.conf.d/homelab-mirrors.conf"
-    printf_args = " ".join(shlex.quote(line) for line in lines)
-    await m.ssh_command("sudo", "mkdir", "-p", "/etc/containers/registries.conf.d")
-    await m.ssh_command("sudo", "bash", "-c", f"printf '%s\\n' {printf_args} > {path}")
-
-
 _RECAP_CHANGED_RE = re.compile(r"\bchanged=(\d+)")
 
 
@@ -278,10 +217,13 @@ async def run_test(
                             await m.ensure_ssh()
                         print_line("SSH up")
 
-                        async with _phase("apt sources + update"):
-                            await _configure_apt_sources(m)
-                        async with _phase("podman registries"):
-                            await _configure_podman_registries(m)
+                        # Mirror setup playbook: apt sources, podman registries,
+                        # /etc/pip.conf, /etc/uv/uv.toml. Routes everything
+                        # through the lab Nexus when nexus_url is set
+                        # (group_vars/test.yml), upstream when --upstream-mirrors
+                        # clears it.
+                        async with _phase("mirrors playbook"):
+                            await m.ansible_command(f"{m.workdir.name}/_mirrors.yml")
 
                         if m.machine == "minimal":
                             # Fixes systemd-analyze validation error:

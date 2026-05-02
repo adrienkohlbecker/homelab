@@ -1,8 +1,8 @@
 asdf_version: "0.19.0"
 asdf_release:
   x86_64:
-    url: "https://github.com/asdf-vm/asdf/releases/download/v{{ asdf_version }}/asdf-v{{ asdf_version }}-linux-amd64.tar.gz"
+    url: "{{ mirror_github }}/asdf-vm/asdf/releases/download/v{{ asdf_version }}/asdf-v{{ asdf_version }}-linux-amd64.tar.gz"
     md5: "259f0aed23083b841a5713397b75ae7c"
   aarch64:
-    url: "https://github.com/asdf-vm/asdf/releases/download/v{{ asdf_version }}/asdf-v{{ asdf_version }}-linux-arm64.tar.gz"
+    url: "{{ mirror_github }}/asdf-vm/asdf/releases/download/v{{ asdf_version }}/asdf-v{{ asdf_version }}-linux-arm64.tar.gz"
     md5: "8cd37cd45d3c12fadbb05dec54a4d75a"
