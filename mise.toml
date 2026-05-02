@@ -57,6 +57,7 @@ depends = [
   "lint:terraform",
   "lint:tflint",
   "lint:packer",
+  "lint:packer-validate",
   "lint:python",
   "lint:ruff",
   "lint:yaml",
@@ -85,6 +86,11 @@ run = "tflint"
 [tasks."lint:packer"]
 description = "Check Packer formatting"
 run = "packer fmt -check -recursive packer"
+
+[tasks."lint:packer-validate"]
+description = "Validate Packer template syntax"
+dir = "{{config_root}}/packer"
+run = "packer validate -syntax-only ."
 
 [tasks."lint:python"]
 description = "Check Python formatting (black)"
