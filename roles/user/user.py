@@ -53,6 +53,7 @@ _USER_PACKAGES = [
 @dataclass
 class Facts:
     """System facts gathered from the target host."""
+
     username: str
     needs_sudo: bool
     user_home: str
