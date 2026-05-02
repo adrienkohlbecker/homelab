@@ -9,7 +9,6 @@
     apt_unit_masked_unit: smartmontools.service
   tags:
     - smart
-    - _check_stage1
 
 - name: Divert smartd.conf
   community.general.dpkg_divert:

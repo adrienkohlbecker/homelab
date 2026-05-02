@@ -6,8 +6,6 @@
   become: true
   tags:
     - podman
-    - _check_stage1
-    - _check_stage2
 
 - name: Install podman
   import_role:
@@ -20,8 +18,6 @@
       - podman.socket
   tags:
     - podman
-    - _check_stage1
-    - _check_stage2
 
 - name: Install aardvark dns
   when: ansible_distribution_major_version == "24"
@@ -32,8 +28,6 @@
   become: true
   tags:
     - podman
-    - _check_stage1
-    - _check_stage2
 
 - name: Add podman-socket group
   group:
@@ -42,7 +36,6 @@
   become: true
   tags:
     - podman
-    - _check_stage2
 
 - name: Create override directory
   file:
@@ -54,7 +47,6 @@
   become: true
   tags:
     - podman
-    - _check_stage2
 
 - name: Install podman socket override
   import_role:
@@ -66,14 +58,12 @@
     systemd_unit_verify: podman.socket
   tags:
     - podman
-    - _check_stage2
 
 - name: Save return value
   set_fact:
     socket_systemd_unit: '{{ systemd_unit }}'
   tags:
     - podman
-    - _check_stage2
 
 - name: Create override directory
   file:
@@ -85,7 +75,6 @@
   become: true
   tags:
     - podman
-    - _check_stage2
 
 - name: Install postman service override
   import_role:
@@ -97,7 +86,6 @@
     systemd_unit_verify: podman.service
   tags:
     - podman
-    - _check_stage2
 
 - name: Divert configuration file
   community.general.dpkg_divert:
@@ -105,7 +93,6 @@
   become: true
   tags:
     - podman
-    - _check_stage2
 
 - name: Configure tmpfiles.d
   when: not (ansible_check_mode and apt_unit_masked.changed)
@@ -121,7 +108,6 @@
   become: true
   tags:
     - podman
-    - _check_stage2
 
 - name: Update containers permissions for netdata disk space monitoring
   file:
@@ -133,7 +119,6 @@
   become: true
   tags:
     - podman
-    - _check_stage2
 
 - name: Create mount point
   file:
@@ -145,7 +130,6 @@
   become: true
   tags:
     - podman
-    - _check_stage2
 
 - name: Create podman zvol
   when: zfs_root
@@ -158,7 +142,6 @@
   become: true
   tags:
     - podman
-    - _check_stage2
 
 - name: Create a ext4 filesystem on podman zvol
   when: not (ansible_check_mode and zfs_zvol_podman.changed) and zfs_root

@@ -7,8 +7,6 @@
   become: true
   tags:
     - keepalived_exporter
-    - _check_stage1
-    - _check_stage2
 
 - name: Install keepalived_exporter if needed
   when: '"0.7.0" not in keepalived_exporter_check.stderr and ansible_architecture == "x86_64"'
@@ -36,7 +34,6 @@
     systemd_unit_src: keepalived_exporter.service
   tags:
     - keepalived_exporter
-    - _check_stage2
 
 - name: Enable keepalived_exporter service
   import_role:

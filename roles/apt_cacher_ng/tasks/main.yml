@@ -9,7 +9,6 @@
   register: apt_cacher_ng_dir
   tags:
     - apt_cacher_ng
-    - _check_stage1
 
 - name: Install apt_cacher_ng service
   import_role:
@@ -19,7 +18,6 @@
     systemd_unit_src: apt_cacher_ng.service
   tags:
     - apt_cacher_ng
-    - _check_stage1
 
 - name: Enable apt_cacher_ng service
   import_role:

@@ -3,8 +3,6 @@
     name: "{{ service_user_name }}"
     system: true
   become: true
-  tags:
-    - _check_stage1
 
 - name: Add {{ service_user_name }} user
   user:
@@ -16,8 +14,6 @@
     home: /nonexistent
   become: true
   register: service_user_result
-  tags:
-    - _check_stage1
 
 # Capture the user record under a per-service fact so successive calls in
 # the same play don't clobber a shared register, and so callers can

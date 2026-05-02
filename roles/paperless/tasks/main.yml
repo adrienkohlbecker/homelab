@@ -5,8 +5,6 @@
   become: true
   tags:
     - paperless
-    - _check_stage1
-    - _check_stage2
 
 - name: Add paperless user
   user:
@@ -20,8 +18,6 @@
   register: paperless_user
   tags:
     - paperless
-    - _check_stage1
-    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and paperless_user.changed)
@@ -34,7 +30,6 @@
   become: true
   tags:
     - paperless
-    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and paperless_user.changed)
@@ -52,7 +47,6 @@
   become: true
   tags:
     - paperless
-    - _check_stage2
 
 - name: Create paperless secret key
   import_role:
@@ -63,7 +57,6 @@
     podman_secret_data: "{{ paperless_secret_key }}"
   tags:
     - paperless
-    - _check_stage2
 
 - name: Install paperless service
   import_role:
@@ -74,7 +67,6 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and paperless_user.changed) }}"
   tags:
     - paperless
-    - _check_stage2
 
 - name: Enable paperless service
   import_role:

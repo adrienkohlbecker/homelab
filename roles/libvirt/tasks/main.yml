@@ -13,8 +13,6 @@
   register: apt_install_libvirt
   tags:
     - libvirt
-    - _check_stage1
-    - _check_stage2
 
 - name: Install ansible dependencies to run libvirt module
   apt:
@@ -26,7 +24,6 @@
   register: apt_install_python_libvirt
   tags:
     - libvirt
-    - _check_stage2
 
 - name: Create zfs filesystem
   when: zfs_root

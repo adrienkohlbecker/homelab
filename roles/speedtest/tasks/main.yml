@@ -6,7 +6,6 @@
     systemd_unit_src: speedtest.service
   tags:
     - speedtest
-    - _check_stage1
 
 - name: Enable speedtest service
   import_role:

@@ -8,10 +8,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage1
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Add homeassistant group
   group:
@@ -20,10 +16,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage1
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Add homeassistant user
   user:
@@ -37,10 +29,6 @@
   register: homeassistant_user
   tags:
     - homeassistant
-    - _check_stage1
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Create configuration directory
   file:
@@ -52,9 +40,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Get influxdb org ID
   shell: set -euo pipefail; podman exec influxdb influx org list --name home --hide-headers | cut -f1
@@ -66,9 +51,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Create influxdb user
   check_mode: false
@@ -80,9 +62,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Create influxdb bucket
   check_mode: false
@@ -94,9 +73,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Create influxdb auth
   check_mode: false
@@ -108,9 +84,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Configure homeassistant
   template:
@@ -128,9 +101,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Create custom_templates directory
   file:
@@ -142,9 +112,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Configure homeassistant macros
   copy:
@@ -158,9 +125,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Configure homeassistant sensors
   copy:
@@ -174,9 +138,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Configure homeassistant templates
   copy:
@@ -190,9 +151,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Ensure files exist
   file:
@@ -212,9 +170,6 @@
     - scenes.yaml
   tags:
     - homeassistant
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Create blueprints directory
   file:
@@ -226,9 +181,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Create automation directory
   file:
@@ -240,9 +192,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Configure homeassistant blueprints
   copy:
@@ -256,9 +205,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Create www directory
   file:
@@ -271,9 +217,6 @@
   register: homeassistant_www_dir
   tags:
     - homeassistant
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Get stats of the thermal_comfort_icons.js file
   stat:
@@ -282,16 +225,12 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage3
-    - _check_stage4
 
 - name: Install thermal_comfort_icons if needed
   when: not thermal_comfort_icons_check.stat.exists or thermal_comfort_icons_check.stat.checksum != '7a37a9c4532308923adfc1378715cf09aaaa4d13'
   become: true
   tags:
     - homeassistant
-    - _check_stage3
-    - _check_stage4
   block:
     - name: Download thermal_comfort_icons
       check_mode: false
@@ -332,8 +271,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage3
-    - _check_stage4
 
 - name: Install unzip
   apt:
@@ -343,8 +280,6 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage3
-    - _check_stage4
 
 - name: Create thermal_comfort directory
   file:
@@ -357,8 +292,6 @@
   register: homeassistant_thermal_comfort_dir
   tags:
     - homeassistant
-    - _check_stage3
-    - _check_stage4
 
 - name: Get stats of the thermal_comfort custom_component
   stat:
@@ -367,14 +300,12 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage4
 
 - name: Install thermal_comfort if needed
   when: not thermal_comfort_check.stat.exists
   become: true
   tags:
     - homeassistant
-    - _check_stage4
   block:
     - name: Download thermal_comfort
       check_mode: false
@@ -414,8 +345,6 @@
   register: homeassistant_hacs_dir
   tags:
     - homeassistant
-    - _check_stage3
-    - _check_stage4
 
 - name: Get stats of the hacs custom_component
   stat:
@@ -424,14 +353,12 @@
   become: true
   tags:
     - homeassistant
-    - _check_stage4
 
 - name: Install hacs if needed
   when: not hacs_check.stat.exists
   become: true
   tags:
     - homeassistant
-    - _check_stage4
   block:
     - name: Download hacs
       check_mode: false
@@ -469,7 +396,6 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and homeassistant_user.changed) }}"
   tags:
     - homeassistant
-    - _check_stage4
 
 - name: Enable homeassistant service
   import_role:
