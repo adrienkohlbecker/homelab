@@ -6,8 +6,6 @@
   become: true
   tags:
     - custom_exporter
-    - _check_stage1
-    - _check_stage2
 
 - name: Create source directory
   file:
@@ -20,8 +18,6 @@
   register: custom_exporter_dir
   tags:
     - custom_exporter
-    - _check_stage1
-    - _check_stage2
 
 - name: Copy files
   copy:
@@ -39,7 +35,6 @@
   become: true
   tags:
     - custom_exporter
-    - _check_stage2
 
 - name: Compile source
   command: go build main.go
@@ -50,7 +45,6 @@
   become: true
   tags:
     - custom_exporter
-    - _check_stage2
 
 - name: Configure custom_exporter
   template:
@@ -64,7 +58,6 @@
   become: true
   tags:
     - custom_exporter
-    - _check_stage2
 
 - name: Install custom_exporter service
   import_role:
@@ -74,7 +67,6 @@
     systemd_unit_src: custom_exporter.service
   tags:
     - custom_exporter
-    - _check_stage2
 
 - name: Enable custom_exporter service
   import_role:

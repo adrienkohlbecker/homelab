@@ -5,7 +5,6 @@
   check_mode: false
   tags:
     - eaton_ipp
-    - _check_stage1
 
 - name: Install curl
   apt:
@@ -15,14 +14,12 @@
   become: true
   tags:
     - eaton_ipp
-    - _check_stage1
 
 - name: Install eaton ipp if needed
   when: ansible_architecture == "x86_64" and ("ipp-linux" not in ansible_facts.packages or ansible_facts.packages["ipp-linux"][0].version != "1.75.183")
   become: true
   tags:
     - eaton_ipp
-    - _check_stage1
   block:
 
     - name: Download ipp-linux deb

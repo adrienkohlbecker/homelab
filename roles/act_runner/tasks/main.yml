@@ -6,10 +6,6 @@
   become: true
   tags:
     - act_runner
-    - _check_stage1
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Add act_runner group
   group:
@@ -18,10 +14,6 @@
   become: true
   tags:
     - act_runner
-    - _check_stage1
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Add act_runner user
   user:
@@ -35,10 +27,6 @@
   register: act_runner_user
   tags:
     - act_runner
-    - _check_stage1
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Create configuration directory
   when: not (ansible_check_mode and act_runner_user.changed)
@@ -56,9 +44,6 @@
     - /mnt/scratch/act_runner/workdir
   tags:
     - act_runner
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Configure act_runner
   when: not (ansible_check_mode and act_runner_user.changed)
@@ -73,9 +58,6 @@
   become: true
   tags:
     - act_runner
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Check if act_runner is installed
   command: act_runner --version
@@ -86,9 +68,6 @@
   become: true
   tags:
     - act_runner
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Install act_runner if needed
   check_mode: false
@@ -103,9 +82,6 @@
   become: true
   tags:
     - act_runner
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Check if act_runner is registered
   stat:
@@ -114,9 +90,6 @@
   become: true
   tags:
     - act_runner
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Get registration token (test)
   when:
@@ -127,9 +100,6 @@
   become: true
   tags:
     - act_runner
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Compute registration parameters
   set_fact:
@@ -151,9 +121,6 @@
       {%- endif -%}
   tags:
     - act_runner
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Register runner
   when: not (ansible_check_mode and act_runner_user.changed) # TODO: registering fails
@@ -170,9 +137,6 @@
   register: act_runner_registration
   tags:
     - act_runner
-    - _check_stage2
-    - _check_stage3
-    - _check_stage4
 
 - name: Load JSON file
   when: not (ansible_check_mode and (act_runner_user.changed or act_runner_registration.changed))
@@ -182,8 +146,6 @@
   become: true
   tags:
     - act_runner
-    - _check_stage3
-    - _check_stage4
 
 - name: Configure act_runner
   when: not (ansible_check_mode and (act_runner_user.changed or act_runner_registration.changed))
@@ -201,8 +163,6 @@
   become: true
   tags:
     - act_runner
-    - _check_stage3
-    - _check_stage4
 
 - name: Turn on linger
   command: loginctl enable-linger act_runner
@@ -212,8 +172,6 @@
   register: act_runner_linger
   tags:
     - act_runner
-    - _check_stage3
-    - _check_stage4
 
 - name: Enable rootless podman socket
   when: not (ansible_check_mode and (act_runner_user.changed or act_runner_linger.changed))
@@ -225,7 +183,6 @@
   become_user: act_runner
   tags:
     - act_runner
-    - _check_stage4
 
 - name: Start rootless podman socket
   when: not (ansible_check_mode and (act_runner_user.changed or act_runner_linger.changed))
@@ -237,7 +194,6 @@
   become_user: act_runner
   tags:
     - act_runner
-    - _check_stage4
 
 - name: Install act_runner service
   import_role:
@@ -248,7 +204,6 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and act_runner_user.changed) }}"
   tags:
     - act_runner
-    - _check_stage4
 
 - name: Enable act_runner service
   import_role:

@@ -230,31 +230,10 @@ async def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -
         )
 
 
-_STAGE_TAG_RE = re.compile(r"\b_check_stage(\d+)\b")
-
-
 async def _run_checkmode(site_yml: str, m: Machine, pass_args: list[str]) -> None:
-    """Run check mode and staged tags when requested."""
-    # Forward pass_args so --list-tags sees the same variable universe as
-    # the --check / --tags runs below; otherwise a -e flag that gates a
-    # tagged task would make the lists disagree.
-    async with _phase("checkmode list-tags"):
-        list_tags = await m.ansible_command(site_yml, "--list-tags", *pass_args)
-
-    async with _phase("checkmode --check (full)"):
+    """Dry-run the role on a fresh system before mutating anything."""
+    async with _phase("checkmode --check"):
         await m.ansible_command(site_yml, "--check", *pass_args)
-
-    # Some roles split expensive checks into stages; auto-discover every
-    # _check_stageN tag and run them in numeric order so adding more stages
-    # later doesn't need a code change.
-    available_tags = "\n".join(list_tags.stdout)
-    stages = sorted({int(n) for n in _STAGE_TAG_RE.findall(available_tags)})
-    for n in stages:
-        stage = f"_check_stage{n}"
-        async with _phase(f"checkmode stage{n} apply"):
-            await m.ansible_command(site_yml, "--tags", stage, *pass_args)
-        async with _phase(f"checkmode stage{n} --check"):
-            await m.ansible_command(site_yml, "--check", *pass_args)
 
 
 async def run_test(

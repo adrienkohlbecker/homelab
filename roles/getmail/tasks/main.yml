@@ -8,7 +8,6 @@
   register: getmail_apt
   tags:
     - getmail
-    - _check_stage1
 
 - name: Create getmail config directory
   file:

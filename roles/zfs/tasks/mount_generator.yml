@@ -10,7 +10,6 @@
   tags:
     - zfs
     - zfs_mount_generator
-    - _check_stage2
 
 - name: mount_generator | Enable zfs-mount-generator for pool
   file:
@@ -26,7 +25,6 @@
   tags:
     - zfs
     - zfs_mount_generator
-    - _check_stage2
 
 - name: mount_generator | Configure symlink
   when: not (ansible_check_mode and zfs_apt.changed)
@@ -38,7 +36,6 @@
   tags:
     - zfs
     - zfs_mount_generator
-    - _check_stage2
 
 - name: Copy the mount cache script
   copy:
@@ -52,7 +49,6 @@
   become: true
   tags:
     - zfs
-    - _check_stage2
 
 - name: mount_generator | Generate mount cache
   when: not (ansible_check_mode and zfs_list_cache_directory.changed)

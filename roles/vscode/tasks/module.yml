@@ -9,7 +9,6 @@
   become: true
   tags:
     - vscode
-    - _check_stage2
 
 - name: Configure workspace
   when: not (ansible_check_mode and vscode_user.changed)
@@ -24,7 +23,6 @@
   become: true
   tags:
     - vscode
-    - _check_stage2
 
 - name: Install vscode service
   import_role:
@@ -36,7 +34,6 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and vscode_user.changed) }}"
   tags:
     - vscode
-    - _check_stage2
 
 - name: Enable vscode service
   import_role:

@@ -5,8 +5,6 @@
   become: true
   tags:
     - redis
-    - _check_stage1
-    - _check_stage2
 
 - name: Add redis user
   user:
@@ -20,8 +18,6 @@
   register: redis_user
   tags:
     - redis
-    - _check_stage1
-    - _check_stage2
 
 - name: Enable memory overcommit
   ansible.posix.sysctl:
@@ -30,7 +26,6 @@
   become: true
   tags:
     - redis
-    - _check_stage2
 
 - name: Create configuration directory
   when: not (ansible_check_mode and redis_user.changed)
@@ -43,7 +38,6 @@
   become: true
   tags:
     - redis
-    - _check_stage2
 
 - name: Install redis service
   import_role:
@@ -54,7 +48,6 @@
     systemd_unit_condition: "{{ not (ansible_check_mode and redis_user.changed) }}"
   tags:
     - redis
-    - _check_stage2
 
 - name: Enable redis service
   import_role:

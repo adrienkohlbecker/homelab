@@ -8,8 +8,6 @@
   become: true
   register: zbm_directory
   tags:
-    - _check_stage1
-    - _check_stage2
     - zfsbootmenu
 
 - name: Download zfsbootmenu
@@ -25,7 +23,6 @@
   register: zfsbootmenu_efi
   tags:
     - zfsbootmenu
-    - _check_stage2
 
 - name: Check if backup exists
   stat:
@@ -34,7 +31,6 @@
   become: true
   tags:
     - zfsbootmenu
-    - _check_stage2
 
 - name: Create backup the first time only
   when: not (ansible_check_mode and (zbm_directory.changed or zfsbootmenu_efi.changed)) and not zfsbootmenu_efi_backup.stat.exists and not qemu_test_minimal

@@ -8,7 +8,6 @@
   register: apt_install_wireguard
   tags:
     - wireguard
-    - _check_stage1
 
 - name: Create configuration directory
   file:

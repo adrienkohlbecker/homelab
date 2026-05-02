@@ -6,9 +6,6 @@
     cache_valid_time: 3600
   register: apt_keepalived_exporter
   become: true
-  tags:
-    - _check_stage1
-    - _check_stage2
 
 - name: install_arm64 | Download keepalived_exporter
   when: not (ansible_check_mode and apt_keepalived_exporter.changed)
@@ -19,8 +16,6 @@
     force: true
   register: git_keepalived_exporter
   become: true
-  tags:
-    - _check_stage2
 
 - name: install_arm64 | Compile source
   when: not (ansible_check_mode and (apt_keepalived_exporter.changed or git_keepalived_exporter.changed)) and git_keepalived_exporter.changed
@@ -29,5 +24,3 @@
     chdir: /opt/keepalived_exporter
   changed_when: true
   become: true
-  tags:
-    - _check_stage2

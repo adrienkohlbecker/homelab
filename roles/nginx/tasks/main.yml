@@ -7,8 +7,6 @@
     apt_unit_masked_unit: nginx.service
   tags:
     - nginx
-    - _check_stage1
-    - _check_stage2
 
 - name: Disable default site
   file:
@@ -18,7 +16,6 @@
   become: true
   tags:
     - nginx
-    - _check_stage2
 
 - name: Generate Diffie-Hellman parameters
   when: not (ansible_check_mode and apt_unit_masked.changed)
@@ -28,7 +25,6 @@
   become: true
   tags:
     - nginx
-    - _check_stage2
 
 - name: Configure nginx
   template:

@@ -6,7 +6,6 @@
   become: true
   tags:
     - hd_idle
-    - _check_stage1
 
 - name: Divert hd-idle configuration
   community.general.dpkg_divert:

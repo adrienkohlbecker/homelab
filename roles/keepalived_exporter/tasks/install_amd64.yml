@@ -8,8 +8,6 @@
     mode: "0644"
     owner: root
     group: root
-  tags:
-    - _check_stage2
 
 - name: install_amd64 | Install keepalived_exporter
   unarchive:
@@ -24,13 +22,9 @@
     extra_opts: [ --strip-components=1 ]
   become: true
   register: keepalived_exporter_installed
-  tags:
-    - _check_stage2
 
 - name: install_amd64 | Delete tar file
   file:
     path: /tmp/keepalived_exporter.tar.gz
     state: absent
   become: true
-  tags:
-    - _check_stage2
