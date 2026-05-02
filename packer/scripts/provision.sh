@@ -149,18 +149,44 @@ network:
       dhcp-identifier: mac
 EOF
 
-# Chroot into the new OS
-
+# Chroot into the new OS, inside a private mount namespace so every mount
+# made here (proc, sys, dev, dev/pts, plus /boot/efi mounted by chroot.sh)
+# is torn down by the kernel the instant unshare exits — no race with host
+# services (udisks2, multipathd, snapd's LXD glue) reaching into our mounts
+# and leaving stale references on /mnt.
+unshare --mount --propagation private bash <<NSEOF
+set -euxo pipefail
 mount -t proc proc /mnt/proc
 mount -t sysfs sys /mnt/sys
 mount -B /dev /mnt/dev
 mount -t devpts pts /mnt/dev/pts
-
 chroot /mnt env DISKS="${DISKS[*]}" LAYOUT="$LAYOUT" HOSTNAME="$HOSTNAME" USERNAME="$USERNAME" PASSWORD="$PASSWORD" SSH_KEY_PUB="$SSH_KEY_PUB" UBUNTU_NAME="$UBUNTU_NAME" UBUNTU_MIRROR="$UBUNTU_MIRROR" UBUNTU_MIRROR_SECURITY="$UBUNTU_MIRROR_SECURITY" bash </home/vagrant/chroot.sh
+NSEOF
 
-# unmount everything
-umount -n -R /mnt
+# Only the rpool root dataset itself remains mounted in the host namespace.
+zfs unmount "rpool/ROOT/$UBUNTU_NAME"
+sync
 
-# Export the zpool and reboot
-zpool export rpool
+# Export with backoff. The pool was created with autotrim=on, and the
+# heavy writes from chroot.sh (apt installs + ZBM copy) leave vdev_autotrim
+# batching TRIMs in the background; each in-flight TRIM bumps spa_refcount
+# enough to make even `zpool export -f` fail with "pool is busy". Retrying
+# rides out the transient quiet windows between TRIM batches.
+exported=
+for delay in 2 5 10 15 30; do
+  sleep "$delay"
+  if zpool export rpool; then
+    exported=1
+    break
+  fi
+  echo "rpool export attempt failed; waited ${delay}s, retrying" >&2
+done
+
+if [ -z "$exported" ]; then
+  # Don't block the build if even -f fails. systemd's shutdown sequence
+  # tears the pool down at reboot time, and ZFS recovers from unclean
+  # export on next import (uberblocks committed every TXG, ~5s).
+  zpool export -f rpool || echo "WARNING: rpool export failed; deferring to systemd shutdown" >&2
+  sync
+fi
 reboot
