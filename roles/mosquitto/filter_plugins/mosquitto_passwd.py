@@ -3,7 +3,7 @@ from ansible.errors import AnsibleError
 def mosquitto_passwd(passwd, salt=None):
     try:
         import passlib.hash
-    except Exception as e:
+    except Exception:
         raise AnsibleError('mosquitto_passlib custom filter requires the passlib pip package installed')
 
     SALT_SIZE = 12

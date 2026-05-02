@@ -54,6 +54,7 @@ depends = [
   "lint:terraform",
   "lint:packer",
   "lint:python",
+  "lint:ruff",
   "lint:yaml",
   "lint:shell",
 ]
@@ -77,6 +78,10 @@ run = "packer fmt -check -recursive packer"
 [tasks."lint:python"]
 description = "Check Python formatting (black)"
 run = "black --check ."
+
+[tasks."lint:ruff"]
+description = "Run ruff Python linter"
+run = "ruff check ."
 
 [tasks."lint:yaml"]
 description = "Run yamllint on tracked YAML files"
