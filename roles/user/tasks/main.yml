@@ -101,7 +101,7 @@
 
 - name: Get public key
   when: not (ansible_check_mode and apt_install_gpg.changed)
-  command: gpg --keyserver hkps://keyserver.ubuntu.com --recv-keys C248DE6357445D6302F9A62E74BFD03C20CC21AF
+  command: gpg --keyserver {{ mirror_keyserver_ubuntu }} --recv-keys C248DE6357445D6302F9A62E74BFD03C20CC21AF
   args:
     creates: "{{ ansible_user_dir }}/.gnupg/pubring.kbx"
   tags:
@@ -220,7 +220,7 @@
 
 - name: Add 1password repository
   apt_repository:
-    repo: deb [arch={{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }} signed-by=/etc/apt/trusted.gpg.d/1password.gpg] https://downloads.1password.com/linux/debian/{{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }} stable main
+    repo: deb [arch={{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }} signed-by=/etc/apt/trusted.gpg.d/1password.gpg] {{ mirror_apt_1password }} stable main
   become: true
   register: apt_repository_1password
   tags:

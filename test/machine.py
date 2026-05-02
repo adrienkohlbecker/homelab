@@ -155,50 +155,6 @@ async def ensure_podman_network() -> None:
         )
 
 
-def ubuntu_mirrors(upstream: bool = False) -> tuple[str, str]:
-    """Return archive and security mirrors for the current CPU architecture.
-
-    With upstream=True, return Ubuntu's public mirrors instead of the local
-    Nexus cache — useful when the lab mirror is unreachable.
-    """
-    arch = platform.machine().lower()
-    if arch in {"aarch64", "arm64"}:
-        if upstream:
-            return (
-                "http://ports.ubuntu.com/ubuntu-ports/",
-                "http://ports.ubuntu.com/ubuntu-ports/",
-            )
-        return (
-            "http://nexus.lab.fahm.fr/repository/ubuntu-ports/",
-            "http://nexus.lab.fahm.fr/repository/ubuntu-ports/",
-        )
-    if arch == "x86_64":
-        if upstream:
-            return (
-                "http://archive.ubuntu.com/ubuntu/",
-                "http://security.ubuntu.com/ubuntu/",
-            )
-        return (
-            "http://nexus.lab.fahm.fr/repository/ubuntu-archive/",
-            "http://nexus.lab.fahm.fr/repository/ubuntu-security/",
-        )
-    raise SystemExit("Unknown machine name")
-
-
-def podman_registry_mirrors(upstream: bool = False) -> dict[str, str]:
-    """Return upstream registry → pull-through mirror endpoint for podman.
-
-    With upstream=True, return an empty mapping so callers skip writing a
-    registries.conf drop-in and let podman pull straight from the upstream.
-    """
-    if upstream:
-        return {}
-    return {
-        "docker.io": "nexus.lab.fahm.fr/docker.io",
-        "ghcr.io": "nexus.lab.fahm.fr/ghcr.io",
-    }
-
-
 @dataclasses.dataclass
 class Machine:
     """Base runner that wraps a test target reachable over SSH and Ansible."""
@@ -282,7 +238,6 @@ class Machine:
 
     def format_ansible_cmd(self, *cmd: str) -> list[str]:
         """Build an ansible-playbook command pinned to this machine's SSH details."""
-        ubuntu_mirror, ubuntu_mirror_security = ubuntu_mirrors(upstream=self.upstream_mirrors)
         # Fact cache lives inside the per-run workdir, so the ~9 ansible-playbook
         # invocations in one test share gathered facts (saves ~0.9s per replay)
         # without leaking facts across runs that target a freshly-spawned host
@@ -305,14 +260,15 @@ class Machine:
             f"ansible_ssh_user={self.ssh_user}",
             "-e",
             f"ansible_ssh_private_key_file={self.ssh_key}",
-            "-e",
-            f"ubuntu_mirror={ubuntu_mirror}",
-            "-e",
-            f"ubuntu_mirror_security={ubuntu_mirror_security}",
             "--inventory",
             "test/inventory.ini",
             *self.ansible_args,
         ]
+        # --upstream-mirrors clears nexus_url so all mirror_* Jinja in
+        # group_vars/all.yml resolves to upstream URLs even though
+        # group_vars/test.yml sets nexus_url.
+        if self.upstream_mirrors:
+            parts += ["-e", "nexus_url="]
         if cmd:
             parts += cmd
         return parts
@@ -358,6 +314,20 @@ class Machine:
         tasks_from: {hook}
 """
                 )
+
+        # Mirror setup runs once at the start of every test (before role hooks)
+        # to point apt / podman / pip / uv at the lab Nexus when nexus_url is
+        # set. Replaces the SSH-driven apt + podman setup that lived in
+        # testrole.py.
+        Path(f"{self.workdir.name}/_mirrors.yml").write_text(
+            f"""
+- hosts: {self.inventory_host}
+  tasks:
+    - import_role:
+        name: _test
+        tasks_from: mirrors
+"""
+        )
 
     def _boot_command(self) -> list[str]:
         raise NotImplementedError
