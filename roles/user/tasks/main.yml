@@ -156,6 +156,7 @@
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0755"
+  register: directory_asdf
   tags:
     - user
 
@@ -171,7 +172,7 @@
     - user
 
 - name: Install asdf binary
-  when: asdf_version not in asdf_check.stdout
+  when: not (ansible_check_mode and directory_asdf.changed) and asdf_version not in asdf_check.stdout
   unarchive:
     src: /tmp/asdf-{{ asdf_version }}.tar.gz
     remote_src: true
