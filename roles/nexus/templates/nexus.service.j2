@@ -51,7 +51,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
     --stop-timeout 120 \
-    nexus.lab.fahm.fr/docker.io/sonatype/nexus3:3.91.1
+    docker.io/sonatype/nexus3:3.91.1
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
