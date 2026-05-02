@@ -23,6 +23,7 @@ locals {
     "gitea-lab"         = "https://gitea.lab.fahm.fr/"
     "netdata-installer" = "https://get.netdata.cloud/"
     "datadog-keys"      = "https://keys.datadoghq.com/"
+    "keyserver-ubuntu"  = "https://keyserver.ubuntu.com/"
   }
 
   docker_proxies = {
