@@ -9,6 +9,7 @@ NEXUS_PASSWORD="op://Lab/u2lem3tvichptsn37new73ftv4/password"
 
 [tools]
 terraform = "1.11.4"
+packer = "1.15.3"
 python = "3.14"
 
 [settings]
@@ -41,3 +42,27 @@ usage = '''
 flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
 '''
 run = 'rm -rf "/mnt/qemu/${usage_ubuntu}"/*.new'
+
+[tasks.lint]
+description = "Run all linters"
+depends = ["lint:ansible", "lint:syntax", "lint:terraform", "lint:packer", "lint:python"]
+
+[tasks."lint:ansible"]
+description = "Run ansible-lint"
+run = "ansible-lint"
+
+[tasks."lint:syntax"]
+description = "Check Ansible playbook syntax"
+run = "ansible-playbook --syntax-check site.yml"
+
+[tasks."lint:terraform"]
+description = "Check Terraform formatting"
+run = "terraform fmt -check -recursive terraform"
+
+[tasks."lint:packer"]
+description = "Check Packer formatting"
+run = "packer fmt -check -recursive packer"
+
+[tasks."lint:python"]
+description = "Check Python formatting (black)"
+run = "black --check ."
