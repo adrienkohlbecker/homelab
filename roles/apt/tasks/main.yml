@@ -1,3 +1,15 @@
+- name: Retry transient apt failures (Nexus restart, packet loss)
+  copy:
+    content: |
+      Acquire::Retries "3";
+    dest: /etc/apt/apt.conf.d/80-retries
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - apt
+
 - name: Ensure apt is using the correct mirror for ubuntu
   template:
     src: sources.list.j2

@@ -20,6 +20,10 @@ esac
 
 export DEBIAN_FRONTEND=noninteractive
 
+# Retry transient apt failures (Nexus restart, packet loss) on the
+# build VM. chroot.sh sets the same on the new install.
+echo 'Acquire::Retries "3";' >/etc/apt/apt.conf.d/80-retries
+
 # Install helpers
 
 apt-get update
