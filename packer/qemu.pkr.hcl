@@ -72,6 +72,14 @@ locals {
   # efibootmgr boot entry verbatim.
   refind_name = var.arch == "x86_64" ? "refind_x64.efi" : "refind_aa64.efi"
 
+  # Single source of truth for the vagrant authorized keys. Rendered
+  # into both the cloud-init seed (for the build VM) and chroot.sh's
+  # vagrant authorized_keys (for the shipped install).
+  vagrant_ssh_keys = [
+    "ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA6NF8iallvQVp22WDkTkyrtvp9eWW6A8YVr+kz4TjGYe7gHzIw+niNltGEFHzD8+v1I2YJ6oXevct1YeS0o9HZyN1Q9qgCgzUFtdOKLv6IedplqoPkcmF0aYet2PkEDo3MlTBckFXPITAMzF8dJSIFo9D8HfdOV0IAdx4O7PtixWKn5y2hMNG0zQPyUecp4pzC6kivAIhyfHilFR61RGL+GPXQ2MWZWFYbAGjyiYJnAmCP3NOTd0jMZEnDkbUvxhMmBYSdETk1rRgm+R4LOzFUGaHqHDLKLX+FIPKcF96hrucXzcWyLbIbEgE98OHlnVYCzRdK8jlqm8tehUc9c9WhQ== vagrant insecure public key",
+    "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key",
+  ]
+
   # Cloud image base URLs. Defaults to the Nexus proxy
   # (`terraform/nexus.tf` raw_proxies "ubuntu-cloud-images"); set
   # `-var upstream_mirrors=true` to bypass it.
@@ -125,6 +133,7 @@ source "qemu" "ubuntu" {
     "user-data" = templatefile("http/user-data.pkrtpl", {
       archive_url  = local.build_archive
       security_url = local.build_security
+      ssh_keys     = local.vagrant_ssh_keys
     })
     "meta-data" = ""
   }
@@ -207,6 +216,7 @@ build {
       "ZBM_VERSION"                     = "${var.zbm_version}"
       "ZBM_ARCH"                        = "${var.arch}"
       "REFIND_NAME"                     = "${local.refind_name}"
+      "SSH_KEY_PUB"                     = join("\n", local.vagrant_ssh_keys)
     }
   }
 
