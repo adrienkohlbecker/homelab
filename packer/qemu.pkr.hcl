@@ -84,9 +84,14 @@ locals {
   ]
   # x86_64 server ISOs live on releases.ubuntu.com keyed by codename;
   # arm64 server ISOs live on cdimage.ubuntu.com keyed by patch version.
-  iso_base_url = var.arch == "x86_64" ? "https://releases.ubuntu.com/${local.ubuntu_release}" : "https://cdimage.ubuntu.com/releases/${local.ubuntu_patch}/release"
-  iso_checksum = "file:${local.iso_base_url}/SHA256SUMS"
-  iso_url      = "${local.iso_base_url}/ubuntu-${local.ubuntu_patch}-live-server-${local.iso_arch}.iso"
+  # Both upstreams are proxied through Nexus raw repos (see
+  # terraform/nexus.tf raw_proxies); routes ISO + SHA256SUMS through the
+  # local cache. `-var upstream_mirrors=true` bypasses Nexus same as for apt.
+  upstream_iso_base = var.arch == "x86_64" ? "https://releases.ubuntu.com/${local.ubuntu_release}" : "https://cdimage.ubuntu.com/releases/${local.ubuntu_patch}/release"
+  nexus_iso_base    = var.arch == "x86_64" ? "https://nexus.lab.fahm.fr/repository/ubuntu-releases/${local.ubuntu_release}" : "https://nexus.lab.fahm.fr/repository/ubuntu-cdimage/releases/${local.ubuntu_patch}/release"
+  iso_base_url      = var.upstream_mirrors ? local.upstream_iso_base : local.nexus_iso_base
+  iso_checksum      = "file:${local.iso_base_url}/SHA256SUMS"
+  iso_url           = "${local.iso_base_url}/ubuntu-${local.ubuntu_patch}-live-server-${local.iso_arch}.iso"
 
   # Apt mirrors. By default the build pulls through the lab Nexus proxy
   # (`group_vars/all.yml` uses the same `repository/ubuntu-*` layout); set

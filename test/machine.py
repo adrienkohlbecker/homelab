@@ -650,8 +650,13 @@ def _qcow2_fingerprint(paths: list[Path]) -> str:
     return h.hexdigest()
 
 
-async def _ensure_extraction_cloudimg(imagedir: str, ubuntu_name: str, arch: str) -> Path:
-    """Download (once) the upstream Ubuntu cloud image used as the extraction vehicle."""
+async def _ensure_extraction_cloudimg(imagedir: str, ubuntu_name: str, arch: str, upstream_mirrors: bool) -> Path:
+    """Download (once) the upstream Ubuntu cloud image used as the extraction vehicle.
+
+    Pulls through the lab Nexus raw proxy (`ubuntu-cloud-images`) by default;
+    `upstream_mirrors=True` bypasses to cloud-images.ubuntu.com directly,
+    matching the same flag's semantics for ansible mirrors and packer apt.
+    """
     cloud_arch = "amd64" if arch == "x86_64" else "arm64"
     name = f"{ubuntu_name}-server-cloudimg-{cloud_arch}.img"
     cache = Path(imagedir) / "cloud-images"
@@ -660,7 +665,8 @@ async def _ensure_extraction_cloudimg(imagedir: str, ubuntu_name: str, arch: str
     if target.exists():
         return target
 
-    url = f"https://cloud-images.ubuntu.com/{ubuntu_name}/current/{name}"
+    base = "https://cloud-images.ubuntu.com" if upstream_mirrors else "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images"
+    url = f"{base}/{ubuntu_name}/current/{name}"
     tmp = target.with_suffix(target.suffix + ".tmp")
     print_line(f"Downloading {url}")
     await run_command(["curl", "-fL", "--retry", "3", "-o", str(tmp), url])
@@ -738,6 +744,7 @@ async def _extract_kernel_initrd(
     ubuntu_name: str,
     os_src_paths: list[str],
     arch: str,
+    upstream_mirrors: bool,
 ) -> tuple[Path, Path, str]:
     """Pull on-pool kernel + initrd out of a ZFS-rooted packer qcow2, cached by sha256.
 
@@ -776,7 +783,7 @@ async def _extract_kernel_initrd(
             return kernel, initrd, cmdline_path.read_text().strip()
 
         print_line(f"Extracting kernel/initrd from packer qcow2 (cache miss; sha256={fingerprint[:12]})")
-        cloud_image = await _ensure_extraction_cloudimg(imagedir, ubuntu_name, arch)
+        cloud_image = await _ensure_extraction_cloudimg(imagedir, ubuntu_name, arch, upstream_mirrors)
 
         with tempfile.TemporaryDirectory(dir=imagedir) as tmpdir:
             tmp = Path(tmpdir)
@@ -1058,6 +1065,7 @@ class QemuMachine(Machine):
                 ubuntu_name=self.ubuntu_name,
                 os_src_paths=os_src_paths,
                 arch=self.host_arch,
+                upstream_mirrors=self.upstream_mirrors,
             )
 
     async def run_disk_setup(self) -> None:
