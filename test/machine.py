@@ -916,7 +916,7 @@ class QemuMachine(Machine):
         """Backfill arch-appropriate console= entries on a direct-boot cmdline.
 
         cmdline arrives composed by extraction as
-        "root=zfs=<bootfs> <org.zfsbootmenu:commandline>" -- the ZBM
+        "root=zfs:<bootfs> <org.zfsbootmenu:commandline>" -- the ZBM
         property is the canonical place to set per-pool boot args, so we
         honour it verbatim. If it doesn't already wire up this arch's
         serial UART we backfill defaults so qemu's `-serial stdio`
@@ -930,6 +930,7 @@ class QemuMachine(Machine):
         kernel printk. Append tty0 first, then the arch-specific serial
         console.
         """
+
         extras: list[str] = []
         if self.keep_vm and "console=tty0" not in cmdline:
             # virtio-gpu-pci is attached when keep_vm=True, giving fbcon

@@ -8,7 +8,7 @@ versioned vmlinuz + initrd to a 9p host share. Subsequent runs cache-hit
 until the source qcow2 sha256 changes (i.e. packer rebuilt).
 
 The cache returns (kernel, initrd, full_cmdline) where full_cmdline is
-"root=zfs=<bootfs> <org.zfsbootmenu:commandline>" -- composed inside the
+"root=zfs:<bootfs> <org.zfsbootmenu:commandline>" -- composed inside the
 extraction VM by reading the ZBM property off rpool/ROOT, matching how
 ZBM itself builds the kexec cmdline. The caller backfills console=/
 earlycon= defaults if the property doesn't supply them.
