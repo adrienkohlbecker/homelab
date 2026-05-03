@@ -77,20 +77,22 @@ description = "Build the zbm-builder container image locally for the host arch"
 # XBPS_REPOS points at the Void Linux Frankfurt mirror because the
 # upstream-default Fastly CDN throttles to <100 kB/s from this ISP,
 # making the xbps-install layer painfully slow. Frankfurt is a Tier 1
-# mirror with EU-local capacity. Override per-invocation with a
-# different mirror by editing the --build-arg below if needed.
+# mirror with EU-local capacity. Per Void docs, glibc x86_64 lives at
+# `/current` and aarch64 (still glibc) at `/current/aarch64` — pick the
+# subpath that matches the host arch.
 run = '''
 set -eu
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 case "$arch" in
-  x86_64|aarch64) ;;
+  x86_64) xbps_repo=https://repo-de.voidlinux.org/current ;;
+  aarch64) xbps_repo=https://repo-de.voidlinux.org/current/aarch64 ;;
   *) echo "unsupported host arch: $arch" >&2; exit 1 ;;
 esac
 src_dir="{{config_root}}/zbm-build/src"
 rm -rf "$src_dir"
 mkdir -p "$(dirname "$src_dir")"
 git clone --depth 1 --branch v{{vars.zbm_version}} https://github.com/zbm-dev/zfsbootmenu.git "$src_dir"
-podman build --security-opt seccomp=unconfined --build-arg XBPS_REPOS=https://repo-de.voidlinux.org/current --tag "localhost/zbm-builder:v{{vars.zbm_version}}-${arch}" -f "{{config_root}}/zbm/Dockerfile" "$src_dir/releng/docker"
+podman build --security-opt seccomp=unconfined --build-arg "XBPS_REPOS=${xbps_repo}" --tag "localhost/zbm-builder:v{{vars.zbm_version}}-${arch}" -f "{{config_root}}/zbm/Dockerfile" "$src_dir/releng/docker"
 '''
 
 [tasks."zbm:build"]
