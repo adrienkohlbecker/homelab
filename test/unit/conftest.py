@@ -13,15 +13,13 @@ import machine
 def machine_factory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[Callable[..., machine.Machine]]:
-    """Build Machine instances against a sandboxed OUT_DIR and imagedir.
+    """Build base Machine instances against a sandboxed OUT_DIR.
 
     Each instance's TemporaryDirectory is cleaned up at fixture teardown so
     the dataclass's destructor warning doesn't fire.
     """
     out_dir = tmp_path / "out"
     monkeypatch.setattr(machine, "OUT_DIR", out_dir)
-    image_dir = tmp_path / "images"
-    image_dir.mkdir()
 
     instances: list[machine.Machine] = []
 
@@ -32,7 +30,6 @@ def machine_factory(
             ansible_args=["-e", '{"flag":true}'],
             inventory_host="box",
             idfile="pid",
-            imagedir=str(image_dir),
             machine="box",
             role="testrole",
             keep_vm=False,
@@ -51,12 +48,12 @@ def machine_factory(
 
 
 def _sandbox_imagedir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pin imagedir resolution to tmp_path/packer/artifacts.
+    """Pin host-platform discovery to Darwin so QemuMachine resolves
+    imagedir to tmp_path/packer/artifacts (writable, host-agnostic).
 
-    Both QemuMachine and PodmanMachine compute imagedir from platform.system
-    in __init__: Darwin -> Path("packer/artifacts").resolve() + mkdir;
-    Linux -> /mnt/qemu (must already exist). Forcing the Darwin branch and
-    chdir-ing to tmp_path keeps the tests host-agnostic and writable.
+    PodmanMachine no longer carries an imagedir; only the OUT_DIR + chdir
+    steps matter for it, but reusing this helper keeps the fixtures
+    symmetric.
     """
     monkeypatch.setattr(machine.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(machine, "OUT_DIR", tmp_path / "out")
@@ -97,7 +94,7 @@ def qemu_machine_factory(
 def podman_machine_factory(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> Iterator[Callable[..., machine.PodmanMachine]]:
-    """Build PodmanMachine instances with imagedir under our control."""
+    """Build PodmanMachine instances against a sandboxed OUT_DIR + cwd."""
     _sandbox_imagedir(tmp_path, monkeypatch)
     instances: list[machine.PodmanMachine] = []
 

@@ -2,8 +2,8 @@
 
 Each Machine subclass now validates its required binaries via shutil.which
 at the end of __post_init__. Failures raise RuntimeError with installation
-guidance. The base class also rejects an imagedir that doesn't exist so the
-caller gets a clearer message than tempfile's FileNotFoundError.
+guidance. QemuMachine on Linux additionally rejects a missing /mnt/qemu
+so the caller gets a clearer message than tempfile's FileNotFoundError.
 """
 
 from collections.abc import Callable
@@ -61,26 +61,22 @@ def test_podman_preflight_raises_when_podman_missing(
         podman_machine_factory()
 
 
-def test_imagedir_must_exist(
+def test_qemu_imagedir_missing_on_linux_raises(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Constructing Machine against a non-existent imagedir raises a clear error.
+    """QemuMachine on Linux fails fast when /mnt/qemu isn't mounted.
 
-    The Mac branch in subclass __init__ mkdir's packer/artifacts; the Linux
-    branch just hardcodes /mnt/qemu. If that path isn't mounted on a fresh
-    dev host, the user should hear about it before tempfile blows up.
+    The Mac branch mkdirs packer/artifacts on the fly; the Linux branch
+    hardcodes /mnt/qemu and assumes the volume is mounted. Surface a
+    clear error before tempfile blows up further down __post_init__.
     """
     monkeypatch.setattr(machine, "OUT_DIR", tmp_path / "out")
-    nonexistent = str(tmp_path / "does_not_exist")
-    with pytest.raises(RuntimeError, match="does not exist or is not a directory"):
-        machine.Machine(
-            ssh_port=2222,
-            ssh_user="vagrant",
-            ansible_args=[],
-            inventory_host="box",
-            idfile="pid",
-            imagedir=nonexistent,
-            machine="box",
+    monkeypatch.setattr(machine.platform, "system", lambda: "Linux")
+    monkeypatch.setattr(machine.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(machine.Path, "is_dir", lambda self: False)
+    with pytest.raises(RuntimeError, match="does not exist"):
+        machine.QemuMachine(
+            machine="minimal",
             role="testrole",
             keep_vm=False,
             ubuntu_name="jammy",
