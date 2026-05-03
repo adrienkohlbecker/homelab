@@ -115,6 +115,14 @@ source "qemu" "ubuntu" {
     ["-object", "rng-random,id=rng0,filename=/dev/urandom"],
     ["-device", "virtio-rng-pci,rng=rng0"],
   ], local.arch_qemuargs)
+
+  # QMP socket lands at <output_dir>/qmp.sock and lets the build be poked
+  # out-of-band: `echo '{"execute":"qmp_capabilities"}{"execute":"system_reset"}' \
+  #   | socat - UNIX-CONNECT:<output_dir>/qmp.sock` resets the guest without
+  # killing qemu, which is much faster than re-running packer when iterating
+  # on bootloader/firmware bits like ZBM. Other useful commands: system_powerdown
+  # (ACPI shutdown), stop / cont, screendump.
+  qmp_enable           = true
 }
 
 build {
@@ -198,11 +206,6 @@ build {
       "SOURCE_NAME" = "${source.name}"
       "UBUNTU_NAME" = "${var.ubuntu_name}"
     }
-  }
-
-  provisioner "shell" {
-    execute_command = "{{ .Vars }} sudo -E bash '{{ .Path }}'"
-    inline          = ["whoami"]
   }
 
   post-processor "shell-local" {
