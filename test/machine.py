@@ -702,11 +702,6 @@ class QemuMachine(Machine):
             upstream_mirrors=upstream_mirrors,
         )
 
-    @property
-    def host_arch(self) -> str:
-        """Canonical host arch name (e.g. "x86_64") -- thin shim over self.arch.name."""
-        return self.arch.name
-
     def _preflight(self) -> None:
         """Verify the qemu binary, GNU timeout, and lsof are reachable."""
         self._require_binary(
