@@ -296,19 +296,19 @@ run = "git ls-files -z '*.sh' | xargs -0 shfmt -i 2 -w"
 [tasks."tf:init"]
 description = "terraform init (forwards args)"
 dir = "{{config_root}}/terraform"
-run = 'terraform init "$@"'
+run = 'op run -- terraform init "$@"'
 
 [tasks."tf:plan"]
 description = "terraform plan (forwards args)"
 dir = "{{config_root}}/terraform"
-run = 'terraform plan "$@"'
+run = 'op run -- terraform plan "$@"'
 
 [tasks."tf:apply"]
 description = "terraform apply (forwards args)"
 dir = "{{config_root}}/terraform"
-run = 'terraform apply "$@"'
+run = 'op run -- terraform apply "$@"'
 
 [tasks."tf:validate"]
 description = "terraform validate (forwards args)"
 dir = "{{config_root}}/terraform"
-run = 'terraform validate "$@"'
+run = 'op run -- terraform validate "$@"'
