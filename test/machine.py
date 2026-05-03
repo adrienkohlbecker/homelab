@@ -1211,29 +1211,28 @@ class PodmanMachine(Machine):
             self.peak_rss_kb = await self._read_container_peak_kb(cid)
 
         try:
-            if cid and self.commit_image:
-                # Commit the live container as the configured image before
-                # rm tears it down. shield: a second SIGINT can't half-bake
-                # the image. The bake-hash label lets future runs cache-hit.
-                bake_hash = _bake_inputs_hash()
-                await asyncio.shield(
-                    run_command(
-                        ["podman", "commit", "--change", f"LABEL homelab.bake-hash={bake_hash}", cid, self.commit_image],
-                        check=False,
-                    )
-                )
             if cid:
-                # asyncio.shield prevents a second SIGINT from cancelling the
-                # rm mid-flight; without it, nested cancellation leaks the
-                # container.
-                await asyncio.shield(
-                    run_command(
-                        ["podman", "rm", "--force", "--time", "5", cid],
-                        check=False,
-                    )
-                )
+                # One shield around the whole commit-then-rm sequence: a
+                # second SIGINT landing between the two awaits would
+                # otherwise let commit complete but cancel rm, leaving a
+                # container reparented to init. The bake-hash label lets
+                # future runs cache-hit on the committed image.
+                await asyncio.shield(self._commit_and_remove(cid))
         finally:
             await super().stop()
+
+    async def _commit_and_remove(self, cid: str) -> None:
+        """Commit (if requested) then force-remove the container."""
+        if self.commit_image:
+            bake_hash = _bake_inputs_hash()
+            await run_command(
+                ["podman", "commit", "--change", f"LABEL homelab.bake-hash={bake_hash}", cid, self.commit_image],
+                check=False,
+            )
+        await run_command(
+            ["podman", "rm", "--force", "--time", "5", cid],
+            check=False,
+        )
 
     async def _read_container_peak_kb(self, cid: str) -> int:
         """Return the cgroup-tracked peak memory in kB for the container.
