@@ -25,10 +25,6 @@ esac
 
 export DEBIAN_FRONTEND=noninteractive
 
-# Confirm EFI support:
-
-dmesg | grep -i efivars
-
 # Install helpers
 
 apt-get update
