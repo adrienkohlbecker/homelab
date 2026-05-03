@@ -167,7 +167,6 @@ class Machine:
     ansible_args: list[str]
     inventory_host: str
     idfile: str
-    imagedir: str
     machine: str
     role: str
     keep_vm: bool
@@ -187,15 +186,6 @@ class Machine:
     def __post_init__(self) -> None:
         if self.ubuntu_name not in UBUNTU_RELEASES:
             raise ValueError(f"Unknown Ubuntu release '{self.ubuntu_name}'; known: {sorted(UBUNTU_RELEASES)}")
-        if not Path(self.imagedir).is_dir():
-            # Mac branch in subclass __init__ mkdir's packer/artifacts; Linux
-            # branch hardcodes /mnt/qemu and assumes it's mounted. A clearer
-            # error here saves a debugging round-trip vs. the FileNotFoundError
-            # the TemporaryDirectory call below would raise.
-            raise RuntimeError(
-                f"Imagedir {self.imagedir!r} does not exist or is not a directory. "
-                f"Create it (`mkdir -p {self.imagedir}`) or mount the qemu image volume."
-            )
         OUT_DIR.mkdir(parents=True, exist_ok=True)
         prefix = f"{self.machine}.{self.ubuntu_name}.{self.role}"
         self.output_file = OUT_DIR / f"{prefix}.output.ansi"
@@ -206,8 +196,19 @@ class Machine:
         # immediately after this; cleaning here also covers cases where a
         # previous run was killed before either writer ran.
         self.cleanup_logs()
-        self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
+        # System tmp by default; subclasses that need the workdir on a
+        # specific filesystem (qemu's qcow2 cache) override _workdir_parent().
+        self.workdir = tempfile.TemporaryDirectory(dir=self._workdir_parent())
         self._preflight()
+
+    def _workdir_parent(self) -> str | None:
+        """Return the parent directory for the per-run TemporaryDirectory.
+
+        Default None puts the workdir under the system tmp. QemuMachine
+        overrides to put it on the same filesystem as the packer qcow2s
+        so qemu-img overlays don't cross device boundaries.
+        """
+        return None
 
     def _preflight(self) -> None:
         """Validate external dependencies; subclasses override with tool checks.
@@ -622,15 +623,20 @@ class QemuMachine(Machine):
         except KeyError:
             raise AttributeError(f"Unknown machine: {machine}") from None
 
-        # Mirror PodmanMachine's per-platform image cache: /mnt/qemu on
-        # Linux dev hosts, <repo>/packer/artifacts on Mac (matches mise.toml's
-        # qemu_dir — /mnt/qemu doesn't exist on Mac).
+        # Per-platform packer-image cache: /mnt/qemu on Linux dev hosts,
+        # <repo>/packer/artifacts on Mac (matches mise.toml's qemu_dir;
+        # /mnt/qemu doesn't exist on Mac).
         system = platform.system()
         if system == "Darwin":
-            imagedir = str(Path("packer/artifacts").resolve())
-            Path(imagedir).mkdir(parents=True, exist_ok=True)
+            self.imagedir = str(Path("packer/artifacts").resolve())
+            Path(self.imagedir).mkdir(parents=True, exist_ok=True)
         elif system == "Linux":
-            imagedir = "/mnt/qemu"
+            self.imagedir = "/mnt/qemu"
+            if not Path(self.imagedir).is_dir():
+                raise RuntimeError(
+                    f"Imagedir {self.imagedir!r} does not exist. "
+                    f"Mount the qemu image volume (e.g. `sudo mount /mnt/qemu`)."
+                )
         else:
             raise AttributeError(f"Unknown operating system: {system}")
 
@@ -650,7 +656,6 @@ class QemuMachine(Machine):
             ansible_args=spec.ansible_args,
             inventory_host=spec.inventory_host,
             idfile="pid",
-            imagedir=imagedir,
             machine=machine,
             role=role,
             keep_vm=keep_vm,
@@ -658,6 +663,16 @@ class QemuMachine(Machine):
             machine_timeout=machine_timeout,
             upstream_mirrors=upstream_mirrors,
         )
+
+    def _workdir_parent(self) -> str | None:
+        """Place the workdir alongside the packer qcow2s.
+
+        qemu-img backing-file overlays must reach the source qcow2 by
+        relative or absolute path; keeping the overlay on the same
+        filesystem also avoids cross-device I/O when the kernel-extraction
+        VM imports the rpool.
+        """
+        return self.imagedir
 
     def _preflight(self) -> None:
         """Verify the qemu binary, GNU timeout, and lsof are reachable."""
@@ -1075,22 +1090,14 @@ class PodmanMachine(Machine):
 
     def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int, upstream_mirrors: bool = False, commit_image: str | None = None):
         """Podman-backed machine wrapper used by integration tests."""
-        system = platform.system()
-        if system == "Darwin":
-            imagedir = str(Path("packer/artifacts").resolve())
-            Path(imagedir).mkdir(parents=True, exist_ok=True)
-        elif system == "Linux":
-            imagedir = "/mnt/qemu"
-        else:
-            raise AttributeError("Unknown operating system")
-
+        # Containers don't mount the host workdir, so the workdir can live
+        # on the system tmp -- no per-platform image-cache dance needed.
         super().__init__(
             ssh_port=0,
             ssh_user="root",
             ansible_args=CONTAINER_ANSIBLE_ARGS,
             inventory_host="box",
             idfile="cid",
-            imagedir=imagedir,
             machine=machine,
             role=role,
             keep_vm=keep_vm,
