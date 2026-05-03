@@ -668,18 +668,45 @@ async def _ensure_extraction_cloudimg(imagedir: str, ubuntu_name: str, arch: str
     return target
 
 
-def _aarch64_uefi_code_path() -> Path:
-    """Locate the EDK2 CODE blob the extraction VM boots through."""
-    candidates = [
-        "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
-        "/usr/local/share/qemu/edk2-aarch64-code.fd",
-        "/usr/share/AAVMF/AAVMF_CODE.fd",
-        "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
-    ]
+def _uefi_code_path(arch: str) -> Path:
+    """Locate the EDK2/OVMF CODE blob for *arch* on the host.
+
+    Searches Homebrew (macOS) plus the canonical package paths on Debian/
+    Ubuntu and Fedora/RHEL. Raises RuntimeError if none of the candidates
+    exist.
+    """
+    by_arch = {
+        "aarch64": [
+            # Homebrew QEMU on macOS:
+            "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
+            "/usr/local/share/qemu/edk2-aarch64-code.fd",
+            # Debian/Ubuntu (qemu-efi-aarch64 package):
+            "/usr/share/AAVMF/AAVMF_CODE.fd",
+            "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
+        ],
+        "x86_64": [
+            # Homebrew QEMU on macOS:
+            "/opt/homebrew/share/qemu/edk2-x86_64-code.fd",
+            "/usr/local/share/qemu/edk2-x86_64-code.fd",
+            # Debian/Ubuntu (ovmf package):
+            "/usr/share/OVMF/OVMF_CODE.fd",
+            # Fedora/RHEL (edk2-ovmf package):
+            "/usr/share/edk2/ovmf/OVMF_CODE.fd",
+            "/usr/share/edk2-ovmf/x64/OVMF_CODE.fd",
+        ],
+    }
+    candidates = by_arch.get(arch)
+    if not candidates:
+        raise RuntimeError(f"Unsupported arch for UEFI lookup: {arch}")
     for c in candidates:
         if Path(c).exists():
             return Path(c)
-    raise RuntimeError(f"No aarch64 UEFI firmware found in {candidates}. " "Install via `brew install qemu` (Mac) or `apt install qemu-efi-aarch64` (Linux).")
+    raise RuntimeError(
+        f"No {arch} UEFI firmware found in {candidates}. "
+        "Install via `brew install qemu` (macOS), "
+        "`apt install ovmf` / `apt install qemu-efi-aarch64` (Debian/Ubuntu), or "
+        "`dnf install edk2-ovmf` (Fedora/RHEL)."
+    )
 
 
 async def _build_seed_iso(out: Path, user_data: Path, meta_data: Path) -> None:
@@ -832,9 +859,10 @@ async def _extract_kernel_initrd(
                 "-no-reboot",
             ]
             if arch == "aarch64":
-                code_path = _aarch64_uefi_code_path()
+                code_path = _uefi_code_path(arch)
                 vars_path = tmp / "AAVMF_VARS.fd"
-                await run_command(["truncate", "-s", "64M", str(vars_path)])
+                # Size empty vars from the code blob so pflash pair sizes match.
+                await run_command(["truncate", "-s", str(code_path.stat().st_size), str(vars_path)])
                 cmd += [
                     "-drive",
                     f"file={code_path},if=pflash,unit=0,format=raw,readonly=on",
@@ -983,7 +1011,7 @@ class QemuMachine(Machine):
             # aarch64's `virt` machine boots only via UEFI; x86_64's q35 falls
             # back to SeaBIOS off the same disk, so no flash is needed there.
             if self.host_arch == "aarch64":
-                self.drives += await self._aarch64_uefi_drives()
+                self.drives += await self._uefi_drives()
             return
 
         # ZFS variants pick a packer image (ubuntu-zfs or ubuntu-zfs-lab),
@@ -1019,7 +1047,7 @@ class QemuMachine(Machine):
         ]
         if self.host_arch == "x86_64":
             await self._copy_efivars_from(image_dir)
-            self.drives += self._uefi_drives()
+            self.drives += await self._uefi_drives()
         else:
             # aarch64: bypass the firmware boot chain (rEFInd -> ZBM -> kexec
             # panics on EDK2) by extracting the on-pool kernel + initrd from
@@ -1065,38 +1093,31 @@ class QemuMachine(Machine):
 
         return f"file={path},if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
 
-    def _uefi_drives(self) -> list[str]:
-        """OVMF flash for x86_64 ZFS variants. The packer build ships an
-        efivars.fd template alongside the qcow2 disks; we pflash both that
-        and OVMF_CODE.fd from the host. arm64 variants don't run this path
-        (gated to x86_64) — minimal-on-aarch64 uses _aarch64_uefi_drives.
-        """
-        return [
-            "file=/usr/share/OVMF/OVMF_CODE.fd,if=pflash,unit=0,format=raw,readonly=on",
-            f"file={self.workdir.name}/efivars.fd,if=pflash,unit=1,format=raw",
-        ]
+    async def _uefi_drives(self) -> list[str]:
+        """UEFI pflash code+vars pair for the host arch.
 
-    async def _aarch64_uefi_drives(self) -> list[str]:
-        """UEFI pflash drives for the aarch64 minimal variant.
+        The CODE blob is resolved per-arch via _uefi_code_path (Homebrew on
+        macOS, ovmf/qemu-efi-aarch64 on Linux). The VARS blob is one of:
 
-        arm64 `virt` machines have no built-in firmware; without a flash
-        pair the guest never boots. The CODE blob comes from the host
-        (Homebrew QEMU on Mac, qemu-efi-aarch64 on Debian/Ubuntu); the VARS
-        blob is a fresh 64 MiB pflash file per run.
+        - {workdir}/efivars.fd, if it's been copied in via _copy_efivars_from
+          (ZFS variants -- the packer image ships a primed efivars template
+          so the bootloader entries survive across runs).
+        - else a fresh empty 64 MiB file -- right for ad-hoc launches like
+          minimal or launch.py --with-pflash where there's no prior state.
         """
-        candidates = [
-            # Homebrew QEMU on macOS:
-            "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
-            "/usr/local/share/qemu/edk2-aarch64-code.fd",
-            # Debian / Ubuntu (qemu-efi-aarch64 package):
-            "/usr/share/AAVMF/AAVMF_CODE.fd",
-            "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
-        ]
-        code_path = next((p for p in candidates if Path(p).exists()), None)
-        if code_path is None:
-            raise RuntimeError(f"No aarch64 UEFI firmware found in {candidates}. " "Install via `brew install qemu` (Mac) or `apt install qemu-efi-aarch64` (Linux).")
-        vars_path = f"{self.workdir.name}/AAVMF_VARS.fd"
-        await run_command(["truncate", "-s", "64M", vars_path])
+        code_path = _uefi_code_path(self.host_arch)
+        packer_vars = Path(f"{self.workdir.name}/efivars.fd")
+        if packer_vars.exists():
+            vars_path = packer_vars
+        else:
+            vars_path = Path(f"{self.workdir.name}/uefi-vars.fd")
+            # qemu pflash requires CODE and VARS to be the same size, and
+            # EDK2 builds aren't uniform: aarch64 EDK2 ships at 64 MiB,
+            # x86_64 OVMF typically at 4 MiB. Size the empty vars from the
+            # code blob so the pflash pair lines up regardless of arch /
+            # distro.
+            code_size = code_path.stat().st_size
+            await run_command(["truncate", "-s", str(code_size), str(vars_path)])
         return [
             f"file={code_path},if=pflash,unit=0,format=raw,readonly=on",
             f"file={vars_path},if=pflash,unit=1,format=raw",
@@ -1132,11 +1153,32 @@ class QemuMachine(Machine):
             # cmdline is composed in extraction as
             # "root=zfs=<bootfs> <org.zfsbootmenu:commandline>" -- the ZBM
             # property is the canonical place to set per-pool boot args, so
-            # we honour it verbatim. If the property doesn't supply console=
-            # / earlycon= we backfill defaults so qemu's `-serial stdio`
-            # actually receives kernel printk for the per-machine boot log.
-            if "console=" not in cmdline:
-                cmdline = f"{cmdline} console=ttyAMA0,115200 earlycon=pl011,0x9000000,115200"
+            # we honour it verbatim. If the cmdline doesn't already wire up
+            # this arch's serial UART we backfill defaults so qemu's
+            # `-serial stdio` receives kernel printk for the boot log.
+            # qemu virt aarch64 exposes a PL011 at 0x9000000 (-> ttyAMA0);
+            # qemu q35 x86_64 exposes a 16550-compatible UART at I/O 0x3f8
+            # (-> ttyS0). Match by ttyAMA/ttyS so a property that already
+            # configures the right console doesn't get a duplicate appended.
+            # Order matters: Linux makes the LAST `console=` the primary
+            # /dev/console. We want serial primary (so ZBM TUI / login prompts
+            # land on -serial stdio in --foreground mode) and tty0 just
+            # secondary so VNC also gets kernel printk. Append tty0 first,
+            # then the arch-specific serial console.
+            extras: list[str] = []
+            if self.keep_vm and "console=tty0" not in cmdline:
+                # virtio-gpu-pci is attached when keep_vm=True, giving fbcon
+                # something to bind to. Skipped headless -- without a graphics
+                # device tty0 has nothing to render onto.
+                extras.append("console=tty0")
+            if self.host_arch == "aarch64":
+                if "console=ttyAMA" not in cmdline:
+                    extras.append("console=ttyAMA0,115200 earlycon=pl011,0x9000000,115200")
+            else:
+                if "console=ttyS" not in cmdline:
+                    extras.append("console=ttyS0,115200 earlycon=uart8250,io,0x3f8,115200")
+            if extras:
+                cmdline = f"{cmdline} {' '.join(extras)}"
             direct_boot = ["-kernel", str(kernel), "-initrd", str(initrd), "-append", cmdline]
 
         return [
