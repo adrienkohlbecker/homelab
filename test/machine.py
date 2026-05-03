@@ -16,6 +16,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import NamedTuple, Self
 
+from arch import ArchProfile, detect_host_arch, profile_for_name
 from setup_mitogen import ensure_mitogen_symlink
 from utils import (
     CommandResult,
@@ -650,15 +651,14 @@ def _qcow2_fingerprint(paths: list[Path]) -> str:
     return h.hexdigest()
 
 
-async def _ensure_extraction_cloudimg(imagedir: str, ubuntu_name: str, arch: str, upstream_mirrors: bool) -> Path:
+async def _ensure_extraction_cloudimg(imagedir: str, ubuntu_name: str, arch: ArchProfile, upstream_mirrors: bool) -> Path:
     """Download (once) the upstream Ubuntu cloud image used as the extraction vehicle.
 
     Pulls through the lab Nexus raw proxy (`ubuntu-cloud-images`) by default;
     `upstream_mirrors=True` bypasses to cloud-images.ubuntu.com directly,
     matching the same flag's semantics for ansible mirrors and packer apt.
     """
-    cloud_arch = "amd64" if arch == "x86_64" else "arm64"
-    name = f"{ubuntu_name}-server-cloudimg-{cloud_arch}.img"
+    name = f"{ubuntu_name}-server-cloudimg-{arch.cloud_image_suffix}.img"
     cache = Path(imagedir) / "cloud-images"
     cache.mkdir(parents=True, exist_ok=True)
     target = cache / name
@@ -678,36 +678,19 @@ def _uefi_code_path(arch: str) -> Path:
     """Locate the EDK2/OVMF CODE blob for *arch* on the host.
 
     Searches Homebrew (macOS) plus the canonical package paths on Debian/
-    Ubuntu and Fedora/RHEL. Raises RuntimeError if none of the candidates
-    exist.
+    Ubuntu and Fedora/RHEL (per ArchProfile.uefi_code_candidates). Raises
+    RuntimeError if none of the candidates exist.
     """
-    by_arch = {
-        "aarch64": [
-            # Homebrew QEMU on macOS:
-            "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
-            "/usr/local/share/qemu/edk2-aarch64-code.fd",
-            # Debian/Ubuntu (qemu-efi-aarch64 package):
-            "/usr/share/AAVMF/AAVMF_CODE.fd",
-            "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
-        ],
-        "x86_64": [
-            # Homebrew QEMU on macOS:
-            "/opt/homebrew/share/qemu/edk2-x86_64-code.fd",
-            "/usr/local/share/qemu/edk2-x86_64-code.fd",
-            # Debian/Ubuntu (ovmf package):
-            "/usr/share/OVMF/OVMF_CODE.fd",
-            # Fedora/RHEL (edk2-ovmf package):
-            "/usr/share/edk2/ovmf/OVMF_CODE.fd",
-            "/usr/share/edk2-ovmf/x64/OVMF_CODE.fd",
-        ],
-    }
-    candidates = by_arch.get(arch)
-    if not candidates:
-        raise RuntimeError(f"Unsupported arch for UEFI lookup: {arch}")
-    for c in candidates:
+    profile = profile_for_name(arch)
+    for c in profile.uefi_code_candidates:
         if Path(c).exists():
             return Path(c)
-    raise RuntimeError(f"No {arch} UEFI firmware found in {candidates}. " "Install via `brew install qemu` (macOS), " "`apt install ovmf` / `apt install qemu-efi-aarch64` (Debian/Ubuntu), or " "`dnf install edk2-ovmf` (Fedora/RHEL).")
+    raise RuntimeError(
+        f"No {arch} UEFI firmware found in {list(profile.uefi_code_candidates)}. "
+        "Install via `brew install qemu` (macOS), "
+        "`apt install ovmf` / `apt install qemu-efi-aarch64` (Debian/Ubuntu), or "
+        "`dnf install edk2-ovmf` (Fedora/RHEL)."
+    )
 
 
 async def _build_seed_iso(out: Path, user_data: Path, meta_data: Path) -> None:
@@ -738,7 +721,7 @@ async def _extract_kernel_initrd(
     imagedir: str,
     ubuntu_name: str,
     os_src_paths: list[str],
-    arch: str,
+    arch: ArchProfile,
     upstream_mirrors: bool,
 ) -> tuple[Path, Path, str]:
     """Pull on-pool kernel + initrd out of a ZFS-rooted packer qcow2, cached by sha256.
@@ -829,10 +812,9 @@ async def _extract_kernel_initrd(
             share.mkdir()
 
             accel = "hvf" if platform.system() == "Darwin" else "kvm"
-            machine_type = "q35" if arch == "x86_64" else "virt"
 
             cmd: list[str] = [
-                f"qemu-system-{arch}",
+                arch.qemu_binary,
                 "--drive",
                 f"file={os_overlay},if=virtio,format=qcow2,cache=unsafe,discard=unmap",
                 "--drive",
@@ -847,7 +829,7 @@ async def _extract_kernel_initrd(
                 "-device",
                 "virtio-9p-pci,fsdev=share,mount_tag=share",
                 "-machine",
-                f"type={machine_type},accel={accel}",
+                f"type={arch.machine_type},accel={accel}",
                 "-cpu",
                 "host",
                 "-smp",
@@ -860,8 +842,8 @@ async def _extract_kernel_initrd(
                 "null",
                 "-no-reboot",
             ]
-            if arch == "aarch64":
-                code_path = _uefi_code_path(arch)
+            if not arch.bios_boot_supported:
+                code_path = _uefi_code_path(arch.name)
                 vars_path = tmp / "AAVMF_VARS.fd"
                 # Size empty vars from the code blob so pflash pair sizes match.
                 await run_command(["truncate", "-s", str(code_path.stat().st_size), str(vars_path)])
@@ -962,6 +944,9 @@ class QemuMachine(Machine):
         # /-initrd, bypassing the firmware chain. See _extract_kernel_initrd
         # and notes/zbm-aarch64-kexec-bug-report.md.
         self._spec = spec
+        # Captured once at construction so prepare()/_boot_command() don't
+        # have to re-run platform.machine() on every access.
+        self.arch: ArchProfile = detect_host_arch()
         super().__init__(
             ssh_port=0,
             ssh_user=spec.ssh_user,
@@ -979,13 +964,8 @@ class QemuMachine(Machine):
 
     @property
     def host_arch(self) -> str:
-        """'x86_64' or 'aarch64' — used for qemu binary, cloud image suffix, etc."""
-        m = platform.machine()
-        if m in ("x86_64", "amd64"):
-            return "x86_64"
-        if m in ("aarch64", "arm64"):
-            return "aarch64"
-        raise RuntimeError(f"Unsupported host architecture: {m}")
+        """Canonical host arch name (e.g. "x86_64") -- thin shim over self.arch.name."""
+        return self.arch.name
 
     async def prepare(self) -> None:
         """Create overlay images and seed data required for the selected QEMU template."""
@@ -1000,9 +980,8 @@ class QemuMachine(Machine):
             await run_command(
                 ["cloud-localds", f"{self.workdir.name}/seed.img", "test/minimal/user-data", "test/minimal/meta-data"],
             )
-            cloud_arch = "amd64" if self.host_arch == "x86_64" else "arm64"
             await self._create_overlay(
-                f"{self.imagedir}/ubuntu-{self.ubuntu_version}-minimal-cloudimg-{cloud_arch}.img",
+                f"{self.imagedir}/ubuntu-{self.ubuntu_version}-minimal-cloudimg-{self.arch.cloud_image_suffix}.img",
                 f"{self.workdir.name}/disk.img",
                 size="20G",
             )
@@ -1010,9 +989,9 @@ class QemuMachine(Machine):
                 self._virtio_drive(f"{self.workdir.name}/disk.img"),
                 f"file={self.workdir.name}/seed.img,if=virtio,format=raw",
             ]
-            # aarch64's `virt` machine boots only via UEFI; x86_64's q35 falls
-            # back to SeaBIOS off the same disk, so no flash is needed there.
-            if self.host_arch == "aarch64":
+            # x86_64's q35 falls back to SeaBIOS off the OS disk; aarch64's
+            # `virt` boots only via UEFI, so flash is required there.
+            if not self.arch.bios_boot_supported:
                 self.drives += await self._uefi_drives()
             return
 
@@ -1047,10 +1026,7 @@ class QemuMachine(Machine):
             *(self._virtio_drive(path) for path in os_disk_paths),
             *(self._virtio_drive(path) for path in extra_paths),
         ]
-        if self.host_arch == "x86_64":
-            await self._copy_efivars_from(image_dir)
-            self.drives += await self._uefi_drives()
-        else:
+        if self.arch.direct_boot_required_for_zfs:
             # aarch64: bypass the firmware boot chain (rEFInd -> ZBM -> kexec
             # panics on EDK2) by extracting the on-pool kernel + initrd from
             # the packer qcow2 once and direct-booting them. Cached by content
@@ -1059,9 +1035,12 @@ class QemuMachine(Machine):
                 imagedir=self.imagedir,
                 ubuntu_name=self.ubuntu_name,
                 os_src_paths=os_src_paths,
-                arch=self.host_arch,
+                arch=self.arch,
                 upstream_mirrors=self.upstream_mirrors,
             )
+        else:
+            await self._copy_efivars_from(image_dir)
+            self.drives += await self._uefi_drives()
 
     async def run_disk_setup(self) -> None:
         """Push test/disks/<variant>.sh to the VM and run it via sudo.
@@ -1129,25 +1108,27 @@ class QemuMachine(Machine):
     def _boot_command(self) -> list[str]:
         """Assemble the qemu command line for the prepared disks.
 
-        Arch- and OS-aware: qemu-system-{x86_64,aarch64} per host arch,
-        accel=kvm on Linux / hvf on Mac, machine type q35 (x86_64) or virt
-        (aarch64). Display hardware (virtio-gpu-pci + qemu-xhci) works
-        identically on both arches.
+        Arch- and OS-aware: ArchProfile supplies the qemu binary, machine
+        type, keep-VM device set, and serial console fallback; this method
+        only chooses accel based on platform.system(). Display hardware
+        (virtio-gpu-pci + qemu-xhci) works identically on both arches.
         """
         accel = "hvf" if platform.system() == "Darwin" else "kvm"
-        machine_type = "q35" if self.host_arch == "x86_64" else "virt"
 
         if self.keep_vm:
             # q35 has std VGA + PS/2 keyboard by default but USB is opt-in
             # (machine flag usb=on, applied below); usb-tablet then attaches
             # to the built-in EHCI/UHCI for absolute-coordinate VNC mouse.
             # aarch64 virt has no default graphics or input devices, so it
-            # needs the full virtio-gpu + xhci + usb-kbd set.
-            if self.host_arch == "aarch64":
-                arch_devices = ["-device", "virtio-gpu-pci", "-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"]
-            else:
-                arch_devices = ["-device", "usb-tablet"]
-            display_args = ["-display", "vnc=:0,to=99", *arch_devices, "-k", "fr"]
+            # needs the full virtio-gpu + xhci + usb-kbd set; both come from
+            # ArchProfile.keep_vm_extra_devices.
+            display_args = [
+                "-display",
+                "vnc=:0,to=99",
+                *self.arch.keep_vm_extra_devices,
+                "-k",
+                "fr",
+            ]
         else:
             display_args = ["-display", "none"]
 
@@ -1160,9 +1141,7 @@ class QemuMachine(Machine):
             # we honour it verbatim. If the cmdline doesn't already wire up
             # this arch's serial UART we backfill defaults so qemu's
             # `-serial stdio` receives kernel printk for the boot log.
-            # qemu virt aarch64 exposes a PL011 at 0x9000000 (-> ttyAMA0);
-            # qemu q35 x86_64 exposes a 16550-compatible UART at I/O 0x3f8
-            # (-> ttyS0). Match by ttyAMA/ttyS so a property that already
+            # Match by serial_console_token so a property that already
             # configures the right console doesn't get a duplicate appended.
             # Order matters: Linux makes the LAST `console=` the primary
             # /dev/console. We want serial primary (so ZBM TUI / login prompts
@@ -1175,12 +1154,8 @@ class QemuMachine(Machine):
                 # something to bind to. Skipped headless -- without a graphics
                 # device tty0 has nothing to render onto.
                 extras.append("console=tty0")
-            if self.host_arch == "aarch64":
-                if "console=ttyAMA" not in cmdline:
-                    extras.append("console=ttyAMA0,115200 earlycon=pl011,0x9000000,115200")
-            else:
-                if "console=ttyS" not in cmdline:
-                    extras.append("console=ttyS0,115200 earlycon=uart8250,io,0x3f8,115200")
+            if self.arch.serial_console_token not in cmdline:
+                extras.append(self.arch.serial_console_default)
             if extras:
                 cmdline = f"{cmdline} {' '.join(extras)}"
             direct_boot = ["-kernel", str(kernel), "-initrd", str(initrd), "-append", cmdline]
@@ -1189,7 +1164,7 @@ class QemuMachine(Machine):
             "timeout",
             "--kill-after=10s",
             str(self.wrapper_timeout),
-            f"qemu-system-{self.host_arch}",
+            self.arch.qemu_binary,
             *[arg for drive in self.drives for arg in ("--drive", drive)],
             *direct_boot,
             "-netdev",
@@ -1203,7 +1178,7 @@ class QemuMachine(Machine):
             # for usb-tablet under --keep-vm. Default-off has no cost when
             # usb-tablet isn't attached. virt machine ignores the flag and
             # uses qemu-xhci added above instead.
-            f"type={machine_type},accel={accel},usb=on",
+            f"type={self.arch.machine_type},accel={accel},usb=on",
             "-smp",
             "8,sockets=8",
             "-name",
