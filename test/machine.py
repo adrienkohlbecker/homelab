@@ -626,43 +626,10 @@ class Machine:
             self.workdir.cleanup()
 
 
-# cloud-init script consumed by _extract_kernel_initrd's one-shot VM. apt-installs
-# zfsutils-linux, mounts the host 9p share, imports the rpool from the attached
-# packer qcow2(s), copies the highest-versioned on-pool kernel + initrd, and
-# composes a ZBM-style cmdline ("root=zfs=<bootfs> <org.zfsbootmenu:commandline>")
-# read off rpool/ROOT before powering off. The poweroff exit is how the host
-# knows extraction finished -- the qemu process exits cleanly.
-EXTRACTION_USER_DATA = """\
-#cloud-config
-package_update: true
-packages:
-  - zfsutils-linux
-runcmd:
-  - |
-    set -eux
-    mkdir -p /share
-    modprobe 9pnet_virtio || true
-    mount -t 9p -o trans=virtio,version=9p2000.L share /share
-    zpool import -fN -R /mnt rpool
-    active=$(zpool get -H -o value bootfs rpool)
-    if [ -z "$active" ] || [ "$active" = "-" ]; then
-        active=$(zfs list -H -o name -t filesystem | grep -m1 '^rpool/ROOT/')
-    fi
-    zfs mount "$active"
-    mp=$(findmnt -nro TARGET --source "$active")
-    kernel=$(ls "$mp/boot/"vmlinuz-* "$mp/boot/"vmlinux-* 2>/dev/null | sort -V | tail -1)
-    initrd=$(ls "$mp/boot/"initrd.img-* 2>/dev/null | sort -V | tail -1)
-    cp -L "$kernel" /share/kernel
-    cp -L "$initrd" /share/initrd
-    zbm_args=$(zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT)
-    [ "$zbm_args" = "-" ] && zbm_args=""
-    printf 'root=zfs=%s %s' "$active" "$zbm_args" > /share/cmdline
-    sync
-    touch /share/done
-power_state:
-  mode: poweroff
-  delay: now
-"""
+# cloud-init script consumed by _extract_kernel_initrd's one-shot VM. Lives
+# in its own file so editor YAML highlighting / yamllint pick it up; see the
+# comment block at the top of test/extraction/user-data for what it does.
+EXTRACTION_USER_DATA_PATH = Path(__file__).parent / "extraction" / "user-data"
 
 
 def _qcow2_fingerprint(paths: list[Path]) -> str:
@@ -797,10 +764,9 @@ async def _extract_kernel_initrd(
 
         with tempfile.TemporaryDirectory(dir=imagedir) as tmpdir:
             tmp = Path(tmpdir)
-            (tmp / "user-data").write_text(EXTRACTION_USER_DATA)
             (tmp / "meta-data").write_text("instance-id: extract\nlocal-hostname: extract\n")
             seed = tmp / "seed.iso"
-            await _build_seed_iso(seed, tmp / "user-data", tmp / "meta-data")
+            await _build_seed_iso(seed, EXTRACTION_USER_DATA_PATH, tmp / "meta-data")
 
             # Cloud-image overlay (writeable, resized so apt has headroom).
             os_overlay = tmp / "cloud.qcow2"
