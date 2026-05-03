@@ -534,20 +534,13 @@ class Machine:
             return
         print_line(f"Systemd journal: {self.journal_file}")
 
-    def print_journal_tail(self, n: int = 50) -> None:
-        """Print the last *n* lines of the saved journal to stdout."""
-        self._print_file_tail(self.journal_file, n)
-
-    def print_boot_tail(self, n: int = 50) -> None:
-        """Print the last *n* lines of the boot subprocess log to stdout."""
-        self._print_file_tail(self.boot_file, n)
-
     def cleanup_logs(self) -> None:
         """Remove all per-run log artifacts (output, boot, journal)."""
         for path in (self.output_file, self.boot_file, self.journal_file):
             path.unlink(missing_ok=True)
 
-    def _print_file_tail(self, path: Path, n: int) -> None:
+    def print_file_tail(self, path: Path, n: int = 50) -> None:
+        """Print the last *n* lines of *path* to stdout, no-op if missing."""
         if not path.exists():
             return
         # Stream through a bounded deque so a multi-MB boot log (panic loop,
@@ -584,7 +577,7 @@ class Machine:
         # is the user wanting out; idempotence checks fail at the role layer
         # and the boot log won't help.
         if exc is not None and not isinstance(exc, (asyncio.CancelledError, IdempotenceFailedException)):
-            self.print_boot_tail()
+            self.print_file_tail(self.boot_file)
 
     async def stop(self) -> None:
         """Drain the boot subprocess and free temp resources.
