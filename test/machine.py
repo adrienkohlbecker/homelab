@@ -8,7 +8,6 @@ import fcntl
 import platform
 import shlex
 import shutil
-import signal
 import socket
 import tempfile
 import time
@@ -27,7 +26,6 @@ from utils import (
     run_command,
     sleep_tick,
     terminate_pid,
-    terminate_subprocess,
 )
 
 OUT_DIR = Path("test/out")
@@ -592,16 +590,21 @@ class Machine:
         """Drain the boot subprocess and free temp resources.
 
         Subclasses perform hypervisor-specific cleanup (qemu kill, podman rm)
-        before delegating here, so this final drain only sees a process
-        that's already on its way out.
+        before delegating here, so the inner child is already dead by the
+        time we get here. The wrapper (`timeout` for qemu, `podman run`
+        client for podman) should notice and exit on its own immediately --
+        we just wait for it. SIGKILL after 5s in case something pathological
+        keeps it alive (zombie subprocess, hung pipe).
         """
         try:
             if self.proc and self.proc.returncode is None:
-                await terminate_subprocess(
-                    self.proc,
-                    grace_seconds=5,
-                    initial_signal=signal.SIGINT,
-                )
+                try:
+                    async with asyncio.timeout(5):
+                        await self.proc.wait()
+                except TimeoutError:
+                    with contextlib.suppress(ProcessLookupError):
+                        self.proc.kill()
+                    await self.proc.wait()
         finally:
             self.workdir.cleanup()
 
