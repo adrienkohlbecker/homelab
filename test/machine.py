@@ -64,6 +64,12 @@ class QemuMachineSpec(NamedTuple):
     # is reachable, before any role/_setup playbook. Receives the extra disk
     # devices as positional args. None means no setup needed.
     disk_setup_script: str | None
+    # Number of qcow2 disks the packer image stages as part of the OS install.
+    # ubuntu-zfs is single-rpool (1), ubuntu-zfs-lab is a 3-disk mirror rpool
+    # (3). prepare() overlays packer-ubuntu-1..N for the OS, then attaches
+    # the variant's extra_disks starting at vd[a+N]. Unused on minimal
+    # (packer_image=None), where the cloud-image branch returns early.
+    os_disk_count: int = 0
     # Guest RAM in MiB and vcpu count, plumbed into qemu's -m / -smp.
     # Defaults match the historical 4096M / 8-vcpu sizing so existing
     # variants are unchanged; minimal trims to 2048/4 since the cloud-
@@ -92,6 +98,7 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         packer_image="ubuntu-zfs",
         extra_disks=[],
         disk_setup_script=None,
+        os_disk_count=1,
     ),
     "lab": QemuMachineSpec(
         ssh_user="vagrant",
@@ -106,6 +113,7 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         # raidz2 vdevs (1G ×2). Sizes match the previous packer-baked layout.
         extra_disks=["1G", "1G", "1.5G", "1.5G", "1G", "1G"],
         disk_setup_script="test/disks/lab.sh",
+        os_disk_count=3,
     ),
     "pug": QemuMachineSpec(
         ssh_user="vagrant",
@@ -114,18 +122,10 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         packer_image="ubuntu-zfs",
         extra_disks=["1G", "1G"],
         disk_setup_script="test/disks/pug.sh",
+        os_disk_count=1,
     ),
 }
 MACHINE_CHOICES: tuple[str, ...] = ("container", *QEMU_MACHINE_SPECS)
-
-# Number of qcow2 disks each packer image stages as part of the OS install.
-# ubuntu-zfs is single-rpool, ubuntu-zfs-lab is a 3-disk mirror rpool. The
-# prepare() code overlays packer-ubuntu-1..N for the OS, then attaches the
-# variant's extra_disks starting at vd[a+N].
-_PACKER_IMAGE_OS_DISKS: dict[str, int] = {
-    "ubuntu-zfs": 1,
-    "ubuntu-zfs-lab": 3,
-}
 
 SSH_WAIT_TIMEOUT = 120
 IDFILE_TIMEOUT = 60
@@ -761,7 +761,7 @@ class QemuMachine(Machine):
             # config error surfaces regardless of optimisation level.
             raise RuntimeError(f"non-minimal variant {self.machine!r} must declare packer_image")
         image_dir = f"{self.imagedir}/{self.ubuntu_name}/{packer_image}"
-        os_disk_count = _PACKER_IMAGE_OS_DISKS[packer_image]
+        os_disk_count = self._spec.os_disk_count
 
         os_src_paths = [f"{image_dir}/packer-ubuntu-{idx}" for idx in range(1, os_disk_count + 1)]
         os_disk_paths: list[str] = []
