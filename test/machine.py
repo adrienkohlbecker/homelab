@@ -1051,7 +1051,12 @@ class QemuMachine(Machine):
 
 
 def is_service_role(role: str) -> bool:
-    """True if the role's _setup.yml imports `_test/podman` or `_test/nginx`.
+    """True if the role's _setup.yml contains `tasks_from: podman` or `tasks_from: nginx`.
+
+    Plain substring match -- not a YAML parse -- so a comment or odd
+    formatting that contains the phrase will trip it. Works for the
+    canonical `import_role` blocks in the existing setup hooks; promote to
+    a real YAML walk if a role ever needs the heuristic to be smarter.
 
     Drives PodmanMachine's image pick: service roles use the pre-baked
     `homelab-service:<release>` so their _setup imports skip via the
