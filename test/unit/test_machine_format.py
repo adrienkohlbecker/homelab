@@ -40,7 +40,7 @@ def test_format_ssh_cmd_with_remote_appends_shlex_joined_arg(
     # The remote command is collapsed into a single positional after user@host
     # (ssh treats trailing args as the remote command, but shlex.join keeps
     # quoting intact when one of the args contains a space).
-    assert cmd[-2] == f"{m.ssh_user}@{m.ssh_host}"
+    assert cmd[-2] == f"{m.ssh_user}@{machine.SSH_HOST}"
     assert cmd[-1] == shlex.join(("ls", "-la", "/etc/hostname"))
 
 

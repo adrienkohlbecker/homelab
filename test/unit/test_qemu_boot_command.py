@@ -73,7 +73,7 @@ def test_default_x86_64_no_keep_no_direct_boot(
 
     # SSH forward listens on a kernel-picked port (the 0 in 0-:22).
     netdev_idx = cmd.index("-netdev")
-    assert cmd[netdev_idx + 1] == f"user,id=user.0,hostfwd=tcp:{m.ssh_host}:0-:22"
+    assert cmd[netdev_idx + 1] == f"user,id=user.0,hostfwd=tcp:{machine.SSH_HOST}:0-:22"
 
 
 def test_default_aarch64_no_keep_no_direct_boot(

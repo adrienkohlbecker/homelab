@@ -125,6 +125,9 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
 }
 
 
+MACHINE_CHOICES: tuple[str, ...] = ("container", *QEMU_MACHINE_SPECS)
+
+
 def _qemu_ansible_args(spec: QemuMachineSpec) -> list[str]:
     """Derive the per-spec -e args for ansible-playbook.
 
@@ -139,7 +142,7 @@ def _qemu_ansible_args(spec: QemuMachineSpec) -> list[str]:
         "-e",
         f"@host_vars/{spec.inventory_host}-qemu{suffix}.yml",
     ]
-MACHINE_CHOICES: tuple[str, ...] = ("container", *QEMU_MACHINE_SPECS)
+
 
 SSH_WAIT_TIMEOUT = 120
 IDFILE_TIMEOUT = 60
@@ -200,8 +203,6 @@ class Machine:
     # self.idfile without caring which subclass it is.
     idfile: str = dataclasses.field(default="pid", init=False)
 
-    ssh_host: str = dataclasses.field(default=SSH_HOST, init=False)
-    ssh_key: str = dataclasses.field(default=SSH_KEY, init=False)
     proc: asyncio.subprocess.Process | None = dataclasses.field(default=None, init=False)
     output_file: Path = dataclasses.field(init=False)
     journal_file: Path = dataclasses.field(init=False)
@@ -304,13 +305,13 @@ class Machine:
         base = [
             "ssh",
             "-i",
-            self.ssh_key,
+            SSH_KEY,
             "-p",
             str(self.ssh_port),
             *self._ssh_options(),
             "-o",
             "ForwardAgent=yes",
-            f"{self.ssh_user}@{self.ssh_host}",
+            f"{self.ssh_user}@{SSH_HOST}",
         ]
         return [*base, shlex.join(cmd)] if cmd else base
 
@@ -324,12 +325,12 @@ class Machine:
         return [
             "scp",
             "-i",
-            self.ssh_key,
+            SSH_KEY,
             "-P",
             str(self.ssh_port),
             *self._ssh_options(),
             local,
-            f"{self.ssh_user}@{self.ssh_host}:{remote}",
+            f"{self.ssh_user}@{SSH_HOST}:{remote}",
         ]
 
     def format_ansible_cmd(self, *cmd: str) -> list[str]:
@@ -351,11 +352,11 @@ class Machine:
             "-e",
             f"ansible_ssh_port={self.ssh_port}",
             "-e",
-            f"ansible_ssh_host={self.ssh_host}",
+            f"ansible_ssh_host={SSH_HOST}",
             "-e",
             f"ansible_ssh_user={self.ssh_user}",
             "-e",
-            f"ansible_ssh_private_key_file={self.ssh_key}",
+            f"ansible_ssh_private_key_file={SSH_KEY}",
             # Static playbooks declare `hosts: all`; --limit pins the play to
             # the inventory host we actually provisioned.
             "--limit",
@@ -477,7 +478,7 @@ class Machine:
 
         try:
             reader, writer = await asyncio.wait_for(
-                asyncio.open_connection(self.ssh_host, self.ssh_port),
+                asyncio.open_connection(SSH_HOST, self.ssh_port),
                 timeout=2,
             )
         except (OSError, TimeoutError):
@@ -933,7 +934,7 @@ class QemuMachine(Machine):
             *[arg for drive in self.drives for arg in ("--drive", drive)],
             *direct_boot,
             "-netdev",
-            f"user,id=user.0,hostfwd=tcp:{self.ssh_host}:0-:22",
+            f"user,id=user.0,hostfwd=tcp:{SSH_HOST}:0-:22",
             "-object",
             "rng-random,id=rng0,filename=/dev/urandom",
             "-device",
