@@ -12,11 +12,13 @@ import pytest
 import machine
 
 
-def test_wrapper_timeout_is_machine_timeout_when_not_keeping(
+def test_wrapper_timeout_adds_grace_when_not_keeping(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
+    # The inner timeout/podman --timeout has to outlast the Python deadline;
+    # WRAPPER_GRACE_SECONDS layers the cushion so callers don't have to.
     m = machine_factory(machine_timeout=600, keep_vm=False)
-    assert m.wrapper_timeout == 600
+    assert m.wrapper_timeout == 600 + machine.Machine.WRAPPER_GRACE_SECONDS
 
 
 def test_wrapper_timeout_is_zero_when_keeping(
