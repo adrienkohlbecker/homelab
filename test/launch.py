@@ -150,7 +150,11 @@ class _LaunchMachine(QemuMachine):
             # that). Without that flag qemu can't put the terminal into
             # raw mode, so mon:stdio is unusable. We don't need timeout in
             # interactive mode anyway -- the user quits via Ctrl-A,x.
-            assert cmd[0] == "timeout", f"expected timeout wrapper, got {cmd[:4]}"
+            if cmd[0] != "timeout":
+                # Asserts elide under `python -O`; raise so a future change
+                # to QemuMachine._boot_command's wrapper layout surfaces
+                # cleanly instead of silently slicing the wrong prefix.
+                raise RuntimeError(f"expected timeout wrapper, got {cmd[:4]}")
             cmd = cmd[3:]
 
             # mon:stdio multiplexes the guest's first serial port with qemu's
