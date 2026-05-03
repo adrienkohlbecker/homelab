@@ -333,8 +333,8 @@ class Machine:
             "--limit",
             self.inventory_host,
             # Static playbooks reference `_role_under_test` for `import_role`
-            # so site.yml / _setup.yml / _verify.yml / _test.yml are all
-            # role-agnostic on disk.
+            # so site.yml / _setup.yml / _verify.yml are all role-agnostic
+            # on disk.
             "-e",
             f"_role_under_test={self.role}",
             "--inventory",
@@ -1022,16 +1022,16 @@ class QemuMachine(Machine):
 
 
 def is_service_role(role: str) -> bool:
-    """True if the role's _test.yml imports `_test/podman` or `_test/nginx`.
+    """True if the role's _setup.yml imports `_test/podman` or `_test/nginx`.
 
     Drives PodmanMachine's image pick: service roles use the pre-baked
-    `homelab-service:<release>` so their _test imports skip via the
+    `homelab-service:<release>` so their _setup imports skip via the
     existing `creates:` sentinels.
     """
-    test_yml = Path(f"roles/{role}/tasks/_test.yml")
-    if not test_yml.exists():
+    setup_yml = Path(f"roles/{role}/tasks/_setup.yml")
+    if not setup_yml.exists():
         return False
-    text = test_yml.read_text()
+    text = setup_yml.read_text()
     return "tasks_from: podman" in text or "tasks_from: nginx" in text
 
 

@@ -235,18 +235,13 @@ async def run_test(
                             # /lib/systemd/system/snapd.service:23: Unknown key name 'RestartMode' section 'Service', ignoring.
                             await m.ssh_command("sudo", "apt-get", "purge", "--autoremove", "--yes", "snapd")
 
-                        # Run pre-role fixture playbook(s). _setup is the new
-                        # name; _test is the legacy alias still used by most
-                        # roles. Roles that have both shouldn't, but if they
-                        # do _test runs first to match historical ordering.
-                        # The hook playbooks themselves are static at
-                        # test/playbooks/<hook>.yml -- presence is decided by
-                        # whether the role under test ships the matching
-                        # tasks file at roles/<role>/tasks/<hook>.yml.
-                        for hook in ("_test", "_setup"):
-                            if Path(f"roles/{m.role}/tasks/{hook}.yml").exists():
-                                async with _phase(f"hook {hook}.yml"):
-                                    await m.ansible_command(f"{m.workdir.name}/{hook}.yml")
+                        # Pre-role fixture playbook. The hook playbook is
+                        # static at test/playbooks/_setup.yml; we invoke it
+                        # only when the role under test ships
+                        # roles/<role>/tasks/_setup.yml for it to import.
+                        if Path(f"roles/{m.role}/tasks/_setup.yml").exists():
+                            async with _phase("hook _setup.yml"):
+                                await m.ansible_command(f"{m.workdir.name}/_setup.yml")
 
                         site_yml = f"{m.workdir.name}/site.yml"
                         if checkmode:
