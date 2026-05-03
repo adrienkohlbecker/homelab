@@ -1,0 +1,4 @@
+- hosts: all
+  tasks:
+    - import_role:
+        name: "{{ _role_under_test }}"
