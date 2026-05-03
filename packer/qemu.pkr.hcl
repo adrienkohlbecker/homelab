@@ -31,6 +31,11 @@ variable "upstream_mirrors" {
   description = "When true, pull apt packages and the cloud image straight from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
 }
 
+variable "zbm_version" {
+  type        = string
+  description = "ZFSBootMenu version to download from Gitea. Single source of truth is mise.toml vars.zbm_version; mise tasks pass it in."
+}
+
 locals {
   # Cloud image dated snapshots. Bump when refreshing; older snapshots
   # eventually fall out of the upstream listing (and out of the Nexus
@@ -63,6 +68,9 @@ locals {
     ["-device", "usb-kbd"],
     ["-device", "usb-tablet"],
   ] : []
+  # rEFInd EFI binary name is per-arch. chroot.sh drops it into the
+  # efibootmgr boot entry verbatim.
+  refind_name = var.arch == "x86_64" ? "refind_x64.efi" : "refind_aa64.efi"
 
   # Cloud image base URLs. Defaults to the Nexus proxy
   # (`terraform/nexus.tf` raw_proxies "ubuntu-cloud-images"); set
@@ -192,6 +200,9 @@ build {
       "UBUNTU_MIRROR_SECURITY"          = local.build_security
       "UBUNTU_MIRROR_UPSTREAM"          = local.upstream_archive
       "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.upstream_security
+      "ZBM_VERSION"                     = "${var.zbm_version}"
+      "ZBM_ARCH"                        = "${var.arch}"
+      "REFIND_NAME"                     = "${local.refind_name}"
     }
   }
 

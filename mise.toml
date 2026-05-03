@@ -37,7 +37,7 @@ flag "--upstream" help="Pull apt packages and the cloud image from upstream Ubun
 '''
 run = [
   'rm -rf "{{vars.qemu_dir}}/${usage_ubuntu}/ubuntu-${usage_variant}.new"',
-  'arch=$(uname -m | sed s/arm64/aarch64/); packer build {{vars.packer_flags}} -var ubuntu_name="${usage_ubuntu}" -var arch="$arch" -var upstream_mirrors="${usage_upstream:-false}" -var output_directory="{{vars.qemu_dir}}/${usage_ubuntu}" -only=qemu.ubuntu-${usage_variant} packer',
+  'arch=$(uname -m | sed s/arm64/aarch64/); packer build {{vars.packer_flags}} -var ubuntu_name="${usage_ubuntu}" -var arch="$arch" -var upstream_mirrors="${usage_upstream:-false}" -var zbm_version="{{vars.zbm_version}}" -var output_directory="{{vars.qemu_dir}}/${usage_ubuntu}" -only=qemu.ubuntu-${usage_variant} packer',
 ]
 
 [tasks."packer:all"]
