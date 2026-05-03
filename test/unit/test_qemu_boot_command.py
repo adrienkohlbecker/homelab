@@ -137,7 +137,7 @@ def test_direct_boot_aarch64_appends_console_when_missing(
     m._direct_boot = (
         Path("/cache/kernel"),
         Path("/cache/initrd"),
-        "root=zfs=rpool/ROOT/ubuntu_xyz",
+        "root=zfs:rpool/ROOT/ubuntu_xyz",
     )
     cmd = m._boot_command()
 
@@ -146,7 +146,7 @@ def test_direct_boot_aarch64_appends_console_when_missing(
 
     append = cmd[cmd.index("-append") + 1]
     # Original cmdline preserved verbatim, followed by the arch-specific UART.
-    assert append.startswith("root=zfs=rpool/ROOT/ubuntu_xyz")
+    assert append.startswith("root=zfs:rpool/ROOT/ubuntu_xyz")
     assert "console=ttyAMA0,115200" in append
     assert "earlycon=pl011,0x9000000" in append
     # No tty0 added without keep_vm (no graphics device to bind fbcon to).
@@ -161,7 +161,7 @@ def test_direct_boot_aarch64_does_not_duplicate_existing_ttyAMA(
     m._direct_boot = (
         Path("/cache/kernel"),
         Path("/cache/initrd"),
-        "root=zfs=rpool/ROOT/ubuntu_xyz console=ttyAMA0 quiet",
+        "root=zfs:rpool/ROOT/ubuntu_xyz console=ttyAMA0 quiet",
     )
     append = m._boot_command()[m._boot_command().index("-append") + 1]
     # Only one console=ttyAMA in the final cmdline -- the user-provided one.
@@ -176,7 +176,7 @@ def test_direct_boot_x86_64_appends_ttyS(
     m._direct_boot = (
         Path("/cache/kernel"),
         Path("/cache/initrd"),
-        "root=zfs=rpool/ROOT/ubuntu_xyz",
+        "root=zfs:rpool/ROOT/ubuntu_xyz",
     )
     append = m._boot_command()[m._boot_command().index("-append") + 1]
     assert "console=ttyS0,115200" in append
@@ -191,7 +191,7 @@ def test_direct_boot_keep_vm_inserts_tty0_first(
     m._direct_boot = (
         Path("/cache/kernel"),
         Path("/cache/initrd"),
-        "root=zfs=rpool/ROOT/ubuntu_xyz",
+        "root=zfs:rpool/ROOT/ubuntu_xyz",
     )
     append = m._boot_command()[m._boot_command().index("-append") + 1]
     # tty0 must appear before the serial console=, because Linux makes the
