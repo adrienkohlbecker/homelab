@@ -707,12 +707,7 @@ def _uefi_code_path(arch: str) -> Path:
     for c in candidates:
         if Path(c).exists():
             return Path(c)
-    raise RuntimeError(
-        f"No {arch} UEFI firmware found in {candidates}. "
-        "Install via `brew install qemu` (macOS), "
-        "`apt install ovmf` / `apt install qemu-efi-aarch64` (Debian/Ubuntu), or "
-        "`dnf install edk2-ovmf` (Fedora/RHEL)."
-    )
+    raise RuntimeError(f"No {arch} UEFI firmware found in {candidates}. " "Install via `brew install qemu` (macOS), " "`apt install ovmf` / `apt install qemu-efi-aarch64` (Debian/Ubuntu), or " "`dnf install edk2-ovmf` (Fedora/RHEL).")
 
 
 async def _build_seed_iso(out: Path, user_data: Path, meta_data: Path) -> None:
@@ -1143,10 +1138,11 @@ class QemuMachine(Machine):
         machine_type = "q35" if self.host_arch == "x86_64" else "virt"
 
         if self.keep_vm:
-            # q35 already has std VGA, PS/2 keyboard, and ICH9 USB controllers
-            # by default, so we only add usb-tablet there (absolute-coordinate
-            # mouse for VNC). aarch64 virt has no default graphics or input
-            # devices, so it needs the full virtio-gpu + xhci + usb-kbd set.
+            # q35 has std VGA + PS/2 keyboard by default but USB is opt-in
+            # (machine flag usb=on, applied below); usb-tablet then attaches
+            # to the built-in EHCI/UHCI for absolute-coordinate VNC mouse.
+            # aarch64 virt has no default graphics or input devices, so it
+            # needs the full virtio-gpu + xhci + usb-kbd set.
             if self.host_arch == "aarch64":
                 arch_devices = ["-device", "virtio-gpu-pci", "-device", "qemu-xhci", "-device", "usb-kbd", "-device", "usb-tablet"]
             else:
@@ -1203,7 +1199,11 @@ class QemuMachine(Machine):
             "-device",
             "virtio-rng-pci,rng=rng0",
             "-machine",
-            f"type={machine_type},accel={accel}",
+            # usb=on enables q35's built-in EHCI/UHCI controllers; needed
+            # for usb-tablet under --keep-vm. Default-off has no cost when
+            # usb-tablet isn't attached. virt machine ignores the flag and
+            # uses qemu-xhci added above instead.
+            f"type={machine_type},accel={accel},usb=on",
             "-smp",
             "8,sockets=8",
             "-name",
