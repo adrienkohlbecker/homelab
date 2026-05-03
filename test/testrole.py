@@ -239,11 +239,14 @@ async def run_test(
                         # name; _test is the legacy alias still used by most
                         # roles. Roles that have both shouldn't, but if they
                         # do _test runs first to match historical ordering.
+                        # The hook playbooks themselves are static at
+                        # test/playbooks/<hook>.yml -- presence is decided by
+                        # whether the role under test ships the matching
+                        # tasks file at roles/<role>/tasks/<hook>.yml.
                         for hook in ("_test", "_setup"):
-                            hook_yml = f"{m.workdir.name}/{hook}.yml"
-                            if Path(hook_yml).exists():
+                            if Path(f"roles/{m.role}/tasks/{hook}.yml").exists():
                                 async with _phase(f"hook {hook}.yml"):
-                                    await m.ansible_command(hook_yml)
+                                    await m.ansible_command(f"{m.workdir.name}/{hook}.yml")
 
                         site_yml = f"{m.workdir.name}/site.yml"
                         if checkmode:
@@ -256,10 +259,9 @@ async def run_test(
                             await _verify_idempotence(site_yml, m, pass_args)
 
                         # Post-role assertions, if the role declares any.
-                        verify_yml = f"{m.workdir.name}/_verify.yml"
-                        if Path(verify_yml).exists():
+                        if Path(f"roles/{m.role}/tasks/_verify.yml").exists():
                             async with _phase("verify.yml"):
-                                await m.ansible_command(verify_yml)
+                                await m.ansible_command(f"{m.workdir.name}/_verify.yml")
 
                     except CommandFailedException:
                         print_line("Command failed")

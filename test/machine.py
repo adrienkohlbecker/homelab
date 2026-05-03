@@ -328,6 +328,15 @@ class Machine:
             f"ansible_ssh_user={self.ssh_user}",
             "-e",
             f"ansible_ssh_private_key_file={self.ssh_key}",
+            # Static playbooks declare `hosts: all`; --limit pins the play to
+            # the inventory host we actually provisioned.
+            "--limit",
+            self.inventory_host,
+            # Static playbooks reference `_role_under_test` for `import_role`
+            # so site.yml / _setup.yml / _verify.yml / _test.yml are all
+            # role-agnostic on disk.
+            "-e",
+            f"_role_under_test={self.role}",
             "--inventory",
             "test/inventory.ini",
             *self.ansible_args,
@@ -361,50 +370,21 @@ class Machine:
         return
 
     async def prepare(self) -> None:
-        """Stage a temporary workdir with inventory snippets and optional role test hooks."""
+        """Stage a temporary workdir with inventory snippets and the static playbooks."""
 
         Path("group_vars").copy_into(self.workdir.name)
         Path("host_vars").copy_into(self.workdir.name)
         Path("wireguard").copy_into(self.workdir.name)
         Path("roles").copy_into(self.workdir.name)
 
-        site_yml = Path(f"{self.workdir.name}/site.yml")
-        site_yml.write_text(
-            f"""
-- hosts: {self.inventory_host}
-  roles:
-    - {self.role}
-"""
-        )
-
-        # Per-role hook playbooks. _setup runs before the role apply; _verify
-        # runs after. _test is the legacy name for setup-style hooks; many
-        # roles still use it, so keep both working.
-        for hook in ("_test", "_setup", "_verify"):
-            if Path(f"roles/{self.role}/tasks/{hook}.yml").exists():
-                Path(f"{self.workdir.name}/{hook}.yml").write_text(
-                    f"""
-- hosts: {self.inventory_host}
-  tasks:
-    - import_role:
-        name: {self.role}
-        tasks_from: {hook}
-"""
-                )
-
-        # Mirror setup runs once at the start of every test (before role hooks)
-        # to point apt / podman / pip / uv at the lab Nexus when nexus_url is
-        # set. Replaces the SSH-driven apt + podman setup that lived in
-        # testrole.py.
-        Path(f"{self.workdir.name}/_mirrors.yml").write_text(
-            f"""
-- hosts: {self.inventory_host}
-  tasks:
-    - import_role:
-        name: _test
-        tasks_from: mirrors
-"""
-        )
+        # Copy the static role-agnostic playbooks (site / _setup / _test /
+        # _verify / _mirrors) into the workdir so ansible loads
+        # group_vars/host_vars from this directory and the playbooks
+        # reference `{{ _role_under_test }}` injected via -e in
+        # format_ansible_cmd. testrole.py decides which hook playbook to
+        # invoke by checking roles/<role>/tasks/<hook>.yml at the source.
+        for playbook in Path("test/playbooks").glob("*.yml"):
+            playbook.copy_into(self.workdir.name)
 
     def _boot_command(self) -> list[str]:
         raise NotImplementedError
