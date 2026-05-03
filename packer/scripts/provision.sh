@@ -134,17 +134,16 @@ debootstrap "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR"
 cp /etc/hostid /mnt/etc
 cp /etc/resolv.conf /mnt/etc
 
-# Configure networking
-
-apt-get install --yes net-tools
-
-IFACE=$(route | grep '^default' | grep -o '[^ ]*$')
-
+# Configure networking. Match by driver so the same image works under any
+# qemu device topology (packer's vs. testrole's direct-kernel boot give the
+# NIC different kernel names; both use virtio_net).
 cat <<EOF >/mnt/etc/netplan/01-netcfg.yaml
 network:
   version: 2
   ethernets:
-    $IFACE:
+    primary:
+      match:
+        driver: virtio_net
       dhcp4: true
       dhcp-identifier: mac
 EOF
