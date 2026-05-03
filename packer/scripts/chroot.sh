@@ -171,18 +171,37 @@ mkdir -p /boot/efi
 mount /boot/efi
 
 # Install ZFSBootMenu
-
-ZBM_VERSION="3.1.0"
-ZBM_URL="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/$ZBM_VERSION/zfsbootmenu-v$ZBM_VERSION-$(uname -m).EFI"
+#
+# ZBM is built + uploaded out-of-band by `mise run zbm:build && zbm:upload`.
+# The Gitea package is keyed by ZBM upstream version (the "package version"
+# in Gitea terms); inside it, each per-arch upload lands as a timestamped
+# file. Bump ZBM_VERSION_<arch> when moving to a new upstream release;
+# bump ZBM_TIMESTAMP_<arch> on every rebuild of the same release. The two
+# arches are independent so a debugging spin on aarch64 doesn't perturb
+# the x86_64 prod image.
+#
 # ZBM names its EFI output after the underlying kernel image: vmlinuz on
 # x86_64 (compressed), vmlinux on aarch64 (uncompressed). Match upstream
 # so the local copy preserves the convention. rEFInd ships its loader as
 # refind_x64.efi on x86_64 and refind_aa64.efi on aarch64.
 case $(uname -m) in
-x86_64) ZBM_NAME=VMLINUZ; REFIND_NAME=refind_x64.efi ;;
-aarch64) ZBM_NAME=VMLINUX; REFIND_NAME=refind_aa64.efi ;;
-*) echo >&2 "Unknown machine name $(uname -m)" && exit 1 ;;
+x86_64)
+  ZBM_VERSION="3.1.0"
+  ZBM_TIMESTAMP="20260503-081404"
+  ZBM_NAME=VMLINUZ
+  REFIND_NAME=refind_x64.efi
+  ;;
+aarch64)
+  ZBM_VERSION="3.1.0"
+  ZBM_TIMESTAMP="20260503-081404"
+  ZBM_NAME=VMLINUX
+  REFIND_NAME=refind_aa64.efi
+  ;;
+*)
+  echo >&2 "Unknown machine name $(uname -m)" && exit 1
+  ;;
 esac
+ZBM_URL="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/${ZBM_VERSION}/zfsbootmenu-v${ZBM_VERSION}-$(uname -m)-${ZBM_TIMESTAMP}.EFI"
 
 apt-get install --yes curl
 mkdir -p /boot/efi/EFI/ZBM
