@@ -1048,12 +1048,6 @@ def is_service_role(role: str) -> bool:
 
 
 BAKE_HASH_LABEL = "homelab.bake-hash"
-_BAKE_HASH_INPUTS = (
-    Path("test/Dockerfile"),
-    Path("roles/_bake/tasks/main.yml"),
-    Path("roles/_test/tasks/podman.yml"),
-    Path("roles/_test/tasks/nginx.yml"),
-)
 
 
 def _bake_inputs_hash() -> str:
@@ -1065,7 +1059,12 @@ def _bake_inputs_hash() -> str:
     import hashlib
 
     h = hashlib.sha256()
-    for p in _BAKE_HASH_INPUTS:
+    for p in (
+        Path("test/Dockerfile"),
+        Path("roles/_bake/tasks/main.yml"),
+        Path("roles/_test/tasks/podman.yml"),
+        Path("roles/_test/tasks/nginx.yml"),
+    ):
         h.update(p.read_bytes())
     return h.hexdigest()
 
