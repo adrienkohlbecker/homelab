@@ -7,7 +7,6 @@ read -r -a DISKS <<<"$DISKS"
 # env block; DISKS, LAYOUT, SSH_KEY_PUB are exported by provision.sh.
 HOSTNAME="$SOURCE_NAME"
 USERNAME=vagrant
-PASSWORD=vagrant
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -283,7 +282,6 @@ apt-get install --yes openssh-server qemu-guest-agent
 # Configure vagrant user
 
 adduser --disabled-password --gecos "" "$USERNAME"
-echo -e "$USERNAME:$PASSWORD" | chpasswd -c SHA256
 cp -a /etc/skel/. "/home/$USERNAME"
 
 mkdir "/home/$USERNAME/.ssh"
