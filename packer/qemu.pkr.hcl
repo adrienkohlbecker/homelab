@@ -25,6 +25,12 @@ variable "arch" {
   }
 }
 
+variable "upstream_mirrors" {
+  type        = bool
+  default     = false
+  description = "When true, pull apt packages straight from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
+}
+
 locals {
   ubuntu_versions = {
     jammy = { release = "22.04", patch = "22.04.5" }
@@ -81,6 +87,19 @@ locals {
   iso_base_url = var.arch == "x86_64" ? "https://releases.ubuntu.com/${local.ubuntu_release}" : "https://cdimage.ubuntu.com/releases/${local.ubuntu_patch}/release"
   iso_checksum = "file:${local.iso_base_url}/SHA256SUMS"
   iso_url      = "${local.iso_base_url}/ubuntu-${local.ubuntu_patch}-live-server-${local.iso_arch}.iso"
+
+  # Apt mirrors. By default the build pulls through the lab Nexus proxy
+  # (`group_vars/all.yml` uses the same `repository/ubuntu-*` layout); set
+  # `-var upstream_mirrors=true` to bypass it. The `upstream_*` pair is
+  # always the canonical Ubuntu URL — chroot.sh writes those into the
+  # final `/etc/apt/sources.list` so we don't ship Nexus-internal URLs.
+  # x86_64 ships glibc on archive/security; aarch64 lives under ports.
+  upstream_archive  = var.arch == "x86_64" ? "http://archive.ubuntu.com/ubuntu" : "http://ports.ubuntu.com/ubuntu-ports"
+  upstream_security = var.arch == "x86_64" ? "http://security.ubuntu.com/ubuntu" : "http://ports.ubuntu.com/ubuntu-ports"
+  nexus_archive     = var.arch == "x86_64" ? "http://nexus.lab.fahm.fr/repository/ubuntu-archive" : "http://nexus.lab.fahm.fr/repository/ubuntu-ports"
+  nexus_security    = var.arch == "x86_64" ? "http://nexus.lab.fahm.fr/repository/ubuntu-security" : "http://nexus.lab.fahm.fr/repository/ubuntu-ports"
+  build_archive     = var.upstream_mirrors ? local.upstream_archive : local.nexus_archive
+  build_security    = var.upstream_mirrors ? local.upstream_security : local.nexus_security
 }
 
 source "qemu" "ubuntu" {
@@ -99,7 +118,17 @@ source "qemu" "ubuntu" {
   efi_firmware_vars    = "${local.efi_firmware_vars}"
   format               = "qcow2"
   headless             = true
-  http_directory       = "${path.root}/http"
+  # http_content (vs http_directory) lets us render user-data through
+  # templatefile() so the autoinstall picks up the build-time mirror
+  # URLs resolved in locals above. meta-data is empty but cloud-init's
+  # NoCloud datasource still requires the path to exist.
+  http_content = {
+    "/user-data" = templatefile("http/user-data.pkrtpl", {
+      archive_url  = local.build_archive
+      security_url = local.build_security
+    })
+    "/meta-data" = ""
+  }
   machine_type         = "${local.machine_type}"
   memory               = 4096
   net_device           = "virtio-net"
@@ -202,9 +231,17 @@ build {
     inline            = ["chmod +x /home/vagrant/*.sh", "sudo -HE /home/vagrant/provision.sh"]
     expect_disconnect = true
     pause_after       = "30s"
+    # Mirror URLs are resolved here (HCL) and passed as env. provision.sh
+    # uses UBUNTU_MIRROR* during the build; chroot.sh swaps in the
+    # UBUNTU_MIRROR_*_UPSTREAM pair at the end so the shipped image
+    # never points at Nexus.
     env = {
-      "SOURCE_NAME" = "${source.name}"
-      "UBUNTU_NAME" = "${var.ubuntu_name}"
+      "SOURCE_NAME"                    = "${source.name}"
+      "UBUNTU_NAME"                    = "${var.ubuntu_name}"
+      "UBUNTU_MIRROR"                  = local.build_archive
+      "UBUNTU_MIRROR_SECURITY"         = local.build_security
+      "UBUNTU_MIRROR_UPSTREAM"         = local.upstream_archive
+      "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.upstream_security
     }
   }
 
