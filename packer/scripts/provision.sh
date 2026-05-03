@@ -21,21 +21,6 @@ ubuntu-zfs-lab)
   ;;
 esac
 
-case $(uname -m) in
-aarch64)
-  UBUNTU_MIRROR="http://ports.ubuntu.com/ubuntu-ports/"
-  UBUNTU_MIRROR_SECURITY="http://ports.ubuntu.com/ubuntu-ports/"
-  ;;
-x86_64)
-  UBUNTU_MIRROR="http://archive.ubuntu.com/ubuntu/"
-  UBUNTU_MIRROR_SECURITY="http://security.ubuntu.com/ubuntu/"
-  ;;
-*)
-  echo >&2 "Unknown machine name $MACHINE"
-  exit 1
-  ;;
-esac
-
 # Ensure APT doesn't asks questions
 
 export DEBIAN_FRONTEND=noninteractive
@@ -159,7 +144,7 @@ mount -t proc proc /mnt/proc
 mount -t sysfs sys /mnt/sys
 mount -B /dev /mnt/dev
 mount -t devpts pts /mnt/dev/pts
-chroot /mnt env DISKS="${DISKS[*]}" LAYOUT="$LAYOUT" HOSTNAME="$HOSTNAME" USERNAME="$USERNAME" PASSWORD="$PASSWORD" SSH_KEY_PUB="$SSH_KEY_PUB" UBUNTU_NAME="$UBUNTU_NAME" UBUNTU_MIRROR="$UBUNTU_MIRROR" UBUNTU_MIRROR_SECURITY="$UBUNTU_MIRROR_SECURITY" bash </home/vagrant/chroot.sh
+chroot /mnt env DISKS="${DISKS[*]}" LAYOUT="$LAYOUT" HOSTNAME="$HOSTNAME" USERNAME="$USERNAME" PASSWORD="$PASSWORD" SSH_KEY_PUB="$SSH_KEY_PUB" UBUNTU_NAME="$UBUNTU_NAME" UBUNTU_MIRROR="$UBUNTU_MIRROR" UBUNTU_MIRROR_SECURITY="$UBUNTU_MIRROR_SECURITY" UBUNTU_MIRROR_UPSTREAM="$UBUNTU_MIRROR_UPSTREAM" UBUNTU_MIRROR_SECURITY_UPSTREAM="$UBUNTU_MIRROR_SECURITY_UPSTREAM" bash </home/vagrant/chroot.sh
 NSEOF
 
 # Only the rpool root dataset itself remains mounted in the host namespace.
