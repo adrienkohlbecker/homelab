@@ -28,16 +28,18 @@ dir = "{{config_root}}/packer"
 run = 'packer init "$@" .'
 
 [tasks."packer:build"]
-description = "Build a packer image variant"
+description = "Build a packer image variant and verify it boots"
 interactive = true
 usage = '''
 arg "<variant>" help="Variant: zfs or zfs-lab"
 flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
 flag "--upstream" help="Pull apt packages and the cloud image from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
+flag "--no-verify" help="Skip the post-build packer:verify smoke test (boot + systemctl is-system-running)."
 '''
 run = [
   'rm -rf "{{vars.qemu_dir}}/${usage_ubuntu}/ubuntu-${usage_variant}.new"',
   'arch=$(uname -m | sed s/arm64/aarch64/); packer build {{vars.packer_flags}} -var ubuntu_name="${usage_ubuntu}" -var arch="$arch" -var upstream_mirrors="${usage_upstream:-false}" -var zbm_version="{{vars.zbm_version}}" -var output_directory="{{vars.qemu_dir}}/${usage_ubuntu}" -only=qemu.ubuntu-${usage_variant} packer',
+  '[ "${usage_no_verify:-false}" = "true" ] || mise run packer:verify "${usage_variant}" --ubuntu "${usage_ubuntu}"',
 ]
 
 [tasks."packer:all"]
