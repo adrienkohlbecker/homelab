@@ -63,6 +63,12 @@ class QemuMachineSpec(NamedTuple):
     # is reachable, before any role/_setup playbook. Receives the extra disk
     # devices as positional args. None means no setup needed.
     disk_setup_script: str | None
+    # Guest RAM in MiB and vcpu count, plumbed into qemu's -m / -smp.
+    # Defaults match the historical 4096M / 8-vcpu single-socket layout
+    # so existing variants are unchanged; minimal trims to 2048/4 since
+    # the cloud-image variant has no zpool to feed.
+    memory_mb: int = 4096
+    vcpus: int = 8
 
 
 QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
@@ -73,6 +79,8 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         packer_image=None,
         extra_disks=[],
         disk_setup_script=None,
+        memory_mb=2048,
+        vcpus=4,
     ),
     "box": QemuMachineSpec(
         ssh_user="vagrant",
@@ -1179,11 +1187,11 @@ class QemuMachine(Machine):
             # uses qemu-xhci added above instead.
             f"type={self.arch.machine_type},accel={accel},usb=on",
             "-smp",
-            "8,sockets=8",
+            f"{self._spec.vcpus},sockets={self._spec.vcpus}",
             "-name",
             f"homelab-{self.machine}-{self.role}",
             "-m",
-            "4096M",
+            f"{self._spec.memory_mb}M",
             "-cpu",
             "host",
             *display_args,

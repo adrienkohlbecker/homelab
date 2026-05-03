@@ -46,9 +46,10 @@ def test_default_x86_64_no_keep_no_direct_boot(
     machine_idx = cmd.index("-machine")
     assert cmd[machine_idx + 1] == "type=q35,accel=hvf,usb=on"
 
-    # Hardcoded sizing (changes when memory_mb / vcpus get plumbed through).
-    assert cmd[cmd.index("-smp") + 1] == "8,sockets=8"
-    assert cmd[cmd.index("-m") + 1] == "4096M"
+    # Sizing flows from QemuMachineSpec; the factory's default machine is
+    # "minimal" which is sized down to 2048M / 4 vcpus.
+    assert cmd[cmd.index("-smp") + 1] == "4,sockets=4"
+    assert cmd[cmd.index("-m") + 1] == "2048M"
     assert cmd[cmd.index("-cpu") + 1] == "host"
     # -name distinguishes parallel runs in ps/pgrep output.
     assert cmd[cmd.index("-name") + 1] == f"homelab-{m.machine}-{m.role}"
@@ -191,6 +192,19 @@ def test_direct_boot_keep_vm_inserts_tty0_first(
     tty0_idx = append.index("console=tty0")
     serial_idx = append.index("console=ttyAMA")
     assert tty0_idx < serial_idx
+
+
+def test_memory_and_vcpus_flow_from_spec(
+    qemu_machine_factory: Callable[..., machine.QemuMachine],
+) -> None:
+    """Mutating the spec's memory_mb/vcpus fields must reach the qemu cmdline."""
+    m = qemu_machine_factory(host_arch="x86_64")
+    _setup(m)
+    m._spec = m._spec._replace(memory_mb=12345, vcpus=2)
+    cmd = m._boot_command()
+    assert cmd[cmd.index("-m") + 1] == "12345M"
+    # -smp keeps single-core sockets to match the historical layout.
+    assert cmd[cmd.index("-smp") + 1] == "2,sockets=2"
 
 
 @pytest.mark.parametrize("host_arch", ["x86_64", "aarch64"])
