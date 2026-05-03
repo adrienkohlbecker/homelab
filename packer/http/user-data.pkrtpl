@@ -35,13 +35,13 @@ autoinstall:
         preserve_sources_list: false
         mirror-selection:
             primary:
-              - uri: "http://archive.ubuntu.com/ubuntu"
+              - uri: "${archive_url}"
                 arches: [i386, amd64]
-              - uri: "http://ports.ubuntu.com/ubuntu-ports"
+              - uri: "${archive_url}"
                 arches: [s390x, arm64, armhf, powerpc, ppc64el, riscv64]
         fallback: abort
         security:
-          - uri:  "http://security.ubuntu.com/ubuntu"
+          - uri:  "${security_url}"
             arches: [i386, amd64]
-          - uri: "http://ports.ubuntu.com/ubuntu-ports"
+          - uri: "${security_url}"
             arches: [s390x, arm64, armhf, powerpc, ppc64el, riscv64]

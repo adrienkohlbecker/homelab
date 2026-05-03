@@ -280,3 +280,24 @@ usermod -a -G adm,cdrom,dip,lpadmin,lxd,plugdev,sambashare,sudo "$USERNAME"
 echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >"/etc/sudoers.d/$USERNAME"
 chown root:root "/etc/sudoers.d/$USERNAME"
 chmod 400 "/etc/sudoers.d/$USERNAME"
+
+# Reset apt sources to upstream so the shipped image isn't pinned to a
+# Nexus-internal URL. Build-time installs above used $UBUNTU_MIRROR
+# (Nexus by default); ansible's mirror_apt_ubuntu_* may rewrite this
+# again on first run, but the at-rest image must point at canonical
+# Ubuntu mirrors.
+cat <<EOF >/etc/apt/sources.list
+# Uncomment the deb-src entries if you need source packages
+
+deb $UBUNTU_MIRROR_UPSTREAM $UBUNTU_NAME main restricted universe multiverse
+# deb-src $UBUNTU_MIRROR_UPSTREAM $UBUNTU_NAME main restricted universe multiverse
+
+deb $UBUNTU_MIRROR_UPSTREAM $UBUNTU_NAME-updates main restricted universe multiverse
+# deb-src $UBUNTU_MIRROR_UPSTREAM $UBUNTU_NAME-updates main restricted universe multiverse
+
+deb $UBUNTU_MIRROR_UPSTREAM $UBUNTU_NAME-backports main restricted universe multiverse
+# deb-src $UBUNTU_MIRROR_UPSTREAM $UBUNTU_NAME-backports main restricted universe multiverse
+
+deb $UBUNTU_MIRROR_SECURITY_UPSTREAM $UBUNTU_NAME-security main restricted universe multiverse
+# deb-src $UBUNTU_MIRROR_SECURITY_UPSTREAM $UBUNTU_NAME-security main restricted universe multiverse
+EOF
