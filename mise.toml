@@ -115,7 +115,10 @@ rm -f "$out_dir"/*-bootmenu "$out_dir"/*-bootmenu.img "$out_dir"/zfsbootmenu-v*-
 podman run --rm -v "{{config_root}}/zbm:/build:ro" -v "$out_dir:/output" "localhost/zbm-builder:v{{vars.zbm_version}}-${arch}" -o /output -t v{{vars.zbm_version}}
 # Components mode emits vmlin{u,uz}-bootmenu + initramfs-bootmenu.img;
 # tar them together preserving upstream names so chroot.sh can glob.
-( cd "$out_dir" && tar -czf "zfsbootmenu-v{{vars.zbm_version}}-${arch}.tar.gz" vmlin*-bootmenu initramfs-bootmenu.img )
+# --owner=0/--group=0 bake root:0 into the archive metadata so extracting
+# in a chroot or onto FAT32 doesn't trip "Cannot change ownership"
+# from the container's build-user uids leaking into the archive.
+( cd "$out_dir" && tar --owner=0 --group=0 -czf "zfsbootmenu-v{{vars.zbm_version}}-${arch}.tar.gz" vmlin*-bootmenu initramfs-bootmenu.img )
 sha256sum "$out_dir/zfsbootmenu-v{{vars.zbm_version}}-${arch}.tar.gz"
 '''
 
@@ -152,9 +155,9 @@ echo "${remote_name}: uploaded to ${base_url}/${remote_name}"
 curl --fail-with-body --user "${username}:${token}" --upload-file "${out_dir}/${sum_name}" "${base_url}/${sum_name}"
 echo "${sum_name}: uploaded to ${base_url}/${sum_name}"
 echo
-echo "Update chroot.sh ZBM_TIMESTAMP_${arch} (and ZBM_VERSION_${arch} if it changed) to:"
-echo "  ZBM_VERSION_${arch}=\"{{vars.zbm_version}}\""
-echo "  ZBM_TIMESTAMP_${arch}=\"${timestamp}\""
+echo "Update chroot.sh ZBM_TIMESTAMP (and ZBM_VERSION if it changed) to:"
+echo "  ZBM_VERSION=\"{{vars.zbm_version}}\""
+echo "  ZBM_TIMESTAMP=\"${timestamp}\""
 '''
 
 [tasks.lint]

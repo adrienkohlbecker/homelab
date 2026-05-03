@@ -207,7 +207,7 @@ mkdir -p /boot/efi/EFI/ZBM
 curl -fL -o /tmp/zbm.tar.gz "$ZBM_URL"
 EXPECTED_SUM="$(curl -fsSL "$ZBM_URL.sha256sum" | awk '{print $1}')"
 echo "$EXPECTED_SUM  /tmp/zbm.tar.gz" | sha256sum -c -
-tar -xzf /tmp/zbm.tar.gz -C /boot/efi/EFI/ZBM/
+tar -xzf /tmp/zbm.tar.gz -C /boot/efi/EFI/ZBM/ --no-same-owner
 rm /tmp/zbm.tar.gz
 
 # x86_64 emits vmlinuz-bootmenu (compressed); aarch64 emits vmlinux-bootmenu
