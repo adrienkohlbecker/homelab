@@ -47,7 +47,6 @@ CONTAINER_ANSIBLE_ARGS = ["-e", '{"docker_test":true}', "-e", "@host_vars/box-po
 
 class QemuMachineSpec(NamedTuple):
     ssh_user: str
-    ansible_args: list[str]
     inventory_host: str
     # Packer image directory under /mnt/qemu/<ubuntu_name>/. None means the
     # variant uses an Ubuntu cloud image instead (minimal).
@@ -67,6 +66,11 @@ class QemuMachineSpec(NamedTuple):
     # the variant's extra_disks starting at vd[a+N]. Unused on minimal
     # (packer_image=None), where the cloud-image branch returns early.
     os_disk_count: int = 0
+    # True for the cloud-image-only "minimal" variant. Toggles
+    # qemu_test_minimal in the role's ansible vars and picks the
+    # `<inventory_host>-qemu-minimal.yml` host_vars file instead of the
+    # default `<inventory_host>-qemu.yml`.
+    qemu_test_minimal: bool = False
     # Guest RAM in MiB and vcpu count, plumbed into qemu's -m / -smp.
     # Defaults match the historical 4096M / 8-vcpu sizing so existing
     # variants are unchanged; minimal trims to 2048/4 since the cloud-
@@ -80,17 +84,16 @@ class QemuMachineSpec(NamedTuple):
 QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
     "minimal": QemuMachineSpec(
         ssh_user="ubuntu",
-        ansible_args=["-e", '{"qemu_test":true,"qemu_test_minimal":true}', "-e", "@host_vars/box-qemu-minimal.yml"],
         inventory_host="box",
         packer_image=None,
         extra_disks=[],
         disk_setup_script=None,
+        qemu_test_minimal=True,
         memory_mb=2048,
         vcpus=4,
     ),
     "box": QemuMachineSpec(
         ssh_user="vagrant",
-        ansible_args=["-e", '{"qemu_test":true,"qemu_test_minimal":false}', "-e", "@host_vars/box-qemu.yml"],
         inventory_host="box",
         packer_image="ubuntu-zfs",
         extra_disks=[],
@@ -99,7 +102,6 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
     ),
     "lab": QemuMachineSpec(
         ssh_user="vagrant",
-        ansible_args=["-e", '{"qemu_test":true,"qemu_test_minimal":false}', "-e", "@host_vars/lab-qemu.yml"],
         inventory_host="lab",
         # ubuntu-zfs-lab brings the 3-disk mirror rpool baked in (matches
         # the lab-class prod host). Extras below add the dozer/tank/mouse
@@ -114,7 +116,6 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
     ),
     "pug": QemuMachineSpec(
         ssh_user="vagrant",
-        ansible_args=["-e", '{"qemu_test":true,"qemu_test_minimal":false}', "-e", "@host_vars/pug-qemu.yml"],
         inventory_host="pug",
         packer_image="ubuntu-zfs",
         extra_disks=["1G", "1G"],
@@ -122,6 +123,22 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         os_disk_count=1,
     ),
 }
+
+
+def _qemu_ansible_args(spec: QemuMachineSpec) -> list[str]:
+    """Derive the per-spec -e args for ansible-playbook.
+
+    Two -e bundles: a JSON blob toggling qemu_test / qemu_test_minimal,
+    and a host_vars file matching the inventory host. Centralising the
+    derivation keeps QEMU_MACHINE_SPECS a pure data table.
+    """
+    suffix = "-minimal" if spec.qemu_test_minimal else ""
+    return [
+        "-e",
+        f'{{"qemu_test":true,"qemu_test_minimal":{str(spec.qemu_test_minimal).lower()}}}',
+        "-e",
+        f"@host_vars/{spec.inventory_host}-qemu{suffix}.yml",
+    ]
 MACHINE_CHOICES: tuple[str, ...] = ("container", *QEMU_MACHINE_SPECS)
 
 SSH_WAIT_TIMEOUT = 120
@@ -651,7 +668,7 @@ class QemuMachine(Machine):
         super().__init__(
             ssh_port=0,
             ssh_user=spec.ssh_user,
-            ansible_args=spec.ansible_args,
+            ansible_args=_qemu_ansible_args(spec),
             inventory_host=spec.inventory_host,
             machine=machine,
             role=role,
