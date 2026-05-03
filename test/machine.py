@@ -846,6 +846,36 @@ class QemuMachine(Machine):
             f"file={vars_path},if=pflash,unit=1,format=raw",
         ]
 
+    def _augment_kernel_cmdline(self, cmdline: str) -> str:
+        """Backfill arch-appropriate console= entries on a direct-boot cmdline.
+
+        cmdline arrives composed by extraction as
+        "root=zfs=<bootfs> <org.zfsbootmenu:commandline>" -- the ZBM
+        property is the canonical place to set per-pool boot args, so we
+        honour it verbatim. If it doesn't already wire up this arch's
+        serial UART we backfill defaults so qemu's `-serial stdio`
+        receives kernel printk for the boot log.
+
+        Match by serial_console_token so a property that already configures
+        the right console doesn't get a duplicate appended. Order matters:
+        Linux makes the LAST `console=` the primary /dev/console. We want
+        serial primary (so ZBM TUI / login prompts land on -serial stdio
+        in --foreground mode) and tty0 just secondary so VNC also gets
+        kernel printk. Append tty0 first, then the arch-specific serial
+        console.
+        """
+        extras: list[str] = []
+        if self.keep_vm and "console=tty0" not in cmdline:
+            # virtio-gpu-pci is attached when keep_vm=True, giving fbcon
+            # something to bind to. Skipped headless -- without a graphics
+            # device tty0 has nothing to render onto.
+            extras.append("console=tty0")
+        if self.arch.serial_console_token not in cmdline:
+            extras.append(self.arch.serial_console_default)
+        if not extras:
+            return cmdline
+        return f"{cmdline} {' '.join(extras)}"
+
     def _boot_command(self) -> list[str]:
         """Assemble the qemu command line for the prepared disks.
 
@@ -876,29 +906,7 @@ class QemuMachine(Machine):
         direct_boot: list[str] = []
         if self._direct_boot is not None:
             kernel, initrd, cmdline = self._direct_boot
-            # cmdline is composed in extraction as
-            # "root=zfs=<bootfs> <org.zfsbootmenu:commandline>" -- the ZBM
-            # property is the canonical place to set per-pool boot args, so
-            # we honour it verbatim. If the cmdline doesn't already wire up
-            # this arch's serial UART we backfill defaults so qemu's
-            # `-serial stdio` receives kernel printk for the boot log.
-            # Match by serial_console_token so a property that already
-            # configures the right console doesn't get a duplicate appended.
-            # Order matters: Linux makes the LAST `console=` the primary
-            # /dev/console. We want serial primary (so ZBM TUI / login prompts
-            # land on -serial stdio in --foreground mode) and tty0 just
-            # secondary so VNC also gets kernel printk. Append tty0 first,
-            # then the arch-specific serial console.
-            extras: list[str] = []
-            if self.keep_vm and "console=tty0" not in cmdline:
-                # virtio-gpu-pci is attached when keep_vm=True, giving fbcon
-                # something to bind to. Skipped headless -- without a graphics
-                # device tty0 has nothing to render onto.
-                extras.append("console=tty0")
-            if self.arch.serial_console_token not in cmdline:
-                extras.append(self.arch.serial_console_default)
-            if extras:
-                cmdline = f"{cmdline} {' '.join(extras)}"
+            cmdline = self._augment_kernel_cmdline(cmdline)
             direct_boot = ["-kernel", str(kernel), "-initrd", str(initrd), "-append", cmdline]
 
         return [
