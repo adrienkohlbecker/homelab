@@ -11,6 +11,10 @@ PASSWORD=vagrant
 
 export DEBIAN_FRONTEND=noninteractive
 
+# Retry transient apt failures (Nexus restart, packet loss). Persists
+# in the shipped image; ansible runs see the same resilience.
+echo 'Acquire::Retries "3";' >/etc/apt/apt.conf.d/80-retries
+
 # Set a hostname
 
 hostname "$HOSTNAME"
@@ -203,8 +207,8 @@ ZBM_URL="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsboot
 
 apt-get install --yes curl
 mkdir -p /boot/efi/EFI/ZBM
-curl -fL -o /tmp/zbm.tar.gz "$ZBM_URL"
-EXPECTED_SUM="$(curl -fsSL "$ZBM_URL.sha256sum" | awk '{print $1}')"
+curl -fL --retry 3 --retry-connrefused -o /tmp/zbm.tar.gz "$ZBM_URL"
+EXPECTED_SUM="$(curl -fsSL --retry 3 --retry-connrefused "$ZBM_URL.sha256sum" | awk '{print $1}')"
 echo "$EXPECTED_SUM  /tmp/zbm.tar.gz" | sha256sum -c -
 tar -xzf /tmp/zbm.tar.gz -C /boot/efi/EFI/ZBM/ --no-same-owner
 rm /tmp/zbm.tar.gz
