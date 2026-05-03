@@ -279,6 +279,12 @@ systemctl enable tmp.mount
 
 apt-get install --yes openssh-server qemu-guest-agent
 
+# Disable ssh password authentication. The vagrant account is
+# key-only (no password set, see below); other users on the image
+# don't exist. Drop a snippet under sshd_config.d so the override
+# wins even if /etc/ssh/sshd_config is later edited.
+echo 'PasswordAuthentication no' >/etc/ssh/sshd_config.d/00-no-password-auth.conf
+
 # Configure vagrant user
 
 adduser --disabled-password --gecos "" "$USERNAME"
