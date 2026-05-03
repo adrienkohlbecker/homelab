@@ -20,11 +20,11 @@ from build_image import build_image
 from machine import (
     DEFAULT_UBUNTU,
     MACHINE_CHOICES,
+    PEAK_KB_SENTINEL_PREFIX,
     Machine,
     PodmanMachine,
     QemuMachine,
     UBUNTU_RELEASES,
-    upsert_memory_row,
 )
 from utils import CommandFailedException, IdempotenceFailedException, cancel_on_signal, print_line, tee_output
 
@@ -413,17 +413,14 @@ def main() -> int:
             print_line("\nInterrupted, shutting down...")
             rc = 130
         finally:
-            # Record peak RSS even on failure -- a timed-out run is often the
+            # Emit peak RSS even on failure -- a timed-out run is often the
             # most interesting reading. peak_rss_kb stays 0 when the read
             # failed (cgroup v1 host, qemu died before stop, etc.), in which
-            # case we have nothing useful to log.
+            # case we have nothing useful to publish. The sentinel goes
+            # through print_line so it lands in both the per-run ANSI log
+            # (eyeballable) and the stdout pipe testall.py reads from.
             if m.peak_rss_kb > 0:
-                upsert_memory_row(
-                    parsed_args.role,
-                    parsed_args.ubuntu,
-                    parsed_args.machine,
-                    m.peak_rss_kb,
-                )
+                print_line(f"{PEAK_KB_SENTINEL_PREFIX}{m.peak_rss_kb}")
             _print_phase_summary()
 
     # Drop per-run logs only on a clean pass when the caller (typically
