@@ -1181,7 +1181,7 @@ class QemuMachine(Machine):
             "-smp",
             "8,sockets=8",
             "-name",
-            "packer-ubuntu",
+            f"homelab-{self.machine}-{self.role}",
             "-m",
             "4096M",
             "-cpu",
