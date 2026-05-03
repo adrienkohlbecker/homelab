@@ -48,7 +48,7 @@ def test_default_x86_64_no_keep_no_direct_boot(
 
     # Sizing flows from QemuMachineSpec; the factory's default machine is
     # "minimal" which is sized down to 2048M / 4 vcpus.
-    assert cmd[cmd.index("-smp") + 1] == "4,sockets=4"
+    assert cmd[cmd.index("-smp") + 1] == "4,sockets=1,cores=4"
     assert cmd[cmd.index("-m") + 1] == "2048M"
     assert cmd[cmd.index("-cpu") + 1] == "host"
     # -name distinguishes parallel runs in ps/pgrep output.
@@ -203,8 +203,8 @@ def test_memory_and_vcpus_flow_from_spec(
     m._spec = m._spec._replace(memory_mb=12345, vcpus=2)
     cmd = m._boot_command()
     assert cmd[cmd.index("-m") + 1] == "12345M"
-    # -smp keeps single-core sockets to match the historical layout.
-    assert cmd[cmd.index("-smp") + 1] == "2,sockets=2"
+    # -smp emits a single-socket layout with one core per vcpu.
+    assert cmd[cmd.index("-smp") + 1] == "2,sockets=1,cores=2"
 
 
 @pytest.mark.parametrize("host_arch", ["x86_64", "aarch64"])

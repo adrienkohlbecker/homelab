@@ -65,9 +65,11 @@ class QemuMachineSpec(NamedTuple):
     # devices as positional args. None means no setup needed.
     disk_setup_script: str | None
     # Guest RAM in MiB and vcpu count, plumbed into qemu's -m / -smp.
-    # Defaults match the historical 4096M / 8-vcpu single-socket layout
-    # so existing variants are unchanged; minimal trims to 2048/4 since
-    # the cloud-image variant has no zpool to feed.
+    # Defaults match the historical 4096M / 8-vcpu sizing so existing
+    # variants are unchanged; minimal trims to 2048/4 since the cloud-
+    # image variant has no zpool to feed. -smp emits a single-socket
+    # layout (sockets=1,cores=vcpus), the conventional shape for a guest
+    # on a non-NUMA hypervisor.
     memory_mb: int = 4096
     vcpus: int = 8
 
@@ -953,7 +955,7 @@ class QemuMachine(Machine):
             # uses qemu-xhci added above instead.
             f"type={self.arch.machine_type},accel={accel},usb=on",
             "-smp",
-            f"{self._spec.vcpus},sockets={self._spec.vcpus}",
+            f"{self._spec.vcpus},sockets=1,cores={self._spec.vcpus}",
             "-name",
             f"homelab-{self.machine}-{self.role}",
             "-m",
