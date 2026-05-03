@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#MISE description="Build a packer image variant and verify it boots"
+#MISE interactive=true
+#USAGE arg "<variant>" help="Variant: zfs or zfs-lab"
+#USAGE flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
+#USAGE flag "--upstream" help="Pull apt packages and the cloud image from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
+#USAGE flag "--no-verify" help="Skip the post-build packer:verify smoke test (boot + systemctl is-system-running)."
+# shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
+set -euo pipefail
+
+ubuntu="${usage_ubuntu}"
+variant="${usage_variant}"
+upstream="${usage_upstream:-false}"
+
+rm -rf "${QEMU_DIR}/${ubuntu}/ubuntu-${variant}.new"
+
+arch="$(uname -m | sed s/arm64/aarch64/)"
+
+# PACKER_FLAGS expands to multiple flags; intentional word-split.
+# shellcheck disable=SC2086
+packer build ${PACKER_FLAGS} \
+  -var "ubuntu_name=${ubuntu}" \
+  -var "arch=${arch}" \
+  -var "upstream_mirrors=${upstream}" \
+  -var "zbm_version=${ZBM_VERSION}" \
+  -var "output_directory=${QEMU_DIR}/${ubuntu}" \
+  "-only=qemu.ubuntu-${variant}" \
+  packer
+
+if [ "${usage_no_verify:-false}" != "true" ]; then
+  mise run packer:verify "${variant}" --ubuntu "${ubuntu}"
+fi
