@@ -1,8 +1,7 @@
 """Tests for the small Machine / QemuMachine / PodmanMachine properties.
 
-Covers wrapper_timeout (Machine), host_arch (QemuMachine), and image_tag
-(PodmanMachine) -- pure-derivation properties that the upcoming refactors
-will touch.
+Covers wrapper_timeout (Machine), the cached ArchProfile on QemuMachine,
+and image_tag (PodmanMachine).
 """
 
 from collections.abc import Callable
@@ -38,21 +37,20 @@ def test_wrapper_timeout_is_zero_when_keeping(
         ("arm64", "aarch64"),
     ],
 )
-def test_host_arch_normalises_known_machines(
+def test_arch_profile_normalises_known_machines(
     qemu_machine_factory: Callable[..., machine.QemuMachine],
     platform_machine: str,
     expected: str,
 ) -> None:
     m = qemu_machine_factory(host_arch=platform_machine)
-    assert m.host_arch == expected
+    assert m.arch.name == expected
 
 
 def test_unknown_host_arch_fails_fast_at_construction(
     qemu_machine_factory: Callable[..., machine.QemuMachine],
 ) -> None:
-    # Arch detection runs once in QemuMachine.__init__ now, so an
-    # unsupported platform raises before the instance exists -- better than
-    # the old property that only failed at first access.
+    # detect_host_arch() runs once inside QemuMachine.__init__, so an
+    # unsupported platform raises before the instance exists.
     with pytest.raises(RuntimeError, match="Unsupported host architecture"):
         qemu_machine_factory(host_arch="riscv64")
 
