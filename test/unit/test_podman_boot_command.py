@@ -50,10 +50,10 @@ def test_uses_service_image_tag_for_service_role(
     podman_machine_factory: Callable[..., machine.PodmanMachine],
     tmp_path,
 ) -> None:
-    # Stage a podman-importing _test.yml so image_tag flips to homelab-service.
+    # Stage a podman-importing _setup.yml so image_tag flips to homelab-service.
     role_dir = tmp_path / "roles" / "edge" / "tasks"
     role_dir.mkdir(parents=True)
-    (role_dir / "_test.yml").write_text("- import_role:\n    tasks_from: nginx\n")
+    (role_dir / "_setup.yml").write_text("- import_role:\n    tasks_from: nginx\n")
 
     m = podman_machine_factory(role="edge", ubuntu_name="noble")
     # Image tag is the very last positional in the podman cmdline.
