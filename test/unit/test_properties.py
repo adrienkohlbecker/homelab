@@ -47,12 +47,14 @@ def test_host_arch_normalises_known_machines(
     assert m.host_arch == expected
 
 
-def test_host_arch_raises_on_unknown(
+def test_unknown_host_arch_fails_fast_at_construction(
     qemu_machine_factory: Callable[..., machine.QemuMachine],
 ) -> None:
-    m = qemu_machine_factory(host_arch="riscv64")
+    # Arch detection runs once in QemuMachine.__init__ now, so an
+    # unsupported platform raises before the instance exists -- better than
+    # the old property that only failed at first access.
     with pytest.raises(RuntimeError, match="Unsupported host architecture"):
-        _ = m.host_arch
+        qemu_machine_factory(host_arch="riscv64")
 
 
 def test_image_tag_for_non_service_role(
