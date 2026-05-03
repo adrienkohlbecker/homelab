@@ -33,16 +33,6 @@ description = "packer init (forwards args)"
 dir = "{{config_root}}/packer"
 run = 'packer init "$@" .'
 
-[tasks."packer:all"]
-description = "Build ubuntu-zfs and ubuntu-zfs-lab in parallel"
-usage = '''
-flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
-flag "--upstream" help="Forwarded to packer:build for each sub-build."
-'''
-run = [
-  'flag=$([ "${usage_upstream:-false}" = "true" ] && echo --upstream); mise run packer:build zfs --ubuntu "${usage_ubuntu}" $flag ::: packer:build zfs-lab --ubuntu "${usage_ubuntu}" $flag',
-]
-
 [tasks."packer:clean"]
 description = "Remove .new build artifacts"
 usage = '''
