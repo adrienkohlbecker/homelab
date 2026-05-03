@@ -113,6 +113,13 @@ def test_format_ansible_cmd_default_envelope(
     for arg in m.ansible_args:
         assert arg in cmd
 
+    # --limit pins the static `hosts: all` playbook to the inventory host
+    assert "--limit" in cmd
+    assert cmd[cmd.index("--limit") + 1] == m.inventory_host
+    # _role_under_test injects the role name into the static playbooks'
+    # `import_role: name: "{{ _role_under_test }}"` references.
+    assert f"_role_under_test={m.role}" in cmd
+
     # Trailing positional
     assert cmd[-1] == "site.yml"
 
