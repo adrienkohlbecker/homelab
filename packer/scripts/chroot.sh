@@ -3,6 +3,12 @@ set -euxo pipefail
 
 read -r -a DISKS <<<"$DISKS"
 
+# Local constants. SOURCE_NAME comes from packer's shell-provisioner
+# env block; DISKS, LAYOUT, SSH_KEY_PUB are exported by provision.sh.
+HOSTNAME="$SOURCE_NAME"
+USERNAME=vagrant
+PASSWORD=vagrant
+
 export DEBIAN_FRONTEND=noninteractive
 
 # Set a hostname

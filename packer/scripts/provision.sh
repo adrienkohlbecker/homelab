@@ -1,9 +1,6 @@
 #!/bin/bash
 set -euxo pipefail
 
-HOSTNAME=$SOURCE_NAME
-USERNAME=vagrant
-PASSWORD=vagrant
 SSH_KEY_PUB=$(cat /home/vagrant/.ssh/authorized_keys)
 
 case $SOURCE_NAME in
@@ -133,14 +130,24 @@ EOF
 # is torn down by the kernel the instant unshare exits — no race with host
 # services (udisks2, multipathd, snapd's LXD glue) reaching into our mounts
 # and leaving stale references on /mnt.
-unshare --mount --propagation private bash <<NSEOF
+#
+# Env propagation: chroot inherits the calling shell's env, so packer's
+# UBUNTU_*/ZBM_*/REFIND_NAME (already exported via the shell provisioner
+# env block) flow straight through. Script-local vars must be exported
+# explicitly; DISKS is a bash array so flatten it to a space-separated
+# string (chroot.sh re-parses with `read -r -a`). New vars added later
+# need only be exported here, not enumerated on the chroot line.
+# shellcheck disable=SC2178  # array→string is intentional for export across the chroot bash invocation
+export DISKS="${DISKS[*]}"
+export LAYOUT SSH_KEY_PUB
+unshare --mount --propagation private bash <<'EOF'
 set -euxo pipefail
 mount -t proc proc /mnt/proc
 mount -t sysfs sys /mnt/sys
 mount -B /dev /mnt/dev
 mount -t devpts pts /mnt/dev/pts
-chroot /mnt env DISKS="${DISKS[*]}" LAYOUT="$LAYOUT" HOSTNAME="$HOSTNAME" USERNAME="$USERNAME" PASSWORD="$PASSWORD" SSH_KEY_PUB="$SSH_KEY_PUB" UBUNTU_NAME="$UBUNTU_NAME" UBUNTU_MIRROR="$UBUNTU_MIRROR" UBUNTU_MIRROR_SECURITY="$UBUNTU_MIRROR_SECURITY" UBUNTU_MIRROR_UPSTREAM="$UBUNTU_MIRROR_UPSTREAM" UBUNTU_MIRROR_SECURITY_UPSTREAM="$UBUNTU_MIRROR_SECURITY_UPSTREAM" ZBM_VERSION="$ZBM_VERSION" ZBM_ARCH="$ZBM_ARCH" REFIND_NAME="$REFIND_NAME" bash </home/vagrant/chroot.sh
-NSEOF
+chroot /mnt bash </home/vagrant/chroot.sh
+EOF
 
 # Only the rpool root dataset itself remains mounted in the host namespace.
 zfs unmount "rpool/ROOT/$UBUNTU_NAME"
