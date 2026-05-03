@@ -30,10 +30,12 @@ def test_default_x86_64_no_keep_no_direct_boot(
     cmd = m._boot_command()
 
     # GNU timeout wrapper -- the 10s kill-after gives the qemu signal handler
-    # a window before SIGKILL.
+    # a window before SIGKILL. wrapper_timeout = machine_timeout +
+    # WRAPPER_GRACE_SECONDS (60s); the wrapper has to outlast the inner
+    # asyncio.timeout in run_test.
     assert cmd[0] == "timeout"
     assert cmd[1] == "--kill-after=10s"
-    assert cmd[2] == "600"
+    assert cmd[2] == str(600 + machine.Machine.WRAPPER_GRACE_SECONDS)
     assert cmd[3] == "qemu-system-x86_64"
 
     # Drives expand to repeated --drive args.
