@@ -235,7 +235,8 @@ build {
     inline = [
       "set -euxo pipefail",
       "rm -f ${var.output_directory}/${source.name}.new/packer-ubuntu",
-      "sed -i $'/\\tpacker-ubuntu$/d' ${var.output_directory}/${source.name}.new/sha256sum",
+      "sed $'/\\tpacker-ubuntu$/d' ${var.output_directory}/${source.name}.new/sha256sum > ${var.output_directory}/${source.name}.new/sha256sum.tmp",
+      "mv ${var.output_directory}/${source.name}.new/sha256sum.tmp ${var.output_directory}/${source.name}.new/sha256sum",
       "rm -rf ${var.output_directory}/${source.name}",
       "mv ${var.output_directory}/${source.name}.new ${var.output_directory}/${source.name}",
     ]
