@@ -77,5 +77,14 @@
     nginx_subdomain: nexus
     nginx_proxy_pass: http://localhost:8082/
     nginx_enable_http: true
+    # Stream large artifact transfers (Ubuntu ISOs, cloud images, docker
+    # layers) without nginx buffering to disk or capping the body. Cold-
+    # cache fetches of upstream proxies (e.g. cdimage.ubuntu.com) can
+    # take minutes; the default 60s read timeout cuts them off mid-pull.
+    nginx_proxy_buffering: "off"
+    nginx_proxy_request_buffering: "off"
+    nginx_client_max_body_size: "0"
+    nginx_proxy_read_timeout: 3600s
+    nginx_proxy_send_timeout: 3600s
   tags:
     - nexus
