@@ -3,7 +3,7 @@
 # apt-installs zfsutils-linux, mounts the host 9p share, imports the rpool
 # from the attached packer qcow2(s), copies the highest-versioned on-pool
 # kernel + initrd, and composes a ZBM-style cmdline
-# ("root=zfs=<bootfs> <org.zfsbootmenu:commandline>") read off rpool/ROOT
+# ("root=zfs:<bootfs> <org.zfsbootmenu:commandline>") read off rpool/ROOT
 # before powering off. The poweroff exit is how the host knows extraction
 # finished -- the qemu process exits cleanly.
 package_update: true
@@ -28,7 +28,7 @@ runcmd:
     cp -L "$initrd" /share/initrd
     zbm_args=$(zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT)
     [ "$zbm_args" = "-" ] && zbm_args=""
-    printf 'root=zfs=%s %s' "$active" "$zbm_args" > /share/cmdline
+    printf 'root=zfs:%s %s' "$active" "$zbm_args" > /share/cmdline
     sync
     touch /share/done
 power_state:

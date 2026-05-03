@@ -32,14 +32,14 @@ def test_extract_returns_cached_artifacts_without_running_qemu(
     extractor.cache_dir.mkdir(parents=True)
     extractor.kernel_path.write_bytes(b"vmlinuz-cached")
     extractor.initrd_path.write_bytes(b"initrd-cached")
-    extractor.cmdline_path.write_text("root=zfs=rpool/ROOT/cached extra=arg\n")
+    extractor.cmdline_path.write_text("root=zfs:rpool/ROOT/cached extra=arg\n")
 
     kernel, initrd, cmdline = asyncio.run(extractor.extract())
 
     assert kernel == extractor.kernel_path
     assert initrd == extractor.initrd_path
     # cmdline trailing whitespace is stripped per the contract.
-    assert cmdline == "root=zfs=rpool/ROOT/cached extra=arg"
+    assert cmdline == "root=zfs:rpool/ROOT/cached extra=arg"
 
 
 def test_cache_dir_is_keyed_by_qcow2_fingerprint(tmp_path: Path) -> None:
