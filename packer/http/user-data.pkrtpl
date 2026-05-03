@@ -1,47 +1,21 @@
 #cloud-config
-autoinstall:
-    version: 1
-    early-commands:
-        # Stop ssh for packer
-        - sudo systemctl stop ssh.service ssh.socket
-    locale: en_US.UTF-8
-    refresh-installer:
-        update: true
-    keyboard:
-        layout: fr
-        variant: mac
-    identity:
-        hostname: box
-        username: vagrant
-        password: '$6$rounds=4096$5CU3LEj/MQvbkfPb$LmKEF9pCfU8R.dA.GemgE/8GT6r9blge3grJvdsVTMFKyLEQwzEF3SGWqAzjawY/XHRpWj4fOiLBrRyxJhIRJ1' # vagrant
-    ssh:
-        install-server: yes
-        allow-pw: no
-        authorized-keys:
-          - ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA6NF8iallvQVp22WDkTkyrtvp9eWW6A8YVr+kz4TjGYe7gHzIw+niNltGEFHzD8+v1I2YJ6oXevct1YeS0o9HZyN1Q9qgCgzUFtdOKLv6IedplqoPkcmF0aYet2PkEDo3MlTBckFXPITAMzF8dJSIFo9D8HfdOV0IAdx4O7PtixWKn5y2hMNG0zQPyUecp4pzC6kivAIhyfHilFR61RGL+GPXQ2MWZWFYbAGjyiYJnAmCP3NOTd0jMZEnDkbUvxhMmBYSdETk1rRgm+R4LOzFUGaHqHDLKLX+FIPKcF96hrucXzcWyLbIbEgE98OHlnVYCzRdK8jlqm8tehUc9c9WhQ== vagrant insecure public key
-          - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key
-    storage:
-        layout:
-            name: direct
-    timezone: UTC
-    user-data:
-        disable_root: false
-    late-commands:
-        - echo 'vagrant ALL=(ALL) NOPASSWD:ALL' > /target/etc/sudoers.d/vagrant
-        - curtin in-target --target=/target -- chmod 440 /etc/sudoers.d/vagrant
-        - curtin in-target --target=/target -- apt-get update
-        - curtin in-target --target=/target -- apt-get upgrade --yes
-    apt:
-        preserve_sources_list: false
-        mirror-selection:
-            primary:
-              - uri: "${archive_url}"
-                arches: [i386, amd64]
-              - uri: "${archive_url}"
-                arches: [s390x, arm64, armhf, powerpc, ppc64el, riscv64]
-        fallback: abort
-        security:
-          - uri:  "${security_url}"
-            arches: [i386, amd64]
-          - uri: "${security_url}"
-            arches: [s390x, arm64, armhf, powerpc, ppc64el, riscv64]
+hostname: ubuntu
+package_update: false
+package_upgrade: false
+ssh_pwauth: false
+users:
+  - name: vagrant
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    shell: /bin/bash
+    lock_passwd: true
+    ssh_authorized_keys:
+      - ssh-rsa AAAAB3NzaC1yc2EAAAABIwAAAQEA6NF8iallvQVp22WDkTkyrtvp9eWW6A8YVr+kz4TjGYe7gHzIw+niNltGEFHzD8+v1I2YJ6oXevct1YeS0o9HZyN1Q9qgCgzUFtdOKLv6IedplqoPkcmF0aYet2PkEDo3MlTBckFXPITAMzF8dJSIFo9D8HfdOV0IAdx4O7PtixWKn5y2hMNG0zQPyUecp4pzC6kivAIhyfHilFR61RGL+GPXQ2MWZWFYbAGjyiYJnAmCP3NOTd0jMZEnDkbUvxhMmBYSdETk1rRgm+R4LOzFUGaHqHDLKLX+FIPKcF96hrucXzcWyLbIbEgE98OHlnVYCzRdK8jlqm8tehUc9c9WhQ== vagrant insecure public key
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key
+apt:
+  preserve_sources_list: false
+  primary:
+    - arches: [default]
+      uri: "${archive_url}"
+  security:
+    - arches: [default]
+      uri: "${security_url}"
