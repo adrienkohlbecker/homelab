@@ -29,7 +29,6 @@ def machine_factory(
             ssh_user="vagrant",
             ansible_args=["-e", '{"flag":true}'],
             inventory_host="box",
-            idfile="pid",
             machine="box",
             role="testrole",
             keep_vm=False,
