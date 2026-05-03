@@ -72,8 +72,9 @@ def qemu_machine_factory(
     instances: list[machine.QemuMachine] = []
 
     def make(*, host_arch: str = "x86_64", **overrides: Any) -> machine.QemuMachine:
-        # platform.machine is read by QemuMachine.host_arch on every access,
-        # not at construction time, so the latest mock wins.
+        # detect_host_arch() runs once inside QemuMachine.__init__ and the
+        # ArchProfile gets cached on the instance, so the patch must be in
+        # place before make() constructs the machine below.
         monkeypatch.setattr(machine.platform, "machine", lambda: host_arch)
         defaults: dict[str, Any] = dict(
             machine="minimal",
