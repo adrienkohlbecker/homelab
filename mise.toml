@@ -107,6 +107,10 @@ run = "git ls-files -z '*.sh' 'mise-tasks/**' | xargs -0 shfmt -i 2 -d"
 description = "Run typos checker"
 run = "typos"
 
+[tasks.test]
+description = "Run Python unit tests (pytest)"
+run = "uv run pytest"
+
 [tasks.fmt]
 description = "Apply all formatters"
 depends = [
