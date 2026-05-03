@@ -50,7 +50,8 @@ def test_default_x86_64_no_keep_no_direct_boot(
     assert cmd[cmd.index("-smp") + 1] == "8,sockets=8"
     assert cmd[cmd.index("-m") + 1] == "4096M"
     assert cmd[cmd.index("-cpu") + 1] == "host"
-    assert cmd[cmd.index("-name") + 1] == "packer-ubuntu"
+    # -name distinguishes parallel runs in ps/pgrep output.
+    assert cmd[cmd.index("-name") + 1] == f"homelab-{m.machine}-{m.role}"
 
     # Headless when not keeping the VM.
     display_idx = cmd.index("-display")
