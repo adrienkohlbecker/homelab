@@ -46,9 +46,9 @@ for disk in "${DISKS[@]}"; do
   sgdisk -a1 -n4:24K:+1000K -t4:EF02 "$disk" # MBR booting (EF02 = BIOS boot partition)
 
   if [ "$LAYOUT" = "" ]; then
-    sgdisk -n2:0:+500M -t2:8200 "$disk" # Swap (8200 = Linux Swap)
+    sgdisk -n2:0:+4G -t2:8200 "$disk" # Swap (8200 = Linux Swap)
   else
-    sgdisk -n2:0:+500M -t2:FD00 "$disk" # Swap (FD00 = Linux RAID)
+    sgdisk -n2:0:+4G -t2:FD00 "$disk" # Swap (FD00 = Linux RAID)
   fi
 
   if [ "$SOURCE_NAME" = "ubuntu-zfs-lab" ]; then
