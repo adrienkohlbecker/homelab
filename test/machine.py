@@ -16,7 +16,8 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import NamedTuple, Self
 
-from arch import ArchProfile, detect_host_arch, profile_for_name
+from arch import ArchProfile, detect_host_arch, uefi_code_path_for
+from extract import KernelInitrdExtractor
 from setup_mitogen import ensure_mitogen_symlink
 from utils import (
     CommandResult,
@@ -626,267 +627,6 @@ class Machine:
             self.workdir.cleanup()
 
 
-# cloud-init script consumed by _extract_kernel_initrd's one-shot VM. Lives
-# in its own file so editor YAML highlighting / yamllint pick it up; see the
-# comment block at the top of test/extraction/user-data for what it does.
-EXTRACTION_USER_DATA_PATH = Path(__file__).parent / "extraction" / "user-data"
-
-
-def _qcow2_fingerprint(paths: list[Path]) -> str:
-    """sha256 over the OS qcow2(s) -- cache key for extracted kernel/initrd.
-
-    Reads all bytes; on a 1 GiB packer image this takes a few seconds. Sorted
-    by path so a multi-disk variant (ubuntu-zfs-lab's 3-way mirror) yields a
-    stable digest regardless of iteration order. Any packer rebuild changes
-    the qcow2 contents, which invalidates the cache and re-runs extraction.
-    """
-    import hashlib
-
-    h = hashlib.sha256()
-    for p in sorted(paths):
-        with p.open("rb") as f:
-            while chunk := f.read(1024 * 1024):
-                h.update(chunk)
-    return h.hexdigest()
-
-
-async def _ensure_extraction_cloudimg(imagedir: str, ubuntu_name: str, arch: ArchProfile, upstream_mirrors: bool) -> Path:
-    """Download (once) the upstream Ubuntu cloud image used as the extraction vehicle.
-
-    Pulls through the lab Nexus raw proxy (`ubuntu-cloud-images`) by default;
-    `upstream_mirrors=True` bypasses to cloud-images.ubuntu.com directly,
-    matching the same flag's semantics for ansible mirrors and packer apt.
-    """
-    name = f"{ubuntu_name}-server-cloudimg-{arch.cloud_image_suffix}.img"
-    cache = Path(imagedir) / "cloud-images"
-    cache.mkdir(parents=True, exist_ok=True)
-    target = cache / name
-    if target.exists():
-        return target
-
-    base = "https://cloud-images.ubuntu.com" if upstream_mirrors else "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images"
-    url = f"{base}/{ubuntu_name}/current/{name}"
-    tmp = target.with_suffix(target.suffix + ".tmp")
-    print_line(f"Downloading {url}")
-    await run_command(["curl", "-fL", "--retry", "3", "-o", str(tmp), url])
-    tmp.rename(target)
-    return target
-
-
-def _uefi_code_path(arch: str) -> Path:
-    """Locate the EDK2/OVMF CODE blob for *arch* on the host.
-
-    Searches Homebrew (macOS) plus the canonical package paths on Debian/
-    Ubuntu and Fedora/RHEL (per ArchProfile.uefi_code_candidates). Raises
-    RuntimeError if none of the candidates exist.
-    """
-    profile = profile_for_name(arch)
-    for c in profile.uefi_code_candidates:
-        if Path(c).exists():
-            return Path(c)
-    raise RuntimeError(
-        f"No {arch} UEFI firmware found in {list(profile.uefi_code_candidates)}. "
-        "Install via `brew install qemu` (macOS), "
-        "`apt install ovmf` / `apt install qemu-efi-aarch64` (Debian/Ubuntu), or "
-        "`dnf install edk2-ovmf` (Fedora/RHEL)."
-    )
-
-
-async def _build_seed_iso(out: Path, user_data: Path, meta_data: Path) -> None:
-    """Pack a NoCloud cidata seed iso for the extraction VM's cloud-init."""
-    if shutil.which("cloud-localds"):
-        await run_command(["cloud-localds", str(out), str(user_data), str(meta_data)])
-        return
-    iso_tool = shutil.which("xorrisofs") or shutil.which("mkisofs") or shutil.which("genisoimage")
-    if iso_tool is None:
-        raise RuntimeError("Need cloud-localds or xorrisofs/mkisofs/genisoimage in PATH to build cloud-init seed iso")
-    await run_command(
-        [
-            iso_tool,
-            "-output",
-            str(out),
-            "-volid",
-            "cidata",
-            "-joliet",
-            "-rock",
-            str(user_data),
-            str(meta_data),
-        ]
-    )
-
-
-async def _extract_kernel_initrd(
-    *,
-    imagedir: str,
-    ubuntu_name: str,
-    os_src_paths: list[str],
-    arch: ArchProfile,
-    upstream_mirrors: bool,
-) -> tuple[Path, Path, str]:
-    """Pull on-pool kernel + initrd out of a ZFS-rooted packer qcow2, cached by sha256.
-
-    Used on aarch64, where rEFInd -> ZBM -> kexec from the packer image into
-    the on-pool kernel panics on EDK2 (see notes/zbm-aarch64-kexec-bug-report.md).
-    Spins up a one-shot Ubuntu cloud-image VM that apt-installs zfsutils-linux,
-    imports the rpool from the attached packer qcow2(s), and copies the
-    highest-versioned vmlinuz + initrd to a 9p host share. Subsequent runs
-    cache-hit until the source qcow2 sha256 changes (i.e. packer rebuilt).
-
-    Returns (kernel_path, initrd_path, full_cmdline) where full_cmdline is
-    "root=zfs=<bootfs> <org.zfsbootmenu:commandline>" -- composed inside
-    the extraction VM by reading the ZBM property off rpool/ROOT, matching
-    how ZBM itself builds the kexec cmdline. The caller backfills
-    console=/earlycon= defaults if the property doesn't supply them.
-    """
-    fingerprint = _qcow2_fingerprint([Path(p) for p in os_src_paths])
-    cache = Path(imagedir) / "extracted" / fingerprint
-    kernel = cache / "kernel"
-    initrd = cache / "initrd"
-    cmdline_path = cache / "cmdline"
-
-    if kernel.exists() and initrd.exists() and cmdline_path.exists():
-        return kernel, initrd, cmdline_path.read_text().strip()
-
-    # Serialise concurrent testrole.py workers extracting the same qcow2:
-    # without the lock, parallel testall.py would spin up two extraction VMs
-    # on the same fingerprint and race on the shutil.copy2 into cache/.
-    cache.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = cache.parent / f"{fingerprint}.lock"
-    with lock_path.open("w") as lock_fd:
-        fcntl.flock(lock_fd, fcntl.LOCK_EX)
-        # Re-check inside the lock: the previous holder may have just finished
-        # extracting; we should cache-hit instead of redoing the work.
-        if kernel.exists() and initrd.exists() and cmdline_path.exists():
-            return kernel, initrd, cmdline_path.read_text().strip()
-
-        print_line(f"Extracting kernel/initrd from packer qcow2 (cache miss; sha256={fingerprint[:12]})")
-        cloud_image = await _ensure_extraction_cloudimg(imagedir, ubuntu_name, arch, upstream_mirrors)
-
-        with tempfile.TemporaryDirectory(dir=imagedir) as tmpdir:
-            tmp = Path(tmpdir)
-            (tmp / "meta-data").write_text("instance-id: extract\nlocal-hostname: extract\n")
-            seed = tmp / "seed.iso"
-            await _build_seed_iso(seed, EXTRACTION_USER_DATA_PATH, tmp / "meta-data")
-
-            # Cloud-image overlay (writeable, resized so apt has headroom).
-            os_overlay = tmp / "cloud.qcow2"
-            await run_command(
-                [
-                    "qemu-img",
-                    "create",
-                    "-f",
-                    "qcow2",
-                    "-b",
-                    str(cloud_image),
-                    "-F",
-                    "qcow2",
-                    str(os_overlay),
-                    "20G",
-                ]
-            )
-
-            # Per-disk overlays of the source packer qcow2(s) so import
-            # doesn't mutate the originals (and a crashed extraction never
-            # corrupts them).
-            rpool_overlays: list[str] = []
-            for idx, src in enumerate(os_src_paths, start=1):
-                overlay = tmp / f"rpool-{idx}.qcow2"
-                await run_command(
-                    [
-                        "qemu-img",
-                        "create",
-                        "-f",
-                        "qcow2",
-                        "-b",
-                        str(Path(src).resolve()),
-                        "-F",
-                        "qcow2",
-                        str(overlay),
-                    ]
-                )
-                rpool_overlays.append(str(overlay))
-
-            share = tmp / "share"
-            share.mkdir()
-
-            accel = "hvf" if platform.system() == "Darwin" else "kvm"
-
-            cmd: list[str] = [
-                arch.qemu_binary,
-                "--drive",
-                f"file={os_overlay},if=virtio,format=qcow2,cache=unsafe,discard=unmap",
-                "--drive",
-                f"file={seed},if=virtio,format=raw",
-                *(arg for ov in rpool_overlays for arg in ("--drive", f"file={ov},if=virtio,format=qcow2,cache=unsafe")),
-                "-netdev",
-                "user,id=net0",
-                "-device",
-                "virtio-net,netdev=net0",
-                "-fsdev",
-                f"local,id=share,path={share},security_model=mapped-xattr",
-                "-device",
-                "virtio-9p-pci,fsdev=share,mount_tag=share",
-                "-machine",
-                f"type={arch.machine_type},accel={accel}",
-                "-cpu",
-                "host",
-                "-smp",
-                "4",
-                "-m",
-                "2048M",
-                "-display",
-                "none",
-                "-serial",
-                "null",
-                "-no-reboot",
-            ]
-            if not arch.bios_boot_supported:
-                code_path = _uefi_code_path(arch.name)
-                vars_path = tmp / "AAVMF_VARS.fd"
-                # Size empty vars from the code blob so pflash pair sizes match.
-                await run_command(["truncate", "-s", str(code_path.stat().st_size), str(vars_path)])
-                cmd += [
-                    "-drive",
-                    f"file={code_path},if=pflash,unit=0,format=raw,readonly=on",
-                    "-drive",
-                    f"file={vars_path},if=pflash,unit=1,format=raw",
-                ]
-
-            log_path = tmp / "extract.log"
-            print_cmd_line(cmd)
-            with log_path.open("wb") as log:
-                proc = await asyncio.create_subprocess_exec(
-                    *cmd,
-                    stdin=asyncio.subprocess.DEVNULL,
-                    stdout=log,
-                    stderr=asyncio.subprocess.STDOUT,
-                )
-                try:
-                    # 20 min covers a cold cloud-image apt update + install +
-                    # zpool import on a slow link. Cache hits skip all of this.
-                    await asyncio.wait_for(proc.wait(), timeout=20 * 60)
-                except asyncio.TimeoutError:
-                    with contextlib.suppress(ProcessLookupError):
-                        proc.kill()
-                    await proc.wait()
-                    raise RuntimeError(f"Kernel extraction timed out (log: {log_path})") from None
-
-            if not (share / "done").exists():
-                # Promote the qemu log out of tmpdir so the user can inspect
-                # it after TemporaryDirectory cleanup runs.
-                fail_log = cache.parent / f"{fingerprint}.failed.log"
-                with contextlib.suppress(OSError):
-                    shutil.copy2(log_path, fail_log)
-                raise RuntimeError(f"Kernel extraction failed; see {fail_log}")
-
-            cache.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(share / "kernel", kernel)
-            shutil.copy2(share / "initrd", initrd)
-            shutil.copy2(share / "cmdline", cmdline_path)
-
-    return kernel, initrd, cmdline_path.read_text().strip()
-
-
 def _read_vm_hwm(pid: int) -> int:
     """Return the kernel-tracked peak RSS in kB for *pid*, or 0 if unreadable.
 
@@ -1050,19 +790,29 @@ class QemuMachine(Machine):
         ]
         if self.arch.direct_boot_required_for_zfs:
             # aarch64: bypass the firmware boot chain (rEFInd -> ZBM -> kexec
-            # panics on EDK2) by extracting the on-pool kernel + initrd from
-            # the packer qcow2 once and direct-booting them. Cached by content
-            # sha256 so a packer rebuild auto-invalidates.
-            self._direct_boot = await _extract_kernel_initrd(
-                imagedir=self.imagedir,
-                ubuntu_name=self.ubuntu_name,
-                os_src_paths=os_src_paths,
-                arch=self.arch,
-                upstream_mirrors=self.upstream_mirrors,
-            )
+            # panics on EDK2) by direct-booting the on-pool kernel/initrd.
+            # Subclasses can override _resolve_direct_boot() to inject their
+            # own override (launch.py uses this for ZBM iteration).
+            self._direct_boot = await self._resolve_direct_boot(os_src_paths)
         else:
             await self._copy_efivars_from(image_dir)
             self.drives += await self._uefi_drives()
+
+    async def _resolve_direct_boot(self, os_src_paths: list[str]) -> tuple[Path, Path, str]:
+        """Resolve (kernel, initrd, cmdline) for the direct-boot ZFS path.
+
+        Default delegates to KernelInitrdExtractor, which spins up a one-shot
+        cloud-image VM to copy the on-pool kernel/initrd out of the packer
+        qcow2. Cached by qcow2 sha256, so a packer rebuild auto-invalidates.
+        """
+        extractor = KernelInitrdExtractor(
+            imagedir=self.imagedir,
+            ubuntu_name=self.ubuntu_name,
+            os_src_paths=os_src_paths,
+            arch=self.arch,
+            upstream_mirrors=self.upstream_mirrors,
+        )
+        return await extractor.extract()
 
     async def run_disk_setup(self) -> None:
         """Push test/disks/<variant>.sh to the VM and run it via sudo.
@@ -1100,8 +850,9 @@ class QemuMachine(Machine):
     async def _uefi_drives(self) -> list[str]:
         """UEFI pflash code+vars pair for the host arch.
 
-        The CODE blob is resolved per-arch via _uefi_code_path (Homebrew on
-        macOS, ovmf/qemu-efi-aarch64 on Linux). The VARS blob is one of:
+        The CODE blob is resolved per-arch via arch.uefi_code_path_for
+        (Homebrew on macOS, ovmf/qemu-efi-aarch64 on Linux). The VARS blob
+        is one of:
 
         - {workdir}/efivars.fd, if it's been copied in via _copy_efivars_from
           (ZFS variants -- the packer image ships a primed efivars template
@@ -1109,7 +860,7 @@ class QemuMachine(Machine):
         - else a fresh empty 64 MiB file -- right for ad-hoc launches like
           minimal or launch.py --with-pflash where there's no prior state.
         """
-        code_path = _uefi_code_path(self.host_arch)
+        code_path = uefi_code_path_for(self.arch)
         packer_vars = Path(f"{self.workdir.name}/efivars.fd")
         if packer_vars.exists():
             vars_path = packer_vars

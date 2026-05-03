@@ -24,7 +24,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-import machine as machine_mod
+from arch import uefi_code_path_for
 from machine import (
     DEFAULT_UBUNTU,
     QEMU_MACHINE_SPECS,
@@ -85,7 +85,7 @@ class _LaunchMachine(QemuMachine):
         if self._efi_code is None and self._efi_vars is None:
             return await super()._uefi_drives()
 
-        code_path = self._efi_code if self._efi_code is not None else machine_mod._uefi_code_path(self.host_arch)
+        code_path = self._efi_code if self._efi_code is not None else uefi_code_path_for(self.arch)
         if self._efi_vars is not None:
             vars_path = self._efi_vars
         else:
@@ -103,28 +103,25 @@ class _LaunchMachine(QemuMachine):
             f"file={vars_path},if=pflash,unit=1,format=raw",
         ]
 
-    async def prepare(self) -> None:
+    async def _resolve_direct_boot(self, os_src_paths: list[str]) -> tuple[Path, Path, str]:
+        """Use the user's --kernel/--initrd/--append override if present.
+
+        Without this hook super().prepare() on aarch64 ZFS would run the
+        ~5 minute cloud-image extraction whose result we'd discard. Falls
+        back to the default extractor when no override was supplied.
+        """
         if self._direct_boot_override is not None:
-            override = self._direct_boot_override
+            return self._direct_boot_override
+        return await super()._resolve_direct_boot(os_src_paths)
 
-            # Stub the module-level extractor so super().prepare() on aarch64
-            # ZFS doesn't run the cloud-image extraction; we'd throw away
-            # the result anyway.
-            async def stub(**_kw: object) -> tuple[Path, Path, str]:
-                return override
+    async def prepare(self) -> None:
+        await super().prepare()
 
-            orig = machine_mod._extract_kernel_initrd
-            machine_mod._extract_kernel_initrd = stub  # type: ignore[assignment]
-            try:
-                await super().prepare()
-            finally:
-                machine_mod._extract_kernel_initrd = orig  # type: ignore[assignment]
-            # x86_64 prepare() never calls the extractor; set _direct_boot
-            # here so _boot_command emits -kernel/-initrd/-append on both
-            # arches when the user overrides.
-            self._direct_boot = override
-        else:
-            await super().prepare()
+        # x86_64 prepare() never calls _resolve_direct_boot, so an override
+        # from launch.py wouldn't reach _boot_command otherwise. Force it
+        # here so -kernel/-initrd/-append fire on both arches.
+        if self._direct_boot_override is not None:
+            self._direct_boot = self._direct_boot_override
 
         # Attach pflash on the variants that don't get it from super (aarch64
         # ZFS direct-boot, x86_64 minimal BIOS). Either --with-pflash or any
