@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euxo pipefail
 
-read -r -a DISKS <<<"$DISKS"
+read -r -a DISKS <<<"$DISKS_LIST"
 
 # Local constants. SOURCE_NAME comes from packer's shell-provisioner
 # env block; DISKS, LAYOUT, SSH_KEY_PUB are exported by provision.sh.

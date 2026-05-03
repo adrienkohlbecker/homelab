@@ -145,12 +145,12 @@ EOF
 # Env propagation: chroot inherits the calling shell's env, so packer's
 # UBUNTU_*/ZBM_*/REFIND_NAME/SSH_KEY_PUB (already exported via the shell
 # provisioner env block) flow straight through. Script-local vars must
-# be exported explicitly; DISKS is a bash array so flatten it to a
-# space-separated string (chroot.sh re-parses with `read -r -a`). New
-# vars added later need only be exported here, not enumerated on the
-# chroot line.
-# shellcheck disable=SC2178  # array→string is intentional for export across the chroot bash invocation
-export DISKS="${DISKS[*]}"
+# be exported explicitly. DISKS is a bash array, and bash silently
+# refuses to put array-typed variables in env even after a scalar
+# reassignment — flatten under a distinct name; chroot.sh re-parses
+# with `read -r -a DISKS <<<"$DISKS_LIST"`. New vars added later need
+# only be exported here, not enumerated on the chroot line.
+export DISKS_LIST="${DISKS[*]}"
 unshare --mount --propagation private bash <<'EOF'
 set -euxo pipefail
 mount -t proc proc /mnt/proc
