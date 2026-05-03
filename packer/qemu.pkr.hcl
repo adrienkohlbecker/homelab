@@ -200,8 +200,6 @@ build {
 
   provisioner "shell" {
     inline            = ["chmod +x /home/vagrant/*.sh", "sudo -HE /home/vagrant/provision.sh"]
-    expect_disconnect = true
-    pause_after       = "30s"
     # Mirror URLs are resolved here (HCL) and passed as env. provision.sh
     # uses UBUNTU_MIRROR* during the build; chroot.sh swaps in the
     # UBUNTU_MIRROR_*_UPSTREAM pair at the end so the shipped image
