@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+#MISE description="Boot a packer image, wait for SSH + systemd-fully-booted, exit"
+# Smoke test for a freshly-built image. Maps the packer variant to the
+# corresponding test machine spec (zfs→box, zfs-lab→lab) and launches
+# under launch.py with --exit-after-ready: the harness waits for SSH
+# then runs `systemctl is-system-running --wait` and exits 0 only if
+# the system reaches state "running". On failure the captured boot log
+# is dumped so you don't need to re-run interactively.
+#USAGE arg "<variant>" help="Variant: zfs (boots box) or zfs-lab (boots lab)"
+#USAGE flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
+# shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
+set -euo pipefail
+
+case "${usage_variant}" in
+zfs) machine=box ;;
+zfs-lab) machine=lab ;;
+*)
+  echo "unknown variant: ${usage_variant} (expected zfs or zfs-lab)" >&2
+  exit 1
+  ;;
+esac
+
+log="test/out/${machine}.${usage_ubuntu}._launch.output.ansi"
+if ! test/launch.py --machine "${machine}" --ubuntu "${usage_ubuntu}" --timeout 300 --exit-after-ready; then
+  echo "--- packer:verify failed; dumping ${log} ---" >&2
+  [ -f "${log}" ] && tail -200 "${log}" >&2
+  exit 1
+fi
