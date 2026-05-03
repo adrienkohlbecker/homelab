@@ -593,6 +593,290 @@ class Machine:
             self.workdir.cleanup()
 
 
+# cloud-init script consumed by _extract_kernel_initrd's one-shot VM. apt-installs
+# zfsutils-linux, mounts the host 9p share, imports the rpool from the attached
+# packer qcow2(s), copies the highest-versioned on-pool kernel + initrd, and
+# composes a ZBM-style cmdline ("root=zfs=<bootfs> <org.zfsbootmenu:commandline>")
+# read off rpool/ROOT before powering off. The poweroff exit is how the host
+# knows extraction finished -- the qemu process exits cleanly.
+EXTRACTION_USER_DATA = """\
+#cloud-config
+package_update: true
+packages:
+  - zfsutils-linux
+runcmd:
+  - |
+    set -eux
+    mkdir -p /share
+    modprobe 9pnet_virtio || true
+    mount -t 9p -o trans=virtio,version=9p2000.L share /share
+    zpool import -fN -R /mnt rpool
+    active=$(zpool get -H -o value bootfs rpool)
+    if [ -z "$active" ] || [ "$active" = "-" ]; then
+        active=$(zfs list -H -o name -t filesystem | grep -m1 '^rpool/ROOT/')
+    fi
+    zfs mount "$active"
+    mp=$(findmnt -nro TARGET --source "$active")
+    kernel=$(ls "$mp/boot/"vmlinuz-* "$mp/boot/"vmlinux-* 2>/dev/null | sort -V | tail -1)
+    initrd=$(ls "$mp/boot/"initrd.img-* 2>/dev/null | sort -V | tail -1)
+    cp -L "$kernel" /share/kernel
+    cp -L "$initrd" /share/initrd
+    zbm_args=$(zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT)
+    [ "$zbm_args" = "-" ] && zbm_args=""
+    printf 'root=zfs=%s %s' "$active" "$zbm_args" > /share/cmdline
+    sync
+    touch /share/done
+power_state:
+  mode: poweroff
+  delay: now
+"""
+
+
+def _qcow2_fingerprint(paths: list[Path]) -> str:
+    """sha256 over the OS qcow2(s) -- cache key for extracted kernel/initrd.
+
+    Reads all bytes; on a 1 GiB packer image this takes a few seconds. Sorted
+    by path so a multi-disk variant (ubuntu-zfs-lab's 3-way mirror) yields a
+    stable digest regardless of iteration order. Any packer rebuild changes
+    the qcow2 contents, which invalidates the cache and re-runs extraction.
+    """
+    import hashlib
+
+    h = hashlib.sha256()
+    for p in sorted(paths):
+        with p.open("rb") as f:
+            while chunk := f.read(1024 * 1024):
+                h.update(chunk)
+    return h.hexdigest()
+
+
+async def _ensure_extraction_cloudimg(imagedir: str, ubuntu_name: str, arch: str) -> Path:
+    """Download (once) the upstream Ubuntu cloud image used as the extraction vehicle."""
+    cloud_arch = "amd64" if arch == "x86_64" else "arm64"
+    name = f"{ubuntu_name}-server-cloudimg-{cloud_arch}.img"
+    cache = Path(imagedir) / "cloud-images"
+    cache.mkdir(parents=True, exist_ok=True)
+    target = cache / name
+    if target.exists():
+        return target
+
+    url = f"https://cloud-images.ubuntu.com/{ubuntu_name}/current/{name}"
+    tmp = target.with_suffix(target.suffix + ".tmp")
+    print_line(f"Downloading {url}")
+    await run_command(["curl", "-fL", "--retry", "3", "-o", str(tmp), url])
+    tmp.rename(target)
+    return target
+
+
+def _aarch64_uefi_code_path() -> Path:
+    """Locate the EDK2 CODE blob the extraction VM boots through."""
+    candidates = [
+        "/opt/homebrew/share/qemu/edk2-aarch64-code.fd",
+        "/usr/local/share/qemu/edk2-aarch64-code.fd",
+        "/usr/share/AAVMF/AAVMF_CODE.fd",
+        "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
+    ]
+    for c in candidates:
+        if Path(c).exists():
+            return Path(c)
+    raise RuntimeError(f"No aarch64 UEFI firmware found in {candidates}. " "Install via `brew install qemu` (Mac) or `apt install qemu-efi-aarch64` (Linux).")
+
+
+async def _build_seed_iso(out: Path, user_data: Path, meta_data: Path) -> None:
+    """Pack a NoCloud cidata seed iso for the extraction VM's cloud-init."""
+    if shutil.which("cloud-localds"):
+        await run_command(["cloud-localds", str(out), str(user_data), str(meta_data)])
+        return
+    iso_tool = shutil.which("xorrisofs") or shutil.which("mkisofs") or shutil.which("genisoimage")
+    if iso_tool is None:
+        raise RuntimeError("Need cloud-localds or xorrisofs/mkisofs/genisoimage in PATH to build cloud-init seed iso")
+    await run_command(
+        [
+            iso_tool,
+            "-output",
+            str(out),
+            "-volid",
+            "cidata",
+            "-joliet",
+            "-rock",
+            str(user_data),
+            str(meta_data),
+        ]
+    )
+
+
+async def _extract_kernel_initrd(
+    *,
+    imagedir: str,
+    ubuntu_name: str,
+    os_src_paths: list[str],
+    arch: str,
+) -> tuple[Path, Path, str]:
+    """Pull on-pool kernel + initrd out of a ZFS-rooted packer qcow2, cached by sha256.
+
+    Used on aarch64, where rEFInd -> ZBM -> kexec from the packer image into
+    the on-pool kernel panics on EDK2 (see notes/zbm-aarch64-kexec-bug-report.md).
+    Spins up a one-shot Ubuntu cloud-image VM that apt-installs zfsutils-linux,
+    imports the rpool from the attached packer qcow2(s), and copies the
+    highest-versioned vmlinuz + initrd to a 9p host share. Subsequent runs
+    cache-hit until the source qcow2 sha256 changes (i.e. packer rebuilt).
+
+    Returns (kernel_path, initrd_path, full_cmdline) where full_cmdline is
+    "root=zfs=<bootfs> <org.zfsbootmenu:commandline>" -- composed inside
+    the extraction VM by reading the ZBM property off rpool/ROOT, matching
+    how ZBM itself builds the kexec cmdline. The caller backfills
+    console=/earlycon= defaults if the property doesn't supply them.
+    """
+    fingerprint = _qcow2_fingerprint([Path(p) for p in os_src_paths])
+    cache = Path(imagedir) / "extracted" / fingerprint
+    kernel = cache / "kernel"
+    initrd = cache / "initrd"
+    cmdline_path = cache / "cmdline"
+
+    if kernel.exists() and initrd.exists() and cmdline_path.exists():
+        return kernel, initrd, cmdline_path.read_text().strip()
+
+    # Serialise concurrent testrole.py workers extracting the same qcow2:
+    # without the lock, parallel testall.py would spin up two extraction VMs
+    # on the same fingerprint and race on the shutil.copy2 into cache/.
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = cache.parent / f"{fingerprint}.lock"
+    with lock_path.open("w") as lock_fd:
+        fcntl.flock(lock_fd, fcntl.LOCK_EX)
+        # Re-check inside the lock: the previous holder may have just finished
+        # extracting; we should cache-hit instead of redoing the work.
+        if kernel.exists() and initrd.exists() and cmdline_path.exists():
+            return kernel, initrd, cmdline_path.read_text().strip()
+
+        print_line(f"Extracting kernel/initrd from packer qcow2 (cache miss; sha256={fingerprint[:12]})")
+        cloud_image = await _ensure_extraction_cloudimg(imagedir, ubuntu_name, arch)
+
+        with tempfile.TemporaryDirectory(dir=imagedir) as tmpdir:
+            tmp = Path(tmpdir)
+            (tmp / "user-data").write_text(EXTRACTION_USER_DATA)
+            (tmp / "meta-data").write_text("instance-id: extract\nlocal-hostname: extract\n")
+            seed = tmp / "seed.iso"
+            await _build_seed_iso(seed, tmp / "user-data", tmp / "meta-data")
+
+            # Cloud-image overlay (writeable, resized so apt has headroom).
+            os_overlay = tmp / "cloud.qcow2"
+            await run_command(
+                [
+                    "qemu-img",
+                    "create",
+                    "-f",
+                    "qcow2",
+                    "-b",
+                    str(cloud_image),
+                    "-F",
+                    "qcow2",
+                    str(os_overlay),
+                    "20G",
+                ]
+            )
+
+            # Per-disk overlays of the source packer qcow2(s) so import
+            # doesn't mutate the originals (and a crashed extraction never
+            # corrupts them).
+            rpool_overlays: list[str] = []
+            for idx, src in enumerate(os_src_paths, start=1):
+                overlay = tmp / f"rpool-{idx}.qcow2"
+                await run_command(
+                    [
+                        "qemu-img",
+                        "create",
+                        "-f",
+                        "qcow2",
+                        "-b",
+                        str(Path(src).resolve()),
+                        "-F",
+                        "qcow2",
+                        str(overlay),
+                    ]
+                )
+                rpool_overlays.append(str(overlay))
+
+            share = tmp / "share"
+            share.mkdir()
+
+            accel = "hvf" if platform.system() == "Darwin" else "kvm"
+            machine_type = "q35" if arch == "x86_64" else "virt"
+
+            cmd: list[str] = [
+                f"qemu-system-{arch}",
+                "--drive",
+                f"file={os_overlay},if=virtio,format=qcow2,cache=unsafe,discard=unmap",
+                "--drive",
+                f"file={seed},if=virtio,format=raw",
+                *(arg for ov in rpool_overlays for arg in ("--drive", f"file={ov},if=virtio,format=qcow2,cache=unsafe")),
+                "-netdev",
+                "user,id=net0",
+                "-device",
+                "virtio-net,netdev=net0",
+                "-fsdev",
+                f"local,id=share,path={share},security_model=mapped-xattr",
+                "-device",
+                "virtio-9p-pci,fsdev=share,mount_tag=share",
+                "-machine",
+                f"type={machine_type},accel={accel}",
+                "-cpu",
+                "host",
+                "-smp",
+                "4",
+                "-m",
+                "2048M",
+                "-display",
+                "none",
+                "-serial",
+                "null",
+                "-no-reboot",
+            ]
+            if arch == "aarch64":
+                code_path = _aarch64_uefi_code_path()
+                vars_path = tmp / "AAVMF_VARS.fd"
+                await run_command(["truncate", "-s", "64M", str(vars_path)])
+                cmd += [
+                    "-drive",
+                    f"file={code_path},if=pflash,unit=0,format=raw,readonly=on",
+                    "-drive",
+                    f"file={vars_path},if=pflash,unit=1,format=raw",
+                ]
+
+            log_path = tmp / "extract.log"
+            print_cmd_line(cmd)
+            with log_path.open("wb") as log:
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdin=asyncio.subprocess.DEVNULL,
+                    stdout=log,
+                    stderr=asyncio.subprocess.STDOUT,
+                )
+                try:
+                    # 20 min covers a cold cloud-image apt update + install +
+                    # zpool import on a slow link. Cache hits skip all of this.
+                    await asyncio.wait_for(proc.wait(), timeout=20 * 60)
+                except asyncio.TimeoutError:
+                    with contextlib.suppress(ProcessLookupError):
+                        proc.kill()
+                    await proc.wait()
+                    raise RuntimeError(f"Kernel extraction timed out (log: {log_path})") from None
+
+            if not (share / "done").exists():
+                # Promote the qemu log out of tmpdir so the user can inspect
+                # it after TemporaryDirectory cleanup runs.
+                fail_log = cache.parent / f"{fingerprint}.failed.log"
+                with contextlib.suppress(OSError):
+                    shutil.copy2(log_path, fail_log)
+                raise RuntimeError(f"Kernel extraction failed; see {fail_log}")
+
+            cache.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(share / "kernel", kernel)
+            shutil.copy2(share / "initrd", initrd)
+            shutil.copy2(share / "cmdline", cmdline_path)
+
+    return kernel, initrd, cmdline_path.read_text().strip()
+
+
 def _read_vm_hwm(pid: int) -> int:
     """Return the kernel-tracked peak RSS in kB for *pid*, or 0 if unreadable.
 
@@ -616,6 +900,11 @@ class QemuMachine(Machine):
     # Device paths (e.g. ["/dev/vdb", "/dev/vdc"]) for disks attached beyond
     # the OS disk. Populated by prepare() and consumed by run_disk_setup().
     _extra_disk_devices: list[str]
+    # Set by prepare() on aarch64 ZFS variants: (kernel, initrd, root_cmdline).
+    # _boot_command() emits -kernel/-initrd/-append from this and skips UEFI
+    # pflash so the firmware boot chain (rEFInd -> ZBM -> kexec, broken on
+    # EDK2+aarch64) is bypassed entirely. None on x86_64 and on minimal.
+    _direct_boot: tuple[Path, Path, str] | None
 
     def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int, upstream_mirrors: bool = False):
         """QEMU-backed machine wrapper used by integration tests."""
@@ -636,20 +925,12 @@ class QemuMachine(Machine):
         else:
             raise AttributeError(f"Unknown operating system: {system}")
 
-        # ZFS-rooted variants (box / lab / pug) consume packer-built qcow2s
-        # that only exist for x86_64 — ZBM has no official aarch64 prebuilts
-        # (see AGENTS.md "Test Environment Design") and we don't run a ZBM
-        # build pipeline. Fail fast on arm64 hosts rather than emit a
-        # confusing "missing qcow2" later in prepare().
-        host_arch = platform.machine()
-        if spec.packer_image is not None and host_arch not in ("x86_64", "amd64"):
-            raise RuntimeError(
-                f"Machine variant {machine!r} requires an x86_64 host (current: {host_arch}). "
-                "ZFS-rooted variants depend on packer-built images that exist only for x86_64; "
-                "ZBM ships no official aarch64 prebuilts. On arm Mac use --machine container or "
-                '--machine minimal (cloud image, arch-portable). See AGENTS.md "Test Environment Design".'
-            )
-
+        # ZFS-rooted variants (box / lab / pug) used to fail fast on arm64
+        # because the rEFInd -> ZBM -> kexec chain in the packer image panics
+        # on EDK2+aarch64. We now extract the on-pool kernel + initrd from
+        # the qcow2 once (cached by sha256) and direct-boot via -kernel
+        # /-initrd, bypassing the firmware chain. See _extract_kernel_initrd
+        # and notes/zbm-aarch64-kexec-bug-report.md.
         self._spec = spec
         super().__init__(
             ssh_port=0,
@@ -681,6 +962,7 @@ class QemuMachine(Machine):
 
         await super().prepare()
         self._extra_disk_devices = []
+        self._direct_boot = None
 
         if self.machine == "minimal":
             if shutil.which("cloud-localds") is None:
@@ -713,10 +995,11 @@ class QemuMachine(Machine):
         image_dir = f"{self.imagedir}/{self.ubuntu_name}/{packer_image}"
         os_disk_count = _PACKER_IMAGE_OS_DISKS[packer_image]
 
+        os_src_paths = [f"{image_dir}/packer-ubuntu-{idx}" for idx in range(1, os_disk_count + 1)]
         os_disk_paths: list[str] = []
-        for idx in range(1, os_disk_count + 1):
+        for idx, src in enumerate(os_src_paths, start=1):
             dest = f"{self.workdir.name}/packer-ubuntu-{idx}"
-            await self._create_overlay(f"{image_dir}/packer-ubuntu-{idx}", dest)
+            await self._create_overlay(src, dest)
             os_disk_paths.append(dest)
 
         # Empty qcow2 disks for the variant's extra pools. test/disks/<variant>.sh
@@ -730,12 +1013,24 @@ class QemuMachine(Machine):
         # OS disks take vda..vd[a+N-1]; extras attach right after, in spec order.
         self._extra_disk_devices = [f"/dev/vd{chr(ord('a') + os_disk_count + i)}" for i in range(len(extra_paths))]
 
-        await self._copy_efivars_from(image_dir)
         self.drives = [
             *(self._virtio_drive(path) for path in os_disk_paths),
             *(self._virtio_drive(path) for path in extra_paths),
-            *self._uefi_drives(),
         ]
+        if self.host_arch == "x86_64":
+            await self._copy_efivars_from(image_dir)
+            self.drives += self._uefi_drives()
+        else:
+            # aarch64: bypass the firmware boot chain (rEFInd -> ZBM -> kexec
+            # panics on EDK2) by extracting the on-pool kernel + initrd from
+            # the packer qcow2 once and direct-booting them. Cached by content
+            # sha256 so a packer rebuild auto-invalidates.
+            self._direct_boot = await _extract_kernel_initrd(
+                imagedir=self.imagedir,
+                ubuntu_name=self.ubuntu_name,
+                os_src_paths=os_src_paths,
+                arch=self.host_arch,
+            )
 
     async def run_disk_setup(self) -> None:
         """Push test/disks/<variant>.sh to the VM and run it via sudo.
@@ -831,12 +1126,26 @@ class QemuMachine(Machine):
         else:
             display_args = ["-display", "none"]
 
+        direct_boot: list[str] = []
+        if self._direct_boot is not None:
+            kernel, initrd, cmdline = self._direct_boot
+            # cmdline is composed in extraction as
+            # "root=zfs=<bootfs> <org.zfsbootmenu:commandline>" -- the ZBM
+            # property is the canonical place to set per-pool boot args, so
+            # we honour it verbatim. If the property doesn't supply console=
+            # / earlycon= we backfill defaults so qemu's `-serial stdio`
+            # actually receives kernel printk for the per-machine boot log.
+            if "console=" not in cmdline:
+                cmdline = f"{cmdline} console=ttyAMA0,115200 earlycon=pl011,0x9000000,115200"
+            direct_boot = ["-kernel", str(kernel), "-initrd", str(initrd), "-append", cmdline]
+
         return [
             "timeout",
             "--kill-after=10s",
             str(self.wrapper_timeout),
             f"qemu-system-{self.host_arch}",
             *[arg for drive in self.drives for arg in ("--drive", drive)],
+            *direct_boot,
             "-netdev",
             f"user,id=user.0,hostfwd=tcp:{self.ssh_host}:0-:22",
             "-object",
