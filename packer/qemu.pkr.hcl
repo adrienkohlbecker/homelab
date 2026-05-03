@@ -99,7 +99,8 @@ source "qemu" "ubuntu" {
   accelerator        = "${local.accelerator}"
   boot_wait          = "2s"
   cpu_model          = "host"
-  sockets            = 8
+  cores              = 8
+  sockets            = 1
   disk_cache         = "unsafe"
   disk_compression   = false
   disk_detect_zeroes = "unmap"
