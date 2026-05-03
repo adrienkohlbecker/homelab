@@ -494,10 +494,12 @@ class Machine:
             return False
         finally:
             writer.close()
-            with contextlib.suppress(OSError, TimeoutError):
-                # Half-open peer or already-broken transport: don't let a
-                # stuck close stall the polling loop.
-                await asyncio.wait_for(writer.wait_closed(), timeout=1)
+            # wait_closed() returns immediately for a healthy transport;
+            # OSError catches the case where the peer dropped the connection
+            # before our close completed. We don't time-bound it -- if
+            # close ever genuinely hangs that's a real bug worth surfacing.
+            with contextlib.suppress(OSError):
+                await writer.wait_closed()
 
     async def collect_journal(self) -> None:
         """Fetch systemd journal for debugging when a run fails."""
