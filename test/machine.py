@@ -195,11 +195,12 @@ class Machine:
         self.output_file = OUT_DIR / f"{prefix}.output.ansi"
         self.journal_file = OUT_DIR / f"{prefix}.journal.ansi"
         self.boot_file = OUT_DIR / f"{prefix}.boot.ansi"
-        # Drop any stale artifacts from a previous run before the new run
-        # starts writing. tee_output and boot() will recreate fresh files
-        # immediately after this; cleaning here also covers cases where a
-        # previous run was killed before either writer ran.
-        self.cleanup_logs()
+        # output/boot get truncated by their respective open("w") at write
+        # time, so they don't need pre-cleanup. journal_file is only ever
+        # created in collect_journal() on a failed run, so a stale one from
+        # a prior run would otherwise survive into a healthy run -- drop it
+        # explicitly.
+        self.journal_file.unlink(missing_ok=True)
         # System tmp by default; subclasses that need the workdir on a
         # specific filesystem (qemu's qcow2 cache) override _workdir_parent().
         self.workdir = tempfile.TemporaryDirectory(dir=self._workdir_parent())
