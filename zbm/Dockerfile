@@ -19,7 +19,8 @@ ARG KERNELS="linux6.6 linux6.12 linux6.18"
 RUN set -eu \
  && if [ -z "${KERNELS}" ]; then echo "ARG KERNELS must contain a value"; exit 1; fi \
  && mkdir -p /etc/xbps.d \
- && for _repo in ${XBPS_REPOS}; do echo "repository=${_repo}" >> /etc/xbps.d/00-custom-repos.conf; done \
+ && rm -f /etc/xbps.d/00-repository-main.conf \
+ && for _repo in ${XBPS_REPOS}; do echo "repository=${_repo}" >> /etc/xbps.d/00-repository-main.conf; done \
  && xbps-install -Suy xbps \
  && xbps-install -Suy \
  && echo "ignorepkg=linux"         >  /etc/xbps.d/10-nolinux.conf \
