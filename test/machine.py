@@ -1107,7 +1107,7 @@ def _bake_inputs_hash() -> str:
 async def existing_image_hash(tag: str) -> str | None:
     """Return the bake-hash label on *tag*, or None if missing/unlabeled."""
     res = await run_command(
-        ["podman", "image", "inspect", "--format", '{{ index .Config.Labels "' + BAKE_HASH_LABEL + '" }}', tag],
+        ["podman", "image", "inspect", "--format", '{{index .Config.Labels "%s"}}' % BAKE_HASH_LABEL, tag],
         check=False,
         quiet=True,
     )
