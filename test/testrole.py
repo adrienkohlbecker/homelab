@@ -264,7 +264,7 @@ async def run_test(
                         # shadow the underlying CommandFailedException.
                         with contextlib.suppress(Exception):
                             await m.collect_journal()
-                            m.print_journal_tail()
+                            m.print_file_tail(m.journal_file)
                         raise
                     except IdempotenceFailedException:
                         print_line("Idempotence check failed")
