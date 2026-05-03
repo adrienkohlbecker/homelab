@@ -42,9 +42,6 @@ for disk in "${DISKS[@]}"; do
   blkdiscard -f "$disk" || true
   sgdisk --zap-all "$disk"
 
-  sync
-  sleep 2
-
   sgdisk -n1:1M:+512M -t1:EF00 "$disk"       # EFI (EF00 = EFI system partition)
   sgdisk -a1 -n4:24K:+1000K -t4:EF02 "$disk" # MBR booting (EF02 = BIOS boot partition)
 
@@ -60,10 +57,12 @@ for disk in "${DISKS[@]}"; do
   sgdisk -n3:0:0 -t3:BF00 "$disk" # rpool (BF00 = Solaris root)
 
   sgdisk -p "$disk"
-
-  sync
-  sleep 2
 done
+
+# Wait for udev to expose every new partition node (/dev/vdbN, ...)
+# before zpool create reads them. Replaces a per-iteration `sync; sleep 2`
+# pair that was timing-based cargo for the same goal.
+udevadm settle
 
 # Create the zpool
 
