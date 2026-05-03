@@ -92,9 +92,16 @@ apt-get update
 apt-get upgrade --yes
 
 # Install additional base packages
-# The --no-install-recommends flag is used here to avoid installing recommended, but not strictly needed, packages (including grub2).
+# linux-generic Recommends `grub-pc | grub-efi-amd64 | grub-efi-ia32 |
+# grub | lilo` (transitively via linux-image-X.X.X-generic). We boot
+# via ZFSBootMenu + rEFInd, so block the alternation by holding all
+# grub variants and lilo. Held packages are silently skipped from
+# Recommends; the glob covers future grub sub-packages without an
+# enumerated list. Other useful recommends (thermald, etc.) come in
+# normally.
 
-apt-get install --yes --no-install-recommends linux-generic
+apt-mark hold 'grub*' lilo
+apt-get install --yes linux-generic
 
 # Install required packages
 
