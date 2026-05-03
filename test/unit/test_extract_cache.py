@@ -21,7 +21,7 @@ def test_extract_returns_cached_artifacts_without_running_qemu(
     src.write_bytes(b"fake-qcow2-bytes")
 
     extractor = extract.KernelInitrdExtractor(
-        imagedir=str(imagedir),
+        imagedir=imagedir,
         ubuntu_name="jammy",
         os_src_paths=[str(src)],
         arch=X86_64,
@@ -47,7 +47,7 @@ def test_cache_dir_is_keyed_by_qcow2_fingerprint(tmp_path: Path) -> None:
     src.write_bytes(b"AAA")
 
     extractor = extract.KernelInitrdExtractor(
-        imagedir=str(tmp_path),
+        imagedir=tmp_path,
         ubuntu_name="jammy",
         os_src_paths=[str(src)],
         arch=X86_64,
@@ -67,11 +67,11 @@ def test_different_arch_does_not_change_cache_key(tmp_path: Path) -> None:
     src.write_bytes(b"some-bytes")
 
     x86 = extract.KernelInitrdExtractor(
-        imagedir=str(tmp_path), ubuntu_name="jammy",
+        imagedir=tmp_path, ubuntu_name="jammy",
         os_src_paths=[str(src)], arch=X86_64,
     )
     arm = extract.KernelInitrdExtractor(
-        imagedir=str(tmp_path), ubuntu_name="jammy",
+        imagedir=tmp_path, ubuntu_name="jammy",
         os_src_paths=[str(src)], arch=AARCH64,
     )
     # Same fingerprint; different arches share the cache directory. The
