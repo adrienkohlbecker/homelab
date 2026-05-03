@@ -20,7 +20,9 @@ def test_default_invocation(
         "run",
         "--rm",
         "--timeout",
-        "300",
+        # wrapper_timeout = machine_timeout + WRAPPER_GRACE_SECONDS so the
+        # podman-side last-resort kill outlasts the asyncio.timeout in run_test.
+        str(300 + machine.Machine.WRAPPER_GRACE_SECONDS),
         "--systemd",
         "always",
         "--hostname",

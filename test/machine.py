@@ -13,7 +13,7 @@ import signal
 import tempfile
 import time
 from pathlib import Path
-from typing import NamedTuple, Self
+from typing import ClassVar, NamedTuple, Self
 
 from arch import ArchProfile, detect_host_arch, uefi_code_path_for
 from extract import KernelInitrdExtractor
@@ -165,6 +165,14 @@ async def ensure_podman_network() -> None:
 class Machine:
     """Base runner that wraps a test target reachable over SSH and Ansible."""
 
+    # Extra seconds added on top of machine_timeout for the GNU `timeout` /
+    # `podman --timeout` last-resort wrapper. Has to outlast the inner
+    # asyncio.timeout in run_test so testrole.py's own deadline fires first
+    # (and we get a clean rc=124 + stop()), with enough headroom for
+    # Machine.stop() to do its graceful->SIGKILL escalation. ClassVar so
+    # @dataclass doesn't promote it to an init field.
+    WRAPPER_GRACE_SECONDS: ClassVar[int] = 60
+
     ssh_port: int
     ssh_user: str
     ansible_args: list[str]
@@ -243,9 +251,13 @@ class Machine:
 
         0 disables the wrapper (`timeout 0` runs forever, podman --timeout 0
         is "no timeout") so an interactive --keep session isn't cut short.
-        Otherwise it tracks the Python --timeout plus a small grace window.
+        Otherwise it's machine_timeout (the Python deadline) plus a small
+        grace window so Machine.stop() finishes its graceful->SIGKILL
+        escalation before the wrapper kills its child.
         """
-        return 0 if self.keep_vm else self.machine_timeout
+        if self.keep_vm:
+            return 0
+        return self.machine_timeout + self.WRAPPER_GRACE_SECONDS
 
     def _ssh_options(self) -> list[str]:
         """Return the shared `-o flag=value` pairs for ssh and scp."""
