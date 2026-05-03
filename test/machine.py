@@ -233,7 +233,7 @@ class Machine:
         self.workdir = tempfile.TemporaryDirectory(dir=self._workdir_parent())
         self._preflight()
 
-    def _workdir_parent(self) -> str | None:
+    def _workdir_parent(self) -> Path | None:
         """Return the parent directory for the per-run TemporaryDirectory.
 
         Default None puts the workdir under the system tmp. QemuMachine
@@ -644,13 +644,13 @@ class QemuMachine(Machine):
         # /mnt/qemu doesn't exist on Mac).
         system = platform.system()
         if system == "Darwin":
-            self.imagedir = str(Path("packer/artifacts").resolve())
-            Path(self.imagedir).mkdir(parents=True, exist_ok=True)
+            self.imagedir: Path = Path("packer/artifacts").resolve()
+            self.imagedir.mkdir(parents=True, exist_ok=True)
         elif system == "Linux":
-            self.imagedir = "/mnt/qemu"
-            if not Path(self.imagedir).is_dir():
+            self.imagedir = Path("/mnt/qemu")
+            if not self.imagedir.is_dir():
                 raise RuntimeError(
-                    f"Imagedir {self.imagedir!r} does not exist. "
+                    f"Imagedir {str(self.imagedir)!r} does not exist. "
                     f"Mount the qemu image volume (e.g. `sudo mount /mnt/qemu`)."
                 )
         else:
@@ -680,7 +680,7 @@ class QemuMachine(Machine):
         )
         # idfile defaults to "pid" on the base, which is what we want here.
 
-    def _workdir_parent(self) -> str | None:
+    def _workdir_parent(self) -> Path | None:
         """Place the workdir alongside the packer qcow2s.
 
         qemu-img backing-file overlays must reach the source qcow2 by
