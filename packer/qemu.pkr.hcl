@@ -199,7 +199,7 @@ build {
   }
 
   provisioner "shell" {
-    inline            = ["chmod +x /home/vagrant/*.sh", "sudo -HE /home/vagrant/provision.sh"]
+    inline = ["chmod +x /home/vagrant/*.sh", "sudo -HE /home/vagrant/provision.sh"]
     # Mirror URLs are resolved here (HCL) and passed as env. provision.sh
     # uses UBUNTU_MIRROR* during the build; chroot.sh swaps in the
     # UBUNTU_MIRROR_*_UPSTREAM pair at the end so the shipped image
@@ -235,7 +235,7 @@ build {
     inline = [
       "set -euxo pipefail",
       "rm -f ${var.output_directory}/${source.name}.new/packer-ubuntu",
-      "sed -i '/  packer-ubuntu$/d' ${var.output_directory}/${source.name}.new/sha256sum",
+      "sed -i $'/\\tpacker-ubuntu$/d' ${var.output_directory}/${source.name}.new/sha256sum",
       "rm -rf ${var.output_directory}/${source.name}",
       "mv ${var.output_directory}/${source.name}.new ${var.output_directory}/${source.name}",
     ]
