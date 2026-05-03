@@ -160,8 +160,8 @@ fi
 
 # Create filesystems
 
-mkdosfs -F 32 -s 1 -n EFI $EFI_DEVICE
-mkswap -f $SWAP_DEVICE
+mkdosfs -F 32 -s 1 -n EFI "$EFI_DEVICE"
+mkswap -f "$SWAP_DEVICE"
 
 sync
 sleep 2
