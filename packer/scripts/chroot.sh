@@ -256,12 +256,6 @@ systemctl enable tmp.mount
 
 apt-get install --yes openssh-server qemu-guest-agent
 
-# Add missing groups
-
-addgroup --system lpadmin
-addgroup --system lxd
-addgroup --system sambashare
-
 # Configure vagrant user
 
 adduser --disabled-password --gecos "" "$USERNAME"
@@ -274,7 +268,7 @@ chmod 0700 "/home/$USERNAME/.ssh"
 chmod 0600 "/home/$USERNAME/.ssh/authorized_keys"
 
 chown -R "$USERNAME:$USERNAME" "/home/$USERNAME"
-usermod -a -G adm,cdrom,dip,lpadmin,lxd,plugdev,sambashare,sudo "$USERNAME"
+usermod -a -G adm,sudo "$USERNAME"
 
 echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >"/etc/sudoers.d/$USERNAME"
 chown root:root "/etc/sudoers.d/$USERNAME"
