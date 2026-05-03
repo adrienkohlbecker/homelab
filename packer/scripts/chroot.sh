@@ -241,9 +241,22 @@ EOF
 
 apt-get install --yes efibootmgr
 
-efibootmgr -c -d "${DISKS[0]}" -p 1 \
-  -L "rEFInd" \
-  -l "\\EFI\\refind\\${REFIND_NAME}"
+# On the multi-disk mdadm-EFI mirror, register one boot entry per disk
+# so the system survives losing any single disk — firmware only follows
+# paths it knows about, and an entry is per-disk regardless of whether
+# the ESP content is mirrored. Single-disk variants get a single bare
+# "rEFInd" entry (unchanged).
+if [ "${#DISKS[@]}" -eq 1 ]; then
+  efibootmgr -c -d "${DISKS[0]}" -p 1 \
+    -L "rEFInd" \
+    -l "\\EFI\\refind\\${REFIND_NAME}"
+else
+  for idx in "${!DISKS[@]}"; do
+    efibootmgr -c -d "${DISKS[$idx]}" -p 1 \
+      -L "rEFInd (disk ${idx})" \
+      -l "\\EFI\\refind\\${REFIND_NAME}"
+  done
+fi
 
 # Enable tmp mount
 
