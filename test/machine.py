@@ -9,6 +9,7 @@ import platform
 import shlex
 import shutil
 import signal
+import socket
 import tempfile
 import time
 from pathlib import Path
@@ -704,12 +705,6 @@ class QemuMachine(Machine):
             "Install via `brew install coreutils` (macOS) or via the coreutils "
             "package on Linux.",
         )
-        # _find_ssh_port parses lsof output to discover the qemu-forwarded port.
-        self._require_binary(
-            "lsof",
-            "Install via `brew install lsof` (macOS) or via the lsof package "
-            "(usually preinstalled on Linux).",
-        )
 
     async def prepare(self) -> None:
         """Create overlay images and seed data required for the selected QEMU template."""
@@ -717,6 +712,16 @@ class QemuMachine(Machine):
         await super().prepare()
         self._extra_disk_devices = []
         self._direct_boot = None
+
+        # Pre-pick a free TCP port on 127.0.0.1 and pin qemu's hostfwd to it.
+        # Replaces the prior lsof-poll heuristic (which had to filter VNC ports
+        # and would re-tangle if any future qemu service published TCP). Tiny
+        # race window between close() and qemu's bind, but qemu launches
+        # near-immediately and the kernel rarely reissues a freshly-released
+        # port within microseconds.
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((SSH_HOST, 0))
+            self.ssh_port = s.getsockname()[1]
 
         if self.machine == "minimal":
             if shutil.which("cloud-localds") is None:
@@ -934,7 +939,10 @@ class QemuMachine(Machine):
             *[arg for drive in self.drives for arg in ("--drive", drive)],
             *direct_boot,
             "-netdev",
-            f"user,id=user.0,hostfwd=tcp:{SSH_HOST}:0-:22",
+            # Host port pre-picked in prepare() so we don't need to ask qemu
+            # which port it ended up on -- avoids the prior lsof-poll dance
+            # and the VNC-port-band collision risk.
+            f"user,id=user.0,hostfwd=tcp:{SSH_HOST}:{self.ssh_port}-:22",
             "-object",
             "rng-random,id=rng0,filename=/dev/urandom",
             "-device",
@@ -998,49 +1006,8 @@ class QemuMachine(Machine):
             await super().stop()
 
     async def _find_ssh_port(self) -> None:
-        """Parse lsof output from the QEMU pidfile to extract forwarded SSH port."""
-        pid = Path(f"{self.workdir.name}/{self.idfile}").read_text().strip()
-        if not pid:
-            raise RuntimeError("Missing qemu PID; pidfile is empty")
-
-        # -sTCP:LISTEN drops ESTABLISHED rows so we never pick up a guest's
-        # outbound connection by accident. -n avoids DNS reverse-lookup
-        # latency on every poll.
-        lsof_cmd = ["lsof", "-iTCP", "-sTCP:LISTEN", "-P", "-n", "-p", pid]
-
-        lines: list[str] = []
-        for _ in range(10):
-            # check=False so a transient lsof failure (qemu not yet listening,
-            # pid already gone) falls through to the retry / friendly-error
-            # path instead of raising CommandFailedException out of the loop.
-            # quiet=True keeps the noisy lsof output out of the role transcript.
-            lines = (await run_command(lsof_cmd, check=False, quiet=True)).stdout
-
-            for line in lines:
-                fields = line.split()
-                # Data rows: COMMAND PID USER FD TYPE DEVICE SIZE/OFF NODE NAME [STATE]
-                if len(fields) < 9 or fields[1] != pid or fields[7] != "TCP":
-                    continue
-
-                # NAME column carries "host:port" for LISTEN sockets;
-                # rsplit handles IPv4 (127.0.0.1:port) and IPv6 ([::]:port).
-                addr = fields[8]
-                if ":" not in addr:
-                    continue
-                port = int(addr.rsplit(":", 1)[-1])
-
-                # VNC displays :0..:99 listen on 5900..5999 — skip those when
-                # --keep adds -display vnc.
-                if 5900 <= port <= 5999:
-                    continue
-
-                self.ssh_port = port
-                return
-
-            await sleep_tick()
-
-        lsof_dump = "\n".join(lines) if lines else "<no output>"
-        raise RuntimeError(f"Unable to determine SSH port from qemu lsof output (pid {pid}):\n{lsof_dump}")
+        """Port was pre-picked in prepare(); nothing to discover at boot."""
+        return
 
 
 def is_service_role(role: str) -> bool:

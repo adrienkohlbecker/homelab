@@ -71,9 +71,10 @@ def test_default_x86_64_no_keep_no_direct_boot(
     # Serial console plumbed to stdio so kernel printk lands in the boot log.
     assert cmd[cmd.index("-serial") + 1] == "stdio"
 
-    # SSH forward listens on a kernel-picked port (the 0 in 0-:22).
+    # hostfwd uses the port pre-picked in prepare() (self.ssh_port).
+    # _setup() bypasses prepare(), so the value here is the __init__ default 0.
     netdev_idx = cmd.index("-netdev")
-    assert cmd[netdev_idx + 1] == f"user,id=user.0,hostfwd=tcp:{machine.SSH_HOST}:0-:22"
+    assert cmd[netdev_idx + 1] == f"user,id=user.0,hostfwd=tcp:{machine.SSH_HOST}:{m.ssh_port}-:22"
 
 
 def test_default_aarch64_no_keep_no_direct_boot(
