@@ -175,29 +175,18 @@ mount /boot/efi
 # ZBM is built + uploaded out-of-band by `mise run zbm:build && zbm:upload`.
 # The Gitea package holds one stable filename per (version, arch);
 # zbm:upload deletes any existing copy before PUT, so a rebuild
-# propagates here without source edits. Bump ZBM_VERSION when moving
-# to a new upstream release; per-arch values are independent so a
-# debugging spin on aarch64 doesn't perturb the x86_64 prod image.
+# propagates here without source edits. Bump mise.toml's zbm_version
+# when moving to a new upstream release; the value is plumbed through
+# packer (var.zbm_version) and provision.sh into $ZBM_VERSION here, so
+# this script holds no version literal of its own.
 #
 # Components mode: the artifact is a tarball with kernel + initrd, not a
 # unified UKI .EFI. rEFInd does the kernel handoff via loader/initrd
 # directives — the systemd-boot aarch64 EFI stub silently fails under
 # EDK2 on QEMU virt, and rEFInd's own loader works on both arches.
-# rEFInd ships as refind_x64.efi on x86_64 and refind_aa64.efi on aarch64.
-case $(uname -m) in
-x86_64)
-  ZBM_VERSION="3.1.0"
-  REFIND_NAME=refind_x64.efi
-  ;;
-aarch64)
-  ZBM_VERSION="3.1.0"
-  REFIND_NAME=refind_aa64.efi
-  ;;
-*)
-  echo >&2 "Unknown machine name $(uname -m)" && exit 1
-  ;;
-esac
-ZBM_URL="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/${ZBM_VERSION}/zfsbootmenu-v${ZBM_VERSION}-$(uname -m).tar.gz"
+# rEFInd ships as refind_x64.efi on x86_64 and refind_aa64.efi on aarch64
+# ($REFIND_NAME, also resolved upstream in HCL).
+ZBM_URL="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/${ZBM_VERSION}/zfsbootmenu-v${ZBM_VERSION}-${ZBM_ARCH}.tar.gz"
 
 apt-get install --yes curl
 mkdir -p /boot/efi/EFI/ZBM
