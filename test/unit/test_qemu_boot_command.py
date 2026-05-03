@@ -44,7 +44,7 @@ def test_default_x86_64_no_keep_no_direct_boot(
 
     # Machine type / accel: x86_64 -> q35; Darwin (forced by fixture) -> hvf.
     machine_idx = cmd.index("-machine")
-    assert cmd[machine_idx + 1] == "type=q35,accel=hvf"
+    assert cmd[machine_idx + 1] == "type=q35,accel=hvf,usb=on"
 
     # Hardcoded sizing (changes when memory_mb / vcpus get plumbed through).
     assert cmd[cmd.index("-smp") + 1] == "8,sockets=8"
@@ -80,7 +80,7 @@ def test_default_aarch64_no_keep_no_direct_boot(
     cmd = m._boot_command()
 
     assert cmd[3] == "qemu-system-aarch64"
-    assert cmd[cmd.index("-machine") + 1] == "type=virt,accel=hvf"
+    assert cmd[cmd.index("-machine") + 1] == "type=virt,accel=hvf,usb=on"
 
 
 def test_keep_vm_zero_timeout_x86_64_uses_minimal_keep_devices(
