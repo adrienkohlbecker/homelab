@@ -227,6 +227,15 @@ class Machine:
     def __post_init__(self) -> None:
         if self.ubuntu_name not in UBUNTU_RELEASES:
             raise ValueError(f"Unknown Ubuntu release '{self.ubuntu_name}'; known: {sorted(UBUNTU_RELEASES)}")
+        if not Path(self.imagedir).is_dir():
+            # Mac branch in subclass __init__ mkdir's packer/artifacts; Linux
+            # branch hardcodes /mnt/qemu and assumes it's mounted. A clearer
+            # error here saves a debugging round-trip vs. the FileNotFoundError
+            # the TemporaryDirectory call below would raise.
+            raise RuntimeError(
+                f"Imagedir {self.imagedir!r} does not exist or is not a directory. "
+                f"Create it (`mkdir -p {self.imagedir}`) or mount the qemu image volume."
+            )
         OUT_DIR.mkdir(parents=True, exist_ok=True)
         prefix = f"{self.machine}.{self.ubuntu_name}.{self.role}"
         self.output_file = OUT_DIR / f"{prefix}.output.ansi"
@@ -238,6 +247,22 @@ class Machine:
         # previous run was killed before either writer ran.
         self.cleanup_logs()
         self.workdir = tempfile.TemporaryDirectory(dir=self.imagedir)
+        self._preflight()
+
+    def _preflight(self) -> None:
+        """Validate external dependencies; subclasses override with tool checks.
+
+        Called once at the end of __post_init__, after self.workdir exists,
+        so the failure surface (binary checks, image cache lookups, etc.) is
+        bounded to "things the harness will need before the next subprocess
+        spawn". Failures raise RuntimeError with installation guidance.
+        """
+        return
+
+    @staticmethod
+    def _require_binary(name: str, hint: str) -> None:
+        if shutil.which(name) is None:
+            raise RuntimeError(f"Required binary {name!r} not found on PATH. {hint}")
 
     @property
     def ubuntu_version(self) -> str:
@@ -974,6 +999,27 @@ class QemuMachine(Machine):
         """Canonical host arch name (e.g. "x86_64") -- thin shim over self.arch.name."""
         return self.arch.name
 
+    def _preflight(self) -> None:
+        """Verify the qemu binary, GNU timeout, and lsof are reachable."""
+        self._require_binary(
+            self.arch.qemu_binary,
+            "Install via `brew install qemu` (macOS) "
+            f"or `apt install qemu-system-{self.arch.name}` (Debian/Ubuntu).",
+        )
+        # The boot wrapper uses GNU timeout; macOS doesn't ship one out of
+        # the box, but `brew install coreutils` puts a `timeout` shim on PATH.
+        self._require_binary(
+            "timeout",
+            "Install via `brew install coreutils` (macOS) or via the coreutils "
+            "package on Linux.",
+        )
+        # _find_ssh_port parses lsof output to discover the qemu-forwarded port.
+        self._require_binary(
+            "lsof",
+            "Install via `brew install lsof` (macOS) or via the lsof package "
+            "(usually preinstalled on Linux).",
+        )
+
     async def prepare(self) -> None:
         """Create overlay images and seed data required for the selected QEMU template."""
 
@@ -1007,7 +1053,10 @@ class QemuMachine(Machine):
         # the per-variant disk-setup script to format. See AGENTS.md
         # "Test Environment Design".
         packer_image = self._spec.packer_image
-        assert packer_image is not None, f"non-minimal variant {self.machine!r} must declare packer_image"
+        if packer_image is None:
+            # Bare assertion would be elided under `python -O`; raise so the
+            # config error surfaces regardless of optimisation level.
+            raise RuntimeError(f"non-minimal variant {self.machine!r} must declare packer_image")
         image_dir = f"{self.imagedir}/{self.ubuntu_name}/{packer_image}"
         os_disk_count = _PACKER_IMAGE_OS_DISKS[packer_image]
 
@@ -1381,6 +1430,14 @@ class PodmanMachine(Machine):
         """`homelab-service:<release>` for podman-service roles, else `homelab:<release>`."""
         repo = "homelab-service" if is_service_role(self.role) else "homelab"
         return f"{repo}:{self.ubuntu_name}"
+
+    def _preflight(self) -> None:
+        """Verify podman is reachable so boot/teardown subprocess calls succeed."""
+        self._require_binary(
+            "podman",
+            "Install via `brew install podman` (macOS) or `apt install podman` "
+            "(Debian/Ubuntu); rootless setup must allow port publishing on 127.0.0.1.",
+        )
 
     async def prepare(self) -> None:
         """Create podman network if missing and stage working dir."""
