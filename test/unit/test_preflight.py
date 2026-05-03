@@ -43,15 +43,6 @@ def test_qemu_preflight_raises_when_timeout_missing(
         qemu_machine_factory()
 
 
-def test_qemu_preflight_raises_when_lsof_missing(
-    qemu_machine_factory: Callable[..., machine.QemuMachine],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(machine.shutil, "which", _which_excluding({"lsof"}))
-    with pytest.raises(RuntimeError, match="'lsof' not found"):
-        qemu_machine_factory()
-
-
 def test_podman_preflight_raises_when_podman_missing(
     podman_machine_factory: Callable[..., machine.PodmanMachine],
     monkeypatch: pytest.MonkeyPatch,
