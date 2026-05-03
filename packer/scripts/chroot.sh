@@ -188,7 +188,7 @@ mount /boot/efi
 case $(uname -m) in
 x86_64)
   ZBM_VERSION="3.1.0"
-  ZBM_TIMESTAMP="20260503-081404"
+  ZBM_TIMESTAMP="20260503-154656"
   REFIND_NAME=refind_x64.efi
   ;;
 aarch64)
