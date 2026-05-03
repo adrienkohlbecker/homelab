@@ -102,9 +102,18 @@ def _write_line(line: str, color: str | None) -> None:
     _emit(colorize(line, color) + "\n")
 
 
-def print_cmd_line(cmd: list[str]) -> None:
-    """Log the command being executed in a distinct color."""
-    _write_line(f"$ {shlex.join(cmd)}", "cyan")
+def print_cmd_line(cmd: list[str], env: dict[str, str] | None = None) -> None:
+    """Log the command being executed in a distinct color.
+
+    When *env* is supplied, render an `env K=V K=V ... cmd ...` prefix so the
+    printed line stays copy-pasteable -- mirrors how the subprocess used to
+    be invoked when env vars were prepended to argv directly.
+    """
+    if env:
+        env_parts = [f"{k}={shlex.quote(v)}" for k, v in env.items()]
+        _write_line(f"$ env {' '.join(env_parts)} {shlex.join(cmd)}", "cyan")
+    else:
+        _write_line(f"$ {shlex.join(cmd)}", "cyan")
 
 
 def print_line(line: str, error: bool = False) -> None:
@@ -211,6 +220,7 @@ async def run_command(
     check: bool = True,
     quiet: bool = False,
     *,
+    env: dict[str, str] | None = None,
     cleanup_grace_seconds: float = 0.0,
     cleanup_signal: int = signal.SIGKILL,
 ) -> CommandResult:
@@ -223,6 +233,9 @@ async def run_command(
         quiet: If True, capture output without echoing it -- for probe
             commands (podman inspect, lsof) whose output is parsed, not
             displayed. The cmd line itself is also not printed.
+        env: Environment overrides layered on top of os.environ. Pass
+            `{"K": "V"}` to set/override variables; pass None to inherit
+            unmodified. Avoids needing to prepend `env K=V ...` to cmd.
         cleanup_grace_seconds: Grace window when the call is cancelled or
             its readers fail. Pair with cleanup_signal=SIGINT for commands
             that need to run their own teardown (default is immediate KILL).
@@ -234,12 +247,19 @@ async def run_command(
         CommandResult with the exit code and captured stdout/stderr lines.
     """
     if not quiet:
-        print_cmd_line(cmd)
+        print_cmd_line(cmd, env=env)
+
+    import os  # local: keep utils mostly os-free, this is the only consumer
+
+    subprocess_env: dict[str, str] | None = None
+    if env is not None:
+        subprocess_env = {**os.environ, **env}
 
     process = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        env=subprocess_env,
     )
     assert process.stdout is not None and process.stderr is not None
 

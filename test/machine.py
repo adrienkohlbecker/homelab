@@ -332,21 +332,31 @@ class Machine:
             f"{self.ssh_user}@{SSH_HOST}:{remote}",
         ]
 
+    def ansible_env(self) -> dict[str, str]:
+        """ANSIBLE_* environment overrides layered on top of os.environ.
+
+        Fact cache lives inside the per-run workdir, so the ~9
+        ansible-playbook invocations in one test share gathered facts
+        (saves ~0.9s per replay) without leaking facts across runs that
+        target a freshly-spawned host (different IP, different cgroup,
+        different filesystem).
+        """
+        return {
+            "ANSIBLE_DISPLAY_OK_HOSTS": "true",
+            "ANSIBLE_DISPLAY_SKIPPED_HOSTS": "true",
+            "ANSIBLE_GATHERING": "smart",
+            "ANSIBLE_FACT_CACHING": "jsonfile",
+            "ANSIBLE_FACT_CACHING_CONNECTION": f"{self.workdir.name}/facts",
+            "ANSIBLE_FACT_CACHING_TIMEOUT": "7200",
+        }
+
     def format_ansible_cmd(self, *cmd: str) -> list[str]:
-        """Build an ansible-playbook command pinned to this machine's SSH details."""
-        # Fact cache lives inside the per-run workdir, so the ~9 ansible-playbook
-        # invocations in one test share gathered facts (saves ~0.9s per replay)
-        # without leaking facts across runs that target a freshly-spawned host
-        # (different IP, different cgroup, different filesystem).
-        fact_cache = f"{self.workdir.name}/facts"
+        """Build an ansible-playbook command pinned to this machine's SSH details.
+
+        ANSIBLE_* env vars come back from ansible_env() and are passed to
+        run_command via env=, not prepended to argv.
+        """
         parts = [
-            "env",
-            "ANSIBLE_DISPLAY_OK_HOSTS=true",
-            "ANSIBLE_DISPLAY_SKIPPED_HOSTS=true",
-            "ANSIBLE_GATHERING=smart",
-            "ANSIBLE_FACT_CACHING=jsonfile",
-            f"ANSIBLE_FACT_CACHING_CONNECTION={fact_cache}",
-            "ANSIBLE_FACT_CACHING_TIMEOUT=7200",
             "ansible-playbook",
             "-e",
             f"ansible_ssh_port={self.ssh_port}",
@@ -386,7 +396,7 @@ class Machine:
     async def ansible_command(self, *cmd: str, check: bool = True) -> CommandResult:
         """Execute ansible-playbook with machine-specific SSH overrides."""
 
-        return await run_command(self.format_ansible_cmd(*cmd), check=check)
+        return await run_command(self.format_ansible_cmd(*cmd), check=check, env=self.ansible_env())
 
     async def run_disk_setup(self) -> None:
         """Run the variant's post-boot disk-setup script over SSH, if any.

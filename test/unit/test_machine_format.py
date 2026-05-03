@@ -88,18 +88,7 @@ def test_format_ansible_cmd_default_envelope(
     )
     cmd = m.format_ansible_cmd("site.yml")
 
-    assert cmd[0] == "env"
-    # Ansible env vars precede the binary
-    assert "ANSIBLE_DISPLAY_OK_HOSTS=true" in cmd
-    assert "ANSIBLE_DISPLAY_SKIPPED_HOSTS=true" in cmd
-    assert "ANSIBLE_GATHERING=smart" in cmd
-    assert "ANSIBLE_FACT_CACHING=jsonfile" in cmd
-    assert f"ANSIBLE_FACT_CACHING_CONNECTION={m.workdir.name}/facts" in cmd
-    assert "ANSIBLE_FACT_CACHING_TIMEOUT=7200" in cmd
-
-    binary_idx = cmd.index("ansible-playbook")
-    # All env-style entries must come before the binary
-    assert all("=" in c for c in cmd[1:binary_idx])
+    assert cmd[0] == "ansible-playbook"
 
     # ansible_ssh_* overrides
     assert "ansible_ssh_port=2222" in cmd
@@ -127,6 +116,19 @@ def test_format_ansible_cmd_default_envelope(
     assert "nexus_url=" not in cmd
 
 
+def test_ansible_env_default_envelope(
+    machine_factory: Callable[..., machine.Machine],
+) -> None:
+    m = machine_factory()
+    env = m.ansible_env()
+    assert env["ANSIBLE_DISPLAY_OK_HOSTS"] == "true"
+    assert env["ANSIBLE_DISPLAY_SKIPPED_HOSTS"] == "true"
+    assert env["ANSIBLE_GATHERING"] == "smart"
+    assert env["ANSIBLE_FACT_CACHING"] == "jsonfile"
+    assert env["ANSIBLE_FACT_CACHING_CONNECTION"] == f"{m.workdir.name}/facts"
+    assert env["ANSIBLE_FACT_CACHING_TIMEOUT"] == "7200"
+
+
 def test_format_ansible_cmd_upstream_mirrors_clears_nexus(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
@@ -147,7 +149,7 @@ def test_format_ansible_cmd_no_positional(
     )
     cmd = m.format_ansible_cmd()
 
-    assert cmd[0] == "env"
+    assert cmd[0] == "ansible-playbook"
     assert "ansible-playbook" in cmd
     # With no extra cmd args the tail is whatever the spec's ansible_args ended in
     assert cmd[-1] == m.ansible_args[-1]
