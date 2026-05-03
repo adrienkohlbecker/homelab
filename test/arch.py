@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import dataclasses
 import platform
+from pathlib import Path
 
 
 @dataclasses.dataclass(frozen=True)
@@ -129,3 +130,20 @@ def profile_for_name(name: str) -> ArchProfile:
     if name == AARCH64.name:
         return AARCH64
     raise RuntimeError(f"Unknown arch profile: {name}")
+
+
+def uefi_code_path_for(profile: ArchProfile) -> Path:
+    """Locate the EDK2/OVMF CODE blob matching *profile* on this host.
+
+    Searches uefi_code_candidates in order; first existing path wins.
+    Raises RuntimeError with installation guidance if none are present.
+    """
+    for c in profile.uefi_code_candidates:
+        if Path(c).exists():
+            return Path(c)
+    raise RuntimeError(
+        f"No {profile.name} UEFI firmware found in {list(profile.uefi_code_candidates)}. "
+        "Install via `brew install qemu` (macOS), "
+        "`apt install ovmf` / `apt install qemu-efi-aarch64` (Debian/Ubuntu), or "
+        "`dnf install edk2-ovmf` (Fedora/RHEL)."
+    )

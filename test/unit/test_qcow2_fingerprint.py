@@ -1,22 +1,22 @@
-"""Pure-function tests for machine._qcow2_fingerprint."""
+"""Pure-function tests for extract._qcow2_fingerprint."""
 
 from pathlib import Path
 
-import machine
+import extract
 
 
 def test_stable_for_identical_bytes(tmp_path: Path) -> None:
     a = tmp_path / "a.qcow2"
     a.write_bytes(b"hello world")
-    assert machine._qcow2_fingerprint([a]) == machine._qcow2_fingerprint([a])
+    assert extract._qcow2_fingerprint([a]) == extract._qcow2_fingerprint([a])
 
 
 def test_changes_when_content_changes(tmp_path: Path) -> None:
     a = tmp_path / "a.qcow2"
     a.write_bytes(b"first")
-    digest1 = machine._qcow2_fingerprint([a])
+    digest1 = extract._qcow2_fingerprint([a])
     a.write_bytes(b"second")
-    digest2 = machine._qcow2_fingerprint([a])
+    digest2 = extract._qcow2_fingerprint([a])
     assert digest1 != digest2
 
 
@@ -28,7 +28,7 @@ def test_order_independent_across_paths(tmp_path: Path) -> None:
     # Caller-provided ordering must not affect the digest -- the function
     # sorts internally so a multi-disk variant (ubuntu-zfs-lab's 3-way
     # mirror) produces a stable cache key regardless of iteration order.
-    assert machine._qcow2_fingerprint([a, b]) == machine._qcow2_fingerprint([b, a])
+    assert extract._qcow2_fingerprint([a, b]) == extract._qcow2_fingerprint([b, a])
 
 
 def test_distinct_for_different_files_same_total_size(tmp_path: Path) -> None:
@@ -38,7 +38,7 @@ def test_distinct_for_different_files_same_total_size(tmp_path: Path) -> None:
     # implementation that only hashed lengths.
     a.write_bytes(b"X" * 16)
     b.write_bytes(b"Y" * 16)
-    assert machine._qcow2_fingerprint([a]) != machine._qcow2_fingerprint([b])
+    assert extract._qcow2_fingerprint([a]) != extract._qcow2_fingerprint([b])
 
 
 def test_handles_chunk_boundary(tmp_path: Path) -> None:
@@ -50,4 +50,4 @@ def test_handles_chunk_boundary(tmp_path: Path) -> None:
     payload = b"A" * (1024 * 1024 + 17)
     a.write_bytes(payload)
     expected = hashlib.sha256(payload).hexdigest()
-    assert machine._qcow2_fingerprint([a]) == expected
+    assert extract._qcow2_fingerprint([a]) == expected
