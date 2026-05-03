@@ -83,7 +83,7 @@ async def _build_seed_iso(out: Path, user_data: Path, meta_data: Path) -> None:
 class KernelInitrdExtractor:
     """One-shot extraction VM, cached by sha256 of the OS qcow2 contents."""
 
-    imagedir: str
+    imagedir: Path
     ubuntu_name: str
     os_src_paths: list[str]
     arch: ArchProfile
@@ -100,7 +100,7 @@ class KernelInitrdExtractor:
 
     def __post_init__(self) -> None:
         self.fingerprint = _qcow2_fingerprint([Path(p) for p in self.os_src_paths])
-        self.cache_dir = Path(self.imagedir) / "extracted" / self.fingerprint
+        self.cache_dir = self.imagedir / "extracted" / self.fingerprint
         self.kernel_path = self.cache_dir / "kernel"
         self.initrd_path = self.cache_dir / "initrd"
         self.cmdline_path = self.cache_dir / "cmdline"
@@ -168,7 +168,7 @@ class KernelInitrdExtractor:
         bypasses to cloud-images.ubuntu.com directly.
         """
         name = f"{self.ubuntu_name}-server-cloudimg-{self.arch.cloud_image_suffix}.img"
-        cache = Path(self.imagedir) / "cloud-images"
+        cache = self.imagedir / "cloud-images"
         cache.mkdir(parents=True, exist_ok=True)
         target = cache / name
         if target.exists():
