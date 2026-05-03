@@ -180,35 +180,39 @@ mount /boot/efi
 # arches are independent so a debugging spin on aarch64 doesn't perturb
 # the x86_64 prod image.
 #
-# ZBM names its EFI output after the underlying kernel image: vmlinuz on
-# x86_64 (compressed), vmlinux on aarch64 (uncompressed). Match upstream
-# so the local copy preserves the convention. rEFInd ships its loader as
-# refind_x64.efi on x86_64 and refind_aa64.efi on aarch64.
+# Components mode: the artifact is a tarball with kernel + initrd, not a
+# unified UKI .EFI. rEFInd does the kernel handoff via loader/initrd
+# directives — the systemd-boot aarch64 EFI stub silently fails under
+# EDK2 on QEMU virt, and rEFInd's own loader works on both arches.
+# rEFInd ships as refind_x64.efi on x86_64 and refind_aa64.efi on aarch64.
 case $(uname -m) in
 x86_64)
   ZBM_VERSION="3.1.0"
   ZBM_TIMESTAMP="20260503-081404"
-  ZBM_NAME=VMLINUZ
   REFIND_NAME=refind_x64.efi
   ;;
 aarch64)
   ZBM_VERSION="3.1.0"
   ZBM_TIMESTAMP="20260503-081404"
-  ZBM_NAME=VMLINUX
   REFIND_NAME=refind_aa64.efi
   ;;
 *)
   echo >&2 "Unknown machine name $(uname -m)" && exit 1
   ;;
 esac
-ZBM_URL="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/${ZBM_VERSION}/zfsbootmenu-v${ZBM_VERSION}-$(uname -m)-${ZBM_TIMESTAMP}.EFI"
+ZBM_URL="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/${ZBM_VERSION}/zfsbootmenu-v${ZBM_VERSION}-$(uname -m)-${ZBM_TIMESTAMP}.tar.gz"
 
 apt-get install --yes curl
 mkdir -p /boot/efi/EFI/ZBM
-curl -fL -o "/boot/efi/EFI/ZBM/${ZBM_NAME}.EFI" "$ZBM_URL"
+curl -fL -o /tmp/zbm.tar.gz "$ZBM_URL"
 EXPECTED_SUM="$(curl -fsSL "$ZBM_URL.sha256sum" | awk '{print $1}')"
-echo "$EXPECTED_SUM  /boot/efi/EFI/ZBM/${ZBM_NAME}.EFI" | sha256sum -c -
-cp "/boot/efi/EFI/ZBM/${ZBM_NAME}.EFI" "/boot/efi/EFI/ZBM/${ZBM_NAME}-BACKUP.EFI"
+echo "$EXPECTED_SUM  /tmp/zbm.tar.gz" | sha256sum -c -
+tar -xzf /tmp/zbm.tar.gz -C /boot/efi/EFI/ZBM/
+rm /tmp/zbm.tar.gz
+
+# x86_64 emits vmlinuz-bootmenu (compressed); aarch64 emits vmlinux-bootmenu
+# (uncompressed). Capture the actual filename for the rEFInd menuentry.
+ZBM_KERNEL="$(basename /boot/efi/EFI/ZBM/vmlin*-bootmenu)"
 
 # Configure rEFInd
 
@@ -222,27 +226,23 @@ timeout 1
 default_selection "Ubuntu (ZBM)"
 
 menuentry "Ubuntu (ZBM)" {
-    loader /EFI/ZBM/${ZBM_NAME}.EFI
-    options "quit loglevel=0 zbm.skip"
+    loader /EFI/ZBM/${ZBM_KERNEL}
+    initrd /EFI/ZBM/initramfs-bootmenu.img
+    options "quiet loglevel=0 zbm.skip"
 }
 
 menuentry "Ubuntu (ZBM Menu)" {
-    loader /EFI/ZBM/${ZBM_NAME}.EFI
-    options "quit loglevel=0 zbm.show"
+    loader /EFI/ZBM/${ZBM_KERNEL}
+    initrd /EFI/ZBM/initramfs-bootmenu.img
+    options "quiet loglevel=0 zbm.show"
 }
 EOF
 
-# # Configure EFI boot entries
+# Configure EFI boot entry — only rEFInd, since ZBM is no longer a
+# bootable EFI binary (Components mode = kernel + initrd as separate
+# files, loaded by rEFInd).
 
 apt-get install --yes efibootmgr
-
-efibootmgr -c -d "${DISKS[0]}" -p 1 \
-  -L "ZFSBootMenu (Backup)" \
-  -l "\\EFI\\ZBM\\${ZBM_NAME}-BACKUP.EFI"
-
-efibootmgr -c -d "${DISKS[0]}" -p 1 \
-  -L "ZFSBootMenu" \
-  -l "\\EFI\\ZBM\\${ZBM_NAME}.EFI"
 
 efibootmgr -c -d "${DISKS[0]}" -p 1 \
   -L "rEFInd" \
