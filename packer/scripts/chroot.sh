@@ -13,7 +13,13 @@ export DEBIAN_FRONTEND=noninteractive
 
 # Retry transient apt failures (Nexus restart, packet loss). Persists
 # in the shipped image; ansible runs see the same resilience.
+# Acquire::Retries::Delay (apt 2.7+ in noble) adds backoff between
+# attempts so a Nexus restart of a few seconds isn't burned through
+# instantly; apt on jammy retries immediately.
 echo 'Acquire::Retries "3";' >/etc/apt/apt.conf.d/80-retries
+if [ "$UBUNTU_NAME" != "jammy" ]; then
+  echo 'Acquire::Retries::Delay "true";' >>/etc/apt/apt.conf.d/80-retries
+fi
 
 # Set a hostname
 
