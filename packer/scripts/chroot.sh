@@ -173,12 +173,11 @@ mount /boot/efi
 # Install ZFSBootMenu
 #
 # ZBM is built + uploaded out-of-band by `mise run zbm:build && zbm:upload`.
-# The Gitea package is keyed by ZBM upstream version (the "package version"
-# in Gitea terms); inside it, each per-arch upload lands as a timestamped
-# file. Bump ZBM_VERSION_<arch> when moving to a new upstream release;
-# bump ZBM_TIMESTAMP_<arch> on every rebuild of the same release. The two
-# arches are independent so a debugging spin on aarch64 doesn't perturb
-# the x86_64 prod image.
+# The Gitea package holds one stable filename per (version, arch);
+# zbm:upload deletes any existing copy before PUT, so a rebuild
+# propagates here without source edits. Bump ZBM_VERSION when moving
+# to a new upstream release; per-arch values are independent so a
+# debugging spin on aarch64 doesn't perturb the x86_64 prod image.
 #
 # Components mode: the artifact is a tarball with kernel + initrd, not a
 # unified UKI .EFI. rEFInd does the kernel handoff via loader/initrd
@@ -188,19 +187,17 @@ mount /boot/efi
 case $(uname -m) in
 x86_64)
   ZBM_VERSION="3.1.0"
-  ZBM_TIMESTAMP="20260503-154656"
   REFIND_NAME=refind_x64.efi
   ;;
 aarch64)
   ZBM_VERSION="3.1.0"
-  ZBM_TIMESTAMP="20260503-081404"
   REFIND_NAME=refind_aa64.efi
   ;;
 *)
   echo >&2 "Unknown machine name $(uname -m)" && exit 1
   ;;
 esac
-ZBM_URL="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/${ZBM_VERSION}/zfsbootmenu-v${ZBM_VERSION}-$(uname -m)-${ZBM_TIMESTAMP}.tar.gz"
+ZBM_URL="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/${ZBM_VERSION}/zfsbootmenu-v${ZBM_VERSION}-$(uname -m).tar.gz"
 
 apt-get install --yes curl
 mkdir -p /boot/efi/EFI/ZBM
