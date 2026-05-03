@@ -214,9 +214,10 @@ apt-get install --yes refind
 refind-install
 rm /boot/refind_linux.conf
 
-cat <<EOF >>/boot/efi/EFI/refind/refind.conf
+cat <<EOF >/boot/efi/EFI/refind/refind.conf
 timeout 1
 default_selection "Ubuntu (ZBM)"
+dont_scan_dirs /EFI/ZBM
 
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/${ZBM_KERNEL}
