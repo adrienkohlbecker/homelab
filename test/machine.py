@@ -36,6 +36,10 @@ from utils import (
 ensure_mitogen_symlink()
 
 OUT_DIR = Path("test/out")
+# Created once at import so every later writer (per-run logs, podman
+# network lock, etc.) can open files inside without repeating the mkdir.
+OUT_DIR.mkdir(parents=True, exist_ok=True)
+
 UBUNTU_RELEASES: dict[str, str] = {
     "jammy": "22.04",
     "noble": "24.04",
@@ -147,7 +151,6 @@ async def ensure_podman_network() -> None:
     so parallel PodmanMachine.prepare() calls don't race and lose with
     "network already exists".
     """
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
     with PODMAN_NETWORK_LOCK.open("w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         result = await run_command(["podman", "network", "inspect", PODMAN_NETWORK], check=False)
@@ -190,7 +193,6 @@ class Machine:
     def __post_init__(self) -> None:
         if self.ubuntu_name not in UBUNTU_RELEASES:
             raise ValueError(f"Unknown Ubuntu release '{self.ubuntu_name}'; known: {sorted(UBUNTU_RELEASES)}")
-        OUT_DIR.mkdir(parents=True, exist_ok=True)
         prefix = f"{self.machine}.{self.ubuntu_name}.{self.role}"
         self.output_file = OUT_DIR / f"{prefix}.output.ansi"
         self.journal_file = OUT_DIR / f"{prefix}.journal.ansi"
