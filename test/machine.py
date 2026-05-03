@@ -5,7 +5,6 @@ import collections
 import contextlib
 import dataclasses
 import fcntl
-import os
 import platform
 import shlex
 import shutil
@@ -26,6 +25,7 @@ from utils import (
     read_and_write_stream,
     run_command,
     sleep_tick,
+    terminate_pid,
     terminate_subprocess,
 )
 
@@ -966,26 +966,11 @@ class QemuMachine(Machine):
         try:
             if pid is not None:
                 # Shield against nested cancellation; without it a second
-                # SIGINT mid-cleanup would leave qemu running.
-                await asyncio.shield(self._terminate_qemu(pid))
+                # SIGINT mid-cleanup would leave qemu running. terminate_pid
+                # SIGTERMs, polls for up to grace_seconds, then SIGKILLs.
+                await asyncio.shield(terminate_pid(pid, grace_seconds=5))
         finally:
             await super().stop()
-
-    async def _terminate_qemu(self, pid: int) -> None:
-        """SIGTERM qemu, poll briefly, escalate to SIGKILL if it lingers."""
-        with contextlib.suppress(ProcessLookupError):
-            os.kill(pid, signal.SIGTERM)
-
-        deadline = time.monotonic() + 5
-        while time.monotonic() < deadline:
-            try:
-                os.kill(pid, 0)
-            except ProcessLookupError:
-                return
-            await asyncio.sleep(0.2)
-
-        with contextlib.suppress(ProcessLookupError):
-            os.kill(pid, signal.SIGKILL)
 
     async def _find_ssh_port(self) -> None:
         """Parse lsof output from the QEMU pidfile to extract forwarded SSH port."""
