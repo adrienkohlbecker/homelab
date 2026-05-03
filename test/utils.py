@@ -141,6 +141,37 @@ async def read_and_write_stream(
             _write_line(line, color)
 
 
+async def terminate_pid(
+    pid: int,
+    *,
+    grace_seconds: float,
+    initial_signal: int = signal.SIGTERM,
+    poll_interval: float = 0.2,
+) -> None:
+    """Stop *pid*, escalating to SIGKILL after *grace_seconds* if needed.
+
+    The pid-based counterpart to terminate_subprocess: used when the parent
+    has only the child's PID (e.g. read out of a hypervisor pidfile), not
+    a Popen handle. Uses kill(pid, 0) to detect exit; tolerant of the
+    process having already gone.
+    """
+    import os  # local: utils.py is otherwise os-free
+
+    with contextlib.suppress(ProcessLookupError):
+        os.kill(pid, initial_signal)
+
+    deadline = asyncio.get_running_loop().time() + grace_seconds
+    while asyncio.get_running_loop().time() < deadline:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return
+        await asyncio.sleep(poll_interval)
+
+    with contextlib.suppress(ProcessLookupError):
+        os.kill(pid, signal.SIGKILL)
+
+
 async def terminate_subprocess(
     proc: asyncio.subprocess.Process,
     *,
