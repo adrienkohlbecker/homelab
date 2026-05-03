@@ -189,4 +189,3 @@ if [ -z "$exported" ]; then
   zpool export -f rpool || echo "WARNING: rpool export failed; deferring to systemd shutdown" >&2
   sync
 fi
-reboot
