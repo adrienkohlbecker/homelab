@@ -627,6 +627,10 @@ class QemuMachine(Machine):
     # Device paths (e.g. ["/dev/vdb", "/dev/vdc"]) for disks attached beyond
     # the OS disk. Populated by prepare() and consumed by run_disk_setup().
     _extra_disk_devices: list[str]
+    # VNC display number (0..99) chosen in prepare() when keep_vm is True;
+    # consumed by _boot_command for the `-display vnc=` argument. Bound on
+    # 5900+display so qemu won't try to walk the band itself.
+    vnc_display: int
     # Set by prepare() on aarch64 ZFS variants: (kernel, initrd, root_cmdline).
     # _boot_command() emits -kernel/-initrd/-append from this and skips UEFI
     # pflash so the firmware boot chain (rEFInd -> ZBM -> kexec, broken on
@@ -691,6 +695,30 @@ class QemuMachine(Machine):
         """
         return self.imagedir
 
+    def print_ssh_instructions(self) -> None:
+        super().print_ssh_instructions()
+        # vnc_display is only set when keep_vm=True; print_ssh_instructions
+        # itself is also keep-only, so we always have a display here.
+        print_line(f"VNC: 127.0.0.1:{5900 + self.vnc_display}")
+
+    @staticmethod
+    def _pick_vnc_display() -> int:
+        """Walk VNC ports 5900..5999 and return the first free display number.
+
+        qemu's `vnc=:N` syntax binds to port 5900+N, so we test bind on the
+        actual port and hand qemu the matching display. Mirrors qemu's own
+        `to=99` walk but resolves up front so we know the chosen display
+        before launch (and can print it). Raises if all 100 are occupied.
+        """
+        for display in range(100):
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.bind((SSH_HOST, 5900 + display))
+                    return display
+            except OSError:
+                continue
+        raise RuntimeError("No free VNC display in 0..99 on 127.0.0.1")
+
     def _preflight(self) -> None:
         """Verify the qemu binary, GNU timeout, and lsof are reachable."""
         self._require_binary(
@@ -722,6 +750,14 @@ class QemuMachine(Machine):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((SSH_HOST, 0))
             self.ssh_port = s.getsockname()[1]
+
+        if self.keep_vm:
+            # Pick a VNC display 0..99 the same way -- qemu's vnc= syntax
+            # interprets the number as a display (port = 5900+display), so
+            # we walk that band and grab the first free port. Replaces
+            # `vnc=:0,to=99` so we know the chosen display up front and can
+            # print it for the user.
+            self.vnc_display = self._pick_vnc_display()
 
         if self.machine == "minimal":
             if shutil.which("cloud-localds") is None:
@@ -917,7 +953,9 @@ class QemuMachine(Machine):
             # ArchProfile.keep_vm_extra_devices.
             display_args = [
                 "-display",
-                "vnc=:0,to=99",
+                # Display number pre-picked in prepare(); qemu binds to
+                # 5900+display so the user can connect at 127.0.0.1:<port>.
+                f"vnc=:{self.vnc_display}",
                 *self.arch.keep_vm_extra_devices,
                 "-k",
                 "fr",

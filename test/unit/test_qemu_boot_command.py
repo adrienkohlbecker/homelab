@@ -20,6 +20,9 @@ def _setup(m: machine.QemuMachine, drives: list[str] | None = None) -> None:
     m.drives = list(drives or [])
     m._direct_boot = None
     m._extra_disk_devices = []
+    # prepare() picks vnc_display when keep_vm; bypass tests pin it so the
+    # cmdline has a deterministic value.
+    m.vnc_display = 0
 
 
 def test_default_x86_64_no_keep_no_direct_boot(
@@ -102,9 +105,10 @@ def test_keep_vm_zero_timeout_x86_64_uses_minimal_keep_devices(
     # added (absolute mouse for VNC). No virtio-gpu-pci.
     assert "virtio-gpu-pci" not in cmd
 
-    # VNC display + French keyboard layout.
+    # VNC display + French keyboard layout. _setup() pinned vnc_display=0
+    # so the cmdline is deterministic.
     display_idx = cmd.index("-display")
-    assert cmd[display_idx + 1] == "vnc=:0,to=99"
+    assert cmd[display_idx + 1] == "vnc=:0"
     assert cmd[cmd.index("-k") + 1] == "fr"
 
     # usb-tablet is the only -device addition for keep_vm on x86_64.
