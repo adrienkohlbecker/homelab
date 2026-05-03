@@ -117,10 +117,13 @@ sha256sum "$out_dir/zfsbootmenu-v{{vars.zbm_version}}-${arch}.EFI"
 description = "Upload the built ZFSBootMenu EFI to Gitea generic packages"
 # Generates a .sha256sum sidecar next to the .EFI, then PUTs both to
 # gitea.lab.fahm.fr's generic package repo at
-# adrienkohlbecker/zfsbootmenu/<zbm_version>. The package upload token
-# is read from 1Password at runtime. Gitea's generic packages reject
-# duplicate filenames with 409; on that we DELETE the existing file and
-# re-PUT.
+# adrienkohlbecker/zfsbootmenu/<zbm_version>-<UTC timestamp>. Each
+# upload becomes a fresh package version (no 409s, no overwrites)
+# which keeps an archive of every build for rollback / diffing. The
+# trade-off: chroot.sh / roles/zfsbootmenu must be pointed at the new
+# version after each upload (the printed URL at the end of this task
+# is the one to copy in). The package upload token is read from
+# 1Password at runtime.
 run = '''
 set -eu
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
@@ -130,20 +133,17 @@ sum_name="${file_name}.sha256sum"
 ( cd "$out_dir" && sha256sum "$file_name" ) > "${out_dir}/${sum_name}"
 username="$(op read 'op://Lab/Gitea package upload token/username')"
 token="$(op read 'op://Lab/Gitea package upload token/password')"
-base_url="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/{{vars.zbm_version}}"
+pkg_version="{{vars.zbm_version}}-$(date -u +%Y%m%d-%H%M%S)"
+base_url="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/${pkg_version}"
 for f in "$file_name" "$sum_name"; do
   url="${base_url}/${f}"
-  status=$(curl --silent --user "${username}:${token}" --upload-file "${out_dir}/${f}" --output /dev/stderr --write-out '%{http_code}' "${url}")
-  if [ "${status}" = "409" ]; then
-    echo "${f}: 409 conflict, deleting and retrying" >&2
-    curl --fail-with-body --user "${username}:${token}" --request DELETE "${url}"
-    curl --fail-with-body --user "${username}:${token}" --upload-file "${out_dir}/${f}" "${url}"
-  elif [ "${status}" -lt 200 ] || [ "${status}" -ge 300 ]; then
-    echo "${f}: upload failed with HTTP ${status}" >&2
-    exit 1
-  fi
+  curl --fail-with-body --user "${username}:${token}" --upload-file "${out_dir}/${f}" "${url}"
   echo "${f}: uploaded to ${url}"
 done
+echo
+echo "Package version: ${pkg_version}"
+echo "Update chroot.sh / roles/zfsbootmenu to fetch from:"
+echo "  ${base_url}/${file_name}"
 '''
 
 [tasks.lint]
