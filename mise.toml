@@ -8,6 +8,12 @@ CLOUDFLARE_EMAIL = "op://Lab/seckvi7vjb6ahgtt7w4l3r73zq/username"
 CLOUDFLARE_API_KEY = "op://Lab/seckvi7vjb6ahgtt7w4l3r73zq/password"
 NEXUS_USERNAME = "op://Lab/u2lem3tvichptsn37new73ftv4/username"
 NEXUS_PASSWORD = "op://Lab/u2lem3tvichptsn37new73ftv4/password"
+# Expose [vars] entries as env so file-based mise-tasks/ scripts can read
+# them (mise vars are tera-expanded into toml `run` strings only). Toml
+# tasks still reference `{{vars.X}}`; both forms resolve to the same value.
+QEMU_DIR = '{{vars.qemu_dir}}'
+PACKER_FLAGS = '{{vars.packer_flags}}'
+ZBM_VERSION = '{{vars.zbm_version}}'
 
 [tools]
 terraform = "1.11.4"
@@ -26,21 +32,6 @@ python.uv_venv_auto = "create|source"
 description = "packer init (forwards args)"
 dir = "{{config_root}}/packer"
 run = 'packer init "$@" .'
-
-[tasks."packer:build"]
-description = "Build a packer image variant and verify it boots"
-interactive = true
-usage = '''
-arg "<variant>" help="Variant: zfs or zfs-lab"
-flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
-flag "--upstream" help="Pull apt packages and the cloud image from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
-flag "--no-verify" help="Skip the post-build packer:verify smoke test (boot + systemctl is-system-running)."
-'''
-run = [
-  'rm -rf "{{vars.qemu_dir}}/${usage_ubuntu}/ubuntu-${usage_variant}.new"',
-  'arch=$(uname -m | sed s/arm64/aarch64/); packer build {{vars.packer_flags}} -var ubuntu_name="${usage_ubuntu}" -var arch="$arch" -var upstream_mirrors="${usage_upstream:-false}" -var zbm_version="{{vars.zbm_version}}" -var output_directory="{{vars.qemu_dir}}/${usage_ubuntu}" -only=qemu.ubuntu-${usage_variant} packer',
-  '[ "${usage_no_verify:-false}" = "true" ] || mise run packer:verify "${usage_variant}" --ubuntu "${usage_ubuntu}"',
-]
 
 [tasks."packer:all"]
 description = "Build ubuntu-zfs and ubuntu-zfs-lab in parallel"
