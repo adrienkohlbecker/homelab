@@ -180,9 +180,9 @@ for delay in 2 5 10 15 30; do
 done
 
 if [ -z "$exported" ]; then
-  # Don't block the build if even -f fails. systemd's shutdown sequence
-  # tears the pool down at reboot time, and ZFS recovers from unclean
-  # export on next import (uberblocks committed every TXG, ~5s).
-  zpool export -f rpool || echo "WARNING: rpool export failed; deferring to systemd shutdown" >&2
+  # Force export. Failure here means the pool is genuinely stuck (open
+  # handle, mount-table desync) — fail the build rather than ship an
+  # image that wasn't cleanly quiesced. set -e kills the script.
+  zpool export -f rpool
   sync
 fi
