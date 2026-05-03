@@ -31,9 +31,9 @@ run = 'packer init "$@" .'
 description = "Build a packer image variant"
 interactive = true
 usage = '''
-arg "<variant>" help="Variant: base, zfs, or zfs-lab"
+arg "<variant>" help="Variant: zfs or zfs-lab"
 flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
-flag "--upstream" help="Pull apt packages from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
+flag "--upstream" help="Pull apt packages and the cloud image from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
 '''
 run = [
   'rm -rf "{{vars.qemu_dir}}/${usage_ubuntu}/ubuntu-${usage_variant}.new"',
@@ -41,13 +41,12 @@ run = [
 ]
 
 [tasks."packer:all"]
-description = "Build ubuntu-base, then ubuntu-zfs and ubuntu-zfs-lab in parallel"
+description = "Build ubuntu-zfs and ubuntu-zfs-lab in parallel"
 usage = '''
 flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
 flag "--upstream" help="Forwarded to packer:build for each sub-build."
 '''
 run = [
-  'mise run packer:build base --ubuntu "${usage_ubuntu}" $([ "${usage_upstream:-false}" = "true" ] && echo --upstream)',
   'flag=$([ "${usage_upstream:-false}" = "true" ] && echo --upstream); mise run packer:build zfs --ubuntu "${usage_ubuntu}" $flag ::: packer:build zfs-lab --ubuntu "${usage_ubuntu}" $flag',
 ]
 
