@@ -29,12 +29,6 @@ from utils import (
     terminate_subprocess,
 )
 
-# Repair the .ansible-mitogen-strategy symlink at module-import time so every
-# testrole.py / testall.py invocation refreshes it after a `uv sync` Python
-# bump. Direct ansible runs by the user share the same symlink; if it's
-# dangling, ansible-playbook fails loudly with "Invalid play strategy".
-ensure_mitogen_symlink()
-
 OUT_DIR = Path("test/out")
 # Created once at import so every later writer (per-run logs, podman
 # network lock, etc.) can open files inside without repeating the mkdir.
@@ -201,6 +195,11 @@ class Machine:
     def __post_init__(self) -> None:
         if self.ubuntu_name not in UBUNTU_RELEASES:
             raise ValueError(f"Unknown Ubuntu release '{self.ubuntu_name}'; known: {sorted(UBUNTU_RELEASES)}")
+        # Refresh the .ansible-mitogen-strategy symlink before we run any
+        # ansible-playbook subprocess. Lifted out of module-import time so
+        # bare imports (tests reading constants, tooling) skip the work;
+        # constructing a Machine implies we're about to drive ansible.
+        ensure_mitogen_symlink()
         prefix = f"{self.machine}.{self.ubuntu_name}.{self.role}"
         self.output_file = OUT_DIR / f"{prefix}.output.ansi"
         self.journal_file = OUT_DIR / f"{prefix}.journal.ansi"
