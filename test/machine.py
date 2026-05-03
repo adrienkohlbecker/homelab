@@ -546,14 +546,14 @@ class Machine:
         await self.boot()
         return self
 
-    async def __aexit__(self, exc_type: object, exc: object, tb: object) -> None:
+    async def __aexit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
         print_line("Stopping machine...")
         await self.stop()
         # Surface the tail of the boot/console log on infra-shaped failures so
         # the main transcript ends with the most likely diagnostic. Cancellation
         # is the user wanting out; idempotence checks fail at the role layer
         # and the boot log won't help.
-        if isinstance(exc_type, type) and issubclass(exc_type, BaseException) and not issubclass(exc_type, (asyncio.CancelledError, IdempotenceFailedException)):
+        if exc is not None and not isinstance(exc, (asyncio.CancelledError, IdempotenceFailedException)):
             self.print_boot_tail()
 
     async def stop(self) -> None:
