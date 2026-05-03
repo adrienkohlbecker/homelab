@@ -312,3 +312,7 @@ run = 'op run -- terraform apply "$@"'
 description = "terraform validate (forwards args)"
 dir = "{{config_root}}/terraform"
 run = 'op run -- terraform validate "$@"'
+
+[tasks."ansible"]
+description = "ansible-playbook against site.yml (forwards args)"
+run = 'ansible-playbook site.yml "$@"'
