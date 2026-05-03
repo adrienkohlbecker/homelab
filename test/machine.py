@@ -1229,7 +1229,17 @@ class PodmanMachine(Machine):
         peak_file = Path("/sys/fs/cgroup") / cgroup_path.lstrip("/") / "memory.peak"
         try:
             return int(peak_file.read_text().strip()) // 1024
-        except (FileNotFoundError, PermissionError, ValueError):
+        except FileNotFoundError:
+            # cgroup v1 host (no memory.peak) or container's cgroup already
+            # torn down between inspect and read. Quiet: PEAK_KB=0 is the
+            # signal and the host is what it is.
+            return 0
+        except (PermissionError, ValueError) as exc:
+            # Rootless podman with cgroup-delegation issues (typical) or a
+            # parse failure on a never-before-seen memory.peak format. Print
+            # once per failure so an operator looking at PEAK_KB=0 has a
+            # breadcrumb instead of guessing.
+            print_line(f"Could not read {peak_file}: {exc}", error=True)
             return 0
 
     async def _find_ssh_port(self) -> None:
