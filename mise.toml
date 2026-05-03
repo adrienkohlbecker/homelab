@@ -94,30 +94,34 @@ podman build --security-opt seccomp=unconfined --build-arg XBPS_REPOS=https://re
 '''
 
 [tasks."zbm:build"]
-description = "Build a ZFSBootMenu UEFI binary via the local builder container"
+description = "Build a ZFSBootMenu kernel + initrd tarball via the local builder container"
 # Runs localhost/zbm-builder:<version>-<arch> with zbm/ bind-mounted at
-# /build (config.yaml lives there, read-only) and zbm-build/<arch>/ at
-# /output. The container's build-init.sh fetches zfsbootmenu at -t and
-# emits vmlinuz.EFI; we rename to a versioned, arch-tagged filename
-# suitable for upload to Gitea releases.
+# /build (config.yaml + dracut.conf.d live there, read-only) and
+# zbm-build/<arch>/ at /output. Components mode: the container emits
+# vmlinuz-bootmenu (or vmlinux-bootmenu on aarch64) + initramfs-bootmenu.img
+# rather than a unified .EFI. We tarball both into a single artifact
+# suitable for upload to Gitea releases. (The systemd-boot UKI stub
+# silently fails to invoke the kernel under EDK2/aarch64 on QEMU virt;
+# letting rEFInd do the handoff via loader/initrd directives works on
+# both arches.)
 run = '''
 set -eu
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 out_dir="{{config_root}}/zbm-build/${arch}"
 mkdir -p "$out_dir"
-rm -f "$out_dir"/*.EFI
+rm -f "$out_dir"/*-bootmenu "$out_dir"/*-bootmenu.img "$out_dir"/zfsbootmenu-v*-${arch}.tar.gz "$out_dir"/zfsbootmenu-v*-${arch}.tar.gz.sha256sum "$out_dir"/*.EFI
 podman run --rm -v "{{config_root}}/zbm:/build:ro" -v "$out_dir:/output" "localhost/zbm-builder:v{{vars.zbm_version}}-${arch}" -o /output -t v{{vars.zbm_version}}
-# x86_64 emits vmlinuz.EFI (gzipped kernel); aarch64 emits vmlinux.EFI
-# (uncompressed). Glob covers both.
-mv "$out_dir"/vmlin*.EFI "$out_dir/zfsbootmenu-v{{vars.zbm_version}}-${arch}.EFI"
-sha256sum "$out_dir/zfsbootmenu-v{{vars.zbm_version}}-${arch}.EFI"
+# Components mode emits vmlin{u,uz}-bootmenu + initramfs-bootmenu.img;
+# tar them together preserving upstream names so chroot.sh can glob.
+( cd "$out_dir" && tar -czf "zfsbootmenu-v{{vars.zbm_version}}-${arch}.tar.gz" vmlin*-bootmenu initramfs-bootmenu.img )
+sha256sum "$out_dir/zfsbootmenu-v{{vars.zbm_version}}-${arch}.tar.gz"
 '''
 
 [tasks."zbm:upload"]
-description = "Upload the built ZFSBootMenu EFI to Gitea generic packages"
-# Generates a .sha256sum sidecar next to the .EFI, then PUTs both to
+description = "Upload the built ZFSBootMenu tarball + checksum to Gitea generic packages"
+# Generates a .sha256sum sidecar next to the .tar.gz, then PUTs both to
 # gitea.lab.fahm.fr's generic package repo at
-# adrienkohlbecker/zfsbootmenu/<zbm_version>/<file>-<UTC timestamp>.EFI.
+# adrienkohlbecker/zfsbootmenu/<zbm_version>/<file>-<UTC timestamp>.tar.gz.
 # The package version stays at zbm_version (one Gitea package per ZBM
 # release, accumulating timestamped builds inside) and each upload
 # becomes a new file in that package — no 409s, no overwrites, full
@@ -130,9 +134,9 @@ run = '''
 set -eu
 arch="$(uname -m | sed -e s/arm64/aarch64/ -e s/amd64/x86_64/)"
 out_dir="{{config_root}}/zbm-build/${arch}"
-local_name="zfsbootmenu-v{{vars.zbm_version}}-${arch}.EFI"
+local_name="zfsbootmenu-v{{vars.zbm_version}}-${arch}.tar.gz"
 timestamp="$(date -u +%Y%m%d-%H%M%S)"
-remote_name="zfsbootmenu-v{{vars.zbm_version}}-${arch}-${timestamp}.EFI"
+remote_name="zfsbootmenu-v{{vars.zbm_version}}-${arch}-${timestamp}.tar.gz"
 sum_name="${remote_name}.sha256sum"
 # Compute the sha256 against the local file but record it under the remote
 # name, so the sidecar's content matches what chroot.sh will sha256sum -c.
