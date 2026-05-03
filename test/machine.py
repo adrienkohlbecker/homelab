@@ -1284,7 +1284,7 @@ class QemuMachine(Machine):
 
         lines: list[str] = []
         for _ in range(10):
-            lines = (await run_command(lsof_cmd)).stdout
+            lines = (await run_command(lsof_cmd, quiet=True)).stdout
 
             for line in lines:
                 fields = line.split()
