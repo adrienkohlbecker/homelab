@@ -246,15 +246,9 @@ class Machine:
         """
         return 0 if self.keep_vm else self.machine_timeout
 
-    def format_ssh_cmd(self, *cmd: str) -> list[str]:
-        """Return an ssh invocation pinned to this instance."""
-
-        base = [
-            "ssh",
-            "-i",
-            self.ssh_key,
-            "-p",
-            str(self.ssh_port),
+    def _ssh_options(self) -> list[str]:
+        """Return the shared `-o flag=value` pairs for ssh and scp."""
+        return [
             "-o",
             "StrictHostKeyChecking=no",
             "-o",
@@ -265,13 +259,26 @@ class Machine:
             "LogLevel=ERROR",
             "-o",
             "BatchMode=yes",
-            # The wait-for-ready loop runs before ansible-playbook does, so
-            # whichever of these creates the ControlMaster (per the user's
-            # ~/.ssh/config Host *: ControlMaster auto) decides whether the
-            # master has an agent-forwarding channel. Without `-A` here, the
-            # master comes up without one, and ansible's later ForwardAgent=yes
-            # silently reuses the agent-less master -- breaking roles that
-            # ssh out to git@github.com from the test target.
+        ]
+
+    def format_ssh_cmd(self, *cmd: str) -> list[str]:
+        """Return an ssh invocation pinned to this instance."""
+
+        # The wait-for-ready loop runs before ansible-playbook does, so
+        # whichever of these creates the ControlMaster (per the user's
+        # ~/.ssh/config Host *: ControlMaster auto) decides whether the
+        # master has an agent-forwarding channel. Without ForwardAgent=yes
+        # here, the master comes up without one, and ansible's later
+        # ForwardAgent=yes silently reuses the agent-less master --
+        # breaking roles that ssh out to git@github.com from the test
+        # target. scp doesn't carry git operations, so it skips this flag.
+        base = [
+            "ssh",
+            "-i",
+            self.ssh_key,
+            "-p",
+            str(self.ssh_port),
+            *self._ssh_options(),
             "-o",
             "ForwardAgent=yes",
             f"{self.ssh_user}@{self.ssh_host}",
@@ -281,8 +288,9 @@ class Machine:
     def format_scp_cmd(self, local: str, remote: str) -> list[str]:
         """Return an scp invocation pinned to this instance.
 
-        Uses the same `-o` flags as `format_ssh_cmd`; only the port flag
-        differs (scp uses `-P`, ssh uses `-p`).
+        Shares `_ssh_options()` with `format_ssh_cmd`; only the port flag
+        differs (scp uses `-P`, ssh uses `-p`) and ForwardAgent is left off
+        (no remote git operations over scp).
         """
         return [
             "scp",
@@ -290,16 +298,7 @@ class Machine:
             self.ssh_key,
             "-P",
             str(self.ssh_port),
-            "-o",
-            "StrictHostKeyChecking=no",
-            "-o",
-            "UserKnownHostsFile=/dev/null",
-            "-o",
-            "ConnectTimeout=10",
-            "-o",
-            "LogLevel=ERROR",
-            "-o",
-            "BatchMode=yes",
+            *self._ssh_options(),
             local,
             f"{self.ssh_user}@{self.ssh_host}:{remote}",
         ]
