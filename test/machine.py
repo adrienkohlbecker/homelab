@@ -1034,7 +1034,11 @@ class QemuMachine(Machine):
 
         lines: list[str] = []
         for _ in range(10):
-            lines = (await run_command(lsof_cmd, quiet=True)).stdout
+            # check=False so a transient lsof failure (qemu not yet listening,
+            # pid already gone) falls through to the retry / friendly-error
+            # path instead of raising CommandFailedException out of the loop.
+            # quiet=True keeps the noisy lsof output out of the role transcript.
+            lines = (await run_command(lsof_cmd, check=False, quiet=True)).stdout
 
             for line in lines:
                 fields = line.split()
