@@ -166,13 +166,17 @@ class Machine:
     ssh_user: str
     ansible_args: list[str]
     inventory_host: str
-    idfile: str
     machine: str
     role: str
     keep_vm: bool
     ubuntu_name: str
     machine_timeout: int
     upstream_mirrors: bool = False
+    # Filename (under the per-run workdir) where the hypervisor writes its
+    # identifier. Default suits QemuMachine; PodmanMachine reassigns to
+    # "cid" after super().__init__. ensure_booted() / stop() read
+    # self.idfile without caring which subclass it is.
+    idfile: str = dataclasses.field(default="pid", init=False)
 
     ssh_host: str = dataclasses.field(default=SSH_HOST, init=False)
     ssh_key: str = dataclasses.field(default=SSH_KEY, init=False)
@@ -655,7 +659,6 @@ class QemuMachine(Machine):
             ssh_user=spec.ssh_user,
             ansible_args=spec.ansible_args,
             inventory_host=spec.inventory_host,
-            idfile="pid",
             machine=machine,
             role=role,
             keep_vm=keep_vm,
@@ -663,6 +666,7 @@ class QemuMachine(Machine):
             machine_timeout=machine_timeout,
             upstream_mirrors=upstream_mirrors,
         )
+        # idfile defaults to "pid" on the base, which is what we want here.
 
     def _workdir_parent(self) -> str | None:
         """Place the workdir alongside the packer qcow2s.
@@ -1097,7 +1101,6 @@ class PodmanMachine(Machine):
             ssh_user="root",
             ansible_args=CONTAINER_ANSIBLE_ARGS,
             inventory_host="box",
-            idfile="cid",
             machine=machine,
             role=role,
             keep_vm=keep_vm,
@@ -1105,6 +1108,8 @@ class PodmanMachine(Machine):
             machine_timeout=machine_timeout,
             upstream_mirrors=upstream_mirrors,
         )
+        # podman writes the container ID via --cidfile, not a pidfile.
+        self.idfile = "cid"
         self.commit_image = commit_image
 
     @property
