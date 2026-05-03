@@ -65,9 +65,7 @@ class _LaunchMachine(QemuMachine):
         **kwargs: object,
     ) -> None:
         super().__init__(*args, **kwargs)  # type: ignore[arg-type]
-        self._direct_boot_override: tuple[Path, Path, str] | None = (
-            (kernel.resolve(), initrd.resolve(), append) if kernel is not None else None
-        )
+        self._direct_boot_override: tuple[Path, Path, str] | None = (kernel.resolve(), initrd.resolve(), append) if kernel is not None else None
         self._mem = mem
         self._with_pflash = with_pflash
         self._efi_code = efi_code.resolve() if efi_code is not None else None
@@ -170,6 +168,7 @@ class _LaunchMachine(QemuMachine):
             ]
         return cmd
 
+
 def _parse_virtfs(specs: list[str]) -> list[tuple[Path, str]]:
     """Parse PATH:TAG pairs from --virtfs flags."""
     out: list[tuple[Path, str]] = []
@@ -218,9 +217,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--append",
         default="",
-        help="Kernel cmdline (used with --kernel/--initrd). The harness "
-        "auto-appends an arch-appropriate serial console= + earlycon= unless "
-        "you already supplied one (ttyAMA on aarch64, ttyS on x86_64).",
+        help="Kernel cmdline (used with --kernel/--initrd). The harness " "auto-appends an arch-appropriate serial console= + earlycon= unless " "you already supplied one (ttyAMA on aarch64, ttyS on x86_64).",
     )
     parser.add_argument(
         "--mem",
@@ -264,15 +261,12 @@ def parse_args() -> argparse.Namespace:
         action="append",
         default=[],
         metavar="PATH:TAG",
-        help="Mount PATH on the host as a 9p share with mount_tag=TAG inside "
-        "the guest (`mount -t 9p TAG /mnt`). Repeatable.",
+        help="Mount PATH on the host as a 9p share with mount_tag=TAG inside " "the guest (`mount -t 9p TAG /mnt`). Repeatable.",
     )
     parser.add_argument(
         "--foreground",
         action="store_true",
-        help="Inherit qemu's stdio and use -serial mon:stdio so HMP is "
-        "reachable via Ctrl-A,c (Ctrl-A,x to quit). The boot log is NOT "
-        "captured to a file; implies --no-ssh-wait.",
+        help="Inherit qemu's stdio and use -serial mon:stdio so HMP is " "reachable via Ctrl-A,c (Ctrl-A,x to quit). The boot log is NOT " "captured to a file; implies --no-ssh-wait.",
     )
     parser.add_argument(
         "--qmp",
@@ -284,13 +278,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-ssh-wait",
         action="store_true",
-        help="Skip the SSH ready-check after boot -- e.g. when launching ZBM "
-        "or any payload that doesn't expose sshd",
+        help="Skip the SSH ready-check after boot -- e.g. when launching ZBM " "or any payload that doesn't expose sshd",
+    )
+    parser.add_argument(
+        "--exit-after-ready",
+        action="store_true",
+        help="Exit cleanly after the SSH ready-check succeeds instead of " "blocking until Ctrl-C. Smoke-test mode: prove the image boots, " "then shut down. Mutually exclusive with --foreground and " "--no-ssh-wait (nothing to wait on for either).",
     )
 
     args = parser.parse_args()
     if (args.kernel is None) != (args.initrd is None):
         parser.error("--kernel and --initrd must be provided together")
+    if args.exit_after_ready and (args.foreground or args.no_ssh_wait):
+        parser.error("--exit-after-ready requires waiting for SSH; cannot combine with --foreground or --no-ssh-wait")
     try:
         args.virtfs = _parse_virtfs(args.virtfs)
     except argparse.ArgumentTypeError as exc:
@@ -298,8 +298,14 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-async def _run_async(m: QemuMachine, *, wait_for_ssh: bool) -> None:
-    """Default flow: prepare + boot + ensure_ssh + wait, all under asyncio."""
+async def _run_async(m: QemuMachine, *, wait_for_ssh: bool, exit_after_ready: bool) -> None:
+    """Default flow: prepare + boot + ensure_ssh + wait, all under asyncio.
+
+    With exit_after_ready, skip the m.wait() block — the async with unwinds
+    after ensure_ssh succeeds and `systemctl is-system-running --wait` returns
+    a clean state. Boot, SSH, or systemd-state failure surfaces as an
+    exception (non-zero exit).
+    """
     task = asyncio.current_task()
     assert task is not None
     with cancel_on_signal(task):
@@ -313,7 +319,24 @@ async def _run_async(m: QemuMachine, *, wait_for_ssh: bool) -> None:
                     m.print_ssh_instructions()
                 except TimeoutError as exc:
                     print_line(f"SSH did not come up in time: {exc}")
-            await m.wait()
+                    if exit_after_ready:
+                        raise
+            if exit_after_ready:
+                # SSH up != systemd "boot complete" — sshd can answer before
+                # all units settle. Block on the system reaching a final
+                # state; "running" is success, anything else (degraded,
+                # maintenance) is a fail and worth surfacing.
+                result = await m.ssh_command("systemctl", "is-system-running", "--wait", check=False)
+                state = "\n".join(result.stdout).strip()
+                if result.exitcode == 0 and state == "running":
+                    print_line(f"System fully booted: {state}")
+                else:
+                    failed = await m.ssh_command("systemctl", "--failed", "--no-legend", check=False)
+                    failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
+                    print_line(f"System reached state {state!r} (rc={result.exitcode}); failed units:\n" f"{failed_units}")
+                    raise RuntimeError(f"systemd is-system-running returned {state!r}")
+            else:
+                await m.wait()
 
 
 def _run_foreground(m: _LaunchMachine) -> int:
@@ -380,7 +403,13 @@ def main() -> int:
     rc = 0
     try:
         with tee_output(m.output_file):
-            asyncio.run(_run_async(m, wait_for_ssh=not args.no_ssh_wait))
+            asyncio.run(
+                _run_async(
+                    m,
+                    wait_for_ssh=not args.no_ssh_wait,
+                    exit_after_ready=args.exit_after_ready,
+                )
+            )
     except asyncio.CancelledError:
         print_line("\nInterrupted, shutting down...")
         rc = 130
