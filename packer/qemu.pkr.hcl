@@ -137,7 +137,10 @@ source "qemu" "ubuntu" {
   ssh_private_key_file = "${path.root}/vagrant.key"
   ssh_timeout          = "20m"
   ssh_username         = "vagrant"
-  vnc_bind_address     = "0.0.0.0"
+  # Local-only VNC. To watch a build from another host, tunnel:
+  #   ssh -L 5900:127.0.0.1:5900 <build-host>
+  # then connect a VNC client to localhost:5900.
+  vnc_bind_address = "127.0.0.1"
   qemuargs = concat([
     ["-object", "rng-random,id=rng0,filename=/dev/urandom"],
     ["-device", "virtio-rng-pci,rng=rng0"],
