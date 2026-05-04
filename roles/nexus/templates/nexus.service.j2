@@ -47,7 +47,7 @@ ExecStart=/usr/bin/podman run \
     --gidmap=0:0:65536 \
     --gidmap=+200:{{ nexus_user.group }}:1 \
     --volume /mnt/services/nexus/data:/nexus-data \
-    --volume /mnt/scratch/nexus:/nexus-data-scratch \
+    --volume /mnt/scratch/nexus:/nexus-data/blobs/default \
     --volume /mnt/services/nexus/user:/user-root \
     --publish 127.0.0.1:8082:8081/tcp \
     --health-cmd         "wget --quiet --tries=1 --spider http://localhost:8081/service/rest/v1/status/writable > /dev/null" \
