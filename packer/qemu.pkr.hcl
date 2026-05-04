@@ -71,6 +71,11 @@ locals {
   # rEFInd EFI binary name is per-arch. chroot.sh drops it into the
   # efibootmgr boot entry verbatim.
   refind_name = var.arch == "x86_64" ? "refind_x64.efi" : "refind_aa64.efi"
+  # UEFI firmware fallback path filename per arch. chroot.sh copies
+  # refind to /boot/efi/EFI/BOOT/<fallback> so a host whose NVRAM has
+  # been wiped (CMOS clear, BIOS update, "Restore Defaults") still
+  # boots from the ESP.
+  refind_fallback_name = var.arch == "x86_64" ? "BOOTX64.EFI" : "BOOTAA64.EFI"
 
   # Single source of truth for the vagrant authorized keys. Rendered
   # into both the cloud-init seed (for the build VM) and chroot.sh's
@@ -213,6 +218,7 @@ build {
       "ZBM_VERSION"                     = "${var.zbm_version}"
       "ZBM_ARCH"                        = "${var.arch}"
       "REFIND_NAME"                     = "${local.refind_name}"
+      "REFIND_FALLBACK_NAME"            = "${local.refind_fallback_name}"
       "SSH_KEY_PUB"                     = join("\n", local.vagrant_ssh_keys)
     }
   }
