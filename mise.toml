@@ -10,9 +10,11 @@ NEXUS_PASSWORD = "op://Lab/u2lem3tvichptsn37new73ftv4/password"
 # MinIO creds for the tofu s3 backend (state in bucket "terraform" on minio-api.lab.fahm.fr).
 AWS_ACCESS_KEY_ID     = "op://Lab/iiis755ps5mhhlpmcv25lrctgu/username"
 AWS_SECRET_ACCESS_KEY = "op://Lab/iiis755ps5mhhlpmcv25lrctgu/password"
-# Bare passphrase for tofu client-side state encryption; the mise-tasks/tf/*
-# scripts wrap it in the HCL fragment that TF_ENCRYPTION expects.
-TF_ENCRYPTION_PASSPHRASE = "op://Lab/vztgbtb2i3nlgrift46fc7r4f4/password"
+# Tofu client-side state encryption: feeds var.state_passphrase in main.tf
+# via the standard TF_VAR_<name> env mechanism. op run substitutes the
+# op:// reference at exec time, so the passphrase only ever materializes
+# inside the wrapped tofu process.
+TF_VAR_state_passphrase = "op://Lab/vztgbtb2i3nlgrift46fc7r4f4/password"
 # Expose [vars] entries as env so file-based mise-tasks/ scripts can read
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
@@ -150,6 +152,26 @@ run = "mise fmt"
 [tasks."fmt:shfmt"]
 description = "Format shell scripts (shfmt)"
 run = "git ls-files -z '*.sh' 'mise-tasks/**' | xargs -0 shfmt -i 2 -w"
+
+[tasks."tf:init"]
+description = "tofu init (forwards args)"
+dir = "{{config_root}}/terraform"
+run = 'op run -- tofu init "$@"'
+
+[tasks."tf:plan"]
+description = "tofu plan (forwards args)"
+dir = "{{config_root}}/terraform"
+run = 'op run -- tofu plan "$@"'
+
+[tasks."tf:apply"]
+description = "tofu apply (forwards args)"
+dir = "{{config_root}}/terraform"
+run = 'op run -- tofu apply "$@"'
+
+[tasks."tf:validate"]
+description = "tofu validate (forwards args)"
+dir = "{{config_root}}/terraform"
+run = 'op run -- tofu validate "$@"'
 
 [tasks."ansible"]
 description = "ansible-playbook against site.yml (forwards args)"
