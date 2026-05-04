@@ -278,6 +278,17 @@ def parse_args() -> argparse.Namespace:
         help="Bind qemu's QMP server to the given unix socket path.",
     )
     parser.add_argument(
+        "--image-dir",
+        type=Path,
+        default=None,
+        metavar="PATH",
+        help="Override the packer artifact directory the harness reads "
+        "(packer-ubuntu-1..N + kernel/initrd/cmdline + efivars.fd) instead "
+        "of the variant's default <imagedir>/<ubuntu>/<packer_image>. Lets "
+        "packer:verify smoke-test a freshly-built `.new` directory before "
+        "it's swapped over the previous good artifact.",
+    )
+    parser.add_argument(
         "--no-ssh-wait",
         action="store_true",
         help="Skip the SSH ready-check after boot -- e.g. when launching ZBM " "or any payload that doesn't expose sshd",
@@ -387,6 +398,7 @@ def main() -> int:
         keep_vm=True,
         ubuntu_name=args.ubuntu,
         machine_timeout=args.timeout,
+        image_dir=args.image_dir,
         kernel=args.kernel,
         initrd=args.initrd,
         append=args.append,
