@@ -1,4 +1,7 @@
 #!/bin/bash
+# Bootstrap a ZFS-on-root install onto $DISKS. Used by packer's qemu
+# build and as the bare-metal copy-paste path for provisioning new
+# lab-class hosts.
 set -euxo pipefail
 
 case $SOURCE_NAME in
@@ -42,6 +45,13 @@ zgenhostid -f
 # Create partitions
 
 for disk in "${DISKS[@]}"; do
+  # Defensive wipe -- a no-op against packer's fresh qcow2s, but
+  # necessary on bare metal:
+  #  - zpool labelclear: ZFS labels at the disk's reserved offsets
+  #    (sgdisk --zap-all alone misses those)
+  #  - wipefs -a: misc filesystem signatures (ext, mdadm, LUKS headers)
+  #  - blkdiscard -f: SSD/sparse hint, frees blocks before partitioning
+  #  - sgdisk --zap-all: GPT + protective MBR
   zpool labelclear -f "$disk" || true
   wipefs -a "$disk"
   blkdiscard -f "$disk" || true
