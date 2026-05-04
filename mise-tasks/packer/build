@@ -44,5 +44,5 @@ for disk in "${artdir}"/packer-ubuntu-*; do
   mv "${disk}.tmp" "${disk}"
 done
 echo "==> writing sha256sum"
-(cd "${artdir}" && sha256sum efivars.fd packer-ubuntu-*) >"${artdir}/sha256sum.tmp"
+(cd "${artdir}" && sha256sum efivars.fd kernel initrd cmdline packer-ubuntu-*) >"${artdir}/sha256sum.tmp"
 mv "${artdir}/sha256sum.tmp" "${artdir}/sha256sum"
