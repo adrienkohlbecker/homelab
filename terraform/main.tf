@@ -32,11 +32,8 @@ terraform {
   }
 
   encryption {
-    # The passphrase is injected at runtime via TF_ENCRYPTION env (sourced
-    # from 1Password through `op run`). The empty value here is overridden
-    # by the env merge — tofu refuses to encrypt with an empty key.
     key_provider "pbkdf2" "main" {
-      passphrase = ""
+      passphrase = var.state_passphrase
     }
     method "aes_gcm" "main" {
       keys = key_provider.pbkdf2.main
@@ -51,6 +48,14 @@ terraform {
     }
   }
 }
+
+# Sourced from $TF_VAR_state_passphrase in mise.toml [env] (op:// reference
+# to 1Password, resolved by op run). Tofu's static evaluation lets the
+# encryption block above read it before any state IO.
+variable "state_passphrase" {
+  type = string
+}
+
 
 data "cloudflare_account" "main" {
   filter = {
