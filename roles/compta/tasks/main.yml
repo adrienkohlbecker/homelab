@@ -29,35 +29,22 @@
   tags:
     - compta
 
-- name: Create compta directory
-  file:
-    dest: /opt/compta
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - compta
-
 - name: Download compta
   when: not (ansible_check_mode and compta_apt_deps.changed)
   git:
     repo: git@github.com:adrienkohlbecker/compta.git
-    dest: /opt/compta
+    dest: "{{ ansible_user_dir }}/compta"
     version: master
     force: true
     accept_newhostkey: true
   register: compta_git
-  become: true
-  become_flags: "--preserve-env=SSH_AUTH_SOCK"
   tags:
     - compta
 
 - name: Build a podman image
   containers.podman.podman_image:
     name: compta:latest
-    path: /opt/compta
+    path: "{{ ansible_user_dir }}/compta"
     build:
       format: oci
     state: build
