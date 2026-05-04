@@ -10,9 +10,7 @@ import machine
 
 
 @pytest.fixture
-def machine_factory(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> Iterator[Callable[..., machine.Machine]]:
+def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., machine.Machine]]:
     """Build base Machine instances against a sandboxed OUT_DIR.
 
     Each instance's TemporaryDirectory is cleaned up at fixture teardown so
@@ -46,25 +44,14 @@ def machine_factory(
         m.workdir.cleanup()
 
 
-def _sandbox_imagedir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Pin host-platform discovery to Darwin so QemuMachine resolves
-    imagedir to tmp_path/packer/artifacts (writable, host-agnostic).
-
-    PodmanMachine no longer carries an imagedir; only the OUT_DIR + chdir
-    steps matter for it, but reusing this helper keeps the fixtures
-    symmetric.
-    """
+@pytest.fixture
+def qemu_machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., machine.QemuMachine]]:
+    """Build QemuMachine instances with imagedir + arch under our control."""
+    # Pin host-platform discovery to Darwin so QemuMachine resolves
+    # imagedir to tmp_path/packer/artifacts (writable, host-agnostic).
     monkeypatch.setattr(machine.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(machine, "OUT_DIR", tmp_path / "out")
     monkeypatch.chdir(tmp_path)
-
-
-@pytest.fixture
-def qemu_machine_factory(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> Iterator[Callable[..., machine.QemuMachine]]:
-    """Build QemuMachine instances with imagedir + arch under our control."""
-    _sandbox_imagedir(tmp_path, monkeypatch)
     instances: list[machine.QemuMachine] = []
 
     def make(*, host_arch: str = "x86_64", **overrides: Any) -> machine.QemuMachine:
@@ -81,32 +68,6 @@ def qemu_machine_factory(
         )
         defaults.update(overrides)
         m = machine.QemuMachine(**defaults)
-        instances.append(m)
-        return m
-
-    yield make
-    for m in instances:
-        m.workdir.cleanup()
-
-
-@pytest.fixture
-def podman_machine_factory(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> Iterator[Callable[..., machine.PodmanMachine]]:
-    """Build PodmanMachine instances against a sandboxed OUT_DIR + cwd."""
-    _sandbox_imagedir(tmp_path, monkeypatch)
-    instances: list[machine.PodmanMachine] = []
-
-    def make(**overrides: Any) -> machine.PodmanMachine:
-        defaults: dict[str, Any] = dict(
-            machine="container",
-            role="testrole",
-            keep_vm=False,
-            ubuntu_name="jammy",
-            machine_timeout=300,
-        )
-        defaults.update(overrides)
-        m = machine.PodmanMachine(**defaults)
         instances.append(m)
         return m
 

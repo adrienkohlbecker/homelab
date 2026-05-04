@@ -1,11 +1,9 @@
-"""Tests for the small Machine / QemuMachine / PodmanMachine properties.
+"""Tests for the small Machine / QemuMachine properties.
 
-Covers wrapper_timeout (Machine), the cached ArchProfile on QemuMachine,
-and image_tag (PodmanMachine).
+Covers wrapper_timeout (Machine) and the cached ArchProfile on QemuMachine.
 """
 
 from collections.abc import Callable
-from pathlib import Path
 
 import pytest
 
@@ -55,25 +53,3 @@ def test_unknown_host_arch_fails_fast_at_construction(
     # unsupported platform raises before the instance exists.
     with pytest.raises(RuntimeError, match="Unsupported host architecture"):
         qemu_machine_factory(host_arch="riscv64")
-
-
-def test_image_tag_for_non_service_role(
-    podman_machine_factory: Callable[..., machine.PodmanMachine],
-) -> None:
-    # is_service_role looks for roles/<role>/tasks/_setup.yml; with no such
-    # file present (the chdir'd tmp_path is empty), the role is non-service.
-    m = podman_machine_factory(role="vanilla", ubuntu_name="jammy")
-    assert m.image_tag == "homelab:jammy"
-
-
-def test_image_tag_for_service_role(
-    podman_machine_factory: Callable[..., machine.PodmanMachine],
-    tmp_path: Path,
-) -> None:
-    # Stage a role with a podman _setup import so is_service_role flips.
-    role_dir = tmp_path / "roles" / "myservice" / "tasks"
-    role_dir.mkdir(parents=True)
-    (role_dir / "_setup.yml").write_text("- import_role:\n    tasks_from: podman\n")
-
-    m = podman_machine_factory(role="myservice", ubuntu_name="noble")
-    assert m.image_tag == "homelab-service:noble"

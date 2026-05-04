@@ -25,14 +25,12 @@ from typing import NamedTuple
 
 from tabulate import tabulate
 
-from build_image import build_image
 from machine import (
     DEFAULT_UBUNTU,
     MACHINE_CHOICES,
     OUT_DIR,
     PEAK_KB_SENTINEL_PREFIX,
     UBUNTU_RELEASES,
-    ensure_podman_network,
 )
 from utils import cancel_on_signal, colorize, terminate_subprocess
 
@@ -52,8 +50,6 @@ TESTROLE_OWNED_FLAGS = frozenset(
         "--no-checkmode",
         "--idempotence",
         "--no-idempotence",
-        "--build-image",
-        "--no-build-image",
         "--keep-logs",
         "--no-keep-logs",
         "--keep",
@@ -79,10 +75,9 @@ class JobResult:
     runtime: float
     exitval: int
     started_at: str
-    # Peak resident memory captured by testrole.py (kernel VmHWM for qemu,
-    # cgroup memory.peak for podman). 0 means we have no measurement -- the
-    # child died before stop(), or the host can't read the source (cgroup v1,
-    # macOS, etc.).
+    # Peak resident memory captured by testrole.py (kernel VmHWM for qemu).
+    # 0 means we have no measurement -- the child died before stop(), or the
+    # host can't read the source (e.g. macOS).
     peak_kb: int = 0
 
 
@@ -110,9 +105,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--machines",
         type=str,
-        default="container",
+        default="box",
         metavar="X",
-        help="Comma-separated list of machine profiles (default: container)",
+        help="Comma-separated list of machine profiles (default: box)",
     )
 
     parser.add_argument(
@@ -135,13 +130,6 @@ def parse_args() -> argparse.Namespace:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Re-run each role and fail if any task reports changed (default: on)",
-    )
-
-    parser.add_argument(
-        "--build-image",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Rebuild the homelab:<codename> container image(s) before running (default: on)",
     )
 
     parser.add_argument(
@@ -250,8 +238,6 @@ async def _run_role(
         ubuntu_name,
         "--checkmode" if checkmode else "--no-checkmode",
         "--idempotence" if idempotence else "--no-idempotence",
-        # testall builds images upfront; tell each child to skip the rebuild.
-        "--no-build-image",
         # Let testrole drop its own logs on a clean pass so we don't leak
         # noise files into test/out/ for green roles.
         "--no-keep-logs",
@@ -287,10 +273,9 @@ async def _run_role(
             except BaseException:
                 # 30s gives Machine.stop() enough headroom for its own
                 # graceful->SIGKILL escalation (~10-15s worst case for
-                # podman rm --time 5 + drain, similar for qemu) without
-                # SIGKILL'ing testrole.py mid-cleanup and leaking the
-                # container/VM. SIGINT mirrors what Machine.stop() sends to
-                # its qemu/podman child so the whole chain reacts the same.
+                # qemu) without SIGKILL'ing testrole.py mid-cleanup and
+                # leaking the VM. SIGINT mirrors what Machine.stop()
+                # sends to its qemu child so the whole chain reacts the same.
                 await terminate_subprocess(proc, grace_seconds=30, initial_signal=signal.SIGINT)
                 raise
         finally:
@@ -342,7 +327,7 @@ async def _capture_peak_kb(stream: asyncio.StreamReader) -> int:
         line = line_bytes.decode("utf-8", errors="replace").rstrip("\r\n")
         if line.startswith(PEAK_KB_SENTINEL_PREFIX):
             with contextlib.suppress(ValueError):
-                peak = int(line[len(PEAK_KB_SENTINEL_PREFIX):])
+                peak = int(line[len(PEAK_KB_SENTINEL_PREFIX) :])
 
 
 async def run_all(
@@ -367,14 +352,6 @@ async def run_all(
     cancelled = False
     try:
         with cancel_on_signal(task):
-            # Provision shared podman state once up front. Doing it here
-            # (instead of letting each child testrole.py race in
-            # PodmanMachine.prepare()) means the per-worker inspect calls find
-            # the network already present and skip the racy create. Inside
-            # cancel_on_signal so a Ctrl+C during the network setup is caught
-            # alongside cancellation during the actual run.
-            if any(mr.machine == "container" for mr in machine_roles):
-                await ensure_podman_network()
             async with asyncio.TaskGroup() as tg:
                 tasks = [tg.create_task(_run_role(seq, mr.machine, mr.ubuntu_name, mr.role, role_args, semaphore, checkmode, idempotence)) for seq, mr in enumerate(machine_roles, start=1)]
     except asyncio.CancelledError:
@@ -458,7 +435,7 @@ def main() -> int:
         return 1
 
     if args.only_failed:
-        if args.machines != "container" or args.ubuntu != DEFAULT_UBUNTU:
+        if args.machines != "box" or args.ubuntu != DEFAULT_UBUNTU:
             print(
                 "Warning: --machines/--ubuntu are ignored with --only-failed; " "the machine and ubuntu of each rerun come from the prior joblog",
                 file=sys.stderr,
@@ -514,23 +491,6 @@ def main() -> int:
         return 0
 
     setup_output_dir()
-
-    if args.build_image:
-        needs_image = any(mr.machine == "container" for mr in machine_roles)
-        if needs_image:
-            try:
-                for codename in dict.fromkeys(mr.ubuntu_name for mr in machine_roles):
-                    rc = build_image(codename)
-                    if rc != 0:
-                        print(f"Image build failed for homelab:{codename}", file=sys.stderr)
-                        return rc
-            except KeyboardInterrupt:
-                # build_image() runs its own asyncio.run(); SIGINT during a
-                # build raises KeyboardInterrupt out of it. Translate that
-                # into the same exit code as a cancelled run rather than
-                # surfacing a stack trace.
-                print("\nInterrupted during image build, shutting down...", file=sys.stderr)
-                return 130
 
     test_start = time.time()
     results, cancelled = asyncio.run(run_all(machine_roles, args.role_args, args.jobs, args.checkmode, args.idempotence))

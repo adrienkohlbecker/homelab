@@ -6,5 +6,4 @@ import machine
 def test_machine_module_exposes_public_api() -> None:
     assert hasattr(machine, "Machine")
     assert hasattr(machine, "QemuMachine")
-    assert hasattr(machine, "PodmanMachine")
     assert hasattr(machine, "QEMU_MACHINE_SPECS")
