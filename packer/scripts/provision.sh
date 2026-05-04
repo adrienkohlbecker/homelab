@@ -11,6 +11,9 @@
 #    the publicly-known vagrant insecure pubkey) and remove
 #    /etc/sudoers.d/vagrant before the host gets a routable IP. The
 #    shipped image is otherwise a free root shell on any lab LAN.
+#  - on the ubuntu-zfs-lab variant, supply matching-size disks. The
+#    rpool mirror caps at the smallest disk's partition 3, so a
+#    2T+4T+4T mix silently halves usable rpool capacity.
 set -euxo pipefail
 
 case $SOURCE_NAME in
