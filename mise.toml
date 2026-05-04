@@ -8,6 +8,12 @@ CLOUDFLARE_EMAIL = "op://Lab/seckvi7vjb6ahgtt7w4l3r73zq/username"
 CLOUDFLARE_API_KEY = "op://Lab/seckvi7vjb6ahgtt7w4l3r73zq/password"
 NEXUS_USERNAME = "op://Lab/u2lem3tvichptsn37new73ftv4/username"
 NEXUS_PASSWORD = "op://Lab/u2lem3tvichptsn37new73ftv4/password"
+# MinIO creds for the tofu s3 backend (state in bucket "terraform" on minio-api.lab.fahm.fr).
+AWS_ACCESS_KEY_ID     = "op://Lab/iiis755ps5mhhlpmcv25lrctgu/username"
+AWS_SECRET_ACCESS_KEY = "op://Lab/iiis755ps5mhhlpmcv25lrctgu/password"
+# Bare passphrase for tofu client-side state encryption; the mise-tasks/tf/*
+# scripts wrap it in the HCL fragment that TF_ENCRYPTION expects.
+TF_ENCRYPTION_PASSPHRASE = "op://Lab/vztgbtb2i3nlgrift46fc7r4f4/password"
 # Expose [vars] entries as env so file-based mise-tasks/ scripts can read
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
@@ -16,7 +22,7 @@ PACKER_FLAGS = '{{vars.packer_flags}}'
 ZBM_VERSION = '{{vars.zbm_version}}'
 
 [tools]
-terraform = "1.11.4"
+opentofu = "1.11.6"
 packer = "1.15.3"
 python = "3.14"
 uv = "0.9.26"
@@ -67,7 +73,7 @@ run = "ansible-playbook --syntax-check site.yml"
 
 [tasks."lint:terraform"]
 description = "Check Terraform formatting"
-run = "terraform fmt -check -recursive terraform"
+run = "tofu fmt -check -recursive terraform"
 
 [tasks."lint:tflint"]
 description = "Run tflint static analysis"
@@ -128,7 +134,7 @@ run = "ansible-lint --fix"
 
 [tasks."fmt:terraform"]
 description = "Format Terraform files"
-run = "terraform fmt -recursive terraform"
+run = "tofu fmt -recursive terraform"
 
 [tasks."fmt:packer"]
 description = "Format Packer files"
@@ -145,26 +151,6 @@ run = "mise fmt"
 [tasks."fmt:shfmt"]
 description = "Format shell scripts (shfmt)"
 run = "git ls-files -z '*.sh' 'mise-tasks/**' | xargs -0 shfmt -i 2 -w"
-
-[tasks."tf:init"]
-description = "terraform init (forwards args)"
-dir = "{{config_root}}/terraform"
-run = 'op run -- terraform init "$@"'
-
-[tasks."tf:plan"]
-description = "terraform plan (forwards args)"
-dir = "{{config_root}}/terraform"
-run = 'op run -- terraform plan "$@"'
-
-[tasks."tf:apply"]
-description = "terraform apply (forwards args)"
-dir = "{{config_root}}/terraform"
-run = 'op run -- terraform apply "$@"'
-
-[tasks."tf:validate"]
-description = "terraform validate (forwards args)"
-dir = "{{config_root}}/terraform"
-run = 'op run -- terraform validate "$@"'
 
 [tasks."ansible"]
 description = "ansible-playbook against site.yml (forwards args)"

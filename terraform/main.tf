@@ -11,6 +11,45 @@ terraform {
   }
 
   required_version = ">= 1.11.4"
+
+  backend "s3" {
+    bucket = "terraform"
+    key    = "homelab.tfstate"
+    region = "us-east-1"
+    endpoints = {
+      s3 = "https://minio-api.lab.fahm.fr"
+    }
+    use_path_style = true
+    use_lockfile   = true
+    # MinIO doesn't speak STS or IMDS; without these the AWS provider
+    # tries sts:GetCallerIdentity and EC2 metadata probes and fails.
+    skip_credentials_validation = true
+    skip_requesting_account_id  = true
+    skip_metadata_api_check     = true
+    # MinIO 2022-05 (pinned in roles/minio) returns 501 on the SDK's
+    # default trailing PutObject checksum. Drop once MinIO is upgraded.
+    skip_s3_checksum = true
+  }
+
+  encryption {
+    # The passphrase is injected at runtime via TF_ENCRYPTION env (sourced
+    # from 1Password through `op run`). The empty value here is overridden
+    # by the env merge — tofu refuses to encrypt with an empty key.
+    key_provider "pbkdf2" "main" {
+      passphrase = ""
+    }
+    method "aes_gcm" "main" {
+      keys = key_provider.pbkdf2.main
+    }
+    state {
+      method   = method.aes_gcm.main
+      enforced = true
+    }
+    plan {
+      method   = method.aes_gcm.main
+      enforced = true
+    }
+  }
 }
 
 # data "cloudflare_account" "main" {
