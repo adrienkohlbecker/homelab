@@ -160,6 +160,21 @@ mount -t devpts pts /mnt/dev/pts
 chroot /mnt bash </home/vagrant/chroot.sh
 EOF
 
+# Copy the on-pool kernel + initrd (and the matching ZBM-style cmdline) out
+# to the build VM filesystem so packer's file provisioner can download them
+# alongside the qcow2. Test harness uses these to direct-boot the variant on
+# arches where the rEFInd -> ZBM -> kexec chain panics on EDK2 (aarch64).
+# x86_64 ships vmlinuz (compressed); aarch64 ships vmlinux (uncompressed).
+mkdir -p /home/vagrant/extracted
+kernel=$(ls /mnt/boot/vmlinuz-* /mnt/boot/vmlinux-* 2>/dev/null | sort -V | tail -1)
+initrd=$(ls /mnt/boot/initrd.img-* 2>/dev/null | sort -V | tail -1)
+cp -L "$kernel" /home/vagrant/extracted/kernel
+cp -L "$initrd" /home/vagrant/extracted/initrd
+zbm_args=$(zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT)
+[ "$zbm_args" = "-" ] && zbm_args=""
+printf 'root=zfs:rpool/ROOT/%s %s' "$UBUNTU_NAME" "$zbm_args" >/home/vagrant/extracted/cmdline
+chown -R vagrant:vagrant /home/vagrant/extracted
+
 # Only the rpool root dataset itself remains mounted in the host namespace.
 zfs unmount "rpool/ROOT/$UBUNTU_NAME"
 sync
