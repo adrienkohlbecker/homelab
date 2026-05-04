@@ -38,34 +38,6 @@
     mode: "0644"
   become: true
 
-# Podman-in-podman: when the test target is itself a container, the host
-# filesystem is already overlayfs and rootless podman can't stack another
-# overlay on top. Install fuse-overlayfs and point rootless storage at it.
-# Skipped for QEMU targets where the kernel overlay driver works fine.
-- name: _test | Install fuse-overlayfs for nested rootless podman
-  when: docker_test | default(false)
-  apt:
-    pkg:
-      - fuse-overlayfs
-    install_recommends: false
-    cache_valid_time: 3600
-  become: true
-
-- name: _test | Configure rootless storage to use fuse-overlayfs
-  when: docker_test | default(false)
-  copy:
-    dest: /etc/containers/storage.conf
-    content: |
-      [storage]
-      driver = "overlay"
-
-      [storage.options]
-      mount_program = "/usr/bin/fuse-overlayfs"
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-
 - name: _test | Install gitea
   get_url:
     url: "{{ act_runner_test_gitea_release[ansible_architecture].url }}"
