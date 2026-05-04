@@ -3,6 +3,11 @@ provider "nexus" {
   # NEXUS_USERNAME / NEXUS_PASSWORD come from terraform/.env via `op run`.
 }
 
+resource "nexus_blobstore_file" "default" {
+  name = "default"
+  path = "default"
+}
+
 locals {
   apt_proxies = {
     "ubuntu-archive"    = "https://archive.ubuntu.com/ubuntu/"
@@ -16,16 +21,21 @@ locals {
   }
 
   raw_proxies = {
-    "github"           = "https://github.com/"
-    "minio"            = "https://dl.min.io/"
-    "gitea-dl"         = "https://dl.gitea.com/"
-    "gitea-com"        = "https://gitea.com/"
-    "gitea-lab"        = "https://gitea.lab.fahm.fr/"
-    "keyserver-ubuntu" = "https://keyserver.ubuntu.com/"
+    "github"              = "https://github.com/"
+    "minio"               = "https://dl.min.io/"
+    "gitea-dl"            = "https://dl.gitea.com/"
+    "gitea-com"           = "https://gitea.com/"
+    "gitea-lab"           = "https://gitea.lab.fahm.fr/"
+    "keyserver-ubuntu"    = "https://keyserver.ubuntu.com/"
     "ubuntu-releases"     = "https://releases.ubuntu.com/"
     "ubuntu-cdimage"      = "https://cdimage.ubuntu.com/"
     "ubuntu-cloud-images" = "https://cloud-images.ubuntu.com/"
   }
+
+  # Raw proxies whose upstream serves content with Content-Type headers that
+  # don't match the filename extensions; strict validation rejects those
+  # responses. Add a key here when a proxy needs it; everyone else stays strict.
+  raw_proxies_loose_content_type = toset(["ubuntu-cloud-images"])
 
   docker_proxies = {
     "docker.io" = {
@@ -99,7 +109,7 @@ resource "nexus_repository_raw_proxy" "this" {
 
   storage {
     blob_store_name                = "default"
-    strict_content_type_validation = true
+    strict_content_type_validation = !contains(local.raw_proxies_loose_content_type, each.key)
   }
   negative_cache {
     enabled = true
