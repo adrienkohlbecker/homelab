@@ -19,9 +19,6 @@ libvirt_default_network: 10.123.50.0/24
 
 sensor_modules: []
 
-macvlan_enable_docker: true
-macvlan_subnet: '{{ home_subnet | ansible.utils.ipsubnet(27, 7) }}'
-
 hdparm_settings: {}
 
 rand_order: 3

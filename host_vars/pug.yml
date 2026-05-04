@@ -18,10 +18,6 @@ sensor_modules:
   - coretemp
   - nct6775
 
-macvlan_enable_docker: false
-macvlan_parent: eth0
-macvlan_subnet: 10.123.1.32/27
-
 netplan:
   ethernets:
     nic0:
