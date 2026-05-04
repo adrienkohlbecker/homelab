@@ -191,25 +191,16 @@ chown -R vagrant:vagrant /home/vagrant/extracted
 zfs unmount "rpool/ROOT/$UBUNTU_NAME"
 sync
 
-# Export with backoff. The pool was created with autotrim=on, and the
-# heavy writes from chroot.sh (apt installs + ZBM copy) leave vdev_autotrim
-# batching TRIMs in the background; each in-flight TRIM bumps spa_refcount
-# enough to make even `zpool export -f` fail with "pool is busy". Retrying
-# rides out the transient quiet windows between TRIM batches.
-exported=
-for delay in 2 5 10 15 30; do
-  sleep "$delay"
-  if zpool export rpool; then
-    exported=1
-    break
-  fi
-  echo "rpool export attempt failed; waited ${delay}s, retrying" >&2
-done
-
-if [ -z "$exported" ]; then
-  # Force export. Failure here means the pool is genuinely stuck (open
-  # handle, mount-table desync) — fail the build rather than ship an
-  # image that wasn't cleanly quiesced. set -e kills the script.
-  zpool export -f rpool
-  sync
+# Export. The intermittent "pool is busy" failures we used to hit are
+# udev/systemd handles lingering on the freshly-bootstrapped root
+# (matches upstream openzfs/zfs#16036), not autotrim — `zpool export
+# -f` doesn't bypass the spa_refcount EBUSY gate either, so force is
+# pointless. udevadm settle drains pending uevents; one retry after 5s
+# covers the rare slow-drain case. If both attempts fail the pool is
+# genuinely wedged and we want the build to fail rather than ship an
+# image that wasn't cleanly quiesced.
+udevadm settle
+if ! zpool export rpool; then
+  sleep 5
+  zpool export rpool
 fi
