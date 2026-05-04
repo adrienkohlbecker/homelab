@@ -158,12 +158,19 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def setup_output_dir() -> None:
-    """Create the output directory and remove stale .ansi logs."""
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+def setup_output_dir(machine_roles: list[MachineRole]) -> None:
+    """Create the output directory and clear stale .ansi logs for the current plan.
 
-    for ansi_file in OUT_DIR.glob("*.ansi"):
-        ansi_file.unlink()
+    Only wipes files for triples about to be rerun -- prior failure logs for
+    triples outside the plan stay on disk so a partial rerun (--retry-failed,
+    --retry-role) doesn't destroy logs the operator may still want to inspect.
+    """
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    # Mirrors the prefix Machine.__post_init__ builds in test/machine.py.
+    for mr in machine_roles:
+        prefix = f"{mr.machine}.{mr.ubuntu_name}.{mr.role}"
+        for suffix in ("output", "journal", "boot"):
+            (OUT_DIR / f"{prefix}.{suffix}.ansi").unlink(missing_ok=True)
 
 
 def list_roles() -> list[str]:
@@ -514,7 +521,7 @@ def main() -> int:
             print(f"{mr.machine}\t{mr.ubuntu_name}\t{mr.role}")
         return 0
 
-    setup_output_dir()
+    setup_output_dir(machine_roles)
     # Only partial reruns merge with the prior log; an unfiltered run replaces
     # out.tsv outright so stale triples (deleted roles, old machine/ubuntu
     # scopes) don't linger forever.
