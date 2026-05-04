@@ -7,7 +7,9 @@ without relying on GNU parallel. Each child testrole.py tees its own transcript
 to `test/out/<machine>.<ubuntu>.<role>.output.ansi` and, when invoked with
 --no-keep-logs (as testall does), drops its output/boot/journal logs on a
 clean pass; failed runs leave them in place under that predictable path. A
-concise job log is written to `test/out.tsv`.
+concise job log is written to `test/out.tsv`. Partial reruns (--retry-failed,
+--retry-role) merge with the prior log so untouched triples survive; an
+unfiltered run replaces the log outright.
 """
 
 import argparse
@@ -89,9 +91,9 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--only-failed",
+        "--retry-failed",
         action="store_true",
-        help="Rerun only roles that failed in the last log",
+        help="Rerun only roles that failed in the last log; merges into out.tsv",
     )
 
     parser.add_argument(
@@ -133,19 +135,11 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--role",
+        "--retry-role",
         type=str,
         default="",
         metavar="X",
-        help="Comma-separated list of roles to run (default: all roles with tasks/main.yml)",
-    )
-
-    parser.add_argument(
-        "--exclude",
-        type=str,
-        default="",
-        metavar="X",
-        help="Comma-separated list of roles to exclude",
+        help="Comma-separated list of roles to rerun; merges into out.tsv (default: all roles with tasks/main.yml, replacing out.tsv)",
     )
 
     parser.add_argument(
@@ -209,6 +203,39 @@ def _rotate_joblog() -> None:
         if LOG_FILE_PREV.exists():
             LOG_FILE_PREV.unlink()
         LOG_FILE.rename(LOG_FILE_PREV)
+
+
+def _read_prior_results() -> dict[MachineRole, JobResult]:
+    """Load the prior joblog into a triple-keyed map for merge-on-write."""
+    if not LOG_FILE.exists():
+        return {}
+
+    prior: dict[MachineRole, JobResult] = {}
+    with LOG_FILE.open(encoding="utf-8", newline="") as handle:
+        for row in csv.DictReader(handle, delimiter="\t"):
+            triple = MachineRole(machine=row["Machine"], ubuntu_name=row["Ubuntu"], role=row["Role"])
+            prior[triple] = JobResult(
+                machine=triple.machine,
+                ubuntu_name=triple.ubuntu_name,
+                role=triple.role,
+                runtime=float(row["Runtime"]),
+                exitval=int(row["Exitval"]),
+                started_at=row["Started"],
+                peak_kb=int(row["PeakKB"]),
+            )
+    return prior
+
+
+def _merge_with_prior(new_results: list[JobResult], prior: dict[MachineRole, JobResult]) -> list[JobResult]:
+    """Combine the current run's results with prior entries for triples not rerun.
+
+    Prior insertion order is preserved for kept entries (and for reruns, which
+    update in place); triples that didn't exist in the prior log are appended.
+    """
+    merged: dict[MachineRole, JobResult] = dict(prior)
+    for r in new_results:
+        merged[MachineRole(r.machine, r.ubuntu_name, r.role)] = r
+    return list(merged.values())
 
 
 async def _emit_liveness(seq: int, machine: str, ubuntu_name: str, role: str, start_time: float) -> None:
@@ -361,7 +388,7 @@ async def run_all(
         cancelled = True
 
     # Build a result for every (machine, ubuntu, role) so a follow-up
-    # `testall.py --only-failed` retries anything that didn't pass -- whether
+    # `testall.py --retry-failed` retries anything that didn't pass -- whether
     # it ran to completion, was cancelled mid-run, or never got the chance
     # to start (cancel hit before / during TaskGroup setup).
     results: list[JobResult] = []
@@ -434,10 +461,10 @@ def main() -> int:
         )
         return 1
 
-    if args.only_failed:
+    if args.retry_failed:
         if args.machines != "box" or args.ubuntu != DEFAULT_UBUNTU:
             print(
-                "Warning: --machines/--ubuntu are ignored with --only-failed; " "the machine and ubuntu of each rerun come from the prior joblog",
+                "Warning: --machines/--ubuntu are ignored with --retry-failed; " "the machine and ubuntu of each rerun come from the prior joblog",
                 file=sys.stderr,
             )
         machine_roles = get_failed_roles()
@@ -475,15 +502,12 @@ def main() -> int:
             return 1
         machine_roles = [MachineRole(machine, ubuntu_name, role) for role in roles for ubuntu_name in ubuntus for machine in machines]
 
-    if args.role:
-        wanted = {r.strip() for r in args.role.split(",") if r.strip()}
+    if args.retry_role:
+        wanted = {r.strip() for r in args.retry_role.split(",") if r.strip()}
         machine_roles = [mr for mr in machine_roles if mr.role in wanted]
-    if args.exclude:
-        excluded = {r.strip() for r in args.exclude.split(",") if r.strip()}
-        machine_roles = [mr for mr in machine_roles if mr.role not in excluded]
-    if not machine_roles:
-        print("No roles match --role/--exclude filters", file=sys.stderr)
-        return 0
+        if not machine_roles:
+            print("No roles match --retry-role", file=sys.stderr)
+            return 0
 
     if args.list:
         for mr in machine_roles:
@@ -491,20 +515,26 @@ def main() -> int:
         return 0
 
     setup_output_dir()
+    # Only partial reruns merge with the prior log; an unfiltered run replaces
+    # out.tsv outright so stale triples (deleted roles, old machine/ubuntu
+    # scopes) don't linger forever.
+    is_partial_rerun = bool(args.retry_failed or args.retry_role)
+    prior_results = _read_prior_results() if is_partial_rerun else {}
 
     test_start = time.time()
     results, cancelled = asyncio.run(run_all(machine_roles, args.role_args, args.jobs, args.checkmode, args.idempotence))
     wall_clock = time.time() - test_start
 
     if results:
+        final = _merge_with_prior(results, prior_results) if is_partial_rerun else results
         _rotate_joblog()
-        _write_joblog(results)
+        _write_joblog(final)
 
     if cancelled:
         # Synthesized cancellation entries have empty started_at; everything
         # else actually ran (whether it passed or failed).
         completed = sum(1 for r in results if r.started_at)
-        msg = f"\nInterrupted, shutting down ({completed}/{len(machine_roles)} completed); " f"joblog written to {LOG_FILE} -- rerun with --only-failed to retry the rest"
+        msg = f"\nInterrupted, shutting down ({completed}/{len(machine_roles)} completed); " f"joblog written to {LOG_FILE} -- rerun with --retry-failed to retry the rest"
         print(msg, file=sys.stderr)
         return 130
 
