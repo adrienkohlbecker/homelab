@@ -181,10 +181,6 @@ fi
 echo "$EFI_DEVICE /boot/efi vfat defaults 0 0" >>/etc/fstab
 echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 
-# Update device symlinks
-
-udevadm trigger
-
 # Update initramfs
 
 update-initramfs -u -k all
