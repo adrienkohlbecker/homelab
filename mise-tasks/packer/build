@@ -30,3 +30,23 @@ packer build ${PACKER_FLAGS} \
 if [ "${usage_no_verify:-false}" != "true" ]; then
   mise run packer:verify "${variant}" --ubuntu "${ubuntu}"
 fi
+
+# Compress the shipped disks here (not in packer post-processors) so a
+# failed boot test short-circuits before we burn cycles compressing.
+# qemu's disk_compression flag only handles the primary VMName disk
+# (which the cleanup post-processor deletes); additional disks need
+# this loop. Refresh the sha256sum disk entries in place so the
+# manifest matches the compressed files; non-disk entries
+# (efivars.fd) are left untouched.
+artdir="${QEMU_DIR}/${ubuntu}/ubuntu-${variant}"
+for disk in "${artdir}"/packer-ubuntu-*; do
+  echo "==> compressing $(basename "${disk}")"
+  qemu-img convert -c -O qcow2 "${disk}" "${disk}.tmp"
+  mv "${disk}.tmp" "${disk}"
+done
+echo "==> refreshing sha256sum"
+{
+  sed $'/\tpacker-ubuntu-[0-9][0-9]*$/d' "${artdir}/sha256sum"
+  (cd "${artdir}" && sha256sum packer-ubuntu-*)
+} >"${artdir}/sha256sum.tmp"
+mv "${artdir}/sha256sum.tmp" "${artdir}/sha256sum"
