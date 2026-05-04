@@ -6,6 +6,36 @@ provider "nexus" {
 resource "nexus_blobstore_file" "default" {
   name = "default"
   path = "default"
+
+  # Banner-only warning when usage crosses this threshold; doesn't block
+  # writes. Sized for the /mnt/scratch zvol the store now lives on —
+  # adjust if that zvol's quota changes. spaceUsedQuota is "alert when
+  # used data exceeds limit"; the alternative spaceRemainingQuota is
+  # "alert when free space drops below limit".
+  soft_quota {
+    type  = "spaceUsedQuota"
+    limit = 100 * 1024 * 1024 * 1024 # 100 GiB
+  }
+}
+
+# Lock in the current public-read posture of the lab Nexus: the rest of
+# the homelab pulls from these proxies without basic auth, so anonymous
+# access must stay on. Codifying this means a Nexus upgrade can't reset
+# the default and silently break apt/podman across every host.
+resource "nexus_security_anonymous" "this" {
+  enabled    = true
+  user_id    = "anonymous"
+  realm_name = "NexusAuthorizingRealm"
+}
+
+# Pin the active *authentication* realms. NexusAuthorizingRealm is not on
+# this list — it's the authorizer (used as nexus_security_anonymous.realm_name
+# above) rather than something the user picks an auth method against.
+resource "nexus_security_realms" "this" {
+  active = [
+    "NexusAuthenticatingRealm",
+    "DockerToken",
+  ]
 }
 
 locals {
@@ -18,6 +48,7 @@ locals {
     "vector"            = "https://apt.vector.dev"
     "netdata"           = "https://repo.netdata.cloud/repos/stable/ubuntu/"
     "1password"         = "https://downloads.1password.com/linux/debian/amd64/"
+    "docker-ce"         = "https://download.docker.com/linux/ubuntu/"
   }
 
   raw_proxies = {
@@ -36,6 +67,15 @@ locals {
   # don't match the filename extensions; strict validation rejects those
   # responses. Add a key here when a proxy needs it; everyone else stays strict.
   raw_proxies_loose_content_type = toset(["ubuntu-cloud-images"])
+
+  # The datadrivers/nexus provider does not expose nexus_repository_cleanup_policy
+  # as a managed resource, so the policy itself has to be created once via the
+  # Nexus UI (Administration → Repository → Cleanup policies): name
+  # "proxy-stale-365d", "all formats", criteria component usage > 365 days
+  # (drops cached components not pulled in a year). Once it exists, every
+  # proxy below references it via the cleanup block; the daily built-in
+  # cleanup task drops the matching components.
+  cleanup_policies = ["proxy-stale-365d"]
 
   docker_proxies = {
     "docker.io" = {
@@ -76,6 +116,9 @@ resource "nexus_repository_apt_proxy" "this" {
     content_max_age  = 525600
     metadata_max_age = 60
   }
+  cleanup {
+    policy_names = local.cleanup_policies
+  }
 }
 
 resource "nexus_repository_pypi_proxy" "pypi" {
@@ -98,6 +141,9 @@ resource "nexus_repository_pypi_proxy" "pypi" {
     remote_url       = "https://pypi.org/"
     content_max_age  = 525600
     metadata_max_age = 60
+  }
+  cleanup {
+    policy_names = local.cleanup_policies
   }
 }
 
@@ -123,6 +169,9 @@ resource "nexus_repository_raw_proxy" "this" {
     remote_url       = each.value
     content_max_age  = 525600
     metadata_max_age = 60
+  }
+  cleanup {
+    policy_names = local.cleanup_policies
   }
 }
 
@@ -156,5 +205,8 @@ resource "nexus_repository_docker_proxy" "this" {
     remote_url       = each.value.remote_url
     content_max_age  = 525600
     metadata_max_age = 60
+  }
+  cleanup {
+    policy_names = local.cleanup_policies
   }
 }
