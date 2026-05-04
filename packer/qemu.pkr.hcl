@@ -218,6 +218,17 @@ build {
     }
   }
 
+  # Pull the kernel/initrd/cmdline that provision.sh staged in
+  # /home/vagrant/extracted/ down into the artifacts directory. The test
+  # harness consumes these on arches where the rEFInd -> ZBM -> kexec chain
+  # panics on EDK2 (aarch64) and direct-boots via -kernel/-initrd. Trailing
+  # slashes matter: scp copies the directory's contents in, not the dir.
+  provisioner "file" {
+    direction   = "download"
+    source      = "/home/vagrant/extracted/"
+    destination = "${var.output_directory}/${source.name}.new/"
+  }
+
   # packer-ubuntu is the residual cloud-image OS disk — provision.sh
   # debootstraps onto packer-ubuntu-1..N and never writes to vda, so
   # nothing downstream consumes it. Drop it before renaming the build

@@ -14,7 +14,6 @@ from pathlib import Path
 from typing import ClassVar, NamedTuple, Self
 
 from arch import ArchProfile, detect_host_arch, uefi_code_path_for
-from extract import KernelInitrdExtractor
 from setup_mitogen import ensure_mitogen_symlink
 from utils import (
     CommandResult,
@@ -642,10 +641,11 @@ class QemuMachine(Machine):
 
         # ZFS-rooted variants (box / lab / pug) used to fail fast on arm64
         # because the rEFInd -> ZBM -> kexec chain in the packer image panics
-        # on EDK2+aarch64. We now extract the on-pool kernel + initrd from
-        # the qcow2 once (cached by sha256) and direct-boot via -kernel
-        # /-initrd, bypassing the firmware chain. See _extract_kernel_initrd
-        # and notes/zbm-aarch64-kexec-bug-report.md.
+        # on EDK2+aarch64. The packer build now ships kernel/initrd/cmdline
+        # alongside the qcow2 (provision.sh stages them, packer's file
+        # provisioner downloads them); _resolve_direct_boot reads those and
+        # qemu boots them directly via -kernel/-initrd, bypassing the
+        # firmware chain. See notes/zbm-aarch64-kexec-bug-report.md.
         self._spec = spec
         # Captured once at construction so prepare()/_boot_command() don't
         # have to re-run platform.machine() on every access.
@@ -667,10 +667,10 @@ class QemuMachine(Machine):
     def _workdir_parent(self) -> Path | None:
         """Place the workdir alongside the packer qcow2s.
 
-        qemu-img backing-file overlays must reach the source qcow2 by
-        relative or absolute path; keeping the overlay on the same
-        filesystem also avoids cross-device I/O when the kernel-extraction
-        VM imports the rpool.
+        qemu-img backing-file overlays reach the source qcow2 by absolute
+        path, so the workdir doesn't strictly need to be colocated, but
+        keeping it on the same filesystem matches the operator's mental
+        model and keeps `du` totals predictable.
         """
         return self.imagedir
 
@@ -805,18 +805,17 @@ class QemuMachine(Machine):
     async def _resolve_direct_boot(self, os_src_paths: list[str]) -> tuple[Path, Path, str]:
         """Resolve (kernel, initrd, cmdline) for the direct-boot ZFS path.
 
-        Default delegates to KernelInitrdExtractor, which spins up a one-shot
-        cloud-image VM to copy the on-pool kernel/initrd out of the packer
-        qcow2. Cached by qcow2 sha256, so a packer rebuild auto-invalidates.
+        Reads the kernel + initrd + cmdline that the packer build ships
+        next to the qcow2 (provision.sh extracts them from the rpool right
+        before export; packer's file provisioner downloads them into the
+        artifacts dir). Always in lock-step with the qcow2 because it's
+        produced from the same build.
         """
-        extractor = KernelInitrdExtractor(
-            imagedir=self.imagedir,
-            ubuntu_name=self.ubuntu_name,
-            os_src_paths=os_src_paths,
-            arch=self.arch,
-            upstream_mirrors=self.upstream_mirrors,
-        )
-        return await extractor.extract()
+        image_dir = Path(os_src_paths[0]).parent
+        kernel = image_dir / "kernel"
+        initrd = image_dir / "initrd"
+        cmdline = (image_dir / "cmdline").read_text().strip()
+        return kernel, initrd, cmdline
 
     async def run_disk_setup(self) -> None:
         """Push test/disks/<variant>.sh to the VM and run it via sudo.
@@ -843,8 +842,7 @@ class QemuMachine(Machine):
         """Download (once) the Ubuntu minimal cloud image used by the `minimal` variant.
 
         Pulls through the lab Nexus raw proxy by default; `--upstream-mirrors`
-        bypasses to cloud-images.ubuntu.com directly. Mirrors
-        `KernelInitrdExtractor._ensure_cloudimg` in extract.py.
+        bypasses to cloud-images.ubuntu.com directly.
         """
         # Ubuntu publishes minimal-cloudimg arm64 only from noble onwards;
         # jammy is amd64-only. Fail loud rather than 404'ing on the curl.
@@ -911,7 +909,7 @@ class QemuMachine(Machine):
     def _augment_kernel_cmdline(self, cmdline: str) -> str:
         """Backfill arch-appropriate console= entries on a direct-boot cmdline.
 
-        cmdline arrives composed by extraction as
+        cmdline arrives composed by provision.sh as
         "root=zfs:<bootfs> <org.zfsbootmenu:commandline>" -- the ZBM
         property is the canonical place to set per-pool boot args, so we
         honour it verbatim. If it doesn't already wire up this arch's

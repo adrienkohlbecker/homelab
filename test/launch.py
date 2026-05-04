@@ -2,9 +2,9 @@
 """Launch a QEMU machine via the test harness driver, no role/ansible.
 
 Wraps machine.QemuMachine for interactive use: pick a variant, the harness
-does image overlays + (on aarch64 ZFS) on-pool kernel extraction + qemu
-launch. After boot it prints the SSH command, leaves the VM up, and blocks
-until Ctrl-C.
+does image overlays + (on aarch64 ZFS) reads the packer-shipped
+kernel/initrd next to the qcow2 + qemu launch. After boot it prints the
+SSH command, leaves the VM up, and blocks until Ctrl-C.
 
 Replaces the ad-hoc test.sh for ZBM iteration. Pass --kernel/--initrd/
 --append to direct-boot a custom kernel against the variant's qcow2:
@@ -38,8 +38,9 @@ class _LaunchMachine(QemuMachine):
     """QemuMachine with launch.py-only knobs layered on top.
 
     Adds:
-    - direct-boot override (kernel/initrd/append) -- skips _extract_kernel_initrd
-      so the aarch64 ZFS path doesn't run a 5+ min extraction we'd discard
+    - direct-boot override (kernel/initrd/append) -- replaces the
+      packer-shipped kernel/initrd on the aarch64 ZFS path so iteration
+      on a custom kernel doesn't have to round-trip through a packer rebuild
     - --mem override
     - --with-pflash / --efi-code / --efi-vars to attach UEFI pflash with
       either auto-detected paths or explicit user-supplied ones
@@ -106,9 +107,9 @@ class _LaunchMachine(QemuMachine):
     async def _resolve_direct_boot(self, os_src_paths: list[str]) -> tuple[Path, Path, str]:
         """Use the user's --kernel/--initrd/--append override if present.
 
-        Without this hook super().prepare() on aarch64 ZFS would run the
-        ~5 minute cloud-image extraction whose result we'd discard. Falls
-        back to the default extractor when no override was supplied.
+        Without this hook super().prepare() on aarch64 ZFS would read the
+        packer-shipped kernel/initrd, which defeats the point of supplying
+        a custom one. Falls back to super() when no override was supplied.
         """
         if self._direct_boot_override is not None:
             return self._direct_boot_override

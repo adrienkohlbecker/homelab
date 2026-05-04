@@ -2,9 +2,10 @@
 
 prepare() does the IO-heavy work of populating drives / _direct_boot /
 _extra_disk_devices, which aren't safe to run in a unit test (qemu-img,
-extraction VM). Each test sets those attrs manually and asserts on the
-shape of the assembled command line. Locks in the invariants that the
-upcoming ArchProfile / memory_mb / -name refactors will touch.
+file IO against packer artifacts). Each test sets those attrs manually
+and asserts on the shape of the assembled command line. Locks in the
+invariants that the upcoming ArchProfile / memory_mb / -name refactors
+will touch.
 """
 
 from collections.abc import Callable
