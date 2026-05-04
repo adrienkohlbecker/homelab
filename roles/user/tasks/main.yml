@@ -193,6 +193,7 @@
     - user
 
 - name: Symlink mise binary into ~/.local/bin
+  when: not (ansible_check_mode and directory_mise.changed)
   file:
     src: "{{ ansible_user_dir }}/.local/share/mise/bin/mise"
     dest: "{{ ansible_user_dir }}/.local/bin/mise"
