@@ -12,7 +12,12 @@ ubuntu="${usage_ubuntu}"
 variant="${usage_variant}"
 upstream="${usage_upstream:-false}"
 
-rm -rf "${QEMU_DIR}/${ubuntu}/ubuntu-${variant}.new"
+artdir="${QEMU_DIR}/${ubuntu}/ubuntu-${variant}"
+new="${artdir}.new"
+
+# Wipe a stale .new from a prior aborted run; packer would otherwise
+# refuse to write into a non-empty output_directory.
+rm -rf "${new}"
 
 arch="$(uname -m | sed s/arm64/aarch64/)"
 
@@ -23,9 +28,15 @@ packer build ${PACKER_FLAGS} \
   -var "arch=${arch}" \
   -var "upstream_mirrors=${upstream}" \
   -var "zbm_version=${ZBM_VERSION}" \
-  -var "output_directory=${QEMU_DIR}/${ubuntu}" \
+  -var "output_directory=${new}" \
   "-only=qemu.ubuntu-${variant}" \
   packer
+
+# Atomic-ish swap: drop the previous final dir and rename .new in.
+# Packer's post-processor already removed the unused vda cloud-image
+# disk; everything else under .new is keepable as-is.
+rm -rf "${artdir}"
+mv "${new}" "${artdir}"
 
 if [ "${usage_no_verify:-false}" != "true" ]; then
   mise run packer:verify "${variant}" --ubuntu "${ubuntu}"
@@ -37,7 +48,6 @@ fi
 # (which the cleanup post-processor deletes); additional disks need
 # this loop. Then write the sha256sum manifest covering the compressed
 # disks plus efivars.fd.
-artdir="${QEMU_DIR}/${ubuntu}/ubuntu-${variant}"
 for disk in "${artdir}"/packer-ubuntu-*; do
   echo "==> compressing $(basename "${disk}")"
   qemu-img convert -c -O qcow2 "${disk}" "${disk}.tmp"
