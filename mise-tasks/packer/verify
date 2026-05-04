@@ -8,6 +8,7 @@
 # is dumped so you don't need to re-run interactively.
 #USAGE arg "<variant>" help="Variant: zfs (boots box) or zfs-lab (boots lab)"
 #USAGE flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
+#USAGE flag "--image-dir <path>" help="Packer artifact directory to verify (default: the variant's shipped <qemu_dir>/<ubuntu>/<packer_image>). Used by packer:build to verify a *.new staging dir before swapping it in." default=""
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
@@ -20,8 +21,13 @@ zfs-lab) machine=lab ;;
   ;;
 esac
 
+launch_args=(--machine "${machine}" --ubuntu "${usage_ubuntu}" --timeout 300 --exit-after-ready)
+if [ -n "${usage_image_dir:-}" ]; then
+  launch_args+=(--image-dir "${usage_image_dir}")
+fi
+
 log="test/out/${machine}.${usage_ubuntu}._launch.output.ansi"
-if ! test/launch.py --machine "${machine}" --ubuntu "${usage_ubuntu}" --timeout 300 --exit-after-ready; then
+if ! test/launch.py "${launch_args[@]}"; then
   echo "--- packer:verify failed; dumping ${log} ---" >&2
   [ -f "${log}" ] && tail -200 "${log}" >&2
   exit 1
