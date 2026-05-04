@@ -8,13 +8,23 @@
 # .backup_file (or deleting the freshly-added unit) keeps the host in its
 # previous-known-good state when the install fails. Don't trim this as
 # "overengineering" — measure first.
+#
+# `systemd_unit_user` (default `root`) selects scope: root installs at
+# /etc/systemd/system and reloads the system manager; any other value
+# installs at /etc/systemd/user (host-wide user-default) and reloads the
+# named user's user manager (which must already be lingered).
+- name: copy | Resolve install scope for {{ systemd_unit_src }}
+  set_fact:
+    _systemd_unit_scope: "{{ 'system' if (systemd_unit_user | default('root')) == 'root' else 'user' }}"
+    _systemd_unit_dir: "{{ '/etc/systemd/system' if (systemd_unit_user | default('root')) == 'root' else '/etc/systemd/user' }}"
+
 - name: Systemd service
   block:
     - name: Copy the unit file
       when: systemd_unit_condition | default(true)
       copy:
         src: "{{ systemd_unit_src }}"
-        dest: "/etc/systemd/system/{{ systemd_unit_dest | default(systemd_unit_src) }}"
+        dest: "{{ _systemd_unit_dir }}/{{ systemd_unit_dest | default(systemd_unit_src) }}"
         owner: root
         group: root
         mode: "0644"
@@ -24,7 +34,7 @@
 
     - name: Validate unit file
       when: systemd_unit.changed
-      command: systemd-analyze verify /etc/systemd/system/{{ systemd_unit_verify | default(systemd_unit_dest) | default(systemd_unit_src) }}
+      command: systemd-analyze verify {{ _systemd_unit_dir }}/{{ systemd_unit_verify | default(systemd_unit_dest) | default(systemd_unit_src) }}
       register: systemd_verify
       changed_when: false
       failed_when: systemd_verify.rc != 0 or systemd_verify.stderr != ''
@@ -34,7 +44,9 @@
       when: systemd_unit.changed
       systemd:
         daemon_reload: true
+        scope: "{{ _systemd_unit_scope }}"
       become: true
+      become_user: "{{ systemd_unit_user | default('root') }}"
 
     # Expose the install result under a per-unit fact so callers can avoid
     # the ambiguous shared `systemd_unit` register (which is also the role
@@ -51,7 +63,7 @@
       when: '"backup_file" in systemd_unit'
       copy:
         remote_src: true
-        dest: "/etc/systemd/system/{{ systemd_unit_dest | default(systemd_unit_src) }}"
+        dest: "{{ _systemd_unit_dir }}/{{ systemd_unit_dest | default(systemd_unit_src) }}"
         src: "{{ systemd_unit.backup_file }}"
         owner: root
         group: root
@@ -68,7 +80,7 @@
     - name: Delete newly added file
       when: systemd_unit.changed and "backup_file" not in systemd_unit
       file:
-        path: /etc/systemd/system/{{ systemd_unit_dest | default(systemd_unit_src) }}
+        path: "{{ _systemd_unit_dir }}/{{ systemd_unit_dest | default(systemd_unit_src) }}"
         state: absent
       become: true
 

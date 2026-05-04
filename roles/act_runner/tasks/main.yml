@@ -195,6 +195,15 @@
   tags:
     - act_runner
 
+- name: Install podman prune timer for act_runner
+  import_role:
+    name: podman
+    tasks_from: prune
+  vars:
+    podman_prune_user: act_runner
+  tags:
+    - act_runner
+
 - name: Install act_runner service
   import_role:
     name: systemd_unit

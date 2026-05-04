@@ -296,3 +296,15 @@
   become: true
   tags:
     - podman
+
+- name: Install podman prune timer
+  import_tasks: prune.yml
+  tags:
+    - podman
+
+- name: Install podman prune timer for {{ ansible_user }}
+  import_tasks: prune.yml
+  vars:
+    podman_prune_user: "{{ ansible_user }}"
+  tags:
+    - podman

@@ -1,9 +1,20 @@
+# `systemd_unit_user` (default `root`) selects scope: root acts on the
+# system manager; any other value drives the named user's user manager
+# (linger must already be enabled). The pre-pull step is rootful-only —
+# extract_podman_image queries the system bus, and a rootless service
+# pulls into its own /var/lib/containers/rootless/$USER store anyway.
+- name: service | Resolve scope for {{ systemd_unit_src }}
+  set_fact:
+    _systemd_unit_scope: "{{ 'system' if (systemd_unit_user | default('root')) == 'root' else 'user' }}"
+
 - name: Enable the service
   when: (systemd_unit_condition | default(true))
   systemd:
     name: "{{ systemd_unit_dest | default(systemd_unit_src) }}"
     enabled: true
+    scope: "{{ _systemd_unit_scope }}"
   become: true
+  become_user: "{{ systemd_unit_user | default('root') }}"
 
 # Each .service file is the single source of truth for its podman image;
 # the extract_podman_image module asks systemd over D-Bus for the parsed
@@ -15,6 +26,7 @@
   when:
     - systemd_unit_condition | default(true)
     - not ansible_check_mode
+    - _systemd_unit_scope == 'system'
   extract_podman_image:
     name: "{{ systemd_unit_dest | default(systemd_unit_src) }}"
   register: systemd_unit_podman_images
@@ -24,6 +36,7 @@
   when:
     - systemd_unit_condition | default(true)
     - not ansible_check_mode
+    - _systemd_unit_scope == 'system'
   containers.podman.podman_image:
     name: "{{ item }}"
   loop: "{{ systemd_unit_podman_images.images | default([]) }}"
@@ -34,12 +47,16 @@
   systemd:
     name: "{{ systemd_unit_dest | default(systemd_unit_src) }}"
     state: started
+    scope: "{{ _systemd_unit_scope }}"
   register: systemd_started
   become: true
+  become_user: "{{ systemd_unit_user | default('root') }}"
 
 - name: Restart the service
   when: (systemd_unit_condition | default(true)) and (systemd_unit_start | default(true)) and (systemd_unit_restart | default(false) and not systemd_started.changed)
   systemd:
     name: "{{ systemd_unit_dest | default(systemd_unit_src) }}"
     state: restarted
+    scope: "{{ _systemd_unit_scope }}"
   become: true
+  become_user: "{{ systemd_unit_user | default('root') }}"
