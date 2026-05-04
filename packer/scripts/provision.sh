@@ -14,6 +14,10 @@
 #  - on the ubuntu-zfs-lab variant, supply matching-size disks. The
 #    rpool mirror caps at the smallest disk's partition 3, so a
 #    2T+4T+4T mix silently halves usable rpool capacity.
+#  - verify the rpool ashift=12 below matches the disks. 4 KiB is
+#    right for ~95% of drives but some enterprise SSDs / SMR HDDs
+#    report 8 KiB / 16 KiB physical (ashift=13 / 14). ashift can't
+#    be changed after pool creation; getting it wrong loses perf.
 set -euxo pipefail
 
 case $SOURCE_NAME in
