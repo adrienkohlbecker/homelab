@@ -169,10 +169,12 @@
         name: podman.socket
         state: stopped
 
-    - name: Unmount old location
-      mount:
-        path: /var/lib/containers/storage
-        state: unmounted
+    # podman's overlay graph driver leaves a self-bind at
+    # /var/lib/containers/storage/overlay (for metacopy). The mount module's
+    # `state: unmounted` calls plain umount and would fail with EBUSY; -R
+    # tears the bind down with the main mount.
+    - name: Recursively unmount old location
+      command: umount -R /var/lib/containers/storage
 
     - name: Move zvol root contents into storage/
       shell: |
@@ -232,6 +234,14 @@
 # mode on podman 4.9, so we have to write the main file directly. The driver
 # is set explicitly to silence the "A driver was picked automatically"
 # warning when containers-common's default storage.conf is absent.
+#
+# runroot and graphroot must be set explicitly even though they match the
+# upstream defaults: containers/storage's TOML loader unconditionally
+# overwrites these fields from the parsed config, so leaving them blank
+# clobbers the rootful defaults with empty strings and breaks rootful
+# podman with "runroot must be set". Rootless ignores both — its codepath
+# rebuilds a fresh options struct from XDG_RUNTIME_DIR and
+# rootless_storage_path.
 - name: Configure podman storage
   when: zfs_root
   copy:
@@ -239,6 +249,8 @@
     content: |
       [storage]
       driver = "overlay"
+      runroot = "/run/containers/storage"
+      graphroot = "/var/lib/containers/storage"
       rootless_storage_path = "/var/lib/containers/rootless/$USER"
     owner: root
     group: root
