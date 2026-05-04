@@ -49,6 +49,6 @@ fi
 # this loop.
 for disk in "${artdir}"/packer-ubuntu-*; do
   echo "==> compressing $(basename "${disk}")"
-  qemu-img convert -c -O qcow2 "${disk}" "${disk}.tmp"
+  qemu-img convert -W -c -O qcow2 -o compression_type=zstd "${disk}" "${disk}.tmp"
   mv "${disk}.tmp" "${disk}"
 done
