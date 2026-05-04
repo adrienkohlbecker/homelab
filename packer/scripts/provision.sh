@@ -24,6 +24,20 @@ ubuntu-zfs-lab)
   ;;
 esac
 
+# Map (disk, partition number) to the kernel/udev partition device.
+# vd*/sd*/hd* tack the digit on directly; nvme/mmcblk/loop/md need a
+# 'p' separator; /dev/disk/by-id symlinks use '-partN'. Passing
+# /dev/nvme0n1 through ${DISKS[@]/%/3} would yield /dev/nvme0n13 --
+# real bug if the script is ever pointed at non-virtio disks.
+partdev() {
+  local disk="$1" n="$2"
+  case "$disk" in
+  /dev/disk/by-id/*) echo "${disk}-part${n}" ;;
+  /dev/nvme[0-9]*n[0-9]* | /dev/mmcblk[0-9]* | /dev/loop[0-9]* | /dev/md[0-9]*) echo "${disk}p${n}" ;;
+  *) echo "${disk}${n}" ;;
+  esac
+}
+
 # Ensure APT doesn't asks questions
 
 export DEBIAN_FRONTEND=noninteractive
@@ -86,6 +100,9 @@ udevadm settle
 
 # Create the zpool
 
+rpool_devs=()
+for d in "${DISKS[@]}"; do rpool_devs+=("$(partdev "$d" 3)"); done
+
 zpool create -f \
   -o ashift=12 \
   -o autotrim=on \
@@ -102,7 +119,7 @@ zpool create -f \
   -O relatime=on \
   -O xattr=sa \
   -m none \
-  rpool $LAYOUT "${DISKS[@]/%/3}"
+  rpool $LAYOUT "${rpool_devs[@]}"
 
 # Create initial file systems
 
