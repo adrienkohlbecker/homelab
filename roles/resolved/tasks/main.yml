@@ -23,7 +23,6 @@
     - resolved
 
 - name: Update resolv conf symlink
-  when: not docker_test
   file:
     src: /run/systemd/resolve/resolv.conf
     dest: /etc/resolv.conf

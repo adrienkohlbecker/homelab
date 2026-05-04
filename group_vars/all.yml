@@ -1,5 +1,3 @@
-docker_test: false
-vmware_test: false
 qemu_test: false
 qemu_test_minimal: false
 
