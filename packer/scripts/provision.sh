@@ -167,6 +167,11 @@ cp /etc/hostid /mnt/etc
 # baremetal (eno1/enp0s31f6/...). All Predictable Network Interface
 # Names start with "en"; only old-style "eth*" is excluded, which
 # requires net.ifnames=0 on modern Ubuntu and so is essentially extinct.
+#
+# Multi-NIC hosts: this stanza claims every "en*" interface as
+# "primary", so each onboard NIC will DHCP independently. Bonded /
+# LACP setups need bare-metal callers to overwrite this file with an
+# explicit netplan before first boot.
 cat <<EOF >/mnt/etc/netplan/01-netcfg.yaml
 network:
   version: 2
