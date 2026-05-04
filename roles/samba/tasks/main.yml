@@ -1,4 +1,4 @@
-- name: Install vector package
+- name: Install samba package
   import_role:
     name: apt_unit_masked
     tasks_from: apt
