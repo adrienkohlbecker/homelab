@@ -63,7 +63,6 @@
     - minio
 
 - name: data | Attach policy
-  when: not minio_useronly_policy_dir.stat.exists
   command: mcli admin policy set default useronly user={{ item.access_key }}
   args:
     creates: /mnt/minio/.minio.sys/config/iam/policydb/users/{{ item.access_key }}.json
