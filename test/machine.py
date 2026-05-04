@@ -618,8 +618,14 @@ class QemuMachine(Machine):
     # EDK2+aarch64) is bypassed entirely. None on x86_64 and on minimal.
     _direct_boot: tuple[Path, Path, str] | None
 
-    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int, upstream_mirrors: bool = False):
-        """QEMU-backed machine wrapper used by integration tests."""
+    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int, upstream_mirrors: bool = False, image_dir: Path | None = None):
+        """QEMU-backed machine wrapper used by integration tests.
+
+        image_dir overrides the per-variant `<imagedir>/<ubuntu>/<packer_image>`
+        path that prepare() would otherwise compute. Used by packer:verify
+        to point the harness at a still-staged `*.new` build output before
+        the build script swaps it over the previous artifact.
+        """
         try:
             spec = QEMU_MACHINE_SPECS[machine]
         except KeyError:
@@ -647,6 +653,9 @@ class QemuMachine(Machine):
         # qemu boots them directly via -kernel/-initrd, bypassing the
         # firmware chain. See notes/zbm-aarch64-kexec-bug-report.md.
         self._spec = spec
+        if image_dir is not None and spec.packer_image is None:
+            raise ValueError(f"image_dir override requires a variant with packer_image set, got {machine!r}")
+        self._image_dir_override = image_dir.resolve() if image_dir is not None else None
         # Captured once at construction so prepare()/_boot_command() don't
         # have to re-run platform.machine() on every access.
         self.arch: ArchProfile = detect_host_arch()
@@ -767,7 +776,10 @@ class QemuMachine(Machine):
             # Bare assertion would be elided under `python -O`; raise so the
             # config error surfaces regardless of optimisation level.
             raise RuntimeError(f"non-minimal variant {self.machine!r} must declare packer_image")
-        image_dir = f"{self.imagedir}/{self.ubuntu_name}/{packer_image}"
+        if self._image_dir_override is not None:
+            image_dir = str(self._image_dir_override)
+        else:
+            image_dir = f"{self.imagedir}/{self.ubuntu_name}/{packer_image}"
         os_disk_count = self._spec.os_disk_count
 
         os_src_paths = [f"{image_dir}/packer-ubuntu-{idx}" for idx in range(1, os_disk_count + 1)]
