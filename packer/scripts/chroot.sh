@@ -5,7 +5,9 @@ read -r -a DISKS <<<"$DISKS_LIST"
 
 # Local constants. SOURCE_NAME comes from packer's shell-provisioner
 # env block; DISKS, LAYOUT, SSH_KEY_PUB are exported by provision.sh.
-HOSTNAME="$SOURCE_NAME"
+# HOSTNAME is a placeholder -- the deploy step (ansible / cloud-init /
+# bare-metal wrapper) is expected to overwrite it before first boot.
+HOSTNAME=ubuntu
 USERNAME=vagrant
 
 export DEBIAN_FRONTEND=noninteractive
