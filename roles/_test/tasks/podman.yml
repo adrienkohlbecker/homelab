@@ -34,7 +34,7 @@
     name: rpool/podman
     state: present
     extra_zfs_properties:
-      volsize: '{{ "20GB" | human_to_bytes | string }}'
+      volsize: '{{ "30GB" | human_to_bytes | string }}'
   become: true
 
 - name: Create a ext4 filesystem on podman zvol
@@ -42,6 +42,7 @@
   filesystem:
     fstype: ext4
     dev: /dev/zvol/rpool/podman
+    resizefs: true
   become: true
 
 - name: Mount podman zvol
