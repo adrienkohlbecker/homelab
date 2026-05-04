@@ -172,6 +172,11 @@ else
   # This configuration exploits the fact that, with version 1.0, mdraid metadata will be written to the end of each partition.
   # Newer metadata versions would be written to the beginning of each partition, and the system firmware would fail to
   # recognize each component as a valid EFI system partition.
+  # Some OEM firmwares (Asus consumer, certain Supermicro X11/X12) scan
+  # ESPs more aggressively and may refuse a member partition; the
+  # per-disk efibootmgr entries below are the survival mechanism if
+  # one disk's path stops working. Validate on your firmware before
+  # committing to this layout for new bare-metal hosts.
   mdadm --create /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --raid-devices="${#DISKS[@]}" "${efi_parts[@]}"
   mdadm --detail --brief /dev/md/efi >>/etc/mdadm/mdadm.conf
   EFI_DEVICE=/dev/md/efi
