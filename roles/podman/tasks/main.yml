@@ -120,17 +120,6 @@
   tags:
     - podman
 
-- name: Create mount point
-  file:
-    dest: /var/lib/containers/storage
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - podman
-
 - name: Create podman zvol
   when: zfs_root
   zfs:
@@ -152,15 +141,117 @@
   tags:
     - podman
 
+# Older hosts mounted the zvol at /var/lib/containers/storage. We now mount
+# it one level higher at /var/lib/containers so a sibling /rootless dir on
+# the same volume can hold per-user rootless storage. On upgrade, sink the
+# existing zvol contents into a storage/ subdir before remounting so podman
+# still finds its graphroot at /var/lib/containers/storage.
+- name: Detect existing zvol mount target
+  when: zfs_root
+  command: findmnt -no TARGET /dev/zvol/rpool/podman
+  register: podman_zvol_mount
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - podman
+
+- name: Migrate zvol layout to /var/lib/containers
+  when:
+    - zfs_root
+    - podman_zvol_mount.rc == 0
+    - podman_zvol_mount.stdout == "/var/lib/containers/storage"
+  become: true
+  block:
+    - name: Stop podman.socket before remount
+      systemd:
+        name: podman.socket
+        state: stopped
+
+    - name: Unmount old location
+      mount:
+        path: /var/lib/containers/storage
+        state: unmounted
+
+    - name: Move zvol root contents into storage/
+      shell: |
+        set -euo pipefail
+        tmp=$(mktemp -d)
+        mount /dev/zvol/rpool/podman "$tmp"
+        cd "$tmp"
+        mkdir -p storage
+        shopt -s dotglob nullglob
+        for f in *; do
+          [ "$f" = "storage" ] && continue
+          [ "$f" = "lost+found" ] && continue
+          mv -- "$f" storage/
+        done
+        cd /
+        umount "$tmp"
+        rmdir "$tmp"
+      args:
+        executable: /bin/bash
+
+    - name: Drop fstab entry for old mount
+      mount:
+        path: /var/lib/containers/storage
+        state: absent
+  tags:
+    - podman
+
 - name: Mount podman zvol
   when: zfs_root
   mount:
-    path: /var/lib/containers/storage
+    path: /var/lib/containers
     src: /dev/zvol/rpool/podman
     fstype: ext4
     opts: defaults,noatime
     state: mounted
     backup: true
+  become: true
+  tags:
+    - podman
+
+# Rootless storage lives on the same zvol under /rootless/$USER. Sticky-bit
+# 1777 (like /tmp) lets each user create and own their own subdir without
+# being able to touch anyone else's.
+- name: Create rootless storage parent
+  when: zfs_root
+  file:
+    path: /var/lib/containers/rootless
+    state: directory
+    owner: root
+    group: root
+    mode: "1777"
+  become: true
+  tags:
+    - podman
+
+# Drop-ins under /etc/containers/storage.conf.d/ aren't loaded in rootless
+# mode on podman 4.9, so we have to write the main file directly. The driver
+# is set explicitly to silence the "A driver was picked automatically"
+# warning when containers-common's default storage.conf is absent.
+- name: Configure podman storage
+  when: zfs_root
+  copy:
+    dest: /etc/containers/storage.conf
+    content: |
+      [storage]
+      driver = "overlay"
+      rootless_storage_path = "/var/lib/containers/rootless/$USER"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - podman
+
+- name: Remove obsolete storage.conf.d drop-in
+  when: zfs_root
+  file:
+    path: /etc/containers/storage.conf.d/rootless-zvol.conf
+    state: absent
   become: true
   tags:
     - podman
