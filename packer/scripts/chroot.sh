@@ -253,6 +253,13 @@ apt-get install --yes refind
 refind-install
 rm /boot/refind_linux.conf
 
+# Drop a copy at the firmware fallback path (\EFI\BOOT\BOOT<arch>.EFI)
+# so a host whose NVRAM has been wiped (CMOS clear, BIOS update,
+# "Restore Defaults") still boots from the ESP. refind-install does
+# not write here by default on Debian/Ubuntu.
+mkdir -p /boot/efi/EFI/BOOT
+cp "/boot/efi/EFI/refind/$REFIND_NAME" "/boot/efi/EFI/BOOT/$REFIND_FALLBACK_NAME"
+
 cat <<EOF >/boot/efi/EFI/refind/refind.conf
 timeout 1
 default_selection "Ubuntu (ZBM)"
