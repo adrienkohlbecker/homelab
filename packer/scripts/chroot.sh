@@ -224,7 +224,6 @@ ZBM_KERNEL="$(basename /boot/efi/EFI/ZBM/vmlin*-bootmenu)"
 
 # Configure rEFInd
 
-mountpoint -q /sys/firmware/efi/efivars || mount -t efivarfs efivarfs /sys/firmware/efi/efivars
 apt-get install --yes refind
 refind-install
 rm /boot/refind_linux.conf
