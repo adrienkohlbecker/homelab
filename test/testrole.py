@@ -16,13 +16,11 @@ import sys
 import time
 from pathlib import Path
 
-from build_image import build_image
 from machine import (
     DEFAULT_UBUNTU,
     MACHINE_CHOICES,
     PEAK_KB_SENTINEL_PREFIX,
     Machine,
-    PodmanMachine,
     QemuMachine,
     UBUNTU_RELEASES,
 )
@@ -79,7 +77,7 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     )
     parser.add_argument(
         "--machine",
-        default="container",
+        default="box",
         choices=MACHINE_CHOICES,
         help="Machine profile to run against",
     )
@@ -114,12 +112,6 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         help="Re-run the role and fail if any task reports changed (default: on)",
     )
     parser.add_argument(
-        "--build-image",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="Rebuild the homelab:<codename> container image before booting (default: on; container machine only)",
-    )
-    parser.add_argument(
         "--keep-logs",
         action=argparse.BooleanOptionalAction,
         default=True,
@@ -136,12 +128,6 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         action="store_true",
         default=False,
         help="Print harness phase timings and enable ansible's profile_tasks callback for per-task timing",
-    )
-    parser.add_argument(
-        "--commit",
-        metavar="IMAGE_TAG",
-        default=None,
-        help="On success, podman-commit the container to IMAGE_TAG before teardown (container machine only). Used by build_image.py to bake homelab-service:<release> via the _bake role.",
     )
     parser.add_argument("role", help="Role name to test")
 
@@ -328,27 +314,9 @@ def main() -> int:
         )
         return 1
 
-    if parsed_args.commit and parsed_args.machine != "container":
-        print_line("Error: --commit only supported with --machine container", error=True)
-        return 1
-
-    # Cache short-circuit: if --commit's target image already carries the
-    # current bake-hash label, the inputs haven't changed since it was
-    # built, so skip the whole run. Lets build_image.py call this every
-    # time without paying for a rebake.
-    if parsed_args.commit:
-        from machine import _bake_inputs_hash, existing_image_hash
-
-        want = _bake_inputs_hash()
-        have = asyncio.run(existing_image_hash(parsed_args.commit))
-        if have == want:
-            print_line(f"==> {parsed_args.commit} cache hit (hash={want[:12]}); skipping bake")
-            return 0
-
-    machine_cls = PodmanMachine if parsed_args.machine == "container" else QemuMachine
     # Machine.wrapper_timeout layers WRAPPER_GRACE_SECONDS on top of this so
-    # the inner timeout/podman --timeout outlasts the Python deadline.
-    machine_kwargs: dict = dict(
+    # the inner `timeout` wrapper outlasts the Python deadline.
+    m: Machine = QemuMachine(
         machine=parsed_args.machine,
         role=parsed_args.role,
         keep_vm=parsed_args.keep,
@@ -356,31 +324,9 @@ def main() -> int:
         machine_timeout=parsed_args.timeout,
         upstream_mirrors=parsed_args.upstream_mirrors,
     )
-    if parsed_args.commit:
-        machine_kwargs["commit_image"] = parsed_args.commit
-    m: Machine = machine_cls(**machine_kwargs)
 
     rc = 0
     with tee_output(m.output_file):
-        if parsed_args.build_image and parsed_args.machine == "container":
-            build_t0 = time.monotonic()
-            try:
-                rc = build_image(parsed_args.ubuntu)
-            except KeyboardInterrupt:
-                # build_image() runs its own asyncio.run(); SIGINT during a
-                # build raises KeyboardInterrupt out of it. Translate into
-                # the same exit code as a cancelled test run.
-                print_line("\nInterrupted during image build, shutting down...", error=True)
-                return 130
-            if _BENCHMARK:
-                _PHASE_TIMINGS.append(("image build", time.monotonic() - build_t0))
-            if rc != 0:
-                print_line(
-                    f"{parsed_args.role}.{parsed_args.machine} build failed",
-                    error=True,
-                )
-                return rc
-
         try:
             asyncio.run(
                 run_test(
