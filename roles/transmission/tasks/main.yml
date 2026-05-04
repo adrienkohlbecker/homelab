@@ -73,8 +73,11 @@
     - transmission
 
 - name: Configure transmission
-  template:
-    src: settings.json.j2
+  # Render via copy:content + regex_replace because transmission rewrites
+  # settings.json on every shutdown without a trailing newline; a plain
+  # template: leaves us drifting forever.
+  copy:
+    content: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
     dest: /mnt/services/transmission/settings.json
     owner: transmission
     group: media
