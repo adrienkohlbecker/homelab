@@ -57,7 +57,6 @@ locals {
     "gitea-dl"            = "https://dl.gitea.com/"
     "gitea-com"           = "https://gitea.com/"
     "gitea-lab"           = "https://gitea.lab.fahm.fr/"
-    "keyserver-ubuntu"    = "https://keyserver.ubuntu.com/"
     "ubuntu-releases"     = "https://releases.ubuntu.com/"
     "ubuntu-cdimage"      = "https://cdimage.ubuntu.com/"
     "ubuntu-cloud-images" = "https://cloud-images.ubuntu.com/"

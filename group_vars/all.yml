@@ -44,7 +44,6 @@ mirror_minio: 'https://{{ nexus_url ~ "/repository/minio" if nexus_url else "dl.
 mirror_gitea_dl: 'https://{{ nexus_url ~ "/repository/gitea-dl" if nexus_url else "dl.gitea.com" }}'
 mirror_gitea_com: 'https://{{ nexus_url ~ "/repository/gitea-com" if nexus_url else "gitea.com" }}'
 mirror_gitea_lab: 'https://{{ nexus_url ~ "/repository/gitea-lab" if nexus_url else "gitea.lab.fahm.fr" }}'
-mirror_keyserver_ubuntu: 'https://{{ nexus_url ~ "/repository/keyserver-ubuntu" if nexus_url else "keyserver.ubuntu.com" }}'
 mirror_pypi: 'https://{{ nexus_url ~ "/repository/pypi" if nexus_url else "pypi.org" }}'
 
 ubuntu_mirror: '{{ (ansible_architecture == "aarch64") | ternary(mirror_apt_ubuntu_ports ~ "/", mirror_apt_ubuntu_archive ~ "/") }}'
