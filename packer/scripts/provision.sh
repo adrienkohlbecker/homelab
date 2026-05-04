@@ -33,7 +33,7 @@ fi
 # Install helpers
 
 apt-get update
-apt-get install --yes debootstrap gdisk zfsutils-linux
+apt-get install --yes arch-install-scripts debootstrap gdisk zfsutils-linux
 
 # Generate /etc/hostid
 
@@ -114,10 +114,13 @@ udevadm trigger
 
 debootstrap "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR"
 
-# Copy files into the new install
+# Copy files into the new install. /etc/hostid must match the one ZFS
+# saw at pool creation; arch-chroot bind-mounts /etc/resolv.conf so apt
+# inside the chroot can resolve hostnames, and the bind goes away when
+# arch-chroot exits — the shipped image keeps whatever debootstrap put
+# there (empty), not the build host's DNS settings.
 
 cp /etc/hostid /mnt/etc
-cp /etc/resolv.conf /mnt/etc
 
 # Configure networking. Match by name glob so the same image works
 # under any qemu device topology (packer's vs. testrole's direct-kernel
@@ -136,29 +139,22 @@ network:
       dhcp-identifier: mac
 EOF
 
-# Chroot into the new OS, inside a private mount namespace so every mount
-# made here (proc, sys, dev, dev/pts, plus /boot/efi mounted by chroot.sh)
-# is torn down by the kernel the instant unshare exits — no race with host
-# services (udisks2, multipathd, snapd's LXD glue) reaching into our mounts
-# and leaving stale references on /mnt.
+# Chroot into the new OS via arch-chroot (arch-install-scripts). It sets
+# up proc/sys/dev/devpts/run/efivarfs in a private mount namespace and
+# bind-mounts /etc/resolv.conf for the chroot's lifetime, so apt can
+# resolve hostnames during the install without leaving the build host's
+# DNS pinned in the shipped image.
 #
-# Env propagation: chroot inherits the calling shell's env, so packer's
-# UBUNTU_*/ZBM_*/REFIND_NAME/SSH_KEY_PUB (already exported via the shell
-# provisioner env block) flow straight through. Script-local vars must
-# be exported explicitly. DISKS is a bash array, and bash silently
-# refuses to put array-typed variables in env even after a scalar
-# reassignment — flatten under a distinct name; chroot.sh re-parses
-# with `read -r -a DISKS <<<"$DISKS_LIST"`. New vars added later need
-# only be exported here, not enumerated on the chroot line.
+# Env propagation: arch-chroot inherits the calling shell's env, so
+# packer's UBUNTU_*/ZBM_*/REFIND_NAME/SSH_KEY_PUB (already exported via
+# the shell provisioner env block) flow straight through. Script-local
+# vars must be exported explicitly. DISKS is a bash array, and bash
+# silently refuses to put array-typed variables in env even after a
+# scalar reassignment — flatten under a distinct name; chroot.sh
+# re-parses with `read -r -a DISKS <<<"$DISKS_LIST"`. New vars added
+# later need only be exported here, not enumerated on the chroot line.
 export DISKS_LIST="${DISKS[*]}"
-unshare --mount --propagation private bash <<'EOF'
-set -euxo pipefail
-mount -t proc proc /mnt/proc
-mount -t sysfs sys /mnt/sys
-mount -B /dev /mnt/dev
-mount -t devpts pts /mnt/dev/pts
-chroot /mnt bash </home/vagrant/chroot.sh
-EOF
+arch-chroot /mnt bash </home/vagrant/chroot.sh
 
 # Copy the on-pool kernel + initrd (and the matching ZBM-style cmdline) out
 # to the build VM filesystem so packer's file provisioner can download them
