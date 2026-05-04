@@ -35,18 +35,14 @@ fi
 # failed boot test short-circuits before we burn cycles compressing.
 # qemu's disk_compression flag only handles the primary VMName disk
 # (which the cleanup post-processor deletes); additional disks need
-# this loop. Refresh the sha256sum disk entries in place so the
-# manifest matches the compressed files; non-disk entries
-# (efivars.fd) are left untouched.
+# this loop. Then write the sha256sum manifest covering the compressed
+# disks plus efivars.fd.
 artdir="${QEMU_DIR}/${ubuntu}/ubuntu-${variant}"
 for disk in "${artdir}"/packer-ubuntu-*; do
   echo "==> compressing $(basename "${disk}")"
   qemu-img convert -c -O qcow2 "${disk}" "${disk}.tmp"
   mv "${disk}.tmp" "${disk}"
 done
-echo "==> refreshing sha256sum"
-{
-  sed $'/\tpacker-ubuntu-[0-9][0-9]*$/d' "${artdir}/sha256sum"
-  (cd "${artdir}" && sha256sum packer-ubuntu-*)
-} >"${artdir}/sha256sum.tmp"
+echo "==> writing sha256sum"
+(cd "${artdir}" && sha256sum efivars.fd packer-ubuntu-*) >"${artdir}/sha256sum.tmp"
 mv "${artdir}/sha256sum.tmp" "${artdir}/sha256sum"

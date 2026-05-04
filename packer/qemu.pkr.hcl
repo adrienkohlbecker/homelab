@@ -218,25 +218,16 @@ build {
     }
   }
 
-  post-processor "checksum" {
-    checksum_types = ["sha256"]
-    output         = "${var.output_directory}/${source.name}.new/{{.ChecksumType}}sum"
-  }
-
   # packer-ubuntu is the residual cloud-image OS disk — provision.sh
   # debootstraps onto packer-ubuntu-1..N and never writes to vda, so
-  # nothing downstream consumes it. Drop the file from both the
-  # shipped directory and the sha256sum manifest. Removing it earlier
-  # (before the checksum post-processor) breaks checksum because that
-  # post-processor iterates the builder's artifact list and ENOENTs
-  # on missing files.
+  # nothing downstream consumes it. Drop it before renaming the build
+  # directory to its final name; the sha256sum manifest is written
+  # later by mise-tasks/packer/build (post-compression).
   post-processor "shell-local" {
     inline_shebang = "/bin/bash"
     inline = [
       "set -euxo pipefail",
       "rm -f ${var.output_directory}/${source.name}.new/packer-ubuntu",
-      "sed $'/\\tpacker-ubuntu$/d' ${var.output_directory}/${source.name}.new/sha256sum > ${var.output_directory}/${source.name}.new/sha256sum.tmp",
-      "mv ${var.output_directory}/${source.name}.new/sha256sum.tmp ${var.output_directory}/${source.name}.new/sha256sum",
       "rm -rf ${var.output_directory}/${source.name}",
       "mv ${var.output_directory}/${source.name}.new ${var.output_directory}/${source.name}",
     ]
