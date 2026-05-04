@@ -3,6 +3,19 @@ set -euxo pipefail
 
 read -r -a DISKS <<<"$DISKS_LIST"
 
+# Mirrors provision.sh's partdev: tack the partition number onto the
+# right separator (none for vd*/sd*/hd*, 'p' for nvme/mmcblk/loop/md,
+# '-part' for /dev/disk/by-id symlinks). Bash functions don't survive
+# the chroot boundary, so the helper is duplicated here.
+partdev() {
+  local disk="$1" n="$2"
+  case "$disk" in
+  /dev/disk/by-id/*) echo "${disk}-part${n}" ;;
+  /dev/nvme[0-9]*n[0-9]* | /dev/mmcblk[0-9]* | /dev/loop[0-9]* | /dev/md[0-9]*) echo "${disk}p${n}" ;;
+  *) echo "${disk}${n}" ;;
+  esac
+}
+
 # Local constants. SOURCE_NAME comes from packer's shell-provisioner
 # env block; DISKS, LAYOUT, SSH_KEY_PUB are exported by provision.sh.
 # HOSTNAME is a placeholder -- the deploy step (ansible / cloud-init /
@@ -144,19 +157,26 @@ zfs set org.zfsbootmenu:commandline="" "rpool/ROOT"
 # Create efi & swap
 
 if [ "$LAYOUT" = "" ]; then
-  EFI_DEVICE="${DISKS[0]}1"
-  SWAP_DEVICE="${DISKS[0]}2"
+  EFI_DEVICE=$(partdev "${DISKS[0]}" 1)
+  SWAP_DEVICE=$(partdev "${DISKS[0]}" 2)
 else
   apt-get install --yes mdadm
+
+  efi_parts=()
+  swap_parts=()
+  for d in "${DISKS[@]}"; do
+    efi_parts+=("$(partdev "$d" 1)")
+    swap_parts+=("$(partdev "$d" 2)")
+  done
 
   # This configuration exploits the fact that, with version 1.0, mdraid metadata will be written to the end of each partition.
   # Newer metadata versions would be written to the beginning of each partition, and the system firmware would fail to
   # recognize each component as a valid EFI system partition.
-  mdadm --create /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --raid-devices="${#DISKS[@]}" "${DISKS[@]/%/1}"
+  mdadm --create /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --raid-devices="${#DISKS[@]}" "${efi_parts[@]}"
   mdadm --detail --brief /dev/md/efi >>/etc/mdadm/mdadm.conf
   EFI_DEVICE=/dev/md/efi
 
-  mdadm --create /dev/md/swap --name=swap --metadata=1.2 --level="raid0" --raid-devices="${#DISKS[@]}" "${DISKS[@]/%/2}"
+  mdadm --create /dev/md/swap --name=swap --metadata=1.2 --level="raid0" --raid-devices="${#DISKS[@]}" "${swap_parts[@]}"
   mdadm --detail --brief /dev/md/swap >>/etc/mdadm/mdadm.conf
   SWAP_DEVICE=/dev/md/swap
 fi
