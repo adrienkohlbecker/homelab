@@ -43,18 +43,7 @@ def test_qemu_preflight_raises_when_timeout_missing(
         qemu_machine_factory()
 
 
-def test_podman_preflight_raises_when_podman_missing(
-    podman_machine_factory: Callable[..., machine.PodmanMachine],
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(machine.shutil, "which", _which_excluding({"podman"}))
-    with pytest.raises(RuntimeError, match="'podman' not found"):
-        podman_machine_factory()
-
-
-def test_qemu_imagedir_missing_on_linux_raises(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_qemu_imagedir_missing_on_linux_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """QemuMachine on Linux fails fast when /mnt/qemu isn't mounted.
 
     The Mac branch mkdirs packer/artifacts on the fly; the Linux branch

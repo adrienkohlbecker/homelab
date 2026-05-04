@@ -4,7 +4,6 @@ import asyncio
 import collections
 import contextlib
 import dataclasses
-import fcntl
 import platform
 import shlex
 import shutil
@@ -30,8 +29,8 @@ from utils import (
 )
 
 OUT_DIR = Path("test/out")
-# Created once at import so every later writer (per-run logs, podman
-# network lock, etc.) can open files inside without repeating the mkdir.
+# Created once at import so every later writer (per-run logs, etc.) can
+# open files inside without repeating the mkdir.
 OUT_DIR.mkdir(parents=True, exist_ok=True)
 
 UBUNTU_RELEASES: dict[str, str] = {
@@ -41,8 +40,6 @@ UBUNTU_RELEASES: dict[str, str] = {
 DEFAULT_UBUNTU = "jammy"
 SSH_KEY = "packer/vagrant.key"
 SSH_HOST = "127.0.0.1"
-
-CONTAINER_ANSIBLE_ARGS = ["-e", '{"docker_test":true}', "-e", "@host_vars/box-podman.yml"]
 
 
 class QemuMachineSpec(NamedTuple):
@@ -125,7 +122,7 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
 }
 
 
-MACHINE_CHOICES: tuple[str, ...] = ("container", *QEMU_MACHINE_SPECS)
+MACHINE_CHOICES: tuple[str, ...] = tuple(QEMU_MACHINE_SPECS)
 
 
 def _qemu_ansible_args(spec: QemuMachineSpec) -> list[str]:
@@ -147,32 +144,11 @@ def _qemu_ansible_args(spec: QemuMachineSpec) -> list[str]:
 SSH_WAIT_TIMEOUT = 120
 IDFILE_TIMEOUT = 60
 
-PODMAN_NETWORK = "homelab_net"
-PODMAN_NETWORK_SUBNET = "192.5.0.0/16"
-PODMAN_NETWORK_LOCK = OUT_DIR / "podman_network.lock"
-
 # Sentinel printed by testrole.py at end-of-run so testall.py can capture
 # the per-machine peak RSS via stdout. Kept simple on purpose: a single
 # `key=int` line is trivial to parse and unlikely to collide with the
-# free-form output ansible/qemu/podman emit upstream.
+# free-form output ansible/qemu emit upstream.
 PEAK_KB_SENTINEL_PREFIX = "PEAK_KB="
-
-
-async def ensure_podman_network() -> None:
-    """Create the shared podman network if it doesn't exist.
-
-    Safe under concurrent callers: a flock serialises the inspect-then-create
-    so parallel PodmanMachine.prepare() calls don't race and lose with
-    "network already exists".
-    """
-    with PODMAN_NETWORK_LOCK.open("w") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
-        result = await run_command(["podman", "network", "inspect", PODMAN_NETWORK], check=False)
-        if result.exitcode == 0:
-            return
-        await run_command(
-            ["podman", "network", "create", "--subnet", PODMAN_NETWORK_SUBNET, PODMAN_NETWORK],
-        )
 
 
 @dataclasses.dataclass
@@ -197,10 +173,7 @@ class Machine:
     ubuntu_name: str
     machine_timeout: int
     upstream_mirrors: bool = False
-    # Filename (under the per-run workdir) where the hypervisor writes its
-    # identifier. Default suits QemuMachine; PodmanMachine reassigns to
-    # "cid" after super().__init__. ensure_booted() / stop() read
-    # self.idfile without caring which subclass it is.
+    # Filename (under the per-run workdir) where qemu writes its pidfile.
     idfile: str = dataclasses.field(default="pid", init=False)
 
     proc: asyncio.subprocess.Process | None = dataclasses.field(default=None, init=False)
@@ -1078,214 +1051,3 @@ class QemuMachine(Machine):
     async def _find_ssh_port(self) -> None:
         """Port was pre-picked in prepare(); nothing to discover at boot."""
         return
-
-
-def is_service_role(role: str) -> bool:
-    """True if the role's _setup.yml contains `tasks_from: podman` or `tasks_from: nginx`.
-
-    Plain substring match -- not a YAML parse -- so a comment or odd
-    formatting that contains the phrase will trip it. Works for the
-    canonical `import_role` blocks in the existing setup hooks; promote to
-    a real YAML walk if a role ever needs the heuristic to be smarter.
-
-    Drives PodmanMachine's image pick: service roles use the pre-baked
-    `homelab-service:<release>` so their _setup imports skip via the
-    existing `creates:` sentinels.
-    """
-    setup_yml = Path(f"roles/{role}/tasks/_setup.yml")
-    if not setup_yml.exists():
-        return False
-    text = setup_yml.read_text()
-    return "tasks_from: podman" in text or "tasks_from: nginx" in text
-
-
-BAKE_HASH_LABEL = "homelab.bake-hash"
-
-
-def _bake_inputs_hash() -> str:
-    """sha256 over the files that drive the homelab-service bake.
-
-    Used to label the committed image and to short-circuit a rebake when
-    nothing relevant has changed.
-    """
-    import hashlib
-
-    h = hashlib.sha256()
-    for p in (
-        Path("test/Dockerfile"),
-        Path("roles/_bake/tasks/main.yml"),
-        Path("roles/_test/tasks/podman.yml"),
-        Path("roles/_test/tasks/nginx.yml"),
-    ):
-        h.update(p.read_bytes())
-    return h.hexdigest()
-
-
-async def existing_image_hash(tag: str) -> str | None:
-    """Return the bake-hash label on *tag*, or None if missing/unlabeled."""
-    res = await run_command(
-        ["podman", "image", "inspect", "--format", '{{index .Config.Labels "%s"}}' % BAKE_HASH_LABEL, tag],
-        check=False,
-        quiet=True,
-    )
-    if res.exitcode != 0:
-        return None
-    return "\n".join(res.stdout).strip() or None
-
-
-class PodmanMachine(Machine):
-    """Start privileged Podman containers that mimic SSH hosts."""
-
-    commit_image: str | None
-
-    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int, upstream_mirrors: bool = False, commit_image: str | None = None):
-        """Podman-backed machine wrapper used by integration tests."""
-        # Containers don't mount the host workdir, so the workdir can live
-        # on the system tmp -- no per-platform image-cache dance needed.
-        super().__init__(
-            ssh_port=0,
-            ssh_user="root",
-            ansible_args=CONTAINER_ANSIBLE_ARGS,
-            inventory_host="box",
-            machine=machine,
-            role=role,
-            keep_vm=keep_vm,
-            ubuntu_name=ubuntu_name,
-            machine_timeout=machine_timeout,
-            upstream_mirrors=upstream_mirrors,
-        )
-        # podman writes the container ID via --cidfile, not a pidfile.
-        self.idfile = "cid"
-        self.commit_image = commit_image
-
-    @property
-    def image_tag(self) -> str:
-        """`homelab-service:<release>` for podman-service roles, else `homelab:<release>`."""
-        repo = "homelab-service" if is_service_role(self.role) else "homelab"
-        return f"{repo}:{self.ubuntu_name}"
-
-    def _preflight(self) -> None:
-        """Verify podman is reachable so boot/teardown subprocess calls succeed."""
-        self._require_binary(
-            "podman",
-            "Install via `brew install podman` (macOS) or `apt install podman` " "(Debian/Ubuntu); rootless setup must allow port publishing on 127.0.0.1.",
-        )
-
-    async def prepare(self) -> None:
-        """Create podman network if missing and stage working dir."""
-
-        await super().prepare()
-
-        await ensure_podman_network()
-
-    def _boot_command(self) -> list[str]:
-        """Return the podman run command that exposes SSH on a random host port."""
-
-        return [
-            "podman",
-            "run",
-            "--rm",
-            "--timeout",
-            str(self.wrapper_timeout),
-            "--systemd",
-            "always",
-            "--hostname",
-            self.inventory_host,
-            "--publish",
-            "127.0.0.1::22",
-            "--privileged",
-            "--cidfile",
-            f"{self.workdir.name}/{self.idfile}",
-            "--network",
-            PODMAN_NETWORK,
-            self.image_tag,
-        ]
-
-    async def stop(self) -> None:
-        """Tear down the container via cidfile, then drain the foreground client.
-
-        Rootless podman containers are supervised by `conmon`, which detaches
-        from the foreground `podman run` client. Signaling the client alone
-        (the base-class default) doesn't reliably stop the container -- if
-        the client is SIGKILL'd or testrole.py is interrupted before cleanup
-        finishes, conmon and the container survive reparented to init.
-        Talking to conmon directly through `podman rm --force <cid>` works
-        regardless of the client's state.
-        """
-        cid_path = Path(f"{self.workdir.name}/{self.idfile}")
-        cid = cid_path.read_text().strip() if cid_path.exists() else None
-
-        if cid:
-            # Snapshot cgroup memory.peak before rm tears the cgroup down.
-            self.peak_rss_kb = await self._read_container_peak_kb(cid)
-
-        try:
-            if cid:
-                # One shield around the whole commit-then-rm sequence: a
-                # second SIGINT landing between the two awaits would
-                # otherwise let commit complete but cancel rm, leaving a
-                # container reparented to init. The bake-hash label lets
-                # future runs cache-hit on the committed image.
-                await asyncio.shield(self._commit_and_remove(cid))
-        finally:
-            await super().stop()
-
-    async def _commit_and_remove(self, cid: str) -> None:
-        """Commit (if requested) then force-remove the container."""
-        if self.commit_image:
-            bake_hash = _bake_inputs_hash()
-            await run_command(
-                ["podman", "commit", "--change", f"LABEL homelab.bake-hash={bake_hash}", cid, self.commit_image],
-                check=False,
-            )
-        await run_command(
-            ["podman", "rm", "--force", "--time", "5", cid],
-            check=False,
-        )
-
-    async def _read_container_peak_kb(self, cid: str) -> int:
-        """Return the cgroup-tracked peak memory in kB for the container.
-
-        Reads memory.peak (cgroup v2; kernel-tracked high-water mark for the
-        whole container, not just PID 1). Returns 0 on cgroup v1 hosts or any
-        other failure — the caller already treats 0 as "no measurement".
-        """
-        inspect = await run_command(
-            ["podman", "inspect", "--format", "{{.State.CgroupPath}}", cid],
-            check=False,
-        )
-        if inspect.exitcode != 0:
-            return 0
-        cgroup_path = "\n".join(inspect.stdout).strip()
-        if not cgroup_path:
-            return 0
-
-        peak_file = Path("/sys/fs/cgroup") / cgroup_path.lstrip("/") / "memory.peak"
-        try:
-            return int(peak_file.read_text().strip()) // 1024
-        except FileNotFoundError:
-            # cgroup v1 host (no memory.peak) or container's cgroup already
-            # torn down between inspect and read. Quiet: PEAK_KB=0 is the
-            # signal and the host is what it is.
-            return 0
-        except (PermissionError, ValueError) as exc:
-            # Rootless podman with cgroup-delegation issues (typical) or a
-            # parse failure on a never-before-seen memory.peak format. Print
-            # once per failure so an operator looking at PEAK_KB=0 has a
-            # breadcrumb instead of guessing.
-            print_line(f"Could not read {peak_file}: {exc}", error=True)
-            return 0
-
-    async def _find_ssh_port(self) -> None:
-        """Ask podman for the forwarded SSH port and store it on the instance."""
-
-        cid = Path(f"{self.workdir.name}/{self.idfile}").read_text().strip()
-        if not cid:
-            raise RuntimeError("Missing container ID; podman run may have failed")
-
-        result = await run_command(["podman", "port", cid, "22"])
-        addr = "\n".join(result.stdout).strip()
-        if ":" not in addr:
-            raise RuntimeError(f"Unexpected podman port output: {addr}")
-
-        self.ssh_port = int(addr.rsplit(":", 1)[-1])
