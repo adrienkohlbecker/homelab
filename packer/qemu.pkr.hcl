@@ -218,6 +218,23 @@ build {
     }
   }
 
+  # qcow2 compression for the shipped disks. The qemu builder's own
+  # disk_compression flag only converts the primary VMName disk
+  # (packer-ubuntu), which we delete further down — additional disks
+  # ship uncompressed. Run qemu-img convert -c on each packer-ubuntu-N
+  # before the checksum step so the recorded sha256 matches the
+  # compressed file we ship.
+  post-processor "shell-local" {
+    inline_shebang = "/bin/bash"
+    inline = [
+      "set -euxo pipefail",
+      "for disk in ${var.output_directory}/${source.name}.new/packer-ubuntu-*; do",
+      "  qemu-img convert -c -O qcow2 \"$disk\" \"$disk.tmp\"",
+      "  mv \"$disk.tmp\" \"$disk\"",
+      "done",
+    ]
+  }
+
   post-processor "checksum" {
     checksum_types = ["sha256"]
     output         = "${var.output_directory}/${source.name}.new/{{.ChecksumType}}sum"
