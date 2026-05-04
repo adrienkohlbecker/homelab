@@ -190,11 +190,18 @@ network:
       dhcp-identifier: mac
 EOF
 
-# Chroot into the new OS via arch-chroot (arch-install-scripts). It sets
-# up proc/sys/dev/devpts/run/efivarfs in a private mount namespace and
-# bind-mounts /etc/resolv.conf for the chroot's lifetime, so apt can
-# resolve hostnames during the install without leaving the build host's
-# DNS pinned in the shipped image.
+# Chroot into the new OS via arch-chroot (arch-install-scripts). It
+# bind-mounts proc/sys/dev/devpts/run/efivarfs and /etc/resolv.conf
+# under /mnt for the chroot's lifetime, so apt can resolve hostnames
+# during the install without leaving the build host's DNS pinned in
+# the shipped image.
+#
+# arch-chroot mounts directly into the host namespace, not a private
+# one, so any mount the chroot script adds (notably /boot/efi from
+# chroot.sh) leaks into the host and would block the later zfs
+# unmount /mnt. Wrap in `unshare --mount --propagation private` so
+# everything mounted between here and exit lives in a throw-away
+# namespace that's destroyed when unshare returns.
 #
 # Env propagation: arch-chroot inherits the calling shell's env, so
 # packer's UBUNTU_*/ZBM_*/REFIND_NAME/SSH_KEY_PUB (already exported via
@@ -205,7 +212,7 @@ EOF
 # re-parses with `read -r -a DISKS <<<"$DISKS_LIST"`. New vars added
 # later need only be exported here, not enumerated on the chroot line.
 export DISKS_LIST="${DISKS[*]}"
-arch-chroot /mnt bash </home/vagrant/chroot.sh
+unshare --mount --propagation private arch-chroot /mnt bash </home/vagrant/chroot.sh
 
 # Copy the on-pool kernel + initrd (and the matching ZBM-style cmdline) out
 # to the build VM filesystem so packer's file provisioner can download them
