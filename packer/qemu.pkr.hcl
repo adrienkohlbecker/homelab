@@ -115,7 +115,7 @@ source "qemu" "ubuntu" {
   disk_discard       = "unmap"
   disk_image         = true
   disk_interface     = "virtio"
-  disk_size          = "40G"
+  disk_size          = "10G"
   efi_boot           = true
   efi_firmware_code  = "${local.efi_firmware_code}"
   efi_firmware_vars  = "${local.efi_firmware_vars}"
