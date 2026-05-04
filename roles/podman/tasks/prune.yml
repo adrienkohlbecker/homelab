@@ -1,0 +1,34 @@
+# Daily podman system-prune. Drops stopped containers, dangling images,
+# unused networks, anonymous volumes, and build cache; named images stay
+# cached so the next pull is a no-op.
+#
+# Caller passes `podman_prune_user`. Default `root` installs the rootful
+# timer at /etc/systemd/system, pruning /var/lib/containers/storage. Pass
+# a username to install at /etc/systemd/user and enable the timer in that
+# user's manager so rootless podman prunes
+# /var/lib/containers/rootless/$USER instead. The named user must already
+# have linger on -- the user manager has to be alive when the timer ticks.
+
+- name: Install podman-prune.service
+  import_role:
+    name: systemd_unit
+    tasks_from: copy
+  vars:
+    systemd_unit_src: podman-prune.service
+    systemd_unit_user: "{{ podman_prune_user | default('root') }}"
+
+- name: Install podman-prune.timer
+  import_role:
+    name: systemd_unit
+    tasks_from: copy
+  vars:
+    systemd_unit_src: podman-prune.timer
+    systemd_unit_user: "{{ podman_prune_user | default('root') }}"
+
+- name: Enable podman-prune.timer
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: podman-prune.timer
+    systemd_unit_user: "{{ podman_prune_user | default('root') }}"
