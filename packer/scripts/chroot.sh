@@ -135,10 +135,6 @@ systemctl enable zfs-import-cache
 systemctl enable zfs-mount
 systemctl enable zfs-import.target
 
-# Rebuild the initramfs
-
-update-initramfs -c -k all
-
 # Set ZFSBootMenu properties on datasets
 
 zfs set org.zfsbootmenu:commandline="" "rpool/ROOT"
