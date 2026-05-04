@@ -16,7 +16,6 @@ rootport_aer_correctable = "rootport_aer_correctable"
 [files]
 extend-exclude = [
   # Upstream / vendor config files we ship verbatim
-  "roles/log2ram/templates/log2ram.conf.j2",
   "roles/sabnzbd/templates/autoProcessMedia.cfg.j2",
   "roles/sabnzbd/templates/sabnzbd.ini.j2",
   "roles/hd_idle/templates/hd-idle.j2",

@@ -45,7 +45,6 @@ locals {
     "ubuntu-ports"      = "https://ports.ubuntu.com/ubuntu-ports/"
     "azlux-debian"      = "https://packages.azlux.fr/debian/"
     "nodesource-node22" = "https://deb.nodesource.com/node_22.x/"
-    "vector"            = "https://apt.vector.dev"
     "netdata"           = "https://repo.netdata.cloud/repos/stable/ubuntu/"
     "1password"         = "https://downloads.1password.com/linux/debian/amd64/"
     "docker-ce"         = "https://download.docker.com/linux/ubuntu/"

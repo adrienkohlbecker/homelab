@@ -44,17 +44,6 @@
     - zfsbootmenu
     - refind
 
-- name: Unused roles (dev box only)
-  hosts: box
-  roles:
-    - grub
-    - log2ram
-    - macvlan
-    - docker
-    - ipmi
-    - vector
-    - postgres
-
 - name: Add more services
   hosts: all:!bunk
   roles:
