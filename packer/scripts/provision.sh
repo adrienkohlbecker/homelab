@@ -184,7 +184,7 @@ cp -L "$kernel" /home/vagrant/extracted/kernel
 cp -L "$initrd" /home/vagrant/extracted/initrd
 zbm_args=$(zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT)
 [ "$zbm_args" = "-" ] && zbm_args=""
-printf 'root=zfs:rpool/ROOT/%s %s' "$UBUNTU_NAME" "$zbm_args" >/home/vagrant/extracted/cmdline
+printf 'root=zfs:rpool/ROOT/%s%s' "$UBUNTU_NAME" "${zbm_args:+ $zbm_args}" >/home/vagrant/extracted/cmdline
 chown -R vagrant:vagrant /home/vagrant/extracted
 
 # Only the rpool root dataset itself remains mounted in the host namespace.
