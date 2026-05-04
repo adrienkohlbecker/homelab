@@ -21,6 +21,9 @@ TF_VAR_state_passphrase = "op://Lab/vztgbtb2i3nlgrift46fc7r4f4/password"
 QEMU_DIR = '{{vars.qemu_dir}}'
 PACKER_FLAGS = '{{vars.packer_flags}}'
 ZBM_VERSION = '{{vars.zbm_version}}'
+# On Linux, keep packer's ISO cache off the root FS; empty on macOS so
+# packer uses its default (./packer_cache in cwd).
+PACKER_CACHE_DIR = '{% if os() == "linux" %}/mnt/scratch/packer{% endif %}'
 
 [tools]
 opentofu = "1.11.6"
