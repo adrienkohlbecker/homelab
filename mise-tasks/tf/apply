@@ -1,6 +1,0 @@
-#!/usr/bin/env bash
-#MISE description="tofu apply (forwards args)"
-#MISE dir="{{config_root}}/terraform"
-set -euo pipefail
-
-exec op run -- env TF_ENCRYPTION="key_provider \"pbkdf2\" \"main\" { passphrase = \"$TF_ENCRYPTION_PASSPHRASE\" }" tofu apply "$@"

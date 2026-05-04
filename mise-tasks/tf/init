@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-#MISE description="tofu init (forwards args)"
-#MISE dir="{{config_root}}/terraform"
-set -euo pipefail
-
-# TF_ENCRYPTION_PASSPHRASE comes from mise [env] as a literal op:// ref;
-# op run substitutes it in our command line before exec'ing env+tofu, so
-# the password manager only has to hold the bare passphrase.
-exec op run -- env TF_ENCRYPTION="key_provider \"pbkdf2\" \"main\" { passphrase = \"$TF_ENCRYPTION_PASSPHRASE\" }" tofu init "$@"
