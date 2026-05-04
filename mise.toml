@@ -4,8 +4,7 @@ qemu_dir = '{% if os() == "macos" %}{{config_root}}/packer/artifacts{% else %}/m
 zbm_version = "3.1.0"
 
 [env]
-CLOUDFLARE_EMAIL = "op://Lab/seckvi7vjb6ahgtt7w4l3r73zq/username"
-CLOUDFLARE_API_KEY = "op://Lab/seckvi7vjb6ahgtt7w4l3r73zq/password"
+CLOUDFLARE_API_TOKEN = "op://Lab/seckvi7vjb6ahgtt7w4l3r73zq/password"
 NEXUS_USERNAME = "op://Lab/u2lem3tvichptsn37new73ftv4/username"
 NEXUS_PASSWORD = "op://Lab/u2lem3tvichptsn37new73ftv4/password"
 # MinIO creds for the tofu s3 backend (state in bucket "terraform" on minio-api.lab.fahm.fr).
