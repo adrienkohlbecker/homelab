@@ -208,6 +208,14 @@ fi
 echo "$EFI_DEVICE /boot/efi vfat defaults 0 0" >>/etc/fstab
 echo "$SWAP_DEVICE none swap discard 0 0" >>/etc/fstab
 
+# Pull all available modules into initramfs (rather than just the
+# build host's currently-loaded set) so the shipped image boots on
+# bare-metal hardware whose controllers/NICs the build host didn't
+# happen to have. Costs ~30 MiB qcow2-compressed. Set right before
+# the final rebuild so we don't have to worry about earlier postinst-
+# driven update-initramfs calls.
+sed -i 's/^MODULES=.*/MODULES=most/' /etc/initramfs-tools/initramfs.conf
+
 # Update initramfs
 
 update-initramfs -u -k all
