@@ -2,6 +2,11 @@
 # Bootstrap a ZFS-on-root install onto $DISKS. Used by packer's qemu
 # build and as the bare-metal copy-paste path for provisioning new
 # lab-class hosts.
+#
+# Bare-metal callers MUST rotate /home/vagrant/.ssh/authorized_keys
+# (which currently holds the publicly-known vagrant insecure pubkey)
+# and remove /etc/sudoers.d/vagrant before the host gets a routable
+# IP. The shipped image is otherwise a free root shell on any lab LAN.
 set -euxo pipefail
 
 case $SOURCE_NAME in
