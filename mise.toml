@@ -158,26 +158,6 @@ description = "tofu (forwards subcommand + args)"
 dir = "{{config_root}}/terraform"
 run = 'op run -- tofu "$@"'
 
-[tasks."tf:init"]
-description = "tofu init (forwards args)"
-dir = "{{config_root}}/terraform"
-run = 'op run -- tofu init "$@"'
-
-[tasks."tf:plan"]
-description = "tofu plan (forwards args)"
-dir = "{{config_root}}/terraform"
-run = 'op run -- tofu plan "$@"'
-
-[tasks."tf:apply"]
-description = "tofu apply (forwards args)"
-dir = "{{config_root}}/terraform"
-run = 'op run -- tofu apply "$@"'
-
-[tasks."tf:validate"]
-description = "tofu validate (forwards args)"
-dir = "{{config_root}}/terraform"
-run = 'op run -- tofu validate "$@"'
-
 [tasks."ansible"]
 description = "ansible-playbook against site.yml (forwards args)"
 run = 'ansible-playbook site.yml "$@"'
