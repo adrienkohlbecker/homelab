@@ -1,9 +1,16 @@
 - name: Ensure grub-common is installed
+  # packer/scripts/chroot.sh holds 'grub*' to keep linux-generic (and
+  # later linux-generic-hwe via roles/hwe_kernel) from pulling in a
+  # bootloader that fights ZFSBootMenu. grub-common/grub2-common are
+  # caught by that glob, but they're just utilities (grub-script-check
+  # is what we need for the validate: below), so allow installing past
+  # the hold. The bootloader packages stay held.
   apt:
     pkg:
       - grub-common
       - grub2-common
     cache_valid_time: 3600
+    allow_change_held_packages: true
   become: true
   tags:
     - grub
