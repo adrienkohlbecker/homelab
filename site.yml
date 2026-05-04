@@ -49,7 +49,6 @@
   roles:
     - grub
     - log2ram
-    - qemu_guest
     - macvlan
     - docker
     - ipmi
