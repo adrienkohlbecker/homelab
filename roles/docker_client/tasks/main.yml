@@ -1,0 +1,83 @@
+- name: Install gpg
+  apt:
+    pkg: gpg
+    cache_valid_time: 3600
+  become: true
+  register: apt_install_gpg
+  tags:
+    - docker_client
+
+- name: Add repository key
+  when: not (ansible_check_mode and apt_install_gpg.changed)
+  apt_key:
+    id: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
+    url: https://download.docker.com/linux/ubuntu/gpg
+    keyring: /etc/apt/trusted.gpg.d/docker.gpg
+  become: true
+  tags:
+    - docker_client
+
+- name: Add repository
+  apt_repository:
+    repo: deb [arch={{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }} signed-by=/etc/apt/trusted.gpg.d/docker.gpg] {{ mirror_apt_docker }} {{ ansible_distribution_release }} stable
+  register: apt_repository_docker_client
+  become: true
+  tags:
+    - docker_client
+
+- name: Install docker client
+  when: not (ansible_check_mode and apt_repository_docker_client.changed)
+  apt:
+    pkg:
+      - docker-ce-cli
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - docker_client
+
+- name: Gather package facts
+  package_facts:
+    manager: apt
+  no_log: true
+  check_mode: false
+  tags:
+    - docker_client
+
+# Docker CLI defaults to /var/run/docker.sock; point it at the rootful podman
+# socket instead. /etc/profile.d/ covers login shells for humans; services that
+# shell out to `docker` need DOCKER_HOST set in their unit env directly.
+- name: Point docker CLI at podman socket
+  when: "'docker-ce' not in ansible_facts.packages"
+  copy:
+    dest: /etc/profile.d/docker-client.sh
+    content: |
+      export DOCKER_HOST=unix:///run/podman/podman.sock
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - docker_client
+
+# When dockerd is installed alongside, it owns /var/run/docker.sock; drop
+# the override so the CLI goes to the local daemon, not podman.
+- name: Remove docker socket override when dockerd is present
+  when: "'docker-ce' in ansible_facts.packages"
+  file:
+    path: /etc/profile.d/docker-client.sh
+    state: absent
+  become: true
+  tags:
+    - docker_client
+
+- name: Add user to podman-socket group
+  import_role:
+    name: usergroup_immediate
+    tasks_from: user
+  vars:
+    usergroup_immediate_group: podman-socket
+  tags:
+    - docker_client

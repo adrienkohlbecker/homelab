@@ -71,6 +71,7 @@
     - nut_monitor
     - dnscrypt_proxy
     - pihole
+    - docker_client
 
 - name: Lab roles
   hosts: box,lab

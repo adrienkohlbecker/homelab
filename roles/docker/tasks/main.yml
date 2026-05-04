@@ -9,13 +9,54 @@
   tags:
     - docker
 
+- name: Install gpg
+  apt:
+    pkg: gpg
+    cache_valid_time: 3600
+  become: true
+  register: apt_install_gpg
+  tags:
+    - docker
+
+- name: Add repository key
+  when: not (ansible_check_mode and apt_install_gpg.changed)
+  apt_key:
+    id: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
+    url: https://download.docker.com/linux/ubuntu/gpg
+    keyring: /etc/apt/trusted.gpg.d/docker.gpg
+  become: true
+  tags:
+    - docker
+
+- name: Add repository
+  apt_repository:
+    repo: deb [arch={{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }} signed-by=/etc/apt/trusted.gpg.d/docker.gpg] {{ mirror_apt_docker }} {{ ansible_distribution_release }} stable
+  register: apt_repository_docker
+  become: true
+  tags:
+    - docker
+
 - name: Install docker
   import_role:
     name: apt_unit_masked
     tasks_from: apt
   vars:
-    apt_unit_masked_pkg: docker.io
-    apt_unit_masked_unit: docker.service
+    apt_unit_masked_pkg: docker-ce
+    apt_unit_masked_unit:
+      - docker.service
+      - docker.socket
+    apt_unit_masked_condition: "{{ not (ansible_check_mode and apt_repository_docker.changed) }}"
+  tags:
+    - docker
+
+- name: Install docker plugins
+  when: not (ansible_check_mode and apt_repository_docker.changed)
+  apt:
+    pkg:
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    cache_valid_time: 3600
+  become: true
   tags:
     - docker
 
@@ -84,7 +125,7 @@
     tasks_from: service
   vars:
     systemd_unit_src: docker
-    systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
+    systemd_unit_condition: "{{ not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_docker.changed)) }}"
     systemd_unit_restart: "{{ docker_conf.changed }}"
   tags:
     - docker
@@ -93,7 +134,7 @@
   import_role:
     name: usergroup_immediate
     tasks_from: user
-  when: not (ansible_check_mode and apt_unit_masked.changed)
+  when: not (ansible_check_mode and (apt_unit_masked.changed or apt_repository_docker.changed))
   vars:
     usergroup_immediate_group: docker
   tags:

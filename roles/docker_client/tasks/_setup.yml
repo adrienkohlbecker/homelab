@@ -1,0 +1,5 @@
+- name: Add podman-socket group
+  group:
+    name: podman-socket
+    system: true
+  become: true
