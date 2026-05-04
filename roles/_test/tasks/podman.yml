@@ -28,16 +28,6 @@
     creates: /etc/apt/preferences.d/podman-noble-backport
   become: true
 
-- name: Create mount point
-  when: zfs_root
-  file:
-    dest: /var/lib/containers/storage
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
 - name: Create podman zvol
   when: zfs_root
   zfs:
@@ -57,7 +47,7 @@
 - name: Mount podman zvol
   when: zfs_root
   mount:
-    path: /var/lib/containers/storage
+    path: /var/lib/containers
     src: /dev/zvol/rpool/podman
     fstype: ext4
     opts: defaults,noatime
