@@ -165,9 +165,15 @@ EOF
 # alongside the qcow2. Test harness uses these to direct-boot the variant on
 # arches where the rEFInd -> ZBM -> kexec chain panics on EDK2 (aarch64).
 # x86_64 ships vmlinuz (compressed); aarch64 ships vmlinux (uncompressed).
+# nullglob: unmatched patterns expand to nothing, so the unused arch's
+# pattern doesn't survive as a literal string under set -o pipefail.
 mkdir -p /home/vagrant/extracted
-kernel=$(ls /mnt/boot/vmlinuz-* /mnt/boot/vmlinux-* 2>/dev/null | sort -V | tail -1)
-initrd=$(ls /mnt/boot/initrd.img-* 2>/dev/null | sort -V | tail -1)
+shopt -s nullglob
+kernels=(/mnt/boot/vmlinuz-* /mnt/boot/vmlinux-*)
+initrds=(/mnt/boot/initrd.img-*)
+shopt -u nullglob
+kernel=$(printf '%s\n' "${kernels[@]}" | sort -V | tail -1)
+initrd=$(printf '%s\n' "${initrds[@]}" | sort -V | tail -1)
 cp -L "$kernel" /home/vagrant/extracted/kernel
 cp -L "$initrd" /home/vagrant/extracted/initrd
 zbm_args=$(zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT)
