@@ -153,6 +153,11 @@ run = "mise fmt"
 description = "Format shell scripts (shfmt)"
 run = "git ls-files -z '*.sh' 'mise-tasks/**' | xargs -0 shfmt -i 2 -w"
 
+[tasks."tf"]
+description = "tofu (forwards subcommand + args)"
+dir = "{{config_root}}/terraform"
+run = 'op run -- tofu "$@"'
+
 [tasks."tf:init"]
 description = "tofu init (forwards args)"
 dir = "{{config_root}}/terraform"
