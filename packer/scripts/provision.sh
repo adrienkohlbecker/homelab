@@ -18,6 +18,9 @@
 #    right for ~95% of drives but some enterprise SSDs / SMR HDDs
 #    report 8 KiB / 16 KiB physical (ashift=13 / 14). ashift can't
 #    be changed after pool creation; getting it wrong loses perf.
+#  - sync the host clock (chronyd -q / ntpdate / similar) before
+#    invoking the script. RTC at 1970 or factory default trips TLS
+#    cert verification on the gitea.lab.fahm.fr ZBM tarball pull.
 set -euxo pipefail
 
 case $SOURCE_NAME in
