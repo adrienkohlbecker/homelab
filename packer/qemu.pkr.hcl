@@ -221,12 +221,28 @@ build {
   # Pull the kernel/initrd/cmdline that provision.sh staged in
   # /home/vagrant/extracted/ down into the artifacts directory. The test
   # harness consumes these on arches where the rEFInd -> ZBM -> kexec chain
-  # panics on EDK2 (aarch64) and direct-boots via -kernel/-initrd. Trailing
-  # slashes matter: scp copies the directory's contents in, not the dir.
+  # panics on EDK2 (aarch64) and direct-boots via -kernel/-initrd. Three
+  # explicit provisioners (one per file) instead of one with a directory
+  # source: packer's download direction always preserves the source's
+  # leaf directory regardless of trailing slash, so a single
+  # /home/vagrant/extracted/ source lands as `<artifacts>/.new/extracted/`
+  # rather than the contents going straight in.
   provisioner "file" {
     direction   = "download"
-    source      = "/home/vagrant/extracted/"
-    destination = "${var.output_directory}/${source.name}.new/"
+    source      = "/home/vagrant/extracted/kernel"
+    destination = "${var.output_directory}/${source.name}.new/kernel"
+  }
+
+  provisioner "file" {
+    direction   = "download"
+    source      = "/home/vagrant/extracted/initrd"
+    destination = "${var.output_directory}/${source.name}.new/initrd"
+  }
+
+  provisioner "file" {
+    direction   = "download"
+    source      = "/home/vagrant/extracted/cmdline"
+    destination = "${var.output_directory}/${source.name}.new/cmdline"
   }
 
   # packer-ubuntu is the residual cloud-image OS disk — provision.sh
