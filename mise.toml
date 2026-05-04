@@ -1,4 +1,8 @@
 [vars]
+# --on-error=ask keeps the build VM up on failure so it can be SSH'd
+# into for debugging. Dev-only: any non-interactive caller (CI, cron,
+# scheduled rebuilds) would hang on the prompt -- swap to
+# --on-error=cleanup for those.
 packer_flags = "-timestamp-ui -warn-on-undeclared-var --on-error=ask"
 qemu_dir = '{% if os() == "macos" %}{{config_root}}/packer/artifacts{% else %}/mnt/qemu{% endif %}'
 zbm_version = "3.1.0"
