@@ -11,7 +11,7 @@
 - Configure everything: `ansible-playbook site.yml --limit prod` (`ansible.cfg` already points at `hosts.ini`; set `--tags` to narrow scope).
 - Focus on one service or host: `ansible-playbook wireguard.yml -l lab --tags wireguard`.
 - Manage DNS: `mise run tf init`, `mise run tf plan`, then `mise run tf apply` — the `tf` task `cd`s into `terraform/` and forwards everything to `tofu` (use `--` for flags mise might intercept, e.g. `mise run tf plan -- -refresh=false`).
-- Refresh the integration image when the base OS changes: `mise run packer:build base` (or `zfs`/`zfs-lab`); `--ubuntu noble` targets a different release. `mise run packer:all` builds base then `zfs` + `zfs-lab` in parallel. `ubuntu-zfs` is consumed by `box`/`pug` test variants; `ubuntu-zfs-lab` (3-disk mirror rpool) is consumed by the `lab` test variant and matches the lab-class prod host shape. See "Test Environment Design" below.
+- Refresh the integration image when the base OS changes: `mise run packer:build zfs` (or `zfs-lab`); `--ubuntu noble` targets a different release. `mise run packer:all` builds `zfs` + `zfs-lab` in parallel. `ubuntu-zfs` is consumed by `box`/`pug` test variants; `ubuntu-zfs-lab` (3-disk mirror rpool) is consumed by the `lab` test variant and matches the lab-class prod host shape. See "Test Environment Design" below.
 - Lint everything: `mise run lint` runs ansible-lint, ansible syntax-check, terraform/packer fmt -check, black --check, yamllint, and shellcheck in parallel; `mise run fmt` applies fixes (ansible-lint --fix, terraform/packer fmt, black, and `mise fmt` for `mise.toml` itself).
 
 ## Coding Style & Naming Conventions
