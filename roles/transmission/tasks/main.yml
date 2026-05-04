@@ -81,7 +81,7 @@
     dest: /mnt/services/transmission/settings.json
     owner: transmission
     group: media
-    mode: "0600"
+    mode: "0644"
     backup: true
     validate: jq . %s
   register: transmission_conf
