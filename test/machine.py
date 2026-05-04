@@ -20,6 +20,7 @@ from setup_mitogen import ensure_mitogen_symlink
 from utils import (
     CommandResult,
     IdempotenceFailedException,
+    build_seed_iso,
     print_cmd_line,
     print_line,
     read_and_write_stream,
@@ -662,10 +663,7 @@ class QemuMachine(Machine):
         elif system == "Linux":
             self.imagedir = Path("/mnt/qemu")
             if not self.imagedir.is_dir():
-                raise RuntimeError(
-                    f"Imagedir {str(self.imagedir)!r} does not exist. "
-                    f"Mount the qemu image volume (e.g. `sudo mount /mnt/qemu`)."
-                )
+                raise RuntimeError(f"Imagedir {str(self.imagedir)!r} does not exist. " f"Mount the qemu image volume (e.g. `sudo mount /mnt/qemu`).")
         else:
             raise AttributeError(f"Unknown operating system: {system}")
 
@@ -731,15 +729,13 @@ class QemuMachine(Machine):
         """Verify the qemu binary, GNU timeout, and lsof are reachable."""
         self._require_binary(
             self.arch.qemu_binary,
-            "Install via `brew install qemu` (macOS) "
-            f"or `apt install qemu-system-{self.arch.name}` (Debian/Ubuntu).",
+            "Install via `brew install qemu` (macOS) " f"or `apt install qemu-system-{self.arch.name}` (Debian/Ubuntu).",
         )
         # The boot wrapper uses GNU timeout; macOS doesn't ship one out of
         # the box, but `brew install coreutils` puts a `timeout` shim on PATH.
         self._require_binary(
             "timeout",
-            "Install via `brew install coreutils` (macOS) or via the coreutils "
-            "package on Linux.",
+            "Install via `brew install coreutils` (macOS) or via the coreutils " "package on Linux.",
         )
 
     async def prepare(self) -> None:
@@ -768,13 +764,14 @@ class QemuMachine(Machine):
             self.vnc_display = self._pick_vnc_display()
 
         if self.machine == "minimal":
-            if shutil.which("cloud-localds") is None:
-                raise RuntimeError("cloud-localds not found in PATH — install cloud-image-utils " "(`apt install cloud-image-utils`) to use the minimal machine.")
-            await run_command(
-                ["cloud-localds", f"{self.workdir.name}/seed.img", "test/minimal/user-data", "test/minimal/meta-data"],
+            cloud_image = await self._ensure_minimal_cloudimg()
+            await build_seed_iso(
+                Path(self.workdir.name) / "seed.img",
+                Path("test/minimal/user-data"),
+                Path("test/minimal/meta-data"),
             )
             await self._create_overlay(
-                f"{self.imagedir}/ubuntu-{self.ubuntu_version}-minimal-cloudimg-{self.arch.cloud_image_suffix}.img",
+                str(cloud_image),
                 f"{self.workdir.name}/disk.img",
                 size="20G",
             )
@@ -868,6 +865,32 @@ class QemuMachine(Machine):
         if size:
             args.append(size)
         await run_command(args)
+
+    async def _ensure_minimal_cloudimg(self) -> Path:
+        """Download (once) the Ubuntu minimal cloud image used by the `minimal` variant.
+
+        Pulls through the lab Nexus raw proxy by default; `--upstream-mirrors`
+        bypasses to cloud-images.ubuntu.com directly. Mirrors
+        `KernelInitrdExtractor._ensure_cloudimg` in extract.py.
+        """
+        # Ubuntu publishes minimal-cloudimg arm64 only from noble onwards;
+        # jammy is amd64-only. Fail loud rather than 404'ing on the curl.
+        if self.arch.cloud_image_suffix == "arm64" and self.ubuntu_name == "jammy":
+            raise RuntimeError(f"Ubuntu does not publish a minimal-cloudimg for {self.ubuntu_name}/arm64. " "Use --ubuntu noble (or later) on arm64 hosts, " "or run --machine minimal on x86_64.")
+        name = f"ubuntu-{self.ubuntu_version}-minimal-cloudimg-{self.arch.cloud_image_suffix}.img"
+        cache = self.imagedir / "cloud-images"
+        cache.mkdir(parents=True, exist_ok=True)
+        target = cache / name
+        if target.exists():
+            return target
+
+        base = "https://cloud-images.ubuntu.com" if self.upstream_mirrors else "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images"
+        url = f"{base}/minimal/releases/{self.ubuntu_name}/release/{name}"
+        tmp = target.with_suffix(target.suffix + ".tmp")
+        print_line(f"Downloading {url}")
+        await run_command(["curl", "-fL", "--retry", "3", "-o", str(tmp), url])
+        tmp.rename(target)
+        return target
 
     async def _copy_efivars_from(self, image_dir: str) -> None:
         """Copy EFI vars for UEFI boots from *image_dir* into the workdir."""
@@ -1145,8 +1168,7 @@ class PodmanMachine(Machine):
         """Verify podman is reachable so boot/teardown subprocess calls succeed."""
         self._require_binary(
             "podman",
-            "Install via `brew install podman` (macOS) or `apt install podman` "
-            "(Debian/Ubuntu); rootless setup must allow port publishing on 127.0.0.1.",
+            "Install via `brew install podman` (macOS) or `apt install podman` " "(Debian/Ubuntu); rootless setup must allow port publishing on 127.0.0.1.",
         )
 
     async def prepare(self) -> None:
