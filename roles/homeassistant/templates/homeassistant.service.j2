@@ -43,7 +43,7 @@ ExecStart=/usr/bin/podman run \
     --gidmap=+0:{{ homeassistant_user.group }}:1 \
     --network=podman \
     --network=iot_macvlan \
-    --env TZ=Europe/Amsterdam \
+    --env TZ=Europe/Paris \
     --volume /mnt/services/homeassistant:/config \
     --publish 127.0.0.1:8123:8123/tcp \
     --publish 0.0.0.0:1400:1400/tcp \
