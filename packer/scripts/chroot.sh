@@ -35,23 +35,29 @@ ff02::1         ip6-allnodes
 ff02::2         ip6-allrouters
 EOF
 
-# Configure apt
-
-cat <<EOF >/etc/apt/sources.list
+# Configure apt. Called twice: once now with the build-time mirror
+# ($UBUNTU_MIRROR, defaults to Nexus), and once at the very end with
+# the upstream pair so the shipped image points at canonical Ubuntu
+# URLs regardless of build-time routing.
+write_sources_list() {
+  cat <<EOF >/etc/apt/sources.list
 # Uncomment the deb-src entries if you need source packages
 
-deb $UBUNTU_MIRROR $UBUNTU_NAME main restricted universe multiverse
-# deb-src $UBUNTU_MIRROR $UBUNTU_NAME main restricted universe multiverse
+deb $1 $UBUNTU_NAME main restricted universe multiverse
+# deb-src $1 $UBUNTU_NAME main restricted universe multiverse
 
-deb $UBUNTU_MIRROR $UBUNTU_NAME-updates main restricted universe multiverse
-# deb-src $UBUNTU_MIRROR $UBUNTU_NAME-updates main restricted universe multiverse
+deb $1 $UBUNTU_NAME-updates main restricted universe multiverse
+# deb-src $1 $UBUNTU_NAME-updates main restricted universe multiverse
 
-deb $UBUNTU_MIRROR $UBUNTU_NAME-backports main restricted universe multiverse
-# deb-src $UBUNTU_MIRROR $UBUNTU_NAME-backports main restricted universe multiverse
+deb $1 $UBUNTU_NAME-backports main restricted universe multiverse
+# deb-src $1 $UBUNTU_NAME-backports main restricted universe multiverse
 
-deb $UBUNTU_MIRROR_SECURITY $UBUNTU_NAME-security main restricted universe multiverse
-# deb-src $UBUNTU_MIRROR_SECURITY $UBUNTU_NAME-security main restricted universe multiverse
+deb $2 $UBUNTU_NAME-security main restricted universe multiverse
+# deb-src $2 $UBUNTU_NAME-security main restricted universe multiverse
 EOF
+}
+
+write_sources_list "$UBUNTU_MIRROR" "$UBUNTU_MIRROR_SECURITY"
 
 # Configure locale
 
@@ -306,18 +312,4 @@ chmod 400 "/etc/sudoers.d/$USERNAME"
 # (Nexus by default); ansible's mirror_apt_ubuntu_* may rewrite this
 # again on first run, but the at-rest image must point at canonical
 # Ubuntu mirrors.
-cat <<EOF >/etc/apt/sources.list
-# Uncomment the deb-src entries if you need source packages
-
-deb $UBUNTU_MIRROR_UPSTREAM $UBUNTU_NAME main restricted universe multiverse
-# deb-src $UBUNTU_MIRROR_UPSTREAM $UBUNTU_NAME main restricted universe multiverse
-
-deb $UBUNTU_MIRROR_UPSTREAM $UBUNTU_NAME-updates main restricted universe multiverse
-# deb-src $UBUNTU_MIRROR_UPSTREAM $UBUNTU_NAME-updates main restricted universe multiverse
-
-deb $UBUNTU_MIRROR_UPSTREAM $UBUNTU_NAME-backports main restricted universe multiverse
-# deb-src $UBUNTU_MIRROR_UPSTREAM $UBUNTU_NAME-backports main restricted universe multiverse
-
-deb $UBUNTU_MIRROR_SECURITY_UPSTREAM $UBUNTU_NAME-security main restricted universe multiverse
-# deb-src $UBUNTU_MIRROR_SECURITY_UPSTREAM $UBUNTU_NAME-security main restricted universe multiverse
-EOF
+write_sources_list "$UBUNTU_MIRROR_UPSTREAM" "$UBUNTU_MIRROR_SECURITY_UPSTREAM"
