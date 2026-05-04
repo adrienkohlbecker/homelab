@@ -1,5 +1,4 @@
 - name: Install HWE kernel
-  when: not docker_test
   apt:
     pkg:
       - linux-generic-hwe-{{ ansible_distribution_version }}

@@ -1,14 +1,3 @@
-- name: Do not install refind to ESP
-  when: docker_test
-  debconf:
-    name: refind
-    question: refind/install_to_esp
-    value: false
-    vtype: boolean
-  become: true
-  tags:
-    - refind
-
 - name: Install refind
   apt:
     package:

@@ -1,5 +1,4 @@
 - name: Set hostname
-  when: not docker_test
   hostname:
     name: "{{ inventory_hostname }}"
   become: true
@@ -7,7 +6,6 @@
     - hostname
 
 - name: Setup hosts file
-  when: not docker_test
   template:
     src: hosts.j2
     dest: /etc/hosts
