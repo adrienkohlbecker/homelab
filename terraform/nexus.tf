@@ -8,11 +8,6 @@ resource "nexus_blobstore_file" "default" {
   path = "default"
 }
 
-resource "nexus_blobstore_file" "scratch" {
-  name = "scratch"
-  path = "/nexus-data-scratch"
-}
-
 locals {
   apt_proxies = {
     "ubuntu-archive"    = "https://archive.ubuntu.com/ubuntu/"
