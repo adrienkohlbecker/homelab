@@ -35,6 +35,18 @@
   tags:
     - nexus
 
+- name: Create scratch blob store directory
+  when: not (ansible_check_mode and nexus_user.changed)
+  file:
+    dest: /mnt/scratch/nexus
+    state: directory
+    owner: nexus
+    group: nexus
+    mode: "0755"
+  become: true
+  tags:
+    - nexus
+
 - name: Configure nexus encryption
   template:
     src: encryption.json.j2
