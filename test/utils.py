@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import shlex
+import shutil
 import signal
 import sys
 from collections.abc import Iterator
@@ -294,3 +295,31 @@ async def run_command(
     if check and exitcode != 0:
         raise CommandFailedException(cmd, exitcode, stderr)
     return CommandResult(exitcode=exitcode, stdout=stdout, stderr=stderr)
+
+
+async def build_seed_iso(out: Path, user_data: Path, meta_data: Path) -> None:
+    """Pack a NoCloud cidata seed iso for a cloud-init guest.
+
+    Prefers `cloud-localds` (Ubuntu's `cloud-image-utils`); falls back to
+    xorrisofs / mkisofs / genisoimage so macOS hosts without
+    cloud-image-utils still work via Homebrew's `xorriso`.
+    """
+    if shutil.which("cloud-localds"):
+        await run_command(["cloud-localds", str(out), str(user_data), str(meta_data)])
+        return
+    iso_tool = shutil.which("xorrisofs") or shutil.which("mkisofs") or shutil.which("genisoimage")
+    if iso_tool is None:
+        raise RuntimeError("Need cloud-localds or xorrisofs/mkisofs/genisoimage in PATH to build cloud-init seed iso")
+    await run_command(
+        [
+            iso_tool,
+            "-output",
+            str(out),
+            "-volid",
+            "cidata",
+            "-joliet",
+            "-rock",
+            str(user_data),
+            str(meta_data),
+        ]
+    )

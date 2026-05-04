@@ -27,7 +27,7 @@ import tempfile
 from pathlib import Path
 
 from arch import ArchProfile, uefi_code_path_for
-from utils import print_cmd_line, print_line, run_command
+from utils import build_seed_iso, print_cmd_line, print_line, run_command
 
 
 # Cloud-init script consumed by the one-shot extraction VM. Lives in its
@@ -54,29 +54,6 @@ def _qcow2_fingerprint(paths: list[Path]) -> str:
             while chunk := f.read(1024 * 1024):
                 h.update(chunk)
     return h.hexdigest()
-
-
-async def _build_seed_iso(out: Path, user_data: Path, meta_data: Path) -> None:
-    """Pack a NoCloud cidata seed iso for the extraction VM's cloud-init."""
-    if shutil.which("cloud-localds"):
-        await run_command(["cloud-localds", str(out), str(user_data), str(meta_data)])
-        return
-    iso_tool = shutil.which("xorrisofs") or shutil.which("mkisofs") or shutil.which("genisoimage")
-    if iso_tool is None:
-        raise RuntimeError("Need cloud-localds or xorrisofs/mkisofs/genisoimage in PATH to build cloud-init seed iso")
-    await run_command(
-        [
-            iso_tool,
-            "-output",
-            str(out),
-            "-volid",
-            "cidata",
-            "-joliet",
-            "-rock",
-            str(user_data),
-            str(meta_data),
-        ]
-    )
 
 
 @dataclasses.dataclass
@@ -132,9 +109,7 @@ class KernelInitrdExtractor:
             if cached is not None:
                 return cached
 
-            print_line(
-                f"Extracting kernel/initrd from packer qcow2 (cache miss; sha256={self.fingerprint[:12]})"
-            )
+            print_line(f"Extracting kernel/initrd from packer qcow2 (cache miss; sha256={self.fingerprint[:12]})")
             cloud_image = await self._ensure_cloudimg()
 
             with tempfile.TemporaryDirectory(dir=self.imagedir) as tmpdir:
@@ -185,7 +160,7 @@ class KernelInitrdExtractor:
     async def _build_seed(self, tmp: Path) -> Path:
         (tmp / "meta-data").write_text("instance-id: extract\nlocal-hostname: extract\n")
         seed = tmp / "seed.iso"
-        await _build_seed_iso(seed, EXTRACTION_USER_DATA_PATH, tmp / "meta-data")
+        await build_seed_iso(seed, EXTRACTION_USER_DATA_PATH, tmp / "meta-data")
         return seed
 
     async def _build_cloudimg_overlay(self, tmp: Path, cloud_image: Path) -> Path:
