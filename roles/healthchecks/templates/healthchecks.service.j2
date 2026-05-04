@@ -19,7 +19,7 @@ PartOf=zfs_autosnapshot.target
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
-TimeoutSec=60
+TimeoutSec=120
 RestartSec=5
 Type=notify
 # Has to be `all`, not `main`. With --detach below podman exits as soon as
@@ -47,8 +47,8 @@ ExecStart=/usr/bin/podman run \
     --gidmap=+0:{{ healthchecks_user.group }}:1 \
     --volume /mnt/services/healthchecks:/config \
     --volume /mnt/services/healthchecks/logo.png:/app/healthchecks/static-collected/img/logo.png:ro \
-    --env PUID={{ healthchecks_user.uid }} \
-    --env PGID={{ healthchecks_user.group }}  \
+    --env PUID=0 \
+    --env PGID=0 \
     --env RP_ID=healthchecks.{{ inventory_hostname }}.{{ domain }} \
     --env SITE_ROOT=https://healthchecks.{{ inventory_hostname }}.{{ domain }} \
     --env ALLOWED_HOSTS=healthchecks.{{ inventory_hostname }}.{{ domain }},localhost \
