@@ -116,10 +116,6 @@ zfs mount "rpool/ROOT/$UBUNTU_NAME"
 
 mount | grep mnt
 
-# Update device symlinks
-
-udevadm trigger
-
 # Install Ubuntu
 
 debootstrap "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR"
