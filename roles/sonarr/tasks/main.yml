@@ -42,8 +42,11 @@
     - sonarr
 
 - name: Configure sonarr
-  template:
-    src: config.xml.j2
+  # Render via copy:content + regex_replace because sonarr rewrites
+  # config.xml on shutdown without a trailing newline; a plain template:
+  # leaves us drifting forever.
+  copy:
+    content: "{{ lookup('template', 'config.xml.j2') | regex_replace('\\n+$', '') }}"
     dest: /mnt/services/sonarr/config.xml
     owner: sonarr
     group: media

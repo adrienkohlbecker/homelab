@@ -59,8 +59,11 @@
     - overseerr
 
 - name: Configure overseerr
-  template:
-    src: settings.json.j2
+  # Render via copy:content + regex_replace because overseerr rewrites
+  # settings.json on shutdown without a trailing newline; a plain template:
+  # leaves us drifting forever.
+  copy:
+    content: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
     dest: /mnt/services/overseerr/settings.json
     owner: overseerr
     group: media

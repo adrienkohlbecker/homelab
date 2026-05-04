@@ -42,8 +42,11 @@
     - radarr
 
 - name: Configure radarr
-  template:
-    src: config.xml.j2
+  # Render via copy:content + regex_replace because radarr rewrites
+  # config.xml on shutdown without a trailing newline; a plain template:
+  # leaves us drifting forever.
+  copy:
+    content: "{{ lookup('template', 'config.xml.j2') | regex_replace('\\n+$', '') }}"
     dest: /mnt/services/radarr/config.xml
     owner: radarr
     group: media
