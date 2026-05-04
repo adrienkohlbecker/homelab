@@ -4,5 +4,5 @@
     tasks_from: podman
 
 - name: _test | Trigger podman ip (TODO proper solution)
-  command: podman run -ti --rm ubuntu whoami
+  command: podman run -ti --rm docker.io/ubuntu whoami
   become: true
