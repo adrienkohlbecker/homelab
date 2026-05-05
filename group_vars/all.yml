@@ -131,6 +131,7 @@ pihole_keepalived_peers:
   - lab
   - pug
   - box
+pihole_keepalived_vrid: 1
 pihole_adlists:
   - https://v.firebog.net/hosts/lists.php?type=tick
 pihole_whitelists:
