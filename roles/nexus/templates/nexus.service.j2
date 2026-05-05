@@ -40,7 +40,7 @@ ExecStart=/usr/bin/podman run \
     --name nexus \
     --log-driver journald \
     --log-opt tag="nexus" \
-    --env INSTALL4J_ADD_VM_PARAMS="{{ nexus_jvm_params | default('-Xms4G -Xmx4G -XX:MaxDirectMemorySize=2g') }} -Djava.util.prefs.userRoot=/user-root" \
+    --env INSTALL4J_ADD_VM_PARAMS="{{ nexus_jvm_params | default('-Xms2G -Xmx2G -XX:MaxDirectMemorySize=1g') }} -Djava.util.prefs.userRoot=/user-root" \
     --env NEXUS_SECRETS_KEY_FILE=/user-root/encryption.json \
     --uidmap=0:0:65536 \
     --uidmap=+200:{{ nexus_user.uid }}:1 \

@@ -6,8 +6,8 @@ nut_monitor_enabled: false
 ssh_public_keys_additional: |
   command="rrsync /mnt/data/MacbookPro/",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-x11-forwarding ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGoV1GKxsIUqLzdCBrFsNDNJomw8NF3d8EwcJACkm1Qk rsync_to_lab
 
-zfs_arc_min: 4294967296
-zfs_arc_max: 8589934592
+zfs_arc_min: 1073741824   # 1 GiB — let ARC shrink under pressure so libvirt VMs can wire
+zfs_arc_max: 8589934592   # 8 GiB — ARC can refill when the VM is off; c_max isn't the blocker
 zfs_trim_pools:
   - rpool
   - dozer
