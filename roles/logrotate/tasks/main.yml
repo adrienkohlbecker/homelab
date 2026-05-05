@@ -1,10 +1,10 @@
 - name: Install logrotate
   import_role:
-    name: apt_unit_masked
+    name: apt_no_autostart
     tasks_from: apt
   vars:
-    apt_unit_masked_pkg: logrotate
-    apt_unit_masked_unit: logrotate.service
+    apt_no_autostart_pkg: logrotate
+    apt_no_autostart_unit: logrotate.service
   tags:
     - logrotate
 
@@ -25,7 +25,7 @@
     file: compression.yml
     apply:
       tags: logrotate
-  loop: "{{ logrotate_confs.files | map(attribute='path') + (ansible_check_mode and apt_unit_masked.changed)|ternary([],['/etc/logrotate.conf']) }}"
+  loop: "{{ logrotate_confs.files | map(attribute='path') + (ansible_check_mode and apt_no_autostart.changed)|ternary([],['/etc/logrotate.conf']) }}"
   loop_control:
     loop_var: logrotate_item
   tags:
