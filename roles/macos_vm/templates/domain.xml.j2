@@ -1,0 +1,141 @@
+<domain type='{{ macos_vm_domain_type }}' xmlns:qemu='http://libvirt.org/schemas/domain/qemu/1.0'>
+  <name>{{ macos_vm_name }}</name>
+  <memory unit='MiB'>{{ macos_vm_memory_mib }}</memory>
+  <currentMemory unit='MiB'>{{ macos_vm_memory_mib }}</currentMemory>
+  <vcpu placement='static'>{{ macos_vm_vcpus }}</vcpu>
+{% if macos_vm_cpu_pinset | length > 0 %}
+  <cputune>
+{%   for thread in macos_vm_cpu_pinset.split(',') %}
+    <vcpupin vcpu='{{ loop.index0 }}' cpuset='{{ thread | trim }}'/>
+{%   endfor %}
+  </cputune>
+{% endif %}
+  <os>
+    <type arch='x86_64' machine='q35'>hvm</type>
+    <loader readonly='yes' type='pflash'>/usr/share/OVMF/OVMF_CODE.fd</loader>
+    <nvram template='/usr/share/OVMF/OVMF_VARS.fd'>/var/lib/libvirt/qemu/nvram/{{ macos_vm_name }}_VARS.fd</nvram>
+  </os>
+  <features>
+    <acpi/>
+    <apic/>
+{% if macos_vm_domain_type == 'kvm' %}
+    <kvm>
+      <hidden state='on'/>
+    </kvm>
+{% endif %}
+    <vmport state='off'/>
+  </features>
+{% if macos_vm_domain_type == 'kvm' %}
+  <cpu mode='host-passthrough' check='none' migratable='off'>
+    <topology sockets='1' dies='1' cores='{{ macos_vm_vcpus }}' threads='1'/>
+  </cpu>
+{% else %}
+  <!-- TCG mode (cross-arch test). Penryn is the OSX-KVM default model
+       and works under TCG without host CPU pass-through. -->
+  <cpu mode='custom' match='exact' check='none'>
+    <model fallback='allow'>Penryn</model>
+    <topology sockets='1' dies='1' cores='{{ macos_vm_vcpus }}' threads='1'/>
+  </cpu>
+{% endif %}
+  <clock offset='utc'>
+    <timer name='rtc' tickpolicy='catchup'/>
+    <timer name='pit' tickpolicy='delay'/>
+    <timer name='hpet' present='no'/>
+  </clock>
+  <pm>
+    <suspend-to-mem enabled='no'/>
+    <suspend-to-disk enabled='no'/>
+  </pm>
+  <on_poweroff>destroy</on_poweroff>
+  <on_reboot>restart</on_reboot>
+  <on_crash>restart</on_crash>
+  <devices>
+    <emulator>/usr/bin/qemu-system-x86_64</emulator>
+
+    <!-- OpenCore EFI bootloader (per-VM working copy; holds NVRAM). -->
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='qcow2' cache='writeback'/>
+      <source file='{{ macos_vm_workdir }}/OpenCore.qcow2'/>
+      <target dev='sda' bus='sata'/>
+      <boot order='1'/>
+    </disk>
+
+    <!-- macOS system disk: physical SATA SSD passed through as a block dev.
+         virtio-blk for performance; OpenCore.qcow2 ships AppleVirtIO* kexts. -->
+    <disk type='block' device='disk'>
+      <driver name='qemu' type='raw' cache='none' io='native' discard='unmap'/>
+      <source dev='/dev/disk/by-id/{{ macos_vm_disk_id }}'/>
+      <target dev='vda' bus='virtio'/>
+      <boot order='2'/>
+    </disk>
+
+{% if macos_vm_install_mode %}
+    <!-- Recovery image. Attached only during install; remove by setting
+         macos_vm_install_mode: false and re-running the role. -->
+    <disk type='file' device='disk'>
+      <driver name='qemu' type='raw' cache='writeback'/>
+      <source file='{{ macos_vm_workdir }}/BaseSystem.dmg'/>
+      <target dev='sdb' bus='sata'/>
+      <boot order='3'/>
+    </disk>
+{% endif %}
+
+    <controller type='sata' index='0'/>
+    <controller type='usb' model='qemu-xhci' ports='15'/>
+    <controller type='pci' index='0' model='pcie-root'/>
+    <controller type='pci' index='1' model='pcie-root-port'/>
+    <controller type='pci' index='2' model='pcie-root-port'/>
+    <controller type='pci' index='3' model='pcie-root-port'/>
+
+{% if macos_vm_network_mode == 'macvtap' %}
+    <interface type='direct'>
+      <mac address='{{ macos_vm_resolved_mac }}'/>
+      <source dev='{{ macos_vm_macvtap_parent }}' mode='bridge'/>
+      <model type='virtio'/>
+    </interface>
+{% else %}
+    <interface type='network'>
+      <mac address='{{ macos_vm_resolved_mac }}'/>
+      <source network='default'/>
+      <model type='virtio'/>
+    </interface>
+{% endif %}
+
+    <input type='tablet' bus='usb'/>
+    <input type='keyboard' bus='usb'/>
+
+    <!-- VNC for initial install; switch to macOS Screen Sharing afterwards. -->
+    <graphics type='vnc' port='-1' autoport='yes'{% if macos_vm_vnc_password | length > 0 %} passwd='{{ macos_vm_vnc_password }}'{% endif %}>
+      <listen type='address' address='{{ macos_vm_vnc_listen }}'/>
+    </graphics>
+    <video>
+      <model type='vga' vram='32768' heads='1' primary='yes'/>
+    </video>
+
+    <memballoon model='none'/>
+  </devices>
+
+  <!-- OSX-KVM lore: bits libvirt's schema doesn't model directly. -->
+  <qemu:commandline>
+    <!-- Apple SMC OSK string. Without this the macOS kernel panics on boot
+         because it can't verify it's running on Apple hardware. -->
+    <qemu:arg value='-device'/>
+    <qemu:arg value='isa-applesmc,osk=ourhardworkbythesewordsguardedpleasedontsteal(c)AppleComputerInc'/>
+
+    <!-- SMBIOS type=2 makes the firmware report a Mac board, which OpenCore
+         then overlays with the iMacPro1,1 (or other) profile from its config.plist. -->
+    <qemu:arg value='-smbios'/>
+    <qemu:arg value='type=2'/>
+
+{% if macos_vm_domain_type == 'kvm' %}
+    <!-- Override libvirt's `-cpu host` with macOS-specific tweaks:
+         vendor=GenuineIntel (cosmetic, host-passthrough already does this),
+         kvm=on / vmware-cpuid-freq=on (timekeeping; without these macOS
+         can hang or panic at boot), +invtsc (stable TSC for timekeeping).
+         Skipped under TCG since kvm=on is invalid and Penryn already
+         reports as Intel. -->
+    <qemu:arg value='-cpu'/>
+    <qemu:arg value='host,vendor=GenuineIntel,kvm=on,vmware-cpuid-freq=on,+invtsc'/>
+{% endif %}
+  </qemu:commandline>
+</domain>
