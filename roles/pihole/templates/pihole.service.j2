@@ -50,6 +50,14 @@ ExecStart=/usr/bin/podman run \
     --env PIHOLE_GID={{ pihole_user.group }} \
     --dns=127.0.0.1 \
     --dns=1.1.1.1 \
+    {# /etc/hosts overrides for FQDNs whose DNS would otherwise hit pihole's #}
+    {# own split-horizon wildcard (`address=/lab.fahm.fr/...`) and resolve to #}
+    {# an IP the container can't reach. Production normally leaves this empty #}
+    {# — only used by group_vars/test.yml to pin nexus.lab.fahm.fr to the real #}
+    {# LAN IP since the test fixture's external_ips.lab is a fake address. #}
+    {% for host, ip in pihole_extra_hosts | default({}) | dict2items %}
+    --add-host={{ host }}:{{ ip }} \
+    {% endfor %}
     --publish 0.0.0.0:53:53/udp \
     --publish 0.0.0.0:53:53/tcp \
     --publish 127.0.0.1:8943:80/tcp \

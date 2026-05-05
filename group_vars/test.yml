@@ -1,5 +1,13 @@
 domain: mhaf.fr
 nexus_url: nexus.lab.fahm.fr
+# Override pihole's own split-horizon wildcard for nexus.lab.fahm.fr. The test
+# fixture's external_ips.lab (10.234.0.2) is a fake IP nothing listens on, so
+# without this --add-host pihole's container resolves nexus to the fake IP and
+# anything it tries to fetch through Nexus (e.g. gravity whitelists) times out.
+# Production leaves this unset because nexus_url is empty there — mirror_*
+# vars resolve to upstream URLs and pihole never queries lab.fahm.fr in-band.
+pihole_extra_hosts:
+  nexus.lab.fahm.fr: 10.123.0.2
 home_subnet: 10.234.0.0/16
 site_subnets:
   home: 10.234.0.0/21
