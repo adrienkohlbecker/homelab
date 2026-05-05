@@ -14,7 +14,7 @@
     state: directory
     owner: root
     group: root
-    mode: "0755"
+    mode: "0750"
   become: true
   tags:
     - keepalived
@@ -23,7 +23,7 @@
   copy:
     src: keepalived.conf
     dest: /etc/keepalived/keepalived.conf
-    mode: "0644"
+    mode: "0640"
     owner: root
     group: root
     backup: true
