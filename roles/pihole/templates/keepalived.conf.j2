@@ -30,6 +30,14 @@ vrrp_instance pihole {
     {{ pihole_keepalived_ip }}/32
   }
 
+  # Periodic gratuitous ARP so any LAN cache that picks up a wrong MAC
+  # for the VIP self-heals within ~1 minute. The VIP shares its broadcast
+  # domain with mac0 (macvlan child of eth0); ARP-flux is mitigated by
+  # arp_ignore=1/arp_announce=2 in roles/macvlan, but periodic GARP is a
+  # belt-and-braces against transient poisoning during role rollouts.
+  garp_master_repeat 3
+  garp_master_refresh 60
+
   track_script {
     pihole_healthcheck
   }
