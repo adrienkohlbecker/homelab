@@ -35,6 +35,7 @@
     - ssh_root
     - zfs_autobackup
     - zfs_mount
+    - macvlan
     - podman
     - avahi
     - samba

@@ -308,3 +308,10 @@
     podman_prune_user: "{{ ansible_user }}"
   tags:
     - podman
+
+- name: Configure macvlan network
+  import_role:
+    name: macvlan
+    tasks_from: podman
+  tags:
+    - podman
