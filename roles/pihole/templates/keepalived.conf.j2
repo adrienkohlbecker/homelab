@@ -20,6 +20,7 @@ vrrp_instance pihole {
 
   virtual_router_id {{ pihole_keepalived_vrid }}
   priority          {{ pihole_keepalived_priority }}
+  advert_int        1
 
   virtual_ipaddress {
     {{ pihole_keepalived_ip }}/32
