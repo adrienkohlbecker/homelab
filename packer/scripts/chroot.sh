@@ -162,6 +162,15 @@ if [ "$LAYOUT" = "" ]; then
 else
   apt-get install --yes mdadm
 
+  # arch-chroot mounts /sys read-only inside the chroot. mdadm 4.5 (resolute)
+  # writes N to /sys/module/md_mod/parameters/legacy_async_del_gendisk at
+  # startup to opt out of the deprecated async del_gendisk path; on a ro /sys
+  # the open fails with "init md module parameters fail" and mdadm aborts.
+  # Debian #1125390 / md-raid-utilities/mdadm#228 — upstream fix in 4.5-3
+  # reorders the modprobe before the write but doesn't help us since the
+  # mount is still ro. Remount rw for the duration of the chroot.
+  mount -o remount,rw /sys
+
   efi_parts=()
   swap_parts=()
   for d in "${DISKS[@]}"; do
@@ -177,7 +186,11 @@ else
   # per-disk efibootmgr entries below are the survival mechanism if
   # one disk's path stops working. Validate on your firmware before
   # committing to this layout for new bare-metal hosts.
-  mdadm --create /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --raid-devices="${#DISKS[@]}" "${efi_parts[@]}"
+  # --bitmap=none: mdadm 4.4+ prompts for write-intent bitmap on raid1
+  # creation; bitmap data is incompatible with metadata=1.0 ESPs (the
+  # firmware would refuse the partition), so suppress the prompt with an
+  # explicit no.
+  mdadm --create /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --bitmap=none --raid-devices="${#DISKS[@]}" "${efi_parts[@]}"
   mdadm --detail --brief /dev/md/efi >>/etc/mdadm/mdadm.conf
   EFI_DEVICE=/dev/md/efi
 
@@ -309,10 +322,15 @@ else
   done
 fi
 
-# Enable tmp mount
+# Enable tmp mount. jammy/noble ship tmp.mount as a template under
+# /usr/share/systemd/ and leave it disabled — copy + enable. resolute's
+# systemd ships /usr/lib/systemd/system/tmp.mount and pre-symlinks it into
+# local-fs.target.wants/, so it's enabled out of the box; skip the copy.
 
-cp /usr/share/systemd/tmp.mount /etc/systemd/system/
-systemctl enable tmp.mount
+if [ -f /usr/share/systemd/tmp.mount ]; then
+  cp /usr/share/systemd/tmp.mount /etc/systemd/system/
+  systemctl enable tmp.mount
+fi
 
 # Add more packages
 
