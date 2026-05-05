@@ -212,11 +212,17 @@
   tags:
     - pihole
 
-- name: Restart keepalived
+# SIGHUP-reload (hitless) for the common edits: priority, VIP, peers,
+# healthcheck params, notify hooks. Structural changes (interface, VRID)
+# need a manual `systemctl restart keepalived`. throttle: 1 serializes
+# across pihole_keepalived_peers so that even on the rare manual
+# restart, only one peer is unavailable at a time.
+- name: Reload keepalived
   when: (pihole_keepalived_cfg.changed)
   systemd:
     name: keepalived
-    state: restarted
+    state: reloaded
   become: true
+  throttle: 1
   tags:
     - pihole
