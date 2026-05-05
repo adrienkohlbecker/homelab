@@ -87,6 +87,24 @@
     - section: db
       option: update every
       value: 5
+    # Drop tier 2 (1h resolution / 2-year retention). Tier 0 + tier 1
+    # still give 14 days at 5s + 90 days at 1m, which covers any chart
+    # you'd actually look at on a homelab. Saves ~100-150 MiB of
+    # per-metric overhead in the main netdata process.
+    - section: db
+      option: storage tiers
+      value: 2
+    # ML anomaly detection trains a model per metric. Memory cost grows
+    # with metric count and the alerts aren't actionable here.
+    - section: ml
+      option: enabled
+      value: 'no'
+    # ebpf.plugin loads syscall/process eBPF programs and runs as its
+    # own ~300 MiB process. Useful for syscall-level forensics, dead
+    # weight if nobody looks at it.
+    - section: plugins
+      option: ebpf
+      value: 'no'
     - section: registry
       option: enabled
       value: 'yes'
