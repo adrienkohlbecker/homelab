@@ -10,6 +10,11 @@ SyslogIdentifier=%N
 ExecStart=/bin/ip link add mac0 link {{ macvlan_parent }} type macvlan mode bridge
 ExecStart=/bin/ip addr add {{ macvlan_host_ip }}/32 dev mac0
 ExecStart=/bin/ip link set mac0 address {{ macvlan_host_mac }}
+# Match the parent NIC's ARP-flux mitigation (see roles/macvlan/tasks/main.yml).
+# Set after `ip link add` because /proc/sys/net/ipv4/conf/mac0/ doesn't exist
+# until then, so a sysctl.d drop-in would silently no-op at boot.
+ExecStart=/sbin/sysctl -q -w net.ipv4.conf.mac0.arp_ignore=1
+ExecStart=/sbin/sysctl -q -w net.ipv4.conf.mac0.arp_announce=2
 ExecStart=/bin/ip link set mac0 up
 ExecStart=/bin/ip route add {{ macvlan_subnet }} dev mac0
 ExecStop=/bin/ip link delete mac0

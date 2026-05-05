@@ -7,6 +7,28 @@
   tags:
     - macvlan
 
+# Tighten ARP rules on the parent NIC to avoid the macvlan ARP-flux
+# flap: with the defaults (arp_ignore=0, arp_announce=0) both eth0
+# and mac0 can reply to ARP requests for any IP in the shared
+# broadcast domain (mac0's /32 lives inside eth0's /23), so the LAN
+# router sees the host's IP bouncing between the two MACs and flags
+# a duplicate. arp_ignore=1 makes each interface reply only for IPs
+# configured on it; arp_announce=2 keeps source-IP selection sane.
+# The matching mac0 sysctls live in mac0.service since the interface
+# only exists after `ip link add`.
+- name: Set ARP rules on macvlan parent
+  ansible.posix.sysctl:
+    name: "net.ipv4.conf.{{ macvlan_parent }}.{{ item.key }}"
+    value: "{{ item.value }}"
+  loop:
+    - { key: arp_ignore, value: '1' }
+    - { key: arp_announce, value: '2' }
+  loop_control:
+    label: "{{ item.key }}"
+  become: true
+  tags:
+    - macvlan
+
 - name: Check macvlan_subnet is valid
   assert:
     that: macvlan_subnet == macvlan_subnet | ansible.utils.ipaddr('net')
