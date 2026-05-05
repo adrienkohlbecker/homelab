@@ -1,0 +1,115 @@
+# Downloads:
+#   - OpenCore.qcow2 (19 MiB) — EFI bootloader image. The role fetches a
+#     pristine pinned copy into _artifacts/, then copies it ONCE per VM into
+#     the per-VM workdir. The per-VM copy holds OpenCore NVRAM (incl. iCloud
+#     activation tokens) and must never be overwritten.
+#   - fetch-macOS-v2.py — Apple's swcdn fetcher from OSX-KVM. Run once per VM
+#     to materialise BaseSystem.dmg + .chunklist into the workdir for the
+#     Recovery installer.
+#
+# All three are gated with `creates:` so re-runs are idempotent without
+# changed_when:false lying.
+
+- name: artifacts | Create artifacts cache dir
+  file:
+    path: "{{ macos_vm_artifacts_dir }}"
+    state: directory
+    owner: libvirt-qemu
+    group: kvm
+    mode: "0755"
+  become: true
+  register: macos_vm_artifacts_dir_result
+
+- name: artifacts | Create per-VM workdir
+  file:
+    path: "{{ macos_vm_workdir }}"
+    state: directory
+    owner: libvirt-qemu
+    group: kvm
+    mode: "0755"
+  become: true
+  register: macos_vm_workdir_result
+
+- name: artifacts | Fetch pinned OpenCore.qcow2
+  # Skip in check mode if the dir was just (notionally) created; in check
+  # mode the dir doesn't actually exist on disk so get_url's destination
+  # check fails. On a real run the dir is real and the task proceeds.
+  when: not (ansible_check_mode and macos_vm_artifacts_dir_result.changed)
+  get_url:
+    url: "{{ macos_vm_opencore_qcow2_url }}"
+    dest: "{{ macos_vm_artifacts_dir }}/OpenCore.qcow2"
+    checksum: "sha256:{{ macos_vm_opencore_qcow2_sha256 }}"
+    owner: libvirt-qemu
+    group: kvm
+    mode: "0644"
+  become: true
+
+- name: artifacts | Stage per-VM OpenCore.qcow2 working copy
+  # Copy from the cache only on first install. Once the VM has booted, this
+  # qcow2 holds NVRAM (incl. iCloud activation) — overwriting it logs the
+  # guest out of Apple services. To intentionally re-pristine, delete the
+  # workdir manually first.
+  when: not (ansible_check_mode and (macos_vm_artifacts_dir_result.changed or macos_vm_workdir_result.changed))
+  copy:
+    src: "{{ macos_vm_artifacts_dir }}/OpenCore.qcow2"
+    dest: "{{ macos_vm_workdir }}/OpenCore.qcow2"
+    remote_src: true
+    owner: libvirt-qemu
+    group: kvm
+    mode: "0644"
+    force: false
+  become: true
+
+- name: artifacts | Stage fetch-macOS script
+  when:
+    - macos_vm_install_mode
+    - not (ansible_check_mode and macos_vm_artifacts_dir_result.changed)
+  get_url:
+    url: "{{ macos_vm_fetch_macos_url }}"
+    dest: "{{ macos_vm_artifacts_dir }}/fetch-macOS-v2.py"
+    checksum: "sha256:{{ macos_vm_fetch_macos_sha256 }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: artifacts | Install python deps for fetch-macOS
+  when: macos_vm_install_mode
+  apt:
+    pkg:
+      - python3-requests
+    cache_valid_time: 3600
+  become: true
+
+- name: artifacts | Fetch BaseSystem recovery image
+  when: macos_vm_install_mode
+  ansible.builtin.command:
+    cmd: >
+      python3 {{ macos_vm_artifacts_dir }}/fetch-macOS-v2.py
+      --action download
+      --board-id Mac-7BA5B2D9E42DDD94
+      --mlb 00000000000J80300
+      --os {{ macos_vm_macos_version_to_apple[macos_vm_macos_version] }}
+    chdir: "{{ macos_vm_workdir }}"
+    creates: "{{ macos_vm_workdir }}/BaseSystem.dmg"
+  become: true
+  vars:
+    # fetch-macOS-v2.py uses Apple's "AssetSet" naming, not version numbers.
+    # 15 = Sequoia, 14 = Sonoma, 13 = Ventura. Add new entries here.
+    macos_vm_macos_version_to_apple:
+      "15": "default"  # latest released = Sequoia at time of pin
+      "14": "default"
+      "13": "default"
+
+- name: artifacts | Set BaseSystem ownership for libvirt-qemu
+  when: macos_vm_install_mode
+  file:
+    path: "{{ item }}"
+    owner: libvirt-qemu
+    group: kvm
+    mode: "0644"
+  loop:
+    - "{{ macos_vm_workdir }}/BaseSystem.dmg"
+    - "{{ macos_vm_workdir }}/BaseSystem.chunklist"
+  become: true
+  ignore_errors: "{{ ansible_check_mode }}"

@@ -1,0 +1,38 @@
+- name: Validate inputs
+  assert:
+    that:
+      - macos_vm_name | length > 0
+      - macos_vm_disk_id | length > 0
+      - macos_vm_macos_version | length > 0
+      - macos_vm_network_mode in ['macvtap', 'nat']
+      - macos_vm_domain_type in ['kvm', 'qemu']
+      - macos_vm_vcpus | int >= 1
+      - macos_vm_memory_mib | int >= 4096
+    fail_msg: |
+      macos_vm_disk_id must be set in host_vars to a stable /dev/disk/by-id name
+      (e.g. ata-Samsung_SSD_870_EVO_500GB_S6PWNX...) AFTER the spare SSD is plugged in.
+  tags:
+    - macos_vm
+
+- name: Compute MAC address
+  set_fact:
+    macos_vm_resolved_mac: >-
+      {{ macos_vm_mac_address if (macos_vm_mac_address | length > 0)
+         else ('52:54:00' | random_mac(seed=inventory_hostname ~ '/' ~ macos_vm_name)) }}
+  tags:
+    - macos_vm
+
+- name: Fetch and stage upstream artifacts
+  import_tasks: artifacts.yml
+  tags:
+    - macos_vm
+
+- name: Validate physical disk passthrough source
+  import_tasks: storage.yml
+  tags:
+    - macos_vm
+
+- name: Define libvirt domain
+  import_tasks: domain.yml
+  tags:
+    - macos_vm

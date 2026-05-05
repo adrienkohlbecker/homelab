@@ -6,6 +6,18 @@ zfs_has_data_mount: false
 zfs_has_minio_mount: false
 home_subnet: 10.0.2.0/24
 macvlan_parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
+
+# macos_vm test fixture: matches the symlink _setup.yml fabricates over
+# a loopback file. install_mode=false skips the 700 MB BaseSystem.dmg
+# download so the test stays under a couple of minutes.
+macos_vm_disk_id: ata-MACOS_VM_TEST_DISK
+macos_vm_macvtap_parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
+macos_vm_install_mode: false
+macos_vm_autostart: false
+# TCG (software) emulation lets libvirt define + validate the x86_64
+# domain XML on aarch64 hosts where /dev/kvm doesn't fit (or doesn't exist).
+macos_vm_domain_type: qemu
+
 grub_bootloader: false
 netplan:
   ethernets:

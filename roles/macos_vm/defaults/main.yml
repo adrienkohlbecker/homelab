@@ -1,0 +1,47 @@
+# Per-VM identity. Overridden in host_vars.
+macos_vm_name: chi
+macos_vm_macos_version: "15"  # Sequoia. Passed verbatim to fetch-macOS-v2.py.
+
+# CPU & memory. macOS dislikes hybrid topology, so on Raptor Lake / Alder Lake
+# pin to P-core threads only via macos_vm_cpu_pinset. Confirm thread numbering
+# with `lscpu -e` on the target host before applying.
+macos_vm_vcpus: 4
+macos_vm_cpu_pinset: ""  # comma-separated list, e.g. "0,2,4,6". Empty = no pinning.
+macos_vm_memory_mib: 12288  # 12 GiB
+
+# Domain type: kvm for production (real x86 host); qemu for cross-arch
+# test (TCG software emulation). Selected via host_vars in test variants.
+macos_vm_domain_type: kvm
+
+# SMBIOS profile. iMacPro1,1 supports Sequoia and is the OSX-KVM default.
+# For iMessage/FaceTime, SMBIOS values must be regenerated with GenSMBIOS and
+# pass Apple's validity check (no registered purchase date). See notes/macos-vm-design.md.
+macos_vm_smbios_model: "iMacPro1,1"
+
+# Disk source. Block-level passthrough of a physical SSD by stable path.
+# Required — set to e.g. "ata-Samsung_SSD_870_EVO_500GB_S6PWNX0R123456" in host_vars
+# AFTER the disk is plugged in. Role asserts /dev/disk/by-id/<this> exists.
+macos_vm_disk_id: ""
+
+# Networking. macvtap puts the guest directly on the LAN; the macvlan role
+# gives the host its own peer IP so it can reach the guest.
+macos_vm_network_mode: macvtap          # macvtap | nat
+macos_vm_macvtap_parent: eth0           # parent NIC for macvtap "direct" mode
+macos_vm_mac_address: ""                # auto-generated from inventory_hostname+name if empty
+
+# Display & input.
+macos_vm_vnc_listen: "127.0.0.1"        # tunnel via SSH; or set to macvlan_host_ip to expose on mac0
+macos_vm_vnc_password: ""               # vault, optional
+
+# First-install flow. Set to true while the recovery DMG should be attached;
+# flip to false (and re-run the role) after macOS is installed and booting.
+macos_vm_install_mode: true
+
+# Autostart on host boot. Leave false until first install completes; flip
+# afterwards. Independent of install_mode so they don't interfere.
+macos_vm_autostart: false
+
+# Where the role caches downloaded artifacts (shared across all macOS VMs)
+# and per-VM working files (one subdir per VM).
+macos_vm_artifacts_dir: /var/lib/libvirt/images/macos-vm/_artifacts
+macos_vm_workdir: "/var/lib/libvirt/images/macos-vm/{{ macos_vm_name }}"
