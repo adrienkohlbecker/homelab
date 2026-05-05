@@ -85,7 +85,7 @@ locals {
     "ghcr.io" = {
       remote_url = "https://ghcr.io"
       index_type = "REGISTRY"
-      index_url  = "https://ghcr.io"
+      index_url  = null
     }
   }
 }
