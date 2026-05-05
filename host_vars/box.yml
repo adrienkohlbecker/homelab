@@ -15,6 +15,10 @@ zfs_has_bpool: false
 zfs_dozer_filesystem: rpool
 zfs_tank_filesystem: rpool
 
+swap_zvol:
+  dataset: rpool/swap
+  size: 1G
+
 libvirt_default_network: 10.123.50.0/24
 
 sensor_modules: []
