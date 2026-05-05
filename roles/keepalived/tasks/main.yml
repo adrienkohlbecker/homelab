@@ -32,13 +32,40 @@
   tags:
     - keepalived
 
+# keepalived.service is Type=notify and only sends READY=1 once it has at
+# least one vrrp_instance to manage. With empty conf.d the unit wedges
+# until TimeoutStartSec (~90s) and then fails — at first start AND at
+# every reboot if it's left enabled. So we gate the whole systemd_unit
+# invocation on conf.d having a tenant, and explicitly tear down when
+# the last tenant leaves so the unit doesn't auto-start broken.
+- name: Count number of configurations
+  find:
+    paths: /etc/keepalived/conf.d
+    patterns: '*.conf'
+  register: keepalived_active_confs
+  become: true
+  tags:
+    - keepalived
+
 - name: Enable keepalived service
   import_role:
     name: systemd_unit
     tasks_from: service
   vars:
     systemd_unit_src: keepalived
-    systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) and keepalived_active_confs.matched > 0 }}"
     systemd_unit_restart: "{{ keepalived_conf.changed }}"
+  tags:
+    - keepalived
+
+- name: Disable keepalived service when no tenants
+  when:
+    - keepalived_active_confs.matched == 0
+    - not (ansible_check_mode and apt_unit_masked.changed)
+  systemd:
+    name: keepalived
+    state: stopped
+    enabled: false
+  become: true
   tags:
     - keepalived
