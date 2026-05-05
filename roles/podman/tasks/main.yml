@@ -209,7 +209,12 @@
     path: /var/lib/containers
     src: /dev/zvol/rpool/podman
     fstype: ext4
-    opts: defaults,noatime
+    # x-systemd.requires=zfs-volumes.target gates the mount on ZFS
+    # finishing pool import + zvol exposure. systemd-fstab-generator
+    # already adds an implicit dep on the device unit, but the
+    # explicit target dep removes any reliance on udev winning the
+    # race against systemd's device-wait timeout.
+    opts: defaults,noatime,x-systemd.requires=zfs-volumes.target
     state: mounted
     backup: true
   become: true
