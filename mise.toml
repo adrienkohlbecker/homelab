@@ -4,7 +4,7 @@
 # scheduled rebuilds) would hang on the prompt -- swap to
 # --on-error=cleanup for those.
 packer_flags = "-timestamp-ui -warn-on-undeclared-var --on-error=ask"
-qemu_dir = '{% if os() == "macos" %}{{config_root}}/packer/artifacts{% else %}/mnt/qemu{% endif %}'
+qemu_dir = '{% if os() == "macos" %}{{config_root}}/packer/artifacts{% else %}/mnt/scratch/qemu{% endif %}'
 zbm_version = "3.1.0"
 
 [env]
