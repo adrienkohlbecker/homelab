@@ -36,4 +36,8 @@ vrrp_instance pihole {
   track_script {
     pihole_healthcheck
   }
+
+  notify_master "/usr/bin/logger -t pihole-keepalived MASTER"
+  notify_backup "/usr/bin/logger -t pihole-keepalived BACKUP"
+  notify_fault  "/usr/bin/logger -t pihole-keepalived FAULT"
 }
