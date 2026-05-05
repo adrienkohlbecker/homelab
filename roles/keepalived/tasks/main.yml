@@ -1,10 +1,10 @@
 - name: Install keepalived
   import_role:
-    name: apt_unit_masked
+    name: apt_no_autostart
     tasks_from: apt
   vars:
-    apt_unit_masked_pkg: keepalived
-    apt_unit_masked_unit: keepalived.service
+    apt_no_autostart_pkg: keepalived
+    apt_no_autostart_unit: keepalived.service
   tags:
     - keepalived
 
@@ -53,7 +53,7 @@
     tasks_from: service
   vars:
     systemd_unit_src: keepalived
-    systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) and keepalived_active_confs.matched > 0 }}"
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_no_autostart.changed) and keepalived_active_confs.matched > 0 }}"
     systemd_unit_reload: "{{ keepalived_conf.changed }}"
   tags:
     - keepalived
@@ -61,7 +61,7 @@
 - name: Disable keepalived service when no tenants
   when:
     - keepalived_active_confs.matched == 0
-    - not (ansible_check_mode and apt_unit_masked.changed)
+    - not (ansible_check_mode and apt_no_autostart.changed)
   systemd:
     name: keepalived
     state: stopped

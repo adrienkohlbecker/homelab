@@ -5,7 +5,7 @@
   check_mode: false
 
 - name: Install package if needed
-  when: apt_unit_masked_pkg not in ansible_facts.packages
+  when: apt_no_autostart_pkg not in ansible_facts.packages
   block:
 
     - name: Prevent daemons from starting during install
@@ -19,14 +19,14 @@
       register: policy_rcd
       become: true
 
-    - name: Install {{ apt_unit_masked_pkg }}
-      when: apt_unit_masked_condition | default(true)
+    - name: Install {{ apt_no_autostart_pkg }}
+      when: apt_no_autostart_condition | default(true)
       apt:
         pkg:
-          - "{{ apt_unit_masked_pkg }}"
+          - "{{ apt_no_autostart_pkg }}"
         cache_valid_time: 3600
-        install_recommends: "{{ apt_unit_masked_install_recommends | default(true) }}"
-      register: apt_unit_masked
+        install_recommends: "{{ apt_no_autostart_install_recommends | default(true) }}"
+      register: apt_no_autostart
       become: true
 
   always:

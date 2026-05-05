@@ -7,7 +7,7 @@ if [ -z "$unit" ]; then
   exit 1
 fi
 
-items="{{ (apt_unit_masked_unit is string) | ternary([apt_unit_masked_unit], apt_unit_masked_unit) | join(' ') }}"
+items="{{ (apt_no_autostart_unit is string) | ternary([apt_no_autostart_unit], apt_no_autostart_unit) | join(' ') }}"
 
 found=false
 for item in $items; do

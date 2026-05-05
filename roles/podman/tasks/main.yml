@@ -9,11 +9,11 @@
 
 - name: Install podman
   import_role:
-    name: apt_unit_masked
+    name: apt_no_autostart
     tasks_from: apt
   vars:
-    apt_unit_masked_pkg: podman
-    apt_unit_masked_unit:
+    apt_no_autostart_pkg: podman
+    apt_no_autostart_unit:
       - podman.service
       - podman.socket
   tags:
@@ -95,7 +95,7 @@
     - podman
 
 - name: Configure tmpfiles.d
-  when: not (ansible_check_mode and apt_unit_masked.changed)
+  when: not (ansible_check_mode and apt_no_autostart.changed)
   lineinfile:
     regexp: '^(# )?(.*) /run/podman (.*)$'
     line: '# \2 /run/podman \3'
@@ -275,7 +275,7 @@
     - podman
 
 - name: Enable the service
-  when: not (ansible_check_mode and apt_unit_masked.changed)
+  when: not (ansible_check_mode and apt_no_autostart.changed)
   systemd:
     name: podman
     enabled: true
@@ -289,7 +289,7 @@
     tasks_from: service
   vars:
     systemd_unit_src: podman.socket
-    systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) }}"
+    systemd_unit_condition: "{{ not (ansible_check_mode and apt_no_autostart.changed) }}"
     systemd_unit_restart: "{{ systemd_unit.changed or socket_systemd_unit.changed }}"
   tags:
     - podman
