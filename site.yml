@@ -73,7 +73,6 @@
     - scratch
     - data
     - media
-    - qemu_host
     - jellyfin
     - sort_ini
     - sabnzbd

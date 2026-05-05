@@ -44,7 +44,7 @@ SSH_HOST = "127.0.0.1"
 class QemuMachineSpec(NamedTuple):
     ssh_user: str
     inventory_host: str
-    # Packer image directory under /mnt/qemu/<ubuntu_name>/. None means the
+    # Packer image directory under /mnt/scratch/qemu/<ubuntu_name>/. None means the
     # variant uses an Ubuntu cloud image instead (minimal).
     packer_image: str | None
     # Sizes of additional empty qcow2 disks attached at boot beyond the OS
@@ -631,17 +631,17 @@ class QemuMachine(Machine):
         except KeyError:
             raise AttributeError(f"Unknown machine: {machine}") from None
 
-        # Per-platform packer-image cache: /mnt/qemu on Linux dev hosts,
+        # Per-platform packer-image cache: /mnt/scratch/qemu on Linux dev hosts,
         # <repo>/packer/artifacts on Mac (matches mise.toml's qemu_dir;
-        # /mnt/qemu doesn't exist on Mac).
+        # /mnt/scratch/qemu doesn't exist on Mac).
         system = platform.system()
         if system == "Darwin":
             self.imagedir: Path = Path("packer/artifacts").resolve()
             self.imagedir.mkdir(parents=True, exist_ok=True)
         elif system == "Linux":
-            self.imagedir = Path("/mnt/qemu")
+            self.imagedir = Path("/mnt/scratch/qemu")
             if not self.imagedir.is_dir():
-                raise RuntimeError(f"Imagedir {str(self.imagedir)!r} does not exist. " f"Mount the qemu image volume (e.g. `sudo mount /mnt/qemu`).")
+                raise RuntimeError(f"Imagedir {str(self.imagedir)!r} does not exist. " f"Mount the qemu image volume (e.g. `sudo mount /mnt/scratch/qemu`).")
         else:
             raise AttributeError(f"Unknown operating system: {system}")
 
