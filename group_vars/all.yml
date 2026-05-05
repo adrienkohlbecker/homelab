@@ -49,6 +49,11 @@ mirror_pypi: 'https://{{ nexus_url ~ "/repository/pypi" if nexus_url else "pypi.
 ubuntu_mirror: '{{ (ansible_architecture == "aarch64") | ternary(mirror_apt_ubuntu_ports ~ "/", mirror_apt_ubuntu_archive ~ "/") }}'
 ubuntu_mirror_security: '{{ (ansible_architecture == "aarch64") | ternary(mirror_apt_ubuntu_ports ~ "/", mirror_apt_ubuntu_security ~ "/") }}'
 
+macvlan_parent_gateway: "{{ ansible_facts[macvlan_parent].ipv4.network | ansible.utils.ipmath(1) }}"
+macvlan_parent_subnet: "{{ ansible_facts[macvlan_parent].ipv4.network }}/{{ ansible_facts[macvlan_parent].ipv4.prefix }}"
+macvlan_host_ip: "{{ macvlan_subnet | ansible.utils.ipmath(1) }}"
+macvlan_host_mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname) }}"
+
 # wireguard-vanity-keygen -c $NAME/
 wireguard_peers:
   - name: lab
@@ -132,4 +137,3 @@ pihole_whitelists:
   - https://raw.githubusercontent.com/anudeepND/whitelist/master/domains/whitelist.txt
   - https://raw.githubusercontent.com/cedwards4038/pihole-whitelist/main/whitelist.txt
   - https://raw.githubusercontent.com/anudeepND/whitelist/master/domains/optional-list.txt
-

@@ -1,0 +1,63 @@
+- name: Install iproute2
+  apt:
+    pkg:
+      - iproute2
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - macvlan
+
+- name: Check macvlan_subnet is valid
+  assert:
+    that: macvlan_subnet == macvlan_subnet | ansible.utils.ipaddr('net')
+    fail_msg: "macvlan_subnet '{{ macvlan_subnet }}' is not in a valid range or has the wrong format (network/prefixlength)"
+    success_msg: "macvlan_subnet is valid"
+  tags:
+    - macvlan
+
+- name: Check macvlan_subnet is in parent subnet
+  assert:
+    that: macvlan_subnet == macvlan_subnet | ansible.utils.ipaddr(macvlan_parent_subnet)
+    fail_msg: "macvlan_subnet '{{ macvlan_subnet }}' is not within parent subnet '{{ macvlan_parent_subnet }}'"
+    success_msg: "macvlan_subnet is within parent_subnet"
+  tags:
+    - macvlan
+
+- name: Check macvlan_host_ip is in parent subnet
+  assert:
+    that: macvlan_host_ip == macvlan_host_ip | ansible.utils.ipaddr(macvlan_parent_subnet)
+    fail_msg: "macvlan_host_ip '{{ macvlan_host_ip }}' is not within parent subnet '{{ macvlan_parent_subnet }}'"
+    success_msg: "macvlan_host_ip is within parent_subnet"
+  tags:
+    - macvlan
+
+- name: Check macvlan_host_ip is the first IP of macvlan_subnet
+  # Convention enforced by group_vars/all.yml:
+  #   macvlan_host_ip: "{{ macvlan_subnet | ansible.utils.ipmath(1) }}"
+  # tasks/podman.yml relies on this to ensure the IP is not in it's subnet range
+  assert:
+    that: macvlan_host_ip == (macvlan_subnet | ansible.utils.ipmath(1))
+    fail_msg: "macvlan_host_ip '{{ macvlan_host_ip }}' must be the first IP of macvlan_subnet '{{ macvlan_subnet }}' (expected '{{ macvlan_subnet | ansible.utils.ipmath(1) }}')"
+    success_msg: "macvlan_host_ip is the first IP of macvlan_subnet"
+  tags:
+    - macvlan
+
+- name: Install mac0 service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: mac0.service
+  tags:
+    - macvlan
+
+- name: Enable mac0 service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: mac0
+    systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed }}"
+  tags:
+    - macvlan
