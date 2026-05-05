@@ -205,7 +205,7 @@
     dest: /etc/keepalived/conf.d/pihole.conf
     owner: root
     group: root
-    mode: "0644"
+    mode: "0640"
     backup: true
   register: pihole_keepalived_cfg
   become: true
