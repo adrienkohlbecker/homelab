@@ -1,0 +1,52 @@
+# Block-device passthrough source. The role itself never writes to the
+# physical disk — it only verifies the by-id path exists and is owned such
+# that libvirt-qemu can open it. The user installs macOS interactively via
+# the Recovery installer.
+
+- name: storage | Resolve disk by-id symlink
+  stat:
+    path: "/dev/disk/by-id/{{ macos_vm_disk_id }}"
+  register: macos_vm_disk_stat
+  become: true
+
+- name: storage | Assert passthrough disk is present
+  assert:
+    that: macos_vm_disk_stat.stat.exists and macos_vm_disk_stat.stat.islnk
+    fail_msg: |
+      /dev/disk/by-id/{{ macos_vm_disk_id }} not found on {{ inventory_hostname }}.
+      Plug in the spare SSD, identify it with `ls -la /dev/disk/by-id/ | grep ata-`,
+      then set macos_vm_disk_id in host_vars to the leaf name (no /dev/disk/by-id/ prefix).
+
+- name: storage | Resolve target block device
+  # Following the symlink so we can chown the actual /dev/sdX node.
+  set_fact:
+    macos_vm_disk_dev: "{{ macos_vm_disk_stat.stat.lnk_source | default('') }}"
+
+- name: storage | Install udev rule giving libvirt-qemu access to the passthrough disk
+  # Survives reboots and disk reseats. Group=kvm matches qemu.conf default.
+  copy:
+    dest: /etc/udev/rules.d/70-macos-vm-disk.rules
+    owner: root
+    group: root
+    mode: "0644"
+    content: |
+      # Managed by roles/macos_vm.
+      # Allows the libvirt-qemu user (group kvm) to open the macOS VM's
+      # passthrough block device without weakening permissions on other disks.
+      KERNEL=="sd*", ENV{ID_SERIAL}=="{{ macos_vm_disk_id | regex_replace('^ata-', '') | regex_replace('^scsi-', '') }}", OWNER="libvirt-qemu", GROUP="kvm", MODE="0660"
+  become: true
+  register: macos_vm_udev_rule
+
+- name: storage | Reload udev rules
+  when: macos_vm_udev_rule.changed
+  ansible.builtin.command:
+    cmd: udevadm control --reload-rules
+  become: true
+  changed_when: true
+
+- name: storage | Trigger udev for the passthrough disk
+  when: macos_vm_udev_rule.changed and macos_vm_disk_dev | length > 0
+  ansible.builtin.command:
+    cmd: "udevadm trigger {{ macos_vm_disk_dev }}"
+  become: true
+  changed_when: true
