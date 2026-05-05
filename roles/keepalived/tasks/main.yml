@@ -54,7 +54,7 @@
   vars:
     systemd_unit_src: keepalived
     systemd_unit_condition: "{{ not (ansible_check_mode and apt_unit_masked.changed) and keepalived_active_confs.matched > 0 }}"
-    systemd_unit_restart: "{{ keepalived_conf.changed }}"
+    systemd_unit_reload: "{{ keepalived_conf.changed }}"
   tags:
     - keepalived
 

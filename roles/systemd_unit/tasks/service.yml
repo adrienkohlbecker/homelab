@@ -60,3 +60,16 @@
     scope: "{{ _systemd_unit_scope }}"
   become: true
   become_user: "{{ systemd_unit_user | default('root') }}"
+
+# Hitless alternative to restart for daemons that pick up config via SIGHUP
+# (keepalived, nginx, etc.). Mutually exclusive with systemd_unit_restart in
+# practice — set one or the other. Skipped on the play that just started the
+# unit (the started state already reflects current config).
+- name: Reload the service
+  when: (systemd_unit_condition | default(true)) and (systemd_unit_start | default(true)) and (systemd_unit_reload | default(false) and not systemd_started.changed)
+  systemd:
+    name: "{{ systemd_unit_dest | default(systemd_unit_src) }}"
+    state: reloaded
+    scope: "{{ _systemd_unit_scope }}"
+  become: true
+  become_user: "{{ systemd_unit_user | default('root') }}"
