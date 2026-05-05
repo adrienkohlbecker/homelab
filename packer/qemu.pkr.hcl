@@ -42,8 +42,9 @@ locals {
   # proxy cache). Same role as the previous `ubuntu_versions.patch`
   # field for live-server ISOs.
   ubuntu_snapshots = {
-    jammy = "20260320"
-    noble = "20260323"
+    jammy    = "20260320"
+    noble    = "20260323"
+    resolute = "20260421"
   }
   ubuntu_snapshot = local.ubuntu_snapshots[var.ubuntu_name]
 
@@ -203,7 +204,15 @@ build {
   }
 
   provisioner "shell" {
-    inline = ["chmod +x /home/vagrant/*.sh", "sudo -HE /home/vagrant/provision.sh"]
+    # Resolute ships sudo-rs as the default `sudo` alternative (priority 50 vs
+    # classic sudo's 40). sudo-rs silently ignores the SETENV sudoers tag, so
+    # `sudo -E` strips the env block below. Switch the alternative back to
+    # classic sudo (which honors SETENV + -E) on resolute only; jammy/noble
+    # ship classic sudo as the default already.
+    inline = concat(
+      var.ubuntu_name == "resolute" ? ["sudo update-alternatives --set sudo /usr/bin/sudo.ws"] : [],
+      ["chmod +x /home/vagrant/*.sh", "sudo -HE /home/vagrant/provision.sh"],
+    )
     # Mirror URLs are resolved here (HCL) and passed as env. provision.sh
     # uses UBUNTU_MIRROR* during the build; chroot.sh swaps in the
     # UBUNTU_MIRROR_*_UPSTREAM pair at the end so the shipped image

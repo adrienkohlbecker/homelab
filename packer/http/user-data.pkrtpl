@@ -5,7 +5,7 @@ package_upgrade: false
 ssh_pwauth: false
 users:
   - name: vagrant
-    sudo: ALL=(ALL) NOPASSWD:ALL
+    sudo: "ALL=(ALL) NOPASSWD:SETENV: ALL"
     shell: /bin/bash
     lock_passwd: true
     ssh_authorized_keys:
