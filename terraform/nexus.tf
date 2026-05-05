@@ -51,20 +51,21 @@ locals {
   }
 
   raw_proxies = {
-    "github"              = "https://github.com/"
-    "minio"               = "https://dl.min.io/"
-    "gitea-dl"            = "https://dl.gitea.com/"
-    "gitea-com"           = "https://gitea.com/"
-    "gitea-lab"           = "https://gitea.lab.fahm.fr/"
-    "ubuntu-releases"     = "https://releases.ubuntu.com/"
-    "ubuntu-cdimage"      = "https://cdimage.ubuntu.com/"
-    "ubuntu-cloud-images" = "https://cloud-images.ubuntu.com/"
+    "github"                = "https://github.com/"
+    "raw-githubusercontent" = "https://raw.githubusercontent.com/"
+    "minio"                 = "https://dl.min.io/"
+    "gitea-dl"              = "https://dl.gitea.com/"
+    "gitea-com"             = "https://gitea.com/"
+    "gitea-lab"             = "https://gitea.lab.fahm.fr/"
+    "ubuntu-releases"       = "https://releases.ubuntu.com/"
+    "ubuntu-cdimage"        = "https://cdimage.ubuntu.com/"
+    "ubuntu-cloud-images"   = "https://cloud-images.ubuntu.com/"
   }
 
   # Raw proxies whose upstream serves content with Content-Type headers that
   # don't match the filename extensions; strict validation rejects those
   # responses. Add a key here when a proxy needs it; everyone else stays strict.
-  raw_proxies_loose_content_type = toset(["ubuntu-cloud-images"])
+  raw_proxies_loose_content_type = toset(["ubuntu-cloud-images", "raw-githubusercontent"])
 
   # The datadrivers/nexus provider does not expose nexus_repository_cleanup_policy
   # as a managed resource, so the policy itself has to be created once via the
