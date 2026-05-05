@@ -199,20 +199,6 @@
   tags:
     - pihole
 
-- name: Ensure keepalived directory exists
-  file:
-    dest: "{{ item }}"
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  loop:
-    - /etc/keepalived/
-    - /etc/keepalived/conf.d/
-  become: true
-  tags:
-    - pihole
-
 - name: Configure keepalived
   template:
     src: keepalived.conf.j2
