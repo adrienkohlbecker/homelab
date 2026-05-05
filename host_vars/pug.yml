@@ -22,6 +22,10 @@ macvlan_enable_podman: false
 macvlan_parent: eth0
 macvlan_subnet: 10.123.1.32/27
 
+swap_partition:
+  device: /dev/disk/by-uuid/00b9e215-aaea-459d-a535-40d47007095b
+  opts: discard
+
 netplan:
   ethernets:
     nic0:

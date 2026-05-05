@@ -1,0 +1,129 @@
+# Manage swap. Two independent declarations, each optional:
+#
+#   swap_zvol:
+#     dataset: rpool/swap
+#     size: 16G
+#     opts: ...   # optional; default below
+#
+#   swap_partition:
+#     device: /dev/disk/by-uuid/00b9e215-...
+#     opts: discard   # optional; default below
+#
+# A host can have either, both, or neither. Zvol gets the conservative
+# properties recommended for ZFS swap: primarycache=metadata +
+# secondarycache=none keep the page cache from also caching pages that
+# are themselves cache eviction targets; logbias=throughput +
+# sync=always avoids losing in-flight writes if the host crashes while
+# paging out; com.sun:auto-snapshot=false because snapshotting churning
+# swap blocks is pointless and pins free space.
+#
+# Raw partitions are taken as-is — the role never reformats a device
+# that already carries a swap signature, so pre-existing installer
+# UUIDs survive untouched.
+#
+# Activation goes through `swapon` and tolerates the "already active"
+# error rather than chasing systemd unit names or canonicalising paths.
+# systemd-fstab-generator's unit naming is sensitive to symlink rules
+# and not always what `systemd-escape` produces; canonicalising via
+# readlink fails on hosts where /dev/zvol/ symlinks aren't udev-
+# populated even when the zvol itself works. Treating the "Device or
+# resource busy" stderr as success makes the task idempotent without
+# either of those moving parts. The fstab entry still ensures
+# activation at next boot via the generator.
+
+#######################################################################
+# Zvol-backed swap
+#######################################################################
+- name: Create swap zvol
+  when: swap_zvol is defined and zfs_root
+  community.general.zfs:
+    name: '{{ swap_zvol.dataset }}'
+    state: present
+    extra_zfs_properties:
+      volsize: '{{ swap_zvol.size | human_to_bytes | string }}'
+      volblocksize: '4096'
+      compression: zstd
+      logbias: throughput
+      sync: always
+      primarycache: metadata
+      secondarycache: none
+      com.sun:auto-snapshot: 'false'
+  become: true
+  tags:
+    - swap
+
+# blkid exits 2 with no signature; treat that as "needs mkswap".
+- name: Detect swap signature on zvol
+  when: swap_zvol is defined
+  command: blkid -s TYPE -o value /dev/zvol/{{ swap_zvol.dataset }}
+  register: swap_zvol_blkid
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - swap
+
+- name: Format swap on zvol
+  when:
+    - swap_zvol is defined
+    - swap_zvol_blkid.stdout | default('') != 'swap'
+  command: mkswap -f /dev/zvol/{{ swap_zvol.dataset }}
+  changed_when: true
+  become: true
+  tags:
+    - swap
+
+# x-systemd.requires=zfs-volumes.target makes the auto-generated .swap
+# unit wait for ZFS to finish importing pools and exposing zvols at
+# boot.
+- name: Add zvol swap to /etc/fstab
+  when: swap_zvol is defined
+  mount:
+    path: none
+    src: /dev/zvol/{{ swap_zvol.dataset }}
+    fstype: swap
+    opts: "{{ swap_zvol.opts | default('defaults,nofail,x-systemd.requires=zfs-volumes.target') }}"
+    state: present
+  become: true
+  tags:
+    - swap
+
+- name: Activate zvol swap
+  when: swap_zvol is defined
+  command: swapon /dev/zvol/{{ swap_zvol.dataset }}
+  register: swap_zvol_swapon
+  changed_when: swap_zvol_swapon.rc == 0
+  failed_when:
+    - swap_zvol_swapon.rc != 0
+    - "'Device or resource busy' not in swap_zvol_swapon.stderr"
+  become: true
+  tags:
+    - swap
+
+#######################################################################
+# Raw-partition swap (no formatting; takes the device as-is)
+#######################################################################
+- name: Add partition swap to /etc/fstab
+  when: swap_partition is defined
+  mount:
+    path: none
+    src: '{{ swap_partition.device }}'
+    fstype: swap
+    opts: "{{ swap_partition.opts | default('defaults,nofail,discard') }}"
+    state: present
+  become: true
+  tags:
+    - swap
+
+- name: Activate partition swap
+  when: swap_partition is defined
+  command: swapon {{ swap_partition.device }}
+  register: swap_partition_swapon
+  changed_when: swap_partition_swapon.rc == 0
+  failed_when:
+    - swap_partition_swapon.rc != 0
+    - "'Device or resource busy' not in swap_partition_swapon.stderr"
+  become: true
+  tags:
+    - swap
