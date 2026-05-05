@@ -127,7 +127,6 @@ influxdb_root_user: ak
 influxdb_root_password: changeme
 pihole_password: changeme
 pihole_keepalived_ip: changeme
-pihole_keepalived_password: changeme
 telegram_overseerr_bot_token: changeme
 telegram_netdata_bot_token: changeme
 telegram_personal_chat_id: changeme

@@ -21,11 +21,6 @@ vrrp_instance pihole {
   virtual_router_id {{ pihole_keepalived_vrid }}
   priority          {{ pihole_keepalived_priority }}
 
-  authentication {
-    auth_type PASS
-    auth_pass {{ pihole_keepalived_password }}
-  }
-
   virtual_ipaddress {
     {{ pihole_keepalived_ip }}/32
   }
