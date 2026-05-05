@@ -22,6 +22,17 @@
     cache_valid_time: 3600
   become: true
 
+# In production, roles/keepalived creates /etc/keepalived/conf.d. Under the
+# test harness pihole runs in isolation, so we mirror that here.
+- name: _test | Ensure keepalived conf.d exists
+  file:
+    dest: /etc/keepalived/conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
 - name: _test | Configure resolved
   shell: |
     set -euo pipefail
