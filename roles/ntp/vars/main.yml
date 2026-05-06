@@ -1,0 +1,47 @@
+# Packages routed to noble on jammy via /etc/apt/preferences.d/backports-ntp.
+# Both the backports role's pin template and `Upgrade backports-pinned
+# packages` task read from this list, so the pin and the explicit upgrade
+# can't drift out of sync. Pinning is unconditional on jammy because
+# noble's libc6 declares `Breaks: chrony (<4.2-3~)`: any host where
+# another role (zfs, podman) pulls libc6 forward will refuse to keep
+# jammy's chrony 4.2-2 installed, so chrony has to ride the same wave.
+ntp_backport_packages:
+  # chrony itself — jammy ships 4.2-2, blocked by noble libc6's Breaks.
+  - chrony
+  # adduser >= 3.130 (jammy has 3.118) — chrony's postinst calls adduser
+  # with flags that the older version doesn't accept.
+  - adduser
+  # Timezone data: noble split the legacy zones (PST8PDT, etc.) out of
+  # tzdata into tzdata-legacy. chrony Depends: tzdata-legacy directly.
+  # tzdata pinned alongside because jammy's tzdata Conflicts noble's
+  # tzdata-legacy on /usr/share/zoneinfo entries.
+  - tzdata
+  - tzdata-legacy
+  # GnuTLS stack — chrony's TLS support (NTS, key exchange). Noble
+  # carries the t64 ABI rename: libgnutls30 -> libgnutls30t64, libnettle8
+  # -> libnettle8t64, libhogweed6 -> libhogweed6t64. The renamed packages
+  # Provides: the old names so existing reverse-deps (e.g. systemd's
+  # libgnutls30) keep working.
+  - libgnutls30t64
+  - libnettle8t64
+  - libhogweed6t64
+  # libgnutls30t64 (>= 3.8.1) bumps the floors on three transitive deps
+  # past what jammy ships: libgmp10 (>= 2:6.3.0; jammy 2:6.2.1),
+  # libp11-kit0 (>= 0.25.1; jammy 0.24.0), libunistring5 (>= 1.1; jammy
+  # has only libunistring2). Without these, gnutls30t64 won't install
+  # and the whole chain fails.
+  - libgmp10
+  - libp11-kit0
+  - libunistring5
+  # libc6 -> 2.39 — pulled in by the GnuTLS stack (libnettle8t64 etc.
+  # require libc6 >= 2.38; jammy is 2.35).
+  # libc-bin pinned alongside: jammy's libc-bin Depends: libc6 (<2.36),
+  # so libc6 2.39 forces libc-bin to noble too or apt refuses.
+  # Without locales, jammy's locales 2.35 conflicts with noble's libc6
+  # 2.39 and apt resolves by REMOVING it (en_US.UTF-8 etc. disappear).
+  # These overlap with zfs_backport_packages on hosts running both
+  # roles; apt is fine with multiple pin files declaring the same
+  # package at the same priority.
+  - libc6
+  - libc-bin
+  - locales

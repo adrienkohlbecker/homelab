@@ -5,26 +5,26 @@
 # tightly-versioned libzfs/libnvpair/etc. companions, plus the libc/locale
 # stack noble's zfs userspace links against.
 zfs_backport_packages:
+  # Userspace + tightly versioned libzfs/libnvpair/libuutil/libzpool
   - zfsutils-linux
   - zfs-initramfs
   - zfs-zed
-  - libc6
   - libzfs4linux
   - libnvpair3linux
   - libuutil3linux
   - libzpool5linux
-  - libssl3t64
+  # libc6 -> 2.39 (zfsutils-linux 2.2 builds against it)
+  # libc-bin pinned alongside: jammy's libc-bin Depends: libc6 (<2.36),
+  # so libc6 2.39 forces libc-bin to noble too or apt refuses.
+  - libc6
   - libc-bin
+  # t64 ABI rename: noble renamed libssl3 -> libssl3t64, libtirpc3 ->
+  # libtirpc3t64. Must be in the pin so the renamed packages are
+  # installable (Provides: libssl3 / libtirpc3 keeps wget/sshd/systemd
+  # depends satisfied virtually).
+  - libssl3t64
   - libtirpc3t64
   - libtirpc-common
+  # Without locales, jammy's locales 2.35 conflicts with noble's libc6
+  # 2.39 and apt resolves by REMOVING it (en_US.UTF-8 etc. disappear).
   - locales
-  - chrony
-  - adduser
-  - tzdata-legacy
-  - libgnutls30t64
-  - libnettle8t64
-  - libgmp10
-  - libhogweed6t64
-  - libp11-kit0
-  - libunistring5
-  - tzdata
