@@ -17,6 +17,7 @@
     owner: root
     group: root
     backup: true
+  register: zfsbootmenu_cmdline_writes_present
   become: true
 
 - name: cmdline | Write contents
@@ -24,6 +25,7 @@
   file:
     path: /etc/zfsbootmenu/{{ zfsbootmenu_cmdline_file }}
     state: absent
+  register: zfsbootmenu_cmdline_writes_absent
   become: true
 
 - name: cmdline | Get files
@@ -52,8 +54,19 @@
   become: true
   register: zfsbootmenu_cmdline_properties
 
+# community.general.zfs reports `changed: false` even when it actually
+# runs `zfs set` because both pre/post property reads happen after the
+# set has already applied (the function calls zfs get fresh both times,
+# then compares "current" to "updated" and they're identical). Fall
+# back to the file-write tasks' changed flag so a fresh
+# /etc/zfsbootmenu/<file> still triggers the reboot ask.
 - name: cmdline | Ask to reboot
-  when: zfsbootmenu_cmdline_properties.changed
+  when: >-
+    zfsbootmenu_cmdline_properties.changed
+    or (zfsbootmenu_cmdline_writes_present is defined
+        and zfsbootmenu_cmdline_writes_present.changed)
+    or (zfsbootmenu_cmdline_writes_absent is defined
+        and zfsbootmenu_cmdline_writes_absent.changed)
   file:
     path: /var/run/reboot-required
     state: touch
