@@ -1,7 +1,7 @@
-- name: _test | Install netdata
+- name: _setup | Install netdata
   import_role:
-    name: _test
-    tasks_from: netdata
+    name: netdata
+    tasks_from: install
 
 - name: _test | Install dependencies
   apt:
