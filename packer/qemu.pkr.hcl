@@ -122,8 +122,8 @@ locals {
   # Maps each packer source to the test machine spec verify-boot drives.
   # Add an entry whenever a new source "qemu.ubuntu" block joins the build.
   variant_machine = {
-    "ubuntu-zfs"     = "box"
-    "ubuntu-zfs-lab" = "lab"
+    "zfs"     = "box"
+    "zfs-lab" = "lab"
   }
 
   # Search PATH for qemu-system-{arch}; lets the same template work on
@@ -219,12 +219,12 @@ source "qemu" "ubuntu" {
 
 build {
 
-  # ubuntu-zfs: single-disk rpool. Consumed by the box and pug test
+  # zfs: single-disk rpool. Consumed by the box and pug test
   # variants. Per-variant differences (extra pools like apoc) are created
   # at test boot via test/disks/<variant>.sh, not baked here.
   source "qemu.ubuntu" {
-    name                 = "ubuntu-zfs"
-    output_directory     = "${var.output_base}/ubuntu-zfs"
+    name                 = "zfs"
+    output_directory     = "${var.output_base}/zfs"
     disk_additional_size = ["40G"]
     host_port_max        = 2231
     host_port_min        = 2222
@@ -232,14 +232,14 @@ build {
     vnc_port_min         = 5900
   }
 
-  # ubuntu-zfs-lab: mdadm-EFI + mdadm-swap + 3-disk mirror rpool. Consumed
+  # zfs-lab: mdadm-EFI + mdadm-swap + 3-disk mirror rpool. Consumed
   # by the lab test variant; matches the lab-class prod host shape. Also
   # serves as the multi-disk regression for provision.sh / chroot.sh and
   # as a copy-paste reference for provisioning new lab-class prod hosts.
   # See AGENTS.md "Test Environment Design".
   source "qemu.ubuntu" {
-    name                 = "ubuntu-zfs-lab"
-    output_directory     = "${var.output_base}/ubuntu-zfs-lab"
+    name                 = "zfs-lab"
+    output_directory     = "${var.output_base}/zfs-lab"
     disk_additional_size = ["40G", "40G", "40G"]
     host_port_max        = 2241
     host_port_min        = 2232

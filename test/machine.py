@@ -57,7 +57,7 @@ class QemuMachineSpec(NamedTuple):
     # devices as positional args. None means no setup needed.
     disk_setup_script: str | None
     # Number of qcow2 disks the packer image stages as part of the OS install.
-    # ubuntu-zfs is single-rpool (1), ubuntu-zfs-lab is a 3-disk mirror rpool
+    # zfs is single-rpool (1), zfs-lab is a 3-disk mirror rpool
     # (3). prepare() overlays packer-ubuntu-1..N for the OS, then attaches
     # the variant's extra_disks starting at vd[a+N]. Unused on minimal
     # (packer_image=None), where the cloud-image branch returns early.
@@ -91,7 +91,7 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
     "box": QemuMachineSpec(
         ssh_user="vagrant",
         inventory_host="box",
-        packer_image="ubuntu-zfs",
+        packer_image="zfs",
         extra_disks=[],
         disk_setup_script=None,
         os_disk_count=1,
@@ -99,10 +99,10 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
     "lab": QemuMachineSpec(
         ssh_user="vagrant",
         inventory_host="lab",
-        # ubuntu-zfs-lab brings the 3-disk mirror rpool baked in (matches
+        # zfs-lab brings the 3-disk mirror rpool baked in (matches
         # the lab-class prod host). Extras below add the dozer/tank/mouse
         # disks layered on top by test/disks/lab.sh.
-        packer_image="ubuntu-zfs-lab",
+        packer_image="zfs-lab",
         # Six disks: dozer mirror legs (1G ×2), tank/mouse shared hosts
         # (1.5G ×2 — partitioned at test time), plus two whole-disk tank
         # raidz2 vdevs (1G ×2). Sizes match the previous packer-baked layout.
@@ -113,7 +113,7 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
     "pug": QemuMachineSpec(
         ssh_user="vagrant",
         inventory_host="pug",
-        packer_image="ubuntu-zfs",
+        packer_image="zfs",
         extra_disks=["1G", "1G"],
         disk_setup_script="test/disks/pug.sh",
         os_disk_count=1,
@@ -773,7 +773,7 @@ class QemuMachine(Machine):
                 self.drives += await self._uefi_drives()
             return
 
-        # ZFS variants pick a packer image (ubuntu-zfs or ubuntu-zfs-lab),
+        # ZFS variants pick a packer image (zfs or zfs-lab),
         # overlay its OS disks, and attach extra empty qcow2s on top for
         # the per-variant disk-setup script to format. See AGENTS.md
         # "Test Environment Design".

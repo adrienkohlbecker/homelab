@@ -11,7 +11,7 @@
 #    the publicly-known vagrant insecure pubkey) and remove
 #    /etc/sudoers.d/vagrant before the host gets a routable IP. The
 #    shipped image is otherwise a free root shell on any lab LAN.
-#  - on the ubuntu-zfs-lab variant, supply matching-size disks. The
+#  - on the zfs-lab variant, supply matching-size disks. The
 #    rpool mirror caps at the smallest disk's partition 3, so a
 #    2T+4T+4T mix silently halves usable rpool capacity.
 #  - verify the rpool ashift=12 below matches the disks. 4 KiB is
@@ -28,11 +28,11 @@
 set -euxo pipefail
 
 case $SOURCE_NAME in
-ubuntu-zfs)
+zfs)
   DISKS=(/dev/vdb)
   export LAYOUT=""
   ;;
-ubuntu-zfs-lab)
+zfs-lab)
   DISKS=(/dev/vdb /dev/vdc /dev/vdd)
   export LAYOUT="mirror"
   ;;
@@ -103,7 +103,7 @@ for disk in "${DISKS[@]}"; do
     sgdisk -n2:0:+4G -t2:FD00 "$disk" # Swap (FD00 = Linux RAID)
   fi
 
-  if [ "$SOURCE_NAME" = "ubuntu-zfs-lab" ]; then
+  if [ "$SOURCE_NAME" = "zfs-lab" ]; then
     sgdisk -n5:-2G:0 -t5:BF01 "$disk" # metadata vdev (BF01 = Solaris /usr & Mac ZFS, default when doing zpool create)
   fi
   sgdisk -n3:0:0 -t3:BF00 "$disk" # rpool (BF00 = Solaris root)

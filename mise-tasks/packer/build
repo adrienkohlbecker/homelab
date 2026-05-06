@@ -40,7 +40,7 @@ tmp=$(mktemp -d "${base}/.build-XXXXXX")
 # vnc_port ranges declared per source in qemu.pkr.hcl).
 only=""
 for variant in "${variants[@]}"; do
-  only+="${only:+,}qemu.ubuntu-${variant}"
+  only+="${only:+,}qemu.${variant}"
 done
 
 # PACKER_FLAGS expands to multiple flags; intentional word-split.
