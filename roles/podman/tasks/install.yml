@@ -1,7 +1,7 @@
 - name: install | Pin podman packages to noble (jammy)
   when: ansible_distribution_major_version == "22"
-  copy:
-    src: backports-podman
+  template:
+    src: backports-podman.j2
     dest: /etc/apt/preferences.d/backports-podman
     owner: root
     group: root
@@ -47,10 +47,6 @@
   tags:
     - podman
 
-# state: latest on jammy so a fresh backports-podman pin actually
-# pulls noble's version on hosts where podman was already installed at
-# jammy's 3.x (apt with state: present honours the pin only on a fresh
-# install). On noble we just want it present.
 - name: install | Install podman
   apt:
     pkg:
@@ -65,10 +61,37 @@
       # layers). Install explicitly so the install never depends on the
       # apt module's install_recommends default flipping under us.
       - fuse-overlayfs
-    state: '{{ "latest" if ansible_distribution_major_version == "22" else "present" }}'
     policy_rc_d: 101
     cache_valid_time: 3600
   register: podman_apt
+  become: true
+  tags:
+    - podman
+
+# state: latest across the full backports-podman pin list so every
+# noble-pinned package actually rolls forward on hosts where any of
+# these were already installed at jammy's version. The Install task
+# above only forces the explicit short list — buildah, conmon,
+# slirp4netns, etc. are separate packages (or weak deps of podman)
+# that apt leaves at jammy's version under state: present even with
+# the pin in place. Reading from podman_backport_packages keeps this
+# list and templates/backports-podman.j2's `Package:` line in sync.
+#
+# The when-clause skips on check-mode runs that just added the noble
+# pin/sources — apt's check resolves names against the live cache,
+# CHECK MODE never actually pulled noble's metadata, so
+# netavark/aardvark-dns (jammy-absent) would error with "No package
+# matching". The real-mode play afterwards refreshes the cache and
+# runs this task properly.
+- name: install | Upgrade backports-pinned packages to noble (jammy)
+  when:
+    - ansible_distribution_major_version == "22"
+    - not (ansible_check_mode and (podman_pin.changed or podman_noble_sources.changed))
+  apt:
+    pkg: '{{ podman_backport_packages }}'
+    state: latest
+    policy_rc_d: 101
+    cache_valid_time: 3600
   become: true
   tags:
     - podman

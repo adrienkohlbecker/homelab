@@ -1,0 +1,11 @@
+Package: {{ podman_backport_packages | join(' ') }}
+Pin: release n=noble
+Pin-Priority: 991
+
+Package: *
+Pin: release n=jammy
+Pin-Priority: 500
+
+Package: *
+Pin: release o=Ubuntu
+Pin-Priority: -10
