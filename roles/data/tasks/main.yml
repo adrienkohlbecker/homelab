@@ -15,5 +15,6 @@
     zfs_dataset_mountpoint: '/mnt/{{ data_item }}'
     zfs_dataset_extra_properties:
       'autobackup:bak': 'true'
+      special_small_blocks: '32K'
   tags:
     - data
