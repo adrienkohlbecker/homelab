@@ -35,7 +35,10 @@ User=act_runner
 Group=act_runner
 WorkingDirectory=/mnt/services/act_runner/
 # Wait for the act_runner user manager to bring podman.socket up.
-ExecStartPre=/bin/sh -c 'until [ -S /run/user/{{ act_runner_user.uid }}/podman/podman.sock ]; do sleep 1; done'
+# Bounded: 60 × 1s, well inside TimeoutStartSec=120. If the socket
+# never appears, the journal records the explicit cause rather than a
+# generic start-timeout.
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S /run/user/{{ act_runner_user.uid }}/podman/podman.sock ] && exit 0; sleep 1; done; echo "podman.sock not present after 60s" >&2; exit 1'
 ExecStart=/usr/local/bin/act_runner daemon --config /mnt/services/act_runner/config.yml
 ExecReload=/bin/kill -s HUP $MAINPID
 
