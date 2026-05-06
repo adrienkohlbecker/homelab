@@ -7,28 +7,18 @@
   tags:
     - act_runner
 
-- name: Add act_runner group
-  group:
-    name: act_runner
-    system: true
-  become: true
+- name: Set up act_runner system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_name: act_runner
+    service_user_home: /mnt/scratch/act_runner
+    service_user_createhome: true
   tags:
     - act_runner
 
-- name: Add act_runner user
-  user:
-    name: act_runner
-    group: act_runner
-    createhome: false
-    system: true
-    shell: /bin/bash
-    home: /mnt/scratch/act_runner
-  become: true
-  register: act_runner_user
-  tags:
-    - act_runner
-
-- name: Create configuration directory
+- name: Create runtime directories
   when: not (ansible_check_mode and act_runner_user.changed)
   file:
     dest: "{{ item }}"
@@ -39,7 +29,6 @@
   become: true
   loop:
     - /mnt/services/act_runner
-    - /mnt/scratch/act_runner
     - /mnt/scratch/act_runner/cache
     - /mnt/scratch/act_runner/workdir
   tags:

@@ -1,0 +1,5 @@
+# Lets `testrole.py _test` exercise the mirrors fixture as the role under
+# test (with idempotence rerun + _verify auto-invocation). Production
+# playbooks never enter through `_test`; this is purely a harness hook.
+- name: Configure homelab mirrors
+  import_tasks: mirrors.yml
