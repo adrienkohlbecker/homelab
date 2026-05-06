@@ -310,9 +310,10 @@ build {
     post-processor "shell-local" {
       name           = "drop-cloudimg-disk"
       inline_shebang = "/bin/bash"
-      inline = [
-        "set -euxo pipefail",
-        "rm -f ${var.build_directory}/${source.name}/packer-ubuntu",
+      inline = [<<-EOT
+        set -euxo pipefail
+        rm -f ${var.build_directory}/${source.name}/packer-ubuntu
+      EOT
       ]
     }
 
@@ -326,14 +327,15 @@ build {
       name             = "verify-boot"
       inline_shebang   = "/bin/bash"
       environment_vars = ["MACHINE=${local.variant_config[source.name].machine}"]
-      inline = [
-        "set -euxo pipefail",
-        "log=\"test/out/$$MACHINE.${var.ubuntu_name}._launch.output.ansi\"",
-        "if ! test/launch.py --machine \"$$MACHINE\" --ubuntu ${var.ubuntu_name} --timeout 300 --exit-after-ready --image-dir ${var.build_directory}/${source.name}; then",
-        "  echo \"--- verify-boot failed; dumping $$log ---\" >&2",
-        "  [ -f \"$$log\" ] && tail -200 \"$$log\" >&2",
-        "  exit 1",
-        "fi",
+      inline = [<<-EOT
+        set -euxo pipefail
+        log="test/out/$${MACHINE}.${var.ubuntu_name}._launch.output.ansi"
+        if ! test/launch.py --machine "$${MACHINE}" --ubuntu ${var.ubuntu_name} --timeout 300 --exit-after-ready --image-dir ${var.build_directory}/${source.name}; then
+          echo "--- verify-boot failed; dumping $${log} ---" >&2
+          [ -f "$${log}" ] && tail -200 "$${log}" >&2
+          exit 1
+        fi
+      EOT
       ]
     }
 
@@ -344,14 +346,15 @@ build {
     post-processor "shell-local" {
       name           = "compress"
       inline_shebang = "/bin/bash"
-      inline = [
-        "set -euxo pipefail",
-        "if [ \"$$(uname -s)\" = \"Linux\" ]; then exit 0; fi",
-        "for disk in ${var.build_directory}/${source.name}/packer-ubuntu-*; do",
-        "  echo \"==> compressing $$(basename \"$$disk\")\"",
-        "  qemu-img convert -W -c -O qcow2 -o compression_type=zstd \"$$disk\" \"$$disk.tmp\"",
-        "  mv \"$$disk.tmp\" \"$$disk\"",
-        "done",
+      inline = [<<-EOT
+        set -euxo pipefail
+        if [ "$$(uname -s)" = "Linux" ]; then exit 0; fi
+        for disk in ${var.build_directory}/${source.name}/packer-ubuntu-*; do
+          echo "==> compressing $$(basename "$${disk}")"
+          qemu-img convert -W -c -O qcow2 -o compression_type=zstd "$${disk}" "$${disk}.tmp"
+          mv "$${disk}.tmp" "$${disk}"
+        done
+      EOT
       ]
     }
 
@@ -363,10 +366,11 @@ build {
     post-processor "shell-local" {
       name           = "install"
       inline_shebang = "/bin/bash"
-      inline = [
-        "set -euxo pipefail",
-        "rm -rf ${var.output_directory}/${source.name}",
-        "mv ${var.build_directory}/${source.name} ${var.output_directory}/${source.name}",
+      inline = [<<-EOT
+        set -euxo pipefail
+        rm -rf ${var.output_directory}/${source.name}
+        mv ${var.build_directory}/${source.name} ${var.output_directory}/${source.name}
+      EOT
       ]
     }
   }
