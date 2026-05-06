@@ -7,13 +7,9 @@ set -euxo pipefail
 #   UBUNTU_MIRROR_UPSTREAM, UBUNTU_MIRROR_SECURITY_UPSTREAM,
 #   SSH_KEY_PUB.
 # - Inherited from provision.sh: DISKS, DISKS_COUNT, LAYOUT,
-#   PARTITIONS_EFI, PARTITIONS_SWAP.
+#   PARTITIONS_EFI, PARTITIONS_SWAP, HOSTNAME, USERNAME.
 # All list-shaped vars are space-delimited strings (bash arrays don't
 # survive `export`); use them unquoted to word-split.
-# HOSTNAME is a placeholder -- the deploy step (ansible / cloud-init /
-# bare-metal wrapper) is expected to overwrite it before first boot.
-HOSTNAME=ubuntu
-USERNAME=vagrant
 
 # ZFSBootMenu version installed into the shipped image. Independent
 # from mise.toml's [vars] zbm_version, which controls what `mise run
@@ -42,18 +38,6 @@ aarch64)
   exit 1
   ;;
 esac
-
-export DEBIAN_FRONTEND=noninteractive
-
-# Retry transient apt failures (Nexus restart, packet loss). Persists
-# in the shipped image; ansible runs see the same resilience.
-# Acquire::Retries::Delay (apt 2.7+ in noble) adds backoff between
-# attempts so a Nexus restart of a few seconds isn't burned through
-# instantly; apt on jammy retries immediately.
-echo 'Acquire::Retries "3";' >/etc/apt/apt.conf.d/80-retries
-if [ "$UBUNTU_NAME" != "jammy" ]; then
-  echo 'Acquire::Retries::Delay "true";' >>/etc/apt/apt.conf.d/80-retries
-fi
 
 # Set a hostname
 

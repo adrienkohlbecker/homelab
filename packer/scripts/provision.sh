@@ -36,6 +36,13 @@ set -euxo pipefail
 export DISKS_COUNT
 DISKS_COUNT=$(wc -w <<<"$DISKS")
 
+# Placeholder hostname for the shipped image — the deploy step
+# (ansible / cloud-init / bare-metal wrapper) is expected to overwrite
+# it before first boot. USERNAME is the vagrant user chroot.sh creates
+# so packer can SSH back in for the next provisioner stage.
+export HOSTNAME=ubuntu
+export USERNAME=vagrant
+
 # Map (disk, partition number) to the kernel/udev partition device.
 # vd*/sd*/hd* tack the digit on directly; nvme/mmcblk/loop/md need a
 # 'p' separator; /dev/disk/by-id symlinks use '-partN'. Passing
@@ -176,6 +183,7 @@ debootstrap "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR"
 # there (empty), not the build host's DNS settings.
 
 cp /etc/hostid /mnt/etc
+cp /etc/apt/apt.conf.d/80-retries /mnt/etc/apt/apt.conf.d
 
 # Configure networking. Match by name glob so the same image works
 # under any qemu device topology (packer's vs. testrole's direct-kernel
