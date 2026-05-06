@@ -123,16 +123,6 @@ XKBOPTIONS=""
 BACKSPACE="guess"
 EOF
 
-# Tell initramfs-tools where root lives. Without this it warns
-# "Warning: root device  does not exist" on every update-initramfs
-# (postinst-driven and our explicit one below) because /etc/fstab
-# has no `/` entry — / is a ZFS dataset, mounted at boot via the
-# zfs-initramfs hook keyed off ${root=ZFS=...} on the kernel cmdline.
-# The conf.d entry just suppresses the noise. mkdir -p because the
-# initramfs-tools package isn't pulled in yet.
-mkdir -p /etc/initramfs-tools/conf.d
-echo "ROOT=ZFS=rpool/ROOT/$UBUNTU_NAME" >/etc/initramfs-tools/conf.d/zfs-root
-
 # Update the repository cache
 
 apt-get update
