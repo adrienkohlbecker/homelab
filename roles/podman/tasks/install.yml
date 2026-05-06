@@ -56,6 +56,11 @@
       # misleading "Error: netavark: No such file or directory" (it's iptables
       # that's missing, not netavark).
       - iptables
+      # fuse-overlayfs is a Recommends, but pinned via storage.conf's
+      # mount_program on jammy (kernel 5.15 has no idmapped overlay
+      # layers). Install explicitly so the install never depends on the
+      # apt module's install_recommends default flipping under us.
+      - fuse-overlayfs
     policy_rc_d: 101
     cache_valid_time: 3600
   register: podman_apt

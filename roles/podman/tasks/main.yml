@@ -112,6 +112,12 @@
 # podman with "runroot must be set". Rootless ignores both — its codepath
 # rebuilds a fresh options struct from XDG_RUNTIME_DIR and
 # rootless_storage_path.
+# mount_program forces fuse-overlayfs on jammy. Kernel overlay 5.15
+# has no idmapped-layer support, so any container with `--uidmap` (e.g.
+# homeassistant) falls back to a slow per-file chown copy that times
+# out the systemd start. fuse-overlayfs supports idmap in userspace and
+# bypasses the kernel limitation. Noble's 6.x overlay does support it,
+# so we only flip mount_program on for jammy.
 - name: Configure podman storage
   when: zfs_root
   copy:
@@ -122,6 +128,11 @@
       runroot = "/run/containers/storage"
       graphroot = "/var/lib/containers/storage"
       rootless_storage_path = "/var/lib/containers/rootless/$USER"
+      {% if ansible_distribution_major_version == "22" %}
+
+      [storage.options.overlay]
+      mount_program = "/usr/bin/fuse-overlayfs"
+      {% endif %}
     owner: root
     group: root
     mode: "0644"
