@@ -622,9 +622,10 @@ class QemuMachine(Machine):
         """QEMU-backed machine wrapper used by integration tests.
 
         image_dir overrides the per-variant `<imagedir>/<ubuntu>/<packer_image>`
-        path that prepare() would otherwise compute. Used by packer:verify
-        to point the harness at a still-staged `*.new` build output before
-        the build script swaps it over the previous artifact.
+        path that prepare() would otherwise compute. Used by qemu.pkr.hcl's
+        verify-boot post-processor to point the harness at a still-staged
+        `*.new` build output before the build script swaps it over the
+        previous artifact.
         """
         try:
             spec = QEMU_MACHINE_SPECS[machine]

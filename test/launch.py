@@ -285,8 +285,9 @@ def parse_args() -> argparse.Namespace:
         help="Override the packer artifact directory the harness reads "
         "(packer-ubuntu-1..N + kernel/initrd/cmdline + efivars.fd) instead "
         "of the variant's default <imagedir>/<ubuntu>/<packer_image>. Lets "
-        "packer:verify smoke-test a freshly-built `.new` directory before "
-        "it's swapped over the previous good artifact.",
+        "qemu.pkr.hcl's verify-boot post-processor smoke-test a freshly-"
+        "built `.new` directory before it's swapped over the previous "
+        "good artifact.",
     )
     parser.add_argument(
         "--no-ssh-wait",
