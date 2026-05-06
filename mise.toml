@@ -1,9 +1,4 @@
 [vars]
-# --on-error=ask keeps the build VM up on failure so it can be SSH'd
-# into for debugging. Dev-only: any non-interactive caller (CI, cron,
-# scheduled rebuilds) would hang on the prompt -- swap to
-# --on-error=cleanup for those.
-packer_flags = "-timestamp-ui -warn-on-undeclared-var --on-error=ask"
 qemu_dir = '{% if os() == "macos" %}{{config_root}}/packer/artifacts{% else %}/mnt/scratch/qemu{% endif %}'
 
 [env]
@@ -22,11 +17,7 @@ TF_VAR_state_passphrase = "op://Lab/vztgbtb2i3nlgrift46fc7r4f4/password"
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
 QEMU_DIR = '{{vars.qemu_dir}}'
-PACKER_FLAGS = '{{vars.packer_flags}}'
 ZBM_VERSION = "3.1.0"
-# On Linux, keep packer's ISO cache off the root FS; empty on macOS so
-# packer uses its default (./packer_cache in cwd).
-PACKER_CACHE_DIR = '{% if os() == "linux" %}/mnt/scratch/packer{% endif %}'
 
 [tools]
 opentofu = "1.11.6"
@@ -48,10 +39,7 @@ run = 'packer init "$@" .'
 
 [tasks."packer:clean"]
 description = "Remove leftover tmpdirs from failed builds"
-usage = '''
-flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
-'''
-run = 'rm -rf "{{vars.qemu_dir}}/${usage_ubuntu}"/.build-*'
+run = 'rm -rf "{{vars.qemu_dir}}"/.build-*'
 
 [tasks.lint]
 description = "Run all linters"
