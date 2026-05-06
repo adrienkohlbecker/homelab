@@ -28,7 +28,7 @@
   systemd:
     name: act_runner
   register: _verify_unit
-  failed_when:
-    - _verify_unit.status.LoadState != "loaded"
-    - _verify_unit.status.ActiveState != "active"
+  failed_when: >-
+    _verify_unit.status.LoadState != "loaded"
+    or _verify_unit.status.ActiveState != "active"
   become: true
