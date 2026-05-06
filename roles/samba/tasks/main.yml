@@ -34,6 +34,46 @@
   tags:
     - samba
 
+# Install the override AFTER smbd is up. On a fresh host the zfs_mount_mnt_*.service
+# units don't exist yet (the data/media roles in a later play create them); the
+# override is installed for boot-time effect only — no smbd restart on change, so a
+# subsequent reboot (with all coordinator units present) is what activates it.
+- name: Create smbd override directory
+  when: (smb_shares | default([])) | length > 0
+  file:
+    dest: /etc/systemd/system/smbd.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - samba
+
+- name: Install smbd zfs-mount dependency override
+  when: (smb_shares | default([])) | length > 0
+  template:
+    src: smbd_zfs_mounts_override.conf.j2
+    dest: /etc/systemd/system/smbd.service.d/zfs-mounts.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: smbd_override
+  become: true
+  tags:
+    - samba
+
+- name: Reload systemd after smbd override
+  when:
+    - (smb_shares | default([])) | length > 0
+    - smbd_override.changed
+  systemd:
+    daemon_reload: true
+  become: true
+  tags:
+    - samba
+
 - name: Enable nmbd service
   import_role:
     name: systemd_unit
