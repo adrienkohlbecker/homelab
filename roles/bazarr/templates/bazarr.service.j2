@@ -10,6 +10,8 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
+After=zfs_mount_mnt_services_sqlite.service
+Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 {% if zfs_has_media_mount %}
 After=zfs_mount_mnt_media.service
@@ -44,6 +46,7 @@ ExecStart=/usr/bin/podman run \
     --env PGID={{ media_group.gid }} \
     --env TZ=Europe/Paris \
     --volume /mnt/services/bazarr:/config \
+    --volume /mnt/services/sqlite/bazarr:/config/db \
     --volume /mnt/media:/media \
     --publish 127.0.0.1:6767:6767/tcp \
     --health-cmd         "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:6767/api/" \

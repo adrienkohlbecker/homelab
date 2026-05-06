@@ -33,7 +33,7 @@
   loop:
     - /mnt/services/mosquitto
     - /mnt/services/mosquitto/config
-    - /mnt/services/mosquitto/data
+    - /mnt/services/sqlite/mosquitto
 
 - name: Configure mosquitto passwords
   template:

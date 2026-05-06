@@ -41,7 +41,7 @@
   with_items:
     - /mnt/services/filebrowser
     - /mnt/services/filebrowser/config
-    - /mnt/services/filebrowser/database
+    - /mnt/services/sqlite/filebrowser
 
 - name: Configure filebrowser
   template:

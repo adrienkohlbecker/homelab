@@ -10,6 +10,8 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
+After=zfs_mount_mnt_services_sqlite.service
+Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
@@ -46,9 +48,11 @@ ExecStart=/usr/bin/podman run \
     --gidmap=0:0:65536 \
     --gidmap=+0:{{ healthchecks_user.group }}:1 \
     --volume /mnt/services/healthchecks:/config \
+    --volume /mnt/services/sqlite/healthchecks:/db \
     --volume /mnt/services/healthchecks/logo.png:/app/healthchecks/static-collected/img/logo.png:ro \
     --env PUID=0 \
     --env PGID=0 \
+    --env DB_NAME=/db/hc.sqlite \
     --env RP_ID=healthchecks.{{ inventory_hostname }}.{{ domain }} \
     --env SITE_ROOT=https://healthchecks.{{ inventory_hostname }}.{{ domain }} \
     --env ALLOWED_HOSTS=healthchecks.{{ inventory_hostname }}.{{ domain }},localhost \
