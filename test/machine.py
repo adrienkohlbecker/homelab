@@ -634,14 +634,19 @@ class QemuMachine(Machine):
         # Per-platform packer-image cache: /mnt/scratch/qemu on Linux dev hosts,
         # <repo>/packer/artifacts on Mac (matches mise.toml's qemu_dir;
         # /mnt/scratch/qemu doesn't exist on Mac).
+        # Disk format also platform-gated: raw on Linux (the host ZFS dataset
+        # already does CoW + zstd), qcow2 on Mac (APFS has no fs-level
+        # compression). Mirrors qemu.pkr.hcl's image_format var.
         system = platform.system()
         if system == "Darwin":
             self.imagedir: Path = Path("packer/artifacts").resolve()
             self.imagedir.mkdir(parents=True, exist_ok=True)
+            self._packer_disk_format = "qcow2"
         elif system == "Linux":
             self.imagedir = Path("/mnt/scratch/qemu")
             if not self.imagedir.is_dir():
                 raise RuntimeError(f"Imagedir {str(self.imagedir)!r} does not exist. " f"Mount the qemu image volume (e.g. `sudo mount /mnt/scratch/qemu`).")
+            self._packer_disk_format = "raw"
         else:
             raise AttributeError(f"Unknown operating system: {system}")
 
@@ -843,9 +848,13 @@ class QemuMachine(Machine):
         await self.ssh_command("sudo", "bash", remote_path, *self._extra_disk_devices)
 
     async def _create_overlay(self, src: str, dest: str, size: str | None = None) -> None:
-        """Create a qcow2 overlay pointing at *src* with optional resize."""
+        """Create a qcow2 overlay pointing at *src* with optional resize.
 
-        args = ["qemu-img", "create", "-f", "qcow2", "-b", src, "-F", "qcow2", dest]
+        The backing file's format matches the packer artifact format, which
+        is platform-dependent (raw on Linux, qcow2 on Mac).
+        """
+
+        args = ["qemu-img", "create", "-f", "qcow2", "-b", src, "-F", self._packer_disk_format, dest]
         if size:
             args.append(size)
         await run_command(args)
