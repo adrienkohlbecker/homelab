@@ -49,14 +49,14 @@
     state: directory
     mode: "0755"
   loop:
-    - /custom/conf
-    - /data/gitea-repositories
-    - /log
+    - /var/lib/gitea/custom/conf
+    - /var/lib/gitea/data/gitea-repositories
+    - /var/lib/gitea/log
   become: true
 
 - name: _test | Write gitea app.ini
   copy:
-    dest: /custom/conf/app.ini
+    dest: /var/lib/gitea/custom/conf/app.ini
     mode: "0644"
     backup: true
     content: |
@@ -80,7 +80,7 @@
 - name: _test | Start gitea via systemd-run
   command: >-
     systemd-run --unit=gitea-test --setenv=HOME=/root
-    /usr/local/bin/gitea web --work-path /
+    /usr/local/bin/gitea web --work-path /var/lib/gitea
   args:
     creates: /run/systemd/transient/gitea-test.service
   become: true
