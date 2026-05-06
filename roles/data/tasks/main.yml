@@ -1,33 +1,19 @@
-- name: Create zfs filesystem
-  when: zfs_root
-  zfs:
-    name: '{{ zfs_tank_filesystem }}/data'
-    state: present
-    extra_zfs_properties:
-      mountpoint: /mnt/data
-      'autobackup:bak': 'true'
-  become: true
-  tags:
+- name: Configure each shared dataset
+  include_role:
+    name: zfs
+    tasks_from: dataset
+    apply:
+      tags: data
+  loop:
     - data
-
-- name: Create mount point
-  file:
-    dest: /mnt/data
-    state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: "0755"
-  become: true
-  tags:
-    - data
-
-- name: Set up mount service for tank/data
-  when: zfs_root
-  import_role:
-    name: zfs_mount
-    tasks_from: unit
+    - brumath
+    - eckwersheim
+  loop_control:
+    loop_var: data_item
   vars:
-    zfs_mount_dataset: '{{ zfs_tank_filesystem }}/data'
-    zfs_mount_mountpoint: /mnt/data
+    zfs_dataset: '{{ zfs_tank_filesystem }}/{{ data_item }}'
+    zfs_dataset_mountpoint: '/mnt/{{ data_item }}'
+    zfs_dataset_extra_properties:
+      'autobackup:bak': 'true'
   tags:
     - data

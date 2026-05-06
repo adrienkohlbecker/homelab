@@ -2,6 +2,8 @@ zfs_has_services_mount: false
 zfs_has_scratch_mount: false
 zfs_has_media_mount: false
 zfs_has_data_mount: false
+zfs_has_brumath_mount: false
+zfs_has_eckwersheim_mount: false
 zfs_has_minio_mount: false
 
 z2m_start_service: false
