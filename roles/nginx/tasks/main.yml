@@ -1,66 +1,7 @@
-- name: Install nginx
-  apt:
-    pkg:
-      - nginx
-    policy_rc_d: 101
-    cache_valid_time: 3600
-  register: nginx_apt
-  become: true
-  tags:
-    - nginx
-
-- name: Disable default site
-  file:
-    path: /etc/nginx/sites-enabled/default
-    state: absent
-  register: nginx_default_conf
-  become: true
-  tags:
-    - nginx
-
-- name: Generate Diffie-Hellman parameters
-  when: not (ansible_check_mode and nginx_apt.changed)
-  openssl_dhparam:
-    path: /etc/nginx/dhparam.pem
-    size: 2048
-  become: true
-  tags:
-    - nginx
-
-- name: Configure nginx
-  template:
-    src: nginx.conf.j2
-    dest: /etc/nginx/nginx.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
-  register: nginx_conf
-  tags:
-    - nginx
-
-- name: Enable stub_status
-  copy:
-    src: status.conf
-    dest: /etc/nginx/conf.d/status.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
-  register: nginx_status_conf
-  tags:
-    - nginx
-
-- name: Enable nginx service
+- name: Install nginx package
   import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_src: nginx
-    systemd_unit_condition: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
-    systemd_unit_restart: "{{ nginx_apt.changed or nginx_default_conf.changed or nginx_conf.changed or nginx_status_conf.changed }}"
+    name: nginx
+    tasks_from: install
   tags:
     - nginx
 
