@@ -47,6 +47,10 @@
   tags:
     - podman
 
+# state: latest on jammy so a fresh backports-podman pin actually
+# pulls noble's version on hosts where podman was already installed at
+# jammy's 3.x (apt with state: present honours the pin only on a fresh
+# install). On noble we just want it present.
 - name: install | Install podman
   apt:
     pkg:
@@ -61,6 +65,7 @@
       # layers). Install explicitly so the install never depends on the
       # apt module's install_recommends default flipping under us.
       - fuse-overlayfs
+    state: '{{ "latest" if ansible_distribution_major_version == "22" else "present" }}'
     policy_rc_d: 101
     cache_valid_time: 3600
   register: podman_apt
