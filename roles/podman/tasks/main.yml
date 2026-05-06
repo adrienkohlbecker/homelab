@@ -112,12 +112,14 @@
 # podman with "runroot must be set". Rootless ignores both — its codepath
 # rebuilds a fresh options struct from XDG_RUNTIME_DIR and
 # rootless_storage_path.
-# mount_program forces fuse-overlayfs on jammy. Kernel overlay 5.15
-# has no idmapped-layer support, so any container with `--uidmap` (e.g.
-# homeassistant) falls back to a slow per-file chown copy that times
-# out the systemd start. fuse-overlayfs supports idmap in userspace and
-# bypasses the kernel limitation. Noble's 6.x overlay does support it,
-# so we only flip mount_program on for jammy.
+# mount_program forces fuse-overlayfs on kernels older than 5.19.
+# Idmapped overlay layers landed in 5.19, so containers with `--uidmap`
+# (e.g. homeassistant) on jammy GA's 5.15 fall back to a slow per-file
+# chown copy that times out the systemd start. fuse-overlayfs supports
+# idmap in userspace and bypasses the kernel limitation. Gate on the
+# running kernel rather than distribution version because prod runs the
+# linux-generic-hwe-22.04 stack on jammy (kernel 6.x), where native
+# overlay idmap works and fuse-overlayfs would just add overhead.
 - name: Configure podman storage
   when: zfs_root
   copy:
@@ -128,7 +130,9 @@
       runroot = "/run/containers/storage"
       graphroot = "/var/lib/containers/storage"
       rootless_storage_path = "/var/lib/containers/rootless/$USER"
-      {% if ansible_distribution_major_version == "22" %}
+      {% set kmajor = ansible_kernel.split('.')[0] | int %}
+      {% set kminor = ansible_kernel.split('.')[1] | int %}
+      {% if kmajor < 5 or (kmajor == 5 and kminor < 19) %}
 
       [storage.options.overlay]
       mount_program = "/usr/bin/fuse-overlayfs"
