@@ -8,10 +8,10 @@
   user:
     name: "{{ service_user_name }}"
     group: "{{ service_user_name }}"
-    createhome: false
+    createhome: "{{ service_user_createhome | default(false) }}"
     system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
+    shell: "{{ service_user_shell | default('/usr/sbin/nologin') }}"
+    home: "{{ service_user_home | default('/nonexistent') }}"
   become: true
   register: service_user_result
 
