@@ -1,30 +1,47 @@
 #!/bin/bash
 set -euxo pipefail
 
-# DISKS rides in as a space-delimited string (see provision.sh's env
-# block — bash arrays don't survive `export`). Used unquoted in for
-# loops; ${DISKS%% *} grabs the first disk and `wc -w <<<"$DISKS"`
-# counts them where indexing or length is needed.
-
-# Mirrors provision.sh's partdev: tack the partition number onto the
-# right separator (none for vd*/sd*/hd*, 'p' for nvme/mmcblk/loop/md,
-# '-part' for /dev/disk/by-id symlinks). Bash functions don't survive
-# the chroot boundary, so the helper is duplicated here.
-partdev() {
-  local disk="$1" n="$2"
-  case "$disk" in
-  /dev/disk/by-id/*) echo "${disk}-part${n}" ;;
-  /dev/nvme[0-9]*n[0-9]* | /dev/mmcblk[0-9]* | /dev/loop[0-9]* | /dev/md[0-9]*) echo "${disk}p${n}" ;;
-  *) echo "${disk}${n}" ;;
-  esac
-}
-
-# Local constants. SOURCE_NAME comes from packer's shell-provisioner
-# env block; DISKS, LAYOUT, SSH_KEY_PUB are exported by provision.sh.
+# Env consumed by this script:
+# - From packer's shell-provisioner env block (qemu.pkr.hcl):
+#   UBUNTU_NAME, UBUNTU_MIRROR, UBUNTU_MIRROR_SECURITY,
+#   UBUNTU_MIRROR_UPSTREAM, UBUNTU_MIRROR_SECURITY_UPSTREAM,
+#   SSH_KEY_PUB.
+# - Inherited from provision.sh: DISKS, DISKS_COUNT, LAYOUT,
+#   PARTITIONS_EFI, PARTITIONS_SWAP.
+# All list-shaped vars are space-delimited strings (bash arrays don't
+# survive `export`); use them unquoted to word-split.
 # HOSTNAME is a placeholder -- the deploy step (ansible / cloud-init /
 # bare-metal wrapper) is expected to overwrite it before first boot.
 HOSTNAME=ubuntu
 USERNAME=vagrant
+
+# ZFSBootMenu version installed into the shipped image. Independent
+# from mise.toml's [vars] zbm_version, which controls what `mise run
+# zbm:build` produces — bump that to build a new tarball, bump this
+# to start shipping it. They line up once a new tarball has been
+# uploaded to Gitea (`mise run zbm:upload`) and verified.
+ZBM_VERSION="3.1.0"
+
+# Arch-derived constants: rEFInd EFI binary names + ZBM tarball arch
+# token. The build VM and the shipped image are always the same arch,
+# so detecting via `uname -m` here is equivalent to passing in from
+# packer. Fail loud on unsupported arches; adding aarch64 vs x86_64
+# also requires updating qemu.pkr.hcl's arch_table.
+ZBM_ARCH=$(uname -m)
+case $ZBM_ARCH in
+x86_64)
+  REFIND_NAME=refind_x64.efi
+  REFIND_FALLBACK_NAME=BOOTX64.EFI
+  ;;
+aarch64)
+  REFIND_NAME=refind_aa64.efi
+  REFIND_FALLBACK_NAME=BOOTAA64.EFI
+  ;;
+*)
+  echo >&2 "Unsupported arch: $ZBM_ARCH"
+  exit 1
+  ;;
+esac
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -160,8 +177,8 @@ zfs set org.zfsbootmenu:commandline="" "rpool/ROOT"
 # Create efi & swap
 
 if [ "$LAYOUT" = "" ]; then
-  EFI_DEVICE=$(partdev "${DISKS%% *}" 1)
-  SWAP_DEVICE=$(partdev "${DISKS%% *}" 2)
+  EFI_DEVICE="$PARTITIONS_EFI"
+  SWAP_DEVICE="$PARTITIONS_SWAP"
 else
   apt-get install --yes mdadm
 
@@ -173,14 +190,6 @@ else
   # reorders the modprobe before the write but doesn't help us since the
   # mount is still ro. Remount rw for the duration of the chroot.
   mount -o remount,rw /sys
-
-  efi_parts=()
-  swap_parts=()
-  # shellcheck disable=SC2086  # word-splitting on DISKS is the point
-  for d in $DISKS; do
-    efi_parts+=("$(partdev "$d" 1)")
-    swap_parts+=("$(partdev "$d" 2)")
-  done
 
   # This configuration exploits the fact that, with version 1.0, mdraid metadata will be written to the end of each partition.
   # Newer metadata versions would be written to the beginning of each partition, and the system firmware would fail to
@@ -194,11 +203,13 @@ else
   # creation; bitmap data is incompatible with metadata=1.0 ESPs (the
   # firmware would refuse the partition), so suppress the prompt with an
   # explicit no.
-  mdadm --create /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --bitmap=none --raid-devices="$(wc -w <<<"$DISKS")" "${efi_parts[@]}"
+  # shellcheck disable=SC2086  # word-splitting on PARTITIONS_EFI is the point
+  mdadm --create /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --bitmap=none --raid-devices="$DISKS_COUNT" $PARTITIONS_EFI
   mdadm --detail --brief /dev/md/efi >>/etc/mdadm/mdadm.conf
   EFI_DEVICE=/dev/md/efi
 
-  mdadm --create /dev/md/swap --name=swap --metadata=1.2 --level="raid0" --raid-devices="$(wc -w <<<"$DISKS")" "${swap_parts[@]}"
+  # shellcheck disable=SC2086  # word-splitting on PARTITIONS_SWAP is the point
+  mdadm --create /dev/md/swap --name=swap --metadata=1.2 --level="raid0" --raid-devices="$DISKS_COUNT" $PARTITIONS_SWAP
   mdadm --detail --brief /dev/md/swap >>/etc/mdadm/mdadm.conf
   SWAP_DEVICE=/dev/md/swap
 fi
@@ -246,16 +257,16 @@ mount /boot/efi
 #
 # ZBM is built + uploaded out-of-band by `mise run zbm:build && zbm:upload`
 # (mise.toml's [vars] zbm_version drives those). The version installed
-# here is decoupled — it lives in qemu.pkr.hcl's local.zbm_version and
-# flows through provision.sh into $ZBM_VERSION. Bump the local once a
-# new tarball has been built + uploaded to Gitea and verified.
+# here is decoupled — it's the $ZBM_VERSION constant set at the top of
+# this script. Bump it once a new tarball has been built + uploaded to
+# Gitea and verified.
 #
 # Components mode: the artifact is a tarball with kernel + initrd, not a
 # unified UKI .EFI. rEFInd does the kernel handoff via loader/initrd
 # directives — the systemd-boot aarch64 EFI stub silently fails under
 # EDK2 on QEMU virt, and rEFInd's own loader works on both arches.
 # rEFInd ships as refind_x64.efi on x86_64 and refind_aa64.efi on aarch64
-# ($REFIND_NAME, also resolved upstream in HCL).
+# ($REFIND_NAME, derived from `uname -m` at the top of this script).
 ZBM_URL="https://gitea.lab.fahm.fr/api/packages/adrienkohlbecker/generic/zfsbootmenu/${ZBM_VERSION}/zfsbootmenu-v${ZBM_VERSION}-${ZBM_ARCH}.tar.gz"
 
 apt-get install --yes curl
@@ -312,8 +323,8 @@ apt-get install --yes efibootmgr
 # paths it knows about, and an entry is per-disk regardless of whether
 # the ESP content is mirrored. Single-disk variants get a single bare
 # "rEFInd" entry (unchanged).
-if [ "$(wc -w <<<"$DISKS")" -eq 1 ]; then
-  efibootmgr -c -d "${DISKS%% *}" -p 1 \
+if [ "$DISKS_COUNT" -eq 1 ]; then
+  efibootmgr -c -d "$DISKS" -p 1 \
     -L "rEFInd" \
     -l "\\EFI\\refind\\${REFIND_NAME}"
 else

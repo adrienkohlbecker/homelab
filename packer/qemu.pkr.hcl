@@ -38,13 +38,6 @@ variable "upstream_mirrors" {
 }
 
 locals {
-  # ZFSBootMenu version to install into the shipped image. Independent
-  # from mise.toml's [vars] zbm_version, which controls what `mise run
-  # zbm:build` produces — bump that to build a new tarball, bump this
-  # to start shipping it. They line up once a new build has been
-  # uploaded to Gitea (`mise run zbm:upload`) and verified.
-  zbm_version = "3.1.0"
-
   # Cloud image dated snapshots. Bump when refreshing; older snapshots
   # eventually fall out of the upstream listing (and out of the Nexus
   # proxy cache). Same role as the previous `ubuntu_versions.patch`
@@ -72,31 +65,26 @@ locals {
   # - qemuargs: aarch64's `virt` machine ships no default graphics or
   #   input devices so VNC would be blank without these. q35 already
   #   has std VGA + PS/2 keyboard, so the x86_64 list is empty.
-  # - refind_name: rEFInd EFI binary; chroot.sh drops it into the
-  #   efibootmgr boot entry verbatim.
-  # - refind_fallback_name: UEFI fallback path filename; chroot.sh
-  #   copies refind to /boot/efi/EFI/BOOT/<fallback> so a host whose
-  #   NVRAM was wiped (CMOS clear, BIOS update, "Restore Defaults")
-  #   still boots from the ESP.
   # - cloud_image_suffix: filename token in the upstream cloud-image
   #   tarball naming.
   # - upstream/nexus_archive/security: x86_64 ships glibc on
   #   archive/security; aarch64 lives under ports.
+  # rEFInd binary names + ZBM version live in chroot.sh (per-arch case
+  # block) — the build VM and the shipped image are always the same
+  # arch, so chroot.sh can derive them from `uname -m` itself.
   arch_table = {
     x86_64 = {
-      machine_type         = "q35"
-      accelerator          = "kvm"
-      efi_firmware_code    = "/usr/share/OVMF/OVMF_CODE.fd"
-      efi_firmware_vars    = "/usr/share/OVMF/OVMF_VARS.fd"
-      image_format         = "raw"
-      qemuargs             = []
-      refind_name          = "refind_x64.efi"
-      refind_fallback_name = "BOOTX64.EFI"
-      cloud_image_suffix   = "amd64"
-      upstream_archive     = "http://archive.ubuntu.com/ubuntu"
-      upstream_security    = "http://security.ubuntu.com/ubuntu"
-      nexus_archive        = "http://nexus.lab.fahm.fr/repository/ubuntu-archive"
-      nexus_security       = "http://nexus.lab.fahm.fr/repository/ubuntu-security"
+      machine_type       = "q35"
+      accelerator        = "kvm"
+      efi_firmware_code  = "/usr/share/OVMF/OVMF_CODE.fd"
+      efi_firmware_vars  = "/usr/share/OVMF/OVMF_VARS.fd"
+      image_format       = "raw"
+      qemuargs           = []
+      cloud_image_suffix = "amd64"
+      upstream_archive   = "http://archive.ubuntu.com/ubuntu"
+      upstream_security  = "http://security.ubuntu.com/ubuntu"
+      nexus_archive      = "http://nexus.lab.fahm.fr/repository/ubuntu-archive"
+      nexus_security     = "http://nexus.lab.fahm.fr/repository/ubuntu-security"
     }
     aarch64 = {
       machine_type      = "virt"
@@ -110,22 +98,35 @@ locals {
         ["-device", "usb-kbd"],
         ["-device", "usb-tablet"],
       ]
-      refind_name          = "refind_aa64.efi"
-      refind_fallback_name = "BOOTAA64.EFI"
-      cloud_image_suffix   = "arm64"
-      upstream_archive     = "http://ports.ubuntu.com/ubuntu-ports"
-      upstream_security    = "http://ports.ubuntu.com/ubuntu-ports"
-      nexus_archive        = "http://nexus.lab.fahm.fr/repository/ubuntu-ports"
-      nexus_security       = "http://nexus.lab.fahm.fr/repository/ubuntu-ports"
+      cloud_image_suffix = "arm64"
+      upstream_archive   = "http://ports.ubuntu.com/ubuntu-ports"
+      upstream_security  = "http://ports.ubuntu.com/ubuntu-ports"
+      nexus_archive      = "http://nexus.lab.fahm.fr/repository/ubuntu-ports"
+      nexus_security     = "http://nexus.lab.fahm.fr/repository/ubuntu-ports"
     }
   }
   arch_cfg = local.arch_table[var.arch]
 
-  # Maps each packer source to the test machine spec verify-boot drives.
+  # Per-source config consumed downstream:
+  # - machine: the test machine spec verify-boot drives.
+  # - disks: space-delimited list of whole-disk paths the build VM
+  #   exposes to provision.sh as $DISKS. The qemu source declares the
+  #   disks in disk_additional_size; this string mirrors what they end
+  #   up as inside the guest.
+  # - layout: zpool create layout token — "" for single-disk, "mirror"
+  #   for an rpool mirror. Consumed by provision.sh and chroot.sh.
   # Add an entry whenever a new source "qemu.ubuntu" block joins the build.
-  variant_machine = {
-    "zfs"     = "box"
-    "zfs-lab" = "lab"
+  variant_config = {
+    zfs = {
+      machine = "box"
+      disks   = "/dev/vdb"
+      layout  = ""
+    }
+    zfs-lab = {
+      machine = "lab"
+      disks   = "/dev/vdb /dev/vdc /dev/vdd"
+      layout  = "mirror"
+    }
   }
 
   # Search PATH for qemu-system-{arch}; lets the same template work on
@@ -270,15 +271,13 @@ build {
     # never points at Nexus.
     env = {
       "SOURCE_NAME"                     = "${source.name}"
+      "DISKS"                           = local.variant_config[source.name].disks
+      "LAYOUT"                          = local.variant_config[source.name].layout
       "UBUNTU_NAME"                     = "${var.ubuntu_name}"
       "UBUNTU_MIRROR"                   = local.build_archive
       "UBUNTU_MIRROR_SECURITY"          = local.build_security
       "UBUNTU_MIRROR_UPSTREAM"          = local.arch_cfg.upstream_archive
       "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.arch_cfg.upstream_security
-      "ZBM_VERSION"                     = "${local.zbm_version}"
-      "ZBM_ARCH"                        = "${var.arch}"
-      "REFIND_NAME"                     = "${local.arch_cfg.refind_name}"
-      "REFIND_FALLBACK_NAME"            = "${local.arch_cfg.refind_fallback_name}"
       "SSH_KEY_PUB"                     = join("\n", local.vagrant_ssh_keys)
     }
   }
@@ -333,7 +332,7 @@ build {
     post-processor "shell-local" {
       name             = "verify-boot"
       inline_shebang   = "/bin/bash"
-      environment_vars = ["MACHINE=${local.variant_machine[source.name]}"]
+      environment_vars = ["MACHINE=${local.variant_config[source.name].machine}"]
       inline = [
         "set -euxo pipefail",
         "log=\"test/out/$$MACHINE.${var.ubuntu_name}._launch.output.ansi\"",
