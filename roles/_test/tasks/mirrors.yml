@@ -40,6 +40,30 @@
       location = "{{ nexus_url }}/repository/ghcr.io"
   become: true
 
+- name: _test | Check for cloud-init
+  ansible.builtin.stat:
+    path: /etc/cloud/cloud.cfg.d
+  register: _test_cloud_init_dir
+
+- name: _test | Disable cloud-init manage_etc_hosts
+  # cloud-init's manage_etc_hosts can regenerate /etc/hosts on boot from a
+  # template, wiping the blockinfile entries below. noble's default is
+  # `false` today, but pin it explicitly so a future default flip doesn't
+  # silently break test boxes. Skips when cloud-init isn't installed
+  # (ZFS variants).
+  when:
+    - _test_cloud_init_dir.stat.exists
+    - extra_hosts | default({}) | length > 0
+  ansible.builtin.copy:
+    dest: /etc/cloud/cloud.cfg.d/90-disable-manage-hosts.cfg
+    mode: "0644"
+    owner: root
+    group: root
+    backup: true
+    content: |
+      manage_etc_hosts: false
+  become: true
+
 - name: _test | Pin lab.fahm.fr DNS to LAN IP
   # Test boxes inherit DNS via qemu user-mode → host's resolver, which works
   # only as long as the dev host's resolver knows about lab.fahm.fr split DNS.
