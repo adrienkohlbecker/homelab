@@ -1,0 +1,29 @@
+- name: install | Install packages
+  apt:
+    name:
+      - man-db # to pass systemd-analyze verification
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - podman
+
+- name: install | Install podman
+  apt:
+    pkg:
+      - podman
+    policy_rc_d: 101
+    cache_valid_time: 3600
+  register: podman_apt
+  become: true
+  tags:
+    - podman
+
+- name: install | Install aardvark dns
+  when: ansible_distribution_major_version != "22"
+  apt:
+    pkg:
+      - aardvark-dns
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - podman
