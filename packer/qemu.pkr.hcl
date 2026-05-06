@@ -13,7 +13,12 @@ variable "ubuntu_name" {
 
 variable "output_base" {
   type        = string
-  description = "Base directory for build artifacts. Each source writes into <output_base>/<source-name>. mise-tasks/packer/build sets this to a fresh tmpdir under QEMU_DIR/<ubuntu>/ and renames the per-source outputs into their final ubuntu-<variant> dirs after verify-boot passes."
+  description = "Staging directory packer writes into. Each source writes <output_base>/<source-name>. mise-tasks/packer/build sets this to a fresh tmpdir under QEMU_DIR/<ubuntu>/ so the previous good artifacts under artifact_base stay intact while the new ones build."
+}
+
+variable "artifact_base" {
+  type        = string
+  description = "Parent directory of final per-source artifact dirs. The install post-processor renames <output_base>/<source-name> -> <artifact_base>/<source-name> after verify + compress pass."
 }
 
 variable "arch" {
@@ -353,6 +358,21 @@ build {
         "  qemu-img convert -W -c -O qcow2 -o compression_type=zstd \"$$disk\" \"$$disk.tmp\"",
         "  mv \"$$disk.tmp\" \"$$disk\"",
         "done",
+      ]
+    }
+
+    # Install: atomic-rename the per-source output out of the staging
+    # tmpdir into its final home. Drops the previous good artifact
+    # right before the move so the window where neither exists is one
+    # rename. mise-tasks/packer/build rmdirs the (now empty) tmpdir
+    # after the build returns.
+    post-processor "shell-local" {
+      name           = "install"
+      inline_shebang = "/bin/bash"
+      inline = [
+        "set -euxo pipefail",
+        "rm -rf ${var.artifact_base}/${source.name}",
+        "mv ${var.output_base}/${source.name} ${var.artifact_base}/${source.name}",
       ]
     }
   }
