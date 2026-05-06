@@ -1,0 +1,60 @@
+- name: install | Configure apt retries
+  # Acquire::Retries::Delay (apt 2.7+ in noble) adds backoff between
+  # attempts so a Nexus restart of a few seconds isn't burned through
+  # instantly; apt on jammy retries immediately.
+  template:
+    src: 80-retries.j2
+    dest: /etc/apt/apt.conf.d/80-retries
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - apt
+
+- name: install | Configure apt sources (jammy legacy)
+  when: ansible_distribution_release == "jammy"
+  template:
+    src: sources.list.j2
+    dest: /etc/apt/sources.list
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: apt_mirror_legacy
+  become: true
+  tags:
+    - apt
+
+- name: install | Drop legacy /etc/apt/sources.list (noble+)
+  when: ansible_distribution_release != "jammy"
+  file:
+    path: /etc/apt/sources.list
+    state: absent
+  register: apt_mirror_legacy_drop
+  become: true
+  tags:
+    - apt
+
+- name: install | Configure apt sources (deb822, noble+)
+  when: ansible_distribution_release != "jammy"
+  template:
+    src: ubuntu.sources.j2
+    dest: /etc/apt/sources.list.d/ubuntu.sources
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: apt_mirror_deb822
+  become: true
+  tags:
+    - apt
+
+- name: install | Force apt update
+  when: apt_mirror_legacy.changed or apt_mirror_legacy_drop.changed or apt_mirror_deb822.changed
+  apt:
+    update_cache: true
+  become: true
+  tags:
+    - apt
