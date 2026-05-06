@@ -4,6 +4,10 @@ packer {
       version = "~> 1"
       source  = "github.com/hashicorp/qemu"
     }
+    external = {
+      version = ">= 0.0.2"
+      source  = "github.com/joomcode/external"
+    }
   }
 }
 
@@ -21,14 +25,14 @@ variable "artifact_base" {
   description = "Parent directory of final per-source artifact dirs. The install post-processor renames <output_base>/<source-name> -> <artifact_base>/<source-name> after verify + compress pass."
 }
 
-variable "arch" {
-  type        = string
-  default     = "x86_64"
-  description = "Host arch for the build (x86_64 or aarch64). Auto-resolved by mise.toml's [env] PKR_VAR_arch from the host's arch()."
-  validation {
-    condition     = contains(["x86_64", "aarch64"], var.arch)
-    error_message = "Arch must be one of: x86_64, aarch64."
-  }
+# Host arch detected at template-eval time. The build VM and the
+# shipped image are always the same arch as documented (x86_64 =
+# Linux + KVM, aarch64 = arm Mac + HVF), so the host's arch is the
+# right value to feed everywhere downstream. The arch_table lookup
+# at local.arch_cfg fails loudly on anything outside x86_64/aarch64.
+data "external-raw" "host_arch" {
+  program = ["uname", "-m"]
+  query   = ""
 }
 
 variable "upstream_mirrors" {
@@ -38,6 +42,11 @@ variable "upstream_mirrors" {
 }
 
 locals {
+  # Normalize Mac's "arm64" to "aarch64" (qemu / refind / ZBM use the
+  # latter; uname -m reports the former). Pass-through for x86_64.
+  arch_raw = trimspace(data.external-raw.host_arch.result)
+  arch     = local.arch_raw == "arm64" ? "aarch64" : local.arch_raw
+
   # Cloud image dated snapshots. Bump when refreshing; older snapshots
   # eventually fall out of the upstream listing (and out of the Nexus
   # proxy cache). Same role as the previous `ubuntu_versions.patch`
@@ -105,7 +114,7 @@ locals {
       nexus_security     = "http://nexus.lab.fahm.fr/repository/ubuntu-ports"
     }
   }
-  arch_cfg = local.arch_table[var.arch]
+  arch_cfg = local.arch_table[local.arch]
 
   # Per-source config consumed downstream:
   # - machine: the test machine spec verify-boot drives.
@@ -132,7 +141,7 @@ locals {
   # Search PATH for qemu-system-{arch}; lets the same template work on
   # Linux (`/usr/bin/qemu-system-x86_64`) and Mac (`/opt/homebrew/bin/...`)
   # without per-OS path hacks.
-  qemu_binary = "qemu-system-${var.arch}"
+  qemu_binary = "qemu-system-${local.arch}"
 
   # Single source of truth for the vagrant authorized keys. Rendered
   # into both the cloud-init seed (for the build VM) and chroot.sh's
