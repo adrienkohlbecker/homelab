@@ -3,6 +3,16 @@
     name: netdata
     tasks_from: install
 
+# install.yml uses policy_rc_d=101 so apt won't auto-start; prod starts
+# netdata in main.yml after configuration. The test fixture skips main.yml,
+# so start netdata here — health_copy below calls `netdatacli reload-health`
+# which fails ENOENT on /run/netdata/netdata.pipe if the service is down.
+- name: _setup | Start netdata
+  systemd:
+    name: netdata
+    state: started
+  become: true
+
 - name: _test | Install nginx
   import_role:
     name: _test
