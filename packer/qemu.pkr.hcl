@@ -11,6 +11,16 @@ packer {
   }
 }
 
+# Host arch detected at template-eval time. The build VM and the
+# shipped image are always the same arch as documented (x86_64 =
+# Linux + KVM, aarch64 = arm Mac + HVF), so the host's arch is the
+# right value to feed everywhere downstream. The arch_table lookup
+# at local.arch_cfg fails loudly on anything outside x86_64/aarch64.
+data "external-raw" "host_arch" {
+  program = ["uname", "-m"]
+  query   = ""
+}
+
 variable "ubuntu_name" {
   type = string
 }
@@ -23,16 +33,6 @@ variable "build_directory" {
 variable "output_directory" {
   type        = string
   description = "Parent directory of final per-source artifact dirs. The install post-processor renames <build_directory>/<source-name> -> <output_directory>/<source-name> after verify + compress pass."
-}
-
-# Host arch detected at template-eval time. The build VM and the
-# shipped image are always the same arch as documented (x86_64 =
-# Linux + KVM, aarch64 = arm Mac + HVF), so the host's arch is the
-# right value to feed everywhere downstream. The arch_table lookup
-# at local.arch_cfg fails loudly on anything outside x86_64/aarch64.
-data "external-raw" "host_arch" {
-  program = ["uname", "-m"]
-  query   = ""
 }
 
 variable "upstream_mirrors" {
@@ -49,8 +49,7 @@ locals {
 
   # Cloud image dated snapshots. Bump when refreshing; older snapshots
   # eventually fall out of the upstream listing (and out of the Nexus
-  # proxy cache). Same role as the previous `ubuntu_versions.patch`
-  # field for live-server ISOs.
+  # proxy cache).
   ubuntu_snapshots = {
     jammy    = "20260320"
     noble    = "20260323"
@@ -60,15 +59,13 @@ locals {
 
   # Arch-keyed configuration table. Centralizes everything that varies
   # between the supported builds. In this stack arch is a 1:1 proxy for
-  # OS (x86_64 = Linux + KVM, aarch64 = arm Mac + HVF); if arm64 Linux
-  # ever joins the mix, this needs to split by os too — accelerator,
-  # image_format, and firmware paths would all diverge.
+  # OS (x86_64 = Linux + KVM, aarch64 = arm Mac + HVF).
   #
   # Field notes:
   # - accelerator: kvm on Linux, hvf on Mac.
   # - efi_firmware_*: ovmf on Linux, Homebrew qemu (aarch64 code + arm
   #   vars) on Mac.
-  # - image_format: raw on Linux (dozer/scratch already does CoW + zstd
+  # - image_format: raw on Linux (zfs already does CoW + zstd
   #   so qcow2 stacks redundant work); qcow2 on Mac (APFS has no
   #   fs-level compression).
   # - qemuargs: aarch64's `virt` machine ships no default graphics or
@@ -76,13 +73,10 @@ locals {
   #   has std VGA + PS/2 keyboard, so the x86_64 list is empty.
   # - cloud_image_suffix: filename token in the upstream cloud-image
   #   tarball naming.
-  # - upstream/nexus_archive/security: x86_64 ships glibc on
-  #   archive/security; aarch64 lives under ports.
-  # rEFInd binary names + ZBM version live in chroot.sh (per-arch case
-  # block) — the build VM and the shipped image are always the same
-  # arch, so chroot.sh can derive them from `uname -m` itself.
+  # - upstream/nexus_archive/security: APT mirror URLs
   arch_table = {
     x86_64 = {
+      qemu_binary        = "qemu-system-x86_64"
       machine_type       = "q35"
       accelerator        = "kvm"
       efi_firmware_code  = "/usr/share/OVMF/OVMF_CODE.fd"
@@ -96,6 +90,7 @@ locals {
       nexus_security     = "http://nexus.lab.fahm.fr/repository/ubuntu-security"
     }
     aarch64 = {
+      qemu_binary       = "qemu-system-aarch64"
       machine_type      = "virt"
       accelerator       = "hvf"
       efi_firmware_code = "/opt/homebrew/share/qemu/edk2-aarch64-code.fd"
@@ -122,26 +117,28 @@ locals {
   #   exposes to provision.sh as $DISKS. The qemu source declares the
   #   disks in disk_additional_size; this string mirrors what they end
   #   up as inside the guest.
+  # - disks_sizes: array of disk sizes.
   # - layout: zpool create layout token — "" for single-disk, "mirror"
   #   for an rpool mirror. Consumed by provision.sh and chroot.sh.
   # Add an entry whenever a new source "qemu.ubuntu" block joins the build.
   variant_config = {
+    # zfs: single-disk rpool. Consumed by the box and pug test variants ;
+    # matches the pug prod host.
     zfs = {
-      machine = "box"
-      disks   = "/dev/vdb"
-      layout  = ""
+      machine    = "box"
+      disks      = "/dev/vdb"
+      disk_sizes = ["40G"]
+      layout     = ""
     }
+    # zfs-lab: mdadm-EFI + mdadm-swap + 3-disk mirror rpool. Consumed
+    # by the lab test variant; matches the lab prod host.
     zfs-lab = {
-      machine = "lab"
-      disks   = "/dev/vdb /dev/vdc /dev/vdd"
-      layout  = "mirror"
+      machine    = "lab"
+      disks      = "/dev/vdb /dev/vdc /dev/vdd"
+      disk_sizes = ["40G", "40G", "40G"]
+      layout     = "mirror"
     }
   }
-
-  # Search PATH for qemu-system-{arch}; lets the same template work on
-  # Linux (`/usr/bin/qemu-system-x86_64`) and Mac (`/opt/homebrew/bin/...`)
-  # without per-OS path hacks.
-  qemu_binary = "qemu-system-${local.arch}"
 
   # Single source of truth for the vagrant authorized keys. Rendered
   # into both the cloud-init seed (for the build VM) and chroot.sh's
@@ -205,7 +202,7 @@ source "qemu" "ubuntu" {
   machine_type         = "${local.arch_cfg.machine_type}"
   memory               = 4096
   net_device           = "virtio-net"
-  qemu_binary          = "${local.qemu_binary}"
+  qemu_binary          = "${local.arch_cfg.qemu_binary}"
   shutdown_command     = "sudo /usr/sbin/shutdown -h now"
   skip_compaction      = true
   ssh_private_key_file = "${path.root}/vagrant.key"
@@ -223,40 +220,28 @@ source "qemu" "ubuntu" {
   # QMP socket lands at <output_dir>/qmp.sock and lets the build be poked
   # out-of-band: `echo '{"execute":"qmp_capabilities"}{"execute":"system_reset"}' \
   #   | socat - UNIX-CONNECT:<output_dir>/qmp.sock` resets the guest without
-  # killing qemu, which is much faster than re-running packer when iterating
-  # on bootloader/firmware bits like ZBM. Other useful commands: system_powerdown
-  # (ACPI shutdown), stop / cont, screendump.
+  # killing qemu, which is much faster than re-running packer when iterating.
   qmp_enable = true
+
+  # Provide port ranges so we avoid any conflict between parallel builds.
+  host_port_max = 2241
+  host_port_min = 2222
+  vnc_port_max  = 5919
+  vnc_port_min  = 5900
 }
 
 build {
 
-  # zfs: single-disk rpool. Consumed by the box and pug test
-  # variants. Per-variant differences (extra pools like apoc) are created
-  # at test boot via test/disks/<variant>.sh, not baked here.
   source "qemu.ubuntu" {
     name                 = "zfs"
-    output_directory     = "${var.build_directory}/zfs"
-    disk_additional_size = ["40G"]
-    host_port_max        = 2231
-    host_port_min        = 2222
-    vnc_port_max         = 5909
-    vnc_port_min         = 5900
+    output_directory     = "${var.build_directory}/${source.name}"
+    disk_additional_size = local.variant_config[source.name].disk_sizes
   }
 
-  # zfs-lab: mdadm-EFI + mdadm-swap + 3-disk mirror rpool. Consumed
-  # by the lab test variant; matches the lab-class prod host shape. Also
-  # serves as the multi-disk regression for provision.sh / chroot.sh and
-  # as a copy-paste reference for provisioning new lab-class prod hosts.
-  # See AGENTS.md "Test Environment Design".
   source "qemu.ubuntu" {
     name                 = "zfs-lab"
-    output_directory     = "${var.build_directory}/zfs-lab"
-    disk_additional_size = ["40G", "40G", "40G"]
-    host_port_max        = 2241
-    host_port_min        = 2232
-    vnc_port_max         = 5919
-    vnc_port_min         = 5910
+    output_directory     = "${var.build_directory}/${source.name}"
+    disk_additional_size = local.variant_config[source.name].disk_sizes
   }
 
   provisioner "file" {
@@ -317,8 +302,7 @@ build {
   }
 
   # Sequential chain: drop the cloud-image disk, smoke-test the boot,
-  # compress (Mac only). All three side-effect-only on ${var.build_directory}/${source.name}.
-  # The final .new -> artdir rename is owned by mise-tasks/packer/build.
+  # compress (Mac only).
   post-processors {
     # packer-ubuntu is the residual cloud-image OS disk — provision.sh
     # debootstraps onto packer-ubuntu-1..N and never writes to vda, so
