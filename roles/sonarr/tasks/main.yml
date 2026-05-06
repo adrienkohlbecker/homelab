@@ -41,6 +41,39 @@
   tags:
     - sonarr
 
+- name: Create sqlite directory
+  when: not (ansible_check_mode and sonarr_user.changed)
+  file:
+    dest: /mnt/services/sqlite/sonarr
+    state: directory
+    owner: sonarr
+    group: media
+    mode: "0755"
+  become: true
+  tags:
+    - sonarr
+
+# Sonarr hardcodes its DBs at /config/<name>.db and writes -wal/-shm next to
+# the resolved path. Symlink at /config so SQLite resolves through to the
+# 4K-recordsize sqlite dataset before computing WAL location. Symlink target
+# matches the host path so it resolves identically inside the container (see
+# matching --volume in sonarr.service.j2).
+- name: Symlink sonarr SQLite DBs onto sqlite dataset
+  when: not (ansible_check_mode and sonarr_user.changed)
+  file:
+    src: "/mnt/services/sqlite/sonarr/{{ item }}"
+    dest: "/mnt/services/sonarr/{{ item }}"
+    state: link
+    owner: sonarr
+    group: media
+    follow: false
+  become: true
+  loop:
+    - sonarr.db
+    - logs.db
+  tags:
+    - sonarr
+
 - name: Configure sonarr
   # Render via copy:content + regex_replace because sonarr rewrites
   # config.xml on shutdown without a trailing newline; a plain template:

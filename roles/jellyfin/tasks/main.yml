@@ -50,6 +50,76 @@
   tags:
     - jellyfin
 
+- name: Create sqlite directory
+  when: not (ansible_check_mode and jellyfin_user.changed)
+  file:
+    dest: /mnt/services/sqlite/jellyfin
+    state: directory
+    owner: "{{ jellyfin_user.uid }}"
+    group: media
+    mode: "0755"
+  become: true
+  tags:
+    - jellyfin
+
+# Jellyfin hardcodes its DBs under /config/data/. Pre-create the parent dir
+# so symlinks below can be placed on a fresh deploy (jellyfin would create
+# it on first start, but that race breaks idempotency).
+- name: Create jellyfin data directory
+  when: not (ansible_check_mode and jellyfin_user.changed)
+  file:
+    dest: /mnt/services/jellyfin/data
+    state: directory
+    owner: "{{ jellyfin_user.uid }}"
+    group: media
+    mode: "0755"
+  become: true
+  tags:
+    - jellyfin
+
+# Symlink the SQLite DBs so Jellyfin's hardcoded /config/data/<name>.db paths
+# resolve through to the 4K sqlite dataset before SQLite computes WAL/SHM.
+- name: Symlink jellyfin SQLite DBs onto sqlite dataset
+  when: not (ansible_check_mode and jellyfin_user.changed)
+  file:
+    src: "/mnt/services/sqlite/jellyfin/{{ item }}"
+    dest: "/mnt/services/jellyfin/data/{{ item }}"
+    state: link
+    owner: "{{ jellyfin_user.uid }}"
+    group: media
+    follow: false
+  become: true
+  loop:
+    - library.db
+    - jellyfin.db
+  tags:
+    - jellyfin
+
+# Introskipper is an optional plugin; only manage its DB symlink when its
+# data dir is already present.
+- name: Check for introskipper plugin data
+  stat:
+    path: /mnt/services/jellyfin/data/introskipper
+  register: jellyfin_introskipper_dir
+  become: true
+  tags:
+    - jellyfin
+
+- name: Symlink introskipper SQLite DB onto sqlite dataset
+  when:
+    - not (ansible_check_mode and jellyfin_user.changed)
+    - jellyfin_introskipper_dir.stat.exists
+  file:
+    src: /mnt/services/sqlite/jellyfin/introskipper.db
+    dest: /mnt/services/jellyfin/data/introskipper/introskipper.db
+    state: link
+    owner: "{{ jellyfin_user.uid }}"
+    group: media
+    follow: false
+  become: true
+  tags:
+    - jellyfin
+
 - name: Create scratch directory
   when: not (ansible_check_mode and jellyfin_user.changed)
   file:
