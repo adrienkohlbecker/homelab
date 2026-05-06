@@ -1,5 +1,5 @@
-# Lets `testrole.py _test` exercise the mirrors fixture as the role under
-# test (with idempotence rerun + _verify auto-invocation). Production
-# playbooks never enter through `_test`; this is purely a harness hook.
-- name: Configure homelab mirrors
-  import_tasks: mirrors.yml
+# Intentionally empty. testrole.py looks for tasks/main.yml to recognise
+# _test as a runnable role; the fixture itself is already applied by the
+# harness's pre-role mirrors playbook (test/playbooks/_mirrors.yml). The
+# idempotence rerun is therefore a no-op and _verify.yml only asserts
+# state — that's the whole point of running `testrole.py _test`.
