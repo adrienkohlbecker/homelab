@@ -6,8 +6,8 @@
 # pin (500) and Ubuntu reject (-10) keep everything else on jammy.
 - name: install | Pin zfs packages to noble (jammy)
   when: ansible_distribution_major_version == "22"
-  copy:
-    src: backports-zfs
+  template:
+    src: backports-zfs.j2
     dest: /etc/apt/preferences.d/backports-zfs
     owner: root
     group: root
@@ -40,9 +40,6 @@
   tags:
     - zfs
 
-# state: latest on jammy so a fresh pin file actually pulls noble's
-# version on the first apply (the package may already be installed at
-# jammy's version). On noble we just want it present.
 - name: install | Install ZoL
   apt:
     package:
@@ -50,9 +47,36 @@
       - zfs-initramfs
       - zfs-zed
       - cron # for cron module
-    state: '{{ "latest" if ansible_distribution_major_version == "22" else "present" }}'
     cache_valid_time: 3600
   register: zfs_apt
+  become: true
+  tags:
+    - zfs
+
+# state: latest across the full backports-zfs pin list so every
+# noble-pinned package actually rolls forward on hosts where any of
+# these were already installed at jammy's version. Install ZoL above
+# only forces zfsutils-linux/zfs-initramfs/zfs-zed; the libzfs/libnvpair
+# companions move with them through Depends, but libssl3t64, locales,
+# chrony, etc. are independent and apt would leave them at jammy's
+# version under state: present even with the pin in place. Reading
+# from zfs_backport_packages keeps this list and
+# templates/backports-zfs.j2's `Package:` line in sync.
+#
+# The when-clause skips on check-mode runs that just added the noble
+# pin/sources — apt's check resolves names against the live cache,
+# CHECK MODE never actually pulled noble's metadata, so anything
+# that exists only in noble would error with "No package matching".
+# The real-mode play afterwards refreshes the cache and runs this
+# task properly.
+- name: install | Upgrade backports-pinned packages to noble (jammy)
+  when:
+    - ansible_distribution_major_version == "22"
+    - not (ansible_check_mode and (zfs_pin.changed or zfs_noble_sources.changed))
+  apt:
+    pkg: '{{ zfs_backport_packages }}'
+    state: latest
+    cache_valid_time: 3600
   become: true
   tags:
     - zfs

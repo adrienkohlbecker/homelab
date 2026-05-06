@@ -1,0 +1,30 @@
+# Packages routed to noble on jammy via /etc/apt/preferences.d/backports-zfs.
+# Both templates/backports-zfs.j2 (the pin file) and tasks/install.yml's
+# `Upgrade backports-pinned packages` task read from this list, so the pin
+# and the explicit-upgrade can't drift out of sync. Userspace tools + the
+# tightly-versioned libzfs/libnvpair/etc. companions, plus the libc/locale
+# stack noble's zfs userspace links against.
+zfs_backport_packages:
+  - zfsutils-linux
+  - zfs-initramfs
+  - zfs-zed
+  - libc6
+  - libzfs4linux
+  - libnvpair3linux
+  - libuutil3linux
+  - libzpool5linux
+  - libssl3t64
+  - libc-bin
+  - libtirpc3t64
+  - libtirpc-common
+  - locales
+  - chrony
+  - adduser
+  - tzdata-legacy
+  - libgnutls30t64
+  - libnettle8t64
+  - libgmp10
+  - libhogweed6t64
+  - libp11-kit0
+  - libunistring5
+  - tzdata
