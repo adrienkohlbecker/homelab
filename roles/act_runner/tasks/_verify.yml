@@ -7,7 +7,7 @@
   command: act_runner --version
   register: _verify_version
   changed_when: false
-  failed_when: act_runner_version not in _verify_version.stderr
+  failed_when: act_runner_version not in _verify_version.stdout
   become: true
 
 - name: _verify | act_runner config file exists
