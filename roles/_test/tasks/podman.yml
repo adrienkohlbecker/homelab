@@ -1,34 +1,54 @@
-- name: _test | Install podman repository
+- name: podman | Add noble backport apt sources (jammy)
   when: ansible_distribution_major_version == "22"
-  shell: |
-    set -euo pipefail
+  copy:
+    dest: /etc/apt/sources.list.d/noble.list
+    mode: "0644"
+    owner: root
+    group: root
+    backup: true
+    content: |
+      deb {{ ubuntu_mirror }} noble main restricted universe multiverse
+      deb {{ ubuntu_mirror }} noble-updates main restricted universe multiverse
+      deb {{ ubuntu_mirror }} noble-backports main restricted universe multiverse
+      deb {{ ubuntu_mirror_security }} noble-security main restricted universe multiverse
+  become: true
+  register: _test_podman_noble_sources
 
-    cat <<EOF >/etc/apt/sources.list.d/noble.list
-    deb {{ ubuntu_mirror }} noble main restricted universe multiverse
-    deb {{ ubuntu_mirror }} noble-updates main restricted universe multiverse
-    deb {{ ubuntu_mirror }} noble-backports main restricted universe multiverse
-    deb {{ ubuntu_mirror_security }} noble-security main restricted universe multiverse
-    EOF
+- name: podman | Pin podman to noble (jammy)
+  when: ansible_distribution_major_version == "22"
+  copy:
+    dest: /etc/apt/preferences.d/podman-noble-backport
+    mode: "0644"
+    owner: root
+    group: root
+    backup: true
+    content: |
+      Package: podman buildah containernetworking-plugins conmon slirp4netns libc6 libgpgme11t64 libsubid4 libc-bin golang-github-containers-common fuse-overlayfs libglib2.0-0t64 locales libfuse3-3 fuse3
+      Pin: release n=noble
+      Pin-Priority: 991
 
-    cat <<EOF >/etc/apt/preferences.d/podman-noble-backport
-    Package: podman buildah containernetworking-plugins conmon slirp4netns libc6 libgpgme11t64 libsubid4 libc-bin golang-github-containers-common fuse-overlayfs libglib2.0-0t64 locales libfuse3-3 fuse3
-    Pin: release n=noble
-    Pin-Priority: 991
+      Package: *
+      Pin: release n=jammy
+      Pin-Priority: 500
 
-    Package: *
-    Pin: release n=jammy
-    Pin-Priority: 500
+      Package: *
+      Pin: release o=Ubuntu
+      Pin-Priority: -10
+  become: true
+  register: _test_podman_noble_pin
 
-    Package: *
-    Pin: release o=Ubuntu
-    Pin-Priority: -10
-    EOF
-  args:
-    executable: /bin/bash
-    creates: /etc/apt/preferences.d/podman-noble-backport
+- name: podman | Refresh apt cache after backport changes
+  when: _test_podman_noble_sources.changed or _test_podman_noble_pin.changed
+  apt:
+    update_cache: true
   become: true
 
-- name: Create podman zvol
+- name: podman | Install podman
+  import_role:
+    name: podman
+    tasks_from: install
+
+- name: podman | Create podman zvol
   when: zfs_root
   zfs:
     name: rpool/podman
@@ -37,7 +57,7 @@
       volsize: '{{ "30GB" | human_to_bytes | string }}'
   become: true
 
-- name: Create a ext4 filesystem on podman zvol
+- name: podman | Create ext4 filesystem on podman zvol
   when: zfs_root
   filesystem:
     fstype: ext4
@@ -45,7 +65,7 @@
     resizefs: true
   become: true
 
-- name: Mount podman zvol
+- name: podman | Mount podman zvol
   when: zfs_root
   mount:
     path: /var/lib/containers
@@ -54,15 +74,4 @@
     opts: defaults,noatime
     state: mounted
     backup: true
-  become: true
-
-- name: _test | Install podman
-  shell: |
-    set -euo pipefail
-
-    apt-get update
-    apt-get install -y podman
-  args:
-    executable: /bin/bash
-    creates: /usr/bin/podman
   become: true
