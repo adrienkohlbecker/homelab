@@ -1,13 +1,5 @@
 - name: Install ZoL
-  apt:
-    package:
-      - zfsutils-linux
-      - zfs-initramfs
-      - zfs-zed
-      - cron # for cron module
-    cache_valid_time: 3600
-  register: zfs_apt
-  become: true
+  import_tasks: install.yml
   tags:
     - zfs
 
