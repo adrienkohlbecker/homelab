@@ -15,13 +15,3 @@ act_runner_release:
   aarch64:
     url: "{{ mirror_gitea_com }}/gitea/act_runner/releases/download/v{{ act_runner_version }}/act_runner-{{ act_runner_version }}-linux-arm64"
     sha256: "1d727f9190ce559689db9d716d548f01c0cde1c034c9c4d570f7992857251be8"
-
-# Gitea fixture used by _setup.yml for in-test registration.
-act_runner_test_gitea_version: "1.21.11"
-act_runner_test_gitea_release:
-  x86_64:
-    url: "{{ mirror_gitea_dl }}/gitea/{{ act_runner_test_gitea_version }}/gitea-{{ act_runner_test_gitea_version }}-linux-amd64"
-    sha256: "238056fa4616633a9ec5a358aac75275bd3f271d5e5238af3dd5f22c713fe97e"
-  aarch64:
-    url: "{{ mirror_gitea_dl }}/gitea/{{ act_runner_test_gitea_version }}/gitea-{{ act_runner_test_gitea_version }}-linux-arm64"
-    sha256: "1bdbb3507067b3db9c2178be0bc038c2549fddb4eafff96d4a7c0010c7d1e404"

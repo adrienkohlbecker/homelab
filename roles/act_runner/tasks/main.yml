@@ -75,7 +75,7 @@
   when:
     - qemu_test
     - not act_runner_registered.stat.exists
-  command: /gitea actions generate-runner-token
+  command: /usr/local/bin/gitea actions generate-runner-token
   register: _test_runner_token
   become: true
   tags:
