@@ -113,6 +113,13 @@ locals {
   }
   arch_cfg = local.arch_table[var.arch]
 
+  # Maps each packer source to the test machine spec verify-boot drives.
+  # Add an entry whenever a new source "qemu.ubuntu" block joins the build.
+  variant_machine = {
+    "ubuntu-zfs"     = "box"
+    "ubuntu-zfs-lab" = "lab"
+  }
+
   # Search PATH for qemu-system-{arch}; lets the same template work on
   # Linux (`/usr/bin/qemu-system-x86_64`) and Mac (`/opt/homebrew/bin/...`)
   # without per-OS path hacks.
@@ -310,14 +317,22 @@ build {
 
     # Boot the freshly-built image and wait for systemd-fully-booted.
     # Runs before compress so a failed verify short-circuits without
-    # burning CPU on a dead image.
+    # burning CPU on a dead image. test/launch.py with --exit-after-ready
+    # boots the variant, waits for SSH, runs `systemctl is-system-running
+    # --wait`, and exits 0 only on state "running". The 200-line tail on
+    # failure spares the operator a reproduction run for trivial breakage.
     post-processor "shell-local" {
       name             = "verify-boot"
       inline_shebang   = "/bin/bash"
-      environment_vars = ["VARIANT=${replace(source.name, "ubuntu-", "")}"]
+      environment_vars = ["MACHINE=${local.variant_machine[source.name]}"]
       inline = [
         "set -euxo pipefail",
-        "mise run packer:verify \"$$VARIANT\" --ubuntu ${var.ubuntu_name} --image-dir ${var.output_directory}",
+        "log=\"test/out/$$MACHINE.${var.ubuntu_name}._launch.output.ansi\"",
+        "if ! test/launch.py --machine \"$$MACHINE\" --ubuntu ${var.ubuntu_name} --timeout 300 --exit-after-ready --image-dir ${var.output_directory}; then",
+        "  echo \"--- verify-boot failed; dumping $$log ---\" >&2",
+        "  [ -f \"$$log\" ] && tail -200 \"$$log\" >&2",
+        "  exit 1",
+        "fi",
       ]
     }
 
