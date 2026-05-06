@@ -31,6 +31,33 @@
   tags:
     - profilarr
 
+- name: Create sqlite directory
+  when: not (ansible_check_mode and profilarr_user.changed)
+  file:
+    dest: /mnt/services/sqlite/profilarr
+    state: directory
+    owner: profilarr
+    group: profilarr
+    mode: "0755"
+  become: true
+  tags:
+    - profilarr
+
+# Profilarr hardcodes profilarr.db at /config root. Symlink so SQLite
+# resolves through to the 4K sqlite dataset before computing WAL placement.
+- name: Symlink profilarr SQLite DB onto sqlite dataset
+  when: not (ansible_check_mode and profilarr_user.changed)
+  file:
+    src: /mnt/services/sqlite/profilarr/profilarr.db
+    dest: /mnt/services/profilarr/profilarr.db
+    state: link
+    owner: profilarr
+    group: profilarr
+    follow: false
+  become: true
+  tags:
+    - profilarr
+
 # - name: Configure profilarr
 #   template:
 #     src: config.xml.j2

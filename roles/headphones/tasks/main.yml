@@ -41,6 +41,33 @@
   tags:
     - headphones
 
+- name: Create sqlite directory
+  when: not (ansible_check_mode and headphones_user.changed)
+  file:
+    dest: /mnt/services/sqlite/headphones
+    state: directory
+    owner: headphones
+    group: media
+    mode: "0755"
+  become: true
+  tags:
+    - headphones
+
+# Headphones hardcodes headphones.db at /config root. Symlink so SQLite
+# resolves through to the 4K sqlite dataset before computing WAL placement.
+- name: Symlink headphones SQLite DB onto sqlite dataset
+  when: not (ansible_check_mode and headphones_user.changed)
+  file:
+    src: /mnt/services/sqlite/headphones/headphones.db
+    dest: /mnt/services/headphones/headphones.db
+    state: link
+    owner: headphones
+    group: media
+    follow: false
+  become: true
+  tags:
+    - headphones
+
 - name: Configure headphones
   template:
     src: config.ini.j2

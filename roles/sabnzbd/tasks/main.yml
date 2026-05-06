@@ -51,6 +51,48 @@
   tags:
     - sabnzbd
 
+- name: Create sqlite directory
+  when: not (ansible_check_mode and sabnzbd_user.changed)
+  file:
+    dest: /mnt/services/sqlite/sabnzbd
+    state: directory
+    owner: sabnzbd
+    group: media
+    mode: "0755"
+  become: true
+  tags:
+    - sabnzbd
+
+# Sabnzbd creates admin/ on first start, but the symlink below needs the
+# parent dir to exist already. Pre-create with matching ownership.
+- name: Create admin directory
+  when: not (ansible_check_mode and sabnzbd_user.changed)
+  file:
+    dest: /mnt/services/sabnzbd/admin
+    state: directory
+    owner: sabnzbd
+    group: media
+    mode: "0755"
+  become: true
+  tags:
+    - sabnzbd
+
+# Sabnzbd writes history1.db inside /config/admin/ alongside cookies.dat,
+# server.cert, queue.sav, etc. Symlink only the SQLite DB so SQLite resolves
+# through to the 4K sqlite dataset before computing WAL/SHM placement.
+- name: Symlink sabnzbd history DB onto sqlite dataset
+  when: not (ansible_check_mode and sabnzbd_user.changed)
+  file:
+    src: /mnt/services/sqlite/sabnzbd/history1.db
+    dest: /mnt/services/sabnzbd/admin/history1.db
+    state: link
+    owner: sabnzbd
+    group: media
+    follow: false
+  become: true
+  tags:
+    - sabnzbd
+
 - name: Create storage directories
   file:
     dest: "{{ item }}"

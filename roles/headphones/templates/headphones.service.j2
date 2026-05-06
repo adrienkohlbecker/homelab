@@ -10,6 +10,8 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
+After=zfs_mount_mnt_services_sqlite.service
+Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 {% if zfs_has_scratch_mount %}
 After=zfs_mount_mnt_scratch.service
@@ -48,6 +50,7 @@ ExecStart=/usr/bin/podman run \
     --env PGID={{ media_group.gid }} \
     --env TZ=Europe/Paris \
     --volume /mnt/services/headphones:/config \
+    --volume /mnt/services/sqlite/headphones:/mnt/services/sqlite/headphones \
     --volume /mnt/media:/media \
     --volume /mnt/scratch:/scratch \
     --publish 127.0.0.1:8181:8181/tcp \
