@@ -3,6 +3,8 @@ zfs_has_services_mount: false
 zfs_has_scratch_mount: false
 zfs_has_media_mount: false
 zfs_has_data_mount: false
+zfs_has_brumath_mount: false
+zfs_has_eckwersheim_mount: false
 zfs_has_minio_mount: false
 home_subnet: 10.0.2.0/24
 macvlan_parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
