@@ -114,7 +114,7 @@
     - act_runner
 
 - name: Register runner
-  when: not (ansible_check_mode and act_runner_user.changed) # TODO: registering fails
+  when: not (ansible_check_mode and act_runner_user.changed)
   command: >-
     act_runner register
     -c /mnt/services/act_runner/config.yml
