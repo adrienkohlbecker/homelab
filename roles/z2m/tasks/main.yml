@@ -31,34 +31,6 @@
   tags:
     - z2m
 
-- name: Create sqlite directory
-  when: not (ansible_check_mode and z2m_user.changed)
-  file:
-    dest: /mnt/services/sqlite/z2m
-    state: directory
-    owner: z2m
-    group: z2m
-    mode: "0755"
-  become: true
-  tags:
-    - z2m
-
-# Zigbee2mqtt writes database.db at /app/data root alongside state.json,
-# coordinator backups, and logs. Symlink so SQLite resolves to the 4K
-# sqlite dataset before placing WAL/SHM.
-- name: Symlink z2m SQLite DB onto sqlite dataset
-  when: not (ansible_check_mode and z2m_user.changed)
-  file:
-    src: /mnt/services/sqlite/z2m/database.db
-    dest: /mnt/services/z2m/database.db
-    state: link
-    owner: z2m
-    group: z2m
-    follow: false
-  become: true
-  tags:
-    - z2m
-
 - name: Configure z2m
   template:
     src: configuration_generated.yaml.j2

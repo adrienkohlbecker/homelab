@@ -10,8 +10,6 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
-After=zfs_mount_mnt_services_sqlite.service
-Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
@@ -39,7 +37,6 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="z2m" \
     --volume /mnt/services/z2m:/app/data \
-    --volume /mnt/services/sqlite/z2m:/mnt/services/sqlite/z2m \
     --user {{ z2m_user.uid }}:{{ z2m_user.group }} \
     --publish 127.0.0.1:8081:8081/tcp \
     --health-cmd         "wget --quiet --tries=1 --spider http://localhost:8081/ > /dev/null" \
