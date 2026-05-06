@@ -5,18 +5,26 @@
 # place, USE_KDUMP=1 set, ZBM cmdline carries crashkernel=, reboot
 # requested.
 
-- name: _verify | Hardlockup panic sysctl is set
-  command: sysctl -n kernel.hardlockup_panic
-  register: kdump_verify_hardlockup
-  changed_when: false
-  failed_when: kdump_verify_hardlockup.stdout | trim != '1'
+# arm64 jammy GA has no NMI watchdog so /proc/sys/kernel/hardlockup_panic
+# is absent and main.yml skips it. Mirror that here: only verify the
+# sysctls the running kernel actually exposes.
+- name: _verify | Detect available lockup-panic sysctls
+  stat:
+    path: /proc/sys/kernel/{{ item }}
+  loop:
+    - hardlockup_panic
+    - softlockup_panic
+  register: kdump_verify_lockup_sysctls
   become: true
 
-- name: _verify | Softlockup panic sysctl is set
-  command: sysctl -n kernel.softlockup_panic
-  register: kdump_verify_softlockup
+- name: _verify | Lockup panic sysctls are set to 1
+  command: sysctl -n kernel.{{ item.item }}
+  register: kdump_verify_lockup
   changed_when: false
-  failed_when: kdump_verify_softlockup.stdout | trim != '1'
+  failed_when: kdump_verify_lockup.stdout | trim != '1'
+  loop: '{{ kdump_verify_lockup_sysctls.results | selectattr("stat.exists") }}'
+  loop_control:
+    label: 'kernel.{{ item.item }}'
   become: true
 
 - name: _verify | Kdump-tools package installed
