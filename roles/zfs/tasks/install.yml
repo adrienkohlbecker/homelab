@@ -1,42 +1,14 @@
 # jammy ships zfs 2.1.x; the homelab tracks 2.2.x for the autotrim and
-# encryption fixes that landed there. Pin zfsutils-linux + libs to noble
-# (priority 991) and route apt at noble's repos so the package upgrade
-# resolves cleanly. backports-zfs lists every transitive dep that has to
-# come from noble alongside the userspace tools — the catch-all jammy
-# pin (500) and Ubuntu reject (-10) keep everything else on jammy.
-- name: install | Pin zfs packages to noble (jammy)
-  when: ansible_distribution_major_version == "22"
-  template:
-    src: backports-zfs.j2
-    dest: /etc/apt/preferences.d/backports-zfs
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
-  register: zfs_pin
-  tags:
-    - zfs
-
-- name: install | Add noble apt sources (jammy)
-  when: ansible_distribution_major_version == "22"
-  apt_repository:
-    repo: "{{ item }}"
-  become: true
-  register: zfs_noble_sources
-  loop:
-    - 'deb {{ ubuntu_mirror }} noble main restricted universe multiverse # For zfsutils-linux userspace tools'
-    - 'deb {{ ubuntu_mirror }} noble-updates main restricted universe multiverse # For zfsutils-linux userspace tools'
-    - 'deb {{ ubuntu_mirror }} noble-backports main restricted universe multiverse # For zfsutils-linux userspace tools'
-    - 'deb {{ ubuntu_mirror_security }} noble-security main restricted universe multiverse # For zfsutils-linux userspace tools'
-  tags:
-    - zfs
-
-- name: install | Refresh apt cache after noble setup
-  when: zfs_pin.changed or zfs_noble_sources.changed
-  apt:
-    update_cache: true
-  become: true
+# encryption fixes that landed there. The full pin list lives in
+# zfs_backport_packages — including libssl3t64, locales, chrony, etc.
+# that aren't hard deps of zfsutils-linux but ship as noble-only and
+# need explicit upgrade.
+- name: install | Apply zfs backports pin + upgrade (jammy)
+  import_role:
+    name: backports
+  vars:
+    backports_name: zfs
+    backports_packages: '{{ zfs_backport_packages }}'
   tags:
     - zfs
 
@@ -49,34 +21,6 @@
       - cron # for cron module
     cache_valid_time: 3600
   register: zfs_apt
-  become: true
-  tags:
-    - zfs
-
-# state: latest across the full backports-zfs pin list so every
-# noble-pinned package actually rolls forward on hosts where any of
-# these were already installed at jammy's version. Install ZoL above
-# only forces zfsutils-linux/zfs-initramfs/zfs-zed; the libzfs/libnvpair
-# companions move with them through Depends, but libssl3t64, locales,
-# chrony, etc. are independent and apt would leave them at jammy's
-# version under state: present even with the pin in place. Reading
-# from zfs_backport_packages keeps this list and
-# templates/backports-zfs.j2's `Package:` line in sync.
-#
-# The when-clause skips on check-mode runs that just added the noble
-# pin/sources — apt's check resolves names against the live cache,
-# CHECK MODE never actually pulled noble's metadata, so anything
-# that exists only in noble would error with "No package matching".
-# The real-mode play afterwards refreshes the cache and runs this
-# task properly.
-- name: install | Upgrade backports-pinned packages to noble (jammy)
-  when:
-    - ansible_distribution_major_version == "22"
-    - not (ansible_check_mode and (zfs_pin.changed or zfs_noble_sources.changed))
-  apt:
-    pkg: '{{ zfs_backport_packages }}'
-    state: latest
-    cache_valid_time: 3600
   become: true
   tags:
     - zfs

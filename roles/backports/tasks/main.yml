@@ -1,0 +1,68 @@
+# Routes the listed packages to noble on jammy via apt pin priority
+# 991, adds noble's apt sources so the upgrade resolves, refreshes
+# the cache, and forces state: latest across the full list. Designed
+# for roles whose userspace stack ships too old in jammy (zfs 2.1.x,
+# podman 3.x). On noble (or any non-22.04 release) every task is a
+# no-op — the distro version is already current.
+#
+# Inputs:
+#   backports_name: short label for the pin filename
+#                   (/etc/apt/preferences.d/backports-<name>).
+#   backports_packages: list of package names. Becomes both the pin
+#                       file's `Package:` line and the upgrade task's
+#                       apt: pkg list, so they can't drift.
+#   backports_policy_rc_d: optional, passed through to the upgrade
+#                          task's apt module. Set to 101 when the
+#                          consumer manages daemon start/stop itself
+#                          and needs apt to skip post-install starts.
+- name: Pin {{ backports_name }} packages to noble (jammy)
+  when: ansible_distribution_major_version == "22"
+  template:
+    src: backports-pin.j2
+    dest: /etc/apt/preferences.d/backports-{{ backports_name }}
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: backports_pin
+
+- name: Add noble apt sources (jammy)
+  when: ansible_distribution_major_version == "22"
+  apt_repository:
+    repo: "{{ item }}"
+  become: true
+  register: backports_noble_sources
+  loop:
+    - 'deb {{ ubuntu_mirror }} noble main restricted universe multiverse # backports'
+    - 'deb {{ ubuntu_mirror }} noble-updates main restricted universe multiverse # backports'
+    - 'deb {{ ubuntu_mirror }} noble-backports main restricted universe multiverse # backports'
+    - 'deb {{ ubuntu_mirror_security }} noble-security main restricted universe multiverse # backports'
+
+- name: Refresh apt cache after noble setup
+  when: backports_pin.changed or backports_noble_sources.changed
+  apt:
+    update_cache: true
+  become: true
+
+# state: latest because apt with state: present leaves an installed
+# package alone even when the pin would prefer noble — only a fresh
+# install or an explicit upgrade re-evaluates the pin. Listing the
+# whole pin set here also catches binaries (buildah, conmon, etc.)
+# that aren't hard deps of the consumer's primary package.
+#
+# The when-clause skips on check-mode runs that just added the pin/
+# sources — apt's check resolves names against the live cache, and
+# CHECK MODE never actually pulled noble's metadata, so anything
+# noble-only would error with "No package matching". The real-mode
+# play afterwards refreshes the cache and runs this task properly.
+- name: Upgrade backports-pinned packages to noble (jammy)
+  when:
+    - ansible_distribution_major_version == "22"
+    - not (ansible_check_mode and (backports_pin.changed or backports_noble_sources.changed))
+  apt:
+    pkg: '{{ backports_packages }}'
+    state: latest
+    policy_rc_d: '{{ backports_policy_rc_d | default(omit) }}'
+    cache_valid_time: 3600
+  become: true
