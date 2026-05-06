@@ -55,8 +55,8 @@ packer build \
   --on-error=ask \
   -var "ubuntu_name=${ubuntu}" \
   -var "upstream_mirrors=${upstream}" \
-  -var "output_base=${tmp}" \
-  -var "artifact_base=${base}" \
+  -var "build_directory=${tmp}" \
+  -var "output_directory=${base}" \
   "${only_args[@]}" \
   packer
 
