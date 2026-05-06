@@ -81,7 +81,7 @@
   tags:
     - act_runner
 
-- name: Compute registration parameters
+- name: Compute registration instance URL
   set_fact:
     act_runner_instance: >-
       {{
@@ -89,16 +89,27 @@
         if qemu_test
         else 'https://gitea.' + inventory_hostname + '.' + domain
       }}
-    act_runner_token: >-
-      {%- if not qemu_test -%}
-        {{ gitea_runner_registration_token }}
-      {%- elif ansible_check_mode -%}
-        TOKEN
-      {%- elif (_test_runner_token.stdout_lines | default([])) | length > 1 -%}
-        {{ _test_runner_token.stdout_lines[1] }}
-      {%- else -%}
-        UNUSED
-      {%- endif -%}
+  tags:
+    - act_runner
+
+- name: Compute prod registration token
+  when: not qemu_test
+  set_fact:
+    act_runner_token: "{{ gitea_runner_registration_token }}"
+  tags:
+    - act_runner
+
+# In check-mode (or when .runner already exists) the fixture's
+# `gitea actions generate-runner-token` task is skipped, leaving
+# _test_runner_token unset. The default([..., 'TOKEN'])[1] gives a
+# placeholder so check-mode dry-run output still renders the
+# `act_runner register` command; on real runs the registration's
+# `creates: .../.runner` short-circuits when already registered,
+# so the placeholder never reaches the wire.
+- name: Compute test registration token
+  when: qemu_test
+  set_fact:
+    act_runner_token: "{{ (_test_runner_token.stdout_lines | default(['', 'TOKEN']))[1] }}"
   tags:
     - act_runner
 
