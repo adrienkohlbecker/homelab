@@ -4,7 +4,6 @@
 #USAGE arg "<variant>" help="Variant: zfs or zfs-lab"
 #USAGE flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
 #USAGE flag "--upstream" help="Pull apt packages and the cloud image from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
-#USAGE flag "--no-verify" help="Skip the post-build packer:verify smoke test (boot + systemctl is-system-running)."
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
@@ -19,57 +18,23 @@ new="${artdir}.new"
 # refuse to write into a non-empty output_directory.
 rm -rf "${new}"
 
-arch="$(uname -m | sed s/arm64/aarch64/)"
-
-# raw on Linux pairs with the zstd-compressed dozer/scratch/qemu host
-# dataset (no need to stack qcow2 CoW + compression on top). qcow2 on
-# Mac since APFS has no fs-level compression.
-case "$(uname -s)" in
-Linux) image_format=raw ;;
-Darwin) image_format=qcow2 ;;
-*) echo "unsupported OS: $(uname -s)" >&2; exit 1 ;;
-esac
+# packer/qemu.pkr.hcl runs verify + compress as post-processors. Arch
+# and image_format come from mise.toml's PKR_VAR_* env.
 
 # PACKER_FLAGS expands to multiple flags; intentional word-split.
 # shellcheck disable=SC2086
 packer build ${PACKER_FLAGS} \
   -var "ubuntu_name=${ubuntu}" \
-  -var "arch=${arch}" \
-  -var "image_format=${image_format}" \
   -var "upstream_mirrors=${upstream}" \
   -var "zbm_version=${ZBM_VERSION}" \
   -var "output_directory=${new}" \
   "-only=qemu.ubuntu-${variant}" \
   packer
 
-# Verify the staging dir BEFORE swapping it in: a failed boot test
-# leaves the previous good artifact at ${artdir} untouched, so the
-# operator can iterate on the build without losing a known-good image.
-if [ "${usage_no_verify:-false}" != "true" ]; then
-  mise run packer:verify "${variant}" --ubuntu "${ubuntu}" --image-dir "${new}"
-fi
-
-# Compress the shipped disks here (not in packer post-processors) so a
-# failed boot test short-circuits before we burn cycles compressing.
-# qemu's disk_compression flag only handles the primary VMName disk
-# (which the cleanup post-processor deletes); additional disks need
-# this loop. Done in-place under ${new} so the swap below is the last
-# step -- if compression dies, ${artdir} still points at the previous
-# good artifact.
-#
-# Linux: artifacts land on /mnt/scratch/qemu (zfs, compression=zstd) so
-# qcow2-level compression is pure CPU waste. Mac (APFS, no fs-level
-# compression) keeps the loop.
-if [ "$(uname -s)" != "Linux" ]; then
-  for disk in "${new}"/packer-ubuntu-*; do
-    echo "==> compressing $(basename "${disk}")"
-    qemu-img convert -W -c -O qcow2 -o compression_type=zstd "${disk}" "${disk}.tmp"
-    mv "${disk}.tmp" "${disk}"
-  done
-fi
-
 # Atomic-ish swap: drop the previous final dir and rename .new in.
-# Packer's post-processor already removed the unused vda cloud-image
-# disk; everything else under .new is keepable as-is.
+# The packer post-processors already removed the unused cloud-image
+# disk, verified the boot, and (on Mac) compressed; everything under
+# .new is keepable as-is. Only the swap stays here so a failed build
+# leaves ${artdir} untouched at the previous good artifact.
 rm -rf "${artdir}"
 mv "${new}" "${artdir}"

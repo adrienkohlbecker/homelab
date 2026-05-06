@@ -28,6 +28,10 @@ ZBM_VERSION = '{{vars.zbm_version}}'
 # On Linux, keep packer's ISO cache off the root FS; empty on macOS so
 # packer uses its default (./packer_cache in cwd).
 PACKER_CACHE_DIR = '{% if os() == "linux" %}/mnt/scratch/packer{% endif %}'
+# Auto-resolve packer template vars from the host. PKR_VAR_<name> overrides
+# the matching `variable "<name>"` default in packer/qemu.pkr.hcl.
+# image_format derives from arch in qemu.pkr.hcl (1:1 in this stack).
+PKR_VAR_arch = '{% if arch() == "arm64" %}aarch64{% else %}{{arch()}}{% endif %}'
 
 [tools]
 opentofu = "1.11.6"

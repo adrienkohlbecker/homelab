@@ -18,7 +18,7 @@ variable "output_directory" {
 variable "arch" {
   type        = string
   default     = "x86_64"
-  description = "Host arch for the build (x86_64 or aarch64). mise.toml resolves this from `uname -m`."
+  description = "Host arch for the build (x86_64 or aarch64). Auto-resolved by mise.toml's [env] PKR_VAR_arch from the host's arch()."
   validation {
     condition     = contains(["x86_64", "aarch64"], var.arch)
     error_message = "Arch must be one of: x86_64, aarch64."
@@ -29,16 +29,6 @@ variable "upstream_mirrors" {
   type        = bool
   default     = false
   description = "When true, pull apt packages and the cloud image straight from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
-}
-
-variable "image_format" {
-  type        = string
-  default     = "qcow2"
-  description = "Disk image format: raw on Linux (artifacts land on dozer/scratch/qemu where ZFS already does CoW + zstd, so qcow2 stacks redundant work) or qcow2 on Mac (APFS has no fs-level compression). mise-tasks/packer/build resolves this from `uname -s`."
-  validation {
-    condition     = contains(["raw", "qcow2"], var.image_format)
-    error_message = "image_format must be raw or qcow2."
-  }
 }
 
 variable "zbm_version" {
@@ -58,35 +48,75 @@ locals {
   }
   ubuntu_snapshot = local.ubuntu_snapshots[var.ubuntu_name]
 
+  # Arch-keyed configuration table. Centralizes everything that varies
+  # between the supported builds. In this stack arch is a 1:1 proxy for
+  # OS (x86_64 = Linux + KVM, aarch64 = arm Mac + HVF); if arm64 Linux
+  # ever joins the mix, this needs to split by os too — accelerator,
+  # image_format, and firmware paths would all diverge.
+  #
+  # Field notes:
+  # - accelerator: kvm on Linux, hvf on Mac.
+  # - efi_firmware_*: ovmf on Linux, Homebrew qemu (aarch64 code + arm
+  #   vars) on Mac.
+  # - image_format: raw on Linux (dozer/scratch already does CoW + zstd
+  #   so qcow2 stacks redundant work); qcow2 on Mac (APFS has no
+  #   fs-level compression).
+  # - qemuargs: aarch64's `virt` machine ships no default graphics or
+  #   input devices so VNC would be blank without these. q35 already
+  #   has std VGA + PS/2 keyboard, so the x86_64 list is empty.
+  # - refind_name: rEFInd EFI binary; chroot.sh drops it into the
+  #   efibootmgr boot entry verbatim.
+  # - refind_fallback_name: UEFI fallback path filename; chroot.sh
+  #   copies refind to /boot/efi/EFI/BOOT/<fallback> so a host whose
+  #   NVRAM was wiped (CMOS clear, BIOS update, "Restore Defaults")
+  #   still boots from the ESP.
+  # - cloud_image_suffix: filename token in the upstream cloud-image
+  #   tarball naming.
+  # - upstream/nexus_archive/security: x86_64 ships glibc on
+  #   archive/security; aarch64 lives under ports.
+  arch_table = {
+    x86_64 = {
+      machine_type         = "q35"
+      accelerator          = "kvm"
+      efi_firmware_code    = "/usr/share/OVMF/OVMF_CODE.fd"
+      efi_firmware_vars    = "/usr/share/OVMF/OVMF_VARS.fd"
+      image_format         = "raw"
+      qemuargs             = []
+      refind_name          = "refind_x64.efi"
+      refind_fallback_name = "BOOTX64.EFI"
+      cloud_image_suffix   = "amd64"
+      upstream_archive     = "http://archive.ubuntu.com/ubuntu"
+      upstream_security    = "http://security.ubuntu.com/ubuntu"
+      nexus_archive        = "http://nexus.lab.fahm.fr/repository/ubuntu-archive"
+      nexus_security       = "http://nexus.lab.fahm.fr/repository/ubuntu-security"
+    }
+    aarch64 = {
+      machine_type      = "virt"
+      accelerator       = "hvf"
+      efi_firmware_code = "/opt/homebrew/share/qemu/edk2-aarch64-code.fd"
+      efi_firmware_vars = "/opt/homebrew/share/qemu/edk2-arm-vars.fd"
+      image_format      = "qcow2"
+      qemuargs = [
+        ["-device", "virtio-gpu-pci"],
+        ["-device", "qemu-xhci"],
+        ["-device", "usb-kbd"],
+        ["-device", "usb-tablet"],
+      ]
+      refind_name          = "refind_aa64.efi"
+      refind_fallback_name = "BOOTAA64.EFI"
+      cloud_image_suffix   = "arm64"
+      upstream_archive     = "http://ports.ubuntu.com/ubuntu-ports"
+      upstream_security    = "http://ports.ubuntu.com/ubuntu-ports"
+      nexus_archive        = "http://nexus.lab.fahm.fr/repository/ubuntu-ports"
+      nexus_security       = "http://nexus.lab.fahm.fr/repository/ubuntu-ports"
+    }
+  }
+  arch_cfg = local.arch_table[var.arch]
+
   # Search PATH for qemu-system-{arch}; lets the same template work on
   # Linux (`/usr/bin/qemu-system-x86_64`) and Mac (`/opt/homebrew/bin/...`)
   # without per-OS path hacks.
-  qemu_binary  = "qemu-system-${var.arch}"
-  machine_type = var.arch == "x86_64" ? "q35" : "virt"
-  # x86_64 host is Linux + KVM; aarch64 host is arm Mac + HVF in this stack.
-  # If arm64 Linux ever joins the mix, swap in an explicit OS knob here.
-  accelerator = var.arch == "x86_64" ? "kvm" : "hvf"
-  # EFI firmware paths follow the same Linux/Mac split as accelerator.
-  # Linux: ovmf package. Mac: Homebrew qemu (aarch64 code + arm vars).
-  efi_firmware_code = var.arch == "x86_64" ? "/usr/share/OVMF/OVMF_CODE.fd" : "/opt/homebrew/share/qemu/edk2-aarch64-code.fd"
-  efi_firmware_vars = var.arch == "x86_64" ? "/usr/share/OVMF/OVMF_VARS.fd" : "/opt/homebrew/share/qemu/edk2-arm-vars.fd"
-  # qemu's `virt` machine has no default graphics or input devices, so
-  # without these the VNC display is blank. q35 already ships with a std
-  # VGA and PS/2 keyboard, so this is aarch64-only.
-  arch_qemuargs = var.arch == "aarch64" ? [
-    ["-device", "virtio-gpu-pci"],
-    ["-device", "qemu-xhci"],
-    ["-device", "usb-kbd"],
-    ["-device", "usb-tablet"],
-  ] : []
-  # rEFInd EFI binary name is per-arch. chroot.sh drops it into the
-  # efibootmgr boot entry verbatim.
-  refind_name = var.arch == "x86_64" ? "refind_x64.efi" : "refind_aa64.efi"
-  # UEFI firmware fallback path filename per arch. chroot.sh copies
-  # refind to /boot/efi/EFI/BOOT/<fallback> so a host whose NVRAM has
-  # been wiped (CMOS clear, BIOS update, "Restore Defaults") still
-  # boots from the ESP.
-  refind_fallback_name = var.arch == "x86_64" ? "BOOTX64.EFI" : "BOOTAA64.EFI"
+  qemu_binary = "qemu-system-${var.arch}"
 
   # Single source of truth for the vagrant authorized keys. Rendered
   # into both the cloud-init seed (for the build VM) and chroot.sh's
@@ -102,24 +132,19 @@ locals {
   nexus_cloud_base    = "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images/${var.ubuntu_name}/${local.ubuntu_snapshot}"
   cloud_base          = var.upstream_mirrors ? local.upstream_cloud_base : local.nexus_cloud_base
   cloud_checksum      = "file:${local.cloud_base}/SHA256SUMS"
-  cloud_url           = "${local.cloud_base}/${var.ubuntu_name}-server-cloudimg-${var.arch == "x86_64" ? "amd64" : "arm64"}.img"
+  cloud_url           = "${local.cloud_base}/${var.ubuntu_name}-server-cloudimg-${local.arch_cfg.cloud_image_suffix}.img"
 
   # Apt mirrors. By default the build pulls through the lab Nexus proxy
   # (`group_vars/all.yml` uses the same `repository/ubuntu-*` layout); set
   # `-var upstream_mirrors=true` to bypass it. The `upstream_*` pair is
   # always the canonical Ubuntu URL — chroot.sh writes those into the
   # final `/etc/apt/sources.list` so we don't ship Nexus-internal URLs.
-  # x86_64 ships glibc on archive/security; aarch64 lives under ports.
-  upstream_archive  = var.arch == "x86_64" ? "http://archive.ubuntu.com/ubuntu" : "http://ports.ubuntu.com/ubuntu-ports"
-  upstream_security = var.arch == "x86_64" ? "http://security.ubuntu.com/ubuntu" : "http://ports.ubuntu.com/ubuntu-ports"
-  nexus_archive     = var.arch == "x86_64" ? "http://nexus.lab.fahm.fr/repository/ubuntu-archive" : "http://nexus.lab.fahm.fr/repository/ubuntu-ports"
-  nexus_security    = var.arch == "x86_64" ? "http://nexus.lab.fahm.fr/repository/ubuntu-security" : "http://nexus.lab.fahm.fr/repository/ubuntu-ports"
-  build_archive     = var.upstream_mirrors ? local.upstream_archive : local.nexus_archive
-  build_security    = var.upstream_mirrors ? local.upstream_security : local.nexus_security
+  build_archive  = var.upstream_mirrors ? local.arch_cfg.upstream_archive : local.arch_cfg.nexus_archive
+  build_security = var.upstream_mirrors ? local.arch_cfg.upstream_security : local.arch_cfg.nexus_security
 }
 
 source "qemu" "ubuntu" {
-  accelerator        = "${local.accelerator}"
+  accelerator        = "${local.arch_cfg.accelerator}"
   boot_wait          = "2s"
   cpu_model          = "host"
   cores              = 8
@@ -132,9 +157,9 @@ source "qemu" "ubuntu" {
   disk_interface     = "virtio"
   disk_size          = "10G"
   efi_boot           = true
-  efi_firmware_code  = "${local.efi_firmware_code}"
-  efi_firmware_vars  = "${local.efi_firmware_vars}"
-  format             = "${var.image_format}"
+  efi_firmware_code  = "${local.arch_cfg.efi_firmware_code}"
+  efi_firmware_vars  = "${local.arch_cfg.efi_firmware_vars}"
+  format             = "${local.arch_cfg.image_format}"
   headless           = true
   iso_checksum       = "${local.cloud_checksum}"
   iso_url            = "${local.cloud_url}"
@@ -152,7 +177,7 @@ source "qemu" "ubuntu" {
     })
     "meta-data" = ""
   }
-  machine_type         = "${local.machine_type}"
+  machine_type         = "${local.arch_cfg.machine_type}"
   memory               = 4096
   net_device           = "virtio-net"
   output_directory     = "${var.output_directory}"
@@ -169,7 +194,7 @@ source "qemu" "ubuntu" {
   qemuargs = concat([
     ["-object", "rng-random,id=rng0,filename=/dev/urandom"],
     ["-device", "virtio-rng-pci,rng=rng0"],
-  ], local.arch_qemuargs)
+  ], local.arch_cfg.qemuargs)
 
   # QMP socket lands at <output_dir>/qmp.sock and lets the build be poked
   # out-of-band: `echo '{"execute":"qmp_capabilities"}{"execute":"system_reset"}' \
@@ -232,12 +257,12 @@ build {
       "UBUNTU_NAME"                     = "${var.ubuntu_name}"
       "UBUNTU_MIRROR"                   = local.build_archive
       "UBUNTU_MIRROR_SECURITY"          = local.build_security
-      "UBUNTU_MIRROR_UPSTREAM"          = local.upstream_archive
-      "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.upstream_security
+      "UBUNTU_MIRROR_UPSTREAM"          = local.arch_cfg.upstream_archive
+      "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.arch_cfg.upstream_security
       "ZBM_VERSION"                     = "${var.zbm_version}"
       "ZBM_ARCH"                        = "${var.arch}"
-      "REFIND_NAME"                     = "${local.refind_name}"
-      "REFIND_FALLBACK_NAME"            = "${local.refind_fallback_name}"
+      "REFIND_NAME"                     = "${local.arch_cfg.refind_name}"
+      "REFIND_FALLBACK_NAME"            = "${local.arch_cfg.refind_fallback_name}"
       "SSH_KEY_PUB"                     = join("\n", local.vagrant_ssh_keys)
     }
   }
@@ -267,16 +292,52 @@ build {
     destination = "${var.output_directory}/cmdline"
   }
 
-  # packer-ubuntu is the residual cloud-image OS disk — provision.sh
-  # debootstraps onto packer-ubuntu-1..N and never writes to vda, so
-  # nothing downstream consumes it. The .new -> final rename and the
-  # sha256sum manifest are owned by mise-tasks/packer/build.
-  post-processor "shell-local" {
-    inline_shebang = "/bin/bash"
-    inline = [
-      "set -euxo pipefail",
-      "rm -f ${var.output_directory}/packer-ubuntu",
-    ]
+  # Sequential chain: drop the cloud-image disk, smoke-test the boot,
+  # compress (Mac only). All three side-effect-only on ${var.output_directory}.
+  # The final .new -> artdir rename is owned by mise-tasks/packer/build.
+  post-processors {
+    # packer-ubuntu is the residual cloud-image OS disk — provision.sh
+    # debootstraps onto packer-ubuntu-1..N and never writes to vda, so
+    # nothing downstream consumes it.
+    post-processor "shell-local" {
+      name           = "drop-cloudimg-disk"
+      inline_shebang = "/bin/bash"
+      inline = [
+        "set -euxo pipefail",
+        "rm -f ${var.output_directory}/packer-ubuntu",
+      ]
+    }
+
+    # Boot the freshly-built image and wait for systemd-fully-booted.
+    # Runs before compress so a failed verify short-circuits without
+    # burning CPU on a dead image.
+    post-processor "shell-local" {
+      name             = "verify-boot"
+      inline_shebang   = "/bin/bash"
+      environment_vars = ["VARIANT=${replace(source.name, "ubuntu-", "")}"]
+      inline = [
+        "set -euxo pipefail",
+        "mise run packer:verify \"$$VARIANT\" --ubuntu ${var.ubuntu_name} --image-dir ${var.output_directory}",
+      ]
+    }
+
+    # Compress shipped disks in-place. qemu's disk_compression flag only
+    # covers the primary VMName disk (deleted above); additional disks
+    # need this loop. No-op on Linux: artifacts land on a zstd-compressed
+    # ZFS dataset so qcow2-level compression is pure CPU waste.
+    post-processor "shell-local" {
+      name           = "compress"
+      inline_shebang = "/bin/bash"
+      inline = [
+        "set -euxo pipefail",
+        "if [ \"$$(uname -s)\" = \"Linux\" ]; then exit 0; fi",
+        "for disk in ${var.output_directory}/packer-ubuntu-*; do",
+        "  echo \"==> compressing $$(basename \"$$disk\")\"",
+        "  qemu-img convert -W -c -O qcow2 -o compression_type=zstd \"$$disk\" \"$$disk.tmp\"",
+        "  mv \"$$disk.tmp\" \"$$disk\"",
+        "done",
+      ]
+    }
   }
 
 }
