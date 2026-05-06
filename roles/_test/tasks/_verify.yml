@@ -129,3 +129,49 @@
     update_cache: true
     cache_valid_time: 0
   become: true
+
+# nginx fixture: snakeoil certs + prod roles/nginx tasks_from: install.
+
+- name: _verify | Stat snakeoil cert paths
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/letsencrypt/live/{{ domain }}/privkey.pem
+    - /etc/letsencrypt/live/{{ domain }}/chain.pem
+    - /etc/letsencrypt/live/{{ domain }}/fullchain.pem
+    - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem
+    - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/chain.pem
+    - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
+  register: _verify_letsencrypt
+
+- name: _verify | Letsencrypt cert files exist for both domains
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: "missing cert at {{ item.item }}"
+  loop: "{{ _verify_letsencrypt.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: _verify | Read /etc/nginx/nginx.conf
+  ansible.builtin.slurp:
+    src: /etc/nginx/nginx.conf
+  register: _verify_nginx_conf
+
+- name: _verify | Nginx.conf contains expected directives
+  ansible.builtin.assert:
+    that:
+      - "'/etc/letsencrypt/live/' in (_verify_nginx_conf.content | b64decode)"
+      - "'$connection_upgrade' in (_verify_nginx_conf.content | b64decode)"
+      - "'$proxy_forwarded_elem' in (_verify_nginx_conf.content | b64decode)"
+      - "'$proxy_add_forwarded' in (_verify_nginx_conf.content | b64decode)"
+    fail_msg: "/etc/nginx/nginx.conf doesn't look like prod's nginx.conf.j2 render"
+
+- name: _verify | Nginx is active
+  ansible.builtin.systemd:
+    name: nginx
+  register: _verify_nginx_unit
+  failed_when:
+    - _verify_nginx_unit.status.LoadState != "loaded"
+    - _verify_nginx_unit.status.ActiveState != "active"
+  become: true
