@@ -11,7 +11,7 @@
 - Configure everything: `ansible-playbook site.yml --limit prod` (`ansible.cfg` already points at `hosts.ini`; set `--tags` to narrow scope).
 - Focus on one service or host: `ansible-playbook wireguard.yml -l lab --tags wireguard`.
 - Manage DNS: `mise run tf init`, `mise run tf plan`, then `mise run tf apply` — the `tf` task `cd`s into `terraform/` and forwards everything to `tofu` (use `--` for flags mise might intercept, e.g. `mise run tf plan -- -refresh=false`).
-- Refresh the integration image when the base OS changes: `mise run packer:build zfs` (or `zfs-lab`); `--ubuntu noble` targets a different release. `mise run packer:all` builds `zfs` + `zfs-lab` in parallel. `ubuntu-zfs` is consumed by `box`/`pug` test variants; `ubuntu-zfs-lab` (3-disk mirror rpool) is consumed by the `lab` test variant and matches the lab-class prod host shape. See "Test Environment Design" below.
+- Refresh the integration image when the base OS changes: `mise run packer:build` builds both `zfs` and `zfs-lab` in parallel (packer's multi-source -only handles the fan-out). Pass one or more variants explicitly to narrow it: `mise run packer:build zfs` or `mise run packer:build zfs zfs-lab`. `--ubuntu noble` targets a different release. `ubuntu-zfs` is consumed by `box`/`pug` test variants; `ubuntu-zfs-lab` (3-disk mirror rpool) is consumed by the `lab` test variant and matches the lab-class prod host shape. See "Test Environment Design" below.
 - Lint everything: `mise run lint` runs ansible-lint, ansible syntax-check, terraform/packer fmt -check, black --check, yamllint, and shellcheck in parallel; `mise run fmt` applies fixes (ansible-lint --fix, terraform/packer fmt, black, and `mise fmt` for `mise.toml` itself).
 
 ## Coding Style & Naming Conventions
@@ -58,7 +58,7 @@ The harness has four variants — `minimal`, `box`, `lab`, `pug` — chosen by d
 Two packer images, both first-class:
 
 - `ubuntu-zfs` — single-disk rpool. Consumed by the `box` and `pug` test variants.
-- `ubuntu-zfs-lab` — mdadm-EFI + mdadm-swap + 3-disk mirror rpool. Consumed by the `lab` test variant; matches the lab-class prod host shape. Doubles as the multi-disk regression for `chroot.sh` / `provision.sh` (both images must build clean on every `mise run packer:all`) and as a copy-paste reference for provisioning new lab-class hosts.
+- `ubuntu-zfs-lab` — mdadm-EFI + mdadm-swap + 3-disk mirror rpool. Consumed by the `lab` test variant; matches the lab-class prod host shape. Doubles as the multi-disk regression for `chroot.sh` / `provision.sh` (both images must build clean on every `mise run packer:build`) and as a copy-paste reference for provisioning new lab-class hosts.
 
 ## Commit & Pull Request Guidelines
 History favors short, imperative subjects such as “Fix dnscrypt” or “Add profilarr”; prefix with a role when it helps clarity (`wireguard: rotate peers`). Each PR should summarize the motivation, list impacted hosts or roles, and link related issues. Mention which commands were run (`test/testrole.py`, `test/testall.py`, `terraform plan`, screenshots when relevant) and flag inventory, vault, or DNS updates so reviewers can re-run `vault.sh`.
