@@ -66,6 +66,7 @@
 - name: Lab roles
   hosts: box,lab
   roles:
+    - kdump
     - libvirt
     - prometheus # for minio
     - minio
