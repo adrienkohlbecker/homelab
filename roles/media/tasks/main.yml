@@ -17,39 +17,19 @@
   tags:
     - media
 
-- name: Create zfs filesystem
-  when: zfs_root
-  zfs:
-    name: '{{ zfs_tank_filesystem }}/media'
-    state: present
-    extra_zfs_properties:
-      mountpoint: /mnt/media
+- name: Configure media dataset
+  import_role:
+    name: zfs
+    tasks_from: dataset
+  vars:
+    zfs_dataset: '{{ zfs_tank_filesystem }}/media'
+    zfs_dataset_mountpoint: /mnt/media
+    zfs_dataset_group: media
+    zfs_dataset_mode: '0775'
+    zfs_dataset_extra_properties:
       'autobackup:bak': 'false'
       recordsize: '1048576'
       special_small_blocks: '32768'
-  become: true
-  tags:
-    - media
-
-- name: Create mount point
-  file:
-    dest: /mnt/media
-    state: directory
-    owner: "{{ ansible_user }}"
-    group: media
-    mode: "0775"
-  become: true
-  tags:
-    - media
-
-- name: Set up mount service for tank/media
-  when: zfs_root
-  import_role:
-    name: zfs_mount
-    tasks_from: unit
-  vars:
-    zfs_mount_dataset: '{{ zfs_tank_filesystem }}/media'
-    zfs_mount_mountpoint: /mnt/media
   tags:
     - media
 

@@ -1,21 +1,32 @@
-- name: Configure each shared dataset
+- name: Configure zfs datasets
   include_role:
     name: zfs
     tasks_from: dataset
-    apply:
-      tags: data
   loop:
-    - data
-    - brumath
-    - eckwersheim
+    - dataset: '{{ zfs_tank_filesystem }}/data'
+      mountpoint: /mnt/data
+      extra_properties:
+        'autobackup:bak': 'true'
+        special_small_blocks: '32768'
+    - dataset: '{{ zfs_tank_filesystem }}/brumath'
+      mountpoint: /mnt/brumath
+      mode: '0775'
+      extra_properties:
+        'autobackup:bak': 'true'
+        special_small_blocks: '32768'
+    - dataset: '{{ zfs_tank_filesystem }}/eckwersheim'
+      mountpoint: /mnt/eckwersheim
+      mode: '0775'
+      extra_properties:
+        'autobackup:bak': 'true'
+        special_small_blocks: '32768'
   loop_control:
     loop_var: data_item
+    label: '{{ data_item.dataset }}'
   vars:
-    zfs_dataset: '{{ zfs_tank_filesystem }}/{{ data_item }}'
-    zfs_dataset_mountpoint: '/mnt/{{ data_item }}'
-    zfs_dataset_extra_properties:
-      'autobackup:bak': 'true'
-      special_small_blocks: '32768'
-    zfs_dataset_mode: '{{ "0755" if data_item == "data" else "0775" }}'
+    zfs_dataset: '{{ data_item.dataset }}'
+    zfs_dataset_mountpoint: '{{ data_item.mountpoint }}'
+    zfs_dataset_mode: "{{ data_item.mode | default(omit) }}"
+    zfs_dataset_extra_properties: "{{ data_item.extra_properties | default(omit) }}"
   tags:
     - data
