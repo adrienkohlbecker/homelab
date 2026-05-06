@@ -26,7 +26,7 @@
       mountpoint: /mnt/media
       'autobackup:bak': 'false'
       recordsize: '1048576'
-      special_small_blocks: '32K'
+      special_small_blocks: '32768'
   become: true
   tags:
     - media
