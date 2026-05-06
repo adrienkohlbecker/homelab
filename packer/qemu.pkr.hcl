@@ -74,6 +74,7 @@ locals {
   # - cloud_image_suffix: filename token in the upstream cloud-image
   #   tarball naming.
   # - upstream/nexus_archive/security: APT mirror URLs
+  nexus_base = "http://nexus.lab.fahm.fr/repository"
   arch_table = {
     x86_64 = {
       qemu_binary        = "qemu-system-x86_64"
@@ -86,8 +87,8 @@ locals {
       cloud_image_suffix = "amd64"
       upstream_archive   = "http://archive.ubuntu.com/ubuntu"
       upstream_security  = "http://security.ubuntu.com/ubuntu"
-      nexus_archive      = "http://nexus.lab.fahm.fr/repository/ubuntu-archive"
-      nexus_security     = "http://nexus.lab.fahm.fr/repository/ubuntu-security"
+      nexus_archive      = "${local.nexus_base}/ubuntu-archive"
+      nexus_security     = "${local.nexus_base}/ubuntu-security"
     }
     aarch64 = {
       qemu_binary       = "qemu-system-aarch64"
@@ -105,8 +106,8 @@ locals {
       cloud_image_suffix = "arm64"
       upstream_archive   = "http://ports.ubuntu.com/ubuntu-ports"
       upstream_security  = "http://ports.ubuntu.com/ubuntu-ports"
-      nexus_archive      = "http://nexus.lab.fahm.fr/repository/ubuntu-ports"
-      nexus_security     = "http://nexus.lab.fahm.fr/repository/ubuntu-ports"
+      nexus_archive      = "${local.nexus_base}/ubuntu-ports"
+      nexus_security     = "${local.nexus_base}/ubuntu-ports"
     }
   }
   arch_cfg = local.arch_table[local.arch]
@@ -177,14 +178,18 @@ source "qemu" "ubuntu" {
   disk_discard       = "unmap"
   disk_image         = true
   disk_interface     = "virtio"
-  disk_size          = "10G"
-  efi_boot           = true
-  efi_firmware_code  = "${local.arch_cfg.efi_firmware_code}"
-  efi_firmware_vars  = "${local.arch_cfg.efi_firmware_vars}"
-  format             = "${local.arch_cfg.image_format}"
-  headless           = true
-  iso_checksum       = "${local.cloud_checksum}"
-  iso_url            = "${local.cloud_url}"
+  # Cloud-image disk gets resized to this during boot so cloud-init has
+  # room to grow into. provision.sh installs onto packer-ubuntu-1..N
+  # and the drop-cloudimg-disk post-processor deletes this one before
+  # ship — the size only matters for the build-time pivot.
+  disk_size         = "10G"
+  efi_boot          = true
+  efi_firmware_code = "${local.arch_cfg.efi_firmware_code}"
+  efi_firmware_vars = "${local.arch_cfg.efi_firmware_vars}"
+  format            = "${local.arch_cfg.image_format}"
+  headless          = true
+  iso_checksum      = "${local.cloud_checksum}"
+  iso_url           = "${local.cloud_url}"
   # NoCloud datasource: cloud-init auto-detects an attached CD/ISO
   # labelled `cidata` containing user-data + meta-data. cd_content
   # renders these inline via templatefile() so the vagrant pubkey and
@@ -321,20 +326,13 @@ build {
     # Runs before compress so a failed verify short-circuits without
     # burning CPU on a dead image. test/launch.py with --exit-after-ready
     # boots the variant, waits for SSH, runs `systemctl is-system-running
-    # --wait`, and exits 0 only on state "running". The 200-line tail on
-    # failure spares the operator a reproduction run for trivial breakage.
+    # --wait`, and exits 0 only on state "running".
     post-processor "shell-local" {
-      name             = "verify-boot"
-      inline_shebang   = "/bin/bash"
-      environment_vars = ["MACHINE=${local.variant_config[source.name].machine}"]
+      name           = "verify-boot"
+      inline_shebang = "/bin/bash"
       inline = [<<-EOT
         set -euxo pipefail
-        log="test/out/$${MACHINE}.${var.ubuntu_name}._launch.output.ansi"
-        if ! test/launch.py --machine "$${MACHINE}" --ubuntu ${var.ubuntu_name} --timeout 300 --exit-after-ready --image-dir ${var.build_directory}/${source.name}; then
-          echo "--- verify-boot failed; dumping $${log} ---" >&2
-          [ -f "$${log}" ] && tail -200 "$${log}" >&2
-          exit 1
-        fi
+        test/launch.py --machine ${local.variant_config[source.name].machine} --ubuntu ${var.ubuntu_name} --timeout 300 --exit-after-ready --image-dir ${var.build_directory}/${source.name}
       EOT
       ]
     }
