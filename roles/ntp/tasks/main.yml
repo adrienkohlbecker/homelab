@@ -1,8 +1,40 @@
+# Pin chrony to noble on jammy. Noble's libc6 declares
+# `Breaks: chrony (<4.2-3~)`, so any host where another role (zfs,
+# podman) pulls libc6 forward needs chrony at noble too — apt will
+# refuse to leave jammy's 4.2-2 in place. The full pin lives in
+# ntp_backport_packages; on noble (or anything non-22.04) every
+# task in the backports role is a no-op.
+- name: Apply chrony backports pin + upgrade (jammy)
+  import_role:
+    name: backports
+  vars:
+    backports_name: ntp
+    backports_packages: '{{ ntp_backport_packages }}'
+  tags:
+    - ntp
+
 - name: Install chrony
   apt:
     pkg:
       - chrony
     cache_valid_time: 3600
+  register: chrony_apt
+  become: true
+  tags:
+    - ntp
+
+# Restart on a backports upgrade so the running chronyd picks up the
+# noble binary after a jammy→noble flip; otherwise just ensure it's
+# started + enabled (and leave a healthy daemon undisturbed).
+# ntp_backports_updated is set by the backports role from
+# `backports_name: ntp`, registering whether the apt upgrade actually
+# moved chrony forward.
+- name: Start chrony
+  when: not (ansible_check_mode and chrony_apt.changed)
+  systemd:
+    name: chrony
+    enabled: true
+    state: '{{ "restarted" if (ntp_backports_updated | default(false)) else "started" }}'
   become: true
   tags:
     - ntp

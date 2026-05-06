@@ -1,23 +1,64 @@
 # Packages routed to noble on jammy via /etc/apt/preferences.d/backports-podman.
-# Both files/backports-podman.j2 (the pin file) and tasks/install.yml's
-# `Upgrade backports-pinned packages` task read from this list, so the pin
-# and the explicit-upgrade can't drift out of sync. Binaries + their
-# tightly-versioned libs; transitive deps come along through Depends.
+# Both the backports role's pin template and `Upgrade backports-pinned
+# packages` task read from this list, so the pin and the explicit upgrade
+# can't drift out of sync. Pinning is the only way to escape jammy's
+# podman 3.4 — the homelab tracks 4.9 for the netavark networking
+# rewrite, idmapped overlay support, and the rootless improvements that
+# landed across the 4.x series.
 podman_backport_packages:
+  # podman itself — jammy 3.4 vs noble 4.9, a major version bump that
+  # changes the network stack, storage paths, and rootless mapping.
   - podman
+  # buildah ships its own binary podman shells out to for image builds.
+  # Jammy 1.23 isn't ABI-compatible with noble podman's image format.
   - buildah
-  - containernetworking-plugins
-  - conmon
-  - slirp4netns
-  - libc6
-  - libgpgme11t64
-  - libsubid4
-  - libc-bin
-  - golang-github-containers-common
-  - fuse-overlayfs
-  - libglib2.0-0t64
-  - locales
-  - libfuse3-3
-  - fuse3
+  # netavark (Rust DNS+routing) replaced CNI as podman 4.x's default
+  # network backend; aardvark-dns is its DNS resolver. Both ship as
+  # noble-only standalone packages — jammy had only legacy CNI plugins.
+  # podman.socket starts will fail with "netavark: No such file or
+  # directory" if these aren't pinned.
   - netavark
   - aardvark-dns
+  # Rootless overlay storage. fuse-overlayfs is podman's mount_program
+  # on kernels < 5.19 (no idmapped overlay layers); it Depends on
+  # libfuse3-3 / fuse3 from the noble fuse3 stack, which is what gates
+  # --uidmap container starts (e.g. homeassistant). fuse-overlayfs
+  # itself bumps the libfuse3-3 floor past what jammy ships.
+  - fuse-overlayfs
+  - fuse3
+  - libfuse3-3
+  # golang-github-containers-common — shared registries.conf / policy.
+  # json. Noble podman + buildah both Depends: on a version newer than
+  # jammy's 0.44, so this gets dragged forward.
+  - golang-github-containers-common
+  # conmon, slirp4netns, containernetworking-plugins — jammy versions
+  # satisfy noble podman's Depends so a fresh install wouldn't need
+  # these pinned. Kept in the list for hosts already running them at
+  # noble: without the pin, jammy's candidate (priority 500) outranks
+  # the installed noble version (priority 100), and any subsequent
+  # `apt full-upgrade` would silently downgrade them.
+  - conmon
+  - slirp4netns
+  - containernetworking-plugins
+  - libglib2.0-0t64
+  # libgpgme11t64 — t64 ABI rename of libgpgme11. Noble podman links
+  # against the renamed package for image signature verification on
+  # `podman pull`. Provides: libgpgme11 keeps existing reverse-deps
+  # (gnupg's reverse chain) satisfied virtually.
+  - libgpgme11t64
+  # libsubid4 — shadow's subuid/subgid library used for rootless user
+  # namespace mapping. Noble podman Depends: libsubid4 (>= 1:4.11.1);
+  # jammy's libsubid4 is 4.8.x and doesn't satisfy.
+  - libsubid4
+  # libc6 -> 2.39 — pulled in once any of the above noble packages
+  # tightens its libc6 floor past jammy's 2.35.
+  # libc-bin pinned alongside: jammy's libc-bin Depends: libc6 (<2.36),
+  # so libc6 2.39 forces libc-bin to noble too or apt refuses.
+  # Without locales, jammy's locales 2.35 conflicts with noble's libc6
+  # 2.39 and apt resolves by REMOVING it (en_US.UTF-8 etc. disappear).
+  # These overlap with zfs/ntp backport pins on hosts running multiple
+  # roles; apt is fine with multiple pin files declaring the same
+  # package at the same priority.
+  - libc6
+  - libc-bin
+  - locales
