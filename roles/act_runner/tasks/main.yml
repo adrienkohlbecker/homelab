@@ -1,12 +1,3 @@
-- name: Install jq
-  apt:
-    pkg:
-      - jq
-    cache_valid_time: 3600
-  become: true
-  tags:
-    - act_runner
-
 - name: Set up act_runner system user, group, and config dir
   import_role:
     name: service_user
@@ -145,7 +136,7 @@
     group: act_runner
     mode: "0600"
     backup: true
-    validate: jq . %s
+    validate: python3 -c "import json,sys; json.load(open(sys.argv[1]))" %s
   vars:
     act_runner_settings_json: "{{ act_runner_settings_b64['content'] | default('e30=') | b64decode | from_json }}"
   register: act_runner_json_conf

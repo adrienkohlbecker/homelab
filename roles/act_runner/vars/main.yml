@@ -1,4 +1,13 @@
 act_runner_version: "0.2.10"
+
+# Labels written into .runner on every play, so a host_vars override can add
+# or remove a label without re-registering the runner. The runner reports
+# these to gitea on each connection; the gitea side updates lazily.
+act_runner_labels:
+  - "host_{{ inventory_hostname }}:host"
+  - "ubuntu-22.04:docker://ghcr.io/catthehacker/ubuntu:act-22.04"
+  - "ubuntu-24.04:docker://ghcr.io/catthehacker/ubuntu:act-24.04"
+
 act_runner_release:
   x86_64:
     url: "{{ mirror_gitea_com }}/gitea/act_runner/releases/download/v{{ act_runner_version }}/act_runner-{{ act_runner_version }}-linux-amd64"
