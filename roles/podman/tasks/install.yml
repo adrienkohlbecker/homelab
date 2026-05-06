@@ -51,6 +51,11 @@
   apt:
     pkg:
       - podman
+      # podman only Suggests iptables, but netavark shells out to it to set up
+      # --publish port forwarding. Without it, container start fails with the
+      # misleading "Error: netavark: No such file or directory" (it's iptables
+      # that's missing, not netavark).
+      - iptables
     policy_rc_d: 101
     cache_valid_time: 3600
   register: podman_apt
