@@ -25,12 +25,13 @@ for variant in "${variants[@]}"; do
 done
 
 base="${QEMU_DIR}/${ubuntu}"
+mkdir -p "${base}"
 
-# Wipe stale .new dirs from prior aborted runs; packer would otherwise
-# refuse to write into a non-empty output_directory.
-for variant in "${variants[@]}"; do
-  rm -rf "${base}/ubuntu-${variant}.new"
-done
+# Build into a sibling tmpdir so the previous good artifacts at
+# ${base}/ubuntu-<variant> stay intact while the new ones land. On
+# success we atomic-rename each variant out; on failure the tmpdir
+# is left behind for inspection (cleanup via packer:clean).
+tmp=$(mktemp -d "${base}/.build-XXXXXX")
 
 # Build -only filter from variants. Packer parallelizes the matched
 # sources internally (one VM per source, non-overlapping host_port and
@@ -46,15 +47,19 @@ packer build ${PACKER_FLAGS} \
   -var "ubuntu_name=${ubuntu}" \
   -var "upstream_mirrors=${upstream}" \
   -var "zbm_version=${ZBM_VERSION}" \
-  -var "output_base=${base}" \
+  -var "output_base=${tmp}" \
   "-only=${only}" \
   packer
 
-# Atomic-ish swap: drop the previous final dir and rename .new in,
-# per variant. verify-boot ran inside packer so the .new dirs are
+# Atomic-ish swap: drop the previous final dir and move the new one
+# in, per variant. verify-boot ran inside packer so each output is
 # known-good by this point.
 for variant in "${variants[@]}"; do
   artdir="${base}/ubuntu-${variant}"
   rm -rf "${artdir}"
-  mv "${artdir}.new" "${artdir}"
+  mv "${tmp}/ubuntu-${variant}" "${artdir}"
 done
+
+# Tmpdir is empty after the swap loop; remove it so successful builds
+# don't leave bookkeeping behind.
+rmdir "${tmp}"
