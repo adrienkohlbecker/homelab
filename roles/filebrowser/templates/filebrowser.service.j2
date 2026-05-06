@@ -10,6 +10,8 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
+After=zfs_mount_mnt_services_sqlite.service
+Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 {% if zfs_has_media_mount %}
 After=zfs_mount_mnt_media.service
@@ -48,7 +50,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/data:/srv/data:ro \
     --volume /mnt/media:/srv/media:ro \
     --volume /mnt/services:/srv/services:ro \
-    --volume /mnt/services/filebrowser/database:/database \
+    --volume /mnt/services/sqlite/filebrowser:/database \
     --volume /mnt/services/filebrowser/config:/config \
     --publish 127.0.0.1:5890:5890/tcp \
     --env PUID={{ filebrowser_user.uid }} \

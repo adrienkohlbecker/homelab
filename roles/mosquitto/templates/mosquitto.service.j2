@@ -10,6 +10,8 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
+After=zfs_mount_mnt_services_sqlite.service
+Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
@@ -37,7 +39,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="mosquitto" \
     --volume /mnt/services/mosquitto/config:/mosquitto/config \
-    --volume /mnt/services/mosquitto/data:/mosquitto/data \
+    --volume /mnt/services/sqlite/mosquitto:/mosquitto/data \
     --user {{ mosquitto_user.uid }}:{{ mosquitto_user.group }} \
     --publish 127.0.0.1:1883:1883/tcp \
     --publish {{ podman_default_network | ansible.utils.ipmath(1) }}:1883:1883/tcp \
