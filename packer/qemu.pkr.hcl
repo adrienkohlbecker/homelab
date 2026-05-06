@@ -37,12 +37,14 @@ variable "upstream_mirrors" {
   description = "When true, pull apt packages and the cloud image straight from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
 }
 
-variable "zbm_version" {
-  type        = string
-  description = "ZFSBootMenu version to download from Gitea. Single source of truth is mise.toml vars.zbm_version; mise tasks pass it in."
-}
-
 locals {
+  # ZFSBootMenu version to install into the shipped image. Independent
+  # from mise.toml's [vars] zbm_version, which controls what `mise run
+  # zbm:build` produces — bump that to build a new tarball, bump this
+  # to start shipping it. They line up once a new build has been
+  # uploaded to Gitea (`mise run zbm:upload`) and verified.
+  zbm_version = "3.1.0"
+
   # Cloud image dated snapshots. Bump when refreshing; older snapshots
   # eventually fall out of the upstream listing (and out of the Nexus
   # proxy cache). Same role as the previous `ubuntu_versions.patch`
@@ -273,7 +275,7 @@ build {
       "UBUNTU_MIRROR_SECURITY"          = local.build_security
       "UBUNTU_MIRROR_UPSTREAM"          = local.arch_cfg.upstream_archive
       "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.arch_cfg.upstream_security
-      "ZBM_VERSION"                     = "${var.zbm_version}"
+      "ZBM_VERSION"                     = "${local.zbm_version}"
       "ZBM_ARCH"                        = "${var.arch}"
       "REFIND_NAME"                     = "${local.arch_cfg.refind_name}"
       "REFIND_FALLBACK_NAME"            = "${local.arch_cfg.refind_fallback_name}"
