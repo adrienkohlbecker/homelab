@@ -48,6 +48,39 @@
   tags:
     - paperless
 
+# Paperless mixes its SQLite DBs with the Whoosh index, classifier model,
+# and logs in the same data/ dir. Whoosh and the model files don't want
+# 4K records; only the two .db files belong on the sqlite dataset.
+# Symlink them in place (matching-path bind so the host-side symlink
+# resolves identically inside the container).
+- name: Create sqlite directory
+  when: not (ansible_check_mode and paperless_user.changed)
+  file:
+    dest: /mnt/services/sqlite/paperless
+    state: directory
+    owner: paperless
+    group: paperless
+    mode: "0700"
+  become: true
+  tags:
+    - paperless
+
+- name: Symlink paperless SQLite DBs onto sqlite dataset
+  when: not (ansible_check_mode and paperless_user.changed)
+  file:
+    src: "/mnt/services/sqlite/paperless/{{ item }}"
+    dest: "/mnt/services/paperless/data/{{ item }}"
+    state: link
+    owner: paperless
+    group: paperless
+    follow: false
+  become: true
+  loop:
+    - db.sqlite3
+    - celerybeat-schedule.db
+  tags:
+    - paperless
+
 - name: Create paperless secret key
   import_role:
     name: podman_secret

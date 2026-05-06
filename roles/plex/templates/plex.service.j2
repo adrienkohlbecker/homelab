@@ -10,6 +10,8 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
+After=zfs_mount_mnt_services_sqlite.service
+Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 {% if zfs_has_scratch_mount %}
 After=zfs_mount_mnt_scratch.service
@@ -52,6 +54,7 @@ ExecStart=/usr/bin/podman run \
     --env PLEX_UID={{ plex_user.uid }} \
     --env PLEX_GID={{ media_group.gid }} \
     --volume /mnt/services/plex:/config \
+    --volume "/mnt/services/sqlite/plex:/config/Library/Application Support/Plex Media Server/Plug-in Support/Databases" \
     --volume /mnt/media:/media \
     --volume "/mnt/data/MacbookPro/Music/iTunes/iTunes Media/Music:/itunes:ro" \
     --volume /mnt/data/Musique/Records:/records:ro \
