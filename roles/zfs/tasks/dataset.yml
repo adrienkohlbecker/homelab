@@ -1,0 +1,33 @@
+# Generic zfs dataset creator. Inputs:
+#   zfs_dataset:                  full dataset path (e.g. tank/brumath)
+#   zfs_dataset_mountpoint:       mountpoint (e.g. /mnt/brumath)
+#   zfs_dataset_extra_properties: dict of extra zfs properties to set
+#   zfs_dataset_owner:            mountpoint dir owner (default: ansible_user)
+#   zfs_dataset_group:            mountpoint dir group (default: ansible_user)
+#   zfs_dataset_mode:             mountpoint dir mode  (default: "0755")
+
+- name: Create zfs filesystem {{ zfs_dataset }}
+  when: zfs_root
+  zfs:
+    name: '{{ zfs_dataset }}'
+    state: present
+    extra_zfs_properties: "{{ (zfs_dataset_extra_properties | default({})) | combine({'mountpoint': zfs_dataset_mountpoint}) }}"
+  become: true
+
+- name: Create mount point {{ zfs_dataset_mountpoint }}
+  file:
+    dest: '{{ zfs_dataset_mountpoint }}'
+    state: directory
+    owner: "{{ zfs_dataset_owner | default(ansible_user) }}"
+    group: "{{ zfs_dataset_group | default(ansible_user) }}"
+    mode: "{{ zfs_dataset_mode | default('0755') }}"
+  become: true
+
+- name: Set up mount service for {{ zfs_dataset }}
+  when: zfs_root
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    zfs_mount_dataset: '{{ zfs_dataset }}'
+    zfs_mount_mountpoint: '{{ zfs_dataset_mountpoint }}'
