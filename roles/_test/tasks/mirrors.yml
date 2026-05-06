@@ -11,7 +11,6 @@
       deb {{ ubuntu_mirror_security }} {{ ansible_distribution_release }}-security main restricted universe multiverse
       deb {{ ubuntu_mirror }} {{ ansible_distribution_release }}-backports main restricted universe multiverse
   become: true
-  register: _test_apt_sources_jammy
 
 - name: _test | Configure apt sources (deb822)
   when: ansible_distribution_release != "jammy"
@@ -33,10 +32,8 @@
       Components: main universe restricted multiverse
       Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
   become: true
-  register: _test_apt_sources_deb822
 
 - name: _test | Refresh apt cache after rewriting sources
-  when: _test_apt_sources_jammy.changed or _test_apt_sources_deb822.changed
   ansible.builtin.apt:
     update_cache: true
   become: true
