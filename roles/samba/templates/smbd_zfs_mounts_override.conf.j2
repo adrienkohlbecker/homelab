@@ -1,0 +1,18 @@
+{% set share_paths = smb_shares | default([]) | map(attribute='path') | list %}
+[Unit]
+{% if zfs_has_data_mount and '/mnt/data' in share_paths %}
+Requires=zfs_mount_mnt_data.service
+After=zfs_mount_mnt_data.service
+{% endif %}
+{% if zfs_has_media_mount and '/mnt/media' in share_paths %}
+Requires=zfs_mount_mnt_media.service
+After=zfs_mount_mnt_media.service
+{% endif %}
+{% if zfs_has_brumath_mount and '/mnt/brumath' in share_paths %}
+Requires=zfs_mount_mnt_brumath.service
+After=zfs_mount_mnt_brumath.service
+{% endif %}
+{% if zfs_has_eckwersheim_mount and '/mnt/eckwersheim' in share_paths %}
+Requires=zfs_mount_mnt_eckwersheim.service
+After=zfs_mount_mnt_eckwersheim.service
+{% endif %}
