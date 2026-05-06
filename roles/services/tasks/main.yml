@@ -42,3 +42,44 @@
     zfs_mount_mountpoint: /mnt/services
   tags:
     - services
+
+# Carve a child dataset with recordsize=4K for SQLite-heavy services
+# (pihole-FTL, HA recorder). Matches SQLite's default page_size=4096
+# exactly: 1× write amplification, and each modified page contributes
+# only 4K to the snapshot diff instead of 128K at the parent's default.
+# Compression is sacrificed (a 4K record can't compress below the 4K
+# ashift=12 sector floor) but snapshot growth is the binding constraint.
+- name: Create zfs filesystem for sqlite
+  when: zfs_root
+  zfs:
+    name: rpool/services/sqlite
+    state: present
+    extra_zfs_properties:
+      mountpoint: /mnt/services/sqlite
+      'autobackup:bak': "true"
+      recordsize: "4096"
+  become: true
+  tags:
+    - services
+
+- name: Create sqlite data dir
+  file:
+    dest: /mnt/services/sqlite
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - services
+
+- name: Set up mount service for rpool/services/sqlite
+  when: zfs_root
+  import_role:
+    name: zfs_mount
+    tasks_from: unit
+  vars:
+    zfs_mount_dataset: rpool/services/sqlite
+    zfs_mount_mountpoint: /mnt/services/sqlite
+  tags:
+    - services
