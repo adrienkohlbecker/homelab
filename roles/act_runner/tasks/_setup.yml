@@ -38,15 +38,10 @@
     mode: "0644"
   become: true
 
-- name: _test | Install gitea
-  get_url:
-    url: "{{ act_runner_test_gitea_release[ansible_architecture].url }}"
-    checksum: "sha256:{{ act_runner_test_gitea_release[ansible_architecture].sha256 }}"
-    dest: /gitea
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
+- name: _test | Install gitea binary
+  import_role:
+    name: gitea
+    tasks_from: install
 
 - name: _test | Run gitea
   shell: |
@@ -68,7 +63,7 @@
     ENABLED = true
     EOF
 
-    systemd-run env HOME=/root /gitea web
+    systemd-run env HOME=/root /usr/local/bin/gitea web --work-path /
     sleep 5
     echo "gitea.{{ inventory_hostname }}.{{ domain }}"
   args:
