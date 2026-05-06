@@ -1,0 +1,19 @@
+## Ubuntu distribution repositories
+##
+## The following settings can be adjusted to configure which packages to use from Ubuntu.
+## Mirror, suite and component (etc.) can be changed to your liking.
+##
+## See the sources.list(5) manual page for further settings.
+Types: deb
+URIs: {{ ubuntu_mirror }}
+Suites: {{ ansible_distribution_release }} {{ ansible_distribution_release }}-updates {{ ansible_distribution_release }}-backports
+Components: main universe restricted multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+## Ubuntu security updates. Aside from URIs and Suites,
+## this should mirror your choices in the previous section.
+Types: deb
+URIs: {{ ubuntu_mirror_security }}
+Suites: {{ ansible_distribution_release }}-security
+Components: main universe restricted multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg

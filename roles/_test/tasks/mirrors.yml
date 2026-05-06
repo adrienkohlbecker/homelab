@@ -1,42 +1,7 @@
-- name: _test | Configure apt sources (jammy)
-  when: ansible_distribution_release == "jammy"
-  ansible.builtin.copy:
-    dest: /etc/apt/sources.list
-    mode: "0644"
-    owner: root
-    group: root
-    content: |
-      deb {{ ubuntu_mirror }} {{ ansible_distribution_release }} main restricted universe multiverse
-      deb {{ ubuntu_mirror }} {{ ansible_distribution_release }}-updates main restricted universe multiverse
-      deb {{ ubuntu_mirror_security }} {{ ansible_distribution_release }}-security main restricted universe multiverse
-      deb {{ ubuntu_mirror }} {{ ansible_distribution_release }}-backports main restricted universe multiverse
-  become: true
-
-- name: _test | Configure apt sources (deb822)
-  when: ansible_distribution_release != "jammy"
-  ansible.builtin.copy:
-    dest: /etc/apt/sources.list.d/ubuntu.sources
-    mode: "0644"
-    owner: root
-    group: root
-    content: |
-      Types: deb
-      URIs: {{ ubuntu_mirror }}
-      Suites: {{ ansible_distribution_release }} {{ ansible_distribution_release }}-updates {{ ansible_distribution_release }}-backports
-      Components: main universe restricted multiverse
-      Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-
-      Types: deb
-      URIs: {{ ubuntu_mirror_security }}
-      Suites: {{ ansible_distribution_release }}-security
-      Components: main universe restricted multiverse
-      Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-  become: true
-
-- name: _test | Refresh apt cache after rewriting sources
-  ansible.builtin.apt:
-    update_cache: true
-  become: true
+- name: _test | Configure apt retries and sources
+  import_role:
+    name: apt
+    tasks_from: install
 
 - name: _test | Ensure /etc/containers/registries.conf.d exists
   when: nexus_url | length > 0
@@ -129,4 +94,3 @@
       url = "{{ mirror_pypi }}/simple/"
       default = true
   become: true
-
