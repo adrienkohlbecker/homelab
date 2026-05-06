@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-#MISE description="Build packer image variant(s) and verify they boot"
+#MISE description="Build packer image source(s) and verify they boot"
 #MISE interactive=true
-#USAGE arg "<variants>..." help="Variants to build (zfs and/or zfs-lab); empty = all" default=""
+#USAGE arg "<sources>..." help="Source names from qemu.pkr.hcl to build; empty = all" default=""
 #USAGE flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
 #USAGE flag "--upstream" help="Pull apt packages and the cloud image from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
@@ -10,47 +10,54 @@ set -euo pipefail
 ubuntu="${usage_ubuntu}"
 upstream="${usage_upstream:-false}"
 
-# Default to all variants if none provided.
-read -r -a variants <<<"${usage_variants:-}"
-[ ${#variants[@]} -eq 0 ] && variants=(zfs zfs-lab)
-
-for variant in "${variants[@]}"; do
-  case "$variant" in
-  zfs | zfs-lab) ;;
-  *)
-    echo "unknown variant: $variant (expected zfs or zfs-lab)" >&2
-    exit 1
-    ;;
-  esac
-done
+# Linux: keep packer's ISO cache off the root FS; falls through to
+# packer's default (./packer_cache in cwd) on Mac.
+case "$(uname -s)" in
+Linux) export PACKER_CACHE_DIR=/mnt/scratch/packer ;;
+Darwin) ;;
+*)
+  echo "Unsupported OS: $(uname -s)" >&2
+  exit 1
+  ;;
+esac
 
 base="${QEMU_DIR}/${ubuntu}"
 mkdir -p "${base}"
 
-# Build into a sibling tmpdir so the previous good artifacts at
-# ${base}/ubuntu-<variant> stay intact while the new ones build.
-# packer's install post-processor moves each per-source output into
-# its final home; we just rmdir the (empty) tmpdir afterwards. On
-# failure the tmpdir is left behind for inspection (cleanup via
-# packer:clean).
-tmp=$(mktemp -d "${base}/.build-XXXXXX")
+# Build into a tmpdir at QEMU_DIR root so the previous good artifacts
+# at ${base}/<source> stay intact while the new ones build. packer's
+# install post-processor moves each per-source output into ${base};
+# we just rmdir the (empty) tmpdir afterwards. On failure the tmpdir
+# is left behind for inspection (cleanup via packer:clean).
+tmp=$(mktemp -d "${QEMU_DIR}/.build-XXXXXX")
 
-# Build -only filter from variants. Packer parallelizes the matched
-# sources internally (one VM per source, non-overlapping host_port and
-# vnc_port ranges declared per source in qemu.pkr.hcl).
-only=""
-for variant in "${variants[@]}"; do
-  only+="${only:+,}qemu.${variant}"
-done
+# Build -only filter when sources are specified. Packer parallelizes
+# the matched sources internally (one VM per source, non-overlapping
+# host_port and vnc_port ranges declared per source in qemu.pkr.hcl);
+# without -only it builds every source.
+only_args=()
+if [ -n "${usage_sources:-}" ]; then
+  only=""
+  # shellcheck disable=SC2086  # word-splitting on usage_sources is the point
+  for src in ${usage_sources}; do
+    only+="${only:+,}qemu.${src}"
+  done
+  only_args=("-only=${only}")
+fi
 
-# PACKER_FLAGS expands to multiple flags; intentional word-split.
-# shellcheck disable=SC2086
-packer build ${PACKER_FLAGS} \
+# --on-error=ask keeps the build VM up on failure so it can be SSH'd
+# into for debugging. Dev-only: any non-interactive caller (CI, cron,
+# scheduled rebuilds) would hang on the prompt — swap to
+# --on-error=cleanup for those.
+packer build \
+  -timestamp-ui \
+  -warn-on-undeclared-var \
+  --on-error=ask \
   -var "ubuntu_name=${ubuntu}" \
   -var "upstream_mirrors=${upstream}" \
   -var "output_base=${tmp}" \
   -var "artifact_base=${base}" \
-  "-only=${only}" \
+  "${only_args[@]}" \
   packer
 
 rmdir "${tmp}"
