@@ -138,7 +138,7 @@
   tags:
     - act_runner
 
-- name: Configure act_runner
+- name: Update .runner with templated labels and address
   when: not (ansible_check_mode and (act_runner_user.changed or act_runner_registration.changed))
   template:
     src: runner.json.j2
