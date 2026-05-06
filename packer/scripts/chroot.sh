@@ -1,7 +1,10 @@
 #!/bin/bash
 set -euxo pipefail
 
-read -r -a DISKS <<<"$DISKS_LIST"
+# DISKS rides in as a space-delimited string (see provision.sh's env
+# block — bash arrays don't survive `export`). Used unquoted in for
+# loops; ${DISKS%% *} grabs the first disk and `wc -w <<<"$DISKS"`
+# counts them where indexing or length is needed.
 
 # Mirrors provision.sh's partdev: tack the partition number onto the
 # right separator (none for vd*/sd*/hd*, 'p' for nvme/mmcblk/loop/md,
@@ -157,8 +160,8 @@ zfs set org.zfsbootmenu:commandline="" "rpool/ROOT"
 # Create efi & swap
 
 if [ "$LAYOUT" = "" ]; then
-  EFI_DEVICE=$(partdev "${DISKS[0]}" 1)
-  SWAP_DEVICE=$(partdev "${DISKS[0]}" 2)
+  EFI_DEVICE=$(partdev "${DISKS%% *}" 1)
+  SWAP_DEVICE=$(partdev "${DISKS%% *}" 2)
 else
   apt-get install --yes mdadm
 
@@ -173,7 +176,8 @@ else
 
   efi_parts=()
   swap_parts=()
-  for d in "${DISKS[@]}"; do
+  # shellcheck disable=SC2086  # word-splitting on DISKS is the point
+  for d in $DISKS; do
     efi_parts+=("$(partdev "$d" 1)")
     swap_parts+=("$(partdev "$d" 2)")
   done
@@ -190,11 +194,11 @@ else
   # creation; bitmap data is incompatible with metadata=1.0 ESPs (the
   # firmware would refuse the partition), so suppress the prompt with an
   # explicit no.
-  mdadm --create /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --bitmap=none --raid-devices="${#DISKS[@]}" "${efi_parts[@]}"
+  mdadm --create /dev/md/efi --name=efi --metadata=1.0 --level="raid1" --bitmap=none --raid-devices="$(wc -w <<<"$DISKS")" "${efi_parts[@]}"
   mdadm --detail --brief /dev/md/efi >>/etc/mdadm/mdadm.conf
   EFI_DEVICE=/dev/md/efi
 
-  mdadm --create /dev/md/swap --name=swap --metadata=1.2 --level="raid0" --raid-devices="${#DISKS[@]}" "${swap_parts[@]}"
+  mdadm --create /dev/md/swap --name=swap --metadata=1.2 --level="raid0" --raid-devices="$(wc -w <<<"$DISKS")" "${swap_parts[@]}"
   mdadm --detail --brief /dev/md/swap >>/etc/mdadm/mdadm.conf
   SWAP_DEVICE=/dev/md/swap
 fi
@@ -308,15 +312,18 @@ apt-get install --yes efibootmgr
 # paths it knows about, and an entry is per-disk regardless of whether
 # the ESP content is mirrored. Single-disk variants get a single bare
 # "rEFInd" entry (unchanged).
-if [ "${#DISKS[@]}" -eq 1 ]; then
-  efibootmgr -c -d "${DISKS[0]}" -p 1 \
+if [ "$(wc -w <<<"$DISKS")" -eq 1 ]; then
+  efibootmgr -c -d "${DISKS%% *}" -p 1 \
     -L "rEFInd" \
     -l "\\EFI\\refind\\${REFIND_NAME}"
 else
-  for idx in "${!DISKS[@]}"; do
-    efibootmgr -c -d "${DISKS[$idx]}" -p 1 \
+  idx=0
+  # shellcheck disable=SC2086  # word-splitting on DISKS is the point
+  for disk in $DISKS; do
+    efibootmgr -c -d "$disk" -p 1 \
       -L "rEFInd (disk ${idx})" \
       -l "\\EFI\\refind\\${REFIND_NAME}"
+    idx=$((idx + 1))
   done
 fi
 

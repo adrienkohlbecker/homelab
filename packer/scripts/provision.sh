@@ -29,11 +29,11 @@ set -euxo pipefail
 
 case $SOURCE_NAME in
 zfs)
-  DISKS=(/dev/vdb)
+  export DISKS="/dev/vdb"
   export LAYOUT=""
   ;;
 zfs-lab)
-  DISKS=(/dev/vdb /dev/vdc /dev/vdd)
+  export DISKS="/dev/vdb /dev/vdc /dev/vdd"
   export LAYOUT="mirror"
   ;;
 *)
@@ -81,7 +81,7 @@ zgenhostid -f
 
 # Create partitions
 
-for disk in "${DISKS[@]}"; do
+for disk in $DISKS; do
   # Defensive wipe -- a no-op against packer's fresh qcow2s, but
   # necessary on bare metal:
   #  - zpool labelclear: ZFS labels at the disk's reserved offsets
@@ -119,7 +119,7 @@ udevadm settle
 # Create the zpool
 
 rpool_devs=()
-for d in "${DISKS[@]}"; do rpool_devs+=("$(partdev "$d" 3)"); done
+for d in $DISKS; do rpool_devs+=("$(partdev "$d" 3)"); done
 
 zpool create -f \
   -o ashift=12 \
@@ -206,12 +206,9 @@ EOF
 # Env propagation: arch-chroot inherits the calling shell's env, so
 # packer's UBUNTU_*/ZBM_*/REFIND_NAME/SSH_KEY_PUB (already exported via
 # the shell provisioner env block) flow straight through. Script-local
-# vars must be exported explicitly. DISKS is a bash array, and bash
-# silently refuses to put array-typed variables in env even after a
-# scalar reassignment — flatten under a distinct name; chroot.sh
-# re-parses with `read -r -a DISKS <<<"$DISKS_LIST"`. New vars added
-# later need only be exported here, not enumerated on the chroot line.
-export DISKS_LIST="${DISKS[*]}"
+# vars must be exported explicitly. DISKS rides as a space-delimited
+# string (not a bash array, which bash refuses to put in env); chroot.sh
+# consumes it the same way via unquoted `for d in $DISKS` word-splitting.
 unshare --mount --propagation private arch-chroot /mnt bash </home/vagrant/chroot.sh
 
 # Copy the on-pool kernel + initrd (and the matching ZBM-style cmdline) out
