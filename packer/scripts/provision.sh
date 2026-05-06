@@ -27,20 +27,14 @@
 #    refuse to load it.
 set -euxo pipefail
 
-case $SOURCE_NAME in
-zfs)
-  export DISKS="/dev/vdb"
-  export LAYOUT=""
-  ;;
-zfs-lab)
-  export DISKS="/dev/vdb /dev/vdc /dev/vdd"
-  export LAYOUT="mirror"
-  ;;
-*)
-  echo >&2 "Unknown build $SOURCE_NAME"
-  exit 1
-  ;;
-esac
+# DISKS, LAYOUT, SOURCE_NAME, UBUNTU_NAME, UBUNTU_MIRROR come from
+# packer's shell-provisioner env block (see qemu.pkr.hcl's
+# variant_config map for DISKS/LAYOUT). Bare-metal callers export
+# them by hand before running. The ZBM_*/REFIND_*/UBUNTU_MIRROR_*
+# vars used downstream are documented at the top of chroot.sh.
+
+export DISKS_COUNT
+DISKS_COUNT=$(wc -w <<<"$DISKS")
 
 # Map (disk, partition number) to the kernel/udev partition device.
 # vd*/sd*/hd* tack the digit on directly; nvme/mmcblk/loop/md need a
@@ -55,6 +49,21 @@ partdev() {
   *) echo "${disk}${n}" ;;
   esac
 }
+
+# Per-disk partition paths, computed once and exported as space-delimited
+# strings so chroot.sh consumes them directly without re-running partdev.
+# Partition layout (sgdisk below): 1 = EFI, 2 = swap, 3 = rpool. The
+# zfs-lab metadata vdev (partition 5) is created at the same time but
+# isn't in this trio — it's used inline in the zpool create.
+PARTITIONS_EFI=""
+PARTITIONS_SWAP=""
+PARTITIONS_RPOOL=""
+for d in $DISKS; do
+  PARTITIONS_EFI+="${PARTITIONS_EFI:+ }$(partdev "$d" 1)"
+  PARTITIONS_SWAP+="${PARTITIONS_SWAP:+ }$(partdev "$d" 2)"
+  PARTITIONS_RPOOL+="${PARTITIONS_RPOOL:+ }$(partdev "$d" 3)"
+done
+export PARTITIONS_EFI PARTITIONS_SWAP PARTITIONS_RPOOL
 
 # Ensure APT doesn't asks questions
 
@@ -116,11 +125,11 @@ done
 # pair that was timing-based cargo for the same goal.
 udevadm settle
 
-# Create the zpool
+# Create the zpool. $LAYOUT is "" (single) or "mirror"; $PARTITIONS_RPOOL
+# is the space-separated rpool partitions — both intentionally unquoted
+# so the shell word-splits them into the zpool args.
 
-rpool_devs=()
-for d in $DISKS; do rpool_devs+=("$(partdev "$d" 3)"); done
-
+# shellcheck disable=SC2086
 zpool create -f \
   -o ashift=12 \
   -o autotrim=on \
@@ -137,7 +146,7 @@ zpool create -f \
   -O relatime=on \
   -O xattr=sa \
   -m none \
-  rpool $LAYOUT "${rpool_devs[@]}"
+  rpool $LAYOUT $PARTITIONS_RPOOL
 
 # Create initial file systems
 
