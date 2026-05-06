@@ -2,7 +2,10 @@
 # encryption fixes that landed there. The full pin list lives in
 # zfs_backport_packages — including libssl3t64, locales, chrony, etc.
 # that aren't hard deps of zfsutils-linux but ship as noble-only and
-# need explicit upgrade.
+# need explicit upgrade. The role exports zfs_backports_updated
+# (derived from backports_name), consumed by main.yml's `Start zed`
+# task to flip state=started→restarted when the binary actually
+# rolled forward.
 - name: install | Apply zfs backports pin + upgrade (jammy)
   import_role:
     name: backports
