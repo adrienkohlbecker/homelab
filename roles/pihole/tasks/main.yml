@@ -41,6 +41,18 @@
   tags:
     - pihole
 
+- name: Create sqlite directory
+  when: not (ansible_check_mode and pihole_user.changed)
+  file:
+    dest: /mnt/services/sqlite/pihole
+    state: directory
+    owner: "{{ pihole_user.uid }}"
+    group: "{{ pihole_user.group }}"
+    mode: "0755"
+  become: true
+  tags:
+    - pihole
+
 - name: Create configuration directory
   file:
     dest: /mnt/services/pihole/dnsmasq
@@ -134,7 +146,7 @@
 
 - name: Compute list update command
   set_fact:
-    pihole_list_update_cmd: /usr/bin/podman run --rm --quiet --volume /mnt/services/pihole/etc:/etc/pihole --entrypoint "/usr/bin/php" --env ADLISTS_URL="{{ pihole_adlists | join(' ') }}" --env WHITELIST_URL="{{ pihole_whitelists | join(' ') }}" docker.io/jacklul/pihole:2024.05.0 /usr/local/sbin/pihole-updatelists --no-gravity --no-reload --env
+    pihole_list_update_cmd: /usr/bin/podman run --rm --quiet --volume /mnt/services/sqlite/pihole:/etc/pihole --entrypoint "/usr/bin/php" --env ADLISTS_URL="{{ pihole_adlists | join(' ') }}" --env WHITELIST_URL="{{ pihole_whitelists | join(' ') }}" docker.io/jacklul/pihole:2024.05.0 /usr/local/sbin/pihole-updatelists --no-gravity --no-reload --env
   tags:
     - pihole
 

@@ -20,6 +20,9 @@ sensor: !include sensors.yaml
 cover: !include covers.yaml
 template: !include templates.yaml
 
+recorder:
+  db_url: sqlite:////config/db/home-assistant_v2.db
+
 zha:
   zigpy_config:
     ota:

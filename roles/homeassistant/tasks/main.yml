@@ -41,6 +41,17 @@
   tags:
     - homeassistant
 
+- name: Create sqlite directory
+  file:
+    dest: /mnt/services/sqlite/homeassistant
+    state: directory
+    owner: homeassistant
+    group: homeassistant
+    mode: "0755"
+  become: true
+  tags:
+    - homeassistant
+
 - name: Get influxdb org ID
   shell: set -euo pipefail; podman exec influxdb influx org list --name home --hide-headers | cut -f1
   args:
