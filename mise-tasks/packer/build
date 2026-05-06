@@ -7,9 +7,6 @@
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
-ubuntu="${usage_ubuntu}"
-upstream="${usage_upstream:-false}"
-
 # Linux: keep packer's ISO cache off the root FS; falls through to
 # packer's default (./packer_cache in cwd) on Mac.
 case "$(uname -s)" in
@@ -21,7 +18,7 @@ Darwin) ;;
   ;;
 esac
 
-base="${QEMU_DIR}/${ubuntu}"
+base="${QEMU_DIR}/${usage_ubuntu}"
 mkdir -p "${base}"
 
 # Build into a tmpdir at QEMU_DIR root so the previous good artifacts
@@ -53,8 +50,8 @@ packer build \
   -timestamp-ui \
   -warn-on-undeclared-var \
   --on-error=ask \
-  -var "ubuntu_name=${ubuntu}" \
-  -var "upstream_mirrors=${upstream}" \
+  -var "ubuntu_name=${usage_ubuntu}" \
+  -var "upstream_mirrors=${usage_upstream:-false}" \
   -var "build_directory=${tmp}" \
   -var "output_directory=${base}" \
   "${only_args[@]}" \
