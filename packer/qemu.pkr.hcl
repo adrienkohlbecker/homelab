@@ -13,7 +13,7 @@ variable "ubuntu_name" {
 
 variable "output_base" {
   type        = string
-  description = "Base directory for build artifacts. Each source writes into <output_base>/<source-name>.new; mise-tasks/packer/build atomically renames .new -> final after the verify-boot post-processor passes."
+  description = "Base directory for build artifacts. Each source writes into <output_base>/<source-name>. mise-tasks/packer/build sets this to a fresh tmpdir under QEMU_DIR/<ubuntu>/ and renames the per-source outputs into their final ubuntu-<variant> dirs after verify-boot passes."
 }
 
 variable "arch" {
@@ -219,7 +219,7 @@ build {
   # at test boot via test/disks/<variant>.sh, not baked here.
   source "qemu.ubuntu" {
     name                 = "ubuntu-zfs"
-    output_directory     = "${var.output_base}/ubuntu-zfs.new"
+    output_directory     = "${var.output_base}/ubuntu-zfs"
     disk_additional_size = ["40G"]
     host_port_max        = 2231
     host_port_min        = 2222
@@ -234,7 +234,7 @@ build {
   # See AGENTS.md "Test Environment Design".
   source "qemu.ubuntu" {
     name                 = "ubuntu-zfs-lab"
-    output_directory     = "${var.output_base}/ubuntu-zfs-lab.new"
+    output_directory     = "${var.output_base}/ubuntu-zfs-lab"
     disk_additional_size = ["40G", "40G", "40G"]
     host_port_max        = 2241
     host_port_min        = 2232
@@ -286,23 +286,23 @@ build {
   provisioner "file" {
     direction   = "download"
     source      = "/home/vagrant/extracted/kernel"
-    destination = "${var.output_base}/${source.name}.new/kernel"
+    destination = "${var.output_base}/${source.name}/kernel"
   }
 
   provisioner "file" {
     direction   = "download"
     source      = "/home/vagrant/extracted/initrd"
-    destination = "${var.output_base}/${source.name}.new/initrd"
+    destination = "${var.output_base}/${source.name}/initrd"
   }
 
   provisioner "file" {
     direction   = "download"
     source      = "/home/vagrant/extracted/cmdline"
-    destination = "${var.output_base}/${source.name}.new/cmdline"
+    destination = "${var.output_base}/${source.name}/cmdline"
   }
 
   # Sequential chain: drop the cloud-image disk, smoke-test the boot,
-  # compress (Mac only). All three side-effect-only on ${var.output_base}/${source.name}.new.
+  # compress (Mac only). All three side-effect-only on ${var.output_base}/${source.name}.
   # The final .new -> artdir rename is owned by mise-tasks/packer/build.
   post-processors {
     # packer-ubuntu is the residual cloud-image OS disk — provision.sh
@@ -313,7 +313,7 @@ build {
       inline_shebang = "/bin/bash"
       inline = [
         "set -euxo pipefail",
-        "rm -f ${var.output_base}/${source.name}.new/packer-ubuntu",
+        "rm -f ${var.output_base}/${source.name}/packer-ubuntu",
       ]
     }
 
@@ -330,7 +330,7 @@ build {
       inline = [
         "set -euxo pipefail",
         "log=\"test/out/$$MACHINE.${var.ubuntu_name}._launch.output.ansi\"",
-        "if ! test/launch.py --machine \"$$MACHINE\" --ubuntu ${var.ubuntu_name} --timeout 300 --exit-after-ready --image-dir ${var.output_base}/${source.name}.new; then",
+        "if ! test/launch.py --machine \"$$MACHINE\" --ubuntu ${var.ubuntu_name} --timeout 300 --exit-after-ready --image-dir ${var.output_base}/${source.name}; then",
         "  echo \"--- verify-boot failed; dumping $$log ---\" >&2",
         "  [ -f \"$$log\" ] && tail -200 \"$$log\" >&2",
         "  exit 1",
@@ -348,7 +348,7 @@ build {
       inline = [
         "set -euxo pipefail",
         "if [ \"$$(uname -s)\" = \"Linux\" ]; then exit 0; fi",
-        "for disk in ${var.output_base}/${source.name}.new/packer-ubuntu-*; do",
+        "for disk in ${var.output_base}/${source.name}/packer-ubuntu-*; do",
         "  echo \"==> compressing $$(basename \"$$disk\")\"",
         "  qemu-img convert -W -c -O qcow2 -o compression_type=zstd \"$$disk\" \"$$disk.tmp\"",
         "  mv \"$$disk.tmp\" \"$$disk\"",

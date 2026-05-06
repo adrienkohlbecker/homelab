@@ -52,11 +52,11 @@ dir = "{{config_root}}/packer"
 run = 'packer init "$@" .'
 
 [tasks."packer:clean"]
-description = "Remove .new build artifacts"
+description = "Remove leftover tmpdirs from failed builds"
 usage = '''
 flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
 '''
-run = 'rm -rf "{{vars.qemu_dir}}/${usage_ubuntu}"/*.new'
+run = 'rm -rf "{{vars.qemu_dir}}/${usage_ubuntu}"/.build-*'
 
 [tasks.lint]
 description = "Run all linters"
