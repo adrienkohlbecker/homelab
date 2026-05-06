@@ -12,17 +12,30 @@
 #    crashkernel= cmdline reserves RAM at boot; can't be added to a
 #    running kernel).
 
-- name: Panic on kernel-detected lockups
-  ansible.posix.sysctl:
-    name: '{{ item.key }}'
-    value: '{{ item.value }}'
+# Stat first because not every kernel exposes both sysctls. arm64
+# jammy GA (5.15) has no NMI watchdog, so /proc/sys/kernel/hardlockup_panic
+# is absent and `sysctl -p` errors out trying to reload it. Skip the
+# missing ones and only act on what the running kernel actually has.
+- name: Detect available lockup-panic sysctls
+  stat:
+    path: /proc/sys/kernel/{{ item }}
   loop:
     # NMI watchdog detects a CPU spinning in interrupt context.
-    - { key: kernel.hardlockup_panic, value: '1' }
+    - hardlockup_panic
     # Soft watchdog detects a task stuck on-CPU for >2*watchdog_thresh.
-    - { key: kernel.softlockup_panic, value: '1' }
+    - softlockup_panic
+  register: kdump_lockup_sysctls
+  become: true
+  tags:
+    - kdump
+
+- name: Panic on kernel-detected lockups
+  ansible.posix.sysctl:
+    name: kernel.{{ item.item }}
+    value: '1'
+  loop: '{{ kdump_lockup_sysctls.results | selectattr("stat.exists") }}'
   loop_control:
-    label: '{{ item.key }}'
+    label: 'kernel.{{ item.item }}'
   become: true
   tags:
     - kdump
