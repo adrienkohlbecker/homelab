@@ -98,13 +98,6 @@
       {% endfor %}
   become: true
 
-- name: _test | Remove podman registry mirrors when no proxy
-  when: not (nexus_url | length > 0)
-  ansible.builtin.file:
-    path: /etc/containers/registries.conf.d/homelab-mirrors.conf
-    state: absent
-  become: true
-
 - name: _test | Configure pip
   when: nexus_url | length > 0
   ansible.builtin.copy:
@@ -115,13 +108,6 @@
     content: |
       [global]
       index-url = {{ mirror_pypi }}/simple/
-  become: true
-
-- name: _test | Remove pip config when no proxy
-  when: not (nexus_url | length > 0)
-  ansible.builtin.file:
-    path: /etc/pip.conf
-    state: absent
   become: true
 
 - name: _test | Ensure /etc/uv exists
@@ -147,9 +133,3 @@
       default = true
   become: true
 
-- name: _test | Remove uv config when no proxy
-  when: not (nexus_url | length > 0)
-  ansible.builtin.file:
-    path: /etc/uv/uv.toml
-    state: absent
-  become: true
