@@ -21,11 +21,21 @@ rm -rf "${new}"
 
 arch="$(uname -m | sed s/arm64/aarch64/)"
 
+# raw on Linux pairs with the zstd-compressed dozer/scratch/qemu host
+# dataset (no need to stack qcow2 CoW + compression on top). qcow2 on
+# Mac since APFS has no fs-level compression.
+case "$(uname -s)" in
+Linux) image_format=raw ;;
+Darwin) image_format=qcow2 ;;
+*) echo "unsupported OS: $(uname -s)" >&2; exit 1 ;;
+esac
+
 # PACKER_FLAGS expands to multiple flags; intentional word-split.
 # shellcheck disable=SC2086
 packer build ${PACKER_FLAGS} \
   -var "ubuntu_name=${ubuntu}" \
   -var "arch=${arch}" \
+  -var "image_format=${image_format}" \
   -var "upstream_mirrors=${upstream}" \
   -var "zbm_version=${ZBM_VERSION}" \
   -var "output_directory=${new}" \
@@ -46,11 +56,17 @@ fi
 # this loop. Done in-place under ${new} so the swap below is the last
 # step -- if compression dies, ${artdir} still points at the previous
 # good artifact.
-for disk in "${new}"/packer-ubuntu-*; do
-  echo "==> compressing $(basename "${disk}")"
-  qemu-img convert -W -c -O qcow2 -o compression_type=zstd "${disk}" "${disk}.tmp"
-  mv "${disk}.tmp" "${disk}"
-done
+#
+# Linux: artifacts land on /mnt/scratch/qemu (zfs, compression=zstd) so
+# qcow2-level compression is pure CPU waste. Mac (APFS, no fs-level
+# compression) keeps the loop.
+if [ "$(uname -s)" != "Linux" ]; then
+  for disk in "${new}"/packer-ubuntu-*; do
+    echo "==> compressing $(basename "${disk}")"
+    qemu-img convert -W -c -O qcow2 -o compression_type=zstd "${disk}" "${disk}.tmp"
+    mv "${disk}.tmp" "${disk}"
+  done
+fi
 
 # Atomic-ish swap: drop the previous final dir and rename .new in.
 # Packer's post-processor already removed the unused vda cloud-image

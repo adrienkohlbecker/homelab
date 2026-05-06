@@ -31,6 +31,16 @@ variable "upstream_mirrors" {
   description = "When true, pull apt packages and the cloud image straight from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
 }
 
+variable "image_format" {
+  type        = string
+  default     = "qcow2"
+  description = "Disk image format: raw on Linux (artifacts land on dozer/scratch/qemu where ZFS already does CoW + zstd, so qcow2 stacks redundant work) or qcow2 on Mac (APFS has no fs-level compression). mise-tasks/packer/build resolves this from `uname -s`."
+  validation {
+    condition     = contains(["raw", "qcow2"], var.image_format)
+    error_message = "image_format must be raw or qcow2."
+  }
+}
+
 variable "zbm_version" {
   type        = string
   description = "ZFSBootMenu version to download from Gitea. Single source of truth is mise.toml vars.zbm_version; mise tasks pass it in."
@@ -124,7 +134,7 @@ source "qemu" "ubuntu" {
   efi_boot           = true
   efi_firmware_code  = "${local.efi_firmware_code}"
   efi_firmware_vars  = "${local.efi_firmware_vars}"
-  format             = "qcow2"
+  format             = "${var.image_format}"
   headless           = true
   iso_checksum       = "${local.cloud_checksum}"
   iso_url            = "${local.cloud_url}"
