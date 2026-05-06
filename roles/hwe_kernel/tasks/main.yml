@@ -35,6 +35,11 @@
   tags:
     - hwe_kernel
 
+# Container packages (podman, netavark, etc.) used to live here but
+# moved to roles/podman/tasks/install.yml with its own backports-podman
+# pin file. Keeping only ZFS userspace here — backports-zfs only pins
+# ZFS packages, so the container set was unpinned and netavark in
+# particular has no jammy candidate at all and would fail to install.
 - name: Install tools from noble
   when: ansible_distribution_major_version == "22" and not (ansible_check_mode and noble_repository.changed)
   apt:
@@ -42,13 +47,6 @@
       - zfsutils-linux
       - zfs-initramfs
       - zfs-zed
-      - podman
-      - buildah
-      - containernetworking-plugins
-      - conmon
-      - slirp4netns
-      - netavark
-      - aardvark-dns
     state: latest
     cache_valid_time: 3600
   register: noble_apt
