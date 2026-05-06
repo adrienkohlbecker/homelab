@@ -3,11 +3,11 @@
   changed_when: false
   become: true
 
-- name: _verify | act_runner registration file exists
-  stat:
-    path: /mnt/services/act_runner/.runner
-  register: _verify_runner_file
-  failed_when: not _verify_runner_file.stat.exists
+- name: _verify | act_runner binary version matches act_runner_version
+  command: act_runner --version
+  register: _verify_version
+  changed_when: false
+  failed_when: act_runner_version not in _verify_version.stderr
   become: true
 
 - name: _verify | act_runner config file exists
@@ -17,12 +17,37 @@
   failed_when: not _verify_config_file.stat.exists
   become: true
 
+- name: _verify | act_runner registration file is valid JSON
+  slurp:
+    src: /mnt/services/act_runner/.runner
+  register: _verify_runner_b64
+  # Fails the play if the slurped bytes don't parse as JSON.
+  failed_when: (_verify_runner_b64.content | b64decode | from_json) is not mapping
+  become: true
+
+- name: _verify | subuid/subgid entries exist for act_runner
+  command: grep -q '^act_runner:' /etc/{{ item }}
+  changed_when: false
+  loop:
+    - subuid
+    - subgid
+  become: true
+
 - name: _verify | linger is enabled for act_runner
   stat:
     path: /var/lib/systemd/linger/act_runner
   register: _verify_linger
   failed_when: not _verify_linger.stat.exists
   become: true
+
+- name: _verify | rootless podman.socket is active under act_runner
+  systemd:
+    name: podman.socket
+    scope: user
+  register: _verify_podman_sock
+  failed_when: _verify_podman_sock.status.ActiveState != "active"
+  become: true
+  become_user: act_runner
 
 - name: _verify | act_runner.service is loaded and active
   systemd:
