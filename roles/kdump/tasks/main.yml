@@ -1,0 +1,100 @@
+# Capture the next silent kernel hang. The lab box wedged on
+# 2026-05-06 with the journal cut off mid-stream and zero kernel
+# evidence — classic hard-lockup signature. This role installs the
+# two pieces that turn that scenario into something diagnosable:
+#
+# 1. Lockup-panic sysctls so the kernel's own watchdogs escalate to
+#    panic instead of silently spinning. Effective immediately, no
+#    reboot required.
+# 2. kdump-tools + crashkernel= reservation so a panic kexec's into
+#    a second kernel that writes /proc/vmcore to /var/crash for
+#    `crash` post-mortem. Requires reboot to take effect (the
+#    crashkernel= cmdline reserves RAM at boot; can't be added to a
+#    running kernel).
+
+- name: Panic on kernel-detected lockups
+  ansible.posix.sysctl:
+    name: '{{ item.key }}'
+    value: '{{ item.value }}'
+  loop:
+    # NMI watchdog detects a CPU spinning in interrupt context.
+    - { key: kernel.hardlockup_panic, value: '1' }
+    # Soft watchdog detects a task stuck on-CPU for >2*watchdog_thresh.
+    - { key: kernel.softlockup_panic, value: '1' }
+  loop_control:
+    label: '{{ item.key }}'
+  become: true
+  tags:
+    - kdump
+
+- name: Install kdump-tools
+  apt:
+    pkg:
+      - kdump-tools
+    policy_rc_d: 101
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - kdump
+
+# kdump-tools defaults to USE_KDUMP=0 on install (the package gets
+# pulled in transitively as well, so it has to be a no-op until the
+# operator opts in). lineinfile rather than a templated replacement
+# so future Ubuntu kdump-tools releases can introduce new vars in
+# this file without us shadowing them.
+- name: Enable kdump in /etc/default/kdump-tools
+  lineinfile:
+    path: /etc/default/kdump-tools
+    regexp: '^USE_KDUMP='
+    line: 'USE_KDUMP=1'
+    backup: true
+  become: true
+  register: kdump_tools_cfg
+  tags:
+    - kdump
+
+# Inject crashkernel=<size> into the ZBM commandline for rpool/ROOT.
+# Lab hosts boot via ZFSBootMenu, not GRUB, so the kdump-tools
+# postinst hook into /etc/default/grub.d/ does nothing useful — we
+# have to thread the parameter through the ZFS dataset property.
+- name: Reserve crashkernel memory in ZBM commandline
+  import_role:
+    name: zfsbootmenu
+    tasks_from: cmdline
+  vars:
+    zfsbootmenu_cmdline_file: crashkernel
+    # Memory reserved at boot for the secondary capture kernel that kdump
+    # kexec's into on panic. Mirrors Ubuntu's kdump-tools default range
+    # syntax: 320M for 2-4G hosts, 512M for everything bigger. Smaller and
+    # the capture kernel won't have room for its own initramfs + dump
+    # tools; bigger and you waste RAM that the host can't otherwise use.
+    zfsbootmenu_cmdline_contents: 'crashkernel=2G-4G:320M,4G-:512M'
+  tags:
+    - kdump
+
+# kdump-tools.service kexec-loads the capture kernel into the memory
+# region reserved by crashkernel= at boot. If the running kernel
+# wasn't booted with the parameter, /sys/kernel/kexec_crash_size is 0
+# and `kdump-config load` exits non-zero — the unit fails to start.
+# Ship enabled-but-not-started until the next reboot rotates a
+# crashkernel-aware kernel in. The reboot already gets requested by
+# the cmdline import_role above, so the site.yml-level reboot check
+# closes the loop.
+- name: Read /sys/kernel/kexec_crash_size
+  slurp:
+    src: /sys/kernel/kexec_crash_size
+  register: kdump_kexec_crash_size
+  become: true
+  tags:
+    - kdump
+
+- name: Enable kdump-tools service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: kdump-tools
+    systemd_unit_start: "{{ (kdump_kexec_crash_size.content | b64decode | trim | int) > 0 }}"
+    systemd_unit_restart: "{{ kdump_tools_cfg.changed }}"
+  tags:
+    - kdump

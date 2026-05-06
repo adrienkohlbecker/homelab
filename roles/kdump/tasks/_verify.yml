@@ -1,0 +1,47 @@
+# Pre-reboot verification only. The capture kernel doesn't exist
+# until the host boots with crashkernel= reserved, so we can't
+# assert kdump-tools.service is active or /proc/vmcore-readable yet.
+# We assert the configured state instead — sysctls live, package in
+# place, USE_KDUMP=1 set, ZBM cmdline carries crashkernel=, reboot
+# requested.
+
+- name: _verify | Hardlockup panic sysctl is set
+  command: sysctl -n kernel.hardlockup_panic
+  register: kdump_verify_hardlockup
+  changed_when: false
+  failed_when: kdump_verify_hardlockup.stdout | trim != '1'
+  become: true
+
+- name: _verify | Softlockup panic sysctl is set
+  command: sysctl -n kernel.softlockup_panic
+  register: kdump_verify_softlockup
+  changed_when: false
+  failed_when: kdump_verify_softlockup.stdout | trim != '1'
+  become: true
+
+- name: _verify | Kdump-tools package installed
+  command: dpkg -s kdump-tools
+  register: kdump_verify_pkg
+  changed_when: false
+  failed_when: "'Status: install ok installed' not in kdump_verify_pkg.stdout"
+  become: true
+
+- name: _verify | USE_KDUMP enabled in /etc/default/kdump-tools
+  command: grep -E '^USE_KDUMP=1$' /etc/default/kdump-tools
+  changed_when: false
+  become: true
+
+- name: _verify | ZBM commandline includes crashkernel
+  when: zfs_root
+  command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
+  register: kdump_verify_zbm_cmdline
+  changed_when: false
+  failed_when: "'crashkernel=' not in kdump_verify_zbm_cmdline.stdout"
+  become: true
+
+- name: _verify | Reboot was requested
+  stat:
+    path: /var/run/reboot-required
+  register: kdump_verify_reboot_flag
+  failed_when: not kdump_verify_reboot_flag.stat.exists
+  become: true
