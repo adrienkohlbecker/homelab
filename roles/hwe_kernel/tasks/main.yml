@@ -11,8 +11,8 @@
 - name: Install apt pins
   when: ansible_distribution_major_version == "22"
   copy:
-    src: backports
-    dest: /etc/apt/preferences.d/backports
+    src: backports-zfs
+    dest: /etc/apt/preferences.d/backports-zfs
     owner: root
     group: root
     mode: "0644"

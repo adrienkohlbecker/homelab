@@ -3,10 +3,10 @@
     name: _test
     tasks_from: nginx
 
-- name: _test | Install podman
+- name: _setup | Install podman
   import_role:
-    name: _test
-    tasks_from: podman
+    name: podman
+    tasks_from: install
 
 - name: _test | Setup dependencies
   shell: |
