@@ -5,6 +5,8 @@ zfs_has_services_mount: true
 zfs_has_scratch_mount: true
 zfs_has_media_mount: true
 zfs_has_data_mount: true
+zfs_has_brumath_mount: true
+zfs_has_eckwersheim_mount: true
 zfs_has_minio_mount: true
 
 ssh_public_keys: |
