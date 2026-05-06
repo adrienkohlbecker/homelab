@@ -1,9 +1,9 @@
-- name: _test | Configure apt retries and sources
+- name: mirrors | Configure apt retries and sources
   import_role:
     name: apt
     tasks_from: install
 
-- name: _test | Ensure /etc/containers/registries.conf.d exists
+- name: mirrors | Ensure /etc/containers/registries.conf.d exists
   when: nexus_url | length > 0
   ansible.builtin.file:
     path: /etc/containers/registries.conf.d
@@ -13,7 +13,7 @@
     group: root
   become: true
 
-- name: _test | Configure podman registry mirrors
+- name: mirrors | Configure podman registry mirrors
   when: nexus_url | length > 0
   ansible.builtin.copy:
     dest: /etc/containers/registries.conf.d/homelab-mirrors.conf
@@ -40,12 +40,12 @@
       location = "{{ nexus_url }}/repository/ghcr.io"
   become: true
 
-- name: _test | Check for cloud-init
+- name: mirrors | Check for cloud-init
   ansible.builtin.stat:
     path: /etc/cloud/cloud.cfg.d
   register: _test_cloud_init_dir
 
-- name: _test | Disable cloud-init manage_etc_hosts
+- name: mirrors | Disable cloud-init manage_etc_hosts
   # cloud-init's manage_etc_hosts can regenerate /etc/hosts on boot from a
   # template, wiping the blockinfile entries below. noble's default is
   # `false` today, but pin it explicitly so a future default flip doesn't
@@ -64,7 +64,7 @@
       manage_etc_hosts: false
   become: true
 
-- name: _test | Pin lab.fahm.fr DNS to LAN IP
+- name: mirrors | Pin lab.fahm.fr DNS to LAN IP
   # Test boxes inherit DNS via qemu user-mode → host's resolver, which works
   # only as long as the dev host's resolver knows about lab.fahm.fr split DNS.
   # Public DNS returns the WAN IP 10.123.128.2, which isn't reachable from
@@ -84,7 +84,7 @@
       {% endfor %}
   become: true
 
-- name: _test | Configure pip
+- name: mirrors | Configure pip
   when: nexus_url | length > 0
   ansible.builtin.copy:
     dest: /etc/pip.conf
@@ -96,7 +96,7 @@
       index-url = {{ mirror_pypi }}/simple/
   become: true
 
-- name: _test | Ensure /etc/uv exists
+- name: mirrors | Ensure /etc/uv exists
   when: nexus_url | length > 0
   ansible.builtin.file:
     path: /etc/uv
@@ -106,7 +106,7 @@
     group: root
   become: true
 
-- name: _test | Configure uv
+- name: mirrors | Configure uv
   when: nexus_url | length > 0
   ansible.builtin.copy:
     dest: /etc/uv/uv.toml
