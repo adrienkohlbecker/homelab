@@ -1,7 +1,6 @@
 # vim:ft=systemd-unit-file
 [Unit]
 Description=Prune unused podman containers, images, networks and volumes
-Documentation=man:podman-system-prune(1)
 
 [Service]
 Type=oneshot
