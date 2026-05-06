@@ -43,31 +43,53 @@
     name: gitea
     tasks_from: install
 
-- name: _test | Run gitea
-  shell: |
-    set -euo pipefail
-
-    mkdir -p /{custom,data,log}
-    mkdir -p /custom/conf
-    mkdir -p /data/gitea-repositories
-    cat <<EOF >/custom/conf/app.ini
-    I_AM_BEING_UNSAFE_RUNNING_AS_ROOT=true
-
-    [database]
-    DB_TYPE = sqlite3
-
-    [security]
-    INSTALL_LOCK = true
-
-    [actions]
-    ENABLED = true
-    EOF
-
-    systemd-run env HOME=/root /usr/local/bin/gitea web --work-path /
-    sleep 5
-    echo "gitea.{{ inventory_hostname }}.{{ domain }}"
-  args:
-    executable: /bin/bash
-    creates: /custom/conf/app.ini
-  changed_when: true
+- name: _test | Create gitea directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /custom/conf
+    - /data/gitea-repositories
+    - /log
   become: true
+
+- name: _test | Write gitea app.ini
+  copy:
+    dest: /custom/conf/app.ini
+    mode: "0644"
+    backup: true
+    content: |
+      I_AM_BEING_UNSAFE_RUNNING_AS_ROOT=true
+
+      [database]
+      DB_TYPE = sqlite3
+
+      [security]
+      INSTALL_LOCK = true
+
+      [actions]
+      ENABLED = true
+  become: true
+
+# systemd-run --unit=<name> registers a transient unit; if a unit by
+# that name already exists (running, exited, or failed), systemd-run
+# errors. Use the runtime unit file as the idempotence sentinel: file
+# present → already launched, skip; absent → first run or unit was
+# garbage-collected, launch it.
+- name: _test | Start gitea via systemd-run
+  command: >-
+    systemd-run --unit=gitea-test --setenv=HOME=/root
+    /usr/local/bin/gitea web --work-path /
+  args:
+    creates: /run/systemd/transient/gitea-test.service
+  become: true
+
+- name: _test | Wait for gitea API to be reachable
+  uri:
+    url: http://localhost:3000/api/v1/version
+    status_code: 200
+  register: _test_gitea_ready
+  retries: 30
+  delay: 1
+  until: _test_gitea_ready.status == 200
