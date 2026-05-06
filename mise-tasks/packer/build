@@ -28,9 +28,11 @@ base="${QEMU_DIR}/${ubuntu}"
 mkdir -p "${base}"
 
 # Build into a sibling tmpdir so the previous good artifacts at
-# ${base}/ubuntu-<variant> stay intact while the new ones land. On
-# success we atomic-rename each variant out; on failure the tmpdir
-# is left behind for inspection (cleanup via packer:clean).
+# ${base}/ubuntu-<variant> stay intact while the new ones build.
+# packer's install post-processor moves each per-source output into
+# its final home; we just rmdir the (empty) tmpdir afterwards. On
+# failure the tmpdir is left behind for inspection (cleanup via
+# packer:clean).
 tmp=$(mktemp -d "${base}/.build-XXXXXX")
 
 # Build -only filter from variants. Packer parallelizes the matched
@@ -48,18 +50,8 @@ packer build ${PACKER_FLAGS} \
   -var "upstream_mirrors=${upstream}" \
   -var "zbm_version=${ZBM_VERSION}" \
   -var "output_base=${tmp}" \
+  -var "artifact_base=${base}" \
   "-only=${only}" \
   packer
 
-# Atomic-ish swap: drop the previous final dir and move the new one
-# in, per variant. verify-boot ran inside packer so each output is
-# known-good by this point.
-for variant in "${variants[@]}"; do
-  artdir="${base}/ubuntu-${variant}"
-  rm -rf "${artdir}"
-  mv "${tmp}/ubuntu-${variant}" "${artdir}"
-done
-
-# Tmpdir is empty after the swap loop; remove it so successful builds
-# don't leave bookkeeping behind.
 rmdir "${tmp}"
