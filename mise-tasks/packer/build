@@ -48,7 +48,6 @@ done
 packer build ${PACKER_FLAGS} \
   -var "ubuntu_name=${ubuntu}" \
   -var "upstream_mirrors=${upstream}" \
-  -var "zbm_version=${ZBM_VERSION}" \
   -var "output_base=${tmp}" \
   -var "artifact_base=${base}" \
   "-only=${only}" \

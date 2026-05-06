@@ -240,13 +240,11 @@ mount /boot/efi
 
 # Install ZFSBootMenu
 #
-# ZBM is built + uploaded out-of-band by `mise run zbm:build && zbm:upload`.
-# The Gitea package holds one stable filename per (version, arch);
-# zbm:upload deletes any existing copy before PUT, so a rebuild
-# propagates here without source edits. Bump mise.toml's zbm_version
-# when moving to a new upstream release; the value is plumbed through
-# packer (var.zbm_version) and provision.sh into $ZBM_VERSION here, so
-# this script holds no version literal of its own.
+# ZBM is built + uploaded out-of-band by `mise run zbm:build && zbm:upload`
+# (mise.toml's [vars] zbm_version drives those). The version installed
+# here is decoupled — it lives in qemu.pkr.hcl's local.zbm_version and
+# flows through provision.sh into $ZBM_VERSION. Bump the local once a
+# new tarball has been built + uploaded to Gitea and verified.
 #
 # Components mode: the artifact is a tarball with kernel + initrd, not a
 # unified UKI .EFI. rEFInd does the kernel handoff via loader/initrd
