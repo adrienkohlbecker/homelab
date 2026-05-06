@@ -10,6 +10,8 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
+After=zfs_mount_mnt_services_sqlite.service
+Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 {% if zfs_has_scratch_mount %}
 After=zfs_mount_mnt_scratch.service
@@ -48,6 +50,7 @@ ExecStart=/usr/bin/podman run \
     --env PGID={{ media_group.gid }} \
     --env TZ=Europe/Paris \
     --volume /mnt/services/sabnzbd:/config \
+    --volume /mnt/services/sqlite/sabnzbd:/mnt/services/sqlite/sabnzbd \
     --volume /mnt/services/sabnzbd/autoProcessMedia.cfg:/opt/nzbToMedia/autoProcessMedia.cfg \
     --volume /mnt/services/sabnzbd/before_start.sh:/custom-cont-init.d/before_start.sh:ro \
     --volume /mnt/media:/media \

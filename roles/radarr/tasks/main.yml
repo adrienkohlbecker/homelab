@@ -41,6 +41,37 @@
   tags:
     - radarr
 
+- name: Create sqlite directory
+  when: not (ansible_check_mode and radarr_user.changed)
+  file:
+    dest: /mnt/services/sqlite/radarr
+    state: directory
+    owner: radarr
+    group: media
+    mode: "0755"
+  become: true
+  tags:
+    - radarr
+
+# Radarr hardcodes its DBs at /config/<name>.db and writes -wal/-shm next to
+# the resolved path. Symlink at /config so SQLite resolves through to the
+# 4K-recordsize sqlite dataset before computing WAL location.
+- name: Symlink radarr SQLite DBs onto sqlite dataset
+  when: not (ansible_check_mode and radarr_user.changed)
+  file:
+    src: "/mnt/services/sqlite/radarr/{{ item }}"
+    dest: "/mnt/services/radarr/{{ item }}"
+    state: link
+    owner: radarr
+    group: media
+    follow: false
+  become: true
+  loop:
+    - radarr.db
+    - logs.db
+  tags:
+    - radarr
+
 - name: Configure radarr
   # Render via copy:content + regex_replace because radarr rewrites
   # config.xml on shutdown without a trailing newline; a plain template:

@@ -10,6 +10,8 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
+After=zfs_mount_mnt_services_sqlite.service
+Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
@@ -40,6 +42,7 @@ ExecStart=/usr/bin/podman run \
     --env PGID={{ profilarr_user.group }} \
     --env TZ=Europe/Paris \
     --volume /mnt/services/profilarr:/config \
+    --volume /mnt/services/sqlite/profilarr:/mnt/services/sqlite/profilarr \
     --publish 127.0.0.1:6868:6868/tcp \
     --health-cmd         "python -c 'import urllib.request as u; u.urlopen(\"http://localhost:6868/\", timeout=1)'" \
     --health-startup-cmd "python -c 'import urllib.request as u; u.urlopen(\"http://localhost:6868/\", timeout=1)'" \
