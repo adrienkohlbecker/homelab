@@ -10,6 +10,8 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
+After=zfs_mount_mnt_services_sqlite.service
+Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
@@ -37,6 +39,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="paperless" \
     --volume /mnt/services/paperless/data:/usr/src/paperless/data \
+    --volume /mnt/services/sqlite/paperless:/mnt/services/sqlite/paperless \
     --volume /mnt/services/paperless/media:/usr/src/paperless/media \
     --volume /mnt/services/paperless/consume:/usr/src/paperless/consume \
     --volume /mnt/services/paperless/export:/usr/src/paperless/export \
