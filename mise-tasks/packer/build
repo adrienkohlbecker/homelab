@@ -1,25 +1,44 @@
 #!/usr/bin/env bash
-#MISE description="Build a packer image variant and verify it boots"
+#MISE description="Build packer image variant(s) and verify they boot"
 #MISE interactive=true
-#USAGE arg "<variant>" help="Variant: zfs or zfs-lab"
+#USAGE arg "<variants>..." help="Variants to build (zfs and/or zfs-lab); empty = all" default=""
 #USAGE flag "--ubuntu <name>" help="Ubuntu release codename" default="jammy"
 #USAGE flag "--upstream" help="Pull apt packages and the cloud image from upstream Ubuntu mirrors during the build instead of via the lab Nexus proxy. The shipped image always points at upstream regardless."
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
 ubuntu="${usage_ubuntu}"
-variant="${usage_variant}"
 upstream="${usage_upstream:-false}"
 
-artdir="${QEMU_DIR}/${ubuntu}/ubuntu-${variant}"
-new="${artdir}.new"
+# Default to all variants if none provided.
+read -r -a variants <<<"${usage_variants:-}"
+[ ${#variants[@]} -eq 0 ] && variants=(zfs zfs-lab)
 
-# Wipe a stale .new from a prior aborted run; packer would otherwise
+for variant in "${variants[@]}"; do
+  case "$variant" in
+  zfs | zfs-lab) ;;
+  *)
+    echo "unknown variant: $variant (expected zfs or zfs-lab)" >&2
+    exit 1
+    ;;
+  esac
+done
+
+base="${QEMU_DIR}/${ubuntu}"
+
+# Wipe stale .new dirs from prior aborted runs; packer would otherwise
 # refuse to write into a non-empty output_directory.
-rm -rf "${new}"
+for variant in "${variants[@]}"; do
+  rm -rf "${base}/ubuntu-${variant}.new"
+done
 
-# packer/qemu.pkr.hcl runs verify + compress as post-processors. Arch
-# and image_format come from mise.toml's PKR_VAR_* env.
+# Build -only filter from variants. Packer parallelizes the matched
+# sources internally (one VM per source, non-overlapping host_port and
+# vnc_port ranges declared per source in qemu.pkr.hcl).
+only=""
+for variant in "${variants[@]}"; do
+  only+="${only:+,}qemu.ubuntu-${variant}"
+done
 
 # PACKER_FLAGS expands to multiple flags; intentional word-split.
 # shellcheck disable=SC2086
@@ -27,14 +46,15 @@ packer build ${PACKER_FLAGS} \
   -var "ubuntu_name=${ubuntu}" \
   -var "upstream_mirrors=${upstream}" \
   -var "zbm_version=${ZBM_VERSION}" \
-  -var "output_directory=${new}" \
-  "-only=qemu.ubuntu-${variant}" \
+  -var "output_base=${base}" \
+  "-only=${only}" \
   packer
 
-# Atomic-ish swap: drop the previous final dir and rename .new in.
-# The packer post-processors already removed the unused cloud-image
-# disk, verified the boot, and (on Mac) compressed; everything under
-# .new is keepable as-is. Only the swap stays here so a failed build
-# leaves ${artdir} untouched at the previous good artifact.
-rm -rf "${artdir}"
-mv "${new}" "${artdir}"
+# Atomic-ish swap: drop the previous final dir and rename .new in,
+# per variant. verify-boot ran inside packer so the .new dirs are
+# known-good by this point.
+for variant in "${variants[@]}"; do
+  artdir="${base}/ubuntu-${variant}"
+  rm -rf "${artdir}"
+  mv "${artdir}.new" "${artdir}"
+done
