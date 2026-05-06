@@ -7,6 +7,18 @@
   tags:
     - healthchecks
 
+- name: Create sqlite directory
+  when: not (ansible_check_mode and healthchecks_user.changed)
+  file:
+    dest: /mnt/services/sqlite/healthchecks
+    state: directory
+    owner: healthchecks
+    group: healthchecks
+    mode: "0755"
+  become: true
+  tags:
+    - healthchecks
+
 - name: Copy healthchecks logo
   when: not (ansible_check_mode and healthchecks_user.changed)
   copy:

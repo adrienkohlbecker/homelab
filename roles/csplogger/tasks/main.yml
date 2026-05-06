@@ -31,6 +31,18 @@
   tags:
     - csplogger
 
+- name: Create sqlite directory
+  when: not (ansible_check_mode and csplogger_user.changed)
+  file:
+    dest: /mnt/services/sqlite/csplogger
+    state: directory
+    owner: csplogger
+    group: csplogger
+    mode: "0755"
+  become: true
+  tags:
+    - csplogger
+
 - name: Install csplogger service
   import_role:
     name: systemd_unit

@@ -41,6 +41,18 @@
   tags:
     - bazarr
 
+- name: Create sqlite directory
+  when: not (ansible_check_mode and bazarr_user.changed)
+  file:
+    dest: /mnt/services/sqlite/bazarr
+    state: directory
+    owner: bazarr
+    group: media
+    mode: "0755"
+  become: true
+  tags:
+    - bazarr
+
 - name: Create configuration directory
   when: not (ansible_check_mode and bazarr_user.changed)
   file:
