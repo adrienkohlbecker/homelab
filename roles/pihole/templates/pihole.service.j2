@@ -10,6 +10,8 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
+After=zfs_mount_mnt_services_sqlite.service
+Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
@@ -38,6 +40,7 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="pihole" \
     --volume /mnt/services/pihole/etc:/etc/pihole \
     --volume /mnt/services/pihole/dnsmasq:/etc/dnsmasq.d \
+    --volume /mnt/services/sqlite/pihole:/var/lib/pihole \
     --volume /var/log/pihole:/var/log/pihole \
     --env TZ="Europe/Paris" \
     --env FTLCONF_dns_listeningMode=SINGLE \
@@ -47,6 +50,8 @@ ExecStart=/usr/bin/podman run \
     --env FTLCONF_misc_etc_dnsmasq_d=true \
     --env FTLCONF_webserver_api_pwhash="{{ pihole_password | hash('sha256') | hash('sha256') }}" \
     --env FTLCONF_database_maxDBdays=31 \
+    --env FTLCONF_files_database=/var/lib/pihole/pihole-FTL.db \
+    --env FTLCONF_files_gravity=/var/lib/pihole/gravity.db \
     --env PIHOLE_UID={{ pihole_user.uid }} \
     --env PIHOLE_GID={{ pihole_user.group }} \
     --dns=127.0.0.1 \
