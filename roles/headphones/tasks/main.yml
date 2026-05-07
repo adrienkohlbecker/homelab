@@ -61,6 +61,7 @@
     src: /mnt/services/sqlite/headphones/headphones.db
     dest: /mnt/services/headphones/headphones.db
     state: link
+    force: true
     owner: headphones
     group: media
     follow: false

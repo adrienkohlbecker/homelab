@@ -85,6 +85,7 @@
     src: "/mnt/services/sqlite/jellyfin/{{ item }}"
     dest: "/mnt/services/jellyfin/data/{{ item }}"
     state: link
+    force: true
     owner: "{{ jellyfin_user.uid }}"
     group: media
     follow: false
@@ -113,6 +114,7 @@
     src: /mnt/services/sqlite/jellyfin/introskipper.db
     dest: /mnt/services/jellyfin/data/introskipper/introskipper.db
     state: link
+    force: true
     owner: "{{ jellyfin_user.uid }}"
     group: media
     follow: false

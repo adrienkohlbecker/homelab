@@ -86,6 +86,7 @@
     src: /mnt/services/sqlite/sabnzbd/history1.db
     dest: /mnt/services/sabnzbd/admin/history1.db
     state: link
+    force: true
     owner: sabnzbd
     group: media
     follow: false

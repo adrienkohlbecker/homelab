@@ -53,6 +53,7 @@
     src: /mnt/services/sqlite/tautulli/tautulli.db
     dest: /mnt/services/tautulli/tautulli.db
     state: link
+    force: true
     owner: tautulli
     group: tautulli
     follow: false

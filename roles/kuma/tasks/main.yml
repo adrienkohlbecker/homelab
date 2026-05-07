@@ -51,6 +51,7 @@
     src: /mnt/services/sqlite/kuma/kuma.db
     dest: /mnt/services/kuma/kuma.db
     state: link
+    force: true
     owner: kuma
     group: kuma
     follow: false
