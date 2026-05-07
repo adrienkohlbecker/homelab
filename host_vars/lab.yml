@@ -11,6 +11,7 @@ zfs_arc_max: 8589934592   # 8 GiB — ARC can refill when the VM is off; c_max i
 zfs_trim_pools:
   - rpool
   - dozer
+  - tank
 zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set to "on" on this dataset
   - rpool/ROOT/jammy
   - dozer/minio
