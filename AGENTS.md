@@ -3,9 +3,6 @@
 ## Project Structure & Module Organization
 `site.yml` orchestrates every host group and its roles. Role logic stays under `roles/<role>/` (tasks, templates, handlers), with shared defaults in `group_vars/` and host-specific overrides in `host_vars/`. `ansible.cfg` binds the repo to `hosts.ini` and `vault.sh`, so running from the root picks up the correct inventory and vault password automatically. Supporting folders: `packer/` builds the QEMU images, `terraform/` keeps Cloudflare DNS code and state, `wireguard/` stores VPN peers, and `test/` holds the harness, inventories, and logs.
 
-### Pyinfra Migration Notes
-`roles/<role>/<role>.py` hosts pyinfra ports of Ansible roles. Keep the function signature close to the original variable naming (`ansible_user`, `ansible_user_dir`, etc.) so deploy files can pass the same data that Ansible normally injects. Put any shared helpers inside `pyinfra_roles/` and ensure they handle both static files on disk and in-memory streams (see `file_put_with_validation`). Run ports via `uv run pyinfra inventory.py main.py` while iterating, and remember to keep sudo handling explicit by threading `_sudo` kwargs through helpers.
-
 ## Build, Test, and Development Commands
 - Bootstrap tools: install [mise](https://mise.jdx.dev), `mise trust`, then `mise install` from the repo root — pins terraform, packer, python, uv, and shellcheck. `python.uv_venv_auto` auto-creates and sources `.venv`, so `uv sync` populates Python deps (ansible, ansible-lint, black, yamllint) on first directory entry. 1Password CLI must be signed in for the `op://` env vars in `mise.toml` to resolve.
 - Configure everything: `ansible-playbook site.yml --limit prod` (`ansible.cfg` already points at `hosts.ini`; set `--tags` to narrow scope).
