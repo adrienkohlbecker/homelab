@@ -8,6 +8,7 @@
 - name: install | Apply podman backports pin + upgrade (jammy)
   import_role:
     name: backports
+    tasks_from: pin
   vars:
     backports_name: podman
     backports_packages: '{{ podman_backport_packages }}'

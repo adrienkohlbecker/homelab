@@ -7,6 +7,7 @@
 - name: Apply chrony backports pin + upgrade (jammy)
   import_role:
     name: backports
+    tasks_from: pin
   vars:
     backports_name: ntp
     backports_packages: '{{ ntp_backport_packages }}'

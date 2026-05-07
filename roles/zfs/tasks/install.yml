@@ -9,6 +9,7 @@
 - name: install | Apply zfs backports pin + upgrade (jammy)
   import_role:
     name: backports
+    tasks_from: pin
   vars:
     backports_name: zfs
     backports_packages: '{{ zfs_backport_packages }}'
