@@ -10,8 +10,23 @@ recordsize tuning worth doing?
 FTL, HA recorder, Tautulli, Sonarr/Radarr/Jellyfin, Kuma) being partially
 rewritten under the parent dataset's default 128K recordsize. Carved a
 child dataset `rpool/services/sqlite` at `recordsize=4K` and routed the
-two worst offenders (pihole-FTL.db, home-assistant_v2.db) onto it. Other
-DBs left alone — their per-snapshot footprint isn't worth the role surgery.
+worst offenders onto it across three batches:
+
+1. **pihole + HA recorder** via volume swap (DB had its own subdir or a
+   relocation env var).
+2. **bazarr / overseerr / filebrowser / csplogger / mosquitto /
+   healthchecks / gitea** — same volume-swap idiom; DBs already lived in
+   a relocatable subdir or accepted a config knob.
+3. **sonarr / radarr / sabnzbd / headphones / profilarr / jellyfin /
+   kuma / z2m / tautulli + HA `zigbee.db`** — DB hardcoded next to other
+   state, so a clean directory bind isn't possible. Used a symlink
+   inside the original config dir pointing to the 4K dataset, with a
+   matching-path bind so SQLite resolves the link identically inside
+   the container. WAL/SHM follow the resolved path onto the 4K dataset.
+
+Plex and paperless still pending — they need bespoke handling (plex has
+a deeply nested DB dir worth a directory bind; paperless mixes SQLite
+with the Whoosh index, which doesn't want 4K records).
 
 ---
 
@@ -227,8 +242,11 @@ Picked **`recordsize=4096`** for the dedicated dataset.
 
 Commits:
 - `0fd3a5ca` — initial dataset + pihole/homeassistant
-- second commit (this batch) — extension to bazarr, overseerr,
-  filebrowser, csplogger, mosquitto, healthchecks, gitea
+- `5991bc28` — extension to bazarr, overseerr, filebrowser, csplogger,
+  mosquitto, healthchecks, gitea (clean directory-bind variants)
+- third commit (this batch) — sonarr, radarr, sabnzbd, headphones,
+  profilarr, jellyfin, kuma, z2m, tautulli, HA `zigbee.db` (symlink
+  variant — see §7)
 
 ### `roles/services/tasks/main.yml`
 

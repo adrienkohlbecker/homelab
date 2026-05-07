@@ -348,6 +348,55 @@ Other zdb signals:
    small_blocks usage approaches 80 GB combined, dial the threshold down or
    stop adding more.
 
+## 8.5 Pre-rollout cold-cache baseline (2026-05-06)
+
+Captured immediately before adding the special vdev, with `tank` datasets
+freshly mounted and ARC naturally cold (`arc_meta_used` had decayed from
+5.98 GiB to 0.53 GiB while datasets were unmounted, so no export/import was
+required).
+
+```
+$ sudo zfs mount tank/data
+$ sync && echo 3 | sudo tee /proc/sys/vm/drop_caches
+$ time find /mnt/data -type f | wc -l
+1471838
+find /mnt/data -type f  2.40s user 27.60s system 3% cpu 13:19.23 total
+
+# warm repeat
+$ time find /mnt/data -type f | wc -l
+1471838
+find /mnt/data -type f  0.37s user 2.37s system 99% cpu  2.755 total
+```
+
+| Run                    | Wall time     | Notes                          |
+|------------------------|--------------:|--------------------------------|
+| Cold (ARC empty)       | **799.23 s**  | raidz2 metadata-IOPS bound     |
+| Warm (ARC primed)      | **2.76 s**    | pure CPU + ARC hits            |
+| Speedup                | **~290×**     | how much of cold is iowait     |
+
+Expected post-special-vdev cold: ≤30 s (NVMe random reads ~100 µs vs HDD
+~10 ms). Re-run the cold benchmark after metadata migrates to quantify
+the real-world latency win on `find`, `du`, `ls -laR`, `rsync --dry-run`,
+and `zfs send` walks.
+
+## 8.6 Rollout executed (2026-05-06)
+
+```
+$ zpool list -v tank
+tank                                                      36.4T  16.4T  20.0T  …
+  raidz2-0                                                36.2T  16.4T  19.9T  …
+  …
+special                                                       -      -      -
+  mirror-1                                                 127G   504K   127G  0.00%
+    nvme-KINGSTON_SEDC1000BM8480G_50026B7686B5DE1D-part3   128G  ONLINE
+    nvme-KINGSTON_SEDC1000BM8480G_50026B7686B5DE39-part3   128G  ONLINE
+    nvme-KINGSTON_SEDC1000BM8480G_50026B7686B5DE54-part3   128G  ONLINE
+```
+
+3-way mirror, 127 GiB usable. `special_small_blocks` deliberately not
+enabled yet — phase 2 of §8 deferred for a few weeks of natural metadata
+migration via snapshot churn / autobackup.
+
 ## 9. Appendix — raw outputs preserved verbatim
 
 ### 9.1 `zpool list -v tank`
@@ -392,15 +441,15 @@ Dittoed blocks in same metaslab: 1
 
 ### 9.4 NVMe target devices
 
-```
-nvme-KINGSTON_SEDC1000BM8480G_50026B7686B5DE1D   (nvme0n1, sn 50026B7686B5DE54 in id-ctrl)
-nvme-KINGSTON_SEDC1000BM8480G_50026B7686B5DE39   (nvme1n1)
-nvme-KINGSTON_SEDC1000BM8480G_50026B7686B5DE54   (nvme2n1)
-```
+Verified 2026-05-06 against `nvme id-ctrl` serials and `/dev/disk/by-id` symlinks:
 
-(Verify mapping with `ls -l /dev/disk/by-id/nvme-* | grep part3` before running
-`zpool add` — the by-id ↔ /dev/nvme* mapping is the bit you don't want to get
-wrong.)
+| /dev/nvme | serial            | by-id symlink (part3)                                       |
+|-----------|-------------------|-------------------------------------------------------------|
+| nvme0n1   | 50026B7686B5DE54  | `nvme-KINGSTON_SEDC1000BM8480G_50026B7686B5DE54-part3`      |
+| nvme1n1   | 50026B7686B5DE39  | `nvme-KINGSTON_SEDC1000BM8480G_50026B7686B5DE39-part3`      |
+| nvme2n1   | 50026B7686B5DE1D  | `nvme-KINGSTON_SEDC1000BM8480G_50026B7686B5DE1D-part3`      |
+
+(udev also exposes `…-<sn>_1-part3` aliases via the NGUID — same target, harmless.)
 
 ### 9.5 `arc_meta_used` snapshot
 

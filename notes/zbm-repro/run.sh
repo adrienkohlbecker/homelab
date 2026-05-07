@@ -90,6 +90,13 @@ if [ ! -f "$EFI_CODE" ]; then
   exit 1
 fi
 
+# qemu pflash requires the VARS unit to match the CODE unit's size.
+# aarch64 AAVMF/edk2-aarch64 are 64M; x86 OVMF/edk2-x86_64 are 4M (and
+# q35's pflash bank caps the CODE+VARS pair at 8M total, so 64M blows up
+# with "combined size of system firmware exceeds 8388608 bytes"). Derive
+# from the CODE file so we don't hardcode per-arch sizes.
+EFI_VARS_SIZE=$(wc -c < "$EFI_CODE")
+
 #######################################################################
 # 1. Clone zfsbootmenu at the requested ref.
 #######################################################################
@@ -99,19 +106,36 @@ if [ ! -d src ]; then
 fi
 
 #######################################################################
-# 2. Patch upstream Dockerfile: rename the xbps repo conf the upstream
-#    Dockerfile writes to so it overrides Void's default
-#    /usr/share/xbps.d/00-repository-main.conf instead of just adding
-#    a parallel /etc/xbps.d/00-custom-repos.conf. xbps merges all repo
-#    configs from /etc/xbps.d/ + /usr/share/xbps.d/, with same-name files
-#    in /etc/ overriding /usr/share/. Without this, XBPS_REPOS adds a
-#    second repo alongside Void's default, and xbps may still query the
-#    slow upstream mirror.
+# 2. Patch upstream Dockerfile:
+#
+#    (a) Rename the xbps repo conf the upstream Dockerfile writes to so
+#    it overrides Void's default /usr/share/xbps.d/00-repository-main.conf
+#    instead of just adding a parallel /etc/xbps.d/00-custom-repos.conf.
+#    xbps merges all repo configs from /etc/xbps.d/ + /usr/share/xbps.d/,
+#    with same-name files in /etc/ overriding /usr/share/. Without this,
+#    XBPS_REPOS adds a second repo alongside Void's default, and xbps
+#    may still query the slow upstream mirror.
+#
+#    (b) Pin the build script's in-image path. Upstream writes
+#    `COPY ${ZBM_BUILDER} /` and `ENTRYPOINT [ "/${ZBM_BUILDER}" ]`, but
+#    exec-form ENTRYPOINT does not expand variables (and ARG isn't in
+#    the runtime env anyway), so docker tries to literally exec
+#    `/${ZBM_BUILDER}` and fails with "no such file or directory". Copy
+#    to a fixed /build-init.sh and hardcode the entrypoint to match —
+#    upstream's own buildah-based image-build.sh already does this.
 #
 #    No other patching needed — buildx supports the BuildKit heredoc and
 #    `--mount=type=cache` syntax that upstream's Dockerfile uses.
 #######################################################################
 sed -i.bak 's|/etc/xbps.d/00-custom-repos.conf|/etc/xbps.d/00-repository-main.conf|' \
+  src/releng/docker/Dockerfile
+# Patterns target the literal `${ZBM_BUILDER}` text in the Dockerfile;
+# the single quotes (and shellcheck disable) keep the shell out of it.
+# shellcheck disable=SC2016
+sed -i.bak 's|COPY --chmod=755 ${ZBM_BUILDER} /$|COPY --chmod=755 ${ZBM_BUILDER} /build-init.sh|' \
+  src/releng/docker/Dockerfile
+# shellcheck disable=SC2016
+sed -i.bak 's|ENTRYPOINT \[ "/${ZBM_BUILDER}" \]|ENTRYPOINT [ "/build-init.sh" ]|' \
   src/releng/docker/Dockerfile
 
 #######################################################################
@@ -181,7 +205,7 @@ qemu-img create -f qcow2 -b "$BASE_IMAGE" -F qcow2 disk.qcow2
 
 # Empty NVRAM — we boot via -kernel, so the firmware doesn't need a
 # bootable EFI binary on the ESP.
-truncate -s 64M efivars.fd
+truncate -s "$EFI_VARS_SIZE" efivars.fd
 
 #######################################################################
 # 7. Extract the on-pool kernel + initrd from the qcow2 and boot them
@@ -250,12 +274,29 @@ runcmd:
     initrd=$(ls "$mp/boot/"initrd.img-* 2>/dev/null | sort -V | tail -1)
     cp -L "$kernel" /share/kernel
     cp -L "$initrd" /share/initrd
+    # ZBM reads `org.zfsbootmenu:commandline` from the boot dataset and
+    # uses it as the cmdline for the kexec'd kernel. Base images often
+    # don't set the serial console there (they boot via grub on a real
+    # display), so the kexec target comes up silent on -nographic. Set
+    # it now so step 8 has visible kernel printk. __EARLYCON__ is sed-
+    # substituted by the host before the seed iso is built.
+    zfs set org.zfsbootmenu:commandline="__EARLYCON__ loglevel=7" "$active"
     sync
+    # Clean export so the property write is committed and the pool is
+    # left without a stale hostid claim — irrelevant for ZBM (force-
+    # imports natively) but good hygiene if disk.qcow2 is reused.
+    zfs unmount "$active"
+    zpool export rpool
 power_state:
   mode: poweroff
   delay: now
   message: "extraction-complete"
 EOF
+# Substitute the EARLYCON placeholder. The user-data heredoc is single-
+# quoted to preserve the inner shell's $active/$mp/etc; this sed step
+# is how we inject host-side values into it.
+sed -i.bak "s|__EARLYCON__|$EARLYCON|" seed/user-data
+rm -f seed/user-data.bak
 cat > seed/meta-data <<EOF
 instance-id: zbm-extractor-$(date +%s)
 local-hostname: zbm-extractor
@@ -273,7 +314,7 @@ docker run --rm \
   '
 
 # Empty NVRAM for the extractor VM.
-truncate -s 64M cloud-efivars.fd
+truncate -s "$EFI_VARS_SIZE" cloud-efivars.fd
 
 # Boot the cloud-image VM. cloud-init runs the runcmd then poweroffs;
 # qemu exits cleanly. The extracted files appear in $WORKDIR/extracted/.
@@ -315,9 +356,14 @@ echo "extracted: $EXTRACTED_INITRD"
 echo
 echo "=== control test: boot on-pool kernel directly via -kernel ==="
 qemu-img create -f qcow2 -b "$BASE_IMAGE" -F qcow2 control-disk.qcow2
-truncate -s 64M control-efivars.fd
+truncate -s "$EFI_VARS_SIZE" control-efivars.fd
 
-CONTROL_APPEND="$EARLYCON loglevel=7 root=ZFS=rpool/ROOT/jammy ro"
+# zfs_force=1: control-disk.qcow2 is a fresh COW from $BASE_IMAGE, so
+# rpool's hostid claim reflects whatever last touched the base image
+# (often "ubuntu-zfs" from the install host). Without -f, Ubuntu's
+# zfs-initramfs refuses with "pool was previously in use from another
+# system". ZBM force-imports natively, so step 8 doesn't need this.
+CONTROL_APPEND="$EARLYCON loglevel=7 root=ZFS=rpool/ROOT/jammy ro zfs_force=1"
 
 # Piping through `tee` block-buffers on a non-TTY sink, so output can
 # vanish when `timeout` SIGTERMs qemu before any flush. Send qemu's
@@ -365,6 +411,9 @@ fi
 #######################################################################
 KERNEL=$(ls build/output/vmlin*-bootmenu)
 INITRD=$(ls build/output/initramfs-bootmenu.img)
+
+sudo chown $USER $KERNEL
+sudo chown $USER $INITRD
 
 cat <<INFO
 
