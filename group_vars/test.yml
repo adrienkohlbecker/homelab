@@ -123,6 +123,8 @@ wireguard_keys:
 synology_endpoint: changeme
 certbot_production_certificates: false
 
+podman_zvol_size: '{{ "5GB" | human_to_bytes | string }}'
+
 postfix_smtp_user: changeme
 postfix_smtp_password: changeme
 journald_exporter_key: changeme
