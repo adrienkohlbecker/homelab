@@ -22,7 +22,6 @@ mac_addresses:
   lab_i210: e8:ea:6a:09:97:67
   lab_i225p1: c8:7f:54:5c:57:5b
   lab_i225p2: c8:7f:54:5c:57:5c
-  pom: d0:37:45:ea:6f:1
 
 wireguard_keys:
   lab:

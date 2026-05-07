@@ -36,7 +36,6 @@ mac_addresses:
   lab_i210: 20:08:e9:30:e7:e9
   lab_i225p1: 4c:4b:b9:1b:60:0c
   lab_i225p2: d2:7d:10:e0:9c:68
-  pom: c3:9e:51:6a:35:81
 
 wireguard_peers:
   - name: lab
