@@ -24,151 +24,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from arch import uefi_code_path_for
 from machine import (
     DEFAULT_UBUNTU,
     QEMU_MACHINE_SPECS,
     QemuMachine,
     UBUNTU_RELEASES,
 )
-from utils import cancel_on_signal, print_cmd_line, print_line, run_command, tee_output
-
-
-class _LaunchMachine(QemuMachine):
-    """QemuMachine with launch.py-only knobs layered on top.
-
-    Adds:
-    - direct-boot override (kernel/initrd/append) -- replaces the
-      packer-shipped kernel/initrd on the aarch64 ZFS path so iteration
-      on a custom kernel doesn't have to round-trip through a packer rebuild
-    - --mem override
-    - --with-pflash / --efi-code / --efi-vars to attach UEFI pflash with
-      either auto-detected paths or explicit user-supplied ones
-    - repeatable --virtfs PATH:TAG 9p host shares
-    - --foreground: inherit qemu stdio + replace `-serial stdio` with mon:stdio
-      so HMP is reachable via Ctrl-A,c
-    - --qmp SOCKET: bind qemu's QMP server to a unix socket
-    """
-
-    def __init__(
-        self,
-        *args: object,
-        kernel: Path | None = None,
-        initrd: Path | None = None,
-        append: str = "",
-        mem: str | None = None,
-        with_pflash: bool = False,
-        efi_code: Path | None = None,
-        efi_vars: Path | None = None,
-        virtfs: list[tuple[Path, str]] | None = None,
-        foreground: bool = False,
-        qmp_socket: Path | None = None,
-        **kwargs: object,
-    ) -> None:
-        super().__init__(*args, **kwargs)  # type: ignore[arg-type]
-        self._direct_boot_override: tuple[Path, Path, str] | None = (kernel.resolve(), initrd.resolve(), append) if kernel is not None else None
-        self._mem = mem
-        self._with_pflash = with_pflash
-        self._efi_code = efi_code.resolve() if efi_code is not None else None
-        self._efi_vars = efi_vars.resolve() if efi_vars is not None else None
-        self._virtfs = list(virtfs or [])
-        self._foreground = foreground
-        self._qmp_socket = qmp_socket
-
-    async def _uefi_drives(self) -> list[str]:
-        """Honour --efi-code / --efi-vars overrides, else delegate to parent.
-
-        Parent's _uefi_drives is also used by super().prepare() for ZFS /
-        minimal-aarch64 firmware boots, so this override flows through to
-        those paths automatically (Python MRO) -- letting the user supply
-        a custom OVMF / EDK2 build for any pflash-using variant.
-        """
-        if self._efi_code is None and self._efi_vars is None:
-            return await super()._uefi_drives()
-
-        code_path = self._efi_code if self._efi_code is not None else uefi_code_path_for(self.arch)
-        if self._efi_vars is not None:
-            vars_path = self._efi_vars
-        else:
-            # Mirrors super()._uefi_drives logic: prefer packer-shipped
-            # efivars (preserves boot order across runs) before creating an
-            # empty file sized to the code blob.
-            packer_vars = Path(f"{self.workdir.name}/efivars.fd")
-            if packer_vars.exists():
-                vars_path = packer_vars
-            else:
-                vars_path = Path(f"{self.workdir.name}/uefi-vars.fd")
-                await run_command(["truncate", "-s", str(code_path.stat().st_size), str(vars_path)])
-        return [
-            f"file={code_path},if=pflash,unit=0,format=raw,readonly=on",
-            f"file={vars_path},if=pflash,unit=1,format=raw",
-        ]
-
-    async def _resolve_direct_boot(self, os_src_paths: list[str]) -> tuple[Path, Path, str]:
-        """Use the user's --kernel/--initrd/--append override if present.
-
-        Without this hook super().prepare() on aarch64 ZFS would read the
-        packer-shipped kernel/initrd, which defeats the point of supplying
-        a custom one. Falls back to super() when no override was supplied.
-        """
-        if self._direct_boot_override is not None:
-            return self._direct_boot_override
-        return await super()._resolve_direct_boot(os_src_paths)
-
-    async def prepare(self) -> None:
-        await super().prepare()
-
-        # x86_64 prepare() never calls _resolve_direct_boot, so an override
-        # from launch.py wouldn't reach _boot_command otherwise. Force it
-        # here so -kernel/-initrd/-append fire on both arches.
-        if self._direct_boot_override is not None:
-            self._direct_boot = self._direct_boot_override
-
-        # Attach pflash on the variants that don't get it from super (aarch64
-        # ZFS direct-boot, x86_64 minimal BIOS). Either --with-pflash or any
-        # of the explicit path overrides triggers attachment. Idempotent:
-        # skip when super().prepare() already attached pflash (x86_64 ZFS,
-        # aarch64 minimal); the override flowed through there already.
-        want_pflash = self._with_pflash or self._efi_code is not None or self._efi_vars is not None
-        if want_pflash and not any("if=pflash" in d for d in self.drives):
-            self.drives += await self._uefi_drives()
-
-    def _boot_command(self) -> list[str]:
-        cmd = super()._boot_command()
-
-        if self._mem is not None:
-            i = cmd.index("-m")
-            cmd[i + 1] = self._mem
-
-        if self._foreground:
-            # Strip the `timeout --kill-after=10s 0 ...` wrapper that
-            # QemuMachine prepends. GNU timeout, when not invoked directly
-            # from a shell prompt, detaches the child from the controlling
-            # tty (it has a `--foreground` flag specifically to opt out of
-            # that). Without that flag qemu can't put the terminal into
-            # raw mode, so mon:stdio is unusable. We don't need timeout in
-            # interactive mode anyway -- the user quits via Ctrl-A,x.
-            if cmd[0] != "timeout":
-                # Asserts elide under `python -O`; raise so a future change
-                # to QemuMachine._boot_command's wrapper layout surfaces
-                # cleanly instead of silently slicing the wrong prefix.
-                raise RuntimeError(f"expected timeout wrapper, got {cmd[:4]}")
-            cmd = cmd[3:]
-
-            # mon:stdio multiplexes the guest's first serial port with qemu's
-            # HMP. Press Ctrl-A,c at the terminal to switch to HMP, Ctrl-A,c
-            # again to return; Ctrl-A,x to quit qemu.
-            i = cmd.index("-serial")
-            cmd[i + 1] = "mon:stdio"
-
-        if self._qmp_socket is not None:
-            cmd += ["-qmp", f"unix:{self._qmp_socket},server,nowait"]
-        for path, tag in self._virtfs:
-            cmd += [
-                "-virtfs",
-                f"local,id={tag},path={path},mount_tag={tag},security_model=mapped-xattr",
-            ]
-        return cmd
+from utils import cancel_on_signal, print_cmd_line, print_line, tee_output
 
 
 def _parse_virtfs(specs: list[str]) -> list[tuple[Path, str]]:
@@ -353,7 +215,7 @@ async def _run_async(m: QemuMachine, *, wait_for_ssh: bool, exit_after_ready: bo
                 await m.wait()
 
 
-def _run_foreground(m: _LaunchMachine) -> int:
+def _run_foreground(m: QemuMachine) -> int:
     """Sync qemu spawn -- no asyncio for the long-running wait.
 
     asyncio's subprocess machinery installs its own SIGCHLD/fd plumbing in
@@ -393,7 +255,7 @@ def _run_foreground(m: _LaunchMachine) -> int:
 def main() -> int:
     args = parse_args()
 
-    m = _LaunchMachine(
+    m = QemuMachine(
         machine=args.machine,
         role="_launch",
         keep_vm=True,

@@ -618,7 +618,27 @@ class QemuMachine(Machine):
     # EDK2+aarch64) is bypassed entirely. None on x86_64 and on minimal.
     _direct_boot: tuple[Path, Path, str] | None
 
-    def __init__(self, machine: str, role: str, keep_vm: bool, ubuntu_name: str, machine_timeout: int, upstream_mirrors: bool = False, image_dir: Path | None = None):
+    def __init__(
+        self,
+        machine: str,
+        role: str,
+        keep_vm: bool,
+        ubuntu_name: str,
+        machine_timeout: int,
+        upstream_mirrors: bool = False,
+        *,
+        image_dir: Path | None = None,
+        kernel: Path | None = None,
+        initrd: Path | None = None,
+        append: str = "",
+        mem: str | None = None,
+        with_pflash: bool = False,
+        efi_code: Path | None = None,
+        efi_vars: Path | None = None,
+        virtfs: list[tuple[Path, str]] | None = None,
+        foreground: bool = False,
+        qmp_socket: Path | None = None,
+    ):
         """QEMU-backed machine wrapper used by integration tests.
 
         image_dir overrides the per-variant `<imagedir>/<ubuntu>/<packer_image>`
@@ -626,6 +646,18 @@ class QemuMachine(Machine):
         verify-boot post-processor to point the harness at a still-staged
         `*.new` build output before the build script swaps it over the
         previous artifact.
+
+        kernel/initrd/append direct-boot a user-supplied kernel against the
+        variant's qcow2, replacing the packer-shipped kernel/initrd on the
+        aarch64 ZFS path (or layering -kernel/-initrd onto x86_64). mem
+        overrides the per-spec `-m` size. with_pflash / efi_code / efi_vars
+        attach UEFI pflash on variants that don't get it from prepare()
+        (auto-detected paths or explicit overrides). virtfs is a list of
+        (host_path, mount_tag) 9p shares. foreground strips the `timeout`
+        wrapper and switches `-serial stdio` -> mon:stdio so HMP is reachable
+        via Ctrl-A,c. qmp_socket binds qemu's QMP server to a unix socket.
+        These last set are launch.py-only knobs; testrole.py / production
+        callers leave them at defaults.
         """
         try:
             spec = QEMU_MACHINE_SPECS[machine]
@@ -662,6 +694,16 @@ class QemuMachine(Machine):
         if image_dir is not None and spec.packer_image is None:
             raise ValueError(f"image_dir override requires a variant with packer_image set, got {machine!r}")
         self._image_dir_override = image_dir.resolve() if image_dir is not None else None
+        # launch.py-only knobs; defaults are no-ops (every gate below the
+        # super().__init__ call short-circuits when each is None/False/[]).
+        self._direct_boot_override: tuple[Path, Path, str] | None = (kernel.resolve(), initrd.resolve(), append) if kernel is not None else None
+        self._mem = mem
+        self._with_pflash = with_pflash
+        self._efi_code = efi_code.resolve() if efi_code is not None else None
+        self._efi_vars = efi_vars.resolve() if efi_vars is not None else None
+        self._virtfs: list[tuple[Path, str]] = list(virtfs or [])
+        self._foreground = foreground
+        self._qmp_socket = qmp_socket
         # Captured once at construction so prepare()/_boot_command() don't
         # have to re-run platform.machine() on every access.
         self.arch: ArchProfile = detect_host_arch()
@@ -771,64 +813,81 @@ class QemuMachine(Machine):
             # `virt` boots only via UEFI, so flash is required there.
             if not self.arch.bios_boot_supported:
                 self.drives += await self._uefi_drives()
-            return
-
-        # ZFS variants pick a packer image (zfs or zfs-lab),
-        # overlay its OS disks, and attach extra empty qcow2s on top for
-        # the per-variant disk-setup script to format. See AGENTS.md
-        # "Test Environment Design".
-        packer_image = self._spec.packer_image
-        if packer_image is None:
-            # Bare assertion would be elided under `python -O`; raise so the
-            # config error surfaces regardless of optimisation level.
-            raise RuntimeError(f"non-minimal variant {self.machine!r} must declare packer_image")
-        if self._image_dir_override is not None:
-            image_dir = str(self._image_dir_override)
         else:
-            image_dir = f"{self.imagedir}/{self.ubuntu_name}/{packer_image}"
-        os_disk_count = self._spec.os_disk_count
+            # ZFS variants pick a packer image (zfs or zfs-lab),
+            # overlay its OS disks, and attach extra empty qcow2s on top for
+            # the per-variant disk-setup script to format. See AGENTS.md
+            # "Test Environment Design".
+            packer_image = self._spec.packer_image
+            if packer_image is None:
+                # Bare assertion would be elided under `python -O`; raise so the
+                # config error surfaces regardless of optimisation level.
+                raise RuntimeError(f"non-minimal variant {self.machine!r} must declare packer_image")
+            if self._image_dir_override is not None:
+                image_dir = str(self._image_dir_override)
+            else:
+                image_dir = f"{self.imagedir}/{self.ubuntu_name}/{packer_image}"
+            os_disk_count = self._spec.os_disk_count
 
-        os_src_paths = [f"{image_dir}/packer-ubuntu-{idx}" for idx in range(1, os_disk_count + 1)]
-        os_disk_paths: list[str] = []
-        for idx, src in enumerate(os_src_paths, start=1):
-            dest = f"{self.workdir.name}/packer-ubuntu-{idx}"
-            await self._create_overlay(src, dest)
-            os_disk_paths.append(dest)
+            os_src_paths = [f"{image_dir}/packer-ubuntu-{idx}" for idx in range(1, os_disk_count + 1)]
+            os_disk_paths: list[str] = []
+            for idx, src in enumerate(os_src_paths, start=1):
+                dest = f"{self.workdir.name}/packer-ubuntu-{idx}"
+                await self._create_overlay(src, dest)
+                os_disk_paths.append(dest)
 
-        # Empty qcow2 disks for the variant's extra pools. test/disks/<variant>.sh
-        # partitions / zpool-creates them after the VM boots.
-        extra_paths: list[str] = []
-        for idx, size in enumerate(self._spec.extra_disks, start=os_disk_count + 1):
-            path = f"{self.workdir.name}/packer-ubuntu-{idx}"
-            await run_command(["qemu-img", "create", "-f", "qcow2", path, size])
-            extra_paths.append(path)
+            # Empty qcow2 disks for the variant's extra pools. test/disks/<variant>.sh
+            # partitions / zpool-creates them after the VM boots.
+            extra_paths: list[str] = []
+            for idx, size in enumerate(self._spec.extra_disks, start=os_disk_count + 1):
+                path = f"{self.workdir.name}/packer-ubuntu-{idx}"
+                await run_command(["qemu-img", "create", "-f", "qcow2", path, size])
+                extra_paths.append(path)
 
-        # OS disks take vda..vd[a+N-1]; extras attach right after, in spec order.
-        self._extra_disk_devices = [f"/dev/vd{chr(ord('a') + os_disk_count + i)}" for i in range(len(extra_paths))]
+            # OS disks take vda..vd[a+N-1]; extras attach right after, in spec order.
+            self._extra_disk_devices = [f"/dev/vd{chr(ord('a') + os_disk_count + i)}" for i in range(len(extra_paths))]
 
-        self.drives = [
-            *(self._virtio_drive(path) for path in os_disk_paths),
-            *(self._virtio_drive(path) for path in extra_paths),
-        ]
-        if self.arch.direct_boot_required_for_zfs:
-            # aarch64: bypass the firmware boot chain (rEFInd -> ZBM -> kexec
-            # panics on EDK2) by direct-booting the on-pool kernel/initrd.
-            # Subclasses can override _resolve_direct_boot() to inject their
-            # own override (launch.py uses this for ZBM iteration).
-            self._direct_boot = await self._resolve_direct_boot(os_src_paths)
-        else:
-            await self._copy_efivars_from(image_dir)
+            self.drives = [
+                *(self._virtio_drive(path) for path in os_disk_paths),
+                *(self._virtio_drive(path) for path in extra_paths),
+            ]
+            if self.arch.direct_boot_required_for_zfs:
+                # aarch64: bypass the firmware boot chain (rEFInd -> ZBM -> kexec
+                # panics on EDK2) by direct-booting the on-pool kernel/initrd.
+                # _resolve_direct_boot() honours the launch.py kernel/initrd
+                # override when set.
+                self._direct_boot = await self._resolve_direct_boot(os_src_paths)
+            else:
+                await self._copy_efivars_from(image_dir)
+                self.drives += await self._uefi_drives()
+
+        # x86_64 / minimal don't reach _resolve_direct_boot, so route the
+        # launch.py kernel/initrd override in here too. On aarch64 ZFS this
+        # is a re-assignment of the same value already set above.
+        if self._direct_boot_override is not None:
+            self._direct_boot = self._direct_boot_override
+
+        # Attach pflash on variants that don't already have it (aarch64 ZFS
+        # direct-boot, x86_64 minimal BIOS) when launch.py asked for it via
+        # --with-pflash or an explicit --efi-code/--efi-vars. Idempotent:
+        # skip when an earlier branch already attached pflash (x86_64 ZFS,
+        # aarch64 minimal); the override flowed through there already.
+        want_pflash = self._with_pflash or self._efi_code is not None or self._efi_vars is not None
+        if want_pflash and not any("if=pflash" in d for d in self.drives):
             self.drives += await self._uefi_drives()
 
     async def _resolve_direct_boot(self, os_src_paths: list[str]) -> tuple[Path, Path, str]:
         """Resolve (kernel, initrd, cmdline) for the direct-boot ZFS path.
 
-        Reads the kernel + initrd + cmdline that the packer build ships
-        next to the qcow2 (provision.sh extracts them from the rpool right
-        before export; packer's file provisioner downloads them into the
-        artifacts dir). Always in lock-step with the qcow2 because it's
-        produced from the same build.
+        Honours the launch.py --kernel/--initrd/--append override when set;
+        otherwise reads the kernel + initrd + cmdline that the packer build
+        ships next to the qcow2 (provision.sh extracts them from the rpool
+        right before export; packer's file provisioner downloads them into
+        the artifacts dir). The packer-shipped tuple is always in lock-step
+        with the qcow2 because it's produced from the same build.
         """
+        if self._direct_boot_override is not None:
+            return self._direct_boot_override
         image_dir = Path(os_src_paths[0]).parent
         kernel = image_dir / "kernel"
         initrd = image_dir / "initrd"
@@ -898,31 +957,33 @@ class QemuMachine(Machine):
         return f"file={path},if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
 
     async def _uefi_drives(self) -> list[str]:
-        """UEFI pflash code+vars pair for the host arch.
+        """UEFI pflash code+vars pair, honouring efi_code/efi_vars overrides.
 
-        The CODE blob is resolved per-arch via arch.uefi_code_path_for
-        (Homebrew on macOS, ovmf/qemu-efi-aarch64 on Linux). The VARS blob
-        is one of:
+        The CODE blob defaults to arch.uefi_code_path_for (Homebrew on macOS,
+        ovmf/qemu-efi-aarch64 on Linux); --efi-code overrides for custom
+        EDK2/OVMF builds. The VARS blob is one of:
 
-        - {workdir}/efivars.fd, if it's been copied in via _copy_efivars_from
-          (ZFS variants -- the packer image ships a primed efivars template
-          so the bootloader entries survive across runs).
-        - else a fresh empty 64 MiB file -- right for ad-hoc launches like
-          minimal or launch.py --with-pflash where there's no prior state.
+        - --efi-vars override, if supplied;
+        - else {workdir}/efivars.fd, if it's been copied in via
+          _copy_efivars_from (ZFS variants -- the packer image ships a
+          primed efivars template so the bootloader entries survive across
+          runs);
+        - else a fresh empty file sized to the code blob -- right for
+          ad-hoc launches like minimal or launch.py --with-pflash where
+          there's no prior state. qemu pflash requires CODE and VARS to be
+          the same size, and EDK2 builds aren't uniform: aarch64 EDK2 ships
+          at 64 MiB, x86_64 OVMF typically at 4 MiB.
         """
-        code_path = uefi_code_path_for(self.arch)
-        packer_vars = Path(f"{self.workdir.name}/efivars.fd")
-        if packer_vars.exists():
-            vars_path = packer_vars
+        code_path = self._efi_code if self._efi_code is not None else uefi_code_path_for(self.arch)
+        if self._efi_vars is not None:
+            vars_path = self._efi_vars
         else:
-            vars_path = Path(f"{self.workdir.name}/uefi-vars.fd")
-            # qemu pflash requires CODE and VARS to be the same size, and
-            # EDK2 builds aren't uniform: aarch64 EDK2 ships at 64 MiB,
-            # x86_64 OVMF typically at 4 MiB. Size the empty vars from the
-            # code blob so the pflash pair lines up regardless of arch /
-            # distro.
-            code_size = code_path.stat().st_size
-            await run_command(["truncate", "-s", str(code_size), str(vars_path)])
+            packer_vars = Path(f"{self.workdir.name}/efivars.fd")
+            if packer_vars.exists():
+                vars_path = packer_vars
+            else:
+                vars_path = Path(f"{self.workdir.name}/uefi-vars.fd")
+                await run_command(["truncate", "-s", str(code_path.stat().st_size), str(vars_path)])
         return [
             f"file={code_path},if=pflash,unit=0,format=raw,readonly=on",
             f"file={vars_path},if=pflash,unit=1,format=raw",
@@ -994,7 +1055,7 @@ class QemuMachine(Machine):
             cmdline = self._augment_kernel_cmdline(cmdline)
             direct_boot = ["-kernel", str(kernel), "-initrd", str(initrd), "-append", cmdline]
 
-        return [
+        cmd = [
             "timeout",
             "--kill-after=10s",
             str(self.wrapper_timeout),
@@ -1036,6 +1097,39 @@ class QemuMachine(Machine):
             "-pidfile",
             f"{self.workdir.name}/{self.idfile}",
         ]
+
+        # launch.py-only post-process. Each branch is a no-op when the
+        # corresponding kwarg is at its default, so testrole.py / production
+        # callers see the cmdline above verbatim.
+        if self._mem is not None:
+            cmd[cmd.index("-m") + 1] = self._mem
+
+        if self._foreground:
+            # Strip the `timeout --kill-after=10s 0 ...` wrapper. GNU timeout,
+            # when not invoked directly from a shell prompt, detaches the
+            # child from the controlling tty (it has a `--foreground` flag
+            # specifically to opt out of that). Without that flag qemu can't
+            # put the terminal into raw mode, so mon:stdio is unusable. We
+            # don't need the wrapper in interactive mode anyway -- the user
+            # quits via Ctrl-A,x.
+            if cmd[0] != "timeout":
+                # Raise so a future change to the wrapper layout surfaces
+                # cleanly instead of silently slicing the wrong prefix.
+                raise RuntimeError(f"expected timeout wrapper, got {cmd[:4]}")
+            cmd = cmd[3:]
+            # mon:stdio multiplexes the guest's first serial port with qemu's
+            # HMP. Press Ctrl-A,c at the terminal to switch to HMP, Ctrl-A,c
+            # again to return; Ctrl-A,x to quit qemu.
+            cmd[cmd.index("-serial") + 1] = "mon:stdio"
+
+        if self._qmp_socket is not None:
+            cmd += ["-qmp", f"unix:{self._qmp_socket},server,nowait"]
+        for path, tag in self._virtfs:
+            cmd += [
+                "-virtfs",
+                f"local,id={tag},path={path},mount_tag={tag},security_model=mapped-xattr",
+            ]
+        return cmd
 
     async def stop(self) -> None:
         """Kill qemu via its pidfile, then drain the timeout wrapper.
