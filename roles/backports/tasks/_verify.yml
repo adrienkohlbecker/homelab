@@ -1,0 +1,31 @@
+# Exercises pin.yml end-to-end against ntp's production backport list
+# (smallest real list that crosses the jammy/noble libc6+t64 transition
+# without leaving apt with broken deps). A self-contained test package
+# would need its own libc6/libc-bin/locales companion list to install,
+# so we lean on a known-good real list instead. Trivially no-ops on
+# noble. Asserts the pin file lands at the documented path and the
+# per-call output fact is exposed for callers to gate restart triggers.
+- name: _verify | load ntp's production backport list
+  include_vars:
+    file: roles/ntp/vars/main.yml
+
+- name: _verify | apply pin.yml
+  import_role:
+    name: backports
+    tasks_from: pin
+  vars:
+    backports_name: test_chrony
+    backports_packages: "{{ ntp_backport_packages }}"
+
+- name: _verify (jammy) | pin file lands at the documented path
+  when: ansible_distribution_major_version == "22"
+  stat:
+    path: /etc/apt/preferences.d/backports-test_chrony
+  register: backports_pin_stat
+  failed_when: not backports_pin_stat.stat.exists
+
+- name: _verify (jammy) | per-call output fact is set
+  when: ansible_distribution_major_version == "22"
+  assert:
+    that:
+      - test_chrony_backports_updated is defined
