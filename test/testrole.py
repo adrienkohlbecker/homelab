@@ -354,6 +354,18 @@ def main() -> int:
         except asyncio.CancelledError:
             print_line("\nInterrupted, shutting down...")
             rc = 130
+        except Exception:
+            # Anything else (RuntimeError from _ensure_minimal_cloudimg
+            # rejecting an unsupported arch/release combo, KeyError on
+            # missing CLI shape, etc.) would otherwise be raised by
+            # asyncio.run and traceback'd straight to sys.stderr, which
+            # bypasses tee_output and never lands in the per-run log.
+            # Route it through print_line so the log captures the same
+            # diagnostic the user sees on the terminal.
+            import traceback
+            print_line(traceback.format_exc().rstrip(), error=True)
+            print_line(f"{parsed_args.role}.{parsed_args.machine} crashed", error=True)
+            rc = 1
         finally:
             # Emit peak RSS even on failure -- a timed-out run is often the
             # most interesting reading. peak_rss_kb stays 0 when the read
