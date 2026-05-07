@@ -22,7 +22,7 @@
     name: zfs
     tasks_from: dataset
   vars:
-    zfs_dataset: '{{ zfs_tank_filesystem }}/media'
+    zfs_dataset: tank/media
     zfs_dataset_mountpoint: /mnt/media
     zfs_dataset_group: media
     zfs_dataset_mode: '0775'
