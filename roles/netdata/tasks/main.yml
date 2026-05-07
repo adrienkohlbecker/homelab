@@ -186,6 +186,50 @@
   tags:
     - netdata
 
+# Drop-in override that blocks `systemctl start/restart netdata` on the
+# HTTP API answering. Without it, downstream `netdatacli reload-health`
+# in health_copy/health_template races against /run/netdata/netdata.pipe
+# coming up — Type=notify's READY=1 fires before the listener is fully
+# accepting connections. Installed before "Enable netdata service" so
+# the first start (and every subsequent restart) is synchronous.
+- name: Create netdata service override directory
+  file:
+    dest: /etc/systemd/system/netdata.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - netdata
+
+- name: Install netdata service override
+  import_role:
+    name: systemd_unit
+    tasks_from: copy
+  vars:
+    systemd_unit_src: override.conf
+    systemd_unit_dest: netdata.service.d/override.conf
+    systemd_unit_verify: netdata.service
+  tags:
+    - netdata
+
+# Enable+start the service before the alert/metrics config writes so
+# `netdatacli reload-health` (in health_copy/health_template) lands on
+# a running daemon. On first install the service starts with stock
+# alerts; the role then writes custom alerts and reload-health hot-loads
+# them. Brief gap is acceptable on a fresh install.
+- name: Enable netdata service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: netdata
+    systemd_unit_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
+    systemd_unit_restart: "{{ netdata_conf.changed or cloud_conf.changed or netdata_optout.changed or netdata_health_alarm_notify.changed or debugfs_mount.changed }}"
+  tags:
+    - netdata
+
 - name: Configure netdata alerts
   import_role:
     name: netdata
@@ -216,17 +260,6 @@
     netdata_copy_src: systemdunits.conf
     netdata_copy_dest: go.d/systemdunits.conf
     netdata_copy_restart: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
-  tags:
-    - netdata
-
-- name: Enable netdata service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_src: netdata
-    systemd_unit_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
-    systemd_unit_restart: "{{ netdata_conf.changed or cloud_conf.changed or netdata_optout.changed or netdata_health_alarm_notify.changed or debugfs_mount.changed }}"
   tags:
     - netdata
 
