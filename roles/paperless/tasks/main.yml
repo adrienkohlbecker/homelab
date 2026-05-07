@@ -71,6 +71,7 @@
     src: "/mnt/services/sqlite/paperless/{{ item }}"
     dest: "/mnt/services/paperless/data/{{ item }}"
     state: link
+    force: true
     owner: paperless
     group: paperless
     follow: false

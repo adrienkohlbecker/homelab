@@ -51,6 +51,7 @@
     src: /mnt/services/sqlite/profilarr/profilarr.db
     dest: /mnt/services/profilarr/profilarr.db
     state: link
+    force: true
     owner: profilarr
     group: profilarr
     follow: false
