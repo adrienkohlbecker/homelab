@@ -9,3 +9,8 @@ test/out/
 /.ansible-mitogen-strategy
 /packer/artifacts
 /zbm-build
+
+.claude/*
+!.claude/settings.json
+!.claude/commands/
+!.claude/agents/
