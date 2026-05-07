@@ -29,6 +29,17 @@
   tags:
     - compta
 
+# Pin SSH_AUTH_SOCK into the git task's env; mitogen's reused interpreter
+# has dropped the forwarded socket on us before. Fail-fast if unset.
+- name: Read forwarded SSH_AUTH_SOCK
+  when: not (ansible_check_mode and compta_apt_deps.changed)
+  command: printenv SSH_AUTH_SOCK
+  changed_when: false
+  failed_when: compta_ssh_auth_sock.rc != 0 or not compta_ssh_auth_sock.stdout
+  register: compta_ssh_auth_sock
+  tags:
+    - compta
+
 - name: Download compta
   when: not (ansible_check_mode and compta_apt_deps.changed)
   git:
@@ -37,6 +48,8 @@
     version: master
     force: true
     accept_newhostkey: true
+  environment:
+    SSH_AUTH_SOCK: "{{ compta_ssh_auth_sock.stdout }}"
   register: compta_git
   tags:
     - compta
