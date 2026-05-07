@@ -11,3 +11,5 @@ z2m_start_service: false
 home_subnet: 10.0.2.0/24
 macvlan_subnet: '{{ home_subnet | ansible.utils.ipsubnet(27, 7) }}'
 macvlan_parent: enp0s3
+
+has_transcoding_acceleration: false

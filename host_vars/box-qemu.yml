@@ -30,3 +30,5 @@ netplan:
       wakeonlan: true
       dhcp4: true
       dhcp6: false
+
+has_transcoding_acceleration: false
