@@ -228,27 +228,6 @@ EOF
 # consumes it the same way via unquoted `for d in $DISKS` word-splitting.
 unshare --mount --propagation private arch-chroot /mnt bash </home/vagrant/chroot.sh
 
-# Copy the on-pool kernel + initrd (and the matching ZBM-style cmdline) out
-# to the build VM filesystem so packer's file provisioner can download them
-# alongside the qcow2. Test harness uses these to direct-boot the variant on
-# arches where the rEFInd -> ZBM -> kexec chain panics on EDK2 (aarch64).
-# x86_64 ships vmlinuz (compressed); aarch64 ships vmlinux (uncompressed).
-# nullglob: unmatched patterns expand to nothing, so the unused arch's
-# pattern doesn't survive as a literal string under set -o pipefail.
-mkdir -p /home/vagrant/extracted
-shopt -s nullglob
-kernels=(/mnt/boot/vmlinuz-* /mnt/boot/vmlinux-*)
-initrds=(/mnt/boot/initrd.img-*)
-shopt -u nullglob
-kernel=$(printf '%s\n' "${kernels[@]}" | sort -V | tail -1)
-initrd=$(printf '%s\n' "${initrds[@]}" | sort -V | tail -1)
-cp -L "$kernel" /home/vagrant/extracted/kernel
-cp -L "$initrd" /home/vagrant/extracted/initrd
-zbm_args=$(zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT)
-[ "$zbm_args" = "-" ] && zbm_args=""
-printf 'root=zfs:rpool/ROOT/%s%s' "$UBUNTU_NAME" "${zbm_args:+ $zbm_args}" >/home/vagrant/extracted/cmdline
-chown -R vagrant:vagrant /home/vagrant/extracted
-
 # Only the rpool root dataset itself remains mounted in the host namespace.
 zfs unmount "rpool/ROOT/$UBUNTU_NAME"
 sync
