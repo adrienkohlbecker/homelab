@@ -3,10 +3,12 @@ act_runner_version: "0.2.10"
 # Labels written into .runner on every play, so a host_vars override can add
 # or remove a label without re-registering the runner. The runner reports
 # these to gitea on each connection; the gitea side updates lazily.
+#
+# Just the one label: every CI workflow runs in the lab-runtime image
+# (built by this role from files/Dockerfile.lab-runtime). The bare
+# host_<name> and stock ubuntu-22.04/24.04 docker labels were unused.
 act_runner_labels:
-  - "host_{{ inventory_hostname }}:host"
-  - "ubuntu-22.04:docker://ghcr.io/catthehacker/ubuntu:act-22.04"
-  - "ubuntu-24.04:docker://ghcr.io/catthehacker/ubuntu:act-24.04"
+  - "lab-runtime:docker://lab-runtime:latest"
 
 act_runner_release:
   x86_64:
