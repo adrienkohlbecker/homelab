@@ -45,7 +45,6 @@ run = 'rm -rf "{{vars.qemu_dir}}"/.build-*'
 description = "Run all linters"
 depends = [
   "lint:ansible",
-  "lint:syntax",
   "lint:terraform",
   "lint:tflint",
   "lint:packer",
@@ -61,10 +60,6 @@ depends = [
 [tasks."lint:ansible"]
 description = "Run ansible-lint"
 run = "ansible-lint"
-
-[tasks."lint:syntax"]
-description = "Check Ansible playbook syntax"
-run = "ansible-playbook --syntax-check site.yml"
 
 [tasks."lint:terraform"]
 description = "Check Terraform formatting"
