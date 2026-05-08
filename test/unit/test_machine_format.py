@@ -53,7 +53,7 @@ def test_format_ssh_cmd_quotes_remote_with_spaces(
     assert cmd[-1] == "echo 'hello world'"
 
 
-def test_format_scp_cmd_uses_capital_P_and_drops_forward_agent(
+def test_format_scp_cmd_uses_capital_P_and_keeps_forward_agent(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
     m = machine_factory(ssh_port=2222, ssh_user="vagrant")
@@ -73,6 +73,8 @@ def test_format_scp_cmd_uses_capital_P_and_drops_forward_agent(
         "LogLevel=ERROR",
         "-o",
         "BatchMode=yes",
+        "-o",
+        "ForwardAgent=yes",
         "local.sh",
         "vagrant@127.0.0.1:/tmp/remote.sh",
     ]
