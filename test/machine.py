@@ -687,13 +687,6 @@ class QemuMachine(Machine):
         else:
             raise AttributeError(f"Unknown operating system: {system}")
 
-        # ZFS-rooted variants (box / lab / pug) used to fail fast on arm64
-        # because the rEFInd -> ZBM -> kexec chain in the packer image panics
-        # on EDK2+aarch64. The packer build now ships kernel/initrd/cmdline
-        # alongside the qcow2 (provision.sh stages them, packer's file
-        # provisioner downloads them); _resolve_direct_boot reads those and
-        # qemu boots them directly via -kernel/-initrd, bypassing the
-        # firmware chain. See notes/zbm-aarch64-kexec-bug-report.md.
         self._spec = spec
         if image_dir is not None and spec.packer_image is None:
             raise ValueError(f"image_dir override requires a variant with packer_image set, got {machine!r}")
@@ -855,48 +848,23 @@ class QemuMachine(Machine):
                 *(self._virtio_drive(path) for path in os_disk_paths),
                 *(self._virtio_drive(path) for path in extra_paths),
             ]
-            if self.arch.direct_boot_required_for_zfs:
-                # aarch64: bypass the firmware boot chain (rEFInd -> ZBM -> kexec
-                # panics on EDK2) by direct-booting the on-pool kernel/initrd.
-                # _resolve_direct_boot() honours the launch.py kernel/initrd
-                # override when set.
-                self._direct_boot = await self._resolve_direct_boot(os_src_paths)
-            else:
-                await self._copy_efivars_from(image_dir)
-                self.drives += await self._uefi_drives()
+            await self._copy_efivars_from(image_dir)
+            self.drives += await self._uefi_drives()
 
-        # x86_64 / minimal don't reach _resolve_direct_boot, so route the
-        # launch.py kernel/initrd override in here too. On aarch64 ZFS this
-        # is a re-assignment of the same value already set above.
+        # launch.py --kernel/--initrd/--append: bypass the firmware boot
+        # chain entirely and qemu-direct-boot a user-supplied kernel.
+        # Useful for trying a custom kernel without rebuilding the image.
         if self._direct_boot_override is not None:
             self._direct_boot = self._direct_boot_override
 
-        # Attach pflash on variants that don't already have it (aarch64 ZFS
-        # direct-boot, x86_64 minimal BIOS) when launch.py asked for it via
-        # --with-pflash or an explicit --efi-code/--efi-vars. Idempotent:
-        # skip when an earlier branch already attached pflash (x86_64 ZFS,
-        # aarch64 minimal); the override flowed through there already.
+        # Attach pflash on variants that don't already have it (x86_64
+        # minimal BIOS) when launch.py asked for it via --with-pflash or an
+        # explicit --efi-code/--efi-vars. Idempotent: skip when an earlier
+        # branch already attached pflash (every ZFS variant + aarch64
+        # minimal); the override flowed through there already.
         want_pflash = self._with_pflash or self._efi_code is not None or self._efi_vars is not None
         if want_pflash and not any("if=pflash" in d for d in self.drives):
             self.drives += await self._uefi_drives()
-
-    async def _resolve_direct_boot(self, os_src_paths: list[str]) -> tuple[Path, Path, str]:
-        """Resolve (kernel, initrd, cmdline) for the direct-boot ZFS path.
-
-        Honours the launch.py --kernel/--initrd/--append override when set;
-        otherwise reads the kernel + initrd + cmdline that the packer build
-        ships next to the qcow2 (provision.sh extracts them from the rpool
-        right before export; packer's file provisioner downloads them into
-        the artifacts dir). The packer-shipped tuple is always in lock-step
-        with the qcow2 because it's produced from the same build.
-        """
-        if self._direct_boot_override is not None:
-            return self._direct_boot_override
-        image_dir = Path(os_src_paths[0]).parent
-        kernel = image_dir / "kernel"
-        initrd = image_dir / "initrd"
-        cmdline = (image_dir / "cmdline").read_text().strip()
-        return kernel, initrd, cmdline
 
     async def run_disk_setup(self) -> None:
         """Push test/disks/<variant>.sh to the VM and run it via sudo.
