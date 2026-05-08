@@ -10,7 +10,7 @@
     # --device + --group-add keep-groups (rootless userns doesn't map
     # the host kvm gid through by default; keep-groups passes the host
     # supplementary groups through).
-    service_user_extra_groups: [kvm]
+    service_user_extra_groups: [ kvm ]
   tags:
     - act_runner
 
@@ -25,8 +25,138 @@
   become: true
   loop:
     - /mnt/services/act_runner
+    - /mnt/services/act_runner/build
     - /mnt/scratch/act_runner/cache
     - /mnt/scratch/act_runner/workdir
+  tags:
+    - act_runner
+
+# Linger has to be on BEFORE the lab-runtime build runs: rootless
+# podman's runtime (crun) makes sd-bus calls when creating the build's
+# intermediate containers, which fail with "Permission denied" if the
+# user has no systemd manager. `loginctl enable-linger` starts
+# user@<uid>.service which provides the dbus + cgroup hierarchy crun
+# expects.
+- name: Turn on linger
+  command: loginctl enable-linger act_runner
+  args:
+    creates: /var/lib/systemd/linger/act_runner
+  become: true
+  register: act_runner_linger
+  tags:
+    - act_runner
+
+# linger triggers user@<uid>.service asynchronously; the build task
+# immediately following needs it fully up so crun's sd-bus calls
+# succeed. systemd module with state=started blocks until active.
+# Skip under check mode when the user wasn't really created — uid
+# isn't populated on the service_user result, and templating
+# user@{{ uid }}.service would fail.
+- name: Ensure act_runner user systemd manager is running
+  when: not (ansible_check_mode and act_runner_user.changed)
+  systemd:
+    name: user@{{ act_runner_user.uid }}.service
+    state: started
+  become: true
+  tags:
+    - act_runner
+
+# rootless podman in some environments (notably nested QEMU under HVF)
+# can't reach the user systemd bus reliably even with linger + a live
+# user@uid.service. Force podman to use cgroupfs and the file events
+# backend so it doesn't depend on sd-bus at runtime. Real lab boxes
+# work either way; this just removes the VM-specific failure mode.
+- name: Ensure act_runner's containers config dir exists
+  when: not (ansible_check_mode and act_runner_user.changed)
+  file:
+    path: /mnt/scratch/act_runner/.config/containers
+    state: directory
+    owner: act_runner
+    group: act_runner
+    mode: "0755"
+  become: true
+  tags:
+    - act_runner
+
+- name: Pin act_runner's podman to cgroupfs + file events
+  when: not (ansible_check_mode and act_runner_user.changed)
+  copy:
+    dest: /mnt/scratch/act_runner/.config/containers/containers.conf
+    owner: act_runner
+    group: act_runner
+    mode: "0644"
+    backup: true
+    content: |
+      # Managed by roles/act_runner. See tasks/main.yml for context.
+      [engine]
+      cgroup_manager = "cgroupfs"
+      events_logger = "file"
+  become: true
+  tags:
+    - act_runner
+
+# Build the lab-runtime container image used by every CI workflow. The
+# image lives only in the act_runner user's local podman image store —
+# no registry, no push. podman build is layer-cached, so unchanged
+# inputs exit in ~200ms; the changed_when below reports honestly via
+# the "Storing signatures" line that podman only prints on real layer
+# commit.
+#
+# Build inputs (Dockerfile + mise.toml + pyproject.toml + uv.lock) are
+# staged into /mnt/services/act_runner/build/ from the controller's
+# repo root. Bumping any of them triggers a rebuild on the next role
+# apply.
+- name: Stage lab-runtime Dockerfile
+  when: not (ansible_check_mode and act_runner_user.changed)
+  copy:
+    src: Dockerfile.lab-runtime
+    dest: /mnt/services/act_runner/build/Dockerfile.lab-runtime
+    owner: act_runner
+    group: act_runner
+    mode: "0644"
+    backup: true
+  become: true
+  register: act_runner_lab_runtime_dockerfile
+  tags:
+    - act_runner
+
+- name: Stage lab-runtime build inputs from repo root
+  when: not (ansible_check_mode and act_runner_user.changed)
+  copy:
+    src: "{{ playbook_dir }}/{{ item }}"
+    dest: /mnt/services/act_runner/build/{{ item }}
+    owner: act_runner
+    group: act_runner
+    mode: "0644"
+    backup: true
+  become: true
+  loop:
+    - mise.toml
+    - pyproject.toml
+    - uv.lock
+  register: act_runner_lab_runtime_inputs
+  tags:
+    - act_runner
+
+- name: Build lab-runtime image
+  when: not ansible_check_mode
+  command: podman build -t lab-runtime:latest -f Dockerfile.lab-runtime .
+  args:
+    chdir: /mnt/services/act_runner/build
+  # become_user: act_runner doesn't propagate XDG_RUNTIME_DIR or
+  # DBUS_SESSION_BUS_ADDRESS the way a real login session would, and
+  # rootless podman/crun need them to find the user's systemd manager
+  # for cgroup + sd-bus operations. Set them explicitly.
+  # Default('0') keeps templating from failing in check mode where
+  # service_user_result has no uid field; the task itself is gated by
+  # `when: not ansible_check_mode` so '0' is never actually used.
+  environment:
+    XDG_RUNTIME_DIR: /run/user/{{ act_runner_user.uid | default('0') }}
+    DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ act_runner_user.uid | default('0') }}/bus
+  become: true
+  become_user: act_runner
+  register: act_runner_lab_runtime_build
+  changed_when: "'Storing signatures' in act_runner_lab_runtime_build.stdout"
   tags:
     - act_runner
 
@@ -166,15 +296,6 @@
     act_runner_settings_json: "{{ act_runner_settings_b64['content'] | default('e30=') | b64decode | from_json }}"
   register: act_runner_json_conf
   become: true
-  tags:
-    - act_runner
-
-- name: Turn on linger
-  command: loginctl enable-linger act_runner
-  args:
-    creates: /var/lib/systemd/linger/act_runner
-  become: true
-  register: act_runner_linger
   tags:
     - act_runner
 
