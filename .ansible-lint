@@ -11,6 +11,10 @@ profile: null # min, basic, moderate,safety, shared, production
 exclude_paths:
   - .cache/ # implicit unless exclude_paths is defined in config
   - .claude/
+  # packer/artifacts/ is in .gitignore but ansible-lint still descends into
+  # leftover tmp* build trees, each containing a full repo copy (~240 yml ×
+  # ~10 stale dirs), inflating wall-clock from ~10s to ~70s.
+  - packer/artifacts/
   # - test/fixtures/formatting-before/
   # - test/fixtures/formatting-prettier/
 # parseable: true
