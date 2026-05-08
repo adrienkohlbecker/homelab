@@ -24,3 +24,18 @@ macos_vm_autostart: false
 macos_vm_domain_type: qemu
 
 has_transcoding_acceleration: false
+
+# Override prod's lab.yml netplan: it matches by physical NIC MAC, but
+# the QEMU VM ships a single virtio-net with a different MAC, so on
+# noble `netplan apply` brings the only interface down (jammy was
+# lenient and silently no-op'd). Match the QEMU NIC by name like box
+# does.
+netplan:
+  ethernets:
+    en:
+      match:
+        name: "en*"
+      link-local: [] # do not setup random link local address when no dhcp is present
+      wakeonlan: true
+      dhcp4: true
+      dhcp6: false
