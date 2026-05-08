@@ -1,0 +1,63 @@
+# Container image used as the gitea-actions runner for homelab CI.
+# Built and tagged on the lab host by the act_runner role; never pushed to
+# a registry. Layered FROM ubuntu:24.04 with everything the test harness,
+# lint, and packer-build need pre-installed so jobs cold-start in ~3s.
+#
+# Build inputs (mise.toml / pyproject.toml / uv.lock) are COPYed in so a
+# bump to any of them invalidates the dependency layers and triggers a
+# fresh `mise install` + `uv sync`.
+FROM ubuntu:24.04
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Harness needs qemu-system-x86 + qemu-utils for booting test VMs;
+# openssh-client for talking to the guests; xorriso + cloud-image-utils
+# for the `minimal` variant's seed iso; python3-yaml so mise-tasks/ci
+# scripts can run without uv. build-essential is for any wheel that
+# needs to compile. gpg + apt-transport-https are for the mise apt repo.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl git jq xz-utils unzip gpg apt-transport-https \
+      qemu-system-x86 qemu-utils \
+      openssh-client coreutils \
+      xorriso cloud-image-utils \
+      python3-yaml \
+      build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install mise via its apt repo — bypasses the tar-with-setgid-bit issue
+# that the curl|sh installer hits under rootless podman build (the buildah
+# userns doesn't allow tar to preserve those bits, even for files mise
+# owns). MISE_DATA_DIR holds the tool tree (python, opentofu, packer, uv,
+# shellcheck, ...) so a re-pull of the image doesn't re-download tools.
+ENV MISE_DATA_DIR=/opt/mise \
+    PATH="/opt/mise/shims:/usr/local/bin:/usr/bin:/bin"
+RUN install -dm 755 /etc/apt/keyrings && \
+    curl -fsSL https://mise.jdx.dev/gpg-key.pub \
+      | gpg --dearmor -o /etc/apt/keyrings/mise-archive-keyring.gpg && \
+    echo "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg arch=amd64] https://mise.jdx.dev/deb stable main" \
+      > /etc/apt/sources.list.d/mise.list && \
+    apt-get update && apt-get install -y --no-install-recommends mise && \
+    rm -rf /var/lib/apt/lists/*
+
+# Pre-resolve everything mise.toml asks for (python 3.14, uv, terraform,
+# packer, shellcheck, shfmt, tflint, typos), then warm uv's wheel cache
+# by syncing the dependency tree once. The resulting .venv is discarded
+# because it's tied to /tmp/build and per-checkout venvs at workflow
+# time will be built against the actual GITHUB_WORKSPACE checkout — but
+# the cached wheels in ~/.cache/uv stay and make those `uv sync` calls
+# resolve in seconds instead of minutes.
+WORKDIR /tmp/build
+COPY mise.toml pyproject.toml uv.lock ./
+RUN mise trust && mise install && \
+    mise exec -- uv sync --frozen && \
+    rm -rf /tmp/build/.venv
+
+# Extract just the [tools] section into a global config. mise shims
+# (uv, opentofu, etc.) can then resolve their version from any CWD;
+# without this, running the image with no project-local mise.toml in
+# CWD leaves shims with "No version is set". Skipping [env] keeps the
+# op:// references from polluting every shell.
+RUN mkdir -p /etc/mise && \
+    awk '/^\[tools\]/{p=1; print; next} /^\[/{p=0} p' /tmp/build/mise.toml \
+      > /etc/mise/config.toml
+
+WORKDIR /
