@@ -76,7 +76,12 @@ container:
   # If you want to allow any volume, please use the following configuration:
   # valid_volumes:
   #   - '**'
-  valid_volumes: []
+  # CI workflows mount /dev/kvm (for qemu accel inside the test cells)
+  # and /mnt/scratch/qemu (read-only artifact tree, rw for packer-build).
+  # Anything else is rejected by the runner.
+  valid_volumes:
+    - /dev/kvm
+    - /mnt/scratch/qemu
   # overrides the docker client host with the specified one.
   # If it's empty, act_runner will find an available docker host automatically.
   # If it's "-", act_runner will find an available docker host automatically, but the docker host won't be mounted to the job containers and service containers.
