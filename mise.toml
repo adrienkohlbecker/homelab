@@ -38,8 +38,8 @@ dir = "{{config_root}}/packer"
 run = 'packer init "$@" .'
 
 [tasks."packer:clean"]
-description = "Remove leftover tmpdirs from failed builds"
-run = 'rm -rf "{{vars.qemu_dir}}"/.build-*'
+description = "Remove leftover tmpdirs from failed packer builds and test-harness runs"
+run = 'rm -rf "{{vars.qemu_dir}}"/.build-* "{{vars.qemu_dir}}"/tmp*'
 
 [tasks.lint]
 description = "Run all linters"
