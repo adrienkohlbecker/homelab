@@ -7,8 +7,13 @@
   tags:
     - docker_client
 
+# Repository setup forks on Ubuntu major version because apt-key was
+# removed from the default install in resolute (26.04). See netdata
+# install.yml for the same idiom.
 - name: Add repository key
-  when: not (ansible_check_mode and apt_install_gpg.changed)
+  when:
+    - ansible_distribution_major_version | int < 26
+    - not (ansible_check_mode and apt_install_gpg.changed)
   apt_key:
     id: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
     url: https://download.docker.com/linux/ubuntu/gpg
@@ -18,10 +23,47 @@
     - docker_client
 
 - name: Add repository
+  when: ansible_distribution_major_version | int < 26
   apt_repository:
     repo: deb [arch={{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }} signed-by=/etc/apt/trusted.gpg.d/docker.gpg] {{ mirror_apt_docker }} {{ ansible_distribution_release }} stable
-  register: apt_repository_docker_client
+  register: apt_repository_docker_client_legacy
   become: true
+  tags:
+    - docker_client
+
+# deb822_repository requires python3-debian even in check mode. See
+# netdata install.yml for the gate idiom.
+- name: Install python3-debian
+  when: ansible_distribution_major_version | int >= 26
+  apt:
+    pkg: python3-debian
+    cache_valid_time: 3600
+  become: true
+  register: apt_install_python3_debian
+  tags:
+    - docker_client
+
+- name: Add repository (deb822)
+  when:
+    - ansible_distribution_major_version | int >= 26
+    - not (ansible_check_mode and apt_install_python3_debian.changed)
+  ansible.builtin.deb822_repository:
+    name: docker
+    types: deb
+    uris: "{{ mirror_apt_docker }}"
+    suites: "{{ ansible_distribution_release }}"
+    components: stable
+    architectures: "{{ (ansible_architecture == 'aarch64') | ternary('arm64', 'amd64') }}"
+    signed_by: https://download.docker.com/linux/ubuntu/gpg
+  register: apt_repository_docker_client_deb822
+  become: true
+  tags:
+    - docker_client
+
+- name: Track repository changes
+  set_fact:
+    apt_repository_docker_client:
+      changed: "{{ apt_repository_docker_client_legacy is changed or apt_repository_docker_client_deb822 is changed or apt_install_python3_debian is changed }}"
   tags:
     - docker_client
 
