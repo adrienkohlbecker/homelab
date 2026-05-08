@@ -1,7 +1,10 @@
 - name: Install virtualization tools
   apt:
     pkg:
-      - qemu-kvm
+      # qemu-kvm was a transitional metapackage in jammy/noble; resolute
+      # (26.04) dropped it. qemu-system is the modern replacement (pulls
+      # qemu-system-x86 / qemu-system-arm transitively via qemu-system-*).
+      - "{{ 'qemu-kvm' if ansible_distribution_major_version | int < 26 else 'qemu-system' }}"
       - libvirt-clients
       - libvirt-daemon
       - libvirt-daemon-system
