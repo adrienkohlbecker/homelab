@@ -322,6 +322,57 @@ else
   done
 fi
 
+# aarch64-only: register a direct EFI-stub boot entry and put it ahead
+# of rEFInd in BootOrder. The rEFInd -> ZBM -> kexec chain panics on
+# EDK2/aarch64 (notes/zbm-aarch64-kexec-bug-report.md), and resolute's
+# vmlinuz dropped the dual-format ARM64-Image+PE header that made
+# qemu's `-kernel` direct boot work, so the test harness now lets EDK2
+# load the EFI-stub kernel directly off the ESP. rEFInd stays
+# registered as a manual fallback. `efibootmgr -c` prepends to
+# BootOrder, so registering the direct entry after rEFInd makes it the
+# default boot.
+#
+# Caveat: the kernel/initrd staged here are a snapshot of whatever apt
+# installed -- a later `apt upgrade linux-image-*` won't refresh them.
+# Acceptable for the build-once test images; long-lived hosts would
+# need a kernel-install hook to re-stage and re-register.
+if [ "$ZBM_ARCH" = "aarch64" ]; then
+  shopt -s nullglob
+  vmlinuz_files=(/boot/vmlinuz-*)
+  initrd_files=(/boot/initrd.img-*)
+  shopt -u nullglob
+  vmlinuz=$(printf '%s\n' "${vmlinuz_files[@]}" | sort -V | tail -1)
+  initrd=$(printf '%s\n' "${initrd_files[@]}" | sort -V | tail -1)
+
+  mkdir -p /boot/efi/EFI/Linux
+  cp -L "$vmlinuz" /boot/efi/EFI/Linux/vmlinuz.efi
+  cp -L "$initrd" /boot/efi/EFI/Linux/initrd
+
+  # Direct cmdline: EFI stub honours initrd= as a backslash-pathed file
+  # on the same volume as the kernel. console=ttyAMA0 + earlycon target
+  # aarch64 virt's pl011 at the standard MMIO base for serial-log
+  # capture in the test harness; bare-metal hosts that lack a pl011 at
+  # this address simply ignore the directive.
+  direct_cmdline="root=zfs:rpool/ROOT/${UBUNTU_NAME} initrd=\\EFI\\Linux\\initrd console=ttyAMA0,115200 earlycon=pl011,0x9000000,115200"
+
+  if [ "$DISKS_COUNT" -eq 1 ]; then
+    efibootmgr -c -d "$DISKS" -p 1 \
+      -L "Linux" \
+      -l "\\EFI\\Linux\\vmlinuz.efi" \
+      --unicode "$direct_cmdline"
+  else
+    idx=0
+    # shellcheck disable=SC2086  # word-splitting on DISKS is the point
+    for disk in $DISKS; do
+      efibootmgr -c -d "$disk" -p 1 \
+        -L "Linux (disk ${idx})" \
+        -l "\\EFI\\Linux\\vmlinuz.efi" \
+        --unicode "$direct_cmdline"
+      idx=$((idx + 1))
+    done
+  fi
+fi
+
 # Enable tmp mount. jammy/noble ship tmp.mount as a template under
 # /usr/share/systemd/ and leave it disabled — copy + enable. resolute's
 # systemd ships /usr/lib/systemd/system/tmp.mount and pre-symlinks it into

@@ -281,31 +281,6 @@ build {
     }
   }
 
-  # Pull the kernel/initrd/cmdline that provision.sh staged on the
-  # build VM down into the artifacts directory. The test harness
-  # consumes these on arches where the rEFInd -> ZBM -> kexec chain
-  # panics on EDK2 (aarch64) and direct-boots via -kernel/-initrd.
-  # Three explicit provisioners (one per file) because packer's
-  # download direction always preserves the source's leaf directory
-  # regardless of trailing slash.
-  provisioner "file" {
-    direction   = "download"
-    source      = "/home/vagrant/extracted/kernel"
-    destination = "${var.build_directory}/${source.name}/kernel"
-  }
-
-  provisioner "file" {
-    direction   = "download"
-    source      = "/home/vagrant/extracted/initrd"
-    destination = "${var.build_directory}/${source.name}/initrd"
-  }
-
-  provisioner "file" {
-    direction   = "download"
-    source      = "/home/vagrant/extracted/cmdline"
-    destination = "${var.build_directory}/${source.name}/cmdline"
-  }
-
   # Sequential chain: drop the cloud-image disk, smoke-test the boot,
   # compress (Mac only).
   post-processors {
