@@ -33,11 +33,6 @@
       # misleading "Error: netavark: No such file or directory" (it's iptables
       # that's missing, not netavark).
       - iptables
-      # fuse-overlayfs is a Recommends, but pinned via storage.conf's
-      # mount_program on jammy (kernel 5.15 has no idmapped overlay
-      # layers). Install explicitly so the install never depends on the
-      # apt module's install_recommends default flipping under us.
-      - fuse-overlayfs
     policy_rc_d: 101
     cache_valid_time: 3600
   register: podman_apt
@@ -209,19 +204,9 @@
 # podman with "runroot must be set". Rootless ignores both — its codepath
 # rebuilds a fresh options struct from XDG_RUNTIME_DIR and
 # rootless_storage_path.
-# mount_program forces fuse-overlayfs on kernels older than 5.19.
-# Idmapped overlay layers landed in 5.19, so containers with `--uidmap`
-# (e.g. homeassistant) on jammy GA's 5.15 fall back to a slow per-file
-# chown copy that times out the systemd start. fuse-overlayfs supports
-# idmap in userspace and bypasses the kernel limitation. Gate on the
-# running kernel rather than distribution version because prod runs the
-# linux-generic-hwe-22.04 stack on jammy (kernel 6.x), where native
-# overlay idmap works and fuse-overlayfs would just add overhead.
 # Lives in install.yml (not main.yml) so consumers that import only
 # `tasks_from: install` (homeassistant/healthchecks/nexus _setup.yml)
-# also get the storage config — without it, --uidmap containers on
-# jammy fall back to the slow per-file copy and time out their unit
-# starts.
+# also get the storage config.
 - name: install | Configure podman storage
   when: zfs_root
   copy:
@@ -232,13 +217,6 @@
       runroot = "/run/containers/storage"
       graphroot = "/var/lib/containers/storage"
       rootless_storage_path = "/var/lib/containers/rootless/$USER"
-      {% set kmajor = ansible_kernel.split('.')[0] | int %}
-      {% set kminor = ansible_kernel.split('.')[1] | int %}
-      {% if kmajor < 5 or (kmajor == 5 and kminor < 19) %}
-
-      [storage.options.overlay]
-      mount_program = "/usr/bin/fuse-overlayfs"
-      {% endif %}
     owner: root
     group: root
     mode: "0644"
