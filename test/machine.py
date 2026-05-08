@@ -266,14 +266,14 @@ class Machine:
     def format_ssh_cmd(self, *cmd: str) -> list[str]:
         """Return an ssh invocation pinned to this instance."""
 
-        # The wait-for-ready loop runs before ansible-playbook does, so
-        # whichever of these creates the ControlMaster (per the user's
-        # ~/.ssh/config Host *: ControlMaster auto) decides whether the
-        # master has an agent-forwarding channel. Without ForwardAgent=yes
-        # here, the master comes up without one, and ansible's later
-        # ForwardAgent=yes silently reuses the agent-less master --
-        # breaking roles that ssh out to git@github.com from the test
-        # target. scp doesn't carry git operations, so it skips this flag.
+        # ForwardAgent=yes on every connection (ssh and scp) so whichever
+        # one happens to create the ControlMaster (per the user's
+        # ~/.ssh/config Host *: ControlMaster auto) seeds it with an
+        # agent-forwarding channel. Otherwise ansible's later
+        # ForwardAgent=yes silently reuses the agent-less master and
+        # breaks roles that ssh out to git@github.com from the target
+        # (compta on lab: run_disk_setup's scp wins the race over the
+        # mirrors playbook's ssh and the master comes up agent-less).
         base = [
             "ssh",
             "-i",
@@ -291,8 +291,9 @@ class Machine:
         """Return an scp invocation pinned to this instance.
 
         Shares `_ssh_options()` with `format_ssh_cmd`; only the port flag
-        differs (scp uses `-P`, ssh uses `-p`) and ForwardAgent is left off
-        (no remote git operations over scp).
+        differs (scp uses `-P`, ssh uses `-p`). ForwardAgent matches ssh
+        so a master created by scp carries the agent channel — see the
+        block comment in `format_ssh_cmd` for why this matters.
         """
         return [
             "scp",
@@ -301,6 +302,8 @@ class Machine:
             "-P",
             str(self.ssh_port),
             *self._ssh_options(),
+            "-o",
+            "ForwardAgent=yes",
             local,
             f"{self.ssh_user}@{SSH_HOST}:{remote}",
         ]
