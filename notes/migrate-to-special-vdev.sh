@@ -244,7 +244,11 @@ zfs inherit mountpoint    "${SRC}_old"
 # from received -> local. Mount, then flip the other received properties so
 # future ansible runs / zfs get reports match the role spec.
 zfs set mountpoint="$MNT" "$SRC"
-zfs mount "$SRC"
+# `zfs set mountpoint=` flips source from received -> local and may auto-mount
+# (observed on tank/media). Mount only if not already mounted.
+if [[ "$(zfs get -H -o value mounted "$SRC")" != "yes" ]]; then
+  zfs mount "$SRC"
+fi
 
 for prop in autobackup:bak special_small_blocks recordsize; do
   src=$(zfs get -H -o source "$prop" "$SRC")
