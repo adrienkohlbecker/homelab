@@ -23,6 +23,8 @@ from machine import (
     Machine,
     QemuMachine,
     UBUNTU_RELEASES,
+    imagedir_for_host,
+    sweep_stale_workdirs,
 )
 from utils import CommandFailedException, IdempotenceFailedException, cancel_on_signal, print_line, tee_output
 
@@ -314,6 +316,12 @@ def main() -> int:
         )
         return 1
 
+    # Reap orphaned workdirs from prior SIGKILL'd / OOM'd / power-cut runs
+    # before constructing this run's QemuMachine. testall.py also sweeps once
+    # before fanning out; the mtime grace inside sweep_stale_workdirs keeps
+    # parallel workers from racing on each other's freshly-minted workdirs.
+    sweep_stale_workdirs(imagedir_for_host())
+
     # Machine.wrapper_timeout layers WRAPPER_GRACE_SECONDS on top of this so
     # the inner `timeout` wrapper outlasts the Python deadline.
     m: Machine = QemuMachine(
@@ -363,6 +371,7 @@ def main() -> int:
             # Route it through print_line so the log captures the same
             # diagnostic the user sees on the terminal.
             import traceback
+
             print_line(traceback.format_exc().rstrip(), error=True)
             print_line(f"{parsed_args.role}.{parsed_args.machine} crashed", error=True)
             rc = 1
