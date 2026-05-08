@@ -7,20 +7,58 @@
   tags:
     - netdata
 
+# Repository setup forks on Ubuntu major version because apt-key was
+# removed from the default install in resolute (26.04) and the apt_key
+# module errors with "Either apt-key or gpg binary is required". The
+# deb822_repository module replaces both apt_key + apt_repository with
+# a single sources.list.d/*.sources file that embeds the key inline.
 - name: install | Add repository key
+  when:
+    - ansible_distribution_major_version | int < 26
+    - not (ansible_check_mode and apt_install_gpg.changed)
   apt_key:
     id: 6E155DC153906B73765A74A99DD4A74CECFA8F4F
     url: https://repo.netdata.cloud/netdatabot.gpg.key
     keyring: /etc/apt/trusted.gpg.d/netdata.gpg
   become: true
-  when: not (ansible_check_mode and apt_install_gpg.changed)
   tags:
     - netdata
 
 - name: install | Add repository
+  when: ansible_distribution_major_version | int < 26
   apt_repository:
     repo: deb [signed-by=/etc/apt/trusted.gpg.d/netdata.gpg] {{ mirror_apt_netdata }}/ {{ ansible_distribution_release }}/
-  register: apt_repository_netdata
+  register: apt_repository_netdata_legacy
+  become: true
+  tags:
+    - netdata
+
+# deb822_repository requires python3-debian even in check mode (it
+# parses/writes deb822 itself rather than shelling to apt). Install it
+# explicitly and gate the deb822 task on its .changed -- mirrors the
+# gpg/apt_key pair on the legacy path.
+- name: install | Install python3-debian
+  when: ansible_distribution_major_version | int >= 26
+  apt:
+    pkg: python3-debian
+    cache_valid_time: 3600
+  become: true
+  register: apt_install_python3_debian
+  tags:
+    - netdata
+
+# Flat repo: trailing `/` on Suites, no Components field.
+- name: install | Add repository (deb822)
+  when:
+    - ansible_distribution_major_version | int >= 26
+    - not (ansible_check_mode and apt_install_python3_debian.changed)
+  ansible.builtin.deb822_repository:
+    name: netdata
+    types: deb
+    uris: "{{ mirror_apt_netdata }}/"
+    suites: "{{ ansible_distribution_release }}/"
+    signed_by: https://repo.netdata.cloud/netdatabot.gpg.key
+  register: apt_repository_netdata_deb822
   become: true
   tags:
     - netdata
@@ -35,6 +73,19 @@
     backup: true
   register: apt_pin_netdata
   become: true
+  tags:
+    - netdata
+
+# Coalesce the version-gated registers so downstream tasks keep
+# referencing apt_repository_netdata.changed without caring which
+# branch ran. Includes apt_install_python3_debian so check mode on
+# resolute (where the deb822 task is gated out by the prereq install)
+# still propagates a "would-change" signal -- otherwise install
+# netdata would run in check mode against an unconfigured repo.
+- name: install | Track repository changes
+  set_fact:
+    apt_repository_netdata:
+      changed: "{{ apt_repository_netdata_legacy is changed or apt_repository_netdata_deb822 is changed or apt_install_python3_debian is changed }}"
   tags:
     - netdata
 
