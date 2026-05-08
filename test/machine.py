@@ -35,6 +35,7 @@ OUT_DIR.mkdir(parents=True, exist_ok=True)
 UBUNTU_RELEASES: dict[str, str] = {
     "jammy": "22.04",
     "noble": "24.04",
+    "resolute": "26.04",
 }
 DEFAULT_UBUNTU = "jammy"
 SSH_KEY = "packer/vagrant.key"
