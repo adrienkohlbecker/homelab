@@ -8,6 +8,8 @@
   user:
     name: "{{ service_user_name }}"
     group: "{{ service_user_name }}"
+    groups: "{{ service_user_extra_groups | default([]) }}"
+    append: true
     createhome: "{{ service_user_createhome | default(false) }}"
     system: true
     shell: "{{ service_user_shell | default('/usr/sbin/nologin') }}"
