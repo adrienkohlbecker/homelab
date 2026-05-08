@@ -51,6 +51,9 @@ COORD="${DATASET_COORDINATOR[$DS]}"
 SERVICES_TO_STOP=$(discover_dependents "$COORD" | tr '\n' ' ')
 
 confirm() {
+  # Drain stdin: phase 1 may run for hours, and any buffered keystrokes
+  # (arrow keys, partial input) would prepend to $ans and break the regex.
+  while read -r -t 0.05 -N 1 _ 2>/dev/null; do :; done
   read -r -p "$1 [y/N] " ans
   [[ "$ans" =~ ^[Yy]$ ]] || { echo "aborted"; exit 1; }
 }
@@ -119,21 +122,28 @@ echo "==> Pre-flight checks for $SRC"
 echo "    services to stop in phase 2: ${SERVICES_TO_STOP:-(none)}"
 zfs list "$SRC" >/dev/null
 
-for s in "$SNAP1" "$SNAP2"; do
-  if zfs list "$s" >/dev/null 2>&1; then
-    echo "ERROR: snapshot $s exists — likely a partial prior run." >&2
-    echo "To recover, run:" >&2
-    echo "  sudo zfs destroy -r $DST   # if it exists" >&2
-    echo "  sudo zfs destroy $SNAP1    # if it exists" >&2
-    echo "  sudo zfs destroy $SNAP2    # if it exists" >&2
-    echo "then re-run this script." >&2
-    exit 1
-  fi
-done
+# Detect resume state. Phase 1 takes hours; if it completed and phase 2 was
+# aborted before snapshotting @premigrate2, allow skipping phase 1 instead of
+# forcing a destroy-and-redo. Any other partial state is ambiguous and errors.
+if zfs list "$SNAP1" >/dev/null 2>&1; then SNAP1_EXISTS=true; else SNAP1_EXISTS=false; fi
+if zfs list "$SNAP2" >/dev/null 2>&1; then SNAP2_EXISTS=true; else SNAP2_EXISTS=false; fi
+if zfs list "$DST"   >/dev/null 2>&1; then DST_EXISTS=true;   else DST_EXISTS=false;   fi
 
-if zfs list "$DST" >/dev/null 2>&1; then
-  echo "WARNING: $DST exists (partial prior run?)"
-  confirm "Overwrite with recv -F?"
+RESUME=false
+if $SNAP1_EXISTS && $DST_EXISTS && ! $SNAP2_EXISTS; then
+  RESUME=true
+  echo "    detected resumable state: $SNAP1 + $DST exist, $SNAP2 absent — will skip phase 1"
+elif $SNAP1_EXISTS || $SNAP2_EXISTS || $DST_EXISTS; then
+  echo "ERROR: inconsistent leftover state from prior run:" >&2
+  $SNAP1_EXISTS && echo "  $SNAP1 exists" >&2 || :
+  $SNAP2_EXISTS && echo "  $SNAP2 exists" >&2 || :
+  $DST_EXISTS   && echo "  $DST exists"   >&2 || :
+  echo "To recover, run:" >&2
+  $DST_EXISTS   && echo "  sudo zfs destroy -r $DST" >&2 || :
+  $SNAP1_EXISTS && echo "  sudo zfs destroy $SNAP1"  >&2 || :
+  $SNAP2_EXISTS && echo "  sudo zfs destroy $SNAP2"  >&2 || :
+  echo "then re-run this script." >&2
+  exit 1
 fi
 
 # Detect snapshot holds via the userrefs property (works on a dataset arg, unlike
@@ -163,9 +173,13 @@ echo "    special vdev ALLOC before: $(human_bytes "$SPECIAL_BEFORE")"
 # --- phase 1: async initial send ----------------------------------------
 echo
 echo "==> Phase 1: snapshot + full send (services up; may take hours)"
-zfs snapshot "$SNAP1"
-zfs send -Rv "$SNAP1" | zfs recv -uF "$DST"
-echo "    phase 1 complete"
+if $RESUME; then
+  echo "    skipping — resuming from existing $SNAP1 + $DST"
+else
+  zfs snapshot "$SNAP1"
+  zfs send -Rv "$SNAP1" | zfs recv -uF "$DST"
+  echo "    phase 1 complete"
+fi
 
 # --- phase 2: stop services, incremental, swap --------------------------
 echo
