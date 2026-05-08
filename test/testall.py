@@ -33,6 +33,8 @@ from machine import (
     OUT_DIR,
     PEAK_KB_SENTINEL_PREFIX,
     UBUNTU_RELEASES,
+    imagedir_for_host,
+    sweep_stale_workdirs,
 )
 from utils import cancel_on_signal, colorize, terminate_subprocess
 
@@ -520,6 +522,12 @@ def main() -> int:
         for mr in machine_roles:
             print(f"{mr.machine}\t{mr.ubuntu_name}\t{mr.role}")
         return 0
+
+    # Reap orphaned workdirs from prior SIGKILL'd / OOM'd / power-cut runs
+    # before fanning out, so workers don't trip on stale state and so disk
+    # usage doesn't accumulate. Must run before the first QemuMachine is
+    # constructed (and thus before any worker subprocess is spawned).
+    sweep_stale_workdirs(imagedir_for_host())
 
     setup_output_dir(machine_roles)
     # Only partial reruns merge with the prior log; an unfiltered run replaces

@@ -8,6 +8,7 @@ import platform
 import shlex
 import shutil
 import socket
+import subprocess
 import tempfile
 import time
 from pathlib import Path
@@ -589,6 +590,71 @@ class Machine:
             self.workdir.cleanup()
 
 
+def imagedir_for_host() -> Path:
+    """Return the platform's packer-image cache root.
+
+    /mnt/scratch/qemu on Linux dev hosts; <repo>/packer/artifacts on Mac
+    (matches mise.toml's qemu_dir; /mnt/scratch/qemu doesn't exist on Mac).
+    Linux raises if the mountpoint is missing -- the dev host workflow
+    expects the qemu volume to be mounted before any test runs.
+    """
+    system = platform.system()
+    if system == "Darwin":
+        d = Path("packer/artifacts").resolve()
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+    if system == "Linux":
+        d = Path("/mnt/scratch/qemu")
+        if not d.is_dir():
+            raise RuntimeError(f"Imagedir {str(d)!r} does not exist. " f"Mount the qemu image volume (e.g. `sudo mount /mnt/scratch/qemu`).")
+        return d
+    raise RuntimeError(f"Unknown operating system: {system}")
+
+
+def sweep_stale_workdirs(imagedir: Path) -> None:
+    """Reap orphaned tmp* (harness) and .build-* (packer) dirs from prior runs.
+
+    Cleanup normally rides Machine.__aexit__'s finally chain (machine.py:579)
+    for tmp* and the trailing rmdir in mise-tasks/packer/build for .build-*.
+    Both bypass on SIGKILL / OOM / power-loss, leaving orphan dirs. Each is a
+    full repo copy plus a qcow2 overlay -- ansible-lint also walks into them
+    until .ansible-lint excludes the path, so leaks are doubly expensive.
+
+    Liveness check: a single `ps -Ao args=` covers every running process; a
+    candidate is reaped only if its dirname appears nowhere in argv AND its
+    mtime is older than the race-window grace. The grace protects the brief
+    interval between QemuMachine.__post_init__ creating the workdir and qemu
+    starting (and thus showing up in ps), so concurrent harness runs don't
+    nuke each other's freshly-minted workdirs.
+    """
+    if not imagedir.is_dir():
+        return
+
+    grace_seconds = 60
+    now = time.time()
+    candidates = [d for d in imagedir.iterdir() if d.is_dir() and (d.name.startswith("tmp") or d.name.startswith(".build-"))]
+    if not candidates:
+        return
+
+    try:
+        ps_args = subprocess.run(["ps", "-Ao", "args="], check=True, capture_output=True, text=True).stdout
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # Don't reap when we can't verify staleness.
+        return
+
+    for d in candidates:
+        try:
+            age = now - d.stat().st_mtime
+        except OSError:
+            continue
+        if age < grace_seconds:
+            continue
+        if d.name in ps_args:
+            continue
+        print_line(f"Reaping orphaned workdir {d}")
+        shutil.rmtree(d, ignore_errors=True)
+
+
 def _read_vm_hwm(pid: int) -> int:
     """Return the kernel-tracked peak RSS in kB for *pid*, or 0 if unreadable.
 
@@ -668,24 +734,12 @@ class QemuMachine(Machine):
         except KeyError:
             raise AttributeError(f"Unknown machine: {machine}") from None
 
-        # Per-platform packer-image cache: /mnt/scratch/qemu on Linux dev hosts,
-        # <repo>/packer/artifacts on Mac (matches mise.toml's qemu_dir;
-        # /mnt/scratch/qemu doesn't exist on Mac).
-        # Disk format also platform-gated: raw on Linux (the host ZFS dataset
-        # already does CoW + zstd), qcow2 on Mac (APFS has no fs-level
-        # compression). Mirrors qemu.pkr.hcl's image_format var.
-        system = platform.system()
-        if system == "Darwin":
-            self.imagedir: Path = Path("packer/artifacts").resolve()
-            self.imagedir.mkdir(parents=True, exist_ok=True)
-            self._packer_disk_format = "qcow2"
-        elif system == "Linux":
-            self.imagedir = Path("/mnt/scratch/qemu")
-            if not self.imagedir.is_dir():
-                raise RuntimeError(f"Imagedir {str(self.imagedir)!r} does not exist. " f"Mount the qemu image volume (e.g. `sudo mount /mnt/scratch/qemu`).")
-            self._packer_disk_format = "raw"
-        else:
-            raise AttributeError(f"Unknown operating system: {system}")
+        # Imagedir layout is platform-gated (see imagedir_for_host); the disk
+        # format alongside it is too: raw on Linux (the host ZFS dataset already
+        # does CoW + zstd), qcow2 on Mac (APFS has no fs-level compression).
+        # Mirrors qemu.pkr.hcl's image_format var.
+        self.imagedir: Path = imagedir_for_host()
+        self._packer_disk_format = "qcow2" if platform.system() == "Darwin" else "raw"
 
         self._spec = spec
         if image_dir is not None and spec.packer_image is None:
