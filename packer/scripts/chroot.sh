@@ -345,7 +345,16 @@ if [ "$ZBM_ARCH" = "aarch64" ]; then
   initrd=$(printf '%s\n' "${initrd_files[@]}" | sort -V | tail -1)
 
   mkdir -p /boot/efi/EFI/Linux
-  cp -L "$vmlinuz" /boot/efi/EFI/Linux/vmlinuz.efi
+  # jammy/noble ship vmlinuz-* as a gzipped dual-format ARM64-Image+PE
+  # binary; EDK2's LoadImage doesn't decompress gzip, so on those
+  # releases we have to materialise the underlying Image. resolute
+  # ships an uncompressed PE32+ EFI stub directly. `gunzip -t` is a
+  # cheap format probe -- 0 means it's a valid gzip stream.
+  if gunzip -t "$vmlinuz" 2>/dev/null; then
+    gunzip -c "$vmlinuz" >/boot/efi/EFI/Linux/vmlinuz.efi
+  else
+    cp -L "$vmlinuz" /boot/efi/EFI/Linux/vmlinuz.efi
+  fi
   cp -L "$initrd" /boot/efi/EFI/Linux/initrd
 
   # Direct cmdline: EFI stub honours initrd= as a backslash-pathed file
