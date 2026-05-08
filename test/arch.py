@@ -46,15 +46,6 @@ class ArchProfile:
     # minimal variant doesn't need UEFI pflash. aarch64 virt only boots via
     # UEFI -- pflash must be attached even on minimal.
     bios_boot_supported: bool
-    # Historical: on aarch64 the rEFInd -> ZFSBootMenu -> kexec chain in
-    # the packer qcow2 panicked on EDK2
-    # (notes/zbm-aarch64-kexec-bug-report.md), so ZFS variants used to
-    # direct-boot the on-pool kernel/initrd via qemu's `-kernel`. With
-    # chroot.sh now registering an EFI-stub direct entry on aarch64
-    # ESPs, EDK2 loads the kernel itself and we can take the firmware
-    # path uniformly. The flag stays as data so a future regression can
-    # flip back without restructuring callers.
-    direct_boot_required_for_zfs: bool
 
 
 X86_64 = ArchProfile(
@@ -76,7 +67,6 @@ X86_64 = ArchProfile(
         "/usr/share/edk2-ovmf/x64/OVMF_CODE.fd",
     ),
     bios_boot_supported=True,
-    direct_boot_required_for_zfs=False,
 )
 
 
@@ -106,7 +96,6 @@ AARCH64 = ArchProfile(
         "/usr/share/qemu-efi-aarch64/QEMU_EFI.fd",
     ),
     bios_boot_supported=False,
-    direct_boot_required_for_zfs=False,
 )
 
 
