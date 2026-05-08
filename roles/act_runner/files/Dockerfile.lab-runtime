@@ -33,7 +33,7 @@ ENV MISE_DATA_DIR=/opt/mise \
 RUN install -dm 755 /etc/apt/keyrings && \
     curl -fsSL https://mise.jdx.dev/gpg-key.pub \
       | gpg --dearmor -o /etc/apt/keyrings/mise-archive-keyring.gpg && \
-    echo "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg arch=amd64] https://mise.jdx.dev/deb stable main" \
+    echo "deb [signed-by=/etc/apt/keyrings/mise-archive-keyring.gpg] https://mise.jdx.dev/deb stable main" \
       > /etc/apt/sources.list.d/mise.list && \
     apt-get update && apt-get install -y --no-install-recommends mise && \
     rm -rf /var/lib/apt/lists/*

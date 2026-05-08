@@ -393,6 +393,16 @@ class Machine:
         Path("wireguard").copy_into(self.workdir.name)
         Path("roles").copy_into(self.workdir.name)
 
+        # mise.toml + uv lock + pyproject are repo-root files that some
+        # roles reference via `{{ playbook_dir }}/<file>` (e.g. act_runner
+        # bakes them into its lab-runtime container build context).
+        # Stage them so the harness's workdir mirrors what ansible sees
+        # on a production controller run.
+        for repo_root_file in ("mise.toml", "pyproject.toml", "uv.lock"):
+            src = Path(repo_root_file)
+            if src.exists():
+                src.copy_into(self.workdir.name)
+
         # Copy the static role-agnostic playbooks (site / _setup / _test /
         # _verify / _mirrors) into the workdir so ansible loads
         # group_vars/host_vars from this directory and the playbooks
