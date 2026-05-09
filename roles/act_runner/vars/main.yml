@@ -1,4 +1,4 @@
-act_runner_version: "0.2.10"
+act_runner_version: "0.6.1"
 
 # Labels written into .runner on every play, so a host_vars override can add
 # or remove a label without re-registering the runner. The runner reports
@@ -13,7 +13,7 @@ act_runner_labels:
 act_runner_release:
   x86_64:
     url: "{{ mirror_gitea_com }}/gitea/act_runner/releases/download/v{{ act_runner_version }}/act_runner-{{ act_runner_version }}-linux-amd64"
-    sha256: "b11753c8fe0143dfbaa392ffc5cc035db551fd7254c145dce512aebc8947542a"
+    sha256: "b4dadc7ea9440e94e73d0bb620aea231acb5a02f35f8bfcfa1ba8824db66367e"
   aarch64:
     url: "{{ mirror_gitea_com }}/gitea/act_runner/releases/download/v{{ act_runner_version }}/act_runner-{{ act_runner_version }}-linux-arm64"
-    sha256: "1d727f9190ce559689db9d716d548f01c0cde1c034c9c4d570f7992857251be8"
+    sha256: "98d143b5a3b50a2f8e5b8e5ee31e10dad35099a9a0e394c43ac2998df396766f"
