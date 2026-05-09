@@ -4,9 +4,6 @@
 :FORWARD DROP [0:0]
 :OUTPUT ACCEPT [0:0]
 
-# Custom chains
-:FWD_DROP - [0:0]
-
 ##################################################
 #                   INPUT RULES                  #
 ##################################################
@@ -73,12 +70,12 @@
 ##################################################
 
 # Boilerplate policy
--A FWD_DROP -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
--A FWD_DROP -m conntrack --ctstate INVALID -j DROP
+-A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+-A FORWARD -m conntrack --ctstate INVALID -j DROP
 
--A FWD_DROP -i wg0 -o eth0 -j ACCEPT -m comment --comment "Allow forwarding traffic to external hosts coming in through wireguard"
+-A FORWARD -i wg0 -o eth0 -j ACCEPT -m comment --comment "Allow forwarding traffic to external hosts coming in through wireguard"
 
--A FWD_DROP -i podman0 -o eth0 -j ACCEPT -m comment --comment "Allow container egress through eth0"
+-A FORWARD -i podman0 -o eth0 -j ACCEPT -m comment --comment "Allow container egress through eth0"
 
 # Per-container new-inbound allows. Netavark's NETAVARK_FORWARD chain
 # only accepts RELATED/ESTABLISHED into the container subnet plus
@@ -87,23 +84,22 @@
 # host-published service with the ingress interface(s) that should
 # reach it (eth0 for LAN, wg0 for VPN). Deleting any line breaks
 # reachability for that service even if `--publish` is set.
--A FWD_DROP -i eth0 -o podman0 -p tcp --dport 32400 -j ACCEPT -m comment --comment "Allow plex through eth0"
--A FWD_DROP -i wg0 -o podman0 -p tcp --dport 32400 -j ACCEPT -m comment --comment "Allow plex through wireguard"
+-A FORWARD -i eth0 -o podman0 -p tcp --dport 32400 -j ACCEPT -m comment --comment "Allow plex through eth0"
+-A FORWARD -i wg0 -o podman0 -p tcp --dport 32400 -j ACCEPT -m comment --comment "Allow plex through wireguard"
 
--A FWD_DROP -i eth0 -o podman0 -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow pihole tcp through eth0"
--A FWD_DROP -i wg0 -o podman0 -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow pihole tcp through wireguard"
--A FWD_DROP -i eth0 -o podman0 -p udp --dport 53 -j ACCEPT -m comment --comment "Allow pihole udp through eth0"
--A FWD_DROP -i wg0 -o podman0 -p udp --dport 53 -j ACCEPT -m comment --comment "Allow pihole udp through wireguard"
+-A FORWARD -i eth0 -o podman0 -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow pihole tcp through eth0"
+-A FORWARD -i wg0 -o podman0 -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow pihole tcp through wireguard"
+-A FORWARD -i eth0 -o podman0 -p udp --dport 53 -j ACCEPT -m comment --comment "Allow pihole udp through eth0"
+-A FORWARD -i wg0 -o podman0 -p udp --dport 53 -j ACCEPT -m comment --comment "Allow pihole udp through wireguard"
 
--A FWD_DROP -i eth0 -o podman0 -p tcp --dport 51413 -j ACCEPT -m comment --comment "Allow transmission tcp through eth0"
--A FWD_DROP -i eth0 -o podman0 -p udp --dport 51413 -j ACCEPT -m comment --comment "Allow transmission udp through eth0"
+-A FORWARD -i eth0 -o podman0 -p tcp --dport 51413 -j ACCEPT -m comment --comment "Allow transmission tcp through eth0"
+-A FORWARD -i eth0 -o podman0 -p udp --dport 51413 -j ACCEPT -m comment --comment "Allow transmission udp through eth0"
 
--A FWD_DROP -i eth0 -o podman0 -p tcp --dport 1400 -j ACCEPT -m comment --comment "Allow sonos app control for homeassistant tcp through eth0"
--A FWD_DROP -i eth0 -o podman0 -p udp --dport 3722 -j ACCEPT -m comment --comment "Allow apple tv for homeassistant udp through eth0"
+-A FORWARD -i eth0 -o podman0 -p tcp --dport 1400 -j ACCEPT -m comment --comment "Allow sonos app control for homeassistant tcp through eth0"
+-A FORWARD -i eth0 -o podman0 -p udp --dport 3722 -j ACCEPT -m comment --comment "Allow apple tv for homeassistant udp through eth0"
 
--A FWD_DROP -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] FORWARD:REJECT: "
--A FWD_DROP -j DROP
--A FORWARD -j FWD_DROP
+-A FORWARD -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] FORWARD:REJECT: "
+-A FORWARD -j DROP
 
 ##################################################
 #                       END                      #
