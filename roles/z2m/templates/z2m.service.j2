@@ -38,6 +38,7 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="z2m" \
     --volume /mnt/services/z2m:/app/data \
     --user {{ z2m_user.uid }}:{{ z2m_user.group }} \
+    --network mosquitto \
     --publish 127.0.0.1:8081:8081/tcp \
     --health-cmd         "wget --quiet --tries=1 --spider http://localhost:8081/ > /dev/null" \
     --health-startup-cmd "wget --quiet --tries=1 --spider http://localhost:8081/ > /dev/null" \
