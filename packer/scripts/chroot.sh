@@ -289,30 +289,68 @@ cp "/boot/efi/EFI/refind/$REFIND_NAME" "/boot/efi/EFI/BOOT/$REFIND_FALLBACK_NAME
 # kernel-EFI-stub on the same firmware), just routed through
 # refind.conf instead of an NVRAM Boot#### entry.
 #
-# Caveat: the kernel/initrd staged here are a snapshot of whatever apt
-# installed -- a later `apt upgrade linux-image-*` won't refresh them.
-# Acceptable for the build-once test images; long-lived hosts would
-# need a kernel-install hook to re-stage.
+# Wire the staging up as a kernel + initramfs hook so apt-driven
+# kernel upgrades (and zfs-initramfs / similar initrd-only rebuilds)
+# refresh /EFI/Linux/. The hook itself is the single source of truth
+# for "pick the latest /boot kernel and copy it to the ESP" -- we
+# install it first, then invoke it to do the initial staging.
 if [ "$ZBM_ARCH" = "aarch64" ]; then
-  shopt -s nullglob
-  vmlinuz_files=(/boot/vmlinuz-*)
-  initrd_files=(/boot/initrd.img-*)
-  shopt -u nullglob
-  vmlinuz=$(printf '%s\n' "${vmlinuz_files[@]}" | sort -V | tail -1)
-  initrd=$(printf '%s\n' "${initrd_files[@]}" | sort -V | tail -1)
+  # Hook script. Installed under /etc/kernel/postinst.d (fires on
+  # linux-image install/upgrade) and /etc/kernel/postrm.d (fires on
+  # autoremove of an old kernel — re-pick the latest remaining one).
+  # Also symlinked into /etc/initramfs/post-update.d to catch
+  # initrd-only rebuilds (e.g. dpkg-reconfigure zfs-initramfs) that
+  # don't bump the kernel package. The script ignores its arguments
+  # and always restages the highest-versioned kernel + initrd from
+  # /boot, matching the selection rule used during the build.
+  #
+  # `zz-` prefix puts us after initramfs-tools' own postinst.d hook
+  # so the new initrd is on disk before we copy it. Atomic rename
+  # (.new + mv) prevents a power loss mid-write from leaving a
+  # half-written kernel image on the ESP.
+  cat <<'HOOK' >/etc/kernel/postinst.d/zz-stage-efi-stub
+#!/bin/bash
+set -euo pipefail
 
-  mkdir -p /boot/efi/EFI/Linux
-  # jammy/noble ship vmlinuz-* as a gzipped dual-format ARM64-Image+PE
-  # binary; EDK2's LoadImage doesn't decompress gzip, so on those
-  # releases we have to materialise the underlying Image. resolute
-  # ships an uncompressed PE32+ EFI stub directly. `gunzip -t` is a
-  # cheap format probe -- 0 means it's a valid gzip stream.
-  if gunzip -t "$vmlinuz" 2>/dev/null; then
-    gunzip -c "$vmlinuz" >/boot/efi/EFI/Linux/vmlinuz.efi
-  else
-    cp -L "$vmlinuz" /boot/efi/EFI/Linux/vmlinuz.efi
-  fi
-  cp -L "$initrd" /boot/efi/EFI/Linux/initrd
+mountpoint -q /boot/efi || exit 0
+
+shopt -s nullglob
+vmlinuz_files=(/boot/vmlinuz-*)
+initrd_files=(/boot/initrd.img-*)
+shopt -u nullglob
+
+[ ${#vmlinuz_files[@]} -gt 0 ] || exit 0
+[ ${#initrd_files[@]} -gt 0 ] || exit 0
+
+vmlinuz=$(printf '%s\n' "${vmlinuz_files[@]}" | sort -V | tail -1)
+initrd=$(printf '%s\n' "${initrd_files[@]}" | sort -V | tail -1)
+
+mkdir -p /boot/efi/EFI/Linux
+
+# jammy/noble ship vmlinuz-* gzipped (dual-format ARM64-Image+PE);
+# EDK2's LoadImage doesn't decompress gzip, so materialise the
+# underlying Image. resolute ships an uncompressed PE32+ EFI stub
+# directly. `gunzip -t` is a cheap format probe.
+if gunzip -t "$vmlinuz" 2>/dev/null; then
+  gunzip -c "$vmlinuz" >/boot/efi/EFI/Linux/vmlinuz.efi.new
+else
+  cp -L "$vmlinuz" /boot/efi/EFI/Linux/vmlinuz.efi.new
+fi
+mv -f /boot/efi/EFI/Linux/vmlinuz.efi.new /boot/efi/EFI/Linux/vmlinuz.efi
+
+cp -L "$initrd" /boot/efi/EFI/Linux/initrd.new
+mv -f /boot/efi/EFI/Linux/initrd.new /boot/efi/EFI/Linux/initrd
+HOOK
+  chmod +x /etc/kernel/postinst.d/zz-stage-efi-stub
+
+  mkdir -p /etc/kernel/postrm.d /etc/initramfs/post-update.d
+  ln -sf ../postinst.d/zz-stage-efi-stub /etc/kernel/postrm.d/zz-stage-efi-stub
+  ln -sf /etc/kernel/postinst.d/zz-stage-efi-stub \
+    /etc/initramfs/post-update.d/zz-stage-efi-stub
+
+  # Initial staging — same code path as every subsequent kernel
+  # upgrade will take.
+  /etc/kernel/postinst.d/zz-stage-efi-stub
 fi
 
 # refind.conf. On aarch64 the default points at the staged EFI-stub
