@@ -1,0 +1,132 @@
+# Functional firewall verification. Test scaffolding (podman, listeners,
+# netns) lives here rather than in _setup.yml because _setup is reserved
+# for genuine role dependencies — none of this is needed for the iptables
+# role itself to converge.
+#
+# Probe topology:
+#   extns netns ─ veth_ext ── wg0* (10.99.0.1) ─ root netns (the VM)
+# The netns acts as an "external" client. Traffic from extns to 10.99.0.1
+# enters the VM's INPUT/FORWARD chains on -i wg0, so the existing
+# wireguard-ingress allow rules in FWD_DROP match the FORWARD probe
+# (-A FWD_DROP -i wg0 -o podman0 -p tcp --dport 32400 -j ACCEPT) without
+# adding test-only rules. *The veth is named wg0 deliberately for this.
+
+# Use the real prod podman install path (jammy backports pin, netavark
+# backend, zvol setup) — keeps the test rig faithful to what runs on
+# real hosts and avoids re-implementing package selection here.
+- name: _verify | Install podman stack via prod install.yml
+  import_role:
+    name: podman
+    tasks_from: install
+
+- name: _verify | Install probe-only deps
+  apt:
+    name:
+      - python3
+      - iproute2
+      - curl
+    cache_valid_time: 3600
+  become: true
+
+- name: _verify | Pull tiny test image
+  command: podman pull docker.io/library/busybox
+  register: iptables_verify_pull
+  changed_when: "'Storing signatures' in iptables_verify_pull.stdout or 'Writing manifest' in iptables_verify_pull.stdout"
+  become: true
+
+# Publish 32400:32400 (not :80) so the post-DNAT dport stays 32400 and
+# matches the existing `-A FWD_DROP -i wg0 -o podman0 --dport 32400`
+# rule. Run busybox httpd on 32400 inside the container to serve a
+# tiny known-content page the probe can grep for.
+- name: _verify | Run busybox httpd test container with --publish on 32400
+  command: >
+    podman run -d --replace --name iptables_verify_httpd
+      --publish 0.0.0.0:32400:32400
+      docker.io/library/busybox
+      sh -c 'mkdir -p /www && echo iptables-verify-ok > /www/index.html && exec httpd -f -p 32400 -h /www'
+  changed_when: true
+  become: true
+
+# Netavark appends `-A FORWARD ... -j NETAVARK_FORWARD` after our
+# `-A FORWARD -j FWD_DROP`. NETAVARK_FORWARD only accepts
+# RELATED/ESTABLISHED + container-egress (it doesn't auto-allow new
+# inbound to published ports — that's why the per-container allows in
+# FWD_DROP exist). For prod-faithful ordering we still want netavark's
+# jump first; delete-and-re-append our jump so it lands at the end.
+- name: _verify | Reorder FWD_DROP after netavark's jump
+  shell: |
+    set -euo pipefail
+    iptables -D FORWARD -j FWD_DROP 2>/dev/null || true
+    iptables -A FORWARD -j FWD_DROP
+  args:
+    executable: /bin/bash
+  changed_when: true
+  become: true
+
+- name: _verify | Bind python http.server on :80 (an INPUT-allowed port)
+  command: >
+    systemd-run --unit iptables-verify-listener --remain-after-exit
+      python3 -m http.server 80 --bind 0.0.0.0
+  changed_when: true
+  become: true
+
+- name: _verify | Create probe netns + wg0-named veth pair
+  shell: |
+    set -euo pipefail
+    ip netns add extns 2>/dev/null || true
+    if ! ip link show wg0 >/dev/null 2>&1; then
+      ip link add wg0 type veth peer name veth_ext
+      ip link set veth_ext netns extns
+    fi
+    ip addr replace 10.99.0.1/24 dev wg0
+    ip link set wg0 up
+    ip -n extns addr replace 10.99.0.2/24 dev veth_ext
+    ip -n extns link set veth_ext up
+    ip -n extns link set lo up
+    ip -n extns route replace default via 10.99.0.1
+  args:
+    executable: /bin/bash
+  changed_when: true
+  become: true
+
+- name: _verify | Wait for python listener
+  wait_for:
+    host: 127.0.0.1
+    port: 80
+    timeout: 10
+  become: true
+
+- name: _verify | Wait for httpd container
+  wait_for:
+    host: 127.0.0.1
+    port: 32400
+    timeout: 30
+  become: true
+
+# --- Probes ------------------------------------------------------------
+
+- name: _verify | INPUT allow — port 80 reachable from external netns
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:80/
+  changed_when: false
+  become: true
+
+- name: _verify | INPUT deny — port 18080 is rejected from external netns
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:18080/
+  register: iptables_verify_denied
+  changed_when: false
+  failed_when: iptables_verify_denied.rc == 0
+  become: true
+
+- name: _verify | FORWARD/DNAT — published 32400 reachable via wg0 ingress
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://10.99.0.1:32400/
+  register: iptables_verify_container
+  changed_when: false
+  failed_when: iptables_verify_container.rc != 0 or 'iptables-verify-ok' not in iptables_verify_container.stdout
+  become: true
+
+- name: _verify | OUTPUT + MASQUERADE — outbound HTTPS from VM works
+  uri:
+    url: https://example.com/
+    timeout: 10
+    status_code: 200
+  become: true
