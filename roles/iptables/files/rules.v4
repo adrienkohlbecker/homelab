@@ -5,7 +5,6 @@
 :OUTPUT ACCEPT [0:0]
 
 # Custom chains
-:FILTERS - [0:0]
 :FWD_DROP - [0:0]
 
 ##################################################
@@ -30,6 +29,7 @@
 # UDP traffic rules
 -A FILTERS -p udp --dport 1900  -j ACCEPT                                     -m comment --comment "Allow UPnP broadcast"
 -A FILTERS -p udp --dport 5053  -j ACCEPT                                     -m comment --comment "Allow dnscrypt-proxy"
+-A FILTERS -p udp --dport 5333  -j ACCEPT                                     -m comment --comment "Allow aardvark-dns (post-DNAT from gateway:53)"
 -A FILTERS -p udp --dport 5353  -j ACCEPT                                     -m comment --comment "Allow mDNS"
 -A FILTERS -p udp --sport 5683  -j ACCEPT                                     -m comment --comment "Allow CoAP replies (source port)"
 -A FILTERS -p udp --dport 6667  -j ACCEPT                                     -m comment --comment "Allow Tuya discovery"
