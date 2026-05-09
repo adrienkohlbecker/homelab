@@ -72,19 +72,19 @@
 -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 -A FORWARD -m conntrack --ctstate INVALID -j DROP
 
--A FORWARD -i wg0 -o eth0 -j ACCEPT -m comment --comment "Allow forwarding traffic to external hosts coming in through wireguard"
+-A FORWARD -i wg0 -o {{ ansible_default_ipv4.interface }} -j ACCEPT -m comment --comment "Allow forwarding traffic to external hosts coming in through wireguard"
 
--A FORWARD -i podman0 -o eth0 -j ACCEPT -m comment --comment "Allow container egress through eth0"
+-A FORWARD -i podman0 -o {{ ansible_default_ipv4.interface }} -j ACCEPT -m comment --comment "Allow container egress through {{ ansible_default_ipv4.interface }}"
 
 # Reach published containers via netavark's DNAT. Netavark's
 # NETAVARK_FORWARD chain only accepts RELATED/ESTABLISHED + egress
 # *from* the container subnet — new inbound is the operator's
-# responsibility. We accept any packet whose ingress is eth0 or wg0
+# responsibility. We accept any packet whose ingress is {{ ansible_default_ipv4.interface }} or wg0
 # and that conntrack tagged as DNAT (i.e. netavark rewrote it for a
 # `--publish 0.0.0.0:` port). New containers self-expose without
-# rule edits; the eth0/wg0 scoping prevents reachability from any
+# rule edits; the {{ ansible_default_ipv4.interface }}/wg0 scoping prevents reachability from any
 # future interface (guest VLAN, mgmt net) that we haven't trusted.
--A FORWARD -i eth0 -o podman0 -d 10.88.0.0/16 -m conntrack --ctstate DNAT -j ACCEPT -m comment --comment "Reach published containers via LAN"
+-A FORWARD -i {{ ansible_default_ipv4.interface }} -o podman0 -d 10.88.0.0/16 -m conntrack --ctstate DNAT -j ACCEPT -m comment --comment "Reach published containers via LAN"
 -A FORWARD -i wg0  -o podman0 -d 10.88.0.0/16 -m conntrack --ctstate DNAT -j ACCEPT -m comment --comment "Reach published containers via wireguard"
 
 -A FORWARD -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] FORWARD:REJECT: "
@@ -98,5 +98,5 @@ COMMIT
 
 *nat
 :POSTROUTING ACCEPT [0:0]
--A POSTROUTING -o eth0 -j MASQUERADE -m comment --comment "Ensure forwarded packets have our IP as source and keep track of where to send the replies"
+-A POSTROUTING -o {{ ansible_default_ipv4.interface }} -j MASQUERADE -m comment --comment "Ensure forwarded packets have our IP as source and keep track of where to send the replies"
 COMMIT
