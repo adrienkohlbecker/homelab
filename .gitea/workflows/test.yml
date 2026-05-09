@@ -15,6 +15,13 @@ concurrency:
   group: lab-qemu-artifacts
   cancel-in-progress: false
 
+# Force bash for all run: steps. Gitea Actions defaults to `sh` (dash)
+# in some configurations, which doesn't support `set -o pipefail` or
+# bash parameter expansion like ${var%%:*} that the parse step uses.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   detect:
     runs-on: lab-runtime
