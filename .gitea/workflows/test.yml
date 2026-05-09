@@ -60,46 +60,56 @@ jobs:
       # GitHub Actions' schema (and most editors) require image: when a
       # container: block is present.
       image: lab-runtime:latest
-      # /dev/kvm via --device for qemu acceleration; --group-add <gid>
-      # passes the host kvm gid through (rootless userns doesn't map it
-      # by default). 109 is lab's kvm gid (`getent group kvm` on the
-      # host). NOT --group-add keep-groups: that's a podman-CLI-only
-      # feature, but act_runner talks to podman through the docker API
-      # socket which doesn't translate it. The qcow2 tree is :ro
-      # because the harness writes per-run scratch under
-      # /tmp/lab-runtime-workdir (--workdir-parent on testrole.py).
+      # /dev/kvm via --device for qemu acceleration; --group-add 109
+      # (lab's kvm gid) so the in-container process can open the
+      # device. NOT --group-add keep-groups: that's a podman-CLI-only
+      # feature; act_runner talks to podman through the docker API
+      # socket and doesn't translate it.
       options: >-
         --device /dev/kvm
         --group-add 109
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        # Flat "role:variant" strings; Gitea 1.21.11 doesn't expand
-        # `${{ matrix.<obj>.<field> }}` for fromJson-derived objects,
-        # so the matrix entries are strings and we shell-parse them
-        # into $GITHUB_ENV in the first step.
-        spec: ${{ fromJson(needs.detect.outputs.matrix) }}
-    name: ${{ matrix.spec }}
-    timeout-minutes: 30
+    timeout-minutes: 600
     steps:
-      - name: Parse role:variant
-        run: |
-          set -euo pipefail
-          spec='${{ matrix.spec }}'
-          echo "TEST_ROLE=${spec%%:*}" >>"$GITHUB_ENV"
-          echo "TEST_VARIANT=${spec##*:}" >>"$GITHUB_ENV"
       - uses: actions/checkout@v4
       - run: uv sync
-      - run: test/testrole.py "$TEST_ROLE" --machine "$TEST_VARIANT" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir
+      - name: Run matrix cells with bounded parallelism
+        # Why a shell loop instead of strategy.matrix: even on Gitea
+        # 1.26.1 with act_runner 0.6.1, dynamic matrix dimensions built
+        # from `${{ fromJson(needs.<job>.outputs.<x>) }}` don't get
+        # their values bound at cell-runtime -- ${{ matrix.<key> }}
+        # ends up as the literal template in the cell's name and
+        # commands. xargs -P sidesteps Gitea's matrix machinery
+        # entirely: one job, one big shell loop, bash-managed
+        # parallelism.
+        env:
+          MATRIX: ${{ needs.detect.outputs.matrix }}
+          MAX_PARALLEL: '2'
+        run: |
+          set -euo pipefail
+          echo "$MATRIX" | jq -r '.[]' \
+            | xargs -I{} -n1 -P "$MAX_PARALLEL" bash -c '
+                spec=$1
+                role=${spec%%:*}
+                variant=${spec##*:}
+                echo "::group::$spec"
+                if test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir; then
+                  echo "::endgroup::"
+                  echo "PASS: $spec"
+                else
+                  rc=$?
+                  echo "::endgroup::"
+                  echo "FAIL($rc): $spec"
+                  exit $rc
+                fi
+              ' _ {}
       - name: Upload harness output on failure
         if: failure()
         uses: actions/upload-artifact@v3
         with:
-          name: testout-${{ env.TEST_ROLE }}-${{ env.TEST_VARIANT }}
+          name: testout
           path: |
-            test/out/${{ env.TEST_VARIANT }}.${{ env.TEST_ROLE }}.*
+            test/out/
             /tmp/lab-runtime-workdir/**
           retention-days: 14
           if-no-files-found: warn

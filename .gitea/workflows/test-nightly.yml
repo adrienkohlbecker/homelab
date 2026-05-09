@@ -48,42 +48,48 @@ jobs:
     if: needs.gate.outputs.matrix != '[]' && needs.gate.outputs.matrix != ''
     runs-on: lab-runtime
     container:
-      # The runs-on label resolves to lab-runtime:latest already, but
-      # GitHub Actions' schema (and most editors) require image: when a
-      # container: block is present.
       image: lab-runtime:latest
-      # 109 is lab's kvm gid (`getent group kvm`). NOT keep-groups -- see
-      # test.yml's container.options for the rationale.
+      # 109 is lab's kvm gid. NOT keep-groups -- see test.yml's
+      # container.options for the rationale.
       options: >-
         --device /dev/kvm
         --group-add 109
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
-    strategy:
-      fail-fast: false
-      # Saturate the runner -- nightly runs unattended, no humans waiting
-      # on responsiveness for an unrelated workflow_dispatch.
-      max-parallel: 4
-      matrix:
-        # See test.yml for why entries are flat "role:variant" strings.
-        spec: ${{ fromJson(needs.gate.outputs.matrix) }}
-    name: ${{ matrix.spec }}
-    timeout-minutes: 30
+    timeout-minutes: 600
     steps:
-      - name: Parse role:variant
-        run: |
-          set -euo pipefail
-          spec='${{ matrix.spec }}'
-          echo "TEST_ROLE=${spec%%:*}" >>"$GITHUB_ENV"
-          echo "TEST_VARIANT=${spec##*:}" >>"$GITHUB_ENV"
       - uses: actions/checkout@v4
       - run: uv sync
-      - run: test/testrole.py "$TEST_ROLE" --machine "$TEST_VARIANT" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir
+      - name: Run matrix cells with bounded parallelism
+        # See test.yml for why we use a shell loop instead of
+        # strategy.matrix. MAX_PARALLEL: 4 here vs 2 on the push test
+        # workflow -- nightly runs unattended.
+        env:
+          MATRIX: ${{ needs.gate.outputs.matrix }}
+          MAX_PARALLEL: '4'
+        run: |
+          set -euo pipefail
+          echo "$MATRIX" | jq -r '.[]' \
+            | xargs -I{} -n1 -P "$MAX_PARALLEL" bash -c '
+                spec=$1
+                role=${spec%%:*}
+                variant=${spec##*:}
+                echo "::group::$spec"
+                if test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir; then
+                  echo "::endgroup::"
+                  echo "PASS: $spec"
+                else
+                  rc=$?
+                  echo "::endgroup::"
+                  echo "FAIL($rc): $spec"
+                  exit $rc
+                fi
+              ' _ {}
       - if: failure()
         uses: actions/upload-artifact@v3
         with:
-          name: testout-${{ env.TEST_ROLE }}-${{ env.TEST_VARIANT }}
+          name: testout
           path: |
-            test/out/${{ env.TEST_VARIANT }}.${{ env.TEST_ROLE }}.*
+            test/out/
             /tmp/lab-runtime-workdir/**
           retention-days: 30
           if-no-files-found: warn
