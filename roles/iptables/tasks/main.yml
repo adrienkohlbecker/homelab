@@ -25,6 +25,52 @@
   tags:
     - iptables
 
+# Network-stack hardening alongside the firewall: assert the
+# defenses iptables can't express itself. Ubuntu's defaults are
+# inconsistent (rp_filter=2, log_martians=0, send_redirects=1) — pin
+# the secure values explicitly so the role is the single place to
+# read for "what's the host's network posture?".
+#
+#  rp_filter=1                  Strict reverse-path: drop packets
+#                               whose source IP wouldn't route back
+#                               via the ingress interface (asymmetric
+#                               routing / spoofed-source filtering).
+#  accept_source_route=0        Refuse source-routed packets (an
+#                               attacker can't dictate the path).
+#  accept_redirects=0           Ignore ICMP redirects (an attacker
+#                               can't reroute our traffic to them).
+#  send_redirects=0             Don't emit ICMP redirects either; we
+#                               don't act as a router for arbitrary
+#                               clients.
+#  log_martians=1               Log packets with bogus source IPs
+#                               (e.g. RFC1918 arriving on WAN).
+#  tcp_syncookies=1             SYN-flood mitigation. Default is on
+#                               in modern Ubuntu; assert anyway.
+- name: Network-stack hardening sysctls
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_set: true
+    state: present
+    reload: true
+  loop:
+    - { name: net.ipv4.conf.all.rp_filter,            value: '1' }
+    - { name: net.ipv4.conf.default.rp_filter,        value: '1' }
+    - { name: net.ipv4.conf.all.accept_source_route,  value: '0' }
+    - { name: net.ipv4.conf.default.accept_source_route, value: '0' }
+    - { name: net.ipv4.conf.all.accept_redirects,     value: '0' }
+    - { name: net.ipv4.conf.default.accept_redirects, value: '0' }
+    - { name: net.ipv4.conf.all.send_redirects,       value: '0' }
+    - { name: net.ipv4.conf.default.send_redirects,   value: '0' }
+    - { name: net.ipv4.conf.all.log_martians,         value: '1' }
+    - { name: net.ipv4.conf.default.log_martians,     value: '1' }
+    - { name: net.ipv4.tcp_syncookies,                value: '1' }
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  tags:
+    - iptables
+
 - name: Configure iptables (v4)
   copy:
     src: rules.v4
