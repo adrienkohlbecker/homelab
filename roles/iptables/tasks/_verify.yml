@@ -172,13 +172,17 @@
       # between --dport and the target.
       - iptables_verify_save.stdout is search('-A INPUT -s ' + podman_default_network + ' .*--dport 5053 .*-j ACCEPT')
       - iptables_verify_save.stdout is search('-A INPUT -s ' + podman_default_network + ' .*--dport 5333 .*-j ACCEPT')
-      # INPUT scoping for wireguard-only admin services
-      - iptables_verify_save.stdout is search('-A INPUT -s ' + wireguard_subnet + ' .*--dport 5353 .*-j ACCEPT')
+      # mDNS — home LAN only (multicast doesn't traverse wireguard)
+      - iptables_verify_save.stdout is search('-A INPUT -s ' + site_subnets.home + ' .*--dport 5353 .*-j ACCEPT')
+      # Samba and nut — home LAN + wireguard, two rules each
+      - iptables_verify_save.stdout is search('-A INPUT -s ' + site_subnets.home + ' .*--dport 445 .*-j ACCEPT')
       - iptables_verify_save.stdout is search('-A INPUT -s ' + wireguard_subnet + ' .*--dport 445 .*-j ACCEPT')
+      - iptables_verify_save.stdout is search('-A INPUT -s ' + site_subnets.home + ' .*--dport 3493 .*-j ACCEPT')
       - iptables_verify_save.stdout is search('-A INPUT -s ' + wireguard_subnet + ' .*--dport 3493 .*-j ACCEPT')
     fail_msg: >-
       Templated rules don't render with the expected scopes
       (ansible_default_ipv4.interface={{ ansible_default_ipv4.interface }},
       podman_default_network={{ podman_default_network }},
+      site_subnets.home={{ site_subnets.home }},
       wireguard_subnet={{ wireguard_subnet }}). Either the template
       didn't render or a rule got desynchronized.
