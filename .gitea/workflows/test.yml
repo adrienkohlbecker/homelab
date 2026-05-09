@@ -53,14 +53,17 @@ jobs:
       # GitHub Actions' schema (and most editors) require image: when a
       # container: block is present.
       image: lab-runtime:latest
-      # /dev/kvm via --device for qemu acceleration; --group-add keep-groups
-      # passes the runner user's host kvm gid through (rootless userns
-      # doesn't map it by default). The qcow2 tree is :ro because the
-      # harness writes per-run scratch under /tmp/lab-runtime-workdir
-      # instead (--workdir-parent flag on testrole.py).
+      # /dev/kvm via --device for qemu acceleration; --group-add <gid>
+      # passes the host kvm gid through (rootless userns doesn't map it
+      # by default). 109 is lab's kvm gid (`getent group kvm` on the
+      # host). NOT --group-add keep-groups: that's a podman-CLI-only
+      # feature, but act_runner talks to podman through the docker API
+      # socket which doesn't translate it. The qcow2 tree is :ro
+      # because the harness writes per-run scratch under
+      # /tmp/lab-runtime-workdir (--workdir-parent on testrole.py).
       options: >-
         --device /dev/kvm
-        --group-add keep-groups
+        --group-add 109
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
     strategy:
       fail-fast: false

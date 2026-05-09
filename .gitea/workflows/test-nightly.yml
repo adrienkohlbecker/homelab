@@ -46,9 +46,11 @@ jobs:
       # GitHub Actions' schema (and most editors) require image: when a
       # container: block is present.
       image: lab-runtime:latest
+      # 109 is lab's kvm gid (`getent group kvm`). NOT keep-groups -- see
+      # test.yml's container.options for the rationale.
       options: >-
         --device /dev/kvm
-        --group-add keep-groups
+        --group-add 109
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
     strategy:
       fail-fast: false
