@@ -114,3 +114,29 @@
     timeout: 10
     status_code: 200
   become: true
+
+# WAN-side rules use {{ ansible_default_ipv4.interface }} which renders
+# differently per host (eth0 on prod hosts via netplan set-name; the
+# kernel's predictable name e.g. enp0s2 on the harness VM). The wg0
+# probe above covers the symmetric wg0 rule; this textual check
+# catches asymmetric edits that affect only the WAN-side counterpart
+# and confirms the template actually rendered the expected interface.
+- name: _verify | Capture iptables-save for rule-presence assertions
+  command: iptables-save
+  register: iptables_verify_save
+  changed_when: false
+  become: true
+
+# iptables-save normalizes argument order — `-d` lands before `-i`,
+# so the regex below uses `.*-i` instead of pinning interface
+# position relative to the rule start.
+- name: _verify | WAN-side FORWARD/DNAT and POSTROUTING rules reference the host WAN iface
+  assert:
+    that:
+      - iptables_verify_save.stdout is search('-A FORWARD .*-i ' + ansible_default_ipv4.interface + ' -o podman0.*ctstate DNAT.*-j ACCEPT')
+      - iptables_verify_save.stdout is search('-A POSTROUTING -o ' + ansible_default_ipv4.interface + ' .*-j MASQUERADE')
+    fail_msg: >-
+      Templated FORWARD/POSTROUTING rules don't reference
+      ansible_default_ipv4.interface ({{ ansible_default_ipv4.interface }}).
+      Either the template didn't render or someone edited only one
+      side of the eth0/wg0 pair.
