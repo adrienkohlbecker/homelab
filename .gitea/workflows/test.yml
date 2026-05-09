@@ -69,20 +69,25 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix:
-        include: ${{ fromJson(needs.detect.outputs.matrix) }}
-    name: ${{ matrix.role }} (${{ matrix.variant }})
+        # Single dimension holding the whole {role, variant} object;
+        # access fields via matrix.cell.<field>. Using `include:` with a
+        # JSON-built list works on GitHub Actions but Gitea 1.21.11 doesn't
+        # unpack the nested keys into matrix.<key>, leaving matrix.role
+        # and matrix.variant empty in the cell context.
+        cell: ${{ fromJson(needs.detect.outputs.matrix) }}
+    name: ${{ matrix.cell.role }} (${{ matrix.cell.variant }})
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - run: uv sync
-      - run: test/testrole.py "${{ matrix.role }}" --machine "${{ matrix.variant }}" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir
+      - run: test/testrole.py "${{ matrix.cell.role }}" --machine "${{ matrix.cell.variant }}" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir
       - name: Upload harness output on failure
         if: failure()
         uses: actions/upload-artifact@v3
         with:
-          name: testout-${{ matrix.role }}-${{ matrix.variant }}
+          name: testout-${{ matrix.cell.role }}-${{ matrix.cell.variant }}
           path: |
-            test/out/${{ matrix.variant }}.${{ matrix.role }}.*
+            test/out/${{ matrix.cell.variant }}.${{ matrix.cell.role }}.*
             /tmp/lab-runtime-workdir/**
           retention-days: 14
           if-no-files-found: warn
