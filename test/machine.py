@@ -409,8 +409,12 @@ class Machine:
 
         Path("group_vars").copy_into(self.workdir.name)
         Path("host_vars").copy_into(self.workdir.name)
-        Path("wireguard").copy_into(self.workdir.name)
         Path("roles").copy_into(self.workdir.name)
+        # wireguard/ is gitignored (vaulted keys, never committed) so it's
+        # absent on a CI checkout. Skip silently when missing -- roles that
+        # actually need its contents will fail later with a clearer error.
+        if Path("wireguard").exists():
+            Path("wireguard").copy_into(self.workdir.name)
 
         # mise.toml + uv lock + pyproject are repo-root files that some
         # roles reference via `{{ playbook_dir }}/<file>` (e.g. act_runner
