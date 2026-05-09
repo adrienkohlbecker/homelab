@@ -15,64 +15,55 @@
 # to prevent flushing what we don't setup here
 
 -F INPUT
--F FILTERS
 -F FWD_DROP
-
-##################################################
-#                  FILTERS RULES                 #
-##################################################
-
-# This only matches traffic going to the host (excluding ports bound by containers)
-# So external host -> port bound to external interface
-# And container -> port bound to bridge interface
-
-# UDP traffic rules
--A FILTERS -p udp --dport 1900  -j ACCEPT                                     -m comment --comment "Allow UPnP broadcast"
--A FILTERS -p udp --dport 5053  -j ACCEPT                                     -m comment --comment "Allow dnscrypt-proxy"
--A FILTERS -p udp --dport 5333  -j ACCEPT                                     -m comment --comment "Allow aardvark-dns (post-DNAT from gateway:53)"
--A FILTERS -p udp --dport 5353  -j ACCEPT                                     -m comment --comment "Allow mDNS"
--A FILTERS -p udp --sport 5683  -j ACCEPT                                     -m comment --comment "Allow CoAP replies (source port)"
--A FILTERS -p udp --dport 6667  -j ACCEPT                                     -m comment --comment "Allow Tuya discovery"
--A FILTERS -p udp --dport 51820 -j ACCEPT                                     -m comment --comment "Allow Wireguard"
--A FILTERS -p udp --dport 60000 -j ACCEPT                                     -m comment --comment "Allow Mosh"
-
-# be explicit with rejection of known traffic so they are documented and don't appear in logs
--A FILTERS -p udp --dport 67    -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny DHCP"
--A FILTERS -p udp --dport 137   -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny NetBIOS"
--A FILTERS -p udp --dport 138   -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny NetBIOS"
--A FILTERS -p udp --dport 139   -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny NetBIOS"
--A FILTERS -p udp --dport 9003  -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Could be HEOS? From Marantz"
--A FILTERS -p udp --dport 10001 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny Unifi device discovery broadcast"
--A FILTERS -p udp --dport 10518 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Unsure what this is?"
--A FILTERS -p udp --dport 17500 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny Dropbox LanSync"
--A FILTERS -p udp --dport 57621 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny Spotify P2P"
--A FILTERS -p udp --dport 65001 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Could be HDHomeRun? From Shield"
-
-# TCP traffic rules
--A FILTERS -p tcp --dport 22    -j ACCEPT                                     -m comment --comment "Allow SSH"
--A FILTERS -p tcp --dport 80    -j ACCEPT                                     -m comment --comment "Allow HTTP"
--A FILTERS -p tcp --dport 443   -j ACCEPT                                     -m comment --comment "Allow HTTPS"
--A FILTERS -p tcp --dport 445   -j ACCEPT                                     -m comment --comment "Allow Samba"
--A FILTERS -p tcp --dport 3493  -j ACCEPT                                     -m comment --comment "Allow nut"
 
 ##################################################
 #                   INPUT RULES                  #
 ##################################################
 
-# Boilerplate acceptance policy
+# Established/related and loopback are accepted unconditionally; INVALID
+# is dropped. After these three lines, every remaining packet is NEW —
+# so no rule below needs an explicit `--ctstate NEW` qualifier.
 -A INPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 -A INPUT -i lo -j ACCEPT
-
-# Drop invalid packets
 -A INPUT -m conntrack --ctstate INVALID -j DROP
 
-# Pass traffic to filter chain
-## Only allow new connections (established and related should already be handled)
-## For TCP, additionally only allow new SYN packets since that is the only valid
-## method for establishing a new TCP connection
--A INPUT -p udp -m conntrack --ctstate NEW -j FILTERS
--A INPUT -p tcp --syn -m conntrack --ctstate NEW -j FILTERS
--A INPUT -p icmp -m conntrack --ctstate NEW -j ACCEPT
+# TCP NEW must have SYN. Conntrack's loose mode (default) classifies
+# mid-stream non-SYN packets as NEW rather than INVALID, so without
+# this an attacker could probe TCP services with crafted ACKs.
+-A INPUT -p tcp ! --syn -j DROP
+
+# UDP traffic rules
+-A INPUT -p udp --dport 1900  -j ACCEPT                                     -m comment --comment "Allow UPnP broadcast"
+-A INPUT -p udp --dport 5053  -j ACCEPT                                     -m comment --comment "Allow dnscrypt-proxy"
+-A INPUT -p udp --dport 5333  -j ACCEPT                                     -m comment --comment "Allow aardvark-dns (post-DNAT from gateway:53)"
+-A INPUT -p udp --dport 5353  -j ACCEPT                                     -m comment --comment "Allow mDNS"
+-A INPUT -p udp --sport 5683  -j ACCEPT                                     -m comment --comment "Allow CoAP replies (source port)"
+-A INPUT -p udp --dport 6667  -j ACCEPT                                     -m comment --comment "Allow Tuya discovery"
+-A INPUT -p udp --dport 51820 -j ACCEPT                                     -m comment --comment "Allow Wireguard"
+-A INPUT -p udp --dport 60000 -j ACCEPT                                     -m comment --comment "Allow Mosh"
+
+# be explicit with rejection of known traffic so they are documented and don't appear in logs
+-A INPUT -p udp --dport 67    -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny DHCP"
+-A INPUT -p udp --dport 137   -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny NetBIOS"
+-A INPUT -p udp --dport 138   -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny NetBIOS"
+-A INPUT -p udp --dport 139   -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny NetBIOS"
+-A INPUT -p udp --dport 9003  -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Could be HEOS? From Marantz"
+-A INPUT -p udp --dport 10001 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny Unifi device discovery broadcast"
+-A INPUT -p udp --dport 10518 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Unsure what this is?"
+-A INPUT -p udp --dport 17500 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny Dropbox LanSync"
+-A INPUT -p udp --dport 57621 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny Spotify P2P"
+-A INPUT -p udp --dport 65001 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Could be HDHomeRun? From Shield"
+
+# TCP traffic rules
+-A INPUT -p tcp --dport 22    -j ACCEPT                                     -m comment --comment "Allow SSH"
+-A INPUT -p tcp --dport 80    -j ACCEPT                                     -m comment --comment "Allow HTTP"
+-A INPUT -p tcp --dport 443   -j ACCEPT                                     -m comment --comment "Allow HTTPS"
+-A INPUT -p tcp --dport 445   -j ACCEPT                                     -m comment --comment "Allow Samba"
+-A INPUT -p tcp --dport 3493  -j ACCEPT                                     -m comment --comment "Allow nut"
+
+# ICMP — ping et al. ESTABLISHED/RELATED handles replies; this is for new incoming.
+-A INPUT -p icmp -j ACCEPT
 
 # Other protocols
 -A INPUT -p 112 -j ACCEPT -m comment --comment "Allow keepalived (VRRP)"
