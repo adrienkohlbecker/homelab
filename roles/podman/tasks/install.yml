@@ -42,26 +42,25 @@
   tags:
     - podman
 
-# Force netavark as the network backend. Without this drop-in podman
+# Force netavark as the network backend. Without this podman
 # auto-detects: if any CNI network already exists it stays on CNI, and
 # CNI doesn't wire DNS without the dnsname plugin (deprecated). With
 # netavark + aardvark-dns (installed above on noble+, dragged in by
 # the backports pin on jammy) container-name resolution Just Works on
 # user-created networks (--disable-dns=false default).
 #
-# Switching backends on a host with running CNI containers leaks
-# iptables rules; on existing CNI hosts a one-shot manual
-# `podman system reset --force` (after stopping everything) is
-# needed -- ansible can't safely automate that.
+# lineinfile against the package's /etc/containers/containers.conf
+# uncomments the line shipped as `#network_backend = ""`; the regex
+# is wide enough to catch any prior explicit value too. Switching
+# backends on a host with running CNI containers leaks iptables
+# rules; on existing CNI hosts a one-shot manual `podman system
+# reset --force` (after stopping everything) is needed -- ansible
+# can't safely automate that.
 - name: install | Force netavark network backend
-  copy:
-    dest: /etc/containers/containers.conf.d/01-netavark.conf
-    content: |
-      [network]
-      network_backend = "netavark"
-    owner: root
-    group: root
-    mode: "0644"
+  lineinfile:
+    path: /etc/containers/containers.conf
+    regexp: '^#?\s*network_backend\s*='
+    line: 'network_backend = "netavark"'
     backup: true
   become: true
   tags:
