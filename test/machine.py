@@ -215,7 +215,13 @@ class Machine:
             stale.unlink(missing_ok=True)
         # System tmp by default; subclasses that need the workdir on a
         # specific filesystem (qemu's qcow2 cache) override _workdir_parent().
-        self.workdir = tempfile.TemporaryDirectory(dir=self._workdir_parent())
+        # Auto-create the parent so --workdir-parent /some/new/path just
+        # works without callers having to mkdir -p first; tempfile itself
+        # doesn't create the dir argument, only the per-run subdir under it.
+        wd_parent = self._workdir_parent()
+        if wd_parent is not None:
+            Path(wd_parent).mkdir(parents=True, exist_ok=True)
+        self.workdir = tempfile.TemporaryDirectory(dir=wd_parent)
         self._preflight()
 
     def _workdir_parent(self) -> Path | None:
