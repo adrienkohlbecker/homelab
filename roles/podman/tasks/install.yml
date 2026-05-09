@@ -73,6 +73,24 @@
   loop:
     - { key: network_backend, value: '"netavark"' }
     - { key: dns_bind_port,   value: '5333' }
+  register: containers_conf_network
+  become: true
+  tags:
+    - podman
+
+# aardvark-dns reads dns_bind_port at launch and keeps the port for
+# its lifetime. netavark spawns it on first need and leaves it
+# running, so a containers.conf change won't take effect until the
+# process is killed; netavark respawns it with the new port on the
+# next network operation. pkill is a no-op when aardvark isn't
+# running yet (e.g. on a fresh install), so we don't gate beyond
+# the config-change check.
+- name: install | Restart aardvark-dns after containers.conf change
+  when: containers_conf_network.changed and not ansible_check_mode
+  command: pkill -9 aardvark-dns
+  register: aardvark_kill
+  failed_when: aardvark_kill.rc not in [0, 1]
+  changed_when: aardvark_kill.rc == 0
   become: true
   tags:
     - podman
