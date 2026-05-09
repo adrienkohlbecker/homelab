@@ -25,12 +25,12 @@
 -A INPUT -p tcp ! --syn -j DROP
 
 # UDP traffic rules. Source-scope what doesn't need WAN reach:
-# 5053/5333 are container DNS (consumers live on podman0), 5353
-# mDNS is restricted to wireguard clients (physical-LAN multicast
-# browsing won't work as a result — accept that tradeoff).
+# 5053/5333 are container DNS (consumers live on podman0); 5353
+# mDNS is link-local on the home LAN so it's scoped there (multicast
+# can't traverse the wireguard tunnel anyway).
 -A INPUT -s {{ podman_default_network }} -p udp --dport 5053 -j ACCEPT      -m comment --comment "Allow dnscrypt-proxy (containers)"
 -A INPUT -s {{ podman_default_network }} -p udp --dport 5333 -j ACCEPT      -m comment --comment "Allow aardvark-dns (post-DNAT from gateway:53)"
--A INPUT -s {{ wireguard_subnet }} -p udp --dport 5353 -j ACCEPT            -m comment --comment "Allow mDNS (wireguard only)"
+-A INPUT -s {{ site_subnets.home }} -p udp --dport 5353 -j ACCEPT           -m comment --comment "Allow mDNS (home LAN)"
 -A INPUT -p udp --dport 51820 -j ACCEPT                                     -m comment --comment "Allow Wireguard"
 -A INPUT -p udp --dport 60000:61000 -j ACCEPT                               -m comment --comment "Allow Mosh"
 
@@ -45,14 +45,17 @@
 -A INPUT -p udp --dport 57621 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny Spotify P2P"
 
 # TCP traffic rules. SSH/HTTP/HTTPS are wide-open (admin + public
-# services); Samba and nut are admin services, restricted to
-# wireguard so physical-LAN devices and any future VLAN can't reach
-# them.
+# services). Samba and nut are admin services scoped to home LAN +
+# wireguard — two rules each because iptables -s takes a single CIDR;
+# remote sites (brumath, bonniers) and any future bridge/VLAN are
+# excluded by omission.
 -A INPUT -p tcp --dport 22    -j ACCEPT                                     -m comment --comment "Allow SSH"
 -A INPUT -p tcp --dport 80    -j ACCEPT                                     -m comment --comment "Allow HTTP"
 -A INPUT -p tcp --dport 443   -j ACCEPT                                     -m comment --comment "Allow HTTPS"
--A INPUT -s {{ wireguard_subnet }} -p tcp --dport 445 -j ACCEPT             -m comment --comment "Allow Samba (wireguard only)"
--A INPUT -s {{ wireguard_subnet }} -p tcp --dport 3493 -j ACCEPT            -m comment --comment "Allow nut (wireguard only)"
+-A INPUT -s {{ site_subnets.home }} -p tcp --dport 445 -j ACCEPT            -m comment --comment "Allow Samba (home LAN)"
+-A INPUT -s {{ wireguard_subnet }} -p tcp --dport 445 -j ACCEPT             -m comment --comment "Allow Samba (wireguard)"
+-A INPUT -s {{ site_subnets.home }} -p tcp --dport 3493 -j ACCEPT           -m comment --comment "Allow nut (home LAN)"
+-A INPUT -s {{ wireguard_subnet }} -p tcp --dport 3493 -j ACCEPT            -m comment --comment "Allow nut (wireguard)"
 
 # ICMP — only echo-request (ping), rate-limited. Other ICMP types
 # (destination unreachable, time exceeded, etc.) come back as
