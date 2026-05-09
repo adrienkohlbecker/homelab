@@ -158,8 +158,10 @@ fi
 
 # Direct role detection: extract role names from `^roles/<X>/...` paths,
 # then for each one either add to the matrix (if in universe) or expand
-# via role-deps (if it's a helper).
-DIRECT=$(echo "$CHANGED" | grep -oE '^roles/[^/]+' | sed 's|^roles/||' | sort -u)
+# via role-deps (if it's a helper). The `|| true` keeps the empty case
+# from tripping `set -o pipefail` -- grep -oE exits 1 with no matches,
+# which is fine here (no-role-paths diff is normal).
+DIRECT=$(echo "$CHANGED" | grep -oE '^roles/[^/]+' | sed 's|^roles/||' | sort -u || true)
 
 ROLES=""
 for role in $DIRECT; do
@@ -176,5 +178,5 @@ for role in $DIRECT; do
   done
 done
 
-ROLES_DEDUPED=$(echo "$ROLES" | tr ' ' '\n' | grep -v '^$' | sort -u)
+ROLES_DEDUPED=$(echo "$ROLES" | tr ' ' '\n' | grep -v '^$' | sort -u || true)
 emit "$(build_matrix "$ROLES_DEDUPED")" "false"
