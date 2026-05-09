@@ -22,6 +22,10 @@ concurrency:
   group: lab-qemu-artifacts
   cancel-in-progress: false
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build:
     runs-on: lab-runtime

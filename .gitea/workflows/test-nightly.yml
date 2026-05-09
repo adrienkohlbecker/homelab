@@ -13,6 +13,12 @@ concurrency:
   group: lab-qemu-artifacts
   cancel-in-progress: false
 
+# bash for all run: steps -- Gitea Actions defaults to dash, which
+# doesn't support `set -o pipefail` or bash parameter expansion.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   gate:
     runs-on: lab-runtime
