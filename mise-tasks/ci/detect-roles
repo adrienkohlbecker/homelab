@@ -25,6 +25,10 @@
 #   mise run ci:detect-roles --all
 set -euo pipefail
 
+# Temporary while we debug a silent failure inside the runner. Drop the
+# `set -x` once detect-roles is reliably emitting matrix= on push.
+set -x
+
 # Universe: roles with tasks/main.yml. Helpers without main.yml fall outside
 # and reach the matrix only through role-deps expansion.
 UNIVERSE=$(for d in roles/*/tasks/main.yml; do
