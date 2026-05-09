@@ -1,6 +1,11 @@
 name: test
 on:
+  # Explicit branches filter so Gitea Actions registers the trigger;
+  # `push:` with a null mapping (no body) gets parsed as "no trigger"
+  # by some Gitea versions even though the workflow itself parses fine.
   push:
+    branches:
+      - master
   workflow_dispatch:
     inputs:
       roles:
