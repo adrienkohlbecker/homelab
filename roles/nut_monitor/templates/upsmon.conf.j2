@@ -82,7 +82,11 @@
 # MONITOR myups@bigserver 1 monmaster blah master
 # MONITOR su700@server.example.com 1 upsmon secretpass slave
 # MONITOR myups@localhost 1 upsmon pass master	(or slave)
-{% if nut_monitor_enabled|default(false) %}MONITOR eaton@localhost 1 upsmon {{ nut_upsmon_password }} master{% endif %}
+{# nut 2.8+ (resolute) renamed master/slave to primary/secondary; the
+   new tokens have been aliases since 2.7.4, so this works on jammy
+   and noble too. Without the rename, resolute fails MONITOR parsing
+   and exits with "Fatal error: insufficient power configured!". #}
+{% if nut_monitor_enabled|default(false) %}MONITOR eaton@localhost 1 upsmon {{ nut_upsmon_password }} primary{% endif %}
 
 # --------------------------------------------------------------------------
 # MINSUPPLIES <num>
