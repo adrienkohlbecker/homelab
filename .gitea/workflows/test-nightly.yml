@@ -42,6 +42,10 @@ jobs:
     if: needs.gate.outputs.matrix != '[]' && needs.gate.outputs.matrix != ''
     runs-on: lab-runtime
     container:
+      # The runs-on label resolves to lab-runtime:latest already, but
+      # GitHub Actions' schema (and most editors) require image: when a
+      # container: block is present.
+      image: lab-runtime:latest
       options: >-
         --device /dev/kvm
         --group-add keep-groups
