@@ -136,11 +136,16 @@
   tags:
     - user
 
+# jammy ships git 2.34, which doesn't know the zdiff3 merge strategy
+# (added in 2.35); the dotfiles' .gitconfig sets it, so on jammy we
+# downgrade to diff3 in place. `replace` reports unchanged once
+# zdiff3 isn't there anymore, so the task no-ops on subsequent runs.
 - name: Fix git config
   when: ansible_distribution_version == "22.04"
-  command: sed -i 's/zdiff3/diff3/' .gitconfig
-  args:
-    chdir: "{{ ansible_user_dir }}"
+  replace:
+    path: "{{ ansible_user_dir }}/.gitconfig"
+    regexp: zdiff3
+    replace: diff3
   tags:
     - user
 
