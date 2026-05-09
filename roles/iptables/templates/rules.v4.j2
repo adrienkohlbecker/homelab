@@ -116,5 +116,10 @@ COMMIT
 
 *nat
 :POSTROUTING ACCEPT [0:0]
--A POSTROUTING -o {{ ansible_default_ipv4.interface }} -j MASQUERADE -m comment --comment "Ensure forwarded packets have our IP as source and keep track of where to send the replies"
+# Source-scoped so we never silently NAT traffic from a future
+# interface (guest VLAN, mgmt net, an extra macvlan) we hadn't
+# considered. Host's own egress matches home_subnet but MASQUERADE
+# is a no-op when the source IP already equals the egress IP.
+-A POSTROUTING -s {{ podman_default_network }} -o {{ ansible_default_ipv4.interface }} -j MASQUERADE -m comment --comment "NAT container egress"
+-A POSTROUTING -s {{ home_subnet }} -o {{ ansible_default_ipv4.interface }} -j MASQUERADE -m comment --comment "NAT routed traffic from wireguard / LAN"
 COMMIT

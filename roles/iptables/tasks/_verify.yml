@@ -163,9 +163,11 @@
   assert:
     that:
       - iptables_verify_save.stdout is search('-A FORWARD .*-i ' + ansible_default_ipv4.interface + ' -o podman0.*ctstate DNAT.*-j ACCEPT')
-      - iptables_verify_save.stdout is search('-A POSTROUTING -o ' + ansible_default_ipv4.interface + ' .*-j MASQUERADE')
+      - iptables_verify_save.stdout is search('-A POSTROUTING -s ' + podman_default_network + ' .*-o ' + ansible_default_ipv4.interface + '.*-j MASQUERADE')
+      - iptables_verify_save.stdout is search('-A POSTROUTING -s ' + home_subnet + ' .*-o ' + ansible_default_ipv4.interface + '.*-j MASQUERADE')
     fail_msg: >-
       Templated FORWARD/POSTROUTING rules don't reference
-      ansible_default_ipv4.interface ({{ ansible_default_ipv4.interface }}).
-      Either the template didn't render or someone edited only one
-      side of the eth0/wg0 pair.
+      ansible_default_ipv4.interface ({{ ansible_default_ipv4.interface }})
+      and the expected source scopes (podman_default_network,
+      home_subnet). Either the template didn't render or a rule got
+      desynchronized.
