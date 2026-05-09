@@ -1,0 +1,82 @@
+name: test-nightly
+on:
+  schedule:
+    # 02:00 UTC daily. Activity-gated below: skips when no commits landed
+    # in the last 25h (25, not 24, so a same-second cron jitter doesn't
+    # mis-fire a false-negative skip).
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+# Shared with test.yml and packer-build.yml so the artifact tree under
+# /mnt/scratch/qemu can't be rewritten by packer-build mid-test.
+concurrency:
+  group: lab-qemu-artifacts
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    runs-on: lab-runtime
+    outputs:
+      matrix: ${{ steps.gate.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        # Full history so `git log --since='25 hours ago'` actually has
+        # the timestamps to walk; the default fetch-depth of 1 only has
+        # HEAD's commit metadata.
+        with: { fetch-depth: 0 }
+      - id: gate
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            count=$(git log --since='25 hours ago' --oneline | wc -l)
+            if [ "$count" -eq 0 ]; then
+              echo "no commits in the last 25h -- skipping nightly"
+              echo "matrix=[]" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          mise run ci:detect-roles --all
+
+  test-role:
+    needs: gate
+    if: needs.gate.outputs.matrix != '[]' && needs.gate.outputs.matrix != ''
+    runs-on: lab-runtime
+    container:
+      options: >-
+        --device /dev/kvm
+        --group-add keep-groups
+        --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
+    strategy:
+      fail-fast: false
+      # Saturate the runner -- nightly runs unattended, no humans waiting
+      # on responsiveness for an unrelated workflow_dispatch.
+      max-parallel: 4
+      matrix:
+        include: ${{ fromJson(needs.gate.outputs.matrix) }}
+    name: ${{ matrix.role }} (${{ matrix.variant }})
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: uv sync
+      - run: test/testrole.py "${{ matrix.role }}" --machine "${{ matrix.variant }}" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir
+      - if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: testout-${{ matrix.role }}-${{ matrix.variant }}
+          path: |
+            test/out/${{ matrix.variant }}.${{ matrix.role }}.*
+            /tmp/lab-runtime-workdir/**
+          retention-days: 30
+          if-no-files-found: warn
+
+  notify:
+    needs: test-role
+    if: failure()
+    runs-on: lab-runtime
+    steps:
+      - uses: actions/checkout@v4
+      - run: mise run ci:mail-failures
+        env:
+          NEEDS_RESULT: ${{ toJson(needs.test-role.result) }}
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+          MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
