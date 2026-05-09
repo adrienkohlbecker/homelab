@@ -24,10 +24,13 @@
 # untracked packets as INVALID. Keep the explicit rule.
 -A INPUT -p tcp ! --syn -j DROP
 
-# UDP traffic rules
--A INPUT -p udp --dport 5053  -j ACCEPT                                     -m comment --comment "Allow dnscrypt-proxy"
--A INPUT -p udp --dport 5333  -j ACCEPT                                     -m comment --comment "Allow aardvark-dns (post-DNAT from gateway:53)"
--A INPUT -p udp --dport 5353  -j ACCEPT                                     -m comment --comment "Allow mDNS"
+# UDP traffic rules. Source-scope what doesn't need WAN reach:
+# 5053/5333 are container DNS (consumers live on podman0), 5353
+# mDNS is restricted to wireguard clients (physical-LAN multicast
+# browsing won't work as a result — accept that tradeoff).
+-A INPUT -s {{ podman_default_network }} -p udp --dport 5053 -j ACCEPT      -m comment --comment "Allow dnscrypt-proxy (containers)"
+-A INPUT -s {{ podman_default_network }} -p udp --dport 5333 -j ACCEPT      -m comment --comment "Allow aardvark-dns (post-DNAT from gateway:53)"
+-A INPUT -s {{ wireguard_subnet }} -p udp --dport 5353 -j ACCEPT            -m comment --comment "Allow mDNS (wireguard only)"
 -A INPUT -p udp --dport 51820 -j ACCEPT                                     -m comment --comment "Allow Wireguard"
 -A INPUT -p udp --dport 60000:61000 -j ACCEPT                               -m comment --comment "Allow Mosh"
 
@@ -41,12 +44,15 @@
 -A INPUT -p udp --dport 17500 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny Dropbox LanSync"
 -A INPUT -p udp --dport 57621 -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny Spotify P2P"
 
-# TCP traffic rules
+# TCP traffic rules. SSH/HTTP/HTTPS are wide-open (admin + public
+# services); Samba and nut are admin services, restricted to
+# wireguard so physical-LAN devices and any future VLAN can't reach
+# them.
 -A INPUT -p tcp --dport 22    -j ACCEPT                                     -m comment --comment "Allow SSH"
 -A INPUT -p tcp --dport 80    -j ACCEPT                                     -m comment --comment "Allow HTTP"
 -A INPUT -p tcp --dport 443   -j ACCEPT                                     -m comment --comment "Allow HTTPS"
--A INPUT -p tcp --dport 445   -j ACCEPT                                     -m comment --comment "Allow Samba"
--A INPUT -p tcp --dport 3493  -j ACCEPT                                     -m comment --comment "Allow nut"
+-A INPUT -s {{ wireguard_subnet }} -p tcp --dport 445 -j ACCEPT             -m comment --comment "Allow Samba (wireguard only)"
+-A INPUT -s {{ wireguard_subnet }} -p tcp --dport 3493 -j ACCEPT            -m comment --comment "Allow nut (wireguard only)"
 
 # ICMP — only echo-request (ping), rate-limited. Other ICMP types
 # (destination unreachable, time exceeded, etc.) come back as

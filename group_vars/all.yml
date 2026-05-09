@@ -130,6 +130,14 @@ wireguard_peers:
 
 podman_default_network: 10.88.0.0/16
 
+# Aggregate of all wireguard-allocated addresses across servers
+# (10.123.64.x), client roaming pool (10.123.66.x), and the bunk
+# off-site peer (10.123.121.x). /18 covers 10.123.64.0–10.123.127.255
+# without including the physical-LAN ranges (10.123.0.x, 10.123.2.x,
+# etc.). Used by iptables to scope admin services (Samba, nut, mDNS)
+# to traffic arriving via wireguard.
+wireguard_subnet: 10.123.64.0/18
+
 pihole_keepalived_peers:
   - lab
   - pug
