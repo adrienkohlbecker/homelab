@@ -79,6 +79,10 @@
 # Boilerplate policy
 -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 -A FORWARD -m conntrack --ctstate INVALID -j DROP
+# Mirror of the INPUT ! --syn drop — see that rule for the conntrack
+# tcp_loose rationale. Without this a spoofed ACK arriving on wg0 can
+# match the wg0→podman0 DNAT-state allow below in NEW state.
+-A FORWARD -p tcp ! --syn -j DROP
 
 -A FORWARD -i wg0 -o {{ ansible_default_ipv4.interface }} -j ACCEPT -m comment --comment "Allow forwarding traffic to external hosts coming in through wireguard"
 
