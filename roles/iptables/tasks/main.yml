@@ -7,6 +7,24 @@
   tags:
     - iptables
 
+# rules.v6 drops everything in the filter table, so IPv6 traffic
+# never reaches userspace anyway. Disable at the kernel layer too so
+# services that bind on `::` (e.g. transmission) don't sit on a
+# silent dead listener and so neighbor discovery doesn't churn.
+- name: Disable IPv6 at the kernel level
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    value: '1'
+    sysctl_set: true
+    state: present
+    reload: true
+  loop:
+    - net.ipv6.conf.all.disable_ipv6
+    - net.ipv6.conf.default.disable_ipv6
+  become: true
+  tags:
+    - iptables
+
 - name: Configure iptables (v4)
   copy:
     src: rules.v4
