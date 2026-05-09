@@ -12,6 +12,10 @@
 
 #HD_IDLE_OPTS="-h"
 
+# Resolute (26.04) gates the daemon on START_HD_IDLE=true; older
+# releases don't read this variable so it's a harmless no-op there.
+START_HD_IDLE=true
+
 # hd-idle command line options
 # Options are:
 #  -a <name>               Set device name of disks for subsequent idle-time
