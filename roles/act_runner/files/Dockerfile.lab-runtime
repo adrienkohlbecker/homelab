@@ -14,12 +14,16 @@ ENV DEBIAN_FRONTEND=noninteractive
 # for the `minimal` variant's seed iso; python3-yaml so mise-tasks/ci
 # scripts can run without uv. build-essential is for any wheel that
 # needs to compile. gpg + apt-transport-https are for the mise apt repo.
+# nodejs because every actions/checkout / actions/upload-artifact / etc.
+# is a JS action and crun aborts with "executable file 'node' not found"
+# without it.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git jq xz-utils unzip gpg apt-transport-https \
       qemu-system-x86 qemu-utils \
       openssh-client coreutils \
       xorriso cloud-image-utils \
       python3-yaml \
+      nodejs \
       build-essential \
     && rm -rf /var/lib/apt/lists/*
 
