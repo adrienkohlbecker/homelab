@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+# Build a per-role test matrix from the current change set.
+#
+# Sources (in priority order):
+#   workflow_dispatch with INPUTS_ROLES set -- explicit list (or "ALL").
+#   --all on the CLI                       -- full universe (used by test-nightly.yml).
+#   default                                -- git diff HEAD~1 HEAD.
+#
+# Outputs (to $GITHUB_OUTPUT, or stdout when $GITHUB_OUTPUT is unset):
+#   matrix=<JSON array of {role, variant}>  -- input to fromJson() in workflow.
+#   cross_cut=true|false                    -- whether the change touches
+#                                              files that affect every role
+#                                              (operator gets a mail and
+#                                              dispatches a targeted subset
+#                                              manually).
+#
+# A change to a helper role (one with no roles/<name>/tasks/main.yml) is
+# expanded via ci:role-deps into the set of consumer roles. So editing
+# roles/usergroup_immediate/tasks/main.yml fans out to every role that
+# imports usergroup_immediate.
+#
+# Local testing:
+#   mise run ci:detect-roles                # uses git diff HEAD~1 HEAD
+#   INPUTS_ROLES=foo,bar:lab GITHUB_EVENT_NAME=workflow_dispatch mise run ci:detect-roles
+#   mise run ci:detect-roles --all
+set -euo pipefail
+
+# Universe: roles with tasks/main.yml. Helpers without main.yml fall outside
+# and reach the matrix only through role-deps expansion.
+UNIVERSE=$(for d in roles/*/tasks/main.yml; do
+  [ -e "$d" ] || continue
+  basename "$(dirname "$(dirname "$d")")"
+done | sort -u)
+
+in_universe() {
+  grep -qx -- "$1" <<<"$UNIVERSE"
+}
+
+# Lab-variant escalation list. One role per line; comments + blank lines OK.
+LAB_ROLES_FILE=".gitea/ci-lab-roles.txt"
+LAB_ROLES=$(
+  if [ -f "$LAB_ROLES_FILE" ]; then
+    grep -vE '^[[:space:]]*(#|$)' "$LAB_ROLES_FILE" || true
+  fi
+)
+
+is_lab_role() {
+  grep -qx -- "$1" <<<"$LAB_ROLES"
+}
+
+# Cross-cut regex: changes to these paths invalidate every role's matrix
+# entry, so we don't try to be clever -- emit empty matrix + cross_cut=true
+# and let the operator pick a targeted subset via workflow_dispatch.
+CROSS_CUT_RE='^(group_vars/all\.yml|group_vars/test\.yml|host_vars/.*-qemu.*\.yml|test/(testrole|testall|machine)\.py|mise\.toml)$'
+
+emit() {
+  local matrix=$1
+  local cross_cut=$2
+  if [ -n "${GITHUB_OUTPUT:-}" ]; then
+    {
+      echo "matrix=$matrix"
+      echo "cross_cut=$cross_cut"
+    } >>"$GITHUB_OUTPUT"
+  else
+    echo "matrix=$matrix"
+    echo "cross_cut=$cross_cut"
+  fi
+}
+
+# Build a JSON array of {role, variant} entries from a newline-separated role
+# list. Each role gets a (role, box) entry; roles in LAB_ROLES additionally
+# get a (role, lab) entry.
+build_matrix() {
+  local roles=$1
+  local entries=()
+  while IFS= read -r role; do
+    [ -z "$role" ] && continue
+    entries+=("{\"role\":\"$role\",\"variant\":\"box\"}")
+    if is_lab_role "$role"; then
+      entries+=("{\"role\":\"$role\",\"variant\":\"lab\"}")
+    fi
+  done <<<"$roles"
+  if [ ${#entries[@]} -eq 0 ]; then
+    echo "[]"
+  else
+    local IFS=,
+    echo "[${entries[*]}]"
+  fi
+}
+
+# Resolve the role list from --all / INPUTS_ROLES / git diff, then emit.
+
+if [ "${1:-}" = "--all" ]; then
+  emit "$(build_matrix "$UNIVERSE")" "false"
+  exit 0
+fi
+
+if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}" ]; then
+  if [ "$INPUTS_ROLES" = "ALL" ]; then
+    emit "$(build_matrix "$UNIVERSE")" "false"
+    exit 0
+  fi
+  # Comma-separated list. Each token is `role` or `role:variant`.
+  entries=()
+  IFS=',' read -ra tokens <<<"$INPUTS_ROLES"
+  for token in "${tokens[@]}"; do
+    token=$(echo "$token" | xargs) # trim whitespace
+    [ -z "$token" ] && continue
+    if [[ "$token" == *:* ]]; then
+      role="${token%%:*}"
+      variant="${token##*:}"
+    else
+      role="$token"
+      variant="box"
+    fi
+    if ! in_universe "$role"; then
+      echo "error: role '$role' is not in the testable universe (no roles/$role/tasks/main.yml)" >&2
+      exit 1
+    fi
+    entries+=("{\"role\":\"$role\",\"variant\":\"$variant\"}")
+  done
+  if [ ${#entries[@]} -eq 0 ]; then
+    emit "[]" "false"
+  else
+    IFS=,
+    emit "[${entries[*]}]" "false"
+  fi
+  exit 0
+fi
+
+# Push event (or default): diff HEAD~1 HEAD. CI_BASE_REF overrides the base
+# revision (lets unit tests exercise the diff logic against a chosen point;
+# CI itself just leaves it unset).
+BASE_REF="${CI_BASE_REF:-HEAD~1}"
+if ! BASE=$(git rev-parse "$BASE_REF" 2>/dev/null); then
+  echo "no $BASE_REF -- treating as cross-cut so the operator can dispatch a roles=ALL run" >&2
+  emit "[]" "true"
+  exit 0
+fi
+
+CHANGED=$(git diff --name-only "$BASE" HEAD)
+
+if echo "$CHANGED" | grep -qE "$CROSS_CUT_RE"; then
+  echo "cross-cut detected:" >&2
+  echo "$CHANGED" | grep -E "$CROSS_CUT_RE" | sed 's/^/  /' >&2
+  emit "[]" "true"
+  exit 0
+fi
+
+# Direct role detection: extract role names from `^roles/<X>/...` paths,
+# then for each one either add to the matrix (if in universe) or expand
+# via role-deps (if it's a helper).
+DIRECT=$(echo "$CHANGED" | grep -oE '^roles/[^/]+' | sed 's|^roles/||' | sort -u)
+
+ROLES=""
+for role in $DIRECT; do
+  if in_universe "$role"; then
+    ROLES="$ROLES $role"
+    continue
+  fi
+  # Helper role: expand to consumers (intersected with universe).
+  expanded=$(mise run ci:role-deps "$role" 2>/dev/null || true)
+  for consumer in $expanded; do
+    if in_universe "$consumer"; then
+      ROLES="$ROLES $consumer"
+    fi
+  done
+done
+
+ROLES_DEDUPED=$(echo "$ROLES" | tr ' ' '\n' | grep -v '^$' | sort -u)
+emit "$(build_matrix "$ROLES_DEDUPED")" "false"
