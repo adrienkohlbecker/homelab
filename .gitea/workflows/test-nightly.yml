@@ -58,19 +58,21 @@ jobs:
       # on responsiveness for an unrelated workflow_dispatch.
       max-parallel: 4
       matrix:
-        include: ${{ fromJson(needs.gate.outputs.matrix) }}
-    name: ${{ matrix.role }} (${{ matrix.variant }})
+        # See test.yml for why we wrap in a single `cell` dimension instead
+        # of using `include:`.
+        cell: ${{ fromJson(needs.gate.outputs.matrix) }}
+    name: ${{ matrix.cell.role }} (${{ matrix.cell.variant }})
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - run: uv sync
-      - run: test/testrole.py "${{ matrix.role }}" --machine "${{ matrix.variant }}" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir
+      - run: test/testrole.py "${{ matrix.cell.role }}" --machine "${{ matrix.cell.variant }}" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir
       - if: failure()
         uses: actions/upload-artifact@v3
         with:
-          name: testout-${{ matrix.role }}-${{ matrix.variant }}
+          name: testout-${{ matrix.cell.role }}-${{ matrix.cell.variant }}
           path: |
-            test/out/${{ matrix.variant }}.${{ matrix.role }}.*
+            test/out/${{ matrix.cell.variant }}.${{ matrix.cell.role }}.*
             /tmp/lab-runtime-workdir/**
           retention-days: 30
           if-no-files-found: warn
