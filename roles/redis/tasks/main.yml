@@ -1,3 +1,17 @@
+# Per-service podman network with DNS enabled, so consumers (paperless)
+# can reach redis by container name on the same named bridge. Avoids
+# the resolute-broken "publish on bridge gateway" pattern: netavark
+# tears down the default bridge between containers, so binding
+# --publish 10.88.0.1:6379 fails when no other container is up.
+- name: Create redis podman network
+  when: not ansible_check_mode
+  containers.podman.podman_network:
+    name: redis
+    state: present
+  become: true
+  tags:
+    - redis
+
 - name: Add redis group
   group:
     name: redis

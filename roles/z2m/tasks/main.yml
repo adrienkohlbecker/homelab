@@ -1,3 +1,14 @@
+# Join the mosquitto-owned network so z2m can resolve `mosquitto` via
+# aardvark-dns. See paperless/tasks/main.yml for the rationale.
+- name: Create mosquitto podman network
+  when: not ansible_check_mode
+  containers.podman.podman_network:
+    name: mosquitto
+    state: present
+  become: true
+  tags:
+    - z2m
+
 - name: Add z2m group
   group:
     name: z2m

@@ -8,20 +8,11 @@
     name: _test
     tasks_from: nginx
 
-- name: _test | Install dependencies
-  apt:
-    pkg:
-      - redis
-    install_recommends: false
-    cache_valid_time: 3600
-  become: true
-
-- name: _test | Setup redis
-  shell: |
-    set -euo pipefail
-    sed -i 's/^bind.*/bind 0.0.0.0/' /etc/redis/redis.conf
-    sed -i 's/^protected-mode.*/protected-mode no/' /etc/redis/redis.conf
-    systemctl restart redis
-  args:
-    executable: /bin/bash
-  become: true
+# Run the actual redis role so paperless connects to a real
+# containerised redis on the shared "redis" network via aardvark-dns.
+# Replaces the previous apt-package redis on the host bound to
+# 0.0.0.0:6379, which only worked because containers reached it via
+# 10.88.0.1 (the bridge gateway) -- broken on resolute/netavark.
+- name: _setup | Install redis (containerised)
+  import_role:
+    name: redis

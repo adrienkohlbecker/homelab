@@ -41,8 +41,8 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/mosquitto/config:/mosquitto/config \
     --volume /mnt/services/sqlite/mosquitto:/mosquitto/data \
     --user {{ mosquitto_user.uid }}:{{ mosquitto_user.group }} \
+    --network mosquitto \
     --publish 127.0.0.1:1883:1883/tcp \
-    --publish {{ podman_default_network | ansible.utils.ipmath(1) }}:1883:1883/tcp \
     --health-cmd "mosquitto_sub -p 1880 -t 'healthcheck' -C 1 -E -i probe -W 3" \
     --health-startup-cmd "mosquitto_sub -p 1880 -t 'healthcheck' -C 1 -E -i probe -W 3" \
     --health-startup-interval "1s" \

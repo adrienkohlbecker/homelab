@@ -1,3 +1,15 @@
+# Per-service podman network with DNS enabled so consumers (z2m) can
+# reach mosquitto by container name. See redis/tasks/main.yml for the
+# full reasoning.
+- name: Create mosquitto podman network
+  when: not ansible_check_mode
+  containers.podman.podman_network:
+    name: mosquitto
+    state: present
+  become: true
+  tags:
+    - mosquitto
+
 - name: Add mosquitto group
   group:
     name: mosquitto

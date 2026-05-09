@@ -1,3 +1,16 @@
+# Join the redis-owned network so paperless can resolve `redis` via
+# aardvark-dns and connect to the redis container on the same bridge.
+# Idempotent: redis role creates this too in prod; ensures the
+# network exists when paperless is tested standalone.
+- name: Create redis podman network
+  when: not ansible_check_mode
+  containers.podman.podman_network:
+    name: redis
+    state: present
+  become: true
+  tags:
+    - paperless
+
 - name: Add paperless group
   group:
     name: paperless
