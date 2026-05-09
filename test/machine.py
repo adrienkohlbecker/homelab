@@ -174,6 +174,12 @@ class Machine:
     ubuntu_name: str
     machine_timeout: int
     upstream_mirrors: bool = False
+    # Optional workdir parent override. When None, _workdir_parent() falls
+    # through to the subclass default (system tmp for the base class, the
+    # imagedir for QemuMachine). Wired by testrole.py from --workdir-parent
+    # / $HOMELAB_WORKDIR_PARENT so CI workflows can keep the qcow2 tree
+    # mounted ro and stage the per-run TempDir somewhere ephemeral.
+    workdir_parent: Path | None = None
     # Filename (under the per-run workdir) where qemu writes its pidfile.
     idfile: str = dataclasses.field(default="pid", init=False)
 
@@ -212,9 +218,11 @@ class Machine:
 
         Default None puts the workdir under the system tmp. QemuMachine
         overrides to put it on the same filesystem as the packer qcow2s
-        so qemu-img overlays don't cross device boundaries.
+        so qemu-img overlays don't cross device boundaries. An explicit
+        workdir_parent at construction time overrides both — that's the
+        CI knob.
         """
-        return None
+        return self.workdir_parent
 
     def _preflight(self) -> None:
         """Validate external dependencies; subclasses override with tool checks.
@@ -707,6 +715,7 @@ class QemuMachine(Machine):
         machine_timeout: int,
         upstream_mirrors: bool = False,
         *,
+        workdir_parent: Path | None = None,
         image_dir: Path | None = None,
         kernel: Path | None = None,
         initrd: Path | None = None,
@@ -779,6 +788,7 @@ class QemuMachine(Machine):
             ubuntu_name=ubuntu_name,
             machine_timeout=machine_timeout,
             upstream_mirrors=upstream_mirrors,
+            workdir_parent=workdir_parent,
         )
         # idfile defaults to "pid" on the base, which is what we want here.
 
@@ -788,9 +798,11 @@ class QemuMachine(Machine):
         qemu-img backing-file overlays reach the source qcow2 by absolute
         path, so the workdir doesn't strictly need to be colocated, but
         keeping it on the same filesystem matches the operator's mental
-        model and keeps `du` totals predictable.
+        model and keeps `du` totals predictable. When the caller supplies
+        an explicit workdir_parent (CI flag) we honour that instead so
+        the imagedir can be ro-mounted.
         """
-        return self.imagedir
+        return self.workdir_parent or self.imagedir
 
     def print_ssh_instructions(self) -> None:
         super().print_ssh_instructions()
