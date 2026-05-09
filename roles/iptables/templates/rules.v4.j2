@@ -48,11 +48,17 @@
 -A INPUT -p tcp --dport 445   -j ACCEPT                                     -m comment --comment "Allow Samba"
 -A INPUT -p tcp --dport 3493  -j ACCEPT                                     -m comment --comment "Allow nut"
 
-# ICMP — only echo-request (ping). Other ICMP types (destination
-# unreachable, time exceeded, etc.) come back as RELATED via
-# conntrack so the ESTABLISHED,RELATED rule above accepts them.
-# Narrowing here keeps redirects and similar attack vectors out.
--A INPUT -p icmp --icmp-type echo-request -j ACCEPT
+# ICMP — only echo-request (ping), rate-limited. Other ICMP types
+# (destination unreachable, time exceeded, etc.) come back as
+# RELATED via conntrack so the ESTABLISHED,RELATED rule above
+# accepts them. Narrowing here keeps redirects and similar attack
+# vectors out. The rate limit (10/sec sustained, 20 burst) caps
+# echo-reply amplification under flood; overflow drops silently
+# rather than falling through to the catch-all REJECT, which would
+# emit icmp-proto-unreachable and reflect bandwidth back at the
+# spoofed source.
+-A INPUT -p icmp --icmp-type echo-request -m limit --limit 10/sec --limit-burst 20 -j ACCEPT
+-A INPUT -p icmp --icmp-type echo-request -j DROP
 
 # Other protocols
 -A INPUT -p 112 -j ACCEPT -m comment --comment "Allow keepalived (VRRP)"
