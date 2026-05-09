@@ -68,6 +68,14 @@
 #                   FORWARD RULES                #
 ##################################################
 
+# Interface naming below: `wg0` is the literal iface name set by
+# the wireguard role (roles/wireguard/tasks/main.yml's `iface: wg0`)
+# and `podman0` is netavark's default bridge name for the default
+# `podman` network. Both are hardcoded conventions; neither varies
+# across hosts in this inventory. The WAN-side iface (eth0 on prod
+# via netplan set-name, enpXsY on the test VM) is templated via
+# ansible_default_ipv4.interface because it does vary.
+
 # Boilerplate policy
 -A FORWARD -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
 -A FORWARD -m conntrack --ctstate INVALID -j DROP
