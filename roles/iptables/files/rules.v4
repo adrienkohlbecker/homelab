@@ -56,7 +56,6 @@
 
 # Other protocols
 -A INPUT -p 112 -j ACCEPT -m comment --comment "Allow keepalived (VRRP)"
--A INPUT -p 51  -j ACCEPT -m comment --comment "Allow keepalived (auth_type AH)"
 
 # Reject anything that's fallen through to this point
 ## Try to be protocol-specific w/ rejection message
