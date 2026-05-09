@@ -28,6 +28,7 @@
   apt:
     pkg:
       - podman
+      - aardvark-dns
       # podman only Suggests iptables, but netavark shells out to it to set up
       # --publish port forwarding. Without it, container start fails with the
       # misleading "Error: netavark: No such file or directory" (it's iptables
@@ -40,11 +41,39 @@
   tags:
     - podman
 
-- name: install | Install aardvark dns
+# Force netavark as the network backend. Without this drop-in podman
+# auto-detects: if any CNI network already exists it stays on CNI, and
+# CNI doesn't wire DNS without the dnsname plugin (deprecated). With
+# netavark + aardvark-dns (installed above on noble+, dragged in by
+# the backports pin on jammy) container-name resolution Just Works on
+# user-created networks (--disable-dns=false default).
+#
+# Switching backends on a host with running CNI containers leaks
+# iptables rules; on existing CNI hosts a one-shot manual
+# `podman system reset --force` (after stopping everything) is
+# needed -- ansible can't safely automate that.
+- name: install | Force netavark network backend
+  copy:
+    dest: /etc/containers/containers.conf.d/01-netavark.conf
+    content: |
+      [network]
+      network_backend = "netavark"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - podman
+
+# noble+ packages netavark separately; jammy gets it via the
+# podman_backport_packages pin (see vars/main.yml), so the explicit
+# install only fires on the releases where it isn't already pulled.
+- name: install | Install netavark
   when: ansible_distribution_major_version != "22"
   apt:
     pkg:
-      - aardvark-dns
+      - netavark
     cache_valid_time: 3600
   become: true
   tags:

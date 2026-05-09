@@ -7,9 +7,10 @@
   when: not ansible_check_mode
   containers.podman.podman_network:
     name: redis
-    # Explicit so paperless can resolve `redis` via aardvark-dns; the
-    # module otherwise omits the flag and relies on podman defaults,
-    # which are not consistently DNS-enabled across backends.
+    # Explicit so paperless resolves `redis` via aardvark-dns. With
+    # netavark as the network backend (see roles/podman) the flag
+    # actually wires up DNS; on CNI it's a no-op without the dnsname
+    # plugin and we'd have to install that separately.
     disable_dns: false
     state: present
   become: true
