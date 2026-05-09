@@ -26,6 +26,10 @@ jobs:
   build:
     runs-on: lab-runtime
     container:
+      # The runs-on label resolves to lab-runtime:latest already, but
+      # GitHub Actions' schema (and most editors) require image: when a
+      # container: block is present.
+      image: lab-runtime:latest
       options: >-
         --device /dev/kvm
         --group-add keep-groups
@@ -35,13 +39,21 @@ jobs:
       - uses: actions/checkout@v4
       - run: uv sync
       - name: Build
+        # Pass dispatch inputs through env vars rather than substituting
+        # them straight into the shell command -- otherwise a misbehaving
+        # input could break out of the args list. Single-quoting in the
+        # mise run line keeps shell word-splitting predictable.
+        env:
+          PACKER_SOURCES: ${{ inputs.sources }}
+          PACKER_UBUNTU: ${{ inputs.ubuntu }}
         run: |
           set -euo pipefail
-          args=""
-          if [ -n "${{ inputs.sources }}" ]; then
-            args="${{ inputs.sources }}"
+          args=()
+          if [ -n "$PACKER_SOURCES" ]; then
+            # shellcheck disable=SC2206  # sources is whitespace-separated, intentional
+            args+=($PACKER_SOURCES)
           fi
-          if [ -n "${{ inputs.ubuntu }}" ]; then
-            args="$args --ubuntu ${{ inputs.ubuntu }}"
+          if [ -n "$PACKER_UBUNTU" ]; then
+            args+=(--ubuntu "$PACKER_UBUNTU")
           fi
-          mise run packer:build $args
+          mise run packer:build "${args[@]}"
