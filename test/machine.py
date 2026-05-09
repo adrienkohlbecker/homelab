@@ -187,6 +187,8 @@ class Machine:
     output_file: Path = dataclasses.field(init=False)
     journal_file: Path = dataclasses.field(init=False)
     boot_file: Path = dataclasses.field(init=False)
+    dmesg_file: Path = dataclasses.field(init=False)
+    systemctl_failed_file: Path = dataclasses.field(init=False)
     workdir: tempfile.TemporaryDirectory[str] = dataclasses.field(init=False)
     peak_rss_kb: int = dataclasses.field(default=0, init=False)
 
@@ -202,12 +204,15 @@ class Machine:
         self.output_file = OUT_DIR / f"{prefix}.output.ansi"
         self.journal_file = OUT_DIR / f"{prefix}.journal.ansi"
         self.boot_file = OUT_DIR / f"{prefix}.boot.ansi"
+        self.dmesg_file = OUT_DIR / f"{prefix}.dmesg.ansi"
+        self.systemctl_failed_file = OUT_DIR / f"{prefix}.systemctl-failed.ansi"
         # output/boot get truncated by their respective open("w") at write
-        # time, so they don't need pre-cleanup. journal_file is only ever
-        # created in collect_journal() on a failed run, so a stale one from
-        # a prior run would otherwise survive into a healthy run -- drop it
-        # explicitly.
-        self.journal_file.unlink(missing_ok=True)
+        # time, so they don't need pre-cleanup. The failure-only artifacts
+        # (journal/dmesg/systemctl-failed) are only ever created on a
+        # failed run, so stale ones from a prior run would otherwise
+        # survive into a healthy run -- drop them explicitly.
+        for stale in (self.journal_file, self.dmesg_file, self.systemctl_failed_file):
+            stale.unlink(missing_ok=True)
         # System tmp by default; subclasses that need the workdir on a
         # specific filesystem (qemu's qcow2 cache) override _workdir_parent().
         self.workdir = tempfile.TemporaryDirectory(dir=self._workdir_parent())
@@ -505,10 +510,59 @@ class Machine:
             with contextlib.suppress(OSError):
                 await writer.wait_closed()
 
-    async def collect_journal(self) -> None:
-        """Fetch systemd journal for debugging when a run fails."""
+    async def _collect_remote_to_file(self, label: str, dest: Path, *remote_cmd: str) -> bool:
+        """Run *remote_cmd* over SSH, capture stdout into *dest*.
 
-        cmd = self.format_ssh_cmd(
+        Returns True on remote-exit-zero, False otherwise. stderr is streamed
+        to the main log; stdout goes only to *dest*. *label* is what we print
+        when the capture fails or succeeds. Used by the per-run failure
+        diagnostics so each artifact (journal, dmesg, systemctl --failed) is
+        a separate file the operator (or CI artifact upload) can read in
+        isolation.
+        """
+        cmd = self.format_ssh_cmd(*remote_cmd)
+        print_cmd_line(cmd)
+
+        with dest.open("w") as handle:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=handle,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            assert proc.stderr is not None
+            # stderr only -- stdout is already going to the file. Drain to
+            # EOF before waiting so a chatty stderr can't deadlock the
+            # child by filling the pipe buffer. Ordering: stdout lines land
+            # in *dest* in source order (single FD, kernel FIFO); stderr
+            # lines land in the main log in source order. The two streams
+            # go to different destinations so there's no cross-stream
+            # interleave to worry about here.
+            await read_and_write_stream(proc.stderr, "red", [])
+            exitcode = await proc.wait()
+
+        if exitcode != 0:
+            print_line(f"Failed to collect {label}: exit code {exitcode}")
+            return False
+        print_line(f"{label}: {dest}")
+        return True
+
+    async def collect_failure_artifacts(self) -> None:
+        """Collect post-mortem diagnostics from the guest after a failed run.
+
+        Three artifacts:
+          - <variant>.<role>.journal.ansi -- full systemd journal
+          - <variant>.<role>.dmesg.ansi -- guest kernel ring buffer
+          - <variant>.<role>.systemctl-failed.ansi -- list of failed units
+
+        Each runs as a best-effort capture: a failure of one doesn't shadow
+        the others. The caller (testrole.py) then tails just the journal
+        for in-terminal context; the rest are downloaded as CI artifacts
+        when needed.
+        """
+
+        await self._collect_remote_to_file(
+            "Systemd journal",
+            self.journal_file,
             "env",
             "SYSTEMD_COLORS=true",
             "journalctl",
@@ -516,33 +570,33 @@ class Machine:
             "--priority",
             "info",
         )
-        print_cmd_line(cmd)
-
-        with self.journal_file.open("w") as handle:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=handle,
-                stderr=asyncio.subprocess.PIPE,
-            )
-            assert proc.stderr is not None
-            # stderr only -- stdout is already going to the journal file. Read
-            # to EOF before waiting so a chatty stderr can't deadlock the child
-            # by filling the pipe buffer.
-            # Ordering: stdout lines land in journal_file in source order
-            # (single FD, kernel FIFO); stderr lines land in the main log in
-            # source order. The two streams go to different destinations so
-            # there's no cross-stream interleave to worry about here.
-            await read_and_write_stream(proc.stderr, "red", [])
-            exitcode = await proc.wait()
-
-        if exitcode != 0:
-            print_line(f"Failed to collect journal: exit code {exitcode}")
-            return
-        print_line(f"Systemd journal: {self.journal_file}")
+        await self._collect_remote_to_file(
+            "Kernel ring buffer",
+            self.dmesg_file,
+            "sudo",
+            "dmesg",
+            "--color=always",
+            "--ctime",
+        )
+        await self._collect_remote_to_file(
+            "Failed units",
+            self.systemctl_failed_file,
+            "env",
+            "SYSTEMD_COLORS=true",
+            "systemctl",
+            "--failed",
+            "--no-pager",
+        )
 
     def cleanup_logs(self) -> None:
-        """Remove all per-run log artifacts (output, boot, journal)."""
-        for path in (self.output_file, self.boot_file, self.journal_file):
+        """Remove all per-run log artifacts."""
+        for path in (
+            self.output_file,
+            self.boot_file,
+            self.journal_file,
+            self.dmesg_file,
+            self.systemctl_failed_file,
+        ):
             path.unlink(missing_ok=True)
 
     def print_file_tail(self, path: Path, n: int = 50) -> None:
