@@ -115,6 +115,32 @@
     status_code: 200
   become: true
 
+# Reload-path coverage: the role's apply task does a full
+# iptables-restore (flushing netavark's chains) followed by
+# `podman network reload --all` to re-install them. The cold-start
+# probe above doesn't exercise this — netavark's rules are already
+# present from the container start. Re-run iptables-restore directly
+# to wipe netavark's chains, run podman network reload, then re-probe
+# the FORWARD/DNAT path. This catches regressions in the reload flow
+# (podman command rename, netavark behavior change) that the
+# main.yml integration would silently ride out for one boot.
+- name: _verify | Re-flush iptables to wipe netavark chains
+  command: iptables-restore /etc/iptables/rules.v4
+  changed_when: true
+  become: true
+
+- name: _verify | Reload podman networking (mirrors main.yml's reload)
+  command: podman network reload --all
+  changed_when: true
+  become: true
+
+- name: _verify | FORWARD/DNAT after reload — published 32400 still reachable
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://10.99.0.1:32400/
+  register: iptables_verify_after_reload
+  changed_when: false
+  failed_when: iptables_verify_after_reload.rc != 0 or 'iptables-verify-ok' not in iptables_verify_after_reload.stdout
+  become: true
+
 # WAN-side rules use {{ ansible_default_ipv4.interface }} which renders
 # differently per host (eth0 on prod hosts via netplan set-name; the
 # kernel's predictable name e.g. enp0s2 on the harness VM). The wg0
