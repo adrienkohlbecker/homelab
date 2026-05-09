@@ -7,9 +7,11 @@
 #   extns netns ─ veth_ext ── wg0* (10.99.0.1) ─ root netns (the VM)
 # The netns acts as an "external" client. Traffic from extns to 10.99.0.1
 # enters the VM's INPUT/FORWARD chains on -i wg0, so the existing
-# wireguard-ingress allow rules in FWD_DROP match the FORWARD probe
-# (-A FWD_DROP -i wg0 -o podman0 -p tcp --dport 32400 -j ACCEPT) without
-# adding test-only rules. *The veth is named wg0 deliberately for this.
+# wireguard-ingress allow rule in FORWARD
+# (-A FORWARD -i wg0 -o podman0 -d {{ podman_default_network }}
+#  -m conntrack --ctstate DNAT -j ACCEPT) matches the FORWARD probe
+# without adding test-only rules. *The veth is named wg0 deliberately
+# for this.
 
 # Use the real prod podman install path (jammy backports pin, netavark
 # backend, zvol setup) — keeps the test rig faithful to what runs on
@@ -34,10 +36,11 @@
   changed_when: "'Storing signatures' in iptables_verify_pull.stdout or 'Writing manifest' in iptables_verify_pull.stdout"
   become: true
 
-# Publish 32400:32400 (not :80) so the post-DNAT dport stays 32400 and
-# matches the existing `-A FWD_DROP -i wg0 -o podman0 --dport 32400`
-# rule. Run busybox httpd on 32400 inside the container to serve a
-# tiny known-content page the probe can grep for.
+# Publish 32400:32400 (not :80) because :80 is already taken by the
+# python http.server INPUT probe; otherwise the port is arbitrary —
+# the FORWARD rule scopes by --ctstate DNAT, not by dport. Run busybox
+# httpd on 32400 inside the container to serve a tiny known-content
+# page the probe can grep for.
 - name: _verify | Run busybox httpd test container with --publish on 32400
   command: >
     podman run -d --replace --name iptables_verify_httpd
