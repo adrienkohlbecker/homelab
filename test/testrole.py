@@ -11,6 +11,7 @@ log streaming.
 import argparse
 import asyncio
 import contextlib
+import os
 import re
 import sys
 import time
@@ -130,6 +131,13 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
         action="store_true",
         default=False,
         help="Print harness phase timings and enable ansible's profile_tasks callback for per-task timing",
+    )
+    parser.add_argument(
+        "--workdir-parent",
+        type=Path,
+        default=os.environ.get("HOMELAB_WORKDIR_PARENT") or None,
+        metavar="PATH",
+        help="Place the per-run TempDir under this path instead of the imagedir. Lets CI keep the qcow2 tree mounted ro and stage scratch in a container-local /tmp. Falls back to $HOMELAB_WORKDIR_PARENT, then to the imagedir.",
     )
     parser.add_argument("role", help="Role name to test")
 
@@ -331,6 +339,7 @@ def main() -> int:
         ubuntu_name=parsed_args.ubuntu,
         machine_timeout=parsed_args.timeout,
         upstream_mirrors=parsed_args.upstream_mirrors,
+        workdir_parent=parsed_args.workdir_parent,
     )
 
     rc = 0
