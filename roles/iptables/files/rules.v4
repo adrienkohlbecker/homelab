@@ -97,6 +97,13 @@
 
 -A FWD_DROP -i podman0 -o eth0 -j ACCEPT -m comment --comment "Allow container egress through eth0"
 
+# Per-container new-inbound allows. Netavark's NETAVARK_FORWARD chain
+# only accepts RELATED/ESTABLISHED into the container subnet plus
+# egress from it; it does NOT auto-allow new inbound to published
+# ports — the operator owns those rules. Each line below pairs a
+# host-published service with the ingress interface(s) that should
+# reach it (eth0 for LAN, wg0 for VPN). Deleting any line breaks
+# reachability for that service even if `--publish` is set.
 -A FWD_DROP -i eth0 -o podman0 -p tcp --dport 32400 -j ACCEPT -m comment --comment "Allow plex through eth0"
 -A FWD_DROP -i wg0 -o podman0 -p tcp --dport 32400 -j ACCEPT -m comment --comment "Allow plex through wireguard"
 
