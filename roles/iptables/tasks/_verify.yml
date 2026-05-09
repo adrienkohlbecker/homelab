@@ -166,13 +166,16 @@
       - iptables_verify_save.stdout is search('-A FORWARD .*-i ' + ansible_default_ipv4.interface + ' -o podman0.*ctstate DNAT.*-j ACCEPT')
       - iptables_verify_save.stdout is search('-A POSTROUTING -s ' + podman_default_network + ' .*-o ' + ansible_default_ipv4.interface + '.*-j MASQUERADE')
       - iptables_verify_save.stdout is search('-A POSTROUTING -s ' + home_subnet + ' .*-o ' + ansible_default_ipv4.interface + '.*-j MASQUERADE')
-      # INPUT scoping for container-only DNS services
-      - iptables_verify_save.stdout is search('-A INPUT -s ' + podman_default_network + ' .*--dport 5053 -j ACCEPT')
-      - iptables_verify_save.stdout is search('-A INPUT -s ' + podman_default_network + ' .*--dport 5333 -j ACCEPT')
+      # INPUT scoping for container-only DNS services. The trailing
+      # `.*-j ACCEPT` (rather than `-j ACCEPT` literal) is required
+      # because iptables-save inserts `-m comment --comment "..."`
+      # between --dport and the target.
+      - iptables_verify_save.stdout is search('-A INPUT -s ' + podman_default_network + ' .*--dport 5053 .*-j ACCEPT')
+      - iptables_verify_save.stdout is search('-A INPUT -s ' + podman_default_network + ' .*--dport 5333 .*-j ACCEPT')
       # INPUT scoping for wireguard-only admin services
-      - iptables_verify_save.stdout is search('-A INPUT -s ' + wireguard_subnet + ' .*--dport 5353 -j ACCEPT')
-      - iptables_verify_save.stdout is search('-A INPUT -s ' + wireguard_subnet + ' .*--dport 445 -j ACCEPT')
-      - iptables_verify_save.stdout is search('-A INPUT -s ' + wireguard_subnet + ' .*--dport 3493 -j ACCEPT')
+      - iptables_verify_save.stdout is search('-A INPUT -s ' + wireguard_subnet + ' .*--dport 5353 .*-j ACCEPT')
+      - iptables_verify_save.stdout is search('-A INPUT -s ' + wireguard_subnet + ' .*--dport 445 .*-j ACCEPT')
+      - iptables_verify_save.stdout is search('-A INPUT -s ' + wireguard_subnet + ' .*--dport 3493 .*-j ACCEPT')
     fail_msg: >-
       Templated rules don't render with the expected scopes
       (ansible_default_ipv4.interface={{ ansible_default_ipv4.interface }},
