@@ -52,6 +52,10 @@ jobs:
     if: needs.detect.outputs.matrix != '[]' && needs.detect.outputs.matrix != ''
     runs-on: lab-runtime
     container:
+      # The runs-on label resolves to lab-runtime:latest already, but
+      # GitHub Actions' schema (and most editors) require image: when a
+      # container: block is present.
+      image: lab-runtime:latest
       # /dev/kvm via --device for qemu acceleration; --group-add keep-groups
       # passes the runner user's host kvm gid through (rootless userns
       # doesn't map it by default). The qcow2 tree is :ro because the
