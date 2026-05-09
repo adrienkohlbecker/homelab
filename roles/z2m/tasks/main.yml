@@ -4,6 +4,7 @@
   when: not ansible_check_mode
   containers.podman.podman_network:
     name: mosquitto
+    disable_dns: false
     state: present
   become: true
   tags:
