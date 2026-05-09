@@ -21,6 +21,10 @@
 # TCP NEW must have SYN. Conntrack's loose mode (default) classifies
 # mid-stream non-SYN packets as NEW rather than INVALID, so without
 # this an attacker could probe TCP services with crafted ACKs.
+# Flipping the sysctl `nf_conntrack_tcp_loose=0` would catch them via
+# INVALID DROP — but doing so live disconnects in-flight SSH on the
+# first apply because the sysctl change classifies pre-existing
+# untracked packets as INVALID. Keep the explicit rule.
 -A INPUT -p tcp ! --syn -j DROP
 
 # UDP traffic rules
