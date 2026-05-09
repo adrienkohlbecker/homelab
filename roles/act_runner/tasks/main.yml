@@ -61,40 +61,6 @@
   tags:
     - act_runner
 
-# rootless podman in some environments (notably nested QEMU under HVF)
-# can't reach the user systemd bus reliably even with linger + a live
-# user@uid.service. Force podman to use cgroupfs and the file events
-# backend so it doesn't depend on sd-bus at runtime. Real lab boxes
-# work either way; this just removes the VM-specific failure mode.
-- name: Ensure act_runner's containers config dir exists
-  when: not (ansible_check_mode and act_runner_user.changed)
-  file:
-    path: /mnt/scratch/act_runner/.config/containers
-    state: directory
-    owner: act_runner
-    group: act_runner
-    mode: "0755"
-  become: true
-  tags:
-    - act_runner
-
-- name: Pin act_runner's podman to cgroupfs + file events
-  when: not (ansible_check_mode and act_runner_user.changed)
-  copy:
-    dest: /mnt/scratch/act_runner/.config/containers/containers.conf
-    owner: act_runner
-    group: act_runner
-    mode: "0644"
-    backup: true
-    content: |
-      # Managed by roles/act_runner. See tasks/main.yml for context.
-      [engine]
-      cgroup_manager = "cgroupfs"
-      events_logger = "file"
-  become: true
-  tags:
-    - act_runner
-
 # Build the lab-runtime container image used by every CI workflow. The
 # image lives only in the act_runner user's local podman image store —
 # no registry, no push. podman build is layer-cached, so unchanged
@@ -140,7 +106,16 @@
 
 - name: Build lab-runtime image
   when: not ansible_check_mode
-  command: podman build -t lab-runtime:latest -f Dockerfile.lab-runtime .
+  # --cgroup-manager=cgroupfs scopes a workaround to JUST the build
+  # command: rootless podman's default systemd cgroup manager needs to
+  # register transient scopes via the user session bus, but the box
+  # images don't ship dbus-user-session (chroot.sh installs
+  # linux-generic --no-install-recommends), so /run/user/$UID/bus
+  # doesn't exist and crun fails with "sd-bus call: Permission denied".
+  # The user manager is up (linger + start above) — only the dbus
+  # session daemon is missing. cgroupfs sidesteps it entirely. Workflow
+  # containers spawned at runtime use the systemd default unaltered.
+  command: podman --cgroup-manager=cgroupfs build -t lab-runtime:latest -f Dockerfile.lab-runtime .
   args:
     chdir: /mnt/services/act_runner/build
   # become_user: act_runner doesn't propagate XDG_RUNTIME_DIR or
