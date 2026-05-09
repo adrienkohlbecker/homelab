@@ -170,6 +170,7 @@
     owner: root
     group: root
   become: true
+  register: act_runner_installed
   tags:
     - act_runner
 
@@ -323,6 +324,6 @@
   vars:
     systemd_unit_src: act_runner
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or act_runner_user.changed)) }}"
-    systemd_unit_restart: "{{ systemd_unit.changed or act_runner_conf.changed or act_runner_registration.changed or act_runner_json_conf.changed }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or act_runner_conf.changed or act_runner_registration.changed or act_runner_json_conf.changed or act_runner_installed.changed }}"
   tags:
     - act_runner
