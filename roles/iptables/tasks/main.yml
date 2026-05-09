@@ -40,7 +40,81 @@
 
 - name: Apply iptables v4
   when: iptables_v4.changed
-  command: iptables-restore -n /etc/iptables/rules.v4
+  command: iptables-restore /etc/iptables/rules.v4
+  changed_when: true
+  become: true
+  tags:
+    - iptables
+
+# Full restore (no -n) flushes all chains in every table the file
+# touches — including third-party chains: netavark (NETAVARK_FORWARD,
+# NETAVARK-HOSTPORT-*), libvirt (per-network LIBVIRT_*), fail2ban
+# (f2b-* and INPUT jumps). Each integration that adds runtime rules
+# needs a stat-gated reload here so a rules.v4 change doesn't leave
+# containers / VMs / bans broken. Stat-gates also cover first-apply
+# (these tools may not be installed yet — iptables runs early in
+# site.yml).
+- name: Check for podman binary
+  stat:
+    path: /usr/bin/podman
+  register: iptables_podman_binary
+  tags:
+    - iptables
+
+- name: Reload netavark/podman firewall rules after restore
+  when: iptables_v4.changed and iptables_podman_binary.stat.exists
+  command: podman network reload --all
+  changed_when: true
+  become: true
+  tags:
+    - iptables
+
+- name: Check for virsh binary (libvirt)
+  stat:
+    path: /usr/bin/virsh
+  register: iptables_virsh_binary
+  tags:
+    - iptables
+
+- name: List active libvirt networks
+  when: iptables_v4.changed and iptables_virsh_binary.stat.exists
+  command: virsh net-list --name
+  register: iptables_libvirt_networks
+  changed_when: false
+  become: true
+  tags:
+    - iptables
+
+# net-destroy + net-start re-installs the network's iptables rules
+# without restarting libvirtd or guest VMs. ~1s connectivity blip per
+# network for any guest attached to it; guests don't reboot.
+- name: Reload libvirt networks (re-installs iptables rules)
+  when: iptables_v4.changed and iptables_virsh_binary.stat.exists
+  shell: |
+    set -euo pipefail
+    virsh net-destroy "{{ item }}"
+    virsh net-start "{{ item }}"
+  args:
+    executable: /bin/bash
+  loop: "{{ iptables_libvirt_networks.stdout_lines | default([]) | select | list }}"
+  changed_when: true
+  become: true
+  tags:
+    - iptables
+
+- name: Check for fail2ban-client binary
+  stat:
+    path: /usr/bin/fail2ban-client
+  register: iptables_fail2ban_binary
+  tags:
+    - iptables
+
+# fail2ban-client reload re-creates its f2b-* chains and the INPUT
+# jump that the iptables-restore just wiped. Active bans persist (in
+# fail2ban's database) and get re-applied on reload.
+- name: Reload fail2ban (re-installs banned IP iptables rules)
+  when: iptables_v4.changed and iptables_fail2ban_binary.stat.exists
+  command: fail2ban-client reload
   changed_when: true
   become: true
   tags:
