@@ -89,6 +89,18 @@
   tags:
     - netdata
 
+# deb822_repository writes the .sources file but doesn't run
+# `apt update`, so the install below would otherwise hit a stale
+# cache (cache_valid_time=3600) and fail to find `netdata`. Force
+# a refresh on the run that actually changed the repo.
+- name: install | Refresh apt cache after netdata repo change
+  when: apt_repository_netdata.changed and not ansible_check_mode
+  apt:
+    update_cache: true
+  become: true
+  tags:
+    - netdata
+
 - name: install | Install netdata
   when: not (ansible_check_mode and apt_repository_netdata.changed)
   apt:
