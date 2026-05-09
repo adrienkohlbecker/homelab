@@ -32,3 +32,10 @@ netplan:
       dhcp6: false
 
 has_transcoding_acceleration: false
+
+# box.yml has nut_monitor_enabled=true for the prod box (which has a
+# real UPS); the qemu test fixture has no UPS, so disable. With the
+# gate in roles/nut_monitor/tasks/main.yml the unit is skipped on
+# this host -- avoids upsmon's "connection refused" loop after nut
+# 2.8 (resolute) stopped tolerating an absent upsd at startup.
+nut_monitor_enabled: false
