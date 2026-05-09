@@ -100,7 +100,9 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}
     emit "$(build_matrix "$UNIVERSE")" "false"
     exit 0
   fi
-  # Comma-separated list. Each token is `role` or `role:variant`.
+  # Comma-separated list. Each token is `role` (variant defaulted, with
+  # lab escalation applied if the role is in ci-lab-roles.txt) or
+  # `role:variant` (exact, no escalation -- user said what they wanted).
   entries=()
   IFS=',' read -ra tokens <<<"$INPUTS_ROLES"
   for token in "${tokens[@]}"; do
@@ -109,15 +111,22 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}
     if [[ "$token" == *:* ]]; then
       role="${token%%:*}"
       variant="${token##*:}"
+      if ! in_universe "$role"; then
+        echo "error: role '$role' is not in the testable universe (no roles/$role/tasks/main.yml)" >&2
+        exit 1
+      fi
+      entries+=("{\"role\":\"$role\",\"variant\":\"$variant\"}")
     else
       role="$token"
-      variant="box"
+      if ! in_universe "$role"; then
+        echo "error: role '$role' is not in the testable universe (no roles/$role/tasks/main.yml)" >&2
+        exit 1
+      fi
+      entries+=("{\"role\":\"$role\",\"variant\":\"box\"}")
+      if is_lab_role "$role"; then
+        entries+=("{\"role\":\"$role\",\"variant\":\"lab\"}")
+      fi
     fi
-    if ! in_universe "$role"; then
-      echo "error: role '$role' is not in the testable universe (no roles/$role/tasks/main.yml)" >&2
-      exit 1
-    fi
-    entries+=("{\"role\":\"$role\",\"variant\":\"$variant\"}")
   done
   if [ ${#entries[@]} -eq 0 ]; then
     emit "[]" "false"
