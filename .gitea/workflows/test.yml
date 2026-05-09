@@ -1,0 +1,84 @@
+name: test
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      roles:
+        description: 'Comma-separated role names (or role:variant). `ALL` = every role. Empty = use git diff.'
+        required: false
+        default: ''
+
+# Shared with test-nightly.yml and packer-build.yml so reads/writes against
+# /mnt/scratch/qemu serialise. The harness writes per-run workdirs there
+# (under --workdir-parent /tmp/lab-runtime-workdir these days, but the
+# artifact tree itself is bind-mounted ro into test cells), and packer-build
+# rewrites the qcow2s. cancel-in-progress: false because every push gets
+# its own clean run with its own commit history.
+concurrency:
+  group: lab-qemu-artifacts
+  cancel-in-progress: false
+
+jobs:
+  detect:
+    runs-on: lab-runtime
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+      cross_cut: ${{ steps.detect.outputs.cross_cut }}
+    steps:
+      - uses: actions/checkout@v4
+        # 50 commits is enough for HEAD~1 plus a typical session of pushes;
+        # detect-roles only ever looks at HEAD..HEAD~1 anyway.
+        with: { fetch-depth: 50 }
+      - id: detect
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          INPUTS_ROLES: ${{ inputs.roles }}
+        run: mise run ci:detect-roles
+
+  notify-cross-cut:
+    needs: detect
+    if: needs.detect.outputs.cross_cut == 'true'
+    runs-on: lab-runtime
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 50 }
+      - run: mise run ci:mail-cross-cut
+        env:
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+          MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
+
+  test-role:
+    needs: detect
+    if: needs.detect.outputs.matrix != '[]' && needs.detect.outputs.matrix != ''
+    runs-on: lab-runtime
+    container:
+      # /dev/kvm via --device for qemu acceleration; --group-add keep-groups
+      # passes the runner user's host kvm gid through (rootless userns
+      # doesn't map it by default). The qcow2 tree is :ro because the
+      # harness writes per-run scratch under /tmp/lab-runtime-workdir
+      # instead (--workdir-parent flag on testrole.py).
+      options: >-
+        --device /dev/kvm
+        --group-add keep-groups
+        --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include: ${{ fromJson(needs.detect.outputs.matrix) }}
+    name: ${{ matrix.role }} (${{ matrix.variant }})
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - run: uv sync
+      - run: test/testrole.py "${{ matrix.role }}" --machine "${{ matrix.variant }}" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir
+      - name: Upload harness output on failure
+        if: failure()
+        uses: actions/upload-artifact@v3
+        with:
+          name: testout-${{ matrix.role }}-${{ matrix.variant }}
+          path: |
+            test/out/${{ matrix.variant }}.${{ matrix.role }}.*
+            /tmp/lab-runtime-workdir/**
+          retention-days: 14
+          if-no-files-found: warn
