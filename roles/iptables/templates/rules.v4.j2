@@ -84,8 +84,8 @@
 # `--publish 0.0.0.0:` port). New containers self-expose without
 # rule edits; the {{ ansible_default_ipv4.interface }}/wg0 scoping prevents reachability from any
 # future interface (guest VLAN, mgmt net) that we haven't trusted.
--A FORWARD -i {{ ansible_default_ipv4.interface }} -o podman0 -d 10.88.0.0/16 -m conntrack --ctstate DNAT -j ACCEPT -m comment --comment "Reach published containers via LAN"
--A FORWARD -i wg0  -o podman0 -d 10.88.0.0/16 -m conntrack --ctstate DNAT -j ACCEPT -m comment --comment "Reach published containers via wireguard"
+-A FORWARD -i {{ ansible_default_ipv4.interface }} -o podman0 -d {{ podman_default_network }} -m conntrack --ctstate DNAT -j ACCEPT -m comment --comment "Reach published containers via LAN"
+-A FORWARD -i wg0  -o podman0 -d {{ podman_default_network }} -m conntrack --ctstate DNAT -j ACCEPT -m comment --comment "Reach published containers via wireguard"
 
 -A FORWARD -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] FORWARD:REJECT: "
 -A FORWARD -j DROP
