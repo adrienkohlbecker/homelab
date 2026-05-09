@@ -124,6 +124,92 @@
       loop_control:
         label: "{{ item.item }}"
 
+    # End-to-end exercise: install the HWE kernel, prove the postinst.d
+    # hook restages /EFI/Linux/, reboot, and prove EDK2 -> rEFInd ->
+    # kernel-EFI-stub picked up the new kernel. HWE meta-packages exist
+    # for jammy and noble; resolute has no HWE concept so this section
+    # is skipped there.
+    - name: _verify | HWE-kernel hook + reboot exercise
+      when: ansible_distribution_release in ["jammy", "noble"]
+      block:
+        - name: _verify | Capture uname -r before HWE install
+          ansible.builtin.command: uname -r
+          changed_when: false
+          register: _packer_verify_uname_before
+
+        - name: _verify | Capture /EFI/Linux/{vmlinuz.efi,initrd} hashes before HWE install
+          ansible.builtin.stat:
+            path: "{{ item }}"
+            get_checksum: true
+            checksum_algorithm: sha256
+          loop:
+            - /boot/efi/EFI/Linux/vmlinuz.efi
+            - /boot/efi/EFI/Linux/initrd
+          register: _packer_verify_efi_linux_before
+          become: true
+
+        - name: _verify | Install HWE kernel (triggers postinst.d hook)
+          ansible.builtin.apt:
+            name: linux-generic-hwe-{{ '22.04' if ansible_distribution_release == 'jammy' else '24.04' }}
+            state: present
+            update_cache: true
+          become: true
+          register: _packer_verify_hwe_install
+
+        - name: _verify | HWE install was a real install, not a no-op
+          ansible.builtin.assert:
+            that: _packer_verify_hwe_install.changed
+            fail_msg: >-
+              apt reported no changes from `linux-generic-hwe-*` —
+              HWE was already current, so the test premise is broken
+              (the hook would never fire and there's nothing to reboot
+              into)
+
+        - name: _verify | Capture /EFI/Linux/{vmlinuz.efi,initrd} hashes after HWE install
+          ansible.builtin.stat:
+            path: "{{ item }}"
+            get_checksum: true
+            checksum_algorithm: sha256
+          loop:
+            - /boot/efi/EFI/Linux/vmlinuz.efi
+            - /boot/efi/EFI/Linux/initrd
+          register: _packer_verify_efi_linux_after
+          become: true
+
+        - name: _verify | Hook restaged vmlinuz.efi and initrd onto the ESP
+          ansible.builtin.assert:
+            that:
+              - >-
+                _packer_verify_efi_linux_after.results[0].stat.checksum
+                != _packer_verify_efi_linux_before.results[0].stat.checksum
+              - >-
+                _packer_verify_efi_linux_after.results[1].stat.checksum
+                != _packer_verify_efi_linux_before.results[1].stat.checksum
+            fail_msg: >-
+              /EFI/Linux/vmlinuz.efi or /EFI/Linux/initrd unchanged
+              after HWE install — postinst.d / post-update.d hook
+              didn't fire (or fired but failed silently)
+
+        - name: _verify | Reboot to pick up the new kernel
+          ansible.builtin.reboot:
+            reboot_timeout: 300
+          become: true
+
+        - name: _verify | Capture uname -r after reboot
+          ansible.builtin.command: uname -r
+          changed_when: false
+          register: _packer_verify_uname_after
+
+        - name: _verify | EDK2 -> rEFInd -> EFI-stub booted into the new kernel
+          ansible.builtin.assert:
+            that: >-
+              _packer_verify_uname_after.stdout
+              != _packer_verify_uname_before.stdout
+            fail_msg: >-
+              uname -r is still {{ _packer_verify_uname_before.stdout }}
+              after reboot — firmware kept booting the old kernel even
+              though the hook restaged a newer one
+
 # --- x86_64: ZBM is the default boot path; no /EFI/Linux staging ---
 
 - name: _verify | ZBM-default-boot assertions (x86_64)
