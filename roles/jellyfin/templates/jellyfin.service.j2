@@ -29,7 +29,11 @@ PartOf=zfs_autosnapshot.target
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
-TimeoutSec=120
+# First-boot EF Core migrations on the SQLite library DB take >100s
+# on emulated aarch64 (the default 100s health-start-period below
+# would otherwise time the unit out before sdnotify=healthy fires).
+# TimeoutSec must outlast --health-start-period for the wait to win.
+TimeoutSec=360
 RestartSec=5
 Type=notify
 NotifyAccess=all
@@ -59,7 +63,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8096/health" \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
-    --health-start-period "100s" \
+    --health-start-period "300s" \
     --stop-timeout 120 \
     docker.io/jellyfin/jellyfin:10.10.6
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
