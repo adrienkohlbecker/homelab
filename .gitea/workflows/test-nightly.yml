@@ -58,21 +58,26 @@ jobs:
       # on responsiveness for an unrelated workflow_dispatch.
       max-parallel: 4
       matrix:
-        # See test.yml for why we wrap in a single `cell` dimension instead
-        # of using `include:`.
-        cell: ${{ fromJson(needs.gate.outputs.matrix) }}
-    name: ${{ matrix.cell.role }} (${{ matrix.cell.variant }})
+        # See test.yml for why entries are flat "role:variant" strings.
+        spec: ${{ fromJson(needs.gate.outputs.matrix) }}
+    name: ${{ matrix.spec }}
     timeout-minutes: 30
     steps:
+      - name: Parse role:variant
+        run: |
+          set -euo pipefail
+          spec='${{ matrix.spec }}'
+          echo "TEST_ROLE=${spec%%:*}" >>"$GITHUB_ENV"
+          echo "TEST_VARIANT=${spec##*:}" >>"$GITHUB_ENV"
       - uses: actions/checkout@v4
       - run: uv sync
-      - run: test/testrole.py "${{ matrix.cell.role }}" --machine "${{ matrix.cell.variant }}" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir
+      - run: test/testrole.py "$TEST_ROLE" --machine "$TEST_VARIANT" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir
       - if: failure()
         uses: actions/upload-artifact@v3
         with:
-          name: testout-${{ matrix.cell.role }}-${{ matrix.cell.variant }}
+          name: testout-${{ env.TEST_ROLE }}-${{ env.TEST_VARIANT }}
           path: |
-            test/out/${{ matrix.cell.variant }}.${{ matrix.cell.role }}.*
+            test/out/${{ env.TEST_VARIANT }}.${{ env.TEST_ROLE }}.*
             /tmp/lab-runtime-workdir/**
           retention-days: 30
           if-no-files-found: warn

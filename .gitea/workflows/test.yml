@@ -69,25 +69,30 @@ jobs:
       fail-fast: false
       max-parallel: 2
       matrix:
-        # Single dimension holding the whole {role, variant} object;
-        # access fields via matrix.cell.<field>. Using `include:` with a
-        # JSON-built list works on GitHub Actions but Gitea 1.21.11 doesn't
-        # unpack the nested keys into matrix.<key>, leaving matrix.role
-        # and matrix.variant empty in the cell context.
-        cell: ${{ fromJson(needs.detect.outputs.matrix) }}
-    name: ${{ matrix.cell.role }} (${{ matrix.cell.variant }})
+        # Flat "role:variant" strings; Gitea 1.21.11 doesn't expand
+        # `${{ matrix.<obj>.<field> }}` for fromJson-derived objects,
+        # so the matrix entries are strings and we shell-parse them
+        # into $GITHUB_ENV in the first step.
+        spec: ${{ fromJson(needs.detect.outputs.matrix) }}
+    name: ${{ matrix.spec }}
     timeout-minutes: 30
     steps:
+      - name: Parse role:variant
+        run: |
+          set -euo pipefail
+          spec='${{ matrix.spec }}'
+          echo "TEST_ROLE=${spec%%:*}" >>"$GITHUB_ENV"
+          echo "TEST_VARIANT=${spec##*:}" >>"$GITHUB_ENV"
       - uses: actions/checkout@v4
       - run: uv sync
-      - run: test/testrole.py "${{ matrix.cell.role }}" --machine "${{ matrix.cell.variant }}" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir
+      - run: test/testrole.py "$TEST_ROLE" --machine "$TEST_VARIANT" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir
       - name: Upload harness output on failure
         if: failure()
         uses: actions/upload-artifact@v3
         with:
-          name: testout-${{ matrix.cell.role }}-${{ matrix.cell.variant }}
+          name: testout-${{ env.TEST_ROLE }}-${{ env.TEST_VARIANT }}
           path: |
-            test/out/${{ matrix.cell.variant }}.${{ matrix.cell.role }}.*
+            test/out/${{ env.TEST_VARIANT }}.${{ env.TEST_ROLE }}.*
             /tmp/lab-runtime-workdir/**
           retention-days: 14
           if-no-files-found: warn
