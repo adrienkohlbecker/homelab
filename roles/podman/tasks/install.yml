@@ -29,6 +29,7 @@
     pkg:
       - podman
       - aardvark-dns
+      - netavark
       # podman only Suggests iptables, but netavark shells out to it to set up
       # --publish port forwarding. Without it, container start fails with the
       # misleading "Error: netavark: No such file or directory" (it's iptables
@@ -62,19 +63,6 @@
     group: root
     mode: "0644"
     backup: true
-  become: true
-  tags:
-    - podman
-
-# noble+ packages netavark separately; jammy gets it via the
-# podman_backport_packages pin (see vars/main.yml), so the explicit
-# install only fires on the releases where it isn't already pulled.
-- name: install | Install netavark
-  when: ansible_distribution_major_version != "22"
-  apt:
-    pkg:
-      - netavark
-    cache_valid_time: 3600
   become: true
   tags:
     - podman
