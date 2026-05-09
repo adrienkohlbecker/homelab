@@ -108,31 +108,7 @@
 
 COMMIT
 
-*raw
-:PREROUTING ACCEPT [0:0]
-:OUTPUT ACCEPT [0:0]
-COMMIT
-
 *nat
-:PREROUTING ACCEPT [0:0]
-:INPUT ACCEPT [0:0]
-:OUTPUT ACCEPT [0:0]
 :POSTROUTING ACCEPT [0:0]
-
 -A POSTROUTING -o eth0 -j MASQUERADE -m comment --comment "Ensure forwarded packets have our IP as source and keep track of where to send the replies"
-
-COMMIT
-
-*security
-:INPUT ACCEPT [0:0]
-:FORWARD ACCEPT [0:0]
-:OUTPUT ACCEPT [0:0]
-COMMIT
-
-*mangle
-:PREROUTING ACCEPT [0:0]
-:INPUT ACCEPT [0:0]
-:FORWARD ACCEPT [0:0]
-:OUTPUT ACCEPT [0:0]
-:POSTROUTING ACCEPT [0:0]
 COMMIT
