@@ -77,26 +77,16 @@
 
 -A FORWARD -i podman0 -o eth0 -j ACCEPT -m comment --comment "Allow container egress through eth0"
 
-# Per-container new-inbound allows. Netavark's NETAVARK_FORWARD chain
-# only accepts RELATED/ESTABLISHED into the container subnet plus
-# egress from it; it does NOT auto-allow new inbound to published
-# ports — the operator owns those rules. Each line below pairs a
-# host-published service with the ingress interface(s) that should
-# reach it (eth0 for LAN, wg0 for VPN). Deleting any line breaks
-# reachability for that service even if `--publish` is set.
--A FORWARD -i eth0 -o podman0 -p tcp --dport 32400 -j ACCEPT -m comment --comment "Allow plex through eth0"
--A FORWARD -i wg0 -o podman0 -p tcp --dport 32400 -j ACCEPT -m comment --comment "Allow plex through wireguard"
-
--A FORWARD -i eth0 -o podman0 -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow pihole tcp through eth0"
--A FORWARD -i wg0 -o podman0 -p tcp --dport 53 -j ACCEPT -m comment --comment "Allow pihole tcp through wireguard"
--A FORWARD -i eth0 -o podman0 -p udp --dport 53 -j ACCEPT -m comment --comment "Allow pihole udp through eth0"
--A FORWARD -i wg0 -o podman0 -p udp --dport 53 -j ACCEPT -m comment --comment "Allow pihole udp through wireguard"
-
--A FORWARD -i eth0 -o podman0 -p tcp --dport 51413 -j ACCEPT -m comment --comment "Allow transmission tcp through eth0"
--A FORWARD -i eth0 -o podman0 -p udp --dport 51413 -j ACCEPT -m comment --comment "Allow transmission udp through eth0"
-
--A FORWARD -i eth0 -o podman0 -p tcp --dport 1400 -j ACCEPT -m comment --comment "Allow sonos app control for homeassistant tcp through eth0"
--A FORWARD -i eth0 -o podman0 -p udp --dport 3722 -j ACCEPT -m comment --comment "Allow apple tv for homeassistant udp through eth0"
+# Reach published containers via netavark's DNAT. Netavark's
+# NETAVARK_FORWARD chain only accepts RELATED/ESTABLISHED + egress
+# *from* the container subnet — new inbound is the operator's
+# responsibility. We accept any packet whose ingress is eth0 or wg0
+# and that conntrack tagged as DNAT (i.e. netavark rewrote it for a
+# `--publish 0.0.0.0:` port). New containers self-expose without
+# rule edits; the eth0/wg0 scoping prevents reachability from any
+# future interface (guest VLAN, mgmt net) that we haven't trusted.
+-A FORWARD -i eth0 -o podman0 -m conntrack --ctstate DNAT -j ACCEPT -m comment --comment "Reach published containers via LAN"
+-A FORWARD -i wg0  -o podman0 -m conntrack --ctstate DNAT -j ACCEPT -m comment --comment "Reach published containers via wireguard"
 
 -A FORWARD -m limit --limit 5/min --limit-burst 10 -j LOG --log-prefix "[iptables] FORWARD:REJECT: "
 -A FORWARD -j DROP
