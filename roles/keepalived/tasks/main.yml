@@ -9,6 +9,21 @@
   tags:
     - keepalived
 
+# Without ip_nonlocal_bind=1 a service can only bind on IPs present
+# on a local interface, so on the keepalived secondary (where the
+# VIP isn't currently held) the bind fails with "cannot assign
+# requested address". Setting this once globally lets services
+# (e.g. pihole on the keepalived VIP) bind regardless of who owns
+# the VIP at any given moment.
+- name: Allow services to bind on VIPs not currently held
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_nonlocal_bind
+    value: '1'
+    sysctl_file: /etc/sysctl.d/30-keepalived.conf
+  become: true
+  tags:
+    - keepalived
+
 - name: Create configuration directory
   file:
     dest: /etc/keepalived/conf.d
