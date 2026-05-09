@@ -47,22 +47,6 @@
   changed_when: true
   become: true
 
-# Netavark appends `-A FORWARD ... -j NETAVARK_FORWARD` after our
-# `-A FORWARD -j FWD_DROP`. NETAVARK_FORWARD only accepts
-# RELATED/ESTABLISHED + container-egress (it doesn't auto-allow new
-# inbound to published ports — that's why the per-container allows in
-# FWD_DROP exist). For prod-faithful ordering we still want netavark's
-# jump first; delete-and-re-append our jump so it lands at the end.
-- name: _verify | Reorder FWD_DROP after netavark's jump
-  shell: |
-    set -euo pipefail
-    iptables -D FORWARD -j FWD_DROP 2>/dev/null || true
-    iptables -A FORWARD -j FWD_DROP
-  args:
-    executable: /bin/bash
-  changed_when: true
-  become: true
-
 - name: _verify | Bind python http.server on :80 (an INPUT-allowed port)
   command: >
     systemd-run --unit iptables-verify-listener --remain-after-exit
