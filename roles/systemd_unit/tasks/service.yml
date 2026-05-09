@@ -42,6 +42,25 @@
   loop: "{{ systemd_unit_podman_images.images | default([]) }}"
   become: true
 
+# Clear any rate-limit / failed state before starting. A unit that has
+# crashed StartLimitBurst times within StartLimitInterval gets stuck
+# in "Start request repeated too quickly" -- ansible's systemd module
+# would surface that as a fatal error on the next play even though
+# the underlying cause has been fixed. reset-failed is a no-op on
+# healthy units; failed_when=false tolerates the unit not existing
+# yet (e.g. a config-only run that touches an as-yet-uninstalled
+# unit).
+- name: Reset failed state to clear any rate-limit
+  when:
+    - systemd_unit_condition | default(true)
+    - systemd_unit_start | default(true)
+    - not ansible_check_mode
+  command: "systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} reset-failed {{ systemd_unit_dest | default(systemd_unit_src) }}"
+  changed_when: false
+  failed_when: false
+  become: true
+  become_user: "{{ systemd_unit_user | default('root') }}"
+
 - name: Start the service
   when: (systemd_unit_condition | default(true)) and (systemd_unit_start | default(true))
   systemd:
