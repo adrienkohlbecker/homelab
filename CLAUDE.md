@@ -58,6 +58,30 @@ Two packer images, both first-class:
 - `zfs` — single-disk rpool. Consumed by the `box` and `pug` test variants.
 - `zfs-lab` — mdadm-EFI + mdadm-swap + 3-disk mirror rpool. Consumed by the `lab` test variant; matches the lab-class prod host shape. Doubles as the multi-disk regression for `chroot.sh` / `provision.sh` (both images must build clean on every `mise run packer:build`) and as a copy-paste reference for provisioning new lab-class hosts.
 
+## Continuous Integration
+Gitea Actions on the lab runner (`act_runner` role, label `lab-runtime`). Four workflows:
+- `lint` — every push, runs `mise run lint` inside the lab-runtime container. Concurrency cancels superseded pushes on the same ref.
+- `test` — every push, fans out per-role. `detect` job runs `mise run ci:detect-roles` (matrix builder); cross-cut paths (`group_vars/all.yml`, `group_vars/test.yml`, `host_vars/*-qemu*.yml`, `test/(testrole|testall|machine).py`, `mise.toml`) emit `cross_cut=true` + an empty matrix and notify-cross-cut sends mail with manual-trigger instructions. Otherwise each changed role becomes a `test-role / <role> (<variant>)` cell. Helper roles (no `tasks/main.yml`) expand to consumers via `mise run ci:role-deps <helper>` (recursive YAML walk over `import_role`/`include_role`, descends `block`/`rescue`/`always`).
+- `test-nightly` — cron `0 2 * * *` + `workflow_dispatch`. Activity gate: skips when no commits landed in the last 25h. Otherwise full-universe matrix at `max-parallel: 4` (push uses 2). Mails on `failure()`.
+- `packer-build` — `workflow_dispatch` + push touching `packer/**` or `mise-tasks/packer/**`. Only writer of `/mnt/scratch/qemu`.
+
+All three QEMU-using workflows share `concurrency: lab-qemu-artifacts` so packer can't rewrite the qcow2 tree mid-test. Test workflows mount `/mnt/scratch/qemu:ro` and pass `--workdir-parent /tmp/lab-runtime-workdir` to `test/testrole.py` so the harness's per-run scratch lands in container-local tmp instead of the artifact tree.
+
+The `lab-runtime` image is built by the `act_runner` role on apply (Dockerfile at [roles/act_runner/files/Dockerfile.lab-runtime](roles/act_runner/files/Dockerfile.lab-runtime)). Bakes mise + the resolved tool tree (python 3.14, uv, opentofu, packer, shellcheck, shfmt, tflint, typos), pre-warms uv's wheel cache, installs nodejs (JS-action runtime), qemu-system-x86 + qemu-utils + openssh-client + xorriso + cloud-image-utils + python3-yaml. To refresh: bump `mise.toml` / `pyproject.toml` / `uv.lock` / `Dockerfile.lab-runtime` and re-apply the act_runner role to lab. `podman build`'s layer cache makes a no-op rebuild ~200ms.
+
+Variant escalation: [.gitea/ci-lab-roles.txt](.gitea/ci-lab-roles.txt) lists roles that get an extra `(role, lab)` matrix entry on top of the default `(role, box)`. Add a role here only when it has prod-shape behaviour that genuinely diverges between the single-disk box rpool and lab's 3-disk mirror rpool — every entry doubles the cost.
+
+Notifications go through Mailgun's HTTP API (not the host's postfix) — two Gitea repo secrets `MAILGUN_API_KEY` and `MAILGUN_DOMAIN` populated once from `group_vars/prod.yml`. `mise run ci:mail-cross-cut` and `mise run ci:mail-failures` are the entry points; both fail loudly on missing secrets.
+
+To trigger a targeted subset manually: Actions tab → `test` → Run workflow → set `roles=foo,bar:lab,baz`. `roles=ALL` runs the entire universe. `roles=foo` (no `:variant`) auto-escalates to lab if foo is in `ci-lab-roles.txt`; `roles=foo:box` (explicit) is exact, no escalation.
+
+The runner uses `--device /dev/kvm --group-add 109` for KVM acceleration (109 = lab's `kvm` gid; bake the kvm group via `service_user_extra_groups: [kvm]` on the act_runner user). NOT `--group-add keep-groups` — that's a podman-CLI-only flag, but act_runner talks to podman through the docker-API socket which routes through Docker semantics that interpret `keep-groups` as a literal group name to look up in /etc/group.
+
+Local debugging:
+- `CI_BASE_REF=HEAD~5 mise run ci:detect-roles` — preview what a multi-commit push would fan out to.
+- `GITHUB_EVENT_NAME=workflow_dispatch INPUTS_ROLES=foo,bar mise run ci:detect-roles` — preview a manual dispatch.
+- `mise run ci:role-deps <helper>` — list consumers of a helper role.
+
 ## Commit & Pull Request Guidelines
 History favors short, imperative subjects such as “Fix dnscrypt” or “Add profilarr”; prefix with a role when it helps clarity (`wireguard: rotate peers`). Each PR should summarize the motivation, list impacted hosts or roles, and link related issues. Mention which commands were run (`test/testrole.py`, `test/testall.py`, `terraform plan`, screenshots when relevant) and flag inventory, vault, or DNS updates so reviewers can re-run `vault.sh`.
 
