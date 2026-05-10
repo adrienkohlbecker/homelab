@@ -2,7 +2,7 @@
 # netfilter behaviour. Test scaffolding (podman, listeners, multi-IP
 # netns) lives here rather than in _setup.yml because _setup is
 # reserved for genuine role dependencies — none of this is needed for
-# the iptables role itself to converge.
+# the firewall role itself to converge.
 #
 # Probe topology:
 #   extns netns ─ veth_ext ── wg0* (10.99.0.1) ─ root netns (the VM)
@@ -43,8 +43,8 @@
 
 - name: _verify | Pull tiny test image
   command: podman pull docker.io/library/busybox
-  register: iptables_verify_pull
-  changed_when: "'Storing signatures' in iptables_verify_pull.stdout or 'Writing manifest' in iptables_verify_pull.stdout"
+  register: firewall_verify_pull
+  changed_when: "'Storing signatures' in firewall_verify_pull.stdout or 'Writing manifest' in firewall_verify_pull.stdout"
   become: true
 
 # Publish 32400:32400 (not :80) because :80 is already taken by the
@@ -54,10 +54,10 @@
 # page the probe can grep for.
 - name: _verify | Run busybox httpd test container with --publish on 32400
   command: >
-    podman run -d --replace --name iptables_verify_httpd
+    podman run -d --replace --name firewall_verify_httpd
       --publish 0.0.0.0:32400:32400
       docker.io/library/busybox
-      sh -c 'mkdir -p /www && echo iptables-verify-ok > /www/index.html && exec httpd -f -p 32400 -h /www'
+      sh -c 'mkdir -p /www && echo firewall-verify-ok > /www/index.html && exec httpd -f -p 32400 -h /www'
   changed_when: true
   become: true
 
@@ -67,7 +67,7 @@
 # non-zero with "Connection refused".
 - name: _verify | Bind python http.server on TCP listeners
   command: >
-    systemd-run --unit iptables-verify-tcp-{{ item }} --remain-after-exit
+    systemd-run --unit firewall-verify-tcp-{{ item }} --remain-after-exit
       python3 -m http.server {{ item }} --bind 0.0.0.0
   loop:
     - 80     # unscoped INPUT-allow probe target
@@ -83,7 +83,7 @@
 # listener and REJECT produce ICMP port-unreachable).
 - name: _verify | Bind socat UDP echo listeners
   command: >
-    systemd-run --unit iptables-verify-udp-{{ item }} --remain-after-exit
+    systemd-run --unit firewall-verify-udp-{{ item }} --remain-after-exit
       socat UDP-RECVFROM:{{ item }},fork SYSTEM:'echo pong'
   loop:
     - 5053   # dnscrypt-proxy (-s podman_default_network)
@@ -310,9 +310,9 @@
 # FORWARD/DNAT — published container reachable via wg0 ingress.
 - name: _verify | FORWARD/DNAT — published 32400 reachable via wg0 ingress
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://10.99.0.1:32400/
-  register: iptables_verify_container
+  register: firewall_verify_container
   changed_when: false
-  failed_when: iptables_verify_container.rc != 0 or 'iptables-verify-ok' not in iptables_verify_container.stdout
+  failed_when: firewall_verify_container.rc != 0 or 'firewall-verify-ok' not in firewall_verify_container.stdout
   become: true
 
 # FORWARD/DNAT WAN-side counterpart — packet ingresses on enp0s2
@@ -324,9 +324,9 @@
 - name: _verify | FORWARD/DNAT — published 32400 reachable from controller via WAN hostfwd
   delegate_to: localhost
   command: curl --connect-timeout 5 --max-time 10 -s http://127.0.0.1:{{ wan_tcp_test_port }}/
-  register: iptables_verify_wan_container
+  register: firewall_verify_wan_container
   changed_when: false
-  failed_when: iptables_verify_wan_container.rc != 0 or 'iptables-verify-ok' not in iptables_verify_wan_container.stdout
+  failed_when: firewall_verify_wan_container.rc != 0 or 'firewall-verify-ok' not in firewall_verify_wan_container.stdout
 
 # FORWARD chain podman0→podman0 ct-status-dnat regression probe.
 # This path broke during the nft migration: containers inheriting the
@@ -344,9 +344,9 @@
   command: >
     podman run --rm --network podman docker.io/library/busybox
     wget -q -O - -T 5 http://10.88.0.1:32400/
-  register: iptables_verify_container_to_vip
+  register: firewall_verify_container_to_vip
   changed_when: false
-  failed_when: iptables_verify_container_to_vip.rc != 0 or 'iptables-verify-ok' not in iptables_verify_container_to_vip.stdout
+  failed_when: firewall_verify_container_to_vip.rc != 0 or 'firewall-verify-ok' not in firewall_verify_container_to_vip.stdout
   become: true
 
 # Host-egress MASQUERADE — exercises -s site_subnets.home (or home_subnet
@@ -361,7 +361,7 @@
 # Container-egress MASQUERADE — exercises -s podman_default_network
 # -j MASQUERADE.
 - name: _verify | POSTROUTING — container egress through MASQUERADE works
-  command: podman exec iptables_verify_httpd wget -q -O- --timeout=10 https://example.com/
+  command: podman exec firewall_verify_httpd wget -q -O- --timeout=10 https://example.com/
   changed_when: false
   become: true
 
@@ -431,13 +431,13 @@
 # until then.
 - name: _verify | sysctl — nf_conntrack_tcp_loose=0 persisted in sysctl.d
   slurp:
-    src: /etc/sysctl.d/30-iptables-hardening.conf
+    src: /etc/sysctl.d/30-firewall-hardening.conf
   register: sysctl_persist
   become: true
 
 - name: _verify | sysctl — nf_conntrack module pinned in modules-load.d
   slurp:
-    src: /etc/modules-load.d/30-iptables-hardening.conf
+    src: /etc/modules-load.d/30-firewall-hardening.conf
   register: modload_persist
   become: true
 
@@ -499,9 +499,9 @@
 
 - name: _verify | FORWARD/DNAT after re-apply — published 32400 still reachable
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://10.99.0.1:32400/
-  register: iptables_verify_after_reapply
+  register: firewall_verify_after_reapply
   changed_when: false
-  failed_when: iptables_verify_after_reapply.rc != 0 or 'iptables-verify-ok' not in iptables_verify_after_reapply.stdout
+  failed_when: firewall_verify_after_reapply.rc != 0 or 'firewall-verify-ok' not in firewall_verify_after_reapply.stdout
   become: true
 
 # Stock nftables.service ExecStop is `nft flush ruleset` — would nuke
@@ -510,7 +510,7 @@
 # co-tenant; if ExecStop still flushed everything, it'd disappear.
 # Runs last because the stop/start cycle resets per-rule counters.
 - name: _verify | ExecStop drop-in — install sentinel table
-  command: nft add table ip iptables_verify_sentinel
+  command: nft add table ip firewall_verify_sentinel
   changed_when: false
   become: true
 
@@ -527,7 +527,7 @@
 - name: _verify | ExecStop drop-in — sentinel survived, homelab deleted
   assert:
     that:
-      - "'table ip iptables_verify_sentinel' in tables_after_stop.stdout"
+      - "'table ip firewall_verify_sentinel' in tables_after_stop.stdout"
       - "'table ip homelab' not in tables_after_stop.stdout"
     fail_msg: >-
       ExecStop drop-in didn't scope correctly: sentinel table should
@@ -535,7 +535,7 @@
       wasn't). Stock `nft flush ruleset` likely still in effect.
 
 - name: _verify | ExecStop drop-in — cleanup sentinel
-  command: nft delete table ip iptables_verify_sentinel
+  command: nft delete table ip firewall_verify_sentinel
   changed_when: false
   failed_when: false
   become: true

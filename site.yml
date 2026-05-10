@@ -18,7 +18,7 @@
     - logrotate
     - journald
     - resolved
-    - iptables
+    - firewall
     - fail2ban
     - ssh
     - ntp
