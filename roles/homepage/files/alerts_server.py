@@ -25,6 +25,7 @@ import os
 import ssl
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -209,13 +210,13 @@ def render_html(hosts: list[dict]) -> str:
             rows.append('<div class="empty">No active alerts.</div>')
         else:
             for a in host["alarms"]:
-                # Deep-link to the host's alarms tab. _top so the click escapes
-                # the iframe and replaces the homepage tab — back-button
-                # returns to the dashboard.
-                href = f"{click_root}/#alarms"
+                # Deep-link to the alarm's chart in netdata so the click lands
+                # on the actual metric, not just the alarms tab. Opens in a
+                # new tab — keeps the dashboard available behind it.
+                href = f"{click_root}/#;chart={urllib.parse.quote(a['chart'], safe='._-')}"
                 rows.append(
                     f'<a class="alarm {html.escape(a["status"])}" '
-                    f'href="{html.escape(href)}" target="_top">'
+                    f'href="{html.escape(href)}" target="_blank" rel="noopener">'
                     f'<span class="status">{html.escape(a["status"])}</span>'
                     f'<span class="name">{html.escape(a["name"])} '
                     f'<code>{html.escape(a["chart"])}</code></span>'
