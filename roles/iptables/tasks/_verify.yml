@@ -442,3 +442,50 @@
   changed_when: false
   failed_when: iptables_verify_after_reapply.rc != 0 or 'iptables-verify-ok' not in iptables_verify_after_reapply.stdout
   become: true
+
+# Stock nftables.service ExecStop is `nft flush ruleset` — would nuke
+# netavark/fail2ban tables on any systemctl stop. Confirm the drop-in
+# scopes the stop to ip homelab only. Sentinel table simulates a
+# co-tenant; if ExecStop still flushed everything, it'd disappear.
+# Runs last because the stop/start cycle resets per-rule counters.
+- name: _verify | ExecStop drop-in — install sentinel table
+  command: nft add table ip iptables_verify_sentinel
+  changed_when: false
+  become: true
+
+- name: _verify | ExecStop drop-in — stop nftables.service
+  systemd: { name: nftables.service, state: stopped }
+  become: true
+
+- name: _verify | ExecStop drop-in — list tables after stop
+  command: nft list tables
+  register: tables_after_stop
+  changed_when: false
+  become: true
+
+- name: _verify | ExecStop drop-in — sentinel survived, homelab deleted
+  assert:
+    that:
+      - "'table ip iptables_verify_sentinel' in tables_after_stop.stdout"
+      - "'table ip homelab' not in tables_after_stop.stdout"
+    fail_msg: >-
+      ExecStop drop-in didn't scope correctly: sentinel table should
+      survive a stop (it didn't) and ip homelab should be gone (it
+      wasn't). Stock `nft flush ruleset` likely still in effect.
+
+- name: _verify | ExecStop drop-in — cleanup sentinel
+  command: nft delete table ip iptables_verify_sentinel
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | ExecStop drop-in — restart nftables.service
+  systemd: { name: nftables.service, state: started }
+  become: true
+
+- name: _verify | ExecStop drop-in — homelab table restored after start
+  command: nft list tables
+  register: tables_after_start
+  changed_when: false
+  failed_when: "'table ip homelab' not in tables_after_start.stdout"
+  become: true
