@@ -258,12 +258,10 @@ async def run_test(
                         print_line("Command failed")
                         # Best-effort: a diagnostics-collection failure must
                         # not shadow the underlying CommandFailedException.
-                        # Tail just the journal in-terminal; dmesg + the
-                        # failed-units list ship as separate files for CI
-                        # artifact upload.
+                        # Artifacts (journal, dmesg, failed-units) ship as
+                        # separate files for CI artifact upload.
                         with contextlib.suppress(Exception):
                             await m.collect_failure_artifacts()
-                            m.print_file_tail(m.journal_file)
                         raise
                     except IdempotenceFailedException:
                         print_line("Idempotence check failed")
