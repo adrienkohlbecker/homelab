@@ -104,72 +104,79 @@
   tags:
     - act_runner
 
-- name: Manage mise_github_token podman secret in act_runner's rootless store
-  # Used at build time to bump mise's GitHub API rate limit during
-  # `mise install` (anon 60/hr vs authenticated 5000/hr). The
-  # podman_secret helper handles creation + rotation tracking via
-  # data_sha256 labels, so re-applying the role with a rotated vault
-  # var refreshes the secret rather than silently using the stale
-  # value. Stays available for any future runtime consumer (workflow
-  # containers that need to authenticate to GitHub) without an extra
-  # storage hop.
-  #
-  # podman_secret_user / podman_secret_environment route the secret
-  # into act_runner's rootless podman store, not root's, so the build
-  # (which runs as act_runner) can pick it up via --secret id=NAME.
-  import_role:
-    name: podman_secret
-    tasks_from: secret
-  vars:
-    podman_secret_name: mise_github_token
-    podman_secret_data: "{{ mise_github_token }}"
-    podman_secret_user: act_runner
-    podman_secret_environment:
-      XDG_RUNTIME_DIR: /run/user/{{ act_runner_user.uid | default('0') }}
-      DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ act_runner_user.uid | default('0') }}/bus
+- name: Stage GitHub token tmpfile for the lab-runtime build
+  # mise pulls tool releases from GitHub during `mise install`. Anon
+  # API is 60/hr; authenticated 5000/hr. Without auth the build fails
+  # on a fresh layer cache. podman build's --secret needs src=PATH
+  # (no podman-secret store integration), so we drop the token to a
+  # 0400 file in /run/user/<uid>/ -- tmpfs, owned by act_runner,
+  # gone on reboot. Removed unconditionally after the build below
+  # whether or not the build succeeded.
+  when: not ansible_check_mode
+  copy:
+    dest: /run/user/{{ act_runner_user.uid | default('0') }}/lab-runtime-build-token
+    content: "{{ mise_github_token }}"
+    owner: act_runner
+    group: act_runner
+    mode: "0400"
+  become: true
+  no_log: true
   tags:
     - act_runner
 
-- name: Build lab-runtime image
-  when: not ansible_check_mode
-  # --cgroup-manager=cgroupfs scopes a workaround to JUST the build
-  # command: rootless podman's default systemd cgroup manager needs to
-  # register transient scopes via the user session bus, but the box
-  # images don't ship dbus-user-session (chroot.sh installs
-  # linux-generic --no-install-recommends), so /run/user/$UID/bus
-  # doesn't exist and crun fails with "sd-bus call: Permission denied".
-  # cgroupfs sidesteps it entirely; workflow containers spawned at
-  # runtime use the systemd default unaltered.
-  #
-  # `--secret id=NAME` resolves NAME from podman's local secret store
-  # automatically (no src= needed). See Dockerfile.lab-runtime for the
-  # consuming RUN -- the secret is mounted only there.
-  #
-  # force: rebuild when the Dockerfile or any of its build inputs
-  # change. podman_image is name-idempotent by default and won't
-  # otherwise re-run podman build when an image with the same tag
-  # exists, even if the Dockerfile differs.
-  containers.podman.podman_image:
-    name: lab-runtime
-    tag: latest
-    state: build
-    path: /mnt/services/act_runner/build
-    force: "{{ act_runner_lab_runtime_dockerfile.changed or act_runner_lab_runtime_inputs.changed }}"
-    build:
-      file: /mnt/services/act_runner/build/Dockerfile.lab-runtime
-      extra_args: "--cgroup-manager=cgroupfs --secret id=mise_github_token"
-  # become_user: act_runner doesn't propagate XDG_RUNTIME_DIR /
-  # DBUS_SESSION_BUS_ADDRESS the way a login session would; rootless
-  # podman/crun need them to reach the user's systemd manager.
-  # Default('0') keeps templating from failing in check mode where
-  # service_user_result has no uid field; the task is gated by
-  # `when: not ansible_check_mode` so '0' is never actually used.
+# Build the lab-runtime image, with always-run cleanup of the staged
+# GitHub-token tmpfile so a build crash doesn't leave it behind.
+#
+# --cgroup-manager=cgroupfs (extra_args) scopes a workaround to just
+# the build: rootless podman's default systemd cgroup manager needs
+# to register transient scopes via the user session bus, but the box
+# images don't ship dbus-user-session (chroot.sh installs
+# linux-generic --no-install-recommends), so /run/user/$UID/bus
+# doesn't exist and crun fails with "sd-bus call: Permission denied".
+# cgroupfs sidesteps it entirely; workflow containers spawned at
+# runtime use the systemd default unaltered.
+#
+# --secret id=NAME,src=PATH mounts the staged tmpfile inside the
+# consuming RUN; the Dockerfile reads /run/secrets/<NAME>.
+#
+# force: rebuild when the Dockerfile or any of its build inputs
+# change. podman_image is name-idempotent by default and won't
+# otherwise re-run podman build when an image with the same tag
+# exists, even if the Dockerfile differs.
+#
+# environment: become_user: act_runner doesn't propagate
+# XDG_RUNTIME_DIR / DBUS_SESSION_BUS_ADDRESS the way a login session
+# would; rootless podman/crun need them to reach the user's systemd
+# manager. Default('0') keeps templating from failing in check mode
+# where service_user_result has no uid field; the build itself is
+# gated by `when: not ansible_check_mode` so '0' is never used.
+- name: Build lab-runtime image (with token cleanup)
   environment:
     XDG_RUNTIME_DIR: /run/user/{{ act_runner_user.uid | default('0') }}
     DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ act_runner_user.uid | default('0') }}/bus
   become: true
   become_user: act_runner
-  register: act_runner_lab_runtime_build
+  block:
+    - name: Build lab-runtime image
+      when: not ansible_check_mode
+      containers.podman.podman_image:
+        name: lab-runtime
+        tag: latest
+        state: build
+        path: /mnt/services/act_runner/build
+        force: "{{ act_runner_lab_runtime_dockerfile.changed or act_runner_lab_runtime_inputs.changed }}"
+        build:
+          file: /mnt/services/act_runner/build/Dockerfile.lab-runtime
+          extra_args: >-
+            --cgroup-manager=cgroupfs
+            --secret id=mise_github_token,src=/run/user/{{ act_runner_user.uid | default('0') }}/lab-runtime-build-token
+      register: act_runner_lab_runtime_build
+  always:
+    - name: Remove staged GitHub token tmpfile
+      when: not ansible_check_mode
+      file:
+        path: /run/user/{{ act_runner_user.uid | default('0') }}/lab-runtime-build-token
+        state: absent
   tags:
     - act_runner
 
