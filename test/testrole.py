@@ -332,6 +332,14 @@ def main() -> int:
     # before fanning out; the mtime grace inside sweep_stale_workdirs keeps
     # parallel workers from racing on each other's freshly-minted workdirs.
     sweep_stale_workdirs(imagedir_for_host())
+    # When --workdir-parent points away from imagedir (CI sets it to the
+    # host-mounted /lab-runtime-workdir), sweep that too -- otherwise
+    # killed test cells leak workdirs onto the host and the next run's
+    # cell ENOSPCs.
+    if parsed_args.workdir_parent:
+        wp = Path(parsed_args.workdir_parent).resolve()
+        if wp != imagedir_for_host().resolve():
+            sweep_stale_workdirs(wp)
 
     # Machine.wrapper_timeout layers WRAPPER_GRACE_SECONDS on top of this so
     # the inner `timeout` wrapper outlasts the Python deadline.
