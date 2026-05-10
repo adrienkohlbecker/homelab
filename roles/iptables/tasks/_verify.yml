@@ -293,6 +293,20 @@
   failed_when: probe_mdns_wg.rc == 0
   become: true
 
+# VRRP (proto 112) scoping is asserted statically because slirp
+# doesn't pass arbitrary L4 protocols, so a functional probe across
+# the netns harness isn't feasible. Confirm the rendered rule still
+# carries the iifname + LAN-saddr scope — guards against someone
+# unscoping it back to `ip protocol vrrp accept`. nft canonicalizes
+# `ip protocol 112` to `ip protocol vrrp` on output, hence the match.
+- name: _verify | INPUT — VRRP rule renders with iifname + LAN-saddr scope
+  command: nft list table ip homelab
+  register: vrrp_rule_dump
+  changed_when: false
+  failed_when: >
+    ('iifname "' + ansible_default_ipv4.interface + '" ip saddr ' + site_subnets.home + ' ip protocol vrrp accept') not in vrrp_rule_dump.stdout
+  become: true
+
 # FORWARD/DNAT — published container reachable via wg0 ingress.
 - name: _verify | FORWARD/DNAT — published 32400 reachable via wg0 ingress
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://10.99.0.1:32400/

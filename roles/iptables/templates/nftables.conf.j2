@@ -80,8 +80,12 @@ table ip homelab {
         icmp type echo-request limit rate 10/second burst 20 packets accept
         icmp type echo-request drop
 
-        # Other protocols.
-        ip protocol 112 accept comment "keepalived (VRRP)"
+        # keepalived runs in unicast mode (not multicast 224.0.0.18)
+        # with peers on the home LAN (see roles/pihole/templates/
+        # keepalived.conf.j2). Scope VRRP to LAN ingress + LAN saddr
+        # so nothing on WAN / wg0 / podman bridges can inject proto
+        # 112 packets to churn election state.
+        iifname "{{ ansible_default_ipv4.interface }}" ip saddr {{ site_subnets.home }} ip protocol vrrp accept comment "keepalived (VRRP, LAN unicast)"
 
         # Catch-all: log+drop UDP and non-TCP/UDP protocols silently
         # to avoid ICMP amplification (every spoofed UDP probe would
