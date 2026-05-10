@@ -55,6 +55,7 @@ depends = [
   "lint:shell",
   "lint:shfmt",
   "lint:typos",
+  "ci:lint-test-matrix",
 ]
 
 [tasks."lint:ansible"]
