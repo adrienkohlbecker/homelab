@@ -44,6 +44,7 @@ ExecStart=/usr/bin/podman run \
     --gidmap=0:0:65536 \
     --gidmap=+0:{{ homeassistant_user.group }}:1 \
     --network=podman \
+    --network=mosquitto \
     --network=iot_macvlan \
     --env TZ=Europe/Paris \
     --volume /mnt/services/homeassistant:/config \
