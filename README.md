@@ -34,8 +34,8 @@ Ansible-driven configuration for my home infrastructure: a handful of bare-metal
 | `zbm/`, `zbm-build/` | ZFSBootMenu image config and aarch64 build scaffolding |
 | `wireguard/` | Generated peer configs and PSKs (vaulted) |
 | `notes/` | Long-form design notes referenced from code comments |
-| `vault.sh` | Resolves the ansible-vault password from macOS keychain or `~/.config/homelab/vault-pass` |
-| `ansible.cfg` | Wires `hosts.ini` + `vault.sh`; enables mitogen strategy and persistent SSH |
+| `vault-client.sh` | Resolves the ansible-vault password per vault-id (`prod`/`test`) from env var, macOS keychain, or `~/.config/homelab/vault-pass-<id>` |
+| `ansible.cfg` | Wires `hosts.ini` + `vault-client.sh`; enables mitogen strategy and persistent SSH |
 
 ## Roles
 
@@ -93,7 +93,7 @@ ansible-vault encrypt_string
 
 ## Secrets
 
-- Ansible vault: passphrase comes from `vault.sh` (macOS keychain or a 0400 file under `~/.config/homelab/vault-pass`). Vaulted values live inline in `group_vars/*/vault.yml` and `host_vars/*` files; edit with `./vault.sh edit <path>`.
+- Ansible vault: per-id passwords come from `vault-client.sh` (macOS keychain `homelab-vault-<id>`, Linux file `~/.config/homelab/vault-pass-<id>`, or `HOMELAB_VAULT_PASSWORD_<UPPER_ID>` env var for CI). Two ids in use: `prod` (workstation-only) and `test` (also pushed to CI as a Gitea repo secret). Vaulted values live inline in `group_vars/*.yml` and `host_vars/*.yml`. See CLAUDE.md "Vault ids" for details.
 - 1Password: `mise.toml [env]` declares `op://Lab/...` refs for Cloudflare, Nexus, MinIO and the OpenTofu state passphrase. `mise run tf` is wrapped in `op run --` so values are only ever in the wrapped process's env.
 - WireGuard: peer private keys are vaulted in `group_vars/{prod,test}.yml`; generated client bundles in `wireguard/<peer>/` (the QR PNGs and zip are kept for convenience).
 
