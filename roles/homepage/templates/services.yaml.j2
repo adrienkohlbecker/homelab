@@ -1,0 +1,18 @@
+# {{ ansible_managed }}
+# Top section: per-host netdata health. Each tile shows active alarm counts
+# (warnings + criticals) polled from the host's netdata; click-through goes to
+# the netdata UI for the alarm names and detail. The dashboard answers "is
+# anything on fire?" — netdata answers "what specifically?".
+- Health:
+    - Lab:
+        href: https://netdata.{{ inventory_hostname }}.{{ domain }}/
+        description: System metrics for lab
+        widget:
+          type: netdata
+          url: https://netdata.{{ inventory_hostname }}.{{ domain }}
+    - Pug:
+        href: https://netdata.pug.{{ domain }}/
+        description: System metrics for pug
+        widget:
+          type: netdata
+          url: https://netdata.pug.{{ domain }}

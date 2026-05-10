@@ -1,0 +1,93 @@
+- name: Set up homepage system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_name: homepage
+  tags:
+    - homepage
+
+- name: Configure homepage services
+  when: not (ansible_check_mode and homepage_user.changed)
+  template:
+    src: services.yaml.j2
+    dest: /mnt/services/homepage/services.yaml
+    owner: homepage
+    group: homepage
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - homepage
+
+- name: Configure homepage bookmarks
+  when: not (ansible_check_mode and homepage_user.changed)
+  template:
+    src: bookmarks.yaml.j2
+    dest: /mnt/services/homepage/bookmarks.yaml
+    owner: homepage
+    group: homepage
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - homepage
+
+- name: Configure homepage settings
+  when: not (ansible_check_mode and homepage_user.changed)
+  template:
+    src: settings.yaml.j2
+    dest: /mnt/services/homepage/settings.yaml
+    owner: homepage
+    group: homepage
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - homepage
+
+- name: Configure homepage widgets
+  when: not (ansible_check_mode and homepage_user.changed)
+  template:
+    src: widgets.yaml.j2
+    dest: /mnt/services/homepage/widgets.yaml
+    owner: homepage
+    group: homepage
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - homepage
+
+- name: Install homepage service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: homepage.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and homepage_user.changed) }}"
+  tags:
+    - homepage
+
+# Homepage hot-reloads YAML config from the bind-mounted dir, so config-file
+# changes don't need a service restart — only the unit template itself does.
+- name: Enable homepage service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: homepage
+    systemd_unit_condition: "{{ not (ansible_check_mode and (homepage_service_result.changed or homepage_user.changed)) }}"
+    systemd_unit_restart: "{{ homepage_service_result.changed }}"
+  tags:
+    - homepage
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: homepage
+    nginx_proxy_pass: http://localhost:{{ service_ports.homepage }}/
+  tags:
+    - homepage

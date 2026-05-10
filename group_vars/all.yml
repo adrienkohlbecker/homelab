@@ -26,6 +26,7 @@ email_domain: noreply.{{ domain }}
 # is the place to grep.
 service_ports:
   healthchecks: 8000
+  homepage: 3003
 
 # Sonatype Nexus pull-through cache. Empty = use upstream URLs directly.
 # Overridden in group_vars/test.yml to route fetches through nexus.lab.fahm.fr.
