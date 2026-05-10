@@ -87,24 +87,20 @@ jobs:
         env:
           MATRIX: ${{ needs.detect.outputs.matrix }}
           MAX_PARALLEL: '2'
-          # vault.sh picks this up for vault-id `test` and skips the
-          # keychain/file lookup. Prod vault entries can't be decrypted
-          # in CI by design -- the test harness only loads test vars.
+          # vault-client.sh picks this up for vault-id `test` and skips
+          # the keychain/file lookup. Prod vault entries can't be
+          # decrypted in CI by design -- the test harness only loads
+          # test vars.
           HOMELAB_VAULT_PASSWORD_TEST: ${{ secrets.HOMELAB_VAULT_PASSWORD_TEST }}
           # Restrict ansible to the test identity only; without this
-          # ansible would still invoke `vault.sh prod` per ansible.cfg's
-          # vault_identity_list, log a benign warning, and continue --
-          # but the noise is confusing. This also makes prod-encrypted
-          # entries fail loudly (not silently) if they're ever loaded.
-          ANSIBLE_VAULT_IDENTITY_LIST: test@vault.sh
+          # ansible would still invoke vault-client.sh for prod per
+          # ansible.cfg's vault_identity_list, log a benign warning,
+          # and continue -- but the noise is confusing. This also
+          # makes prod-encrypted entries fail loudly (not silently) if
+          # they're ever loaded.
+          ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
         run: |
           set -euo pipefail
-          # one-shot debug: confirm the secret reached the cell + vault.sh
-          # picks it up from the env. Length-only so we don't leak the
-          # value if Gitea ever stops masking it.
-          echo "DEBUG: HOMELAB_VAULT_PASSWORD_TEST length=${#HOMELAB_VAULT_PASSWORD_TEST}"
-          echo "DEBUG: vault.sh test exit=$(./vault.sh test >/dev/null 2>&1; echo $?)"
-          echo "DEBUG: vault.sh test output length=$(./vault.sh test 2>/dev/null | wc -c)"
           echo "$MATRIX" | jq -r '.[]' \
             | xargs -I{} -n1 -P "$MAX_PARALLEL" bash -c '
                 spec=$1

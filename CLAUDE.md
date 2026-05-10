@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Project Structure & Module Organization
-`site.yml` orchestrates every host group and its roles. Role logic stays under `roles/<role>/` (tasks, templates, handlers), with shared defaults in `group_vars/` and host-specific overrides in `host_vars/`. `ansible.cfg` binds the repo to `hosts.ini` and `vault.sh` (which dispatches on vault-id; see *Vault ids* below), so running from the root picks up the correct inventory and vault passwords automatically. Supporting folders: `packer/` builds the QEMU images, `terraform/` keeps Cloudflare DNS code and state, `wireguard/` stores VPN peers, and `test/` holds the harness, inventories, and logs.
+`site.yml` orchestrates every host group and its roles. Role logic stays under `roles/<role>/` (tasks, templates, handlers), with shared defaults in `group_vars/` and host-specific overrides in `host_vars/`. `ansible.cfg` binds the repo to `hosts.ini` and `vault-client.sh` (which dispatches on vault-id; see *Vault ids* below), so running from the root picks up the correct inventory and vault passwords automatically. Supporting folders: `packer/` builds the QEMU images, `terraform/` keeps Cloudflare DNS code and state, `wireguard/` stores VPN peers, and `test/` holds the harness, inventories, and logs.
 
 ## Build, Test, and Development Commands
 - Bootstrap tools: install [mise](https://mise.jdx.dev), `mise trust`, then `mise install` from the repo root — pins terraform, packer, python, uv, and shellcheck. `python.uv_venv_auto` auto-creates and sources `.venv`, so `uv sync` populates Python deps (ansible, ansible-lint, black, yamllint) on first directory entry. 1Password CLI must be signed in for the `op://` env vars in `mise.toml` to resolve.
@@ -88,18 +88,18 @@ Local debugging:
 - `mise run ci:role-deps <helper>` — list consumers of a helper role.
 
 ## Commit & Pull Request Guidelines
-History favors short, imperative subjects such as “Fix dnscrypt” or “Add profilarr”; prefix with a role when it helps clarity (`wireguard: rotate peers`). Each PR should summarize the motivation, list impacted hosts or roles, and link related issues. Mention which commands were run (`test/testrole.py`, `test/testall.py`, `terraform plan`, screenshots when relevant) and flag inventory, vault, or DNS updates so reviewers can re-run `vault.sh`.
+History favors short, imperative subjects such as “Fix dnscrypt” or “Add profilarr”; prefix with a role when it helps clarity (`wireguard: rotate peers`). Each PR should summarize the motivation, list impacted hosts or roles, and link related issues. Mention which commands were run (`test/testrole.py`, `test/testall.py`, `terraform plan`, screenshots when relevant) and flag inventory, vault, or DNS updates so reviewers can re-run `vault-client.sh`.
 
 ## Security & Configuration Tips
 Do not commit decrypted data; access secrets through `ansible-vault edit <path>` (or the equivalent), and keep them in `group_vars/*.yml` / `host_vars/*.yml`. WireGuard keys in `wireguard/` must remain vaulted and rotate with peer changes. When touching networking or DNS, run playbooks with `--limit` and apply Terraform only after review in a dedicated branch.
 
 ### Vault ids: `prod` vs `test`
-Two passwords, two scopes. Configured in [ansible.cfg](ansible.cfg) as `vault_identity_list = prod@vault.sh, test@vault.sh` with `vault_id_match = True`.
+Two passwords, two scopes. Configured in [ansible.cfg](ansible.cfg) as `vault_identity_list = prod@vault-client.sh, test@vault-client.sh` with `vault_id_match = True`.
 
 - `prod` — encrypts `group_vars/prod.yml` and prod host_vars (lab, pug, bunk). Stays on local workstations only; never lands in CI.
 - `test` — encrypts `group_vars/test.yml` and test host_vars (currently just `host_vars/box.yml`). Available to CI as the Gitea repo secret `HOMELAB_VAULT_PASSWORD_TEST` so the test harness can decrypt test vars.
 
-[vault.sh](vault.sh) dispatches on `$1`: env var `HOMELAB_VAULT_PASSWORD_<UPPER_ID>` first (CI), then macOS keychain entry `homelab-vault-<id>`, then Linux file `~/.config/homelab/vault-pass-<id>` (mode 0400). To add a new password locally: `security add-generic-password -a ak -j "vault password ansible (<id>)" -s homelab-vault-<id> -w` on Mac; `install -m 0400 /dev/stdin ~/.config/homelab/vault-pass-<id> <<<"$pw"` on Linux.
+[vault-client.sh](vault-client.sh) follows ansible's "client" password-script protocol: ansible only passes `--vault-id <id>` to scripts whose filename ends in `-client`, hence the suffix. The script accepts both `--vault-id <id>` and a positional `$1` for ad-hoc invocations. Lookup order per id: env var `HOMELAB_VAULT_PASSWORD_<UPPER_ID>` first (CI), then macOS keychain entry `homelab-vault-<id>`, then Linux file `~/.config/homelab/vault-pass-<id>` (mode 0400). To add a new password locally: `security add-generic-password -a ak -j "vault password ansible (<id>)" -s homelab-vault-<id> -w` on Mac; `install -m 0400 /dev/stdin ~/.config/homelab/vault-pass-<id> <<<"$pw"` on Linux.
 
 When encrypting a new value with `ansible-vault encrypt_string`, pass `--encrypt-vault-id prod` (or `test`) so the resulting envelope carries the right label — otherwise `vault_id_match = True` will refuse to decrypt it.
 
