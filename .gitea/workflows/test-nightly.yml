@@ -49,8 +49,8 @@ jobs:
     runs-on: lab-runtime
     container:
       image: lab-runtime:latest
-      # --group-add keep-groups is supplied by act_runner's
-      # container.options default; see test.yml for the rationale.
+      # --group-add 1 is supplied by act_runner's container.options
+      # default; see test.yml for the rationale.
       options: >-
         --device /dev/kvm
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro

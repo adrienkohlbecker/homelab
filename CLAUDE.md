@@ -75,11 +75,12 @@ Notifications go through Mailgun's HTTP API (not the host's postfix) — two Git
 
 To trigger a targeted subset manually: Actions tab → `test` → Run workflow → set `roles=foo,bar:lab,baz`. `roles=ALL` runs the entire universe. `roles=foo` (no `:variant`) auto-escalates to lab if foo is in `ci-lab-roles.txt`; `roles=foo:box` (explicit) is exact, no escalation.
 
-The runner uses `--device /dev/kvm --group-add keep-groups` for KVM acceleration. `keep-groups` is a podman extension (not stock Docker) that podman ≥4.0 honours through its docker-compat API as well as the CLI — it passes the act_runner host user's supplementary groups into the container's gid space, mapped via `/etc/subgid`. Two prerequisites both wired through ansible:
-1. `service_user_extra_groups: [kvm]` on the act_runner user so the host user is actually in `kvm`.
-2. `subid_extra_subgid_groups: [{ user: act_runner, group: kvm }]` in [host_vars/lab.yml](host_vars/lab.yml) so `/etc/subgid` carries `act_runner:<kvm-gid>:1`. Without it, keep-groups translates host kvm gid to `nogroup (65534)` inside the container and `/dev/kvm` is denied.
+The runner uses `--device /dev/kvm --group-add 1` for KVM acceleration. The `1` is the **container-side gid** that the rootless userns maps the host's kvm gid to — not the host kvm gid itself. Three pieces have to line up:
+1. `service_user_extra_groups: [kvm]` on the act_runner user (so the host user can read `/dev/kvm` at all).
+2. `subid_extra_subgid_groups: [{ user: act_runner, group: kvm }]` in [host_vars/lab.yml](host_vars/lab.yml) so `/etc/subgid` carries `act_runner:<kvm-gid>:1` — making the kvm gid delegatable into a userns.
+3. After changing `/etc/subgid`, run once on lab: `sudo systemctl stop act_runner && sudo -u act_runner podman system migrate && sudo systemctl start act_runner` — podman caches the gidmap and won't re-read the new line otherwise.
 
-After changing `/etc/subgid`, podman caches the user's gidmap and won't pick up the new line automatically — run once on lab: `sudo systemctl stop act_runner && sudo -u act_runner podman system migrate && sudo systemctl start act_runner`.
+Why the literal `1`: rootless podman builds the container gidmap from `/etc/subgid` shortest-range-first. With our two-range layout (one 65k range + one single-gid range for kvm), the single-gid range lands at container gid 1 — so host kvm = container 1. Why not `--group-add keep-groups`? It's a podman-CLI extension; act_runner talks to podman over the docker-compat socket, where Docker semantics interpret `keep-groups` as a literal group name and the container fails with "no matching entries in group file". Why not `--group-add <kvm-host-gid>` directly? That host gid is unmapped inside the container's userns (or maps to a high subuid), so the supplementary group doesn't grant access to a host-gid-`<kvm>` file. The literal `1` is brittle to one thing only: adding a *second* single-id range to `subid_extra_subgid_groups` for act_runner could shift ordering — re-verify if you ever do that.
 
 Local debugging:
 - `CI_BASE_REF=HEAD~5 mise run ci:detect-roles` — preview what a multi-commit push would fan out to.
