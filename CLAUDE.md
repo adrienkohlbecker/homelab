@@ -75,7 +75,11 @@ Notifications go through Mailgun's HTTP API (not the host's postfix) — two Git
 
 To trigger a targeted subset manually: Actions tab → `test` → Run workflow → set `roles=foo,bar:lab,baz`. `roles=ALL` runs the entire universe. `roles=foo` (no `:variant`) auto-escalates to lab if foo is in `ci-lab-roles.txt`; `roles=foo:box` (explicit) is exact, no escalation.
 
-The runner uses `--device /dev/kvm --group-add 109` for KVM acceleration (109 = lab's `kvm` gid; bake the kvm group via `service_user_extra_groups: [kvm]` on the act_runner user). NOT `--group-add keep-groups` — that's a podman-CLI-only flag, but act_runner talks to podman through the docker-API socket which routes through Docker semantics that interpret `keep-groups` as a literal group name to look up in /etc/group.
+The runner uses `--device /dev/kvm --group-add keep-groups` for KVM acceleration. `keep-groups` is a podman extension (not stock Docker) that podman ≥4.0 honours through its docker-compat API as well as the CLI — it passes the act_runner host user's supplementary groups into the container's gid space, mapped via `/etc/subgid`. Two prerequisites both wired through ansible:
+1. `service_user_extra_groups: [kvm]` on the act_runner user so the host user is actually in `kvm`.
+2. `subid_extra_subgid_groups: [{ user: act_runner, group: kvm }]` in [host_vars/lab.yml](host_vars/lab.yml) so `/etc/subgid` carries `act_runner:<kvm-gid>:1`. Without it, keep-groups translates host kvm gid to `nogroup (65534)` inside the container and `/dev/kvm` is denied.
+
+After changing `/etc/subgid`, podman caches the user's gidmap and won't pick up the new line automatically — run once on lab: `sudo systemctl stop act_runner && sudo -u act_runner podman system migrate && sudo systemctl start act_runner`.
 
 Local debugging:
 - `CI_BASE_REF=HEAD~5 mise run ci:detect-roles` — preview what a multi-commit push would fan out to.
