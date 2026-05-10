@@ -60,7 +60,10 @@ X86_64 = ArchProfile(
         # Homebrew QEMU on macOS:
         "/opt/homebrew/share/qemu/edk2-x86_64-code.fd",
         "/usr/local/share/qemu/edk2-x86_64-code.fd",
-        # Debian/Ubuntu (ovmf package):
+        # Debian/Ubuntu (ovmf package). Ubuntu 24.04 dropped the legacy
+        # non-4M OVMF_CODE.fd in favour of the 4M variant; older releases
+        # still ship the legacy name. Try both.
+        "/usr/share/OVMF/OVMF_CODE_4M.fd",
         "/usr/share/OVMF/OVMF_CODE.fd",
         # Fedora/RHEL (edk2-ovmf package):
         "/usr/share/edk2/ovmf/OVMF_CODE.fd",
