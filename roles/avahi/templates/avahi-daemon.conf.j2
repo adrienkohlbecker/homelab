@@ -24,7 +24,13 @@
 #browse-domains=0pointer.de, zeroconf.org
 use-ipv4=yes
 use-ipv6=yes
-#allow-interfaces=eth0
+# Pin avahi to the host's primary uplink. Without this, multi-NIC hosts
+# (eth0 + macvlan child mac0 sharing one L2, plus virbr0/podman*/iot
+# VLAN) running enable-reflector=yes hear their own mDNS announcements
+# echoed back via a sibling interface and rename to <host>-NNNN every
+# time a netlink address-change fires — e.g. keepalived adding the
+# pihole VIP to eth0 on MASTER transition.
+allow-interfaces={{ ansible_default_ipv4.interface }}
 #deny-interfaces=eth1
 #check-response-ttl=no
 #use-iff-running=no
