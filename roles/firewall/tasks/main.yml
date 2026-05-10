@@ -199,34 +199,11 @@
   tags:
     - firewall
 
-# One-shot transition cleanup. Drop these tasks after a release
-# cycle once every host has converged.
-- name: Remove iptables-persistent (legacy regime)
-  apt:
-    pkg:
-      - iptables-persistent
-    state: absent
-  become: true
-  tags:
-    - firewall
-
-- name: Remove legacy iptables rule files
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /etc/iptables/rules.v4
-    - /etc/iptables/rules.v6
-    - /etc/iptables
-  become: true
-  tags:
-    - firewall
-
-# Transition: the old role wrote 30-iptables-hardening.conf. After
-# the rename to roles/firewall, the new file at 30-firewall-hardening.conf
-# coexists with the legacy one on already-deployed hosts unless we
-# explicitly delete the old one. Drop these tasks after a release
-# cycle once every host has converged.
+# Transition cleanup: the role-rename to roles/firewall left the old
+# sysctl/modules-load files on already-deployed hosts. The new files
+# (30-firewall-hardening.conf) coexist with the legacy ones unless
+# we explicitly delete them. Drop this task after a release cycle
+# once every host has converged.
 - name: Remove legacy 30-iptables-hardening.conf (sysctl + modules-load)
   file:
     path: "{{ item }}"
