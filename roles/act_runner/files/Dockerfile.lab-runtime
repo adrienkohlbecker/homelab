@@ -19,7 +19,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # without it.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git jq xz-utils unzip gpg apt-transport-https \
-      qemu-system-x86 qemu-utils ovmf \
+      qemu-system-x86 qemu-utils wget \
       openssh-client coreutils \
       xorriso cloud-image-utils \
       python3-yaml \
@@ -51,7 +51,16 @@ RUN install -dm 755 /etc/apt/keyrings && \
 # resolve in seconds instead of minutes.
 WORKDIR /tmp/build
 COPY mise.toml pyproject.toml uv.lock ./
-RUN mise trust && mise install && \
+# The github_token build secret raises mise's GitHub API rate limit
+# (mise pulls tool releases from gh; anonymous is 60/hr, authenticated
+# is 5000/hr). Sourced from the act_runner role's `mise_github_token`
+# vaulted var. The secret is mounted only for this RUN -- it never
+# lands in any image layer.
+RUN --mount=type=secret,id=github_token \
+    if [ -s /run/secrets/github_token ]; then \
+      export GITHUB_TOKEN=$(cat /run/secrets/github_token); \
+    fi && \
+    mise trust && mise install && \
     mise exec -- uv sync --frozen && \
     rm -rf /tmp/build/.venv
 

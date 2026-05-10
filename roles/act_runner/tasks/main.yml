@@ -104,6 +104,24 @@
   tags:
     - act_runner
 
+- name: Manage mise_github_token podman secret
+  # Used at build time to bump mise's GitHub API rate limit during
+  # `mise install` (anon 60/hr vs authenticated 5000/hr). The
+  # podman_secret helper handles creation + rotation tracking via
+  # data_sha256 labels, so re-applying the role with a rotated vault
+  # var refreshes the secret rather than silently using the stale
+  # value. Stays available for any future runtime consumer (workflow
+  # containers that need to authenticate to GitHub) without an extra
+  # storage hop.
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_name: mise_github_token
+    podman_secret_data: "{{ mise_github_token }}"
+  tags:
+    - act_runner
+
 - name: Build lab-runtime image
   when: not ansible_check_mode
   # --cgroup-manager=cgroupfs scopes a workaround to JUST the build
@@ -115,9 +133,22 @@
   # The user manager is up (linger + start above) — only the dbus
   # session daemon is missing. cgroupfs sidesteps it entirely. Workflow
   # containers spawned at runtime use the systemd default unaltered.
-  command: podman --cgroup-manager=cgroupfs build -t lab-runtime:latest -f Dockerfile.lab-runtime .
+  #
+  # The github_token build secret is sourced by piping the
+  # mise_github_token podman secret straight into podman build via
+  # bash process substitution. <(...) hands podman a /dev/fd/N path
+  # backed by a pipe -- no on-disk tmpfile, so nothing to clean up
+  # and nothing for an unrelated process to read mid-build. podman
+  # build's --secret reads the source once during orchestration,
+  # which is fine over a pipe.
+  shell: |
+    set -euo pipefail
+    podman --cgroup-manager=cgroupfs build \
+      --secret id=github_token,src=<(podman secret inspect mise_github_token --showsecret --format '{% raw %}{{ .SecretData }}{% endraw %}') \
+      -t lab-runtime:latest -f Dockerfile.lab-runtime .
   args:
     chdir: /mnt/services/act_runner/build
+    executable: /bin/bash
   # become_user: act_runner doesn't propagate XDG_RUNTIME_DIR or
   # DBUS_SESSION_BUS_ADDRESS the way a real login session would, and
   # rootless podman/crun need them to find the user's systemd manager
@@ -131,7 +162,7 @@
   become: true
   become_user: act_runner
   register: act_runner_lab_runtime_build
-  changed_when: "'Storing signatures' in act_runner_lab_runtime_build.stdout"
+  changed_when: true
   tags:
     - act_runner
 
