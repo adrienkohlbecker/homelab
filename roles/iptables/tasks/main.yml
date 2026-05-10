@@ -102,7 +102,7 @@
     virsh net-start "{{ item }}"
   args:
     executable: /bin/bash
-  loop: "{{ iptables_libvirt_networks.stdout_lines | default([]) | select | list }}"
+  loop: "{{ iptables_libvirt_networks.stdout_lines | default([]) }}"
   changed_when: true
   become: true
   tags:
