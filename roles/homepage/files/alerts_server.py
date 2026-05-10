@@ -67,17 +67,21 @@ def fetch_alarms(url: str) -> dict:
 
 def normalize(payload: dict) -> list[dict]:
     """Flatten netdata's `{alarms: {chart.alarm: {...}}}` into a list sorted
-    critical-first then warning-first then alphabetical."""
+    critical-first then warning-first then alphabetical. The `id` and
+    `last_status_change` fields are kept so click-through can build the
+    same registry-alert-redirect URL netdata uses for telegram notifs."""
     rank = {"CRITICAL": 0, "WARNING": 1, "CLEAR": 2, "UNDEFINED": 3, "UNINITIALIZED": 4}
     items = []
     for key, alarm in (payload.get("alarms") or {}).items():
         items.append(
             {
                 "key": key,
+                "id": alarm.get("id") or 0,
                 "name": alarm.get("name") or key,
                 "chart": alarm.get("chart") or "",
                 "status": alarm.get("status") or "UNDEFINED",
                 "value": alarm.get("value_string") or "",
+                "when": alarm.get("last_status_change") or 0,
                 "info": alarm.get("info") or "",
             }
         )
@@ -210,10 +214,23 @@ def render_html(hosts: list[dict]) -> str:
             rows.append('<div class="empty">No active alerts.</div>')
         else:
             for a in host["alarms"]:
-                # Deep-link to the alarm's chart in netdata so the click lands
-                # on the actual metric, not just the alarms tab. Opens in a
-                # new tab — keeps the dashboard available behind it.
-                href = f"{click_root}/#;chart={urllib.parse.quote(a['chart'], safe='._-')}"
+                # Deep-link via netdata's own registry-alert-redirect.html —
+                # same format used by telegram notifications. Lands on the
+                # alarm's chart with the alarm context preserved. Opens in a
+                # new tab so the dashboard stays behind.
+                params = urllib.parse.urlencode(
+                    {
+                        "host": host["name"],
+                        "chart": a["chart"],
+                        "alarm": a["name"],
+                        "alarm_id": a["id"],
+                        "alarm_status": a["status"],
+                        "alarm_chart": a["chart"],
+                        "alarm_value": a["value"],
+                        "alarm_when": a["when"],
+                    }
+                )
+                href = f"{click_root}/registry-alert-redirect.html?{params}"
                 rows.append(
                     f'<a class="alarm {html.escape(a["status"])}" '
                     f'href="{html.escape(href)}" target="_blank" rel="noopener">'
