@@ -49,11 +49,10 @@ jobs:
     runs-on: lab-runtime
     container:
       image: lab-runtime:latest
-      # 109 is lab's kvm gid. NOT keep-groups -- see test.yml's
-      # container.options for the rationale.
+      # kvm gid is supplied by act_runner's container.options default;
+      # see test.yml for the rationale.
       options: >-
         --device /dev/kvm
-        --group-add 109
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
     timeout-minutes: 600
     steps:

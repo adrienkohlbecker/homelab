@@ -34,11 +34,11 @@ jobs:
       # GitHub Actions' schema (and most editors) require image: when a
       # container: block is present.
       image: lab-runtime:latest
-      # 109 is lab's kvm gid (`getent group kvm`). NOT keep-groups -- see
-      # test.yml's container.options for the rationale.
+      # kvm gid is supplied by act_runner's container.options default;
+      # see test.yml for the rationale. rw because packer-build is the
+      # only writer of the qcow2 tree.
       options: >-
         --device /dev/kvm
-        --group-add 109
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:rw
     timeout-minutes: 90
     steps:

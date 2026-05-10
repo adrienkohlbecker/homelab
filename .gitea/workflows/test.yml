@@ -63,14 +63,12 @@ jobs:
       # GitHub Actions' schema (and most editors) require image: when a
       # container: block is present.
       image: lab-runtime:latest
-      # /dev/kvm via --device for qemu acceleration; --group-add 109
-      # (lab's kvm gid) so the in-container process can open the
-      # device. NOT --group-add keep-groups: that's a podman-CLI-only
-      # feature; act_runner talks to podman through the docker API
-      # socket and doesn't translate it.
+      # /dev/kvm via --device for qemu acceleration. The host kvm gid
+      # is supplied automatically by act_runner's container.options
+      # default (--group-add gid resolved via getent at role-apply
+      # time), so this workflow stays free of host-specific gids.
       options: >-
         --device /dev/kvm
-        --group-add 109
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
     timeout-minutes: 600
     steps:
