@@ -75,14 +75,15 @@ def test_default_x86_64_no_keep_no_direct_boot(
     # Serial console plumbed to stdio so kernel printk lands in the boot log.
     assert cmd[cmd.index("-serial") + 1] == "stdio"
 
-    # hostfwds use ports pre-picked in prepare() (self.ssh_port and
-    # self.wan_test_port). _setup() bypasses prepare(), so values here
-    # are the dataclass defaults (0 for both).
+    # hostfwds use ports pre-picked in prepare() (self.ssh_port,
+    # self.wan_tcp_test_port, self.wan_udp_test_port). _setup() bypasses
+    # prepare(), so values here are the dataclass defaults (0 for all).
     netdev_idx = cmd.index("-netdev")
     assert cmd[netdev_idx + 1] == (
         f"user,id=user.0,"
         f"hostfwd=tcp:{machine.SSH_HOST}:{m.ssh_port}-:22,"
-        f"hostfwd=tcp:{machine.SSH_HOST}:{m.wan_test_port}-:32400"
+        f"hostfwd=tcp:{machine.SSH_HOST}:{m.wan_tcp_test_port}-:32400,"
+        f"hostfwd=udp:{machine.SSH_HOST}:{m.wan_udp_test_port}-:51820"
     )
 
 
