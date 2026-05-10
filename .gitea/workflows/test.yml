@@ -1,9 +1,12 @@
 name: test
-on: [ push ]
-# TODO: workflow_dispatch with inputs.roles deferred; Gitea 1.21.11 wasn't
-# firing the workflow on push when the workflow_dispatch block was present.
-# Re-add once we've isolated which sub-element of the dispatch block was
-# the trigger.
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      roles:
+        description: 'Comma-separated role names (or role:variant). `ALL` = every role. Empty = use git diff.'
+        required: false
+        default: ''
 
 # Shared with test-nightly.yml and packer-build.yml so reads/writes against
 # /mnt/scratch/qemu serialise. The harness writes per-run workdirs there
