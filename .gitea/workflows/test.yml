@@ -99,6 +99,12 @@ jobs:
           ANSIBLE_VAULT_IDENTITY_LIST: test@vault.sh
         run: |
           set -euo pipefail
+          # one-shot debug: confirm the secret reached the cell + vault.sh
+          # picks it up from the env. Length-only so we don't leak the
+          # value if Gitea ever stops masking it.
+          echo "DEBUG: HOMELAB_VAULT_PASSWORD_TEST length=${#HOMELAB_VAULT_PASSWORD_TEST}"
+          echo "DEBUG: vault.sh test exit=$(./vault.sh test >/dev/null 2>&1; echo $?)"
+          echo "DEBUG: vault.sh test output length=$(./vault.sh test 2>/dev/null | wc -c)"
           echo "$MATRIX" | jq -r '.[]' \
             | xargs -I{} -n1 -P "$MAX_PARALLEL" bash -c '
                 spec=$1
