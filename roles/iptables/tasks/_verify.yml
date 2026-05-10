@@ -280,7 +280,8 @@
   failed_when: iptables_verify_container.rc != 0 or 'iptables-verify-ok' not in iptables_verify_container.stdout
   become: true
 
-# Host-egress MASQUERADE — exercises -s home_subnet -j MASQUERADE.
+# Host-egress MASQUERADE — exercises -s site_subnets.home (or home_subnet
+# on prod) -j MASQUERADE for the host's own outbound traffic.
 - name: _verify | OUTPUT + MASQUERADE — outbound HTTPS from VM works
   uri:
     url: https://example.com/
@@ -289,11 +290,25 @@
   become: true
 
 # Container-egress MASQUERADE — exercises -s podman_default_network
-# -j MASQUERADE. The unscoped POSTROUTING rule pre-fix would have
-# NAT'd this packet via a different (broader) source match, so this
-# probe specifically catches a regression in the source-scoping.
+# -j MASQUERADE.
 - name: _verify | POSTROUTING — container egress through MASQUERADE works
   command: podman exec iptables_verify_httpd wget -q -O- --timeout=10 https://example.com/
+  changed_when: false
+  become: true
+
+# Forwarded-egress MASQUERADE — exercises the per-source rules.
+# extns aliases sit in site_subnets.home and wireguard_subnet; egress
+# hits FORWARD wg0→WAN ACCEPT, then the matching POSTROUTING -s rule
+# MASQUERADEs to the host's egress IP. slirp NATs again on the qemu
+# side, reply round-trips back via wg0. IP literal (1.1.1.1) avoids
+# needing DNS inside the netns (no /etc/resolv.conf there).
+- name: _verify | POSTROUTING — home-LAN-source egress through MASQUERADE works
+  command: ip netns exec extns curl --interface 10.234.0.250 --connect-timeout 5 --max-time 10 -sI http://1.1.1.1/
+  changed_when: false
+  become: true
+
+- name: _verify | POSTROUTING — wireguard-source egress through MASQUERADE works
+  command: ip netns exec extns curl --interface 10.234.64.250 --connect-timeout 5 --max-time 10 -sI http://1.1.1.1/
   changed_when: false
   become: true
 
