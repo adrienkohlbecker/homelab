@@ -42,7 +42,7 @@ Ansible-driven configuration for my home infrastructure: a handful of bare-metal
 Roles map 1:1 to a service or a system concern; the order in `site.yml` reflects boot/dependency order.
 
 - **Bootstrap & OS**: `ansible_dependencies`, `bash`, `user`, `cleanup`, `hostname`, `apt`, `locale`, `keyboard`, `console`, `timezone`, `subid`, `hwe_kernel`, `cron`, `logrotate`, `journald`, `unattended_upgrades`
-- **Networking**: `netplan`, `wireguard`, `resolved`, `iptables`, `fail2ban`, `ssh` / `ssh_root`, `macvlan`, `avahi`, `postfix`, `ntp`
+- **Networking**: `netplan`, `wireguard`, `resolved`, `firewall`, `fail2ban`, `ssh` / `ssh_root`, `macvlan`, `avahi`, `postfix`, `ntp`
 - **Hardware**: `fancontrol`, `hdparm`, `hd_idle`, `smart`, `lm_sensors`, `powertop`
 - **Storage / boot**: `zfs`, `zfs_autobackup`, `zfs_mount`, `swap`, `zfsbootmenu`, `refind`, `kdump`
 - **Container / web stack**: `podman`, `samba`, `certbot`, `nginx`, `services`

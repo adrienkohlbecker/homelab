@@ -26,7 +26,7 @@
 
 # Older releases need iptables: netavark's iptables firewall_driver
 # shells out to /usr/sbin/iptables for --publish port forwarding, and
-# the iptables role's cohabitation-cleanup task pokes `ip filter`
+# the firewall role's cohabitation-cleanup task pokes `ip filter`
 # policies via the same binary. Without it container start fails with
 # the misleading "Error: netavark: No such file or directory" (it's
 # iptables that's missing, not netavark). Resolute+ runs netavark on
@@ -63,7 +63,7 @@
 #   netavark redirects container DNS queries to gateway:5333 via
 #   iptables; nothing on the host changes from the container POV.
 # - default_subnet_pools: shrink the upstream 5-range list to just
-#   podman_bridge_pool. The iptables INPUT accept for aardvark-dns and
+#   podman_bridge_pool. The firewall INPUT accept for aardvark-dns and
 #   homeassistant's trusted_proxies are scoped to that prefix; if podman
 #   ever auto-allocated a named bridge from the wider 10.90.0.0/15
 #   (etc) ranges, container-name DNS would silently fail and HA would

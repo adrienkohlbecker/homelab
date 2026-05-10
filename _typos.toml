@@ -24,7 +24,6 @@ extend-exclude = [
   "roles/nut_monitor/templates/upsmon.conf.j2",
   "roles/nut_server/files/upsd.conf",
   "roles/nut_server/templates/ups.conf.j2",
-  "roles/iptables/files/rules.v4",
   "roles/hdparm/templates/hdparm.conf.j2",
   "roles/refind/files/refind.conf",
 ]
