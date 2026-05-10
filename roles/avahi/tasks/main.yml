@@ -18,13 +18,14 @@
   tags:
     - avahi
 
-- name: Copy avahi daemon conf
-  copy:
-    src: avahi-daemon.conf
+- name: Render avahi daemon conf
+  template:
+    src: avahi-daemon.conf.j2
     dest: /etc/avahi/avahi-daemon.conf
     mode: "0644"
     owner: root
     group: root
+    backup: true
   become: true
   register: avahi_daemon_conf
   tags:
