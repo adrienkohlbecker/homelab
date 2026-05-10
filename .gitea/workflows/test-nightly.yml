@@ -54,6 +54,7 @@ jobs:
       options: >-
         --device /dev/kvm
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
+        --volume /mnt/scratch/act_runner/lab-runtime-workdir:/lab-runtime-workdir:rw
     timeout-minutes: 600
     steps:
       - uses: actions/checkout@v4
@@ -76,7 +77,7 @@ jobs:
                 role=${spec%%:*}
                 variant=${spec##*:}
                 echo "::group::$spec"
-                if test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir; then
+                if test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /lab-runtime-workdir; then
                   echo "::endgroup::"
                   echo "PASS: $spec"
                 else
@@ -92,7 +93,7 @@ jobs:
           name: testout
           path: |
             test/out/
-            /tmp/lab-runtime-workdir/**
+            /lab-runtime-workdir/**
           retention-days: 30
           if-no-files-found: warn
 

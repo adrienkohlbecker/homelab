@@ -9,11 +9,14 @@ on:
         default: ''
 
 # Shared with test-nightly.yml and packer-build.yml so reads/writes against
-# /mnt/scratch/qemu serialise. The harness writes per-run workdirs there
-# (under --workdir-parent /tmp/lab-runtime-workdir these days, but the
-# artifact tree itself is bind-mounted ro into test cells), and packer-build
-# rewrites the qcow2s. cancel-in-progress: false because every push gets
-# its own clean run with its own commit history.
+# /mnt/scratch/qemu serialise. The harness writes per-run workdirs to a
+# host-mounted dir (--workdir-parent /lab-runtime-workdir, mapped to
+# /mnt/scratch/act_runner/lab-runtime-workdir on the host so qcow2
+# overlays + role copies have real disk space and don't ENOSPC the
+# container's writable overlay). The qcow2 artifact tree itself is
+# bind-mounted ro into test cells, and packer-build rewrites the qcow2s.
+# cancel-in-progress: false because every push gets its own clean run
+# with its own commit history.
 concurrency:
   group: lab-qemu-artifacts
   cancel-in-progress: false
@@ -71,6 +74,7 @@ jobs:
       options: >-
         --device /dev/kvm
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
+        --volume /mnt/scratch/act_runner/lab-runtime-workdir:/lab-runtime-workdir:rw
     timeout-minutes: 600
     steps:
       - uses: actions/checkout@v4
@@ -107,7 +111,7 @@ jobs:
                 role=${spec%%:*}
                 variant=${spec##*:}
                 echo "::group::$spec"
-                if test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /tmp/lab-runtime-workdir; then
+                if test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /lab-runtime-workdir; then
                   echo "::endgroup::"
                   echo "PASS: $spec"
                 else
@@ -124,6 +128,6 @@ jobs:
           name: testout
           path: |
             test/out/
-            /tmp/lab-runtime-workdir/**
+            /lab-runtime-workdir/**
           retention-days: 14
           if-no-files-found: warn
