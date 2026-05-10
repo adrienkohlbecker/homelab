@@ -28,6 +28,11 @@
     - /mnt/services/act_runner/build
     - /mnt/scratch/act_runner/cache
     - /mnt/scratch/act_runner/workdir
+    # Bind-mounted into test cells via container.options for the harness's
+    # --workdir-parent. Lives on /mnt/scratch (terabytes) instead of the
+    # container's writable overlay so concurrent qcow2 overlays + role
+    # checkouts can't ENOSPC the cell.
+    - /mnt/scratch/act_runner/lab-runtime-workdir
   tags:
     - act_runner
 
