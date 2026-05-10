@@ -89,6 +89,8 @@
     - 5053   # dnscrypt-proxy (-s podman_default_network)
     - 5333   # aardvark-dns   (-s podman_default_network)
     - 5353   # mDNS           (-s site_subnets.home)
+    - 51820  # wireguard      (-i WAN — only used to verify negative case from wg0)
+    - 60000  # mosh           (-s site_subnets.home / wireguard_subnet, port within 60000:61000)
   changed_when: true
   become: true
 
@@ -148,6 +150,44 @@
 - name: _verify | INPUT allow — port 443 reachable from extns (unscoped)
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:443/
   changed_when: false
+  become: true
+
+# Wireguard 51820 is scoped to -i WAN. From the netns harness we
+# always ingress on wg0, so the only thing we can probe is the
+# *negative* — confirm the rule rejects WG packets that arrive on
+# wg0. (Real-world ingress on the WAN iface is unreachable from
+# inside the test VM.)
+- name: _verify | INPUT — wireguard (51820/udp) rejected when ingressing on wg0
+  shell: |
+    echo ping | ip netns exec extns nc -u -w 2 10.99.0.1 51820 | grep -q pong
+  args: { executable: /bin/bash }
+  register: probe_wg_oos
+  changed_when: false
+  failed_when: probe_wg_oos.rc == 0
+  become: true
+
+# Mosh is scoped to home LAN + wireguard. Probe positive from each.
+- name: _verify | INPUT — mosh (60000/udp) reachable from home LAN source
+  shell: |
+    echo ping | ip netns exec extns nc -u -w 2 -s 10.234.0.250 10.99.0.1 60000 | grep -q pong
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+- name: _verify | INPUT — mosh (60000/udp) reachable from wireguard source
+  shell: |
+    echo ping | ip netns exec extns nc -u -w 2 -s 10.234.64.250 10.99.0.1 60000 | grep -q pong
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+- name: _verify | INPUT — mosh (60000/udp) rejected from non-scope source
+  shell: |
+    echo ping | ip netns exec extns nc -u -w 2 -s 10.99.0.2 10.99.0.1 60000 | grep -q pong
+  args: { executable: /bin/bash }
+  register: probe_mosh_oos
+  changed_when: false
+  failed_when: probe_mosh_oos.rc == 0
   become: true
 
 # Source-scoped admin services: positive cases for each rule, plus
