@@ -17,10 +17,16 @@ ENV DEBIAN_FRONTEND=noninteractive
 # nodejs because every actions/checkout / actions/upload-artifact / etc.
 # is a JS action and crun aborts with "executable file 'node' not found"
 # without it.
+#
+# curl + netcat-openbsd back the WAN-side delegate_to: localhost probes
+# in roles/iptables/tasks/_verify.yml — TCP via curl, UDP via `nc -u`.
+# Without netcat, the wireguard ingress probe fails with
+# "nc: command not found".
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git jq xz-utils unzip gpg apt-transport-https \
       qemu-system-x86 qemu-utils ovmf \
       openssh-client coreutils \
+      netcat-openbsd \
       xorriso cloud-image-utils \
       python3-yaml \
       nodejs \
