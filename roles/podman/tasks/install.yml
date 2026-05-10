@@ -24,17 +24,20 @@
   tags:
     - podman
 
+# Older releases need iptables: netavark's iptables firewall_driver
+# shells out to /usr/sbin/iptables for --publish port forwarding, and
+# the iptables role's cohabitation-cleanup task pokes `ip filter`
+# policies via the same binary. Without it container start fails with
+# the misleading "Error: netavark: No such file or directory" (it's
+# iptables that's missing, not netavark). Resolute+ runs netavark on
+# the native nftables driver and has no iptables-nft compat tables to
+# clean up — drop the dependency so `iptables -L` doesn't silently
+# resurrect empty `ip filter` chains. Drop releases from this list as
+# they age out.
 - name: install | Install podman
   apt:
-    pkg:
-      - podman
-      - aardvark-dns
-      - netavark
-      # podman only Suggests iptables, but netavark shells out to it to set up
-      # --publish port forwarding. Without it, container start fails with the
-      # misleading "Error: netavark: No such file or directory" (it's iptables
-      # that's missing, not netavark).
-      - iptables
+    pkg: "{{ ['podman', 'aardvark-dns', 'netavark']
+             + (['iptables'] if ansible_distribution_release in ['jammy', 'noble'] else []) }}"
     policy_rc_d: 101
     cache_valid_time: 3600
   register: podman_apt
