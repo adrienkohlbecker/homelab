@@ -89,29 +89,15 @@
   tags:
     - podman
 
-# aardvark-dns reads dns_bind_port at launch and keeps the port for
-# its lifetime. netavark spawns it on first need and leaves it
-# running, so a containers.conf change won't take effect until the
-# process is killed; netavark respawns it with the new port on the
-# next network operation. pkill is a no-op when aardvark isn't
-# running yet (e.g. on a fresh install), so we don't gate beyond
-# the config-change check.
-- name: install | Restart aardvark-dns after containers.conf change
-  when: containers_conf_network.changed and not ansible_check_mode
-  command: pkill -9 aardvark-dns
-  register: aardvark_kill
-  failed_when: aardvark_kill.rc not in [0, 1]
-  changed_when: aardvark_kill.rc == 0
-  become: true
-  tags:
-    - podman
-
-# Re-create netavark's firewall rules under the (possibly new)
-# firewall_driver. On a flip from iptables-nft compat to native nft,
-# this moves NETAVARK_FORWARD / NETAVARK-HOSTPORT-* out of `ip filter`
-# and `ip nat` into the new `inet netavark` table. No-op on a fresh
-# host with no networks, so the gate on the config change is enough.
-- name: install | Reload netavark firewall rules after containers.conf change
+# Re-create netavark's firewall rules and DNS resolver under the
+# possibly-new firewall_driver / dns_bind_port. Aardvark-dns reads
+# dns_bind_port once at launch and keeps the port for its lifetime;
+# `podman network reload --all` tears down and respawns it with the
+# new config. Same flow covers a flip from iptables-nft compat to
+# native nft: NETAVARK_FORWARD / NETAVARK-HOSTPORT-* move out of
+# `ip filter` and `ip nat` into the new `inet netavark` table.
+# No-op on a fresh host with no networks.
+- name: install | Reload netavark firewall + dns after containers.conf change
   when: containers_conf_network.changed and not ansible_check_mode
   command: podman network reload --all
   changed_when: true
