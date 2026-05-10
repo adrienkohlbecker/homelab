@@ -105,25 +105,27 @@
 # in `ip homelab` with its own policy, the leftover DROP on
 # `ip filter` would silently drop packets that aren't matched there —
 # specifically anything netavark / libvirt / fail2ban added an
-# explicit ACCEPT for. Reset to ACCEPT (idempotent: no-op once
-# converged).
+# explicit ACCEPT for. Reset to ACCEPT.
 #
 # Only on jammy/noble — resolute+ has nothing using iptables-nft
 # compat (netavark / libvirt / fail2ban all on native-nft drivers),
-# so calling `iptables -P` there would *create* the empty chains we
+# so calling iptables -P there would *create* the empty chains we
 # don't want. Drop these releases from the list as each one ages out.
+#
+# In prod the iptables binary arrives via the podman role; in test
+# _setup.yml installs it explicitly.
 - name: Reset iptables-nft compat chain policies (cohabitation cleanup)
   when: ansible_distribution_release in ["jammy", "noble"]
-  shell: |
-    set -eu
-    iptables -P INPUT ACCEPT 2>/dev/null || true
-    iptables -P FORWARD ACCEPT 2>/dev/null || true
-    iptables -P OUTPUT ACCEPT 2>/dev/null || true
-    iptables -t nat -P PREROUTING ACCEPT 2>/dev/null || true
-    iptables -t nat -P POSTROUTING ACCEPT 2>/dev/null || true
-  args:
-    executable: /bin/bash
-  changed_when: false
+  ansible.builtin.iptables:
+    table: "{{ item.table | default('filter') }}"
+    chain: "{{ item.chain }}"
+    policy: ACCEPT
+  loop:
+    - { chain: INPUT }
+    - { chain: FORWARD }
+    - { chain: OUTPUT }
+    - { chain: PREROUTING, table: nat }
+    - { chain: POSTROUTING, table: nat }
   become: true
   tags:
     - iptables
