@@ -21,7 +21,7 @@ Group=homepage
 # Lab is queried via loopback to skip nginx + TLS but click-through targets
 # the public vhost so the alarm rows are reachable from a browser; pug is
 # remote so the same FQDN doubles as both.
-Environment=NETDATA_HOSTS={{ inventory_hostname }}=http://localhost:19999=https://netdata.{{ inventory_hostname }}.{{ domain }},pug=https://netdata.pug.{{ domain }}
+Environment=NETDATA_HOSTS=lab=http://localhost:19999=https://netdata.lab.{{ domain }},pug=https://netdata.pug.{{ domain }}
 Environment=LISTEN_PORT={{ service_ports.homepage_alerts }}
 
 ExecStart=/usr/bin/python3 /opt/homepage_alerts/alerts_server.py
