@@ -21,6 +21,7 @@ import ssl
 import sys
 import urllib.error
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REFRESH_SECONDS = 30
@@ -74,17 +75,26 @@ def normalize(payload: dict) -> list[dict]:
     return items
 
 
+def _fetch_one(name: str, url: str) -> dict:
+    entry = {"name": name, "url": url}
+    try:
+        entry["alarms"] = normalize(fetch_alarms(url))
+    except (urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError) as e:
+        entry["error"] = f"{type(e).__name__}: {e}"
+        entry["alarms"] = []
+    return entry
+
+
 def collect(hosts: list[tuple[str, str]]) -> list[dict]:
-    out = []
-    for name, url in hosts:
-        entry = {"name": name, "url": url}
-        try:
-            entry["alarms"] = normalize(fetch_alarms(url))
-        except (urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError) as e:
-            entry["error"] = f"{type(e).__name__}: {e}"
-            entry["alarms"] = []
-        out.append(entry)
-    return out
+    # Parallel fetches so one slow/unreachable host doesn't gate the others —
+    # worst-case page render is bounded by FETCH_TIMEOUT, not summed across
+    # hosts. Iterating futures in submit order preserves the configured host
+    # order in the response.
+    if not hosts:
+        return []
+    with ThreadPoolExecutor(max_workers=len(hosts)) as pool:
+        futures = [pool.submit(_fetch_one, name, url) for name, url in hosts]
+        return [f.result() for f in futures]
 
 
 PAGE = """<!doctype html>
