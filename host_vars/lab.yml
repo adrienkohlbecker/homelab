@@ -52,7 +52,12 @@ netplan:
       activation-mode: 'off' # do not enable interface
       link-local: [] # do not setup random link local address when no dhcp is present
       wakeonlan: true
-      dhcp4: true
+      # dhcp4 must be off — when the i225 link briefly comes up (cable
+      # bounce / WoL keep-alive) networkd otherwise grabs an IoT-VLAN
+      # lease and spends the up-window logging martians for every frame
+      # it can't route. activation-mode:off only stops the initial
+      # bringup, not transient carrier events.
+      dhcp4: false
       dhcp6: false
     nic2:
       match:
@@ -61,7 +66,7 @@ netplan:
       activation-mode: 'off' # do not enable interface
       link-local: [] # do not setup random link local address when no dhcp is present
       wakeonlan: true
-      dhcp4: true
+      dhcp4: false
       dhcp6: false
   vlans:
     iot:
