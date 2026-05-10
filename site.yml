@@ -1,7 +1,6 @@
 - name: Base installation
   hosts: all:!bunk
   roles:
-    - ansible_dependencies
     - bash
     - user
     - cleanup
