@@ -104,7 +104,7 @@
   tags:
     - act_runner
 
-- name: Manage mise_github_token podman secret
+- name: Manage mise_github_token podman secret in act_runner's rootless store
   # Used at build time to bump mise's GitHub API rate limit during
   # `mise install` (anon 60/hr vs authenticated 5000/hr). The
   # podman_secret helper handles creation + rotation tracking via
@@ -113,12 +113,20 @@
   # value. Stays available for any future runtime consumer (workflow
   # containers that need to authenticate to GitHub) without an extra
   # storage hop.
+  #
+  # podman_secret_user / podman_secret_environment route the secret
+  # into act_runner's rootless podman store, not root's, so the build
+  # (which runs as act_runner) can pick it up via --secret id=NAME.
   import_role:
     name: podman_secret
     tasks_from: secret
   vars:
     podman_secret_name: mise_github_token
     podman_secret_data: "{{ mise_github_token }}"
+    podman_secret_user: act_runner
+    podman_secret_environment:
+      XDG_RUNTIME_DIR: /run/user/{{ act_runner_user.uid | default('0') }}
+      DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ act_runner_user.uid | default('0') }}/bus
   tags:
     - act_runner
 
@@ -130,27 +138,31 @@
   # images don't ship dbus-user-session (chroot.sh installs
   # linux-generic --no-install-recommends), so /run/user/$UID/bus
   # doesn't exist and crun fails with "sd-bus call: Permission denied".
-  # The user manager is up (linger + start above) — only the dbus
-  # session daemon is missing. cgroupfs sidesteps it entirely. Workflow
-  # containers spawned at runtime use the systemd default unaltered.
+  # cgroupfs sidesteps it entirely; workflow containers spawned at
+  # runtime use the systemd default unaltered.
   #
   # `--secret id=NAME` resolves NAME from podman's local secret store
-  # automatically (no src= needed). The build sees the secret as a
-  # mounted file inside the consuming RUN; see Dockerfile.lab-runtime
-  # for how it's read into GITHUB_TOKEN. Token never touches disk
-  # outside podman's secret store.
-  command: >-
-    podman --cgroup-manager=cgroupfs build
-    --secret id=mise_github_token
-    -t lab-runtime:latest -f Dockerfile.lab-runtime .
-  args:
-    chdir: /mnt/services/act_runner/build
-  # become_user: act_runner doesn't propagate XDG_RUNTIME_DIR or
-  # DBUS_SESSION_BUS_ADDRESS the way a real login session would, and
-  # rootless podman/crun need them to find the user's systemd manager
-  # for cgroup + sd-bus operations. Set them explicitly.
+  # automatically (no src= needed). See Dockerfile.lab-runtime for the
+  # consuming RUN -- the secret is mounted only there.
+  #
+  # force: rebuild when the Dockerfile or any of its build inputs
+  # change. podman_image is name-idempotent by default and won't
+  # otherwise re-run podman build when an image with the same tag
+  # exists, even if the Dockerfile differs.
+  containers.podman.podman_image:
+    name: lab-runtime
+    tag: latest
+    state: build
+    path: /mnt/services/act_runner/build
+    force: "{{ act_runner_lab_runtime_dockerfile.changed or act_runner_lab_runtime_inputs.changed }}"
+    build:
+      file: /mnt/services/act_runner/build/Dockerfile.lab-runtime
+      extra_args: "--cgroup-manager=cgroupfs --secret id=mise_github_token"
+  # become_user: act_runner doesn't propagate XDG_RUNTIME_DIR /
+  # DBUS_SESSION_BUS_ADDRESS the way a login session would; rootless
+  # podman/crun need them to reach the user's systemd manager.
   # Default('0') keeps templating from failing in check mode where
-  # service_user_result has no uid field; the task itself is gated by
+  # service_user_result has no uid field; the task is gated by
   # `when: not ansible_check_mode` so '0' is never actually used.
   environment:
     XDG_RUNTIME_DIR: /run/user/{{ act_runner_user.uid | default('0') }}
@@ -158,7 +170,6 @@
   become: true
   become_user: act_runner
   register: act_runner_lab_runtime_build
-  changed_when: true
   tags:
     - act_runner
 
