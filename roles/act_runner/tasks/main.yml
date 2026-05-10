@@ -104,6 +104,25 @@
   tags:
     - act_runner
 
+# Precheck so the staging+build pair below is properly idempotent.
+# podman_image with state=build is name-idempotent and won't rebuild
+# when the image already exists and `force` is false; without this
+# check we'd have no way to know whether the staging task is actually
+# feeding a build or just churning tmpfs.
+- name: Check whether lab-runtime image already exists
+  when: not (ansible_check_mode and act_runner_user.changed)
+  command: podman image exists lab-runtime:latest
+  register: act_runner_lab_runtime_present
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  become: true
+  become_user: act_runner
+  environment:
+    XDG_RUNTIME_DIR: /run/user/{{ act_runner_user.uid | default('0') }}
+  tags:
+    - act_runner
+
 - name: Stage GitHub token tmpfile for the lab-runtime build
   # mise pulls tool releases from GitHub during `mise install`. Anon
   # API is 60/hr; authenticated 5000/hr. Without auth the build fails
@@ -111,8 +130,15 @@
   # (no podman-secret store integration), so we drop the token to a
   # 0400 file in /run/user/<uid>/ -- tmpfs, owned by act_runner,
   # gone on reboot. Removed unconditionally after the build below
-  # whether or not the build succeeded.
-  when: not ansible_check_mode
+  # whether or not the build succeeded. Gated on the same condition
+  # that drives an actual rebuild (inputs changed, or image missing
+  # so podman_image will build regardless of `force`) so steady-state
+  # runs don't churn the tmpfile.
+  when:
+    - not ansible_check_mode
+    - act_runner_lab_runtime_dockerfile.changed
+      or act_runner_lab_runtime_inputs.changed
+      or act_runner_lab_runtime_present.rc != 0
   copy:
     dest: /run/user/{{ act_runner_user.uid | default('0') }}/lab-runtime-build-token
     content: "{{ mise_github_token }}"
