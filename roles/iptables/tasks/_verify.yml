@@ -452,6 +452,24 @@
       nf_conntrack. Without both, loose=0 won't take effect at
       next boot.
 
+# First-apply path: nf_conntrack wasn't loaded at sysctl-write time,
+# so the role should have created /var/run/reboot-required to let
+# site.yml's tail block schedule a reboot.
+- name: _verify | reboot signal — /var/run/reboot-required exists
+  stat:
+    path: /var/run/reboot-required
+  register: reboot_required_stat
+  become: true
+
+- name: _verify | reboot signal — assert reboot was signaled
+  assert:
+    that:
+      - reboot_required_stat.stat.exists
+    fail_msg: >-
+      /var/run/reboot-required wasn't created. With nf_conntrack
+      not pre-loaded, the conntrack sysctl can't take effect until
+      reboot — the role should have signaled.
+
 # Match `counter packets N bytes M drop comment "..."` with N >= 1
 # (non-zero pkts), confirming the rule actually saw a packet rather
 # than just being present. The comment disambiguates the three

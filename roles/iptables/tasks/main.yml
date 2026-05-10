@@ -81,6 +81,36 @@
   tags:
     - iptables
 
+# Signal site.yml's tail reboot block when the sysctl file changed
+# but nf_conntrack isn't loaded yet — that's the only case where a
+# key in the file (nf_conntrack_tcp_loose) can't take effect live.
+# After the resulting reboot, modules-load.d loads conntrack and
+# systemd-sysctl writes the desired value at boot. Subsequent runs
+# (module persistent) reapply via `sysctl -e -p` without needing
+# another reboot.
+- name: Check whether nf_conntrack is loaded (gates reboot signal)
+  stat:
+    path: /sys/module/nf_conntrack
+  register: iptables_nf_conntrack_loaded
+  tags:
+    - iptables
+
+- name: Signal reboot required (conntrack sysctls deferred to boot)
+  when:
+    - iptables_sysctl.changed
+    - not iptables_nf_conntrack_loaded.stat.exists
+  copy:
+    dest: /var/run/reboot-required
+    content: |
+      *** System restart required ***
+    owner: root
+    group: root
+    mode: "0644"
+    force: false
+  become: true
+  tags:
+    - iptables
+
 # `nft -c -f %s` validates the assembled ruleset before it ever
 # touches the kernel — a real correctness improvement over
 # iptables-restore, which had no equivalent dry-run path used by the
