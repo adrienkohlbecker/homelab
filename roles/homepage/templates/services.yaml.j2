@@ -1,12 +1,12 @@
 # {{ ansible_managed }}
 # Active alarm titles pulled by the homepage_alerts sidecar across each host.
-# Replaces the built-in netdata count widget (warnings/criticals only) since
-# the iframe already shows the underlying alarm names.
+# Same origin (mounted at /alerts/ on the homepage vhost) so the page can
+# resize its own iframe to fit content.
 - Active alerts:
     - Active alerts:
         widget:
           type: iframe
-          src: https://homepage-alerts.{{ inventory_hostname }}.{{ domain }}/
-          classes: h-96 w-full
+          src: /alerts/
+          classes: w-full h-32
           referrerPolicy: same-origin
-          allowScrolling: 'yes'
+          allowScrolling: 'no'

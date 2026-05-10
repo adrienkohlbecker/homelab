@@ -89,10 +89,19 @@
   vars:
     nginx_subdomain: homepage
     nginx_proxy_pass: http://localhost:{{ service_ports.homepage }}/
-    # Allow embedding the alerts sidecar's vhost as an iframe; default-src
-    # alone falls back for frame-src and 'self' wouldn't cover a sibling
-    # subdomain.
-    nginx_csp_additional: frame-src https://homepage-alerts.{{ inventory_hostname }}.{{ domain }} {{ nginx_csp_default }}
+    # Mount the alerts sidecar under /alerts/ on the same origin as homepage
+    # itself. Same-origin lets the panel resize its own iframe via
+    # window.frameElement and folds away the CSP frame-src/frame-ancestors
+    # ceremony a sibling subdomain would need.
+    nginx_server_conf: |
+      location /alerts/ {
+        proxy_pass http://localhost:{{ service_ports.homepage_alerts }}/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+      }
   tags:
     - homepage
 
@@ -145,15 +154,3 @@
   tags:
     - homepage
 
-- name: Configure nginx for alerts panel
-  import_role:
-    name: nginx
-    tasks_from: site
-  vars:
-    nginx_subdomain: homepage-alerts
-    nginx_proxy_pass: http://localhost:{{ service_ports.homepage_alerts }}/
-    # Permit being framed by the homepage vhost; the default frame-ancestors
-    # is 'self', which would block cross-subdomain embedding.
-    nginx_csp_frame_ancestors: https://homepage.{{ inventory_hostname }}.{{ domain }} 'self'
-  tags:
-    - homepage
