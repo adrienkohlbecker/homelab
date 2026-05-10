@@ -2,17 +2,24 @@
 {% for user in subid_users %}
 {{ user }}:{{100000 + (loop.index * 65536)}}:65536
 {% endfor %}
-{# Per-file extras (host_vars sets subid_extra_subuid_entries /
-   subid_extra_subgid_entries as lists of literal "user:start:count" lines).
-   Used to expose specific host uids/gids inside a rootless userns -- e.g.
-   the kvm gid for /dev/kvm passthrough when the runner spawns qemu in a
-   container. `item` is the loop variable from the role's with_items. #}
+{# Per-file extras: expose specific host uids/gids inside a user's
+   rootless userns -- e.g. the kvm gid for /dev/kvm passthrough when
+   the runner spawns qemu in a container.
+
+   host_vars sets:
+     subid_extra_subgid_groups: [{user, group, count?}, ...]
+     subid_extra_subuid_users:  [{user, source_user, count?}, ...]
+
+   The role's getent prerequisites populate ansible_facts.getent_group
+   / getent_passwd, so the resolved gid/uid lands in the file without
+   the caller having to know it by number. count defaults to 1.
+   `item` is the loop variable from the template task's with_items. #}
 {% if item == 'subuid' %}
-{% for entry in (subid_extra_subuid_entries | default([])) %}
-{{ entry }}
+{% for entry in (subid_extra_subuid_users | default([])) %}
+{{ entry.user }}:{{ ansible_facts.getent_passwd[entry.source_user][1] }}:{{ entry.count | default(1) }}
 {% endfor %}
 {% elif item == 'subgid' %}
-{% for entry in (subid_extra_subgid_entries | default([])) %}
-{{ entry }}
+{% for entry in (subid_extra_subgid_groups | default([])) %}
+{{ entry.user }}:{{ ansible_facts.getent_group[entry.group][1] }}:{{ entry.count | default(1) }}
 {% endfor %}
 {% endif %}

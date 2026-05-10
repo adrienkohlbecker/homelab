@@ -1,3 +1,29 @@
+# Look up gids/uids for the per-host extras so the template can render
+# them as "<user>:<resolved-id>:<count>" lines without the host_vars
+# author having to know each id by hand. getent populates
+# ansible_facts.getent_group / getent_passwd as a dict keyed by name.
+- name: Resolve gids for subgid extras
+  getent:
+    database: group
+    key: "{{ item.group }}"
+  loop: "{{ subid_extra_subgid_groups | default([]) }}"
+  loop_control:
+    label: "{{ item.user }}:{{ item.group }}"
+  become: true
+  tags:
+    - subid
+
+- name: Resolve uids for subuid extras
+  getent:
+    database: passwd
+    key: "{{ item.source_user }}"
+  loop: "{{ subid_extra_subuid_users | default([]) }}"
+  loop_control:
+    label: "{{ item.user }}:{{ item.source_user }}"
+  become: true
+  tags:
+    - subid
+
 - name: Apply subuid and subgid settings
   template:
     src: subid.j2
