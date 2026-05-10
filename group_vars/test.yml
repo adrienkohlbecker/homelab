@@ -37,6 +37,8 @@ mac_addresses:
   lab_i225p1: 4c:4b:b9:1b:60:0c
   lab_i225p2: d2:7d:10:e0:9c:68
 
+wireguard_subnet: 10.234.64.0/18
+
 wireguard_peers:
   - name: lab
     address: 10.234.64.2
