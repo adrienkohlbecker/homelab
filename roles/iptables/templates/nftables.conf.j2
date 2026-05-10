@@ -10,16 +10,10 @@ add table ip homelab
 flush table ip homelab
 table ip homelab {
 
-    # Admin services scoped to home LAN + wireguard. Adding a future
-    # site (brumath, bonniers) is one set-element edit, not a fan-out
-    # of duplicate rules.
+    # Admin services (samba/nut/mosh) scoped to home LAN + wireguard.
+    # Adding a future site (brumath, bonniers) is one set-element edit,
+    # not a fan-out of duplicate rules.
     set lan_admin_sources {
-        type ipv4_addr
-        flags interval
-        elements = { {{ site_subnets.home }}, {{ wireguard_subnet }} }
-    }
-
-    set mosh_sources {
         type ipv4_addr
         flags interval
         elements = { {{ site_subnets.home }}, {{ wireguard_subnet }} }
@@ -59,7 +53,7 @@ table ip homelab {
 
         # Mosh sessions originate from admin clients on the home LAN
         # or via wireguard, never from raw WAN.
-        ip saddr @mosh_sources udp dport 60000-61000 accept comment "Mosh"
+        ip saddr @lan_admin_sources udp dport 60000-61000 accept comment "Mosh"
 
         # Explicit denies — collapses 7 iptables rules into one with
         # a port set. Documents intent and keeps the catch-all log
