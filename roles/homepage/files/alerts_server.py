@@ -73,16 +73,19 @@ def fetch_alarm_log(url: str) -> list[dict]:
 
 
 def latest_transition_by_alarm(log) -> dict[int, str]:
-    """Map alarm id → most-recent transition_id. netdata returns the log as a
-    list (older builds) or a {"data": [...]} envelope (newer builds), so we
-    accept either; sorting by `unique_id` (newest first) keeps the first hit
-    per alarm id, which is the current-state transition we want to deep-link
-    to."""
+    """Map alarm id → most-recent transition_id. The active-alarms endpoint
+    spells the alarm id as `id` while the alarm-log endpoint spells the same
+    integer as `alarm_id`; we key on the alarm-log spelling here and join on
+    the alarms-endpoint id at the call site. netdata also returns the log as
+    a list (older builds) or a {"data": [...]} envelope (newer builds), so
+    we accept either; sorting by `unique_id` (newest first) keeps the first
+    hit per alarm id, which is the current-state transition we want to
+    deep-link to."""
     if isinstance(log, dict):
         log = log.get("data") or []
     out: dict[int, str] = {}
     for entry in sorted(log, key=lambda e: e.get("unique_id") or 0, reverse=True):
-        aid = entry.get("id")
+        aid = entry.get("alarm_id") or entry.get("id")
         tid = entry.get("transition_id") or entry.get("transition_uuid")
         if aid and tid and aid not in out:
             out[aid] = tid
