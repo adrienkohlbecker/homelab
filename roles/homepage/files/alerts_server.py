@@ -2,16 +2,21 @@
 endpoint across one or more hosts and renders both:
 
 - GET /          → HTML page (auto-refresh, dark theme, iframe-friendly)
-- GET /api/alerts → JSON: {"hosts": [{"name", "url", "alarms": [...], "error"?}]}
+- GET /api/alerts → JSON: {"hosts": [{"name", "url", "click_url", "alarms": [...], "error"?}]}
 
 Inputs (env):
-- NETDATA_HOSTS: comma-separated list of `<name>=<url>` pairs.
-  Example: "lab=http://localhost:19999,pug=https://netdata.pug.fahm.fr"
+- NETDATA_HOSTS: comma-separated list of `<name>=<query-url>[=<click-url>]`
+  triples. The query-url is fetched server-side, the click-url is the public
+  netdata vhost a browser can navigate to. If only one URL is given, both are
+  set to it.
+  Example: "lab=http://localhost:19999=https://netdata.lab.fahm.fr,pug=https://netdata.pug.fahm.fr"
 - LISTEN_PORT:  TCP port to bind on 127.0.0.1 (default 8765)
 
-Embedded in the homepage dashboard via an iframe widget. Stdlib only so it
-runs as a plain `python3 alerts_server.py` systemd unit on the host — no
-container, no third-party deps.
+Embedded in the homepage dashboard via an iframe widget mounted at /alerts/
+on the homepage vhost (same origin) so the page can resize itself by
+poking `window.frameElement.style.height`. Stdlib only so it runs as a plain
+`python3 alerts_server.py` systemd unit on the host — no container, no
+third-party deps.
 """
 
 import html
@@ -32,16 +37,21 @@ FETCH_TIMEOUT = 5
 SSL_CTX = ssl.create_default_context()
 
 
-def parse_hosts(spec: str) -> list[tuple[str, str]]:
+def parse_hosts(spec: str) -> list[tuple[str, str, str]]:
     out = []
     for chunk in spec.split(","):
         chunk = chunk.strip()
         if not chunk:
             continue
-        if "=" not in chunk:
-            raise ValueError(f"NETDATA_HOSTS entry missing `=`: {chunk!r}")
-        name, url = chunk.split("=", 1)
-        out.append((name.strip(), url.strip().rstrip("/")))
+        parts = [p.strip() for p in chunk.split("=")]
+        if len(parts) == 2:
+            name, query = parts
+            click = query
+        elif len(parts) == 3:
+            name, query, click = parts
+        else:
+            raise ValueError(f"NETDATA_HOSTS entry malformed: {chunk!r}")
+        out.append((name, query.rstrip("/"), click.rstrip("/")))
     return out
 
 
@@ -56,8 +66,7 @@ def fetch_alarms(url: str) -> dict:
 
 def normalize(payload: dict) -> list[dict]:
     """Flatten netdata's `{alarms: {chart.alarm: {...}}}` into a list sorted
-    critical-first then warning-first then alphabetical. We keep just the
-    fields a one-line list view needs."""
+    critical-first then warning-first then alphabetical."""
     rank = {"CRITICAL": 0, "WARNING": 1, "CLEAR": 2, "UNDEFINED": 3, "UNINITIALIZED": 4}
     items = []
     for key, alarm in (payload.get("alarms") or {}).items():
@@ -75,17 +84,20 @@ def normalize(payload: dict) -> list[dict]:
     return items
 
 
-def _fetch_one(name: str, url: str) -> dict:
-    entry = {"name": name, "url": url}
+def _fetch_one(name: str, query_url: str, click_url: str) -> dict:
+    entry = {"name": name, "url": query_url, "click_url": click_url}
     try:
-        entry["alarms"] = normalize(fetch_alarms(url))
-    except (urllib.error.URLError, TimeoutError, ValueError, json.JSONDecodeError) as e:
+        entry["alarms"] = normalize(fetch_alarms(query_url))
+    except Exception as e:  # noqa: BLE001
+        # Bare except so one host's transport quirk (TLS, DNS, weird upstream)
+        # never disappears the rest of the dashboard. The error string lands
+        # in the rendered HTML so the operator can see what's up.
         entry["error"] = f"{type(e).__name__}: {e}"
         entry["alarms"] = []
     return entry
 
 
-def collect(hosts: list[tuple[str, str]]) -> list[dict]:
+def collect(hosts: list[tuple[str, str, str]]) -> list[dict]:
     # Parallel fetches so one slow/unreachable host doesn't gate the others —
     # worst-case page render is bounded by FETCH_TIMEOUT, not summed across
     # hosts. Iterating futures in submit order preserves the configured host
@@ -93,7 +105,7 @@ def collect(hosts: list[tuple[str, str]]) -> list[dict]:
     if not hosts:
         return []
     with ThreadPoolExecutor(max_workers=len(hosts)) as pool:
-        futures = [pool.submit(_fetch_one, name, url) for name, url in hosts]
+        futures = [pool.submit(_fetch_one, n, q, c) for n, q, c in hosts]
         return [f.result() for f in futures]
 
 
@@ -106,41 +118,48 @@ PAGE = """<!doctype html>
 <style>
   :root {{
     color-scheme: dark;
-    --bg: #0f172a;
+    --bg: transparent;
     --fg: #e2e8f0;
     --muted: #64748b;
     --critical: #ef4444;
     --warning: #f59e0b;
     --ok: #10b981;
-    --row: #1e293b;
+    --row: rgba(30, 41, 59, 0.6);
   }}
+  html, body {{ margin: 0; }}
+  html {{ padding: 0; }}
   body {{
-    margin: 0;
-    padding: 12px;
+    padding: 10px 14px;
     font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
     background: var(--bg);
     color: var(--fg);
   }}
-  .host {{ margin-bottom: 16px; }}
+  .host {{ margin-bottom: 10px; }}
+  .host:last-child {{ margin-bottom: 0; }}
   .host h2 {{
-    margin: 0 0 6px 0;
-    font-size: 13px;
+    margin: 0 0 4px 0;
+    font-size: 11px;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.04em;
+    letter-spacing: 0.06em;
     color: var(--muted);
   }}
-  .empty {{ color: var(--ok); padding: 6px 8px; }}
-  .err {{ color: var(--critical); padding: 6px 8px; font-style: italic; }}
-  .alarm {{
+  .empty {{ color: var(--ok); padding: 4px 8px; }}
+  .err {{ color: var(--critical); padding: 4px 8px; font-style: italic; }}
+  a.alarm {{
     display: grid;
-    grid-template-columns: 90px 1fr auto;
+    grid-template-columns: 80px 1fr auto;
     gap: 8px;
-    padding: 6px 8px;
+    padding: 5px 8px;
     background: var(--row);
     border-radius: 4px;
-    margin-bottom: 3px;
+    margin-bottom: 2px;
     align-items: baseline;
+    text-decoration: none;
+    color: inherit;
   }}
+  a.alarm:hover {{ background: rgba(51, 65, 85, 0.7); }}
+  a.alarm:last-child {{ margin-bottom: 0; }}
   .alarm .status {{
     font-weight: 600;
     font-size: 11px;
@@ -155,6 +174,24 @@ PAGE = """<!doctype html>
 </head>
 <body>
 {body}
+<script>
+  // Same-origin auto-height: the alerts panel is mounted under /alerts/ on
+  // the homepage vhost so we can directly resize the embedding iframe. The
+  // try/catch keeps the page functional if it ever ends up cross-origin.
+  (function () {{
+    function fit() {{
+      try {{
+        var f = window.frameElement;
+        if (f) f.style.height = document.documentElement.scrollHeight + 'px';
+      }} catch (e) {{ /* cross-origin or detached */ }}
+    }}
+    window.addEventListener('load', fit);
+    if (document.readyState === 'complete') fit();
+    if (typeof ResizeObserver === 'function') {{
+      new ResizeObserver(fit).observe(document.body);
+    }}
+  }})();
+</script>
 </body>
 </html>
 """
@@ -165,19 +202,25 @@ def render_html(hosts: list[dict]) -> str:
     for host in hosts:
         rows = []
         title = html.escape(host["name"])
+        click_root = host["click_url"]
         if host.get("error"):
             rows.append(f'<div class="err">{html.escape(host["error"])}</div>')
         elif not host["alarms"]:
             rows.append('<div class="empty">No active alerts.</div>')
         else:
             for a in host["alarms"]:
+                # Deep-link to the host's alarms tab. _top so the click escapes
+                # the iframe and replaces the homepage tab — back-button
+                # returns to the dashboard.
+                href = f"{click_root}/#alarms"
                 rows.append(
-                    f'<div class="alarm {html.escape(a["status"])}">'
+                    f'<a class="alarm {html.escape(a["status"])}" '
+                    f'href="{html.escape(href)}" target="_top">'
                     f'<span class="status">{html.escape(a["status"])}</span>'
                     f'<span class="name">{html.escape(a["name"])} '
                     f'<code>{html.escape(a["chart"])}</code></span>'
                     f'<span class="value">{html.escape(a["value"])}</span>'
-                    f"</div>"
+                    f"</a>"
                 )
         sections.append(f'<section class="host"><h2>{title}</h2>{"".join(rows)}</section>')
     return PAGE.format(refresh=REFRESH_SECONDS, body="".join(sections))
