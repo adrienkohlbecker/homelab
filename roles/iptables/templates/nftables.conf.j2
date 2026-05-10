@@ -105,14 +105,23 @@ table ip homelab {
         iifname "wg0" oifname "{{ ansible_default_ipv4.interface }}" accept comment "wg → WAN"
         iifname "podman0" oifname "{{ ansible_default_ipv4.interface }}" accept comment "podman → WAN"
 
-        # Reach published containers via netavark's DNAT. The two
-        # ingress ifaces collapse into one rule with an interface
-        # set. New containers self-expose without rule edits; the
-        # WAN/wg0 scoping prevents reachability from any future
+        # Reach containers via netavark's DNAT. Three ingress paths
+        # collapse into one rule via an interface set:
+        #   - WAN: external clients hitting a published container
+        #   - wg0: wireguard peers hitting a published container
+        #   - podman0: a container querying a VIP/host-IP that
+        #     PREROUTING DNATs back into the bridge (e.g. container
+        #     → 10.123.1.224:53 → DNAT to pihole container at
+        #     10.88.0.76). Without podman0 here, the multi-base-chain
+        #     interaction with netavark drops these: netavark's chain
+        #     accepts container egress, but our default-drop forward
+        #     fires regardless (any chain's drop wins under nft hook
+        #     semantics, even if another chain returned accept).
+        # WAN/wg0 scoping still prevents reachability from any future
         # interface (guest VLAN, mgmt net) we haven't trusted.
-        iifname { "{{ ansible_default_ipv4.interface }}", "wg0" } oifname "podman0" \
+        iifname { "{{ ansible_default_ipv4.interface }}", "wg0", "podman0" } oifname "podman0" \
             ip daddr {{ podman_default_network }} ct status dnat \
-            accept comment "Reach published containers (LAN + wireguard)"
+            accept comment "Reach containers (LAN + wireguard + container-to-VIP)"
 
         # Catch-all log+drop. Counter for _verify.yml.
         limit rate 5/minute burst 10 packets log prefix "[nftables] FORWARD:REJECT: "
