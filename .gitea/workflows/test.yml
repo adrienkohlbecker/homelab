@@ -23,7 +23,7 @@ concurrency:
 
 # Force bash for all run: steps. Gitea Actions defaults to `sh` (dash)
 # in some configurations, which doesn't support `set -o pipefail` or
-# bash parameter expansion like ${var%%:*} that the parse step uses.
+# bash parameter expansion like ${var%%:*} that the spec parsing uses.
 defaults:
   run:
     shell: bash
@@ -59,7 +59,17 @@ jobs:
 
   test-role:
     needs: detect
-    if: needs.detect.outputs.matrix != '[]' && needs.detect.outputs.matrix != ''
+    # Per-cell server-side filter. Gitea materialises the job DAG before
+    # any job runs, so a `strategy.matrix.include: ${{ fromJson(needs...) }}`
+    # form can't reach detect's output (matrix expansion happens too
+    # early). The workaround: a static superset matrix listing every
+    # role:variant the universe could produce, plus this `if:` to skip
+    # cells that aren't in the dynamic detect output. Gitea evaluates
+    # job-level if: at dispatch using the resolved needs.outputs context,
+    # so skipped cells cost ~zero (no runner cycle, no container start).
+    # Keep the matrix in sync with `mise run ci:gen-test-matrix`;
+    # ci:lint-test-matrix flags drift in lint.
+    if: contains(fromJSON(needs.detect.outputs.matrix), matrix.spec)
     runs-on: lab-runtime
     container:
       # The runs-on label resolves to lab-runtime:latest already, but
@@ -75,59 +85,157 @@ jobs:
         --device /dev/kvm
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
         --volume /mnt/scratch/act_runner/lab-runtime-workdir:/lab-runtime-workdir:rw
-    timeout-minutes: 600
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        # BEGIN AUTO-GENERATED MATRIX -- run `mise run ci:gen-test-matrix` to update
+        spec:
+          - "_packer:box"
+          - "_test:box"
+          - "act_runner:box"
+          - "ansible_dependencies:box"
+          - "apt:box"
+          - "avahi:box"
+          - "backports:box"
+          - "bash:box"
+          - "bazarr:box"
+          - "certbot:box"
+          - "cleanup:box"
+          - "compta:box"
+          - "console:box"
+          - "cron:box"
+          - "csplogger:box"
+          - "custom_exporter:box"
+          - "data:box"
+          - "dnscrypt_proxy:box"
+          - "docker_client:box"
+          - "eaton_ipp:box"
+          - "fail2ban:box"
+          - "fancontrol:box"
+          - "filebrowser:box"
+          - "getmail:box"
+          - "gitea:box"
+          - "hd_idle:box"
+          - "hdparm:box"
+          - "headphones:box"
+          - "healthchecks:box"
+          - "homeassistant:box"
+          - "homepage:box"
+          - "hostname:box"
+          - "hwe_kernel:box"
+          - "influxdb:box"
+          - "iptables:box"
+          - "jellyfin:box"
+          - "journald:box"
+          - "journald_exporter:box"
+          - "kdump:box"
+          - "keepalived:box"
+          - "keepalived_exporter:box"
+          - "keyboard:box"
+          - "kuma:box"
+          - "libvirt:box"
+          - "lm_sensors:box"
+          - "locale:box"
+          - "logrotate:box"
+          - "macos_vm:box"
+          - "macvlan:box"
+          - "marie:box"
+          - "media:box"
+          - "minio:box"
+          - "mosquitto:box"
+          - "netdata:box"
+          - "netplan:box"
+          - "nexus:box"
+          - "nginx:box"
+          - "nodejs:box"
+          - "ntp:box"
+          - "nut_monitor:box"
+          - "nut_server:box"
+          - "openproject:box"
+          - "overseerr:box"
+          - "paperless:box"
+          - "pihole:box"
+          - "plex:box"
+          - "podman:box"
+          - "podman_secret:box"
+          - "postfix:box"
+          - "powertop:box"
+          - "profilarr:box"
+          - "prometheus:box"
+          - "radarr:box"
+          - "redis:box"
+          - "refind:box"
+          - "resolved:box"
+          - "sabnzbd:box"
+          - "samba:box"
+          - "scratch:box"
+          - "service_user:box"
+          - "services:box"
+          - "smart:box"
+          - "sonarr:box"
+          - "sort_ini:box"
+          - "speedtest:box"
+          - "ssh:box"
+          - "ssh_root:box"
+          - "subid:box"
+          - "swap:box"
+          - "systemd_unit:box"
+          - "tautulli:box"
+          - "timezone:box"
+          - "transmission:box"
+          - "unattended_upgrades:box"
+          - "user:box"
+          - "wireguard:box"
+          - "wolweb:box"
+          - "z2m:box"
+          - "zfs:box"
+          - "zfs_autobackup:box"
+          - "zfs_mount:box"
+          - "zfsbootmenu:box"
+          - "zfsbootmenu:lab"
+        # END AUTO-GENERATED MATRIX
+    name: ${{ matrix.spec }}
+    timeout-minutes: 30
+    env:
+      # vault-client.sh picks this up for vault-id `test` and skips the
+      # keychain/file lookup. Prod vault entries can't be decrypted in
+      # CI by design -- the test harness only loads test vars.
+      HOMELAB_VAULT_PASSWORD_TEST: ${{ secrets.HOMELAB_VAULT_PASSWORD_TEST }}
+      # Restrict ansible to the test identity only; without this ansible
+      # would still invoke vault-client.sh for prod per ansible.cfg's
+      # vault_identity_list, log a benign warning, and continue -- but
+      # the noise is confusing. This also makes prod-encrypted entries
+      # fail loudly (not silently) if they're ever loaded.
+      ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
     steps:
       - uses: actions/checkout@v4
       - run: uv sync
-      - name: Run matrix cells with bounded parallelism
-        # Why a shell loop instead of strategy.matrix: even on Gitea
-        # 1.26.1 with act_runner 0.6.1, dynamic matrix dimensions built
-        # from `${{ fromJson(needs.<job>.outputs.<x>) }}` don't get
-        # their values bound at cell-runtime -- ${{ matrix.<key> }}
-        # ends up as the literal template in the cell's name and
-        # commands. xargs -P sidesteps Gitea's matrix machinery
-        # entirely: one job, one big shell loop, bash-managed
-        # parallelism.
+      - name: Run test cell
         env:
-          MATRIX: ${{ needs.detect.outputs.matrix }}
-          MAX_PARALLEL: '2'
-          # vault-client.sh picks this up for vault-id `test` and skips
-          # the keychain/file lookup. Prod vault entries can't be
-          # decrypted in CI by design -- the test harness only loads
-          # test vars.
-          HOMELAB_VAULT_PASSWORD_TEST: ${{ secrets.HOMELAB_VAULT_PASSWORD_TEST }}
-          # Restrict ansible to the test identity only; without this
-          # ansible would still invoke vault-client.sh for prod per
-          # ansible.cfg's vault_identity_list, log a benign warning,
-          # and continue -- but the noise is confusing. This also
-          # makes prod-encrypted entries fail loudly (not silently) if
-          # they're ever loaded.
-          ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
+          SPEC: ${{ matrix.spec }}
         run: |
           set -euo pipefail
-          echo "$MATRIX" | jq -r '.[]' \
-            | xargs -I{} -n1 -P "$MAX_PARALLEL" bash -c '
-                spec=$1
-                role=${spec%%:*}
-                variant=${spec##*:}
-                echo "::group::$spec"
-                if test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /lab-runtime-workdir; then
-                  echo "::endgroup::"
-                  echo "PASS: $spec"
-                else
-                  rc=$?
-                  echo "::endgroup::"
-                  echo "FAIL($rc): $spec"
-                  exit $rc
-                fi
-              ' _ {}
+          role=${SPEC%%:*}
+          variant=${SPEC##*:}
+          # Persist for the on-failure artifact step. $GITHUB_ENV is
+          # read between steps regardless of this step's exit status,
+          # so a test failure still gives the artifact step a name.
+          {
+            echo "ROLE=$role"
+            echo "VARIANT=$variant"
+          } >>"$GITHUB_ENV"
+          test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /lab-runtime-workdir
       - name: Upload harness output on failure
         if: failure()
         uses: actions/upload-artifact@v3
+        # actions/upload-artifact@v3 rejects ':' in artifact names; ROLE
+        # + VARIANT come from the parsed SPEC so the resulting name is
+        # plain alnum/underscores/hyphens.
         with:
-          name: testout
+          name: testout-${{ env.ROLE }}-${{ env.VARIANT }}
           path: |
-            test/out/
+            test/out/${{ env.VARIANT }}.${{ env.ROLE }}.*
             /lab-runtime-workdir/**
           retention-days: 14
           if-no-files-found: warn

@@ -45,7 +45,11 @@ jobs:
 
   test-role:
     needs: gate
-    if: needs.gate.outputs.matrix != '[]' && needs.gate.outputs.matrix != ''
+    # Per-cell server-side filter, identical to test.yml. See that file
+    # for why we use a static superset matrix + `if:` rather than a
+    # dynamic matrix from the gate job's output. Empty gate output (no
+    # commits in the last 25h) skips every cell at zero cost.
+    if: contains(fromJSON(needs.gate.outputs.matrix), matrix.spec)
     runs-on: lab-runtime
     container:
       image: lab-runtime:latest
@@ -55,44 +59,145 @@ jobs:
         --device /dev/kvm
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
         --volume /mnt/scratch/act_runner/lab-runtime-workdir:/lab-runtime-workdir:rw
-    timeout-minutes: 600
+    strategy:
+      fail-fast: false
+      # Nightly runs unattended; saturate runner capacity (vs 2 on the
+      # push test workflow which leaves headroom for lint/dispatch).
+      max-parallel: 4
+      matrix:
+        # BEGIN AUTO-GENERATED MATRIX -- run `mise run ci:gen-test-matrix` to update
+        spec:
+          - "_packer:box"
+          - "_test:box"
+          - "act_runner:box"
+          - "ansible_dependencies:box"
+          - "apt:box"
+          - "avahi:box"
+          - "backports:box"
+          - "bash:box"
+          - "bazarr:box"
+          - "certbot:box"
+          - "cleanup:box"
+          - "compta:box"
+          - "console:box"
+          - "cron:box"
+          - "csplogger:box"
+          - "custom_exporter:box"
+          - "data:box"
+          - "dnscrypt_proxy:box"
+          - "docker_client:box"
+          - "eaton_ipp:box"
+          - "fail2ban:box"
+          - "fancontrol:box"
+          - "filebrowser:box"
+          - "getmail:box"
+          - "gitea:box"
+          - "hd_idle:box"
+          - "hdparm:box"
+          - "headphones:box"
+          - "healthchecks:box"
+          - "homeassistant:box"
+          - "homepage:box"
+          - "hostname:box"
+          - "hwe_kernel:box"
+          - "influxdb:box"
+          - "iptables:box"
+          - "jellyfin:box"
+          - "journald:box"
+          - "journald_exporter:box"
+          - "kdump:box"
+          - "keepalived:box"
+          - "keepalived_exporter:box"
+          - "keyboard:box"
+          - "kuma:box"
+          - "libvirt:box"
+          - "lm_sensors:box"
+          - "locale:box"
+          - "logrotate:box"
+          - "macos_vm:box"
+          - "macvlan:box"
+          - "marie:box"
+          - "media:box"
+          - "minio:box"
+          - "mosquitto:box"
+          - "netdata:box"
+          - "netplan:box"
+          - "nexus:box"
+          - "nginx:box"
+          - "nodejs:box"
+          - "ntp:box"
+          - "nut_monitor:box"
+          - "nut_server:box"
+          - "openproject:box"
+          - "overseerr:box"
+          - "paperless:box"
+          - "pihole:box"
+          - "plex:box"
+          - "podman:box"
+          - "podman_secret:box"
+          - "postfix:box"
+          - "powertop:box"
+          - "profilarr:box"
+          - "prometheus:box"
+          - "radarr:box"
+          - "redis:box"
+          - "refind:box"
+          - "resolved:box"
+          - "sabnzbd:box"
+          - "samba:box"
+          - "scratch:box"
+          - "service_user:box"
+          - "services:box"
+          - "smart:box"
+          - "sonarr:box"
+          - "sort_ini:box"
+          - "speedtest:box"
+          - "ssh:box"
+          - "ssh_root:box"
+          - "subid:box"
+          - "swap:box"
+          - "systemd_unit:box"
+          - "tautulli:box"
+          - "timezone:box"
+          - "transmission:box"
+          - "unattended_upgrades:box"
+          - "user:box"
+          - "wireguard:box"
+          - "wolweb:box"
+          - "z2m:box"
+          - "zfs:box"
+          - "zfs_autobackup:box"
+          - "zfs_mount:box"
+          - "zfsbootmenu:box"
+          - "zfsbootmenu:lab"
+        # END AUTO-GENERATED MATRIX
+    name: ${{ matrix.spec }}
+    timeout-minutes: 30
+    env:
+      HOMELAB_VAULT_PASSWORD_TEST: ${{ secrets.HOMELAB_VAULT_PASSWORD_TEST }}
+      ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
     steps:
       - uses: actions/checkout@v4
       - run: uv sync
-      - name: Run matrix cells with bounded parallelism
-        # See test.yml for why we use a shell loop instead of
-        # strategy.matrix. MAX_PARALLEL: 4 here vs 2 on the push test
-        # workflow -- nightly runs unattended.
+      - name: Run test cell
         env:
-          MATRIX: ${{ needs.gate.outputs.matrix }}
-          MAX_PARALLEL: '4'
-          # See test.yml for rationale.
-          HOMELAB_VAULT_PASSWORD_TEST: ${{ secrets.HOMELAB_VAULT_PASSWORD_TEST }}
-          ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
+          SPEC: ${{ matrix.spec }}
         run: |
           set -euo pipefail
-          echo "$MATRIX" | jq -r '.[]' \
-            | xargs -I{} -n1 -P "$MAX_PARALLEL" bash -c '
-                spec=$1
-                role=${spec%%:*}
-                variant=${spec##*:}
-                echo "::group::$spec"
-                if test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /lab-runtime-workdir; then
-                  echo "::endgroup::"
-                  echo "PASS: $spec"
-                else
-                  rc=$?
-                  echo "::endgroup::"
-                  echo "FAIL($rc): $spec"
-                  exit $rc
-                fi
-              ' _ {}
-      - if: failure()
+          role=${SPEC%%:*}
+          variant=${SPEC##*:}
+          {
+            echo "ROLE=$role"
+            echo "VARIANT=$variant"
+          } >>"$GITHUB_ENV"
+          test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /lab-runtime-workdir
+      - name: Upload harness output on failure
+        if: failure()
         uses: actions/upload-artifact@v3
         with:
-          name: testout
+          name: testout-${{ env.ROLE }}-${{ env.VARIANT }}
           path: |
-            test/out/
+            test/out/${{ env.VARIANT }}.${{ env.ROLE }}.*
             /lab-runtime-workdir/**
           retention-days: 30
           if-no-files-found: warn

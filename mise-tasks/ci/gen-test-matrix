@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+# Regenerate the static fan-out matrix in .gitea/workflows/test.yml and
+# .gitea/workflows/test-nightly.yml from the current role universe.
+#
+# Why static: Gitea materialises the job DAG before any job runs, so
+# `strategy.matrix.include: ${{ fromJson(needs.detect.outputs.matrix) }}`
+# can't reach the detect job's output. Workaround is a static matrix
+# (every role:variant the universe could produce) plus per-cell
+# `if: contains(fromJSON(needs.detect.outputs.matrix), matrix.spec)`,
+# which Gitea does evaluate at dispatch using the resolved needs.outputs
+# context. Skipped cells cost ~zero (server-side filter, no runner cycle).
+#
+# This task rewrites the YAML between the BEGIN/END markers in both
+# workflow files. Run after adding/removing a role or editing
+# .gitea/ci-lab-roles.txt; ci:lint-test-matrix flags drift in CI.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+# Source of truth: ci:detect-roles --all emits the full universe of
+# role:variant strings (with lab escalation per .gitea/ci-lab-roles.txt).
+matrix_json=$(mise-tasks/ci/detect-roles --all | sed -n 's/^matrix=//p')
+
+# Render the rewritten block: a `spec:` key with the role:variant list
+# under it. Indents are 8 (matrix:'s content level) for `spec:` and 10
+# for the list entries. We write to a file rather than passing through
+# `awk -v` because awk's variable assignment rejects embedded newlines.
+# Sorted for deterministic diffs.
+block=$(mktemp)
+trap 'rm -f "$block"' EXIT
+{
+  echo '        spec:'
+  jq -r '.[]' <<<"$matrix_json" | sort | sed 's/^/          - "/; s/$/"/'
+} >"$block"
+
+# Replace the block between BEGIN/END markers in a workflow file. The
+# markers must already exist (the template lives in the workflow's
+# hand-edited surroundings); this task only ever rewrites between them.
+# `getline line < blockfile` pulls each line from the temp file in turn,
+# letting us emit the multi-line block from awk without smuggling it
+# through `-v`.
+splice() {
+  local file=$1
+  if ! grep -q '# BEGIN AUTO-GENERATED MATRIX' "$file"; then
+    echo "error: $file has no BEGIN AUTO-GENERATED MATRIX marker" >&2
+    exit 1
+  fi
+  awk -v blockfile="$block" '
+    /# BEGIN AUTO-GENERATED MATRIX/ {
+      print
+      while ((getline line < blockfile) > 0) print line
+      close(blockfile)
+      in_block = 1
+      next
+    }
+    /# END AUTO-GENERATED MATRIX/ { in_block = 0 }
+    !in_block { print }
+  ' "$file" >"$file.tmp"
+  mv "$file.tmp" "$file"
+}
+
+splice .gitea/workflows/test.yml
+splice .gitea/workflows/test-nightly.yml
