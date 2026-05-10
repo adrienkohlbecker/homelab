@@ -27,6 +27,7 @@
       - python3
       - iproute2
       - curl
+      - iputils-ping
     cache_valid_time: 3600
   become: true
 
@@ -118,6 +119,14 @@
     status_code: 200
   become: true
 
+# Confirms the rate-limited ICMP rule accepts pings (a common
+# regression target — easy to mis-edit the rate or accidentally
+# replace ACCEPT with DROP). One ping is well below the 10/sec limit.
+- name: _verify | ICMP — ping from external netns is accepted
+  command: ip netns exec extns ping -c 1 -W 2 10.99.0.1
+  changed_when: false
+  become: true
+
 # Reload-path coverage: the role's apply task does a full
 # iptables-restore (flushing netavark's chains) followed by
 # `podman network reload --all` to re-install them. The cold-start
@@ -179,6 +188,19 @@
       - iptables_verify_save.stdout is search('-A INPUT -s ' + wireguard_subnet + ' .*--dport 445 .*-j ACCEPT')
       - iptables_verify_save.stdout is search('-A INPUT -s ' + site_subnets.home + ' .*--dport 3493 .*-j ACCEPT')
       - iptables_verify_save.stdout is search('-A INPUT -s ' + wireguard_subnet + ' .*--dport 3493 .*-j ACCEPT')
+      # TCP non-SYN drop on both INPUT and FORWARD (conntrack tcp_loose
+      # compensation — a missing rule lets spoofed mid-stream ACKs
+      # through as NEW). iptables-save renders `! --syn` as
+      # `! --tcp-flags FIN,SYN,RST,ACK SYN`.
+      - iptables_verify_save.stdout is search('-A INPUT -p tcp -m tcp ! --tcp-flags FIN,SYN,RST,ACK SYN -j DROP')
+      - iptables_verify_save.stdout is search('-A FORWARD -p tcp -m tcp ! --tcp-flags FIN,SYN,RST,ACK SYN -j DROP')
+      # INVALID-state drops on both INPUT and FORWARD
+      - iptables_verify_save.stdout is search('-A INPUT -m conntrack --ctstate INVALID -j DROP')
+      - iptables_verify_save.stdout is search('-A FORWARD -m conntrack --ctstate INVALID -j DROP')
+      # ICMP echo-request rate-limit ACCEPT + DROP overflow.
+      # iptables-save renders --icmp-type echo-request as --icmp-type 8.
+      - iptables_verify_save.stdout is search('-A INPUT -p icmp -m icmp --icmp-type 8 -m limit --limit 10/sec --limit-burst 20 -j ACCEPT')
+      - iptables_verify_save.stdout is search('-A INPUT -p icmp -m icmp --icmp-type 8 -j DROP')
     fail_msg: >-
       Templated rules don't render with the expected scopes
       (ansible_default_ipv4.interface={{ ansible_default_ipv4.interface }},
