@@ -56,13 +56,60 @@ def parse_hosts(spec: str) -> list[tuple[str, str, str]]:
     return out
 
 
-def fetch_alarms(url: str) -> dict:
-    req = urllib.request.Request(
-        f"{url}/api/v1/alarms?active",
-        headers={"User-Agent": "homepage-alerts/1"},
-    )
+def _http_json(url: str):
+    req = urllib.request.Request(url, headers={"User-Agent": "homepage-alerts/1"})
     with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT, context=SSL_CTX) as resp:
         return json.load(resp)
+
+
+def fetch_alarms(url: str) -> dict:
+    return _http_json(f"{url}/api/v1/alarms?active")
+
+
+def fetch_alarm_log(url: str) -> list[dict]:
+    # 500 entries covers a chatty agent; the server returns smaller envelopes
+    # if it has fewer transitions on hand.
+    return _http_json(f"{url}/api/v1/alarm_log?count=500")
+
+
+def latest_transition_by_alarm(log) -> dict[int, str]:
+    """Map alarm id → most-recent transition_id. netdata returns the log as a
+    list (older builds) or a {"data": [...]} envelope (newer builds), so we
+    accept either; sorting by `unique_id` (newest first) keeps the first hit
+    per alarm id, which is the current-state transition we want to deep-link
+    to."""
+    if isinstance(log, dict):
+        log = log.get("data") or []
+    out: dict[int, str] = {}
+    for entry in sorted(log, key=lambda e: e.get("unique_id") or 0, reverse=True):
+        aid = entry.get("id")
+        tid = entry.get("transition_id") or entry.get("transition_uuid")
+        if aid and tid and aid not in out:
+            out[aid] = tid
+    return out
+
+
+def alarm_href(click_root: str, host_name: str, alarm: dict) -> str:
+    """Build the v2 deep-link for an alarm row. Falls back to the alerts
+    list page if alarm_log didn't yield a transition_id."""
+    base = f"{click_root}/v2/spaces/{urllib.parse.quote(host_name)}/rooms/local/alerts"
+    tid = alarm.get("transition_id")
+    if not tid:
+        return base
+    params = urllib.parse.urlencode(
+        {
+            "host": host_name,
+            "chart": alarm.get("chart", ""),
+            "alarm": alarm.get("name", ""),
+            "alarm_id": alarm.get("id", ""),
+            "alarm_status": alarm.get("status", ""),
+            "alarm_chart": alarm.get("chart", ""),
+            "alarm_value": alarm.get("value", ""),
+            "alarm_when": alarm.get("when", ""),
+            "transition_id": tid,
+        }
+    )
+    return f"{base}/{urllib.parse.quote(tid)}?{params}"
 
 
 def normalize(payload: dict) -> list[dict]:
@@ -92,7 +139,33 @@ def normalize(payload: dict) -> list[dict]:
 def _fetch_one(name: str, query_url: str, click_url: str) -> dict:
     entry = {"name": name, "url": query_url, "click_url": click_url}
     try:
-        entry["alarms"] = normalize(fetch_alarms(query_url))
+        alarms = normalize(fetch_alarms(query_url))
+        # alarm_log gives us per-alarm transition_id needed for the v2
+        # deep-link path. Fetched alongside alarms; on failure or empty
+        # match the row falls back to the alerts list URL.
+        log_warn = ""
+        try:
+            log_response = fetch_alarm_log(query_url)
+            tid_by_id = latest_transition_by_alarm(log_response)
+            if alarms and not tid_by_id:
+                # Surface field shape so it's debuggable from the JSON API
+                # without having to enable any extra logging.
+                sample_keys = []
+                if isinstance(log_response, dict):
+                    log_response = log_response.get("data") or []
+                if log_response:
+                    sample_keys = list(log_response[0].keys())
+                log_warn = f"alarm_log yielded no transitions; sample fields={sample_keys!r}"
+        except Exception as e:  # noqa: BLE001
+            tid_by_id = {}
+            log_warn = f"alarm_log fetch failed: {type(e).__name__}: {e}"
+        if log_warn:
+            print(f"[{name}] {log_warn}", file=sys.stderr)
+            entry["log_warn"] = log_warn
+        for a in alarms:
+            a["transition_id"] = tid_by_id.get(a["id"], "")
+            a["href"] = alarm_href(click_url, name, a)
+        entry["alarms"] = alarms
     except Exception as e:  # noqa: BLE001
         # Bare except so one host's transport quirk (TLS, DNS, weird upstream)
         # never disappears the rest of the dashboard. The error string lands
@@ -214,23 +287,9 @@ def render_html(hosts: list[dict]) -> str:
             rows.append('<div class="empty">No active alerts.</div>')
         else:
             for a in host["alarms"]:
-                # Deep-link via netdata's own registry-alert-redirect.html —
-                # same format used by telegram notifications. Lands on the
-                # alarm's chart with the alarm context preserved. Opens in a
-                # new tab so the dashboard stays behind.
-                params = urllib.parse.urlencode(
-                    {
-                        "host": host["name"],
-                        "chart": a["chart"],
-                        "alarm": a["name"],
-                        "alarm_id": a["id"],
-                        "alarm_status": a["status"],
-                        "alarm_chart": a["chart"],
-                        "alarm_value": a["value"],
-                        "alarm_when": a["when"],
-                    }
-                )
-                href = f"{click_root}/registry-alert-redirect.html?{params}"
+                # href was pre-computed in _fetch_one so it's also visible on
+                # /api/alerts (debugging) — render_html just trusts it.
+                href = a.get("href") or click_root
                 rows.append(
                     f'<a class="alarm {html.escape(a["status"])}" '
                     f'href="{html.escape(href)}" target="_blank" rel="noopener">'
