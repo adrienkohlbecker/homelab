@@ -17,9 +17,11 @@ SyslogIdentifier=%N
 User=homepage
 Group=homepage
 
-# Polled netdata endpoints, formatted as `<label>=<base-url>`. Lab is queried
-# via loopback to skip nginx; pug goes through its public vhost.
-Environment=NETDATA_HOSTS={{ inventory_hostname }}=http://localhost:19999,pug=https://netdata.pug.{{ domain }}
+# Polled netdata endpoints, formatted as `<label>=<query-url>[=<click-url>]`.
+# Lab is queried via loopback to skip nginx + TLS but click-through targets
+# the public vhost so the alarm rows are reachable from a browser; pug is
+# remote so the same FQDN doubles as both.
+Environment=NETDATA_HOSTS={{ inventory_hostname }}=http://localhost:19999=https://netdata.{{ inventory_hostname }}.{{ domain }},pug=https://netdata.pug.{{ domain }}
 Environment=LISTEN_PORT={{ service_ports.homepage_alerts }}
 
 ExecStart=/usr/bin/python3 /opt/homepage_alerts/alerts_server.py
