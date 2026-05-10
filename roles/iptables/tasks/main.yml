@@ -82,7 +82,13 @@
 # specifically anything netavark / libvirt / fail2ban added an
 # explicit ACCEPT for. Reset to ACCEPT (idempotent: no-op once
 # converged).
+#
+# Only on jammy/noble — resolute+ has nothing using iptables-nft
+# compat (netavark / libvirt / fail2ban all on native-nft drivers),
+# so calling `iptables -P` there would *create* the empty chains we
+# don't want. Drop these releases from the list as each one ages out.
 - name: Reset iptables-nft compat chain policies (cohabitation cleanup)
+  when: ansible_distribution_release in ["jammy", "noble"]
   shell: |
     set -eu
     iptables -P INPUT ACCEPT 2>/dev/null || true
@@ -93,6 +99,21 @@
   args:
     executable: /bin/bash
   changed_when: false
+  become: true
+  tags:
+    - iptables
+
+# On resolute+ the compat layer has no users — drop the package so
+# `iptables -L` doesn't quietly resurrect empty `ip filter` chains
+# (and so an operator looking for the ruleset doesn't get a confusing
+# half-answer). apt resolves dependents; if anything still hard-
+# Depends on iptables on a future release, this fails loudly.
+- name: Remove iptables-nft compat layer (resolute+)
+  when: ansible_distribution_release not in ["jammy", "noble"]
+  apt:
+    pkg:
+      - iptables
+    state: absent
   become: true
   tags:
     - iptables
