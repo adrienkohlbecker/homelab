@@ -1,0 +1,28 @@
+name: test-spike2
+on:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  detect:
+    runs-on: lab-runtime
+    outputs:
+      matrix: ${{ steps.gen.outputs.matrix }}
+    steps:
+      - id: gen
+        run: echo 'matrix=["alpha","gamma"]' >> "$GITHUB_OUTPUT"
+
+  cell:
+    needs: detect
+    runs-on: lab-runtime
+    strategy:
+      fail-fast: false
+      matrix:
+        spec: [ alpha, beta, gamma, delta ]
+    name: cell-${{ matrix.spec }}
+    if: contains(fromJSON(needs.detect.outputs.matrix), matrix.spec)
+    steps:
+      - run: echo "ran cell ${{ matrix.spec }}"
