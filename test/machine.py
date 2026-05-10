@@ -42,6 +42,15 @@ DEFAULT_UBUNTU = "jammy"
 SSH_KEY = "packer/vagrant.key"
 SSH_HOST = "127.0.0.1"
 
+# git only tracks the executable bit; a fresh checkout (notably CI's
+# `actions/checkout@v4`) lands the vagrant key at 0644 and ssh refuses
+# to use it ("UNPROTECTED PRIVATE KEY FILE"). chmod once at import
+# time -- idempotent, invisible to git, and ensures every harness
+# entrypoint is covered without sprinkling the fix at each call site.
+_ssh_key_path = Path(SSH_KEY)
+if _ssh_key_path.exists():
+    _ssh_key_path.chmod(0o600)
+
 
 class QemuMachineSpec(NamedTuple):
     ssh_user: str
