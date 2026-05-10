@@ -133,7 +133,7 @@ wireguard_peers:
 podman_default_network: 10.88.0.0/16
 # First range of netavark's default_subnet_pools — every named bridge
 # (mosquitto, redis, …) is auto-allocated a /24 from here. Consumed by
-# the iptables INPUT accept for aardvark-dns:5333 and homeassistant's
+# the firewall INPUT accept for aardvark-dns:5333 and homeassistant's
 # trusted_proxies (the published-port DNAT lands on a mosquitto-bridge
 # IP and SNAT rewrites the source to that bridge's gateway).
 podman_bridge_pool: 10.89.0.0/16

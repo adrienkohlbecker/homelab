@@ -3,10 +3,10 @@
     pkg:
       - nftables
     cache_valid_time: 3600
-  register: iptables_apt_nftables
+  register: firewall_apt_nftables
   become: true
   tags:
-    - iptables
+    - firewall
 
 - name: Create nftables.service drop-in directory
   file:
@@ -17,11 +17,12 @@
     mode: "0755"
   become: true
   tags:
-    - iptables
+    - firewall
 
 # Stock nftables.service ships `ExecStop=/usr/sbin/nft flush ruleset`,
-# which would tear down netavark / fail2ban / libvirt tables on any
-# `systemctl stop` or `restart`. Scope the stop to our own table.
+# which would tear down netavark / fail2ban / libvirt tables in the
+# same kernel ruleset on any `systemctl stop` or `restart`. Scope the
+# stop to our own table.
 - name: Install nftables.service ExecStop drop-in
   import_role:
     name: systemd_unit
@@ -31,7 +32,7 @@
     systemd_unit_dest: nftables.service.d/override.conf
     systemd_unit_verify: nftables.service
   tags:
-    - iptables
+    - firewall
 
 # Pin nf_conntrack at boot so /proc/sys/net/netfilter/nf_conntrack_*
 # is populated before systemd-sysctl reads /etc/sysctl.d/. Deliberately
@@ -39,19 +40,18 @@
 # every existing TCP connection (no state, no SYN history) as INVALID
 # under loose=0 — our `ct state invalid drop` rule then kills SSH
 # along with everything else. Settings take effect at next reboot;
-# until then the nftables non-SYN drop rules are the only protection
-# (which is what was there before this commit anyway).
+# until then the nftables non-SYN drop rules are the only protection.
 - name: Pin nf_conntrack at boot
   copy:
     src: modules-load.conf
-    dest: /etc/modules-load.d/30-iptables-hardening.conf
+    dest: /etc/modules-load.d/30-firewall-hardening.conf
     owner: root
     group: root
     mode: "0644"
     backup: true
   become: true
   tags:
-    - iptables
+    - firewall
 
 # Network-stack hardening (IPv6-disable + ipv4 hardening) lives in
 # files/sysctl-hardening.conf. One artifact, one reload — the file
@@ -59,27 +59,27 @@
 - name: Install network-stack hardening sysctls
   copy:
     src: sysctl-hardening.conf
-    dest: /etc/sysctl.d/30-iptables-hardening.conf
+    dest: /etc/sysctl.d/30-firewall-hardening.conf
     owner: root
     group: root
     mode: "0644"
     backup: true
-  register: iptables_sysctl
+  register: firewall_sysctl
   become: true
   tags:
-    - iptables
+    - firewall
 
 # -e (--ignore) skips keys whose /proc path doesn't exist yet — the
 # nf_conntrack_* keys aren't writable until the module loads. On
 # subsequent runs (after a reboot has loaded the module via
 # modules-load.d), the keys are applied normally.
 - name: Apply hardening sysctls
-  when: iptables_sysctl.changed
-  command: sysctl -e -p /etc/sysctl.d/30-iptables-hardening.conf
+  when: firewall_sysctl.changed
+  command: sysctl -e -p /etc/sysctl.d/30-firewall-hardening.conf
   changed_when: true
   become: true
   tags:
-    - iptables
+    - firewall
 
 # Signal site.yml's tail reboot block when the sysctl file changed
 # but nf_conntrack isn't loaded yet — that's the only case where a
@@ -91,14 +91,14 @@
 - name: Check whether nf_conntrack is loaded (gates reboot signal)
   stat:
     path: /sys/module/nf_conntrack
-  register: iptables_nf_conntrack_loaded
+  register: firewall_nf_conntrack_loaded
   tags:
-    - iptables
+    - firewall
 
 - name: Signal reboot required (conntrack sysctls deferred to boot)
   when:
-    - iptables_sysctl.changed
-    - not iptables_nf_conntrack_loaded.stat.exists
+    - firewall_sysctl.changed
+    - not firewall_nf_conntrack_loaded.stat.exists
   copy:
     dest: /var/run/reboot-required
     content: |
@@ -109,7 +109,7 @@
     force: false
   become: true
   tags:
-    - iptables
+    - firewall
 
 # `nft -c -f %s` validates the assembled ruleset before it ever
 # touches the kernel — a real correctness improvement over
@@ -118,7 +118,7 @@
 # (nftables apt install reports changed but didn't actually run, so
 # nft isn't on disk yet to validate with).
 - name: Configure nftables ruleset
-  when: not (ansible_check_mode and iptables_apt_nftables.changed)
+  when: not (ansible_check_mode and firewall_apt_nftables.changed)
   template:
     src: nftables.conf.j2
     dest: /etc/nftables.conf
@@ -127,32 +127,32 @@
     mode: "0644"
     backup: true
     validate: "nft -c -f %s"
-  register: iptables_ruleset
+  register: firewall_ruleset
   become: true
   tags:
-    - iptables
+    - firewall
 
 # `nft -f` is per-table atomic: the `flush table ip homelab` +
 # rebuild inside the file replaces only our table. netavark /
 # libvirt / fail2ban tables (in iptables-nft compat) are untouched.
 # No more reload-cascade for those integrations.
 - name: Apply nftables ruleset
-  when: iptables_ruleset.changed and not (ansible_check_mode and iptables_apt_nftables.changed)
+  when: firewall_ruleset.changed and not (ansible_check_mode and firewall_apt_nftables.changed)
   command: nft -f /etc/nftables.conf
   changed_when: true
   become: true
   tags:
-    - iptables
+    - firewall
 
 - name: Enable nftables.service
-  when: not (ansible_check_mode and iptables_apt_nftables.changed)
+  when: not (ansible_check_mode and firewall_apt_nftables.changed)
   systemd:
     name: nftables.service
     enabled: true
     state: started
   become: true
   tags:
-    - iptables
+    - firewall
 
 # Cohabitation cleanup: the old iptables-restore set policy DROP on
 # `ip filter` chains via `:INPUT DROP` etc. Now that our rules live
@@ -182,7 +182,7 @@
     - { chain: POSTROUTING, table: nat }
   become: true
   tags:
-    - iptables
+    - firewall
 
 # On resolute+ the compat layer has no users — drop the package so
 # `iptables -L` doesn't quietly resurrect empty `ip filter` chains
@@ -197,7 +197,7 @@
     state: absent
   become: true
   tags:
-    - iptables
+    - firewall
 
 # One-shot transition cleanup. Drop these tasks after a release
 # cycle once every host has converged.
@@ -208,7 +208,7 @@
     state: absent
   become: true
   tags:
-    - iptables
+    - firewall
 
 - name: Remove legacy iptables rule files
   file:
@@ -220,4 +220,20 @@
     - /etc/iptables
   become: true
   tags:
-    - iptables
+    - firewall
+
+# Transition: the old role wrote 30-iptables-hardening.conf. After
+# the rename to roles/firewall, the new file at 30-firewall-hardening.conf
+# coexists with the legacy one on already-deployed hosts unless we
+# explicitly delete the old one. Drop these tasks after a release
+# cycle once every host has converged.
+- name: Remove legacy 30-iptables-hardening.conf (sysctl + modules-load)
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/sysctl.d/30-iptables-hardening.conf
+    - /etc/modules-load.d/30-iptables-hardening.conf
+  become: true
+  tags:
+    - firewall
