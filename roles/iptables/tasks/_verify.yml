@@ -309,17 +309,12 @@
   changed_when: false
   become: true
 
-# Forwarded-egress MASQUERADE — exercises the per-source rules.
-# extns aliases sit in site_subnets.home and wireguard_subnet; egress
-# hits FORWARD wg0→WAN ACCEPT, then the matching POSTROUTING -s rule
-# MASQUERADEs to the host's egress IP. slirp NATs again on the qemu
-# side, reply round-trips back via wg0. IP literal (1.1.1.1) avoids
-# needing DNS inside the netns (no /etc/resolv.conf there).
-- name: _verify | POSTROUTING — home-LAN-source egress through MASQUERADE works
-  command: ip netns exec extns curl --interface 10.234.0.250 --connect-timeout 5 --max-time 10 -sI http://1.1.1.1/
-  changed_when: false
-  become: true
-
+# Wireguard-source-egress MASQUERADE — exercises -s wireguard_subnet
+# -j MASQUERADE. extns alias 10.234.64.250 sits in wireguard_subnet;
+# egress hits FORWARD wg0→WAN ACCEPT, then the matching POSTROUTING
+# rule MASQUERADEs to the host's egress IP. slirp NATs again on the
+# qemu side, reply round-trips back via wg0. IP literal (1.1.1.1)
+# avoids needing DNS inside the netns (no /etc/resolv.conf there).
 - name: _verify | POSTROUTING — wireguard-source egress through MASQUERADE works
   command: ip netns exec extns curl --interface 10.234.64.250 --connect-timeout 5 --max-time 10 -sI http://1.1.1.1/
   changed_when: false
