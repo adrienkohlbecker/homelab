@@ -332,82 +332,77 @@
   changed_when: false
   become: true
 
-# Crafted-packet probes for ! --syn DROP rules on INPUT and FORWARD.
+# Crafted-packet probes for non-SYN DROP rules on input and forward.
 # hping3 always exits 0 on send (it doesn't fail just because no reply
-# arrived), so we use iptables counters as the actual assertion: reset
-# counters, send the crafted packet, then check that the specific DROP
-# rule's pkt counter incremented.
-- name: _verify | Reset iptables counters before crafted-packet probes
-  command: iptables -Z
+# arrived), so we use nft per-rule counters as the actual assertion:
+# reset counters, send the crafted packet, then confirm the specific
+# rule's counter incremented. Each rule has a unique comment so the
+# text-rendered output is unambiguous.
+- name: _verify | Reset nftables counters before crafted-packet probes
+  command: nft reset counters table ip homelab
   changed_when: false
   become: true
 
-- name: _verify | INPUT — TCP-ACK (no SYN) from extns to :80 hits the `! --syn` DROP
+- name: _verify | input — TCP-ACK (no SYN) from extns to :80 hits the non-SYN drop
   command: ip netns exec extns hping3 -A -p 80 -c 1 --quiet 10.99.0.1
   changed_when: false
   failed_when: false
   become: true
 
-- name: _verify | FORWARD — TCP-ACK (no SYN) from extns to a container hits the `! --syn` DROP
+- name: _verify | forward — TCP-ACK (no SYN) from extns to a container hits the non-SYN drop
   command: ip netns exec extns hping3 -A -p 32400 -c 1 --quiet 10.88.0.2
   changed_when: false
   failed_when: false
   become: true
 
-# FORWARD catch-all DROP — direct curl from extns to a container's
-# bridge IP (no DNAT involved, so the wg0→podman0 DNAT-state allow
-# doesn't match either). With ESTABLISHED, INVALID, ! --syn, and the
-# four scoped allows all not matching, the packet falls through to
-# the trailing -j DROP.
-- name: _verify | FORWARD — direct-to-container TCP-SYN with no DNAT hits the catch-all DROP
+# forward catch-all drop — direct curl from extns to a container's
+# bridge IP (no DNAT involved, so the wg0→podman0 ct-status-dnat
+# allow doesn't match either). With established, invalid, non-SYN,
+# and the scoped allows all not matching, the packet falls through
+# to the trailing counter-drop.
+- name: _verify | forward — direct-to-container TCP-SYN with no DNAT hits the catch-all drop
   command: ip netns exec extns curl --connect-timeout 2 --max-time 3 -sf http://10.88.0.2:80/
   register: probe_forward_drop
   changed_when: false
   failed_when: probe_forward_drop.rc == 0
   become: true
 
-- name: _verify | Capture iptables counters after crafted-packet probes
-  command: iptables-save -c
+- name: _verify | Capture nftables counters after crafted-packet probes
+  command: nft list table ip homelab
   register: counters_after_crafted
   changed_when: false
   become: true
 
-# Match `[N:M] -A CHAIN ...` with N >= 1 (non-zero pkts), confirming
-# the rule actually saw a packet rather than just being present.
-- name: _verify | Counter-checked DROP rules each fired ≥ 1 time
+# Match `counter packets N bytes M drop comment "..."` with N >= 1
+# (non-zero pkts), confirming the rule actually saw a packet rather
+# than just being present. The comment disambiguates the three
+# counter-drop rules.
+- name: _verify | Counter-checked drop rules each fired ≥ 1 time
   assert:
     that:
-      - counters_after_crafted.stdout is search('\[[1-9][0-9]*:[0-9]+\] -A INPUT -p tcp -m tcp ! --tcp-flags FIN,SYN,RST,ACK SYN -j DROP')
-      - counters_after_crafted.stdout is search('\[[1-9][0-9]*:[0-9]+\] -A FORWARD -p tcp -m tcp ! --tcp-flags FIN,SYN,RST,ACK SYN -j DROP')
-      - counters_after_crafted.stdout is search('\[[1-9][0-9]*:[0-9]+\] -A FORWARD -j DROP')
+      - counters_after_crafted.stdout is search('counter packets [1-9][0-9]* bytes [0-9]+ drop comment "input non-syn drop"')
+      - counters_after_crafted.stdout is search('counter packets [1-9][0-9]* bytes [0-9]+ drop comment "forward non-syn drop"')
+      - counters_after_crafted.stdout is search('counter packets [1-9][0-9]* bytes [0-9]+ drop comment "forward catch-all"')
     fail_msg: >-
-      Counter-based probes didn't fire all expected DROP rules:
-      ! --syn (INPUT/FORWARD) or the FORWARD catch-all. Either a rule
+      Counter-based probes didn't fire all expected drop rules:
+      non-SYN (input/forward) or the forward catch-all. Either a rule
       is missing, the probe didn't reach the chain, or another rule
       swallowed the packet first.
 
-# Reload-path coverage: the role's apply task does a full
-# iptables-restore (flushing netavark's chains) followed by
-# `podman network reload --all` to re-install them. The cold-start
-# probe above doesn't exercise this — netavark's rules are already
-# present from the container start. Re-run iptables-restore directly
-# to wipe netavark's chains, run podman network reload, then re-probe
-# the FORWARD/DNAT path. This catches regressions in the reload flow
-# (podman command rename, netavark behavior change) that the
-# main.yml integration would silently ride out for one boot.
-- name: _verify | Re-flush iptables to wipe netavark chains
-  command: iptables-restore /etc/iptables/rules.v4
+# Re-apply coverage. With iptables-restore the apply was destructive
+# (wiped netavark's chains), so the verify forced a re-flush + podman
+# network reload to validate the reload-cascade. nft -f is per-table
+# atomic — our apply only touches `ip homelab`, leaving netavark's
+# `ip filter`/`ip nat` chains alone. The smoke check is just: re-apply
+# our ruleset and confirm the published-container path still works.
+- name: _verify | Re-apply nftables ruleset (must not disturb netavark)
+  command: nft -f /etc/nftables.conf
   changed_when: true
   become: true
 
-- name: _verify | Reload podman networking (mirrors main.yml's reload)
-  command: podman network reload --all
-  changed_when: true
-  become: true
-
-- name: _verify | FORWARD/DNAT after reload — published 32400 still reachable
+- name: _verify | FORWARD/DNAT after re-apply — published 32400 still reachable
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://10.99.0.1:32400/
-  register: iptables_verify_after_reload
+  register: iptables_verify_after_reapply
   changed_when: false
-  failed_when: iptables_verify_after_reload.rc != 0 or 'iptables-verify-ok' not in iptables_verify_after_reload.stdout
+  failed_when: iptables_verify_after_reapply.rc != 0 or 'iptables-verify-ok' not in iptables_verify_after_reapply.stdout
   become: true

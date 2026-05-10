@@ -1,8 +1,9 @@
-- name: Install iptables-persistent
+- name: Install nftables
   apt:
     pkg:
-      - iptables-persistent
+      - nftables
     cache_valid_time: 3600
+  register: iptables_apt_nftables
   become: true
   tags:
     - iptables
@@ -31,109 +32,90 @@
   tags:
     - iptables
 
-- name: Configure iptables (v4)
+# `nft -c -f %s` validates the assembled ruleset before it ever
+# touches the kernel — a real correctness improvement over
+# iptables-restore, which had no equivalent dry-run path used by the
+# old role. Skipped on the same-run-as-install check-mode branch
+# (nftables apt install reports changed but didn't actually run, so
+# nft isn't on disk yet to validate with).
+- name: Configure nftables ruleset
+  when: not (ansible_check_mode and iptables_apt_nftables.changed)
   template:
-    src: rules.v4.j2
-    dest: /etc/iptables/rules.v4
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
     owner: root
     group: root
     mode: "0644"
     backup: true
-  register: iptables_v4
+    validate: "nft -c -f %s"
+  register: iptables_ruleset
   become: true
   tags:
     - iptables
 
-- name: Apply iptables v4
-  when: iptables_v4.changed
-  command: iptables-restore /etc/iptables/rules.v4
+# `nft -f` is per-table atomic: the `flush table ip homelab` +
+# rebuild inside the file replaces only our table. netavark /
+# libvirt / fail2ban tables (in iptables-nft compat) are untouched.
+# No more reload-cascade for those integrations.
+- name: Apply nftables ruleset
+  when: iptables_ruleset.changed and not (ansible_check_mode and iptables_apt_nftables.changed)
+  command: nft -f /etc/nftables.conf
   changed_when: true
   become: true
   tags:
     - iptables
 
-# Full restore (no -n) flushes all chains in every table the file
-# touches — including third-party chains: netavark (NETAVARK_FORWARD,
-# NETAVARK-HOSTPORT-*), libvirt (per-network LIBVIRT_*), fail2ban
-# (f2b-* and INPUT jumps). Each integration that adds runtime rules
-# needs a stat-gated reload here so a rules.v4 change doesn't leave
-# containers / VMs / bans broken. Stat-gates also cover first-apply
-# (these tools may not be installed yet — iptables runs early in
-# site.yml).
-- name: Check for podman binary
-  stat:
-    path: /usr/bin/podman
-  register: iptables_podman_binary
-  tags:
-    - iptables
-
-- name: Reload netavark/podman firewall rules after restore
-  when: iptables_v4.changed and iptables_podman_binary.stat.exists
-  command: podman network reload --all
-  changed_when: true
+- name: Enable nftables.service
+  when: not (ansible_check_mode and iptables_apt_nftables.changed)
+  systemd:
+    name: nftables.service
+    enabled: true
+    state: started
   become: true
   tags:
     - iptables
 
-- name: Check for virsh binary (libvirt)
-  stat:
-    path: /usr/bin/virsh
-  register: iptables_virsh_binary
-  tags:
-    - iptables
-
-- name: List active libvirt networks
-  when: iptables_v4.changed and iptables_virsh_binary.stat.exists
-  command: virsh net-list --name
-  register: iptables_libvirt_networks
+# Cohabitation cleanup: the old iptables-restore set policy DROP on
+# `ip filter` chains via `:INPUT DROP` etc. Now that our rules live
+# in `ip homelab` with its own policy, the leftover DROP on
+# `ip filter` would silently drop packets that aren't matched there —
+# specifically anything netavark / libvirt / fail2ban added an
+# explicit ACCEPT for. Reset to ACCEPT (idempotent: no-op once
+# converged).
+- name: Reset iptables-nft compat chain policies (cohabitation cleanup)
+  shell: |
+    set -eu
+    iptables -P INPUT ACCEPT 2>/dev/null || true
+    iptables -P FORWARD ACCEPT 2>/dev/null || true
+    iptables -P OUTPUT ACCEPT 2>/dev/null || true
+    iptables -t nat -P PREROUTING ACCEPT 2>/dev/null || true
+    iptables -t nat -P POSTROUTING ACCEPT 2>/dev/null || true
+  args:
+    executable: /bin/bash
   changed_when: false
   become: true
   tags:
     - iptables
 
-# net-destroy + net-start re-installs the network's iptables rules
-# without restarting libvirtd or guest VMs. ~1s connectivity blip per
-# network for any guest attached to it; guests don't reboot.
-- name: Reload libvirt networks (re-installs iptables rules)
-  when: iptables_v4.changed and iptables_virsh_binary.stat.exists
-  shell: |
-    set -euo pipefail
-    virsh net-destroy "{{ item }}"
-    virsh net-start "{{ item }}"
-  args:
-    executable: /bin/bash
-  loop: "{{ iptables_libvirt_networks.stdout_lines | default([]) }}"
-  changed_when: true
-  become: true
-  tags:
-    - iptables
-
-- name: Check for fail2ban-client binary
-  stat:
-    path: /usr/bin/fail2ban-client
-  register: iptables_fail2ban_binary
-  tags:
-    - iptables
-
-# fail2ban-client reload re-creates its f2b-* chains and the INPUT
-# jump that the iptables-restore just wiped. Active bans persist (in
-# fail2ban's database) and get re-applied on reload.
-- name: Reload fail2ban (re-installs banned IP iptables rules)
-  when: iptables_v4.changed and iptables_fail2ban_binary.stat.exists
-  command: fail2ban-client reload
-  changed_when: true
-  become: true
-  tags:
-    - iptables
-
-# IPv6 is disabled at the kernel layer (sysctl-hardening.conf
-# net.ipv6.conf.*.disable_ipv6 = 1), so we don't manage rules.v6.
-# Sweep the file iptables-persistent shipped (or our previous role
-# revision wrote) so the on-disk config matches the policy.
-- name: Remove unmanaged ip6tables rules
-  file:
-    path: /etc/iptables/rules.v6
+# One-shot transition cleanup. Drop these tasks after a release
+# cycle once every host has converged.
+- name: Remove iptables-persistent (legacy regime)
+  apt:
+    pkg:
+      - iptables-persistent
     state: absent
+  become: true
+  tags:
+    - iptables
+
+- name: Remove legacy iptables rule files
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/iptables/rules.v4
+    - /etc/iptables/rules.v6
+    - /etc/iptables
   become: true
   tags:
     - iptables
