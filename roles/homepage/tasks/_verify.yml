@@ -1,0 +1,42 @@
+- name: _verify | homepage user exists
+  command: getent passwd homepage
+  changed_when: false
+  become: true
+
+- name: _verify | homepage config dir exists
+  stat:
+    path: /mnt/services/homepage
+  register: _verify_config_dir
+  failed_when: not _verify_config_dir.stat.exists or _verify_config_dir.stat.pw_name != 'homepage'
+  become: true
+
+- name: _verify | homepage config files are present
+  stat:
+    path: /mnt/services/homepage/{{ item }}
+  loop:
+    - services.yaml
+    - bookmarks.yaml
+    - settings.yaml
+    - widgets.yaml
+  register: _verify_config_files
+  failed_when: not _verify_config_files.stat.exists
+  become: true
+
+- name: _verify | homepage.service is loaded and active
+  systemd:
+    name: homepage
+  register: _verify_unit
+  failed_when: >-
+    _verify_unit.status.LoadState != "loaded"
+    or _verify_unit.status.ActiveState != "active"
+  become: true
+
+- name: _verify | homepage answers on its loopback port
+  uri:
+    url: http://localhost:{{ service_ports.homepage }}/api/healthcheck
+    status_code: 200
+  register: _verify_http
+  retries: 30
+  delay: 2
+  until: _verify_http.status == 200
+  become: true
