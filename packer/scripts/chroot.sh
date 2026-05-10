@@ -279,21 +279,27 @@ mkdir -p /boot/efi/EFI/BOOT
 cp "/boot/efi/EFI/refind/$REFIND_NAME" "/boot/efi/EFI/BOOT/$REFIND_FALLBACK_NAME"
 
 # aarch64-only: stage the on-pool EFI-stub kernel + initrd onto the ESP
-# so rEFInd can launch them directly (menuentry appended below). The
-# rEFInd -> ZBM -> kexec chain panics on EDK2/aarch64
-# (notes/zbm-aarch64-kexec-bug-report.md), and resolute's vmlinuz
-# dropped the dual-format ARM64-Image+PE header that made qemu's
-# `-kernel` direct boot work, so the test harness now lets
-# EDK2 -> rEFInd -> kernel-EFI-stub take over. That's the same UEFI
-# LoadImage path the bug report confirms works (shim -> GRUB ->
-# kernel-EFI-stub on the same firmware), just routed through
-# refind.conf instead of an NVRAM Boot#### entry.
+# and (further down) register a direct NVRAM Boot#### entry pointing
+# at them, ahead of rEFInd in BootOrder. The rEFInd -> ZBM -> kexec
+# chain panics on EDK2/aarch64 (notes/zbm-aarch64-kexec-bug-report.md),
+# and resolute's vmlinuz dropped the dual-format ARM64-Image+PE header
+# that made qemu's `-kernel` direct boot work, so the test harness now
+# lets EDK2 load the EFI-stub kernel directly off the ESP. rEFInd
+# stays registered as a manual fallback. Routing the direct boot via
+# a rEFInd menuentry instead was tried and exposed an EDK2 DxeCore
+# Pool.c assertion on the qemu-bundled aarch64 firmware after a
+# kernel upgrade, so we keep the firmware -> kernel path as
+# short as possible and skip rEFInd's LoadImage entirely on the
+# default boot.
 #
 # Wire the staging up as a kernel + initramfs hook so apt-driven
 # kernel upgrades (and zfs-initramfs / similar initrd-only rebuilds)
-# refresh /EFI/Linux/. The hook itself is the single source of truth
-# for "pick the latest /boot kernel and copy it to the ESP" -- we
-# install it first, then invoke it to do the initial staging.
+# refresh /EFI/Linux/. The hook is the single source of truth for
+# "pick the latest /boot kernel and copy it to the ESP" -- we install
+# it first, then invoke it to do the initial staging. The NVRAM Boot
+# entry only has to be registered once at build time; it points at
+# the same /EFI/Linux/{vmlinuz.efi,initrd} paths the hook rewrites on
+# every kernel update.
 if [ "$ZBM_ARCH" = "aarch64" ]; then
   # Hook script. Installed under /etc/kernel/postinst.d (fires on
   # linux-image install/upgrade) and /etc/kernel/postrm.d (fires on
@@ -353,24 +359,10 @@ HOOK
   /etc/kernel/postinst.d/zz-stage-efi-stub
 fi
 
-# refind.conf. On aarch64 the default points at the staged EFI-stub
-# kernel (`Ubuntu (direct)` appended below); the ZBM entries stay
-# registered for diagnostics / recovery shell, even though their kexec
-# step panics. /EFI/Linux is added to dont_scan_dirs so rEFInd's
-# default scan_all_linux_kernels=true doesn't auto-detect vmlinuz.efi
-# as a duplicate alongside the explicit menuentry.
-if [ "$ZBM_ARCH" = "aarch64" ]; then
-  refind_default="Ubuntu (direct)"
-  refind_dont_scan="/EFI/ZBM,/EFI/Linux"
-else
-  refind_default="Ubuntu (ZBM)"
-  refind_dont_scan="/EFI/ZBM"
-fi
-
 cat <<EOF >/boot/efi/EFI/refind/refind.conf
 timeout 1
-default_selection "${refind_default}"
-dont_scan_dirs ${refind_dont_scan}
+default_selection "Ubuntu (ZBM)"
+dont_scan_dirs /EFI/ZBM
 
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/${ZBM_KERNEL}
@@ -385,27 +377,9 @@ menuentry "Ubuntu (ZBM Menu)" {
 }
 EOF
 
-# console=ttyAMA0 + earlycon target aarch64 virt's pl011 at the
-# standard MMIO base for serial-log capture in the test harness;
-# bare-metal hosts that lack a pl011 at this address simply ignore the
-# directive. rEFInd loads the initrd via the kernel's EFI initrd
-# protocol when the `initrd` keyword is set, so it isn't also passed
-# on the cmdline.
-if [ "$ZBM_ARCH" = "aarch64" ]; then
-  cat <<EOF >>/boot/efi/EFI/refind/refind.conf
-
-menuentry "Ubuntu (direct)" {
-    loader /EFI/Linux/vmlinuz.efi
-    initrd /EFI/Linux/initrd
-    options "root=zfs:rpool/ROOT/${UBUNTU_NAME} console=ttyAMA0,115200 earlycon=pl011,0x9000000,115200"
-}
-EOF
-fi
-
 # Configure EFI boot entry — only rEFInd, since ZBM is no longer a
 # bootable EFI binary (Components mode = kernel + initrd as separate
-# files, loaded by rEFInd) and the aarch64 direct-boot path is now a
-# rEFInd menuentry rather than an NVRAM entry.
+# files, loaded by rEFInd).
 
 apt-get install --yes efibootmgr
 
@@ -427,6 +401,37 @@ else
       -l "\\EFI\\refind\\${REFIND_NAME}"
     idx=$((idx + 1))
   done
+fi
+
+# aarch64-only: register a direct EFI-stub Boot#### entry pointing at
+# the kernel + initrd the hook above staged into /EFI/Linux/. EDK2 ->
+# kernel-EFI-stub, no rEFInd in the path. `efibootmgr -c` prepends to
+# BootOrder, so adding this AFTER the rEFInd entries makes it the
+# default while leaving rEFInd reachable as a manual selection. EFI
+# stub honours initrd= as a backslash-pathed file on the same volume
+# as the kernel; console=ttyAMA0 + earlycon target aarch64 virt's
+# pl011 at the standard MMIO base for serial-log capture in the test
+# harness; bare-metal hosts that lack a pl011 at this address simply
+# ignore the directive.
+if [ "$ZBM_ARCH" = "aarch64" ]; then
+  direct_cmdline="root=zfs:rpool/ROOT/${UBUNTU_NAME} initrd=\\EFI\\Linux\\initrd console=ttyAMA0,115200 earlycon=pl011,0x9000000,115200"
+
+  if [ "$DISKS_COUNT" -eq 1 ]; then
+    efibootmgr -c -d "$DISKS" -p 1 \
+      -L "Linux" \
+      -l "\\EFI\\Linux\\vmlinuz.efi" \
+      --unicode "$direct_cmdline"
+  else
+    idx=0
+    # shellcheck disable=SC2086  # word-splitting on DISKS is the point
+    for disk in $DISKS; do
+      efibootmgr -c -d "$disk" -p 1 \
+        -L "Linux (disk ${idx})" \
+        -l "\\EFI\\Linux\\vmlinuz.efi" \
+        --unicode "$direct_cmdline"
+      idx=$((idx + 1))
+    done
+  fi
 fi
 
 # Enable tmp mount. jammy/noble ship tmp.mount as a template under
