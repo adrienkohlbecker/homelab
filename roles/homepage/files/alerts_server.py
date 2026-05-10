@@ -66,10 +66,13 @@ def fetch_alarms(url: str) -> dict:
     return _http_json(f"{url}/api/v1/alarms?active")
 
 
-def fetch_alarm_log(url: str) -> list[dict]:
-    # 500 entries covers a chatty agent; the server returns smaller envelopes
-    # if it has fewer transitions on hand.
-    return _http_json(f"{url}/api/v1/alarm_log?count=500")
+def fetch_alarm_log(url: str):
+    # `after=0` asks for everything netdata still retains (capped internally
+    # by its health-log-retention setting). A simple `count=N` window misses
+    # long-running active alarms whose last transition is older than the most
+    # recent N events on a chatty agent — the lab churns through >500
+    # transitions per day, so persistent warnings drop out of a count window.
+    return _http_json(f"{url}/api/v1/alarm_log?after=0")
 
 
 def latest_transition_by_alarm(log) -> dict[int, str]:
