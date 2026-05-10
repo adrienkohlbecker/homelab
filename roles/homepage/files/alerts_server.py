@@ -24,6 +24,7 @@ import json
 import os
 import ssl
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -66,13 +67,14 @@ def fetch_alarms(url: str) -> dict:
     return _http_json(f"{url}/api/v1/alarms?active")
 
 
-def fetch_alarm_log(url: str):
-    # `after=0` asks for everything netdata still retains (capped internally
-    # by its health-log-retention setting). A simple `count=N` window misses
-    # long-running active alarms whose last transition is older than the most
-    # recent N events on a chatty agent — the lab churns through >500
-    # transitions per day, so persistent warnings drop out of a count window.
-    return _http_json(f"{url}/api/v1/alarm_log?after=0")
+def fetch_alarm_log(url: str, *, chart: str | None = None):
+    # Bulk: count=10000 covers a chatty agent's full retained log on lab; the
+    # earlier count=500 was missing alarms whose last transition was >24h old.
+    # Chart-filtered: per-alarm fallback when the bulk fetch still misses.
+    qs = {"count": "10000"}
+    if chart:
+        qs["chart"] = chart
+    return _http_json(f"{url}/api/v1/alarm_log?{urllib.parse.urlencode(qs)}")
 
 
 def latest_transition_by_alarm(log) -> dict[int, str]:
@@ -118,6 +120,40 @@ def alarm_href(click_root: str, host_name: str, alarm: dict) -> str:
     return f"{base}/{urllib.parse.quote(tid)}?{params}"
 
 
+def _humanize_delta(seconds: float) -> str:
+    """Compact relative-time string like `6d ago` / `3h from now` / `just now`."""
+    abs_s = abs(seconds)
+    if abs_s < 45:
+        return "just now"
+    suffix = "ago" if seconds >= 0 else "from now"
+    if abs_s < 3600:
+        return f"{int(abs_s / 60)}m {suffix}"
+    if abs_s < 86400:
+        return f"{int(abs_s / 3600)}h {suffix}"
+    if abs_s < 86400 * 30:
+        return f"{int(abs_s / 86400)}d {suffix}"
+    if abs_s < 86400 * 365:
+        return f"{int(abs_s / (86400 * 30))}mo {suffix}"
+    return f"{int(abs_s / (86400 * 365))}y {suffix}"
+
+
+def _format_value(alarm: dict) -> str:
+    """Pretty-print an alarm value. The `value_string` netdata returns is
+    `<num> <unit>` which is fine for `%`/`B`/`s`/etc. but unreadable for
+    `unit=timestamp` (raw epoch seconds) and a few sentinel cases. Convert
+    timestamps to relative time and `0 timestamp` to `never`."""
+    units = (alarm.get("units") or "").strip()
+    if units == "timestamp":
+        try:
+            ts = int(float(alarm.get("value") or 0))
+        except (TypeError, ValueError):
+            return alarm.get("value_string") or ""
+        if ts == 0:
+            return "never"
+        return _humanize_delta(time.time() - ts)
+    return alarm.get("value_string") or ""
+
+
 def normalize(payload: dict) -> list[dict]:
     """Flatten netdata's `{alarms: {chart.alarm: {...}}}` into a list sorted
     critical-first then warning-first then alphabetical. The `id` and
@@ -133,7 +169,7 @@ def normalize(payload: dict) -> list[dict]:
                 "name": alarm.get("name") or key,
                 "chart": alarm.get("chart") or "",
                 "status": alarm.get("status") or "UNDEFINED",
-                "value": alarm.get("value_string") or "",
+                "value": _format_value(alarm),
                 "when": alarm.get("last_status_change") or 0,
                 "info": alarm.get("info") or "",
             }
@@ -147,30 +183,34 @@ def _fetch_one(name: str, query_url: str, click_url: str) -> dict:
     try:
         alarms = normalize(fetch_alarms(query_url))
         # alarm_log gives us per-alarm transition_id needed for the v2
-        # deep-link path. Fetched alongside alarms; on failure or empty
-        # match the row falls back to the alerts list URL.
+        # deep-link path. Bulk fetch first; for any active alarm not in the
+        # window, fall back to a chart-filtered fetch since per-chart logs
+        # stay short even when the bulk has been GC'd at the tail. All
+        # alarm_log failures are non-fatal — the alarm row falls back to the
+        # alerts list URL.
         log_warn = ""
         try:
-            log_response = fetch_alarm_log(query_url)
-            tid_by_id = latest_transition_by_alarm(log_response)
-            if alarms and not tid_by_id:
-                # Surface field shape so it's debuggable from the JSON API
-                # without having to enable any extra logging.
-                sample_keys = []
-                if isinstance(log_response, dict):
-                    log_response = log_response.get("data") or []
-                if log_response:
-                    sample_keys = list(log_response[0].keys())
-                log_warn = f"alarm_log yielded no transitions; sample fields={sample_keys!r}"
+            tid_by_id = latest_transition_by_alarm(fetch_alarm_log(query_url))
         except Exception as e:  # noqa: BLE001
             tid_by_id = {}
             log_warn = f"alarm_log fetch failed: {type(e).__name__}: {e}"
+        for a in alarms:
+            tid = tid_by_id.get(a["id"], "")
+            if not tid and a["chart"]:
+                try:
+                    chart_map = latest_transition_by_alarm(
+                        fetch_alarm_log(query_url, chart=a["chart"])
+                    )
+                    tid = chart_map.get(a["id"], "")
+                except Exception:  # noqa: BLE001
+                    pass
+            a["transition_id"] = tid
+            a["href"] = alarm_href(click_url, name, a)
+        if alarms and not any(a["transition_id"] for a in alarms):
+            log_warn = log_warn or "no transition_id matched any active alarm"
         if log_warn:
             print(f"[{name}] {log_warn}", file=sys.stderr)
             entry["log_warn"] = log_warn
-        for a in alarms:
-            a["transition_id"] = tid_by_id.get(a["id"], "")
-            a["href"] = alarm_href(click_url, name, a)
         entry["alarms"] = alarms
     except Exception as e:  # noqa: BLE001
         # Bare except so one host's transport quirk (TLS, DNS, weird upstream)
