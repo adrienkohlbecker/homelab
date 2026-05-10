@@ -89,6 +89,10 @@
   vars:
     nginx_subdomain: homepage
     nginx_proxy_pass: http://localhost:{{ service_ports.homepage }}/
+    # Allow embedding the alerts sidecar's vhost as an iframe; default-src
+    # alone falls back for frame-src and 'self' wouldn't cover a sibling
+    # subdomain.
+    nginx_csp_additional: frame-src https://homepage-alerts.{{ inventory_hostname }}.{{ domain }} {{ nginx_csp_default }}
   tags:
     - homepage
 
@@ -148,5 +152,8 @@
   vars:
     nginx_subdomain: homepage-alerts
     nginx_proxy_pass: http://localhost:{{ service_ports.homepage_alerts }}/
+    # Permit being framed by the homepage vhost; the default frame-ancestors
+    # is 'self', which would block cross-subdomain embedding.
+    nginx_csp_frame_ancestors: https://homepage.{{ inventory_hostname }}.{{ domain }} 'self'
   tags:
     - homepage
