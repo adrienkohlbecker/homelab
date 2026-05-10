@@ -19,7 +19,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # without it.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git jq xz-utils unzip gpg apt-transport-https \
-      qemu-system-x86 qemu-utils \
+      qemu-system-x86 qemu-utils ovmf \
       openssh-client coreutils \
       xorriso cloud-image-utils \
       python3-yaml \
