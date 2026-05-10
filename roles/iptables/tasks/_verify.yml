@@ -71,6 +71,7 @@
       python3 -m http.server {{ item }} --bind 0.0.0.0
   loop:
     - 80     # unscoped INPUT-allow probe target
+    - 443    # unscoped INPUT-allow (HTTPS port; serves plain HTTP for the probe)
     - 445    # Samba probe target (-s site_subnets.home / wireguard_subnet)
     - 3493   # nut probe target (-s site_subnets.home / wireguard_subnet)
   changed_when: true
@@ -122,7 +123,7 @@
 
 - name: _verify | Wait for TCP listeners
   wait_for: { host: 127.0.0.1, port: "{{ item }}", timeout: 10 }
-  loop: [80, 445, 3493]
+  loop: [80, 443, 445, 3493]
   become: true
 
 - name: _verify | Wait for httpd container
@@ -142,6 +143,11 @@
   register: probe_18080
   changed_when: false
   failed_when: probe_18080.rc == 0
+  become: true
+
+- name: _verify | INPUT allow — port 443 reachable from extns (unscoped)
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:443/
+  changed_when: false
   become: true
 
 # Source-scoped admin services: positive cases for each rule, plus
@@ -279,6 +285,18 @@
   failed_when: false
   become: true
 
+# FORWARD catch-all DROP — direct curl from extns to a container's
+# bridge IP (no DNAT involved, so the wg0→podman0 DNAT-state allow
+# doesn't match either). With ESTABLISHED, INVALID, ! --syn, and the
+# four scoped allows all not matching, the packet falls through to
+# the trailing -j DROP.
+- name: _verify | FORWARD — direct-to-container TCP-SYN with no DNAT hits the catch-all DROP
+  command: ip netns exec extns curl --connect-timeout 2 --max-time 3 -sf http://10.88.0.2:80/
+  register: probe_forward_drop
+  changed_when: false
+  failed_when: probe_forward_drop.rc == 0
+  become: true
+
 - name: _verify | Capture iptables counters after crafted-packet probes
   command: iptables-save -c
   register: counters_after_crafted
@@ -287,16 +305,17 @@
 
 # Match `[N:M] -A CHAIN ...` with N >= 1 (non-zero pkts), confirming
 # the rule actually saw a packet rather than just being present.
-- name: _verify | INPUT/FORWARD `! --syn` DROP rules each fired ≥ 1 time
+- name: _verify | Counter-checked DROP rules each fired ≥ 1 time
   assert:
     that:
       - counters_after_crafted.stdout is search('\[[1-9][0-9]*:[0-9]+\] -A INPUT -p tcp -m tcp ! --tcp-flags FIN,SYN,RST,ACK SYN -j DROP')
       - counters_after_crafted.stdout is search('\[[1-9][0-9]*:[0-9]+\] -A FORWARD -p tcp -m tcp ! --tcp-flags FIN,SYN,RST,ACK SYN -j DROP')
+      - counters_after_crafted.stdout is search('\[[1-9][0-9]*:[0-9]+\] -A FORWARD -j DROP')
     fail_msg: >-
-      Crafted TCP-ACK packets didn't increment the `! --syn` DROP
-      counters on INPUT/FORWARD. Either the rules are missing, the
-      hping3 probe didn't reach the chain, or conntrack ate the
-      packet earlier.
+      Counter-based probes didn't fire all expected DROP rules:
+      ! --syn (INPUT/FORWARD) or the FORWARD catch-all. Either a rule
+      is missing, the probe didn't reach the chain, or another rule
+      swallowed the packet first.
 
 # Reload-path coverage: the role's apply task does a full
 # iptables-restore (flushing netavark's chains) followed by
