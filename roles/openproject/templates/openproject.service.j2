@@ -36,6 +36,12 @@ ExecStart=/usr/bin/podman run \
     --name openproject \
     --log-driver journald \
     --log-opt tag="openproject" \
+    --uidmap=0:0:65536 \
+    --uidmap=+102:{{ openproject_pg_user.uid }}:1 \
+    --uidmap=+1000:{{ openproject_user.uid }}:1 \
+    --gidmap=0:0:65536 \
+    --gidmap=+106:{{ openproject_pg_user.group }}:1 \
+    --gidmap=+1000:{{ openproject_user.group }}:1 \
     --volume /mnt/services/openproject/pgdata:/var/openproject/pgdata \
     --volume /mnt/services/openproject/assets:/var/openproject/assets \
     --publish 127.0.0.1:8070:80/tcp \
