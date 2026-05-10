@@ -6,6 +6,16 @@ After=network-online.target
 Wants=network-online.target
 StartLimitInterval=600
 StartLimitBurst=3
+{# pi-hole's upstream is dnscrypt-proxy on the podman bridge gateway:5053  #}
+{# (FTLCONF_dns_upstreams below). Without this ordering the two units stop #}
+{# in parallel at shutdown; dnscrypt-proxy exits in <1s while pi-hole has  #}
+{# a 120s container stop-timeout, so pi-hole outlives its upstream and any #}
+{# cache miss from a LAN client (host services, peers using the keepalived #}
+{# VIP) hangs until pi-hole's drain finishes. Order on the .socket so the  #}
+{# daemon stays lazily socket-activated; Wants= (not Requires=) so a       #}
+{# broken dnscrypt doesn't block pi-hole from serving cached answers.      #}
+After=dnscrypt-proxy.socket
+Wants=dnscrypt-proxy.socket
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
