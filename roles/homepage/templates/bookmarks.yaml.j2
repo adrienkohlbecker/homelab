@@ -1,81 +1,108 @@
 # {{ ansible_managed }}
+# Icons resolve to selfh.st via the sh-<name> prefix; .png picks the colored
+# variant. abbr stays as a 2-letter fallback if an icon name is mistyped or
+# selfh.st doesn't ship one for that service.
 - Media:
     - Plex:
         - abbr: PX
+          icon: sh-plex.png
           href: https://plex.{{ inventory_hostname }}.{{ domain }}/
     - Jellyfin:
         - abbr: JF
+          icon: sh-jellyfin.png
           href: https://jellyfin.{{ inventory_hostname }}.{{ domain }}/
     - Overseerr:
         - abbr: OS
+          icon: sh-overseerr.png
           href: https://overseerr.{{ inventory_hostname }}.{{ domain }}/
     - Tautulli:
         - abbr: TT
+          icon: sh-tautulli.png
           href: https://tautulli.{{ inventory_hostname }}.{{ domain }}/
     - Sonarr:
         - abbr: SN
+          icon: sh-sonarr.png
           href: https://sonarr.{{ inventory_hostname }}.{{ domain }}/
     - Radarr:
         - abbr: RD
+          icon: sh-radarr.png
           href: https://radarr.{{ inventory_hostname }}.{{ domain }}/
     - Bazarr:
         - abbr: BZ
+          icon: sh-bazarr.png
           href: https://bazarr.{{ inventory_hostname }}.{{ domain }}/
     - Headphones:
         - abbr: HP
+          icon: sh-headphones.png
           href: https://headphones.{{ inventory_hostname }}.{{ domain }}/
     - Profilarr:
         - abbr: PF
+          icon: sh-profilarr.png
           href: https://profilarr.{{ inventory_hostname }}.{{ domain }}/
     - SABnzbd:
         - abbr: SB
+          icon: sh-sabnzbd.png
           href: https://sabnzbd.{{ inventory_hostname }}.{{ domain }}/
     - Transmission:
         - abbr: TR
+          icon: sh-transmission.png
           href: https://transmission.{{ inventory_hostname }}.{{ domain }}/
 
 - Infra:
     - Gitea:
         - abbr: GT
+          icon: sh-gitea.png
           href: https://gitea.{{ inventory_hostname }}.{{ domain }}/
     - Nexus:
         - abbr: NX
+          icon: sh-sonatype-nexus.png
           href: https://nexus.{{ inventory_hostname }}.{{ domain }}/
     - MinIO:
         - abbr: MN
+          icon: sh-minio.png
           href: https://minio.{{ inventory_hostname }}.{{ domain }}/
     - Healthchecks:
         - abbr: HC
+          icon: sh-healthchecks.png
           href: https://healthchecks.{{ inventory_hostname }}.{{ domain }}/
     - Uptime Kuma:
         - abbr: UK
+          icon: sh-uptime-kuma.png
           href: https://kuma.{{ inventory_hostname }}.{{ domain }}/
     - Pi-hole:
         - abbr: PH
+          icon: sh-pi-hole.png
           href: https://pihole.{{ inventory_hostname }}.{{ domain }}/admin/
     - Netdata (lab):
         - abbr: NL
+          icon: sh-netdata.png
           href: https://netdata.{{ inventory_hostname }}.{{ domain }}/
     - Netdata (pug):
         - abbr: NP
+          icon: sh-netdata.png
           href: https://netdata.pug.{{ domain }}/
 
 - Personal:
     - Paperless:
         - abbr: PL
+          icon: sh-paperless-ngx.png
           href: https://paperless.{{ inventory_hostname }}.{{ domain }}/
     - OpenProject:
         - abbr: OP
+          icon: sh-openproject.png
           href: https://openproject.{{ inventory_hostname }}.{{ domain }}/
     - Compta:
         - abbr: CP
           href: https://compta.{{ inventory_hostname }}.{{ domain }}/
     - Home Assistant:
         - abbr: HA
+          icon: sh-home-assistant.png
           href: https://homeassistant.{{ inventory_hostname }}.{{ domain }}/
     - Filebrowser:
         - abbr: FB
+          icon: sh-filebrowser.png
           href: https://filebrowser.{{ inventory_hostname }}.{{ domain }}/
     - Speedtest:
         - abbr: ST
+          icon: sh-speedtest-tracker.png
           href: https://speedtest.{{ inventory_hostname }}.{{ domain }}/
