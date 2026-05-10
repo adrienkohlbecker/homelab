@@ -32,9 +32,16 @@
       become: true
       register: systemd_unit
 
+    # --man=no because Documentation=man:foo(8) refs trigger
+    # `man <topic>` lookups that can fail on minimal images (e.g.
+    # stock nftables.service ships `Documentation=man:nft(8)` and
+    # the test image doesn't have nft's man page installed). The
+    # man-page check is completeness fluff, not syntax/dependency
+    # validation — drop it. `--man=no` works on systemd 249+; the
+    # newer `--no-man` form is 254+ only.
     - name: Validate unit file
       when: systemd_unit.changed
-      command: systemd-analyze verify {{ _systemd_unit_dir }}/{{ systemd_unit_verify | default(systemd_unit_dest) | default(systemd_unit_src) }}
+      command: systemd-analyze verify --man=no {{ _systemd_unit_dir }}/{{ systemd_unit_verify | default(systemd_unit_dest) | default(systemd_unit_src) }}
       register: systemd_verify
       changed_when: false
       failed_when: systemd_verify.rc != 0 or systemd_verify.stderr != ''
