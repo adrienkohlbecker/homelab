@@ -64,17 +64,20 @@
 #   iptables; nothing on the host changes from the container POV.
 # - firewall_driver: native nftables, not iptables-nft compat. Lands
 #   netavark's rules in `inet netavark` instead of `ip filter`/
-#   `ip nat`. Our `ip homelab` table is independent either way; the
-#   FORWARD `ct status dnat` rule matches on conntrack tagging, not
-#   on which framework did the DNAT, so published-port reachability
-#   is unchanged. Requires netavark 1.10+ (noble ships 1.12+, on
-#   jammy we get it via the noble backport pin above).
+#   `ip nat`. The driver was added in netavark 1.10 (Jun 2024). Ubuntu
+#   has been frozen on netavark 1.4.0-4 across jammy and noble (the
+#   backport pin doesn't help — noble itself shipped 1.4.0), so the
+#   setting would be silently ignored on those releases. Gate to
+#   resolute+, where the archive is expected to carry 1.10+. Drop
+#   releases from the absent-list as they age out *and* their netavark
+#   crosses 1.10.
 - name: install | Configure podman containers.conf [network]
   community.general.ini_file:
     path: /etc/containers/containers.conf
     section: network
     option: "{{ item.key }}"
     value: "{{ item.value }}"
+    state: "{{ item.state | default('present') }}"
     create: true
     backup: true
     owner: root
@@ -83,7 +86,9 @@
   loop:
     - { key: network_backend,  value: '"netavark"' }
     - { key: dns_bind_port,    value: '5333' }
-    - { key: firewall_driver,  value: '"nftables"' }
+    - key: firewall_driver
+      value: '"nftables"'
+      state: "{{ 'absent' if ansible_distribution_release in ['jammy', 'noble'] else 'present' }}"
   register: containers_conf_network
   become: true
   tags:
