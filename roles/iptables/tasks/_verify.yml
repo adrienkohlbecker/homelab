@@ -112,12 +112,14 @@
     ip -n extns addr replace 10.234.0.250/32 dev veth_ext
     ip -n extns addr replace 10.234.64.250/32 dev veth_ext
     ip -n extns addr replace 10.88.255.250/32 dev veth_ext
+    ip -n extns addr replace 10.89.255.250/32 dev veth_ext
     ip -n extns link set veth_ext up
     ip -n extns link set lo up
     ip -n extns route replace default via 10.99.0.1
     ip route replace 10.234.0.250/32 dev wg0
     ip route replace 10.234.64.250/32 dev wg0
     ip route replace 10.88.255.250/32 dev wg0
+    ip route replace 10.89.255.250/32 dev wg0
   args:
     executable: /bin/bash
   changed_when: true
@@ -256,9 +258,22 @@
   failed_when: probe_dns_oos.rc == 0
   become: true
 
-- name: _verify | INPUT — aardvark-dns (5333/udp) reachable from container source
+- name: _verify | INPUT — aardvark-dns (5333/udp) reachable from default-bridge source
   shell: |
     echo ping | ip netns exec extns nc -u -w 2 -s 10.88.255.250 10.99.0.1 5333 | grep -q pong
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+# Regression probe for the cross-bridge case: aardvark-dns binds the
+# gateway IP of every dns-enabled named bridge (mosquitto, redis, …),
+# all carved out of netavark's 10.89.0.0/16 default_subnet_pools[0]
+# base. A previous saddr-scoped rule covered only podman_default_network
+# and the catch-all UDP reject killed every cross-bridge container-name
+# lookup (paperless → redis, z2m → mosquitto) before aardvark saw it.
+- name: _verify | INPUT — aardvark-dns (5333/udp) reachable from non-default-bridge source
+  shell: |
+    echo ping | ip netns exec extns nc -u -w 2 -s 10.89.255.250 10.99.0.1 5333 | grep -q pong
   args: { executable: /bin/bash }
   changed_when: false
   become: true

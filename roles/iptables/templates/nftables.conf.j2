@@ -40,10 +40,17 @@ table ip homelab {
         tcp flags & (fin|syn|rst|ack) != syn counter drop comment "input non-syn drop"
 
         # UDP allows. Source-scope what doesn't need WAN reach: 5053/
-        # 5333 are container DNS (consumers live on podman0); 5353
-        # mDNS is link-local on the home LAN.
-        ip saddr {{ podman_default_network }} udp dport 5053 accept comment "dnscrypt-proxy (containers)"
-        ip saddr {{ podman_default_network }} udp dport 5333 accept comment "aardvark-dns (post-DNAT from gateway:53)"
+        # 5333 are container DNS (consumers live on podman bridges); 5353
+        # mDNS is link-local on the home LAN. dnscrypt only listens on
+        # the default bridge gateway (10.88.0.1), but aardvark-dns binds
+        # the gateway IP of every dns-enabled named bridge — those are
+        # allocated from netavark's default_subnet_pools[0], the
+        # 10.89.0.0/16 prefix (mosquitto on .0/24, redis on .1/24, etc).
+        # Without this second subnet, the saddr scope rejects every
+        # cross-bridge container-name lookup (paperless → redis,
+        # z2m → mosquitto) at INPUT before aardvark even sees them.
+        ip saddr {{ podman_default_network }} udp dport 5053 accept comment "dnscrypt-proxy (default bridge only)"
+        ip saddr { {{ podman_default_network }}, 10.89.0.0/16 } udp dport 5333 accept comment "aardvark-dns (post-DNAT from gateway:53, all podman bridges)"
         ip saddr {{ site_subnets.home }} udp dport 5353 accept comment "mDNS (home LAN)"
 
         # Wireguard ingress only on the WAN iface. Pinning iif means
