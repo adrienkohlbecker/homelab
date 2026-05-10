@@ -1,7 +1,14 @@
 - name: Create internal podman network
+  # 10.123.4.96/30 — usable .97/.98. The earlier choice of .100/30
+  # (.101/.102) collided with lab's host IP 10.123.4.102 on eth0.4
+  # (host_vars/lab.yml: vlans.iot.addresses), and netavark
+  # auto-assigned HA the colliding .102. Two MACs claiming the same
+  # IP made every HA-originated frame on the IoT VLAN log as a martian
+  # on the host. Keep this block clear of any address that lab itself
+  # carries on the .4 VLAN.
   containers.podman.podman_network:
     name: iot_macvlan
-    subnet: 10.123.4.100/30
+    subnet: 10.123.4.96/30
     driver: macvlan
     opt:
       parent: iot
