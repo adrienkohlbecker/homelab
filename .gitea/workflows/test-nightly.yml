@@ -65,6 +65,8 @@ jobs:
         env:
           MATRIX: ${{ needs.gate.outputs.matrix }}
           MAX_PARALLEL: '4'
+          # See test.yml for rationale.
+          HOMELAB_VAULT_PASSWORD_TEST: ${{ secrets.HOMELAB_VAULT_PASSWORD_TEST }}
         run: |
           set -euo pipefail
           echo "$MATRIX" | jq -r '.[]' \
