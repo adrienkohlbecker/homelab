@@ -1,0 +1,63 @@
+# jinja2: lstrip_blocks: "True"
+# homepage.service ###########################################################
+[Unit]
+Description=homepage
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+{% if zfs_has_services_mount %}
+After=zfs_mount_mnt_services.service
+Requires=zfs_mount_mnt_services.service
+{% endif %}
+After=zfs_autosnapshot.target
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=always
+Delegate=yes
+TimeoutSec=60
+RestartSec=5
+Type=notify
+NotifyAccess=all
+SyslogIdentifier=%N
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name homepage \
+    --log-driver journald \
+    --log-opt tag="homepage" \
+    --security-opt=no-new-privileges \
+    --user root \
+    --uidmap=0:0:65536 \
+    --uidmap=+0:{{ homepage_user.uid }}:1 \
+    --gidmap=0:0:65536 \
+    --gidmap=+0:{{ homepage_user.group }}:1 \
+    --volume /mnt/services/homepage:/app/config \
+    --tz=local \
+    --env HOMEPAGE_ALLOWED_HOSTS=homepage.{{ inventory_hostname }}.{{ domain }},localhost \
+    --publish 127.0.0.1:{{ service_ports.homepage }}:3000/tcp \
+    --health-cmd "wget -qO- http://localhost:3000/api/healthcheck >/dev/null || exit 1" \
+    --health-startup-cmd "wget -qO- http://localhost:3000/api/healthcheck >/dev/null || exit 1" \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    --health-start-period "30s" \
+    --stop-timeout 30 \
+    ghcr.io/gethomepage/homepage:v1.13
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

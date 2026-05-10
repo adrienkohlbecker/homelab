@@ -103,6 +103,7 @@
     - profilarr
     - openproject
     - nexus
+    - homepage
 
 - name: Reboot check
   hosts: all:!bunk
