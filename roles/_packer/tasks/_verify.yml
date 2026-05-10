@@ -47,15 +47,17 @@
     src: /boot/efi/EFI/refind/refind.conf
   register: _packer_verify_refind_conf
 
-- name: _verify | ZBM menuentries and dont_scan_dirs entry are present in refind.conf
+- name: _verify | ZBM menuentries + default_selection + dont_scan_dirs in refind.conf
   ansible.builtin.assert:
     that:
+      - >-
+        'default_selection "Ubuntu (ZBM)"' in (_packer_verify_refind_conf.content | b64decode)
       - >-
         'menuentry "Ubuntu (ZBM)"' in (_packer_verify_refind_conf.content | b64decode)
       - >-
         'menuentry "Ubuntu (ZBM Menu)"' in (_packer_verify_refind_conf.content | b64decode)
       - "'/EFI/ZBM' in (_packer_verify_refind_conf.content | b64decode)"
-    fail_msg: "refind.conf missing expected ZBM menuentries / dont_scan_dirs"
+    fail_msg: "refind.conf missing expected ZBM menuentries / default_selection / dont_scan_dirs"
 
 # --- aarch64: direct EFI-stub boot path + kernel-install hook ---
 
@@ -80,17 +82,25 @@
       loop_control:
         label: "{{ item.item }}"
 
-    - name: _verify | Direct-boot menuentry is the default in refind.conf
+    - name: _verify | Read NVRAM Boot entries via efibootmgr
+      ansible.builtin.command: efibootmgr -v
+      changed_when: false
+      register: _packer_verify_efibootmgr
+      become: true
+
+    # Path-presence is enough — `efibootmgr -c` registers the loader
+    # path and the --unicode cmdline atomically, so if the path is in
+    # NVRAM the cmdline went with it. We don't grep for the cmdline
+    # because --unicode stores it as UCS-2 (ASCII chars interleaved
+    # with nulls) and efibootmgr -v's printout doesn't show the
+    # cmdline as a contiguous ASCII substring.
+    - name: _verify | Direct EFI-stub Boot entry is registered in NVRAM
       ansible.builtin.assert:
         that:
-          - >-
-            'default_selection "Ubuntu (direct)"' in (_packer_verify_refind_conf.content | b64decode)
-          - >-
-            'menuentry "Ubuntu (direct)"' in (_packer_verify_refind_conf.content | b64decode)
-          - "'/EFI/Linux' in (_packer_verify_refind_conf.content | b64decode)"
-          - "'/EFI/Linux/vmlinuz.efi' in (_packer_verify_refind_conf.content | b64decode)"
-          - "'/EFI/Linux/initrd' in (_packer_verify_refind_conf.content | b64decode)"
-        fail_msg: "refind.conf missing aarch64 'Ubuntu (direct)' menuentry, default_selection, or /EFI/Linux dont_scan_dirs entry"
+          - "'EFI\\\\Linux\\\\vmlinuz.efi' in _packer_verify_efibootmgr.stdout"
+        fail_msg: >-
+          No NVRAM Boot#### entry pointing at /EFI/Linux/vmlinuz.efi —
+          chroot.sh's aarch64 efibootmgr -c didn't run or didn't land
 
     - name: _verify | Stat kernel-install hook (regular file)
       ansible.builtin.stat:
@@ -200,7 +210,7 @@
           changed_when: false
           register: _packer_verify_uname_after
 
-        - name: _verify | EDK2 -> rEFInd -> EFI-stub booted into the new kernel
+        - name: _verify | EDK2 -> EFI-stub booted into the new kernel
           ansible.builtin.assert:
             that: >-
               _packer_verify_uname_after.stdout
@@ -210,18 +220,11 @@
               after reboot — firmware kept booting the old kernel even
               though the hook restaged a newer one
 
-# --- x86_64: ZBM is the default boot path; no /EFI/Linux staging ---
+# --- x86_64: no /EFI/Linux staging (only the aarch64 branch creates it) ---
 
-- name: _verify | ZBM-default-boot assertions (x86_64)
+- name: _verify | x86_64-only assertions
   when: ansible_architecture == "x86_64"
   block:
-    - name: _verify | Default_selection points at ZBM in refind.conf
-      ansible.builtin.assert:
-        that:
-          - >-
-            'default_selection "Ubuntu (ZBM)"' in (_packer_verify_refind_conf.content | b64decode)
-        fail_msg: "x86_64 refind.conf default_selection isn't 'Ubuntu (ZBM)'"
-
     - name: _verify | Stat /EFI/Linux on x86_64
       ansible.builtin.stat:
         path: /boot/efi/EFI/Linux
