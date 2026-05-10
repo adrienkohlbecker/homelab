@@ -44,13 +44,13 @@ table ip homelab {
         # mDNS is link-local on the home LAN. dnscrypt only listens on
         # the default bridge gateway (10.88.0.1), but aardvark-dns binds
         # the gateway IP of every dns-enabled named bridge — those are
-        # allocated from netavark's default_subnet_pools[0], the
-        # 10.89.0.0/16 prefix (mosquitto on .0/24, redis on .1/24, etc).
-        # Without this second subnet, the saddr scope rejects every
-        # cross-bridge container-name lookup (paperless → redis,
-        # z2m → mosquitto) at INPUT before aardvark even sees them.
+        # allocated from netavark's default_subnet_pools[0], hence the
+        # podman_bridge_pool prefix here. Without this second subnet,
+        # the saddr scope rejects every cross-bridge container-name
+        # lookup (paperless → redis, z2m → mosquitto) at INPUT before
+        # aardvark even sees them.
         ip saddr {{ podman_default_network }} udp dport 5053 accept comment "dnscrypt-proxy (default bridge only)"
-        ip saddr { {{ podman_default_network }}, 10.89.0.0/16 } udp dport 5333 accept comment "aardvark-dns (post-DNAT from gateway:53, all podman bridges)"
+        ip saddr { {{ podman_default_network }}, {{ podman_bridge_pool }} } udp dport 5333 accept comment "aardvark-dns (post-DNAT from gateway:53, all podman bridges)"
         ip saddr {{ site_subnets.home }} udp dport 5353 accept comment "mDNS (home LAN)"
 
         # Wireguard ingress only on the WAN iface. Pinning iif means
@@ -93,10 +93,12 @@ table ip homelab {
     #                  FORWARD CHAIN                 #
     ##################################################
     # Interface naming: `wg0` is the literal iface name from the
-    # wireguard role; `podman0` is netavark's default bridge name.
-    # Both are conventions that don't vary across hosts. The WAN
-    # iface (eth0 on prod, enpXsY on test VMs) is templated via
-    # ansible_default_ipv4.interface because it does vary.
+    # wireguard role; podman bridges follow the `podmanN` pattern
+    # (podman0 = default bridge, podman1+ = named bridges allocated
+    # from podman_bridge_pool). nft's prefix-wildcard `iifname "podman*"`
+    # collapses the per-bridge fan-out into one rule. The WAN iface
+    # (eth0 on prod, enpXsY on test VMs) is templated via
+    # ansible_default_ipv4.interface because it does vary per host.
     chain forward {
         type filter hook forward priority filter; policy drop;
 
@@ -107,28 +109,40 @@ table ip homelab {
         # conntrack tcp_loose rationale. Counter for _verify.yml.
         tcp flags & (fin|syn|rst|ack) != syn counter drop comment "forward non-syn drop"
 
-        # Egress paths from internal interfaces to WAN. POSTROUTING
-        # below MASQUERADEs them so reply-routing is correct.
+        # Egress paths from internal interfaces. SNAT for the reply
+        # path comes from POSTROUTING below for the default bridge,
+        # and from netavark's per-bridge NETAVARK-* chains in `ip nat`
+        # for every other named bridge — netavark masquerades any
+        # saddr-in-its-own-subnet packet whose daddr is outside that
+        # subnet, so we don't have to add SNAT rules per bridge here.
+        # The egress oifname set is "anything that isn't another
+        # podman bridge" — covers WAN, host VLAN sub-interfaces (the
+        # iot macvlan parent on lab), wireguard, libvirt — without
+        # hardcoding host-specific iface names. Cross-bridge container
+        # traffic still has to go through the DNAT-reach rule below;
+        # direct podman → podman is still dropped.
         iifname "wg0" oifname "{{ ansible_default_ipv4.interface }}" accept comment "wg → WAN"
-        iifname "podman0" oifname "{{ ansible_default_ipv4.interface }}" accept comment "podman → WAN"
+        iifname "podman*" oifname != "podman*" accept comment "podman → external (WAN/LAN/wireguard)"
 
-        # Reach containers via netavark's DNAT. Three ingress paths
-        # collapse into one rule via an interface set:
+        # Reach containers via netavark's DNAT. Three ingress paths,
+        # all targeting any podman bridge:
         #   - WAN: external clients hitting a published container
         #   - wg0: wireguard peers hitting a published container
-        #   - podman0: a container querying a VIP/host-IP that
-        #     PREROUTING DNATs back into the bridge (e.g. container
-        #     → 10.123.1.224:53 → DNAT to pihole container at
-        #     10.88.0.76). Without podman0 here, the multi-base-chain
-        #     interaction with netavark drops these: netavark's chain
-        #     accepts container egress, but our default-drop forward
-        #     fires regardless (any chain's drop wins under nft hook
+        #   - any podman bridge: a container querying a VIP/host-IP
+        #     that PREROUTING DNATs back into a bridge (e.g. container
+        #     → 10.123.1.224:53 → DNAT to pihole at 10.88.0.76, or
+        #     nginx → 127.0.0.1:8123 → DNAT to homeassistant at
+        #     10.89.0.21). Without these accepts, the multi-base-chain
+        #     interaction with netavark drops them: netavark's chain
+        #     accepts the egress, but our default-drop forward fires
+        #     regardless (any chain's drop wins under nft hook
         #     semantics, even if another chain returned accept).
         # WAN/wg0 scoping still prevents reachability from any future
         # interface (guest VLAN, mgmt net) we haven't trusted.
-        iifname { "{{ ansible_default_ipv4.interface }}", "wg0", "podman0" } oifname "podman0" \
-            ip daddr {{ podman_default_network }} ct status dnat \
-            accept comment "Reach containers (LAN + wireguard + container-to-VIP)"
+        iifname { "{{ ansible_default_ipv4.interface }}", "wg0" } oifname "podman*" \
+            ct status dnat accept comment "Reach containers (LAN + wireguard ingress)"
+        iifname "podman*" oifname "podman*" ct status dnat \
+            accept comment "container → VIP → container (cross- or same-bridge DNAT)"
 
         # Catch-all log+drop. Counter for _verify.yml.
         limit rate 5/minute burst 10 packets log prefix "[nftables] FORWARD:REJECT: "

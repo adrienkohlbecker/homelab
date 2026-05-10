@@ -62,6 +62,15 @@
 #   with services (pihole) that bind on the bridge-gateway interface.
 #   netavark redirects container DNS queries to gateway:5333 via
 #   iptables; nothing on the host changes from the container POV.
+# - default_subnet_pools: shrink the upstream 5-range list to just
+#   podman_bridge_pool. The iptables INPUT accept for aardvark-dns and
+#   homeassistant's trusted_proxies are scoped to that prefix; if podman
+#   ever auto-allocated a named bridge from the wider 10.90.0.0/15
+#   (etc) ranges, container-name DNS would silently fail and HA would
+#   reject X-Forwarded-For from a "stranger" gateway. Pinning to a
+#   single range with size 24 gives us 256 named bridges before
+#   exhaustion (vs. ~7 today) and turns "ran out of pool" into a loud
+#   create-time error rather than a quiet drift into untrusted space.
 # - firewall_driver: native nftables, not iptables-nft compat. Lands
 #   netavark's rules in `inet netavark` instead of `ip filter`/
 #   `ip nat`. The driver was added in netavark 1.10 (Jun 2024). Ubuntu
@@ -84,8 +93,9 @@
     group: root
     mode: "0644"
   loop:
-    - { key: network_backend,  value: '"netavark"' }
-    - { key: dns_bind_port,    value: '5333' }
+    - { key: network_backend,      value: '"netavark"' }
+    - { key: dns_bind_port,        value: '5333' }
+    - { key: default_subnet_pools, value: '[{"base" = "{{ podman_bridge_pool }}", "size" = 24}]' }
     - key: firewall_driver
       value: '"nftables"'
       state: "{{ 'absent' if ansible_distribution_release in ['jammy', 'noble'] else 'present' }}"
