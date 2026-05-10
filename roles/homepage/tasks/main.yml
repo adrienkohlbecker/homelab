@@ -91,3 +91,62 @@
     nginx_proxy_pass: http://localhost:{{ service_ports.homepage }}/
   tags:
     - homepage
+
+# Sidecar service: a tiny stdlib-only Python http.server that polls each host's
+# netdata `/api/v1/alarms?active`, renders an HTML page, and exposes the same
+# data as JSON. Embedded in the homepage dashboard via an iframe widget so the
+# alarm names show up next to the count tiles.
+- name: Create alerts panel source directory
+  file:
+    dest: /opt/homepage_alerts
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - homepage
+
+- name: Copy alerts panel server
+  copy:
+    src: alerts_server.py
+    dest: /opt/homepage_alerts/alerts_server.py
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: homepage_alerts_source
+  become: true
+  tags:
+    - homepage
+
+- name: Install alerts panel service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: homepage_alerts.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and homepage_user.changed) }}"
+  tags:
+    - homepage
+
+- name: Enable alerts panel service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: homepage_alerts
+    systemd_unit_condition: "{{ not (ansible_check_mode and (homepage_alerts_service_result.changed or homepage_user.changed)) }}"
+    systemd_unit_restart: "{{ homepage_alerts_service_result.changed or homepage_alerts_source.changed }}"
+  tags:
+    - homepage
+
+- name: Configure nginx for alerts panel
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: homepage-alerts
+    nginx_proxy_pass: http://localhost:{{ service_ports.homepage_alerts }}/
+  tags:
+    - homepage

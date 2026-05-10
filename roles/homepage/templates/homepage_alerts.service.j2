@@ -1,0 +1,35 @@
+# {{ ansible_managed }}
+[Unit]
+Description=homepage_alerts
+Wants=network-online.target
+After=network-online.target
+
+StartLimitInterval=300
+StartLimitBurst=3
+
+[Service]
+Restart=always
+TimeoutSec=30
+RestartSec=5
+Type=exec
+SyslogIdentifier=%N
+
+User=homepage
+Group=homepage
+
+# Polled netdata endpoints, formatted as `<label>=<base-url>`. Lab is queried
+# via loopback to skip nginx; pug goes through its public vhost.
+Environment=NETDATA_HOSTS={{ inventory_hostname }}=http://localhost:19999,pug=https://netdata.pug.{{ domain }}
+Environment=LISTEN_PORT={{ service_ports.homepage_alerts }}
+
+ExecStart=/usr/bin/python3 /opt/homepage_alerts/alerts_server.py
+
+# Tighten the namespace since this process only needs network + the script
+# under /opt. Useful at zero cost — the script is short and well-bounded.
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target
