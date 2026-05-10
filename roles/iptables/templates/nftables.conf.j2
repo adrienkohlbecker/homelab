@@ -1,0 +1,140 @@
+#!/usr/sbin/nft -f
+
+# Atomic replace of just our table — netavark / libvirt / fail2ban
+# tables in the same kernel ruleset (under iptables-nft compat) are
+# untouched. This is the killer simplification over iptables-restore,
+# which flushed every chain in every table the file referenced. The
+# `add table` then `flush` dance is the canonical idempotent idiom:
+# first run creates the (empty) table; subsequent runs reset it.
+add table ip homelab
+flush table ip homelab
+table ip homelab {
+
+    # Admin services scoped to home LAN + wireguard. Adding a future
+    # site (brumath, bonniers) is one set-element edit, not a fan-out
+    # of duplicate rules.
+    set lan_admin_sources {
+        type ipv4_addr
+        flags interval
+        elements = { {{ site_subnets.home }}, {{ wireguard_subnet }} }
+    }
+
+    set mosh_sources {
+        type ipv4_addr
+        flags interval
+        elements = { {{ site_subnets.home }}, {{ wireguard_subnet }} }
+    }
+
+    ##################################################
+    #                   INPUT CHAIN                  #
+    ##################################################
+    chain input {
+        type filter hook input priority filter; policy drop;
+
+        # Established/related and loopback unconditionally; INVALID
+        # dropped. After these, every remaining packet is NEW — no
+        # rule below needs an explicit ct-state qualifier.
+        ct state established,related accept
+        iif lo accept
+        ct state invalid drop
+
+        # TCP NEW must have SYN. Conntrack's loose mode (default)
+        # classifies mid-stream non-SYN packets as NEW rather than
+        # INVALID, so without this an attacker could probe TCP
+        # services with crafted ACKs. `counter` so _verify.yml can
+        # assert the rule actually fired (matched by comment).
+        tcp flags & (fin|syn|rst|ack) != syn counter drop comment "input non-syn drop"
+
+        # UDP allows. Source-scope what doesn't need WAN reach: 5053/
+        # 5333 are container DNS (consumers live on podman0); 5353
+        # mDNS is link-local on the home LAN.
+        ip saddr {{ podman_default_network }} udp dport 5053 accept comment "dnscrypt-proxy (containers)"
+        ip saddr {{ podman_default_network }} udp dport 5333 accept comment "aardvark-dns (post-DNAT from gateway:53)"
+        ip saddr {{ site_subnets.home }} udp dport 5353 accept comment "mDNS (home LAN)"
+
+        # Wireguard ingress only on the WAN iface. Pinning iif means
+        # an attacker on a future LAN bridge can't speculatively send
+        # to udp/51820 from inside.
+        iifname "{{ ansible_default_ipv4.interface }}" udp dport 51820 accept comment "wireguard (WAN ingress only)"
+
+        # Mosh sessions originate from admin clients on the home LAN
+        # or via wireguard, never from raw WAN.
+        ip saddr @mosh_sources udp dport 60000-61000 accept comment "Mosh"
+
+        # Explicit denies — collapses 7 iptables rules into one with
+        # a port set. Documents intent and keeps the catch-all log
+        # quieter.
+        udp dport { 67, 137, 138, 139, 5351, 10001, 17500, 57621 } reject with icmp type port-unreachable comment "documented denies (DHCP/NetBIOS/NAT-PMP/etc)"
+
+        # TCP allows. SSH/HTTP/HTTPS are wide-open (admin + public);
+        # Samba and nut are admin services scoped via the set.
+        tcp dport { 22, 80, 443 } accept comment "SSH/HTTP/HTTPS"
+        ip saddr @lan_admin_sources tcp dport { 445, 3493 } accept comment "Samba/nut (admin)"
+
+        # ICMP — only echo-request, rate-limited. Other ICMP types
+        # come back as RELATED. Overflow drops silently rather than
+        # falling through to the catch-all reject.
+        icmp type echo-request limit rate 10/second burst 20 packets accept
+        icmp type echo-request drop
+
+        # Other protocols.
+        ip protocol 112 accept comment "keepalived (VRRP)"
+
+        # Reject anything that's fallen through. Protocol-specific
+        # rejects mirror what the iptables ruleset emitted.
+        limit rate 5/minute burst 10 packets log prefix "[nftables] INPUT:REJECT: "
+        meta l4proto udp reject with icmp type port-unreachable
+        meta l4proto tcp reject with tcp reset
+        reject with icmp type prot-unreachable
+    }
+
+    ##################################################
+    #                  FORWARD CHAIN                 #
+    ##################################################
+    # Interface naming: `wg0` is the literal iface name from the
+    # wireguard role; `podman0` is netavark's default bridge name.
+    # Both are conventions that don't vary across hosts. The WAN
+    # iface (eth0 on prod, enpXsY on test VMs) is templated via
+    # ansible_default_ipv4.interface because it does vary.
+    chain forward {
+        type filter hook forward priority filter; policy drop;
+
+        ct state established,related accept
+        ct state invalid drop
+
+        # Mirror of input ! --syn drop — see input rule for the
+        # conntrack tcp_loose rationale. Counter for _verify.yml.
+        tcp flags & (fin|syn|rst|ack) != syn counter drop comment "forward non-syn drop"
+
+        # Egress paths from internal interfaces to WAN. POSTROUTING
+        # below MASQUERADEs them so reply-routing is correct.
+        iifname "wg0" oifname "{{ ansible_default_ipv4.interface }}" accept comment "wg → WAN"
+        iifname "podman0" oifname "{{ ansible_default_ipv4.interface }}" accept comment "podman → WAN"
+
+        # Reach published containers via netavark's DNAT. The two
+        # ingress ifaces collapse into one rule with an interface
+        # set. New containers self-expose without rule edits; the
+        # WAN/wg0 scoping prevents reachability from any future
+        # interface (guest VLAN, mgmt net) we haven't trusted.
+        iifname { "{{ ansible_default_ipv4.interface }}", "wg0" } oifname "podman0" \
+            ip daddr {{ podman_default_network }} ct status dnat \
+            accept comment "Reach published containers (LAN + wireguard)"
+
+        # Catch-all log+drop. Counter for _verify.yml.
+        limit rate 5/minute burst 10 packets log prefix "[nftables] FORWARD:REJECT: "
+        counter drop comment "forward catch-all"
+    }
+
+    ##################################################
+    #                POSTROUTING / NAT               #
+    ##################################################
+    # Source-scoped so we never silently NAT traffic from a future
+    # interface (guest VLAN, mgmt net, an extra macvlan) we hadn't
+    # considered. Two real customers: containers on podman0 and
+    # wireguard clients reaching the internet through us.
+    chain postrouting {
+        type nat hook postrouting priority srcnat; policy accept;
+        ip saddr {{ podman_default_network }} oifname "{{ ansible_default_ipv4.interface }}" masquerade comment "NAT container egress"
+        ip saddr {{ wireguard_subnet }} oifname "{{ ansible_default_ipv4.interface }}" masquerade comment "NAT wireguard-client egress"
+    }
+}
