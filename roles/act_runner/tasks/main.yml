@@ -180,6 +180,16 @@
   tags:
     - act_runner
 
+- name: Look up kvm gid for runner container.options
+  # config.yml.j2 embeds `--group-add <kvm-gid>` so workflow YAMLs don't
+  # have to. getent populates ansible_facts.getent_group['kvm'].
+  getent:
+    database: group
+    key: kvm
+  become: true
+  tags:
+    - act_runner
+
 - name: Configure act_runner
   when: not (ansible_check_mode and act_runner_user.changed)
   template:
