@@ -11,15 +11,25 @@
 # scoped INPUT rule from a representative source. Specific /32 host
 # routes back to those aliases go via wg0; we avoid broader subnet
 # routes that would collide with podman0's real container network.
+# Aliases derived from group_vars via ipmath(250) — picking offset
+# 250 keeps the address comfortably outside netavark's bottom-up
+# auto-allocation range while staying within the subnet.
 #
-#   10.99.0.2                    non-scope source (catch-all reject)
-#   {{ site_subnets.home }} .250 physical home LAN source
-#   {{ wireguard_subnet }} .250  wireguard client source
-#   10.88.255.250                container source (DNS rule probes)
+#   10.99.0.2                          non-scope source (catch-all reject)
+#   site_subnets.home  + .250 offset   physical home LAN source
+#   wireguard_subnet   + .250 offset   wireguard client source
+#   podman_default_network + .250      container source (DNS rule probes)
+#   podman_bridge_pool     + .250      non-default-bridge container source
 #
 # *The veth is named wg0 deliberately so traffic from extns enters
 # the root netns's INPUT/FORWARD chains as if it arrived on the real
 # wireguard interface — exercising rules that key on -i wg0.
+- name: _verify | Derive probe source IPs from subnet vars
+  set_fact:
+    probe_home: "{{ site_subnets.home | ansible.utils.ipmath(250) }}"
+    probe_wg: "{{ wireguard_subnet | ansible.utils.ipmath(250) }}"
+    probe_podman: "{{ podman_default_network | ansible.utils.ipmath(250) }}"
+    probe_podman_pool: "{{ podman_bridge_pool | ansible.utils.ipmath(250) }}"
 
 # Use the real prod podman install path (jammy backports pin, netavark
 # backend, zvol setup) — keeps the test rig faithful to what runs on
@@ -109,17 +119,17 @@
     ip addr replace 10.99.0.1/24 dev wg0
     ip link set wg0 up
     ip -n extns addr replace 10.99.0.2/24 dev veth_ext
-    ip -n extns addr replace 10.234.0.250/32 dev veth_ext
-    ip -n extns addr replace 10.234.64.250/32 dev veth_ext
-    ip -n extns addr replace 10.88.255.250/32 dev veth_ext
-    ip -n extns addr replace 10.89.255.250/32 dev veth_ext
+    ip -n extns addr replace {{ probe_home }}/32 dev veth_ext
+    ip -n extns addr replace {{ probe_wg }}/32 dev veth_ext
+    ip -n extns addr replace {{ probe_podman }}/32 dev veth_ext
+    ip -n extns addr replace {{ probe_podman_pool }}/32 dev veth_ext
     ip -n extns link set veth_ext up
     ip -n extns link set lo up
     ip -n extns route replace default via 10.99.0.1
-    ip route replace 10.234.0.250/32 dev wg0
-    ip route replace 10.234.64.250/32 dev wg0
-    ip route replace 10.88.255.250/32 dev wg0
-    ip route replace 10.89.255.250/32 dev wg0
+    ip route replace {{ probe_home }}/32 dev wg0
+    ip route replace {{ probe_wg }}/32 dev wg0
+    ip route replace {{ probe_podman }}/32 dev wg0
+    ip route replace {{ probe_podman_pool }}/32 dev wg0
   args:
     executable: /bin/bash
   changed_when: true
@@ -177,14 +187,14 @@
 # Mosh is scoped to home LAN + wireguard. Probe positive from each.
 - name: _verify | INPUT — mosh (60000/udp) reachable from home LAN source
   shell: |
-    echo ping | ip netns exec extns nc -u -w 2 -s 10.234.0.250 10.99.0.1 60000 | grep -q pong
+    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_home }} 10.99.0.1 60000 | grep -q pong
   args: { executable: /bin/bash }
   changed_when: false
   become: true
 
 - name: _verify | INPUT — mosh (60000/udp) reachable from wireguard source
   shell: |
-    echo ping | ip netns exec extns nc -u -w 2 -s 10.234.64.250 10.99.0.1 60000 | grep -q pong
+    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_wg }} 10.99.0.1 60000 | grep -q pong
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -205,8 +215,8 @@
     ip netns exec extns curl --interface {{ item.src }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
   loop:
-    - { src: 10.234.0.250,  label: home LAN }
-    - { src: 10.234.64.250, label: wireguard }
+    - { src: "{{ probe_home }}", label: home LAN }
+    - { src: "{{ probe_wg }}", label: wireguard }
   loop_control: { label: "{{ item.label }}" }
   changed_when: false
   become: true
@@ -225,8 +235,8 @@
     ip netns exec extns curl --interface {{ item.src }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:3493/
   loop:
-    - { src: 10.234.0.250,  label: home LAN }
-    - { src: 10.234.64.250, label: wireguard }
+    - { src: "{{ probe_home }}", label: home LAN }
+    - { src: "{{ probe_wg }}", label: wireguard }
   loop_control: { label: "{{ item.label }}" }
   changed_when: false
   become: true
@@ -245,7 +255,7 @@
 # turns the round-trip into a clean exit code.
 - name: _verify | INPUT — dnscrypt (5053/udp) reachable from container source
   shell: |
-    echo ping | ip netns exec extns nc -u -w 2 -s 10.88.255.250 10.99.0.1 5053 | grep -q pong
+    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_podman }} 10.99.0.1 5053 | grep -q pong
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -260,7 +270,7 @@
 
 - name: _verify | INPUT — aardvark-dns (5333/udp) reachable from default-bridge source
   shell: |
-    echo ping | ip netns exec extns nc -u -w 2 -s 10.88.255.250 10.99.0.1 5333 | grep -q pong
+    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_podman }} 10.99.0.1 5333 | grep -q pong
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -273,21 +283,21 @@
 # lookup (paperless → redis, z2m → mosquitto) before aardvark saw it.
 - name: _verify | INPUT — aardvark-dns (5333/udp) reachable from non-default-bridge source
   shell: |
-    echo ping | ip netns exec extns nc -u -w 2 -s 10.89.255.250 10.99.0.1 5333 | grep -q pong
+    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_podman_pool }} 10.99.0.1 5333 | grep -q pong
   args: { executable: /bin/bash }
   changed_when: false
   become: true
 
 - name: _verify | INPUT — mDNS (5353/udp) reachable from home LAN source
   shell: |
-    echo ping | ip netns exec extns nc -u -w 2 -s 10.234.0.250 10.99.0.1 5353 | grep -q pong
+    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_home }} 10.99.0.1 5353 | grep -q pong
   args: { executable: /bin/bash }
   changed_when: false
   become: true
 
 - name: _verify | INPUT — mDNS (5353/udp) rejected from wireguard source (LAN-only rule)
   shell: |
-    echo ping | ip netns exec extns nc -u -w 2 -s 10.234.64.250 10.99.0.1 5353 | grep -q pong
+    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_wg }} 10.99.0.1 5353 | grep -q pong
   register: probe_mdns_wg
   changed_when: false
   failed_when: probe_mdns_wg.rc == 0
@@ -366,13 +376,13 @@
   become: true
 
 # Wireguard-source-egress MASQUERADE — exercises -s wireguard_subnet
-# -j MASQUERADE. extns alias 10.234.64.250 sits in wireguard_subnet;
+# -j MASQUERADE. extns alias {{ probe_wg }} sits in wireguard_subnet;
 # egress hits FORWARD wg0→WAN ACCEPT, then the matching POSTROUTING
 # rule MASQUERADEs to the host's egress IP. slirp NATs again on the
 # qemu side, reply round-trips back via wg0. IP literal (1.1.1.1)
 # avoids needing DNS inside the netns (no /etc/resolv.conf there).
 - name: _verify | POSTROUTING — wireguard-source egress through MASQUERADE works
-  command: ip netns exec extns curl --interface 10.234.64.250 --connect-timeout 5 --max-time 10 -sI http://1.1.1.1/
+  command: ip netns exec extns curl --interface {{ probe_wg }} --connect-timeout 5 --max-time 10 -sI http://1.1.1.1/
   changed_when: false
   become: true
 
