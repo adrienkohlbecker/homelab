@@ -64,8 +64,10 @@ table ip homelab {
 
         # Explicit denies — collapses 7 iptables rules into one with
         # a port set. Documents intent and keeps the catch-all log
-        # quieter.
-        udp dport { 67, 137, 138, 139, 5351, 10001, 17500, 57621 } reject with icmp type port-unreachable comment "documented denies (DHCP/NetBIOS/NAT-PMP/etc)"
+        # quieter. Drop (not reject) to avoid ICMP amplification —
+        # an attacker spoofing a victim source would otherwise have
+        # us return ICMP port-unreachable per probe.
+        udp dport { 67, 137, 138, 139, 5351, 10001, 17500, 57621 } drop comment "documented denies (DHCP/NetBIOS/NAT-PMP/etc)"
 
         # TCP allows. SSH/HTTP/HTTPS are wide-open (admin + public);
         # Samba and nut are admin services scoped via the set.
@@ -81,12 +83,14 @@ table ip homelab {
         # Other protocols.
         ip protocol 112 accept comment "keepalived (VRRP)"
 
-        # Reject anything that's fallen through. Protocol-specific
-        # rejects mirror what the iptables ruleset emitted.
-        limit rate 5/minute burst 10 packets log prefix "[nftables] INPUT:REJECT: "
-        meta l4proto udp reject with icmp type port-unreachable
+        # Catch-all: log+drop UDP and non-TCP/UDP protocols silently
+        # to avoid ICMP amplification (every spoofed UDP probe would
+        # otherwise echo an ICMP port-unreachable back to the spoofed
+        # victim). TCP still gets a RST so legitimate clients fail
+        # fast without waiting for connect timeout.
+        limit rate 5/minute burst 10 packets log prefix "[nftables] INPUT:DROP: "
         meta l4proto tcp reject with tcp reset
-        reject with icmp type prot-unreachable
+        drop
     }
 
     ##################################################
