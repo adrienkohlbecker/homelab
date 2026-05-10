@@ -61,7 +61,10 @@ publish-workstation=no
 #publish-a-on-ipv6=no
 
 [reflector]
-enable-reflector=yes
+# No-op while allow-interfaces pins avahi to a single uplink — reflector
+# needs ≥2 interfaces to bridge between. Kept false to keep the config
+# truthful for future readers.
+enable-reflector=no
 #reflect-ipv=no
 #reflect-filters=_airplay._tcp.local,_raop._tcp.local
 
