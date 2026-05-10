@@ -24,6 +24,7 @@ import json
 import os
 import ssl
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -349,6 +350,47 @@ def render_html(hosts: list[dict]) -> str:
     return PAGE.format(refresh=REFRESH_SECONDS, body="".join(sections))
 
 
+class AlertsCache:
+    """Holds the most recent collect() snapshot. A daemon thread refreshes it
+    every REFRESH_SECONDS so HTTP requests never wait on netdata. The lock is
+    only held across the reference swap; the slow API fetches happen
+    lock-free."""
+
+    def __init__(self, hosts: list[tuple[str, str, str]]) -> None:
+        self._hosts = hosts
+        self._lock = threading.Lock()
+        self._data: list[dict] = []
+        self._updated_at: float = 0.0
+        self._error: str = ""
+
+    def snapshot(self) -> tuple[list[dict], float, str]:
+        with self._lock:
+            return self._data, self._updated_at, self._error
+
+    def refresh(self) -> None:
+        try:
+            data = collect(self._hosts)
+            err = ""
+        except Exception as e:  # noqa: BLE001
+            data = None
+            err = f"{type(e).__name__}: {e}"
+        now = time.time()
+        with self._lock:
+            if data is not None:
+                self._data = data
+            self._updated_at = now
+            self._error = err
+
+
+def _cache_loop(cache: AlertsCache, interval: float) -> None:
+    while True:
+        try:
+            cache.refresh()
+        except Exception as e:  # noqa: BLE001
+            print(f"cache refresh crashed: {type(e).__name__}: {e}", file=sys.stderr)
+        time.sleep(interval)
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, status: int, ctype: str, body: bytes) -> None:
         self.send_response(status)
@@ -359,12 +401,14 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler API)
+        cache: AlertsCache = self.server.cache
         if self.path in ("/", "/index.html"):
-            data = collect(self.server.hosts)
+            data, _, _ = cache.snapshot()
             self._send(200, "text/html; charset=utf-8", render_html(data).encode("utf-8"))
         elif self.path == "/api/alerts":
-            data = collect(self.server.hosts)
-            self._send(200, "application/json", json.dumps({"hosts": data}).encode("utf-8"))
+            data, updated, err = cache.snapshot()
+            payload = {"hosts": data, "updated_at": updated, "error": err}
+            self._send(200, "application/json", json.dumps(payload).encode("utf-8"))
         elif self.path == "/api/healthcheck":
             self._send(200, "application/json", b'{"status":"ok"}')
         else:
@@ -381,8 +425,16 @@ def main() -> None:
         print("NETDATA_HOSTS is empty; refusing to start", file=sys.stderr)
         sys.exit(1)
     port = int(os.environ.get("LISTEN_PORT", "8765"))
+    cache = AlertsCache(hosts)
+    # Synchronous first refresh so the first HTTP request lands on data, not
+    # an empty cache. If it fails, the page renders empty and the background
+    # thread keeps retrying every REFRESH_SECONDS.
+    cache.refresh()
+    threading.Thread(
+        target=_cache_loop, args=(cache, REFRESH_SECONDS), daemon=True, name="alerts-cache"
+    ).start()
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    server.hosts = hosts  # attach to instance so handlers can read it
+    server.cache = cache
     print(f"alerts_server listening on 127.0.0.1:{port} for {len(hosts)} host(s)", file=sys.stderr)
     server.serve_forever()
 
