@@ -87,6 +87,10 @@ jobs:
         env:
           MATRIX: ${{ needs.detect.outputs.matrix }}
           MAX_PARALLEL: '2'
+          # vault.sh picks this up for vault-id `test` and skips the
+          # keychain/file lookup. Prod vault entries can't be decrypted
+          # in CI by design -- the test harness only loads test vars.
+          HOMELAB_VAULT_PASSWORD_TEST: ${{ secrets.HOMELAB_VAULT_PASSWORD_TEST }}
         run: |
           set -euo pipefail
           echo "$MATRIX" | jq -r '.[]' \
