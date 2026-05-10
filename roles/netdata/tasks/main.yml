@@ -87,6 +87,41 @@
   tags:
     - netdata
 
+# The bundled go.d/pihole collector in netdata 1.46.x predates pi-hole v6
+# and probes /admin/api.php once per minute; v6 retired that path and FTL
+# logs a "Bad request" warning for every probe. Disable until the netdata
+# pin is bumped past 2.x (which ships the v6-aware module). See
+# notes/netdata-2x-upgrade.md for the migration plan.
+- name: Remove stale pihole collector config
+  file:
+    path: /etc/netdata/go.d/pihole.conf
+    state: absent
+  register: netdata_pihole_conf_removed
+  become: true
+  tags:
+    - netdata
+
+- name: Copy stock go.d.conf
+  command: cp /usr/lib/netdata/conf.d/go.d.conf /etc/netdata/go.d.conf
+  args:
+    creates: /etc/netdata/go.d.conf
+  register: netdata_godconf_copy
+  become: true
+  tags:
+    - netdata
+
+- name: Disable pihole collector in go.d.conf
+  when: not (ansible_check_mode and netdata_godconf_copy.changed)
+  lineinfile:
+    path: /etc/netdata/go.d.conf
+    regexp: '^[#\s]*pihole:\s+'
+    line: '  pihole: no'
+    backup: true
+  register: netdata_godconf_pihole
+  become: true
+  tags:
+    - netdata
+
 - name: Disable analytics
   file:
     path: /etc/netdata/.opt-out-from-anonymous-statistics
@@ -226,7 +261,7 @@
   vars:
     systemd_unit_src: netdata
     systemd_unit_condition: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
-    systemd_unit_restart: "{{ netdata_conf.changed or cloud_conf.changed or netdata_optout.changed or netdata_health_alarm_notify.changed or debugfs_mount.changed or netdata_service_d_override_conf_result.changed }}"
+    systemd_unit_restart: "{{ netdata_conf.changed or cloud_conf.changed or netdata_optout.changed or netdata_health_alarm_notify.changed or debugfs_mount.changed or netdata_service_d_override_conf_result.changed or netdata_pihole_conf_removed.changed or netdata_godconf_copy.changed or netdata_godconf_pihole.changed }}"
   tags:
     - netdata
 
