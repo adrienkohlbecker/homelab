@@ -8,6 +8,31 @@
   tags:
     - iptables
 
+- name: Create nftables.service drop-in directory
+  file:
+    path: /etc/systemd/system/nftables.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - iptables
+
+# Stock nftables.service ships `ExecStop=/usr/sbin/nft flush ruleset`,
+# which would tear down netavark / fail2ban / libvirt tables on any
+# `systemctl stop` or `restart`. Scope the stop to our own table.
+- name: Install nftables.service ExecStop drop-in
+  import_role:
+    name: systemd_unit
+    tasks_from: copy
+  vars:
+    systemd_unit_src: override_nftables.conf
+    systemd_unit_dest: nftables.service.d/override.conf
+    systemd_unit_verify: nftables.service
+  tags:
+    - iptables
+
 # Network-stack hardening (IPv6-disable + ipv4 hardening) lives in
 # files/sysctl-hardening.conf. One artifact, one reload — the file
 # header documents each setting's rationale.
