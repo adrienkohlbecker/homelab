@@ -63,11 +63,11 @@ jobs:
       # GitHub Actions' schema (and most editors) require image: when a
       # container: block is present.
       image: lab-runtime:latest
-      # /dev/kvm via --device for qemu acceleration. `--group-add
-      # keep-groups` is supplied by act_runner's container.options
-      # default (passes the runner user's host supplementary groups
-      # -- notably kvm -- into the container's gid space via
-      # /etc/subgid), so this workflow stays free of host-specific gids.
+      # /dev/kvm via --device for qemu acceleration. `--group-add 1`
+      # (container-side gid that maps to host kvm via /etc/subgid +
+      # the rootless gidmap; see roles/act_runner/templates/config.yml.j2
+      # for the why) is supplied by act_runner's container.options
+      # default, keeping this workflow free of host-specific gids.
       options: >-
         --device /dev/kvm
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro

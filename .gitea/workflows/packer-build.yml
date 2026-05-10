@@ -34,9 +34,9 @@ jobs:
       # GitHub Actions' schema (and most editors) require image: when a
       # container: block is present.
       image: lab-runtime:latest
-      # --group-add keep-groups is supplied by act_runner's
-      # container.options default; see test.yml for the rationale.
-      # rw because packer-build is the only writer of the qcow2 tree.
+      # --group-add 1 is supplied by act_runner's container.options
+      # default; see test.yml for the rationale. rw because
+      # packer-build is the only writer of the qcow2 tree.
       options: >-
         --device /dev/kvm
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:rw

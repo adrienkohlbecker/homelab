@@ -60,15 +60,35 @@ container:
   # Whether to use privileged mode or not when launching task containers (privileged mode is required for Docker-in-Docker).
   privileged: false
   # And other options to be used when the container is started (eg, --add-host=my.gitea.url:host-gateway).
-  # `--group-add keep-groups` passes the act_runner host user's
-  # supplementary groups (notably kvm) through into the container's gid
-  # space, so /dev/kvm is accessible without any host-specific gid in
-  # the workflows. This is a podman feature (not Docker) but works via
-  # podman's docker-compat API on podman ≥4.0 -- act_runner talks to
-  # podman over the docker socket and podman recognises the literal.
-  # Lint / detect / other non-qemu jobs are unaffected (extra supp
-  # groups are harmless when the device isn't mounted).
-  options: --add-host=gitea.{{ inventory_hostname }}.{{ domain }}:host-gateway --group-add keep-groups
+  # --group-add 1 gives test cells access to /dev/kvm. The reasoning:
+  #
+  # * /dev/kvm on the host is owned by root:kvm (gid 109 on lab).
+  # * act_runner is in the host kvm group, AND /etc/subgid has
+  #   `act_runner:109:1` (added via subid_extra_subgid_groups in
+  #   host_vars/lab.yml) so the kvm gid is delegatable into a userns.
+  # * Rootless podman builds the container's gidmap from /etc/subgid
+  #   shortest-range-first: the single-id kvm range lands at container
+  #   gid 1 (= "daemon" inside the container; an artifact, not the real
+  #   meaning), and the 65k subgid range follows starting at container
+  #   gid 2. So host gid 109 = container gid 1.
+  # * --group-add keep-groups would be cleaner but doesn't work via the
+  #   docker-compat API act_runner uses -- Docker semantics treat it as
+  #   a literal group name and look it up in /etc/group, where it
+  #   doesn't exist.
+  # * --group-add 109 doesn't work either: 109 is the host gid, but
+  #   inside the container 109 is unmapped (or maps to a high subuid),
+  #   so the supplementary group doesn't grant access to a host-gid-109
+  #   file.
+  #
+  # The literal "1" is brittle in one specific way: it assumes
+  # act_runner has exactly ONE extra single-id /etc/subgid range (the
+  # kvm one). If a second single-id range is added to
+  # subid_extra_subgid_groups, ordering may shift and this constant
+  # would need re-evaluation. After /etc/subgid changes, podman caches
+  # the gidmap; run `sudo systemctl stop act_runner && sudo -u
+  # act_runner podman system migrate && sudo systemctl start
+  # act_runner` once to pick up the new mapping.
+  options: --add-host=gitea.{{ inventory_hostname }}.{{ domain }}:host-gateway --group-add 1
   # The parent directory of a job's working directory.
   # NOTE: There is no need to add the first '/' of the path as act_runner will add it automatically.
   # If the path starts with '/', the '/' will be trimmed.
