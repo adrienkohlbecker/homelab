@@ -3,6 +3,67 @@
   tags:
     - zfs
 
+# Catches divergence between the userspace zfsutils and the loaded
+# zfs.ko. Ubuntu ships the kernel module bundled inside
+# linux-modules-*-generic, so its version tracks whichever release the
+# HWE kernel was rebased from — independent of what `apt install
+# zfsutils-linux` installed on top. Prod jammy hosts paper over this
+# by combining hwe_kernel (donor: noble → ZFS 2.2.x kmod) with the
+# noble-backports zfsutils pin (2.2.x userspace); the assert is what
+# catches a broken combination (HWE missing, backports off, donor
+# release advanced past the pinned userspace) before zfs commands
+# start failing in confusing ways.
+#
+# Gates — the assert is only meaningful in a settled state:
+#   - zfs_apt.changed: just upgraded userspace; the loaded kmod won't
+#     refresh until reboot, mismatch is expected for the rest of this
+#     play.
+#   - reboot-required: a kernel upgrade is pending elsewhere (e.g.
+#     hwe_kernel earlier in site.yml), so the loaded kmod is stale by
+#     definition and the comparison would false-positive.
+#   - jammy without HWE: known-divergent config that only shows up in
+#     the test harness — testrole.py runs roles in isolation and never
+#     applies hwe_kernel, leaving jammy GA kmod (2.1.x) beside the
+#     backported userspace (2.2.x). In prod hwe_kernel always runs
+#     before zfs, so this branch is for tests only.
+- name: Detect HWE kernel meta package
+  command: dpkg-query -W -f='${Status}' linux-generic-hwe-{{ ansible_distribution_version }}
+  register: zfs_hwe_status
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  tags:
+    - zfs
+
+- name: Stat /var/run/reboot-required
+  stat:
+    path: /var/run/reboot-required
+  register: zfs_reboot_required
+  tags:
+    - zfs
+
+- name: Read zfs userspace + kmod versions
+  command: zfs --version
+  register: zfs_version_out
+  changed_when: false
+  check_mode: false
+  tags:
+    - zfs
+
+- name: Assert userspace and kmod ZFS versions match
+  when:
+    - not zfs_apt.changed
+    - not zfs_reboot_required.stat.exists
+    - ansible_distribution_release != "jammy" or "install ok installed" in zfs_hwe_status.stdout
+  assert:
+    that:
+      - (zfs_version_out.stdout_lines[0] | regex_replace('^zfs-', '')) == (zfs_version_out.stdout_lines[1] | regex_replace('^zfs-kmod-', ''))
+    fail_msg: |-
+      ZFS userspace and kernel-module versions disagree:
+      {{ zfs_version_out.stdout }}
+  tags:
+    - zfs
+
 - name: Create /etc/default/grub.d directory
   when: grub_bootloader
   file:
