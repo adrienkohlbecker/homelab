@@ -4,8 +4,8 @@
 
 PRECONDITIONS
 =============
-1. New keychain entries / pass files are set up so `./vault.sh prod` and
-   `./vault.sh test` both succeed:
+1. New keychain entries / pass files are set up so `./vault-client.sh prod` and
+   `./vault-client.sh test` both succeed:
      macOS:
        security add-generic-password -a ak \\
          -j "vault password ansible (prod)" -s homelab-vault-prod -w
@@ -27,7 +27,7 @@ WHAT IT DOES
    block: decrypts with the current secret, re-encrypts with a labeled
    secret -- `test` for files in TEST_FILES, `prod` for everything else.
 3. Rewrites ansible.cfg's `vault_password_file = vault.sh` line to
-   `vault_identity_list = prod@vault.sh, test@vault.sh` plus
+   `vault_identity_list = prod@vault-client.sh, test@vault-client.sh` plus
    `vault_id_match = True`.
 
 The script is rerunnable: re-running re-encrypts (which is harmless
@@ -67,7 +67,7 @@ VAULT_RE = re.compile(
 
 def vault_password(vault_id: str) -> bytes:
     out = subprocess.run(
-        [str(REPO / "vault.sh"), vault_id],
+        [str(REPO / "vault-client.sh"), vault_id],
         check=True,
         capture_output=True,
     )
@@ -139,7 +139,7 @@ def update_ansible_cfg() -> None:
         return
     new_text, n = re.subn(
         r"^vault_password_file\s*=\s*vault\.sh\s*$",
-        "vault_identity_list = prod@vault.sh, test@vault.sh\nvault_id_match = True",
+        "vault_identity_list = prod@vault-client.sh, test@vault-client.sh\nvault_id_match = True",
         text,
         count=1,
         flags=re.M,
@@ -163,7 +163,7 @@ def main() -> int:
     prod_pw = vault_password("prod")
     test_pw = vault_password("test")
     if not prod_pw or not test_pw:
-        print("vault.sh returned an empty password for prod or test", file=sys.stderr)
+        print("vault-client.sh returned an empty password for prod or test", file=sys.stderr)
         return 1
 
     prod_secret = VaultSecret(prod_pw)
