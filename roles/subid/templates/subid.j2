@@ -2,3 +2,17 @@
 {% for user in subid_users %}
 {{ user }}:{{100000 + (loop.index * 65536)}}:65536
 {% endfor %}
+{# Per-file extras (host_vars sets subid_extra_subuid_entries /
+   subid_extra_subgid_entries as lists of literal "user:start:count" lines).
+   Used to expose specific host uids/gids inside a rootless userns -- e.g.
+   the kvm gid for /dev/kvm passthrough when the runner spawns qemu in a
+   container. `item` is the loop variable from the role's with_items. #}
+{% if item == 'subuid' %}
+{% for entry in (subid_extra_subuid_entries | default([])) %}
+{{ entry }}
+{% endfor %}
+{% elif item == 'subgid' %}
+{% for entry in (subid_extra_subgid_entries | default([])) %}
+{{ entry }}
+{% endfor %}
+{% endif %}

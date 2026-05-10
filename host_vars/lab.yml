@@ -239,5 +239,12 @@ subid_users:
   - act_runner
   - marie
 
+# Expose the host kvm gid (109) inside act_runner's rootless userns so
+# `--group-add 109` on a podman-spawned container (test workflows running
+# qemu) actually grants /dev/kvm access. Without this, the gid isn't in
+# the user's subgidmap and `--group-add 109` is silently ignored.
+subid_extra_subgid_entries:
+  - act_runner:109:1
+
 has_transcoding_acceleration: true
 z2m_start_service: true
