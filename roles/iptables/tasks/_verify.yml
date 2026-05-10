@@ -280,6 +280,19 @@
   failed_when: iptables_verify_container.rc != 0 or 'iptables-verify-ok' not in iptables_verify_container.stdout
   become: true
 
+# FORWARD/DNAT WAN-side counterpart — packet ingresses on enp0s2
+# (the qemu slirp interface) via the controller-side hostfwd that
+# the harness sets up in QemuMachine.prepare(). delegate_to: localhost
+# runs the curl on the test runner, so the packet reaches the VM
+# from "outside" exactly the way real WAN traffic does. Without the
+# hostfwd this rule is unreachable from the netns harness.
+- name: _verify | FORWARD/DNAT — published 32400 reachable from controller via WAN hostfwd
+  delegate_to: localhost
+  command: curl --connect-timeout 5 --max-time 10 -s http://127.0.0.1:{{ wan_test_port }}/
+  register: iptables_verify_wan_container
+  changed_when: false
+  failed_when: iptables_verify_wan_container.rc != 0 or 'iptables-verify-ok' not in iptables_verify_wan_container.stdout
+
 # Host-egress MASQUERADE — exercises -s site_subnets.home (or home_subnet
 # on prod) -j MASQUERADE for the host's own outbound traffic.
 - name: _verify | OUTPUT + MASQUERADE — outbound HTTPS from VM works

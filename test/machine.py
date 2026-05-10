@@ -191,6 +191,13 @@ class Machine:
     systemctl_failed_file: Path = dataclasses.field(init=False)
     workdir: tempfile.TemporaryDirectory[str] = dataclasses.field(init=False)
     peak_rss_kb: int = dataclasses.field(default=0, init=False)
+    # Auxiliary slirp hostfwd that maps a free 127.0.0.1 port on the
+    # controller to VM:32400 (the iptables _verify busybox-httpd publish
+    # target). 0 = unset (any non-QEMU machine, or before prepare()
+    # picks one). Lets `delegate_to: localhost` probes exercise rules
+    # keying on the WAN interface — traffic originating inside the VM
+    # never ingresses on enp0s2 via slirp's user-mode net.
+    wan_test_port: int = dataclasses.field(default=0, init=False)
 
     def __post_init__(self) -> None:
         if self.ubuntu_name not in UBUNTU_RELEASES:
@@ -372,6 +379,11 @@ class Machine:
             # on disk.
             "-e",
             f"_role_under_test={self.role}",
+            # Auxiliary slirp hostfwd port (controller-side) for verify
+            # probes that delegate_to: localhost. 0 when not applicable
+            # (non-QEMU machine, or before prepare() ran).
+            "-e",
+            f"wan_test_port={self.wan_test_port}",
             "--inventory",
             "test/inventory.ini",
             *self.ansible_args,
@@ -921,6 +933,14 @@ class QemuMachine(Machine):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((SSH_HOST, 0))
             self.ssh_port = s.getsockname()[1]
+        # Second hostfwd port — controller-side probes that need to
+        # ingress on the VM's WAN iface use this. Maps to VM:32400
+        # (iptables _verify's published-port target). Picked the same
+        # way as ssh_port; emitted into qemu's -netdev unconditionally
+        # so the qemu cmdline doesn't have to know which role's running.
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind((SSH_HOST, 0))
+            self.wan_test_port = s.getsockname()[1]
 
         if self.keep_vm:
             # Pick a VNC display 0..99 the same way -- qemu's vnc= syntax
@@ -1175,10 +1195,17 @@ class QemuMachine(Machine):
             *[arg for drive in self.drives for arg in ("--drive", drive)],
             *direct_boot,
             "-netdev",
-            # Host port pre-picked in prepare() so we don't need to ask qemu
+            # Host ports pre-picked in prepare() so we don't need to ask qemu
             # which port it ended up on -- avoids the prior lsof-poll dance
-            # and the VNC-port-band collision risk.
-            f"user,id=user.0,hostfwd=tcp:{SSH_HOST}:{self.ssh_port}-:22",
+            # and the VNC-port-band collision risk. Two forwards: SSH for
+            # ansible-playbook, and an auxiliary :32400 forward used by
+            # `delegate_to: localhost` probes (iptables _verify is the only
+            # consumer today; emitted unconditionally for simplicity).
+            (
+                f"user,id=user.0,"
+                f"hostfwd=tcp:{SSH_HOST}:{self.ssh_port}-:22,"
+                f"hostfwd=tcp:{SSH_HOST}:{self.wan_test_port}-:32400"
+            ),
             "-object",
             "rng-random,id=rng0,filename=/dev/urandom",
             "-device",
