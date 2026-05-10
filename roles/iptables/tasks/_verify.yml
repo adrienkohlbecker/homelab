@@ -1,17 +1,25 @@
-# Functional firewall verification. Test scaffolding (podman, listeners,
-# netns) lives here rather than in _setup.yml because _setup is reserved
-# for genuine role dependencies — none of this is needed for the iptables
-# role itself to converge.
+# Functional firewall verification — every probe exercises live
+# netfilter behaviour. Test scaffolding (podman, listeners, multi-IP
+# netns) lives here rather than in _setup.yml because _setup is
+# reserved for genuine role dependencies — none of this is needed for
+# the iptables role itself to converge.
 #
 # Probe topology:
 #   extns netns ─ veth_ext ── wg0* (10.99.0.1) ─ root netns (the VM)
-# The netns acts as an "external" client. Traffic from extns to 10.99.0.1
-# enters the VM's INPUT/FORWARD chains on -i wg0, so the existing
-# wireguard-ingress allow rule in FORWARD
-# (-A FORWARD -i wg0 -o podman0 -d {{ podman_default_network }}
-#  -m conntrack --ctstate DNAT -j ACCEPT) matches the FORWARD probe
-# without adding test-only rules. *The veth is named wg0 deliberately
-# for this.
+#
+# extns is set up with multiple source aliases so we can probe each
+# scoped INPUT rule from a representative source. Specific /32 host
+# routes back to those aliases go via wg0; we avoid broader subnet
+# routes that would collide with podman0's real container network.
+#
+#   10.99.0.2                    non-scope source (catch-all reject)
+#   {{ site_subnets.home }} .250 physical home LAN source
+#   {{ wireguard_subnet }} .250  wireguard client source
+#   10.88.255.250                container source (DNS rule probes)
+#
+# *The veth is named wg0 deliberately so traffic from extns enters
+# the root netns's INPUT/FORWARD chains as if it arrived on the real
+# wireguard interface — exercising rules that key on -i wg0.
 
 # Use the real prod podman install path (jammy backports pin, netavark
 # backend, zvol setup) — keeps the test rig faithful to what runs on
@@ -28,6 +36,8 @@
       - iproute2
       - curl
       - iputils-ping
+      - socat        # UDP echo listeners (5053 / 5333 / 5353)
+      - hping3       # crafted TCP-ACK probes for `! --syn` rules
     cache_valid_time: 3600
   become: true
 
@@ -51,14 +61,41 @@
   changed_when: true
   become: true
 
-- name: _verify | Bind python http.server on :80 (an INPUT-allowed port)
+# TCP listeners — one python http.server per port. Probes that source
+# from an allowed range get HTTP 200 (curl --connect-timeout exits 0);
+# probes from a denied source hit the catch-all REJECT and curl exits
+# non-zero with "Connection refused".
+- name: _verify | Bind python http.server on TCP listeners
   command: >
-    systemd-run --unit iptables-verify-listener --remain-after-exit
-      python3 -m http.server 80 --bind 0.0.0.0
+    systemd-run --unit iptables-verify-tcp-{{ item }} --remain-after-exit
+      python3 -m http.server {{ item }} --bind 0.0.0.0
+  loop:
+    - 80     # unscoped INPUT-allow probe target
+    - 445    # Samba probe target (-s site_subnets.home / wireguard_subnet)
+    - 3493   # nut probe target (-s site_subnets.home / wireguard_subnet)
   changed_when: true
   become: true
 
-- name: _verify | Create probe netns + wg0-named veth pair
+# UDP listeners — socat echoes "pong" so the probe can `grep -q pong`
+# to confirm the packet round-tripped (the only reliable way to
+# distinguish ACCEPT from REJECT/DROP on UDP, since both ACCEPT-no-
+# listener and REJECT produce ICMP port-unreachable).
+- name: _verify | Bind socat UDP echo listeners
+  command: >
+    systemd-run --unit iptables-verify-udp-{{ item }} --remain-after-exit
+      socat UDP-RECVFROM:{{ item }},fork SYSTEM:'echo pong'
+  loop:
+    - 5053   # dnscrypt-proxy (-s podman_default_network)
+    - 5333   # aardvark-dns   (-s podman_default_network)
+    - 5353   # mDNS           (-s site_subnets.home)
+  changed_when: true
+  become: true
+
+# Multi-aliased extns netns + matching host /32 routes. The aliases
+# let curl/nc source-bind from each representative subnet without
+# spinning up four separate netns. /32 host routes ensure replies
+# return via wg0 without colliding with podman0's 10.88.0.0/16 route.
+- name: _verify | Create probe netns with multi-source aliases
   shell: |
     set -euo pipefail
     ip netns add extns 2>/dev/null || true
@@ -69,42 +106,127 @@
     ip addr replace 10.99.0.1/24 dev wg0
     ip link set wg0 up
     ip -n extns addr replace 10.99.0.2/24 dev veth_ext
+    ip -n extns addr replace 10.234.0.250/32 dev veth_ext
+    ip -n extns addr replace 10.234.64.250/32 dev veth_ext
+    ip -n extns addr replace 10.88.255.250/32 dev veth_ext
     ip -n extns link set veth_ext up
     ip -n extns link set lo up
     ip -n extns route replace default via 10.99.0.1
+    ip route replace 10.234.0.250/32 dev wg0
+    ip route replace 10.234.64.250/32 dev wg0
+    ip route replace 10.88.255.250/32 dev wg0
   args:
     executable: /bin/bash
   changed_when: true
   become: true
 
-- name: _verify | Wait for python listener
-  wait_for:
-    host: 127.0.0.1
-    port: 80
-    timeout: 10
+- name: _verify | Wait for TCP listeners
+  wait_for: { host: 127.0.0.1, port: "{{ item }}", timeout: 10 }
+  loop: [80, 445, 3493]
   become: true
 
 - name: _verify | Wait for httpd container
-  wait_for:
-    host: 127.0.0.1
-    port: 32400
-    timeout: 30
+  wait_for: { host: 127.0.0.1, port: 32400, timeout: 30 }
   become: true
 
-# --- Probes ------------------------------------------------------------
+# --- Functional probes ------------------------------------------------
 
-- name: _verify | INPUT allow — port 80 reachable from external netns
+# Unscoped INPUT allow / catch-all reject — baseline coverage.
+- name: _verify | INPUT allow — port 80 reachable from extns (unscoped)
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:80/
   changed_when: false
   become: true
 
-- name: _verify | INPUT deny — port 18080 is rejected from external netns
+- name: _verify | INPUT deny — port 18080 (no rule, no listener) is rejected
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:18080/
-  register: iptables_verify_denied
+  register: probe_18080
   changed_when: false
-  failed_when: iptables_verify_denied.rc == 0
+  failed_when: probe_18080.rc == 0
   become: true
 
+# Source-scoped admin services: positive cases for each rule, plus
+# one negative case from the non-scope source per service.
+- name: _verify | INPUT — Samba (445/tcp) reachable from each allowed source
+  command: >
+    ip netns exec extns curl --interface {{ item.src }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
+  loop:
+    - { src: 10.234.0.250,  label: home LAN }
+    - { src: 10.234.64.250, label: wireguard }
+  loop_control: { label: "{{ item.label }}" }
+  changed_when: false
+  become: true
+
+- name: _verify | INPUT — Samba (445/tcp) rejected from non-scope source 10.99.0.2
+  command: >
+    ip netns exec extns curl --interface 10.99.0.2
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
+  register: probe_samba_oos
+  changed_when: false
+  failed_when: probe_samba_oos.rc == 0
+  become: true
+
+- name: _verify | INPUT — nut (3493/tcp) reachable from each allowed source
+  command: >
+    ip netns exec extns curl --interface {{ item.src }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:3493/
+  loop:
+    - { src: 10.234.0.250,  label: home LAN }
+    - { src: 10.234.64.250, label: wireguard }
+  loop_control: { label: "{{ item.label }}" }
+  changed_when: false
+  become: true
+
+- name: _verify | INPUT — nut (3493/tcp) rejected from non-scope source 10.99.0.2
+  command: >
+    ip netns exec extns curl --interface 10.99.0.2
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:3493/
+  register: probe_nut_oos
+  changed_when: false
+  failed_when: probe_nut_oos.rc == 0
+  become: true
+
+# Source-scoped UDP: container DNS (5053/5333) and home-LAN mDNS (5353).
+# `nc -u -w 2 -s SRC` source-binds; piping through `grep -q pong`
+# turns the round-trip into a clean exit code.
+- name: _verify | INPUT — dnscrypt (5053/udp) reachable from container source
+  shell: |
+    echo ping | ip netns exec extns nc -u -w 2 -s 10.88.255.250 10.99.0.1 5053 | grep -q pong
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+- name: _verify | INPUT — dnscrypt (5053/udp) rejected from non-scope source
+  shell: |
+    echo ping | ip netns exec extns nc -u -w 2 -s 10.99.0.2 10.99.0.1 5053 | grep -q pong
+  register: probe_dns_oos
+  changed_when: false
+  failed_when: probe_dns_oos.rc == 0
+  become: true
+
+- name: _verify | INPUT — aardvark-dns (5333/udp) reachable from container source
+  shell: |
+    echo ping | ip netns exec extns nc -u -w 2 -s 10.88.255.250 10.99.0.1 5333 | grep -q pong
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+- name: _verify | INPUT — mDNS (5353/udp) reachable from home LAN source
+  shell: |
+    echo ping | ip netns exec extns nc -u -w 2 -s 10.234.0.250 10.99.0.1 5353 | grep -q pong
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+- name: _verify | INPUT — mDNS (5353/udp) rejected from wireguard source (LAN-only rule)
+  shell: |
+    echo ping | ip netns exec extns nc -u -w 2 -s 10.234.64.250 10.99.0.1 5353 | grep -q pong
+  register: probe_mdns_wg
+  changed_when: false
+  failed_when: probe_mdns_wg.rc == 0
+  become: true
+
+# FORWARD/DNAT — published container reachable via wg0 ingress.
 - name: _verify | FORWARD/DNAT — published 32400 reachable via wg0 ingress
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://10.99.0.1:32400/
   register: iptables_verify_container
@@ -112,6 +234,7 @@
   failed_when: iptables_verify_container.rc != 0 or 'iptables-verify-ok' not in iptables_verify_container.stdout
   become: true
 
+# Host-egress MASQUERADE — exercises -s home_subnet -j MASQUERADE.
 - name: _verify | OUTPUT + MASQUERADE — outbound HTTPS from VM works
   uri:
     url: https://example.com/
@@ -119,13 +242,61 @@
     status_code: 200
   become: true
 
-# Confirms the rate-limited ICMP rule accepts pings (a common
-# regression target — easy to mis-edit the rate or accidentally
-# replace ACCEPT with DROP). One ping is well below the 10/sec limit.
-- name: _verify | ICMP — ping from external netns is accepted
+# Container-egress MASQUERADE — exercises -s podman_default_network
+# -j MASQUERADE. The unscoped POSTROUTING rule pre-fix would have
+# NAT'd this packet via a different (broader) source match, so this
+# probe specifically catches a regression in the source-scoping.
+- name: _verify | POSTROUTING — container egress through MASQUERADE works
+  command: podman exec iptables_verify_httpd wget -q -O- --timeout=10 https://example.com/
+  changed_when: false
+  become: true
+
+# ICMP rate-limit ACCEPT path. One ping is well below 10/sec.
+- name: _verify | ICMP — ping from extns is accepted
   command: ip netns exec extns ping -c 1 -W 2 10.99.0.1
   changed_when: false
   become: true
+
+# Crafted-packet probes for ! --syn DROP rules on INPUT and FORWARD.
+# hping3 always exits 0 on send (it doesn't fail just because no reply
+# arrived), so we use iptables counters as the actual assertion: reset
+# counters, send the crafted packet, then check that the specific DROP
+# rule's pkt counter incremented.
+- name: _verify | Reset iptables counters before crafted-packet probes
+  command: iptables -Z
+  changed_when: false
+  become: true
+
+- name: _verify | INPUT — TCP-ACK (no SYN) from extns to :80 hits the `! --syn` DROP
+  command: ip netns exec extns hping3 -A -p 80 -c 1 --quiet 10.99.0.1
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | FORWARD — TCP-ACK (no SYN) from extns to a container hits the `! --syn` DROP
+  command: ip netns exec extns hping3 -A -p 32400 -c 1 --quiet 10.88.0.2
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Capture iptables counters after crafted-packet probes
+  command: iptables-save -c
+  register: counters_after_crafted
+  changed_when: false
+  become: true
+
+# Match `[N:M] -A CHAIN ...` with N >= 1 (non-zero pkts), confirming
+# the rule actually saw a packet rather than just being present.
+- name: _verify | INPUT/FORWARD `! --syn` DROP rules each fired ≥ 1 time
+  assert:
+    that:
+      - counters_after_crafted.stdout is search('\[[1-9][0-9]*:[0-9]+\] -A INPUT -p tcp -m tcp ! --tcp-flags FIN,SYN,RST,ACK SYN -j DROP')
+      - counters_after_crafted.stdout is search('\[[1-9][0-9]*:[0-9]+\] -A FORWARD -p tcp -m tcp ! --tcp-flags FIN,SYN,RST,ACK SYN -j DROP')
+    fail_msg: >-
+      Crafted TCP-ACK packets didn't increment the `! --syn` DROP
+      counters on INPUT/FORWARD. Either the rules are missing, the
+      hping3 probe didn't reach the chain, or conntrack ate the
+      packet earlier.
 
 # Reload-path coverage: the role's apply task does a full
 # iptables-restore (flushing netavark's chains) followed by
@@ -152,59 +323,3 @@
   changed_when: false
   failed_when: iptables_verify_after_reload.rc != 0 or 'iptables-verify-ok' not in iptables_verify_after_reload.stdout
   become: true
-
-# WAN-side rules use {{ ansible_default_ipv4.interface }} which renders
-# differently per host (eth0 on prod hosts via netplan set-name; the
-# kernel's predictable name e.g. enp0s2 on the harness VM). The wg0
-# probe above covers the symmetric wg0 rule; this textual check
-# catches asymmetric edits that affect only the WAN-side counterpart
-# and confirms the template actually rendered the expected interface.
-- name: _verify | Capture iptables-save for rule-presence assertions
-  command: iptables-save
-  register: iptables_verify_save
-  changed_when: false
-  become: true
-
-# iptables-save normalizes argument order — `-d` lands before `-i`,
-# so the regex below uses `.*-i` instead of pinning interface
-# position relative to the rule start.
-- name: _verify | Templated rules render with the expected scopes
-  assert:
-    that:
-      # FORWARD/POSTROUTING WAN-iface coverage
-      - iptables_verify_save.stdout is search('-A FORWARD .*-i ' + ansible_default_ipv4.interface + ' -o podman0.*ctstate DNAT.*-j ACCEPT')
-      - iptables_verify_save.stdout is search('-A POSTROUTING -s ' + podman_default_network + ' .*-o ' + ansible_default_ipv4.interface + '.*-j MASQUERADE')
-      - iptables_verify_save.stdout is search('-A POSTROUTING -s ' + home_subnet + ' .*-o ' + ansible_default_ipv4.interface + '.*-j MASQUERADE')
-      # INPUT scoping for container-only DNS services. The trailing
-      # `.*-j ACCEPT` (rather than `-j ACCEPT` literal) is required
-      # because iptables-save inserts `-m comment --comment "..."`
-      # between --dport and the target.
-      - iptables_verify_save.stdout is search('-A INPUT -s ' + podman_default_network + ' .*--dport 5053 .*-j ACCEPT')
-      - iptables_verify_save.stdout is search('-A INPUT -s ' + podman_default_network + ' .*--dport 5333 .*-j ACCEPT')
-      # mDNS — home LAN only (multicast doesn't traverse wireguard)
-      - iptables_verify_save.stdout is search('-A INPUT -s ' + site_subnets.home + ' .*--dport 5353 .*-j ACCEPT')
-      # Samba and nut — home LAN + wireguard, two rules each
-      - iptables_verify_save.stdout is search('-A INPUT -s ' + site_subnets.home + ' .*--dport 445 .*-j ACCEPT')
-      - iptables_verify_save.stdout is search('-A INPUT -s ' + wireguard_subnet + ' .*--dport 445 .*-j ACCEPT')
-      - iptables_verify_save.stdout is search('-A INPUT -s ' + site_subnets.home + ' .*--dport 3493 .*-j ACCEPT')
-      - iptables_verify_save.stdout is search('-A INPUT -s ' + wireguard_subnet + ' .*--dport 3493 .*-j ACCEPT')
-      # TCP non-SYN drop on both INPUT and FORWARD (conntrack tcp_loose
-      # compensation — a missing rule lets spoofed mid-stream ACKs
-      # through as NEW). iptables-save renders `! --syn` as
-      # `! --tcp-flags FIN,SYN,RST,ACK SYN`.
-      - iptables_verify_save.stdout is search('-A INPUT -p tcp -m tcp ! --tcp-flags FIN,SYN,RST,ACK SYN -j DROP')
-      - iptables_verify_save.stdout is search('-A FORWARD -p tcp -m tcp ! --tcp-flags FIN,SYN,RST,ACK SYN -j DROP')
-      # INVALID-state drops on both INPUT and FORWARD
-      - iptables_verify_save.stdout is search('-A INPUT -m conntrack --ctstate INVALID -j DROP')
-      - iptables_verify_save.stdout is search('-A FORWARD -m conntrack --ctstate INVALID -j DROP')
-      # ICMP echo-request rate-limit ACCEPT + DROP overflow.
-      # iptables-save renders --icmp-type echo-request as --icmp-type 8.
-      - iptables_verify_save.stdout is search('-A INPUT -p icmp -m icmp --icmp-type 8 -m limit --limit 10/sec --limit-burst 20 -j ACCEPT')
-      - iptables_verify_save.stdout is search('-A INPUT -p icmp -m icmp --icmp-type 8 -j DROP')
-    fail_msg: >-
-      Templated rules don't render with the expected scopes
-      (ansible_default_ipv4.interface={{ ansible_default_ipv4.interface }},
-      podman_default_network={{ podman_default_network }},
-      site_subnets.home={{ site_subnets.home }},
-      wireguard_subnet={{ wireguard_subnet }}). Either the template
-      didn't render or a rule got desynchronized.
