@@ -33,6 +33,26 @@
   tags:
     - iptables
 
+# Pin nf_conntrack at boot so /proc/sys/net/netfilter/nf_conntrack_*
+# is populated before systemd-sysctl reads /etc/sysctl.d/. Deliberately
+# not modprobed mid-run: loading conntrack on a live host classifies
+# every existing TCP connection (no state, no SYN history) as INVALID
+# under loose=0 — our `ct state invalid drop` rule then kills SSH
+# along with everything else. Settings take effect at next reboot;
+# until then the nftables non-SYN drop rules are the only protection
+# (which is what was there before this commit anyway).
+- name: Pin nf_conntrack at boot
+  copy:
+    src: modules-load.conf
+    dest: /etc/modules-load.d/30-iptables-hardening.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  tags:
+    - iptables
+
 # Network-stack hardening (IPv6-disable + ipv4 hardening) lives in
 # files/sysctl-hardening.conf. One artifact, one reload — the file
 # header documents each setting's rationale.
@@ -49,9 +69,13 @@
   tags:
     - iptables
 
+# -e (--ignore) skips keys whose /proc path doesn't exist yet — the
+# nf_conntrack_* keys aren't writable until the module loads. On
+# subsequent runs (after a reboot has loaded the module via
+# modules-load.d), the keys are applied normally.
 - name: Apply hardening sysctls
   when: iptables_sysctl.changed
-  command: sysctl -p /etc/sysctl.d/30-iptables-hardening.conf
+  command: sysctl -e -p /etc/sysctl.d/30-iptables-hardening.conf
   changed_when: true
   become: true
   tags:

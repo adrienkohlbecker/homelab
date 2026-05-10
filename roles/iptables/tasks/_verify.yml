@@ -423,6 +423,35 @@
   changed_when: false
   become: true
 
+# nf_conntrack_tcp_loose=0 makes the kernel itself classify mid-stream
+# non-SYN TCP as INVALID rather than NEW. Can't apply mid-flight (would
+# break live SSH), so the value persists in /etc/sysctl.d/ and the
+# module is pinned via /etc/modules-load.d/ to load at next boot. The
+# nftables non-SYN drop rules above remain the runtime protection
+# until then.
+- name: _verify | sysctl — nf_conntrack_tcp_loose=0 persisted in sysctl.d
+  slurp:
+    src: /etc/sysctl.d/30-iptables-hardening.conf
+  register: sysctl_persist
+  become: true
+
+- name: _verify | sysctl — nf_conntrack module pinned in modules-load.d
+  slurp:
+    src: /etc/modules-load.d/30-iptables-hardening.conf
+  register: modload_persist
+  become: true
+
+- name: _verify | sysctl — assert persistence
+  assert:
+    that:
+      - "'net.netfilter.nf_conntrack_tcp_loose = 0' in (sysctl_persist.content | b64decode)"
+      - "'nf_conntrack' in (modload_persist.content | b64decode)"
+    fail_msg: >-
+      Either sysctl-hardening.conf doesn't pin
+      nf_conntrack_tcp_loose=0, or modules-load.d doesn't pin
+      nf_conntrack. Without both, loose=0 won't take effect at
+      next boot.
+
 # Match `counter packets N bytes M drop comment "..."` with N >= 1
 # (non-zero pkts), confirming the rule actually saw a packet rather
 # than just being present. The comment disambiguates the three
