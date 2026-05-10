@@ -31,8 +31,15 @@
 -A INPUT -s {{ podman_default_network }} -p udp --dport 5053 -j ACCEPT      -m comment --comment "Allow dnscrypt-proxy (containers)"
 -A INPUT -s {{ podman_default_network }} -p udp --dport 5333 -j ACCEPT      -m comment --comment "Allow aardvark-dns (post-DNAT from gateway:53)"
 -A INPUT -s {{ site_subnets.home }} -p udp --dport 5353 -j ACCEPT           -m comment --comment "Allow mDNS (home LAN)"
--A INPUT -p udp --dport 51820 -j ACCEPT                                     -m comment --comment "Allow Wireguard"
--A INPUT -p udp --dport 60000:61000 -j ACCEPT                               -m comment --comment "Allow Mosh"
+# Wireguard ingress only on the WAN iface — peers' real packets
+# arrive there via udm port-forward, and wg-quick rejects bad-key
+# packets anyway. Pinning -i WAN means an attacker on a future LAN
+# bridge can't speculatively send to udp/51820 from inside.
+-A INPUT -i {{ ansible_default_ipv4.interface }} -p udp --dport 51820 -j ACCEPT  -m comment --comment "Allow Wireguard (WAN ingress only)"
+# Mosh sessions originate from admin clients on the home LAN or via
+# wireguard, never from raw WAN. Two -s rules (single CIDR each).
+-A INPUT -s {{ site_subnets.home }} -p udp --dport 60000:61000 -j ACCEPT    -m comment --comment "Allow Mosh (home LAN)"
+-A INPUT -s {{ wireguard_subnet }} -p udp --dport 60000:61000 -j ACCEPT     -m comment --comment "Allow Mosh (wireguard)"
 
 # be explicit with rejection of known traffic so they are documented and don't appear in logs
 -A INPUT -p udp --dport 67    -j REJECT --reject-with icmp-port-unreachable -m comment --comment "Deny DHCP"
