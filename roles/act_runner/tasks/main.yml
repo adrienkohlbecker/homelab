@@ -134,21 +134,17 @@
   # session daemon is missing. cgroupfs sidesteps it entirely. Workflow
   # containers spawned at runtime use the systemd default unaltered.
   #
-  # The github_token build secret is sourced by piping the
-  # mise_github_token podman secret straight into podman build via
-  # bash process substitution. <(...) hands podman a /dev/fd/N path
-  # backed by a pipe -- no on-disk tmpfile, so nothing to clean up
-  # and nothing for an unrelated process to read mid-build. podman
-  # build's --secret reads the source once during orchestration,
-  # which is fine over a pipe.
-  shell: |
-    set -euo pipefail
-    podman --cgroup-manager=cgroupfs build \
-      --secret id=github_token,src=<(podman secret inspect mise_github_token --showsecret --format '{% raw %}{{ .SecretData }}{% endraw %}') \
-      -t lab-runtime:latest -f Dockerfile.lab-runtime .
+  # `--secret id=NAME` resolves NAME from podman's local secret store
+  # automatically (no src= needed). The build sees the secret as a
+  # mounted file inside the consuming RUN; see Dockerfile.lab-runtime
+  # for how it's read into GITHUB_TOKEN. Token never touches disk
+  # outside podman's secret store.
+  command: >-
+    podman --cgroup-manager=cgroupfs build
+    --secret id=mise_github_token
+    -t lab-runtime:latest -f Dockerfile.lab-runtime .
   args:
     chdir: /mnt/services/act_runner/build
-    executable: /bin/bash
   # become_user: act_runner doesn't propagate XDG_RUNTIME_DIR or
   # DBUS_SESSION_BUS_ADDRESS the way a real login session would, and
   # rootless podman/crun need them to find the user's systemd manager
