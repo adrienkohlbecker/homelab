@@ -299,6 +299,27 @@
   changed_when: false
   failed_when: iptables_verify_wan_container.rc != 0 or 'iptables-verify-ok' not in iptables_verify_wan_container.stdout
 
+# FORWARD chain podman0→podman0 ct-status-dnat regression probe.
+# This path broke during the nft migration: containers inheriting the
+# host's resolv.conf (one-shot containers without --dns) ended up
+# querying a VIP that PREROUTING DNATs back into the bridge — iif and
+# oif both podman0. netavark's NETAVARK_FORWARD chain accepted, but
+# our `ip homelab` forward chain had no matching rule and fell
+# through to default DROP; multi-base-chain semantics drops the
+# packet regardless. Re-fired the canonical case here by running a
+# transient busybox on the same `podman` network and curling the
+# bridge gateway IP — netavark's existing --publish 32400 rule
+# DNATs that to the long-running httpd container, exercising exactly
+# the iif=podman0/oif=podman0/ct-status-dnat path.
+- name: _verify | FORWARD/DNAT — container → host bridge IP → DNAT'd to container on same bridge
+  command: >
+    podman run --rm --network podman docker.io/library/busybox
+    wget -q -O - -T 5 http://10.88.0.1:32400/
+  register: iptables_verify_container_to_vip
+  changed_when: false
+  failed_when: iptables_verify_container_to_vip.rc != 0 or 'iptables-verify-ok' not in iptables_verify_container_to_vip.stdout
+  become: true
+
 # Host-egress MASQUERADE — exercises -s site_subnets.home (or home_subnet
 # on prod) -j MASQUERADE for the host's own outbound traffic.
 - name: _verify | OUTPUT + MASQUERADE — outbound HTTPS from VM works
