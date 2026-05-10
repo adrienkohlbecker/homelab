@@ -1,7 +1,6 @@
 #!/usr/bin/env -S uv run
 
 import asyncio
-import collections
 import contextlib
 import dataclasses
 import platform
@@ -638,21 +637,6 @@ class Machine:
         ):
             path.unlink(missing_ok=True)
 
-    def print_file_tail(self, path: Path, n: int = 50) -> None:
-        """Print the last *n* lines of *path* to stdout, no-op if missing."""
-        if not path.exists():
-            return
-        # Stream through a bounded deque so a multi-MB boot log (panic loop,
-        # chatty cloud-init) doesn't get fully loaded into memory just to
-        # slice off the last N lines.
-        with path.open("r", errors="replace") as handle:
-            tail = list(collections.deque(handle, maxlen=n))
-        tail = [line.rstrip("\n") for line in tail]
-        print_line(f"--- last {len(tail)} lines of {path} ---")
-        for line in tail:
-            print_line(line)
-        print_line(f"--- end {path} ---")
-
     def print_ssh_instructions(self) -> None:
         ssh_cmd = shlex.join(self.format_ssh_cmd())
         print_line("Keeping VM around, ssh using:")
@@ -671,12 +655,6 @@ class Machine:
     async def __aexit__(self, exc_type: object, exc: BaseException | None, tb: object) -> None:
         print_line("Stopping machine...")
         await self.stop()
-        # Surface the tail of the boot/console log on infra-shaped failures so
-        # the main transcript ends with the most likely diagnostic. Cancellation
-        # is the user wanting out; idempotence checks fail at the role layer
-        # and the boot log won't help.
-        if exc is not None and not isinstance(exc, (asyncio.CancelledError, IdempotenceFailedException)):
-            self.print_file_tail(self.boot_file)
 
     async def stop(self) -> None:
         """Drain the boot subprocess and free temp resources.
