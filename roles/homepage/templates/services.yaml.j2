@@ -1,23 +1,7 @@
 # {{ ansible_managed }}
-# Top section: per-host netdata health. Each count tile shows the active
-# warnings + criticals; the alerts iframe below renders the alarm names
-# pulled by the homepage_alerts sidecar so the dashboard answers both "is
-# anything on fire?" and "what specifically?" without round-tripping into
-# netdata's UI.
-- Health:
-    - Lab:
-        href: https://netdata.{{ inventory_hostname }}.{{ domain }}/
-        description: System metrics for lab
-        widget:
-          type: netdata
-          url: https://netdata.{{ inventory_hostname }}.{{ domain }}
-    - Pug:
-        href: https://netdata.pug.{{ domain }}/
-        description: System metrics for pug
-        widget:
-          type: netdata
-          url: https://netdata.pug.{{ domain }}
-
+# Active alarm titles pulled by the homepage_alerts sidecar across each host.
+# Replaces the built-in netdata count widget (warnings/criticals only) since
+# the iframe already shows the underlying alarm names.
 - Active alerts:
     - Active alerts:
         widget:
