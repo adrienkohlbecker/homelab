@@ -62,13 +62,6 @@ table ip homelab {
         # or via wireguard, never from raw WAN.
         ip saddr @lan_admin_sources udp dport 60000-61000 accept comment "Mosh"
 
-        # Explicit denies — collapses 7 iptables rules into one with
-        # a port set. Documents intent and keeps the catch-all log
-        # quieter. Drop (not reject) to avoid ICMP amplification —
-        # an attacker spoofing a victim source would otherwise have
-        # us return ICMP port-unreachable per probe.
-        udp dport { 67, 137, 138, 139, 5351, 10001, 17500, 57621 } drop comment "documented denies (DHCP/NetBIOS/NAT-PMP/etc)"
-
         # TCP allows. SSH/HTTP/HTTPS are wide-open (admin + public);
         # Samba and nut are admin services scoped via the set.
         tcp dport { 22, 80, 443 } accept comment "SSH/HTTP/HTTPS"
