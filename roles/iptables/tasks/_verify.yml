@@ -152,11 +152,17 @@
   changed_when: false
   become: true
 
-# Wireguard 51820 is scoped to -i WAN. From the netns harness we
-# always ingress on wg0, so the only thing we can probe is the
-# *negative* — confirm the rule rejects WG packets that arrive on
-# wg0. (Real-world ingress on the WAN iface is unreachable from
-# inside the test VM.)
+# Wireguard 51820 is scoped to -i WAN. Two probes — positive via
+# the controller-side UDP hostfwd (slirp ingresses on enp0s2, which
+# is the WAN iface in the test VM) and negative from the netns where
+# traffic always ingresses on wg0.
+- name: _verify | INPUT allow — wireguard (51820/udp) reachable on WAN iface from controller
+  delegate_to: localhost
+  shell: |
+    echo ping | nc -u -w 2 127.0.0.1 {{ wan_udp_test_port }} | grep -q pong
+  args: { executable: /bin/bash }
+  changed_when: false
+
 - name: _verify | INPUT — wireguard (51820/udp) rejected when ingressing on wg0
   shell: |
     echo ping | ip netns exec extns nc -u -w 2 10.99.0.1 51820 | grep -q pong
@@ -288,7 +294,7 @@
 # hostfwd this rule is unreachable from the netns harness.
 - name: _verify | FORWARD/DNAT — published 32400 reachable from controller via WAN hostfwd
   delegate_to: localhost
-  command: curl --connect-timeout 5 --max-time 10 -s http://127.0.0.1:{{ wan_test_port }}/
+  command: curl --connect-timeout 5 --max-time 10 -s http://127.0.0.1:{{ wan_tcp_test_port }}/
   register: iptables_verify_wan_container
   changed_when: false
   failed_when: iptables_verify_wan_container.rc != 0 or 'iptables-verify-ok' not in iptables_verify_wan_container.stdout

@@ -191,13 +191,19 @@ class Machine:
     systemctl_failed_file: Path = dataclasses.field(init=False)
     workdir: tempfile.TemporaryDirectory[str] = dataclasses.field(init=False)
     peak_rss_kb: int = dataclasses.field(default=0, init=False)
-    # Auxiliary slirp hostfwd that maps a free 127.0.0.1 port on the
-    # controller to VM:32400 (the iptables _verify busybox-httpd publish
-    # target). 0 = unset (any non-QEMU machine, or before prepare()
-    # picks one). Lets `delegate_to: localhost` probes exercise rules
-    # keying on the WAN interface — traffic originating inside the VM
-    # never ingresses on enp0s2 via slirp's user-mode net.
-    wan_test_port: int = dataclasses.field(default=0, init=False)
+    # Auxiliary slirp hostfwds. Pre-picked free 127.0.0.1 ports map
+    # the controller side to specific VM ports so `delegate_to:
+    # localhost` probes can exercise rules keying on the WAN interface
+    # (traffic originating inside the VM never ingresses on enp0s2 via
+    # slirp's user-mode net). Two protocols since slirp keeps TCP/UDP
+    # forwards in separate namespaces.
+    #   wan_tcp_test_port      → controller TCP → VM:32400 (iptables _verify
+    #                        busybox-httpd publish target)
+    #   wan_udp_test_port  → controller UDP → VM:51820 (iptables _verify
+    #                        wireguard ACCEPT rule, scoped -i WAN)
+    # 0 = unset (non-QEMU machine, or before prepare() picks one).
+    wan_tcp_test_port: int = dataclasses.field(default=0, init=False)
+    wan_udp_test_port: int = dataclasses.field(default=0, init=False)
 
     def __post_init__(self) -> None:
         if self.ubuntu_name not in UBUNTU_RELEASES:
@@ -379,11 +385,13 @@ class Machine:
             # on disk.
             "-e",
             f"_role_under_test={self.role}",
-            # Auxiliary slirp hostfwd port (controller-side) for verify
+            # Auxiliary slirp hostfwd ports (controller-side) for verify
             # probes that delegate_to: localhost. 0 when not applicable
             # (non-QEMU machine, or before prepare() ran).
             "-e",
-            f"wan_test_port={self.wan_test_port}",
+            f"wan_tcp_test_port={self.wan_tcp_test_port}",
+            "-e",
+            f"wan_udp_test_port={self.wan_udp_test_port}",
             "--inventory",
             "test/inventory.ini",
             *self.ansible_args,
@@ -933,14 +941,18 @@ class QemuMachine(Machine):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((SSH_HOST, 0))
             self.ssh_port = s.getsockname()[1]
-        # Second hostfwd port — controller-side probes that need to
-        # ingress on the VM's WAN iface use this. Maps to VM:32400
-        # (iptables _verify's published-port target). Picked the same
-        # way as ssh_port; emitted into qemu's -netdev unconditionally
-        # so the qemu cmdline doesn't have to know which role's running.
+        # Auxiliary hostfwd ports for controller-side probes that need
+        # to ingress on the VM's WAN iface. Two protocols since slirp
+        # keeps TCP/UDP forwards in separate namespaces. Picked the
+        # same way as ssh_port; emitted into qemu's -netdev
+        # unconditionally so the qemu cmdline doesn't have to know
+        # which role's running.
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.bind((SSH_HOST, 0))
-            self.wan_test_port = s.getsockname()[1]
+            self.wan_tcp_test_port = s.getsockname()[1]
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+            s.bind((SSH_HOST, 0))
+            self.wan_udp_test_port = s.getsockname()[1]
 
         if self.keep_vm:
             # Pick a VNC display 0..99 the same way -- qemu's vnc= syntax
@@ -1197,14 +1209,16 @@ class QemuMachine(Machine):
             "-netdev",
             # Host ports pre-picked in prepare() so we don't need to ask qemu
             # which port it ended up on -- avoids the prior lsof-poll dance
-            # and the VNC-port-band collision risk. Two forwards: SSH for
-            # ansible-playbook, and an auxiliary :32400 forward used by
-            # `delegate_to: localhost` probes (iptables _verify is the only
-            # consumer today; emitted unconditionally for simplicity).
+            # and the VNC-port-band collision risk. Three forwards: SSH for
+            # ansible-playbook, plus TCP :32400 and UDP :51820 used by
+            # `delegate_to: localhost` probes that need to ingress on the
+            # VM's WAN iface (iptables _verify is the only consumer today;
+            # emitted unconditionally for simplicity).
             (
                 f"user,id=user.0,"
                 f"hostfwd=tcp:{SSH_HOST}:{self.ssh_port}-:22,"
-                f"hostfwd=tcp:{SSH_HOST}:{self.wan_test_port}-:32400"
+                f"hostfwd=tcp:{SSH_HOST}:{self.wan_tcp_test_port}-:32400,"
+                f"hostfwd=udp:{SSH_HOST}:{self.wan_udp_test_port}-:51820"
             ),
             "-object",
             "rng-random,id=rng0,filename=/dev/urandom",
