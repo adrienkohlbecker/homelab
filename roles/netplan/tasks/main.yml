@@ -7,6 +7,20 @@
   tags:
     - netplan
 
+- name: Assert netplan host var is a non-empty mapping
+  # Rendering an empty `netplan` would produce `network: { version: 2 }`
+  # with no interfaces — netplan accepts it silently, networkd ends up
+  # with no .network files in /run, and the host loses configured
+  # networking on next apply. Fail loudly before the template runs.
+  assert:
+    that:
+      - netplan is defined
+      - netplan is mapping
+      - netplan | length > 0
+    fail_msg: "host_vars must define a non-empty `netplan` mapping (see host_vars/lab.yml for the schema)"
+  tags:
+    - netplan
+
 - name: Configure netplan
   template:
     src: config.yaml.j2
