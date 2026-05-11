@@ -273,28 +273,51 @@ PAGE = """<!doctype html>
   .err {{ color: var(--critical); padding: 4px 8px; font-style: italic; }}
   a.alarm {{
     display: grid;
-    grid-template-columns: 80px 1fr auto;
-    gap: 8px;
-    padding: 5px 8px;
+    grid-template-columns: auto 1fr auto;
+    column-gap: 10px;
+    padding: 6px 10px;
     background: var(--row);
     border-radius: 4px;
     margin-bottom: 2px;
-    align-items: baseline;
+    align-items: start;
     text-decoration: none;
     color: inherit;
   }}
   a.alarm:hover {{ background: rgba(51, 65, 85, 0.7); }}
   a.alarm:last-child {{ margin-bottom: 0; }}
   .alarm .status {{
-    font-weight: 600;
-    font-size: 11px;
-    letter-spacing: 0.04em;
+    font-weight: 700;
+    font-size: 10px;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: 3px;
+    line-height: 1.4;
+    white-space: nowrap;
   }}
-  .alarm.CRITICAL .status {{ color: var(--critical); }}
-  .alarm.WARNING  .status {{ color: var(--warning); }}
-  .alarm .name {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-  .alarm .name code {{ color: var(--muted); font-size: 11px; }}
-  .alarm .value {{ color: var(--muted); font-variant-numeric: tabular-nums; }}
+  .alarm.CRITICAL .status {{ color: var(--critical); background: rgba(239, 68, 68, 0.12); }}
+  .alarm.WARNING  .status {{ color: var(--warning); background: rgba(245, 158, 11, 0.12); }}
+  .alarm .name {{
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.4;
+  }}
+  .alarm .name .alarm-name {{ font-weight: 500; word-break: break-word; }}
+  .alarm .name code {{
+    display: block;
+    color: var(--muted);
+    font-size: 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    line-height: 1.3;
+  }}
+  .alarm .value {{
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    line-height: 1.4;
+  }}
 </style>
 </head>
 <body>
@@ -341,8 +364,10 @@ def render_html(hosts: list[dict]) -> str:
                     f'<a class="alarm {html.escape(a["status"])}" '
                     f'href="{html.escape(href)}" target="_blank" rel="noopener">'
                     f'<span class="status">{html.escape(a["status"])}</span>'
-                    f'<span class="name">{html.escape(a["name"])} '
-                    f'<code>{html.escape(a["chart"])}</code></span>'
+                    f'<span class="name">'
+                    f'<span class="alarm-name">{html.escape(a["name"])}</span>'
+                    f'<code>{html.escape(a["chart"])}</code>'
+                    f"</span>"
                     f'<span class="value">{html.escape(a["value"])}</span>'
                     f"</a>"
                 )
