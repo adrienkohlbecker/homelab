@@ -28,6 +28,7 @@ service_ports:
   healthchecks: 8000
   homepage: 3003
   homepage_alerts: 8765
+  openobserve: 5080
 
 # Sonatype Nexus pull-through cache. Empty = use upstream URLs directly.
 # Overridden in group_vars/test.yml to route fetches through nexus.lab.fahm.fr.

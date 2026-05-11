@@ -1,0 +1,89 @@
+# jinja2: lstrip_blocks: "True"
+# openobserve.service ########################################################################
+[Unit]
+Description=openobserve
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+{% if zfs_has_services_mount %}
+After=zfs_mount_mnt_services.service
+Requires=zfs_mount_mnt_services.service
+After=zfs_mount_mnt_services_sqlite.service
+Requires=zfs_mount_mnt_services_sqlite.service
+{% endif %}
+After=zfs_autosnapshot.target
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=always
+Delegate=yes
+TimeoutSec=60
+RestartSec=5
+Type=notify
+# With --sdnotify=healthy + --detach, conmon (not podman) sends READY=1
+# once the in-container healthcheck passes. conmon is never MainPID, so
+# NotifyAccess must be `all`, not `main`, or the unit hangs in `activating`.
+#
+# The image is gcr.io/distroless/cc-debian13 — no shell, no wget, no curl.
+# We bind-mount /usr/local/bin/curl-static (installed by the static_curl
+# role) read-only and invoke it via podman's JSON-array form of
+# --health-cmd, which bypasses CMD-SHELL and execs argv directly (no
+# /bin/sh needed). A plain string for --health-cmd would be wrapped in
+# /bin/sh -c and immediately fail in this image.
+NotifyAccess=all
+SyslogIdentifier=%N
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name openobserve \
+    --log-driver journald \
+    --log-opt tag="openobserve" \
+    --security-opt=no-new-privileges \
+    --user 0:0 \
+    --uidmap=0:0:65536 \
+    --uidmap=+0:{{ openobserve_user.uid }}:1 \
+    --gidmap=0:0:65536 \
+    --gidmap=+0:{{ openobserve_user.group }}:1 \
+    --volume /mnt/services/openobserve:/data \
+    --volume /mnt/services/sqlite/openobserve:/db \
+    --volume /usr/local/bin/curl-static:/curl-static:ro \
+    --env ZO_LOCAL_MODE=true \
+    --env ZO_META_STORE=sqlite \
+    --env ZO_DATA_DIR=/data/ \
+    --env ZO_DATA_DB_DIR=/db/ \
+    --env ZO_DATA_WAL_DIR=/data/wal/ \
+    --env ZO_DATA_STREAM_DIR=/data/stream/ \
+    --env ZO_DATA_IDX_DIR=/data/idx/ \
+    --env ZO_DATA_CACHE_DIR=/data/cache/ \
+    --env ZO_HTTP_PORT={{ service_ports.openobserve }} \
+    --env ZO_ROOT_USER_EMAIL={{ root_email }} \
+    --secret=openobserve_root_password,type=env,target=ZO_ROOT_USER_PASSWORD \
+    --env ZO_TELEMETRY=false \
+    --env ZO_WEB_URL=https://openobserve.{{ inventory_hostname }}.{{ domain }} \
+    --env RUST_LOG=warn \
+    --publish 127.0.0.1:{{ service_ports.openobserve }}:{{ service_ports.openobserve }}/tcp \
+    --health-cmd         '["/curl-static","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:{{ service_ports.openobserve }}/healthz"]' \
+    --health-startup-cmd '["/curl-static","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:{{ service_ports.openobserve }}/healthz"]' \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    --health-start-period "30s" \
+    --stop-timeout 30 \
+    docker.io/openobserve/openobserve:v0.80.3
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}
