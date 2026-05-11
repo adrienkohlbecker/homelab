@@ -35,6 +35,28 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 REFRESH_SECONDS = 30
 FETCH_TIMEOUT = 5
 
+# Heroicons-style status glyphs swapped in for the text pill below the
+# narrow-viewport breakpoint so the row reads on phones. fill="currentColor"
+# inherits the status colour from the parent .status span.
+STATUS_ICONS = {
+    "CRITICAL": (
+        '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor" '
+        'aria-hidden="true"><path fill-rule="evenodd" '
+        'd="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 '
+        "9.75-9.75 9.75S2.25 17.385 2.25 12Zm9.75-3.75a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 "
+        "1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.875.875 0 1 0 0-1.75.875.875 0 0 0 0 "
+        '1.75Z" clip-rule="evenodd"/></svg>'
+    ),
+    "WARNING": (
+        '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor" '
+        'aria-hidden="true"><path fill-rule="evenodd" '
+        'd="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 '
+        "4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 "
+        ".75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.875.875 0 1 0 "
+        '0-1.75.875.875 0 0 0 0 1.75Z" clip-rule="evenodd"/></svg>'
+    ),
+}
+
 # Trust the host's CA bundle. netdata vhosts use Let's Encrypt via the certbot
 # role, so default verification works; no need for a custom store.
 SSL_CTX = ssl.create_default_context()
@@ -296,6 +318,14 @@ PAGE = """<!doctype html>
   }}
   .alarm.CRITICAL .status {{ color: var(--critical); background: rgba(239, 68, 68, 0.12); }}
   .alarm.WARNING  .status {{ color: var(--warning); background: rgba(245, 158, 11, 0.12); }}
+  .status-icon {{ display: none; width: 18px; height: 18px; vertical-align: middle; }}
+  @media (max-width: 480px) {{
+    /* Drop the text pill on narrow viewports; show just the colored glyph
+       so the alarm name has room to read. */
+    .alarm .status {{ padding: 0; background: transparent; }}
+    .alarm .status .status-text {{ display: none; }}
+    .alarm .status .status-icon {{ display: inline-block; }}
+  }}
   .alarm .name {{
     display: flex;
     flex-direction: column;
@@ -363,7 +393,10 @@ def render_html(hosts: list[dict]) -> str:
                 rows.append(
                     f'<a class="alarm {html.escape(a["status"])}" '
                     f'href="{html.escape(href)}" target="_blank" rel="noopener">'
-                    f'<span class="status">{html.escape(a["status"])}</span>'
+                    f'<span class="status">'
+                    f'{STATUS_ICONS.get(a["status"], "")}'
+                    f'<span class="status-text">{html.escape(a["status"])}</span>'
+                    f"</span>"
                     f'<span class="name">'
                     f'<span class="alarm-name">{html.escape(a["name"])}</span>'
                     f'<code>{html.escape(a["chart"])}</code>'
