@@ -1,0 +1,90 @@
+- name: Set up openobserve system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_name: openobserve
+  tags:
+    - openobserve
+
+# SQLite metadata lands on the 4K-recordsize child dataset; Parquet/WAL/cache
+# land on the 128K parent (no separate dataset by deliberate choice — the
+# extra-record-size tuning isn't worth the operational split here).
+- name: Create sqlite directory
+  when: not (ansible_check_mode and openobserve_user.changed)
+  file:
+    dest: /mnt/services/sqlite/openobserve
+    state: directory
+    owner: openobserve
+    group: openobserve
+    mode: "0755"
+  become: true
+  tags:
+    - openobserve
+
+- name: Create openobserve root user password secret
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_name: openobserve_root_password
+    podman_secret_data: "{{ openobserve_root_password }}"
+  tags:
+    - openobserve
+
+# ZO_ROOT_USER_PASSWORD is honored only when openobserve creates the root
+# user for the first time. Subsequent rotations land in the podman secret
+# but the running instance keeps the old password silently. Detect that
+# case and force an in-band reset via the API; re-running the play after
+# is clean.
+- name: Fail if root password rotated post-bootstrap
+  fail:
+    msg: |
+      openobserve_root_password changed in vault. The podman secret has been
+      updated, but openobserve only honors ZO_ROOT_USER_PASSWORD when the
+      root user is first created, so the running instance still has the old
+      password.
+
+      To complete the rotation, log in with the previous password and
+      change it from the UI (Settings → Users), or call the API:
+
+        curl -u {{ root_email }}:<OLD_PASSWORD> \
+          -X PUT https://openobserve.{{ inventory_hostname }}.{{ domain }}/api/default/users/{{ root_email }} \
+          -H 'Content-Type: application/json' \
+          -d '{"new_password":"<NEW_PASSWORD>"}'
+
+      Then re-run this play.
+  when: openobserve_root_password_rotated and openobserve_root_password_existed_before
+  tags:
+    - openobserve
+
+- name: Install openobserve service
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: openobserve.service
+    systemd_unit_condition: "{{ not (ansible_check_mode and openobserve_user.changed) }}"
+  tags:
+    - openobserve
+
+- name: Enable openobserve service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: openobserve
+    systemd_unit_condition: "{{ not (ansible_check_mode and (openobserve_service_result.changed or openobserve_user.changed)) }}"
+    systemd_unit_restart: "{{ openobserve_service_result.changed or openobserve_root_password_rotated }}"
+  tags:
+    - openobserve
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_subdomain: openobserve
+    nginx_proxy_pass: http://localhost:{{ service_ports.openobserve }}/
+  tags:
+    - openobserve

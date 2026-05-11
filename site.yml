@@ -97,6 +97,7 @@
     - homeassistant
     - kuma
     - healthchecks
+    - openobserve
     - spouse
     - redis
     - paperless
