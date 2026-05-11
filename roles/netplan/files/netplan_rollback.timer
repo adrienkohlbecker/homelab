@@ -1,0 +1,8 @@
+[Unit]
+Description=Netplan auto-rollback timer (armed by the role's safe-apply path)
+
+[Timer]
+# 90s deadline is intentionally longer than wait_for_connection's
+# 60s in apply.yml so a slow reconnect doesn't trigger spurious revert.
+OnActiveSec=90
+Unit=netplan_rollback.service

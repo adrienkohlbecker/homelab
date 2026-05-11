@@ -1,0 +1,6 @@
+[Unit]
+Description=Netplan auto-rollback (fires 90s after a safe-apply if SSH never came back)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/netplan_rollback
