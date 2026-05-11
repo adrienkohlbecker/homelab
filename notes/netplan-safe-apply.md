@@ -1,7 +1,7 @@
 # Netplan safe-apply pattern
 
-Background — why the role applies netplan through three nested safety
-gates instead of a plain `netplan apply`:
+Background — why the role applies netplan through a snapshot-and-rollback
+harness instead of a plain `netplan apply`:
 
 ## The incident (2026-05-10)
 
@@ -35,39 +35,51 @@ Fixes landed for those two specific bugs:
   carrier events still grab leases).
 
 But "a careless netplan edit can lock you out of the box" is a more
-general problem than those two specifics, so the role now wraps apply
-in a safety harness.
+general problem than those two specifics, so the role wraps apply in
+a safety harness.
 
 ## The harness
 
-Three independent layers, each addressing a different failure mode:
+A single snapshot, taken *before* the role's template overwrites
+`/etc/netplan`, feeds two consumers:
 
-### 1. Pre-flight validation
-`netplan generate --debug` compiles the YAML and writes to
-`/run/systemd/network/` *without* restarting networkd. We grep its
-output for `WARNING|Cannot find unique|ERROR` and refuse to apply if
-any of those appear. Catches the unique-match class of bug before it
-touches live state.
+### Snapshot timing — load-bearing
 
-### 2. `netplan apply --state <snapshot>`
-Before apply we snapshot `/etc/netplan` to `/var/lib/netplan-prev` and
-pass that path via `--state`. In theory netplan diffs new-vs-state and
-restricts the restart scope to genuinely-changed ifaces. The flag is
-under-documented and the practical effect varies between netplan
-versions, but it's cheap to pass and never hurts. Don't rely on this
-as the only safety net — layer 3 is the real backstop.
+The first revision of the harness snapshotted `/etc/netplan` *inside*
+the apply block (after the `Configure netplan` template task had
+already written the new config). That snapshot captured the new
+config, so:
+- `netplan apply --state` was diffing new-against-new and never
+  restricted restart scope.
+- The rollback timer's `mv /run/netplan-rollback /etc/netplan` would
+  have restored the new (broken) config and re-applied it.
 
-### 3. systemd-run-scheduled rollback (the real backstop)
+Both broken silently because `_verify` only asserted wiring (snapshot
+dir exists, rollback unit reaped) and never triggered an actual
+rollback.
+
+Fixed in commit `7b015c0d` by moving the snapshot above the template
+task and running it unconditionally every converge. `/run/netplan-prev`
+now holds the genuine *previous* `/etc/netplan` for both consumers.
+
+### Consumer 1: `netplan apply --state /run/netplan-prev`
+
+`--state` lets netplan diff the prior YAML against the new YAML in
+`/etc/netplan` and restrict the networkd restart scope to genuinely
+changed interfaces. Reduces carrier-flap blast radius on unrelated
+NICs.
+
+### Consumer 2: systemd-run-scheduled rollback (the real backstop)
+
 Before apply:
-- Snapshot `/etc/netplan` to `/run/netplan-rollback`.
 - `systemd-run --on-active=90 --unit=netplan-rollback --collect` arms
   a one-shot transient timer-unit that fires in 90 s.
 
 After apply, ansible's `wait_for_connection` (timeout: 60 s) probes
 SSH. If it reconnects, ansible `touch`es `/run/netplan-keep`. When
 the timer fires at +90 s it reads that file: present = cancelled,
-absent = roll back (mv `/run/netplan-rollback` → `/etc/netplan`,
-`netplan apply`).
+absent = roll back (`mv /run/netplan-prev /etc/netplan`, `netplan
+apply`).
 
 The 90 s vs 60 s gap is deliberate: a slow reconnect mustn't be
 mis-read as a failed apply.
@@ -77,9 +89,24 @@ so successive applies don't accumulate dead units. `logger -t
 netplan-rollback` writes the outcome to the journal so post-mortems
 can tell whether the rollback fired.
 
+### Why one snapshot directory, not two
+
+The two consumers' access windows don't overlap in practice:
+- `netplan apply` (Consumer 1) reads `--state` at the start of apply
+  and is done within seconds.
+- The timer (Consumer 2) fires at +90 s, well after Consumer 1 has
+  finished.
+
+The earlier two-directory split was defensive against a race that
+doesn't exist; the merge (commit `7b015c0d`) keeps the rollback path
+correct while halving the snapshot I/O and cleanup.
+
+The Cancel step intentionally does NOT remove `/run/netplan-prev` —
+the next converge's pre-template snapshot rotates it.
+
 ## What this does NOT protect against
 
-- **Reboot-during-bad-apply.** `/run/netplan-rollback` lives in tmpfs;
+- **Reboot-during-bad-apply.** `/run/netplan-prev` lives in tmpfs;
   the systemd-run timer is in runtime state. If the box reboots between
   apply and the timer firing, the timer is lost and the new (potentially
   broken) `/etc/netplan` becomes effective on next boot. Operator still
@@ -90,8 +117,7 @@ can tell whether the rollback fired.
   report success while a downstream LAN client is broken.
 - **netplan apply succeeds but produces wrong-but-reachable config.**
   E.g. wrong default route via the wrong iface. The rollback won't
-  fire (we reconnected), so the bad config sticks. Validation in
-  layer 1 catches typos/structural errors but not semantic ones.
+  fire (we reconnected), so the bad config sticks.
 
 ## Operator tips
 
