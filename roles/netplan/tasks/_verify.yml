@@ -26,16 +26,6 @@
   register: netplan_verify_runtime
   failed_when: netplan_verify_runtime.matched < 1
 
-- name: _verify | Cancel-marker /run/netplan-keep present
-  # Proof the safe-apply path got all the way through wait_for_connection
-  # to the Cancel auto-rollback step. If absent, either the apply was
-  # skipped (no YAML change) or wait_for_connection failed and the
-  # rollback timer is still pending.
-  stat:
-    path: /run/netplan-keep
-  register: netplan_verify_keep
-  failed_when: not netplan_verify_keep.stat.exists
-
 - name: _verify | Snapshot dir /var/lib/netplan-prev kept for next apply
   # The cancel step intentionally leaves this around — the async apply
   # may still be reading --state, and the next safe-apply rotates it.
@@ -45,30 +35,30 @@
   register: netplan_verify_prev
   failed_when: not (netplan_verify_prev.stat.exists and netplan_verify_prev.stat.isdir)
 
-- name: _verify | Rollback transient unit cleaned up
-  # systemd-run --collect should reap the netplan-rollback.service unit
-  # after it fires (the timer is one-shot). list-units returns 0 with
-  # empty output when no match. If the unit is still listed as active
-  # we've leaked a pending rollback into post-apply state. The systemd
-  # module doesn't expose "is this unit completely gone" cleanly, so
-  # shell out.
-  command: systemctl list-units --no-legend --state=active netplan-rollback.service netplan-rollback.timer  # noqa command-instead-of-module
+- name: _verify | Rollback transient unit fully reaped
+  # systemd-run --collect should reap netplan-rollback.{service,timer}
+  # after the timer fires (or after we stop+rm them in the cancel step).
+  # --all catches units in any state (active/inactive/failed/dead) — a
+  # narrower --state=active filter would silently pass on a leaked
+  # failed unit. list-units returns 0 with empty output when no match.
+  command: systemctl list-units --all --no-legend netplan-rollback.service netplan-rollback.timer  # noqa command-instead-of-module
   register: netplan_verify_unit
   changed_when: false
   failed_when: netplan_verify_unit.stdout != ""
 
-- name: _verify | Validation regex still catches the unique-match warning
-  # Guards the validation gate against accidental regression: feed the
-  # exact message that locked us out on 2026-05-10 into the same
-  # grep used by `main.yml`'s "Validate config" step and confirm it
-  # would have refused. If someone narrows the regex this fails loudly.
+- name: _verify | On-disk config still validates
+  # Re-run the apply-time validator post-converge so an unchanged-YAML
+  # run still asserts current state. `netplan generate --debug` compiles
+  # to /run/systemd/network without restarting networkd — same gate
+  # main.yml uses pre-apply.
   shell: |
     set -o pipefail
-    if echo "WARNING:root:Cannot find unique matching interface for nic0" \
-       | grep -qiE "WARNING|Cannot find unique|ERROR"; then
-      exit 0
+    out=$(netplan generate --debug 2>&1)
+    echo "$out"
+    if echo "$out" | grep -qiE "WARNING|Cannot find unique|ERROR"; then
+      exit 1
     fi
-    exit 1
   args:
     executable: /bin/bash
+  become: true
   changed_when: false
