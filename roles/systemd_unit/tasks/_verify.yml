@@ -124,12 +124,14 @@
     daemon_reload: true
   become: true
 
-# Install-path coverage: the rescue block is comment-flagged as
-# "rare-but-load-bearing" and is never exercised by normal callers, so
-# a regression would ship undetected. The fixtures below install a good
-# unit, then deliberately install one `systemd-analyze verify` rejects
-# (`Bogus=` in [Unit] is a stable trip-wire across systemd versions),
-# and assert both rescue branches: backup-restore and fresh-file-delete.
+# Install-path coverage: the rescue block fires on any systemd-analyze
+# verify failure (validate runs against the unit *after* it lands at its
+# production path), but the regular test matrix ships valid units only,
+# so the rescue is never exercised — a regression there would silently
+# brick the host's recovery path. The fixtures below install a good
+# unit, then deliberately install one verify rejects (`Bogus=` in [Unit]
+# is a stable trip-wire across systemd versions), and assert both rescue
+# branches: backup-restore and fresh-file-delete.
 
 - name: _verify | install valid unit via tasks_from=template
   import_role:
@@ -203,6 +205,38 @@
   become: true
 
 - name: _verify | daemon-reload after install-path cleanup
+  systemd:
+    daemon_reload: true
+  become: true
+
+# Smoke the tasks_from=copy dispatch path. install.yml's `action:` chooses
+# the module from _systemd_unit_module; the template path is well-covered
+# above, this just confirms the copy branch lands a file with no .j2 suffix.
+- name: _verify | install valid unit via tasks_from=copy
+  import_role:
+    name: systemd_unit
+    tasks_from: copy
+  vars:
+    systemd_unit_src: systemd_unit_verify_copy_ok.service
+
+- name: _verify | copy-path install set the per-unit fact and put file on disk
+  block:
+    - stat:
+        path: /etc/systemd/system/systemd_unit_verify_copy_ok.service
+      register: _verify_copy_stat
+    - assert:
+        that:
+          - systemd_unit_verify_copy_ok_service_result is defined
+          - systemd_unit_verify_copy_ok_service_result.changed
+          - _verify_copy_stat.stat.exists
+
+- name: _verify | cleanup copy-path test unit
+  file:
+    path: /etc/systemd/system/systemd_unit_verify_copy_ok.service
+    state: absent
+  become: true
+
+- name: _verify | daemon-reload after copy-path cleanup
   systemd:
     daemon_reload: true
   become: true
