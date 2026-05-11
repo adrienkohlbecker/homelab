@@ -8,17 +8,6 @@
   tags:
     - firewall
 
-- name: Create nftables.service drop-in directory
-  file:
-    path: /etc/systemd/system/nftables.service.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - firewall
-
 # Stock nftables.service ships `ExecStop=/usr/sbin/nft flush ruleset`,
 # which would tear down netavark / fail2ban / libvirt tables in the
 # same kernel ruleset on any `systemctl stop` or `restart`. Scope the
@@ -26,11 +15,10 @@
 - name: Install nftables.service ExecStop drop-in
   import_role:
     name: systemd_unit
-    tasks_from: copy
+    tasks_from: dropin
   vars:
     systemd_unit_src: override_nftables.conf
-    systemd_unit_dest: nftables.service.d/override.conf
-    systemd_unit_verify: nftables.service
+    systemd_unit_for: nftables.service
   tags:
     - firewall
 

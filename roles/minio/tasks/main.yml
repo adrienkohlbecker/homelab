@@ -101,26 +101,14 @@
   tags:
     - minio
 
-- name: Create override directory
-  when: zfs_root
-  file:
-    dest: /etc/systemd/system/minio.service.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - minio
-
 - name: Install minio service override
   import_role:
     name: systemd_unit
-    tasks_from: template
+    tasks_from: dropin
   vars:
+    systemd_unit_module: template
     systemd_unit_src: override_service.conf
-    systemd_unit_dest: minio.service.d/override.conf
-    systemd_unit_verify: minio.service
+    systemd_unit_for: minio.service
     systemd_unit_condition: "{{ zfs_root }}"
   tags:
     - minio
