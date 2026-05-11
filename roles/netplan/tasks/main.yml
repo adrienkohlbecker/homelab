@@ -33,10 +33,14 @@
 
 # Apply path — wrapped in a systemd-run-scheduled rollback after the
 # 2026-05-10 SSH-lockout incident (see notes/netplan-safe-apply.md):
-# snapshot /etc/netplan, schedule a deadline 90 s ahead, apply, then
-# wait_for_connection. If we reconnect we touch a cancel-file; if we
-# don't, the timer fires and restores the prior config so the box
-# doesn't get stranded.
+# snapshot /etc/netplan to /run/netplan-rollback for the timer and to
+# /var/lib/netplan-prev for `netplan apply --state`, schedule a
+# deadline 90 s ahead, apply, then wait_for_connection. If we
+# reconnect we touch a cancel-file; if we don't, the timer fires and
+# restores the prior config so the box doesn't get stranded.
+# `--state` lets netplan diff new-vs-prior YAML and restrict the
+# restart scope to genuinely-changed ifaces, reducing carrier-flap
+# blast radius on unrelated NICs.
 # Gated on `not ansible_check_mode` because all of this is destructive.
 - name: Apply netplan safely
   when: netplan_cfg.changed and not ansible_check_mode
@@ -84,7 +88,7 @@
         '
       changed_when: false
 
-    - name: Apply netplan asynchronously
+    - name: Apply netplan with --state pointing at the snapshot
       # async: 30 + poll: 0 hands control back to ansible immediately
       # so wait_for_connection can take over. If we let `command` block
       # synchronously, an apply that severs SSH freezes the ansible run
@@ -114,7 +118,8 @@
       #      timer for a minute and a half post-apply.
       #   3. rm /run/netplan-rollback — only safe AFTER the timer is
       #      stopped (otherwise concurrent with the rollback script).
-      # /var/lib/netplan-prev is left in place — the next safe-apply
+      # /var/lib/netplan-prev is left in place — the async apply may
+      # still be reading it via --state, and the next safe-apply
       # rotates it.
       shell: |
         set -e
