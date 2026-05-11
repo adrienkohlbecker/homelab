@@ -21,6 +21,25 @@
   tags:
     - netplan
 
+# Snapshot BEFORE the template runs so /run/netplan-prev captures the
+# genuine *previous* /etc/netplan, not the just-rendered new one. Two
+# downstream consumers read this:
+#   - `netplan apply --state` diffs new-vs-prev to restrict restart
+#     scope to genuinely-changed ifaces.
+#   - the systemd-run rollback timer mv's it over /etc/netplan if we
+#     don't reconnect post-apply.
+# Unconditional so the snapshot is always available; the apply block
+# below is what's gated on netplan_cfg.changed.
+- name: Snapshot current /etc/netplan to /run/netplan-prev
+  shell: |
+    set -e
+    rm -rf /run/netplan-prev
+    cp -a /etc/netplan /run/netplan-prev
+  become: true
+  changed_when: false
+  tags:
+    - netplan
+
 - name: Configure netplan
   template:
     src: config.yaml.j2
@@ -47,14 +66,10 @@
 
 # Apply path — wrapped in a systemd-run-scheduled rollback after the
 # 2026-05-10 SSH-lockout incident (see notes/netplan-safe-apply.md):
-# snapshot /etc/netplan to /run/netplan-rollback for the timer and to
-# /var/lib/netplan-prev for `netplan apply --state`, schedule a
-# deadline 90 s ahead, apply, then wait_for_connection. If we
-# reconnect we touch a cancel-file; if we don't, the timer fires and
-# restores the prior config so the box doesn't get stranded.
-# `--state` lets netplan diff new-vs-prior YAML and restrict the
-# restart scope to genuinely-changed ifaces, reducing carrier-flap
-# blast radius on unrelated NICs.
+# schedule a deadline 90 s ahead, apply, then wait_for_connection. If
+# we reconnect we touch a cancel-file; if we don't, the timer fires
+# and mv's /run/netplan-prev over /etc/netplan so the box doesn't get
+# stranded.
 # Gated on `not ansible_check_mode` because all of this is destructive.
 - name: Apply netplan safely
   when: netplan_cfg.changed and not ansible_check_mode
@@ -62,18 +77,6 @@
   tags:
     - netplan
   block:
-    - name: Snapshot current /etc/netplan for rollback
-      # /run/netplan-rollback is the directory the rollback timer mv's
-      # over /etc/netplan if we don't reconnect in time.
-      # /var/lib/netplan-prev is the snapshot we hand to `netplan apply
-      # --state` below.
-      shell: |
-        set -e
-        rm -rf /var/lib/netplan-prev /run/netplan-rollback
-        cp -a /etc/netplan /var/lib/netplan-prev
-        cp -a /etc/netplan /run/netplan-rollback
-      changed_when: false
-
     - name: Arm 90s auto-rollback (cancelled by touching /run/netplan-keep)
       # systemd-run --on-active is preferable to at(1): no extra package,
       # no MTA dependencies, --collect cleans the unit up after it runs.
@@ -91,13 +94,12 @@
         systemd-run --on-active=90 --unit=netplan-rollback --collect /bin/bash -c '
           if [ -f /run/netplan-keep ]; then
             rm -f /run/netplan-keep
-            rm -rf /run/netplan-rollback
             logger -t netplan-rollback "cancelled — apply confirmed OK"
             exit 0
           fi
           logger -t netplan-rollback "auto-rollback firing: restoring previous /etc/netplan"
           rm -rf /etc/netplan
-          mv /run/netplan-rollback /etc/netplan
+          mv /run/netplan-prev /etc/netplan
           netplan apply
         '
       changed_when: false
@@ -107,7 +109,7 @@
       # so wait_for_connection can take over. If we let `command` block
       # synchronously, an apply that severs SSH freezes the ansible run
       # instead of failing fast.
-      command: netplan apply --state /var/lib/netplan-prev
+      command: netplan apply --state /run/netplan-prev
       async: 30
       poll: 0
       changed_when: true
@@ -127,17 +129,15 @@
       #      wait_for_connection to exceed 90 s), it sees the file and
       #      exits cleanly without rolling back.
       #   2. systemctl stop the timer — collapses the +90 s wait so
-      #      `_verify | Rollback transient unit cleaned up` doesn't have
-      #      to race the deadline, and operators don't see a pending
-      #      timer for a minute and a half post-apply.
-      #   3. rm /run/netplan-rollback — only safe AFTER the timer is
-      #      stopped (otherwise concurrent with the rollback script).
-      # /var/lib/netplan-prev is left in place — the async apply may
-      # still be reading it via --state, and the next safe-apply
-      # rotates it.
+      #      `_verify | Rollback transient unit fully reaped` doesn't
+      #      have to race the deadline, and operators don't see a
+      #      pending timer for a minute and a half post-apply.
+      # /run/netplan-prev is left in place — the next converge's
+      # pre-template snapshot rotates it, and not removing it here
+      # avoids racing with the async netplan apply that may still be
+      # reading it via --state.
       shell: |
         set -e
         touch /run/netplan-keep
         systemctl stop netplan-rollback.timer netplan-rollback.service 2>/dev/null || true
-        rm -rf /run/netplan-rollback
       changed_when: false
