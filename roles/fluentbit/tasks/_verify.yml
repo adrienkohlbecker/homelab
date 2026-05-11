@@ -1,0 +1,20 @@
+- name: _verify | fluent-bit binary present
+  stat:
+    path: /opt/fluent-bit/bin/fluent-bit
+  register: _verify_bin
+  failed_when: not _verify_bin.stat.exists or not _verify_bin.stat.executable
+  become: true
+
+- name: _verify | fluent-bit config validates
+  command: /opt/fluent-bit/bin/fluent-bit --config /etc/fluent-bit/fluent-bit.conf --dry-run
+  changed_when: false
+  become: true
+
+- name: _verify | fluent-bit.service is loaded and active
+  systemd:
+    name: fluent-bit
+  register: _verify_unit
+  failed_when: >-
+    _verify_unit.status.LoadState != "loaded"
+    or _verify_unit.status.ActiveState != "active"
+  become: true

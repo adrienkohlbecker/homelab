@@ -1,0 +1,4 @@
+- name: _setup | Install nginx (for the tail input paths to resolve)
+  import_role:
+    name: _test
+    tasks_from: nginx
