@@ -87,20 +87,6 @@
   tags:
     - netdata
 
-# The bundled go.d/pihole collector in netdata 1.46.x predates pi-hole v6
-# and probes /admin/api.php once per minute; v6 retired that path and FTL
-# logs a "Bad request" warning for every probe. Disable until the netdata
-# pin is bumped past 2.x (which ships the v6-aware module). See
-# notes/netdata-2x-upgrade.md for the migration plan.
-- name: Remove stale pihole collector config
-  file:
-    path: /etc/netdata/go.d/pihole.conf
-    state: absent
-  register: netdata_pihole_conf_removed
-  become: true
-  tags:
-    - netdata
-
 - name: Copy stock go.d.conf
   command: cp /usr/lib/netdata/conf.d/go.d.conf /etc/netdata/go.d.conf
   args:

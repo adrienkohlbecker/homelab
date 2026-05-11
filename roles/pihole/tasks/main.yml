@@ -190,16 +190,23 @@
   tags:
     - pihole
 
-- name: Configure pihole metrics
-  import_role:
-    name: netdata
-    tasks_from: template
-  vars:
-    netdata_template_src: pihole.conf.j2
-    netdata_template_dest: go.d/pihole.conf
-    netdata_template_mode: "0600"
-  tags:
-    - pihole
+
+# The bundled go.d/pihole collector in netdata 1.46.x predates pi-hole v6
+# and probes /admin/api.php once per minute; v6 retired that path and FTL
+# logs a "Bad request" warning for every probe. Disable until the netdata
+# pin is bumped past 2.x (which ships the v6-aware module). See
+# notes/netdata-2x-upgrade.md for the migration plan.
+#
+# - name: Configure pihole metrics
+#   import_role:
+#     name: netdata
+#     tasks_from: template
+#   vars:
+#     netdata_template_src: pihole.conf.j2
+#     netdata_template_dest: go.d/pihole.conf
+#     netdata_template_mode: "0600"
+#   tags:
+#     - pihole
 
 - name: Configure nginx
   import_role:
