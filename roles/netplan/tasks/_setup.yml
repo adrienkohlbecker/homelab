@@ -2,12 +2,14 @@
 # by udev. The minimal cloud image variant doesn't always have udev
 # present + started by the time the role runs — install and start it
 # explicitly so match-by-name/MAC works during the converge.
-- name: _setup | Ensure udev is installed and running
-  shell: |
-    set -euo pipefail
+- name: _setup | Ensure udev is installed
+  apt:
+    pkg: udev
+    cache_valid_time: 3600
+  become: true
 
-    apt-get install --yes udev
-    systemctl start systemd-udevd
-  args:
-    executable: /bin/bash
+- name: _setup | Ensure systemd-udevd is running
+  systemd:
+    name: systemd-udevd
+    state: started
   become: true

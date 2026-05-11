@@ -7,6 +7,42 @@
   tags:
     - netplan
 
+- name: Install rollback script
+  copy:
+    src: netplan_rollback.sh
+    dest: /usr/local/bin/netplan_rollback
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+  become: true
+  tags:
+    - netplan
+
+- name: Install rollback service+timer units
+  copy:
+    src: "{{ item }}"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  loop:
+    - netplan_rollback.service
+    - netplan_rollback.timer
+  become: true
+  register: netplan_rollback_units
+  tags:
+    - netplan
+
+- name: Reload systemd if rollback units changed
+  systemd:
+    daemon_reload: true
+  when: netplan_rollback_units.changed
+  become: true
+  tags:
+    - netplan
+
 - name: Assert netplan host var is a non-empty mapping
   # Rendering an empty `netplan` would produce `network: { version: 2 }`
   # with no interfaces — netplan accepts it silently, networkd ends up
@@ -21,7 +57,7 @@
   tags:
     - netplan
 
-# Snapshot BEFORE the template runs so /run/netplan-prev captures the
+# Snapshot BEFORE the template runs so /run/netplan_prev captures the
 # genuine *previous* /etc/netplan, not the just-rendered new one. Two
 # downstream consumers read this:
 #   - `netplan apply --state` diffs new-vs-prev to restrict restart
@@ -30,11 +66,21 @@
 #     don't reconnect post-apply.
 # Unconditional so the snapshot is always available; the apply block
 # below is what's gated on netplan_cfg.changed.
-- name: Snapshot current /etc/netplan to /run/netplan-prev
-  shell: |
-    set -e
-    rm -rf /run/netplan-prev
-    cp -a /etc/netplan /run/netplan-prev
+- name: Wipe any stale /run/netplan_prev
+  file:
+    path: /run/netplan_prev
+    state: absent
+  become: true
+  changed_when: false
+  tags:
+    - netplan
+
+- name: Snapshot current /etc/netplan to /run/netplan_prev
+  copy:
+    src: /etc/netplan/
+    dest: /run/netplan_prev/
+    remote_src: true
+    mode: preserve
   become: true
   changed_when: false
   tags:
