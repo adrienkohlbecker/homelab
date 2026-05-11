@@ -20,6 +20,47 @@
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_dir: "{{ '/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user' }}"
 
+# Linger has to be on for user-scope installs: without it the named
+# user's systemd manager isn't running between logins, so daemon-reload
+# (and any later enable/start in service.yml) lands on a manager that
+# vanishes at logout. /var/lib/systemd/linger/<user> is the marker
+# `loginctl enable-linger` creates; a stat is enough and avoids a busctl
+# dependency. Callers wire linger up at user-creation time (roles/user,
+# roles/act_runner) — this check is the guardrail for the next consumer
+# that forgets.
+- name: Verify user-scope linger marker exists for {{ _systemd_unit_user }}
+  when: _systemd_unit_scope == 'user'
+  stat:
+    path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
+  register: _systemd_unit_linger
+  failed_when: not _systemd_unit_linger.stat.exists
+
+# Refuse to overwrite a masked unit. `systemctl mask` creates a /dev/null
+# symlink at the unit's location — the standard "do not start this"
+# lever during incident response. A naive write would clobber the
+# symlink with a regular file and silently unmask, undoing operator
+# intent. Check the same path the verify command targets so drop-ins
+# whose parent unit is masked (dest = <unit>.d/override.conf, verify =
+# the bare unit) are also caught.
+- name: Stat unit path to detect a pre-existing mask
+  when: _systemd_unit_condition
+  stat:
+    path: "{{ _systemd_unit_dir }}/{{ systemd_unit_verify | default(_systemd_unit_name) }}"
+  register: _systemd_unit_mask
+  become: true
+
+- name: Refuse to overwrite masked unit
+  when:
+    - _systemd_unit_condition
+    - _systemd_unit_mask.stat.islnk | default(false)
+    - _systemd_unit_mask.stat.lnk_target | default('') == '/dev/null'
+  fail:
+    msg: >-
+      Refusing to overwrite {{ _systemd_unit_dir }}/{{ systemd_unit_verify | default(_systemd_unit_name) }}:
+      it is masked (symlink to /dev/null). Unmask with
+      `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ systemd_unit_verify | default(_systemd_unit_name) }}`
+      before re-running, or --limit the play to skip this role.
+
 - name: Install systemd unit
   block:
     # `action:` + `args:` dispatches to copy or template based on which entry
