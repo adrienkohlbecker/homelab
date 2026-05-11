@@ -73,7 +73,9 @@
   become_user: "{{ systemd_unit_user | default('root') }}"
 
 - name: Start the service
-  when: (systemd_unit_condition | default(true)) and (systemd_unit_start | default(true))
+  when:
+    - systemd_unit_condition | default(true)
+    - systemd_unit_start | default(true)
   systemd:
     name: "{{ _systemd_unit_name }}"
     state: started
@@ -83,7 +85,11 @@
   become_user: "{{ systemd_unit_user | default('root') }}"
 
 - name: Restart the service
-  when: (systemd_unit_condition | default(true)) and (systemd_unit_start | default(true)) and (systemd_unit_restart | default(false) and not systemd_started.changed)
+  when:
+    - systemd_unit_condition | default(true)
+    - systemd_unit_start | default(true)
+    - systemd_unit_restart | default(false)
+    - not systemd_started.changed
   systemd:
     name: "{{ _systemd_unit_name }}"
     state: restarted
@@ -96,7 +102,11 @@
 # practice — set one or the other. Skipped on the play that just started the
 # unit (the started state already reflects current config).
 - name: Reload the service
-  when: (systemd_unit_condition | default(true)) and (systemd_unit_start | default(true)) and (systemd_unit_reload | default(false) and not systemd_started.changed)
+  when:
+    - systemd_unit_condition | default(true)
+    - systemd_unit_start | default(true)
+    - systemd_unit_reload | default(false)
+    - not systemd_started.changed
   systemd:
     name: "{{ _systemd_unit_name }}"
     state: reloaded
