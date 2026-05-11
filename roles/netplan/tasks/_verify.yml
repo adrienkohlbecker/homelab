@@ -26,12 +26,13 @@
   register: netplan_verify_runtime
   failed_when: netplan_verify_runtime.matched < 1
 
-- name: _verify | Snapshot dir /var/lib/netplan-prev kept for next apply
-  # The cancel step intentionally leaves this around — the async apply
-  # may still be reading --state, and the next safe-apply rotates it.
-  # Asserting its presence pins down the leave-in-place decision.
+- name: _verify | Snapshot dir /run/netplan-prev kept for next apply
+  # The pre-template snapshot task always populates this; the cancel
+  # step intentionally leaves it in place so the next converge's
+  # snapshot rotates it, and the async netplan apply --state can
+  # finish reading without racing a removal.
   stat:
-    path: /var/lib/netplan-prev
+    path: /run/netplan-prev
   register: netplan_verify_prev
   failed_when: not (netplan_verify_prev.stat.exists and netplan_verify_prev.stat.isdir)
 
