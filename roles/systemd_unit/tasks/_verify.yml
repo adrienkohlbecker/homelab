@@ -123,3 +123,86 @@
   systemd:
     daemon_reload: true
   become: true
+
+# Install-path coverage: the rescue block is comment-flagged as
+# "rare-but-load-bearing" and is never exercised by normal callers, so
+# a regression would ship undetected. The fixtures below install a good
+# unit, then deliberately install one `systemd-analyze verify` rejects
+# (`Bogus=` in [Unit] is a stable trip-wire across systemd versions),
+# and assert both rescue branches: backup-restore and fresh-file-delete.
+
+- name: _verify | install valid unit via tasks_from=template
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: systemd_unit_verify_ok.service
+
+- name: _verify | first install set the per-unit fact and put file on disk
+  block:
+    - stat:
+        path: /etc/systemd/system/systemd_unit_verify_ok.service
+      register: _verify_ok_stat
+    - assert:
+        that:
+          - systemd_unit_verify_ok_service_result is defined
+          - systemd_unit_verify_ok_service_result.changed
+          - _verify_ok_stat.stat.exists
+
+- name: _verify | re-install same template is idempotent
+  import_role:
+    name: systemd_unit
+    tasks_from: template
+  vars:
+    systemd_unit_src: systemd_unit_verify_ok.service
+
+- name: _verify | second install reported no change
+  assert:
+    that: not systemd_unit_verify_ok_service_result.changed
+
+- name: _verify | rescue restores backup when validate fails over a prior unit
+  block:
+    - name: _verify | install broken unit over the good one (expect failure)
+      import_role:
+        name: systemd_unit
+        tasks_from: template
+      vars:
+        systemd_unit_src: systemd_unit_verify_bad.service
+        systemd_unit_dest: systemd_unit_verify_ok.service
+    - fail:
+        msg: broken install over the good unit should have failed but did not
+  rescue:
+    - name: _verify | on-disk content reverted to the good unit
+      command: grep -qF Description=systemd_unit_verify_ok /etc/systemd/system/systemd_unit_verify_ok.service
+      changed_when: false
+
+- name: _verify | rescue deletes new file on fresh-install validate failure
+  block:
+    - name: _verify | install broken unit fresh (expect failure)
+      import_role:
+        name: systemd_unit
+        tasks_from: template
+      vars:
+        systemd_unit_src: systemd_unit_verify_bad.service
+    - fail:
+        msg: broken install should have failed but did not
+  rescue:
+    - stat:
+        path: /etc/systemd/system/systemd_unit_verify_bad.service
+      register: _verify_bad_stat
+    - assert:
+        that: not _verify_bad_stat.stat.exists
+
+- name: _verify | cleanup install-path test units
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/systemd/system/systemd_unit_verify_ok.service
+    - /etc/systemd/system/systemd_unit_verify_bad.service
+  become: true
+
+- name: _verify | daemon-reload after install-path cleanup
+  systemd:
+    daemon_reload: true
+  become: true
