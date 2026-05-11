@@ -1,0 +1,21 @@
+- name: _verify | curl-static binary exists and is executable
+  stat:
+    path: /usr/local/bin/curl-static
+    checksum_algorithm: sha256
+  register: _verify_curl
+  failed_when: >-
+    not _verify_curl.stat.exists
+    or _verify_curl.stat.mode != '0755'
+    or _verify_curl.stat.checksum != static_curl_release[ansible_architecture].binary_sha256
+  become: true
+
+- name: _verify | curl-static --version runs successfully
+  command: /usr/local/bin/curl-static --version
+  changed_when: false
+  register: _verify_curl_version
+
+- name: _verify | curl-static reports a curl version line
+  assert:
+    that:
+      - _verify_curl_version.stdout is search('^curl ')
+    fail_msg: "curl-static --version output did not start with 'curl ': {{ _verify_curl_version.stdout }}"
