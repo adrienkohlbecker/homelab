@@ -28,9 +28,16 @@ swap_partition:
 
 netplan:
   ethernets:
+    # match.driver pins the block to the physical PCIe NIC. Without it
+    # netplan's apply-time matcher walks /sys using the *current* MAC
+    # (not PermanentMACAddress like the generated .network files), so
+    # any virtual link that inherits the parent's MAC would also be
+    # caught. r8169 is the Realtek driver pug's onboard NIC uses;
+    # virtual links don't match.
     nic0:
       match:
         macaddress: "{{ mac_addresses.pug }}"
+        driver: r8169
       set-name: eth0
       link-local: [] # do not setup random link local address when no dhcp is present
       wakeonlan: true
