@@ -1,4 +1,8 @@
-- name: _test | Reload udev
+# netplan's apply-time matcher walks /sys/class/net, which is populated
+# by udev. The minimal cloud image variant doesn't always have udev
+# present + started by the time the role runs — install and start it
+# explicitly so match-by-name/MAC works during the converge.
+- name: _setup | Ensure udev is installed and running
   shell: |
     set -euo pipefail
 
