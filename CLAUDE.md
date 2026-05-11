@@ -28,6 +28,9 @@ Use two-space YAML indentation and descriptive `name` values. Namespace variable
 ### Service Ports
 Loopback ports for podman services live in `group_vars/all.yml` under `service_ports:` — single source of truth for both the unit template's `--publish 127.0.0.1:{{ service_ports.<svc> }}:<container_port>/tcp` and the matching `nginx_proxy_pass: http://localhost:{{ service_ports.<svc> }}/`. Migrate roles to consume from there as you touch them; until a role is migrated its port literal lives in two places (unit template + nginx import). When allocating a new port, grep `service_ports:` first.
 
+### Homepage Bookmarks
+Any new user-facing service (anything with an nginx subdomain) gets a bookmark in [roles/homepage/templates/bookmarks.yaml.j2](roles/homepage/templates/bookmarks.yaml.j2) — pick the right section (Media / Infra / Personal), follow the existing `abbr: XX` + `icon: sh-<name>.png` + `href: https://<subdomain>.{{ inventory_hostname }}.{{ domain }}/` shape. Icons resolve through selfh.st (the `sh-` prefix); if the service has no selfh.st icon, omit the `icon:` line and the 2-letter `abbr:` becomes the visible fallback. Adding bookmarks doesn't need a separate test run — the YAML structure is enforced by example.
+
 ### Container Healthchecks
 Every podman `*.service.j2` unit must declare `--health-cmd` (and `--health-startup-cmd`) so systemd can distinguish "process running" from "service serving". The check executes *inside* the container, so it has to invoke something the image actually contains. In order of preference:
 
