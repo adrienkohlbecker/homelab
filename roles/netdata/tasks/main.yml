@@ -213,25 +213,13 @@
 # coming up — Type=notify's READY=1 fires before the listener is fully
 # accepting connections. Installed before "Enable netdata service" so
 # the first start (and every subsequent restart) is synchronous.
-- name: Create netdata service override directory
-  file:
-    dest: /etc/systemd/system/netdata.service.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - netdata
-
 - name: Install netdata service override
   import_role:
     name: systemd_unit
-    tasks_from: copy
+    tasks_from: dropin
   vars:
     systemd_unit_src: override.conf
-    systemd_unit_dest: netdata.service.d/override.conf
-    systemd_unit_verify: netdata.service
+    systemd_unit_for: netdata.service
   tags:
     - netdata
 

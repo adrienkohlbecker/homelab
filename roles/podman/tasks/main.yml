@@ -13,25 +13,13 @@
   tags:
     - podman
 
-- name: Create override directory
-  file:
-    dest: /etc/systemd/system/podman.socket.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - podman
-
 - name: Install podman socket override
   import_role:
     name: systemd_unit
-    tasks_from: copy
+    tasks_from: dropin
   vars:
     systemd_unit_src: override_socket.conf
-    systemd_unit_dest: podman.socket.d/override.conf
-    systemd_unit_verify: podman.socket
+    systemd_unit_for: podman.socket
   tags:
     - podman
 
@@ -41,25 +29,13 @@
   tags:
     - podman
 
-- name: Create override directory
-  file:
-    dest: /etc/systemd/system/podman.service.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - podman
-
-- name: Install postman service override
+- name: Install podman service override
   import_role:
     name: systemd_unit
-    tasks_from: copy
+    tasks_from: dropin
   vars:
     systemd_unit_src: override_service.conf
-    systemd_unit_dest: podman.service.d/override.conf
-    systemd_unit_verify: podman.service
+    systemd_unit_for: podman.service
   tags:
     - podman
 
