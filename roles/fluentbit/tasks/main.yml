@@ -1,0 +1,113 @@
+- name: Install gpg
+  apt:
+    pkg: gpg
+    cache_valid_time: 3600
+  become: true
+  register: apt_install_gpg
+  tags:
+    - fluentbit
+
+# Repository setup forks on Ubuntu major version because apt-key was
+# removed from the default install in resolute (26.04). Same release
+# blacklist pattern as roles/netdata.
+- name: Add fluent-bit repository key
+  when:
+    - ansible_distribution_major_version | int < 26
+    - not (ansible_check_mode and apt_install_gpg.changed)
+  apt_key:
+    url: https://packages.fluentbit.io/fluentbit.key
+    keyring: /etc/apt/trusted.gpg.d/fluentbit.gpg
+  become: true
+  tags:
+    - fluentbit
+
+- name: Add fluent-bit repository
+  when: ansible_distribution_major_version | int < 26
+  apt_repository:
+    repo: deb [signed-by=/etc/apt/trusted.gpg.d/fluentbit.gpg] {{ mirror_apt_fluentbit }}/{{ ansible_distribution_release }} {{ ansible_distribution_release }} main
+    filename: fluent-bit
+  register: apt_repository_fluentbit_legacy
+  become: true
+  tags:
+    - fluentbit
+
+- name: Install python3-debian (deb822_repository prereq)
+  when: ansible_distribution_major_version | int >= 26
+  apt:
+    pkg: python3-debian
+    cache_valid_time: 3600
+  become: true
+  register: apt_install_python3_debian
+  tags:
+    - fluentbit
+
+- name: Add fluent-bit repository (deb822)
+  when:
+    - ansible_distribution_major_version | int >= 26
+    - not (ansible_check_mode and apt_install_python3_debian.changed)
+  ansible.builtin.deb822_repository:
+    name: fluent-bit
+    types: deb
+    uris: "{{ mirror_apt_fluentbit }}/{{ ansible_distribution_release }}"
+    suites: "{{ ansible_distribution_release }}"
+    components: main
+    signed_by: https://packages.fluentbit.io/fluentbit.key
+  register: apt_repository_fluentbit_deb822
+  become: true
+  tags:
+    - fluentbit
+
+- name: Track repository changes
+  set_fact:
+    apt_repository_fluentbit:
+      changed: "{{ apt_repository_fluentbit_legacy is changed or apt_repository_fluentbit_deb822 is changed or apt_install_python3_debian is changed }}"
+  tags:
+    - fluentbit
+
+- name: Refresh apt cache after fluent-bit repo change
+  when: apt_repository_fluentbit.changed and not ansible_check_mode
+  apt:
+    update_cache: true
+  become: true
+  tags:
+    - fluentbit
+
+# policy_rc_d=101 blocks the package's postinst auto-start. The default
+# config logs to stdout and would harmlessly start, but skipping that
+# saves a noisy systemd restart cycle.
+- name: Install fluent-bit
+  when: not (ansible_check_mode and apt_repository_fluentbit.changed)
+  apt:
+    pkg: fluent-bit
+    policy_rc_d: 101
+    cache_valid_time: 3600
+  register: fluentbit_apt
+  become: true
+  tags:
+    - fluentbit
+
+- name: Configure fluent-bit
+  template:
+    src: fluent-bit.conf.j2
+    dest: /etc/fluent-bit/fluent-bit.conf
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+    validate: /opt/fluent-bit/bin/fluent-bit --config %s --dry-run
+  become: true
+  register: fluentbit_cfg
+  when: not (ansible_check_mode and fluentbit_apt.changed)
+  tags:
+    - fluentbit
+
+- name: Enable fluent-bit service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: fluent-bit
+    systemd_unit_condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or apt_repository_fluentbit.changed)) }}"
+    systemd_unit_restart: "{{ fluentbit_cfg.changed or fluentbit_apt.changed }}"
+  tags:
+    - fluentbit

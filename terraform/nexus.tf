@@ -46,6 +46,7 @@ locals {
     "azlux-debian"      = "https://packages.azlux.fr/debian/"
     "nodesource-node22" = "https://deb.nodesource.com/node_22.x/"
     "netdata"           = "https://repo.netdata.cloud/repos/stable/ubuntu/"
+    "fluentbit"         = "https://packages.fluentbit.io/ubuntu/"
     "1password"         = "https://downloads.1password.com/linux/debian/amd64/"
     "docker-ce"         = "https://download.docker.com/linux/ubuntu/"
   }

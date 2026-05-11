@@ -1,0 +1,74 @@
+# {{ ansible_managed }}
+#
+# Ships journald + nginx logs to OpenObserve on lab. One stream per
+# host ({{ inventory_hostname }}); the openobserve UI groups streams
+# per-org, so per-host streams keep filtering clean without pre-tagging
+# every record. Auth: HTTP Basic with the root account; rotate by
+# bumping openobserve_root_password in the vault and re-running the
+# play (the new password is templated into this file).
+
+[SERVICE]
+    Flush             5
+    Log_Level         warn
+    Daemon            off
+    Parsers_File      parsers.conf
+    HTTP_Server       off
+    storage.path      /var/lib/fluent-bit/storage/
+    storage.sync      normal
+    storage.checksum  off
+    storage.backlog.mem_limit  5M
+
+# Everything that logs via systemd journal (which on modern Ubuntu is
+# nearly every service — including apt/dpkg/unattended-upgrades that
+# the legacy vector role had to tail individually).
+[INPUT]
+    Name              systemd
+    Tag               journal.*
+    Path              /var/log/journal
+    DB                /var/lib/fluent-bit/journal.db
+    Read_From_Tail    on
+    Strip_Underscores on
+
+# nginx access/error logs don't go through journald by default.
+[INPUT]
+    Name              tail
+    Tag               nginx.access
+    Path              /var/log/nginx/access.log
+    DB                /var/lib/fluent-bit/nginx-access.db
+    Path_Key          filepath
+    Refresh_Interval  5
+    Skip_Long_Lines   on
+
+[INPUT]
+    Name              tail
+    Tag               nginx.error
+    Path              /var/log/nginx/error.log
+    DB                /var/lib/fluent-bit/nginx-error.db
+    Path_Key          filepath
+    Refresh_Interval  5
+    Skip_Long_Lines   on
+
+# Tag every record with the inventory hostname so cross-stream queries
+# in OpenObserve can still filter by host without parsing the stream
+# name. systemd input also sets HOSTNAME from the journal, but tails
+# don't — this normalises both.
+[FILTER]
+    Name              modify
+    Match             *
+    Add               host {{ inventory_hostname }}
+
+[OUTPUT]
+    Name              http
+    Match             *
+    Host              openobserve.lab.{{ domain }}
+    Port              443
+    URI               /api/default/{{ inventory_hostname }}/_json
+    tls               on
+    tls.verify        on
+    Format            json
+    Json_date_key     _timestamp
+    Json_date_format  iso8601
+    http_User         {{ root_email }}
+    http_Passwd       {{ openobserve_root_password }}
+    Retry_Limit       False
+    storage.total_limit_size  50M
