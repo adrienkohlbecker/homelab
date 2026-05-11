@@ -337,9 +337,12 @@ PAGE = """<!doctype html>
     display: block;
     color: var(--muted);
     font-size: 11px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    /* Chart slugs carry the differentiating label (`job=<x>`) at the tail —
+       ellipsis truncation hid exactly the part that distinguishes two alerts
+       on the same chart family. Let it wrap; overflow-wrap: anywhere breaks
+       cleanly at the natural separators (./-/_/=) before falling back to
+       mid-word splits. */
+    overflow-wrap: anywhere;
     line-height: 1.3;
   }}
   .alarm .value {{
