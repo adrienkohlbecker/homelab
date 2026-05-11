@@ -35,25 +35,25 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 REFRESH_SECONDS = 30
 FETCH_TIMEOUT = 5
 
-# Heroicons-style status glyphs swapped in for the text pill below the
-# narrow-viewport breakpoint so the row reads on phones. fill="currentColor"
-# inherits the status colour from the parent .status span.
+# Heroicons-outline status glyphs swapped in for the text pill below the
+# narrow-viewport breakpoint. Outline style (fill=none, stroke=currentColor)
+# so the inside of the circle/triangle is transparent — only the ring and the
+# exclamation pick up the status color.
+_ICON_SVG_PREFIX = (
+    '<svg class="status-icon" viewBox="0 0 24 24" fill="none" '
+    'stroke="currentColor" stroke-width="1.75" stroke-linecap="round" '
+    'stroke-linejoin="round" aria-hidden="true">'
+)
 STATUS_ICONS = {
     "CRITICAL": (
-        '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor" '
-        'aria-hidden="true"><path fill-rule="evenodd" '
-        'd="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 '
-        "9.75-9.75 9.75S2.25 17.385 2.25 12Zm9.75-3.75a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 "
-        "1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.875.875 0 1 0 0-1.75.875.875 0 0 0 0 "
-        '1.75Z" clip-rule="evenodd"/></svg>'
+        _ICON_SVG_PREFIX
+        + '<path d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z"/></svg>'
     ),
     "WARNING": (
-        '<svg class="status-icon" viewBox="0 0 24 24" fill="currentColor" '
-        'aria-hidden="true"><path fill-rule="evenodd" '
-        'd="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 '
-        "4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003ZM12 8.25a.75.75 0 0 1 "
-        ".75.75v3.75a.75.75 0 0 1-1.5 0V9a.75.75 0 0 1 .75-.75Zm0 8.25a.875.875 0 1 0 "
-        '0-1.75.875.875 0 0 0 0 1.75Z" clip-rule="evenodd"/></svg>'
+        _ICON_SVG_PREFIX
+        + '<path d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 '
+        '3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.502-3.032-1.502-3.898 '
+        '0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z"/></svg>'
     ),
 }
 
