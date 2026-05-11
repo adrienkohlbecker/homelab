@@ -44,6 +44,7 @@
     - services
     - zfsbootmenu
     - refind
+    - static_curl
 
 - name: Add more services
   hosts: all:!bunk

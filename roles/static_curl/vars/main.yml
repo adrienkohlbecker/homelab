@@ -1,0 +1,16 @@
+# Statically-linked curl from https://github.com/stunnel/static-curl, used
+# to bind-mount into distroless containers that have no in-image HTTP
+# client to power their --health-cmd. Installed to /usr/local/bin/curl-static.
+#
+# Two sha256s per arch: one for the tarball (verified at download), one
+# for the extracted binary (verified after extraction). Keeping both
+# closes the "tarball verified, contents trusted" gap.
+static_curl_release:
+  x86_64:
+    url: https://github.com/stunnel/static-curl/releases/download/8.20.0/curl-linux-x86_64-musl-8.20.0.tar.xz
+    archive_sha256: 7a12a4c460967e769fad9ddae2de4fce6679633b5a1891628e657dad8df57f3d
+    binary_sha256: 58c6fab6e3f62d39d23224d752de1302cb717d997288d0f23d6fa7e79c393c1f
+  aarch64:
+    url: https://github.com/stunnel/static-curl/releases/download/8.20.0/curl-linux-aarch64-musl-8.20.0.tar.xz
+    archive_sha256: b5dde6790a33f55dee04e965d5b0fcd9c82493b72e1e5608c09ce1483359fb81
+    binary_sha256: 32799692a41e88f9f2be85348c2230baf5a0a29ded2d6c086e49e5cbab22b3f4

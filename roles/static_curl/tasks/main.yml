@@ -1,0 +1,79 @@
+# Install a statically-linked curl binary at /usr/local/bin/curl-static.
+# Designed to be bind-mounted into distroless containers (gcr.io/distroless/*)
+# whose images have no shell / wget / curl, so --health-cmd has nothing to
+# invoke. Podman's exec form (no shell) calls /usr/local/bin/curl-static
+# directly inside the container.
+#
+# Both the tarball and the extracted binary are sha256-pinned. Idempotence
+# is gated on whether the binary is already present with the expected
+# sha256; a stale (older-version) binary triggers re-download. To force a
+# refresh after a version bump, the new sha256 alone is enough — no need
+# to manually delete the binary first.
+
+# xz-utils provides the xz binary that GNU tar shells out to for .tar.xz.
+# The static-curl release only ships .tar.xz, so we need it on every host
+# that installs curl-static. Tiny package, no daemon, safe to add.
+- name: Install xz-utils (needed by tar -J to extract .tar.xz)
+  apt:
+    name: xz-utils
+    state: present
+  become: true
+  tags:
+    - static_curl
+
+- name: Check current curl-static binary
+  stat:
+    path: /usr/local/bin/curl-static
+    checksum_algorithm: sha256
+  register: _static_curl_existing
+  become: true
+  tags:
+    - static_curl
+
+- name: Install curl-static
+  when: >-
+    not _static_curl_existing.stat.exists
+    or _static_curl_existing.stat.checksum != static_curl_release[ansible_architecture].binary_sha256
+  become: true
+  tags:
+    - static_curl
+  block:
+    - name: Download static curl tarball
+      get_url:
+        url: "{{ static_curl_release[ansible_architecture].url }}"
+        dest: /tmp/curl-static.tar.xz
+        checksum: sha256:{{ static_curl_release[ansible_architecture].archive_sha256 }}
+        mode: "0644"
+
+    # `include: [curl]` keeps trurl + SHA256SUMS out of /usr/local/bin;
+    # `--transform` renames the binary so it doesn't collide with the
+    # distro's /usr/bin/curl on PATH lookups inside the container.
+    - name: Extract curl binary to /usr/local/bin/curl-static
+      unarchive:
+        src: /tmp/curl-static.tar.xz
+        dest: /usr/local/bin
+        remote_src: true
+        include:
+          - curl
+        extra_opts:
+          - --transform=s,^curl$,curl-static,
+
+    - name: Fix ownership and mode on /usr/local/bin/curl-static
+      file:
+        path: /usr/local/bin/curl-static
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Re-stat curl-static to verify post-install sha256
+      stat:
+        path: /usr/local/bin/curl-static
+        checksum_algorithm: sha256
+      register: _static_curl_post
+      failed_when: _static_curl_post.stat.checksum != static_curl_release[ansible_architecture].binary_sha256
+
+  always:
+    - name: Remove static curl tarball
+      file:
+        path: /tmp/curl-static.tar.xz
+        state: absent
