@@ -3,27 +3,35 @@
 # (linger must already be enabled). The pre-pull step is rootful-only —
 # extract_podman_image queries the system bus, and a rootless service
 # pulls into its own /var/lib/containers/rootless/$USER store anyway.
-- name: service | Resolve scope and unit name for {{ systemd_unit_src }}
+# Two set_fact tasks because ansible's templating engine resolves all
+# keys in a single set_fact concurrently — a key can't read a sibling
+# defined in the same task. Primitives (caller-var defaulting) first,
+# derived facts (scope, is_service) second.
+#
+# _is_service: only `.service` units carry ExecStart properties; the
+# extract_podman_image module silently returns [] for anything else
+# after blindly appending `.service` to the name. Bare names (no
+# extension) are treated as services by the role's convention.
+- name: service | Resolve caller defaults for {{ systemd_unit_src }}
   set_fact:
-    _systemd_unit_scope: "{{ 'system' if (systemd_unit_user | default('root')) == 'root' else 'user' }}"
+    _systemd_unit_user: "{{ systemd_unit_user | default('root') }}"
+    _systemd_unit_condition: "{{ systemd_unit_condition | default(true) }}"
+    _systemd_unit_start: "{{ systemd_unit_start | default(true) }}"
     _systemd_unit_name: "{{ systemd_unit_dest | default(systemd_unit_src) }}"
 
-# Only `.service` units carry ExecStart properties; the module silently
-# returns [] for anything else after blindly appending `.service` to the
-# name. Skip the D-Bus round-trip for timers/sockets/targets/paths. Bare
-# names (no extension) are treated as services by the role's convention.
-- name: service | Classify unit type
+- name: service | Derive scope and unit type for {{ systemd_unit_src }}
   set_fact:
+    _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_is_service: "{{ _systemd_unit_name.endswith('.service') or '.' not in _systemd_unit_name }}"
 
 - name: Enable the service
-  when: (systemd_unit_condition | default(true))
+  when: _systemd_unit_condition
   systemd:
     name: "{{ _systemd_unit_name }}"
     enabled: true
     scope: "{{ _systemd_unit_scope }}"
   become: true
-  become_user: "{{ systemd_unit_user | default('root') }}"
+  become_user: "{{ _systemd_unit_user }}"
 
 # Each .service file is the single source of truth for its podman image;
 # the extract_podman_image module asks systemd over D-Bus for the parsed
@@ -33,7 +41,7 @@
 # deadline.
 - name: Detect podman images referenced by the unit
   when:
-    - systemd_unit_condition | default(true)
+    - _systemd_unit_condition
     - not ansible_check_mode
     - _systemd_unit_scope == 'system'
     - _systemd_unit_is_service
@@ -44,7 +52,7 @@
 
 - name: Pre-pull podman images referenced by the unit
   when:
-    - systemd_unit_condition | default(true)
+    - _systemd_unit_condition
     - not ansible_check_mode
     - _systemd_unit_scope == 'system'
     - _systemd_unit_is_service
@@ -63,31 +71,31 @@
 # unit).
 - name: Reset failed state to clear any rate-limit
   when:
-    - systemd_unit_condition | default(true)
-    - systemd_unit_start | default(true)
+    - _systemd_unit_condition
+    - _systemd_unit_start
     - not ansible_check_mode
   command: "systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} reset-failed {{ _systemd_unit_name }}"
   changed_when: false
   failed_when: false
   become: true
-  become_user: "{{ systemd_unit_user | default('root') }}"
+  become_user: "{{ _systemd_unit_user }}"
 
 - name: Start the service
   when:
-    - systemd_unit_condition | default(true)
-    - systemd_unit_start | default(true)
+    - _systemd_unit_condition
+    - _systemd_unit_start
   systemd:
     name: "{{ _systemd_unit_name }}"
     state: started
     scope: "{{ _systemd_unit_scope }}"
   register: systemd_started
   become: true
-  become_user: "{{ systemd_unit_user | default('root') }}"
+  become_user: "{{ _systemd_unit_user }}"
 
 - name: Restart the service
   when:
-    - systemd_unit_condition | default(true)
-    - systemd_unit_start | default(true)
+    - _systemd_unit_condition
+    - _systemd_unit_start
     - systemd_unit_restart | default(false)
     - not systemd_started.changed
   systemd:
@@ -95,7 +103,7 @@
     state: restarted
     scope: "{{ _systemd_unit_scope }}"
   become: true
-  become_user: "{{ systemd_unit_user | default('root') }}"
+  become_user: "{{ _systemd_unit_user }}"
 
 # Hitless alternative to restart for daemons that pick up config via SIGHUP
 # (keepalived, nginx, etc.). Mutually exclusive with systemd_unit_restart in
@@ -103,8 +111,8 @@
 # unit (the started state already reflects current config).
 - name: Reload the service
   when:
-    - systemd_unit_condition | default(true)
-    - systemd_unit_start | default(true)
+    - _systemd_unit_condition
+    - _systemd_unit_start
     - systemd_unit_reload | default(false)
     - not systemd_started.changed
   systemd:
@@ -112,4 +120,4 @@
     state: reloaded
     scope: "{{ _systemd_unit_scope }}"
   become: true
-  become_user: "{{ systemd_unit_user | default('root') }}"
+  become_user: "{{ _systemd_unit_user }}"
