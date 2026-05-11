@@ -1,12 +1,3 @@
-- name: _verify | curl_static binary exists with mode 0755
-  stat:
-    path: /usr/local/bin/curl_static
-  register: _verify_curl
-  failed_when: >-
-    not _verify_curl.stat.exists
-    or _verify_curl.stat.mode != '0755'
-  become: true
-
 - name: _verify | curl_static --version runs successfully
   command: /usr/local/bin/curl_static --version
   changed_when: false
@@ -17,3 +8,29 @@
     that:
       - _verify_curl_version.stdout is search('^curl ' ~ (static_curl_version | regex_escape) ~ ' ')
     fail_msg: "curl_static --version output didn't start with 'curl {{ static_curl_version }} ': {{ _verify_curl_version.stdout }}"
+
+# The whole reason this role exists is "a curl that runs inside
+# distroless containers with no libc". `ldd` on a fully-static binary
+# emits either "statically linked" (jammy) or "not a dynamic
+# executable" (older glibc); a dynamically-linked binary always lists
+# each library with a `=>` arrow. The negative check on `=>` covers
+# both glibc variants and catches a glibc-named upstream release that
+# would silently pass --version but break the moment openobserve
+# invoked it inside gcr.io/distroless/cc-debian13. ldd ships in
+# libc-bin (always present on Ubuntu); `file` is not in the base
+# image. failed_when: false because ldd of a static binary on some
+# glibc versions exits non-zero.
+- name: _verify | curl_static is fully statically linked
+  command: ldd /usr/local/bin/curl_static
+  changed_when: false
+  failed_when: false
+  register: _verify_curl_ldd
+
+- name: _verify | assert curl_static reports no dynamic libraries
+  assert:
+    that:
+      - "'=>' not in _verify_curl_ldd.stdout"
+    fail_msg: >-
+      curl_static is not fully statically linked.
+      ldd stdout: {{ _verify_curl_ldd.stdout | default('') }}
+      ldd stderr: {{ _verify_curl_ldd.stderr | default('') }}
