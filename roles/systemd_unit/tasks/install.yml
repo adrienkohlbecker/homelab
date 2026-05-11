@@ -22,15 +22,16 @@
 
 - name: Install systemd unit
   block:
-    # `action: { module: "{{ var }}" }` dispatches to copy or template based on
-    # which entry point (copy.yml / template.yml) the caller imported. Keeping
-    # one install task here means the validate + rescue logic below is a single
-    # source of truth — used to be ~90 lines duplicated across copy.yml and
-    # template.yml.
+    # `action:` + `args:` dispatches to copy or template based on which entry
+    # point (copy.yml / template.yml) the caller imported. Keeping one install
+    # task here means the validate + rescue logic below is a single source of
+    # truth — used to be ~90 lines duplicated across copy.yml and template.yml.
+    # The mapping form of `action:` is deprecated in ansible-core 2.23 (use
+    # string `action:` with a separate `args:` block).
     - name: Write the unit file ({{ _systemd_unit_module }})
       when: _systemd_unit_condition
-      action:
-        module: "{{ _systemd_unit_module }}"
+      action: "{{ _systemd_unit_module }}"
+      args:
         src: "{{ systemd_unit_src }}{{ '.j2' if _systemd_unit_module == 'template' else '' }}"
         dest: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
         owner: root
