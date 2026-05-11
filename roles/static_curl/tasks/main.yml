@@ -20,11 +20,16 @@
   tags:
     - static_curl
 
+# `check_mode: false` so the probe runs even under --check; without it
+# the command is skipped and the install gate below errors on an
+# undefined .rc. Reading --version is read-only, so honoring check mode
+# is correct.
 - name: Check installed curl_static version
   command: /usr/local/bin/curl_static --version
   register: _static_curl_existing
   changed_when: false
   failed_when: false
+  check_mode: false
   become: true
   tags:
     - static_curl
@@ -37,17 +42,29 @@
   tags:
     - static_curl
   block:
+    # `check_mode: false` so the tarball actually lands on disk under
+    # --check; the unarchive below opens it eagerly and would otherwise
+    # fail "Source does not exist". The file lives in /tmp and is wiped
+    # by the always: cleanup at the end of the block.
     - name: Download static curl tarball
       get_url:
         url: "{{ static_curl_release[ansible_architecture].url }}"
         dest: /tmp/curl_static.tar.xz
         checksum: sha256:{{ static_curl_release[ansible_architecture].sha256 }}
         mode: "0644"
+      check_mode: false
 
     # `include: [curl]` keeps trurl + SHA256SUMS out of /usr/local/bin;
     # `--transform` renames the binary so it doesn't collide with the
     # distro's /usr/bin/curl on PATH lookups inside the container.
+    #
+    # `when: not ansible_check_mode` because gtar-backed unarchive has no
+    # check-mode support ("remote module does not support check mode
+    # when using gtar"). The downstream file-ownership task is gated the
+    # same way so it doesn't fail on a missing file when --check skipped
+    # the extract.
     - name: Extract curl binary to /usr/local/bin/curl_static
+      when: not ansible_check_mode
       unarchive:
         src: /tmp/curl_static.tar.xz
         dest: /usr/local/bin
@@ -58,6 +75,7 @@
           - --transform=s,^curl$,curl_static,
 
     - name: Fix ownership and mode on /usr/local/bin/curl_static
+      when: not ansible_check_mode
       file:
         path: /usr/local/bin/curl_static
         owner: root
@@ -65,7 +83,10 @@
         mode: "0755"
 
   always:
+    # Cleanup pairs with the check_mode: false download above so /tmp
+    # doesn't carry the tarball past a --check run.
     - name: Remove static curl tarball
       file:
         path: /tmp/curl_static.tar.xz
         state: absent
+      check_mode: false
