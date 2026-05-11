@@ -27,9 +27,9 @@
   failed_when: netplan_verify_runtime.matched < 1
 
 - name: _verify | Snapshot dir /var/lib/netplan-prev kept for next apply
-  # The cancel step intentionally leaves this around — the async apply
-  # may still be reading --state, and the next safe-apply rotates it.
-  # Asserting its presence pins down the leave-in-place decision.
+  # The cancel step intentionally leaves this around for the next
+  # safe-apply to rotate. Asserting its presence pins down the
+  # leave-in-place decision.
   stat:
     path: /var/lib/netplan-prev
   register: netplan_verify_prev
