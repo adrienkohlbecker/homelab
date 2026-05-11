@@ -31,16 +31,12 @@
   tags:
     - netplan
 
-# Apply path — two layers of safety after the earlier SSH-lockout incident
-# (see notes/netplan-safe-apply.md):
-#   1. Pre-flight validation: `netplan generate --debug` writes to /run but
-#      doesn't restart networkd. Surfaces "Cannot find unique matching
-#      interface" and similar before we touch live state.
-#   2. systemd-run-scheduled rollback: takes a runtime snapshot of
-#      /etc/netplan, schedules a deadline 90 s ahead, applies, then asks
-#      ansible to wait_for_connection. If we make it back we touch a
-#      cancel-file; if we don't, the timer fires and restores the prior
-#      config so the box doesn't get stranded.
+# Apply path — wrapped in a systemd-run-scheduled rollback after the
+# 2026-05-10 SSH-lockout incident (see notes/netplan-safe-apply.md):
+# snapshot /etc/netplan, schedule a deadline 90 s ahead, apply, then
+# wait_for_connection. If we reconnect we touch a cancel-file; if we
+# don't, the timer fires and restores the prior config so the box
+# doesn't get stranded.
 # Gated on `not ansible_check_mode` because all of this is destructive.
 - name: Apply netplan safely
   when: netplan_cfg.changed and not ansible_check_mode
@@ -48,22 +44,6 @@
   tags:
     - netplan
   block:
-    - name: Validate config (netplan generate --debug)
-      # netplan generate is "compile, write to /run, don't restart networkd"
-      # — safe to use as a validation gate. Surfaces the unique-match
-      # warning that previously halted apply mid-way.
-      shell: |
-        set -o pipefail
-        out=$(netplan generate --debug 2>&1)
-        echo "$out"
-        if echo "$out" | grep -qiE "WARNING|Cannot find unique|ERROR"; then
-          echo "netplan generate reported a warning/error — refusing to apply" >&2
-          exit 1
-        fi
-      args:
-        executable: /bin/bash
-      changed_when: false
-
     - name: Snapshot current /etc/netplan for rollback
       # /run/netplan-rollback is the directory the rollback timer mv's
       # over /etc/netplan if we don't reconnect in time.
