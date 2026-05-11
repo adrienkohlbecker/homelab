@@ -103,7 +103,7 @@
 - name: _verify rollback | Run the role's apply path against the broken config
   become: true
   block:
-    - include_tasks: apply.yml
+    - import_tasks: apply.yml
 
     - name: _verify rollback | Apply path completed cleanly — rollback was not exercised
       # We should never reach this task: the wait_for_connection inside

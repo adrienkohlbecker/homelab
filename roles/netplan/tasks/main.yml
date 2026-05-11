@@ -20,7 +20,7 @@
     - netplan
 
 - name: Install netplan_rollback.service
-  include_role:
+  import_role:
     name: systemd_unit
     tasks_from: copy
   vars:
@@ -29,7 +29,7 @@
     - netplan
 
 - name: Install netplan_rollback.timer
-  include_role:
+  import_role:
     name: systemd_unit
     tasks_from: copy
   vars:
@@ -109,9 +109,8 @@
 # rollback timer end-to-end.
 # Gated on `not ansible_check_mode` because all of this is destructive.
 - name: Apply netplan safely
+  import_tasks: apply.yml
   when: netplan_cfg.changed and not ansible_check_mode
   become: true
   tags:
     - netplan
-  block:
-    - include_tasks: apply.yml
