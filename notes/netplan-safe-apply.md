@@ -51,7 +51,7 @@ already written the new config). That snapshot captured the new
 config, so:
 - `netplan apply --state` was diffing new-against-new and never
   restricted restart scope.
-- The rollback timer's `mv /run/netplan-rollback /etc/netplan` would
+- The rollback timer's `mv /run/netplan_prev /etc/netplan` would
   have restored the new (broken) config and re-applied it.
 
 Both broken silently because `_verify` only asserted wiring (snapshot
@@ -59,35 +59,44 @@ dir exists, rollback unit reaped) and never triggered an actual
 rollback.
 
 Fixed in commit `7b015c0d` by moving the snapshot above the template
-task and running it unconditionally every converge. `/run/netplan-prev`
+task and running it unconditionally every converge. `/run/netplan_prev`
 now holds the genuine *previous* `/etc/netplan` for both consumers.
 
-### Consumer 1: `netplan apply --state /run/netplan-prev`
+### Consumer 1: `netplan apply --state /run/netplan_prev`
 
 `--state` lets netplan diff the prior YAML against the new YAML in
 `/etc/netplan` and restrict the networkd restart scope to genuinely
 changed interfaces. Reduces carrier-flap blast radius on unrelated
 NICs.
 
-### Consumer 2: systemd-run-scheduled rollback (the real backstop)
+### Consumer 2: timer-armed rollback (the real backstop)
 
-Before apply:
-- `systemd-run --on-active=90 --unit=netplan-rollback --collect` arms
-  a one-shot transient timer-unit that fires in 90 s.
+The role installs three persistent files once at apply-time:
+- `/usr/local/bin/netplan_rollback` — the rollback shell script.
+- `/etc/systemd/system/netplan_rollback.service` — oneshot, ExecStart
+  the script.
+- `/etc/systemd/system/netplan_rollback.timer` — OnActiveSec=90,
+  Unit=netplan_rollback.service.
 
-After apply, ansible's `wait_for_connection` (timeout: 60 s) probes
-SSH. If it reconnects, ansible `touch`es `/run/netplan-keep`. When
-the timer fires at +90 s it reads that file: present = cancelled,
-absent = roll back (`mv /run/netplan-prev /etc/netplan`, `netplan
-apply`).
+Before apply, the role removes any stale `/run/netplan_keep` and does
+`systemd: state=restarted` on `netplan_rollback.timer`, which (re)sets
+the 90 s deadline. After apply, ansible's `wait_for_connection`
+(timeout: 60 s) probes SSH. If it reconnects, ansible `touch`es
+`/run/netplan_keep` and stops the timer. When the timer fires at
++90 s — only relevant on the SSH-died path — the script reads
+`/run/netplan_keep`: present = cancelled (no-op), absent = roll back
+(`mv /run/netplan_prev /etc/netplan`, `netplan apply`).
 
 The 90 s vs 60 s gap is deliberate: a slow reconnect mustn't be
 mis-read as a failed apply.
 
-`--collect` makes systemd clean up the transient unit after it runs,
-so successive applies don't accumulate dead units. `logger -t
-netplan-rollback` writes the outcome to the journal so post-mortems
-can tell whether the rollback fired.
+`logger -t netplan_rollback` writes the outcome to the journal so
+post-mortems can tell whether the rollback fired. The previous
+revision used `systemd-run --on-active=90 ... --collect` for the
+transient-unit equivalent of this pattern, but persistent unit files
+are easier to audit and let `_verify` exercise the same path via the
+`systemd:` module without re-inventing systemd-run semantics in
+shell.
 
 ### Why one snapshot directory, not two
 
@@ -101,12 +110,12 @@ The earlier two-directory split was defensive against a race that
 doesn't exist; the merge (commit `7b015c0d`) keeps the rollback path
 correct while halving the snapshot I/O and cleanup.
 
-The Cancel step intentionally does NOT remove `/run/netplan-prev` —
+The Cancel step intentionally does NOT remove `/run/netplan_prev` —
 the next converge's pre-template snapshot rotates it.
 
 ## What this does NOT protect against
 
-- **Reboot-during-bad-apply.** `/run/netplan-prev` lives in tmpfs;
+- **Reboot-during-bad-apply.** `/run/netplan_prev` lives in tmpfs;
   the systemd-run timer is in runtime state. If the box reboots between
   apply and the timer firing, the timer is lost and the new (potentially
   broken) `/etc/netplan` becomes effective on next boot. Operator still

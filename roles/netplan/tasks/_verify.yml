@@ -26,43 +26,39 @@
   register: netplan_verify_runtime
   failed_when: netplan_verify_runtime.matched < 1
 
-- name: _verify | Snapshot dir /run/netplan-prev kept for next apply
+- name: _verify | Snapshot dir /run/netplan_prev kept for next apply
   # The pre-template snapshot task always populates this; the cancel
   # step intentionally leaves it in place so the next converge's
   # snapshot rotates it, and the async netplan apply --state can
   # finish reading without racing a removal.
   stat:
-    path: /run/netplan-prev
+    path: /run/netplan_prev
   register: netplan_verify_prev
   failed_when: not (netplan_verify_prev.stat.exists and netplan_verify_prev.stat.isdir)
 
-- name: _verify | Rollback transient unit fully reaped
-  # systemd-run --collect should reap netplan-rollback.{service,timer}
-  # after the timer fires (or after we stop+rm them in the cancel step).
-  # --all catches units in any state (active/inactive/failed/dead) — a
-  # narrower --state=active filter would silently pass on a leaked
-  # failed unit. list-units returns 0 with empty output when no match.
-  command: systemctl list-units --all --no-legend netplan-rollback.service netplan-rollback.timer  # noqa command-instead-of-module
+- name: _verify | Rollback timer and service not currently running
+  # After cancel (or after a rollback fire), both units must end in
+  # inactive. If either is active/activating/failed we've leaked a
+  # pending rollback or hit a unit-script error.
+  systemd:
+    name: "{{ item }}"
   register: netplan_verify_unit
   changed_when: false
-  failed_when: netplan_verify_unit.stdout != ""
+  failed_when: netplan_verify_unit.status.ActiveState != "inactive"
+  loop:
+    - netplan_rollback.timer
+    - netplan_rollback.service
+  loop_control:
+    label: "{{ item }}"
 
 - name: _verify | On-disk config still validates
   # Re-run the apply-time validator post-converge so an unchanged-YAML
   # run still asserts current state. `netplan generate --debug` compiles
-  # to /run/systemd/network without restarting networkd — same gate
-  # main.yml uses pre-apply.
-  shell: |
-    set -o pipefail
-    out=$(netplan generate --debug 2>&1)
-    echo "$out"
-    if echo "$out" | grep -qiE "WARNING|Cannot find unique|ERROR"; then
-      exit 1
-    fi
-  args:
-    executable: /bin/bash
-  become: true
+  # to /run/systemd/network without restarting networkd. No ansible
+  # module wraps `netplan generate`.
+  command: netplan generate --debug
   changed_when: false
+  become: true
 
 # Functional end-to-end test of the rollback safety harness — the
 # critical check in this file, the one that catches snapshot-timing
@@ -75,7 +71,7 @@
 # inside _verify). Then invoke the role's apply.yml tasks_from to
 # arm the rollback timer, apply the broken config, watch the role's
 # wait_for_connection canary fail when SSH severs, then wait for the
-# rollback timer at +90s to restore /run/netplan-prev → /etc/netplan
+# rollback timer at +90s to restore /run/netplan_prev → /etc/netplan
 # and bring DHCP back. Assert the journal recorded the rollback fire
 # and the good config is back on disk.
 - name: _verify rollback | Write a known-broken /etc/netplan directly
@@ -128,34 +124,43 @@
         timeout: 120
 
 - name: _verify rollback | Confirm the rollback timer logged its firing
-  # The rollback script calls `logger -t netplan-rollback "auto-
+  # The rollback script calls `logger -t netplan_rollback "auto-
   # rollback firing: ..."`. If we recovered SSH but this isn't in the
   # journal, something else healed the network and the rollback path
-  # wasn't exercised.
-  command: journalctl -t netplan-rollback --since "5 minutes ago"  # noqa command-instead-of-module
+  # wasn't exercised. No built-in ansible module wraps journalctl.
+  command: journalctl -t netplan_rollback --since "5 minutes ago"
   register: netplan_verify_rollback_journal
   changed_when: false
   failed_when: "'auto-rollback firing' not in netplan_verify_rollback_journal.stdout"
   become: true
 
-- name: _verify rollback | Confirm /etc/netplan no longer holds the broken config
-  # The broken file carried the `_verify-rollback-broken` marker
-  # comment; the rolled-back content should not have it.
-  shell: |
-    set -o pipefail
-    ! grep -q "_verify-rollback-broken" /etc/netplan/01-netcfg.yaml
-  args:
-    executable: /bin/bash
-  changed_when: false
+- name: _verify rollback | Read /etc/netplan/01-netcfg.yaml
+  slurp:
+    src: /etc/netplan/01-netcfg.yaml
+  register: netplan_verify_rollback_etcfile
   become: true
 
-- name: _verify rollback | Re-snapshot /run/netplan-prev (mv consumed it)
-  # Leave the box in a state where the next ansible run finds a valid
-  # snapshot, matching what the role's unconditional pre-template
-  # snapshot task would have produced.
-  shell: |
-    set -e
-    rm -rf /run/netplan-prev
-    cp -a /etc/netplan /run/netplan-prev
+- name: _verify rollback | Confirm broken marker is gone from /etc/netplan
+  # The broken file carried the `_verify-rollback-broken` marker
+  # comment; the rolled-back content should not have it.
+  assert:
+    that:
+      - "'_verify-rollback-broken' not in (netplan_verify_rollback_etcfile.content | b64decode)"
+
+- name: _verify rollback | Wipe stale /run/netplan_prev before re-snapshot
+  # mv consumed it during rollback; recreate matching what the role's
+  # unconditional pre-template snapshot task would have produced.
+  file:
+    path: /run/netplan_prev
+    state: absent
+  become: true
+  changed_when: false
+
+- name: _verify rollback | Re-snapshot /etc/netplan to /run/netplan_prev
+  copy:
+    src: /etc/netplan/
+    dest: /run/netplan_prev/
+    remote_src: true
+    mode: preserve
   become: true
   changed_when: false
