@@ -5,10 +5,20 @@
 # /etc/systemd/system and reloads the system manager; any other value
 # installs at /etc/systemd/user (host-wide user-default) and reloads the
 # named user's user manager (which must already be lingered).
-- name: Resolve install scope for {{ systemd_unit_src }}
+# Two set_fact tasks because ansible's templating engine resolves all
+# keys in a single set_fact concurrently — a key can't read a sibling
+# defined in the same task. Primitives (caller-var defaulting) first,
+# derived facts (scope/dir/is_service) second.
+- name: Resolve caller defaults for {{ systemd_unit_src }}
   set_fact:
-    _systemd_unit_scope: "{{ 'system' if (systemd_unit_user | default('root')) == 'root' else 'user' }}"
-    _systemd_unit_dir: "{{ '/etc/systemd/system' if (systemd_unit_user | default('root')) == 'root' else '/etc/systemd/user' }}"
+    _systemd_unit_user: "{{ systemd_unit_user | default('root') }}"
+    _systemd_unit_condition: "{{ systemd_unit_condition | default(true) }}"
+    _systemd_unit_name: "{{ systemd_unit_dest | default(systemd_unit_src) }}"
+
+- name: Derive install scope for {{ systemd_unit_src }}
+  set_fact:
+    _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
+    _systemd_unit_dir: "{{ '/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user' }}"
 
 - name: Install systemd unit
   block:
@@ -18,11 +28,11 @@
     # source of truth — used to be ~90 lines duplicated across copy.yml and
     # template.yml.
     - name: Write the unit file ({{ _systemd_unit_module }})
-      when: systemd_unit_condition | default(true)
+      when: _systemd_unit_condition
       action:
         module: "{{ _systemd_unit_module }}"
         src: "{{ systemd_unit_src }}{{ '.j2' if _systemd_unit_module == 'template' else '' }}"
-        dest: "{{ _systemd_unit_dir }}/{{ systemd_unit_dest | default(systemd_unit_src) }}"
+        dest: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
         owner: root
         group: root
         mode: "0644"
@@ -39,7 +49,7 @@
     # newer `--no-man` form is 254+ only.
     - name: Validate unit file
       when: systemd_unit.changed
-      command: systemd-analyze verify --man=no {{ _systemd_unit_dir }}/{{ systemd_unit_verify | default(systemd_unit_dest) | default(systemd_unit_src) }}
+      command: systemd-analyze verify --man=no {{ _systemd_unit_dir }}/{{ systemd_unit_verify | default(_systemd_unit_name) }}
       register: systemd_verify
       changed_when: false
       failed_when: systemd_verify.rc != 0 or systemd_verify.stderr != ''
@@ -51,7 +61,7 @@
         daemon_reload: true
         scope: "{{ _systemd_unit_scope }}"
       become: true
-      become_user: "{{ systemd_unit_user | default('root') }}"
+      become_user: "{{ _systemd_unit_user }}"
 
     # Expose the install result under a per-unit fact so callers can avoid
     # the ambiguous shared `systemd_unit` register (which is also the role
@@ -61,7 +71,7 @@
     # podman.socket / podman.service yield distinct facts.
     - name: Record install result for {{ systemd_unit_src }}
       set_fact:
-        "{{ (systemd_unit_dest | default(systemd_unit_src)) | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ systemd_unit }}"
+        "{{ _systemd_unit_name | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ systemd_unit }}"
 
   # systemd-analyze verify takes a file path, so the unit has to land at
   # its production location first and is then validated in place. If
@@ -77,7 +87,7 @@
       when: '"backup_file" in systemd_unit'
       copy:
         remote_src: true
-        dest: "{{ _systemd_unit_dir }}/{{ systemd_unit_dest | default(systemd_unit_src) }}"
+        dest: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
         src: "{{ systemd_unit.backup_file }}"
         owner: root
         group: root
@@ -94,7 +104,7 @@
     - name: Delete newly added file
       when: systemd_unit.changed and "backup_file" not in systemd_unit
       file:
-        path: "{{ _systemd_unit_dir }}/{{ systemd_unit_dest | default(systemd_unit_src) }}"
+        path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
         state: absent
       become: true
 
