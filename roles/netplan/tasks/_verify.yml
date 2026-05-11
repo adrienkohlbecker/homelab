@@ -63,3 +63,99 @@
     executable: /bin/bash
   become: true
   changed_when: false
+
+# Functional end-to-end test of the rollback safety harness — the
+# critical check in this file, the one that catches snapshot-timing
+# bugs that stat-only assertions cannot.
+#
+# Approach: write a known-broken /etc/netplan/01-netcfg.yaml directly
+# (bypassing the role's template — the harness passes `-e
+# @host_vars/foo.yml` as CLI extra-vars, which beats include_role's
+# vars: precedence, so we can't override the `netplan` host var from
+# inside _verify). Then invoke the role's apply.yml tasks_from to
+# arm the rollback timer, apply the broken config, watch the role's
+# wait_for_connection canary fail when SSH severs, then wait for the
+# rollback timer at +90s to restore /run/netplan-prev → /etc/netplan
+# and bring DHCP back. Assert the journal recorded the rollback fire
+# and the good config is back on disk.
+- name: _verify rollback | Write a known-broken /etc/netplan directly
+  # 192.0.2.0/24 is TEST-NET-1 (RFC 5737), guaranteed not to match
+  # any real network. Replacing the DHCP-assigned IP with a static
+  # address on this range makes networkd drop the live lease,
+  # severing SSH. `dhcp4: false` alone is not enough — networkd
+  # holds onto the existing lease until something explicitly
+  # replaces it.
+  copy:
+    dest: /etc/netplan/01-netcfg.yaml
+    content: |
+      # _verify-rollback-broken
+      network:
+        version: 2
+        ethernets:
+          en:
+            match:
+              name: "en*"
+            dhcp4: false
+            dhcp6: false
+            addresses: ["192.0.2.99/24"]
+    owner: root
+    group: root
+    mode: "0600"
+    backup: true
+  become: true
+
+- name: _verify rollback | Run the role's apply path against the broken config
+  become: true
+  block:
+    - include_tasks: apply.yml
+
+    - name: _verify rollback | Apply path completed cleanly — rollback was not exercised
+      # We should never reach this task: the wait_for_connection inside
+      # apply.yml must time out because the broken config severed SSH.
+      # If it didn't, either the bad config wasn't actually
+      # destructive on this host (rare) or SSH survived via a side
+      # channel — either way the test didn't validate the rollback.
+      fail:
+        msg: "Expected the apply path's wait_for_connection canary to time out, but it succeeded"
+
+  rescue:
+    - name: _verify rollback | Wait for SSH to recover after the rollback timer fires
+      # By the time we land here, ~65s of apply.yml's wait_for_connection
+      # has already elapsed. The rollback timer fires at +90s relative to
+      # the apply, so we start probing in ~25s.
+      wait_for_connection:
+        delay: 20
+        timeout: 120
+
+- name: _verify rollback | Confirm the rollback timer logged its firing
+  # The rollback script calls `logger -t netplan-rollback "auto-
+  # rollback firing: ..."`. If we recovered SSH but this isn't in the
+  # journal, something else healed the network and the rollback path
+  # wasn't exercised.
+  command: journalctl -t netplan-rollback --since "5 minutes ago"  # noqa command-instead-of-module
+  register: netplan_verify_rollback_journal
+  changed_when: false
+  failed_when: "'auto-rollback firing' not in netplan_verify_rollback_journal.stdout"
+  become: true
+
+- name: _verify rollback | Confirm /etc/netplan no longer holds the broken config
+  # The broken file carried the `_verify-rollback-broken` marker
+  # comment; the rolled-back content should not have it.
+  shell: |
+    set -o pipefail
+    ! grep -q "_verify-rollback-broken" /etc/netplan/01-netcfg.yaml
+  args:
+    executable: /bin/bash
+  changed_when: false
+  become: true
+
+- name: _verify rollback | Re-snapshot /run/netplan-prev (mv consumed it)
+  # Leave the box in a state where the next ansible run finds a valid
+  # snapshot, matching what the role's unconditional pre-template
+  # snapshot task would have produced.
+  shell: |
+    set -e
+    rm -rf /run/netplan-prev
+    cp -a /etc/netplan /run/netplan-prev
+  become: true
+  changed_when: false
