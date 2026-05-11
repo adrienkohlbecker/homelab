@@ -1,5 +1,11 @@
 domain: mhaf.fr
 nexus_url: nexus.lab.fahm.fr
+
+# Override mirror_apt_fluentbit back to upstream: the lab nexus serves
+# /repository/fluentbit only after `mise run tf apply` materialises the
+# terraform/nexus.tf addition. Remove this line once that apply has
+# happened (and the test box can hit the proxy URL).
+mirror_apt_fluentbit: 'https://packages.fluentbit.io/ubuntu'
 # Static name → IP overrides for the test environment. Two consumers share
 # this map:
 #   1. roles/_test/tasks/mirrors.yml writes them to /etc/hosts on every test
