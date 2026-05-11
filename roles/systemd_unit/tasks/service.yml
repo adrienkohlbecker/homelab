@@ -24,6 +24,19 @@
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_is_service: "{{ _systemd_unit_name.endswith('.service') or '.' not in _systemd_unit_name }}"
 
+# Linger has to be on for user-scope lifecycle ops: without it the named
+# user's systemd manager isn't running between logins, so `systemctl
+# --user enable/start` may appear to succeed via the current session but
+# the unit dies at logout. /var/lib/systemd/linger/<user> is the marker
+# loginctl enable-linger creates -- see install.yml for the longer
+# rationale.
+- name: service | Verify user-scope linger marker exists for {{ _systemd_unit_user }}
+  when: _systemd_unit_scope == 'user'
+  stat:
+    path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
+  register: _systemd_unit_linger
+  failed_when: not _systemd_unit_linger.stat.exists
+
 - name: Enable the service
   when: _systemd_unit_condition
   systemd:
