@@ -34,6 +34,17 @@ from utils import CommandFailedException, IdempotenceFailedException, cancel_on_
 _BENCHMARK = False
 _PHASE_TIMINGS: list[tuple[str, float]] = []
 
+# Roles that self-test the test prelude's own machinery: they configure
+# what _mirrors.yml configures (apt sources today; pip/uv/podman
+# registries in the future if they're ever extracted to dedicated
+# roles). Routing them through the Nexus rewrite the prelude installs
+# would mean the role's _verify.yml asserts against Nexus URLs that
+# came from the prelude, not against the upstream URLs the role's
+# templates actually produce on a prod box (where nexus_url is empty
+# by default). Force --upstream-mirrors so the role exercises its real
+# contract.
+_FORCE_UPSTREAM_MIRRORS_ROLES = frozenset({"apt"})
+
 
 @contextlib.asynccontextmanager
 async def _phase(label: str):
@@ -306,6 +317,10 @@ def main() -> int:
     """CLI entry point for running a single role test."""
 
     parsed_args, pass_args = parse_args()
+
+    if parsed_args.role in _FORCE_UPSTREAM_MIRRORS_ROLES and not parsed_args.upstream_mirrors:
+        parsed_args.upstream_mirrors = True
+        print_line(f"Auto-enabling --upstream-mirrors so {parsed_args.role!r} runs against the URLs its templates actually emit on prod")
 
     if parsed_args.benchmark:
         global _BENCHMARK
