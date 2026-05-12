@@ -53,9 +53,15 @@
     mode: "0644"
     backup: true
     # Catches typos in the rule line; --create exits non-zero on parse
-    # failure. Runs with --dry-run so it doesn't actually create or clean
-    # anything during validation.
-    validate: systemd-tmpfiles --dry-run --create %s
+    # failure. --dry-run was added in systemd 250 -- jammy ships 249
+    # so we drop the flag there. Without --dry-run the validate's
+    # side effect is the `d` rule's mkdir of /mnt/scratch/qemu/
+    # _sentinels (idempotent; next tmpfiles tick would do the same);
+    # the `e` rule has no creation side effect.
+    validate: >-
+      systemd-tmpfiles
+      {{ '--dry-run' if ansible_distribution_release not in ['jammy'] else '' }}
+      --create %s
   become: true
   tags:
     - act_runner
