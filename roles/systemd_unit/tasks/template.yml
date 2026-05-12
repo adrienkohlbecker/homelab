@@ -1,3 +1,0 @@
-- import_tasks: install.yml
-  vars:
-    _systemd_unit_module: template
