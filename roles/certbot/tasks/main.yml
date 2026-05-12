@@ -26,7 +26,19 @@
 
 # Renewal happens out-of-band via the certbot.timer that the apt package
 # ships. Without this hook nginx would keep serving the pre-renewal cert
-# until something else restarted it.
+# until something else restarted it. The Ubuntu certbot package doesn't
+# pre-create renewal-hooks/deploy, so we own it here.
+- name: Create renewal-hooks deploy directory
+  file:
+    dest: /etc/letsencrypt/renewal-hooks/deploy
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - certbot
+
 - name: Install nginx reload deploy-hook
   copy:
     src: reload_nginx.sh
