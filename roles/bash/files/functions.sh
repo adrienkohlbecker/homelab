@@ -30,7 +30,7 @@ if [ -n "${F_DEBUGME:-}" ]; then
   set -x
 fi
 
-# Use f_rescue to run multiple commands that can each fail, and observe the number in f_failed afterwards to know if any did
+# Use f_rescue to run multiple commands that can each fail, and check f_failed afterwards for the count of failures
 f_failed=0
 f_rescue() {
   set +e
@@ -40,7 +40,7 @@ f_rescue() {
 
   if [ $retval -ne 0 ]; then
     f_error "Error:$(printf ' %q' "$@") failed with exit $retval"
-    f_failed=1
+    ((f_failed += 1))
   fi
 }
 

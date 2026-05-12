@@ -88,7 +88,7 @@
   assert:
     that:
       - _verify_f_rescue.rc == 0
-      - "'f_failed=1' in _verify_f_rescue.stdout"
+      - "'f_failed=2' in _verify_f_rescue.stdout"
       - "'Error: false failed with exit 1' in _verify_f_rescue.stderr"
       - "'Error: ls /nonexistent-path-for-verify failed with exit' in _verify_f_rescue.stderr"
 
