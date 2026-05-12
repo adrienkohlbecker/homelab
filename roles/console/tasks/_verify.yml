@@ -1,0 +1,69 @@
+# Functional checks for the console role. The converge proves apt +
+# copy + update-initramfs exit-coded cleanly; these checks verify
+# (a) /etc/default/console-setup landed in the documented shape,
+# (b) console-setup.service is loaded and enabled (the unit that
+# applies the config to live ttys at boot), and (c) the initramfs
+# picked up our config -- i.e. the console-setup initramfs hook fired
+# and bundled /etc/default/console-setup into the initrd.
+#
+# Live tty glyph output isn't observable in a headless QEMU run, so
+# (b) is a state check. The initrd-content check (c) is the strongest
+# functional probe available: a future regression where the package
+# de-bundles its hook, or where update-initramfs silently no-ops,
+# slips past the converge but trips here.
+
+- name: _verify | Stat console-setup config
+  stat:
+    path: /etc/default/console-setup
+  register: _verify_console_cfg
+  become: true
+
+- name: _verify | Config exists with expected mode/owner
+  assert:
+    that:
+      - _verify_console_cfg.stat.exists
+      - _verify_console_cfg.stat.mode == "0644"
+      - _verify_console_cfg.stat.pw_name == "root"
+      - _verify_console_cfg.stat.gr_name == "root"
+    fail_msg: "/etc/default/console-setup wrong perms or missing ({{ _verify_console_cfg.stat }})"
+
+- name: _verify | Read console-setup config
+  slurp:
+    src: /etc/default/console-setup
+  register: _verify_console_content
+  become: true
+
+- name: _verify | Config carries expected directives
+  assert:
+    that:
+      - item in (_verify_console_content.content | b64decode)
+    fail_msg: "console-setup config missing directive: {{ item }}"
+  loop:
+    - 'CHARMAP="UTF-8"'
+    - 'CODESET="Lat15"'
+    - 'FONTFACE="Fixed"'
+    - 'FONTSIZE="8x16"'
+    - 'ACTIVE_CONSOLES="/dev/tty[1-6]"'
+
+# is-enabled exits 0 for both "enabled" and "static" -- both states
+# mean the unit runs at boot through normal dependency wiring. Masked
+# or disabled would silently break the apply-at-boot path.
+- name: _verify | console-setup.service is enabled
+  command: systemctl is-enabled console-setup.service
+  register: _verify_console_unit
+  changed_when: false
+  failed_when:
+    - _verify_console_unit.rc != 0 or _verify_console_unit.stdout not in ['enabled', 'static']
+  become: true
+
+# The console-setup initramfs hook
+# (/usr/share/initramfs-tools/hooks/console_setup) copies
+# /etc/default/console-setup into the initrd at the same path. If the
+# hook didn't fire (package change, hook disabled, update-initramfs
+# no-op), the path is absent and this fails.
+- name: _verify | Current kernel's initrd contains console-setup config
+  command: lsinitramfs /boot/initrd.img-{{ ansible_kernel }}
+  register: _verify_console_initrd
+  changed_when: false
+  failed_when: "'etc/default/console-setup' not in _verify_console_initrd.stdout"
+  become: true
