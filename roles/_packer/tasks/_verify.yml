@@ -143,6 +143,50 @@
           per-disk efibootmgr -c loop didn't run for every disk,
           breaking the single-disk-survival path.
 
+# --- chroot.sh post-debootstrap shape (universal) ---
+
+# chroot.sh sets MODULES=most in /etc/initramfs-tools/initramfs.conf
+# right before the final update-initramfs, so the shipped image boots
+# on bare-metal hardware whose controllers/NICs the build host didn't
+# happen to have loaded. A regression here would surface only on
+# first-bare-metal-boot of the image, which is too late to recover.
+- name: _verify | Read /etc/initramfs-tools/initramfs.conf
+  ansible.builtin.slurp:
+    src: /etc/initramfs-tools/initramfs.conf
+  register: _packer_verify_initramfs_conf
+
+- name: _verify | initramfs.conf carries MODULES=most
+  ansible.builtin.assert:
+    that: >-
+      (_packer_verify_initramfs_conf.content | b64decode)
+      is search('(?m)^MODULES=most\b')
+    fail_msg: >-
+      MODULES=most missing from initramfs.conf — chroot.sh's sed
+      didn't run or was overridden, and the shipped initrd will only
+      carry modules the build host had loaded (boot failure on
+      bare-metal with unfamiliar controllers/NICs).
+
+# chroot.sh holds grub* before installing linux-generic so apt doesn't
+# pull grub-pc/grub-efi-amd64/etc via the Recommends alternation. If
+# the holds were silently dropped (apt-mark unhold somewhere, dpkg
+# state surgery during a kernel upgrade), a future apt upgrade could
+# pull a grub package back in, install its post-install hook, and
+# fight with rEFInd at boot. Match any grub-prefixed held package --
+# chroot.sh's glob is intentionally future-grub-variant-tolerant.
+- name: _verify | apt holds list
+  ansible.builtin.command: apt-mark showhold
+  changed_when: false
+  register: _packer_verify_apt_holds
+
+- name: _verify | grub* packages are held
+  ansible.builtin.assert:
+    that: _packer_verify_apt_holds.stdout_lines | select('match', '^grub') | list | length > 0
+    fail_msg: >-
+      No grub-prefixed packages in `apt-mark showhold` — chroot.sh's
+      apt-mark hold 'grub*' didn't take effect, leaving future apt
+      operations free to install grub and create a boot-loader
+      conflict with rEFInd.
+
 # --- aarch64: direct EFI-stub boot path + kernel-install hook ---
 
 - name: _verify | EFI-stub direct-boot assertions (aarch64)
