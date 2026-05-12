@@ -95,6 +95,44 @@
   tags:
     - act_runner
 
+# Silence the kernel's "overlayfs: fs on '...' does not support file
+# handles, falling back to xino=off" printk that fires on every rootless
+# overlay mount. The fallback is unavoidable in a rootless userns
+# (CAP_DAC_READ_SEARCH isn't held in the init namespace, so the kernel
+# disables file-handle support regardless of underlying fs), and CI churn
+# emits the warning ~160x/day on lab. Pre-declaring xino=off in mountopt
+# makes the kernel skip the probe — same end state, no printk.
+#
+# Scoped to act_runner (the only loud rootless user) instead of global
+# /etc/containers/storage.conf so rootful overlay keeps its working xino.
+# nodev preserves the upstream default; userxattr is force-added by
+# podman internally for rootless, so we don't restate it.
+- name: Create rootless containers config directory
+  when: not (ansible_check_mode and act_runner_user.changed)
+  file:
+    path: /mnt/scratch/act_runner/.config/containers
+    state: directory
+    owner: act_runner
+    group: act_runner
+    mode: "0755"
+  become: true
+  tags:
+    - act_runner
+
+- name: Configure rootless overlay storage opts
+  when: not (ansible_check_mode and act_runner_user.changed)
+  copy:
+    dest: /mnt/scratch/act_runner/.config/containers/storage.conf
+    content: |
+      [storage.options.overlay]
+      mountopt = "nodev,xino=off"
+    owner: act_runner
+    group: act_runner
+    mode: "0644"
+  become: true
+  tags:
+    - act_runner
+
 # Build the lab-runtime container image used by every CI workflow. The
 # image lives only in the act_runner user's local podman image store --
 # no registry, no push. podman build is layer-cached, so unchanged
