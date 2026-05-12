@@ -42,13 +42,20 @@ jobs:
         run: mise run ci:detect-roles
 
   notify-cross-cut:
+    # Step-level if: instead of job-level. act_runner 0.6.1 / gitea 1.26.1
+    # mis-reports a job-level skip as Failure (status=4) rather than Skipped
+    # (status=6); the failure then jams downstream `needs:` consumers in
+    # Blocked forever (jobEmitter retries every ~9s, hammering the DB).
+    # Keeping the steps gated instead costs a no-op runner start per push
+    # but keeps the workflow unstuck.
     needs: detect
-    if: needs.detect.outputs.cross_cut == 'true'
     runs-on: lab-runtime
     steps:
-      - uses: actions/checkout@v4
+      - if: needs.detect.outputs.cross_cut == 'true'
+        uses: actions/checkout@v4
         with: { fetch-depth: 50 }
-      - run: mise run ci:mail-cross-cut
+      - if: needs.detect.outputs.cross_cut == 'true'
+        run: mise run ci:mail-cross-cut
         env:
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
           MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
@@ -63,8 +70,12 @@ jobs:
     # _packer-in-matrix so edits to roles/_packer/ alone (no qcow2
     # rebuild) don't trigger an 85-min wait for a packer-build that
     # was never dispatched.
+    #
+    # Step-level if: rather than job-level -- act_runner 0.6.1 / gitea
+    # 1.26.1 report a job-level skip as Failure (status=4) which jams
+    # all `needs: wait-for-packer-build` consumers in Blocked. See the
+    # twin comment on notify-cross-cut.
     needs: detect
-    if: needs.detect.outputs.packer_changed == 'true'
     runs-on: lab-runtime
     container:
       image: lab-runtime:latest
@@ -72,6 +83,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - name: Wait for packer-build sentinel for this SHA
+        if: needs.detect.outputs.packer_changed == 'true'
         env:
           SHA: ${{ github.sha }}
         run: |
