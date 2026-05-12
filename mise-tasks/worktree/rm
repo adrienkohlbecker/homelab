@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+#MISE description="Remove a worktree and delete its branch"
+#USAGE arg "<name>" help="Branch and worktree name"
+# shellcheck disable=SC2154  # usage_name injected by mise from the #USAGE spec
+
+# Before deleting the worktree, migrate Claude Code session logs from
+# ~/.claude/projects/<encoded-worktree-path>/ to the main repo's project
+# dir and rewrite the embedded worktree path inside each JSONL so the
+# transcripts remain navigable after the worktree is gone. Claude Code
+# encodes the absolute project path by replacing `/` with `-`.
+set -euo pipefail
+
+repo=$(git worktree list --porcelain | awk '/^worktree / {print $2; exit}')
+wt="$repo/.worktrees/$usage_name"
+enc_main="${repo//\//-}"
+enc_wt="${wt//\//-}"
+src_proj="$HOME/.claude/projects/$enc_wt"
+dst_proj="$HOME/.claude/projects/$enc_main"
+if [ -d "$src_proj" ]; then
+  n=$(find "$src_proj" -maxdepth 1 -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$n" -gt 0 ]; then
+    mkdir -p "$dst_proj"
+    find "$src_proj" -maxdepth 1 -name '*.jsonl' \
+      -exec perl -i -pe "s|\Q$wt\E|$repo|g" {} +
+    find "$src_proj" -maxdepth 1 -name '*.jsonl' \
+      -exec mv {} "$dst_proj/" +
+    echo "Migrated $n Claude session(s); rewrote $wt -> $repo"
+  fi
+  rmdir "$src_proj" 2>/dev/null || true
+fi
+git -C "$repo" worktree remove "$wt"
+git -C "$repo" branch -D "$usage_name" 2>/dev/null || true
