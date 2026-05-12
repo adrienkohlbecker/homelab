@@ -1,0 +1,6 @@
+# friendly_name regex matched against each device in devices.yaml when
+# applying the tilt-null cover override. Today every cover (Schneider
+# S520567 roller shutters) is named `<room>/shutter` or
+# `<room>/<position>_shutter`; bare `shutter$` covers both. Tighten or
+# widen here if a non-shutter cover (venetian/tilt-capable) ever joins.
+z2m_cover_friendly_name_pattern: shutter$
