@@ -152,82 +152,9 @@ run = 'op run -- tofu "$@"'
 description = "ansible-playbook against site.yml (forwards args)"
 run = 'ansible-playbook site.yml "$@"'
 
-# mise's inline `run` doesn't bind positional args to $1/$@ — it appends
-# them as literal text to the script's last line. Declare `usage` so args
-# come through as $usage_<name> env vars (same mechanism as file-based
-# tasks with #USAGE).
-#
-# The populate step (packer/artifacts symlink + .worktreeinclude copies +
-# mise trust) is factored into mise-tasks/worktree/populate so the same
-# logic runs from Claude Code's WorktreeCreate hook (.claude/settings.json).
-[tasks."worktree:add"]
-description = "Create .worktrees/<name>, populate shared state, mise trust, open VS Code"
-usage = '''
-arg "<name>" help="Branch and worktree name"
-arg "[base]" default="HEAD" help="Base commit-ish"
-'''
-run = '''
-set -euo pipefail
-repo=$(git -C "{{config_root}}" worktree list --porcelain | awk '/^worktree / {print $2; exit}')
-wt="$repo/.worktrees/$usage_name"
-git -C "$repo" worktree add -b "$usage_name" "$wt" "$usage_base"
-"$repo/mise-tasks/worktree/populate" "$wt"
-code --new-window "$wt"
-'''
-
-[tasks."worktree:rm"]
-description = "Remove a worktree and delete its branch"
-usage = 'arg "<name>" help="Branch and worktree name"'
-# Before deleting the worktree, migrate Claude Code session logs from
-# ~/.claude/projects/<encoded-worktree-path>/ to the main repo's project
-# dir and rewrite the embedded worktree path inside each JSONL so the
-# transcripts remain navigable after the worktree is gone. Claude Code
-# encodes the absolute project path by replacing `/` with `-`.
-run = '''
-set -euo pipefail
-repo=$(git -C "{{config_root}}" worktree list --porcelain | awk '/^worktree / {print $2; exit}')
-wt="$repo/.worktrees/$usage_name"
-enc_main=$(echo "$repo" | sed 's|/|-|g')
-enc_wt=$(echo "$wt" | sed 's|/|-|g')
-src_proj="$HOME/.claude/projects/$enc_wt"
-dst_proj="$HOME/.claude/projects/$enc_main"
-if [ -d "$src_proj" ]; then
-  n=$(find "$src_proj" -maxdepth 1 -name '*.jsonl' 2>/dev/null | wc -l | tr -d ' ')
-  if [ "$n" -gt 0 ]; then
-    mkdir -p "$dst_proj"
-    find "$src_proj" -maxdepth 1 -name '*.jsonl' \
-      -exec perl -i -pe "s|\Q$wt\E|$repo|g" {} +
-    find "$src_proj" -maxdepth 1 -name '*.jsonl' \
-      -exec mv {} "$dst_proj/" +
-    echo "Migrated $n Claude session(s); rewrote $wt -> $repo"
-  fi
-  rmdir "$src_proj" 2>/dev/null || true
-fi
-git -C "$repo" worktree remove "$wt"
-git -C "$repo" branch -D "$usage_name" 2>/dev/null || true
-'''
-
-# Rebases <name> onto master first so the FF-only merge succeeds even if
-# master has moved since the worktree was branched. Conflicts halt the
-# script with set -e — the worktree is left in mid-rebase for resolution,
-# rm doesn't run. Operates from the main worktree so that worktree:rm
-# removing the caller's cwd (if invoked from inside the worktree being
-# merged) doesn't strand the rest of the script.
-[tasks."worktree:merge"]
-description = "Rebase <name> onto master, fast-forward master, then worktree:rm <name>"
-usage = 'arg "<name>" help="Branch and worktree name"'
-run = '''
-set -euo pipefail
-repo=$(git -C "{{config_root}}" worktree list --porcelain | awk '/^worktree / {print $2; exit}')
-cd "$repo"
-wt=".worktrees/$usage_name"
-[ -d "$wt" ] || { echo "worktree:merge: $wt not found" >&2; exit 1; }
-main_branch=$(git rev-parse --abbrev-ref HEAD)
-[ "$main_branch" = "master" ] || { echo "worktree:merge: main worktree on '$main_branch', expected master" >&2; exit 1; }
-git -C "$wt" rebase master
-git merge --ff-only "$usage_name"
-mise run worktree:rm "$usage_name"
-'''
+# worktree:add / worktree:rm / worktree:merge live under mise-tasks/worktree/
+# so shellcheck and shfmt cover them. The populate helper is factored out
+# separately so Claude Code's WorktreeCreate hook can call it directly.
 
 [tasks."worktree:ls"]
 description = "List active git worktrees"
