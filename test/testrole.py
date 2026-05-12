@@ -34,17 +34,18 @@ from utils import CommandFailedException, IdempotenceFailedException, cancel_on_
 _BENCHMARK = False
 _PHASE_TIMINGS: list[tuple[str, float]] = []
 
-# Roles whose own job is to configure what _mirrors.yml configures.
-# For these, running the prelude first means the prelude does the
-# transition (packer's shipped upstream sources -> nexus URLs) and the
-# role under test becomes a no-op idempotency check that asserts
-# against the prelude's output, never exercising the role's actual
-# mutation. Skip the prelude so the role itself drives the transition
-# and _verify.yml catches a regression where the role doesn't actually
-# rewrite sources. DNS for nexus.lab.fahm.fr resolves via the host
-# resolver chain on-LAN (CI runner, lab dev hosts); off-LAN dev work
-# can pass --upstream-mirrors as the escape hatch.
-_SKIP_MIRRORS_PRELUDE_ROLES = frozenset({"apt"})
+# Roles whose _verify.yml needs the VM in its packer-shipped state
+# (sources.list still pointing at upstream URLs from chroot.sh's final
+# write_sources_list call), either because the role itself is what
+# transitions that state (apt -> rewrites sources to nexus) or because
+# the role asserts that packer shipped the right thing (_packer ->
+# verifies chroot.sh's upstream reset landed). Running the mirrors
+# prelude first would rewrite sources to nexus before _verify sees the
+# image, masking both kinds of regression. DNS for nexus.lab.fahm.fr
+# resolves via the host resolver chain on-LAN (CI runner, lab dev
+# hosts); off-LAN dev work can pass --upstream-mirrors as the escape
+# hatch.
+_SKIP_MIRRORS_PRELUDE_ROLES = frozenset({"apt", "_packer"})
 
 
 @contextlib.asynccontextmanager
