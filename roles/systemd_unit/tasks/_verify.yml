@@ -309,3 +309,59 @@
   systemd:
     daemon_reload: true
   become: true
+
+# tasks_from: install smoke. Module is derived from systemd_unit_src's
+# extension — foo.service.j2 → template, foo.service → copy. The legacy
+# copy.yml / template.yml entrypoints continue to work via the
+# _systemd_unit_module default branch in install.yml; this scenario
+# exercises the new entrypoint where no wrapper is in play.
+- name: _verify | install valid unit via tasks_from=install with .j2 src
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_src: systemd_unit_verify_ok.service.j2
+
+- name: _verify | install entrypoint stripped .j2 and templated foo.service
+  block:
+    - stat:
+        path: /etc/systemd/system/systemd_unit_verify_ok.service
+      register: _verify_install_template_stat
+    - assert:
+        that:
+          - _verify_install_template_stat.stat.exists
+          - not _verify_install_template_stat.stat.islnk
+
+- name: _verify | cleanup install-via-template fixture
+  file:
+    path: /etc/systemd/system/systemd_unit_verify_ok.service
+    state: absent
+  become: true
+
+- name: _verify | install valid unit via tasks_from=install with plain src
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_src: systemd_unit_verify_copy_ok.service
+
+- name: _verify | install entrypoint copied the file under its src name
+  block:
+    - stat:
+        path: /etc/systemd/system/systemd_unit_verify_copy_ok.service
+      register: _verify_install_copy_stat
+    - assert:
+        that:
+          - _verify_install_copy_stat.stat.exists
+          - not _verify_install_copy_stat.stat.islnk
+
+- name: _verify | cleanup install-via-copy fixture
+  file:
+    path: /etc/systemd/system/systemd_unit_verify_copy_ok.service
+    state: absent
+  become: true
+
+- name: _verify | daemon-reload after install-entrypoint cleanup
+  systemd:
+    daemon_reload: true
+  become: true
