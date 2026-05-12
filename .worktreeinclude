@@ -1,0 +1,10 @@
+# Paths copied (cp -RP, preserves symlinks) from the main worktree into
+# each new worktree by `mise run worktree:add`. One path per line, relative
+# to the repo root. Missing entries are skipped with a warning.
+#
+# Use for gitignored state the worktree needs but shouldn't share live with
+# main (vaulted secrets, generated symlinks). For multi-GB shared artifacts
+# like packer/artifacts, the task uses a real symlink instead — edit the
+# task directly.
+wireguard
+.ansible-mitogen-strategy
