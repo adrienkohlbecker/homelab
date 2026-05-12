@@ -67,9 +67,9 @@
 - name: Install mac0 service
   import_role:
     name: systemd_unit
-    tasks_from: template
+    tasks_from: install
   vars:
-    systemd_unit_src: mac0.service
+    systemd_unit_src: mac0.service.j2
   tags:
     - macvlan
 

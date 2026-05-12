@@ -92,9 +92,9 @@
 - name: Install overseerr service
   import_role:
     name: systemd_unit
-    tasks_from: template
+    tasks_from: install
   vars:
-    systemd_unit_src: overseerr.service
+    systemd_unit_src: overseerr.service.j2
     systemd_unit_condition: "{{ not (ansible_check_mode and overseerr_user.changed) }}"
   tags:
     - overseerr

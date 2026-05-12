@@ -12,7 +12,7 @@
 - name: Install podman-prune.service
   import_role:
     name: systemd_unit
-    tasks_from: copy
+    tasks_from: install
   vars:
     systemd_unit_src: podman-prune.service
     systemd_unit_user: "{{ podman_prune_user | default('root') }}"
@@ -21,7 +21,7 @@
 - name: Install podman-prune.timer
   import_role:
     name: systemd_unit
-    tasks_from: copy
+    tasks_from: install
   vars:
     systemd_unit_src: podman-prune.timer
     systemd_unit_user: "{{ podman_prune_user | default('root') }}"

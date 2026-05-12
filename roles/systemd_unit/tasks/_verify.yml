@@ -133,12 +133,12 @@
 # is a stable trip-wire across systemd versions), and assert both rescue
 # branches: backup-restore and fresh-file-delete.
 
-- name: _verify | install valid unit via tasks_from=template
+- name: _verify | install valid template via tasks_from=install
   import_role:
     name: systemd_unit
-    tasks_from: template
+    tasks_from: install
   vars:
-    systemd_unit_src: systemd_unit_verify_ok.service
+    systemd_unit_src: systemd_unit_verify_ok.service.j2
 
 - name: _verify | first install set the per-unit fact and put file on disk
   block:
@@ -154,9 +154,9 @@
 - name: _verify | re-install same template is idempotent
   import_role:
     name: systemd_unit
-    tasks_from: template
+    tasks_from: install
   vars:
-    systemd_unit_src: systemd_unit_verify_ok.service
+    systemd_unit_src: systemd_unit_verify_ok.service.j2
 
 - name: _verify | second install reported no change
   assert:
@@ -167,9 +167,9 @@
     - name: _verify | install broken unit over the good one (expect failure)
       import_role:
         name: systemd_unit
-        tasks_from: template
+        tasks_from: install
       vars:
-        systemd_unit_src: systemd_unit_verify_bad.service
+        systemd_unit_src: systemd_unit_verify_bad.service.j2
         systemd_unit_dest: systemd_unit_verify_ok.service
     - fail:
         msg: broken install over the good unit should have failed but did not
@@ -183,9 +183,9 @@
     - name: _verify | install broken unit fresh (expect failure)
       import_role:
         name: systemd_unit
-        tasks_from: template
+        tasks_from: install
       vars:
-        systemd_unit_src: systemd_unit_verify_bad.service
+        systemd_unit_src: systemd_unit_verify_bad.service.j2
     - fail:
         msg: broken install should have failed but did not
   rescue:
@@ -213,9 +213,9 @@
   block:
     - import_role:
         name: systemd_unit
-        tasks_from: template
+        tasks_from: install
       vars:
-        systemd_unit_src: systemd_unit_verify_ok.service
+        systemd_unit_src: systemd_unit_verify_ok.service.j2
         systemd_unit_dest: systemd_unit_mask_test.service
     - fail:
         msg: install over masked unit should have refused but did not
@@ -248,13 +248,12 @@
     daemon_reload: true
   become: true
 
-# Smoke the tasks_from=copy dispatch path. install.yml's `action:` chooses
-# the module from _systemd_unit_module; the template path is well-covered
-# above, this just confirms the copy branch lands a file with no .j2 suffix.
-- name: _verify | install valid unit via tasks_from=copy
+# Smoke the copy dispatch (extension-derived): src without .j2 picks the
+# copy module so install.yml reads from files/ rather than templates/.
+- name: _verify | install valid unit via tasks_from=install (copy path)
   import_role:
     name: systemd_unit
-    tasks_from: copy
+    tasks_from: install
   vars:
     systemd_unit_src: systemd_unit_verify_copy_ok.service
 
@@ -310,58 +309,3 @@
     daemon_reload: true
   become: true
 
-# tasks_from: install smoke. Module is derived from systemd_unit_src's
-# extension — foo.service.j2 → template, foo.service → copy. The legacy
-# copy.yml / template.yml entrypoints continue to work via the
-# _systemd_unit_module default branch in install.yml; this scenario
-# exercises the new entrypoint where no wrapper is in play.
-- name: _verify | install valid unit via tasks_from=install with .j2 src
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_src: systemd_unit_verify_ok.service.j2
-
-- name: _verify | install entrypoint stripped .j2 and templated foo.service
-  block:
-    - stat:
-        path: /etc/systemd/system/systemd_unit_verify_ok.service
-      register: _verify_install_template_stat
-    - assert:
-        that:
-          - _verify_install_template_stat.stat.exists
-          - not _verify_install_template_stat.stat.islnk
-
-- name: _verify | cleanup install-via-template fixture
-  file:
-    path: /etc/systemd/system/systemd_unit_verify_ok.service
-    state: absent
-  become: true
-
-- name: _verify | install valid unit via tasks_from=install with plain src
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_src: systemd_unit_verify_copy_ok.service
-
-- name: _verify | install entrypoint copied the file under its src name
-  block:
-    - stat:
-        path: /etc/systemd/system/systemd_unit_verify_copy_ok.service
-      register: _verify_install_copy_stat
-    - assert:
-        that:
-          - _verify_install_copy_stat.stat.exists
-          - not _verify_install_copy_stat.stat.islnk
-
-- name: _verify | cleanup install-via-copy fixture
-  file:
-    path: /etc/systemd/system/systemd_unit_verify_copy_ok.service
-    state: absent
-  become: true
-
-- name: _verify | daemon-reload after install-entrypoint cleanup
-  systemd:
-    daemon_reload: true
-  become: true

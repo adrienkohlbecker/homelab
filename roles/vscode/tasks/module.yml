@@ -27,9 +27,9 @@
 - name: Install vscode service
   import_role:
     name: systemd_unit
-    tasks_from: template
+    tasks_from: install
   vars:
-    systemd_unit_src: vscode.service
+    systemd_unit_src: vscode.service.j2
     systemd_unit_dest: "{{ vscode_name }}.service"
     systemd_unit_condition: "{{ not (ansible_check_mode and vscode_user.changed) }}"
   tags:

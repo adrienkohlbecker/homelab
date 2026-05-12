@@ -47,7 +47,7 @@
 - name: Add zfs_autosnapshot.target systemd unit
   import_role:
     name: systemd_unit
-    tasks_from: copy
+    tasks_from: install
   vars:
     systemd_unit_src: zfs_autosnapshot.target
   tags:
