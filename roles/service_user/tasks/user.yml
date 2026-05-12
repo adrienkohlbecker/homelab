@@ -24,8 +24,14 @@
   set_fact:
     "{{ service_user_name }}_user": "{{ service_user_result }}"
 
+# Stateless services (no config / no on-host state) opt out via
+# service_user_config_dir: false. The helper still owns user/group/uid
+# capture; callers that don't bind-mount /mnt/services/<svc> anywhere
+# shouldn't be carrying an empty dir.
 - name: Create configuration directory for {{ service_user_name }}
-  when: not (ansible_check_mode and service_user_result.changed)
+  when:
+    - service_user_config_dir | default(true)
+    - not (ansible_check_mode and service_user_result.changed)
   file:
     dest: /mnt/services/{{ service_user_name }}
     state: directory

@@ -30,7 +30,6 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="compta" \
     --user {{ compta_user.uid }}:{{ compta_user.group }}  \
     --publish 127.0.0.1:{{ service_ports.compta }}:4567/tcp \
-    --volume /mnt/services/compta:/usr/src/app/data \
     --health-cmd         "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:4567/" \
     --health-startup-cmd "curl --head --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:4567/" \
     --health-startup-interval "1s" \
