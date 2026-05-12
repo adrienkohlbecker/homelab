@@ -7,11 +7,11 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
 
-# Shared with test.yml and packer-build.yml so the artifact tree under
-# /mnt/scratch/qemu can't be rewritten by packer-build mid-test.
-concurrency:
-  group: lab-qemu-artifacts
-  cancel-in-progress: false
+# Mutex on /mnt/scratch/qemu lives at the test-role job level (matching
+# test.yml), not workflow level. Nightly never collides with an
+# automatic packer-build (the cron fires at 02:00 with no push event),
+# but manual workflow_dispatch of packer-build during a nightly is
+# still gated by the per-cell test-role concurrency below.
 
 # bash for all run: steps -- Gitea Actions defaults to dash, which
 # doesn't support `set -o pipefail` or bash parameter expansion.
@@ -44,6 +44,13 @@ jobs:
           mise run ci:detect-roles --all
 
   test-role:
+    # Reader half of the lab-qemu-artifacts mutex (packer-build is the
+    # writer). Job-level rather than workflow-level so it matches
+    # test.yml's structure; see that file's test-role concurrency
+    # comment for the full deadlock-avoidance reasoning.
+    concurrency:
+      group: lab-qemu-artifacts
+      cancel-in-progress: false
     needs: gate
     # Per-cell server-side filter, identical to test.yml. See that file
     # for why we use a static superset matrix + `if:` rather than a
@@ -91,6 +98,7 @@ jobs:
           - "fancontrol:box"
           - "filebrowser:box"
           - "firewall:box"
+          - "fluentbit:box"
           - "getmail:box"
           - "gitea:box"
           - "hd_idle:box"
@@ -128,6 +136,7 @@ jobs:
           - "ntp:box"
           - "nut_monitor:box"
           - "nut_server:box"
+          - "openobserve:box"
           - "openproject:box"
           - "overseerr:box"
           - "paperless:box"
@@ -154,6 +163,7 @@ jobs:
           - "speedtest:box"
           - "ssh:box"
           - "ssh_root:box"
+          - "static_curl:box"
           - "subid:box"
           - "swap:box"
           - "systemd_unit:box"
