@@ -3,8 +3,13 @@
 # without leaving apt with broken deps). A self-contained test package
 # would need its own libc6/libc-bin/locales companion list to install,
 # so we lean on a known-good real list instead. Trivially no-ops on
-# noble. Asserts the pin file lands at the documented path and the
-# per-call output fact is exposed for callers to gate restart triggers.
+# noble. Asserts: (1) the pin file lands at the documented path, (2)
+# the apt resolver actually picks the noble candidate for every pinned
+# package, (3) the per-call output fact reports the upgrade outcome on
+# both a fresh apply and an idempotent re-apply, and (4) a second
+# import under a distinct name lands its own pin file and per-call
+# fact without clobbering the first -- the multi-consumer guarantee
+# the docstring's regex-mangled fact name exists to provide.
 - name: _verify | load ntp's production backport list
   include_vars:
     file: roles/ntp/vars/main.yml
@@ -24,8 +29,76 @@
   register: backports_pin_stat
   failed_when: not backports_pin_stat.stat.exists
 
-- name: _verify (jammy) | per-call output fact is set
+# Functional check: the role's job is to make the apt resolver prefer
+# noble candidates for the listed packages. apt-cache policy reports
+# the pin priority next to each candidate version; our pin file is the
+# only thing in this image stamping 991 onto packages, so "Candidate:
+# non-(none)" + "991" in the policy output means the pin is in effect.
+- name: _verify (jammy) | apt picks the noble candidate for every pinned package
+  when: ansible_distribution_major_version == "22"
+  command: apt-cache policy {{ item }}
+  register: backports_policy
+  changed_when: false
+  loop: "{{ ntp_backport_packages }}"
+  failed_when: >
+    backports_policy.rc != 0
+    or 'Candidate: (none)' in backports_policy.stdout
+    or '991' not in backports_policy.stdout
+
+# Functional check: state=latest on a packer image that doesn't ship
+# chrony forces a real install, so the per-call fact must report true.
+# `is defined` would pass even on a no-op run -- assert the value.
+- name: _verify (jammy) | first apply actually installed/upgraded the pin set
+  when: ansible_distribution_major_version == "22"
+  assert:
+    that:
+      - test_chrony_backports_updated | bool
+    fail_msg: "Expected pin to install/upgrade packages, got {{ test_chrony_backports_updated }}"
+
+# Re-import with the same name to verify idempotence: pin file
+# unchanged, sources unchanged, apt has nothing to do, fact flips to
+# false. The harness's idempotence phase re-runs main.yml (empty for
+# this role) so it doesn't cover the same-name re-import case.
+- name: _verify | re-apply pin.yml with the same name
+  import_role:
+    name: backports
+    tasks_from: pin
+  vars:
+    backports_name: test_chrony
+    backports_packages: "{{ ntp_backport_packages }}"
+
+- name: _verify (jammy) | second apply is a no-op (fact flips to false)
+  when: ansible_distribution_major_version == "22"
+  assert:
+    that:
+      - not (test_chrony_backports_updated | bool)
+    fail_msg: "Expected idempotent re-apply to report no change, got {{ test_chrony_backports_updated }}"
+
+# Multi-consumer guarantee: a second import under a different name
+# lands its own pin file and its own per-call fact, and doesn't
+# disturb the first import's fact. libc6 is already noble after the
+# first apply (it's in ntp_backport_packages), so this is a no-op
+# install -- but the pin file is new, so we still get a fresh apt
+# update and a fresh fact.
+- name: _verify | apply pin.yml under a second distinct name
+  import_role:
+    name: backports
+    tasks_from: pin
+  vars:
+    backports_name: test_second
+    backports_packages: [ libc6 ]
+
+- name: _verify (jammy) | second import lands its own pin file
+  when: ansible_distribution_major_version == "22"
+  stat:
+    path: /etc/apt/preferences.d/backports-test_second
+  register: backports_second_stat
+  failed_when: not backports_second_stat.stat.exists
+
+- name: _verify (jammy) | per-call facts are independent
   when: ansible_distribution_major_version == "22"
   assert:
     that:
       - test_chrony_backports_updated is defined
+      - test_second_backports_updated is defined
+    fail_msg: "Expected both per-call facts to survive a second import"
