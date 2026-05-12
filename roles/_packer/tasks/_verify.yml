@@ -157,9 +157,12 @@
 
 - name: _verify | initramfs.conf carries MODULES=most
   ansible.builtin.assert:
+    # \b in a YAML/Jinja string literal is Python's backspace escape,
+    # not a regex word boundary; anchor with $ + \s instead. (\s isn't
+    # a Python string escape, so it passes through to re unchanged.)
     that: >-
       (_packer_verify_initramfs_conf.content | b64decode)
-      is search('(?m)^MODULES=most\b')
+      is search('^MODULES=most\s*$', multiline=True)
     fail_msg: >-
       MODULES=most missing from initramfs.conf — chroot.sh's sed
       didn't run or was overridden, and the shipped initrd will only
