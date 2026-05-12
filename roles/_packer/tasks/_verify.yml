@@ -200,6 +200,35 @@
       cleared, leaving future apt operations free to install grub
       and create a boot-loader conflict with rEFInd.
 
+# --- sshd password-auth lockdown ---
+#
+# chroot.sh drops /etc/ssh/sshd_config.d/00-no-password-auth.conf to
+# force PasswordAuthentication no on the shipped image. Verify via
+# `sshd -T` (effective-config dump) rather than slurping the snippet
+# directly -- that exercises the whole chain (Include directive in
+# /etc/ssh/sshd_config + drop-in file + lexical-order precedence).
+# Reading the snippet alone would pass even if /etc/ssh/sshd_config
+# were edited to drop the Include line.
+
+- name: _verify | Read effective sshd config
+  ansible.builtin.command: sshd -T
+  changed_when: false
+  become: true
+  register: _packer_verify_sshd_effective
+
+- name: _verify | sshd effective config disables password authentication
+  ansible.builtin.assert:
+    that: >-
+      _packer_verify_sshd_effective.stdout_lines
+      | select('match', '^passwordauthentication\s+no$')
+      | list | length > 0
+    fail_msg: >-
+      `sshd -T` does not report `passwordauthentication no` --
+      chroot.sh's sshd_config.d/00-no-password-auth.conf drop-in didn't
+      land, or /etc/ssh/sshd_config no longer Includes sshd_config.d.
+      The shipped image would accept passwords on any account that
+      has one.
+
 # --- aarch64: direct EFI-stub boot path + kernel-install hook ---
 
 - name: _verify | EFI-stub direct-boot assertions (aarch64)
