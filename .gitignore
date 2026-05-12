@@ -1,5 +1,6 @@
 /wireguard
 /.vagrant
+/.worktrees
 __pycache__
 .vscode
 .esphome
