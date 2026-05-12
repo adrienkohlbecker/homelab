@@ -82,5 +82,14 @@ PASSWORD_HASH_ALGO = pbkdf2
 [oauth2]
 JWT_SECRET = {{ gitea_jwt_secret }}
 
+# Disabled until the gitea-actions / act_runner 0.6.1 state-machine bug
+# is resolved. Symptom: a job whose `if:` resolves to false (job-level
+# or matrix-cell-level) is reported back as Failure (status=4) rather
+# than Skipped (status=6); downstream `needs:` consumers then sit in
+# Blocked (status=7) forever while the jobEmitter retries them every
+# ~9s, generating a write storm that drives push latency to 30s+. The
+# test.yml workflow's static-superset matrix triggers this on every
+# push (~100 cells with a per-cell `if:` filter). Flip back to true
+# once test.yml is restructured or the upstream bug is fixed.
 [actions]
-ENABLED = true
+ENABLED = false
