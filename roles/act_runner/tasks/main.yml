@@ -25,7 +25,6 @@
   become: true
   loop:
     - /mnt/services/act_runner
-    - /mnt/services/act_runner/build
     - /mnt/scratch/act_runner/cache
     - /mnt/scratch/act_runner/workdir
     # Bind-mounted into test cells via container.options for the harness's
@@ -97,96 +96,20 @@
     - act_runner
 
 # Build the lab-runtime container image used by every CI workflow. The
-# image lives only in the act_runner user's local podman image store —
+# image lives only in the act_runner user's local podman image store --
 # no registry, no push. podman build is layer-cached, so unchanged
-# inputs exit in ~200ms; the changed_when below reports honestly via
-# the "Storing signatures" line that podman only prints on real layer
-# commit.
+# inputs exit in ~200ms even with force: true.
 #
-# Build inputs (Dockerfile + mise.toml + pyproject.toml + uv.lock) are
-# staged into /mnt/services/act_runner/build/ from the controller's
-# repo root. Bumping any of them triggers a rebuild on the next role
-# apply.
-- name: Stage lab-runtime Dockerfile
-  when: not (ansible_check_mode and act_runner_user.changed)
-  copy:
-    src: Dockerfile.lab-runtime
-    dest: /mnt/services/act_runner/build/Dockerfile.lab-runtime
-    owner: act_runner
-    group: act_runner
-    mode: "0644"
-    backup: true
-  become: true
-  register: act_runner_lab_runtime_dockerfile
-  tags:
-    - act_runner
-
-- name: Stage lab-runtime build inputs from repo root
-  when: not (ansible_check_mode and act_runner_user.changed)
-  copy:
-    src: "{{ playbook_dir }}/{{ item }}"
-    dest: /mnt/services/act_runner/build/{{ item }}
-    owner: act_runner
-    group: act_runner
-    mode: "0644"
-    backup: true
-  become: true
-  loop:
-    - mise.toml
-    - pyproject.toml
-    - uv.lock
-  register: act_runner_lab_runtime_inputs
-  tags:
-    - act_runner
-
-# Precheck so the staging+build pair below is properly idempotent.
-# podman_image with state=build is name-idempotent and won't rebuild
-# when the image already exists and `force` is false; without this
-# check we'd have no way to know whether the staging task is actually
-# feeding a build or just churning tmpfs.
-- name: Check whether lab-runtime image already exists
-  when: not (ansible_check_mode and act_runner_user.changed)
-  command: podman image exists lab-runtime:latest
-  register: act_runner_lab_runtime_present
-  failed_when: false
-  changed_when: false
-  check_mode: false
-  become: true
-  become_user: act_runner
-  environment:
-    XDG_RUNTIME_DIR: /run/user/{{ act_runner_user.uid | default('0') }}
-  tags:
-    - act_runner
-
-- name: Stage GitHub token tmpfile for the lab-runtime build
-  # mise pulls tool releases from GitHub during `mise install`. Anon
-  # API is 60/hr; authenticated 5000/hr. Without auth the build fails
-  # on a fresh layer cache. podman build's --secret needs src=PATH
-  # (no podman-secret store integration), so we drop the token to a
-  # 0400 file in /run/user/<uid>/ -- tmpfs, owned by act_runner,
-  # gone on reboot. Removed unconditionally after the build below
-  # whether or not the build succeeded. Gated on the same condition
-  # that drives an actual rebuild (inputs changed, or image missing
-  # so podman_image will build regardless of `force`) so steady-state
-  # runs don't churn the tmpfile.
-  when:
-    - not ansible_check_mode
-    - act_runner_lab_runtime_dockerfile.changed
-      or act_runner_lab_runtime_inputs.changed
-      or act_runner_lab_runtime_present.rc != 0
-  copy:
-    dest: /run/user/{{ act_runner_user.uid | default('0') }}/lab-runtime-build-token
-    content: "{{ mise_github_token }}"
-    owner: act_runner
-    group: act_runner
-    mode: "0400"
-  become: true
-  no_log: true
-  tags:
-    - act_runner
-
-# Build the lab-runtime image, with always-run cleanup of the staged
-# GitHub-token tmpfile so a build crash doesn't leave it behind.
+# Build inputs (Dockerfile + mise.toml + pyproject.toml + uv.lock +
+# packer/qemu.pkr.hcl) are staged into a per-apply temp dir on the
+# remote via `rsync --relative` so the repo's relative paths survive
+# into the build context (Dockerfile's `COPY packer/qemu.pkr.hcl ...`
+# depends on that). The temp dir, plus the GitHub token tmpfile used
+# for `podman build --secret`, are both torn down in `always:` so a
+# build crash doesn't leak state.
+#
+# force: true because we no longer keep a persistent build dir to
+# diff against; podman's layer cache makes no-op rebuilds cheap.
 #
 # --cgroup-manager=cgroupfs (extra_args) scopes a workaround to just
 # the build: rootless podman's default systemd cgroup manager needs
@@ -194,52 +117,106 @@
 # images don't ship dbus-user-session (chroot.sh installs
 # linux-generic --no-install-recommends), so /run/user/$UID/bus
 # doesn't exist and crun fails with "sd-bus call: Permission denied".
-# cgroupfs sidesteps it entirely; workflow containers spawned at
-# runtime use the systemd default unaltered.
+# cgroupfs sidesteps it; workflow containers spawned at runtime use
+# the systemd default unaltered.
 #
-# --secret id=NAME,src=PATH mounts the staged tmpfile inside the
+# --secret id=NAME,src=PATH mounts the token tmpfile inside the
 # consuming RUN; the Dockerfile reads /run/secrets/<NAME>.
-#
-# force: rebuild when the Dockerfile or any of its build inputs
-# change. podman_image is name-idempotent by default and won't
-# otherwise re-run podman build when an image with the same tag
-# exists, even if the Dockerfile differs.
 #
 # environment: become_user: act_runner doesn't propagate
 # XDG_RUNTIME_DIR / DBUS_SESSION_BUS_ADDRESS the way a login session
 # would; rootless podman/crun need them to reach the user's systemd
 # manager. Default('0') keeps templating from failing in check mode
-# where service_user_result has no uid field; the build itself is
-# gated by `when: not ansible_check_mode` so '0' is never used.
-- name: Build lab-runtime image (with token cleanup)
-  environment:
-    XDG_RUNTIME_DIR: /run/user/{{ act_runner_user.uid | default('0') }}
-    DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ act_runner_user.uid | default('0') }}/bus
+# where act_runner_user has no uid field; the build itself is gated
+# by `when: not ansible_check_mode` so '0' is never used.
+- name: Build lab-runtime image
+  when: not (ansible_check_mode and act_runner_user.changed)
+  tags:
+    - act_runner
+  # Whole block runs as act_runner so the build context (tempfile +
+  # rsync'd inputs) and the token tmpfile are written by the same
+  # user that podman_image will read them as -- no chmod / chown
+  # dance. synchronize's become_user wiring auto-generates
+  # `--rsync-path="sudo -u act_runner rsync"` so the remote rsync
+  # writes as act_runner too.
   become: true
   become_user: act_runner
   block:
+    - name: Create temp build context for lab-runtime image
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: lab-runtime-build-
+      register: act_runner_lab_runtime_buildctx
+
+    - name: Stage build inputs into temp build context
+      # rsync --relative + the /./ pivot in src preserves the path
+      # after the pivot inside dest. The Dockerfile is included with
+      # its repo-relative path, so it lands at
+      # <ctx>/roles/act_runner/files/Dockerfile.lab-runtime and
+      # podman_image below points `build.file` at it -- no separate
+      # copy task needed. Inputs land at the layout the Dockerfile's
+      # COPY statements expect (e.g. packer/qemu.pkr.hcl). Intermediate
+      # dirs are auto-created (ansible.builtin.copy won't do that).
+      # owner/group: false drops rsync's -o/-g; controller UIDs don't
+      # translate to the remote anyway (ansible-lint no-same-owner).
+      ansible.posix.synchronize:
+        src: "{{ playbook_dir }}/./{{ item }}"
+        dest: "{{ act_runner_lab_runtime_buildctx.path }}/"
+        owner: false
+        group: false
+        rsync_opts:
+          - "--relative"
+      loop:
+        - roles/act_runner/files/Dockerfile.lab-runtime
+        - mise.toml
+        - pyproject.toml
+        - uv.lock
+        - packer/qemu.pkr.hcl
+
+    - name: Stage GitHub token tmpfile for the lab-runtime build
+      # mise pulls tool releases from GitHub during `mise install`.
+      # Anon API is 60/hr; authenticated 5000/hr. podman build's
+      # --secret needs src=PATH (no podman-secret store integration),
+      # so the token lands at a 0400 file in /run/user/<uid>/ --
+      # tmpfs (act_runner owns its own /run/user/<uid>/), gone on
+      # reboot, plus torn down in `always:` below.
+      when: not ansible_check_mode
+      copy:
+        dest: /run/user/{{ act_runner_user.uid | default('0') }}/lab-runtime-build-token
+        content: "{{ mise_github_token }}"
+        mode: "0400"
+      no_log: true
+
     - name: Build lab-runtime image
       when: not ansible_check_mode
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ act_runner_user.uid | default('0') }}
+        DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ act_runner_user.uid | default('0') }}/bus
       containers.podman.podman_image:
         name: lab-runtime
         tag: latest
         state: build
-        path: /mnt/services/act_runner/build
-        force: "{{ act_runner_lab_runtime_dockerfile.changed or act_runner_lab_runtime_inputs.changed }}"
+        path: "{{ act_runner_lab_runtime_buildctx.path }}"
+        force: true
         build:
-          file: /mnt/services/act_runner/build/Dockerfile.lab-runtime
+          file: "{{ act_runner_lab_runtime_buildctx.path }}/roles/act_runner/files/Dockerfile.lab-runtime"
           extra_args: >-
             --cgroup-manager=cgroupfs
             --secret id=mise_github_token,src=/run/user/{{ act_runner_user.uid | default('0') }}/lab-runtime-build-token
       register: act_runner_lab_runtime_build
+
   always:
+    - name: Remove temp build context
+      when: act_runner_lab_runtime_buildctx.path is defined
+      file:
+        path: "{{ act_runner_lab_runtime_buildctx.path }}"
+        state: absent
+
     - name: Remove staged GitHub token tmpfile
       when: not ansible_check_mode
       file:
         path: /run/user/{{ act_runner_user.uid | default('0') }}/lab-runtime-build-token
         state: absent
-  tags:
-    - act_runner
 
 - name: Configure act_runner
   when: not (ansible_check_mode and act_runner_user.changed)
