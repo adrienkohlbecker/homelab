@@ -1,4 +1,4 @@
 Acquire::Retries "3";
-{% if ansible_distribution_version != "22.04" %}
+{% if ansible_distribution_release != "jammy" %}
 Acquire::Retries::Delay "true";
 {% endif %}
