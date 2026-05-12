@@ -48,6 +48,7 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="sonarr" \
     --env PUID={{ sonarr_user.uid }} \
     --env PGID={{ media_group.gid }} \
+    --env UMASK=002 \
     --env TZ=Europe/Paris \
     --volume /mnt/services/sonarr:/config \
     --volume /mnt/services/sqlite/sonarr:/mnt/services/sqlite/sonarr \
