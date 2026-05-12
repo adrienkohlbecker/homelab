@@ -39,7 +39,7 @@ f_rescue() {
   set -e
 
   if [ $retval -ne 0 ]; then
-    f_error "Error: Step has failed"
+    f_error "Error:$(printf ' %q' "$@") failed with exit $retval"
     f_failed=1
   fi
 }
