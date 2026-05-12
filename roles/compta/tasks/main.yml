@@ -8,24 +8,12 @@
   tags:
     - compta
 
-- name: Add compta group
-  group:
-    name: compta
-    system: true
-  become: true
-  tags:
-    - compta
-
-- name: Add compta user
-  user:
-    name: compta
-    group: compta
-    createhome: false
-    system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
-  become: true
-  register: compta_user
+- name: Set up compta system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_name: compta
   tags:
     - compta
 
