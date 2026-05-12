@@ -297,6 +297,24 @@ build {
       ]
     }
 
+    # Tag each shipped disk with its on-disk format so `file`/Quick Look/
+    # qemu-img-without-`-f` all identify it correctly. Runs after
+    # drop-cloudimg-disk so packer-ubuntu (no number) is gone and the
+    # glob only matches the OS disks. test/machine.py reads images at
+    # <imagedir>/.../packer-ubuntu-N.<format>; keep this rename in sync
+    # with the format suffix it appends.
+    post-processor "shell-local" {
+      name           = "extension"
+      inline_shebang = "/bin/bash"
+      inline = [<<-EOT
+        set -euxo pipefail
+        for disk in ${var.build_directory}/${source.name}/packer-ubuntu-*; do
+          mv "$${disk}" "$${disk}.${local.arch_cfg.image_format}"
+        done
+      EOT
+      ]
+    }
+
     # Boot the freshly-built image and wait for systemd-fully-booted.
     # Runs before compress so a failed verify short-circuits without
     # burning CPU on a dead image. test/launch.py with --exit-after-ready
@@ -322,7 +340,7 @@ build {
       inline = [<<-EOT
         set -euxo pipefail
         if [ "$$(uname -s)" = "Linux" ]; then exit 0; fi
-        for disk in ${var.build_directory}/${source.name}/packer-ubuntu-*; do
+        for disk in ${var.build_directory}/${source.name}/packer-ubuntu-*.qcow2; do
           echo "==> compressing $$(basename "$${disk}")"
           qemu-img convert -W -c -O qcow2 -o compression_type=zstd "$${disk}" "$${disk}.tmp"
           mv "$${disk}.tmp" "$${disk}"

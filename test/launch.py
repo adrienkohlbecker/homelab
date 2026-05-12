@@ -145,7 +145,7 @@ def parse_args() -> argparse.Namespace:
         default=None,
         metavar="PATH",
         help="Override the packer artifact directory the harness reads "
-        "(packer-ubuntu-1..N + efivars.fd) instead of the variant's "
+        "(packer-ubuntu-1..N.{raw,qcow2} + efivars.fd) instead of the variant's "
         "default <imagedir>/<ubuntu>/<packer_image>. Lets qemu.pkr.hcl's "
         "verify-boot post-processor smoke-test a freshly-built `.new` "
         "directory before it's swapped over the previous good artifact.",
