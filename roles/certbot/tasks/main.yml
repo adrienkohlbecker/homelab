@@ -5,6 +5,7 @@
       - python3-certbot-dns-cloudflare
     cache_valid_time: 3600
   become: true
+  register: certbot_apt
   tags:
     - certbot
 
@@ -72,5 +73,20 @@
   loop:
     - "{{ domain }}"
     - "{{ inventory_hostname }}.{{ domain }}"
+  tags:
+    - certbot
+
+# Renewal happens out-of-band via certbot.timer. The apt package's
+# systemd preset enables it, but assert explicitly so a manual
+# `systemctl disable` (or a future preset change) doesn't silently
+# leave certs to expire. Gated so check mode against a host that
+# doesn't have certbot installed yet doesn't fail on the missing unit.
+- name: Ensure certbot.timer is enabled and running
+  systemd:
+    name: certbot.timer
+    enabled: true
+    state: started
+  when: not (ansible_check_mode and certbot_apt.changed)
+  become: true
   tags:
     - certbot
