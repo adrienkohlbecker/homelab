@@ -44,6 +44,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: uv sync
+      - name: Packer init
+        # Plugins are pre-installed into /opt/packer/plugins by the
+        # lab-runtime Dockerfile, so this is a no-op on the steady
+        # state. It's here as a safety net for the case where a
+        # commit bumps the required_plugins constraints in
+        # packer/qemu.pkr.hcl before the act_runner role has been
+        # re-applied to rebuild the image -- otherwise `packer build`
+        # would fail with a plugin-version mismatch.
+        run: mise run packer:init
       - name: Build
         # Pass dispatch inputs through env vars rather than substituting
         # them straight into the shell command -- otherwise a misbehaving

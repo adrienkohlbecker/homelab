@@ -3,9 +3,12 @@
 # a registry. Layered FROM ubuntu:24.04 with everything the test harness,
 # lint, and packer-build need pre-installed so jobs cold-start in ~3s.
 #
-# Build inputs (mise.toml / pyproject.toml / uv.lock) are COPYed in so a
-# bump to any of them invalidates the dependency layers and triggers a
-# fresh `mise install` + `uv sync`.
+# Build inputs (mise.toml / pyproject.toml / uv.lock /
+# packer/qemu.pkr.hcl) are COPYed in so a bump to any of them
+# invalidates the dependency layers and triggers a fresh `mise
+# install` + `uv sync` + `packer init`. The act_runner role stages
+# them into a per-apply temp dir on the build host, preserving the
+# repo's relative paths via `rsync --relative`.
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -78,5 +81,15 @@ RUN --mount=type=secret,id=mise_github_token \
 RUN mkdir -p /etc/mise && \
     awk '/^\[tools\]/{p=1; print; next} /^\[/{p=0} p' /tmp/build/mise.toml \
       > /etc/mise/config.toml
+
+# Pre-install the packer plugins declared in packer/qemu.pkr.hcl
+# (qemu + external) so the packer-build workflow doesn't have to
+# fetch them on every CI run -- the container's HOME is fresh each
+# time. PACKER_PLUGIN_PATH is honored both during this init and at
+# runtime, so the same /opt/packer/plugins tree is found by `packer
+# build` later.
+ENV PACKER_PLUGIN_PATH=/opt/packer/plugins
+COPY packer/qemu.pkr.hcl ./packer/qemu.pkr.hcl
+RUN mise run packer:init && rm -rf ./packer
 
 WORKDIR /
