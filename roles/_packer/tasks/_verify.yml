@@ -91,6 +91,58 @@
       firmware-fallback /EFI/BOOT/BOOT<arch>.EFI is a recovery path,
       not a primary boot loader.
 
+# --- mdadm-EFI multi-disk variants (lab variant) ---
+#
+# chroot.sh's LAYOUT=mirror branch builds an mdadm RAID1 EFI mirror
+# (/dev/md/efi) + RAID0 swap (/dev/md/swap) across the OS disks, and
+# registers per-disk "rEFInd (disk N)" NVRAM entries so the host
+# survives losing any single disk. Detect via /dev/md/efi presence --
+# the LAYOUT="" branch (single-disk variants) doesn't create it.
+# Skipping the block on single-disk variants is intentional: the
+# universal rEFInd assertion above already covers them.
+
+- name: _verify | Stat /dev/md/efi (mdadm-EFI mirror detection)
+  ansible.builtin.stat:
+    path: /dev/md/efi
+  register: _packer_verify_md_efi
+
+- name: _verify | mdadm-EFI multi-disk assertions
+  when: _packer_verify_md_efi.stat.exists
+  block:
+    - name: _verify | mdadm --detail --test (clean=0, degraded=1, failed=2)
+      ansible.builtin.command: mdadm --detail --test {{ item }}
+      changed_when: false
+      failed_when: false
+      become: true
+      loop:
+        - /dev/md/efi
+        - /dev/md/swap
+      register: _packer_verify_md_test
+
+    - name: _verify | EFI mirror + swap array are clean
+      ansible.builtin.assert:
+        that: item.rc == 0
+        fail_msg: >-
+          mdadm --detail --test {{ item.item }} returned rc={{ item.rc }}
+          — degraded or failed array. stderr: {{ item.stderr }}
+      loop: "{{ _packer_verify_md_test.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: _verify | Per-disk "rEFInd (disk N)" NVRAM entries exist
+      vars:
+        _disk_entries: >-
+          {{ _packer_verify_efibootmgr.stdout_lines
+             | select('match', '^Boot[0-9A-F]{4}\*?\s+rEFInd \(disk \d+\)\s')
+             | list }}
+      ansible.builtin.assert:
+        that: _disk_entries | length >= 2
+        fail_msg: >-
+          Multi-disk variant has only {{ _disk_entries | length }}
+          per-disk "rEFInd (disk N)" NVRAM entries — chroot.sh's
+          per-disk efibootmgr -c loop didn't run for every disk,
+          breaking the single-disk-survival path.
+
 # --- aarch64: direct EFI-stub boot path + kernel-install hook ---
 
 - name: _verify | EFI-stub direct-boot assertions (aarch64)
