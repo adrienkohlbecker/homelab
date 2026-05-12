@@ -5,18 +5,11 @@ version: 5
 homeassistant:
   enabled: true
 
-# Strip tilt_* from every cover's discovery payload. The Schneider S520567
-# Roller shutter converter advertises tilt support but the hardware has no
-# tilt, so every state update triggers a HA "no attribute 'tilt'" template
-# warning. Safe globally only because all covers currently routed through
-# z2m here are S520567s; move to per-device overrides in devices.yaml if a
-# real venetian/tilt-capable cover is ever added.
-device_options:
-  homeassistant:
-    cover:
-      tilt_status_topic: null
-      tilt_status_template: null
-      tilt_command_topic: null
+# Tilt-null cover override is applied per-device in devices.yaml by
+# roles/z2m/files/patch_cover_tilt.py, not here: z2m's merge of
+# `device_options` into a device's options is shallow, so any device that
+# already has its own `homeassistant: {...}` block (e.g. a renamed cover)
+# shadows the global one and the override never reaches HA discovery.
 
 # Enable the frontend, runs on port 8080 by default
 frontend:
