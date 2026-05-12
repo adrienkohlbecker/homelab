@@ -17,7 +17,7 @@
 # so retries here have to give it at least that long before failing.
 - name: _verify | Compta answers on its loopback port
   uri:
-    url: http://localhost:4567/
+    url: http://localhost:{{ service_ports.compta }}/
     status_code: 200
   register: compta_verify_http
   retries: 60

@@ -99,6 +99,6 @@
     tasks_from: site
   vars:
     nginx_subdomain: compta
-    nginx_proxy_pass: http://localhost:4567/
+    nginx_proxy_pass: http://localhost:{{ service_ports.compta }}/
   tags:
     - compta
