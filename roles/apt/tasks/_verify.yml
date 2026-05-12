@@ -1,0 +1,85 @@
+# Assertions for the apt role. Exercises the contract end-to-end:
+# 80-retries content matches the release, sources file shape matches
+# the release (legacy on jammy, deb822 on noble+), apt's parsed view
+# (apt-cache policy) references our mirror, and `apt-get update`
+# succeeds against it.
+
+- name: _verify | Slurp 80-retries
+  ansible.builtin.slurp:
+    src: /etc/apt/apt.conf.d/80-retries
+  register: _verify_apt_retries
+
+- name: _verify | 80-retries pins Acquire::Retries
+  ansible.builtin.assert:
+    that:
+      - '''Acquire::Retries "3";'' in (_verify_apt_retries.content | b64decode)'
+    fail_msg: 80-retries missing 'Acquire::Retries "3";'
+
+- name: _verify | 80-retries pins Retries::Delay on noble+ only
+  ansible.builtin.assert:
+    that:
+      - >-
+        ('Acquire::Retries::Delay "true";' in (_verify_apt_retries.content | b64decode))
+        == (ansible_distribution_release != "jammy")
+    fail_msg: >-
+      Retries::Delay presence doesn't match release
+      (jammy must omit, noble+ must include).
+
+- name: _verify | Stat apt sources files
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/apt/sources.list
+    - /etc/apt/sources.list.d/ubuntu.sources
+  register: _verify_apt_sources
+
+- name: _verify | Legacy sources.list shape matches release
+  ansible.builtin.assert:
+    that:
+      - _verify_apt_sources.results[0].stat.exists == (ansible_distribution_release == "jammy")
+    fail_msg: >-
+      /etc/apt/sources.list shape doesn't match release
+      (jammy must have it, noble+ must not).
+
+- name: _verify | Deb822 ubuntu.sources shape matches release
+  ansible.builtin.assert:
+    that:
+      - _verify_apt_sources.results[1].stat.exists == (ansible_distribution_release != "jammy")
+    fail_msg: >-
+      /etc/apt/sources.list.d/ubuntu.sources shape doesn't match release
+      (noble+ must have it, jammy must not).
+
+- name: _verify | Slurp active sources file
+  ansible.builtin.slurp:
+    src: "{{ (ansible_distribution_release == 'jammy') | ternary('/etc/apt/sources.list', '/etc/apt/sources.list.d/ubuntu.sources') }}"
+  register: _verify_apt_sources_content
+
+- name: _verify | Sources reference the configured ubuntu_mirror
+  ansible.builtin.assert:
+    that:
+      - ubuntu_mirror in (_verify_apt_sources_content.content | b64decode)
+      - ubuntu_mirror_security in (_verify_apt_sources_content.content | b64decode)
+    fail_msg: >-
+      Active sources file doesn't reference both
+      {{ ubuntu_mirror }} and {{ ubuntu_mirror_security }}.
+
+# apt-cache policy reads apt's own parsed view of the configured world.
+# A passing assertion here proves apt loaded our sources (not just that
+# the file on disk looks right).
+- name: _verify | Read apt-cache policy
+  ansible.builtin.command: apt-cache policy
+  changed_when: false
+  register: _verify_apt_policy
+
+- name: _verify | Apt-cache policy references configured mirror
+  ansible.builtin.assert:
+    that:
+      - (ubuntu_mirror | regex_replace('/$', '')) in _verify_apt_policy.stdout
+    fail_msg: "apt-cache policy doesn't see {{ ubuntu_mirror }} -- sources file may be malformed."
+
+# Functional check: the mirror is reachable and serves valid metadata.
+- name: _verify | Apt-get update succeeds against configured mirror
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 0
+  become: true
