@@ -25,7 +25,6 @@
   when: keyboard_cfg.changed
   command: update-initramfs -u -k all
   become: true
-  changed_when: true
   tags:
     - keyboard
 
