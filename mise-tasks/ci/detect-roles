@@ -54,16 +54,17 @@ is_lab_role() {
 CROSS_CUT_RE='^(group_vars/all\.yml|group_vars/test\.yml|host_vars/.*-qemu.*\.yml|test/(testrole|testall|machine)\.py|mise\.toml)$'
 
 emit() {
-  local matrix=$1
-  local cross_cut=$2
+  local matrix=$1 cross_cut=$2 packer_changed=${3:-false}
   if [ -n "${GITHUB_OUTPUT:-}" ]; then
     {
       echo "matrix=$matrix"
       echo "cross_cut=$cross_cut"
+      echo "packer_changed=$packer_changed"
     } >>"$GITHUB_OUTPUT"
   else
     echo "matrix=$matrix"
     echo "cross_cut=$cross_cut"
+    echo "packer_changed=$packer_changed"
   fi
 }
 
@@ -190,11 +191,15 @@ done
 # re-exercise roles/_packer's assertions against the rebuilt image.
 # detect-roles only scans roles/<X>/ paths by default, so without this
 # clause those edits would wait for the nightly run to catch a
-# regression. wait-for-packer-build in test.yml ensures the _packer
-# cell runs *after* packer-build finishes on the same push.
+# regression. packer_changed is consumed by test.yml's
+# wait-for-packer-build job so the _packer cell only reads the qcow2s
+# *after* packer-build finishes -- firing on _packer-in-matrix alone
+# would also block pushes that only touch roles/_packer/.
+packer_changed=false
 if echo "$CHANGED" | grep -qE '^(packer/|mise-tasks/packer/)'; then
   ROLES="$ROLES _packer"
+  packer_changed=true
 fi
 
 ROLES_DEDUPED=$(echo "$ROLES" | tr ' ' '\n' | grep -v '^$' | sort -u || true)
-emit "$(build_matrix "$ROLES_DEDUPED")" "false"
+emit "$(build_matrix "$ROLES_DEDUPED")" "false" "$packer_changed"
