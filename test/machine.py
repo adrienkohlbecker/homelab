@@ -68,9 +68,9 @@ class QemuMachineSpec(NamedTuple):
     # is reachable, before any role/_setup playbook. Receives the extra disk
     # devices as positional args. None means no setup needed.
     disk_setup_script: str | None
-    # Number of qcow2 disks the packer image stages as part of the OS install.
+    # Number of disks the packer image stages as part of the OS install.
     # zfs is single-rpool (1), zfs-lab is a 3-disk mirror rpool
-    # (3). prepare() overlays packer-ubuntu-1..N for the OS, then attaches
+    # (3). prepare() overlays packer-ubuntu-1..N.{raw,qcow2} for the OS, then attaches
     # the variant's extra_disks starting at vd[a+N]. Unused on minimal
     # (packer_image=None), where the cloud-image branch returns early.
     os_disk_count: int = 0
@@ -1056,7 +1056,10 @@ class QemuMachine(Machine):
                 image_dir = f"{self.imagedir}/{self.ubuntu_name}/{packer_image}"
             os_disk_count = self._spec.os_disk_count
 
-            os_src_paths = [f"{image_dir}/packer-ubuntu-{idx}" for idx in range(1, os_disk_count + 1)]
+            # Packer renames per-OS disks to packer-ubuntu-N.<format> in its
+            # `extension` post-processor; mirror that suffix here. The format
+            # matches arch (raw on Linux, qcow2 on Mac).
+            os_src_paths = [f"{image_dir}/packer-ubuntu-{idx}.{self._packer_disk_format}" for idx in range(1, os_disk_count + 1)]
             os_disk_paths: list[str] = []
             for idx, src in enumerate(os_src_paths, start=1):
                 dest = f"{self.workdir.name}/packer-ubuntu-{idx}"
