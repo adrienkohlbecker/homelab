@@ -111,3 +111,28 @@
     systemd_unit_restart: "{{ fluentbit_cfg.changed or fluentbit_apt.changed }}"
   tags:
     - fluentbit
+
+# The systemd input plugin doesn't expose db.journal_mode (only the
+# tail plugin does -- which is why the nginx-{access,error}.db files
+# end up WAL by default but journal.db doesn't). Flip the mode once
+# in the header here; the plugin doesn't override on open, so it
+# persists across fluent-bit restarts.
+- name: Read fluent-bit journal.db journal mode
+  command: sqlite3 -readonly /var/lib/fluent-bit/journal.db 'PRAGMA journal_mode;'
+  register: fluentbit_journal_pragma
+  changed_when: false
+  failed_when: false
+  become: true
+  tags:
+    - fluentbit
+
+- name: Convert fluent-bit journal.db to WAL
+  command: sqlite3 /var/lib/fluent-bit/journal.db 'PRAGMA journal_mode=WAL;'
+  register: fluentbit_journal_wal
+  changed_when: fluentbit_journal_wal.stdout | trim == 'wal'
+  when:
+    - fluentbit_journal_pragma.rc == 0
+    - fluentbit_journal_pragma.stdout | trim != 'wal'
+  become: true
+  tags:
+    - fluentbit

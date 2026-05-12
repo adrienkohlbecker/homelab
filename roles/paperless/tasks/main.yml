@@ -127,6 +127,30 @@
   tags:
     - paperless
 
+# Paperless-ngx (Django) has no env var for SQLite PRAGMA. Without
+# this, db.sqlite3 stays in rollback-journal mode and document ingest
+# (write-heavy) takes a per-commit fsync hit. WAL is persisted in the
+# DB header so the convert is one-shot.
+- name: Read paperless sqlite journal mode
+  command: sqlite3 -readonly /mnt/services/sqlite/paperless/db.sqlite3 'PRAGMA journal_mode;'
+  register: paperless_sqlite_pragma
+  changed_when: false
+  failed_when: false
+  become: true
+  tags:
+    - paperless
+
+- name: Convert paperless sqlite to WAL
+  command: sqlite3 /mnt/services/sqlite/paperless/db.sqlite3 'PRAGMA journal_mode=WAL;'
+  register: paperless_sqlite_wal
+  changed_when: paperless_sqlite_wal.stdout | trim == 'wal'
+  when:
+    - paperless_sqlite_pragma.rc == 0
+    - paperless_sqlite_pragma.stdout | trim != 'wal'
+  become: true
+  tags:
+    - paperless
+
 - name: Configure nginx
   import_role:
     name: nginx
