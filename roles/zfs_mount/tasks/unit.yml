@@ -14,9 +14,9 @@
 - name: unit | Install systemd mount service
   import_role:
     name: systemd_unit
-    tasks_from: template
+    tasks_from: install
   vars:
-    systemd_unit_src: zfs_mount.service
+    systemd_unit_src: zfs_mount.service.j2
     systemd_unit_dest: zfs_mount{{ zfs_mount_mountpoint | regex_replace('^/$', '/root') | replace('/', '_') }}.service
   tags:
     - zfs_mount

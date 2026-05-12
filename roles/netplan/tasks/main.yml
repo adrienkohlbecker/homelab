@@ -22,7 +22,7 @@
 - name: Install netplan_rollback.service
   import_role:
     name: systemd_unit
-    tasks_from: copy
+    tasks_from: install
   vars:
     systemd_unit_src: netplan_rollback.service
   tags:
@@ -31,7 +31,7 @@
 - name: Install netplan_rollback.timer
   import_role:
     name: systemd_unit
-    tasks_from: copy
+    tasks_from: install
   vars:
     systemd_unit_src: netplan_rollback.timer
   tags:

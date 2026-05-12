@@ -11,7 +11,7 @@
 - name: Install powertop service
   import_role:
     name: systemd_unit
-    tasks_from: copy
+    tasks_from: install
   vars:
     systemd_unit_src: powertop.service
   tags:

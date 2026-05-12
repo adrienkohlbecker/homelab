@@ -109,9 +109,9 @@
 - name: Install paperless service
   import_role:
     name: systemd_unit
-    tasks_from: template
+    tasks_from: install
   vars:
-    systemd_unit_src: paperless.service
+    systemd_unit_src: paperless.service.j2
     systemd_unit_condition: "{{ not (ansible_check_mode and paperless_user.changed) }}"
   tags:
     - paperless
