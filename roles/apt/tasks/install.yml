@@ -32,7 +32,7 @@
   file:
     path: /etc/apt/sources.list
     state: absent
-  register: apt_mirror_legacy_drop
+  register: apt_mirror_legacy_removed
   become: true
   tags:
     - apt
@@ -52,7 +52,7 @@
     - apt
 
 - name: install | Force apt update
-  when: apt_mirror_legacy.changed or apt_mirror_legacy_drop.changed or apt_mirror_deb822.changed
+  when: apt_mirror_legacy.changed or apt_mirror_legacy_removed.changed or apt_mirror_deb822.changed
   apt:
     update_cache: true
   become: true
