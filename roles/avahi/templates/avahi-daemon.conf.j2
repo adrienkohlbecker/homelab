@@ -1,78 +1,22 @@
-# This file is part of avahi.
-#
-# avahi is free software; you can redistribute it and/or modify it
-# under the terms of the GNU Lesser General Public License as
-# published by the Free Software Foundation; either version 2 of the
-# License, or (at your option) any later version.
-#
-# avahi is distributed in the hope that it will be useful, but WITHOUT
-# ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-# or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public
-# License for more details.
-#
-# You should have received a copy of the GNU Lesser General Public
-# License along with avahi; if not, write to the Free Software
-# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-# USA.
-
-# See avahi-daemon.conf(5) for more information on this configuration
-# file!
-
-[server]
-#host-name=foo
-#domain-name=local
-#browse-domains=0pointer.de, zeroconf.org
-use-ipv4=yes
-use-ipv6=yes
-# Pin avahi to the host's primary uplink. Without this, multi-NIC hosts
+# Pinned to the host's primary uplink. Without this, multi-NIC hosts
 # (eth0 + macvlan child mac0 sharing one L2, plus virbr0/podman*/iot
-# VLAN) running enable-reflector=yes hear their own mDNS announcements
-# echoed back via a sibling interface and rename to <host>-NNNN every
-# time a netlink address-change fires — e.g. keepalived adding the
-# pihole VIP to eth0 on MASTER transition.
+# VLAN) hear their own mDNS announcements echoed back via a sibling
+# interface and rename to <host>-NNNN every time a netlink address-
+# change fires — e.g. keepalived adding the pihole VIP to eth0 on
+# MASTER transition.
+[server]
 allow-interfaces={{ ansible_default_ipv4.interface }}
-#deny-interfaces=eth1
-#check-response-ttl=no
-#use-iff-running=no
-#enable-dbus=yes
-#disallow-other-stacks=no
-#allow-point-to-point=no
-#cache-entries-max=4096
-#clients-max=4096
-#objects-per-client-max=1024
-#entries-per-entry-group-max=32
-ratelimit-interval-usec=1000000
-ratelimit-burst=1000
-
-[wide-area]
-enable-wide-area=yes
 
 [publish]
-#disable-publishing=no
-#disable-user-service-publishing=no
-#add-service-cookie=no
-#publish-addresses=yes
-publish-hinfo=no
+# Suppress _workstation._tcp (avahi upstream default = yes; Ubuntu's
+# packaged conf overrides to no, preserved here). The service-name
+# format embeds the publishing interface's MAC address
+# (`<host> [aa:bb:cc:dd:ee:ff]._workstation._tcp`), a fingerprinting
+# leak across mDNS; on macOS clients it also duplicates the host in
+# the Finder sidebar alongside the _device-info-driven entry this
+# role already publishes.
 publish-workstation=no
-#publish-domain=yes
-#publish-dns-servers=192.168.50.1, 192.168.50.2
-#publish-resolv-conf-dns-servers=yes
-#publish-aaaa-on-ipv4=yes
-#publish-a-on-ipv6=no
-
-[reflector]
-# No-op while allow-interfaces pins avahi to a single uplink — reflector
-# needs ≥2 interfaces to bridge between. Kept false to keep the config
-# truthful for future readers.
-enable-reflector=no
-#reflect-ipv=no
-#reflect-filters=_airplay._tcp.local,_raop._tcp.local
-
-[rlimits]
-#rlimit-as=
-#rlimit-core=0
-#rlimit-data=8388608
-#rlimit-fsize=0
-#rlimit-nofile=768
-#rlimit-stack=8388608
-#rlimit-nproc=3
+# Defensive: avahi's upstream default is already `no`, set explicitly
+# to insure against a future upstream change re-enabling HINFO (CPU /
+# OS architecture broadcast over mDNS).
+publish-hinfo=no
