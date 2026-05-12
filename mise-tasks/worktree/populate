@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Populate a freshly-created worktree: packer/artifacts symlink, .worktreeinclude copies, mise trust"
+#MISE alias="wt:populate"
 #USAGE arg "<worktree>" help="Absolute path to the new worktree"
 # shellcheck disable=SC2154  # usage_worktree injected by mise from the #USAGE spec
 set -euo pipefail

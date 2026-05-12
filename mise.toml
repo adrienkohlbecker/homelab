@@ -158,4 +158,5 @@ run = 'ansible-playbook site.yml "$@"'
 
 [tasks."worktree:ls"]
 description = "List active git worktrees"
+alias = "wt:ls"
 run = "git worktree list"
