@@ -12,6 +12,7 @@
 # reaches the discovery code. Patching the per-device block is the only
 # place where the override actually gets applied.
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -57,6 +58,7 @@ def main() -> int:
     if not patch(devices, name_re):
         print("OK")
         return 0
+    st = path.stat()
     with NamedTemporaryFile(
         mode="w",
         dir=path.parent,
@@ -66,7 +68,11 @@ def main() -> int:
     ) as tmp:
         yaml.safe_dump(devices, tmp, default_flow_style=False, sort_keys=False, allow_unicode=True)
         tmp_path = Path(tmp.name)
-    tmp_path.chmod(path.stat().st_mode & 0o777)
+    # Preserve uid/gid as well as mode — NamedTemporaryFile is created as the
+    # script's running uid (root via become), and the rename would otherwise
+    # silently re-own devices.yaml away from the z2m service user.
+    os.chown(tmp_path, st.st_uid, st.st_gid)
+    tmp_path.chmod(st.st_mode & 0o777)
     tmp_path.replace(path)
     print("CHANGED")
     return 0
