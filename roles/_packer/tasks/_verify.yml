@@ -143,6 +143,102 @@
           per-disk efibootmgr -c loop didn't run for every disk,
           breaking the single-disk-survival path.
 
+# --- rpool shape (universal) ---
+#
+# provision.sh creates rpool with a specific feature/property set and
+# sets bootfs; chroot.sh stamps org.zfsbootmenu:commandline on
+# rpool/ROOT so ZBM knows what cmdline to hand the kernel. The pool
+# also has to be *healthy* -- a degraded mirror on lab is invisible
+# without a status probe (zpool import succeeds in degraded state),
+# and the mdadm assertions above only cover the /boot/efi + swap
+# arrays, not rpool.
+#
+# Properties asserted below are the ones whose absence is silent (the
+# pool still imports/boots without them) but functionally load-bearing:
+# - ashift=12: wrong on creation = poor IO; un-changeable post-create.
+# - compatibility=openzfs-2.1-linux: caps feature flags so the pool
+#   stays importable on older systems; provision.sh sets this
+#   explicitly and a regression silently widens the feature set.
+# - compression=zstd, xattr=sa, acltype=posix, autotrim=on: dataset
+#   defaults inherited by everything under rpool; subtle perf/feature
+#   regressions if missing. Booting masks them all.
+
+- name: _verify | Read source of org.zfsbootmenu:commandline on rpool/ROOT
+  ansible.builtin.command: zfs get -H -o source org.zfsbootmenu:commandline rpool/ROOT
+  changed_when: false
+  become: true
+  register: _packer_verify_zbm_cmdline_source
+
+- name: _verify | org.zfsbootmenu:commandline is set locally on rpool/ROOT
+  ansible.builtin.assert:
+    # Source must be `local` (set by chroot.sh's `zfs set`), not `-`
+    # (never set) or `inherited` (would mean a parent set it, which
+    # nothing in our stack does). The value itself is the empty string
+    # by design, so checking source rather than value is the right
+    # signal -- value="" is indistinguishable from value-not-set when
+    # looking at the value alone.
+    that: _packer_verify_zbm_cmdline_source.stdout | trim == 'local'
+    fail_msg: >-
+      org.zfsbootmenu:commandline on rpool/ROOT has source
+      `{{ _packer_verify_zbm_cmdline_source.stdout | trim }}` (want
+      `local`) -- chroot.sh's `zfs set org.zfsbootmenu:commandline=`
+      didn't run. ZBM will fall through to a parent dataset's value
+      (or defaults), which can silently change the kernel cmdline at
+      boot.
+
+- name: _verify | Read rpool properties
+  ansible.builtin.command: >-
+    zpool get -H -o property,value
+    ashift,autotrim,bootfs,compatibility,health rpool
+  changed_when: false
+  become: true
+  register: _packer_verify_zpool_props
+
+- name: _verify | rpool ashift / autotrim / bootfs / compatibility / health
+  vars:
+    # zpool get -H -o property,value emits tab-separated lines.
+    # split() with no arg tokenises on any whitespace (including tab)
+    # and discards empty fields; the properties here all have
+    # single-token values so the result is an unambiguous [k, v] pair.
+    _props: >-
+      {{ dict(_packer_verify_zpool_props.stdout_lines | map('split')) }}
+  ansible.builtin.assert:
+    that:
+      - _props.ashift == '12'
+      - _props.autotrim == 'on'
+      - _props.bootfs == 'rpool/ROOT/' ~ ansible_distribution_release
+      - _props.compatibility == 'openzfs-2.1-linux'
+      - _props.health == 'ONLINE'
+    fail_msg: >-
+      rpool property mismatch: {{ _props }}.
+      Want: ashift=12, autotrim=on,
+      bootfs=rpool/ROOT/{{ ansible_distribution_release }},
+      compatibility=openzfs-2.1-linux, health=ONLINE.
+
+- name: _verify | Read rpool root-dataset properties
+  ansible.builtin.command: >-
+    zfs get -H -o property,value
+    compression,xattr,acltype,atime,relatime rpool
+  changed_when: false
+  become: true
+  register: _packer_verify_zfs_rpool_props
+
+- name: _verify | rpool dataset defaults (compression / xattr / acltype / atime / relatime)
+  vars:
+    _props: >-
+      {{ dict(_packer_verify_zfs_rpool_props.stdout_lines | map('split')) }}
+  ansible.builtin.assert:
+    that:
+      - _props.compression == 'zstd'
+      - _props.xattr == 'sa'
+      - _props.acltype == 'posix'
+      - _props.atime == 'on'
+      - _props.relatime == 'on'
+    fail_msg: >-
+      rpool dataset properties mismatch: {{ _props }}.
+      Want: compression=zstd, xattr=sa, acltype=posix, atime=on,
+      relatime=on.
+
 # --- chroot.sh post-debootstrap shape (universal) ---
 
 # chroot.sh sets MODULES=most in /etc/initramfs-tools/initramfs.conf
