@@ -8,11 +8,12 @@
     name: podman
     tasks_from: install
 
-- name: _test | Setup dependencies
-  shell: |
-    set -euo pipefail
-    mkdir /mnt/{services,media}
-  args:
-    executable: /bin/bash
-    creates: /mnt/services
+- name: _setup | Ensure /mnt/services and /mnt/media exist
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /mnt/services
+    - /mnt/media
   become: true
