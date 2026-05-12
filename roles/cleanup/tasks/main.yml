@@ -3,7 +3,6 @@
     manager: apt
   tags:
     - cleanup
-  no_log: true
   check_mode: false
 
 - name: List installed snaps
