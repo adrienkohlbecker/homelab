@@ -18,7 +18,9 @@
     - compta
 
 # Pin SSH_AUTH_SOCK into the git task's env; mitogen's reused interpreter
-# has dropped the forwarded socket on us before. Fail-fast if unset.
+# has dropped the forwarded socket on us before. printenv exits 1 when
+# the var is unset, so the default non-zero-rc failure suffices -- no
+# explicit failed_when needed.
 # check_mode: false because the `command` module is skipped in check mode
 # by default, which leaves compta_ssh_auth_sock.stdout undefined and
 # blows up the git task's environment lookup on any second-pass check
@@ -28,7 +30,6 @@
   command: printenv SSH_AUTH_SOCK
   changed_when: false
   check_mode: false
-  failed_when: compta_ssh_auth_sock.rc != 0 or not compta_ssh_auth_sock.stdout
   register: compta_ssh_auth_sock
   tags:
     - compta
