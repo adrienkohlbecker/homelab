@@ -381,6 +381,75 @@
       The shipped image would accept passwords on any account that
       has one.
 
+# --- vagrant user + sudo (universal) ---
+#
+# chroot.sh creates the vagrant system user, drops the packer pubkey
+# into its authorized_keys, and writes a NOPASSWD sudoers entry. Bad
+# ownership/mode on authorized_keys still permits SSH (so the harness
+# wouldn't catch it via "can I connect?"), and bad mode on
+# /etc/sudoers.d/vagrant silently demotes the entry to "ignored by
+# visudo" -- not strictly broken today (the user is in the sudo
+# group, so admin-pw fallback kicks in) but a regression next time
+# someone adds another account that needs sudo.
+
+- name: _verify | Stat vagrant authorized_keys
+  ansible.builtin.stat:
+    path: /home/vagrant/.ssh/authorized_keys
+  register: _packer_verify_vagrant_authkeys
+
+- name: _verify | vagrant authorized_keys exists, owned by vagrant, mode 0600
+  ansible.builtin.assert:
+    that:
+      - _packer_verify_vagrant_authkeys.stat.exists
+      - _packer_verify_vagrant_authkeys.stat.pw_name == 'vagrant'
+      - _packer_verify_vagrant_authkeys.stat.gr_name == 'vagrant'
+      - _packer_verify_vagrant_authkeys.stat.mode == '0600'
+      - _packer_verify_vagrant_authkeys.stat.size > 0
+    fail_msg: >-
+      /home/vagrant/.ssh/authorized_keys missing or wrong shape
+      (exists={{ _packer_verify_vagrant_authkeys.stat.exists }},
+      owner={{ _packer_verify_vagrant_authkeys.stat.pw_name | default('?') }},
+      group={{ _packer_verify_vagrant_authkeys.stat.gr_name | default('?') }},
+      mode={{ _packer_verify_vagrant_authkeys.stat.mode | default('?') }},
+      size={{ _packer_verify_vagrant_authkeys.stat.size | default(0) }}).
+
+- name: _verify | Read vagrant group memberships
+  ansible.builtin.command: id -nG vagrant
+  changed_when: false
+  register: _packer_verify_vagrant_groups
+
+- name: _verify | vagrant is in sudo + adm groups
+  ansible.builtin.assert:
+    that:
+      - "'sudo' in _packer_verify_vagrant_groups.stdout.split()"
+      - "'adm' in _packer_verify_vagrant_groups.stdout.split()"
+    fail_msg: >-
+      vagrant group memberships missing sudo and/or adm:
+      `{{ _packer_verify_vagrant_groups.stdout }}`. chroot.sh's
+      `usermod -a -G adm,sudo` didn't land.
+
+- name: _verify | Stat /etc/sudoers.d/vagrant
+  ansible.builtin.stat:
+    path: /etc/sudoers.d/vagrant
+  become: true
+  register: _packer_verify_vagrant_sudoers
+
+- name: _verify | sudoers drop-in for vagrant is mode 0400 root:root
+  ansible.builtin.assert:
+    that:
+      - _packer_verify_vagrant_sudoers.stat.exists
+      - _packer_verify_vagrant_sudoers.stat.pw_name == 'root'
+      - _packer_verify_vagrant_sudoers.stat.gr_name == 'root'
+      - _packer_verify_vagrant_sudoers.stat.mode == '0400'
+    fail_msg: >-
+      /etc/sudoers.d/vagrant missing or wrong shape
+      (exists={{ _packer_verify_vagrant_sudoers.stat.exists }},
+      owner={{ _packer_verify_vagrant_sudoers.stat.pw_name | default('?') }},
+      group={{ _packer_verify_vagrant_sudoers.stat.gr_name | default('?') }},
+      mode={{ _packer_verify_vagrant_sudoers.stat.mode | default('?') }}).
+      visudo's sudoers.d scan ignores files not mode 0440/0400 or
+      not owned by root -- a bad mode silently drops the entry.
+
 # --- aarch64: direct EFI-stub boot path + kernel-install hook ---
 
 - name: _verify | EFI-stub direct-boot assertions (aarch64)
