@@ -52,6 +52,6 @@ f_require_root() {
 }
 
 f_trace() {
-  echo "\$ $*"
+  echo "\$$(printf ' %q' "$@")"
   "$@"
 }
