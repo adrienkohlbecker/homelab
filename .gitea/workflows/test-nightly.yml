@@ -54,11 +54,12 @@ jobs:
     container:
       image: lab-runtime:latest
       # --group-add 1 is supplied by act_runner's container.options
-      # default; see test.yml for the rationale.
+      # default; see test.yml for the rationale (and for the per-cell
+      # lab-runtime-workdir bind-mount).
       options: >-
         --device /dev/kvm
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
-        --volume /mnt/scratch/act_runner/lab-runtime-workdir:/lab-runtime-workdir:rw
+        --volume /mnt/scratch/act_runner/lab-runtime-workdir/${{ github.run_id }}-${{ strategy.job-index }}:/lab-runtime-workdir:rw
     strategy:
       fail-fast: false
       # Nightly runs unattended; saturate runner capacity (vs 2 on the
