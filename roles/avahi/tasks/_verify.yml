@@ -1,0 +1,35 @@
+- name: _verify | avahi-daemon is loaded and active
+  systemd:
+    name: avahi-daemon
+  register: _verify_unit
+  failed_when: >-
+    _verify_unit.status.LoadState != "loaded"
+    or _verify_unit.status.ActiveState != "active"
+  become: true
+
+# Proves the daemon is actually publishing its A record on the pinned
+# uplink. Retried because there's a sub-second gap between unit-active and
+# first multicast announcement.
+- name: _verify | avahi resolves the host's own .local name
+  command: avahi-resolve-host-name -4 {{ ansible_hostname }}.local
+  register: _verify_resolve
+  retries: 10
+  delay: 1
+  until: _verify_resolve.rc == 0
+  changed_when: false
+  become: true
+
+# Proves the device-info.service XML loaded and the templated model field
+# rendered through to a TXT record. `-p` parseable, `-r` resolve (TXT
+# records appear on `=` lines), `-t` terminate after one cycle. Avahi
+# quotes the TXT value so a literal substring match is enough.
+- name: _verify | device-info service is announced with the configured model
+  command: avahi-browse -prt _device-info._tcp
+  register: _verify_browse
+  retries: 10
+  delay: 1
+  until:
+    - _verify_browse.rc == 0
+    - ('"model=' + avahi_device_model + '"') in _verify_browse.stdout
+  changed_when: false
+  become: true
