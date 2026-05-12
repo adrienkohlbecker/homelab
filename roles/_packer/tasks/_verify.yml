@@ -212,9 +212,15 @@
               ansible.builtin.shell:
                 cmd: |
                   set -euo pipefail
-                  ver=$(apt-cache madison linux-image-generic |
-                         awk '$1=="linux-image-generic"{print $3}' |
-                         sort -uV | tail -2 | head -1)
+                  versions=$(apt-cache madison linux-image-generic |
+                             awk '$1=="linux-image-generic"{print $3}' |
+                             sort -uV)
+                  count=$(echo "$versions" | grep -c .)
+                  if [ "$count" -lt 2 ]; then
+                    echo >&2 "archive has only $count linux-image-generic version(s); need 2+ for a downgrade target (test premise broken)"
+                    exit 1
+                  fi
+                  ver=$(echo "$versions" | tail -2 | head -1)
                   echo "$ver" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+-[0-9]+).*$/\1/'
               register: _packer_verify_older_abi
               changed_when: false
@@ -223,10 +229,9 @@
               ansible.builtin.assert:
                 that: _packer_verify_older_abi.stdout != ""
                 fail_msg: >-
-                  apt-cache madison linux-image-generic returned no
-                  second-newest version — resolute's archive currently
-                  has only one kernel, so there's nothing to downgrade
-                  to (test premise broken)
+                  Older-kernel ABI extraction returned an empty string —
+                  the madison version didn't match the expected
+                  ABI.REVISION shape (sed strip failed)
 
             - name: _verify | Install older specific kernel + modules (fires postinst.d hook)
               ansible.builtin.apt:
