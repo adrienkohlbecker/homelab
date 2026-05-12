@@ -5,21 +5,11 @@
       - python3-certbot-dns-cloudflare
     cache_valid_time: 3600
   become: true
-  register: apt_install_certbot
   tags:
     - certbot
 
-- name: Create config directory
-  file:
-    dest: /etc/letsencrypt
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - certbot
-
+# Relax apt's default 0700 on live/ and archive/ to 0755 so non-root
+# services (e.g. www-data) can traverse into <domain>/ to read fullchain.
 - name: Set permissions on storage directories
   file:
     dest: /etc/letsencrypt/{{ item }}
