@@ -3,6 +3,8 @@
 import asyncio
 import contextlib
 import dataclasses
+import fcntl
+import os
 import platform
 import shlex
 import shutil
@@ -198,6 +200,15 @@ class Machine:
     dmesg_file: Path = dataclasses.field(init=False)
     systemctl_failed_file: Path = dataclasses.field(init=False)
     workdir: tempfile.TemporaryDirectory[str] = dataclasses.field(init=False)
+    # fd of <workdir>/.live, held with fcntl.LOCK_EX|LOCK_NB for the lifetime
+    # of the Machine. Liveness signal consumed by sweep_stale_workdirs(): the
+    # kernel releases the lock on process death (clean or SIGKILL/OOM), so a
+    # crashed run's workdir becomes reapable without a polling daemon. Survives
+    # PID namespaces -- the lock is on the inode, shared across containers
+    # that bind-mount the same workdir parent. Replaces the prior ps-based
+    # check, which was PID-ns-scoped and so couldn't see sibling Gitea Actions
+    # test cells running in separate containers on the same host bind-mount.
+    _live_lock_fd: int = dataclasses.field(default=-1, init=False)
     peak_rss_kb: int = dataclasses.field(default=0, init=False)
     # Auxiliary slirp hostfwds. Pre-picked free 127.0.0.1 ports map
     # the controller side to specific VM ports so `delegate_to:
@@ -243,6 +254,14 @@ class Machine:
         if wd_parent is not None:
             Path(wd_parent).mkdir(parents=True, exist_ok=True)
         self.workdir = tempfile.TemporaryDirectory(dir=wd_parent)
+        # Claim the liveness lock immediately after the workdir exists so a
+        # sweep racing us from another container can't reap the dir between
+        # mkdtemp and the first qemu/ansible spawn. LOCK_NB so a contended
+        # lock fails loudly (would only happen if two Machines somehow shared
+        # a workdir, which mkdtemp prevents -- a BlockingIOError here is a
+        # bug, not a race).
+        self._live_lock_fd = os.open(f"{self.workdir.name}/.live", os.O_WRONLY | os.O_CREAT, 0o644)
+        fcntl.flock(self._live_lock_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
         self._preflight()
 
     def _workdir_parent(self) -> Path | None:
@@ -676,6 +695,13 @@ class Machine:
                         self.proc.kill()
                     await self.proc.wait()
         finally:
+            # Release the liveness lock before rmtree -- the kernel would
+            # release it on close()/exit anyway, but doing it explicitly
+            # keeps the ordering obvious.
+            if self._live_lock_fd >= 0:
+                with contextlib.suppress(OSError):
+                    os.close(self._live_lock_fd)
+                self._live_lock_fd = -1
             self.workdir.cleanup()
 
 
@@ -709,12 +735,21 @@ def sweep_stale_workdirs(imagedir: Path) -> None:
     full repo copy plus a qcow2 overlay -- ansible-lint also walks into them
     until .ansible-lint excludes the path, so leaks are doubly expensive.
 
-    Liveness check: a single `ps -Ao args=` covers every running process; a
-    candidate is reaped only if its dirname appears nowhere in argv AND its
-    mtime is older than the race-window grace. The grace protects the brief
-    interval between QemuMachine.__post_init__ creating the workdir and qemu
-    starting (and thus showing up in ps), so concurrent harness runs don't
-    nuke each other's freshly-minted workdirs.
+    Liveness check is split by dir kind:
+
+    * tmp* (harness workdirs) -- each live Machine holds an exclusive flock on
+      <workdir>/.live. Sweep tries LOCK_EX|LOCK_NB on that file: contended =
+      live (skip), uncontended = orphan (reap). flock is inode-scoped, so it
+      works across PID namespaces -- critical because Gitea Actions test cells
+      run in separate containers that bind-mount a shared workdir parent
+      (/lab-runtime-workdir), and the prior ps-based check couldn't see
+      sibling cells' qemu/ansible. The mtime grace still guards the tiny
+      window between mkdtemp and Machine.__post_init__'s flock acquisition.
+
+    * .build-* (packer) -- packer doesn't (yet) hold a liveness lock, so these
+      keep the ps-args check. Safe because packer-build runs alone under the
+      `concurrency: lab-qemu-artifacts` workflow lock, so a single ps scan
+      sees the only candidate process.
     """
     if not imagedir.is_dir():
         return
@@ -725,11 +760,7 @@ def sweep_stale_workdirs(imagedir: Path) -> None:
     if not candidates:
         return
 
-    try:
-        ps_args = subprocess.run(["ps", "-Ao", "args="], check=True, capture_output=True, text=True).stdout
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        # Don't reap when we can't verify staleness.
-        return
+    ps_args: str | None = None
 
     for d in candidates:
         try:
@@ -738,10 +769,50 @@ def sweep_stale_workdirs(imagedir: Path) -> None:
             continue
         if age < grace_seconds:
             continue
-        if d.name in ps_args:
-            continue
+
+        if d.name.startswith("tmp"):
+            if not _workdir_is_orphan(d):
+                continue
+        else:
+            # .build-* path: fall back to ps scan, lazily computed.
+            if ps_args is None:
+                try:
+                    ps_args = subprocess.run(["ps", "-Ao", "args="], check=True, capture_output=True, text=True).stdout
+                except (subprocess.CalledProcessError, FileNotFoundError):
+                    # Don't reap when we can't verify staleness.
+                    return
+            if d.name in ps_args:
+                continue
+
         print_line(f"Reaping orphaned workdir {d}")
         shutil.rmtree(d, ignore_errors=True)
+
+
+def _workdir_is_orphan(workdir: Path) -> bool:
+    """True iff the harness liveness lock on <workdir>/.live is unheld.
+
+    Missing .live file means the workdir predates this mechanism (or was
+    created by a non-harness tool) -- treat as orphan, the mtime grace in
+    the caller is the only safety net. An open()/flock() failure other than
+    "contended" also means orphan: the file is gone or unreadable, nothing
+    live could be holding it.
+    """
+    live = workdir / ".live"
+    try:
+        fd = os.open(live, os.O_RDONLY)
+    except FileNotFoundError:
+        return True
+    except OSError:
+        return True
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return False
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        return True
+    finally:
+        os.close(fd)
 
 
 def _read_vm_hwm(pid: int) -> int:
