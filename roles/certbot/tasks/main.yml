@@ -60,6 +60,7 @@
     group: root
     backup: true
   become: true
+  no_log: true
   tags:
     - certbot
 
