@@ -102,3 +102,18 @@
       - test_chrony_backports_updated is defined
       - test_second_backports_updated is defined
     fail_msg: "Expected both per-call facts to survive a second import"
+
+# The Record-outcome task runs unconditionally (no major-version gate),
+# so on noble both per-call facts should still land — populated from a
+# skipped upgrade result and therefore false. Consumers wrap the lookup
+# in `| default(false)` so a missing fact wouldn't fail loudly; verify
+# the documented contract directly.
+- name: _verify (noble) | per-call facts are defined and false
+  when: ansible_distribution_major_version != "22"
+  assert:
+    that:
+      - test_chrony_backports_updated is defined
+      - test_second_backports_updated is defined
+      - not (test_chrony_backports_updated | bool)
+      - not (test_second_backports_updated | bool)
+    fail_msg: "Expected both per-call facts to be set to false on noble"
