@@ -24,6 +24,21 @@
   tags:
     - certbot
 
+# Renewal happens out-of-band via the certbot.timer that the apt package
+# ships. Without this hook nginx would keep serving the pre-renewal cert
+# until something else restarted it.
+- name: Install nginx reload deploy-hook
+  copy:
+    src: reload_nginx.sh
+    dest: /etc/letsencrypt/renewal-hooks/deploy/reload_nginx.sh
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+  become: true
+  tags:
+    - certbot
+
 - name: Write cloudflare credentials
   copy:
     dest: /etc/letsencrypt/cloudflare.ini
