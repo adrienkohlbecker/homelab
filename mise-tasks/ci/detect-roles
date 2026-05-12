@@ -185,5 +185,16 @@ for role in $DIRECT; do
   done
 done
 
+# Any change under packer/ or mise-tasks/packer/ (the same paths that
+# trigger packer-build.yml) rebuilds the qcow2 tree and so should
+# re-exercise roles/_packer's assertions against the rebuilt image.
+# detect-roles only scans roles/<X>/ paths by default, so without this
+# clause those edits would wait for the nightly run to catch a
+# regression. wait-for-packer-build in test.yml ensures the _packer
+# cell runs *after* packer-build finishes on the same push.
+if echo "$CHANGED" | grep -qE '^(packer/|mise-tasks/packer/)'; then
+  ROLES="$ROLES _packer"
+fi
+
 ROLES_DEDUPED=$(echo "$ROLES" | tr ' ' '\n' | grep -v '^$' | sort -u || true)
 emit "$(build_matrix "$ROLES_DEDUPED")" "false"
