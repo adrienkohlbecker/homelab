@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Create .worktrees/<name>, populate shared state, mise trust, open VS Code"
+#MISE alias="wt:add"
 #USAGE arg "<name>" help="Branch and worktree name"
 #USAGE arg "[base]" default="HEAD" help="Base commit-ish"
 # shellcheck disable=SC2154  # usage_name / usage_base injected by mise from the #USAGE spec
