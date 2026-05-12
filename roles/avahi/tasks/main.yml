@@ -1,19 +1,11 @@
-- name: Install avahi-daemon
+- name: Install avahi
   apt:
     pkg:
       - avahi-daemon
+      - avahi-utils
     policy_rc_d: 101
     cache_valid_time: 3600
   register: avahi_apt
-  become: true
-  tags:
-    - avahi
-
-- name: Install tools
-  apt:
-    pkg:
-      - avahi-utils
-    cache_valid_time: 3600
   become: true
   tags:
     - avahi
