@@ -57,6 +57,35 @@
     src: "{{ (ansible_distribution_release == 'jammy') | ternary('/etc/apt/sources.list', '/etc/apt/sources.list.d/ubuntu.sources') }}"
   register: _verify_apt_sources_content
 
+# Per-suite and per-component file-content checks catch a missing
+# entry in the template (e.g. a Components: line that dropped
+# 'multiverse', or a Suites: line that omitted -backports). Components
+# in the parsed apt view aren't a useful check -- whether a mirror
+# actually serves all four components per suite is mirror-dependent
+# (ports.ubuntu.com only ships main/universe for -backports), not a
+# role contract.
+- name: _verify | Active sources file mentions every expected suite
+  ansible.builtin.assert:
+    that:
+      - item in (_verify_apt_sources_content.content | b64decode)
+    fail_msg: "Active sources file is missing suite '{{ item }}'."
+  loop:
+    - "{{ ansible_distribution_release }}"
+    - "{{ ansible_distribution_release }}-updates"
+    - "{{ ansible_distribution_release }}-backports"
+    - "{{ ansible_distribution_release }}-security"
+
+- name: _verify | Active sources file mentions every expected component
+  ansible.builtin.assert:
+    that:
+      - item in (_verify_apt_sources_content.content | b64decode)
+    fail_msg: "Active sources file is missing component '{{ item }}'."
+  loop:
+    - main
+    - restricted
+    - universe
+    - multiverse
+
 - name: _verify | Sources reference the configured ubuntu_mirror
   ansible.builtin.assert:
     that:
@@ -67,18 +96,32 @@
       {{ ubuntu_mirror }} and {{ ubuntu_mirror_security }}.
 
 # apt-cache policy reads apt's own parsed view of the configured world.
-# A passing assertion here proves apt loaded our sources (not just that
-# the file on disk looks right).
+# Per-suite check (with trailing '/') catches a missing or typo'd suite
+# while staying mirror-agnostic at the component level.
 - name: _verify | Read apt-cache policy
   ansible.builtin.command: apt-cache policy
   changed_when: false
   register: _verify_apt_policy
 
-- name: _verify | Apt-cache policy references configured mirror
+- name: _verify | Apt-cache policy lists every archive suite
   ansible.builtin.assert:
     that:
-      - (ubuntu_mirror | regex_replace('/$', '')) in _verify_apt_policy.stdout
-    fail_msg: "apt-cache policy doesn't see {{ ubuntu_mirror }} -- sources file may be malformed."
+      - (_verify_apt_mirror ~ ' ' ~ item ~ '/') in _verify_apt_policy.stdout
+    fail_msg: "apt-cache policy missing {{ _verify_apt_mirror }} {{ item }}."
+  vars:
+    _verify_apt_mirror: "{{ ubuntu_mirror | regex_replace('/$', '') }}"
+  loop:
+    - "{{ ansible_distribution_release }}"
+    - "{{ ansible_distribution_release }}-updates"
+    - "{{ ansible_distribution_release }}-backports"
+
+- name: _verify | Apt-cache policy lists the security suite
+  ansible.builtin.assert:
+    that:
+      - (_verify_apt_security_mirror ~ ' ' ~ ansible_distribution_release ~ '-security/') in _verify_apt_policy.stdout
+    fail_msg: "apt-cache policy missing {{ _verify_apt_security_mirror }} {{ ansible_distribution_release }}-security."
+  vars:
+    _verify_apt_security_mirror: "{{ ubuntu_mirror_security | regex_replace('/$', '') }}"
 
 # Functional check: the mirror is reachable and serves valid metadata.
 - name: _verify | Apt-get update succeeds against configured mirror
