@@ -10,6 +10,80 @@
   when: qemu_test_minimal | default(false)
   ansible.builtin.meta: end_play
 
+# --- chroot.sh apt-sources reset (universal) ---
+#
+# chroot.sh writes sources.list twice: once with $UBUNTU_MIRROR (Nexus
+# during the build for fast cached fetches) and once at the very end
+# with $UBUNTU_MIRROR_UPSTREAM so the at-rest image isn't pinned to a
+# Nexus-internal URL someone deploying to a new site can't reach. A
+# regression where the final reset gets skipped would silently ship
+# images with build-time URLs -- works on lab, fails everywhere else.
+#
+# testrole.py skips the mirrors prelude for _packer
+# (_SKIP_MIRRORS_PRELUDE_ROLES) so the VM stays in its packer-shipped
+# state and these asserts see what chroot.sh actually wrote, not what
+# the prelude rewrote on top.
+
+- name: _verify | Slurp packer-shipped /etc/apt/sources.list
+  ansible.builtin.slurp:
+    src: /etc/apt/sources.list
+  register: _packer_verify_sources_list
+
+- name: _verify | Decode sources.list + resolve expected upstream URLs
+  ansible.builtin.set_fact:
+    _packer_verify_sources_list_text: "{{ _packer_verify_sources_list.content | b64decode }}"
+    # Upstream URLs match packer/qemu.pkr.hcl's arch_table.upstream_*
+    # entries; chroot.sh inherits them via $UBUNTU_MIRROR_UPSTREAM /
+    # $UBUNTU_MIRROR_SECURITY_UPSTREAM. Hardcoded here rather than
+    # pulled from group_vars/all.yml's mirror_apt_* (which resolve via
+    # nexus_url) so the assertion is a true upstream-or-bust check
+    # independent of the test environment's nexus setting.
+    _packer_verify_upstream_archive: "{{ 'http://ports.ubuntu.com/ubuntu-ports' if ansible_architecture == 'aarch64' else 'http://archive.ubuntu.com/ubuntu' }}"
+    _packer_verify_upstream_security: "{{ 'http://ports.ubuntu.com/ubuntu-ports' if ansible_architecture == 'aarch64' else 'http://security.ubuntu.com/ubuntu' }}"
+
+- name: _verify | sources.list points at upstream Ubuntu mirrors
+  ansible.builtin.assert:
+    that:
+      - _packer_verify_upstream_archive in _packer_verify_sources_list_text
+      - _packer_verify_upstream_security in _packer_verify_sources_list_text
+    fail_msg: >-
+      /etc/apt/sources.list missing upstream URL
+      ({{ _packer_verify_upstream_archive }} and/or
+      {{ _packer_verify_upstream_security }}) -- chroot.sh's final
+      write_sources_list with $UBUNTU_MIRROR_UPSTREAM didn't run or
+      didn't land; shipped image is pinned to a build-time URL.
+
+- name: _verify | sources.list doesn't carry the build-time Nexus URL
+  ansible.builtin.assert:
+    that:
+      - "'nexus' not in _packer_verify_sources_list_text"
+    fail_msg: >-
+      /etc/apt/sources.list contains 'nexus' -- chroot.sh's final
+      upstream reset got skipped, image is shipping with build-time
+      mirror URLs and won't apt-update at sites without Nexus access.
+
+- name: _verify | sources.list mentions every expected suite
+  ansible.builtin.assert:
+    that:
+      - item in _packer_verify_sources_list_text
+    fail_msg: "/etc/apt/sources.list missing suite '{{ item }}'."
+  loop:
+    - "{{ ansible_distribution_release }}"
+    - "{{ ansible_distribution_release }}-updates"
+    - "{{ ansible_distribution_release }}-backports"
+    - "{{ ansible_distribution_release }}-security"
+
+- name: _verify | sources.list mentions every expected component
+  ansible.builtin.assert:
+    that:
+      - item in _packer_verify_sources_list_text
+    fail_msg: "/etc/apt/sources.list missing component '{{ item }}'."
+  loop:
+    - main
+    - restricted
+    - universe
+    - multiverse
+
 # --- ESP fundamentals (universal across box / lab / pug) ---
 
 - name: _verify | Stat firmware-fallback rEFInd
