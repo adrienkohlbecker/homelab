@@ -186,58 +186,47 @@
       (or defaults), which can silently change the kernel cmdline at
       boot.
 
-- name: _verify | Read rpool properties
-  ansible.builtin.command: >-
-    zpool get -H -o property,value
-    ashift,autotrim,bootfs,compatibility,health rpool
+# Each property is checked with its own `zpool get`/`zfs get`
+# invocation so the failing iteration names the exact property +
+# observed value in the task output, instead of dumping a whole
+# dict and leaving the reader to spot the mismatch. The "want"
+# dicts double as the spec -- adding a new property to check is
+# one line.
+- name: _verify | rpool zpool properties
+  vars:
+    _packer_zpool_want:
+      ashift: "12"
+      autotrim: "on"
+      bootfs: "rpool/ROOT/{{ ansible_distribution_release }}"
+      compatibility: "openzfs-2.1-linux"
+      health: "ONLINE"
+  ansible.builtin.command:
+    argv: [ zpool, get, -H, -o, value, "{{ item.key }}", rpool ]
   changed_when: false
   become: true
-  register: _packer_verify_zpool_props
+  loop: "{{ _packer_zpool_want | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}={{ item.value }}"
+  register: _packer_verify_zpool_prop
+  failed_when: (_packer_verify_zpool_prop.stdout | trim) != item.value
 
-- name: _verify | rpool ashift / autotrim / bootfs / compatibility / health
+- name: _verify | rpool root-dataset properties
   vars:
-    # zpool get -H -o property,value emits tab-separated lines.
-    # split() with no arg tokenises on any whitespace (including tab)
-    # and discards empty fields; the properties here all have
-    # single-token values so the result is an unambiguous [k, v] pair.
-    _props: >-
-      {{ dict(_packer_verify_zpool_props.stdout_lines | map('split')) }}
-  ansible.builtin.assert:
-    that:
-      - _props.ashift == '12'
-      - _props.autotrim == 'on'
-      - _props.bootfs == 'rpool/ROOT/' ~ ansible_distribution_release
-      - _props.compatibility == 'openzfs-2.1-linux'
-      - _props.health == 'ONLINE'
-    fail_msg: >-
-      rpool property mismatch: {{ _props }}.
-      Want: ashift=12, autotrim=on,
-      bootfs=rpool/ROOT/{{ ansible_distribution_release }},
-      compatibility=openzfs-2.1-linux, health=ONLINE.
-
-- name: _verify | Read rpool root-dataset properties
-  ansible.builtin.command: >-
-    zfs get -H -o property,value
-    compression,xattr,acltype,atime,relatime rpool
+    _packer_zfs_want:
+      compression: "zstd"
+      xattr: "sa"
+      acltype: "posix"
+      atime: "on"
+      relatime: "on"
+  ansible.builtin.command:
+    argv: [ zfs, get, -H, -o, value, "{{ item.key }}", rpool ]
   changed_when: false
   become: true
-  register: _packer_verify_zfs_rpool_props
-
-- name: _verify | rpool dataset defaults (compression / xattr / acltype / atime / relatime)
-  vars:
-    _props: >-
-      {{ dict(_packer_verify_zfs_rpool_props.stdout_lines | map('split')) }}
-  ansible.builtin.assert:
-    that:
-      - _props.compression == 'zstd'
-      - _props.xattr == 'sa'
-      - _props.acltype == 'posix'
-      - _props.atime == 'on'
-      - _props.relatime == 'on'
-    fail_msg: >-
-      rpool dataset properties mismatch: {{ _props }}.
-      Want: compression=zstd, xattr=sa, acltype=posix, atime=on,
-      relatime=on.
+  loop: "{{ _packer_zfs_want | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}={{ item.value }}"
+  register: _packer_verify_zfs_prop
+  failed_when: (_packer_verify_zfs_prop.stdout | trim) != item.value
 
 # --- swap active (universal) ---
 #
