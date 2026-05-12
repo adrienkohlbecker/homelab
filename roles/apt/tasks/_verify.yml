@@ -4,26 +4,29 @@
 # (apt-cache policy) references our mirror, and `apt-get update`
 # succeeds against it.
 
-- name: _verify | Slurp 80-retries
-  ansible.builtin.slurp:
-    src: /etc/apt/apt.conf.d/80-retries
+# apt-config dump reports apt's parsed view; a malformed 80-retries
+# (missing semicolon, quoting glitch) shows up as a missing key here
+# even though a slurp + substring check on the file would still pass.
+- name: _verify | Read apt's parsed retry config
+  ansible.builtin.command: apt-config dump Acquire::Retries
+  changed_when: false
   register: _verify_apt_retries
 
-- name: _verify | 80-retries pins Acquire::Retries
+- name: _verify | apt parses Acquire::Retries=3
   ansible.builtin.assert:
     that:
-      - '''Acquire::Retries "3";'' in (_verify_apt_retries.content | b64decode)'
-    fail_msg: 80-retries missing 'Acquire::Retries "3";'
+      - '''Acquire::Retries "3";'' in _verify_apt_retries.stdout_lines'
+    fail_msg: apt didn't load Acquire::Retries=3 from 80-retries.
 
-- name: _verify | 80-retries pins Retries::Delay on noble+ only
+- name: _verify | apt parses Acquire::Retries::Delay on noble+ only
   ansible.builtin.assert:
     that:
       - >-
-        ('Acquire::Retries::Delay "true";' in (_verify_apt_retries.content | b64decode))
+        ('Acquire::Retries::Delay "true";' in _verify_apt_retries.stdout_lines)
         == (ansible_distribution_release != "jammy")
     fail_msg: >-
-      Retries::Delay presence doesn't match release
-      (jammy must omit, noble+ must include).
+      Acquire::Retries::Delay presence in apt's parsed config
+      doesn't match release (jammy must omit, noble+ must include).
 
 - name: _verify | Stat apt sources files
   ansible.builtin.stat:
