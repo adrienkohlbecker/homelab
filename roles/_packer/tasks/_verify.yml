@@ -290,35 +290,67 @@
       bare-metal with unfamiliar controllers/NICs).
 
 # chroot.sh holds grub* before installing linux-generic so apt doesn't
-# pull grub-pc/grub-efi-amd64/etc via the Recommends alternation. If
-# the holds were silently dropped (apt-mark unhold somewhere, dpkg
-# state surgery during a kernel upgrade), a future apt upgrade could
-# pull a grub package back in, install its post-install hook, and
-# fight with rEFInd at boot. Match any grub-prefixed held package --
-# chroot.sh's glob is intentionally future-grub-variant-tolerant.
+# pull grub-pc/grub-efi-amd64/etc via the Recommends alternation. The
+# safety net (apt-mark hold) is a *mechanism*; the invariant we care
+# about is the *outcome* -- no grub package is actually installed.
+# Assert the outcome directly: a future Recommends churn could pull
+# in a grub variant the existing hold glob didn't catch, and a holds-
+# only check would pass while the invariant silently regressed.
 #
-# dpkg --get-selections rather than apt-mark showhold because the
-# latter depends on apt's cache contents -- _test/mirrors rewrites
-# sources to Nexus before _verify runs, and apt-mark filters its
-# output by what's currently in the cache. dpkg state is mirror-
-# independent and survives sources.list churn.
-- name: _verify | dpkg selections for grub*
-  ansible.builtin.command: dpkg --get-selections 'grub*'
+# dpkg-query rather than `apt list --installed` because the latter
+# depends on apt's cache (which _test/mirrors rewrites to Nexus before
+# _verify runs). dpkg state is mirror-independent. `${db:Status-Status}`
+# is the install state proper ("installed" / "not-installed" /
+# "config-files" / ...), distinct from selection state ("install" /
+# "hold" / "deinstall" / "purge") -- a held-but-not-installed package
+# has Status-Status=not-installed, which we want, while an installed-
+# and-held package has Status-Status=installed, which we want to fail.
+- name: _verify | dpkg install status for grub*
+  ansible.builtin.command: dpkg-query -W -f='${binary:Package} ${db:Status-Status}\n' 'grub*'
   changed_when: false
   failed_when: false  # exits 1 when the pattern matches nothing
-  register: _packer_verify_grub_selections
+  register: _packer_verify_grub_status
 
-- name: _verify | grub* packages have selection=hold
+- name: _verify | No grub* package is installed
   ansible.builtin.assert:
     that: >-
-      _packer_verify_grub_selections.stdout_lines
-      | select('search', '\\bhold$')
-      | list | length > 0
+      _packer_verify_grub_status.stdout_lines
+      | select('search', '\\sinstalled$')
+      | list | length == 0
     fail_msg: >-
-      No grub-prefixed packages have selection=hold in dpkg --
-      chroot.sh's apt-mark hold 'grub*' didn't take effect or was
-      cleared, leaving future apt operations free to install grub
-      and create a boot-loader conflict with rEFInd.
+      A grub-prefixed package is in installed state --
+      chroot.sh's `apt-mark hold 'grub*'` either didn't take effect
+      or a future Recommends pulled in a variant the glob didn't
+      cover. Installed grub will fight rEFInd at boot.
+      Offending: {{ _packer_verify_grub_status.stdout_lines
+                    | select('search', '\\sinstalled$') | list }}
+
+# The check above is a snapshot ("nothing grub is installed right
+# now"). The hold is a *mechanism* meant to block future installs;
+# verify it functionally by asking apt to install a grub package in
+# dry-run mode. With -y and no --allow-change-held-packages, apt
+# exits non-zero on held-package changes. Picking grub-pc because
+# it's the bare-metal x86 grub variant linux-generic Recommends
+# alongside grub-efi-amd64; both arches have it in the archive.
+- name: _verify | Apt refuses to install grub-pc (dry-run)
+  ansible.builtin.command: apt-get install --simulate --yes --no-install-recommends grub-pc
+  changed_when: false
+  failed_when: false
+  become: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  register: _packer_verify_apt_grub_dryrun
+
+- name: _verify | Apt blocked the dry-run install (rc != 0)
+  ansible.builtin.assert:
+    that: _packer_verify_apt_grub_dryrun.rc != 0
+    fail_msg: >-
+      `apt-get install --simulate -y grub-pc` succeeded (rc=0) --
+      the hold safety net isn't blocking future grub installs.
+      Held packages under -y should error with "Held packages were
+      changed and -y was used without --allow-change-held-packages".
+      stdout: {{ _packer_verify_apt_grub_dryrun.stdout }}
+      stderr: {{ _packer_verify_apt_grub_dryrun.stderr }}
 
 # --- sshd password-auth lockdown ---
 #
