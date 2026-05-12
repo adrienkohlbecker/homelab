@@ -6,19 +6,15 @@
 # installs at /etc/systemd/user (host-wide user-default) and reloads the
 # named user's user manager (which must already be lingered).
 #
-# Module dispatch: derived from systemd_unit_src's suffix — *.j2 → template,
-# anything else → copy. Caller passes the source filename as it sits under
-# templates/ or files/ (foo.service.j2 or foo.service); the role strips .j2
-# for the on-disk dest. systemd_unit_dest overrides the dest path (used by
-# drop-ins to land at <unit>.d/override.conf). The legacy copy.yml /
-# template.yml wrappers preset _systemd_unit_module and pass src without
-# the .j2 suffix; the wrappers and the Write task below keep that working
-# until the migration is complete.
+# Module dispatch: derived from systemd_unit_src's suffix — *.j2 → template
+# (loaded from the calling role's templates/), anything else → copy (from
+# files/). The role strips .j2 for the on-disk dest. systemd_unit_dest
+# overrides the dest path (used by drop-ins to land at <unit>.d/override.conf).
 #
 # Two set_fact tasks because ansible's templating engine resolves all
 # keys in a single set_fact concurrently — a key can't read a sibling
 # defined in the same task. Primitives (caller-var defaulting) first,
-# derived facts (scope/dir/module) second.
+# derived facts (scope/dir) second.
 - name: Resolve caller defaults for {{ systemd_unit_src }}
   set_fact:
     _systemd_unit_user: "{{ systemd_unit_user | default('root') }}"
@@ -29,12 +25,6 @@
   set_fact:
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_dir: "{{ '/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user' }}"
-
-# Deliberately NOT set_fact'd: a cached _systemd_unit_module from a previous
-# call would persist as a host fact within the play and override the
-# task-var the next wrapper passes (set_fact precedence beats import_tasks
-# task vars). Caller-supplied _systemd_unit_module (from copy.yml /
-# template.yml) is still respected, just consumed inline below.
 
 # Linger has to be on for user-scope installs: without it the named
 # user's systemd manager isn't running between logins, so daemon-reload
@@ -79,27 +69,19 @@
 
 - name: Install systemd unit
   block:
-    # `action:` + `args:` dispatches to copy or template based on _module.
-    # _module is resolved task-locally (NOT via set_fact — see preamble note)
-    # from either the legacy wrapper's _systemd_unit_module override or the
-    # src extension. Keeping one install task here means the validate +
-    # rescue logic below is a single source of truth — used to be ~90 lines
-    # duplicated across copy.yml and template.yml. The mapping form of
-    # `action:` is deprecated in ansible-core 2.23 (use string `action:`
-    # with a separate `args:` block).
-    #
-    # The conditional .j2 append on src is a transitional shim for the
-    # legacy copy.yml / template.yml entrypoints: those pass src without
-    # the .j2 suffix and rely on the wrapper's _systemd_unit_module=template
-    # to know to look in templates/. New callers passing foo.service.j2
-    # directly fall through with no append.
+    # `action:` + `args:` dispatches to copy or template. _module is resolved
+    # task-locally (not via set_fact, which would persist as a host fact and
+    # poison the next call's dispatch). Keeping the install task here means
+    # the validate + rescue logic below is a single source of truth. The
+    # mapping form of `action:` is deprecated in ansible-core 2.23, so the
+    # string form with a separate `args:` block is used.
     - name: Write the unit file ({{ _module }})
       when: _systemd_unit_condition
       vars:
-        _module: "{{ _systemd_unit_module | default('template' if systemd_unit_src.endswith('.j2') else 'copy') }}"
+        _module: "{{ 'template' if systemd_unit_src.endswith('.j2') else 'copy' }}"
       action: "{{ _module }}"
       args:
-        src: "{{ systemd_unit_src }}{{ '.j2' if (_module == 'template' and not systemd_unit_src.endswith('.j2')) else '' }}"
+        src: "{{ systemd_unit_src }}"
         dest: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
         owner: root
         group: root

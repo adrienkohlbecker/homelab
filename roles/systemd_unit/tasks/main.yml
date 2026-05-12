@@ -1,3 +1,3 @@
-# systemd_unit is a helper role accessed only via `tasks_from: {template,copy,service}`.
+# systemd_unit is a helper role accessed only via `tasks_from: {install,dropin,service}`.
 # main.yml exists so testrole.py can target this role; the actual logic lives
 # in the named subtask files and the verification scenarios in _verify.yml.
