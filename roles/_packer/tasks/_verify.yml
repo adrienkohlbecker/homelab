@@ -47,16 +47,20 @@
     src: /boot/efi/EFI/refind/refind.conf
   register: _packer_verify_refind_conf
 
+- name: _verify | Decode refind.conf once for the asserts below
+  ansible.builtin.set_fact:
+    _packer_verify_refind_conf_text: "{{ _packer_verify_refind_conf.content | b64decode }}"
+
 - name: _verify | ZBM menuentries + default_selection + dont_scan_dirs in refind.conf
   ansible.builtin.assert:
     that:
       - >-
-        'default_selection "Ubuntu (ZBM)"' in (_packer_verify_refind_conf.content | b64decode)
+        'default_selection "Ubuntu (ZBM)"' in _packer_verify_refind_conf_text
       - >-
-        'menuentry "Ubuntu (ZBM)"' in (_packer_verify_refind_conf.content | b64decode)
+        'menuentry "Ubuntu (ZBM)"' in _packer_verify_refind_conf_text
       - >-
-        'menuentry "Ubuntu (ZBM Menu)"' in (_packer_verify_refind_conf.content | b64decode)
-      - "'/EFI/ZBM' in (_packer_verify_refind_conf.content | b64decode)"
+        'menuentry "Ubuntu (ZBM Menu)"' in _packer_verify_refind_conf_text
+      - "'/EFI/ZBM' in _packer_verify_refind_conf_text"
     fail_msg: "refind.conf missing expected ZBM menuentries / default_selection / dont_scan_dirs"
 
 # --- aarch64: direct EFI-stub boot path + kernel-install hook ---
