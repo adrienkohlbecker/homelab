@@ -1,0 +1,116 @@
+# Functional checks for the certbot role. The role's main.yml fails
+# loudly if the certbot subprocess errors, but that doesn't catch
+# regressions like "wrong SANs", "snakeoil left from a sibling _setup
+# masquerading as the real cert", or "x509check.conf.j2 broke" --
+# x509check.conf is rendered from roles/netdata/tasks/main.yml so a
+# break only surfaces on the netdata test. The import_tasks: netdata.yml
+# at the bottom pulls that path into certbot's own coverage.
+
+- name: _verify | Stat cert files for both domains
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/letsencrypt/live/{{ domain }}/privkey.pem
+    - /etc/letsencrypt/live/{{ domain }}/fullchain.pem
+    - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem
+    - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
+  register: _verify_certs
+  become: true
+
+- name: _verify | Cert files exist for both domains
+  assert:
+    that:
+      - item.stat.exists
+    fail_msg: "missing cert at {{ item.item }}"
+  loop: "{{ _verify_certs.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: _verify | Inspect issued certificates
+  community.crypto.x509_certificate_info:
+    path: /etc/letsencrypt/live/{{ item }}/fullchain.pem
+  loop:
+    - "{{ domain }}"
+    - "{{ inventory_hostname }}.{{ domain }}"
+  register: _verify_cert_info
+  become: true
+
+- name: _verify | Certificate SANs cover apex + wildcard
+  assert:
+    that:
+      - ("DNS:" + item.item) in item.subject_alt_name
+      - ("DNS:*." + item.item) in item.subject_alt_name
+    fail_msg: >-
+      cert for {{ item.item }} missing apex+wildcard SANs
+      (got {{ item.subject_alt_name }})
+  loop: "{{ _verify_cert_info.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+# Distinguishes "real LE cert" from snakeoil/self-signed left in place
+# by a sibling role's _setup at the same paths. Staging and prod have
+# different issuer shapes; pick the marker that's stable in each.
+- name: _verify | Certificate is from Let's Encrypt
+  assert:
+    that:
+      - >-
+        (not certbot_production_certificates and 'STAGING' in (item.issuer.commonName | default('')))
+        or (certbot_production_certificates and "Let's Encrypt" in (item.issuer.organizationName | default('')))
+    fail_msg: >-
+      cert for {{ item.item }} not issued by expected LE
+      (issuer={{ item.issuer }}, staging_expected={{ not certbot_production_certificates }})
+  loop: "{{ _verify_cert_info.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: _verify | Stat cloudflare credentials file
+  stat:
+    path: /etc/letsencrypt/cloudflare.ini
+  register: _verify_cf
+  become: true
+
+- name: _verify | Cloudflare credentials are 0600 root:root
+  assert:
+    that:
+      - _verify_cf.stat.exists
+      - _verify_cf.stat.mode == "0600"
+      - _verify_cf.stat.pw_name == "root"
+      - _verify_cf.stat.gr_name == "root"
+    fail_msg: "cloudflare.ini has wrong perms or owner ({{ _verify_cf.stat }})"
+
+- name: _verify | Stat nginx reload deploy-hook
+  stat:
+    path: /etc/letsencrypt/renewal-hooks/deploy/reload_nginx.sh
+  register: _verify_hook
+  become: true
+
+- name: _verify | Deploy-hook is installed and executable
+  assert:
+    that:
+      - _verify_hook.stat.exists
+      - _verify_hook.stat.mode == "0755"
+    fail_msg: "reload_nginx.sh missing or wrong mode ({{ _verify_hook.stat }})"
+
+# Cover the cross-role coupling: roles/netdata/tasks/main.yml calls
+# into roles/certbot/tasks/netdata.yml, so a break in x509check.conf.j2
+# would otherwise only surface on the netdata test. netdata_restart is
+# false because the harness installed netdata with policy_rc_d=101 in
+# _setup.yml -- the unit isn't running, and restarting would be a no-op
+# noise either way.
+- name: _verify | Render netdata x509check config
+  import_tasks: netdata.yml
+  vars:
+    netdata_restart: false
+
+- name: _verify | Read rendered x509check config
+  slurp:
+    src: /etc/netdata/go.d/x509check.conf
+  register: _verify_x509check
+  become: true
+
+- name: _verify | x509check references both cert paths
+  assert:
+    that:
+      - "'/etc/letsencrypt/live/' + domain + '/fullchain.pem' in (_verify_x509check.content | b64decode)"
+      - "'/etc/letsencrypt/live/' + inventory_hostname + '.' + domain + '/fullchain.pem' in (_verify_x509check.content | b64decode)"
+    fail_msg: x509check.conf didn't render both cert paths
