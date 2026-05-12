@@ -34,16 +34,17 @@ from utils import CommandFailedException, IdempotenceFailedException, cancel_on_
 _BENCHMARK = False
 _PHASE_TIMINGS: list[tuple[str, float]] = []
 
-# Roles that self-test the test prelude's own machinery: they configure
-# what _mirrors.yml configures (apt sources today; pip/uv/podman
-# registries in the future if they're ever extracted to dedicated
-# roles). Routing them through the Nexus rewrite the prelude installs
-# would mean the role's _verify.yml asserts against Nexus URLs that
-# came from the prelude, not against the upstream URLs the role's
-# templates actually produce on a prod box (where nexus_url is empty
-# by default). Force --upstream-mirrors so the role exercises its real
-# contract.
-_FORCE_UPSTREAM_MIRRORS_ROLES = frozenset({"apt"})
+# Roles whose own job is to configure what _mirrors.yml configures.
+# For these, running the prelude first means the prelude does the
+# transition (packer's shipped upstream sources -> nexus URLs) and the
+# role under test becomes a no-op idempotency check that asserts
+# against the prelude's output, never exercising the role's actual
+# mutation. Skip the prelude so the role itself drives the transition
+# and _verify.yml catches a regression where the role doesn't actually
+# rewrite sources. DNS for nexus.lab.fahm.fr resolves via the host
+# resolver chain on-LAN (CI runner, lab dev hosts); off-LAN dev work
+# can pass --upstream-mirrors as the escape hatch.
+_SKIP_MIRRORS_PRELUDE_ROLES = frozenset({"apt"})
 
 
 @contextlib.asynccontextmanager
@@ -233,9 +234,14 @@ async def run_test(
                         # /etc/pip.conf, /etc/uv/uv.toml. Routes everything
                         # through the lab Nexus when nexus_url is set
                         # (group_vars/test.yml), upstream when --upstream-mirrors
-                        # clears it.
-                        async with _phase("mirrors playbook"):
-                            await m.ansible_command(f"{m.workdir.name}/_mirrors.yml")
+                        # clears it. Skipped when testing a role whose own job
+                        # is to configure these things (see
+                        # _SKIP_MIRRORS_PRELUDE_ROLES).
+                        if m.role in _SKIP_MIRRORS_PRELUDE_ROLES:
+                            print_line(f"Skipping mirrors prelude: {m.role!r} is the role that configures it")
+                        else:
+                            async with _phase("mirrors playbook"):
+                                await m.ansible_command(f"{m.workdir.name}/_mirrors.yml")
 
                         if m.machine == "minimal":
                             # Fixes systemd-analyze validation error:
@@ -317,10 +323,6 @@ def main() -> int:
     """CLI entry point for running a single role test."""
 
     parsed_args, pass_args = parse_args()
-
-    if parsed_args.role in _FORCE_UPSTREAM_MIRRORS_ROLES and not parsed_args.upstream_mirrors:
-        parsed_args.upstream_mirrors = True
-        print_line(f"Auto-enabling --upstream-mirrors so {parsed_args.role!r} runs against the URLs its templates actually emit on prod")
 
     if parsed_args.benchmark:
         global _BENCHMARK
