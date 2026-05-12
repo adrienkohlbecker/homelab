@@ -8,12 +8,16 @@
   tags:
     - compta
 
-- name: Set up compta system user, group, and config dir
+# compta is stateless: no config files, no on-host data. Skip the
+# /mnt/services/compta dir the helper creates by default; the unit
+# runs the image as compta:compta and bind-mounts nothing.
+- name: Set up compta system user and group
   import_role:
     name: service_user
     tasks_from: user
   vars:
     service_user_name: compta
+    service_user_config_dir: false
   tags:
     - compta
 
