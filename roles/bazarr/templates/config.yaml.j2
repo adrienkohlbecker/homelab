@@ -108,9 +108,10 @@ general:
   use_postprocessing: false
   use_postprocessing_threshold: false
   use_postprocessing_threshold_movie: false
-  use_radarr: true
+{# bazarr's utilities/analytics.py instantiates EventTracker() at import time, which synchronously hits sonarr+radarr APIs (each at http_timeout) regardless of analytics.enabled. In the QEMU test variant those endpoints DNS-resolve but TCP-time-out, costing ~120s per startup. Flipping use_* off short-circuits version() so the tracker import returns fast. See notes/bazarr_test_blocking_imports.md. #}
+  use_radarr: {{ 'false' if qemu_test else 'true' }}
   use_scenename: true
-  use_sonarr: true
+  use_sonarr: {{ 'false' if qemu_test else 'true' }}
   utf8_encode: true
   wanted_search_frequency: 6
   wanted_search_frequency_movie: 6
@@ -210,7 +211,7 @@ radarr:
   full_update: Daily
   full_update_day: 6
   full_update_hour: 2
-  http_timeout: 60
+  http_timeout: 5
   ip: radarr.{{ inventory_hostname }}.{{ domain }}
   movies_sync: 60
   only_monitored: false
@@ -241,7 +242,7 @@ sonarr:
   full_update: Daily
   full_update_day: 6
   full_update_hour: 2
-  http_timeout: 60
+  http_timeout: 5
   ip: sonarr.{{ inventory_hostname }}.{{ domain }}
   only_monitored: false
   port: 443
