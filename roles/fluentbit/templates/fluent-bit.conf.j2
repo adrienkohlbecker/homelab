@@ -60,11 +60,21 @@
 [OUTPUT]
     Name              http
     Match             *
+{% if inventory_hostname in ['box', 'lab'] %}
+    # openobserve is co-located: skip nginx + public DNS + TLS and hit
+    # its published loopback port directly. Decouples fluent-bit's
+    # bootstrap from pihole/dnscrypt readiness (the upstream's
+    # getaddrinfo race during the 02:20 podman cycle stops being a
+    # thing) and removes the cert/handshake from the per-flush path.
+    Host              127.0.0.1
+    Port              {{ service_ports.openobserve }}
+{% else %}
     Host              openobserve.lab.{{ domain }}
     Port              443
-    URI               /api/default/{{ inventory_hostname }}/_json
     tls               on
     tls.verify        on
+{% endif %}
+    URI               /api/default/{{ inventory_hostname }}/_json
     Format            json
     Json_date_key     _timestamp
     Json_date_format  iso8601
