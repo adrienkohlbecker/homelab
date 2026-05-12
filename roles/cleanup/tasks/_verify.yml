@@ -4,12 +4,12 @@
 # asserts pass trivially; the value is regression coverage that catches
 # a future role transitively pulling any of them back in.
 
-- name: _verify | re-gather package facts
+- name: _verify | Re-gather package facts
   ansible.builtin.package_facts:
     manager: apt
   check_mode: false
 
-- name: _verify | assert cleanup target packages are absent
+- name: _verify | Assert cleanup target packages are absent
   ansible.builtin.assert:
     that:
       - item not in ansible_facts.packages
@@ -21,15 +21,18 @@
     - fwupd
     - os-prober
 
-- name: _verify | look for residual squashfs mounts (snap leftovers)
+- name: _verify | Look for residual squashfs mounts (snap leftovers)
   ansible.builtin.command:
     cmd: findmnt --noheadings --types squashfs
-  register: _verify_squashfs_mounts
+  register: cleanup_verify_squashfs_mounts
   changed_when: false
+  # findmnt exits 0 even when there are no matches (it reserves rc=1
+  # for actual errors), so we can't gate on rc — fall back to parsing
+  # stdout. failed_when: false keeps a true error from masking that.
   failed_when: false
 
-- name: _verify | assert no squashfs (snap) mounts remain
+- name: _verify | Assert no squashfs (snap) mounts remain
   ansible.builtin.assert:
     that:
-      - _verify_squashfs_mounts.stdout | trim | length == 0
-    fail_msg: "Residual snap mounts present:\n{{ _verify_squashfs_mounts.stdout }}"
+      - cleanup_verify_squashfs_mounts.stdout | trim | length == 0
+    fail_msg: "Residual snap mounts present:\n{{ cleanup_verify_squashfs_mounts.stdout }}"
