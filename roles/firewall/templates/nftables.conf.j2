@@ -39,7 +39,7 @@ table ip homelab {
         # assert the rule actually fired (matched by comment).
         tcp flags & (fin|syn|rst|ack) != syn counter drop comment "input non-syn drop"
 
-        # UDP allows. Source-scope what doesn't need WAN reach: 5053/
+        # DNS allows. Source-scope what doesn't need WAN reach: 5053/
         # 5333 are container DNS (consumers live on podman bridges); 5353
         # mDNS is link-local on the home LAN. dnscrypt only listens on
         # the default bridge gateway (10.88.0.1), but aardvark-dns binds
@@ -48,8 +48,11 @@ table ip homelab {
         # podman_bridge_pool prefix here. Without this second subnet,
         # the saddr scope rejects every cross-bridge container-name
         # lookup (paperless → redis, z2m → mosquitto) at INPUT before
-        # aardvark even sees them.
-        ip saddr {{ podman_default_network }} udp dport 5053 accept comment "dnscrypt-proxy (default bridge only)"
+        # aardvark even sees them. Accept TCP alongside UDP on 5053 so
+        # clients can fall back to TCP when a response would be
+        # UDP-truncated (pihole does this opportunistically); we kept it
+        # UDP-only originally and saw ~2 TCP drops/day from pihole.
+        ip saddr {{ podman_default_network }} meta l4proto { tcp, udp } th dport 5053 accept comment "dnscrypt-proxy (default bridge only, TCP+UDP)"
         ip saddr { {{ podman_default_network }}, {{ podman_bridge_pool }} } udp dport 5333 accept comment "aardvark-dns (post-DNAT from gateway:53, all podman bridges)"
         ip saddr {{ site_subnets.home }} udp dport 5353 accept comment "mDNS (home LAN)"
 
@@ -57,6 +60,15 @@ table ip homelab {
         # an attacker on a future LAN bridge can't speculatively send
         # to udp/51820 from inside.
         iifname "{{ ansible_default_ipv4.interface }}" udp dport 51820 accept comment "wireguard (WAN ingress only)"
+
+        # Transmission BitTorrent peer port — WAN-only, both TCP (peer
+        # wire protocol) and UDP (µTP + DHT). The UDM port-forwards
+        # 51413 to lab:51413; transmission's host listener (created by
+        # `--publish 0.0.0.0:51413` in transmission.service.j2) accepts
+        # both protocols. Without these rules, peers can find us via
+        # tracker announces but can't actually connect — visible as
+        # external SRC=… DPT=51413 drops in INPUT.
+        iifname "{{ ansible_default_ipv4.interface }}" meta l4proto { tcp, udp } th dport 51413 accept comment "transmission BT peers (WAN ingress)"
 
         # Mosh sessions originate from admin clients on the home LAN
         # or via wireguard, never from raw WAN.
@@ -66,6 +78,25 @@ table ip homelab {
         # Samba and nut are admin services scoped via the set.
         tcp dport { 22, 80, 443 } accept comment "SSH/HTTP/HTTPS"
         ip saddr @lan_admin_sources tcp dport { 445, 3493 } accept comment "Samba/nut (admin)"
+
+        # NetBIOS for nmbd (137 = name service, 138 = datagram). Same
+        # admin scope as Samba — these are the legacy SMB browsing
+        # broadcasts and only make sense from trusted LAN/wireguard.
+        # Most of the volume is lab's own nmbd announcements coming
+        # back through INPUT via broadcast loopback on both eth0
+        # (10.123.0.2) and wg0 (10.123.64.2); the rest is real SMB
+        # clients (MBP, pug) doing name resolution.
+        ip saddr @lan_admin_sources udp dport { 137, 138 } accept comment "NetBIOS (nmbd, admin)"
+
+        # Container access to NUT: homeassistant's NUT integration
+        # connects from its podman bridge IP (currently the mosquitto
+        # bridge) to lab's LAN IP at 3493. The admin rule above scopes
+        # by lan_admin_sources which intentionally excludes containers
+        # — broaden access here on port 3493 only (not 445; containers
+        # shouldn't reach Samba) for any podman bridge in the pool.
+        # Without this, HA's NUT integration silently fails — observed
+        # as ~300 SYN-retry drops/day at INPUT.
+        ip saddr {{ podman_bridge_pool }} tcp dport 3493 accept comment "nut (podman bridges, e.g. HA NUT integration)"
 
         # ICMP — only echo-request, rate-limited. Other ICMP types
         # come back as RELATED. Overflow drops silently rather than
@@ -79,6 +110,24 @@ table ip homelab {
         # so nothing on WAN / wg0 / podman bridges can inject proto
         # 112 packets to churn election state.
         iifname "{{ ansible_default_ipv4.interface }}" ip saddr {{ site_subnets.home }} ip protocol vrrp accept comment "keepalived (VRRP, LAN unicast)"
+
+        # LAN broadcast/discovery noise. Every entry here was identified
+        # from a 24h journal sweep of the catch-all log+drop below; each
+        # is recurring and benign, and silencing them keeps the log
+        # signal-to-noise high. Drop (not reject) to avoid ICMP-amplifying
+        # responses back at broadcast sources.
+        #   67    — DHCP DISCOVER from 0.0.0.0 (IoT devices booting, UDM
+        #           is the DHCP server, lab isn't)
+        #   1900  — SSDP/UPnP M-SEARCH (homeassistant doing UPnP
+        #           discovery on its podman bridge)
+        #   5351  — NAT-PMP (plex trying to auto-open ports; UDM doesn't
+        #           speak NAT-PMP, port forwards are manual)
+        #   10001 — UBNT discovery protocol; UniFi gateway broadcasts
+        #           4-byte `01 00 00 00` every ~10s on every VLAN it
+        #           has an interface in. ~6k/day. We don't run a UBNT
+        #           agent on this host
+        #   57621 — Spotify Connect LAN discovery (Adrien's MBP)
+        udp dport { 67, 1900, 5351, 10001, 57621 } drop comment "LAN broadcast/discovery noise — silenced"
 
         # Catch-all: log+drop UDP and non-TCP/UDP protocols silently
         # to avoid ICMP amplification (every spoofed UDP probe would
