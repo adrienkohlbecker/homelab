@@ -25,6 +25,18 @@
 # major version (jammy 3.x -> noble 4.x for podman, 2.1.x -> 2.2.x
 # for zfs), and we'd rather drive the restart explicitly through
 # the output fact than have apt half-restart things on its own.
+
+# backports_name is used verbatim in the pin file path AND as the
+# stem of the per-call set_fact name. Fail loud on anything that
+# wouldn't be a valid Ansible identifier rather than silently
+# translating ('foo-bar' would write /etc/apt/preferences.d/backports-
+# foo-bar but set foo_bar_backports_updated, an invisible split).
+- name: Validate backports_name shape
+  assert:
+    that:
+      - backports_name is match('^[A-Za-z0-9_]+$')
+    fail_msg: "backports_name must match [A-Za-z0-9_]+, got {{ backports_name | to_json }}"
+
 - name: Pin packages to noble (jammy) — {{ backports_name }}
   when: ansible_distribution_major_version == "22"
   template:
@@ -50,7 +62,9 @@
     - 'deb {{ ubuntu_mirror_security }} noble-security main restricted universe multiverse # backports'
 
 - name: Refresh apt cache after noble setup
-  when: backports_pin.changed or backports_noble_sources.changed
+  when:
+    - ansible_distribution_major_version == "22"
+    - backports_pin.changed or backports_noble_sources.changed
   apt:
     update_cache: true
   become: true
@@ -85,7 +99,9 @@
 # multiple backports imports run in the same play (the register
 # handle is reused on the next import). Mirrors systemd_unit's
 # *_result pattern — derive the fact name from an existing input
-# rather than taking another argument.
+# rather than taking another argument. The validate-shape assert
+# above is what lets us use backports_name verbatim here without a
+# regex_replace silently diverging from the pin file's path.
 - name: Record upgrade outcome for {{ backports_name }}
   set_fact:
-    "{{ backports_name | regex_replace('[^A-Za-z0-9_]', '_') }}_backports_updated": "{{ backports_upgrade.changed | default(false) }}"
+    "{{ backports_name }}_backports_updated": "{{ backports_upgrade.changed | default(false) }}"
