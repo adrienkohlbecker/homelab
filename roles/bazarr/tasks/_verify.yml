@@ -28,10 +28,22 @@
     or _verify_unit.status.ActiveState != "active"
   become: true
 
+# Negative probe first: confirms /api/* enforces the apikey. Pairs with the
+# auth'd probe below -- together they prove the apikey we templated is both
+# required by bazarr and the one it accepted. Without this, a future bug that
+# disabled apikey enforcement would let the auth'd probe pass on any key.
+- name: _verify | bazarr /api/system/status rejects unauth'd requests
+  uri:
+    url: http://localhost:{{ service_ports.bazarr }}/api/system/status
+    status_code: 401
+  register: _verify_http_unauth
+  retries: 30
+  delay: 2
+  until: _verify_http_unauth.status == 401
+
 # Authenticated probe -- proves the apikey we templated into config.yaml is
 # the one the running container accepted, not just one we wrote to disk.
-# Unauth'd hits on /api/system/status return 401, so 200+JSON here is the
-# end-to-end signal. Header form keeps the key out of journald.
+# Header form keeps the key out of journald.
 - name: _verify | bazarr answers /api/system/status with our apikey
   uri:
     url: http://localhost:{{ service_ports.bazarr }}/api/system/status
