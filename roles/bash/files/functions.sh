@@ -14,7 +14,7 @@ f_error() {
 
 # Print an error message to stderr and exit
 f_fail() {
-  echo "$@" >&2
+  f_error "$@"
   exit 1
 }
 
