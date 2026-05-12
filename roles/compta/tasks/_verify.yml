@@ -1,0 +1,26 @@
+- name: _verify | Compta user exists
+  command: getent passwd compta
+  changed_when: false
+  become: true
+
+- name: _verify | Compta.service is loaded and active
+  systemd:
+    name: compta
+  register: compta_verify_unit
+  failed_when: >-
+    compta_verify_unit.status.LoadState != "loaded"
+    or compta_verify_unit.status.ActiveState != "active"
+  become: true
+
+# Same probe as the container's health-cmd, run from the host. compta is
+# a slow-booting rails-ish app — the unit's health-start-period is 100s,
+# so retries here have to give it at least that long before failing.
+- name: _verify | Compta answers on its loopback port
+  uri:
+    url: http://localhost:4567/
+    status_code: 200
+  register: compta_verify_http
+  retries: 60
+  delay: 2
+  until: compta_verify_http.status == 200
+  become: true
