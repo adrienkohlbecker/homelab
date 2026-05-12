@@ -8,18 +8,13 @@ on:
         required: false
         default: ''
 
-# Shared with test-nightly.yml and packer-build.yml so reads/writes against
-# /mnt/scratch/qemu serialise. The harness writes per-run workdirs to a
-# host-mounted dir (--workdir-parent /lab-runtime-workdir, mapped to
-# /mnt/scratch/act_runner/lab-runtime-workdir on the host so qcow2
-# overlays + role copies have real disk space and don't ENOSPC the
-# container's writable overlay). The qcow2 artifact tree itself is
-# bind-mounted ro into test cells, and packer-build rewrites the qcow2s.
-# cancel-in-progress: false because every push gets its own clean run
-# with its own commit history.
-concurrency:
-  group: lab-qemu-artifacts
-  cancel-in-progress: false
+# Mutex on /mnt/scratch/qemu lives at the test-role job level (further
+# down), not workflow level: a workflow-level lock would block
+# wait-for-packer-build from polling for the same push's packer-build
+# completion (deadlock -- test holds the lock, packer-build can't run,
+# wait-for-packer-build never returns). The per-cell test-role lock
+# preserves the same "no qcow2 reads while packer-build rewrites"
+# guarantee while letting detect/wait/notify run free.
 
 # Force bash for all run: steps. Gitea Actions defaults to `sh` (dash)
 # in some configurations, which doesn't support `set -o pipefail` or
@@ -34,6 +29,7 @@ jobs:
     outputs:
       matrix: ${{ steps.detect.outputs.matrix }}
       cross_cut: ${{ steps.detect.outputs.cross_cut }}
+      packer_changed: ${{ steps.detect.outputs.packer_changed }}
     steps:
       - uses: actions/checkout@v4
         # 50 commits is enough for HEAD~1 plus a typical session of pushes;
@@ -57,8 +53,53 @@ jobs:
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
           MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
 
-  test-role:
+  wait-for-packer-build:
+    # When this push touched packer/** or mise-tasks/packer/** (the
+    # paths that trigger packer-build.yml), detect emits
+    # packer_changed=true and this job blocks test-role on packer-build
+    # finishing. Otherwise the _packer matrix cell could win the
+    # concurrency-queue race and read the qcow2 tree mid-rewrite.
+    # detect-roles emits packer_changed independently from
+    # _packer-in-matrix so edits to roles/_packer/ alone (no qcow2
+    # rebuild) don't trigger an 85-min wait for a packer-build that
+    # was never dispatched.
     needs: detect
+    if: needs.detect.outputs.packer_changed == 'true'
+    runs-on: lab-runtime
+    container:
+      image: lab-runtime:latest
+      options: --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
+    timeout-minutes: 90
+    steps:
+      - name: Wait for packer-build sentinel for this SHA
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          target=/mnt/scratch/qemu/_sentinels/complete-$SHA
+          deadline=$(( $(date +%s) + 85 * 60 ))
+          while [ ! -f "$target" ]; do
+            if [ "$(date +%s)" -gt "$deadline" ]; then
+              echo >&2 "Timed out waiting for $target after 85min --"
+              echo >&2 "packer-build for this SHA likely failed or wasn't dispatched."
+              exit 1
+            fi
+            sleep 15
+          done
+          echo "Found $target -- releasing test-role."
+
+  test-role:
+    # Reader half of the lab-qemu-artifacts mutex (packer-build is the
+    # writer). At job level rather than workflow level so
+    # wait-for-packer-build above doesn't hold the lock while polling
+    # the packer-build sentinel -- otherwise packer-build for this same
+    # push couldn't run, and the wait would deadlock.
+    concurrency:
+      group: lab-qemu-artifacts
+      cancel-in-progress: false
+    needs:
+      - detect
+      - wait-for-packer-build
     # Per-cell server-side filter. Gitea materialises the job DAG before
     # any job runs, so a `strategy.matrix.include: ${{ fromJson(needs...) }}`
     # form can't reach detect's output (matrix expansion happens too
@@ -69,7 +110,17 @@ jobs:
     # so skipped cells cost ~zero (no runner cycle, no container start).
     # Keep the matrix in sync with `mise run ci:gen-test-matrix`;
     # ci:lint-test-matrix flags drift in lint.
-    if: contains(fromJSON(needs.detect.outputs.matrix), matrix.spec)
+    #
+    # always() lets this cell evaluate even when wait-for-packer-build
+    # was skipped (its default behaviour when packer_changed=false);
+    # the (success || skipped) clause then filters out the genuine
+    # failure case (sentinel timeout) so test-role doesn't read against
+    # a stale or half-rebuilt qcow2 tree.
+    if: |
+      always()
+      && (needs.wait-for-packer-build.result == 'success'
+          || needs.wait-for-packer-build.result == 'skipped')
+      && contains(fromJSON(needs.detect.outputs.matrix), matrix.spec)
     runs-on: lab-runtime
     container:
       # The runs-on label resolves to lab-runtime:latest already, but
@@ -122,6 +173,7 @@ jobs:
           - "fancontrol:box"
           - "filebrowser:box"
           - "firewall:box"
+          - "fluentbit:box"
           - "getmail:box"
           - "gitea:box"
           - "hd_idle:box"
@@ -159,6 +211,7 @@ jobs:
           - "ntp:box"
           - "nut_monitor:box"
           - "nut_server:box"
+          - "openobserve:box"
           - "openproject:box"
           - "overseerr:box"
           - "paperless:box"
@@ -185,6 +238,7 @@ jobs:
           - "speedtest:box"
           - "ssh:box"
           - "ssh_root:box"
+          - "static_curl:box"
           - "subid:box"
           - "swap:box"
           - "systemd_unit:box"

@@ -63,3 +63,15 @@ jobs:
             args+=(--ubuntu "$PACKER_UBUNTU")
           fi
           mise run packer:build "${args[@]}"
+      - name: Mark build complete for waiters
+        # test.yml's wait-for-packer-build job polls this sentinel before
+        # letting the _packer test cell read the qcow2s. Sentinels live
+        # in a dedicated subdir (not next to the qcow2s) so the
+        # tmpfiles.d age-out rule in roles/act_runner doesn't mistakenly
+        # walk the artifact tree. Only fires on a green Build step: a
+        # failed build leaves no sentinel, the waiter times out, the
+        # _packer cell skips rather than asserting against half-rebuilt
+        # artifacts.
+        run: |
+          mkdir -p /mnt/scratch/qemu/_sentinels
+          touch "/mnt/scratch/qemu/_sentinels/complete-${{ github.sha }}"
