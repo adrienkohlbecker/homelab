@@ -239,6 +239,30 @@
       Want: compression=zstd, xattr=sa, acltype=posix, atime=on,
       relatime=on.
 
+# --- swap active (universal) ---
+#
+# Single-disk variants format the partition-2 swap directly; the lab
+# variant builds a RAID0 mdadm-swap across all partition-2s. Either
+# way chroot.sh writes the fstab entry and systemd-fstab-generator
+# activates it at boot. We test the live `swapon` state rather than
+# parsing fstab because that exercises the full path (fstab entry +
+# device resolution + mkswap signature + systemd activation); a
+# broken fstab entry would leave swap inactive at runtime and the
+# kernel would silently OOM under memory pressure instead of paging.
+- name: _verify | Read active swap devices
+  ansible.builtin.command: swapon --show=NAME --noheadings
+  changed_when: false
+  register: _packer_verify_swapon
+
+- name: _verify | At least one swap device is active
+  ansible.builtin.assert:
+    that: _packer_verify_swapon.stdout_lines | length > 0
+    fail_msg: >-
+      `swapon --show` reports no active swap -- chroot.sh's fstab swap
+      entry didn't activate at boot (broken device path, missing
+      mkswap signature, or fstab entry dropped). Kernel will OOM under
+      memory pressure with no paging fallback.
+
 # --- chroot.sh post-debootstrap shape (universal) ---
 
 # chroot.sh sets MODULES=most in /etc/initramfs-tools/initramfs.conf
