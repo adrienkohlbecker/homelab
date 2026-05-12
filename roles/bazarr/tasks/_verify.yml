@@ -1,6 +1,8 @@
 - name: _verify | bazarr user exists
-  command: getent passwd bazarr
-  changed_when: false
+  getent:
+    database: passwd
+    key: bazarr
+    fail_key: true
   become: true
 
 - name: _verify | bazarr config dir exists
