@@ -1,0 +1,132 @@
+- name: _verify | f_error prints to stderr and exits 0
+  shell: |
+    source /usr/local/lib/functions.sh
+    f_error "err-message"
+    echo "still-running"
+  args:
+    executable: /bin/bash
+  register: _verify_f_error
+  changed_when: false
+
+- name: _verify | f_error assertions
+  assert:
+    that:
+      - _verify_f_error.rc == 0
+      - "'err-message' in _verify_f_error.stderr"
+      - "'err-message' not in _verify_f_error.stdout"
+      - "'still-running' in _verify_f_error.stdout"
+
+- name: _verify | f_fail prints to stderr and exits 1
+  shell: |
+    source /usr/local/lib/functions.sh
+    f_fail "fatal-message"
+    echo "should-not-run"
+  args:
+    executable: /bin/bash
+  register: _verify_f_fail
+  changed_when: false
+  failed_when: false
+
+- name: _verify | f_fail assertions
+  assert:
+    that:
+      - _verify_f_fail.rc == 1
+      - "'fatal-message' in _verify_f_fail.stderr"
+      - "'should-not-run' not in _verify_f_fail.stdout"
+
+- name: _verify | f_require_root succeeds as root
+  shell: |
+    source /usr/local/lib/functions.sh
+    f_require_root
+    echo "ok"
+  args:
+    executable: /bin/bash
+  register: _verify_require_root_ok
+  changed_when: false
+  become: true
+
+- name: _verify | f_require_root root assertions
+  assert:
+    that:
+      - _verify_require_root_ok.rc == 0
+      - "'ok' in _verify_require_root_ok.stdout"
+
+- name: _verify | f_require_root fails as non-root
+  shell: |
+    runuser -u nobody -- bash -c '
+      source /usr/local/lib/functions.sh
+      f_require_root
+      echo "should-not-run"
+    '
+  args:
+    executable: /bin/bash
+  register: _verify_require_root_fail
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | f_require_root non-root assertions
+  assert:
+    that:
+      - _verify_require_root_fail.rc == 1
+      - "'I require root' in _verify_require_root_fail.stderr"
+      - "'should-not-run' not in _verify_require_root_fail.stdout"
+
+- name: _verify | f_rescue continues past failures and records them in f_failed
+  shell: |
+    source /usr/local/lib/functions.sh
+    f_rescue false
+    f_rescue true
+    f_rescue ls /nonexistent-path-for-verify
+    echo "f_failed=$f_failed"
+  args:
+    executable: /bin/bash
+  register: _verify_f_rescue
+  changed_when: false
+
+- name: _verify | f_rescue assertions
+  assert:
+    that:
+      - _verify_f_rescue.rc == 0
+      - "'f_failed=1' in _verify_f_rescue.stdout"
+      - "'Error: false failed with exit 1' in _verify_f_rescue.stderr"
+      - "'Error: ls /nonexistent-path-for-verify failed with exit' in _verify_f_rescue.stderr"
+
+- name: _verify | f_trace echoes the shell-quoted command then runs it
+  shell: |
+    source /usr/local/lib/functions.sh
+    f_trace echo hello "two words"
+  args:
+    executable: /bin/bash
+  register: _verify_f_trace
+  changed_when: false
+
+- name: _verify | f_trace assertions
+  assert:
+    that:
+      - _verify_f_trace.rc == 0
+      - "'$ echo hello' in _verify_f_trace.stdout"
+      - "'hello two words' in _verify_f_trace.stdout"
+
+- name: _verify | F_DEBUGME enables xtrace to a log file
+  shell: |
+    set -euo pipefail
+    F_DEBUGME=1 bash -c 'source /usr/local/lib/functions.sh; echo traced-marker'
+    latest=$(ls -t /tmp/bash-*.log 2>/dev/null | head -1)
+    test -s "$latest"
+    grep -q "echo traced-marker" "$latest"
+    echo "log=$latest"
+  args:
+    executable: /bin/bash
+  register: _verify_f_debugme
+  changed_when: false
+
+- name: _verify | F_DEBUGME assertions
+  assert:
+    that:
+      - _verify_f_debugme.rc == 0
+      - "'log=/tmp/bash-' in _verify_f_debugme.stdout"
+
+- name: _verify | cleanup F_DEBUGME log files
+  shell: rm -f /tmp/bash-*.log
+  changed_when: false
