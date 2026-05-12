@@ -151,3 +151,33 @@ run = 'op run -- tofu "$@"'
 [tasks."ansible"]
 description = "ansible-playbook against site.yml (forwards args)"
 run = 'ansible-playbook site.yml "$@"'
+
+# The populate step (packer/artifacts symlink + .worktreeinclude copies +
+# mise trust) is factored into mise-tasks/worktree/populate so the same
+# logic runs from Claude Code's WorktreeCreate hook (.claude/settings.json).
+[tasks."worktree:add"]
+description = "Create .worktrees/<name>, populate shared state, mise trust, open VS Code"
+run = '''
+set -euo pipefail
+name="${1:?Usage: mise run worktree:add <name> [base]}"
+base="${2:-HEAD}"
+repo=$(git -C "{{config_root}}" worktree list --porcelain | awk '/^worktree / {print $2; exit}')
+wt="$repo/.worktrees/$name"
+git -C "$repo" worktree add -b "$name" "$wt" "$base"
+"$repo/mise-tasks/worktree/populate" "$wt"
+code --new-window "$wt"
+'''
+
+[tasks."worktree:rm"]
+description = "Remove a worktree and delete its branch"
+run = '''
+set -euo pipefail
+name="${1:?Usage: mise run worktree:rm <name> [git worktree remove args...]}"
+repo=$(git -C "{{config_root}}" worktree list --porcelain | awk '/^worktree / {print $2; exit}')
+git -C "$repo" worktree remove "$repo/.worktrees/$name" "${@:2}"
+git -C "$repo" branch -D "$name" 2>/dev/null || true
+'''
+
+[tasks."worktree:ls"]
+description = "List active git worktrees"
+run = "git worktree list"
