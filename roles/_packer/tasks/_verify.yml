@@ -106,6 +106,33 @@
           No NVRAM Boot#### entry pointing at /EFI/Linux/vmlinuz.efi —
           chroot.sh's aarch64 efibootmgr -c didn't run or didn't land
 
+    # chroot.sh registers the EFI-stub entry AFTER the rEFInd entries;
+    # `efibootmgr -c` prepends to BootOrder, so the Linux entry should
+    # end up first. If a future chroot.sh change flips ordering, or a
+    # third entry slips in front, default boot silently falls through
+    # to rEFInd -> ZBM -> kexec — the aarch64/EDK2 panic path the
+    # EFI-stub direct boot was added to avoid.
+    - name: _verify | First BootOrder entry resolves to the EFI-stub Linux loader
+      vars:
+        _bo_first: >-
+          {{ (_packer_verify_efibootmgr.stdout_lines
+              | select('match', '^BootOrder:')
+              | first | default(''))
+              | regex_replace('^BootOrder:\s*', '')
+              | split(',') | first | default('') }}
+        _bo_first_line: >-
+          {{ _packer_verify_efibootmgr.stdout_lines
+             | select('match', '^Boot' ~ _bo_first ~ '\*?\s')
+             | first | default('') }}
+      ansible.builtin.assert:
+        that:
+          - _bo_first | length > 0
+          - "'EFI\\\\Linux\\\\vmlinuz.efi' in _bo_first_line"
+        fail_msg: >-
+          First BootOrder entry (Boot{{ _bo_first }}) is not the
+          /EFI/Linux/vmlinuz.efi loader — default boot would land on
+          rEFInd -> ZBM -> kexec, which panics on aarch64/EDK2.
+
     - name: _verify | Stat kernel-install hook (regular file)
       ansible.builtin.stat:
         path: /etc/kernel/postinst.d/zz-stage-efi-stub
