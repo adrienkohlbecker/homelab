@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 #MISE description="Rebase <name> onto master, fast-forward master, then worktree:rm <name>"
+#MISE alias="wt:merge"
 #USAGE arg "<name>" help="Branch and worktree name"
 # shellcheck disable=SC2154  # usage_name injected by mise from the #USAGE spec
 
