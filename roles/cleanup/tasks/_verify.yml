@@ -1,0 +1,35 @@
+# This role is purely removal — there's no positive "function" to
+# exercise — so this is the state-check exception CLAUDE.md allows.
+# On packer-built ZFS boxes none of these were ever installed and the
+# asserts pass trivially; the value is regression coverage that catches
+# a future role transitively pulling any of them back in.
+
+- name: _verify | re-gather package facts
+  ansible.builtin.package_facts:
+    manager: apt
+  check_mode: false
+
+- name: _verify | assert cleanup target packages are absent
+  ansible.builtin.assert:
+    that:
+      - item not in ansible_facts.packages
+    fail_msg: "{{ item }} is still installed after cleanup"
+  loop:
+    - ufw
+    - cloud-init
+    - snapd
+    - fwupd
+    - os-prober
+
+- name: _verify | look for residual squashfs mounts (snap leftovers)
+  ansible.builtin.command:
+    cmd: findmnt --noheadings --types squashfs
+  register: _verify_squashfs_mounts
+  changed_when: false
+  failed_when: false
+
+- name: _verify | assert no squashfs (snap) mounts remain
+  ansible.builtin.assert:
+    that:
+      - _verify_squashfs_mounts.stdout | trim | length == 0
+    fail_msg: "Residual snap mounts present:\n{{ _verify_squashfs_mounts.stdout }}"
