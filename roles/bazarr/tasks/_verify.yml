@@ -1,0 +1,46 @@
+- name: _verify | bazarr user exists
+  command: getent passwd bazarr
+  changed_when: false
+  become: true
+
+- name: _verify | bazarr config dir exists
+  stat:
+    path: /mnt/services/bazarr
+  register: _verify_config_dir
+  failed_when: not _verify_config_dir.stat.exists or _verify_config_dir.stat.pw_name != 'bazarr'
+  become: true
+
+- name: _verify | bazarr sqlite dir exists
+  stat:
+    path: /mnt/services/sqlite/bazarr
+  register: _verify_sqlite_dir
+  failed_when: not _verify_sqlite_dir.stat.exists or _verify_sqlite_dir.stat.pw_name != 'bazarr'
+  become: true
+
+- name: _verify | bazarr.service is loaded and active
+  systemd:
+    name: bazarr
+  register: _verify_unit
+  failed_when: >-
+    _verify_unit.status.LoadState != "loaded"
+    or _verify_unit.status.ActiveState != "active"
+  become: true
+
+# Authenticated probe -- proves the apikey we templated into config.yaml is
+# the one the running container accepted, not just one we wrote to disk.
+# Unauth'd hits on /api/system/status return 401, so 200+JSON here is the
+# end-to-end signal. Header form keeps the key out of journald.
+- name: _verify | bazarr answers /api/system/status with our apikey
+  uri:
+    url: http://localhost:{{ service_ports.bazarr }}/api/system/status
+    headers:
+      X-API-KEY: "{{ bazarr_api_key }}"
+    status_code: 200
+    return_content: true
+  register: _verify_http
+  retries: 30
+  delay: 2
+  until: _verify_http.status == 200
+  failed_when: >-
+    _verify_http.status != 200
+    or (_verify_http.json.data | default({})) | length == 0
