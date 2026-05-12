@@ -75,9 +75,9 @@
 - name: Install profilarr service
   import_role:
     name: systemd_unit
-    tasks_from: template
+    tasks_from: install
   vars:
-    systemd_unit_src: profilarr.service
+    systemd_unit_src: profilarr.service.j2
     systemd_unit_condition: "{{ not (ansible_check_mode and profilarr_user.changed) }}"
   tags:
     - profilarr

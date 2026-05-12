@@ -1,9 +1,9 @@
 - name: path | Install sort_ini service
   import_role:
     name: systemd_unit
-    tasks_from: template
+    tasks_from: install
   vars:
-    systemd_unit_src: sort_ini.service
+    systemd_unit_src: sort_ini.service.j2
     systemd_unit_dest: sort_ini_{{ sort_ini_escaped_path }}.service
 
 - name: path | Enable sort_ini.service
@@ -16,9 +16,9 @@
 - name: path | Install sort_ini.path
   import_role:
     name: systemd_unit
-    tasks_from: template
+    tasks_from: install
   vars:
-    systemd_unit_src: sort_ini.path
+    systemd_unit_src: sort_ini.path.j2
     systemd_unit_dest: sort_ini_{{ sort_ini_escaped_path }}.path
 
 - name: path | Enable sort_ini.path

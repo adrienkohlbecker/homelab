@@ -1,9 +1,9 @@
 - name: Install speedtest service
   import_role:
     name: systemd_unit
-    tasks_from: template
+    tasks_from: install
   vars:
-    systemd_unit_src: speedtest.service
+    systemd_unit_src: speedtest.service.j2
   tags:
     - speedtest
 

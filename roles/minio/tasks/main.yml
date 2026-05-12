@@ -106,8 +106,7 @@
     name: systemd_unit
     tasks_from: dropin
   vars:
-    systemd_unit_module: template
-    systemd_unit_src: override_service.conf
+    systemd_unit_src: override_service.conf.j2
     systemd_unit_for: minio.service
     systemd_unit_condition: "{{ zfs_root }}"
   tags:
