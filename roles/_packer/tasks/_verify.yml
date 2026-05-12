@@ -176,19 +176,29 @@
 # pull a grub package back in, install its post-install hook, and
 # fight with rEFInd at boot. Match any grub-prefixed held package --
 # chroot.sh's glob is intentionally future-grub-variant-tolerant.
-- name: _verify | apt holds list
-  ansible.builtin.command: apt-mark showhold
+#
+# dpkg --get-selections rather than apt-mark showhold because the
+# latter depends on apt's cache contents -- _test/mirrors rewrites
+# sources to Nexus before _verify runs, and apt-mark filters its
+# output by what's currently in the cache. dpkg state is mirror-
+# independent and survives sources.list churn.
+- name: _verify | dpkg selections for grub*
+  ansible.builtin.command: dpkg --get-selections 'grub*'
   changed_when: false
-  register: _packer_verify_apt_holds
+  failed_when: false  # exits 1 when the pattern matches nothing
+  register: _packer_verify_grub_selections
 
-- name: _verify | grub* packages are held
+- name: _verify | grub* packages have selection=hold
   ansible.builtin.assert:
-    that: _packer_verify_apt_holds.stdout_lines | select('match', '^grub') | list | length > 0
+    that: >-
+      _packer_verify_grub_selections.stdout_lines
+      | select('search', '\\bhold$')
+      | list | length > 0
     fail_msg: >-
-      No grub-prefixed packages in `apt-mark showhold` — chroot.sh's
-      apt-mark hold 'grub*' didn't take effect, leaving future apt
-      operations free to install grub and create a boot-loader
-      conflict with rEFInd.
+      No grub-prefixed packages have selection=hold in dpkg --
+      chroot.sh's apt-mark hold 'grub*' didn't take effect or was
+      cleared, leaving future apt operations free to install grub
+      and create a boot-loader conflict with rEFInd.
 
 # --- aarch64: direct EFI-stub boot path + kernel-install hook ---
 
