@@ -12,13 +12,13 @@
   changed_when: false
   register: _verify_apt_retries
 
-- name: _verify | apt parses Acquire::Retries=3
+- name: _verify | Apt parses Acquire::Retries=3
   ansible.builtin.assert:
     that:
       - '''Acquire::Retries "3";'' in _verify_apt_retries.stdout_lines'
     fail_msg: apt didn't load Acquire::Retries=3 from 80-retries.
 
-- name: _verify | apt parses Acquire::Retries::Delay on noble+ only
+- name: _verify | Apt parses Acquire::Retries::Delay on noble+ only
   ansible.builtin.assert:
     that:
       - >-
