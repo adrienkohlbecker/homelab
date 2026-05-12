@@ -165,178 +165,6 @@
       loop_control:
         label: "{{ item.item }}"
 
-    # End-to-end exercise: trigger an apt-driven kernel transaction
-    # that fires the postinst.d hook, then prove EDK2 -> EFI-stub
-    # picks up a *different* /EFI/Linux/{vmlinuz.efi,initrd} on
-    # reboot. The trigger differs per release because there's no
-    # one-size apt path that works on all of them:
-    #
-    # - jammy / noble: install the HWE meta-package. The HWE kernel
-    #   is newer than what packer shipped, the hook picks it as the
-    #   highest /boot kernel during postinst.d, and the reboot lands
-    #   on it.
-    #
-    # - resolute: 26.04 LTS GA has no HWE concept. We install the
-    #   second-newest linux-image-X.Y.Z-generic from the archive
-    #   (postinst.d fires the hook with no observable ESP change
-    #   since the running kernel is still the highest), then hide
-    #   the running kernel's /boot files behind dotfile names so the
-    #   hook's `/boot/vmlinuz-*` glob skips them, and re-run the hook
-    #   to stage the older kernel onto /EFI/Linux/. dpkg's "Aborting
-    #   removal of the running kernel" prerm guard blocks the cleaner
-    #   apt-purge path, so this is the closest substitute for an
-    #   apt-driven re-stage we can do without bypassing dpkg.
-    - name: _verify | Kernel-update hook + reboot exercise
-      block:
-        - name: _verify | Capture uname -r before kernel transaction
-          ansible.builtin.command: uname -r
-          changed_when: false
-          register: _packer_verify_uname_before
-
-        - name: _verify | Capture /EFI/Linux/{vmlinuz.efi,initrd} hashes before
-          ansible.builtin.stat:
-            path: "{{ item }}"
-            get_checksum: true
-            checksum_algorithm: sha256
-          loop:
-            - /boot/efi/EFI/Linux/vmlinuz.efi
-            - /boot/efi/EFI/Linux/initrd
-          register: _packer_verify_efi_linux_before
-          become: true
-
-        - name: _verify | HWE-kernel install (jammy/noble)
-          when: ansible_distribution_release in ["jammy", "noble"]
-          block:
-            - name: _verify | Install HWE kernel (triggers postinst.d hook)
-              ansible.builtin.apt:
-                name: linux-generic-hwe-{{ '22.04' if ansible_distribution_release == 'jammy' else '24.04' }}
-                state: present
-                update_cache: true
-              become: true
-              register: _packer_verify_hwe_install
-
-            - name: _verify | HWE install was a real install, not a no-op
-              ansible.builtin.assert:
-                that: _packer_verify_hwe_install.changed
-                fail_msg: >-
-                  apt reported no changes from `linux-generic-hwe-*` —
-                  HWE was already current, so the test premise is broken
-                  (the hook would never fire and there's nothing to reboot
-                  into)
-
-        - name: _verify | Older-kernel install + manual restage (resolute)
-          when: ansible_distribution_release == "resolute"
-          block:
-            - name: _verify | Refresh apt cache so madison sees the current archive
-              ansible.builtin.apt:
-                update_cache: true
-              become: true
-
-            # apt-cache madison lists every available version of the
-            # metapackage in the archive; the running kernel is the
-            # newest, so the second-newest is the downgrade target.
-            # The version string is "ABI.REVISION" (e.g. 7.0.0-15.15);
-            # the sed strips the trailing .REVISION (and any +N suffix)
-            # to leave just the ABI fragment that names the actual
-            # linux-image-X.Y.Z-N-generic package.
-            - name: _verify | Find second-newest linux-image-generic ABI in archive
-              ansible.builtin.shell:
-                cmd: |
-                  set -euo pipefail
-                  versions=$(apt-cache madison linux-image-generic |
-                             awk '$1=="linux-image-generic"{print $3}' |
-                             sort -uV)
-                  count=$(echo "$versions" | grep -c .)
-                  if [ "$count" -lt 2 ]; then
-                    echo >&2 "archive has only $count linux-image-generic version(s); need 2+ for a downgrade target (test premise broken)"
-                    exit 1
-                  fi
-                  ver=$(echo "$versions" | tail -2 | head -1)
-                  echo "$ver" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+-[0-9]+).*$/\1/'
-              register: _packer_verify_older_abi
-              changed_when: false
-
-            - name: _verify | Older-kernel ABI was found in the archive
-              ansible.builtin.assert:
-                that: _packer_verify_older_abi.stdout != ""
-                fail_msg: >-
-                  Older-kernel ABI extraction returned an empty string —
-                  the madison version didn't match the expected
-                  ABI.REVISION shape (sed strip failed)
-
-            - name: _verify | Install older specific kernel + modules (fires postinst.d hook)
-              ansible.builtin.apt:
-                name:
-                  - "linux-image-{{ _packer_verify_older_abi.stdout }}-generic"
-                  - "linux-modules-{{ _packer_verify_older_abi.stdout }}-generic"
-                state: present
-              become: true
-
-            # dpkg refuses to purge the running kernel ("Aborting
-            # removal of the running kernel"), so we can't apt-drive a
-            # postrm.d -> hook -> ESP-flip-to-older. Hide the running
-            # kernel's /boot files behind dotfile names — default shell
-            # globs don't match leading dots, so the hook's
-            # /boot/vmlinuz-* / /boot/initrd.img-* globs skip them —
-            # and re-run the hook directly. The older kernel is then
-            # the only candidate and gets staged onto /EFI/Linux/.
-            - name: _verify | Hide running kernel files from the hook's glob
-              ansible.builtin.shell:
-                cmd: |
-                  set -euo pipefail
-                  mv -f /boot/vmlinuz-{{ ansible_kernel }} /boot/.vmlinuz-{{ ansible_kernel }}
-                  mv -f /boot/initrd.img-{{ ansible_kernel }} /boot/.initrd.img-{{ ansible_kernel }}
-              become: true
-
-            - name: _verify | Re-run the hook to stage the older kernel onto /EFI/Linux/
-              ansible.builtin.command: /etc/kernel/postinst.d/zz-stage-efi-stub
-              become: true
-
-        - name: _verify | Capture /EFI/Linux/{vmlinuz.efi,initrd} hashes after
-          ansible.builtin.stat:
-            path: "{{ item }}"
-            get_checksum: true
-            checksum_algorithm: sha256
-          loop:
-            - /boot/efi/EFI/Linux/vmlinuz.efi
-            - /boot/efi/EFI/Linux/initrd
-          register: _packer_verify_efi_linux_after
-          become: true
-
-        - name: _verify | Hook restaged vmlinuz.efi and initrd onto the ESP
-          ansible.builtin.assert:
-            that:
-              - >-
-                _packer_verify_efi_linux_after.results[0].stat.checksum
-                != _packer_verify_efi_linux_before.results[0].stat.checksum
-              - >-
-                _packer_verify_efi_linux_after.results[1].stat.checksum
-                != _packer_verify_efi_linux_before.results[1].stat.checksum
-            fail_msg: >-
-              /EFI/Linux/vmlinuz.efi or /EFI/Linux/initrd unchanged
-              after the kernel transaction — postinst.d hook didn't
-              fire (or fired but failed silently)
-
-        - name: _verify | Reboot to pick up the swapped kernel
-          ansible.builtin.reboot:
-            reboot_timeout: 300
-          become: true
-
-        - name: _verify | Capture uname -r after reboot
-          ansible.builtin.command: uname -r
-          changed_when: false
-          register: _packer_verify_uname_after
-
-        - name: _verify | EDK2 -> EFI-stub booted into the swapped kernel
-          ansible.builtin.assert:
-            that: >-
-              _packer_verify_uname_after.stdout
-              != _packer_verify_uname_before.stdout
-            fail_msg: >-
-              uname -r is still {{ _packer_verify_uname_before.stdout }}
-              after reboot — firmware kept booting the previous kernel
-              even though the hook restaged a different one
-
 # --- x86_64: no /EFI/Linux staging (only the aarch64 branch creates it) ---
 
 - name: _verify | x86_64-only assertions
@@ -351,3 +179,181 @@
       ansible.builtin.assert:
         that: not _packer_verify_efi_linux_x86.stat.exists
         fail_msg: "/boot/efi/EFI/Linux/ shouldn't exist on x86_64 — only the aarch64 branch in chroot.sh creates it"
+
+# --- Functional kernel-update + reboot exercise (both arches) ---
+#
+# Trigger an apt-driven kernel transaction and reboot, then prove the
+# firmware boots into a *different* kernel. End-to-end exercise of the
+# live boot chain:
+#   x86_64:  firmware -> rEFInd -> ZBM (Components mode) -> kexec
+#   aarch64: firmware -> EFI-stub direct boot via /EFI/Linux/
+#
+# Per-release apt trigger differs (no one-size path works on all):
+#
+# - jammy/noble: install the HWE meta-package. The HWE kernel is newer
+#   than what packer shipped, becomes the highest in /boot/, and the
+#   reboot lands on it.
+#
+# - resolute: 26.04 LTS GA has no HWE concept. Install the second-newest
+#   linux-image-X.Y.Z-generic, then hide the running kernel's /boot
+#   files behind dotfile names so the "highest kernel" selection skips
+#   them (ZBM's glob on x86_64; the postinst.d hook's glob on aarch64).
+#   dpkg's "Aborting removal of the running kernel" prerm guard blocks
+#   the cleaner apt-purge path, so this is the closest substitute
+#   without bypassing dpkg.
+#
+# aarch64 also re-runs the postinst.d hook (after the hide) so
+# /EFI/Linux/ restages with the older kernel, and asserts the file
+# hashes flipped. That ESP-staging path is the aarch64-only mechanism
+# for the direct-EFI-stub workaround documented at chroot.sh's top.
+- name: _verify | Kernel-update + reboot exercise
+  block:
+    - name: _verify | Capture uname -r before kernel transaction
+      ansible.builtin.command: uname -r
+      changed_when: false
+      register: _packer_verify_uname_before
+
+    - name: _verify | Capture /EFI/Linux/{vmlinuz.efi,initrd} hashes before (aarch64)
+      when: ansible_architecture == "aarch64"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        get_checksum: true
+        checksum_algorithm: sha256
+      loop:
+        - /boot/efi/EFI/Linux/vmlinuz.efi
+        - /boot/efi/EFI/Linux/initrd
+      register: _packer_verify_efi_linux_before
+      become: true
+
+    - name: _verify | HWE-kernel install (jammy/noble)
+      when: ansible_distribution_release in ["jammy", "noble"]
+      block:
+        - name: _verify | Install HWE kernel (newer than what packer shipped)
+          ansible.builtin.apt:
+            name: linux-generic-hwe-{{ '22.04' if ansible_distribution_release == 'jammy' else '24.04' }}
+            state: present
+            update_cache: true
+          become: true
+          register: _packer_verify_hwe_install
+
+        - name: _verify | HWE install was a real install, not a no-op
+          ansible.builtin.assert:
+            that: _packer_verify_hwe_install.changed
+            fail_msg: >-
+              apt reported no changes from `linux-generic-hwe-*` —
+              HWE was already current, so the test premise is broken
+              (no different kernel to reboot into)
+
+    - name: _verify | Older-kernel install + hide running kernel (resolute)
+      when: ansible_distribution_release == "resolute"
+      block:
+        - name: _verify | Refresh apt cache so madison sees the current archive
+          ansible.builtin.apt:
+            update_cache: true
+          become: true
+
+        # apt-cache madison lists every available version of the
+        # metapackage; the running kernel is the newest, so the
+        # second-newest is the downgrade target. Version is
+        # "ABI.REVISION" (e.g. 7.0.0-15.15); sed strips the trailing
+        # .REVISION (and any +N suffix) to leave the ABI fragment that
+        # names the actual linux-image-X.Y.Z-N-generic package.
+        - name: _verify | Find second-newest linux-image-generic ABI in archive
+          ansible.builtin.shell:
+            cmd: |
+              set -euo pipefail
+              versions=$(apt-cache madison linux-image-generic |
+                         awk '$1=="linux-image-generic"{print $3}' |
+                         sort -uV)
+              count=$(echo "$versions" | grep -c .)
+              if [ "$count" -lt 2 ]; then
+                echo >&2 "archive has only $count linux-image-generic version(s); need 2+ for a downgrade target (test premise broken)"
+                exit 1
+              fi
+              ver=$(echo "$versions" | tail -2 | head -1)
+              echo "$ver" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+-[0-9]+).*$/\1/'
+          register: _packer_verify_older_abi
+          changed_when: false
+
+        - name: _verify | Older-kernel ABI was found in the archive
+          ansible.builtin.assert:
+            that: _packer_verify_older_abi.stdout != ""
+            fail_msg: >-
+              Older-kernel ABI extraction returned an empty string —
+              the madison version didn't match the expected
+              ABI.REVISION shape (sed strip failed)
+
+        - name: _verify | Install older specific kernel + modules
+          ansible.builtin.apt:
+            name:
+              - "linux-image-{{ _packer_verify_older_abi.stdout }}-generic"
+              - "linux-modules-{{ _packer_verify_older_abi.stdout }}-generic"
+            state: present
+          become: true
+
+        # dpkg refuses to purge the running kernel ("Aborting removal of
+        # the running kernel"). Hide the /boot files behind dotfile names
+        # — shell globs don't match leading dots, so:
+        #   x86_64: ZBM's /boot/vmlinuz-* scan skips the hidden running
+        #           kernel and picks the older one as the new highest.
+        #   aarch64: the postinst.d hook's same glob skips them; we
+        #            re-run the hook below to restage /EFI/Linux/.
+        - name: _verify | Hide running kernel files from highest-kernel selection
+          ansible.builtin.shell:
+            cmd: |
+              set -euo pipefail
+              mv -f /boot/vmlinuz-{{ ansible_kernel }} /boot/.vmlinuz-{{ ansible_kernel }}
+              mv -f /boot/initrd.img-{{ ansible_kernel }} /boot/.initrd.img-{{ ansible_kernel }}
+          become: true
+
+        - name: _verify | Re-run the hook to stage the older kernel onto /EFI/Linux/ (aarch64)
+          when: ansible_architecture == "aarch64"
+          ansible.builtin.command: /etc/kernel/postinst.d/zz-stage-efi-stub
+          become: true
+
+    - name: _verify | Capture /EFI/Linux/{vmlinuz.efi,initrd} hashes after (aarch64)
+      when: ansible_architecture == "aarch64"
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        get_checksum: true
+        checksum_algorithm: sha256
+      loop:
+        - /boot/efi/EFI/Linux/vmlinuz.efi
+        - /boot/efi/EFI/Linux/initrd
+      register: _packer_verify_efi_linux_after
+      become: true
+
+    - name: _verify | Hook restaged vmlinuz.efi and initrd onto the ESP (aarch64)
+      when: ansible_architecture == "aarch64"
+      ansible.builtin.assert:
+        that:
+          - >-
+            _packer_verify_efi_linux_after.results[0].stat.checksum
+            != _packer_verify_efi_linux_before.results[0].stat.checksum
+          - >-
+            _packer_verify_efi_linux_after.results[1].stat.checksum
+            != _packer_verify_efi_linux_before.results[1].stat.checksum
+        fail_msg: >-
+          /EFI/Linux/vmlinuz.efi or /EFI/Linux/initrd unchanged after the
+          kernel transaction — postinst.d hook didn't fire (or fired but
+          failed silently)
+
+    - name: _verify | Reboot to pick up the swapped kernel
+      ansible.builtin.reboot:
+        reboot_timeout: 300
+      become: true
+
+    - name: _verify | Capture uname -r after reboot
+      ansible.builtin.command: uname -r
+      changed_when: false
+      register: _packer_verify_uname_after
+
+    - name: _verify | Boot chain landed on the swapped kernel
+      ansible.builtin.assert:
+        that: >-
+          _packer_verify_uname_after.stdout
+          != _packer_verify_uname_before.stdout
+        fail_msg: >-
+          uname -r is still {{ _packer_verify_uname_before.stdout }}
+          after reboot — boot chain kept selecting the previous kernel
+          even though we installed a different one
