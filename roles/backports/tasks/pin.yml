@@ -31,11 +31,23 @@
 # wouldn't be a valid Ansible identifier rather than silently
 # translating ('foo-bar' would write /etc/apt/preferences.d/backports-
 # foo-bar but set foo_bar_backports_updated, an invisible split).
-- name: Validate backports_name shape
+#
+# backports_packages must be a non-empty list. A bare string would
+# `join(' ')` per-character ("c h r o n y") and produce a pin file
+# matching nothing; an empty list would render `Package: ` with the
+# same effect. Both fail silently — the pin is "applied" but the apt
+# resolver never picks a noble candidate.
+- name: Validate backports inputs
   assert:
     that:
       - backports_name is match('^[A-Za-z0-9_]+$')
-    fail_msg: "backports_name must match [A-Za-z0-9_]+, got {{ backports_name | to_json }}"
+      - backports_packages is sequence
+      - backports_packages is not string
+      - backports_packages | length > 0
+    fail_msg: >-
+      backports_name must match [A-Za-z0-9_]+ (got {{ backports_name | to_json }})
+      and backports_packages must be a non-empty list
+      (got {{ backports_packages | to_json }})
 
 - name: Pin packages to noble (jammy) — {{ backports_name }}
   when: ansible_distribution_major_version == "22"
