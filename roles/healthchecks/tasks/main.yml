@@ -95,6 +95,32 @@
   tags:
     - healthchecks
 
+# linuxserver/healthchecks (Django) doesn't expose a PRAGMA hook and
+# defaults SQLite to rollback-journal mode. WAL halves the per-commit
+# fsync count and lets readers not block the writer; on the gitea
+# SQLite this cut p99 push latency from seconds to milliseconds under
+# concurrent write load. The mode is persisted in the DB header, so
+# this is one-shot (probe returns 'wal' on subsequent applies).
+- name: Read healthchecks sqlite journal mode
+  command: sqlite3 -readonly /mnt/services/sqlite/healthchecks/hc.sqlite 'PRAGMA journal_mode;'
+  register: healthchecks_sqlite_pragma
+  changed_when: false
+  failed_when: false
+  become: true
+  tags:
+    - healthchecks
+
+- name: Convert healthchecks sqlite to WAL
+  command: sqlite3 /mnt/services/sqlite/healthchecks/hc.sqlite 'PRAGMA journal_mode=WAL;'
+  register: healthchecks_sqlite_wal
+  changed_when: healthchecks_sqlite_wal.stdout | trim == 'wal'
+  when:
+    - healthchecks_sqlite_pragma.rc == 0
+    - healthchecks_sqlite_pragma.stdout | trim != 'wal'
+  become: true
+  tags:
+    - healthchecks
+
 - name: Configure nginx
   import_role:
     name: nginx
