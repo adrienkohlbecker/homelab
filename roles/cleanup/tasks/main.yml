@@ -16,11 +16,16 @@
     - cleanup
 
 - name: Uninstall snaps
-  # snapd must come last: `snap remove snapd` fails while base snaps
-  # (core20, core22, ...) are still mounted, so non-snapd snaps drain
-  # first. Hardcoding the list (the previous shape) silently missed
-  # noble's core22 — the dynamic enumeration covers any base snap an
-  # Ubuntu cloud image ships now or later.
+  # Removal order matters: app snaps depend on their base (e.g. an `lxd`
+  # snap pins `core22`), so the base can't be removed first or snap
+  # refuses with "snap X requires base Y". And snapd itself must come
+  # last because removing it while any snap is still mounted fails.
+  # We split the discovered list by the Notes column (last whitespace
+  # field): apps (Notes is `-`, `disabled`, `classic`, ...) → bases
+  # (Notes contains `base`) → snapd literal. snapd is filtered out of
+  # both selectattr/rejectattr passes by the regex and re-appended
+  # explicitly, so it always lands last regardless of where it sat in
+  # `snap list`'s alphabetic output.
   when:
     - "'snapd' in ansible_facts.packages"
     - _cleanup_snap_list.rc == 0
@@ -31,11 +36,12 @@
   become: true
   loop: >-
     {{
-      (_cleanup_snap_list.stdout_lines[1:]
-       | map('split') | map('first')
-       | reject('equalto', 'snapd') | list)
+      (_cleanup_snap_rows | rejectattr(-1, 'search', '(^|,)(base|snapd)($|,)') | map(attribute=0) | list)
+      + (_cleanup_snap_rows | selectattr(-1, 'search', '(^|,)base($|,)') | map(attribute=0) | list)
       + ['snapd']
     }}
+  vars:
+    _cleanup_snap_rows: "{{ _cleanup_snap_list.stdout_lines[1:] | map('split') | list }}"
   tags:
     - cleanup
 
