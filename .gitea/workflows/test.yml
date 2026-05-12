@@ -81,10 +81,18 @@ jobs:
       # the rootless gidmap; see roles/act_runner/templates/config.yml.j2
       # for the why) is supplied by act_runner's container.options
       # default, keeping this workflow free of host-specific gids.
+      #
+      # lab-runtime-workdir is bind-mounted per-cell. The host path
+      # embeds run_id + job-index so two concurrent test cells never
+      # share a workdir parent -- without this, a sibling cell's startup
+      # sweep (or any other reaper running in its container, where ps
+      # can't see this cell's qemu) could reap files mid-run. Cleanup
+      # of old per-cell dirs lives in the act_runner role's tmpfiles.d
+      # entry (Age=1d).
       options: >-
         --device /dev/kvm
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
-        --volume /mnt/scratch/act_runner/lab-runtime-workdir:/lab-runtime-workdir:rw
+        --volume /mnt/scratch/act_runner/lab-runtime-workdir/${{ github.run_id }}-${{ strategy.job-index }}:/lab-runtime-workdir:rw
     strategy:
       fail-fast: false
       max-parallel: 2

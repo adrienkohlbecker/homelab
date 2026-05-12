@@ -31,8 +31,32 @@
     # Bind-mounted into test cells via container.options for the harness's
     # --workdir-parent. Lives on /mnt/scratch (terabytes) instead of the
     # container's writable overlay so concurrent qcow2 overlays + role
-    # checkouts can't ENOSPC the cell.
+    # checkouts can't ENOSPC the cell. Each cell mounts a unique subdir
+    # underneath this so two concurrent cells can't see each other; the
+    # tmpfiles.d entry below reaps the per-cell subdirs after they idle.
     - /mnt/scratch/act_runner/lab-runtime-workdir
+  tags:
+    - act_runner
+
+# systemd-tmpfiles --clean runs daily via systemd-tmpfiles-clean.timer
+# and applies the rule on each tick. The rule walks lab-runtime-workdir's
+# tree, deletes files >1d stale, removes empty old subdirs as a side
+# effect -- so a completed or crashed test cell's per-cell tree gets
+# fully reaped once its contents are >1d old. The 1d age is comfortably
+# beyond the harness's 1500s timeout, so a live cell can't be touched.
+- name: Install tmpfiles.d entry for lab-runtime-workdir
+  copy:
+    src: tmpfiles.conf
+    dest: /etc/tmpfiles.d/act_runner.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    # Catches typos in the rule line; --create exits non-zero on parse
+    # failure. Runs with --dry-run so it doesn't actually create or clean
+    # anything during validation.
+    validate: systemd-tmpfiles --dry-run --create %s
+  become: true
   tags:
     - act_runner
 

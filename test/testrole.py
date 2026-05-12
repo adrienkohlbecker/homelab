@@ -327,17 +327,15 @@ def main() -> int:
 
     # Reap orphaned workdirs from prior SIGKILL'd / OOM'd / power-cut runs
     # before constructing this run's QemuMachine. testall.py also sweeps once
-    # before fanning out; the mtime grace inside sweep_stale_workdirs keeps
-    # parallel workers from racing on each other's freshly-minted workdirs.
+    # before fanning out; the .live-file flock check inside
+    # sweep_stale_workdirs keeps parallel workers from racing on each other's
+    # freshly-minted workdirs.
+    #
+    # Scope is imagedir-only. CI's --workdir-parent points at a per-cell
+    # host bind-mount (see .gitea/workflows/test.yml) so no two cells share
+    # state and a host-side tmpfiles.d entry in the act_runner role reaps
+    # stale per-cell dirs -- no in-harness sweep needed there.
     sweep_stale_workdirs(imagedir_for_host())
-    # When --workdir-parent points away from imagedir (CI sets it to the
-    # host-mounted /lab-runtime-workdir), sweep that too -- otherwise
-    # killed test cells leak workdirs onto the host and the next run's
-    # cell ENOSPCs.
-    if parsed_args.workdir_parent:
-        wp = Path(parsed_args.workdir_parent).resolve()
-        if wp != imagedir_for_host().resolve():
-            sweep_stale_workdirs(wp)
 
     # Machine.wrapper_timeout layers WRAPPER_GRACE_SECONDS on top of this so
     # the inner `timeout` wrapper outlasts the Python deadline.
