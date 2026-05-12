@@ -35,7 +35,7 @@ f_failed=0
 f_rescue() {
   set +e
   "$@"
-  retval=$?
+  local retval=$?
   set -e
 
   if [ $retval -ne 0 ]; then
