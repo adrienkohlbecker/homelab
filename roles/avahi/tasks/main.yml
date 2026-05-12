@@ -23,13 +23,14 @@
   tags:
     - avahi
 
-- name: Copy avahi device-info service
-  copy:
-    src: device-info.service
+- name: Render avahi device-info service
+  template:
+    src: device-info.service.j2
     dest: /etc/avahi/services/device-info.service
     mode: "0644"
     owner: root
     group: root
+    backup: true
   become: true
   register: avahi_device_info
   tags:
