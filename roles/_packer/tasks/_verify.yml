@@ -63,6 +63,34 @@
       - "'/EFI/ZBM' in _packer_verify_refind_conf_text"
     fail_msg: "refind.conf missing expected ZBM menuentries / default_selection / dont_scan_dirs"
 
+# --- NVRAM Boot entries (rEFInd, plus aarch64 EFI-stub) ---
+
+- name: _verify | Read NVRAM Boot entries via efibootmgr
+  ansible.builtin.command: efibootmgr -v
+  changed_when: false
+  register: _packer_verify_efibootmgr
+  become: true
+
+# chroot.sh registers either a single "rEFInd" entry (single-disk
+# variants) or per-disk "rEFInd (disk N)" entries (multi-disk mdadm-EFI
+# on lab). The disk-N suffix is the survival mechanism: firmware only
+# follows paths it knows about, so losing one disk still leaves the
+# other entries usable. Either shape must be in NVRAM -- the
+# firmware-fallback BOOT<arch>.EFI checked above is a degraded recovery
+# path (kicks in on CMOS clear / BIOS reset), not the everyday loader.
+# A green fallback + missing primary entry would silently force every
+# reboot through the fallback chain.
+- name: _verify | rEFInd Boot entry registered in NVRAM
+  ansible.builtin.assert:
+    that: >-
+      _packer_verify_efibootmgr.stdout
+      is search('^Boot[0-9A-F]{4}\*?\s+rEFInd( \(disk \d+\))?\s', multiline=True)
+    fail_msg: >-
+      No NVRAM Boot#### entry labelled "rEFInd" (or "rEFInd (disk N)")
+      — chroot.sh's efibootmgr -c didn't run or didn't land. The
+      firmware-fallback /EFI/BOOT/BOOT<arch>.EFI is a recovery path,
+      not a primary boot loader.
+
 # --- aarch64: direct EFI-stub boot path + kernel-install hook ---
 
 - name: _verify | EFI-stub direct-boot assertions (aarch64)
@@ -85,12 +113,6 @@
       loop: "{{ _packer_verify_efi_linux.results }}"
       loop_control:
         label: "{{ item.item }}"
-
-    - name: _verify | Read NVRAM Boot entries via efibootmgr
-      ansible.builtin.command: efibootmgr -v
-      changed_when: false
-      register: _packer_verify_efibootmgr
-      become: true
 
     # Path-presence is enough — `efibootmgr -c` registers the loader
     # path and the --unicode cmdline atomically, so if the path is in
