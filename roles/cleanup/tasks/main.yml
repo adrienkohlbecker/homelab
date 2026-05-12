@@ -6,16 +6,37 @@
   no_log: true
   check_mode: false
 
-- name: Uninstall snaps
+- name: List installed snaps
+  command: snap list
+  register: _cleanup_snap_list
+  changed_when: false
+  failed_when: false
+  check_mode: false
   when: "'snapd' in ansible_facts.packages"
+  tags:
+    - cleanup
+
+- name: Uninstall snaps
+  # snapd must come last: `snap remove snapd` fails while base snaps
+  # (core20, core22, ...) are still mounted, so non-snapd snaps drain
+  # first. Hardcoding the list (the previous shape) silently missed
+  # noble's core22 — the dynamic enumeration covers any base snap an
+  # Ubuntu cloud image ships now or later.
+  when:
+    - "'snapd' in ansible_facts.packages"
+    - _cleanup_snap_list.rc == 0
+    - _cleanup_snap_list.stdout_lines | length > 1
   snap:
     name: "{{ item }}"
     state: absent
   become: true
-  loop:
-    - lxd
-    - core20
-    - snapd
+  loop: >-
+    {{
+      (_cleanup_snap_list.stdout_lines[1:]
+       | map('split') | map('first')
+       | reject('equalto', 'snapd') | list)
+      + ['snapd']
+    }}
   tags:
     - cleanup
 
