@@ -63,6 +63,19 @@
   loop_control:
     label: "{{ item.item }}"
 
+# Renewals only happen if certbot.timer is enabled+active. Both
+# commands exit non-zero on failure, so the task fails as its own
+# functional assertion -- no separate `assert:` needed.
+- name: _verify | certbot.timer is enabled
+  command: systemctl is-enabled certbot.timer
+  changed_when: false
+  become: true
+
+- name: _verify | certbot.timer is active
+  command: systemctl is-active certbot.timer
+  changed_when: false
+  become: true
+
 - name: _verify | Stat cloudflare credentials file
   stat:
     path: /etc/letsencrypt/cloudflare.ini
