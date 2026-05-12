@@ -25,6 +25,7 @@ email_domain: noreply.{{ domain }}
 # Migrate roles to consume from here as they get touched; for collisions, this
 # is the place to grep.
 service_ports:
+  bazarr: 6767
   healthchecks: 8000
   homepage: 3003
   homepage_alerts: 8765

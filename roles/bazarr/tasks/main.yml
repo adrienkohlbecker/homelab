@@ -105,6 +105,6 @@
     tasks_from: site
   vars:
     nginx_subdomain: bazarr
-    nginx_proxy_pass: http://localhost:6767/
+    nginx_proxy_pass: http://localhost:{{ service_ports.bazarr }}/
   tags:
     - bazarr
