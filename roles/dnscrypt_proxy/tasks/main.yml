@@ -20,12 +20,6 @@
   tags:
     - dnscrypt_proxy
 
-- name: Save return value
-  set_fact:
-    socket_systemd_unit: '{{ systemd_unit }}'
-  tags:
-    - dnscrypt_proxy
-
 - name: Copy dnscrypt-proxy conf
   copy:
     src: dnscrypt-proxy.toml
@@ -33,6 +27,7 @@
     mode: "0644"
     owner: root
     group: root
+    backup: true
   become: true
   register: dnscrypt_proxy_conf
   tags:
@@ -55,6 +50,6 @@
     systemd_unit_args:
       src: dnscrypt-proxy.socket
       condition: "{{ not (ansible_check_mode and dnscrypt_proxy_apt.changed) }}"
-      restart: "{{ dnscrypt_proxy_conf.changed or socket_systemd_unit.changed }}"
+      restart: "{{ dnscrypt_proxy_conf.changed or dnscrypt_proxy_socket_d_override_conf_result.changed }}"
   tags:
     - dnscrypt_proxy
