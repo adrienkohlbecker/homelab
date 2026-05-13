@@ -6,7 +6,7 @@
 # --log-driver=k8s-file the line lands in journald with PRIORITY set
 # from the content rather than hardcoded by stream.
 #
-# Build path: source is copied into /usr/local/src/level-init/ and
+# Build path: source is copied into /usr/local/src/level_init/ and
 # compiled in place. This requires golang-go on the host (~300MB).
 # When this role grows past one or two consumers it should migrate to
 # the static_curl pattern — Gitea Actions build, sha256-pinned release
@@ -23,7 +23,7 @@
   tags:
     - level_init
 
-- name: Create level-init source and install dirs
+- name: Create level_init source and install dirs
   file:
     path: "{{ item }}"
     state: directory
@@ -31,22 +31,22 @@
     group: root
     mode: "0755"
   loop:
-    - /usr/local/src/level-init
+    - /usr/local/src/level_init
     - /usr/local/libexec
   become: true
   when: not (ansible_check_mode and level_init_apt.changed)
   tags:
     - level_init
 
-- name: Copy level-init source
+- name: Copy level_init source
   copy:
     src: "{{ item }}"
-    dest: "/usr/local/src/level-init/{{ item }}"
+    dest: "/usr/local/src/level_init/{{ item }}"
     owner: root
     group: root
     mode: "0644"
   loop:
-    - level-init.go
+    - level_init.go
     - go.mod
   become: true
   register: level_init_src
@@ -56,7 +56,7 @@
 
 - name: Stat installed binary
   stat:
-    path: /usr/local/libexec/level-init
+    path: /usr/local/libexec/level_init
   register: level_init_bin
   tags:
     - level_init
@@ -64,10 +64,10 @@
 # Rebuild only on source change or first install. `go build` writes a
 # fresh binary unconditionally when invoked, so guarding the task is
 # what keeps idempotence happy on the harness's second-apply run.
-- name: Build level-init binary
-  command: go build -ldflags="-s -w" -trimpath -o /usr/local/libexec/level-init .
+- name: Build level_init binary
+  command: go build -ldflags="-s -w" -trimpath -o /usr/local/libexec/level_init .
   args:
-    chdir: /usr/local/src/level-init
+    chdir: /usr/local/src/level_init
   environment:
     # `go build` insists on a HOME for the module cache even though we
     # have no external deps; without it the build fails on the root

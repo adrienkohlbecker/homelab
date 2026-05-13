@@ -1,4 +1,4 @@
-// level-init is a minimal PID-1 process for podman containers that
+// level_init is a minimal PID-1 process for podman containers that
 // interposes on the workload's stdout/stderr and prepends a BSD syslog
 // priority prefix (<N>) based on a level keyword scanned out of the
 // first 120 bytes of each line. With --log-driver=passthrough, podman
@@ -138,7 +138,7 @@ func waitAll(workloadPid int) int {
 			// ECHILD shouldn't happen while the workload is still
 			// running; treat anything we can't wait on as a bug
 			// and surface a generic failure rather than spin.
-			fmt.Fprintln(os.Stderr, "level-init: wait4:", err)
+			fmt.Fprintln(os.Stderr, "level_init: wait4:", err)
 			return 1
 		}
 		if pid == workloadPid {
@@ -154,14 +154,14 @@ func waitAll(workloadPid int) int {
 func main() {
 	// podman invokes init as `<init-path> -- <cmd> [args...]` when
 	// --init is set; catatonit/tini swallow the leading "--" the same
-	// way. Strip it so users running level-init outside podman aren't
+	// way. Strip it so users running level_init outside podman aren't
 	// forced to use the same convention.
 	args := os.Args[1:]
 	if len(args) > 0 && args[0] == "--" {
 		args = args[1:]
 	}
 	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: level-init [--] <cmd> [args...]")
+		fmt.Fprintln(os.Stderr, "usage: level_init [--] <cmd> [args...]")
 		os.Exit(64)
 	}
 
@@ -171,17 +171,17 @@ func main() {
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "level-init: stdout pipe:", err)
+		fmt.Fprintln(os.Stderr, "level_init: stdout pipe:", err)
 		os.Exit(127)
 	}
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "level-init: stderr pipe:", err)
+		fmt.Fprintln(os.Stderr, "level_init: stderr pipe:", err)
 		os.Exit(127)
 	}
 
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintln(os.Stderr, "level-init: exec:", err)
+		fmt.Fprintln(os.Stderr, "level_init: exec:", err)
 		os.Exit(127)
 	}
 
