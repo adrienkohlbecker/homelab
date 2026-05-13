@@ -42,7 +42,7 @@ func main() {
 		stderr.Fatal(err)
 	}
 
-  r := prometheus.NewRegistry()
+	r := prometheus.NewRegistry()
 	r.MustRegister(exporterUp)
 	r.MustRegister(exporterErrors)
 	r.MustRegister(driveActiveGauge)
@@ -53,13 +53,13 @@ func main() {
 	r.MustRegister(cronNextRunTimestamp)
 	r.MustRegister(netdataCollectorUp)
 
-  handler := promhttp.HandlerFor(r, promhttp.HandlerOpts{})
+	handler := promhttp.HandlerFor(r, promhttp.HandlerOpts{})
 	http.Handle("/metrics", handler)
 	gatherMetrics()
 	go func() {
 		for {
 			gatherMetrics()
-			time.Sleep(5*time.Second)
+			time.Sleep(5 * time.Second)
 		}
 	}()
 
@@ -128,17 +128,17 @@ var netdataClient = &http.Client{Timeout: 3 * time.Second}
 func getJSON(url string, result interface{}) error {
 	resp, err := netdataClient.Get(url)
 	if err != nil {
-			return fmt.Errorf("cannot fetch URL %q: %v", url, err)
+		return fmt.Errorf("cannot fetch URL %q: %v", url, err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("unexpected http GET status: %s", resp.Status)
+		return fmt.Errorf("unexpected http GET status: %s", resp.Status)
 	}
 	// We could check the resulting content type
 	// here if desired.
 	err = json.NewDecoder(resp.Body).Decode(result)
 	if err != nil {
-			return fmt.Errorf("cannot decode JSON: %v", err)
+		return fmt.Errorf("cannot decode JSON: %v", err)
 	}
 	return nil
 }
@@ -197,7 +197,7 @@ var driveHdparmDevices = []string{}
 func getDriveActiveStatusInit() {
 	value, ok := os.LookupEnv("DRIVE_HDPARM_DEVICES")
 	if ok && value != "" {
-		driveHdparmDevices = strings.Split(value,",")
+		driveHdparmDevices = strings.Split(value, ",")
 	}
 }
 
@@ -236,10 +236,10 @@ func getDriveActiveStatus() error {
 		device := m[1]
 		state := m[2]
 
-		if (!slices.Contains(driveHdparmDevices, device)) {
+		if !slices.Contains(driveHdparmDevices, device) {
 			loopErr = append(loopErr, fmt.Errorf("invalid device found: %s", device))
 		}
-		if (!slices.Contains(driveHdparmStates, state)) {
+		if !slices.Contains(driveHdparmStates, state) {
 			loopErr = append(loopErr, fmt.Errorf("invalid state found: %s", state))
 		}
 
@@ -289,7 +289,6 @@ func getDriveActiveStatus() error {
 // ╚██████╗██║  ██║╚██████╔╝██║ ╚████║    ███████╗██║  ██║███████║   ██║       ███████║╚██████╔╝╚██████╗╚██████╗███████╗███████║███████║       ██║   ██║██║ ╚═╝ ██║███████╗███████║   ██║   ██║  ██║██║ ╚═╝ ██║██║
 //  ╚═════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═══╝    ╚══════╝╚═╝  ╚═╝╚══════╝   ╚═╝       ╚══════╝ ╚═════╝  ╚═════╝ ╚═════╝╚══════╝╚══════╝╚══════╝       ╚═╝   ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝
 
-
 var cronLastSuccessTimestamp = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "cron_last_success_timestamp",
@@ -317,7 +316,7 @@ func getCronLastSuccessTimestamp() error {
 
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-			return fmt.Errorf("unable to read jobs directory: %s", err)
+		return fmt.Errorf("unable to read jobs directory: %s", err)
 	}
 
 	var loopErr []error
@@ -343,7 +342,7 @@ func getCronLastSuccessTimestamp() error {
 				continue
 			}
 
-			dataTime, err :=  time.Parse(time.RFC3339, d[1])
+			dataTime, err := time.Parse(time.RFC3339, d[1])
 			if err != nil {
 				loopErr = append(loopErr, fmt.Errorf("unable to parse date for %s: %s", e.Name(), err))
 				continue
@@ -355,11 +354,11 @@ func getCronLastSuccessTimestamp() error {
 			case "hourly":
 				nextDataTime = dataTime.Add(time.Hour * time.Duration(retry))
 			case "daily":
-				nextDataTime = dataTime.AddDate(0,0,retry*1)
+				nextDataTime = dataTime.AddDate(0, 0, retry*1)
 			case "weekly":
-				nextDataTime = dataTime.AddDate(0,0,retry*7)
+				nextDataTime = dataTime.AddDate(0, 0, retry*7)
 			case "monthly":
-				nextDataTime = dataTime.AddDate(0,retry*1,0)
+				nextDataTime = dataTime.AddDate(0, retry*1, 0)
 			default:
 				loopErr = append(loopErr, fmt.Errorf("invalid frequency value for %s: %s", e.Name(), strconv.Quote(d[0])))
 				continue
@@ -406,11 +405,11 @@ var netdataCollectorUp = prometheus.NewGaugeVec(
 )
 
 type NetdataContext struct {
-	Family string
-	Priority int
+	Family     string
+	Priority   int
 	FirstEntry int
-	LastEntry int
-	Live bool
+	LastEntry  int
+	Live       bool
 }
 
 type NetdataContextsResponse struct {
@@ -424,7 +423,7 @@ func getNetdataContextStatusInit() error {
 
 	value, ok := os.LookupEnv("NETDATA_CONTEXTS")
 	if ok && value != "" {
-		for _, v := range strings.Split(value,",") {
+		for _, v := range strings.Split(value, ",") {
 			vv := strings.Split(v, ":")
 			if len(vv) != 2 {
 				return fmt.Errorf("invalid format for NETDATA_CONTEXTS env var, expected comma-separated name:context pairs, got: %s", v)
@@ -443,8 +442,8 @@ func getNetdataContextStatus() error {
 	}
 
 	var resp NetdataContextsResponse
-  err := getJSON("http://localhost:19999/api/v2/contexts", &resp)
-	if (err != nil) {
+	err := getJSON("http://localhost:19999/api/v2/contexts", &resp)
+	if err != nil {
 		return err
 	}
 
@@ -475,12 +474,12 @@ func getNetdataContextStatus() error {
 }
 
 type NetdataCollector struct {
-	Type string
-	Status string
-	Sync bool
-	UserDisabled bool
+	Type            string
+	Status          string
+	Sync            bool
+	UserDisabled    bool
 	RestartRequired bool
-	PluginRejected bool
+	PluginRejected  bool
 }
 
 type NetdataConfigResponse struct {
@@ -492,7 +491,7 @@ var netdataCollectors []string
 func getNetdataCollectorStatusInit() {
 	value, ok := os.LookupEnv("NETDATA_COLLECTORS")
 	if ok && value != "" {
-		netdataCollectors = strings.Split(value,",")
+		netdataCollectors = strings.Split(value, ",")
 	}
 }
 
@@ -503,8 +502,8 @@ func getNetdataCollectorStatus() error {
 	}
 
 	var resp NetdataConfigResponse
-  err := getJSON("http://localhost:19999/api/v1/config", &resp)
-	if (err != nil) {
+	err := getJSON("http://localhost:19999/api/v1/config", &resp)
+	if err != nil {
 		return err
 	}
 
