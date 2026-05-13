@@ -195,7 +195,6 @@ func getDriveActiveStatus() error {
 		return nil
 	}
 
-	// cmd := exec.Command("/bin/sh", "-c", "cat test/test.txt")
 	cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("hdparm -C /dev/disk/by-id/%s", strings.Join(driveHdparmDevices, " /dev/disk/by-id/")))
 
 	out, err := cmd.CombinedOutput()
@@ -299,7 +298,6 @@ var cronNextRunTimestamp = prometheus.NewGaugeVec(
 
 func getCronLastSuccessTimestamp() error {
 
-	// dir := "test/jobs"
 	dir := "/var/log/jobs"
 
 	entries, err := os.ReadDir(dir)
