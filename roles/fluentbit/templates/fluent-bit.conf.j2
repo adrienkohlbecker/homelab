@@ -88,6 +88,18 @@
     Match             *
     Add               host {{ inventory_hostname }}
 
+# Mirror journald's MESSAGE into `log` so the parallel HyperDX OTLP
+# output below picks it up as the LogRecord Body (fluent-bit's
+# opentelemetry output uses `log` by convention). Copy not Rename:
+# the OpenObserve HTTP output still references MESSAGE as the canonical
+# body field, so both pipelines need their respective key intact. The
+# modify Copy is a no-op when MESSAGE doesn't exist (nginx tails),
+# leaving their existing `log` field untouched.
+[FILTER]
+    Name              modify
+    Match             *
+    Copy              MESSAGE log
+
 # podman's journald log driver labels every stderr line as PRIORITY=3
 # (err) regardless of content, so postgres / celery / linuxserver INFO
 # chatter swamps `journalctl -p warning`. Parse the message text for a
@@ -126,3 +138,28 @@
     http_Passwd       {{ openobserve_root_password }}
     Retry_Limit       False
     storage.total_limit_size  50M
+
+{% if inventory_hostname in ['box', 'lab'] %}
+# Parallel-ship to HyperDX over OTLP HTTP for the evaluation window
+# (see CLAUDE.md "Someday" -- pick a winner between OO and HyperDX and
+# drop the loser). HyperDX is co-located on the same hosts where it's
+# installed (lab roles in site.yml), so target loopback directly. The
+# bundled OTel collector listens unauthenticated on 4318; safe because
+# the publish in hyperdx.service.j2 binds 127.0.0.1 only.
+#
+# ServiceName isn't populated in HyperDX's otel_logs table yet:
+# fluent-bit's opentelemetry output only sets static resource
+# attributes via `add_label`, and SYSLOG_IDENTIFIER is per-record.
+# Filter by LogAttributes.SYSLOG_IDENTIFIER in the UI until we either
+# adjust DEFAULT_SOURCES on the HyperDX side or front this with a real
+# otel-collector that can do per-record resource rewriting.
+[OUTPUT]
+    Name              opentelemetry
+    Match             *
+    Host              127.0.0.1
+    Port              {{ service_ports.hyperdx_otlp_http }}
+    logs_uri          /v1/logs
+    log_response_payload  false
+    Retry_Limit       False
+    storage.total_limit_size  50M
+{% endif %}
