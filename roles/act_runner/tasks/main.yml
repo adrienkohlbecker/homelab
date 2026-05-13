@@ -20,7 +20,6 @@
     mode: "0755"
   become: true
   loop:
-    - /mnt/services/act_runner
     - /mnt/scratch/act_runner/cache
     - /mnt/scratch/act_runner/workdir
   tags:
@@ -246,7 +245,7 @@
   vars:
     systemd_unit_args:
       src: act_runner
-      condition: "{{ not (ansible_check_mode and (systemd_unit.changed or act_runner_user.changed)) }}"
-      restart: "{{ systemd_unit.changed or act_runner_conf.changed or act_runner_registration.changed or act_runner_json_conf.changed or act_runner_installed.changed }}"
+      condition: "{{ not (ansible_check_mode and (act_runner_service_result.changed or act_runner_user.changed)) }}"
+      restart: "{{ act_runner_service_result.changed or act_runner_conf.changed or act_runner_registration.changed or act_runner_json_conf.changed or act_runner_installed.changed }}"
   tags:
     - act_runner

@@ -17,12 +17,20 @@
   failed_when: not _verify_config_file.stat.exists
   become: true
 
-- name: _verify | act_runner registration file is valid JSON
+- name: _verify | .runner is valid JSON and carries templated name + labels
   slurp:
     src: /mnt/services/act_runner/.runner
   register: _verify_runner_b64
-  # Fails the play if the slurped bytes don't parse as JSON.
-  failed_when: (_verify_runner_b64.content | b64decode | from_json) is not mapping
+  vars:
+    _runner_data: "{{ _verify_runner_b64.content | b64decode | from_json }}"
+  # Asserts the role's per-apply rewrite contract: .runner is valid JSON,
+  # the name field matches inventory_hostname (so gitea sees this host's
+  # entry under the expected name), and the labels list matches
+  # act_runner_labels (so a host_vars label override actually lands).
+  failed_when: >-
+    _runner_data is not mapping
+    or (_runner_data.name | default('')) != inventory_hostname
+    or (_runner_data.labels | default([]) | sort) != (act_runner_labels | sort)
   become: true
 
 - name: _verify | subuid/subgid entries exist for act_runner
@@ -56,4 +64,39 @@
   failed_when: >-
     _verify_unit.status.LoadState != "loaded"
     or _verify_unit.status.ActiveState != "active"
+  become: true
+
+- name: _verify | act_runner is registered and recently online in gitea (test only)
+  # Functional check: the harness's gitea fixture writes
+  # action_runner.last_online whenever the runner pings (every
+  # fetch_interval, default 2s). A registered-but-broken daemon (bad
+  # token persisted, gitea unreachable, daemon crash-looping under
+  # Restart=always) shows up as either a missing row or a stale
+  # last_online -- neither of which the unit-Active=active check
+  # above can catch. Skipped outside qemu_test: prod gitea isn't
+  # local and we don't have admin auth to its API here.
+  when: qemu_test
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import sqlite3, sys, time
+        conn = sqlite3.connect("/var/lib/gitea/data/gitea.db", timeout=10)
+        row = conn.execute(
+            "SELECT last_online FROM action_runner WHERE name = ?",
+            (sys.argv[1],),
+        ).fetchone()
+        if row is None:
+            sys.exit(f"no action_runner row for name={sys.argv[1]!r}")
+        delta = int(time.time()) - int(row[0] or 0)
+        if delta > 30:
+            sys.exit(f"runner last_online was {delta}s ago (>30s threshold)")
+        print(delta)
+      - "{{ inventory_hostname }}"
+  register: _verify_runner_db
+  changed_when: false
+  retries: 15
+  delay: 2
+  until: _verify_runner_db.rc == 0
   become: true
