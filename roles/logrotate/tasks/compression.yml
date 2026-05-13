@@ -28,3 +28,10 @@
     path: "{{ logrotate_item }}"
     divert: "{{ logrotate_item }}.dpkg-dist" # so it is not included by logrotate.conf
   become: true
+
+# Reset caller-input vars to defaults so they don't leak into a sibling
+# call later in the play. See roles/systemd_unit/tasks/install.yml for
+# the full background on the import_role + vars: leak.
+- name: compression | Reset caller-input vars to defaults
+  set_fact:
+    logrotate_condition: true

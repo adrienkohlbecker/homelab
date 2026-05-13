@@ -35,5 +35,17 @@
       vars:
         zfs_mount_dataset: '{{ zfs_dataset_resolved }}'
         zfs_mount_mountpoint: '{{ zfs_dataset_mountpoint }}'
+
+    # Reset caller-input vars to defaults so they don't leak into a
+    # sibling call later in the play. See roles/systemd_unit/tasks/
+    # install.yml for the full background on the import_role + vars:
+    # leak. owner/group default to ansible_user dynamically; keep that
+    # by re-evaluating the same expression at reset time.
+    - name: Reset caller-input vars to defaults
+      set_fact:
+        zfs_dataset_extra_properties: {}
+        zfs_dataset_owner: "{{ ansible_user }}"
+        zfs_dataset_group: "{{ ansible_user }}"
+        zfs_dataset_mode: "0755"
   vars:
     zfs_dataset_resolved: "{{ zfs_dataset | regex_replace('^tank/', (zfs_tank_filesystem | default('tank')) ~ '/') }}"
