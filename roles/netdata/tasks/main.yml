@@ -80,10 +80,11 @@
     name: netdata
     tasks_from: template
   vars:
-    netdata_template_src: prometheus.conf.j2
-    netdata_template_dest: go.d/prometheus.conf
-    netdata_template_mode: "0600"
-    netdata_template_restart: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
+    netdata_args:
+      src: prometheus.conf.j2
+      dest: go.d/prometheus.conf
+      mode: "0600"
+      restart: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
 
@@ -127,9 +128,10 @@
     name: netdata
     tasks_from: copy
   vars:
-    netdata_copy_src: docker.conf
-    netdata_copy_dest: go.d/docker.conf
-    netdata_copy_restart: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
+    netdata_args:
+      src: docker.conf
+      dest: go.d/docker.conf
+      restart: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
 
@@ -147,10 +149,11 @@
     name: netdata
     tasks_from: copy
   vars:
-    netdata_copy_src: intelgpu.conf
-    netdata_copy_dest: go.d/intelgpu.conf
-    netdata_copy_condition: '{{ ansible_architecture == "x86_64" }}'
-    netdata_copy_restart: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
+    netdata_args:
+      src: intelgpu.conf
+      dest: go.d/intelgpu.conf
+      condition: '{{ ansible_architecture == "x86_64" }}'
+      restart: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
 
@@ -246,9 +249,10 @@
     name: netdata
     tasks_from: health_copy
   vars:
-    netdata_copy_src: systemdunits_alerts.conf
-    netdata_copy_dest: systemdunits.conf
-    netdata_copy_restart: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
+    netdata_args:
+      src: systemdunits_alerts.conf
+      dest: systemdunits.conf
+      restart: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
 
@@ -257,9 +261,10 @@
     name: netdata
     tasks_from: health_template
   vars:
-    netdata_template_src: zfs_alerts_override.conf.j2
-    netdata_template_dest: zfs_alerts_override.conf
-    netdata_template_restart: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
+    netdata_args:
+      src: zfs_alerts_override.conf.j2
+      dest: zfs_alerts_override.conf
+      restart: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
 
@@ -268,9 +273,10 @@
     name: netdata
     tasks_from: copy
   vars:
-    netdata_copy_src: systemdunits.conf
-    netdata_copy_dest: go.d/systemdunits.conf
-    netdata_copy_restart: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
+    netdata_args:
+      src: systemdunits.conf
+      dest: go.d/systemdunits.conf
+      restart: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
   tags:
     - netdata
 
