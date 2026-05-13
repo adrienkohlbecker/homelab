@@ -34,10 +34,12 @@
     mode: "0777"
   become: true
 
-# Three fixtures exercise the three branches of getCronLastSuccessTimestamp:
-#   _verify_recent  -- valid line, last=parsed-time, next=last+2*period
-#   _verify_overdue -- valid line with a date well in the past so next<now
-#   _verify_empty   -- empty file, both metrics emitted as 0 (touched-but-never-run)
+# Four fixtures exercise the branches of getCronLastSuccessTimestamp:
+#   _verify_recent    -- valid line, last=parsed-time, next=last+2*period
+#   _verify_overdue   -- valid line with a date well in the past so next<now
+#   _verify_empty     -- empty file, both metrics emitted as 0 (touched-but-never-run)
+#   _verify_malformed -- unparseable date; scrape returns error, no gauge emitted
+#                        for this job, exporter_errors counter increments each tick
 - name: _verify | seed cron-job fixtures
   copy:
     content: "{{ item.content }}"
@@ -49,10 +51,12 @@
     - { name: _verify_recent, content: "daily 2026-05-13T12:00:00+00:00\n" }
     - { name: _verify_overdue, content: "daily 2024-01-01T00:00:00+00:00\n" }
     - { name: _verify_empty, content: "" }
+    - { name: _verify_malformed, content: "daily not-a-date\n" }
   become: true
 
-# Goroutine scrapes every 5s -- poll until all three jobs have been picked up.
-- name: _verify | metrics reflect all three cron fixtures
+# Goroutine scrapes every 5s -- poll until the three well-formed jobs have
+# been picked up. The malformed fixture is checked in the next two tasks.
+- name: _verify | metrics reflect the three well-formed cron fixtures
   uri:
     url: http://localhost:{{ service_ports.custom_exporter }}/metrics
     return_content: true
@@ -64,6 +68,30 @@
     and 'cron_last_success_timestamp{job="_verify_recent"}' in _verify_cron.content
     and 'cron_next_run_timestamp{job="_verify_overdue"}' in _verify_cron.content
     and 'cron_last_success_timestamp{job="_verify_empty"} 0' in _verify_cron.content
+
+# The malformed fixture's parse failure surfaces as an exporter_errors tick
+# every 5s -- this is what custom_exporter_errors alert in alerts.conf fires on.
+- name: _verify | exporter_errors increments when a job log fails to parse
+  uri:
+    url: http://localhost:{{ service_ports.custom_exporter }}/metrics
+    return_content: true
+  register: _verify_errors
+  retries: 15
+  delay: 2
+  until: >-
+    _verify_errors.status == 200
+    and (_verify_errors.content
+         | regex_findall('^exporter_errors ([0-9.e+-]+)$', multiline=True)
+         | first | default('0') | float) > 0
+
+# The malformed branch `continue`s before setting either gauge, so a sibling
+# label for _verify_malformed must not appear -- the exporter has to skip the
+# bad job rather than emit a misleading 0.
+- name: _verify | malformed job has no cron_last_success_timestamp gauge
+  assert:
+    that:
+      - "'cron_last_success_timestamp{job=\"_verify_malformed\"}' not in _verify_errors.content"
+      - "'cron_next_run_timestamp{job=\"_verify_malformed\"}' not in _verify_errors.content"
 
 - name: _verify | overdue cron next_run is in the past (alert path fires)
   vars:
@@ -88,4 +116,5 @@
     - _verify_recent
     - _verify_overdue
     - _verify_empty
+    - _verify_malformed
   become: true
