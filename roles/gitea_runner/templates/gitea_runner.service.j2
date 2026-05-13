@@ -1,13 +1,13 @@
 # jinja2: lstrip_blocks: "True"
-# act_runner.service #######################################################################
+# gitea_runner.service #######################################################################
 [Unit]
-Description=act_runner
+Description=gitea_runner
 After=network-online.target
 Wants=network-online.target
-# act_runner connects to the rootless podman.socket inside the act_runner
+# gitea_runner connects to the rootless podman.socket inside the gitea_runner
 # user manager; wait for that user manager to be up before starting.
-After=user@{{ act_runner_user.uid }}.service
-Requires=user@{{ act_runner_user.uid }}.service
+After=user@{{ gitea_runner_user.uid }}.service
+Requires=user@{{ gitea_runner_user.uid }}.service
 StartLimitInterval=600
 StartLimitBurst=3
 {% if zfs_root %}
@@ -31,15 +31,16 @@ RestartSec=5
 SyslogIdentifier=%N
 
 Type=simple
-User=act_runner
-Group=act_runner
-WorkingDirectory=/mnt/services/act_runner/
-# Wait for the act_runner user manager to bring podman.socket up.
+User=gitea_runner
+Group=gitea_runner
+WorkingDirectory=/mnt/services/gitea_runner/
+# Wait for the gitea_runner user manager to bring podman.socket up.
 # Bounded: 60 × 1s, well inside TimeoutStartSec=120. If the socket
 # never appears, the journal records the explicit cause rather than a
 # generic start-timeout.
-ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S /run/user/{{ act_runner_user.uid }}/podman/podman.sock ] && exit 0; sleep 1; done; echo "podman.sock not present after 60s" >&2; exit 1'
-ExecStart=/usr/local/bin/act_runner daemon --config /mnt/services/act_runner/config.yml
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S /run/user/{{ gitea_runner_user.uid }}/podman/podman.sock ] && exit 0; sleep 1; done; echo "podman.sock not present after 60s" >&2; exit 1'
+# Upstream renamed the binary act_runner -> gitea-runner in v1.0.0.
+ExecStart=/usr/local/bin/gitea-runner daemon --config /mnt/services/gitea_runner/config.yml
 ExecReload=/bin/kill -s HUP $MAINPID
 
 [Install]

@@ -6,7 +6,7 @@
       # podman's rootless mode shells out to newuidmap/newgidmap (in uidmap)
       # to read the subuid/subgid ranges. uidmap is only a Recommends of
       # podman, so install_recommends:false leaves it out -- pull it in
-      # explicitly so podman can start under act_runner.
+      # explicitly so podman can start under gitea_runner.
       - uidmap
     install_recommends: false
     cache_valid_time: 3600
@@ -14,24 +14,24 @@
 
 # In production, host-wide subuid/subgid allocation happens in the `subid` role
 # (driven by host_vars `subid_users`). The role-only test harness doesn't apply
-# that role, so we pre-seed an entry for act_runner here -- without it, rootless
-# podman refuses to start with "no subuid ranges found for user act_runner".
-- name: _test | Pre-allocate subuid for act_runner
+# that role, so we pre-seed an entry for gitea_runner here -- without it, rootless
+# podman refuses to start with "no subuid ranges found for user gitea_runner".
+- name: _test | Pre-allocate subuid for gitea_runner
   lineinfile:
     path: /etc/subuid
-    line: "act_runner:100000:65536"
-    regexp: "^act_runner:"
+    line: "gitea_runner:100000:65536"
+    regexp: "^gitea_runner:"
     create: true
     owner: root
     group: root
     mode: "0644"
   become: true
 
-- name: _test | Pre-allocate subgid for act_runner
+- name: _test | Pre-allocate subgid for gitea_runner
   lineinfile:
     path: /etc/subgid
-    line: "act_runner:100000:65536"
-    regexp: "^act_runner:"
+    line: "gitea_runner:100000:65536"
+    regexp: "^gitea_runner:"
     create: true
     owner: root
     group: root

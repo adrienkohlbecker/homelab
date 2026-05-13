@@ -55,7 +55,7 @@
 # vanishes at logout. /var/lib/systemd/linger/<user> is the marker
 # `loginctl enable-linger` creates; a stat is enough and avoids a busctl
 # dependency. Callers wire linger up at user-creation time (roles/user,
-# roles/act_runner) — this check is the guardrail for the next consumer
+# roles/gitea_runner) — this check is the guardrail for the next consumer
 # that forgets.
 - name: Verify user-scope linger marker exists for {{ _systemd_unit_user }}
   when:
