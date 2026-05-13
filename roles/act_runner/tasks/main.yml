@@ -79,7 +79,6 @@
     - act_runner
 
 - name: Install act_runner if needed
-  check_mode: false
   when: act_runner_version not in act_runner_check.stdout
   get_url:
     url: "{{ act_runner_release[ansible_architecture].url }}"
@@ -158,6 +157,7 @@
     act_runner register
     -c /mnt/services/act_runner/config.yml
     --no-interactive
+    --name {{ inventory_hostname }}
     --instance {{ act_runner_instance }}
     --token {{ act_runner_token }}
   args:
@@ -165,6 +165,7 @@
   become: true
   become_user: act_runner
   register: act_runner_registration
+  no_log: true
   tags:
     - act_runner
 
