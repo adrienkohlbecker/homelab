@@ -86,9 +86,10 @@
     name: netdata
     tasks_from: health_copy
   vars:
-    netdata_copy_src: alerts.conf
-    netdata_copy_dest: custom_exporter.conf
-    netdata_copy_mode: "0600"
+    netdata_args:
+      src: alerts.conf
+      dest: custom_exporter.conf
+      mode: "0600"
   tags:
     - custom_exporter
 
