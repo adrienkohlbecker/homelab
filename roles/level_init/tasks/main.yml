@@ -6,6 +6,32 @@
 # --log-driver=k8s-file the line lands in journald with PRIORITY set
 # from the content rather than hardcoded by stream.
 #
+# DEFERRED — NOT WIRED INTO site.yml. The role is staged + tested
+# (Go unit tests + _verify.yml exercise reaping in a real container)
+# but has no production consumer yet. The first pilot was paperless,
+# reverted in the same conversation. Why:
+#
+#   Putting level_init in front of a real container requires podman
+#   --log-driver={k8s-file,none} + dropping --detach so podman keeps
+#   the container's stdio attached to systemd's pipe — that's the
+#   path that gets <N> prefixes into the journal. Combined with
+#   Type=notify --sdnotify=healthy (which every service template in
+#   this homelab uses to gate "active" on the healthcheck), the
+#   non-detach codepath in libpod runs through an unlock/re-lock
+#   sequence that crosses OS threads, panicking with EPERM on the
+#   pthread_mutex_t in shared memory.
+#
+#   Fixed upstream in podman PR #22658, ships in 5.x. Lab is jammy
+#   pinning noble's podman 4.9.3 — still buggy. Resolute (26.04)
+#   ships 5.x but pinning across two LTS jumps drags too much of the
+#   userspace forward to be casually safe.
+#
+# To revive when ready, in order of cost: (1) switch the pilot
+# service to --sdnotify=conmon to bypass the buggy code path at the
+# cost of losing healthy-gating on initial boot, (2) wait for lab to
+# move to noble and pin resolute's podman (one LTS jump), (3) keep
+# deferring until the next LTS ships podman 5.x natively.
+#
 # Build path: source is copied into /usr/local/src/level_init/ and
 # compiled in place. This requires golang-go on the host (~300MB).
 # When this role grows past one or two consumers it should migrate to
