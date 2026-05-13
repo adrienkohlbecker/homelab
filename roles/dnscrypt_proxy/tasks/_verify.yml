@@ -55,7 +55,7 @@
         q += b"\x00\x00\x01\x00\x01"
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.settimeout(2)
-        s.sendto(q, ("127.0.0.1", 5053))
+        s.sendto(q, ("127.0.0.1", {{ service_ports.dnscrypt_proxy }}))
         data, _ = s.recvfrom(512)
         rcode = data[3] & 0x0f
         ancount = struct.unpack(">H", data[6:8])[0]
@@ -84,7 +84,7 @@
         q += b"\x00\x00\x01\x00\x01"
         s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.settimeout(2)
-        s.connect(("127.0.0.1", 5053))
+        s.connect(("127.0.0.1", {{ service_ports.dnscrypt_proxy }}))
         s.sendall(struct.pack(">H", len(q)) + q)
         ln = struct.unpack(">H", s.recv(2))[0]
         data = b""
