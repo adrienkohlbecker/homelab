@@ -21,7 +21,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-const DEFAULT_ADDRESS = ":19392"
+const DEFAULT_ADDRESS = "127.0.0.1:19392"
 
 var stderr *log.Logger
 var stdout *log.Logger
@@ -31,11 +31,17 @@ func init() {
 	stderr = log.New(os.Stderr, "", 0)
 	getDriveActiveStatusInit()
 	exporterUpInit()
-	getNetdataContextStatusInit()
 	getNetdataCollectorStatusInit()
 }
 
 func main() {
+	// Parse NETDATA_CONTEXTS here rather than in init() so an env-format error
+	// surfaces as a normal Fatal log line with the loggers already wired up,
+	// not a panic-style stderr dump from the Go runtime before main() runs.
+	if err := getNetdataContextStatusInit(); err != nil {
+		stderr.Fatal(err)
+	}
+
   r := prometheus.NewRegistry()
 	r.MustRegister(exporterUp)
 	r.MustRegister(exporterErrors)
@@ -404,7 +410,7 @@ type NetdataContextsResponse struct {
 
 var netdataContexts map[string]string
 
-func getNetdataContextStatusInit() {
+func getNetdataContextStatusInit() error {
 	netdataContexts = make(map[string]string)
 
 	value, ok := os.LookupEnv("NETDATA_CONTEXTS")
@@ -412,12 +418,13 @@ func getNetdataContextStatusInit() {
 		for _, v := range strings.Split(value,",") {
 			vv := strings.Split(v, ":")
 			if len(vv) != 2 {
-				log.Fatalf("Invalid format for NETDATA_CONTEXTS env var, expected comma separated list of values separated by colon, got: %s", v)
+				return fmt.Errorf("invalid format for NETDATA_CONTEXTS env var, expected comma-separated name:context pairs, got: %s", v)
 			}
 
 			netdataContexts[vv[1]] = vv[0]
 		}
 	}
+	return nil
 }
 
 func getNetdataContextStatus() error {
