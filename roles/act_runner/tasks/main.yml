@@ -7,11 +7,6 @@
       name: act_runner
       home: /mnt/scratch/act_runner
       createhome: true
-      # kvm so podman can hand /dev/kvm to lab-runtime containers via
-      # --device + --group-add keep-groups (rootless userns doesn't map
-      # the host kvm gid through by default; keep-groups passes the host
-      # supplementary groups through).
-      extra_groups: [ kvm ]
   tags:
     - act_runner
 
@@ -28,50 +23,14 @@
     - /mnt/services/act_runner
     - /mnt/scratch/act_runner/cache
     - /mnt/scratch/act_runner/workdir
-    # Bind-mounted into test cells via container.options for the harness's
-    # --workdir-parent. Lives on /mnt/scratch (terabytes) instead of the
-    # container's writable overlay so concurrent qcow2 overlays + role
-    # checkouts can't ENOSPC the cell. Each cell mounts a unique subdir
-    # underneath this so two concurrent cells can't see each other; the
-    # tmpfiles.d entry below reaps the per-cell subdirs after they idle.
-    - /mnt/scratch/act_runner/lab-runtime-workdir
   tags:
     - act_runner
 
-# systemd-tmpfiles --clean runs daily via systemd-tmpfiles-clean.timer
-# and applies the rule on each tick. The rule walks lab-runtime-workdir's
-# tree, deletes files >1d stale, removes empty old subdirs as a side
-# effect -- so a completed or crashed test cell's per-cell tree gets
-# fully reaped once its contents are >1d old. The 1d age is comfortably
-# beyond the harness's 1500s timeout, so a live cell can't be touched.
-- name: Install tmpfiles.d entry for lab-runtime-workdir
-  copy:
-    src: tmpfiles.conf
-    dest: /etc/tmpfiles.d/act_runner.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    # Catches typos in the rule line; --create exits non-zero on parse
-    # failure. --dry-run was added in systemd 250 -- jammy ships 249
-    # so we drop the flag there. Without --dry-run the validate's
-    # side effect is the `d` rule's mkdir of /mnt/scratch/qemu/
-    # _sentinels (idempotent; next tmpfiles tick would do the same);
-    # the `e` rule has no creation side effect.
-    validate: >-
-      systemd-tmpfiles
-      {{ '--dry-run' if ansible_distribution_release not in ['jammy'] else '' }}
-      --create %s
-  become: true
-  tags:
-    - act_runner
-
-# Linger has to be on BEFORE the lab-runtime build runs: rootless
-# podman's runtime (crun) makes sd-bus calls when creating the build's
-# intermediate containers, which fail with "Permission denied" if the
-# user has no systemd manager. `loginctl enable-linger` starts
-# user@<uid>.service which provides the dbus + cgroup hierarchy crun
-# expects.
+# Linger has to be on before the rootless podman socket can come up:
+# act_runner.service connects to /run/user/<uid>/podman/podman.sock, which
+# is owned by the user manager and only present while user@<uid>.service
+# is alive. `loginctl enable-linger` keeps that manager running across
+# logout/reboot.
 - name: Turn on linger
   command: loginctl enable-linger act_runner
   args:
@@ -81,12 +40,11 @@
   tags:
     - act_runner
 
-# linger triggers user@<uid>.service asynchronously; the build task
-# immediately following needs it fully up so crun's sd-bus calls
-# succeed. systemd module with state=started blocks until active.
-# Skip under check mode when the user wasn't really created — uid
-# isn't populated on the service_user result, and templating
-# user@{{ uid }}.service would fail.
+# linger triggers user@<uid>.service asynchronously; downstream tasks
+# (rootless podman.socket enable/start) need it fully up. systemd module
+# with state=started blocks until active. Skip under check mode when the
+# user wasn't really created — uid isn't populated on the service_user
+# result, and templating user@{{ uid }}.service would fail.
 - name: Ensure act_runner user systemd manager is running
   when: not (ansible_check_mode and act_runner_user.changed)
   systemd:
@@ -95,171 +53,6 @@
   become: true
   tags:
     - act_runner
-
-# Silence the kernel's "overlayfs: fs on '...' does not support file
-# handles, falling back to xino=off" printk that fires on every rootless
-# overlay mount. The fallback is unavoidable in a rootless userns
-# (CAP_DAC_READ_SEARCH isn't held in the init namespace, so the kernel
-# disables file-handle support regardless of underlying fs), and CI churn
-# emits the warning ~160x/day on lab. Pre-declaring xino=off in mountopt
-# makes the kernel skip the probe — same end state, no printk.
-#
-# Scoped to act_runner (the only loud rootless user) instead of global
-# /etc/containers/storage.conf so rootful overlay keeps its working xino.
-# nodev preserves the upstream default; userxattr is force-added by
-# podman internally for rootless, so we don't restate it.
-- name: Create rootless containers config directory
-  when: not (ansible_check_mode and act_runner_user.changed)
-  file:
-    path: /mnt/scratch/act_runner/.config/containers
-    state: directory
-    owner: act_runner
-    group: act_runner
-    mode: "0755"
-  become: true
-  tags:
-    - act_runner
-
-- name: Configure rootless overlay storage opts
-  when: not (ansible_check_mode and act_runner_user.changed)
-  copy:
-    dest: /mnt/scratch/act_runner/.config/containers/storage.conf
-    content: |
-      [storage.options.overlay]
-      mountopt = "nodev,xino=off"
-    owner: act_runner
-    group: act_runner
-    mode: "0644"
-  become: true
-  tags:
-    - act_runner
-
-# Build the lab-runtime container image used by every CI workflow. The
-# image lives only in the act_runner user's local podman image store --
-# no registry, no push. podman build is layer-cached, so unchanged
-# inputs exit in ~200ms even with force: true.
-#
-# Build inputs (Dockerfile + mise.toml + pyproject.toml + uv.lock +
-# packer/qemu.pkr.hcl) are staged into a per-apply temp dir on the
-# remote via `rsync --relative` so the repo's relative paths survive
-# into the build context (Dockerfile's `COPY packer/qemu.pkr.hcl ...`
-# depends on that). The temp dir, plus the GitHub token tmpfile used
-# for `podman build --secret`, are both torn down in `always:` so a
-# build crash doesn't leak state.
-#
-# force: true because we no longer keep a persistent build dir to
-# diff against; podman's layer cache makes no-op rebuilds cheap.
-#
-# --cgroup-manager=cgroupfs (extra_args) scopes a workaround to just
-# the build: rootless podman's default systemd cgroup manager needs
-# to register transient scopes via the user session bus, but the box
-# images don't ship dbus-user-session (chroot.sh installs
-# linux-generic --no-install-recommends), so /run/user/$UID/bus
-# doesn't exist and crun fails with "sd-bus call: Permission denied".
-# cgroupfs sidesteps it; workflow containers spawned at runtime use
-# the systemd default unaltered.
-#
-# --secret id=NAME,src=PATH mounts the token tmpfile inside the
-# consuming RUN; the Dockerfile reads /run/secrets/<NAME>.
-#
-# environment: become_user: act_runner doesn't propagate
-# XDG_RUNTIME_DIR / DBUS_SESSION_BUS_ADDRESS the way a login session
-# would; rootless podman/crun need them to reach the user's systemd
-# manager. Default('0') keeps templating from failing in check mode
-# where act_runner_user has no uid field; the build itself is gated
-# by `when: not ansible_check_mode` so '0' is never used.
-- name: Build lab-runtime image
-  # Skip the whole block in check mode: tempfile doesn't actually
-  # create the dir (returns a result without `path`), so the
-  # downstream synchronize fails resolving dest. The build itself is
-  # also a no-op in check mode, so there's nothing to dry-run here.
-  when: not ansible_check_mode
-  tags:
-    - act_runner
-  # Whole block runs as act_runner so the build context (tempfile +
-  # rsync'd inputs) and the token tmpfile are written by the same
-  # user that podman_image will read them as -- no chmod / chown
-  # dance. synchronize's become_user wiring auto-generates
-  # `--rsync-path="sudo -u act_runner rsync"` so the remote rsync
-  # writes as act_runner too.
-  become: true
-  become_user: act_runner
-  block:
-    - name: Create temp build context for lab-runtime image
-      ansible.builtin.tempfile:
-        state: directory
-        prefix: lab-runtime-build-
-      register: act_runner_lab_runtime_buildctx
-
-    - name: Stage build inputs into temp build context
-      # rsync --relative + the /./ pivot in src preserves the path
-      # after the pivot inside dest. The Dockerfile is included with
-      # its repo-relative path, so it lands at
-      # <ctx>/roles/act_runner/files/Dockerfile.lab-runtime and
-      # podman_image below points `build.file` at it -- no separate
-      # copy task needed. Inputs land at the layout the Dockerfile's
-      # COPY statements expect (e.g. packer/qemu.pkr.hcl). Intermediate
-      # dirs are auto-created (ansible.builtin.copy won't do that).
-      # owner/group: false drops rsync's -o/-g; controller UIDs don't
-      # translate to the remote anyway (ansible-lint no-same-owner).
-      ansible.posix.synchronize:
-        src: "{{ playbook_dir }}/./{{ item }}"
-        dest: "{{ act_runner_lab_runtime_buildctx.path }}/"
-        owner: false
-        group: false
-        rsync_opts:
-          - "--relative"
-      loop:
-        - roles/act_runner/files/Dockerfile.lab-runtime
-        - mise.toml
-        - pyproject.toml
-        - uv.lock
-        - packer/qemu.pkr.hcl
-
-    - name: Stage GitHub token tmpfile for the lab-runtime build
-      # mise pulls tool releases from GitHub during `mise install`.
-      # Anon API is 60/hr; authenticated 5000/hr. podman build's
-      # --secret needs src=PATH (no podman-secret store integration),
-      # so the token lands at a 0400 file in /run/user/<uid>/ --
-      # tmpfs (act_runner owns its own /run/user/<uid>/), gone on
-      # reboot, plus torn down in `always:` below.
-      when: not ansible_check_mode
-      copy:
-        dest: /run/user/{{ act_runner_user.uid | default('0') }}/lab-runtime-build-token
-        content: "{{ mise_github_token }}"
-        mode: "0400"
-      no_log: true
-
-    - name: Build lab-runtime image
-      when: not ansible_check_mode
-      environment:
-        XDG_RUNTIME_DIR: /run/user/{{ act_runner_user.uid | default('0') }}
-        DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ act_runner_user.uid | default('0') }}/bus
-      containers.podman.podman_image:
-        name: lab-runtime
-        tag: latest
-        state: build
-        path: "{{ act_runner_lab_runtime_buildctx.path }}"
-        force: true
-        build:
-          file: "{{ act_runner_lab_runtime_buildctx.path }}/roles/act_runner/files/Dockerfile.lab-runtime"
-          extra_args: >-
-            --cgroup-manager=cgroupfs
-            --secret id=mise_github_token,src=/run/user/{{ act_runner_user.uid | default('0') }}/lab-runtime-build-token
-      register: act_runner_lab_runtime_build
-
-  always:
-    - name: Remove temp build context
-      when: act_runner_lab_runtime_buildctx.path is defined
-      file:
-        path: "{{ act_runner_lab_runtime_buildctx.path }}"
-        state: absent
-
-    - name: Remove staged GitHub token tmpfile
-      when: not ansible_check_mode
-      file:
-        path: /run/user/{{ act_runner_user.uid | default('0') }}/lab-runtime-build-token
-        state: absent
 
 - name: Configure act_runner
   when: not (ansible_check_mode and act_runner_user.changed)

@@ -4,11 +4,14 @@ act_runner_version: "0.6.1"
 # or remove a label without re-registering the runner. The runner reports
 # these to gitea on each connection; the gitea side updates lazily.
 #
-# Just the one label: every CI workflow runs in the lab-runtime image
-# (built by this role from files/Dockerfile.lab-runtime). The bare
-# host_<name> and stock ubuntu-22.04/24.04 docker labels were unused.
+# Default to the gitea-provided runner-images so a plain workflow
+# (`runs-on: ubuntu-latest`) Just Works without baking a custom image.
+# Override per-host via act_runner_labels in host_vars if a workflow needs
+# something more specific.
 act_runner_labels:
-  - "lab-runtime:docker://lab-runtime:latest"
+  - "ubuntu-latest:docker://gitea/runner-images:ubuntu-latest"
+  - "ubuntu-22.04:docker://gitea/runner-images:ubuntu-22.04"
+  - "ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04"
 
 act_runner_release:
   x86_64:
