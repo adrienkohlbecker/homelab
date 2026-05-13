@@ -3,14 +3,15 @@
     name: service_user
     tasks_from: user
   vars:
-    service_user_name: github_runner
-    service_user_home: /mnt/scratch/github_runner
-    service_user_createhome: true
-    # kvm so podman can hand /dev/kvm to lab-runtime containers via
-    # --device + --group-add 1 (rootless userns doesn't map the host
-    # kvm gid through by default; see config.yml.j2 in the legacy
-    # act_runner role for the full rationale, which is unchanged here).
-    service_user_extra_groups: [ kvm ]
+    service_user_args:
+      name: github_runner
+      home: /mnt/scratch/github_runner
+      createhome: true
+      # kvm so podman can hand /dev/kvm to lab-runtime containers via
+      # --device + --group-add 1 (rootless userns doesn't map the host
+      # kvm gid through by default; see config.yml.j2 in the legacy
+      # act_runner role for the full rationale, which is unchanged here).
+      extra_groups: [ kvm ]
   tags:
     - github_runner
 

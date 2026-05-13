@@ -3,14 +3,15 @@
     name: service_user
     tasks_from: user
   vars:
-    service_user_name: act_runner
-    service_user_home: /mnt/scratch/act_runner
-    service_user_createhome: true
-    # kvm so podman can hand /dev/kvm to lab-runtime containers via
-    # --device + --group-add keep-groups (rootless userns doesn't map
-    # the host kvm gid through by default; keep-groups passes the host
-    # supplementary groups through).
-    service_user_extra_groups: [ kvm ]
+    service_user_args:
+      name: act_runner
+      home: /mnt/scratch/act_runner
+      createhome: true
+      # kvm so podman can hand /dev/kvm to lab-runtime containers via
+      # --device + --group-add keep-groups (rootless userns doesn't map
+      # the host kvm gid through by default; keep-groups passes the host
+      # supplementary groups through).
+      extra_groups: [ kvm ]
   tags:
     - act_runner
 

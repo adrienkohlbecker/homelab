@@ -16,8 +16,9 @@
     name: service_user
     tasks_from: user
   vars:
-    service_user_name: compta
-    service_user_config_dir: false
+    service_user_args:
+      name: compta
+      config_dir: false
   tags:
     - compta
 
