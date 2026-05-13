@@ -57,6 +57,7 @@ func main() {
 	r.MustRegister(driveUnknownGauge)
 	r.MustRegister(cronLastSuccessTimestamp)
 	r.MustRegister(cronNextRunTimestamp)
+	r.MustRegister(netdataContextUp)
 	r.MustRegister(netdataCollectorUp)
 
 	handler := promhttp.HandlerFor(r, promhttp.HandlerOpts{})
@@ -411,10 +412,24 @@ func getCronLastSuccessTimestamp() error {
 // ██║ ╚████║███████╗   ██║   ██████╔╝██║  ██║   ██║   ██║  ██║    ╚██████╗╚██████╔╝███████╗███████╗███████╗╚██████╗   ██║   ╚██████╔╝██║  ██║    ███████║   ██║   ██║  ██║   ██║   ╚██████╔╝███████║
 // ╚═╝  ╚═══╝╚══════╝   ╚═╝   ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝  ╚═╝     ╚═════╝ ╚═════╝ ╚══════╝╚══════╝╚══════╝ ╚═════╝   ╚═╝    ╚═════╝ ╚═╝  ╚═╝    ╚══════╝   ╚═╝   ╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚══════╝
 
+// Distinct gauges for distinct sources: NETDATA_CONTEXTS maps short names to
+// metric contexts (data-pipeline health), NETDATA_COLLECTORS lists collector
+// plugin ids (plugin-runtime health). Folding both into one metric let two
+// writers stomp on each other when a short name happened to equal a plugin id.
+var netdataContextUp = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "netdata_context_up",
+		Help: "Set to 1 when the netdata metric context is live",
+	},
+	[]string{
+		// short name from NETDATA_CONTEXTS, not the underlying context id
+		"context",
+	},
+)
 var netdataCollectorUp = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "netdata_collector_up",
-		Help: "Always reports 1 when the collector is up",
+		Help: "Set to 1 when the netdata collector plugin is running",
 	},
 	[]string{
 		// collector identifier
@@ -468,23 +483,23 @@ func getNetdataContextStatus() error {
 	metrics := map[string]float64{}
 
 	for id, c := range resp.Contexts {
-		collector, ok := netdataContexts[id]
+		name, ok := netdataContexts[id]
 		if !ok {
 			continue
 		}
 
 		if c.Live {
-			metrics[collector] = 1
+			metrics[name] = 1
 		}
 	}
 
-	for _, collector := range netdataContexts {
-		value, ok := metrics[collector]
+	for _, name := range netdataContexts {
+		value, ok := metrics[name]
 		if !ok {
 			value = 0
 		}
 
-		netdataCollectorUp.With(prometheus.Labels{"collector": collector}).Set(value)
+		netdataContextUp.With(prometheus.Labels{"context": name}).Set(value)
 	}
 
 	return nil
