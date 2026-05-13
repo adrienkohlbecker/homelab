@@ -120,8 +120,13 @@ func exporterUpInit() {
 	exporterUp.Set(1)
 }
 
+// Bounded client for the localhost netdata API. The scrape goroutine calls
+// getJSON sequentially every 5s; without a timeout a wedged netdata stalls the
+// entire loop while exporter_up keeps reporting 1.
+var netdataClient = &http.Client{Timeout: 3 * time.Second}
+
 func getJSON(url string, result interface{}) error {
-	resp, err := http.Get(url)
+	resp, err := netdataClient.Get(url)
 	if err != nil {
 			return fmt.Errorf("cannot fetch URL %q: %v", url, err)
 	}
