@@ -15,6 +15,8 @@
 ## Coding Style & Naming Conventions
 Use two-space YAML indentation and descriptive `name` values. Namespace variables per role (e.g., `samba_share_path`). Shell helpers in `packer/scripts/` should be Bash with `set -euo pipefail`. Before committing, run `mise run lint` (or `mise run fmt` to autofix the formatters) to avoid churn.
 
+**Underscores, not hyphens** in identifiers we author: role names, file names under `roles/`, systemd unit names, vars, directory names under `/mnt/services/<svc>/`, etc. — `clickhouse_logs` not `clickhouse-logs`, `service_user.yml` not `service-user.yml`. Editor double-click on `foo_bar` selects the whole token; on `foo-bar` it stops at the hyphen, which makes search/replace and code-aware navigation worse. The exceptions are names dictated by upstream (image tags, package names, K8s-flavored YAML keys, etc.) — those keep their hyphens.
+
 ### Role Conventions
 - Centralize downloadable artifact metadata in `roles/<role>/vars/main.yml`. Keep the full URL **adjacent to its sha256** keyed by `ansible_architecture` (`x86_64` / `aarch64`), so a human auditing a checksum can see exactly which URL it pins without recomposing it from a version constant.
 - For tasks that mutate state but should run only once (downloads, registrations, token fetches), gate them with `args: creates: <sentinel>` rather than `changed_when: false`. Skipped tasks don't count against the harness's idempotence check, and `changed_when: false` lies about what the task actually does.
@@ -40,6 +42,16 @@ Every podman `*.service.j2` unit must declare `--health-cmd` (and `--health-star
 4. **Bind-mount static curl via the `static_curl` role** — escape hatch for distroless images (`gcr.io/distroless/*`) that have neither shell nor HTTP client. `static_curl` installs `/usr/local/bin/curl_static` (sha256-pinned, statically-linked, from the `stunnel/static-curl` releases). Add the role to `site.yml` (it lives under *Base installation*) and bind-mount `/usr/local/bin/curl_static:/curl_static:ro` into the unit. Because podman wraps a string `--health-cmd` in `/bin/sh -c` — which a distroless image doesn't have — use the **JSON-array form** to get exec semantics: `--health-cmd '["/curl_static","--fail","--silent","-o","/dev/null","http://localhost:PORT/healthz"]'`. See [roles/openobserve/templates/openobserve.service.j2](roles/openobserve/templates/openobserve.service.j2) for the canonical example.
 
 Do not drop the healthcheck and lean on external monitoring (kuma, the `_verify.yml` task) instead — without an in-container check, `--sdnotify=healthy` can't gate the unit's `active` state, podman won't auto-restart on HTTP failure, and the unit reports liveness only at the OS-process level. If none of the four mechanisms above is feasible for an image, treat that as a blocker, not a license to skip.
+
+### Container User Namespacing
+
+Every podman unit uses the **fake-root** uidmap pattern: `--user 0:0` plus `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1` (and the matching gidmap). In-container root maps to the dedicated host system user created by `service_user`; everything else falls through 1:1 from the base mapping. The `+0:N:1` override is what makes a namespace-escape land at an unprivileged host uid rather than real root.
+
+That default is sufficient when the container runs entirely as in-container root (openobserve, healthchecks with `PUID=0`, etc.). It is **not sufficient** when the image's entrypoint drops privileges mid-startup to a baked-in non-root user — e.g. ClickHouse → in-container uid 101 `clickhouse`, MongoDB → uid 100 `mongodb`. With the bare 1:1 fall-through, those uids land on whatever the host happens to have at the same number (commonly `systemd-resolve` / `systemd-journal`), which is wrong for two reasons: `ls -la` lies about who owns the data, and ZFS replication breaks portability because the destination host's package layout may put a *different* system user at that uid — silently changing apparent ownership across a `zfs send | recv`.
+
+For every privilege-drop the image performs, allocate a dedicated host system user (`<svc>_<role>`, e.g. `hyperdx_clickhouse`, `hyperdx_mongodb`) via `service_user` with `config_dir: false`, and add a `+N:<uid>:1` override (and matching gid override) where `N` is the in-container uid the daemon runs as. Also add an ownership assertion in `_verify.yml` — `stat:` the bind-mount and `failed_when:` the owner is wrong — so a regression in the mapping is loud rather than silent. See [roles/hyperdx/](roles/hyperdx/) for the canonical example with both ClickHouse and MongoDB mappings.
+
+Don't conflate "the container runs as root" with "the daemons inside the container run as root" — many images intentionally split the two. Skipping the per-daemon mapping only matters cosmetically until you start replicating data across hosts or grepping `ls -la` during an incident, at which point it becomes a real diagnostic hazard.
 
 ### Helper Roles
 Several helper roles factor out duplicated patterns. Prefer them over re-implementing the boilerplate; a hand-rolled implementation in a service role is a migration candidate.
