@@ -1,66 +1,78 @@
-- name: _verify | csplogger user exists
-  command: getent passwd csplogger
-  changed_when: false
-  become: true
+- name: _verify | fluent-bit listens on the CSP ingest port
+  wait_for:
+    host: 127.0.0.1
+    port: "{{ service_ports.csp_ingest }}"
+    timeout: 30
 
-- name: _verify | csplogger.service is loaded
-  systemd:
-    name: csplogger
-  register: csplogger_verify_unit
-  failed_when: csplogger_verify_unit.status.LoadState != "loaded"
-  become: true
+# Bypass nginx and POST straight at the fluent-bit HTTP input. Verifies
+# the ingest side works in isolation — separates a fluent-bit config
+# failure from an nginx routing failure when something breaks.
+- name: _verify | POST a synthetic CSP report directly to fluent-bit
+  uri:
+    url: http://127.0.0.1:{{ service_ports.csp_ingest }}/
+    method: POST
+    body_format: json
+    body:
+      csp-report:
+        blocked-uri: "https://_verify.example/{{ ansible_date_time.iso8601_basic_short }}"
+        document-uri: "https://_verify.example/"
+        original-policy: "default-src 'self'"
+        referrer: ""
+        violated-directive: "script-src"
+    status_code: 204
 
-# csplogger is amd64-only on docker hub; on arm64 hosts the unit gets
-# installed but never started (see "Enable csplogger service" in main.yml).
-# Skip the functional probes — there's no listener to talk to.
-- name: _verify | Exercise the report sink on x86_64
-  when: ansible_architecture == "x86_64"
-  become: true
-  block:
-    - name: _verify | csplogger.service is active
-      systemd:
-        name: csplogger
-      register: csplogger_verify_active
-      failed_when: csplogger_verify_active.status.ActiveState != "active"
+# Test through nginx using a Host header so the request hits the
+# csplogger server block without needing DNS. Snakeoil certs in test
+# mode → validate_certs: false. Origin set so the response carries any
+# CORS headers (browser CSP reports come from arbitrary origins).
+- name: _verify | POST /log through the public nginx shim
+  uri:
+    url: https://localhost/log
+    method: POST
+    headers:
+      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
+      Origin: "https://_verify.example"
+    validate_certs: false
+    body_format: json
+    body:
+      csp-report:
+        blocked-uri: "https://_verify.example/"
+        document-uri: "https://_verify.example/"
+        original-policy: "default-src 'self'"
+        referrer: ""
+        violated-directive: "script-src"
+    status_code: 204
 
-    - name: _verify | csplogger answers on its loopback port
-      uri:
-        url: http://localhost:{{ service_ports.csplogger }}/dashboard
-        status_code: 200
-      register: csplogger_verify_http
-      retries: 60
-      delay: 2
-      until: csplogger_verify_http.status == 200
+- name: _verify | OPTIONS preflight returns CORS allow-POST
+  uri:
+    url: https://localhost/log
+    method: OPTIONS
+    headers:
+      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
+      Origin: "https://_verify.example"
+      Access-Control-Request-Method: POST
+      Access-Control-Request-Headers: Content-Type
+    validate_certs: false
+    status_code: 204
+  register: csplogger_verify_preflight
+  failed_when: >-
+    'POST' not in (csplogger_verify_preflight.access_control_allow_methods | default(''))
+    or '*' not in (csplogger_verify_preflight.access_control_allow_origin | default(''))
 
-    # Functional check: POST a synthetic CSP report through the /log sink
-    # and confirm it lands in csp_violations.db. State-only checks (unit
-    # active, port open) would pass even if the writer were broken — this
-    # exercises the actual contract csplogger exists to fulfill. The marker
-    # in blocked-uri lets us pick our own row out of any ambient reports.
-    - name: _verify | POST synthetic CSP report to /log
-      uri:
-        url: http://localhost:{{ service_ports.csplogger }}/log
-        method: POST
-        body_format: json
-        body:
-          csp-report:
-            blocked-uri: "https://_verify.example/{{ ansible_date_time.iso8601_basic_short }}"
-            document-uri: "https://_verify.example/"
-            original-policy: "default-src 'self'"
-            referrer: ""
-            violated-directive: "script-src"
-        status_code: 200
+- name: _verify | GET /log is rejected (POST/OPTIONS only)
+  uri:
+    url: https://localhost/log
+    method: GET
+    headers:
+      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    status_code: 403
 
-    # csplogger always returns 200 on /log regardless of whether the row
-    # was actually inserted (schema-validation failures are swallowed —
-    # see app.py). Confirm persistence by reading /records back, which
-    # serializes the violations table directly. Short retry loop covers
-    # the few-ms gap between commit and read.
-    - name: _verify | /records JSON includes the synthetic report
-      uri:
-        url: http://localhost:{{ service_ports.csplogger }}/records
-        return_content: true
-      register: csplogger_verify_records
-      retries: 5
-      delay: 1
-      until: "'_verify.example' in csplogger_verify_records.content"
+- name: _verify | GET / on csplogger subdomain returns 404
+  uri:
+    url: https://localhost/
+    method: GET
+    headers:
+      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    status_code: 404

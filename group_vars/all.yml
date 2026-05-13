@@ -27,7 +27,7 @@ email_domain: noreply.{{ domain }}
 service_ports:
   bazarr: 6767
   compta: 4567
-  csplogger: 8443
+  csp_ingest: 9880
   custom_exporter: 19392
   healthchecks: 8000
   homepage: 3003
