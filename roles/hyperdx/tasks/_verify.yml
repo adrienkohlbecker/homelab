@@ -4,6 +4,16 @@
   changed_when: false
   become: true
 
+- name: _verify | Hyperdx clickhouse system user exists
+  command: getent passwd hyperdx_clickhouse
+  changed_when: false
+  become: true
+
+- name: _verify | Hyperdx mongodb system user exists
+  command: getent passwd hyperdx_mongodb
+  changed_when: false
+  become: true
+
 - name: _verify | Hyperdx config dir exists
   stat:
     path: /mnt/services/hyperdx
@@ -11,33 +21,39 @@
   failed_when: not _verify_config_dir.stat.exists or _verify_config_dir.stat.pw_name != 'hyperdx'
   become: true
 
-# The image's entrypoint chowns each bind-mount to its internal `clickhouse`
-# (uid 101) and mongo (uid 100) users; with the standard uidmap pattern those
-# in-container uids land at host uids 101/100 (random system users on the host
-# side). We only assert existence here -- ownership is intentionally not
-# hyperdx:hyperdx on the children, and the daemons writing to them is a
-# stronger functional signal than an owner check anyway.
-- name: _verify | Hyperdx mongo data dir exists and is non-empty
+# Functional ownership check: the container's clickhouse-server chowns
+# /var/lib/clickhouse to its in-namespace uid 101 on first start, which
+# the +101 uidmap routes to host uid hyperdx_clickhouse. If this lands
+# anywhere else (root, hyperdx, a random system user), the uidmap is
+# broken and the refactor regressed.
+- name: _verify | Hyperdx clickhouse data dir is owned by hyperdx_clickhouse
+  stat:
+    path: /mnt/services/hyperdx/clickhouse
+  register: _verify_ch_dir
+  failed_when: >-
+    not _verify_ch_dir.stat.exists
+    or _verify_ch_dir.stat.pw_name != 'hyperdx_clickhouse'
+  become: true
+
+- name: _verify | Hyperdx clickhouse log dir is owned by hyperdx_clickhouse
+  stat:
+    path: /mnt/services/hyperdx/clickhouse_logs
+  register: _verify_ch_log_dir
+  failed_when: >-
+    not _verify_ch_log_dir.stat.exists
+    or _verify_ch_log_dir.stat.pw_name != 'hyperdx_clickhouse'
+  become: true
+
+# Mongo's data dir is more permissive: this image starts mongod as
+# in-namespace root rather than dropping to uid 100, so the +100 mapping
+# is precautionary (covers a future image change). We just assert the
+# dir is non-empty -- whichever uid wrote to it, mongo is alive.
+- name: _verify | Hyperdx mongo data dir is non-empty
   find:
     paths: /mnt/services/hyperdx/db
     file_type: file
   register: _verify_db_dir
   failed_when: _verify_db_dir.matched == 0
-  become: true
-
-- name: _verify | Hyperdx clickhouse data dir exists and is non-empty
-  find:
-    paths: /mnt/services/hyperdx/clickhouse
-    file_type: any
-  register: _verify_ch_dir
-  failed_when: _verify_ch_dir.matched == 0
-  become: true
-
-- name: _verify | Hyperdx clickhouse log dir exists
-  stat:
-    path: /mnt/services/hyperdx/clickhouse-logs
-  register: _verify_ch_log_dir
-  failed_when: not _verify_ch_log_dir.stat.exists or not _verify_ch_log_dir.stat.isdir
   become: true
 
 - name: _verify | Hyperdx.service is loaded and active
