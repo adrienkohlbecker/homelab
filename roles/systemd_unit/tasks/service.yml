@@ -54,7 +54,9 @@
 # loginctl enable-linger creates -- see install.yml for the longer
 # rationale.
 - name: service | Verify user-scope linger marker exists for {{ _systemd_unit_user }}
-  when: _systemd_unit_scope == 'user'
+  when:
+    - _systemd_unit_condition
+    - _systemd_unit_scope == 'user'
   stat:
     path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
   register: _systemd_unit_linger
