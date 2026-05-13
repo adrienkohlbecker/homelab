@@ -37,8 +37,9 @@
     name: podman_secret
     tasks_from: secret
   vars:
-    podman_secret_name: healthchecks_password
-    podman_secret_data: "{{ healthchecks_password }}"
+    podman_secret_args:
+      name: healthchecks_password
+      data: "{{ healthchecks_password }}"
   tags:
     - healthchecks
 
@@ -70,8 +71,9 @@
     name: podman_secret
     tasks_from: secret
   vars:
-    podman_secret_name: healthchecks_smtp_password
-    podman_secret_data: "{{ healthchecks_smtp_password }}"
+    podman_secret_args:
+      name: healthchecks_smtp_password
+      data: "{{ healthchecks_smtp_password }}"
   tags:
     - healthchecks
 
