@@ -1,0 +1,87 @@
+- name: _verify | stage sentinel dir
+  file:
+    path: /var/log/jobs
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _verify | stage sentinel file
+  copy:
+    content: ""
+    dest: /var/log/jobs/_verify_test
+    owner: root
+    group: root
+    mode: "0644"
+    force: true
+  become: true
+
+- name: _verify | run_job success writes the sentinel
+  command: /usr/local/bin/run_job daily _verify_test /bin/true
+  register: _verify_success
+  changed_when: false
+  become: true
+
+- name: _verify | slurp sentinel after success
+  slurp:
+    src: /var/log/jobs/_verify_test
+  register: _verify_success_sentinel
+  become: true
+
+- name: _verify | success assertions
+  assert:
+    that:
+      - _verify_success.rc == 0
+      - (_verify_success_sentinel.content | b64decode) is match('^daily \d{4}-\d{2}-\d{2}T')
+
+- name: _verify | run_job failure leaves sentinel untouched
+  command: /usr/local/bin/run_job daily _verify_test /bin/false
+  register: _verify_failure
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | slurp sentinel after failure
+  slurp:
+    src: /var/log/jobs/_verify_test
+  register: _verify_failure_sentinel
+  become: true
+
+- name: _verify | failure assertions
+  assert:
+    that:
+      - _verify_failure.rc != 0
+      - _verify_failure_sentinel.content == _verify_success_sentinel.content
+
+- name: _verify | run_job with no args prints usage
+  command: /usr/local/bin/run_job
+  register: _verify_noargs
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | noargs assertions
+  assert:
+    that:
+      - _verify_noargs.rc != 0
+      - "'Usage:' in _verify_noargs.stderr"
+
+- name: _verify | run_job with bad frequency prints usage
+  command: /usr/local/bin/run_job bogus _verify_test /bin/true
+  register: _verify_badfreq
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | badfreq assertions
+  assert:
+    that:
+      - _verify_badfreq.rc != 0
+      - "'Usage:' in _verify_badfreq.stderr"
+
+- name: _verify | cleanup sentinel
+  file:
+    path: /var/log/jobs/_verify_test
+    state: absent
+  become: true
