@@ -1,7 +1,13 @@
+# Inputs: caller passes a single dict `logrotate_args` with keys
+#   src         required; template file under the calling role's templates/
+#   dest        required; on-disk path under /etc/logrotate.d/
+#
+# The dict form prevents inter-call leakage at play-vars scope (see
+# compression.yml for the longer rationale; same shape).
 - name: template | Configure logrotate
   template:
-    src: "{{ logrotate_src }}"
-    dest: "{{ logrotate_dest }}"
+    src: "{{ logrotate_args.src }}"
+    dest: "{{ logrotate_args.dest }}"
     owner: root
     group: root
     mode: "0644"

@@ -157,8 +157,9 @@
     name: logrotate
     tasks_from: template
   vars:
-    logrotate_src: logrotate.j2
-    logrotate_dest: /etc/logrotate.d/zfs_autobackup
+    logrotate_args:
+      src: logrotate.j2
+      dest: /etc/logrotate.d/zfs_autobackup
   tags:
     - zfs_autobackup
 
