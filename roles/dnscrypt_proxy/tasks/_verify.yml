@@ -67,6 +67,38 @@
   until: _verify_probe.rc == 0
   changed_when: false
 
+# TCP path: the override binds ListenStream alongside ListenDatagram, and
+# pi-hole falls back to TCP on truncated (>512B) replies. Same query,
+# different socket type; no retry because the UDP probe above already woke
+# the service. recv() loop handles short reads -- TCP isn't message-atomic.
+- name: _verify | Resolve example.com via dnscrypt-proxy on 127.0.0.1:5053/tcp
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import socket, struct
+        q = struct.pack(">HHHHHH", 0x1234, 0x0100, 1, 0, 0, 0)
+        for p in b"example.com".split(b"."):
+            q += bytes([len(p)]) + p
+        q += b"\x00\x00\x01\x00\x01"
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.settimeout(2)
+        s.connect(("127.0.0.1", 5053))
+        s.sendall(struct.pack(">H", len(q)) + q)
+        ln = struct.unpack(">H", s.recv(2))[0]
+        data = b""
+        while len(data) < ln:
+            chunk = s.recv(ln - len(data))
+            if not chunk:
+                break
+            data += chunk
+        rcode = data[3] & 0x0f
+        ancount = struct.unpack(">H", data[6:8])[0]
+        assert rcode == 0, f"rcode={rcode} expected NOERROR"
+        assert ancount > 0, f"ancount={ancount} expected >=1"
+  changed_when: false
+
 - name: _verify | dnscrypt-proxy.service was woken by socket activation
   systemd:
     name: dnscrypt-proxy.service
