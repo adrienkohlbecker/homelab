@@ -1,0 +1,54 @@
+# jinja2: lstrip_blocks: "True"
+# github_runner.service ####################################################################
+[Unit]
+Description=github-actions runner
+After=network-online.target
+Wants=network-online.target
+# actions/runner spawns container jobs via the rootless podman.socket
+# inside the github_runner user manager; wait for that user manager to be
+# up before starting.
+After=user@{{ github_runner_user.uid }}.service
+Requires=user@{{ github_runner_user.uid }}.service
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+{% if zfs_has_services_mount %}
+After=zfs_mount_mnt_services.service
+Requires=zfs_mount_mnt_services.service
+{% endif %}
+{% if zfs_has_scratch_mount %}
+After=zfs_mount_mnt_scratch.service
+Requires=zfs_mount_mnt_scratch.service
+{% endif %}
+After=zfs_autosnapshot.target
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Restart=always
+TimeoutStartSec=120
+TimeoutStopSec=30
+RestartSec=5
+SyslogIdentifier=%N
+
+Type=simple
+User=github_runner
+Group=github_runner
+WorkingDirectory=/mnt/services/github_runner/
+# Point actions/runner's docker-CLI shell-outs at the rootless podman
+# socket. The runner uses the Docker API to spawn container jobs; podman
+# ships a docker-compat socket under /run/user/<uid>/podman/podman.sock.
+Environment=DOCKER_HOST=unix:///run/user/{{ github_runner_user.uid }}/podman/podman.sock
+# Wait for the github_runner user manager to bring podman.socket up.
+# Bounded: 60 x 1s, well inside TimeoutStartSec=120. If the socket
+# never appears, the journal records the explicit cause rather than a
+# generic start-timeout.
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S /run/user/{{ github_runner_user.uid }}/podman/podman.sock ] && exit 0; sleep 1; done; echo "podman.sock not present after 60s" >&2; exit 1'
+ExecStart=/mnt/services/github_runner/run.sh
+ExecReload=/bin/kill -s HUP $MAINPID
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}
