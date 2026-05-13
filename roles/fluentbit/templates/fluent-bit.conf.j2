@@ -48,6 +48,37 @@
     Refresh_Interval  5
     Skip_Long_Lines   on
 
+# Partition journal records by service before the multiline filter
+# runs. The multiline filter buffers per-tag, so without retagging, a
+# paperless INFO line arriving mid-flush inside a homeassistant python
+# traceback would get appended to it. Records without SYSLOG_IDENTIFIER
+# (rare) keep the original journal.* tag and pass through unchanged.
+[FILTER]
+    Name              rewrite_tag
+    Match             journal.*
+    Rule              $SYSLOG_IDENTIFIER ^(.+)$ svc.$1 false
+    Emitter_Name      re_emit_svc
+
+# Join python / go / java / ruby tracebacks into a single record per
+# stack so OpenObserve doesn't scatter the frames across 10+ rows.
+# Per-service tag partitioning above is what keeps the buffer from
+# cross-contaminating between concurrent log streams. flush_ms is the
+# worst-case added latency for non-continuation lines (default 4s ->
+# 1s; tracebacks are emitted contiguously, no need to wait long).
+#
+# Known quirk of fluent-bit's python parser: the trailing exception
+# line ("ValueError: bad input") is emitted *both* as the tail of the
+# joined record and as a standalone record. The dup is harmless — it
+# just inflates count slightly and provides a redundant searchable copy
+# of the error type.
+[FILTER]
+    Name              multiline
+    Match             svc.*
+    multiline.parser  python,go,java,ruby
+    multiline.key_content  MESSAGE
+    buffer            on
+    flush_ms          1000
+
 # Tag every record with the inventory hostname so cross-stream queries
 # in OpenObserve can still filter by host without parsing the stream
 # name. systemd input also sets HOSTNAME from the journal, but tails
@@ -56,6 +87,19 @@
     Name              modify
     Match             *
     Add               host {{ inventory_hostname }}
+
+# podman's journald log driver labels every stderr line as PRIORITY=3
+# (err) regardless of content, so postgres / celery / linuxserver INFO
+# chatter swamps `journalctl -p warning`. Parse the message text for a
+# level token and overwrite PRIORITY. See the script for the matching
+# rules. Non-matching records (kernel, systemd, anything without a
+# recognisable level keyword in the first 120 chars) pass through with
+# the journald-supplied PRIORITY intact.
+[FILTER]
+    Name              lua
+    Match             *
+    script            /etc/fluent-bit/level-from-message.lua
+    call              set_priority
 
 [OUTPUT]
     Name              http
