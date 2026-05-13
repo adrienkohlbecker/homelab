@@ -24,9 +24,6 @@
     loop_var: data_item
     label: '{{ data_item.dataset }}'
   vars:
-    zfs_dataset: '{{ data_item.dataset }}'
-    zfs_dataset_mountpoint: '{{ data_item.mountpoint }}'
-    zfs_dataset_mode: "{{ data_item.mode | default(omit) }}"
-    zfs_dataset_extra_properties: "{{ data_item.extra_properties | default(omit) }}"
+    zfs_dataset_args: "{{ data_item }}"
   tags:
     - data
