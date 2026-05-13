@@ -60,6 +60,11 @@
           # rate above 10/s/IP gets shed with 503.
           limit_req zone=cspreports burst=20 nodelay;
 
+          # CSP reports are tiny (a few KB typical, ~30KB worst case with
+          # script-sample). Cap well below nginx's 16M global default so a
+          # misbehaving site CSP or hostile poster can't waste bandwidth.
+          client_max_body_size 64k;
+
           # Fluent-bit's HTTP input lives on loopback; the tag is set in
           # the [INPUT] block in roles/fluentbit, not derived from the
           # URI here, so the upstream path is irrelevant.
