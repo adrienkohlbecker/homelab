@@ -30,7 +30,7 @@ jobs:
   build:
     runs-on: [ self-hosted, lab-runtime ]
     container:
-      image: lab-runtime:latest
+      image: localhost/lab-runtime:latest
       # --group-add 1 maps to host kvm gid via /etc/subgid (see
       # roles/github_runner notes). rw mount because packer-build is
       # the only writer of the qcow2 tree.

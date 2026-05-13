@@ -16,7 +16,7 @@ jobs:
   lint:
     runs-on: [ self-hosted, lab-runtime ]
     container:
-      image: lab-runtime:latest
+      image: localhost/lab-runtime:latest
     steps:
       - uses: actions/checkout@v4
       # mise + uv + the resolved tool dir (ansible-lint, black, ruff,
