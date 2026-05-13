@@ -52,7 +52,7 @@ table ip homelab {
         # clients can fall back to TCP when a response would be
         # UDP-truncated (pihole does this opportunistically); we kept it
         # UDP-only originally and saw ~2 TCP drops/day from pihole.
-        ip saddr {{ podman_default_network }} meta l4proto { tcp, udp } th dport 5053 accept comment "dnscrypt-proxy (default bridge only, TCP+UDP)"
+        ip saddr {{ podman_default_network }} meta l4proto { tcp, udp } th dport {{ service_ports.dnscrypt_proxy }} accept comment "dnscrypt-proxy (default bridge only, TCP+UDP)"
         ip saddr { {{ podman_default_network }}, {{ podman_bridge_pool }} } udp dport 5333 accept comment "aardvark-dns (post-DNAT from gateway:53, all podman bridges)"
         ip saddr {{ site_subnets.home }} udp dport 5353 accept comment "mDNS (home LAN)"
 
