@@ -1,12 +1,3 @@
-- name: _verify | stage sentinel dir
-  file:
-    path: /var/log/jobs
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
 - name: _verify | stage sentinel file
   copy:
     content: ""
