@@ -55,6 +55,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/hyperdx/clickhouse_logs:/var/log/clickhouse-server \
     --env FRONTEND_URL=https://hyperdx.{{ inventory_hostname }}.{{ domain }} \
     --publish 127.0.0.1:{{ service_ports.hyperdx }}:8080/tcp \
+    --publish 127.0.0.1:{{ service_ports.hyperdx_otlp_http }}:4318/tcp \
     --health-cmd         "curl --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8080/" \
     --health-startup-cmd "curl --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8080/" \
     --health-startup-interval "2s" \
