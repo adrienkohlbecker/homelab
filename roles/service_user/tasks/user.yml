@@ -2,7 +2,7 @@
 #   name              required; system group + user name and config dir basename
 #   extra_groups      optional list, default []; appended to the user
 #   createhome        optional bool, default false; usually only true when the
-#                     service writes into $HOME (act_runner, github_runner)
+#                     service writes into $HOME (gitea_runner, github_runner)
 #   shell             optional, default '/usr/sbin/nologin'
 #   home              optional, default '/nonexistent'
 #   config_dir        optional bool, default true; false opts out of the

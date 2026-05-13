@@ -97,7 +97,7 @@ The runner uses `--device /dev/kvm --group-add 1` for KVM acceleration. The `1` 
 
 Why the literal `1`: rootless podman builds the container gidmap from `/etc/subgid` shortest-range-first. With our two-range layout (one 65k range + one single-gid range for kvm), the single-gid range lands at container gid 1 — so host kvm = container 1. Why not `--group-add keep-groups`? It's a podman-CLI extension; the runner talks to podman over the docker-compat socket, where Docker semantics interpret `keep-groups` as a literal group name and the container fails with "no matching entries in group file". Why not `--group-add <kvm-host-gid>` directly? That host gid is unmapped inside the container's userns (or maps to a high subuid), so the supplementary group doesn't grant access to a host-gid-`<kvm>` file. The literal `1` is brittle to one thing only: adding a *second* single-id range to `subid_extra_subgid_groups` for github_runner could shift ordering — re-verify if you ever do that.
 
-The `act_runner` role still ships a stripped-down Gitea Actions runner on lab (labels: `gitea/runner-images:ubuntu-*`, no KVM, no `/mnt/scratch/qemu` mount, no custom image). It's there for ad-hoc Gitea repo workflows; this repo's CI does not run through it.
+The `gitea_runner` role still ships a stripped-down Gitea Actions runner on lab (labels: `gitea/runner-images:ubuntu-*`, no KVM, no `/mnt/scratch/qemu` mount, no custom image). It's there for ad-hoc Gitea repo workflows; this repo's CI does not run through it.
 
 Local debugging:
 - `CI_BASE_REF=HEAD~5 mise run ci:detect-roles` — preview what a multi-commit push would fan out to.

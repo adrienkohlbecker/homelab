@@ -9,8 +9,9 @@
       createhome: true
       # kvm so podman can hand /dev/kvm to lab-runtime containers via
       # --device + --group-add 1 (rootless userns doesn't map the host
-      # kvm gid through by default; see config.yml.j2 in the legacy
-      # act_runner role for the full rationale, which is unchanged here).
+      # kvm gid through by default; see roles/gitea_runner's git history
+      # -- formerly act_runner -- for the full rationale, which is
+      # unchanged here).
       extra_groups: [ kvm ]
   tags:
     - github_runner
@@ -114,9 +115,9 @@
   tags:
     - github_runner
 
-# Same xino=off override as act_runner had; see that role's git history
-# for the kernel printk rationale. Scoped to github_runner so the
-# rootful overlay's working xino is unaffected.
+# Same xino=off override as gitea_runner (formerly act_runner) had; see
+# that role's git history for the kernel printk rationale. Scoped to
+# github_runner so the rootful overlay's working xino is unaffected.
 - name: Create rootless containers config directory
   when: not (ansible_check_mode and github_runner_user.changed)
   file:
@@ -155,8 +156,9 @@
   when: not (ansible_check_mode and github_runner_user.changed)
   copy:
     dest: /mnt/scratch/github_runner/.config/containers/storage.conf
-    # Only the mountopt override (xino=off); see roles/act_runner's git
-    # history for the printk-suppression rationale. Pinning the driver
+    # Only the mountopt override (xino=off); see roles/gitea_runner's
+    # git history (formerly act_runner) for the printk-suppression
+    # rationale. Pinning the driver
     # explicitly via [storage] driver = "overlay" would silence podman's
     # cosmetic "auto-picked a driver" warning, but ALSO triggers a
     # "database graph driver mismatch" error against any podman storage

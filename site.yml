@@ -87,7 +87,7 @@
     - tautulli
     - gitea
     - nodejs
-    - act_runner
+    - gitea_runner
     - github_runner
     - transmission
     - getmail

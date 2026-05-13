@@ -219,7 +219,7 @@ smb_shares:
 # user's ranges and invalidates their existing rootless podman storage.
 # Append new entries at the end; don't sort.
 subid_users:
-  - act_runner
+  - gitea_runner
   - spouse
   - github_runner
 

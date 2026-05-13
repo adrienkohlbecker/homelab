@@ -350,8 +350,8 @@ def main() -> int:
     # freshly-minted workdirs.
     #
     # Scope is imagedir-only. CI's --workdir-parent points at a per-cell
-    # host bind-mount (see .gitea/workflows/test.yml) so no two cells share
-    # state and a host-side tmpfiles.d entry in the act_runner role reaps
+    # host bind-mount (see .github/workflows/test.yml) so no two cells share
+    # state and a host-side tmpfiles.d entry in the github_runner role reaps
     # stale per-cell dirs -- no in-harness sweep needed there.
     sweep_stale_workdirs(imagedir_for_host())
 

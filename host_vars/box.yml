@@ -52,7 +52,7 @@ netdata_diskspace_blocklist: []
 smb_shares: []
 
 subid_users:
-  - act_runner
+  - gitea_runner
 
 has_transcoding_acceleration: false
 z2m_start_service: false

@@ -1,72 +1,72 @@
-- name: _verify | act_runner user exists
-  command: getent passwd act_runner
+- name: _verify | gitea_runner user exists
+  command: getent passwd gitea_runner
   changed_when: false
   become: true
 
-- name: _verify | act_runner binary version matches act_runner_version
-  command: act_runner --version
+- name: _verify | gitea-runner binary version matches gitea_runner_version
+  command: gitea-runner --version
   register: _verify_version
   changed_when: false
-  failed_when: act_runner_version not in _verify_version.stdout
+  failed_when: gitea_runner_version not in _verify_version.stdout
   become: true
 
-- name: _verify | act_runner config file exists
+- name: _verify | gitea_runner config file exists
   stat:
-    path: /mnt/services/act_runner/config.yml
+    path: /mnt/services/gitea_runner/config.yml
   register: _verify_config_file
   failed_when: not _verify_config_file.stat.exists
   become: true
 
 - name: _verify | .runner is valid JSON and carries templated name + labels
   slurp:
-    src: /mnt/services/act_runner/.runner
+    src: /mnt/services/gitea_runner/.runner
   register: _verify_runner_b64
   vars:
     _runner_data: "{{ _verify_runner_b64.content | b64decode | from_json }}"
   # Asserts the role's per-apply rewrite contract: .runner is valid JSON,
   # the name field matches inventory_hostname (so gitea sees this host's
   # entry under the expected name), and the labels list matches
-  # act_runner_labels (so a host_vars label override actually lands).
+  # gitea_runner_labels (so a host_vars label override actually lands).
   failed_when: >-
     _runner_data is not mapping
     or (_runner_data.name | default('')) != inventory_hostname
-    or (_runner_data.labels | default([]) | sort) != (act_runner_labels | sort)
+    or (_runner_data.labels | default([]) | sort) != (gitea_runner_labels | sort)
   become: true
 
-- name: _verify | subuid/subgid entries exist for act_runner
-  command: grep -q '^act_runner:' /etc/{{ item }}
+- name: _verify | subuid/subgid entries exist for gitea_runner
+  command: grep -q '^gitea_runner:' /etc/{{ item }}
   changed_when: false
   loop:
     - subuid
     - subgid
   become: true
 
-- name: _verify | linger is enabled for act_runner
+- name: _verify | linger is enabled for gitea_runner
   stat:
-    path: /var/lib/systemd/linger/act_runner
+    path: /var/lib/systemd/linger/gitea_runner
   register: _verify_linger
   failed_when: not _verify_linger.stat.exists
   become: true
 
-- name: _verify | rootless podman.socket is active under act_runner
+- name: _verify | rootless podman.socket is active under gitea_runner
   systemd:
     name: podman.socket
     scope: user
   register: _verify_podman_sock
   failed_when: _verify_podman_sock.status.ActiveState != "active"
   become: true
-  become_user: act_runner
+  become_user: gitea_runner
 
-- name: _verify | act_runner.service is loaded and active
+- name: _verify | gitea_runner.service is loaded and active
   systemd:
-    name: act_runner
+    name: gitea_runner
   register: _verify_unit
   failed_when: >-
     _verify_unit.status.LoadState != "loaded"
     or _verify_unit.status.ActiveState != "active"
   become: true
 
-- name: _verify | act_runner is registered and recently online in gitea (test only)
+- name: _verify | gitea_runner is registered and recently online in gitea (test only)
   # Functional check: the harness's gitea fixture writes
   # action_runner.last_online whenever the runner pings (every
   # fetch_interval, default 2s). A registered-but-broken daemon (bad
