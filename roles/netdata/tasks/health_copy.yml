@@ -1,3 +1,10 @@
+# Inputs: caller passes a single dict `netdata_args` with keys
+#   src         required; file under the calling role's files/
+#   dest        required; filename under /etc/netdata/health.d/
+#   mode        optional, default '0644'
+#
+# The dict form prevents inter-call leakage at play-vars scope (see
+# template.yml for the longer rationale; same shape).
 - name: health_copy | Ensure netdata directory exists
   file:
     dest: "{{ item }}"
@@ -12,25 +19,25 @@
 
 - name: health_copy | Check if built-in template
   stat:
-    path: /usr/lib/netdata/conf.d/health.d/{{ netdata_copy_dest }}
+    path: /usr/lib/netdata/conf.d/health.d/{{ netdata_args.dest }}
   register: netdata_alerts_template_builtin
   become: true
 
 - name: health_copy | Copy alerting template
   when: netdata_alerts_template_builtin.stat.exists
-  command: cp /usr/lib/netdata/conf.d/health.d/{{ netdata_copy_dest }} /etc/netdata/health.d/{{ netdata_copy_dest }}
+  command: cp /usr/lib/netdata/conf.d/health.d/{{ netdata_args.dest }} /etc/netdata/health.d/{{ netdata_args.dest }}
   args:
-    creates: /etc/netdata/health.d/{{ netdata_copy_dest }}
+    creates: /etc/netdata/health.d/{{ netdata_args.dest }}
   register: netdata_alerts_template
   become: true
 
 - name: health_copy | Copy the alerting config
   copy:
-    src: "{{ netdata_copy_src }}"
-    dest: "/etc/netdata/health.d/{{ netdata_copy_dest }}"
+    src: "{{ netdata_args.src }}"
+    dest: "/etc/netdata/health.d/{{ netdata_args.dest }}"
     owner: netdata
     group: netdata
-    mode: "{{ netdata_copy_mode | default('0644') }}"
+    mode: "{{ netdata_args.mode | default('0644') }}"
     backup: true
   register: netdata_alerts_conf
   become: true

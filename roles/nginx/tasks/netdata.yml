@@ -3,8 +3,9 @@
     name: netdata
     tasks_from: copy
   vars:
-    netdata_copy_src: web_log.conf
-    netdata_copy_dest: go.d/web_log.conf
-    netdata_copy_restart: "{{ netdata_restart }}"
+    netdata_args:
+      src: web_log.conf
+      dest: go.d/web_log.conf
+      restart: "{{ netdata_restart }}"
   tags:
     - nginx

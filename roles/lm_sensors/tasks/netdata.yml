@@ -3,8 +3,9 @@
     name: netdata
     tasks_from: copy
   vars:
-    netdata_copy_src: sensors.conf
-    netdata_copy_dest: go.d/sensors.conf
-    netdata_copy_restart: "{{ netdata_restart }}"
+    netdata_args:
+      src: sensors.conf
+      dest: go.d/sensors.conf
+      restart: "{{ netdata_restart }}"
   tags:
     - lm_sensors

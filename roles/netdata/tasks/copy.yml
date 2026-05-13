@@ -1,5 +1,14 @@
+# Inputs: caller passes a single dict `netdata_args` with keys
+#   src         required; file under the calling role's files/
+#   dest        required; path relative to /etc/netdata/
+#   mode        optional, default '0644'
+#   condition   optional bool, default true; gates the whole call
+#   restart     optional bool, default true; restart netdata after a change
+#
+# The dict form prevents inter-call leakage at play-vars scope (see
+# template.yml for the longer rationale; same shape).
 - name: copy | Ensure netdata directory exists
-  when: netdata_copy_condition | default(true)
+  when: netdata_args.condition | default(true)
   file:
     dest: "{{ item }}"
     state: directory
@@ -8,31 +17,31 @@
     mode: "0755"
   loop:
     - /etc/netdata/
-    - /etc/netdata/{{ netdata_copy_dest | dirname }}/
+    - /etc/netdata/{{ netdata_args.dest | dirname }}/
   become: true
 
 - name: copy | Copy metrics template
-  when: netdata_copy_condition | default(true)
-  command: cp /usr/lib/netdata/conf.d/{{ netdata_copy_dest }} /etc/netdata/{{ netdata_copy_dest }}
+  when: netdata_args.condition | default(true)
+  command: cp /usr/lib/netdata/conf.d/{{ netdata_args.dest }} /etc/netdata/{{ netdata_args.dest }}
   args:
-    creates: /etc/netdata/{{ netdata_copy_dest }}
+    creates: /etc/netdata/{{ netdata_args.dest }}
   register: netdata_copy_copy
   become: true
 
 - name: copy | Setup metrics
-  when: not (ansible_check_mode and netdata_copy_copy.changed) and (netdata_copy_condition | default(true))
+  when: not (ansible_check_mode and netdata_copy_copy.changed) and (netdata_args.condition | default(true))
   copy:
-    src: "{{ netdata_copy_src }}"
-    dest: /etc/netdata/{{ netdata_copy_dest }}
+    src: "{{ netdata_args.src }}"
+    dest: /etc/netdata/{{ netdata_args.dest }}
     owner: netdata
     group: netdata
-    mode: "{{ netdata_copy_mode | default('0644') }}"
+    mode: "{{ netdata_args.mode | default('0644') }}"
     backup: true
   register: netdata_copy
   become: true
 
 - name: copy | Restart netdata
-  when: (netdata_copy_restart | default(true)) and (netdata_copy_copy.changed or netdata_copy.changed)
+  when: (netdata_args.restart | default(true)) and (netdata_copy_copy.changed or netdata_copy.changed)
   systemd:
     name: netdata
     state: restarted

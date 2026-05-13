@@ -204,9 +204,10 @@
 #     name: netdata
 #     tasks_from: template
 #   vars:
-#     netdata_template_src: pihole.conf.j2
-#     netdata_template_dest: go.d/pihole.conf
-#     netdata_template_mode: "0600"
+#     netdata_args:
+#       src: pihole.conf.j2
+#       dest: go.d/pihole.conf
+#       mode: "0600"
 #   tags:
 #     - pihole
 
