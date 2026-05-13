@@ -119,9 +119,10 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: fluent-bit
-    systemd_unit_condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or fluentbit_repository.changed)) }}"
-    systemd_unit_restart: "{{ fluentbit_cfg.changed or fluentbit_lua.changed or fluentbit_apt.changed }}"
+    systemd_unit_args:
+      src: fluent-bit
+      condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or fluentbit_repository.changed)) }}"
+      restart: "{{ fluentbit_cfg.changed or fluentbit_lua.changed or fluentbit_apt.changed }}"
   tags:
     - fluentbit
 

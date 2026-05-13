@@ -47,9 +47,10 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: eaton-ipp
-    systemd_unit_condition: '{{ not (ansible_check_mode and ipp_linux_installed.changed) and ansible_architecture == "x86_64" }}'
-    systemd_unit_restart: false
+    systemd_unit_args:
+      src: eaton-ipp
+      condition: '{{ not (ansible_check_mode and ipp_linux_installed.changed) and ansible_architecture == "x86_64" }}'
+      restart: false
   tags:
     - eaton_ipp
 

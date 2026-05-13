@@ -63,8 +63,9 @@
     name: systemd_unit
     tasks_from: install
   vars:
-    systemd_unit_src: openobserve.service.j2
-    systemd_unit_condition: "{{ not (ansible_check_mode and openobserve_user.changed) }}"
+    systemd_unit_args:
+      src: openobserve.service.j2
+      condition: "{{ not (ansible_check_mode and openobserve_user.changed) }}"
   tags:
     - openobserve
 
@@ -73,9 +74,10 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: openobserve
-    systemd_unit_condition: "{{ not (ansible_check_mode and (openobserve_service_result.changed or openobserve_user.changed)) }}"
-    systemd_unit_restart: "{{ openobserve_service_result.changed or openobserve_root_password_rotated }}"
+    systemd_unit_args:
+      src: openobserve
+      condition: "{{ not (ansible_check_mode and (openobserve_service_result.changed or openobserve_user.changed)) }}"
+      restart: "{{ openobserve_service_result.changed or openobserve_root_password_rotated }}"
   tags:
     - openobserve
 

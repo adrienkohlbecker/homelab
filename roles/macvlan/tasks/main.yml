@@ -69,7 +69,8 @@
     name: systemd_unit
     tasks_from: install
   vars:
-    systemd_unit_src: mac0.service.j2
+    systemd_unit_args:
+      src: mac0.service.j2
   tags:
     - macvlan
 
@@ -78,8 +79,9 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: mac0
-    systemd_unit_condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
-    systemd_unit_restart: "{{ systemd_unit.changed }}"
+    systemd_unit_args:
+      src: mac0
+      condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
+      restart: "{{ systemd_unit.changed }}"
   tags:
     - macvlan

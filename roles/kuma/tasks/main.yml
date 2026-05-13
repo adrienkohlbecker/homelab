@@ -64,8 +64,9 @@
     name: systemd_unit
     tasks_from: install
   vars:
-    systemd_unit_src: kuma.service.j2
-    systemd_unit_condition: "{{ not (ansible_check_mode and kuma_user.changed) }}"
+    systemd_unit_args:
+      src: kuma.service.j2
+      condition: "{{ not (ansible_check_mode and kuma_user.changed) }}"
   tags:
     - kuma
 
@@ -74,9 +75,10 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: kuma
-    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or kuma_user.changed)) }}"
-    systemd_unit_restart: "{{ systemd_unit.changed }}"
+    systemd_unit_args:
+      src: kuma
+      condition: "{{ not (ansible_check_mode and (systemd_unit.changed or kuma_user.changed)) }}"
+      restart: "{{ systemd_unit.changed }}"
   tags:
     - kuma
 

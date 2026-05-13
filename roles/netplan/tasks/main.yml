@@ -24,7 +24,8 @@
     name: systemd_unit
     tasks_from: install
   vars:
-    systemd_unit_src: netplan_rollback.service
+    systemd_unit_args:
+      src: netplan_rollback.service
   tags:
     - netplan
 
@@ -33,7 +34,8 @@
     name: systemd_unit
     tasks_from: install
   vars:
-    systemd_unit_src: netplan_rollback.timer
+    systemd_unit_args:
+      src: netplan_rollback.timer
   tags:
     - netplan
 

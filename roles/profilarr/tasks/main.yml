@@ -77,8 +77,9 @@
     name: systemd_unit
     tasks_from: install
   vars:
-    systemd_unit_src: profilarr.service.j2
-    systemd_unit_condition: "{{ not (ansible_check_mode and profilarr_user.changed) }}"
+    systemd_unit_args:
+      src: profilarr.service.j2
+      condition: "{{ not (ansible_check_mode and profilarr_user.changed) }}"
   tags:
     - profilarr
 
@@ -87,9 +88,10 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: profilarr
-    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or profilarr_user.changed)) }}"
-    systemd_unit_restart: "{{ systemd_unit.changed }}"
+    systemd_unit_args:
+      src: profilarr
+      condition: "{{ not (ansible_check_mode and (systemd_unit.changed or profilarr_user.changed)) }}"
+      restart: "{{ systemd_unit.changed }}"
   tags:
     - profilarr
 
