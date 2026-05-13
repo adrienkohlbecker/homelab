@@ -134,16 +134,3 @@
     scope: "{{ _systemd_unit_scope }}"
   become: true
   become_user: "{{ _systemd_unit_user }}"
-
-# Same vars-leak defense as install.yml. service.yml additionally
-# resets _start / _restart / _reload because they're booleans whose
-# leaked-true (or leaked-false) variant would silently change the
-# next caller's start/restart/reload behavior. See install.yml's
-# matching task for the import_role + vars: leak background.
-- name: Reset caller-input vars to defaults
-  set_fact:
-    systemd_unit_user: root
-    systemd_unit_condition: true
-    systemd_unit_start: true
-    systemd_unit_restart: false
-    systemd_unit_reload: false

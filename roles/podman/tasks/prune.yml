@@ -35,11 +35,3 @@
     systemd_unit_src: podman-prune.timer
     systemd_unit_user: "{{ podman_prune_user | default('root') }}"
     systemd_unit_condition: "{{ not (ansible_check_mode and (podman_prune_timer_result.changed or podman_prune_service_result.changed)) and podman_prune_condition | default(true) }}"
-
-# Reset caller-input vars to defaults so they don't leak into a sibling
-# call later in the play. See roles/systemd_unit/tasks/install.yml for
-# the full background on the import_role + vars: leak.
-- name: Reset caller-input vars to defaults
-  set_fact:
-    podman_prune_user: root
-    podman_prune_condition: true

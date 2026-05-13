@@ -39,15 +39,3 @@
     group: "{{ service_user_name }}"
     mode: "0755"
   become: true
-
-# Reset caller-input vars to documented defaults so they don't leak
-# into a sibling call later in the play. See roles/systemd_unit/tasks/
-# install.yml for the full background on the import_role + vars: leak
-# (ansible/ansible#74091, #79502).
-- name: Reset caller-input vars to defaults
-  set_fact:
-    service_user_extra_groups: []
-    service_user_createhome: false
-    service_user_shell: /usr/sbin/nologin
-    service_user_home: /nonexistent
-    service_user_config_dir: true
