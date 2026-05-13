@@ -45,6 +45,7 @@
     - zfsbootmenu
     - refind
     - static_curl
+    - level_init
 
 - name: Add more services
   hosts: all:!bunk
