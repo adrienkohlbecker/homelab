@@ -59,6 +59,35 @@
       - _verify_failure.rc != 0
       - (_verify_failure_sentinel.content | b64decode) == "daily 1970-01-01T00:00:00+00:00\n"
 
+# systemd-cat capture is the other observable side of run_job (the
+# sentinel is the metric side, this is the operator-debugging side).
+# Confirm stdout lands at default priority and stderr is upgraded to
+# err via --stderr-priority=3.
+- name: _verify | run_job emits stdout and stderr to the journal
+  command: >-
+    /usr/local/bin/run_job daily _verify_test_journal
+    /bin/sh -c 'echo CRON_VERIFY_STDOUT; echo CRON_VERIFY_STDERR >&2'
+  changed_when: false
+  become: true
+
+- name: _verify | read journal entries for the test identifier
+  command: journalctl --identifier _verify_test_journal --output json --no-pager
+  register: _verify_journal
+  changed_when: false
+  become: true
+
+- name: _verify | journal assertions
+  vars:
+    _entries: "{{ _verify_journal.stdout_lines | map('from_json') | list }}"
+    _by_msg: "{{ dict(_entries | map(attribute='MESSAGE') | zip(_entries)) }}"
+  assert:
+    that:
+      - "'CRON_VERIFY_STDOUT' in _by_msg"
+      - "'CRON_VERIFY_STDERR' in _by_msg"
+      # PRIORITY is a string in journal JSON; 6=info (default), 3=err.
+      - _by_msg['CRON_VERIFY_STDOUT'].PRIORITY == '6'
+      - _by_msg['CRON_VERIFY_STDERR'].PRIORITY == '3'
+
 - name: _verify | run_job with no args prints usage
   command: /usr/local/bin/run_job
   register: _verify_noargs
@@ -95,4 +124,5 @@
     - _verify_test_weekly
     - _verify_test_monthly
     - _verify_test_failure
+    - _verify_test_journal
   become: true
