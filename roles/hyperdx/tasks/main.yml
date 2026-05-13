@@ -1,0 +1,66 @@
+---
+- name: Set up hyperdx system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: hyperdx
+  tags:
+    - hyperdx
+
+# The all-in-one image bundles three stateful daemons (ClickHouse, MongoDB,
+# OTel collector) writing to three distinct paths. Split into siblings under
+# /mnt/services/hyperdx so each can become its own ZFS child dataset later
+# (ClickHouse benefits from larger recordsize than MongoDB). One-shot mkdir
+# rather than `file:` because the in-container entrypoint chowns the
+# clickhouse bind-mounts to its internal `clickhouse` user (uid 101);
+# re-asserting owner=hyperdx with `file:` would flip changed=true on every
+# subsequent apply.
+- name: Create hyperdx data subdirectories
+  when: not (ansible_check_mode and hyperdx_user.changed)
+  shell: |
+    set -euo pipefail
+    mkdir -p /mnt/services/hyperdx/{db,clickhouse,clickhouse-logs}
+    chown hyperdx:hyperdx /mnt/services/hyperdx/{db,clickhouse,clickhouse-logs}
+    chmod 0755 /mnt/services/hyperdx/{db,clickhouse,clickhouse-logs}
+  args:
+    executable: /bin/bash
+    creates: /mnt/services/hyperdx/clickhouse-logs
+  become: true
+  tags:
+    - hyperdx
+
+- name: Install hyperdx service
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: hyperdx.service.j2
+      condition: "{{ not (ansible_check_mode and hyperdx_user.changed) }}"
+  tags:
+    - hyperdx
+
+- name: Enable hyperdx service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: hyperdx
+      condition: "{{ not (ansible_check_mode and (hyperdx_service_result.changed or hyperdx_user.changed)) }}"
+      restart: "{{ hyperdx_service_result.changed }}"
+  tags:
+    - hyperdx
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: hyperdx
+      proxy_pass: http://localhost:{{ service_ports.hyperdx }}/
+  tags:
+    - hyperdx

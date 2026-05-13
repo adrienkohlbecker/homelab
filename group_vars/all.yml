@@ -31,6 +31,7 @@ service_ports:
   healthchecks: 8000
   homepage: 3003
   homepage_alerts: 8765
+  hyperdx: 5085
   openobserve: 5080
 
 # mDNS device-info model -- drives the Finder sidebar icon for the host.
