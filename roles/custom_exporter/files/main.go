@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 )
 
 const DEFAULT_ADDRESS = "127.0.0.1:19392"
@@ -43,6 +44,10 @@ func main() {
 	}
 
 	r := prometheus.NewRegistry()
+	// Standard Go runtime + process collectors -- go_goroutines, process_resident_memory_bytes,
+	// process_cpu_seconds_total, etc. Lets us spot a leaking or wedged exporter from outside.
+	r.MustRegister(collectors.NewGoCollector())
+	r.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	r.MustRegister(exporterUp)
 	r.MustRegister(exporterErrors)
 	r.MustRegister(driveActiveGauge)
