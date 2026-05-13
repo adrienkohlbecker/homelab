@@ -86,8 +86,9 @@
     name: podman_secret
     tasks_from: secret
   vars:
-    podman_secret_name: openproject_secret_key
-    podman_secret_data: "{{ openproject_secret_key }}"
+    podman_secret_args:
+      name: openproject_secret_key
+      data: "{{ openproject_secret_key }}"
   tags:
     - openproject
 

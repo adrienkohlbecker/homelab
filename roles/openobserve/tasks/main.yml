@@ -28,8 +28,9 @@
     name: podman_secret
     tasks_from: secret
   vars:
-    podman_secret_name: openobserve_root_password
-    podman_secret_data: "{{ openobserve_root_password }}"
+    podman_secret_args:
+      name: openobserve_root_password
+      data: "{{ openobserve_root_password }}"
   tags:
     - openobserve
 

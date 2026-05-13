@@ -3,8 +3,9 @@
     name: podman_secret
     tasks_from: secret
   vars:
-    podman_secret_name: podman_secret_test
-    podman_secret_data: alpha
+    podman_secret_args:
+      name: podman_secret_test
+      data: alpha
 
 - name: _verify | scenario 1 — assert created and not pre-existing
   assert:
@@ -17,8 +18,9 @@
     name: podman_secret
     tasks_from: secret
   vars:
-    podman_secret_name: podman_secret_test
-    podman_secret_data: alpha
+    podman_secret_args:
+      name: podman_secret_test
+      data: alpha
 
 - name: _verify | scenario 2 — assert NOT rotated and pre-existing
   assert:
@@ -31,8 +33,9 @@
     name: podman_secret
     tasks_from: secret
   vars:
-    podman_secret_name: podman_secret_test
-    podman_secret_data: beta
+    podman_secret_args:
+      name: podman_secret_test
+      data: beta
 
 - name: _verify | scenario 3 — assert rotated and pre-existing
   assert:
