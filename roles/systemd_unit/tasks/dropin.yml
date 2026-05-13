@@ -1,27 +1,28 @@
 # Drop-in entrypoint: write <scope-dir>/<unit>.d/override.conf to extend
 # or override a unit (usually one shipped by an OS package; can also
-# layer over a unit installed by this role). Caller passes:
-#   systemd_unit_for: <unit>             e.g. podman.socket
-#   systemd_unit_src: <file>             under role files/ or templates/;
-#                                        suffix .j2 picks the template path
-#   systemd_unit_user: <user>            optional, default root
-#   systemd_unit_condition: <bool>       optional, default true
-# install.yml does the write + systemd-analyze verify; verify is pointed
-# at <unit> (not the override file) so the drop-in is validated as part
-# of its composed unit. install.yml derives copy vs template from src's
-# .j2 suffix — no dispatch flag here. The drop-in name is fixed at
-# override.conf — every current consumer uses that and a fancier API
-# can wait for the first counterexample.
-- name: dropin | Resolve user for {{ systemd_unit_for }}
+# layer over a unit installed by this role). Caller passes a single dict
+# `systemd_unit_args` with keys:
+#   for               parent unit  e.g. podman.socket
+#   src               file under role files/ or templates/; suffix .j2
+#                     picks the template path
+#   user              optional, default root
+#   condition         optional, default true
+# install.yml does the write + systemd-analyze verify; when `for` is set
+# it derives dest=<for>.d/override.conf and verify=<for> automatically,
+# so the drop-in is validated as part of its composed unit. install.yml
+# derives copy vs template from src's .j2 suffix — no dispatch flag here.
+# The drop-in name is fixed at override.conf — every current consumer
+# uses that and a fancier API can wait for the first counterexample.
+- name: dropin | Resolve user for {{ systemd_unit_args.for }}
   set_fact:
-    _systemd_unit_user: "{{ systemd_unit_user | default('root') }}"
+    _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
 
-- name: dropin | Derive drop-in directory for {{ systemd_unit_for }}
+- name: dropin | Derive drop-in directory for {{ systemd_unit_args.for }}
   set_fact:
-    _systemd_unit_dropin_dir: "{{ ('/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user') ~ '/' ~ systemd_unit_for ~ '.d' }}"
+    _systemd_unit_dropin_dir: "{{ ('/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user') ~ '/' ~ systemd_unit_args.for ~ '.d' }}"
 
 - name: dropin | Create {{ _systemd_unit_dropin_dir }}
-  when: systemd_unit_condition | default(true)
+  when: systemd_unit_args.condition | default(true)
   file:
     path: "{{ _systemd_unit_dropin_dir }}"
     state: directory
@@ -30,7 +31,5 @@
     mode: "0755"
   become: true
 
-- import_tasks: install.yml
-  vars:
-    systemd_unit_dest: "{{ systemd_unit_for }}.d/override.conf"
-    systemd_unit_verify: "{{ systemd_unit_for }}"
+- name: dropin | Install override.conf via install.yml
+  import_tasks: install.yml

@@ -120,8 +120,9 @@
     name: systemd_unit
     tasks_from: install
   vars:
-    systemd_unit_src: transmission.service.j2
-    systemd_unit_condition: "{{ not (ansible_check_mode and transmission_user.changed) }}"
+    systemd_unit_args:
+      src: transmission.service.j2
+      condition: "{{ not (ansible_check_mode and transmission_user.changed) }}"
   tags:
     - transmission
 
@@ -130,9 +131,10 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: transmission
-    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or transmission_user.changed)) }}"
-    systemd_unit_restart: "{{ systemd_unit.changed or transmission_conf.changed or transmission_env.changed or transmission_health.changed }}"
+    systemd_unit_args:
+      src: transmission
+      condition: "{{ not (ansible_check_mode and (systemd_unit.changed or transmission_user.changed)) }}"
+      restart: "{{ systemd_unit.changed or transmission_conf.changed or transmission_env.changed or transmission_health.changed }}"
   tags:
     - transmission
 

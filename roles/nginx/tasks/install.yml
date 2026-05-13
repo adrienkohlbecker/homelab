@@ -58,8 +58,9 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: nginx
-    systemd_unit_condition: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
-    systemd_unit_restart: "{{ nginx_apt.changed or nginx_default_conf.changed or nginx_conf.changed or nginx_status_conf.changed }}"
+    systemd_unit_args:
+      src: nginx
+      condition: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
+      restart: "{{ nginx_apt.changed or nginx_default_conf.changed or nginx_conf.changed or nginx_status_conf.changed }}"
   tags:
     - nginx

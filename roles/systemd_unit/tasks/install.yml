@@ -1,27 +1,50 @@
 # Note: with ubuntu 24.04, may be able to use `validate: systemd-analyze verify %s:foo.service`,
 # although it won't fail for warnings like undefined keys?
 #
-# `systemd_unit_user` (default `root`) selects scope: root installs at
+# Inputs: caller passes a single dict `systemd_unit_args` with keys
+#   src               file under role files/ (copy) or templates/ (.j2 → template)
+#   dest              optional on-disk filename; defaults to src with .j2 stripped
+#   for               drop-in only: parent unit (e.g. podman.socket); derives
+#                     dest=<for>.d/override.conf and verify=<for>
+#   user              default 'root'; non-root drives /etc/systemd/user
+#   condition         default true; gates the whole call
+#   verify            optional path for systemd-analyze verify (drop-ins
+#                     validate the composed parent unit, not the override)
+#
+# The dict form prevents inter-call leakage: each import_role pass replaces
+# the whole `systemd_unit_args` value at play-vars scope, so a previous
+# caller's user/start/etc. can't bleed into the next caller's call.
+#
+# `systemd_unit_args.user` (default 'root') selects scope: root installs at
 # /etc/systemd/system and reloads the system manager; any other value
 # installs at /etc/systemd/user (host-wide user-default) and reloads the
 # named user's user manager (which must already be lingered).
 #
-# Module dispatch: derived from systemd_unit_src's suffix — *.j2 → template
-# (loaded from the calling role's templates/), anything else → copy (from
-# files/). The role strips .j2 for the on-disk dest. systemd_unit_dest
-# overrides the dest path (used by drop-ins to land at <unit>.d/override.conf).
+# Module dispatch: derived from src's suffix — *.j2 → template (loaded from
+# the calling role's templates/), anything else → copy (from files/). The
+# role strips .j2 for the on-disk dest. systemd_unit_args.dest overrides
+# the dest path (used by drop-ins to land at <unit>.d/override.conf).
 #
 # Two set_fact tasks because ansible's templating engine resolves all
 # keys in a single set_fact concurrently — a key can't read a sibling
 # defined in the same task. Primitives (caller-var defaulting) first,
 # derived facts (scope/dir) second.
-- name: Resolve caller defaults for {{ systemd_unit_src }}
+- name: Resolve caller defaults for {{ systemd_unit_args.src }}
   set_fact:
-    _systemd_unit_user: "{{ systemd_unit_user | default('root') }}"
-    _systemd_unit_condition: "{{ systemd_unit_condition | default(true) }}"
-    _systemd_unit_name: "{{ systemd_unit_dest | default(systemd_unit_src | regex_replace('\\.j2$', '')) }}"
+    _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
+    _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
+    _systemd_unit_src: "{{ systemd_unit_args.src }}"
+    _systemd_unit_name: >-
+      {{ systemd_unit_args.dest
+         | default((systemd_unit_args.for ~ '.d/override.conf') if systemd_unit_args.for is defined
+                   else (systemd_unit_args.src | regex_replace('\.j2$', ''))) }}
+    _systemd_unit_verify: >-
+      {{ systemd_unit_args.verify
+         | default(systemd_unit_args.for if systemd_unit_args.for is defined
+                   else (systemd_unit_args.dest
+                         | default(systemd_unit_args.src | regex_replace('\.j2$', '')))) }}
 
-- name: Derive install scope for {{ systemd_unit_src }}
+- name: Derive install scope for {{ systemd_unit_args.src }}
   set_fact:
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_dir: "{{ '/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user' }}"
@@ -51,7 +74,7 @@
 - name: Stat unit path to detect a pre-existing mask
   when: _systemd_unit_condition
   stat:
-    path: "{{ _systemd_unit_dir }}/{{ systemd_unit_verify | default(_systemd_unit_name) }}"
+    path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}"
   register: _systemd_unit_mask
   become: true
 
@@ -62,9 +85,9 @@
     - _systemd_unit_mask.stat.lnk_target | default('') == '/dev/null'
   fail:
     msg: >-
-      Refusing to overwrite {{ _systemd_unit_dir }}/{{ systemd_unit_verify | default(_systemd_unit_name) }}:
+      Refusing to overwrite {{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}:
       it is masked (symlink to /dev/null). Unmask with
-      `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ systemd_unit_verify | default(_systemd_unit_name) }}`
+      `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_verify }}`
       before re-running, or --limit the play to skip this role.
 
 - name: Install systemd unit
@@ -78,10 +101,10 @@
     - name: Write the unit file ({{ _module }})
       when: _systemd_unit_condition
       vars:
-        _module: "{{ 'template' if systemd_unit_src.endswith('.j2') else 'copy' }}"
+        _module: "{{ 'template' if _systemd_unit_src.endswith('.j2') else 'copy' }}"
       action: "{{ _module }}"
       args:
-        src: "{{ systemd_unit_src }}"
+        src: "{{ _systemd_unit_src }}"
         dest: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
         owner: root
         group: root
@@ -99,7 +122,7 @@
     # newer `--no-man` form is 254+ only.
     - name: Validate unit file
       when: systemd_unit.changed
-      command: systemd-analyze verify --man=no {{ _systemd_unit_dir }}/{{ systemd_unit_verify | default(_systemd_unit_name) }}
+      command: systemd-analyze verify --man=no {{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}
       register: systemd_verify
       changed_when: false
       failed_when: systemd_verify.rc != 0 or systemd_verify.stderr != ''
@@ -119,7 +142,7 @@
     # same play). New callers should reference <basename>_<type>_result —
     # e.g. healthchecks.service → healthchecks_service_result, and
     # podman.socket / podman.service yield distinct facts.
-    - name: Record install result for {{ systemd_unit_src }}
+    - name: Record install result for {{ _systemd_unit_src }}
       set_fact:
         "{{ _systemd_unit_name | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ systemd_unit }}"
 

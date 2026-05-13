@@ -102,9 +102,10 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: libvirtd
-    systemd_unit_condition: "{{ not (ansible_check_mode and apt_install_libvirt.changed) }}"
-    systemd_unit_restart: "{{ libvirt_firewall_backend.changed | default(false) }}"
+    systemd_unit_args:
+      src: libvirtd
+      condition: "{{ not (ansible_check_mode and apt_install_libvirt.changed) }}"
+      restart: "{{ libvirt_firewall_backend.changed | default(false) }}"
   tags:
     - libvirt
 

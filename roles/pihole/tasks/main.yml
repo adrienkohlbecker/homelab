@@ -94,8 +94,9 @@
     name: systemd_unit
     tasks_from: install
   vars:
-    systemd_unit_src: pihole.service.j2
-    systemd_unit_condition: "{{ not (ansible_check_mode and pihole_user.changed) }}"
+    systemd_unit_args:
+      src: pihole.service.j2
+      condition: "{{ not (ansible_check_mode and pihole_user.changed) }}"
   tags:
     - pihole
 
@@ -104,9 +105,10 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: pihole
-    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) }}"
-    systemd_unit_restart: false
+    systemd_unit_args:
+      src: pihole
+      condition: "{{ not (ansible_check_mode and (systemd_unit.changed or pihole_user.changed)) }}"
+      restart: false
   tags:
     - pihole
 

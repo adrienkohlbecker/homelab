@@ -138,7 +138,8 @@
     name: systemd_unit
     tasks_from: install
   vars:
-    systemd_unit_src: systemd_unit_verify_ok.service.j2
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
 
 - name: _verify | first install set the per-unit fact and put file on disk
   block:
@@ -156,7 +157,8 @@
     name: systemd_unit
     tasks_from: install
   vars:
-    systemd_unit_src: systemd_unit_verify_ok.service.j2
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
 
 - name: _verify | second install reported no change
   assert:
@@ -169,8 +171,9 @@
         name: systemd_unit
         tasks_from: install
       vars:
-        systemd_unit_src: systemd_unit_verify_bad.service.j2
-        systemd_unit_dest: systemd_unit_verify_ok.service
+        systemd_unit_args:
+          src: systemd_unit_verify_bad.service.j2
+          dest: systemd_unit_verify_ok.service
     - fail:
         msg: broken install over the good unit should have failed but did not
   rescue:
@@ -185,7 +188,8 @@
         name: systemd_unit
         tasks_from: install
       vars:
-        systemd_unit_src: systemd_unit_verify_bad.service.j2
+        systemd_unit_args:
+          src: systemd_unit_verify_bad.service.j2
     - fail:
         msg: broken install should have failed but did not
   rescue:
@@ -215,8 +219,9 @@
         name: systemd_unit
         tasks_from: install
       vars:
-        systemd_unit_src: systemd_unit_verify_ok.service.j2
-        systemd_unit_dest: systemd_unit_mask_test.service
+        systemd_unit_args:
+          src: systemd_unit_verify_ok.service.j2
+          dest: systemd_unit_mask_test.service
     - fail:
         msg: install over masked unit should have refused but did not
   rescue:
@@ -255,7 +260,8 @@
     name: systemd_unit
     tasks_from: install
   vars:
-    systemd_unit_src: systemd_unit_verify_copy_ok.service
+    systemd_unit_args:
+      src: systemd_unit_verify_copy_ok.service
 
 - name: _verify | copy-path install set the per-unit fact and put file on disk
   block:
@@ -277,8 +283,9 @@
     name: systemd_unit
     tasks_from: dropin
   vars:
-    systemd_unit_src: systemd_unit_verify_dropin.conf
-    systemd_unit_for: systemd_unit_verify_copy_ok.service
+    systemd_unit_args:
+      src: systemd_unit_verify_dropin.conf
+      for: systemd_unit_verify_copy_ok.service
 
 - name: _verify | drop-in landed under <unit>.d and carries the expected line
   block:
@@ -308,4 +315,3 @@
   systemd:
     daemon_reload: true
   become: true
-
