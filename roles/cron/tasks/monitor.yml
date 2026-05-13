@@ -1,12 +1,3 @@
-- name: monitor | Ensure job log directory exists
-  file:
-    dest: /var/log/jobs
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
 - name: monitor | Monitor cron entry
   file:
     path: /var/log/jobs/{{ item }}
