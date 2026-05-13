@@ -1,0 +1,192 @@
+name: test
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      roles:
+        description: 'Comma-separated role names (or role:variant). `ALL` = every role. Empty = use git diff.'
+        required: false
+        default: ''
+
+# Mutex on /mnt/scratch/qemu lives at the test-role job level (further
+# down), not workflow level: a workflow-level lock would block
+# wait-for-packer-build from polling for the same push's packer-build
+# completion (deadlock -- test holds the lock, packer-build can't run,
+# wait-for-packer-build never returns). The per-cell test-role lock
+# preserves the same "no qcow2 reads while packer-build rewrites"
+# guarantee while letting detect/wait/notify run free.
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  detect:
+    runs-on: [ self-hosted, lab-runtime ]
+    container:
+      image: lab-runtime:latest
+    outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+      cross_cut: ${{ steps.detect.outputs.cross_cut }}
+      packer_changed: ${{ steps.detect.outputs.packer_changed }}
+    steps:
+      - uses: actions/checkout@v4
+        # 50 commits is enough for HEAD~1 plus a typical session of pushes;
+        # detect-roles only ever looks at HEAD..HEAD~1 anyway.
+        with: { fetch-depth: 50 }
+      - id: detect
+        env:
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          INPUTS_ROLES: ${{ inputs.roles }}
+        run: mise run ci:detect-roles
+
+  notify-cross-cut:
+    needs: detect
+    if: needs.detect.outputs.cross_cut == 'true'
+    runs-on: [ self-hosted, lab-runtime ]
+    container:
+      image: lab-runtime:latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 50 }
+      - run: mise run ci:mail-cross-cut
+        env:
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+          MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
+
+  wait-for-packer-build:
+    # When this push touched packer/** or mise-tasks/packer/** (the
+    # paths that trigger packer-build.yml), detect emits
+    # packer_changed=true and this job blocks test-role on packer-build
+    # finishing. Otherwise the _packer matrix cell could win the
+    # concurrency-queue race and read the qcow2 tree mid-rewrite.
+    # detect-roles emits packer_changed independently from
+    # _packer-in-matrix so edits to roles/_packer/ alone (no qcow2
+    # rebuild) don't trigger an 85-min wait for a packer-build that
+    # was never dispatched.
+    needs: detect
+    if: needs.detect.outputs.packer_changed == 'true'
+    runs-on: [ self-hosted, lab-runtime ]
+    container:
+      image: lab-runtime:latest
+      options: --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
+    timeout-minutes: 90
+    steps:
+      - name: Wait for packer-build sentinel for this SHA
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          target=/mnt/scratch/qemu/_sentinels/complete-$SHA
+          deadline=$(( $(date +%s) + 85 * 60 ))
+          while [ ! -f "$target" ]; do
+            if [ "$(date +%s)" -gt "$deadline" ]; then
+              echo >&2 "Timed out waiting for $target after 85min --"
+              echo >&2 "packer-build for this SHA likely failed or wasn't dispatched."
+              exit 1
+            fi
+            sleep 15
+          done
+          echo "Found $target -- releasing test-role."
+
+  test-role:
+    # Reader half of the lab-qemu-artifacts mutex (packer-build is the
+    # writer). At job level rather than workflow level so
+    # wait-for-packer-build above doesn't hold the lock while polling
+    # the packer-build sentinel -- otherwise packer-build for this same
+    # push couldn't run, and the wait would deadlock.
+    concurrency:
+      group: lab-qemu-artifacts
+      cancel-in-progress: false
+    needs:
+      - detect
+      - wait-for-packer-build
+    # always() lets this evaluate even when wait-for-packer-build was
+    # skipped (its default when packer_changed=false); the (success ||
+    # skipped) clause filters out the genuine failure case (sentinel
+    # timeout) so test-role doesn't read against a stale or half-rebuilt
+    # qcow2 tree. The matrix-not-empty guard short-circuits the no-op
+    # case (cross-cut push, empty matrix) without spinning a runner.
+    if: |
+      always()
+      && needs.detect.result == 'success'
+      && (needs.wait-for-packer-build.result == 'success'
+          || needs.wait-for-packer-build.result == 'skipped')
+      && needs.detect.outputs.matrix != '[]'
+      && needs.detect.outputs.matrix != ''
+    runs-on: [ self-hosted, lab-runtime ]
+    container:
+      image: lab-runtime:latest
+      # /dev/kvm via --device for qemu acceleration. --group-add 1 is
+      # the container-side gid that maps to host kvm via /etc/subgid +
+      # the rootless gidmap (see roles/github_runner/templates/
+      # github_runner.service.j2's sibling note). Not a system-wide
+      # constant: brittle to /etc/subgid range ordering -- re-verify if
+      # you add another single-id range to subid_extra_subgid_groups
+      # for github_runner.
+      #
+      # lab-runtime-workdir is bind-mounted per-cell. The host path
+      # embeds run_id + job-index so two concurrent test cells never
+      # share a workdir parent -- without this, a sibling cell's startup
+      # sweep (or any other reaper running in its container, where ps
+      # can't see this cell's qemu) could reap files mid-run. Cleanup
+      # of old per-cell dirs lives in the github_runner role's
+      # tmpfiles.d entry (Age=1d).
+      options: >-
+        --device /dev/kvm
+        --group-add 1
+        --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
+        --volume /mnt/scratch/github_runner/lab-runtime-workdir/${{ github.run_id }}-${{ strategy.job-index }}:/lab-runtime-workdir:rw
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      # Dynamic matrix populated by the detect job. GitHub evaluates
+      # fromJSON against needs.<job>.outputs at job-resolve time, so
+      # each cell in the emitted JSON array becomes its own UI row with
+      # its own log and re-run button.
+      matrix:
+        spec: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    name: ${{ matrix.spec }}
+    timeout-minutes: 30
+    env:
+      # vault-client.sh picks this up for vault-id `test` and skips the
+      # keychain/file lookup. Prod vault entries can't be decrypted in
+      # CI by design -- the test harness only loads test vars.
+      HOMELAB_VAULT_PASSWORD_TEST: ${{ secrets.HOMELAB_VAULT_PASSWORD_TEST }}
+      # Restrict ansible to the test identity only; without this ansible
+      # would still invoke vault-client.sh for prod per ansible.cfg's
+      # vault_identity_list, log a benign warning, and continue -- but
+      # the noise is confusing. This also makes prod-encrypted entries
+      # fail loudly (not silently) if they're ever loaded.
+      ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
+    steps:
+      - uses: actions/checkout@v4
+      - run: uv sync
+      - name: Run test cell
+        env:
+          SPEC: ${{ matrix.spec }}
+        run: |
+          set -euo pipefail
+          role=${SPEC%%:*}
+          variant=${SPEC##*:}
+          # Persist for the on-failure artifact step. $GITHUB_ENV is
+          # read between steps regardless of this step's exit status,
+          # so a test failure still gives the artifact step a name.
+          {
+            echo "ROLE=$role"
+            echo "VARIANT=$variant"
+          } >>"$GITHUB_ENV"
+          test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /lab-runtime-workdir
+      - name: Upload harness output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        # actions/upload-artifact@v4 requires unique artifact names per
+        # run; ROLE + VARIANT come from the parsed SPEC so the name is
+        # plain alnum/underscores/hyphens and unique per matrix cell.
+        with:
+          name: testout-${{ env.ROLE }}-${{ env.VARIANT }}
+          path: |
+            test/out/${{ env.VARIANT }}.${{ env.ROLE }}.*
+            /lab-runtime-workdir/**
+          retention-days: 14
+          if-no-files-found: warn

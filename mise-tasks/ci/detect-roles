@@ -37,7 +37,7 @@ in_universe() {
 }
 
 # Lab-variant escalation list. One role per line; comments + blank lines OK.
-LAB_ROLES_FILE=".gitea/ci-lab-roles.txt"
+LAB_ROLES_FILE=".github/ci-lab-roles.txt"
 LAB_ROLES=$(
   if [ -f "$LAB_ROLES_FILE" ]; then
     grep -vE '^[[:space:]]*(#|$)' "$LAB_ROLES_FILE" || true
@@ -72,11 +72,11 @@ emit() {
 # role list. Each role gets a "role:box" entry; roles in LAB_ROLES
 # additionally get a "role:lab" entry.
 #
-# Why flat strings instead of `{role, variant}` objects: Gitea Actions
-# 1.21.11 doesn't expand `${{ matrix.<obj>.<field> }}` -- the literal
-# template ends up in the cell's run command. Single-dot
-# `${{ matrix.<key> }}` works fine. The workflow parses the spec into
-# $GITHUB_ENV at step start and uses env.* afterwards.
+# Flat strings (not {role, variant} objects) keep workflow parsing
+# simple: a single ${SPEC%%:*} / ${SPEC##*:} pair in bash gets both
+# fields. The original constraint (Gitea Actions 1.21.x not expanding
+# ${{ matrix.<obj>.<field> }}) is gone on GitHub Actions, but the flat
+# form is still ergonomically lighter than nested-object matrix entries.
 build_matrix() {
   local roles=$1
   local entries=()

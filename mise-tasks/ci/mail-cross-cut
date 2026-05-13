@@ -7,11 +7,11 @@
 # inside lab-runtime and would have to widen lab's postfix to listen on
 # the podman bridge -- not worth it for one notification path).
 #
-# Required env (Gitea repo secrets, set in the workflow's `env:`):
+# Required env (GitHub Actions repo secrets, set in the workflow's `env:`):
 #   MAILGUN_API_KEY        -- the Mailgun API key (api:<key>)
 #   MAILGUN_DOMAIN         -- the Mailgun-controlled domain (e.g. noreply.fahm.fr)
 #
-# Optional env (always populated by Gitea Actions):
+# Optional env (always populated by GitHub Actions):
 #   GITHUB_SHA, GITHUB_REPOSITORY, GITHUB_SERVER_URL, GITHUB_RUN_ID
 #   MAIL_TO                -- override recipient (default adrien.kohlbecker@gmail.com)
 set -euo pipefail
@@ -34,7 +34,7 @@ else
   affected="<no parent commit>"
 fi
 
-run_url="${GITHUB_SERVER_URL:-https://gitea.example}/${GITHUB_REPOSITORY:-repo}/actions/runs/${GITHUB_RUN_ID:-?}"
+run_url="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-repo}/actions/runs/${GITHUB_RUN_ID:-?}"
 
 body=$(
   cat <<EOF
