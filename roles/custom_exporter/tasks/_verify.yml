@@ -93,6 +93,24 @@
       - "'cron_last_success_timestamp{job=\"_verify_malformed\"}' not in _verify_errors.content"
       - "'cron_next_run_timestamp{job=\"_verify_malformed\"}' not in _verify_errors.content"
 
+# gather_last_iteration_timestamp is the goroutine heartbeat -- guards the
+# wedged-loop scenario where the HTTP server keeps serving but the gather
+# routine has stalled. Should be within the last few seconds of "now".
+- name: _verify | gather heartbeat is recent
+  vars:
+    _heartbeat: >-
+      {{ (_verify_errors.content
+          | regex_findall('^gather_last_iteration_timestamp ([0-9.e+-]+)$', multiline=True)
+          | first | default('0') | float | int) }}
+    _now: "{{ ansible_date_time.epoch | int }}"
+  assert:
+    that:
+      - _heartbeat | int > 0
+      - (_now | int) - (_heartbeat | int) < 30
+    fail_msg: >-
+      gather_last_iteration_timestamp is {{ _heartbeat }};
+      expected within 30s of now ({{ _now }})
+
 - name: _verify | overdue cron next_run is in the past (alert path fires)
   vars:
     _next: >-

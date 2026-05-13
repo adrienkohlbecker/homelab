@@ -50,6 +50,7 @@ func main() {
 	r.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 	r.MustRegister(exporterUp)
 	r.MustRegister(exporterErrors)
+	r.MustRegister(gatherLastIterationTimestamp)
 	r.MustRegister(driveActiveGauge)
 	r.MustRegister(driveStandbyGauge)
 	r.MustRegister(driveSleepingGauge)
@@ -99,6 +100,7 @@ func gatherMetrics() {
 		stderr.Printf("error during getNetdataCollectorStatus: %s\n", err)
 		exporterErrors.Inc()
 	}
+	gatherLastIterationTimestamp.Set(float64(time.Now().Unix()))
 }
 
 //  ██████╗██╗   ██╗███████╗████████╗ ██████╗ ███╗   ███╗    ███████╗██╗  ██╗██████╗  ██████╗ ██████╗ ████████╗███████╗██████╗
@@ -118,6 +120,17 @@ var exporterErrors = prometheus.NewCounter(
 	prometheus.CounterOpts{
 		Name: "exporter_errors",
 		Help: "Count the number of errors",
+	},
+)
+
+// Heartbeat for the gather goroutine. exporter_up only reflects whether the
+// process is alive -- this gauge advances each loop iteration, so an alert
+// on `$now - $this` catches the case where the goroutine wedges (e.g. on a
+// blocked syscall) while the HTTP server keeps serving stale metrics.
+var gatherLastIterationTimestamp = prometheus.NewGauge(
+	prometheus.GaugeOpts{
+		Name: "gather_last_iteration_timestamp",
+		Help: "Unix time the most recent gatherMetrics() call returned",
 	},
 )
 
