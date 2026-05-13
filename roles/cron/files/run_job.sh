@@ -6,10 +6,14 @@ usage() {
   f_error "Usage: run_job (hourly|daily|weekly|monthly) IDENTIFIER CMD [ARGS...]"
 }
 
-frequency=${1:-}
-shift
-identifier=${1:-}
-shift
+if [ "$#" -lt 3 ]; then
+  usage
+  exit 1
+fi
+
+frequency=$1
+identifier=$2
+shift 2
 
 case $frequency in
 hourly)
@@ -29,15 +33,5 @@ monthly)
   exit 1
   ;;
 esac
-
-if [ "$identifier" = "" ]; then
-  usage
-  exit 1
-fi
-
-if [ "$*" = "" ]; then
-  usage
-  exit 1
-fi
 
 /usr/bin/systemd-cat --identifier "$identifier" --stderr-priority=3 /usr/bin/timeout --kill-after=120 $TIMEOUT "$@" && echo "$frequency $(/usr/bin/date --iso-8601=seconds)" >"/var/log/jobs/$identifier"
