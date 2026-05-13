@@ -231,10 +231,12 @@ func getDriveActiveStatus() error {
 	}
 	cmd := exec.Command("hdparm", args...)
 
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("unable to execute hdparm: %s", err)
-	}
+	// hdparm continues past per-drive failures and emits valid sections for the
+	// drives that did respond; parse stdout even on non-zero exit so a single
+	// flaky drive doesn't pin the rest at stale gauge values. Drives missing
+	// from the parsed output fall through to unknown=1, which feeds the
+	// hdparm_drive_unknown alert.
+	out, runErr := cmd.CombinedOutput()
 	// Output:
 	//
 	// /dev/disk/by-id/ata-WDC_WD101EFBX-68B0AN0_VCJ3MYHP:
@@ -244,12 +246,8 @@ func getDriveActiveStatus() error {
 	// drive state is:  active/idle
 
 	matches := driveHdparmRegex.FindAllStringSubmatch(string(out), -1)
-	if matches == nil {
-		return fmt.Errorf("unable to match output, result is nil: %s", strconv.Quote(string(out)))
-	}
 
 	data := map[string]string{}
-
 	var loopErr []error
 	for _, m := range matches {
 		device := m[1]
@@ -257,20 +255,14 @@ func getDriveActiveStatus() error {
 
 		if !slices.Contains(driveHdparmDevices, device) {
 			loopErr = append(loopErr, fmt.Errorf("invalid device found: %s", device))
+			continue
 		}
 		if !slices.Contains(driveHdparmStates, state) {
-			loopErr = append(loopErr, fmt.Errorf("invalid state found: %s", state))
+			loopErr = append(loopErr, fmt.Errorf("invalid state %q for %s", state, device))
+			continue
 		}
 
 		data[device] = state
-	}
-
-	if len(loopErr) > 0 {
-		var errorMsg []string
-		for _, e := range loopErr {
-			errorMsg = append(errorMsg, e.Error())
-		}
-		return fmt.Errorf("unable to hdparm output: %s", strings.Join(errorMsg, ", "))
 	}
 
 	for _, d := range driveHdparmDevices {
@@ -286,7 +278,7 @@ func getDriveActiveStatus() error {
 			standby = 1
 		case "sleeping":
 			sleeping = 1
-		case "unknown":
+		default: // explicit "unknown" from hdparm, or no entry parsed for this drive
 			unknown = 1
 		}
 
@@ -295,6 +287,20 @@ func getDriveActiveStatus() error {
 		driveStandbyGauge.With(prometheus.Labels{"device": d}).Set(standby)
 		driveUnknownGauge.With(prometheus.Labels{"device": d}).Set(unknown)
 
+	}
+
+	if runErr != nil {
+		return fmt.Errorf("hdparm returned non-zero: %s (output=%s)", runErr, strconv.Quote(string(out)))
+	}
+	if len(matches) == 0 {
+		return fmt.Errorf("unable to match output, result is nil: %s", strconv.Quote(string(out)))
+	}
+	if len(loopErr) > 0 {
+		var errorMsg []string
+		for _, e := range loopErr {
+			errorMsg = append(errorMsg, e.Error())
+		}
+		return fmt.Errorf("unable to hdparm output: %s", strings.Join(errorMsg, ", "))
 	}
 
 	return nil
@@ -339,7 +345,20 @@ func getCronLastSuccessTimestamp() error {
 	}
 
 	var loopErr []error
+	thisRun := map[string]struct{}{}
 	for _, e := range entries {
+
+		// /var/log/jobs is mode 0777 in prod; ignore anything that isn't a plain
+		// job log file (subdirs, dotfiles, editor swap files) so a stray entry
+		// can't tick exporter_errors every 5s.
+		if !e.Type().IsRegular() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+
+		// Track on file-presence (not parse-success) so a transiently malformed
+		// log retains its previous gauge value; reaping is for jobs whose log
+		// file has been removed entirely.
+		thisRun[e.Name()] = struct{}{}
 
 		p := path.Join(dir, e.Name())
 		buf, err := os.ReadFile(p)
@@ -392,6 +411,14 @@ func getCronLastSuccessTimestamp() error {
 		cronNextRunTimestamp.With(prometheus.Labels{"job": e.Name()}).Set(nextValue)
 
 	}
+
+	for job := range lastCronJobs {
+		if _, ok := thisRun[job]; !ok {
+			cronLastSuccessTimestamp.DeleteLabelValues(job)
+			cronNextRunTimestamp.DeleteLabelValues(job)
+		}
+	}
+	lastCronJobs = thisRun
 
 	if len(loopErr) > 0 {
 		var errorMsg []string
@@ -449,6 +476,13 @@ type NetdataContextsResponse struct {
 	Contexts map[string]NetdataContext
 }
 
+// Tracks the job-log filenames observed on the previous scrape so we can
+// DeleteLabelValues for jobs that have since been decommissioned. Without this
+// the GaugeVec keeps emitting the last known value of cron_next_run_timestamp
+// for a deleted job, and cron_job_missed eventually fires for a job that no
+// longer exists.
+var lastCronJobs = map[string]struct{}{}
+
 var netdataContexts map[string]string
 
 func getNetdataContextStatusInit() error {
@@ -457,7 +491,9 @@ func getNetdataContextStatusInit() error {
 	value, ok := os.LookupEnv("NETDATA_CONTEXTS")
 	if ok && value != "" {
 		for _, v := range strings.Split(value, ",") {
-			vv := strings.Split(v, ":")
+			// SplitN keeps the context id intact even if it ever contains a
+			// colon -- only the first separator should be consumed.
+			vv := strings.SplitN(v, ":", 2)
 			if len(vv) != 2 {
 				return fmt.Errorf("invalid format for NETDATA_CONTEXTS env var, expected comma-separated name:context pairs, got: %s", v)
 			}
