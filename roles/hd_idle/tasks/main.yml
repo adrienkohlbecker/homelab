@@ -44,7 +44,8 @@
     name: logrotate
     tasks_from: template
   vars:
-    logrotate_src: logrotate.j2
-    logrotate_dest: /etc/logrotate.d/hd-idle
+    logrotate_args:
+      src: logrotate.j2
+      dest: /etc/logrotate.d/hd-idle
   tags:
     - hd_idle
