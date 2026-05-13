@@ -143,9 +143,15 @@
 # Parallel-ship to HyperDX over OTLP HTTP for the evaluation window
 # (see CLAUDE.md "Someday" -- pick a winner between OO and HyperDX and
 # drop the loser). HyperDX is co-located on the same hosts where it's
-# installed (lab roles in site.yml), so target loopback directly. The
-# bundled OTel collector listens unauthenticated on 4318; safe because
-# the publish in hyperdx.service.j2 binds 127.0.0.1 only.
+# installed (lab roles in site.yml), so target loopback directly.
+#
+# The bundled OTel collector enforces a per-team auth token on the OTLP
+# receiver (opampController in the api wires bearertokenauth/hyperdx
+# when at least one team exists in MongoDB, and the hyperdx role
+# bootstraps that team with team.apiKey = hyperdx_ingestion_api_key).
+# The extension is configured with `scheme: ''`, so the header value
+# is the raw token -- NOT "Bearer <token>". Sending the Bearer prefix
+# gets a 401 "provided authorization does not match expected scheme".
 #
 # ServiceName isn't populated in HyperDX's otel_logs table yet:
 # fluent-bit's opentelemetry output only sets static resource
@@ -159,6 +165,7 @@
     Host              127.0.0.1
     Port              {{ service_ports.hyperdx_otlp_http }}
     logs_uri          /v1/logs
+    header            Authorization {{ hyperdx_ingestion_api_key }}
     log_response_payload  false
     Retry_Limit       False
     storage.total_limit_size  50M
