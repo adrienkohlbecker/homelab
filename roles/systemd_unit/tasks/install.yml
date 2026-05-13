@@ -161,3 +161,19 @@
     - name: Record failure
       fail:
         msg: Unable to install systemd unit
+
+# Reset caller-input vars to their documented defaults so they don't
+# leak into a sibling systemd_unit invocation later in the same play.
+# Background: `import_role: vars:` is statically inlined at parse time
+# and the values persist for the rest of the play (ansible/ansible#74091,
+# #79502). Without this reset, e.g. podman/prune passing
+# `systemd_unit_user: <svc>` flips a subsequent caller's
+# `systemd_unit_user | default('root')` to <svc>, silently switching
+# the next install/service from system scope to user scope. Cleanup
+# runs at set_fact precedence, which an explicit role-param `vars:`
+# block beats -- so callers that actually do want to override are
+# unaffected, only the default-falling-through case is corrected.
+- name: Reset caller-input vars to defaults
+  set_fact:
+    systemd_unit_user: root
+    systemd_unit_condition: true
