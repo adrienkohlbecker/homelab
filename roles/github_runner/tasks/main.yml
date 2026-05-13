@@ -108,6 +108,28 @@
   tags:
     - github_runner
 
+# actions/runner shells out to `docker pull <image>` unconditionally
+# before creating a job container, and the docker-compat socket path
+# in podman always tries the registry -- our locally-built lab-runtime
+# image lives at localhost/lab-runtime:latest in podman storage but
+# "localhost" gets parsed as a registry host and connects to lab's
+# nginx instead. Install a /usr/local/bin/docker wrapper that
+# intercepts pull -> podman pull --policy=missing (CLI path, honours
+# local storage); everything else passes through to /usr/bin/docker.
+# The github_runner systemd unit inherits PATH=/usr/local/bin:/usr/bin
+# so the wrapper wins.
+- name: Install docker-pull wrapper for actions/runner
+  copy:
+    src: docker_pull_wrapper.sh
+    dest: /usr/local/bin/docker
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+  become: true
+  tags:
+    - github_runner
+
 - name: Configure rootless overlay storage opts
   when: not (ansible_check_mode and github_runner_user.changed)
   copy:
