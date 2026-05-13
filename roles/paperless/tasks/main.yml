@@ -101,8 +101,9 @@
     name: podman_secret
     tasks_from: secret
   vars:
-    podman_secret_name: paperless_secret_key
-    podman_secret_data: "{{ paperless_secret_key }}"
+    podman_secret_args:
+      name: paperless_secret_key
+      data: "{{ paperless_secret_key }}"
   tags:
     - paperless
 
