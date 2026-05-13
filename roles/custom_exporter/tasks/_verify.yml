@@ -1,0 +1,91 @@
+# Functional verification of the metrics endpoint and the cron-job path.
+# Drive-state (hdparm) and netdata-context paths short-circuit on the box
+# fixture (no rotational disks, netdata_contexts={}, netdata_collectors=[]),
+# so the cron loop is the only thing that scrapes in this env -- which makes
+# it the right path to exercise functionally per CLAUDE.md.
+
+- name: _verify | custom_exporter.service is loaded and active
+  systemd:
+    name: custom_exporter
+  register: _verify_unit
+  failed_when: >-
+    _verify_unit.status.LoadState != "loaded"
+    or _verify_unit.status.ActiveState != "active"
+  become: true
+
+- name: _verify | metrics endpoint serves exporter_up=1
+  uri:
+    url: http://localhost:{{ service_ports.custom_exporter }}/metrics
+    return_content: true
+  register: _verify_metrics
+  retries: 15
+  delay: 2
+  until: _verify_metrics.status == 200 and 'exporter_up 1' in _verify_metrics.content
+
+# In prod /var/log/jobs is owned by the cron role's monitor.yml. The test
+# fixture skips that role, so seed the directory here before dropping
+# cron-log fixtures into it.
+- name: _verify | ensure /var/log/jobs exists (cron role would create it in prod)
+  file:
+    path: /var/log/jobs
+    state: directory
+    owner: root
+    group: root
+    mode: "0777"
+  become: true
+
+# Three fixtures exercise the three branches of getCronLastSuccessTimestamp:
+#   _verify_recent  -- valid line, last=parsed-time, next=last+2*period
+#   _verify_overdue -- valid line with a date well in the past so next<now
+#   _verify_empty   -- empty file, both metrics emitted as 0 (touched-but-never-run)
+- name: _verify | seed cron-job fixtures
+  copy:
+    content: "{{ item.content }}"
+    dest: "/var/log/jobs/{{ item.name }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - { name: _verify_recent, content: "daily 2026-05-13T12:00:00+00:00\n" }
+    - { name: _verify_overdue, content: "daily 2024-01-01T00:00:00+00:00\n" }
+    - { name: _verify_empty, content: "" }
+  become: true
+
+# Goroutine scrapes every 5s -- poll until all three jobs have been picked up.
+- name: _verify | metrics reflect all three cron fixtures
+  uri:
+    url: http://localhost:{{ service_ports.custom_exporter }}/metrics
+    return_content: true
+  register: _verify_cron
+  retries: 15
+  delay: 2
+  until: >-
+    _verify_cron.status == 200
+    and 'cron_last_success_timestamp{job="_verify_recent"}' in _verify_cron.content
+    and 'cron_next_run_timestamp{job="_verify_overdue"}' in _verify_cron.content
+    and 'cron_last_success_timestamp{job="_verify_empty"} 0' in _verify_cron.content
+
+- name: _verify | overdue cron next_run is in the past (alert path fires)
+  vars:
+    _next: >-
+      {{ (_verify_cron.content
+          | regex_findall('cron_next_run_timestamp\{job="_verify_overdue"\} ([0-9.e+-]+)')
+          | first | default('0') | float | int) }}
+    _now: "{{ ansible_date_time.epoch | int }}"
+  assert:
+    that:
+      - _next | int > 0
+      - _next | int < _now | int
+    fail_msg: >-
+      cron_next_run_timestamp{job="_verify_overdue"} is {{ _next }};
+      expected > 0 and < now ({{ _now }})
+
+- name: _verify | remove cron-job fixtures
+  file:
+    path: "/var/log/jobs/{{ item }}"
+    state: absent
+  loop:
+    - _verify_recent
+    - _verify_overdue
+    - _verify_empty
+  become: true
