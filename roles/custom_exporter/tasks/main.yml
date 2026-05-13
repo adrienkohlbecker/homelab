@@ -76,8 +76,8 @@
   vars:
     systemd_unit_args:
       src: custom_exporter
-      condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
-      restart: "{{ systemd_unit.changed or custom_exporter_files.changed or custom_exporter_cfg.changed }}"
+      condition: "{{ not (ansible_check_mode and custom_exporter_service_result.changed) }}"
+      restart: "{{ custom_exporter_service_result.changed or custom_exporter_files.changed or custom_exporter_cfg.changed }}"
   tags:
     - custom_exporter
 
@@ -100,7 +100,7 @@
   vars:
     nginx_site_args:
       subdomain: custom-exporter
-      proxy_pass: http://localhost:19392/
+      proxy_pass: http://localhost:{{ service_ports.custom_exporter }}/
       server_conf: |
         location = / {
           return 301 /metrics;
