@@ -1,0 +1,68 @@
+- name: _verify | github_runner user exists
+  command: getent passwd github_runner
+  changed_when: false
+  become: true
+
+# actions/runner has no `--version` flag; the version sentinel written
+# by main.yml is the source of truth. Stat the sentinel to confirm the
+# role's "extract on version bump" path landed.
+- name: _verify | github_runner version sentinel present
+  stat:
+    path: /mnt/services/github_runner/.version-{{ github_runner_version }}
+  register: _verify_version_sentinel
+  failed_when: not _verify_version_sentinel.stat.exists
+  become: true
+
+- name: _verify | github_runner run.sh present and executable
+  stat:
+    path: /mnt/services/github_runner/run.sh
+  register: _verify_runsh
+  failed_when: >-
+    not _verify_runsh.stat.exists
+    or not _verify_runsh.stat.executable
+  become: true
+
+- name: _verify | subuid/subgid entries exist for github_runner
+  command: grep -q '^github_runner:' /etc/{{ item }}
+  changed_when: false
+  loop:
+    - subuid
+    - subgid
+  become: true
+
+- name: _verify | linger is enabled for github_runner
+  stat:
+    path: /var/lib/systemd/linger/github_runner
+  register: _verify_linger
+  failed_when: not _verify_linger.stat.exists
+  become: true
+
+- name: _verify | rootless podman.socket is active under github_runner
+  systemd:
+    name: podman.socket
+    scope: user
+  register: _verify_podman_sock
+  failed_when: _verify_podman_sock.status.ActiveState != "active"
+  become: true
+  become_user: github_runner
+
+# Under qemu_test the unit is installed but not started (no .runner
+# means run.sh would loop on "configure first"). Verify it's at least
+# loaded so a syntax error in the template surfaces here.
+- name: _verify | github_runner.service is loaded (qemu_test skips start)
+  when: qemu_test
+  systemd:
+    name: github_runner
+  register: _verify_unit_test
+  failed_when: _verify_unit_test.status.LoadState != "loaded"
+  become: true
+
+- name: _verify | github_runner.service is loaded and active
+  when: not qemu_test
+  systemd:
+    name: github_runner
+  register: _verify_unit_prod
+  failed_when: >-
+    _verify_unit_prod.status.LoadState != "loaded"
+    or _verify_unit_prod.status.ActiveState != "active"
+  become: true
