@@ -223,17 +223,14 @@ subid_users:
   - spouse
   - github_runner
 
-# Expose the host kvm gid inside the CI runners' rootless userns so
+# Expose the host kvm gid inside github_runner's rootless userns so
 # `--group-add <kvm-gid>` on a podman-spawned container (test workflows
 # running qemu) actually grants /dev/kvm access. Without this, the gid
 # isn't in the user's subgidmap and the --group-add is silently ignored
 # and qemu fails with "Could not access KVM kernel module: Permission
 # denied". The subid role looks up the kvm gid via getent so we don't
-# hardcode it here. Both runners (act_runner during the Gitea->GitHub
-# migration, github_runner after) need their own mapping.
+# hardcode it here.
 subid_extra_subgid_groups:
-  - user: act_runner
-    group: kvm
   - user: github_runner
     group: kvm
 
