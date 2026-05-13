@@ -46,3 +46,14 @@
   become: true
   tags:
     - nginx_site
+
+# Reset caller-input vars to defaults so they don't leak into a sibling
+# call later in the play. See roles/systemd_unit/tasks/install.yml for
+# the full background on the import_role + vars: leak.
+- name: site | Reset caller-input vars to defaults
+  set_fact:
+    nginx_condition: true
+    nginx_permissions: "0644"
+    nginx_site_reload: true
+  tags:
+    - nginx_site
