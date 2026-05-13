@@ -101,6 +101,7 @@ jobs:
           - "fluentbit:box"
           - "getmail:box"
           - "gitea:box"
+          - "github_runner:box"
           - "hd_idle:box"
           - "hdparm:box"
           - "headphones:box"
