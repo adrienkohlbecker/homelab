@@ -9,11 +9,6 @@
   changed_when: false
   become: true
 
-- name: _verify | Hyperdx mongodb system user exists
-  command: getent passwd hyperdx_mongodb
-  changed_when: false
-  become: true
-
 - name: _verify | Hyperdx config dir exists
   stat:
     path: /mnt/services/hyperdx
@@ -44,10 +39,10 @@
     or _verify_ch_log_dir.stat.pw_name != 'hyperdx_clickhouse'
   become: true
 
-# Mongo's data dir is more permissive: this image starts mongod as
-# in-namespace root rather than dropping to uid 100, so the +100 mapping
-# is precautionary (covers a future image change). We just assert the
-# dir is non-empty -- whichever uid wrote to it, mongo is alive.
+# Mongo's data dir is owned by in-namespace root (= hyperdx on the host)
+# because the entrypoint runs `mongod` without dropping privileges. We
+# just assert the dir is non-empty -- if mongo failed to start there'd
+# be no WiredTiger files.
 - name: _verify | Hyperdx mongo data dir is non-empty
   find:
     paths: /mnt/services/hyperdx/db
