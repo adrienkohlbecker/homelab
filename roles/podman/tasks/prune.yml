@@ -8,19 +8,9 @@
 # user's manager so rootless podman prunes
 # /var/lib/containers/rootless/$USER instead. The named user must already
 # have linger on -- the user manager has to be alive when the timer ticks.
-#
-# include_role (not import_role) for the systemd_unit calls is
-# load-bearing: ansible scopes vars: on import_role at play level (they
-# persist for the rest of the play, including later systemd_unit calls
-# from the parent role), but vars: on include_role are scoped to the
-# include only. With import_role here, `systemd_unit_user: <svc>` would
-# leak and flip a subsequent systemd_unit invocation in the calling
-# role (e.g. act_runner / github_runner installing their own service
-# unit) from system scope to user scope, with all the cascading
-# linger-check failures that implies.
 
 - name: Install podman-prune.service
-  include_role:
+  import_role:
     name: systemd_unit
     tasks_from: install
   vars:
@@ -29,7 +19,7 @@
     systemd_unit_condition: "{{ podman_prune_condition | default(true) }}"
 
 - name: Install podman-prune.timer
-  include_role:
+  import_role:
     name: systemd_unit
     tasks_from: install
   vars:
@@ -38,7 +28,7 @@
     systemd_unit_condition: "{{ podman_prune_condition | default(true) }}"
 
 - name: Enable podman-prune.timer
-  include_role:
+  import_role:
     name: systemd_unit
     tasks_from: service
   vars:
