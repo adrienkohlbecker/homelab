@@ -22,6 +22,46 @@
   delay: 2
   until: _verify_metrics.status == 200 and 'exporter_up 1' in _verify_metrics.content
 
+# go_goroutines / process_resident_memory_bytes come from the standard
+# collectors registered in main.go. Pin them so a regression that drops
+# collectors.NewGoCollector / NewProcessCollector fails loudly.
+- name: _verify | standard Go runtime + process collectors are registered
+  assert:
+    that:
+      - "'go_goroutines' in _verify_metrics.content"
+      - "'process_resident_memory_bytes' in _verify_metrics.content"
+      - "'process_cpu_seconds_total' in _verify_metrics.content"
+
+# Exercise the nginx reverse proxy installed by main.yml -- a backend-port-only
+# probe would let a broken proxy_pass / server_name ship silently.
+- name: _verify | metrics endpoint reachable through nginx proxy
+  uri:
+    url: https://localhost/metrics
+    headers:
+      Host: custom-exporter.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    return_content: true
+  register: _verify_proxy
+  retries: 15
+  delay: 2
+  until: _verify_proxy.status == 200 and 'exporter_up 1' in _verify_proxy.content
+
+# The / -> /metrics redirect is server_conf in main.yml; assert the 301 itself
+# rather than following it so a regression that drops the redirect surfaces here.
+- name: _verify | root path redirects to /metrics
+  uri:
+    url: https://localhost/
+    headers:
+      Host: custom-exporter.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    follow_redirects: none
+    status_code: 301
+  register: _verify_redirect
+  failed_when: >-
+    _verify_redirect.status != 301
+    or _verify_redirect.location is not defined
+    or not _verify_redirect.location.endswith('/metrics')
+
 # In prod /var/log/jobs is owned by the cron role's monitor.yml. The test
 # fixture skips that role, so seed the directory here before dropping
 # cron-log fixtures into it.
@@ -34,12 +74,13 @@
     mode: "0777"
   become: true
 
-# Four fixtures exercise the branches of getCronLastSuccessTimestamp:
-#   _verify_recent    -- valid line, last=parsed-time, next=last+2*period
-#   _verify_overdue   -- valid line with a date well in the past so next<now
+# Fixtures exercise the branches of getCronLastSuccessTimestamp:
+#   _verify_hourly/_daily/_weekly/_monthly -- one per frequency switch arm
+#   _verify_overdue   -- valid daily line with a date well in the past so next<now
 #   _verify_empty     -- empty file, both metrics emitted as 0 (touched-but-never-run)
 #   _verify_malformed -- unparseable date; scrape returns error, no gauge emitted
 #                        for this job, exporter_errors counter increments each tick
+#   _verify_badfreq   -- unknown frequency token; same error path as malformed-date
 - name: _verify | seed cron-job fixtures
   copy:
     content: "{{ item.content }}"
@@ -48,15 +89,21 @@
     group: root
     mode: "0644"
   loop:
-    - { name: _verify_recent, content: "daily 2026-05-13T12:00:00+00:00\n" }
+    # Use "now" rather than a literal date so the +retry*period next_run always
+    # lands clearly in the future regardless of when the suite runs.
+    - { name: _verify_hourly, content: "hourly {{ ansible_date_time.iso8601 }}\n" }
+    - { name: _verify_daily, content: "daily {{ ansible_date_time.iso8601 }}\n" }
+    - { name: _verify_weekly, content: "weekly {{ ansible_date_time.iso8601 }}\n" }
+    - { name: _verify_monthly, content: "monthly {{ ansible_date_time.iso8601 }}\n" }
     - { name: _verify_overdue, content: "daily 2024-01-01T00:00:00+00:00\n" }
     - { name: _verify_empty, content: "" }
     - { name: _verify_malformed, content: "daily not-a-date\n" }
+    - { name: _verify_badfreq, content: "yearly 2026-05-13T12:00:00+00:00\n" }
   become: true
 
-# Goroutine scrapes every 5s -- poll until the three well-formed jobs have
-# been picked up. The malformed fixture is checked in the next two tasks.
-- name: _verify | metrics reflect the three well-formed cron fixtures
+# Goroutine scrapes every 5s -- poll until the well-formed jobs have been
+# picked up. The malformed/badfreq fixtures are checked in the next tasks.
+- name: _verify | metrics reflect the well-formed cron fixtures (all four frequencies)
   uri:
     url: http://localhost:{{ service_ports.custom_exporter }}/metrics
     return_content: true
@@ -65,9 +112,41 @@
   delay: 2
   until: >-
     _verify_cron.status == 200
-    and 'cron_last_success_timestamp{job="_verify_recent"}' in _verify_cron.content
+    and 'cron_last_success_timestamp{job="_verify_hourly"}' in _verify_cron.content
+    and 'cron_last_success_timestamp{job="_verify_daily"}' in _verify_cron.content
+    and 'cron_last_success_timestamp{job="_verify_weekly"}' in _verify_cron.content
+    and 'cron_last_success_timestamp{job="_verify_monthly"}' in _verify_cron.content
     and 'cron_next_run_timestamp{job="_verify_overdue"}' in _verify_cron.content
     and 'cron_last_success_timestamp{job="_verify_empty"} 0' in _verify_cron.content
+    and 'cron_next_run_timestamp{job="_verify_empty"} 0' in _verify_cron.content
+
+# Each frequency arm picks a different time.Add/AddDate call -- assert each
+# next_run is strictly future relative to its last_success, so a regression
+# that swaps two arms or off-by-one's the duration shows up here.
+- name: _verify | next_run > last_success for each frequency
+  vars:
+    _last: >-
+      {{ (_verify_cron.content
+          | regex_findall('cron_last_success_timestamp\{job="_verify_' + item + '"\} ([0-9.e+-]+)')
+          | first | default('0') | float | int) }}
+    _next: >-
+      {{ (_verify_cron.content
+          | regex_findall('cron_next_run_timestamp\{job="_verify_' + item + '"\} ([0-9.e+-]+)')
+          | first | default('0') | float | int) }}
+    _now: "{{ ansible_date_time.epoch | int }}"
+  assert:
+    that:
+      - _last | int > 0
+      - _next | int > _last | int
+      - _next | int > _now | int
+    fail_msg: >-
+      _verify_{{ item }}: last={{ _last }} next={{ _next }} now={{ _now }};
+      expected next > last > 0 and next > now
+  loop:
+    - hourly
+    - daily
+    - weekly
+    - monthly
 
 # The malformed fixture's parse failure surfaces as an exporter_errors tick
 # every 5s -- this is what custom_exporter_errors alert in alerts.conf fires on.
@@ -84,14 +163,16 @@
          | regex_findall('^exporter_errors ([0-9.e+-]+)$', multiline=True)
          | first | default('0') | float) > 0
 
-# The malformed branch `continue`s before setting either gauge, so a sibling
-# label for _verify_malformed must not appear -- the exporter has to skip the
-# bad job rather than emit a misleading 0.
-- name: _verify | malformed job has no cron_last_success_timestamp gauge
+# The malformed-date and invalid-frequency branches both `continue` before
+# setting either gauge, so neither sibling label must appear -- the exporter
+# has to skip the bad job rather than emit a misleading 0.
+- name: _verify | malformed/badfreq jobs have no cron_* gauges
   assert:
     that:
       - "'cron_last_success_timestamp{job=\"_verify_malformed\"}' not in _verify_errors.content"
       - "'cron_next_run_timestamp{job=\"_verify_malformed\"}' not in _verify_errors.content"
+      - "'cron_last_success_timestamp{job=\"_verify_badfreq\"}' not in _verify_errors.content"
+      - "'cron_next_run_timestamp{job=\"_verify_badfreq\"}' not in _verify_errors.content"
 
 # gather_last_iteration_timestamp is the goroutine heartbeat -- guards the
 # wedged-loop scenario where the HTTP server keeps serving but the gather
@@ -131,8 +212,12 @@
     path: "/var/log/jobs/{{ item }}"
     state: absent
   loop:
-    - _verify_recent
+    - _verify_hourly
+    - _verify_daily
+    - _verify_weekly
+    - _verify_monthly
     - _verify_overdue
     - _verify_empty
     - _verify_malformed
+    - _verify_badfreq
   become: true
