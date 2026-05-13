@@ -214,10 +214,14 @@ smb_shares:
     path: /mnt/eckwersheim
     valid users: ak
 
+# Order is load-bearing: each entry gets a /etc/subuid+/etc/subgid range
+# allocated by index, so inserting in the middle shifts every later
+# user's ranges and invalidates their existing rootless podman storage.
+# Append new entries at the end; don't sort.
 subid_users:
   - act_runner
-  - github_runner
   - marie
+  - github_runner
 
 # Expose the host kvm gid inside the CI runners' rootless userns so
 # `--group-add <kvm-gid>` on a podman-spawned container (test workflows
