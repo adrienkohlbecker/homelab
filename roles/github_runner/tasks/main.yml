@@ -399,12 +399,24 @@
   tags:
     - github_runner
 
+# systemd_unit_user: root is explicit -- this is a system-scope unit
+# (User=github_runner in the unit file lets the system manager run the
+# process as that user without making the unit user-scope). The default
+# is already 'root' inside systemd_unit/install.yml, BUT the immediately-
+# preceding podman/prune import passes systemd_unit_user: github_runner
+# to its own nested systemd_unit calls; with import_role's `vars:` those
+# values persist as play vars for the rest of the play, so omitting the
+# override here picks up "github_runner" and scope flips to user. The
+# linger check then fails in check-mode (linger file not yet created)
+# and a real run would install under /etc/systemd/user instead of
+# /etc/systemd/system.
 - name: Install github_runner service
   import_role:
     name: systemd_unit
     tasks_from: install
   vars:
     systemd_unit_src: github_runner.service.j2
+    systemd_unit_user: root
     systemd_unit_condition: "{{ not (ansible_check_mode and github_runner_user.changed) }}"
   tags:
     - github_runner
@@ -420,6 +432,7 @@
     tasks_from: service
   vars:
     systemd_unit_src: github_runner
+    systemd_unit_user: root
     systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or github_runner_user.changed)) }}"
     systemd_unit_restart: "{{ systemd_unit.changed or github_runner_extracted.changed }}"
   tags:
