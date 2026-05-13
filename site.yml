@@ -100,6 +100,7 @@
     - kuma
     - healthchecks
     - openobserve
+    - hyperdx
     - marie
     - redis
     - paperless
