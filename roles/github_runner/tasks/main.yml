@@ -45,6 +45,7 @@
 # fully reaped once its contents are >1d old. The 1d age is comfortably
 # beyond the harness's 1500s timeout, so a live cell can't be touched.
 - name: Install tmpfiles.d entry for lab-runtime-workdir
+  when: not (ansible_check_mode and github_runner_user.changed)
   template:
     src: tmpfiles.conf.j2
     dest: /etc/tmpfiles.d/github_runner.conf
