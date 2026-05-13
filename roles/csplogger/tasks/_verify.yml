@@ -59,6 +59,25 @@
     'POST' not in (csplogger_verify_preflight.access_control_allow_methods | default(''))
     or '*' not in (csplogger_verify_preflight.access_control_allow_origin | default(''))
 
+# Exercise the body-size cap on /log. CSP reports are tiny; the cap
+# stops a runaway site CSP or hostile poster from chewing bandwidth.
+- name: _verify | /log rejects oversize bodies (>64K)
+  uri:
+    url: https://localhost/log
+    method: POST
+    headers:
+      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    body_format: json
+    body:
+      csp-report:
+        blocked-uri: "https://_verify.example/oversize"
+        document-uri: "https://_verify.example/"
+        original-policy: "default-src 'self'"
+        violated-directive: "script-src"
+        script-sample: "{{ 'A' * 70000 }}"
+    status_code: 413
+
 - name: _verify | GET /log is rejected (POST/OPTIONS only)
   uri:
     url: https://localhost/log
