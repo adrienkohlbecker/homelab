@@ -22,14 +22,15 @@
     name: zfs
     tasks_from: dataset
   vars:
-    zfs_dataset: tank/media
-    zfs_dataset_mountpoint: /mnt/media
-    zfs_dataset_group: media
-    zfs_dataset_mode: '0775'
-    zfs_dataset_extra_properties:
-      'autobackup:bak': 'false'
-      recordsize: '1048576'
-      special_small_blocks: '32768'
+    zfs_dataset_args:
+      dataset: tank/media
+      mountpoint: /mnt/media
+      group: media
+      mode: '0775'
+      extra_properties:
+        'autobackup:bak': 'false'
+        recordsize: '1048576'
+        special_small_blocks: '32768'
   tags:
     - media
 

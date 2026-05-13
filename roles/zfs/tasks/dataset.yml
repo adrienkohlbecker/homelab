@@ -1,39 +1,45 @@
-# Generic zfs dataset creator. Inputs:
-#   zfs_dataset:                  dataset path; a leading 'tank/' is rewritten
-#                                 to '{{ zfs_tank_filesystem }}/' so callers can
-#                                 stay literal and avoid host-var templating in
-#                                 caller-side import_role vars (e.g. tank/brumath)
-#   zfs_dataset_mountpoint:       mountpoint (e.g. /mnt/brumath)
-#   zfs_dataset_extra_properties: dict of extra zfs properties to set
-#   zfs_dataset_owner:            mountpoint dir owner (default: ansible_user)
-#   zfs_dataset_group:            mountpoint dir group (default: ansible_user)
-#   zfs_dataset_mode:             mountpoint dir mode  (default: "0755")
+# Generic zfs dataset creator. Inputs: caller passes a single dict
+# `zfs_dataset_args` with keys:
+#   dataset             dataset path; a leading 'tank/' is rewritten to
+#                       '{{ zfs_tank_filesystem }}/' so callers can stay
+#                       literal and avoid host-var templating in caller-side
+#                       import_role vars (e.g. tank/brumath)
+#   mountpoint          mountpoint (e.g. /mnt/brumath)
+#   extra_properties    optional dict of extra zfs properties to set
+#   owner               optional mountpoint dir owner (default: ansible_user)
+#   group               optional mountpoint dir group (default: ansible_user)
+#   mode                optional mountpoint dir mode (default: "0755")
+#
+# The dict form prevents inter-call leakage at play-vars scope: each
+# import_role pass replaces the whole `zfs_dataset_args` value, so a
+# previous caller's mode/group/etc. can't bleed into the next caller
+# that doesn't explicitly override.
 
 - block:
-    - name: Create zfs filesystem {{ zfs_dataset_resolved }}
+    - name: Create zfs filesystem {{ _zfs_dataset_resolved }}
       when: zfs_root
       zfs:
-        name: '{{ zfs_dataset_resolved }}'
+        name: '{{ _zfs_dataset_resolved }}'
         state: present
-        extra_zfs_properties: "{{ (zfs_dataset_extra_properties | default({})) | combine({'mountpoint': zfs_dataset_mountpoint}) }}"
+        extra_zfs_properties: "{{ (zfs_dataset_args.extra_properties | default({})) | combine({'mountpoint': zfs_dataset_args.mountpoint}) }}"
       become: true
 
-    - name: Create mount point {{ zfs_dataset_mountpoint }}
+    - name: Create mount point {{ zfs_dataset_args.mountpoint }}
       file:
-        dest: '{{ zfs_dataset_mountpoint }}'
+        dest: '{{ zfs_dataset_args.mountpoint }}'
         state: directory
-        owner: "{{ zfs_dataset_owner | default(ansible_user) }}"
-        group: "{{ zfs_dataset_group | default(ansible_user) }}"
-        mode: "{{ zfs_dataset_mode | default('0755') }}"
+        owner: "{{ zfs_dataset_args.owner | default(ansible_user) }}"
+        group: "{{ zfs_dataset_args.group | default(ansible_user) }}"
+        mode: "{{ zfs_dataset_args.mode | default('0755') }}"
       become: true
 
-    - name: Set up mount service for {{ zfs_dataset_resolved }}
+    - name: Set up mount service for {{ _zfs_dataset_resolved }}
       when: zfs_root
       import_role:
         name: zfs_mount
         tasks_from: unit
       vars:
-        zfs_mount_dataset: '{{ zfs_dataset_resolved }}'
-        zfs_mount_mountpoint: '{{ zfs_dataset_mountpoint }}'
+        zfs_mount_dataset: '{{ _zfs_dataset_resolved }}'
+        zfs_mount_mountpoint: '{{ zfs_dataset_args.mountpoint }}'
   vars:
-    zfs_dataset_resolved: "{{ zfs_dataset | regex_replace('^tank/', (zfs_tank_filesystem | default('tank')) ~ '/') }}"
+    _zfs_dataset_resolved: "{{ zfs_dataset_args.dataset | regex_replace('^tank/', (zfs_tank_filesystem | default('tank')) ~ '/') }}"
