@@ -134,16 +134,17 @@
   when: not (ansible_check_mode and github_runner_user.changed)
   copy:
     dest: /mnt/scratch/github_runner/.config/containers/storage.conf
-    # `driver = "overlay"` is explicit to silence podman's "auto-picked
-    # a driver" warning on every command; modern Linux always wants
-    # overlay for rootless. The mountopt override is the xino=off
-    # workaround that keeps the kernel's printk quiet on rootless
-    # overlay mounts (see roles/act_runner's git history for the full
-    # printk reasoning).
+    # Only the mountopt override (xino=off); see roles/act_runner's git
+    # history for the printk-suppression rationale. Pinning the driver
+    # explicitly via [storage] driver = "overlay" would silence podman's
+    # cosmetic "auto-picked a driver" warning, but ALSO triggers a
+    # "database graph driver mismatch" error against any podman storage
+    # database that was first initialised without a driver setting --
+    # which is what github_runner ends up with on a fresh apply, because
+    # the user's first podman invocation (the lab-runtime build) happens
+    # before this file is written. The warning is harmless; the database
+    # mismatch is fatal. Leave it implicit.
     content: |
-      [storage]
-      driver = "overlay"
-
       [storage.options.overlay]
       mountopt = "nodev,xino=off"
     owner: github_runner
