@@ -48,18 +48,6 @@ Several helper roles factor out duplicated patterns. Prefer them over re-impleme
 - `podman_secret` — `import_role: name: podman_secret, tasks_from: secret` with `podman_secret_name` / `podman_secret_data` creates or rotates a podman secret. Tracks the data sha256 as a label on the secret itself and force-recreates only when content drifts (the upstream module is name-idempotent only and silently ignores rotations). Exposes `<name>_rotated` and `<name>_existed_before` so callers can wire restart triggers and detect post-bootstrap rotations of state that consumes the secret only at first creation (e.g. Django superuser via `SUPERUSER_PASSWORD` — fail loudly and tell the operator to run `manage.py changepassword` rather than rotate silently).
 - `systemd_unit` — `import_role: name: systemd_unit, tasks_from: {install,dropin,service}` installs/validates a unit, reloads systemd, and (for `service`) pre-pulls referenced podman images and starts/restarts the unit. `install` dispatches to copy or template based on `systemd_unit_src`'s extension (`foo.service.j2` → template under the calling role's `templates/`, `foo.service` → copy under `files/`); the role strips `.j2` for the on-disk dest. `dropin` writes `<scope>/<unit>.d/override.conf` for a unit shipped elsewhere; pass `systemd_unit_for: <unit>` and the same extension-tagged `systemd_unit_src`. Drive restarts via `systemd_unit_restart: "{{ <unit-dest>_result.changed or <other>_rotated }}"` (e.g. `healthchecks_service_result.changed`) so config / secret changes propagate. The legacy `systemd_unit.changed` register still works for backward compat but collides with the role name and is clobbered if a single play installs two units — when touching an existing caller, migrate it to the per-unit fact. **Do not use Ansible handlers for service restarts** — handlers run at end-of-play, which doesn't compose with the helper's pre-pull-then-start ordering, and the inline OR chain keeps the set of restart triggers explicit at the call site instead of scattered across `notify:` annotations. When you add a new config file or secret, append its `.changed` / `_rotated` to the chain. Always prefer this helper over a hand-written `template:` + `systemd:` pair.
 
-#### Helper tail-reset convention
-Sub-task entrypoints invoked via `tasks_from:` (e.g. `service_user/tasks/user.yml`, `podman/tasks/prune.yml`, `netdata/tasks/{copy,template,health_copy}.yml`, `nginx/tasks/site.yml`, `zfs/tasks/dataset.yml`, `logrotate/tasks/compression.yml`, `podman_secret/tasks/secret.yml`, `systemd_unit/tasks/{install,service}.yml`) must end with a `set_fact` resetting any caller-input var they read via `| default(...)` back to its documented default. **Why:** `import_role: vars:` is statically inlined at parse time and the values persist into play scope after the role completes (ansible/ansible#74091, #79502) — without the reset, a sibling call's `foo | default(X)` resolves to the leaked value instead of `X`, silently flipping behavior. Pattern:
-
-```yaml
-- name: Reset caller-input vars to defaults
-  set_fact:
-    foo: "<literal default>"
-    bar: "<literal default>"
-```
-
-Reset only the vars with a literal default (root, true, "0644", `[]`, `{}` ...). Required inputs (no default) don't need resetting — a leaked value affects only callers that themselves read with a default, which by definition won't exist for that var. `set_fact` precedence sits below role-param `vars:`, so explicit callers still win. Skip the reset for sub-tasks that take no defaulted inputs.
-
 ## Testing Guidelines
 The harness lives in `test/` (Python, asyncio-based; the previous `*.sh` shims are gone).
 
