@@ -20,7 +20,6 @@
     zfs_dataset_args:
       dataset: tank/brumath
       mountpoint: /mnt/brumath
-      mode: '0775'
       extra_properties:
         'autobackup:bak': 'true'
         special_small_blocks: '32768'
@@ -35,7 +34,6 @@
     zfs_dataset_args:
       dataset: tank/eckwersheim
       mountpoint: /mnt/eckwersheim
-      mode: '0775'
       extra_properties:
         'autobackup:bak': 'true'
         special_small_blocks: '32768'
