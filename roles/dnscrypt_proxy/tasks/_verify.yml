@@ -41,7 +41,7 @@
 # datagram that triggered activation is buffered on the kernel socket but
 # dnscrypt-proxy 2.0.45 logs `Systemd sockets are untested and unsupported`
 # and empirically doesn't pick it up. The per-attempt 2s timeout matches
-# the loop delay; total budget ~60s covers cold-start init.
+# the loop delay; total budget ~30s gives 6x margin on the measured 5s.
 - name: _verify | Resolve example.com via dnscrypt-proxy on 127.0.0.1:5053
   command:
     argv:
@@ -62,7 +62,7 @@
         assert rcode == 0, f"rcode={rcode} expected NOERROR"
         assert ancount > 0, f"ancount={ancount} expected >=1"
   register: _verify_probe
-  retries: 30
+  retries: 15
   delay: 2
   until: _verify_probe.rc == 0
   changed_when: false
