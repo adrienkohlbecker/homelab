@@ -28,16 +28,41 @@ NotifyAccess=all
 SyslogIdentifier=%N
 
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
+# First level_init pilot. The chain: workload writes "INFO: …" /
+# "ERROR: …" / "[259] LOG: …" → level_init scans each line's head,
+# prepends the matching <N> syslog priority → podman, with
+# --log-driver=none, keeps container stdio attached to its own
+# (since we dropped --detach) → systemd reads podman's stdout/stderr,
+# stream-parses <N>, sets PRIORITY before the line lands in the
+# journal. SyslogIdentifier=%N attributes the entry to this unit.
+#
+# Driver choice: `none` (not `journald` or `k8s-file`):
+#  - journald has podman/conmon double-log every line, once raw via
+#    sd_journal_send (hardcoded PRIORITY-by-stream) and once via the
+#    systemd stream parser. Duplicates with mismatched priorities.
+#  - k8s-file works correctly via the same systemd path but also
+#    writes a per-container log file under /var/lib/containers/...
+#    that has to be size-bounded.
+#  - none does what we want: nothing duplicates, nothing on disk,
+#    journal is the single source of truth.
+#
+# Cost of `none`: `podman logs paperless` returns nothing. Acceptable
+# since journalctl -u paperless shows the same data with corrected
+# priorities.
+#
+# --detach is dropped because passthrough/none require podman to stay
+# foreground so its stdio remains connected to systemd's pipe. With
+# --detach, podman exits and the bytes vanish.
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
     --cgroups=split \
     --sdnotify=healthy \
-    --detach \
     --replace \
     --rm \
     --name paperless \
-    --log-driver journald \
-    --log-opt tag="paperless" \
+    --init \
+    --init-path=/usr/local/libexec/level_init \
+    --log-driver=none \
     --volume /mnt/services/paperless/data:/usr/src/paperless/data \
     --volume /mnt/services/sqlite/paperless:/mnt/services/sqlite/paperless \
     --volume /mnt/services/paperless/media:/usr/src/paperless/media \
@@ -59,8 +84,12 @@ ExecStart=/usr/bin/podman run \
     --health-start-period "100s" \
     --stop-timeout 120 \
     ghcr.io/paperless-ngx/paperless-ngx:2.12
-ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
-ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+# ExecStop / ExecStopPost are unnecessary in this foreground model:
+# systemd's SIGTERM to MainPID (podman) is sig-proxied to the
+# container's PID 1, the workload exits gracefully, podman exits,
+# ExecStart returns. Whatever ExecStop=podman-stop would do is
+# already done by the time it'd run. --replace --rm on ExecStart
+# handles the rare case of a leftover container after a hard kill.
 
 [Install]
 WantedBy=default.target
