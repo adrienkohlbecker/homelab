@@ -1,50 +1,27 @@
-- name: Set up csplogger system user, group, and config dir
-  import_role:
-    name: service_user
-    tasks_from: user
-  vars:
-    service_user_args:
-      name: csplogger
-  tags:
-    - csplogger
+# CSP report shim. The browser-facing /log POST endpoint at
+# csplogger.<host>.<domain> is wired up here as a thin nginx → fluent-bit
+# pipe (the HTTP input lives in roles/fluentbit). Endpoint URL stays
+# unchanged so the central report-uri / Reporting-Endpoints headers in
+# roles/nginx/templates/site.conf.j2 don't need to move.
 
-- name: Create sqlite directory
-  when: not (ansible_check_mode and csplogger_user.changed)
-  file:
-    dest: /mnt/services/sqlite/csplogger
-    state: directory
-    owner: csplogger
-    group: csplogger
-    mode: "0755"
+# Rate-limit the public endpoint at the nginx level: CSP reports are
+# browser-driven and untrusted; a misbehaving site CSP can flood this
+# from every visitor it has. limit_req_zone has to live in http{} scope,
+# not server{}, hence the conf.d drop rather than a snippet inside the
+# site config.
+- name: Install CSP report rate-limit zone
+  copy:
+    content: |
+      # Managed by roles/csplogger.
+      # 10 r/s per IP, 1MB zone (~16k tracked IPs). Burst handled per-location.
+      limit_req_zone $binary_remote_addr zone=cspreports:1m rate=10r/s;
+    dest: /etc/nginx/conf.d/csp_ratelimit.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
   become: true
-  tags:
-    - csplogger
-
-- name: Install csplogger service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: csplogger.service.j2
-      condition: "{{ not (ansible_check_mode and csplogger_user.changed) }}"
-  tags:
-    - csplogger
-
-# The upstream image (docker.io/giuliocomi/csplogger) ships an amd64-only
-# manifest, so install the unit on every arch but only start it on x86_64
-# hosts. CSP report-uri sinks are best-effort: prod hosts that run it
-# (lab/pug) are amd64; arm64 hosts (e.g. bunk) collect no reports.
-- name: Enable csplogger service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: csplogger
-      condition: "{{ not (ansible_check_mode and (csplogger_service_result.changed or csplogger_user.changed)) }}"
-      start: "{{ ansible_architecture == 'x86_64' }}"
-      restart: "{{ csplogger_service_result.changed }}"
+  register: csplogger_ratelimit_conf
   tags:
     - csplogger
 
@@ -55,10 +32,51 @@
   vars:
     nginx_site_args:
       subdomain: csplogger
-      proxy_pass: http://localhost:{{ service_ports.csplogger }}/
+      # No site-wide proxy_pass; the only valid path is /log. Anything
+      # else gets a 404 so probes and misdirected traffic don't fall
+      # through to the default location { } empty block.
+      location_conf: |
+        return 404;
       server_conf: |
-        location = / {
-          return 301 /dashboard;
+        location = /log {
+          limit_except POST OPTIONS {
+            deny all;
+          }
+
+          # CSP reports arrive as cross-origin browser POSTs. The
+          # Reporting API (Content-Type: application/reports+json) triggers
+          # a CORS preflight; legacy report-uri (application/csp-report)
+          # historically doesn't, but handling OPTIONS costs nothing.
+          if ($request_method = 'OPTIONS') {
+            add_header 'Access-Control-Allow-Origin' '*' always;
+            add_header 'Access-Control-Allow-Methods' 'POST, OPTIONS' always;
+            add_header 'Access-Control-Allow-Headers' 'Content-Type' always;
+            add_header 'Access-Control-Max-Age' 86400 always;
+            return 204;
+          }
+
+          # 20-request burst absorbs CSP-storm spikes (page reload, ad
+          # network with several violations) without dropping; sustained
+          # rate above 10/s/IP gets shed with 503.
+          limit_req zone=cspreports burst=20 nodelay;
+
+          # Fluent-bit's HTTP input lives on loopback; the tag is set in
+          # the [INPUT] block in roles/fluentbit, not derived from the
+          # URI here, so the upstream path is irrelevant.
+          proxy_pass http://127.0.0.1:{{ service_ports.csp_ingest }}/;
+          proxy_set_header Content-Type $content_type;
         }
+  tags:
+    - csplogger
+
+# site.yml only reloads nginx when the per-site template changes, not
+# when conf.d/ drops do. Catch the ratelimit-only-changed case here so
+# zone tweaks land without a manual reload.
+- name: Reload nginx after rate-limit zone change
+  when: csplogger_ratelimit_conf.changed and not ansible_check_mode
+  systemd:
+    name: nginx
+    state: reloaded
+  become: true
   tags:
     - csplogger

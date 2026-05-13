@@ -29,6 +29,18 @@
     Read_From_Tail    on
     Strip_Underscores on
 
+# Browser-emitted CSP violation reports. nginx on csplogger.<host>.<domain>
+# proxies POST /log here; the public endpoint stays public-by-design (CSP
+# reports are fire-and-forget cross-origin POSTs that can't carry auth)
+# while the ingest token (once HyperDX is wired up at the output side)
+# stays server-side. Returns 204 to keep browser report queues happy.
+[INPUT]
+    Name              http
+    Tag               csp.{{ inventory_hostname }}
+    Listen            127.0.0.1
+    Port              {{ service_ports.csp_ingest }}
+    Successful_response_code  204
+
 # nginx access/error logs don't go through journald by default.
 [INPUT]
     Name              tail
