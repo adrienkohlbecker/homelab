@@ -21,7 +21,7 @@ jobs:
   gate:
     runs-on: [ self-hosted, lab-runtime ]
     container:
-      image: lab-runtime:latest
+      image: localhost/lab-runtime:latest
     outputs:
       matrix: ${{ steps.gate.outputs.matrix }}
     steps:
@@ -55,7 +55,7 @@ jobs:
     if: needs.gate.outputs.matrix != '[]' && needs.gate.outputs.matrix != ''
     runs-on: [ self-hosted, lab-runtime ]
     container:
-      image: lab-runtime:latest
+      image: localhost/lab-runtime:latest
       # See test.yml's test-role container.options comment for the
       # --group-add 1 / per-cell workdir rationale.
       options: >-
@@ -106,7 +106,7 @@ jobs:
     if: failure()
     runs-on: [ self-hosted, lab-runtime ]
     container:
-      image: lab-runtime:latest
+      image: localhost/lab-runtime:latest
     steps:
       - uses: actions/checkout@v4
       - run: mise run ci:mail-failures
