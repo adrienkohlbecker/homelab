@@ -130,8 +130,9 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: minio
-    nginx_proxy_pass: http://127.0.0.1:9001/
+    nginx_site_args:
+      subdomain: minio
+      proxy_pass: http://127.0.0.1:9001/
   tags:
     - minio
 
@@ -140,13 +141,14 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: minio-api
-    nginx_proxy_pass: http://localhost:9199/
-    nginx_location_conf: |
-      # Otherwise ARQ uploads return HTTP 413
-      client_max_body_size     60M;
-      # Increase body buffer size to not buffer uploads to disk
-      client_body_buffer_size  60M;
+    nginx_site_args:
+      subdomain: minio-api
+      proxy_pass: http://localhost:9199/
+      location_conf: |
+        # Otherwise ARQ uploads return HTTP 413
+        client_max_body_size     60M;
+        # Increase body buffer size to not buffer uploads to disk
+        client_body_buffer_size  60M;
   tags:
     - minio
 

@@ -168,7 +168,8 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: z2m
-    nginx_proxy_pass: http://localhost:8081/
+    nginx_site_args:
+      subdomain: z2m
+      proxy_pass: http://localhost:8081/
   tags:
     - z2m

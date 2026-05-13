@@ -165,8 +165,9 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: openproject
-    nginx_proxy_pass: http://localhost:8070/
-    nginx_csp_additional: "img-src secure.gravatar.com {{ nginx_csp_default }}"
+    nginx_site_args:
+      subdomain: openproject
+      proxy_pass: http://localhost:8070/
+      csp_additional: "img-src secure.gravatar.com {{ nginx_csp_default }}"
   tags:
     - openproject

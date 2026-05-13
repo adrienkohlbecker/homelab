@@ -53,11 +53,12 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: keepalived-exporter
-    nginx_proxy_pass: http://localhost:9650/
-    nginx_server_conf: |
-      location = / {
-        return 301 /metrics;
-      }
+    nginx_site_args:
+      subdomain: keepalived-exporter
+      proxy_pass: http://localhost:9650/
+      server_conf: |
+        location = / {
+          return 301 /metrics;
+        }
   tags:
     - keepalived_exporter

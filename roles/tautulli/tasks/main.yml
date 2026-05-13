@@ -102,9 +102,10 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: tautulli
-    nginx_proxy_pass: http://localhost:8182/
-    nginx_csp_default_src: "plex.tv *.plex.tv"
+    nginx_site_args:
+      subdomain: tautulli
+      proxy_pass: http://localhost:8182/
+      csp_default_src: "plex.tv *.plex.tv"
   tags:
     - tautulli
 

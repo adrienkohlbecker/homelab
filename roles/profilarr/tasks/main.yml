@@ -100,7 +100,8 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: profilarr
-    nginx_proxy_pass: http://localhost:6868/
+    nginx_site_args:
+      subdomain: profilarr
+      proxy_pass: http://localhost:6868/
   tags:
     - profilarr

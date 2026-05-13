@@ -215,8 +215,9 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: pihole
-    nginx_proxy_pass: http://localhost:8943/
+    nginx_site_args:
+      subdomain: pihole
+      proxy_pass: http://localhost:8943/
   tags:
     - pihole
 

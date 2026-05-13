@@ -97,11 +97,12 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: custom-exporter
-    nginx_proxy_pass: http://localhost:19392/
-    nginx_server_conf: |
-      location = / {
-        return 301 /metrics;
-      }
+    nginx_site_args:
+      subdomain: custom-exporter
+      proxy_pass: http://localhost:19392/
+      server_conf: |
+        location = / {
+          return 301 /metrics;
+        }
   tags:
     - custom_exporter

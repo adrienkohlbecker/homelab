@@ -159,7 +159,8 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: paperless
-    nginx_proxy_pass: http://localhost:8001/
+    nginx_site_args:
+      subdomain: paperless
+      proxy_pass: http://localhost:8001/
   tags:
     - paperless

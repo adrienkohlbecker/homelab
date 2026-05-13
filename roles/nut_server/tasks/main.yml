@@ -139,18 +139,19 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: nut
-    nginx_server_conf: |
-      location = / {
-        return 301 /upsstats.cgi;
-      }
-    nginx_location_conf: |
-      gzip off;
-      root /usr/lib/cgi-bin/nut;
+    nginx_site_args:
+      subdomain: nut
+      server_conf: |
+        location = / {
+          return 301 /upsstats.cgi;
+        }
+      location_conf: |
+        gzip off;
+        root /usr/lib/cgi-bin/nut;
 
-      include /etc/nginx/fastcgi_params;
+        include /etc/nginx/fastcgi_params;
 
-      fastcgi_pass  unix:/var/run/fcgiwrap.socket;
-      fastcgi_param SCRIPT_FILENAME  /usr/lib/cgi-bin/nut$fastcgi_script_name;
+        fastcgi_pass  unix:/var/run/fcgiwrap.socket;
+        fastcgi_param SCRIPT_FILENAME  /usr/lib/cgi-bin/nut$fastcgi_script_name;
   tags:
     - nut_server

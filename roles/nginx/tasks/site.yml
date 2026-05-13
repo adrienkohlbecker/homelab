@@ -1,5 +1,32 @@
+# Inputs: caller passes a single dict `nginx_site_args` with keys
+#   subdomain                 required; serves at <subdomain>.<host>.<domain>
+#   condition                 optional bool, default true; gates the whole call
+#   permissions               optional, default '0644'
+#   reload                    optional bool, default true; reload nginx after a
+#                             config change. Setting false makes the install
+#                             config-only — useful for pre-warming a site whose
+#                             upstream isn't ready yet.
+#   proxy_pass                optional; URL to reverse-proxy to (location /)
+#   proxy_buffering           optional; nginx proxy_buffering directive value
+#   proxy_request_buffering   optional; nginx proxy_request_buffering directive value
+#   proxy_connect_timeout     optional, default '60s'
+#   proxy_send_timeout        optional, default '60s'
+#   proxy_read_timeout        optional, default '60s'
+#   client_max_body_size      optional; sets nginx client_max_body_size
+#   enable_http               optional bool, default false; if true, also listen on :80
+#                             and skip the http->https redirect server block
+#   csp_default_src           optional CSP directive override
+#   csp_frame_ancestors       optional CSP directive override
+#   csp_additional            optional CSP directive prefix
+#   server_conf               optional snippet inserted in the server block
+#   location_conf             optional snippet inserted in the / location block
+#
+# The dict form prevents inter-call leakage at play-vars scope: each
+# import_role pass replaces the whole `nginx_site_args` value, so a
+# previous caller's proxy_pass / csp / etc. can't bleed into the next
+# caller that doesn't explicitly override.
 - name: site | Ensure directories exists
-  when: nginx_condition | default(true)
+  when: nginx_site_args.condition | default(true)
   file:
     state: directory
     path: "{{ item }}"
@@ -14,13 +41,13 @@
     - nginx_site
 
 - name: site | Configure nginx site
-  when: nginx_condition | default(true)
+  when: nginx_site_args.condition | default(true)
   template:
     src: site.conf.j2
-    dest: /etc/nginx/sites-available/{{ nginx_subdomain }}
+    dest: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
     owner: root
     group: root
-    mode: "{{ nginx_permissions | default('0644') }}"
+    mode: "{{ nginx_site_args.permissions | default('0644') }}"
     backup: true
   become: true
   register: nginx_static_conf
@@ -28,10 +55,10 @@
     - nginx_site
 
 - name: site | Enable nginx site
-  when: (nginx_condition | default(true)) and not (ansible_check_mode and nginx_static_conf.changed)
+  when: (nginx_site_args.condition | default(true)) and not (ansible_check_mode and nginx_static_conf.changed)
   file:
-    src: /etc/nginx/sites-available/{{ nginx_subdomain }}
-    dest: /etc/nginx/sites-enabled/{{ nginx_subdomain }}
+    src: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
+    dest: /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
     state: link
   become: true
   register: nginx_static_conf_enable
@@ -39,7 +66,10 @@
     - nginx_site
 
 - name: site | Reload nginx config
-  when: (nginx_condition | default(true)) and (nginx_site_reload | default(true)) and (nginx_static_conf.changed or nginx_static_conf_enable.changed)
+  when: >-
+    (nginx_site_args.condition | default(true))
+    and (nginx_site_args.reload | default(true))
+    and (nginx_static_conf.changed or nginx_static_conf_enable.changed)
   systemd:
     name: nginx
     state: reloaded
