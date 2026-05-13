@@ -1,8 +1,0 @@
-- name: _setup | Install podman
-  import_role:
-    name: podman
-    tasks_from: install
-
-- name: _test | Trigger podman ip (TODO proper solution)
-  command: podman run -ti --rm docker.io/ubuntu whoami
-  become: true
