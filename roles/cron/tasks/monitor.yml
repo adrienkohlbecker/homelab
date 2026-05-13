@@ -16,5 +16,5 @@
     owner: root
     group: root
     mode: "0644"
-  loop: "{{ cron_entry is string | ternary([cron_entry], cron_entry) }}"
+  loop: "{{ [cron_entry] | flatten(levels=1) }}"
   become: true
