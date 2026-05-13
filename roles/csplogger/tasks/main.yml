@@ -57,8 +57,11 @@
 
           # 20-request burst absorbs CSP-storm spikes (page reload, ad
           # network with several violations) without dropping; sustained
-          # rate above 10/s/IP gets shed with 503.
+          # rate above 10/s/IP gets shed with 429. Browsers ignore the
+          # response, but 429 is semantically right and keeps rate-limit
+          # drops from blending into 5xx upstream-outage noise in logs.
           limit_req zone=cspreports burst=20 nodelay;
+          limit_req_status 429;
 
           # CSP reports are tiny (a few KB typical, ~30KB worst case with
           # script-sample). Cap well below nginx's 16M global default so a
