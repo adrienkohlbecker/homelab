@@ -206,7 +206,11 @@ func getDriveActiveStatus() error {
 		return nil
 	}
 
-	cmd := exec.Command("/bin/sh", "-c", fmt.Sprintf("hdparm -C /dev/disk/by-id/%s", strings.Join(driveHdparmDevices, " /dev/disk/by-id/")))
+	args := []string{"-C"}
+	for _, d := range driveHdparmDevices {
+		args = append(args, "/dev/disk/by-id/"+d)
+	}
+	cmd := exec.Command("hdparm", args...)
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
