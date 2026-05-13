@@ -1,0 +1,219 @@
+# Integration tests for the installed binary. Each block replays one
+# of the manual checks we used while bringing this up:
+#  * binary metadata (present, executable, root-owned)
+#  * usage exit (no args -> 64, sysexits-ish)
+#  * `--` argument stripping (podman invokes init as `<path> -- <cmd>`)
+#  * level prefixing across the log shapes we see in the lab journal
+#  * sticky-prio carry-over for indented continuations (traceback shape)
+#  * SIGTERM forwarding + trap exit-status propagation
+#  * SIGUSR1 forwarding (separate from SIGTERM to catch handler set
+#    overlap regressions; SIGINT is skipped because bash refuses to
+#    install traps on signals inherited as SIG_IGN, which the test
+#    harness's background-and-kill shape triggers)
+#  * signalled-exit propagation (workload killed by signal w/o trap
+#    -> level-init exits 128+signo per shell convention)
+#  * exec failure (nonexistent workload -> level-init exits 127)
+#  * orphan reaping via PR_SET_CHILD_SUBREAPER — the load-bearing
+#    PID-1 contract, verified by spawning an orphan that exits during
+#    the workload's lifetime and asserting no zombies remain under
+#    level-init's pid
+#
+# Podman-integrated end-to-end testing (journald PRIORITY parsing
+# through --log-driver=k8s-file + --init-path) lives in whatever
+# service role first consumes level_init, since it depends on that
+# service's image + healthcheck shape.
+
+- name: _verify | Binary is present, executable, root-owned, mode 0755
+  stat:
+    path: /usr/local/libexec/level-init
+  register: level_init_bin
+  become: true
+  failed_when: >-
+    not level_init_bin.stat.exists
+    or not level_init_bin.stat.executable
+    or level_init_bin.stat.pw_name != 'root'
+    or level_init_bin.stat.mode != '0755'
+
+- name: _verify | No-arg invocation exits 64
+  command: /usr/local/libexec/level-init
+  register: level_init_usage
+  failed_when: level_init_usage.rc != 64
+  changed_when: false
+
+- name: _verify | Strips leading `--` (podman invocation shape)
+  command: /usr/local/libexec/level-init -- /bin/echo hello
+  register: level_init_dashdash
+  failed_when: level_init_dashdash.rc != 0 or level_init_dashdash.stdout != 'hello'
+  changed_when: false
+
+- name: _verify | Level prefixing across the journal's known shapes
+  shell: |-
+    set -eu
+    /usr/local/libexec/level-init -- /bin/sh -c '
+      echo "INFO: paperless-style"
+      echo "[INFO] [celery.beat] bracketed style"
+      echo "- INFO (movies:39) - bazarr"
+      echo "info: z2m lowercase"
+      echo "[INF] jellyfin abbrev"
+      echo "[259] LOG: postgres style"
+      echo "WARN bare warn" >&2
+      echo "[2026-05-13] WRN transmission" >&2
+      echo "WARNING: tautulli-style" >&2
+      echo "ERROR: HA-style" >&2
+      echo "FATAL: postgres-fatal-style" >&2
+      echo "nginx-style 192.168.1.5 - - GET / 200"
+      echo "Traceback (most recent call last):" >&2
+    '
+  register: level_init_levels
+  changed_when: false
+
+- name: _verify | Stdout has expected level prefixes
+  assert:
+    that:
+      - "'<6>INFO: paperless-style' in level_init_levels.stdout"
+      - "'<6>[INFO] [celery.beat] bracketed style' in level_init_levels.stdout"
+      - "'<6>- INFO (movies:39) - bazarr' in level_init_levels.stdout"
+      - "'<6>info: z2m lowercase' in level_init_levels.stdout"
+      - "'<6>[INF] jellyfin abbrev' in level_init_levels.stdout"
+      - "'<6>[259] LOG: postgres style' in level_init_levels.stdout"
+      - "'nginx-style 192.168.1.5 - - GET / 200' in level_init_levels.stdout"
+      # Unprefixed line must NOT have a level prefix injected:
+      - "'<6>nginx-style' not in level_init_levels.stdout"
+
+- name: _verify | Stderr has expected level prefixes
+  assert:
+    that:
+      - "'<4>WARN bare warn' in level_init_levels.stderr"
+      - "'<4>[2026-05-13] WRN transmission' in level_init_levels.stderr"
+      - "'<4>WARNING: tautulli-style' in level_init_levels.stderr"
+      - "'<3>ERROR: HA-style' in level_init_levels.stderr"
+      - "'<2>FATAL: postgres-fatal-style' in level_init_levels.stderr"
+      - "'Traceback (most recent call last):' in level_init_levels.stderr"
+      # Unprefixed traceback header must NOT have a prefix injected:
+      - "'<6>Traceback' not in level_init_levels.stderr"
+
+- name: _verify | Sticky prio carries across indented continuation lines
+  shell: |-
+    /usr/local/libexec/level-init -- /bin/sh -c '
+      echo "ERROR: failure on connection" >&2
+      echo "  retrying in 5s" >&2
+      echo "  retrying in 10s" >&2
+      echo "INFO: recovered" >&2
+    '
+  register: level_init_sticky
+  changed_when: false
+
+- name: _verify | Indented continuation inherits ERROR priority
+  assert:
+    that:
+      - "'<3>ERROR: failure on connection' in level_init_sticky.stderr"
+      - "'<3>  retrying in 5s' in level_init_sticky.stderr"
+      - "'<3>  retrying in 10s' in level_init_sticky.stderr"
+      # Flush-left line with its own keyword breaks the run:
+      - "'<6>INFO: recovered' in level_init_sticky.stderr"
+      # And must NOT have been escalated to <3>:
+      - "'<3>INFO: recovered' not in level_init_sticky.stderr"
+
+# Signal forwarding is the load-bearing PID-1 behaviour. Trap the
+# signal in a child script, send it to level-init, verify the trap's
+# exit status propagates back through level-init's waitAll loop.
+- name: _verify | SIGTERM forwards and exit code propagates
+  shell: |-
+    /usr/local/libexec/level-init -- /bin/sh -c '
+      trap "exit 42" TERM
+      sleep 30 &
+      wait $!
+    ' &
+    PID=$!
+    sleep 1
+    kill -TERM $PID
+    wait $PID
+    echo "exit=$?"
+  args:
+    executable: /bin/bash
+  register: level_init_sigterm
+  changed_when: false
+  failed_when: "'exit=42' not in level_init_sigterm.stdout"
+
+- name: _verify | SIGUSR1 forwards (signal-class regression check)
+  shell: |-
+    /usr/local/libexec/level-init -- /bin/sh -c '
+      trap "exit 44" USR1
+      sleep 30 &
+      wait $!
+    ' &
+    PID=$!
+    sleep 1
+    kill -USR1 $PID
+    wait $PID
+    echo "exit=$?"
+  args:
+    executable: /bin/bash
+  register: level_init_sigusr
+  changed_when: false
+  failed_when: "'exit=44' not in level_init_sigusr.stdout"
+
+# Workload with no trap, killed by SIGTERM. Bash default behaviour on
+# uncaught SIGTERM is to die without setting a normal exit code; the
+# kernel reports the process as signalled and level-init's waitAll
+# converts that into 128+signo (143 for SIGTERM = 128+15) per shell
+# convention. Distinct from the trap-style test above which exercises
+# the "child returned a normal exit code" branch of waitAll.
+- name: _verify | Signalled exit propagates as 128+signo
+  shell: |-
+    /usr/local/libexec/level-init -- /bin/sh -c 'exec sleep 30' &
+    PID=$!
+    sleep 1
+    kill -TERM $PID
+    wait $PID
+    echo "exit=$?"
+  args:
+    executable: /bin/bash
+  register: level_init_signalled
+  changed_when: false
+  failed_when: "'exit=143' not in level_init_signalled.stdout"
+
+- name: _verify | Exec failure exits 127
+  command: /usr/local/libexec/level-init -- /nonexistent/binary
+  register: level_init_execfail
+  changed_when: false
+  failed_when: level_init_execfail.rc != 127
+
+# Orphan reaping: spawn an orphan whose direct parent exits before
+# the orphan does, then assert the orphan doesn't linger as a zombie.
+#
+# The shape: workload sh runs `( sleep 0.5 & )`. The parens make a
+# subshell that backgrounds sleep then exits. With level-init as a
+# subreaper (PR_SET_CHILD_SUBREAPER), the orphaned sleep reparents
+# to level-init when its subshell parent exits. When sleep finishes
+# ~0.5s later it becomes a zombie under level-init, and level-init's
+# Wait4(-1) loop reaps it. The workload sleeps 3s overall so we have
+# time to observe the post-reap state before level-init exits.
+#
+# We check the process table from outside via `ps --ppid=<level-init>`
+# during the workload's run. A leaked zombie shows up with stat Z;
+# a reaped one is gone entirely. The bash test harness is itself the
+# parent of level-init here, so there's no outer subreaper masking
+# the test — the only thing that can reap is level-init.
+- name: _verify | Reaps orphaned grandchildren (PR_SET_CHILD_SUBREAPER)
+  shell: |-
+    set -o pipefail
+    /usr/local/libexec/level-init -- /bin/sh -c '
+      ( sleep 0.5 & )
+      sleep 3
+    ' &
+    PID=$!
+    sleep 1.5
+    # By now the orphaned sleep has exited (~t=0.5) and either been
+    # reaped by level-init or left as a zombie. ps --ppid lists
+    # direct children; a zombie shows status Z. `grep -c '^Z' || true`
+    # handles the "no zombies" case (grep exits 1 when nothing matches,
+    # which pipefail would otherwise surface as a task failure).
+    zombies=$(ps -o stat= --ppid="$PID" 2>/dev/null | grep -c '^Z' || true)
+    wait $PID
+    echo "zombies=$zombies"
+  args:
+    executable: /bin/bash
+  register: level_init_reap
+  changed_when: false
+  failed_when: "'zombies=0' not in level_init_reap.stdout"
