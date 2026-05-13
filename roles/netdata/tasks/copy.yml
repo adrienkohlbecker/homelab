@@ -37,3 +37,12 @@
     name: netdata
     state: restarted
   become: true
+
+# Reset caller-input vars to defaults so they don't leak into a sibling
+# call later in the play. See roles/systemd_unit/tasks/install.yml for
+# the full background on the import_role + vars: leak.
+- name: copy | Reset caller-input vars to defaults
+  set_fact:
+    netdata_copy_condition: true
+    netdata_copy_mode: "0644"
+    netdata_copy_restart: true
