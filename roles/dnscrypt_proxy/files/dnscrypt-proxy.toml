@@ -2,6 +2,16 @@
 listen_addresses = []
 server_names = ['fdn', 'scaleway-fr']
 
+# Resolver-list refresh (download.dnscrypt.info, every 72h per [sources])
+# needs DNS for the URL host. Without ignore_system_dns, dnscrypt asks
+# getaddrinfo, which on these hosts walks /etc/resolv.conf -> pihole ->
+# dnscrypt: circular. Force the bootstrap resolver instead. Steady-state
+# lookups use IP-keyed stamps from the cached list and don't hit this path.
+# Note: 2.0.45 (jammy) uses fallback_resolver (singular); on 2.1.x+ migrate
+# to `bootstrap_resolvers = ['9.9.9.11:53', '8.8.8.8:53']` (plural, list).
+fallback_resolver = '9.9.9.11:53'
+ignore_system_dns = true
+
 [query_log]
   file = '/var/log/dnscrypt-proxy/query.log'
 
