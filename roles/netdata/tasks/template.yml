@@ -37,12 +37,3 @@
     name: netdata
     state: restarted
   become: true
-
-# Reset caller-input vars to defaults so they don't leak into a sibling
-# call later in the play. See roles/systemd_unit/tasks/install.yml for
-# the full background on the import_role + vars: leak.
-- name: template | Reset caller-input vars to defaults
-  set_fact:
-    netdata_template_condition: true
-    netdata_template_mode: "0644"
-    netdata_template_restart: true
