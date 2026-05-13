@@ -86,6 +86,19 @@
   tags:
     - fluentbit
 
+- name: Install fluent-bit level-from-message Lua filter
+  copy:
+    src: level-from-message.lua
+    dest: /etc/fluent-bit/level-from-message.lua
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: fluentbit_lua
+  when: not (ansible_check_mode and fluentbit_apt.changed)
+  tags:
+    - fluentbit
+
 - name: Configure fluent-bit
   template:
     src: fluent-bit.conf.j2
@@ -97,7 +110,7 @@
     validate: /opt/fluent-bit/bin/fluent-bit --config %s --dry-run
   become: true
   register: fluentbit_cfg
-  when: not (ansible_check_mode and fluentbit_apt.changed)
+  when: not (ansible_check_mode and (fluentbit_apt.changed or fluentbit_lua.changed))
   tags:
     - fluentbit
 
@@ -108,7 +121,7 @@
   vars:
     systemd_unit_src: fluent-bit
     systemd_unit_condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or fluentbit_repository.changed)) }}"
-    systemd_unit_restart: "{{ fluentbit_cfg.changed or fluentbit_apt.changed }}"
+    systemd_unit_restart: "{{ fluentbit_cfg.changed or fluentbit_lua.changed or fluentbit_apt.changed }}"
   tags:
     - fluentbit
 
