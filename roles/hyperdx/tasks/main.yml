@@ -91,3 +91,83 @@
       proxy_pass: http://localhost:{{ service_ports.hyperdx }}/
   tags:
     - hyperdx
+
+# Bootstrap the first team. HyperDX's all-in-one image leaves the OTLP
+# receiver UNWIRED until at least one team exists in MongoDB
+# (opampController only adds `otlp/hyperdx` to pipelines when
+# `apiKeys.length > 0`, and apiKeys comes from team documents). Without
+# this, port 4318 never binds and fluent-bit's OTLP output sees
+# Connection refused. The `INGESTION_API_KEY` env that's documented for
+# this purpose is dead code in the all-in-one-noauth image variant --
+# config.js checks `HYPERDX_IMAGE === 'all-in-one-auth'` but
+# entry.base.sh always sets `all-in-one-noauth` when IS_LOCAL_APP_MODE
+# is not the dangerous-mode sentinel. Bootstrapping a real team is the
+# only path that actually wires the receiver.
+#
+# /api/register/password is open (no auth required) but one-shot:
+# returns 409 if any team already exists. So this task is naturally
+# idempotent once the team is created. We force the team's apiKey to
+# the vault value afterwards so fluent-bit and the _verify probe can
+# authenticate with a known token regardless of the random uuid the
+# api generated at registration.
+- name: Wait for hyperdx api to be ready
+  uri:
+    url: http://localhost:{{ service_ports.hyperdx }}/api/health
+    status_code: 200
+  register: hyperdx_health
+  retries: 60
+  delay: 2
+  until: hyperdx_health.status == 200
+  when: not ansible_check_mode
+  tags:
+    - hyperdx
+
+- name: Probe team existence in MongoDB
+  # find().itcount() is robust on the legacy `mongo` shell shipped in the
+  # all-in-one image (where countDocuments() throws TypeError on an empty
+  # collection that doesn't exist yet).
+  command: podman exec hyperdx mongo --quiet hyperdx --eval "db.teams.find().itcount()"
+  register: hyperdx_team_count
+  changed_when: false
+  failed_when: hyperdx_team_count.rc != 0
+  when: not ansible_check_mode
+  become: true
+  tags:
+    - hyperdx
+
+# 409 (teamAlreadyExists) is fine -- means we ran this on a prior apply
+# (or the user registered manually via the UI). status_code allows both
+# so the task stays green.
+- name: Register first admin user (creates initial team)
+  uri:
+    url: http://localhost:{{ service_ports.hyperdx }}/api/register/password
+    method: POST
+    body_format: json
+    body:
+      email: "{{ root_email }}"
+      password: "{{ hyperdx_admin_password }}"
+      confirmPassword: "{{ hyperdx_admin_password }}"
+    status_code: [ 200, 409 ]
+  when:
+    - not ansible_check_mode
+    - hyperdx_team_count.stdout | trim | int == 0
+  tags:
+    - hyperdx
+
+# Vault is source of truth for the apiKey: force-set it after registration
+# so fluent-bit's Bearer matches regardless of the random uuid the api
+# generated. Also force collectorAuthenticationEnforced=true (registration
+# defaults to true today, but pin it so a future default flip doesn't
+# silently disable auth on prod re-applies). modifiedCount=0 when the
+# state already matches, so this is idempotent on subsequent applies.
+- name: Force team apiKey + auth enforcement to vault values
+  command: >-
+    podman exec hyperdx mongo --quiet hyperdx --eval
+    'JSON.stringify(db.teams.updateOne({}, {$set: {apiKey: "{{ hyperdx_ingestion_api_key }}", collectorAuthenticationEnforced: true}}))'
+  register: hyperdx_team_update
+  changed_when: (hyperdx_team_update.stdout | from_json).modifiedCount | int > 0
+  failed_when: hyperdx_team_update.rc != 0 or (hyperdx_team_update.stdout | from_json).matchedCount | int == 0
+  when: not ansible_check_mode
+  become: true
+  tags:
+    - hyperdx

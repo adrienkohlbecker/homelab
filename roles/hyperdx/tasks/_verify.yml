@@ -81,3 +81,63 @@
   delay: 2
   until: _verify_clickhouse.rc == 0
   become: true
+
+# End-to-end ingest probe: synthesise a minimal OTLP log and POST it at
+# the published OTLP HTTP port using the same Bearer auth fluent-bit
+# does. Any auth / shape / endpoint regression here surfaces as a
+# failed _verify rather than silently-dropped production logs.
+#
+# Retry budget reasoning: opampController only adds `otlp/hyperdx` to
+# the active pipelines after a team exists (we bootstrap it in
+# main.yml). The supervisor polls the api every ~30s, then the
+# collector child is restarted with the new config. Allow ~3 minutes
+# end-to-end (90 * 2s).
+- name: _verify | OTLP HTTP endpoint accepts a synthetic log POST
+  uri:
+    url: http://localhost:{{ service_ports.hyperdx_otlp_http }}/v1/logs
+    method: POST
+    body_format: json
+    # bearertokenauth extension on the receiver is configured with
+    # `scheme: ''` (see opampController.js); the header value is the
+    # raw token with no "Bearer " prefix.
+    headers:
+      Authorization: "{{ hyperdx_ingestion_api_key }}"
+    body:
+      resourceLogs:
+        - resource:
+            attributes:
+              - key: service.name
+                value:
+                  stringValue: hyperdx_verify_probe
+          scopeLogs:
+            # timeUnixNano must be recent: otel_logs has
+            # `TTL TimestampTime + INTERVAL 30 DAY` and ClickHouse drops
+            # past-TTL rows at insert time. The exporter counts them as
+            # "sent" so failures look like silent data loss. Stamp with
+            # the current epoch in nanoseconds.
+            - logRecords:
+                - timeUnixNano: "{{ ansible_date_time.epoch }}000000000"
+                  severityText: INFO
+                  body:
+                    stringValue: hyperdx _verify probe
+    status_code: 200
+  register: _verify_otlp
+  retries: 90
+  delay: 2
+  until: _verify_otlp.status == 200
+
+# Confirm the probe actually landed in ClickHouse, not just "the HTTP
+# layer said 200". The otel_logs table is auto-created by the OTel
+# ClickHouse exporter on first record; if it's missing entirely the
+# pipeline silently dropped on the way through.
+- name: _verify | Probe row reached otel_logs in ClickHouse
+  command: >-
+    podman exec hyperdx curl --fail --silent --show-error --max-time 5
+    "http://localhost:8123/?query=SELECT+count()+FROM+default.otel_logs+WHERE+ServiceName='hyperdx_verify_probe'"
+  register: _verify_otel_logs
+  changed_when: false
+  failed_when: _verify_otel_logs.rc != 0 or (_verify_otel_logs.stdout | trim | int) == 0
+  retries: 15
+  delay: 2
+  until: _verify_otel_logs.rc == 0 and (_verify_otel_logs.stdout | trim | int) > 0
+  become: true
