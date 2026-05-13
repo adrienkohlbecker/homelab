@@ -1,29 +1,43 @@
-- name: Configure zfs datasets
-  include_role:
+- name: Configure tank/data dataset
+  import_role:
     name: zfs
     tasks_from: dataset
-  loop:
-    - dataset: tank/data
+  vars:
+    zfs_dataset_args:
+      dataset: tank/data
       mountpoint: /mnt/data
       extra_properties:
         'autobackup:bak': 'true'
         special_small_blocks: '32768'
-    - dataset: tank/brumath
+  tags:
+    - data
+
+- name: Configure tank/brumath dataset
+  import_role:
+    name: zfs
+    tasks_from: dataset
+  vars:
+    zfs_dataset_args:
+      dataset: tank/brumath
       mountpoint: /mnt/brumath
       mode: '0775'
       extra_properties:
         'autobackup:bak': 'true'
         special_small_blocks: '32768'
-    - dataset: tank/eckwersheim
+  tags:
+    - data
+
+- name: Configure tank/eckwersheim dataset
+  import_role:
+    name: zfs
+    tasks_from: dataset
+  vars:
+    zfs_dataset_args:
+      dataset: tank/eckwersheim
       mountpoint: /mnt/eckwersheim
       mode: '0775'
       extra_properties:
         'autobackup:bak': 'true'
         special_small_blocks: '32768'
-  loop_control:
-    loop_var: data_item
-    label: '{{ data_item.dataset }}'
-  vars:
-    zfs_dataset_args: "{{ data_item }}"
   tags:
     - data
