@@ -1,0 +1,47 @@
+- name: _setup | Install dependencies
+  apt:
+    pkg:
+      - podman
+      - git
+      # podman's rootless mode shells out to newuidmap/newgidmap (in uidmap)
+      # to read the subuid/subgid ranges. uidmap is only a Recommends of
+      # podman, so install_recommends:false leaves it out -- pull it in
+      # explicitly so podman can start under github_runner.
+      - uidmap
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+
+# In production, host-wide subuid/subgid allocation happens in the `subid` role
+# (driven by host_vars `subid_users`). The role-only test harness doesn't apply
+# that role, so we pre-seed an entry for github_runner here -- without it,
+# rootless podman refuses to start with "no subuid ranges found for user
+# github_runner".
+- name: _setup | Pre-allocate subuid for github_runner
+  lineinfile:
+    path: /etc/subuid
+    line: "github_runner:100000:65536"
+    regexp: "^github_runner:"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Pre-allocate subgid for github_runner
+  lineinfile:
+    path: /etc/subgid
+    line: "github_runner:100000:65536"
+    regexp: "^github_runner:"
+    create: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+# Under qemu_test the runner doesn't register against GitHub (no
+# fixture exists for github.com's runner-registration API). The role's
+# main.yml gates the registration + service-start tasks on `qemu_test`,
+# so this _setup.yml only needs to bring up the rootless-podman
+# prerequisites. _verify.yml asserts the static layout (binary, user,
+# subid, podman socket) without expecting the runner to be online.

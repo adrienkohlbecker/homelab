@@ -88,6 +88,7 @@
     - gitea
     - nodejs
     - act_runner
+    - github_runner
     - transmission
     - getmail
     - compta

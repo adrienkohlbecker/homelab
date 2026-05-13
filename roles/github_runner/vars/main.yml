@@ -1,0 +1,21 @@
+github_runner_version: "2.334.0"
+
+# Labels reported to GitHub on registration. `self-hosted` is the implicit
+# label GitHub adds to every self-hosted runner; we list it explicitly so
+# workflows' `runs-on: [self-hosted, lab-runtime]` selector resolves
+# unambiguously. lab-runtime is the custom label workflows match on; the
+# container image of the same name is built by this role.
+github_runner_labels: "self-hosted,lab-runtime"
+
+# GitHub repo to register against. Overridable from host_vars when we
+# eventually have more than one consumer of this role.
+github_runner_owner: "adrienkohlbecker"
+github_runner_repo: "homelab"
+
+github_runner_release:
+  x86_64:
+    url: "https://github.com/actions/runner/releases/download/v{{ github_runner_version }}/actions-runner-linux-x64-{{ github_runner_version }}.tar.gz"
+    sha256: "048024cd2c848eb6f14d5646d56c13a4def2ae7ee3ad12122bee960c56f3d271"
+  aarch64:
+    url: "https://github.com/actions/runner/releases/download/v{{ github_runner_version }}/actions-runner-linux-arm64-{{ github_runner_version }}.tar.gz"
+    sha256: "f44255bd3e80160eb25f71bc83d06ea025f6908748807a584687b3184759f7e4"

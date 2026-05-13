@@ -1,0 +1,375 @@
+- name: Set up github_runner system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_name: github_runner
+    service_user_home: /mnt/scratch/github_runner
+    service_user_createhome: true
+    # kvm so podman can hand /dev/kvm to lab-runtime containers via
+    # --device + --group-add 1 (rootless userns doesn't map the host
+    # kvm gid through by default; see config.yml.j2 in the legacy
+    # act_runner role for the full rationale, which is unchanged here).
+    service_user_extra_groups: [ kvm ]
+  tags:
+    - github_runner
+
+- name: Create runtime directories
+  when: not (ansible_check_mode and github_runner_user.changed)
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: github_runner
+    group: github_runner
+    mode: "0755"
+  become: true
+  loop:
+    - /mnt/services/github_runner
+    - /mnt/services/github_runner/.tarballs
+    - /mnt/scratch/github_runner/cache
+    - /mnt/scratch/github_runner/workdir
+    # Bind-mounted into test cells via container.options for the harness's
+    # --workdir-parent. Lives on /mnt/scratch (terabytes) instead of the
+    # container's writable overlay so concurrent qcow2 overlays + role
+    # checkouts can't ENOSPC the cell. Each cell mounts a unique subdir
+    # underneath this so two concurrent cells can't see each other; the
+    # tmpfiles.d entry below reaps the per-cell subdirs after they idle.
+    - /mnt/scratch/github_runner/lab-runtime-workdir
+  tags:
+    - github_runner
+
+# systemd-tmpfiles --clean runs daily via systemd-tmpfiles-clean.timer
+# and applies the rule on each tick. The rule walks lab-runtime-workdir's
+# tree, deletes files >1d stale, removes empty old subdirs as a side
+# effect -- so a completed or crashed test cell's per-cell tree gets
+# fully reaped once its contents are >1d old. The 1d age is comfortably
+# beyond the harness's 1500s timeout, so a live cell can't be touched.
+- name: Install tmpfiles.d entry for lab-runtime-workdir
+  copy:
+    src: tmpfiles.conf
+    dest: /etc/tmpfiles.d/github_runner.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    # Catches typos in the rule line; --create exits non-zero on parse
+    # failure. --dry-run was added in systemd 250 -- jammy ships 249
+    # so we drop the flag there. Without --dry-run the validate's
+    # side effect is the `d` rule's mkdir of /mnt/scratch/qemu/
+    # _sentinels (idempotent; next tmpfiles tick would do the same);
+    # the `e` rule has no creation side effect.
+    validate: >-
+      systemd-tmpfiles
+      {{ '--dry-run' if ansible_distribution_release not in ['jammy'] else '' }}
+      --create %s
+  become: true
+  tags:
+    - github_runner
+
+# Linger has to be on BEFORE the lab-runtime build runs: rootless
+# podman's runtime (crun) makes sd-bus calls when creating the build's
+# intermediate containers, which fail with "Permission denied" if the
+# user has no systemd manager. `loginctl enable-linger` starts
+# user@<uid>.service which provides the dbus + cgroup hierarchy crun
+# expects.
+- name: Turn on linger
+  command: loginctl enable-linger github_runner
+  args:
+    creates: /var/lib/systemd/linger/github_runner
+  become: true
+  register: github_runner_linger
+  tags:
+    - github_runner
+
+# linger triggers user@<uid>.service asynchronously; the build task
+# immediately following needs it fully up so crun's sd-bus calls
+# succeed. systemd module with state=started blocks until active.
+- name: Ensure github_runner user systemd manager is running
+  when: not (ansible_check_mode and github_runner_user.changed)
+  systemd:
+    name: user@{{ github_runner_user.uid }}.service
+    state: started
+  become: true
+  tags:
+    - github_runner
+
+# Same xino=off override as act_runner had; see that role's git history
+# for the kernel printk rationale. Scoped to github_runner so the
+# rootful overlay's working xino is unaffected.
+- name: Create rootless containers config directory
+  when: not (ansible_check_mode and github_runner_user.changed)
+  file:
+    path: /mnt/scratch/github_runner/.config/containers
+    state: directory
+    owner: github_runner
+    group: github_runner
+    mode: "0755"
+  become: true
+  tags:
+    - github_runner
+
+- name: Configure rootless overlay storage opts
+  when: not (ansible_check_mode and github_runner_user.changed)
+  copy:
+    dest: /mnt/scratch/github_runner/.config/containers/storage.conf
+    content: |
+      [storage.options.overlay]
+      mountopt = "nodev,xino=off"
+    owner: github_runner
+    group: github_runner
+    mode: "0644"
+  become: true
+  tags:
+    - github_runner
+
+# Build the lab-runtime container image used by every CI workflow. The
+# image lives only in the github_runner user's local podman image store --
+# no registry, no push. podman build is layer-cached, so unchanged
+# inputs exit in ~200ms even with force: true.
+#
+# Build inputs (Dockerfile + mise.toml + pyproject.toml + uv.lock +
+# packer/qemu.pkr.hcl) are staged into a per-apply temp dir on the
+# remote via `rsync --relative` so the repo's relative paths survive
+# into the build context (Dockerfile's `COPY packer/qemu.pkr.hcl ...`
+# depends on that). The temp dir, plus the GitHub token tmpfile used
+# for `podman build --secret`, are both torn down in `always:` so a
+# build crash doesn't leak state.
+- name: Build lab-runtime image
+  when: not ansible_check_mode
+  tags:
+    - github_runner
+  become: true
+  become_user: github_runner
+  block:
+    - name: Create temp build context for lab-runtime image
+      ansible.builtin.tempfile:
+        state: directory
+        prefix: lab-runtime-build-
+      register: github_runner_lab_runtime_buildctx
+
+    - name: Stage build inputs into temp build context
+      ansible.posix.synchronize:
+        src: "{{ playbook_dir }}/./{{ item }}"
+        dest: "{{ github_runner_lab_runtime_buildctx.path }}/"
+        owner: false
+        group: false
+        rsync_opts:
+          - "--relative"
+      loop:
+        - roles/github_runner/files/Dockerfile.lab-runtime
+        - mise.toml
+        - pyproject.toml
+        - uv.lock
+        - packer/qemu.pkr.hcl
+
+    - name: Stage GitHub token tmpfile for the lab-runtime build
+      when: not ansible_check_mode
+      copy:
+        dest: /run/user/{{ github_runner_user.uid | default('0') }}/lab-runtime-build-token
+        content: "{{ mise_github_token }}"
+        mode: "0400"
+      no_log: true
+
+    - name: Build lab-runtime image
+      when: not ansible_check_mode
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ github_runner_user.uid | default('0') }}
+        DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ github_runner_user.uid | default('0') }}/bus
+      containers.podman.podman_image:
+        name: lab-runtime
+        tag: latest
+        state: build
+        path: "{{ github_runner_lab_runtime_buildctx.path }}"
+        force: true
+        build:
+          file: "{{ github_runner_lab_runtime_buildctx.path }}/roles/github_runner/files/Dockerfile.lab-runtime"
+          extra_args: >-
+            --cgroup-manager=cgroupfs
+            --secret id=mise_github_token,src=/run/user/{{ github_runner_user.uid | default('0') }}/lab-runtime-build-token
+      register: github_runner_lab_runtime_build
+
+  always:
+    - name: Remove temp build context
+      when: github_runner_lab_runtime_buildctx.path is defined
+      file:
+        path: "{{ github_runner_lab_runtime_buildctx.path }}"
+        state: absent
+
+    - name: Remove staged GitHub token tmpfile
+      when: not ansible_check_mode
+      file:
+        path: /run/user/{{ github_runner_user.uid | default('0') }}/lab-runtime-build-token
+        state: absent
+
+# Install / upgrade actions/runner from the upstream tarball. The
+# version sentinel (.version-<ver>) is what `unarchive` keys off via
+# `creates:` -- on a version bump we delete the sentinel via the
+# pre-task, the unarchive overwrites everything in /mnt/services/
+# github_runner/, and the post-task writes the new sentinel. The
+# tarball is kept under .tarballs/ so the apt-style upgrade-then-clean
+# pattern is auditable (and a rollback is one `cp` away).
+- name: Check current github_runner version
+  when: not (ansible_check_mode and github_runner_user.changed)
+  stat:
+    path: /mnt/services/github_runner/.version-{{ github_runner_version }}
+  register: github_runner_version_sentinel
+  become: true
+  tags:
+    - github_runner
+
+- name: Download actions/runner tarball
+  when:
+    - not (ansible_check_mode and github_runner_user.changed)
+    - not github_runner_version_sentinel.stat.exists
+  get_url:
+    url: "{{ github_runner_release[ansible_architecture].url }}"
+    checksum: "sha256:{{ github_runner_release[ansible_architecture].sha256 }}"
+    dest: /mnt/services/github_runner/.tarballs/actions-runner-{{ github_runner_version }}.tar.gz
+    owner: github_runner
+    group: github_runner
+    mode: "0644"
+  become: true
+  register: github_runner_tarball
+  tags:
+    - github_runner
+
+- name: Extract actions/runner tarball
+  when:
+    - not (ansible_check_mode and github_runner_user.changed)
+    - not github_runner_version_sentinel.stat.exists
+  unarchive:
+    src: /mnt/services/github_runner/.tarballs/actions-runner-{{ github_runner_version }}.tar.gz
+    dest: /mnt/services/github_runner/
+    remote_src: true
+    owner: github_runner
+    group: github_runner
+    # Don't blow away .runner / .credentials / _work; the tarball
+    # doesn't include them but `extra_opts` keeps `tar` from messing
+    # with files it never created.
+    extra_opts:
+      - "--no-overwrite-dir"
+  become: true
+  register: github_runner_extracted
+  tags:
+    - github_runner
+
+- name: Mark current github_runner version
+  when:
+    - not (ansible_check_mode and github_runner_user.changed)
+    - not github_runner_version_sentinel.stat.exists
+  copy:
+    dest: /mnt/services/github_runner/.version-{{ github_runner_version }}
+    content: "{{ github_runner_version }}\n"
+    owner: github_runner
+    group: github_runner
+    mode: "0644"
+  become: true
+  tags:
+    - github_runner
+
+- name: Check if github_runner is already registered
+  stat:
+    path: /mnt/services/github_runner/.runner
+  register: github_runner_registered
+  become: true
+  tags:
+    - github_runner
+
+# Registration token (1h TTL, can't be vaulted). Fetched from the
+# controller via `gh api`, which authenticates through the operator's
+# existing gh login (keyring) or a $GITHUB_TOKEN env var (resolved by
+# mise's [env] from op://). Skipped under qemu_test -- there's no
+# GitHub fixture to register against; tests verify the static layout
+# only.
+- name: Fetch GitHub runner registration token
+  when:
+    - not qemu_test
+    - not github_runner_registered.stat.exists
+  command: gh api -X POST /repos/{{ github_runner_owner }}/{{ github_runner_repo }}/actions/runners/registration-token --jq .token
+  register: github_runner_token_result
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  check_mode: false
+  no_log: true
+  tags:
+    - github_runner
+
+- name: Register runner with GitHub
+  when:
+    - not qemu_test
+    - not github_runner_registered.stat.exists
+  command: >-
+    ./config.sh
+    --url https://github.com/{{ github_runner_owner }}/{{ github_runner_repo }}
+    --token {{ github_runner_token_result.stdout }}
+    --name {{ inventory_hostname }}
+    --labels {{ github_runner_labels }}
+    --unattended
+    --replace
+  args:
+    chdir: /mnt/services/github_runner
+    creates: /mnt/services/github_runner/.runner
+  become: true
+  become_user: github_runner
+  no_log: true
+  tags:
+    - github_runner
+
+- name: Enable rootless podman socket
+  when: not (ansible_check_mode and (github_runner_user.changed or github_runner_linger.changed))
+  systemd:
+    name: podman.socket
+    enabled: true
+    scope: user
+  become: true
+  become_user: github_runner
+  tags:
+    - github_runner
+
+- name: Start rootless podman socket
+  when: not (ansible_check_mode and (github_runner_user.changed or github_runner_linger.changed))
+  systemd:
+    name: podman.socket
+    state: started
+    scope: user
+  become: true
+  become_user: github_runner
+  tags:
+    - github_runner
+
+- name: Install podman prune timer for github_runner
+  import_role:
+    name: podman
+    tasks_from: prune
+  vars:
+    podman_prune_user: github_runner
+    podman_prune_condition: "{{ not (ansible_check_mode and github_runner_user.changed) }}"
+  tags:
+    - github_runner
+
+- name: Install github_runner service
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_src: github_runner.service.j2
+    systemd_unit_condition: "{{ not (ansible_check_mode and github_runner_user.changed) }}"
+  tags:
+    - github_runner
+
+# Under qemu_test the runner isn't registered, so run.sh would loop on
+# "configure first" -- skip the service-start step. The unit file itself
+# is still installed above so syntax / dependency errors surface in
+# check-mode and integration tests.
+- name: Enable github_runner service
+  when: not qemu_test
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_src: github_runner
+    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or github_runner_user.changed)) }}"
+    systemd_unit_restart: "{{ systemd_unit.changed or github_runner_extracted.changed }}"
+  tags:
+    - github_runner
