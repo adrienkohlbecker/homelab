@@ -85,7 +85,8 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: filebrowser
-    nginx_proxy_pass: http://localhost:5890/
+    nginx_site_args:
+      subdomain: filebrowser
+      proxy_pass: http://localhost:5890/
   tags:
     - filebrowser

@@ -117,9 +117,10 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: overseerr
-    nginx_proxy_pass: http://localhost:5055/
-    nginx_csp_default_src: plex.tv *.plex.tv
-    nginx_csp_additional: img-src plex.tv *.plex.tv *.gravatar.com *.tmdb.org {{ nginx_csp_default }}; font-src plex.tv *.plex.tv fonts.gstatic.com {{ nginx_csp_default }}
+    nginx_site_args:
+      subdomain: overseerr
+      proxy_pass: http://localhost:5055/
+      csp_default_src: plex.tv *.plex.tv
+      csp_additional: img-src plex.tv *.plex.tv *.gravatar.com *.tmdb.org {{ nginx_csp_default }}; font-src plex.tv *.plex.tv fonts.gstatic.com {{ nginx_csp_default }}
   tags:
     - overseerr

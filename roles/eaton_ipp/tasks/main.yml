@@ -59,12 +59,13 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_condition: '{{ ansible_architecture == "x86_64" }}'
-    nginx_subdomain: ipp
-    nginx_proxy_pass: https://localhost:4680/
-    nginx_location_conf: |
-      # By default the header name is lowercase, and this app expects it in capitalized form, otherwise we can't login.
-      proxy_set_header Content-Type      $content_type;
-      proxy_set_header Cookie            $http_cookie;
+    nginx_site_args:
+      condition: '{{ ansible_architecture == "x86_64" }}'
+      subdomain: ipp
+      proxy_pass: https://localhost:4680/
+      location_conf: |
+        # By default the header name is lowercase, and this app expects it in capitalized form, otherwise we can't login.
+        proxy_set_header Content-Type      $content_type;
+        proxy_set_header Cookie            $http_cookie;
   tags:
     - eaton_ipp

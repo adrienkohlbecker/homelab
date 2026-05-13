@@ -54,7 +54,9 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: "{{ vscode_subdomain }}"
-    nginx_proxy_pass: http://localhost:3002/
+    nginx_site_args:
+      subdomain: "{{ vscode_subdomain }}"
+      proxy_pass: http://localhost:3002/
+      csp_frame_ancestors: "{{ vscode_csp_frame_ancestors | default(omit) }}"
   tags:
     - vscode

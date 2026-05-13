@@ -103,7 +103,8 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: wolweb
-    nginx_proxy_pass: http://localhost:8089/
+    nginx_site_args:
+      subdomain: wolweb
+      proxy_pass: http://localhost:8089/
   tags:
     - wolweb

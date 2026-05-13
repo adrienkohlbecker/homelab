@@ -143,7 +143,8 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: transmission
-    nginx_proxy_pass: http://localhost:9091/
+    nginx_site_args:
+      subdomain: transmission
+      proxy_pass: http://localhost:9091/
   tags:
     - transmission

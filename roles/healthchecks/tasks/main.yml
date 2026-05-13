@@ -131,7 +131,8 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: healthchecks
-    nginx_proxy_pass: http://localhost:{{ service_ports.healthchecks }}/
+    nginx_site_args:
+      subdomain: healthchecks
+      proxy_pass: http://localhost:{{ service_ports.healthchecks }}/
   tags:
     - healthchecks

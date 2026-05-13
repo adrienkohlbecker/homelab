@@ -25,7 +25,8 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: speedtest
-    nginx_proxy_pass: http://localhost:2807/
+    nginx_site_args:
+      subdomain: speedtest
+      proxy_pass: http://localhost:2807/
   tags:
     - speedtest
