@@ -8,7 +8,7 @@ jobs:
     autodetection_retry: 60
 
   - name: custom
-    url: http://127.0.0.1:19392/metrics
+    url: http://127.0.0.1:{{ service_ports.custom_exporter }}/metrics
     autodetection_retry: 60
 {% if prometheus_enabled|default(false) %}
 
