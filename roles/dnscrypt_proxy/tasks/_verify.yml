@@ -1,0 +1,75 @@
+# Functional verification: exercise the actual DNS path through
+# dnscrypt-proxy's systemd-activated socket. Stat-only "is the socket
+# listening" would pass even if the service crashes on its first query
+# (typo in dnscrypt-proxy.toml, broken resolver list, etc.) -- socket
+# activation keeps the .socket unit `active (listening)` regardless of
+# the .service unit's fate.
+#
+# Probe 127.0.0.1:5053 rather than the podman bridge gateway (10.88.0.1):
+# loopback is unrestricted by the firewall's saddr-scoped INPUT rule, so
+# we don't have to spin up a container/netns just to satisfy the saddr
+# match. It's the same socket -- the override binds 0.0.0.0:5053.
+
+- name: _verify | dnscrypt-proxy.socket is loaded and active
+  systemd:
+    name: dnscrypt-proxy.socket
+  register: _verify_socket
+  failed_when: >-
+    _verify_socket.status.LoadState != "loaded"
+    or _verify_socket.status.ActiveState != "active"
+  become: true
+
+# Pre-probe: the .service unit should be inactive before any client
+# connects -- proves the .socket is lazily activating rather than the
+# .service running as a normal daemon. If someone disables socket
+# activation in the future, this catches it.
+- name: _verify | dnscrypt-proxy.service is inactive before first query
+  systemd:
+    name: dnscrypt-proxy.service
+  register: _verify_service_pre
+  failed_when: _verify_service_pre.status.ActiveState != "inactive"
+  become: true
+
+# Inline Python socket probe: avoids adding a dnsutils dep just for the
+# test and avoids the netns dance. Builds a minimal DNS query (id=0x1234,
+# RD=1, A example.com IN), reads the response, asserts NOERROR + at
+# least one answer record.
+#
+# Retry under ansible: socket activation only triggers when the first
+# datagram arrives, then dnscrypt-proxy spends ~5s probing upstream
+# resolvers (fdn DoH + scaleway-fr DNSCrypt) before serving queries. The
+# datagram that triggered activation is buffered on the kernel socket but
+# dnscrypt-proxy 2.0.45 logs `Systemd sockets are untested and unsupported`
+# and empirically doesn't pick it up. The per-attempt 2s timeout matches
+# the loop delay; total budget ~60s covers cold-start init.
+- name: _verify | Resolve example.com via dnscrypt-proxy on 127.0.0.1:5053
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import socket, struct
+        q = struct.pack(">HHHHHH", 0x1234, 0x0100, 1, 0, 0, 0)
+        for p in b"example.com".split(b"."):
+            q += bytes([len(p)]) + p
+        q += b"\x00\x00\x01\x00\x01"
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(2)
+        s.sendto(q, ("127.0.0.1", 5053))
+        data, _ = s.recvfrom(512)
+        rcode = data[3] & 0x0f
+        ancount = struct.unpack(">H", data[6:8])[0]
+        assert rcode == 0, f"rcode={rcode} expected NOERROR"
+        assert ancount > 0, f"ancount={ancount} expected >=1"
+  register: _verify_probe
+  retries: 30
+  delay: 2
+  until: _verify_probe.rc == 0
+  changed_when: false
+
+- name: _verify | dnscrypt-proxy.service was woken by socket activation
+  systemd:
+    name: dnscrypt-proxy.service
+  register: _verify_service_post
+  failed_when: _verify_service_post.status.ActiveState != "active"
+  become: true
