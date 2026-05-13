@@ -1,0 +1,70 @@
+# jinja2: lstrip_blocks: "True"
+# hyperdx.service ############################################################################
+[Unit]
+Description=hyperdx
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+{% if zfs_has_services_mount %}
+After=zfs_mount_mnt_services.service
+Requires=zfs_mount_mnt_services.service
+{% endif %}
+After=zfs_autosnapshot.target
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=always
+Delegate=yes
+# Cold-start has to bring up ClickHouse, MongoDB, the otel-collector and the
+# Node app; ClickHouse alone takes ~15-20s on the lab. 120s leaves headroom
+# without going extreme.
+TimeoutSec=120
+RestartSec=5
+Type=notify
+# `all`, not `main`: with --detach podman exits as soon as conmon takes over;
+# conmon (not podman, never MainPID) is what sends READY=1 once the in-
+# container healthcheck flips healthy.
+NotifyAccess=all
+SyslogIdentifier=%N
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name hyperdx \
+    --log-driver journald \
+    --log-opt tag="hyperdx" \
+    --security-opt=no-new-privileges \
+    --user 0:0 \
+    --uidmap=0:0:65536 \
+    --uidmap=+0:{{ hyperdx_user.uid }}:1 \
+    --gidmap=0:0:65536 \
+    --gidmap=+0:{{ hyperdx_user.group }}:1 \
+    --volume /mnt/services/hyperdx/db:/data/db \
+    --volume /mnt/services/hyperdx/clickhouse:/var/lib/clickhouse \
+    --volume /mnt/services/hyperdx/clickhouse-logs:/var/log/clickhouse-server \
+    --env FRONTEND_URL=https://hyperdx.{{ inventory_hostname }}.{{ domain }} \
+    --publish 127.0.0.1:{{ service_ports.hyperdx }}:8080/tcp \
+    --health-cmd         "curl --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8080/" \
+    --health-startup-cmd "curl --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8080/" \
+    --health-startup-interval "2s" \
+    --health-startup-timeout "5s" \
+    --health-start-period "90s" \
+    --stop-timeout 60 \
+    docker.io/hyperdx/hyperdx-all-in-one:2.24.1
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

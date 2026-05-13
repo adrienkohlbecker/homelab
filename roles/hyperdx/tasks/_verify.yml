@@ -1,0 +1,72 @@
+---
+- name: _verify | Hyperdx user exists
+  command: getent passwd hyperdx
+  changed_when: false
+  become: true
+
+- name: _verify | Hyperdx config dir exists
+  stat:
+    path: /mnt/services/hyperdx
+  register: _verify_config_dir
+  failed_when: not _verify_config_dir.stat.exists or _verify_config_dir.stat.pw_name != 'hyperdx'
+  become: true
+
+# The image's entrypoint chowns each bind-mount to its internal `clickhouse`
+# (uid 101) and mongo (uid 100) users; with the standard uidmap pattern those
+# in-container uids land at host uids 101/100 (random system users on the host
+# side). We only assert existence here -- ownership is intentionally not
+# hyperdx:hyperdx on the children, and the daemons writing to them is a
+# stronger functional signal than an owner check anyway.
+- name: _verify | Hyperdx mongo data dir exists and is non-empty
+  find:
+    paths: /mnt/services/hyperdx/db
+    file_type: file
+  register: _verify_db_dir
+  failed_when: _verify_db_dir.matched == 0
+  become: true
+
+- name: _verify | Hyperdx clickhouse data dir exists and is non-empty
+  find:
+    paths: /mnt/services/hyperdx/clickhouse
+    file_type: any
+  register: _verify_ch_dir
+  failed_when: _verify_ch_dir.matched == 0
+  become: true
+
+- name: _verify | Hyperdx clickhouse log dir exists
+  stat:
+    path: /mnt/services/hyperdx/clickhouse-logs
+  register: _verify_ch_log_dir
+  failed_when: not _verify_ch_log_dir.stat.exists or not _verify_ch_log_dir.stat.isdir
+  become: true
+
+- name: _verify | Hyperdx.service is loaded and active
+  systemd:
+    name: hyperdx
+  register: _verify_unit
+  failed_when: >-
+    _verify_unit.status.LoadState != "loaded"
+    or _verify_unit.status.ActiveState != "active"
+  become: true
+
+- name: _verify | Hyperdx UI answers on its loopback port
+  uri:
+    url: http://localhost:{{ service_ports.hyperdx }}/
+    status_code: [ 200, 302, 307 ]
+  register: _verify_http
+  retries: 60
+  delay: 2
+  until: _verify_http.status in [ 200, 302, 307 ]
+
+# Stronger signal than "frontend renders": ClickHouse is the data plane
+# the otel collector exports to. Probe it via `podman exec` since the
+# service only publishes port 8080 (the UI) to the host loopback.
+- name: _verify | ClickHouse inside the container is queryable
+  command: podman exec hyperdx curl --fail --silent --show-error --max-time 5 "http://localhost:8123/?query=SELECT+1"
+  register: _verify_clickhouse
+  changed_when: false
+  failed_when: _verify_clickhouse.rc != 0 or _verify_clickhouse.stdout | trim != '1'
+  retries: 30
+  delay: 2
+  until: _verify_clickhouse.rc == 0
+  become: true
