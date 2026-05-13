@@ -34,4 +34,4 @@ monthly)
   ;;
 esac
 
-/usr/bin/systemd-cat --identifier "$identifier" --stderr-priority=3 /usr/bin/timeout --kill-after=120 $TIMEOUT "$@" && echo "$frequency $(/usr/bin/date --iso-8601=seconds)" >"/var/log/jobs/$identifier"
+/usr/bin/systemd-cat --identifier "$identifier" --stderr-priority=3 /usr/bin/timeout --kill-after=120 "$TIMEOUT" "$@" && echo "$frequency $(/usr/bin/date --iso-8601=seconds)" >"/var/log/jobs/$identifier"
