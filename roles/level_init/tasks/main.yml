@@ -1,0 +1,87 @@
+# level_init builds and installs a small Go binary that acts as
+# container PID 1 for podman --init. The binary forwards signals,
+# reaps orphans, and prepends a BSD syslog priority prefix (<N>) to
+# each line of the workload's stdout/stderr based on a level keyword
+# scanned out of the first 120 bytes — so when paired with podman
+# --log-driver=k8s-file the line lands in journald with PRIORITY set
+# from the content rather than hardcoded by stream.
+#
+# Build path: source is copied into /usr/local/src/level-init/ and
+# compiled in place. This requires golang-go on the host (~300MB).
+# When this role grows past one or two consumers it should migrate to
+# the static_curl pattern — Gitea Actions build, sha256-pinned release
+# artifact, downloaded straight to /usr/local/libexec/. For now the
+# on-host build keeps the source auditable and avoids the release
+# pipeline overhead while the design is still firming up.
+
+- name: Install golang-go
+  apt:
+    pkg: golang-go
+    cache_valid_time: 3600
+  become: true
+  register: level_init_apt
+  tags:
+    - level_init
+
+- name: Create level-init source and install dirs
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /usr/local/src/level-init
+    - /usr/local/libexec
+  become: true
+  when: not (ansible_check_mode and level_init_apt.changed)
+  tags:
+    - level_init
+
+- name: Copy level-init source
+  copy:
+    src: "{{ item }}"
+    dest: "/usr/local/src/level-init/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - level-init.go
+    - go.mod
+  become: true
+  register: level_init_src
+  when: not (ansible_check_mode and level_init_apt.changed)
+  tags:
+    - level_init
+
+- name: Stat installed binary
+  stat:
+    path: /usr/local/libexec/level-init
+  register: level_init_bin
+  tags:
+    - level_init
+
+# Rebuild only on source change or first install. `go build` writes a
+# fresh binary unconditionally when invoked, so guarding the task is
+# what keeps idempotence happy on the harness's second-apply run.
+- name: Build level-init binary
+  command: go build -ldflags="-s -w" -trimpath -o /usr/local/libexec/level-init .
+  args:
+    chdir: /usr/local/src/level-init
+  environment:
+    # `go build` insists on a HOME for the module cache even though we
+    # have no external deps; without it the build fails on the root
+    # user when /root isn't already set as HOME (sudo's env-reset
+    # behaviour). GOCACHE is similarly required.
+    HOME: /root
+    GOCACHE: /root/.cache/go-build
+  become: true
+  when:
+    - level_init_src.changed or not level_init_bin.stat.exists
+    - not ansible_check_mode
+  # When the `when` clause above evaluates true the build does write
+  # a fresh binary, so this is honest. Idempotence is preserved via
+  # the gate, not via changed_when: false (which would lie).
+  changed_when: true
+  tags:
+    - level_init
