@@ -46,11 +46,15 @@ ExecStart=/usr/bin/podman run \
     --user 0:0 \
     --uidmap=0:0:65536 \
     --uidmap=+0:{{ hyperdx_user.uid }}:1 \
+    --uidmap=+100:{{ hyperdx_mongodb_user.uid }}:1 \
+    --uidmap=+101:{{ hyperdx_clickhouse_user.uid }}:1 \
     --gidmap=0:0:65536 \
     --gidmap=+0:{{ hyperdx_user.group }}:1 \
+    --gidmap=+100:{{ hyperdx_mongodb_user.group }}:1 \
+    --gidmap=+101:{{ hyperdx_clickhouse_user.group }}:1 \
     --volume /mnt/services/hyperdx/db:/data/db \
     --volume /mnt/services/hyperdx/clickhouse:/var/lib/clickhouse \
-    --volume /mnt/services/hyperdx/clickhouse-logs:/var/log/clickhouse-server \
+    --volume /mnt/services/hyperdx/clickhouse_logs:/var/log/clickhouse-server \
     --env FRONTEND_URL=https://hyperdx.{{ inventory_hostname }}.{{ domain }} \
     --publish 127.0.0.1:{{ service_ports.hyperdx }}:8080/tcp \
     --health-cmd         "curl --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8080/" \
