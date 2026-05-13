@@ -96,7 +96,7 @@
     systemd-run --unit firewall-verify-udp-{{ item }} --remain-after-exit
       socat UDP-RECVFROM:{{ item }},fork SYSTEM:'echo pong'
   loop:
-    - 5053   # dnscrypt-proxy (-s podman_default_network)
+    - "{{ service_ports.dnscrypt_proxy }}"  # dnscrypt-proxy (-s podman_default_network)
     - 5333   # aardvark-dns   (-s podman_default_network)
     - 5353   # mDNS           (-s site_subnets.home)
     - 51820  # wireguard      (-i WAN — only used to verify negative case from wg0)
@@ -255,14 +255,14 @@
 # turns the round-trip into a clean exit code.
 - name: _verify | INPUT — dnscrypt (5053/udp) reachable from container source
   shell: |
-    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_podman }} 10.99.0.1 5053 | grep -q pong
+    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_podman }} 10.99.0.1 {{ service_ports.dnscrypt_proxy }} | grep -q pong
   args: { executable: /bin/bash }
   changed_when: false
   become: true
 
 - name: _verify | INPUT — dnscrypt (5053/udp) rejected from non-scope source
   shell: |
-    echo ping | ip netns exec extns nc -u -w 2 -s 10.99.0.2 10.99.0.1 5053 | grep -q pong
+    echo ping | ip netns exec extns nc -u -w 2 -s 10.99.0.2 10.99.0.1 {{ service_ports.dnscrypt_proxy }} | grep -q pong
   register: probe_dns_oos
   changed_when: false
   failed_when: probe_dns_oos.rc == 0

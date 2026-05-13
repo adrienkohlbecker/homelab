@@ -20,15 +20,17 @@ smtp_host: smtp.eu.mailgun.org
 smtp_port: 587
 email_domain: noreply.{{ domain }}
 
-# Loopback ports each podman service publishes on the host. Single source of
-# truth for both the unit template's --publish flag and the nginx proxy_pass.
-# Migrate roles to consume from here as they get touched; for collisions, this
-# is the place to grep.
+# Ports each host-level service publishes. Single source of truth for unit
+# templates (--publish for loopback-bound podman services, ListenStream= for
+# native daemons), nginx proxy_pass, firewall rules, and cross-role consumers
+# (pihole's dnscrypt upstream, etc.). Migrate roles to consume from here as
+# they get touched; for collisions, this is the place to grep.
 service_ports:
   bazarr: 6767
   compta: 4567
   csp_ingest: 9880
   custom_exporter: 19392
+  dnscrypt_proxy: 5053
   healthchecks: 8000
   homepage: 3003
   homepage_alerts: 8765
