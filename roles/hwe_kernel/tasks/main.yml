@@ -19,3 +19,19 @@
   become: true
   tags:
     - hwe_kernel
+
+# thermald is a Recommends of linux-generic-hwe-* and ships an
+# /etc/dbus-1/system.d/org.freedesktop.thermald.conf with a
+# `<policy group="power">` rule. Ubuntu doesn't create the `power`
+# group (it's a Debian convention), so dbus-daemon logs "Unknown group
+# 'power' in message bus configuration file" 8× on every boot. Create
+# the group empty -- thermald keeps its root-only access (no users in
+# the group) and the warnings stop.
+- name: Create power group (silence thermald dbus policy warning)
+  ansible.builtin.group:
+    name: power
+    system: true
+    state: present
+  become: true
+  tags:
+    - hwe_kernel
