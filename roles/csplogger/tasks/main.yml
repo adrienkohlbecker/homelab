@@ -1,33 +1,10 @@
-- name: Add csplogger group
-  group:
-    name: csplogger
-    system: true
-  become: true
-  tags:
-    - csplogger
-
-- name: Add csplogger user
-  user:
-    name: csplogger
-    group: csplogger
-    createhome: false
-    system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
-  become: true
-  register: csplogger_user
-  tags:
-    - csplogger
-
-- name: Create configuration directory
-  when: not (ansible_check_mode and csplogger_user.changed)
-  file:
-    dest: /mnt/services/csplogger
-    state: directory
-    owner: csplogger
-    group: csplogger
-    mode: "0755"
-  become: true
+- name: Set up csplogger system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: csplogger
   tags:
     - csplogger
 
@@ -54,6 +31,10 @@
   tags:
     - csplogger
 
+# The upstream image (docker.io/giuliocomi/csplogger) ships an amd64-only
+# manifest, so install the unit on every arch but only start it on x86_64
+# hosts. CSP report-uri sinks are best-effort: prod hosts that run it
+# (lab/pug) are amd64; arm64 hosts (e.g. bunk) collect no reports.
 - name: Enable csplogger service
   import_role:
     name: systemd_unit
@@ -61,9 +42,9 @@
   vars:
     systemd_unit_args:
       src: csplogger
-      condition: "{{ not (ansible_check_mode and (systemd_unit.changed or csplogger_user.changed)) }}"
+      condition: "{{ not (ansible_check_mode and (csplogger_service_result.changed or csplogger_user.changed)) }}"
       start: "{{ ansible_architecture == 'x86_64' }}"
-      restart: "{{ systemd_unit.changed }}"
+      restart: "{{ csplogger_service_result.changed }}"
   tags:
     - csplogger
 
@@ -74,7 +55,7 @@
   vars:
     nginx_site_args:
       subdomain: csplogger
-      proxy_pass: http://localhost:8443/
+      proxy_pass: http://localhost:{{ service_ports.csplogger }}/
       server_conf: |
         location = / {
           return 301 /dashboard;
