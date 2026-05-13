@@ -1,16 +1,16 @@
 server {
   listen              443 ssl http2;
-{% if nginx_enable_http is defined and nginx_enable_http %}
+{% if nginx_site_args.enable_http | default(false) %}
   listen              80;
 {% endif %}
 
-  server_name         {{ nginx_subdomain }} {{ nginx_subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_subdomain }}.{{ domain}};
+  server_name         {{ nginx_site_args.subdomain }} {{ nginx_site_args.subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_site_args.subdomain }}.{{ domain}};
 
   # security headers
   add_header X-XSS-Protection          "1; mode=block" always;
   add_header X-Content-Type-Options    "nosniff" always;
   add_header Referrer-Policy           "same-origin" always;
-  add_header Content-Security-Policy   "{% if nginx_csp_additional is defined %}{{ nginx_csp_additional }}; {% endif %}default-src {% if nginx_csp_default_src is defined %}{{ nginx_csp_default_src }} {% endif %}{{ nginx_csp_default }}; frame-ancestors {% if nginx_csp_frame_ancestors is defined %}{{ nginx_csp_frame_ancestors }}{% else %}'self'{% endif %}; report-uri https://csplogger.{{ inventory_hostname }}.{{ domain }}/log; report-to csp-endpoint;" always;
+  add_header Content-Security-Policy   "{% if nginx_site_args.csp_additional is defined %}{{ nginx_site_args.csp_additional }}; {% endif %}default-src {% if nginx_site_args.csp_default_src is defined %}{{ nginx_site_args.csp_default_src }} {% endif %}{{ nginx_csp_default }}; frame-ancestors {% if nginx_site_args.csp_frame_ancestors is defined %}{{ nginx_site_args.csp_frame_ancestors }}{% else %}'self'{% endif %}; report-uri https://csplogger.{{ inventory_hostname }}.{{ domain }}/log; report-to csp-endpoint;" always;
   add_header Permissions-Policy        "interest-cohort=()" always;
   add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
   add_header Reporting-Endpoints       'csp-endpoint="https://csplogger.{{ inventory_hostname }}.{{ domain }}/log"' always;
@@ -33,8 +33,8 @@ server {
   gzip_types      text/plain text/css text/xml application/json application/javascript application/rss+xml application/atom+xml image/svg+xml;
 
   location / {
-{% if nginx_proxy_pass is defined %}
-    proxy_pass         {{ nginx_proxy_pass }};
+{% if nginx_site_args.proxy_pass is defined %}
+    proxy_pass         {{ nginx_site_args.proxy_pass }};
 
     proxy_http_version 1.1;
     proxy_cache_bypass $http_upgrade;
@@ -54,34 +54,34 @@ server {
     proxy_set_header X-Forwarded-Port  $server_port;
 
     # Proxy timeouts
-    proxy_connect_timeout {{ nginx_proxy_connect_timeout | default('60s') }};
-    proxy_send_timeout    {{ nginx_proxy_send_timeout | default('60s') }};
-    proxy_read_timeout    {{ nginx_proxy_read_timeout | default('60s') }};
-{% if nginx_proxy_buffering is defined %}
-    proxy_buffering {{ nginx_proxy_buffering }};
+    proxy_connect_timeout {{ nginx_site_args.proxy_connect_timeout | default('60s') }};
+    proxy_send_timeout    {{ nginx_site_args.proxy_send_timeout | default('60s') }};
+    proxy_read_timeout    {{ nginx_site_args.proxy_read_timeout | default('60s') }};
+{% if nginx_site_args.proxy_buffering is defined %}
+    proxy_buffering {{ nginx_site_args.proxy_buffering }};
 {% endif %}
-{% if nginx_proxy_request_buffering is defined %}
-    proxy_request_buffering {{ nginx_proxy_request_buffering }};
+{% if nginx_site_args.proxy_request_buffering is defined %}
+    proxy_request_buffering {{ nginx_site_args.proxy_request_buffering }};
 {% endif %}
-{% if nginx_client_max_body_size is defined %}
-    client_max_body_size {{ nginx_client_max_body_size }};
+{% if nginx_site_args.client_max_body_size is defined %}
+    client_max_body_size {{ nginx_site_args.client_max_body_size }};
 {% endif %}
 {% endif %}
-{% if nginx_location_conf is defined %}
+{% if nginx_site_args.location_conf is defined %}
 
-    {{ nginx_location_conf | trim | indent(4) }}
+    {{ nginx_site_args.location_conf | trim | indent(4) }}
 {% endif %}
   }
-{% if nginx_server_conf is defined %}
+{% if nginx_site_args.server_conf is defined %}
 
-  {{ nginx_server_conf | trim | indent(2) }}
+  {{ nginx_site_args.server_conf | trim | indent(2) }}
 {% endif %}
 }
-{% if nginx_enable_http is not defined or not nginx_enable_http %}
+{% if not (nginx_site_args.enable_http | default(false)) %}
 
 server {
     listen      80;
-    server_name {{ nginx_subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_subdomain }}.{{ domain}};
+    server_name {{ nginx_site_args.subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_site_args.subdomain }}.{{ domain}};
 
     return 301 https://$host$request_uri;
 }

@@ -95,10 +95,11 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: gitea
-    nginx_proxy_pass: http://localhost:3000/
-    nginx_location_conf: |
-      # Otherwise podman uploads return HTTP 413
-      client_max_body_size     0;
+    nginx_site_args:
+      subdomain: gitea
+      proxy_pass: http://localhost:3000/
+      location_conf: |
+        # Otherwise podman uploads return HTTP 413
+        client_max_body_size     0;
   tags:
     - gitea

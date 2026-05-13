@@ -509,11 +509,12 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: homeassistant
-    nginx_proxy_pass: http://localhost:8123/
-    nginx_csp_additional: "connect-src *.openstreetmap.org {{ nginx_csp_default }}; img-src *.cartocdn.com *.home-assistant.io {{ nginx_csp_default }}"
-    nginx_location_conf: |
-      add_header Access-Control-Allow-Origin "https://brands.home-assistant.io";
+    nginx_site_args:
+      subdomain: homeassistant
+      proxy_pass: http://localhost:8123/
+      csp_additional: "connect-src *.openstreetmap.org {{ nginx_csp_default }}; img-src *.cartocdn.com *.home-assistant.io {{ nginx_csp_default }}"
+      location_conf: |
+        add_header Access-Control-Allow-Origin "https://brands.home-assistant.io";
   tags:
     - homeassistant
 
@@ -529,6 +530,6 @@
     vscode_mount: /mnt/services/homeassistant
     vscode_workspace: homeassistant
     vscode_port: 3002
-    nginx_csp_frame_ancestors: https://homeassistant.{{ inventory_hostname }}.{{ domain }}/ 'self'
+    vscode_csp_frame_ancestors: https://homeassistant.{{ inventory_hostname }}.{{ domain }}/ 'self'
   tags:
     - homeassistant

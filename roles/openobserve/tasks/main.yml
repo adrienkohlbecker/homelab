@@ -88,7 +88,8 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: openobserve
-    nginx_proxy_pass: http://localhost:{{ service_ports.openobserve }}/
+    nginx_site_args:
+      subdomain: openobserve
+      proxy_pass: http://localhost:{{ service_ports.openobserve }}/
   tags:
     - openobserve

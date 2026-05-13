@@ -237,8 +237,9 @@
     name: nginx
     tasks_from: site
   vars:
-    nginx_subdomain: sabnzbd
-    nginx_proxy_pass: http://localhost:8080/
+    nginx_site_args:
+      subdomain: sabnzbd
+      proxy_pass: http://localhost:8080/
   tags:
     - sabnzbd
 
