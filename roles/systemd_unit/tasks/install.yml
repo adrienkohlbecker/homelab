@@ -58,7 +58,9 @@
 # roles/act_runner) — this check is the guardrail for the next consumer
 # that forgets.
 - name: Verify user-scope linger marker exists for {{ _systemd_unit_user }}
-  when: _systemd_unit_scope == 'user'
+  when:
+    - _systemd_unit_condition
+    - _systemd_unit_scope == 'user'
   stat:
     path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
   register: _systemd_unit_linger
