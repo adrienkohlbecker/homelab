@@ -1,0 +1,8 @@
+{
+  "id": {{ gitea_runner_settings_json.id }},
+  "uuid": "{{ gitea_runner_settings_json.uuid }}",
+  "name": "{{ inventory_hostname }}",
+  "token": "{{ gitea_runner_settings_json.token }}",
+  "address": "{{ gitea_runner_instance }}",
+  "labels": {{ gitea_runner_labels | to_json }}
+}

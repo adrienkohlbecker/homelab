@@ -1,0 +1,255 @@
+- name: Set up gitea_runner system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: gitea_runner
+      home: /mnt/scratch/gitea_runner
+      createhome: true
+  tags:
+    - gitea_runner
+
+- name: Create runtime directories
+  when: not (ansible_check_mode and gitea_runner_user.changed)
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: gitea_runner
+    group: gitea_runner
+    mode: "0755"
+  become: true
+  loop:
+    - /mnt/scratch/gitea_runner/cache
+    - /mnt/scratch/gitea_runner/workdir
+  tags:
+    - gitea_runner
+
+# Linger has to be on before the rootless podman socket can come up:
+# gitea_runner.service connects to /run/user/<uid>/podman/podman.sock, which
+# is owned by the user manager and only present while user@<uid>.service
+# is alive. `loginctl enable-linger` keeps that manager running across
+# logout/reboot.
+- name: Turn on linger
+  command: loginctl enable-linger gitea_runner
+  args:
+    creates: /var/lib/systemd/linger/gitea_runner
+  become: true
+  register: gitea_runner_linger
+  tags:
+    - gitea_runner
+
+# linger triggers user@<uid>.service asynchronously; downstream tasks
+# (rootless podman.socket enable/start) need it fully up. systemd module
+# with state=started blocks until active. Skip under check mode when the
+# user wasn't really created — uid isn't populated on the service_user
+# result, and templating user@{{ uid }}.service would fail.
+- name: Ensure gitea_runner user systemd manager is running
+  when: not (ansible_check_mode and gitea_runner_user.changed)
+  systemd:
+    name: user@{{ gitea_runner_user.uid }}.service
+    state: started
+  become: true
+  tags:
+    - gitea_runner
+
+- name: Configure gitea_runner
+  when: not (ansible_check_mode and gitea_runner_user.changed)
+  template:
+    src: config.yml.j2
+    dest: /mnt/services/gitea_runner/config.yml
+    owner: gitea_runner
+    group: gitea_runner
+    mode: "0644"
+    backup: true
+  register: gitea_runner_conf
+  become: true
+  tags:
+    - gitea_runner
+
+# Upstream renamed the binary `act_runner` -> `gitea-runner` in v1.0.0.
+# Keep the on-disk path matching upstream's spelling (hyphen) so logs,
+# ps output, and shell PATH usage all match what an operator would
+# google. The role/user/unit follow the repo's underscore convention.
+- name: Check if gitea-runner is installed
+  command: gitea-runner --version
+  register: gitea_runner_check
+  failed_when: false
+  changed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - gitea_runner
+
+- name: Install gitea-runner if needed
+  when: gitea_runner_version not in gitea_runner_check.stdout
+  get_url:
+    url: "{{ gitea_runner_release[ansible_architecture].url }}"
+    checksum: "sha256:{{ gitea_runner_release[ansible_architecture].sha256 }}"
+    dest: /usr/local/bin/gitea-runner
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  register: gitea_runner_installed
+  tags:
+    - gitea_runner
+
+- name: Check if gitea_runner is registered
+  stat:
+    path: /mnt/services/gitea_runner/.runner
+  register: gitea_runner_registered
+  become: true
+  tags:
+    - gitea_runner
+
+# --work-path matches roles/gitea_runner/tasks/_setup.yml's `gitea web`
+# invocation; without it gitea looks next to the binary, misses app.ini,
+# and refuses with "Gitea is not supposed to be run as root" because
+# I_AM_BEING_UNSAFE_RUNNING_AS_ROOT=true lives in app.ini, not env.
+- name: Get registration token (test)
+  when:
+    - qemu_test
+    - not gitea_runner_registered.stat.exists
+  command: /usr/local/bin/gitea --work-path /var/lib/gitea actions generate-runner-token
+  register: _test_runner_token
+  become: true
+  tags:
+    - gitea_runner
+
+- name: Compute registration instance URL
+  set_fact:
+    gitea_runner_instance: >-
+      {{
+        'http://localhost:3000'
+        if qemu_test
+        else 'https://gitea.' + inventory_hostname + '.' + domain
+      }}
+  tags:
+    - gitea_runner
+
+- name: Compute prod registration token
+  when: not qemu_test
+  set_fact:
+    gitea_runner_token: "{{ gitea_runner_registration_token }}"
+  tags:
+    - gitea_runner
+
+# In check-mode (or when .runner already exists) the fixture's
+# `gitea actions generate-runner-token` task is skipped, leaving
+# _test_runner_token unset. The conditional substitutes a placeholder
+# so check-mode dry-run output still renders the `gitea-runner register`
+# command; on real runs the registration's `creates: .../.runner`
+# short-circuits when already registered, so the placeholder never
+# reaches the wire. Inline conditional rather than `default([..])[1]`
+# because ansible-core 2.20's templating engine misroutes `[1]` on a
+# default-substituted list as `.1` attribute access and errors out.
+- name: Compute test registration token
+  when: qemu_test
+  set_fact:
+    gitea_runner_token: >-
+      {{ _test_runner_token.stdout_lines[1]
+         if (_test_runner_token.stdout_lines | default([]) | length > 1)
+         else 'TOKEN' }}
+  tags:
+    - gitea_runner
+
+- name: Register runner
+  when: not (ansible_check_mode and gitea_runner_user.changed)
+  command: >-
+    gitea-runner register
+    -c /mnt/services/gitea_runner/config.yml
+    --no-interactive
+    --name {{ inventory_hostname }}
+    --instance {{ gitea_runner_instance }}
+    --token {{ gitea_runner_token }}
+  args:
+    creates: /mnt/services/gitea_runner/.runner
+  become: true
+  become_user: gitea_runner
+  register: gitea_runner_registration
+  no_log: true
+  tags:
+    - gitea_runner
+
+- name: Load JSON file
+  when: not (ansible_check_mode and (gitea_runner_user.changed or gitea_runner_registration.changed))
+  slurp:
+    src: /mnt/services/gitea_runner/.runner
+  register: gitea_runner_settings_b64
+  become: true
+  tags:
+    - gitea_runner
+
+- name: Update .runner with templated labels and address
+  when: not (ansible_check_mode and (gitea_runner_user.changed or gitea_runner_registration.changed))
+  template:
+    src: runner.json.j2
+    dest: /mnt/services/gitea_runner/.runner
+    owner: gitea_runner
+    group: gitea_runner
+    mode: "0600"
+    backup: true
+    validate: python3 -c "import json,sys; json.load(open(sys.argv[1]))" %s
+  vars:
+    gitea_runner_settings_json: "{{ gitea_runner_settings_b64['content'] | default('e30=') | b64decode | from_json }}"
+  register: gitea_runner_json_conf
+  become: true
+  tags:
+    - gitea_runner
+
+- name: Enable rootless podman socket
+  when: not (ansible_check_mode and (gitea_runner_user.changed or gitea_runner_linger.changed))
+  systemd:
+    name: podman.socket
+    enabled: true
+    scope: user
+  become: true
+  become_user: gitea_runner
+  tags:
+    - gitea_runner
+
+- name: Start rootless podman socket
+  when: not (ansible_check_mode and (gitea_runner_user.changed or gitea_runner_linger.changed))
+  systemd:
+    name: podman.socket
+    state: started
+    scope: user
+  become: true
+  become_user: gitea_runner
+  tags:
+    - gitea_runner
+
+- name: Install podman prune timer for gitea_runner
+  import_role:
+    name: podman
+    tasks_from: prune
+  vars:
+    podman_prune_args:
+      user: gitea_runner
+      condition: "{{ not (ansible_check_mode and gitea_runner_user.changed) }}"
+  tags:
+    - gitea_runner
+
+- name: Install gitea_runner service
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: gitea_runner.service.j2
+      condition: "{{ not (ansible_check_mode and gitea_runner_user.changed) }}"
+  tags:
+    - gitea_runner
+
+- name: Enable gitea_runner service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: gitea_runner
+      condition: "{{ not (ansible_check_mode and (gitea_runner_service_result.changed or gitea_runner_user.changed)) }}"
+      restart: "{{ gitea_runner_service_result.changed or gitea_runner_conf.changed or gitea_runner_registration.changed or gitea_runner_json_conf.changed or gitea_runner_installed.changed }}"
+  tags:
+    - gitea_runner
