@@ -1,41 +1,64 @@
-- name: Add {{ service_user_name }} group
+# Inputs: caller passes a single dict `service_user_args` with keys
+#   name              required; system group + user name and config dir basename
+#   extra_groups      optional list, default []; appended to the user
+#   createhome        optional bool, default false; usually only true when the
+#                     service writes into $HOME (act_runner, github_runner)
+#   shell             optional, default '/usr/sbin/nologin'
+#   home              optional, default '/nonexistent'
+#   config_dir        optional bool, default true; false opts out of the
+#                     /mnt/services/<name> dir for stateless services
+#
+# The dict form prevents inter-call leakage at play-vars scope: each
+# import_role pass replaces the whole `service_user_args` value, so a
+# previous caller's createhome / extra_groups / etc. can't bleed into
+# the next caller that doesn't explicitly override.
+- name: Resolve caller defaults for {{ service_user_args.name }}
+  set_fact:
+    _service_user_name: "{{ service_user_args.name }}"
+    _service_user_extra_groups: "{{ service_user_args.extra_groups | default([]) }}"
+    _service_user_createhome: "{{ service_user_args.createhome | default(false) }}"
+    _service_user_shell: "{{ service_user_args.shell | default('/usr/sbin/nologin') }}"
+    _service_user_home: "{{ service_user_args.home | default('/nonexistent') }}"
+    _service_user_config_dir: "{{ service_user_args.config_dir | default(true) }}"
+
+- name: Add {{ _service_user_name }} group
   group:
-    name: "{{ service_user_name }}"
+    name: "{{ _service_user_name }}"
     system: true
   become: true
 
-- name: Add {{ service_user_name }} user
+- name: Add {{ _service_user_name }} user
   user:
-    name: "{{ service_user_name }}"
-    group: "{{ service_user_name }}"
-    groups: "{{ service_user_extra_groups | default([]) }}"
+    name: "{{ _service_user_name }}"
+    group: "{{ _service_user_name }}"
+    groups: "{{ _service_user_extra_groups }}"
     append: true
-    createhome: "{{ service_user_createhome | default(false) }}"
+    createhome: "{{ _service_user_createhome }}"
     system: true
-    shell: "{{ service_user_shell | default('/usr/sbin/nologin') }}"
-    home: "{{ service_user_home | default('/nonexistent') }}"
+    shell: "{{ _service_user_shell }}"
+    home: "{{ _service_user_home }}"
   become: true
   register: service_user_result
 
 # Capture the user record under a per-service fact so successive calls in
 # the same play don't clobber a shared register, and so callers can
 # reference {{ <name>_user.uid }} / .group in their templates.
-- name: Record user record for {{ service_user_name }}
+- name: Record user record for {{ _service_user_name }}
   set_fact:
-    "{{ service_user_name }}_user": "{{ service_user_result }}"
+    "{{ _service_user_name }}_user": "{{ service_user_result }}"
 
 # Stateless services (no config / no on-host state) opt out via
-# service_user_config_dir: false. The helper still owns user/group/uid
-# capture; callers that don't bind-mount /mnt/services/<svc> anywhere
-# shouldn't be carrying an empty dir.
-- name: Create configuration directory for {{ service_user_name }}
+# config_dir: false. The helper still owns user/group/uid capture; callers
+# that don't bind-mount /mnt/services/<svc> anywhere shouldn't be carrying
+# an empty dir.
+- name: Create configuration directory for {{ _service_user_name }}
   when:
-    - service_user_config_dir | default(true)
+    - _service_user_config_dir
     - not (ansible_check_mode and service_user_result.changed)
   file:
-    dest: /mnt/services/{{ service_user_name }}
+    dest: /mnt/services/{{ _service_user_name }}
     state: directory
-    owner: "{{ service_user_name }}"
-    group: "{{ service_user_name }}"
+    owner: "{{ _service_user_name }}"
+    group: "{{ _service_user_name }}"
     mode: "0755"
   become: true

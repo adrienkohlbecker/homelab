@@ -3,7 +3,8 @@
     name: service_user
     tasks_from: user
   vars:
-    service_user_name: service_user_test
+    service_user_args:
+      name: service_user_test
 
 - name: _verify | user record fact is exposed
   assert:

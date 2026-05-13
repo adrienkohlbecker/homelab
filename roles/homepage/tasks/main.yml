@@ -3,7 +3,8 @@
     name: service_user
     tasks_from: user
   vars:
-    service_user_name: homepage
+    service_user_args:
+      name: homepage
   tags:
     - homepage
 
