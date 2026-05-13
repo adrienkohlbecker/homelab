@@ -1,0 +1,64 @@
+# Exercises the docker_client role's contract:
+# 1) docker / docker-buildx-plugin / docker-compose-plugin are
+#    installed and runnable (binary exec, not just dpkg state).
+# 2) /etc/profile.d/docker-client.sh actually fires in a login shell
+#    (bash -lc sources /etc/profile.d/*; bash -c alone would not).
+# 3) ansible_user shows up in the podman-socket group via nsswitch.
+#
+# We don't exercise the shim -> socket -> daemon chain end-to-end
+# because podman.socket itself is the podman role's contract and
+# isn't applied on the test VM.
+
+- name: _verify | docker CLI is installed and runnable
+  ansible.builtin.command: docker --version
+  changed_when: false
+  register: _verify_docker_version
+
+- name: _verify | docker --version reports a version
+  ansible.builtin.assert:
+    that:
+      - _verify_docker_version.stdout is match('^Docker version ')
+
+- name: _verify | buildx plugin loads
+  ansible.builtin.command: docker buildx version
+  changed_when: false
+  register: _verify_buildx_version
+
+- name: _verify | buildx version is non-empty
+  ansible.builtin.assert:
+    that:
+      - _verify_buildx_version.stdout | length > 0
+
+- name: _verify | compose plugin loads
+  ansible.builtin.command: docker compose version --short
+  changed_when: false
+  register: _verify_compose_version
+
+- name: _verify | compose version is non-empty
+  ansible.builtin.assert:
+    that:
+      - _verify_compose_version.stdout | length > 0
+
+# bash -lc starts a login shell, which sources /etc/profile and
+# therefore /etc/profile.d/docker-client.sh. A non-login shell would
+# miss the shim and silently inherit ansible's own env -- which
+# would tell us nothing about the role's contract.
+- name: _verify | DOCKER_HOST is exported in a login shell
+  ansible.builtin.command: bash -lc 'echo "$DOCKER_HOST"'
+  changed_when: false
+  register: _verify_docker_host_env
+
+- name: _verify | DOCKER_HOST points at the podman socket
+  ansible.builtin.assert:
+    that:
+      - _verify_docker_host_env.stdout == 'unix:///run/podman/podman.sock'
+
+- name: _verify | Read podman-socket group membership
+  ansible.builtin.command: getent group podman-socket
+  changed_when: false
+  register: _verify_podman_socket_group
+
+- name: _verify | ansible_user is a member of podman-socket
+  ansible.builtin.assert:
+    that:
+      - ansible_user in (_verify_podman_socket_group.stdout.split(':')[-1].split(','))
