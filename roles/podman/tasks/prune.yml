@@ -2,12 +2,21 @@
 # unused networks, anonymous volumes, and build cache; named images stay
 # cached so the next pull is a no-op.
 #
-# Caller passes `podman_prune_user`. Default `root` installs the rootful
-# timer at /etc/systemd/system, pruning /var/lib/containers/storage. Pass
-# a username to install at /etc/systemd/user and enable the timer in that
-# user's manager so rootless podman prunes
-# /var/lib/containers/rootless/$USER instead. The named user must already
-# have linger on -- the user manager has to be alive when the timer ticks.
+# Inputs: caller passes a single dict `podman_prune_args` with keys
+#   user        default 'root'. Root installs the rootful timer at
+#                /etc/systemd/system, pruning /var/lib/containers/storage.
+#                Pass a username to install at /etc/systemd/user and enable
+#                the timer in that user's manager so rootless podman prunes
+#                /var/lib/containers/rootless/$USER instead. The named user
+#                must already have linger on — the user manager has to be
+#                alive when the timer ticks.
+#   condition   default true; gates the whole call (use this to skip the
+#                install during check mode when the user was just created).
+#
+# The dict form prevents inter-call leakage at play-vars scope: each
+# import_role pass replaces the whole `podman_prune_args` value, so a
+# previous caller's user can't bleed into the next caller that doesn't
+# explicitly override.
 
 - name: Install podman-prune.service
   import_role:
@@ -16,8 +25,8 @@
   vars:
     systemd_unit_args:
       src: podman-prune.service
-      user: "{{ podman_prune_user | default('root') }}"
-      condition: "{{ podman_prune_condition | default(true) }}"
+      user: "{{ podman_prune_args.user | default('root') }}"
+      condition: "{{ podman_prune_args.condition | default(true) }}"
 
 - name: Install podman-prune.timer
   import_role:
@@ -26,8 +35,8 @@
   vars:
     systemd_unit_args:
       src: podman-prune.timer
-      user: "{{ podman_prune_user | default('root') }}"
-      condition: "{{ podman_prune_condition | default(true) }}"
+      user: "{{ podman_prune_args.user | default('root') }}"
+      condition: "{{ podman_prune_args.condition | default(true) }}"
 
 - name: Enable podman-prune.timer
   import_role:
@@ -36,5 +45,5 @@
   vars:
     systemd_unit_args:
       src: podman-prune.timer
-      user: "{{ podman_prune_user | default('root') }}"
-      condition: "{{ not (ansible_check_mode and (podman_prune_timer_result.changed or podman_prune_service_result.changed)) and podman_prune_condition | default(true) }}"
+      user: "{{ podman_prune_args.user | default('root') }}"
+      condition: "{{ not (ansible_check_mode and (podman_prune_timer_result.changed or podman_prune_service_result.changed)) and podman_prune_args.condition | default(true) }}"

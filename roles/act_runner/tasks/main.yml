@@ -428,8 +428,9 @@
     name: podman
     tasks_from: prune
   vars:
-    podman_prune_user: act_runner
-    podman_prune_condition: "{{ not (ansible_check_mode and act_runner_user.changed) }}"
+    podman_prune_args:
+      user: act_runner
+      condition: "{{ not (ansible_check_mode and act_runner_user.changed) }}"
   tags:
     - act_runner
 
