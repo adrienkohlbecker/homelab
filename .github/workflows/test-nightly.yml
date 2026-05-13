@@ -1,0 +1,116 @@
+name: test-nightly
+on:
+  schedule:
+    # 02:00 UTC daily. Activity-gated below: skips when no commits landed
+    # in the last 25h (25, not 24, so a same-second cron jitter doesn't
+    # mis-fire a false-negative skip).
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+# Mutex on /mnt/scratch/qemu lives at the test-role job level (matching
+# test.yml), not workflow level. Nightly never collides with an
+# automatic packer-build (the cron fires at 02:00 with no push event),
+# but manual workflow_dispatch of packer-build during a nightly is
+# still gated by the per-cell test-role concurrency below.
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  gate:
+    runs-on: [ self-hosted, lab-runtime ]
+    container:
+      image: lab-runtime:latest
+    outputs:
+      matrix: ${{ steps.gate.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+        # Full history so `git log --since='25 hours ago'` actually has
+        # the timestamps to walk; the default fetch-depth of 1 only has
+        # HEAD's commit metadata.
+        with: { fetch-depth: 0 }
+      - id: gate
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            count=$(git log --since='25 hours ago' --oneline | wc -l)
+            if [ "$count" -eq 0 ]; then
+              echo "no commits in the last 25h -- skipping nightly"
+              echo "matrix=[]" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          mise run ci:detect-roles --all
+
+  test-role:
+    # Reader half of the lab-qemu-artifacts mutex (packer-build is the
+    # writer). Job-level rather than workflow-level so it matches
+    # test.yml's structure; see that file's test-role concurrency
+    # comment for the full deadlock-avoidance reasoning.
+    concurrency:
+      group: lab-qemu-artifacts
+      cancel-in-progress: false
+    needs: gate
+    if: needs.gate.outputs.matrix != '[]' && needs.gate.outputs.matrix != ''
+    runs-on: [ self-hosted, lab-runtime ]
+    container:
+      image: lab-runtime:latest
+      # See test.yml's test-role container.options comment for the
+      # --group-add 1 / per-cell workdir rationale.
+      options: >-
+        --device /dev/kvm
+        --group-add 1
+        --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
+        --volume /mnt/scratch/github_runner/lab-runtime-workdir/${{ github.run_id }}-${{ strategy.job-index }}:/lab-runtime-workdir:rw
+    strategy:
+      fail-fast: false
+      # Nightly runs unattended; saturate runner capacity (vs 2 on the
+      # push test workflow which leaves headroom for lint/dispatch).
+      max-parallel: 4
+      matrix:
+        spec: ${{ fromJSON(needs.gate.outputs.matrix) }}
+    name: ${{ matrix.spec }}
+    timeout-minutes: 30
+    env:
+      HOMELAB_VAULT_PASSWORD_TEST: ${{ secrets.HOMELAB_VAULT_PASSWORD_TEST }}
+      ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
+    steps:
+      - uses: actions/checkout@v4
+      - run: uv sync
+      - name: Run test cell
+        env:
+          SPEC: ${{ matrix.spec }}
+        run: |
+          set -euo pipefail
+          role=${SPEC%%:*}
+          variant=${SPEC##*:}
+          {
+            echo "ROLE=$role"
+            echo "VARIANT=$variant"
+          } >>"$GITHUB_ENV"
+          test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /lab-runtime-workdir
+      - name: Upload harness output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testout-${{ env.ROLE }}-${{ env.VARIANT }}
+          path: |
+            test/out/${{ env.VARIANT }}.${{ env.ROLE }}.*
+            /lab-runtime-workdir/**
+          retention-days: 30
+          if-no-files-found: warn
+
+  notify:
+    needs: test-role
+    if: failure()
+    runs-on: [ self-hosted, lab-runtime ]
+    container:
+      image: lab-runtime:latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: mise run ci:mail-failures
+        env:
+          NEEDS_RESULT: ${{ toJson(needs.test-role.result) }}
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+          MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
