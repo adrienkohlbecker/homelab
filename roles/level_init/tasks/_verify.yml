@@ -13,10 +13,10 @@
 #  * signalled-exit propagation (workload killed by signal w/o trap
 #    -> level-init exits 128+signo per shell convention)
 #  * exec failure (nonexistent workload -> level-init exits 127)
-#  * orphan reaping via PR_SET_CHILD_SUBREAPER — the load-bearing
-#    PID-1 contract, verified by spawning an orphan that exits during
-#    the workload's lifetime and asserting no zombies remain under
-#    level-init's pid
+#  * orphan reaping — the load-bearing PID-1 contract, verified by
+#    launching a real podman container with --init-path=level-init so
+#    PID 1 of the namespace is genuinely our binary, then asserting
+#    no State:Z processes remain after an orphan exits
 #
 # Podman-integrated end-to-end testing (journald PRIORITY parsing
 # through --log-driver=k8s-file + --init-path) lives in whatever
@@ -179,41 +179,38 @@
   changed_when: false
   failed_when: level_init_execfail.rc != 127
 
-# Orphan reaping: spawn an orphan whose direct parent exits before
-# the orphan does, then assert the orphan doesn't linger as a zombie.
+# Orphan reaping is exercised inside a real podman container because
+# PID 1 of a PID namespace is the only place where it naturally
+# applies — the kernel reparents orphans to namespace PID 1 with no
+# PR_SET_CHILD_SUBREAPER dance needed. Doing this via a host-side bash
+# test would either require the binary to set the subreaper bit (a
+# production code path that only exists to make tests work — exactly
+# the smell we're avoiding) or watch orphans skip past level-init to
+# whatever's higher up the host process tree, giving a false pass.
 #
-# The shape: workload sh runs `( sleep 0.5 & )`. The parens make a
-# subshell that backgrounds sleep then exits. With level-init as a
-# subreaper (PR_SET_CHILD_SUBREAPER), the orphaned sleep reparents
-# to level-init when its subshell parent exits. When sleep finishes
-# ~0.5s later it becomes a zombie under level-init, and level-init's
-# Wait4(-1) loop reaps it. The workload sleeps 3s overall so we have
-# time to observe the post-reap state before level-init exits.
-#
-# We check the process table from outside via `ps --ppid=<level-init>`
-# during the workload's run. A leaked zombie shows up with stat Z;
-# a reaped one is gone entirely. The bash test harness is itself the
-# parent of level-init here, so there's no outer subreaper masking
-# the test — the only thing that can reap is level-init.
-- name: _verify | Reaps orphaned grandchildren (PR_SET_CHILD_SUBREAPER)
+# Shape: workload sh runs `( sleep 0.5 & )`. The parens fork a
+# subshell which backgrounds sleep then exits at ~t=0; sleep is now
+# orphaned and reparents to PID 1 (level-init) by namespace
+# semantics. At t=0.5 sleep exits → zombie under level-init →
+# level-init's Wait4(-1) loop reaps it. At t=1.0 we scan /proc
+# inside the container for any State:Z process — none should remain
+# if reaping works. The container's /proc is namespaced so only
+# container PIDs appear; nothing from the host leaks in.
+- name: _verify | Reaps orphaned grandchildren (in a real container)
   shell: |-
-    set -o pipefail
-    /usr/local/libexec/level-init -- /bin/sh -c '
-      ( sleep 0.5 & )
-      sleep 3
-    ' &
-    PID=$!
-    sleep 1.5
-    # By now the orphaned sleep has exited (~t=0.5) and either been
-    # reaped by level-init or left as a zombie. ps --ppid lists
-    # direct children; a zombie shows status Z. `grep -c '^Z' || true`
-    # handles the "no zombies" case (grep exits 1 when nothing matches,
-    # which pipefail would otherwise surface as a task failure).
-    zombies=$(ps -o stat= --ppid="$PID" 2>/dev/null | grep -c '^Z' || true)
-    wait $PID
-    echo "zombies=$zombies"
+    podman run --rm --init --init-path=/usr/local/libexec/level-init \
+      docker.io/library/busybox sh -c '
+        ( sleep 0.5 & )
+        sleep 1.0
+        if grep -q "^State:.Z" /proc/[0-9]*/status 2>/dev/null; then
+          echo "FAIL: zombies present"
+          exit 1
+        fi
+        echo "no zombies"
+      '
   args:
     executable: /bin/bash
   register: level_init_reap
   changed_when: false
-  failed_when: "'zombies=0' not in level_init_reap.stdout"
+  failed_when: "'no zombies' not in level_init_reap.stdout"
+  become: true

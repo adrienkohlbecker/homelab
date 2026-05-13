@@ -9,11 +9,11 @@
 // PID-1 duties: signal forwarding (catchable signals to the child's
 // process group via the negative-pgid kill) and orphan reaping (a
 // single Wait4(-1) loop consumes both the workload's exit status and
-// any reparented orphans). PR_SET_CHILD_SUBREAPER is set so reaping
-// works correctly even when level-init isn't actually PID 1, which is
-// what makes the test harness able to exercise that path. Exit-status
-// follows shell convention: 128+signo on signalled exit, child's
-// status otherwise.
+// any reparented orphans). In a podman container with --init, PID 1
+// of the namespace is automatically the reaper for any orphan in the
+// container's process tree — no PR_SET_CHILD_SUBREAPER dance needed.
+// Exit-status follows shell convention: 128+signo on signalled exit,
+// child's status otherwise.
 //
 // Multi-line errors (python/go/java tracebacks etc.) are handled by a
 // "sticky" priority — once a line gets classified, subsequent indented
@@ -151,21 +151,7 @@ func waitAll(workloadPid int) int {
 	}
 }
 
-// PR_SET_CHILD_SUBREAPER, from include/uapi/linux/prctl.h. Tells the
-// kernel that orphans within our subtree should reparent to us
-// instead of skipping past to PID 1 (or the next ancestral
-// subreaper). In production where level-init is the container's PID 1
-// this is redundant, but it makes the binary correct when run outside
-// a container — and the test harness exercises that path.
-const prSetChildSubreaper = 36
-
 func main() {
-	// Mark self as the subreaper before forking anything. Failure
-	// here means orphan reaping won't work outside PID 1 contexts;
-	// don't surface it since the syscall is unavailable on kernels
-	// older than 3.4 and we'd rather degrade than refuse to start.
-	_, _, _ = syscall.Syscall(syscall.SYS_PRCTL, prSetChildSubreaper, 1, 0)
-
 	// podman invokes init as `<init-path> -- <cmd> [args...]` when
 	// --init is set; catatonit/tini swallow the leading "--" the same
 	// way. Strip it so users running level-init outside podman aren't
