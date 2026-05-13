@@ -67,6 +67,18 @@
   tags:
     - docker_client
 
+# deb822_repository writes the .sources file but doesn't run
+# `apt update`, so the install below would otherwise hit a stale
+# cache (cache_valid_time=3600) and fail to find docker-ce-cli.
+# Force a refresh on the run that actually changed the repo.
+- name: Refresh apt cache after docker repo change
+  when: apt_repository_docker_client.changed and not ansible_check_mode
+  apt:
+    update_cache: true
+  become: true
+  tags:
+    - docker_client
+
 - name: Install docker client
   when: not (ansible_check_mode and apt_repository_docker_client.changed)
   apt:
