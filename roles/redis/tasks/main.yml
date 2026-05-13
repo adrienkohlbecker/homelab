@@ -63,8 +63,9 @@
     name: systemd_unit
     tasks_from: install
   vars:
-    systemd_unit_src: redis.service.j2
-    systemd_unit_condition: "{{ not (ansible_check_mode and redis_user.changed) }}"
+    systemd_unit_args:
+      src: redis.service.j2
+      condition: "{{ not (ansible_check_mode and redis_user.changed) }}"
   tags:
     - redis
 
@@ -73,8 +74,9 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: redis
-    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or redis_user.changed)) }}"
-    systemd_unit_restart: "{{ systemd_unit.changed }}"
+    systemd_unit_args:
+      src: redis
+      condition: "{{ not (ansible_check_mode and (systemd_unit.changed or redis_user.changed)) }}"
+      restart: "{{ systemd_unit.changed }}"
   tags:
     - redis

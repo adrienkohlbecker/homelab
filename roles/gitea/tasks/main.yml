@@ -72,8 +72,9 @@
     name: systemd_unit
     tasks_from: install
   vars:
-    systemd_unit_src: gitea.service.j2
-    systemd_unit_condition: "{{ not (ansible_check_mode and gitea_user.changed) }}"
+    systemd_unit_args:
+      src: gitea.service.j2
+      condition: "{{ not (ansible_check_mode and gitea_user.changed) }}"
   tags:
     - gitea
 
@@ -82,9 +83,10 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: gitea
-    systemd_unit_condition: "{{ not (ansible_check_mode and (systemd_unit.changed or gitea_user.changed)) }}"
-    systemd_unit_restart: "{{ systemd_unit.changed or gitea_conf.changed or gitea_installed.changed }}"
+    systemd_unit_args:
+      src: gitea
+      condition: "{{ not (ansible_check_mode and (systemd_unit.changed or gitea_user.changed)) }}"
+      restart: "{{ systemd_unit.changed or gitea_conf.changed or gitea_installed.changed }}"
   tags:
     - gitea
 

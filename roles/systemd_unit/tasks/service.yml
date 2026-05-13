@@ -1,8 +1,31 @@
-# `systemd_unit_user` (default `root`) selects scope: root acts on the
-# system manager; any other value drives the named user's user manager
-# (linger must already be enabled). The pre-pull step is rootful-only —
-# extract_podman_image queries the system bus, and a rootless service
-# pulls into its own /var/lib/containers/rootless/$USER store anyway.
+# Inputs: caller passes a single dict `systemd_unit_args` with keys
+#   src               bare unit name (e.g. "mosquitto"), full unit filename
+#                     (e.g. "mosquitto.service"), or template path
+#                     (e.g. "mosquitto.service.j2"); used only for the name
+#                     fallback and the task title
+#   dest              optional override for the resolved unit name
+#   user              default 'root'; non-root drives the named user's
+#                     user manager (linger must already be on)
+#   condition         default true; gates the whole call
+#   start             default true; false → enable only, don't touch state
+#   restart           default false; if true and the start didn't change
+#                     state, force `state=restarted`. Drive from upstream
+#                     changes (template/copy register, secret rotation) so
+#                     config drift propagates.
+#   reload            default false; hitless alternative to restart for
+#                     daemons that pick up config via SIGHUP. Mutually
+#                     exclusive with restart in practice.
+#
+# The dict form prevents inter-call leakage: each import_role pass replaces
+# the whole `systemd_unit_args` value at play-vars scope, so a previous
+# caller's user/start/etc. can't bleed into the next caller's call.
+#
+# `systemd_unit_args.user` (default 'root') selects scope: root acts on
+# the system manager; any other value drives the named user's user
+# manager (linger must already be enabled). The pre-pull step is
+# rootful-only — extract_podman_image queries the system bus, and a
+# rootless service pulls into its own /var/lib/containers/rootless/$USER
+# store anyway.
 # Two set_fact tasks because ansible's templating engine resolves all
 # keys in a single set_fact concurrently — a key can't read a sibling
 # defined in the same task. Primitives (caller-var defaulting) first,
@@ -12,14 +35,14 @@
 # extract_podman_image module silently returns [] for anything else
 # after blindly appending `.service` to the name. Bare names (no
 # extension) are treated as services by the role's convention.
-- name: service | Resolve caller defaults for {{ systemd_unit_src }}
+- name: service | Resolve caller defaults for {{ systemd_unit_args.src }}
   set_fact:
-    _systemd_unit_user: "{{ systemd_unit_user | default('root') }}"
-    _systemd_unit_condition: "{{ systemd_unit_condition | default(true) }}"
-    _systemd_unit_start: "{{ systemd_unit_start | default(true) }}"
-    _systemd_unit_name: "{{ systemd_unit_dest | default(systemd_unit_src) }}"
+    _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
+    _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
+    _systemd_unit_start: "{{ systemd_unit_args.start | default(true) }}"
+    _systemd_unit_name: "{{ systemd_unit_args.dest | default(systemd_unit_args.src) }}"
 
-- name: service | Derive scope and unit type for {{ systemd_unit_src }}
+- name: service | Derive scope and unit type for {{ systemd_unit_args.src }}
   set_fact:
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_is_service: "{{ _systemd_unit_name.endswith('.service') or '.' not in _systemd_unit_name }}"
@@ -109,7 +132,7 @@
   when:
     - _systemd_unit_condition
     - _systemd_unit_start
-    - systemd_unit_restart | default(false)
+    - systemd_unit_args.restart | default(false)
     - not systemd_started.changed
   systemd:
     name: "{{ _systemd_unit_name }}"
@@ -119,14 +142,14 @@
   become_user: "{{ _systemd_unit_user }}"
 
 # Hitless alternative to restart for daemons that pick up config via SIGHUP
-# (keepalived, nginx, etc.). Mutually exclusive with systemd_unit_restart in
-# practice — set one or the other. Skipped on the play that just started the
-# unit (the started state already reflects current config).
+# (keepalived, nginx, etc.). Mutually exclusive with systemd_unit_args.restart
+# in practice — set one or the other. Skipped on the play that just started
+# the unit (the started state already reflects current config).
 - name: Reload the service
   when:
     - _systemd_unit_condition
     - _systemd_unit_start
-    - systemd_unit_reload | default(false)
+    - systemd_unit_args.reload | default(false)
     - not systemd_started.changed
   systemd:
     name: "{{ _systemd_unit_name }}"

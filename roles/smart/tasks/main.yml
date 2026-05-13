@@ -56,8 +56,9 @@
     name: systemd_unit
     tasks_from: service
   vars:
-    systemd_unit_src: smartmontools
-    systemd_unit_condition: "{{ not (ansible_check_mode and smart_apt.changed) }}"
-    systemd_unit_restart: "{{ smartd_cfg.changed or smartmontools_cfg.changed }}"
+    systemd_unit_args:
+      src: smartmontools
+      condition: "{{ not (ansible_check_mode and smart_apt.changed) }}"
+      restart: "{{ smartd_cfg.changed or smartmontools_cfg.changed }}"
   tags:
     - smart

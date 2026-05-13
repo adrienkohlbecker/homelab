@@ -17,8 +17,9 @@
     name: systemd_unit
     tasks_from: dropin
   vars:
-    systemd_unit_src: override_nftables.conf
-    systemd_unit_for: nftables.service
+    systemd_unit_args:
+      src: override_nftables.conf
+      for: nftables.service
   tags:
     - firewall
 
