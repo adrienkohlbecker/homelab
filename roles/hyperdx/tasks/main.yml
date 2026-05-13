@@ -9,16 +9,21 @@
   tags:
     - hyperdx
 
-# The all-in-one container drops privileges to its baked-in `clickhouse`
-# (uid 101) and `mongodb` (uid 100) users when spawning those daemons.
-# With a bare 1:1 uidmap those in-namespace uids would land on whatever
-# host happens to have at 100/101 (commonly systemd-resolve/-journal) --
+# The image's clickhouse-server drops privileges to in-namespace uid 101
+# at startup. With the bare 1:1 uidmap fall-through that uid would land
+# on whatever the host has at 101 (commonly systemd-journal on Ubuntu) --
 # semantic noise, and breaks ZFS replication portability across hosts
-# whose system-package layout differs. Allocate dedicated host system
-# users so the +N uidmap overrides in the unit route container 100/101
-# to meaningful host owners. `config_dir: false` because these users
-# only exist as host-side names for the userns mapping; they don't get
-# /mnt/services/<name> dirs of their own.
+# whose system-package layout differs. Allocate a dedicated host system
+# user so the +101 uidmap override in the unit routes container 101 to
+# a meaningful host owner. `config_dir: false` because this user only
+# exists as a host-side name for the userns mapping; it doesn't get a
+# /mnt/services/<name> dir of its own.
+#
+# MongoDB's user (uid 100) is also present in the image but the
+# entrypoint runs `mongod` without dropping privileges, so its files
+# land as in-namespace root (=hyperdx on the host) -- no override
+# needed. If a future image starts dropping to uid 100, add a
+# hyperdx_mongodb user and a +100 mapping then.
 - name: Set up hyperdx_clickhouse system user
   import_role:
     name: service_user
@@ -26,17 +31,6 @@
   vars:
     service_user_args:
       name: hyperdx_clickhouse
-      config_dir: false
-  tags:
-    - hyperdx
-
-- name: Set up hyperdx_mongodb system user
-  import_role:
-    name: service_user
-    tasks_from: user
-  vars:
-    service_user_args:
-      name: hyperdx_mongodb
       config_dir: false
   tags:
     - hyperdx
