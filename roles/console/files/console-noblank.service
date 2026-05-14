@@ -1,0 +1,30 @@
+# consoleblank=0 on the kernel cmdline (set in roles/console via
+# zfsbootmenu_cmdline_file: console) already disables the VT idle-blank
+# timer from early boot. This unit covers the DPMS half of the picture:
+# --powersave / --powerdown drive the monitor's sleep state via VT
+# escape sequences and aren't reachable from the kernel cmdline. --blank
+# is set defensively too, so a reset that clears the kernel timer (rare,
+# but cheap to belt+brace) doesn't reintroduce blanking until the next
+# boot.
+[Unit]
+Description=Disable VT console blanking and DPMS powersave
+ConditionPathExists=/dev/tty0
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+# setterm reads $TERM to pick its escape-sequence dialect; systemd
+# starts services with no TERM set so it'd fall back to the wrong
+# table and exit non-zero. Force the linux console dialect.
+Environment=TERM=linux
+# setterm writes the control sequence to stdout; wire stdout to the
+# foreground VT (/dev/tty0 is the kernel's "current VT" alias). The
+# blanking/powersave settings live in the kernel VT subsystem, so one
+# write to tty0 propagates to all VTs.
+StandardOutput=tty
+TTYPath=/dev/tty0
+ExecStart=/usr/bin/setterm --blank 0 --powersave off --powerdown 0
+SyslogIdentifier=%N
+
+[Install]
+WantedBy=multi-user.target
