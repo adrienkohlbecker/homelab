@@ -3,14 +3,16 @@
 built-in collectors:
   * hdparm power state for rotational drives (DRIVE_HDPARM_DEVICES)
   * /var/log/jobs/* cron job last-success / next-run timestamps
-  * netdata context *presence* and collector liveness, via the local netdata API
+  * netdata context and collector *presence*, via the local netdata API
 
-Per-context staleness is handled natively by the context_liveness.conf.j2
-health template (it uses $last_collected_t on each chart). What native
-templates can't catch is a context that never appeared in netdata's chart
+Per-context staleness and per-collector staleness/failure are handled natively
+in roles/custom_exporter/templates/context_liveness.conf.j2 (using
+$last_collected_t on each chart and the netdata.plugin_data_collection_status
+charts' success/failed dimensions). What native templates can't catch is the
+case where the configured chart or collector never appeared in netdata's chart
 registry -- a template with on:<missing-chart> silently fails to instantiate.
-The netdata_context_present metric here closes that gap: 1 if the configured
-context id is in /api/v2/contexts, 0 otherwise.
+The netdata_context_present and netdata_collector_present metrics here close
+that gap: 1 if the configured id resolves to a registered chart, 0 otherwise.
 """
 
 from __future__ import annotations
@@ -195,29 +197,31 @@ def _netdata_context_present_lines() -> tuple[list[str], bool]:
     )
 
 
-def _netdata_collector_lines() -> tuple[list[str], bool]:
+def _collector_chart(cid: str) -> str | None:
+    # go.d:collector:<plugin>:<job> -> netdata.go_d_<plugin>[_<job>]_data_collection_status
+    # When plugin == job (e.g. zfspool:zfspool), netdata dedupes the suffix.
+    parts = cid.split(":")
+    if len(parts) < 4 or parts[0] != "go.d":
+        return None
+    plugin, job = parts[2], parts[3]
+    suffix = plugin if plugin == job else f"{plugin}_{job}"
+    return f"netdata.go_d_{suffix}_data_collection_status"
+
+
+def _netdata_collector_present_lines() -> tuple[list[str], bool]:
     if not COLLECTORS:
         return [], False
     try:
-        data = _netdata_json("/api/v1/config")
+        data = _netdata_json("/api/v1/charts")
     except Exception:
         return [], True
-    jobs = data.get("tree", {}).get("/collectors/jobs", {})
-    # netdata v1.x emits these as camelCase; if upstream ever changes the
-    # field casing, this filter degrades closed (collector_up = 0).
-    up = {
-        cid for cid, c in jobs.items()
-        if cid in COLLECTORS
-        and c.get("status") == "running"
-        and not c.get("userDisabled")
-        and not c.get("pluginRejected")
-        and not c.get("restartRequired")
-    }
-    return (
-        [f'netdata_collector_up{{collector="{c}"}} {int(c in up)}'
-         for c in COLLECTORS],
-        False,
-    )
+    charts = set(data.get("charts", {}).keys())
+    out = []
+    for cid in COLLECTORS:
+        expected = _collector_chart(cid)
+        present = 1 if expected and expected in charts else 0
+        out.append(f'netdata_collector_present{{collector="{cid}"}} {present}')
+    return out, False
 
 
 def _gather() -> None:
@@ -226,7 +230,8 @@ def _gather() -> None:
         errs = 0
         lines = ["exporter_up 1"]
         for fn in (_hdparm_lines, _cron_lines,
-                   _netdata_context_present_lines, _netdata_collector_lines):
+                   _netdata_context_present_lines,
+                   _netdata_collector_present_lines):
             try:
                 got, e = fn()
                 lines += got

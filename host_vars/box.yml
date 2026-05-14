@@ -47,7 +47,8 @@ minio_buckets:
 netdata_contexts:
   system_cpu: system.cpu              # always-live chart, baseline
   ghost: foo.does_not_exist           # never-existed chart, probes the "missing-chart" gap
-netdata_collectors: []
+netdata_collectors:
+  - go.d:collector:fake_plugin:fake_job  # never-existed collector; exercises the netdata_collector_missing alert path
 netdata_zfspool_thresholds: {}
 netdata_diskspace_blocklist: []
 
