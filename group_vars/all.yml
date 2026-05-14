@@ -29,7 +29,6 @@ service_ports:
   bazarr: 6767
   compta: 4567
   csp_ingest: 9880
-  custom_exporter: 19392
   dnscrypt_proxy: 5053
   healthchecks: 8000
   homepage: 3003
