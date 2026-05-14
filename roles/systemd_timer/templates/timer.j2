@@ -1,0 +1,12 @@
+[Unit]
+Description={{ systemd_timer_args.description | default(systemd_timer_args.name) }} timer
+
+[Timer]
+OnCalendar={{ systemd_timer_args.on_calendar }}
+Persistent=true
+{% if systemd_timer_args.randomized_delay_sec is defined %}
+RandomizedDelaySec={{ systemd_timer_args.randomized_delay_sec }}
+{% endif %}
+
+[Install]
+WantedBy=timers.target
