@@ -32,8 +32,8 @@
 # Browser-emitted CSP violation reports. nginx on csplogger.<host>.<domain>
 # proxies POST /log here; the public endpoint stays public-by-design (CSP
 # reports are fire-and-forget cross-origin POSTs that can't carry auth)
-# while the ingest token (once HyperDX is wired up at the output side)
-# stays server-side. Returns 204 to keep browser report queues happy.
+# while the OO / HyperDX ingest tokens stay server-side. Returns 204 to
+# keep browser report queues happy.
 [INPUT]
     Name              http
     Tag               csp.{{ inventory_hostname }}
@@ -90,6 +90,21 @@
     multiline.key_content  MESSAGE
     buffer            on
     flush_ms          1000
+
+# CSP reports arrive as raw JSON; the http input takes the body as the
+# record verbatim, so there's no MESSAGE, no SYSLOG_IDENTIFIER, and the
+# OTLP output below sees a record with no `log` -> blank LogRecord Body
+# in HyperDX, and the UI filter pattern (LogAttributes.SYSLOG_IDENTIFIER)
+# documented at the bottom of this file doesn't reach them. Set both
+# fields here so CSP records show up in HyperDX alongside svc.* records.
+# `Set` (not `Add`) on SYSLOG_IDENTIFIER so a hostile poster who put one
+# in their JSON body can't shadow ours; `Add` on log so a future input
+# that already supplies a body wins.
+[FILTER]
+    Name              modify
+    Match             csp.*
+    Set               SYSLOG_IDENTIFIER csplogger
+    Add               log csp_violation
 
 # Tag every record with the inventory hostname so cross-stream queries
 # in OpenObserve can still filter by host without parsing the stream
