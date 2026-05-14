@@ -167,33 +167,34 @@
     storage.total_limit_size  50M
 
 {% if inventory_hostname in ['box', 'lab'] %}
-# Parallel-ship to HyperDX over OTLP HTTP for the evaluation window
-# (see CLAUDE.md "Someday" -- pick a winner between OO and HyperDX and
-# drop the loser). HyperDX is co-located on the same hosts where it's
-# installed (lab roles in site.yml), so target loopback directly.
+# Parallel-ship to HyperDX for the evaluation window (see CLAUDE.md
+# "Someday" -- pick a winner between OO and HyperDX and drop the loser).
+# HyperDX is co-located on the same hosts where it's installed (lab roles
+# in site.yml), so target loopback directly.
 #
-# The bundled OTel collector enforces a per-team auth token on the OTLP
-# receiver (opampController in the api wires bearertokenauth/hyperdx
-# when at least one team exists in MongoDB, and the hyperdx role
-# bootstraps that team with team.apiKey = hyperdx_ingestion_api_key).
-# The extension is configured with `scheme: ''`, so the header value
-# is the raw token -- NOT "Bearer <token>". Sending the Bearer prefix
-# gets a 401 "provided authorization does not match expected scheme".
+# Forward protocol, NOT OTLP HTTP: fluent-bit's opentelemetry output only
+# promotes specific "metadata" record keys to LogRecord fields and
+# silently drops everything else (host, SYSLOG_IDENTIFIER, csp_* etc.),
+# leaving LogAttributes empty in ClickHouse. The HyperDX bundled
+# otel-collector has the fluentforward receiver enabled and wired into
+# its logs/in pipeline, and the receiver maps fluent-bit record kv pairs
+# directly to LogRecord attributes -- the shape fluent-bit naturally
+# emits. No auth on fluentforward (the collector doesn't apply
+# bearertokenauth there); same trust boundary as OTLP since the published
+# port is bound to 127.0.0.1 only.
 #
-# ServiceName isn't populated in HyperDX's otel_logs table yet:
-# fluent-bit's opentelemetry output only sets static resource
-# attributes via `add_label`, and SYSLOG_IDENTIFIER is per-record.
-# Filter by LogAttributes.SYSLOG_IDENTIFIER in the UI until we either
-# adjust DEFAULT_SOURCES on the HyperDX side or front this with a real
-# otel-collector that can do per-record resource rewriting.
+# Send_options on is load-bearing: without it fluent-bit sends a basic
+# forward message, the otelcontribcol fluentforward receiver fails the
+# handshake and you get "could not write forward header" errors with
+# zero attributes landing in ClickHouse. Time_as_Integer on aligns
+# fluent-bit's timestamp encoding with what the receiver expects.
 [OUTPUT]
-    Name              opentelemetry
+    Name              forward
     Match             *
     Host              127.0.0.1
-    Port              {{ service_ports.hyperdx_otlp_http }}
-    logs_uri          /v1/logs
-    header            Authorization {{ hyperdx_ingestion_api_key }}
-    log_response_payload  false
+    Port              {{ service_ports.hyperdx_fluentforward }}
+    Send_options      on
+    Time_as_Integer   on
     Retry_Limit       False
     storage.total_limit_size  50M
 {% endif %}
