@@ -142,6 +142,11 @@
       frequency: daily
       on_calendar: "*-*-* 02:{{ '%02d' | format(rand_order * 10) }}:00"
       exec_start: /usr/local/bin/zfs_autosnapshot
+      # Override the helper's 1h default. Snapshotting hundreds of
+      # datasets can legitimately take hours; 23h gives the script
+      # nearly the whole day to finish and still leaves a buffer
+      # before the next fire.
+      runtime_max_sec: 23h
   tags:
     - zfs_autobackup
 
