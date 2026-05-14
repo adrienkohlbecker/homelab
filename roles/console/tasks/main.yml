@@ -39,3 +39,46 @@
   become: true
   tags:
     - console
+
+# Disabling console blanking has two halves that don't overlap:
+#
+#   1. consoleblank=0 on the kernel cmdline (below) — disables the VT
+#      idle-blank timer from before userspace exists, so an early-boot
+#      panic stays on screen instead of blanking 10 minutes later.
+#   2. console-noblank.service (above) — runs `setterm --powersave off
+#      --powerdown 0` to disable DPMS, which is monitor-side state the
+#      kernel cmdline can't reach.
+#
+# Both matter for walk-up/KVM-IP debugging: (1) handles the kernel
+# timer, (2) keeps the monitor from sleeping on top of that.
+- name: Install console-noblank.service
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: console-noblank.service
+  tags:
+    - console
+
+- name: Enable console-noblank.service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: console-noblank.service
+      condition: "{{ not (ansible_check_mode and console_noblank_service_result.changed) }}"
+      restart: "{{ console_noblank_service_result.changed }}"
+  tags:
+    - console
+
+- name: Set ZBM commandline (consoleblank=0)
+  import_role:
+    name: zfsbootmenu
+    tasks_from: cmdline
+  vars:
+    zfsbootmenu_cmdline_file: console
+    zfsbootmenu_cmdline_contents: consoleblank=0
+  tags:
+    - console
