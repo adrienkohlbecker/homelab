@@ -26,21 +26,27 @@
 --   nginx.error    -> "nginx_error"
 --   journal.<...>  -> "journal"      (rewrite_tag rule didn't match)
 --   <other>        -> tag verbatim   (fallback)
+--
+-- Lowercased on the way out. Journal SYSLOG_IDENTIFIERs are mixed-case
+-- (Keepalived_vrrp, NetworkManager, etc.) which is awkward both to type
+-- in HyperDX's UI filter and to group on when one service identifies
+-- itself inconsistently across releases. Normalising to lowercase here
+-- keeps the Services facet tidy and case-insensitive at the source.
 
 local function service_from_tag(tag)
+    local svc
     if string.sub(tag, 1, 4) == "csp." then
-        return "csplogger"
+        svc = "csplogger"
+    elseif string.sub(tag, 1, 4) == "svc." then
+        svc = string.sub(tag, 5)
+    elseif string.sub(tag, 1, 6) == "nginx." then
+        svc = "nginx_" .. string.sub(tag, 7)
+    elseif string.sub(tag, 1, 8) == "journal." then
+        svc = "journal"
+    else
+        svc = tag
     end
-    if string.sub(tag, 1, 4) == "svc." then
-        return string.sub(tag, 5)
-    end
-    if string.sub(tag, 1, 6) == "nginx." then
-        return "nginx_" .. string.sub(tag, 7)
-    end
-    if string.sub(tag, 1, 8) == "journal." then
-        return "journal"
-    end
-    return tag
+    return string.lower(svc)
 end
 
 function shape_otlp(tag, ts, record)
