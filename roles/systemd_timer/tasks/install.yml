@@ -12,10 +12,13 @@
 #                     next-run timestamp, so the word matters.
 #   description       optional; falls back to name.
 #   randomized_delay_sec  optional; emits RandomizedDelaySec=<n>.
-#   runtime_max_sec   optional; emits RuntimeMaxSec=<v>. Default '1h'
+#   timeout_start_sec optional; emits TimeoutStartSec=<v>. Default '1h'
 #                     — every job we ship today completes in seconds
 #                     to minutes; override per-consumer if a future
-#                     job legitimately needs longer.
+#                     job legitimately needs longer. (RuntimeMaxSec=
+#                     is the natural-sounding name but has no effect
+#                     under Type=oneshot; TimeoutStartSec bounds
+#                     ExecStart + ExecStartPost together for oneshot.)
 #   sentinel          default true; pre-creates /var/log/jobs/<name>
 #                     so custom_exporter sees the job before its first
 #                     run completes, and the .service unit gets an
