@@ -22,7 +22,6 @@
       - zfsutils-linux
       - zfs-initramfs
       - zfs-zed
-      - cron # for cron module
     cache_valid_time: 3600
   register: zfs_apt
   become: true
