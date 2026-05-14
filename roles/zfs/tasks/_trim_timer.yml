@@ -13,9 +13,11 @@
 #    fails -- the include_role's vars scope doesn't pick up the host
 #    fact from the prior task, so the inner role sees the indirect
 #    name undefined. Set the role's own input fact name directly.
+# noqa: var-naming[no-role-prefix] -- systemd_timer_args is the
+# consumed role's required input name, not a zfs role-internal var.
 - name: _trim_timer | Build systemd_timer_args
   set_fact:
-    systemd_timer_args:
+    systemd_timer_args:  # noqa: var-naming[no-role-prefix]
       name: "zfs_trim_{{ item }}"
       description: "Weekly ZFS trim for {{ item }}"
       frequency: weekly
