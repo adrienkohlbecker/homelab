@@ -95,21 +95,30 @@
   become: true
   register: _netdata_charts_d_restart_result
 
-# netdata's Type=notify ExecStartPost signals READY=1 before the listener +
-# control socket are fully up, so `state: restarted` returns "early" and an
-# immediately-following `netdatacli reload-health` would race against
-# /run/netdata/netdata.pipe. netdata/main.yml installs an ExecStartPost
-# drop-in that polls /api/v1/info to close that race; callers that
-# invoke charts_d outside that flow (e.g. role _setup paths) need this
-# wait_for as the equivalent backstop.
-- name: charts_d | Wait for netdata control socket
+# netdata's Type=notify ExecStartPost signals READY=1 before the HTTP
+# listener is up, so `state: restarted` returns "early" and an
+# immediately-following `netdatacli reload-health` (which talks to the
+# HTTP API) would race the listener coming up. netdata/main.yml installs
+# an ExecStartPost drop-in that polls /api/v1/info to close that race;
+# callers that invoke charts_d outside that flow (e.g. role _setup
+# paths) need this uri probe as the equivalent backstop.
+#
+# Was previously a wait_for on /run/netdata/netdata.pipe -- that named
+# pipe is gone in netdata 1.46.x+ (netdatacli switched to HTTP-only),
+# so the pipe never appears and the wait_for would time out at 120s
+# even though netdata was perfectly healthy. /api/v1/info is the
+# functional check.
+- name: charts_d | Wait for netdata HTTP API
   when:
     - _netdata_charts_d_condition
     - _netdata_charts_d_restart_result.changed | default(false)
-  wait_for:
-    path: /run/netdata/netdata.pipe
-    timeout: 120
-  become: true
+  uri:
+    url: http://127.0.0.1:19999/api/v1/info
+    status_code: 200
+  register: _netdata_charts_d_api_probe
+  retries: 60
+  delay: 2
+  until: _netdata_charts_d_api_probe.status == 200
 
 # Expose a per-collector "did anything change" fact so callers can chain
 # downstream restart triggers (e.g. an alerts.conf reload-health gated on
