@@ -44,7 +44,9 @@ prometheus_enabled: true
 minio_enabled: true
 minio_buckets:
   - test
-netdata_contexts: {}
+netdata_contexts:
+  system_cpu: system.cpu              # always-live chart, baseline
+  ghost: foo.does_not_exist           # never-existed chart, probes the "missing-chart" gap
 netdata_collectors: []
 netdata_zfspool_thresholds: {}
 netdata_diskspace_blocklist: []

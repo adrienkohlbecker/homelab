@@ -1,0 +1,17 @@
+{# Per-context liveness alerts, one per entry in netdata_contexts. Replaces
+   the custom_exporter netdata_context_up indirection: $last_collected_t is a
+   first-class netdata field on every chart, so we can alert on it directly
+   without scraping /api/v2/contexts and re-exposing the result as a Prometheus
+   gauge. #}
+{% for name, ctx in netdata_contexts.items() %}
+template: liveness_{{ name }}
+      on: {{ ctx }}
+    calc: $now - $last_collected_t
+   every: 60s
+    crit: $this > (60)
+   delay: up 5m
+ summary: Context {{ name }} ({{ ctx }}) is stale
+    info: netdata has not collected {{ ctx }} for over 60s
+      to: sysadmin
+
+{% endfor %}
