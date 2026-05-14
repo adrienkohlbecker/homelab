@@ -3,6 +3,7 @@
     pkg:
       - avahi-daemon
       - avahi-utils
+      - libxml2-utils
     policy_rc_d: 101
     cache_valid_time: 3600
   register: avahi_apt
@@ -18,6 +19,7 @@
     owner: root
     group: root
     backup: true
+  when: not (ansible_check_mode and avahi_apt.changed)
   become: true
   register: avahi_daemon_conf
   tags:
@@ -31,12 +33,20 @@
     owner: root
     group: root
     backup: true
+    validate: xmllint --noout --dtdvalid /usr/share/avahi/avahi-service.dtd %s
+  when: not (ansible_check_mode and avahi_apt.changed)
   become: true
   register: avahi_device_info
   tags:
     - avahi
 
 - name: Enable avahi service
+  # Daemon conf changes need a real restart (allow-interfaces et al.
+  # are only read at startup). Service-XML drops into
+  # /etc/avahi/services/ are picked up via SIGHUP, so reload keeps
+  # the LAN's mDNS cache warm across per-host model overrides. A conf
+  # change wins both — restart already re-reads the services dir, so
+  # the reload is redundant in that case.
   import_role:
     name: systemd_unit
     tasks_from: service
@@ -44,6 +54,7 @@
     systemd_unit_args:
       src: avahi-daemon
       condition: "{{ not (ansible_check_mode and avahi_apt.changed) }}"
-      restart: "{{ avahi_device_info.changed or avahi_daemon_conf.changed }}"
+      restart: "{{ avahi_daemon_conf.changed }}"
+      reload: "{{ avahi_device_info.changed and not avahi_daemon_conf.changed }}"
   tags:
     - avahi
