@@ -1,7 +1,43 @@
-# Fixture timer that writes a known file on success. Triggered manually
-# via `systemctl start <name>.service` so we don't wait for OnCalendar
-# (the timer spec is set far in the future to avoid concurrent fires).
-- name: _verify | Install fixture timer
+# Verify covers four contracts:
+#   1. install + manual-trigger + remove for a monitor: false timer
+#   2. stderr_priority wrapper routes stderr to journal priority err
+#   3. monitor: true writes the netdata metadata file with the right period
+#   4. systemd_timers.chart.sh emits a chart per registered timer, age_secs
+#      tracks real LastTriggerUSec, and overdue fires when the file's mtime
+#      is older than 2 * period without a trigger
+
+- name: _verify | install systemd_timers netdata collector
+  import_tasks: netdata.yml
+
+# Drop a fast-poll override so a fixture chart materializes in seconds
+# rather than the default 60s. Restart netdata so charts.d.plugin picks it
+# up before any of the later assertions run.
+- name: _verify | speed up systemd_timers update_every for tests
+  copy:
+    content: |
+      systemd_timers_meta_dir=/etc/netdata/charts.d/systemd_timers.d
+      systemd_timers_update_every=5
+    dest: /etc/netdata/charts.d/systemd_timers.conf
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: true
+  become: true
+- name: _verify | restart netdata to apply update_every override
+  systemd:
+    name: netdata
+    state: restarted
+  become: true
+- name: _verify | wait for netdata control socket
+  wait_for:
+    path: /run/netdata/netdata.pipe
+    timeout: 120
+  become: true
+
+# ============================================================
+# Contract 1+2: install/remove and stderr_priority (monitor:false)
+# ============================================================
+- name: "_verify | Install fixture timer (monitor: false)"
   import_role:
     name: systemd_timer
     tasks_from: install
@@ -11,7 +47,7 @@
       description: systemd_timer self-test
       on_calendar: "*-*-* 23:59:00"
       exec_start: /bin/sh -c 'echo CRON_VERIFY_OK > /tmp/_verify_timer.out'
-      sentinel: false
+      monitor: false
 
 - name: _verify | Trigger the fixture service manually
   command: systemctl start --wait _verify_timer.service
@@ -43,8 +79,15 @@
       - (_verify_timer_out.content | b64decode) == "CRON_VERIFY_OK\n"
       - _verify_timer_active.stdout == 'active'
 
-# Re-import with state=absent and confirm the unit files vanish and the
-# timer is no longer known to systemd.
+- name: "_verify | Stat netdata metadata file (should NOT exist for monitor: false)"
+  stat:
+    path: /etc/netdata/charts.d/systemd_timers.d/_verify_timer.conf
+  register: _verify_timer_meta
+- name: _verify | Assert no metadata written for monitor=false
+  assert:
+    that:
+      - not _verify_timer_meta.stat.exists
+
 - name: _verify | Remove the fixture timer
   import_role:
     name: systemd_timer
@@ -82,81 +125,236 @@
     state: absent
   become: true
 
-# Second fixture: sentinel-enabled run that emits to both stdout and
-# stderr. Two contracts under test:
-#  - ExecStartPost writes "<frequency> <iso-8601-ts>" to /var/log/jobs/<name>
-#    (the format custom_exporter._bump() parses).
-#  - stderr_priority re-tags stderr at priority err, so
-#    `journalctl -u <unit> -p err` surfaces the stderr line but not the
-#    stdout line (which lands at info).
+# ----- stderr_priority -----
 - name: _verify | Capture pre-run timestamp for journal filter
   command: date +%s
-  register: _verify_sentinel_t0
+  register: _verify_stderr_t0
   changed_when: false
 
-- name: _verify | Install sentinel fixture timer
+- name: "_verify | Install stderr-test timer (monitor: false)"
   import_role:
     name: systemd_timer
     tasks_from: install
   vars:
     systemd_timer_args:
-      name: _verify_timer_sentinel
-      description: systemd_timer sentinel + stderr_priority self-test
-      frequency: daily
+      name: _verify_timer_stderr
+      description: stderr_priority self-test
       on_calendar: "*-*-* 23:59:00"
-      # Two echoes via /bin/sh so both streams come from a real
-      # process under the stderr_priority wrapper.
       exec_start: /bin/sh -c 'echo STDOUT_VERIFY_LINE; echo STDERR_VERIFY_LINE >&2'
+      monitor: false
 
-- name: _verify | Trigger the sentinel fixture manually
-  command: systemctl start --wait _verify_timer_sentinel.service
+- name: _verify | Trigger the stderr fixture manually
+  command: systemctl start --wait _verify_timer_stderr.service
   changed_when: false
   become: true
 
-# Force a synchronous journal flush so the journalctl read below sees
-# the run's output without racing the async writer.
 - name: _verify | Sync journal before reading
   command: journalctl --sync
   changed_when: false
   become: true
 
-- name: _verify | Read sentinel file
-  slurp:
-    src: /var/log/jobs/_verify_timer_sentinel
-  register: _verify_sentinel_file
-  become: true
-
-- name: _verify | Read journal at priority err for the sentinel unit
+- name: _verify | Read journal at priority err for the stderr unit
   command: >-
-    journalctl -u _verify_timer_sentinel.service -p err
-    --since=@{{ _verify_sentinel_t0.stdout }} --no-pager --output=cat
-  register: _verify_sentinel_journal_err
+    journalctl -u _verify_timer_stderr.service -p err
+    --since=@{{ _verify_stderr_t0.stdout }} --no-pager --output=cat
+  register: _verify_stderr_journal_err
   changed_when: false
   become: true
 
-- name: _verify | Functional assertions for sentinel + stderr_priority
+- name: _verify | Functional assertions for stderr_priority
   assert:
     that:
-      # Sentinel format: `<frequency> <iso-8601-ts>` -- the contract
-      # custom_exporter._bump() parses. date --iso-8601=seconds emits
-      # e.g. 2026-05-14T10:30:00+02:00.
-      - (_verify_sentinel_file.content | b64decode | trim)
-        is match('^daily \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$')
-      # Stderr line surfaces at priority err; stdout line (priority
-      # info by default) is filtered out by `-p err`.
-      - "'STDERR_VERIFY_LINE' in _verify_sentinel_journal_err.stdout"
-      - "'STDOUT_VERIFY_LINE' not in _verify_sentinel_journal_err.stdout"
+      - "'STDERR_VERIFY_LINE' in _verify_stderr_journal_err.stdout"
+      - "'STDOUT_VERIFY_LINE' not in _verify_stderr_journal_err.stdout"
 
-- name: _verify | Remove the sentinel fixture timer
+- name: _verify | Remove the stderr fixture timer
   import_role:
     name: systemd_timer
     tasks_from: remove
   vars:
     systemd_timer_args:
-      name: _verify_timer_sentinel
+      name: _verify_timer_stderr
 
-- name: _verify | Cleanup sentinel file
-  file:
-    path: /var/log/jobs/_verify_timer_sentinel
-    state: absent
+# ============================================================
+# Contract 3+4: monitored timer + overdue detection via netdata
+# ============================================================
+# _verify_timer_recent fires immediately (OnCalendar matches every
+# second) so LastTriggerUSec lands within ~2-3 seconds; then we stop
+# the timer to freeze the value. Expected: age_secs small, overdue=0.
+- name: _verify | Install recent monitored fixture (frequency=hourly)
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_recent
+      description: monitored fixture, fires immediately
+      frequency: hourly
+      on_calendar: "*-*-* *:*:*"
+      exec_start: /bin/true
+
+# Manually wait for the timer to fire (LastTriggerUSec moves off n/a)
+# rather than `sleep N`, so the test races less with QEMU clock skew.
+- name: _verify | Wait for the recent timer to fire at least once
+  shell: |
+    for i in $(seq 1 30); do
+      last=$(LC_ALL=C systemctl show --value -p LastTriggerUSec _verify_timer_recent.timer 2>/dev/null)
+      if [ -n "$last" ] && [ "$last" != "n/a" ]; then
+        echo "$last"
+        exit 0
+      fi
+      sleep 1
+    done
+    echo "timer never fired after 30s" >&2
+    exit 1
+  changed_when: false
   become: true
+
+- name: _verify | Stop the timer to freeze LastTriggerUSec
+  systemd:
+    name: _verify_timer_recent.timer
+    state: stopped
+  become: true
+
+# _verify_timer_overdue: OnCalendar in 2099 so it never fires; backdate
+# the metadata file's mtime to 3h ago so the collector treats it as
+# "installed >2*hourly_period ago, never fired" → overdue=1.
+- name: _verify | Install overdue monitored fixture (frequency=hourly)
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_overdue
+      description: monitored fixture, never fires
+      frequency: hourly
+      on_calendar: "2099-01-01 00:00:00"
+      exec_start: /bin/true
+
+- name: _verify | Backdate overdue fixture's metadata mtime to 3h ago
+  command: touch -d "3 hours ago" /etc/netdata/charts.d/systemd_timers.d/_verify_timer_overdue.conf
+  changed_when: false
+  become: true
+
+- name: _verify | Assert metadata files exist with the right period_secs
+  command: cat /etc/netdata/charts.d/systemd_timers.d/{{ item }}.conf
+  register: _verify_meta
+  changed_when: false
+  loop:
+    - _verify_timer_recent
+    - _verify_timer_overdue
+  become: true
+- name: _verify | Assert period_secs=3600 (hourly) in both metadata files
+  assert:
+    that:
+      - "'period_secs=3600' in item.stdout"
+    fail_msg: "metadata missing period_secs=3600: {{ item.stdout }}"
+  loop: "{{ _verify_meta.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+# Charts.d.plugin re-scans the metadata dir each tick (update_every=5s
+# under our override). Wait for both charts to appear in netdata's
+# registry, then check the data API for the expected age + overdue.
+- name: _verify | Wait for both fixture charts to register
+  uri:
+    url: http://localhost:19999/api/v1/charts
+    return_content: true
+  register: _verify_charts
+  retries: 30
+  delay: 2
+  until: >-
+    _verify_charts.status == 200
+    and 'systemd_timers._verify_timer_recent' in (_verify_charts.content | from_json).charts.keys()
+    and 'systemd_timers._verify_timer_overdue' in (_verify_charts.content | from_json).charts.keys()
+
+- name: _verify | Recent fixture reports overdue=0
+  uri:
+    url: http://localhost:19999/api/v1/data?chart=systemd_timers._verify_timer_recent&points=1&after=-30&format=json
+    return_content: true
+  register: _verify_recent_data
+  retries: 30
+  delay: 2
+  until: >-
+    _verify_recent_data.status == 200
+    and 'overdue' in (_verify_recent_data.json.labels | default([]))
+    and 'age_secs' in _verify_recent_data.json.labels
+    and (_verify_recent_data.json.data | default([])) | length > 0
+    and _verify_recent_data.json.data[0][_verify_recent_data.json.labels.index('overdue')] | int == 0
+    and _verify_recent_data.json.data[0][_verify_recent_data.json.labels.index('age_secs')] | int < 600
+
+- name: _verify | Overdue fixture reports overdue=1
+  uri:
+    url: http://localhost:19999/api/v1/data?chart=systemd_timers._verify_timer_overdue&points=1&after=-30&format=json
+    return_content: true
+  register: _verify_overdue_data
+  retries: 30
+  delay: 2
+  until: >-
+    _verify_overdue_data.status == 200
+    and 'overdue' in (_verify_overdue_data.json.labels | default([]))
+    and (_verify_overdue_data.json.data | default([])) | length > 0
+    and _verify_overdue_data.json.data[0][_verify_overdue_data.json.labels.index('overdue')] | int == 1
+    and _verify_overdue_data.json.data[0][_verify_overdue_data.json.labels.index('age_secs')] | int > 7200
+
+# Alert binds on context systemd.timer_lag; netdata keys the instance
+# as <chart_id>.<template_name>, e.g.
+# systemd_timers._verify_timer_overdue.systemd_timer_overdue.
+- name: _verify | Wait for overdue alert to register against the fixture
+  uri:
+    url: http://localhost:19999/api/v1/alarms?all
+    return_content: true
+  register: _verify_alarms
+  retries: 30
+  delay: 2
+  until: >-
+    _verify_alarms.status == 200
+    and (_verify_alarms.content | from_json).alarms.keys() | list
+        | select('search', 'systemd_timers._verify_timer_overdue.systemd_timer_overdue') | list | length > 0
+
+- name: _verify | Assert overdue alert instantiated against both fixtures
+  vars:
+    _keys: "{{ (_verify_alarms.content | from_json).alarms.keys() | list }}"
+  assert:
+    that:
+      - _keys | select('search', 'systemd_timers._verify_timer_recent.systemd_timer_overdue') | list | length > 0
+      - _keys | select('search', 'systemd_timers._verify_timer_overdue.systemd_timer_overdue') | list | length > 0
+    fail_msg: >-
+      Expected systemd_timer_overdue template to bind on both fixtures.
+      Got keys: {{ _keys | select('search', 'systemd_timers') | list }}
+
+# Cleanup: remove fixtures so a follow-on test run starts clean.
+# Two separate import_role calls instead of a loop — import_role
+# doesn't accept `loop:`, and include_role + loop binds the vars
+# block once (per [[feedback_include_role_loop_vars]]) so {{ item }}
+# inside systemd_timer_args wouldn't re-evaluate per iteration.
+- name: _verify | Remove recent monitored fixture
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_recent
+- name: _verify | Remove overdue monitored fixture
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_overdue
+
+- name: _verify | Stat metadata files after removal (should NOT exist)
+  stat:
+    path: /etc/netdata/charts.d/systemd_timers.d/{{ item }}.conf
+  loop:
+    - _verify_timer_recent
+    - _verify_timer_overdue
+  register: _verify_meta_after
+- name: _verify | Assert metadata cleaned up
+  assert:
+    that:
+      - not item.stat.exists
+    fail_msg: "metadata for {{ item.item }} still present"
+  loop: "{{ _verify_meta_after.results }}"
+  loop_control:
+    label: "{{ item.item }}"
