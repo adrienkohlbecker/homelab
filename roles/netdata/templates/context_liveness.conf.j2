@@ -1,8 +1,10 @@
-{# Per-context liveness alerts, one per entry in netdata_contexts. Replaces
-   the custom_exporter netdata_context_up indirection: $last_collected_t is a
-   first-class netdata field on every chart, so we can alert on it directly
-   without scraping /api/v2/contexts and re-exposing the result as a Prometheus
-   gauge. #}
+{# Per-context liveness alerts, one per entry in netdata_contexts.
+   $last_collected_t is a first-class netdata field on every chart, so
+   we can alert on it directly without scraping /api/v2/contexts and
+   re-exposing the result as a Prometheus gauge. The configured-but-
+   never-instantiated case (where the named context never appears in
+   the chart registry at all, so a template with `on: <missing>` silently
+   drops) is covered by netdata_presence.chart.sh + netdata_presence_alerts.conf. #}
 {% for name, ctx in netdata_contexts.items() %}
 template: liveness_{{ name }}
       on: {{ ctx }}
@@ -17,8 +19,8 @@ template: liveness_{{ name }}
 {% endfor %}
 {# Per-collector staleness + iteration-failure alerts. Fans out to every
    netdata.go_d_<plugin>_<job>_data_collection_status chart without
-   per-collector enumeration; the netdata_collector_present exporter metric
-   covers the configured-but-never-instantiated gap separately. #}
+   per-collector enumeration; netdata_presence_alerts.conf covers the
+   configured-but-never-instantiated gap separately. #}
 template: collector_stale
       on: netdata.plugin_data_collection_status
     calc: $now - $last_collected_t

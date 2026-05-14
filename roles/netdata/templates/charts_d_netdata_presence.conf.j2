@@ -1,0 +1,15 @@
+# Managed by ansible (roles/netdata/templates/charts_d_netdata_presence.conf.j2).
+# Sourced by /usr/libexec/netdata/charts.d/netdata_presence.chart.sh before
+# netdata_presence_check. Contexts use a flat "name=context_id" array
+# (bash 4 doesn't portably export associative arrays through `source`);
+# collectors are go.d:collector:<plugin>:<job> ids.
+netdata_presence_contexts=(
+{% for name, ctx in (netdata_contexts | default({})).items() %}
+  "{{ name }}={{ ctx }}"
+{% endfor %}
+)
+netdata_presence_collectors=(
+{% for cid in netdata_collectors | default([]) %}
+  "{{ cid }}"
+{% endfor %}
+)
