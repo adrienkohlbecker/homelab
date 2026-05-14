@@ -58,6 +58,11 @@
     group: root
     mode: "0644"
     backup: true
+    # Structural sanity check: catches a template breakage that drops
+    # the load-bearing 991 line entirely (apt silently ignores
+    # malformed preferences files, so without this the only signal
+    # would be silent loss of pinning).
+    validate: "grep -qE '^Pin-Priority: 991$' %s"
   become: true
   register: backports_pin
 
@@ -131,7 +136,10 @@
 # package alone even when the pin would prefer noble — only a fresh
 # install or an explicit upgrade re-evaluates the pin. Listing the
 # whole pin set here also catches binaries (buildah, conmon, etc.)
-# that aren't hard deps of the consumer's primary package.
+# that aren't hard deps of the consumer's primary package. `| unique`
+# defends against caller-side list concatenation accidentally
+# duplicating an entry (e.g. libc6 appears in ntp's pin set and could
+# easily land in zfs's too if the lists are ever computed).
 #
 # The when-clause skips on check-mode runs that just added the pin/
 # sources — apt's check resolves names against the live cache, and
@@ -140,15 +148,18 @@
 # play afterwards refreshes the cache and runs this task properly.
 # state: latest is intentional — the whole point of this task is to
 # force the pin, so silence ansible-lint's package-latest warning.
+#
+# No cache_valid_time: the upgrade follows the conditional refresh
+# above, and we want fresh metadata when an upgrade actually fires
+# rather than risking a stale partial cache for the 1-hour window.
 - name: Upgrade backports-pinned packages to noble (jammy)  # noqa: package-latest
   when:
     - ansible_distribution_major_version == "22"
     - not (ansible_check_mode and (backports_pin.changed or backports_noble_sources.changed))
   apt:
-    pkg: '{{ backports_packages }}'
+    pkg: '{{ backports_packages | unique }}'
     state: latest
     policy_rc_d: 101
-    cache_valid_time: 3600
   register: backports_upgrade
   become: true
 
