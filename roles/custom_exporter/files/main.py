@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Prometheus exporter for host-specific signals not covered by netdata's
-built-in collectors:
-  * /var/log/jobs/* cron job last-success / next-run timestamps
-  * netdata context and collector *presence*, via the local netdata API
+built-in collectors: namely netdata context and collector *presence*, via
+the local netdata API.
 
 Per-context staleness and per-collector staleness/failure are handled natively
 in roles/custom_exporter/templates/context_liveness.conf.j2 (using
@@ -13,8 +12,11 @@ registry -- a template with on:<missing-chart> silently fails to instantiate.
 The netdata_context_present and netdata_collector_present metrics here close
 that gap: 1 if the configured id resolves to a registered chart, 0 otherwise.
 
-Drive power state was the third leg of this exporter; it now ships as the
-netdata charts.d collector at roles/hdparm/files/hdparm.chart.sh.
+Other signals this exporter used to carry now ship as native netdata
+charts.d collectors:
+  * Drive power state -> roles/hdparm/files/hdparm.chart.sh
+  * Cron / systemd timer freshness ->
+    roles/systemd_timer/files/systemd_timers.chart.sh
 """
 
 from __future__ import annotations
@@ -22,12 +24,10 @@ from __future__ import annotations
 import http.server
 import json
 import os
-import stat
 import sys
 import threading
 import time
 import urllib.request
-from datetime import datetime, timedelta
 
 LISTEN = os.environ.get("LISTEN_ADDRESS", "127.0.0.1:19392")
 COLLECTORS = [c for c in os.environ.get("NETDATA_COLLECTORS", "").split(",") if c]
@@ -60,76 +60,6 @@ except ValueError as e:
 _lock = threading.Lock()
 _errors = 0
 _text = "exporter_up 0\n"
-
-
-def _bump(freq: str, t: datetime) -> datetime | None:
-    # retry=2: tolerate one missed run before the alert fires.
-    if freq == "hourly":
-        return t + timedelta(hours=2)
-    if freq == "daily":
-        return t + timedelta(days=2)
-    if freq == "weekly":
-        return t + timedelta(days=14)
-    if freq == "monthly":
-        # Calendar-month arithmetic, clamping day to the target month's end so
-        # Jan 31 + 2 months -> Mar 31, not a Feb-31 ValueError.
-        m = t.month - 1 + 2
-        year, month = t.year + m // 12, m % 12 + 1
-        nxt_m, nxt_y = (month + 1, year) if month < 12 else (1, year + 1)
-        last = (datetime(nxt_y, nxt_m, 1, tzinfo=t.tzinfo) - timedelta(days=1)).day
-        return t.replace(year=year, month=month, day=min(t.day, last))
-    return None
-
-
-def _cron_lines() -> tuple[list[str], bool]:
-    out: list[str] = []
-    err = False
-    try:
-        names = os.listdir("/var/log/jobs")
-    except OSError:
-        return out, True
-    for name in names:
-        # /var/log/jobs is mode 0777 in prod; ignore non-regular and dotfiles
-        # so a stray entry can't tick exporter_errors every 5s.
-        if name.startswith("."):
-            continue
-        p = f"/var/log/jobs/{name}"
-        try:
-            st = os.stat(p)
-        except OSError:
-            continue
-        if not stat.S_ISREG(st.st_mode):
-            continue
-        try:
-            with open(p) as f:
-                content = f.read().strip()
-        except OSError:
-            err = True
-            continue
-        last_v, next_v = 0, 0
-        if content:
-            try:
-                freq, ts = content.split(" ", 1)
-                # Python <3.11's fromisoformat doesn't accept a trailing 'Z' for
-                # UTC; cron and ansible_date_time both emit that form. Rewrite
-                # it to the explicit offset RFC 3339 also accepts.
-                if ts.endswith("Z"):
-                    ts = ts[:-1] + "+00:00"
-                t = datetime.fromisoformat(ts)
-                n = _bump(freq, t)
-                if n is None:
-                    raise ValueError(f"unknown frequency {freq!r}")
-                last_v = int(t.timestamp())
-                next_v = int(n.timestamp())
-            except (ValueError, KeyError):
-                # Malformed date / unknown freq: skip emission for this job and
-                # tick errors. Sibling jobs still get their gauges -- matches
-                # the Go behaviour and what _verify.yml asserts.
-                err = True
-                continue
-        out.append(f'cron_last_success_timestamp{{job="{name}"}} {last_v}')
-        out.append(f'cron_next_run_timestamp{{job="{name}"}} {next_v}')
-    return out, err
 
 
 def _netdata_json(path: str):
@@ -192,8 +122,7 @@ def _gather() -> None:
     while True:
         errs = 0
         lines = ["exporter_up 1"]
-        for fn in (_cron_lines,
-                   _netdata_context_present_lines,
+        for fn in (_netdata_context_present_lines,
                    _netdata_collector_present_lines):
             try:
                 got, e = fn()
