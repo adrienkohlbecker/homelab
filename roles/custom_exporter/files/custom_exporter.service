@@ -14,7 +14,7 @@ Type=exec
 EnvironmentFile=/etc/default/custom_exporter
 SyslogIdentifier=%N
 
-ExecStart=/opt/custom_exporter/main
+ExecStart=/usr/bin/python3 /opt/custom_exporter/main.py
 
 [Install]
 WantedBy=default.target
