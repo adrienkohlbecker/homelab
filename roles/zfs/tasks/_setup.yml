@@ -2,13 +2,6 @@
   import_role:
     name: bash
 
-# zfs_health / zfs_trim timer ExecStarts call /usr/local/bin/run_job,
-# installed by the cron role. In prod site.yml runs cron before zfs;
-# under the test harness only zfs runs, so import the dep here.
-- name: _setup | Install run_job wrapper
-  import_role:
-    name: cron
-
 - name: Create zfs filesystem
   zfs:
     name: '{{ item }}'

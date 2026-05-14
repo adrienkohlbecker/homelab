@@ -139,8 +139,9 @@
     systemd_timer_args:
       name: zfs_autosnapshot
       description: Daily ZFS autosnapshot
+      frequency: daily
       on_calendar: "*-*-* 02:{{ '%02d' | format(rand_order * 10) }}:00"
-      exec_start: /usr/local/bin/run_job daily zfs_autosnapshot /usr/local/bin/zfs_autosnapshot
+      exec_start: /usr/local/bin/zfs_autosnapshot
   tags:
     - zfs_autobackup
 
