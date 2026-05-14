@@ -163,6 +163,17 @@
   register: backports_upgrade
   become: true
 
+# Surface what apt actually did so a security-relevant transitive bump
+# is visible in the playbook log. Combined with policy_rc_d=101 the
+# operator otherwise has no signal of "which daemons just got a new
+# binary on disk" until the consumer's restart fires.
+- name: Show upgrade summary for {{ backports_name }}
+  when:
+    - ansible_distribution_major_version == "22"
+    - backports_upgrade.changed | default(false)
+  debug:
+    var: backports_upgrade.stdout_lines
+
 # Stash .changed under a per-call fact name so consumers can wire it
 # into systemd_unit_restart / state=restarted without colliding when
 # multiple backports imports run in the same play (the register
@@ -171,6 +182,13 @@
 # rather than taking another argument. The validate-shape assert
 # above is what lets us use backports_name verbatim here without a
 # regex_replace silently diverging from the pin file's path.
+#
+# On non-jammy releases every preceding task was skipped and
+# backports_upgrade is a skipped-result; hardcode false rather than
+# relying on Ansible's skipped-register .changed semantics so the
+# noble-path contract is local to this task.
 - name: Record upgrade outcome for {{ backports_name }}
   set_fact:
-    "{{ backports_name }}_backports_updated": "{{ backports_upgrade.changed | default(false) }}"
+    "{{ backports_name }}_backports_updated": >-
+      {{ (backports_upgrade.changed | default(false))
+         if ansible_distribution_major_version == "22" else false }}
