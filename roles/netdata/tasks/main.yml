@@ -336,6 +336,13 @@
   tags:
     - netdata
 
+- name: Install netdata_presence metrics
+  import_role:
+    name: netdata
+    tasks_from: presence
+  tags:
+    - netdata
+
 - name: Install lm_sensors metrics
   import_role:
     name: lm_sensors
