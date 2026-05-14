@@ -3,13 +3,16 @@
 # without leaving apt with broken deps). A self-contained test package
 # would need its own libc6/libc-bin/locales companion list to install,
 # so we lean on a known-good real list instead. Trivially no-ops on
-# noble. Asserts: (1) the pin file lands at the documented path, (2)
-# the apt resolver actually picks the noble candidate for every pinned
-# package, (3) the per-call output fact reports the upgrade outcome on
-# both a fresh apply and an idempotent re-apply, and (4) a second
-# import under a distinct name lands its own pin file and per-call
-# fact without clobbering the first -- the multi-consumer guarantee
-# the docstring's regex-mangled fact name exists to provide.
+# noble. Asserts: (1) the pin file lands at the documented .pref
+# path, (2) all four noble suites resolve on this host's architecture,
+# (3) the apt resolver picks the noble candidate for every pinned
+# package, (4) unpinned noble packages stay at the -10 catch-all band
+# so a jammy host can't silently drift to noble, (5) the per-call
+# output fact reports the upgrade outcome on both a fresh apply and
+# an idempotent re-apply, and (6) a second import under a distinct
+# name lands its own pin file and per-call fact without clobbering
+# the first -- the multi-consumer guarantee the docstring's per-call
+# fact naming exists to provide.
 - name: _verify | load ntp's production backport list
   include_vars:
     file: roles/ntp/vars/main.yml
@@ -29,11 +32,37 @@
   register: backports_pin_stat
   failed_when: not backports_pin_stat.stat.exists
 
+# Cross-arch mirror sanity: all four noble suites must have resolved
+# during the cache refresh. apt-get update returns 0 even on partial
+# failure (any source success), so don't trust its rc. Instead check
+# that an InRelease file exists for each of the four expected suites
+# under /var/lib/apt/lists/ -- apt only writes those after a
+# successful signed fetch. amd64 hits archive.ubuntu.com-class
+# mirrors; aarch64 hits ports.ubuntu.com-class; both produce the same
+# per-suite filename shape ending in `<suite>_InRelease`. A bad
+# ternary in group_vars/all.yml's ubuntu_mirror or a typo in the
+# deb822 template would otherwise produce a silent partial-mirror
+# failure that the rest of the verify wouldn't catch.
+- name: _verify (jammy) | all four noble suites have signed InRelease metadata
+  when: ansible_distribution_major_version == "22"
+  find:
+    paths: /var/lib/apt/lists
+    patterns:
+      - "*_dists_noble_InRelease"
+      - "*_dists_noble-updates_InRelease"
+      - "*_dists_noble-backports_InRelease"
+      - "*_dists_noble-security_InRelease"
+  register: backports_noble_release_files
+  failed_when: backports_noble_release_files.matched < 4
+
 # Functional check: the role's job is to make the apt resolver prefer
 # noble candidates for the listed packages. apt-cache policy reports
 # the pin priority next to each candidate version; our pin file is the
-# only thing in this image stamping 991 onto packages, so "Candidate:
-# non-(none)" + "991" in the policy output means the pin is in effect.
+# only thing in this image stamping 991 onto packages, so an installed
+# version at priority 991 means the pin took effect. Match the
+# priority on its own field (preceded by the *** installed marker) to
+# avoid false-positives from a version string that happens to contain
+# "991".
 - name: _verify (jammy) | apt picks the noble candidate for every pinned package
   when: ansible_distribution_major_version == "22"
   command: apt-cache policy {{ item }}
@@ -43,7 +72,28 @@
   failed_when: >
     backports_policy.rc != 0
     or 'Candidate: (none)' in backports_policy.stdout
-    or '991' not in backports_policy.stdout
+    or backports_policy.stdout_lines
+       | select('match', '^\s+\*\*\* .* 991\s*$')
+       | list | length == 0
+
+# Negative pin band: the template's `Pin: release o=Ubuntu Pin-Priority: -10`
+# catch-all must suppress any unpinned noble package. nano exists in
+# both jammy and noble and is NOT in the pin set, so its noble entry
+# in apt-cache policy should sit at priority -10. If the -10 band
+# regresses (collapsed, removed, or rewritten with a wrong selector),
+# the noble entry would default to 500 and the role would silently
+# drift jammy hosts to noble on every `apt upgrade` -- this is the
+# test that catches that regression.
+- name: _verify (jammy) | unpinned noble packages stay below jammy priority
+  when: ansible_distribution_major_version == "22"
+  command: apt-cache policy nano
+  register: backports_negative_policy
+  changed_when: false
+  failed_when: >
+    backports_negative_policy.rc != 0
+    or backports_negative_policy.stdout_lines
+       | select('match', '^\s+500\s+.*noble')
+       | list | length > 0
 
 # Functional check: state=latest on a packer image that doesn't ship
 # chrony forces a real install, so the per-call fact must report true.
