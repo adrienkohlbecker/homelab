@@ -212,6 +212,22 @@
     logs_uri          /v1/logs
     header            Authorization {{ hyperdx_ingestion_api_key }}
     log_response_payload  false
+    # Resource is the only OTLP field fluent-bit's opentelemetry output
+    # can populate from a record body key. The default for
+    # logs_resource_metadata_key is a body-level lookup ("resource"), so
+    # otlp-shape.lua's record["resource"]["attributes"] map flows
+    # through to LogRecord.Resource and the ClickHouse exporter
+    # populates the ServiceName column. The other metadata-key options
+    # (logs_attributes_metadata_key, logs_severity_*_metadata_key) all
+    # default to fluent-bit's separate event-metadata stream which lua
+    # filters can't populate from the standard callback signature;
+    # overriding them to body keys doesn't help -- the output ignores
+    # any value that isn't sourced from the event-metadata stream.
+    # Instead we encode LogRecord attributes and severity into Body as
+    # "warn: <prose> {<json>}" and let HyperDX's collector transform
+    # processor extract them on receive. See flatten-csp.lua for the
+    # body construction.
+    logs_resource_metadata_key         resource
     Retry_Limit       False
     storage.total_limit_size  50M
 {% endif %}
