@@ -70,6 +70,18 @@
   tags:
     - custom_exporter
 
+- name: Configure netdata context-liveness alerts
+  import_role:
+    name: netdata
+    tasks_from: health_template
+  vars:
+    netdata_args:
+      src: context_liveness.conf.j2
+      dest: context_liveness.conf
+      mode: "0600"
+  tags:
+    - custom_exporter
+
 - name: Configure nginx
   import_role:
     name: nginx

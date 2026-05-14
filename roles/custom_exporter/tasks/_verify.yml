@@ -1,8 +1,7 @@
-# Functional verification of the metrics endpoint and the cron-job path.
-# Drive-state (hdparm) and netdata-context paths short-circuit on the box
-# fixture (no rotational disks, netdata_contexts={}, netdata_collectors=[]),
-# so the cron loop is the only thing that scrapes in this env -- which makes
-# it the right path to exercise functionally per CLAUDE.md.
+# Functional verification of the metrics endpoint, the cron-job path, and the
+# netdata_context_present "ghost chart" gap-closer. Drive-state (hdparm) short-
+# circuits on the box fixture (no rotational disks); netdata_collectors=[] so
+# that path short-circuits too.
 
 - name: _verify | custom_exporter.service is loaded and active
   systemd:
@@ -51,6 +50,45 @@
     _verify_redirect.status != 301
     or _verify_redirect.location is not defined
     or not _verify_redirect.location.endswith('/metrics')
+
+# host_vars/box.yml seeds netdata_contexts with two entries:
+#   system_cpu -> system.cpu       (real chart, always live on a running netdata)
+#   ghost      -> foo.does_not_exist (never appears in /api/v2/contexts)
+# The exporter should emit netdata_context_present=1 for the former and 0 for
+# the latter; the alerts.conf netdata_context_missing template alerts on the 0.
+- name: _verify | netdata_context_present reflects API state for configured contexts
+  uri:
+    url: http://localhost:{{ service_ports.custom_exporter }}/metrics
+    return_content: true
+  register: _verify_ctx_present
+  retries: 15
+  delay: 2
+  until: >-
+    _verify_ctx_present.status == 200
+    and 'netdata_context_present{context="system_cpu"} 1' in _verify_ctx_present.content
+    and 'netdata_context_present{context="ghost"} 0' in _verify_ctx_present.content
+
+# Native $last_collected_t alerts only bind to charts that exist. Confirm the
+# system.cpu liveness template instantiated; ghost is *expected* to silently
+# drop (that's the gap netdata_context_present closes).
+- name: _verify | context_liveness alert registered for the real chart only
+  uri:
+    url: http://localhost:19999/api/v1/alarms?all
+    return_content: true
+  register: _verify_alarms
+  retries: 5
+  delay: 2
+  until: _verify_alarms.status == 200
+- name: _verify | liveness_system_cpu present, liveness_ghost absent
+  vars:
+    _alarm_keys: "{{ (_verify_alarms.content | from_json).alarms.keys() | list }}"
+  assert:
+    that:
+      - _alarm_keys | select('search', 'liveness_system_cpu') | list | length > 0
+      - _alarm_keys | select('search', 'liveness_ghost') | list | length == 0
+    fail_msg: >-
+      Expected liveness_system_cpu to be registered and liveness_ghost to be
+      silently dropped (ghost chart doesn't exist). Got alarm keys: {{ _alarm_keys }}
 
 # In prod /var/log/jobs is owned by the cron role's monitor.yml. The test
 # fixture skips that role, so seed the directory here before dropping
