@@ -1,0 +1,9 @@
+- name: Run apt safe-upgrade
+  apt:
+    upgrade: safe
+    autoremove: true
+    cache_valid_time: 3600
+    lock_timeout: 300
+  become: true
+  tags:
+    - apt_upgrade

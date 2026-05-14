@@ -6,6 +6,7 @@
     - cleanup
     - hostname
     - apt
+    - apt_upgrade
     - netplan
     - wireguard
     - locale
