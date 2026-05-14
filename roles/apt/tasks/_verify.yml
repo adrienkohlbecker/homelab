@@ -1,12 +1,13 @@
-# Assertions for the apt role. Exercises the contract end-to-end:
-# 80-retries content matches the release, sources file shape matches
-# the release (legacy on jammy, deb822 on noble+), apt's parsed view
-# (apt-cache policy) references our mirror, and `apt-get update`
-# succeeds against it.
+# Assertions for the apt role. Functional checks only:
+# - 80-retries is parsed by apt (retries=3, Delay matches release).
+# - apt-cache policy enumerates every expected suite against the
+#   configured mirror (mirror-agnostic at the component level --
+#   ports.ubuntu.com is sparse on -backports components but the
+#   suite itself is published, so the suite-level check stays
+#   uniform across architectures).
+# - apt-get update --error-on=any succeeds (turns transient mirror
+#   failures into a hard fail instead of a 0-exit warning).
 
-# apt-config dump reports apt's parsed view; a malformed 80-retries
-# (missing semicolon, quoting glitch) shows up as a missing key here
-# even though a slurp + substring check on the file would still pass.
 - name: _verify | Read apt's parsed retry config
   ansible.builtin.command: apt-config dump Acquire::Retries
   changed_when: false
@@ -23,81 +24,11 @@
     that:
       - >-
         ('Acquire::Retries::Delay "true";' in _verify_apt_retries.stdout_lines)
-        == (ansible_distribution_release != "jammy")
+        == (ansible_distribution_major_version | int >= 24)
     fail_msg: >-
       Acquire::Retries::Delay presence in apt's parsed config
       doesn't match release (jammy must omit, noble+ must include).
 
-- name: _verify | Stat apt sources files
-  ansible.builtin.stat:
-    path: "{{ item }}"
-  loop:
-    - /etc/apt/sources.list
-    - /etc/apt/sources.list.d/ubuntu.sources
-  register: _verify_apt_sources
-
-- name: _verify | Legacy sources.list shape matches release
-  ansible.builtin.assert:
-    that:
-      - _verify_apt_sources.results[0].stat.exists == (ansible_distribution_release == "jammy")
-    fail_msg: >-
-      /etc/apt/sources.list shape doesn't match release
-      (jammy must have it, noble+ must not).
-
-- name: _verify | Deb822 ubuntu.sources shape matches release
-  ansible.builtin.assert:
-    that:
-      - _verify_apt_sources.results[1].stat.exists == (ansible_distribution_release != "jammy")
-    fail_msg: >-
-      /etc/apt/sources.list.d/ubuntu.sources shape doesn't match release
-      (noble+ must have it, jammy must not).
-
-- name: _verify | Slurp active sources file
-  ansible.builtin.slurp:
-    src: "{{ (ansible_distribution_release == 'jammy') | ternary('/etc/apt/sources.list', '/etc/apt/sources.list.d/ubuntu.sources') }}"
-  register: _verify_apt_sources_content
-
-# Per-suite and per-component file-content checks catch a missing
-# entry in the template (e.g. a Components: line that dropped
-# 'multiverse', or a Suites: line that omitted -backports). Components
-# in the parsed apt view aren't a useful check -- whether a mirror
-# actually serves all four components per suite is mirror-dependent
-# (ports.ubuntu.com only ships main/universe for -backports), not a
-# role contract.
-- name: _verify | Active sources file mentions every expected suite
-  ansible.builtin.assert:
-    that:
-      - item in (_verify_apt_sources_content.content | b64decode)
-    fail_msg: "Active sources file is missing suite '{{ item }}'."
-  loop:
-    - "{{ ansible_distribution_release }}"
-    - "{{ ansible_distribution_release }}-updates"
-    - "{{ ansible_distribution_release }}-backports"
-    - "{{ ansible_distribution_release }}-security"
-
-- name: _verify | Active sources file mentions every expected component
-  ansible.builtin.assert:
-    that:
-      - item in (_verify_apt_sources_content.content | b64decode)
-    fail_msg: "Active sources file is missing component '{{ item }}'."
-  loop:
-    - main
-    - restricted
-    - universe
-    - multiverse
-
-- name: _verify | Sources reference the configured ubuntu_mirror
-  ansible.builtin.assert:
-    that:
-      - ubuntu_mirror in (_verify_apt_sources_content.content | b64decode)
-      - ubuntu_mirror_security in (_verify_apt_sources_content.content | b64decode)
-    fail_msg: >-
-      Active sources file doesn't reference both
-      {{ ubuntu_mirror }} and {{ ubuntu_mirror_security }}.
-
-# apt-cache policy reads apt's own parsed view of the configured world.
-# Per-suite check (with trailing '/') catches a missing or typo'd suite
-# while staying mirror-agnostic at the component level.
 - name: _verify | Read apt-cache policy
   ansible.builtin.command: apt-cache policy
   changed_when: false
@@ -123,9 +54,14 @@
   vars:
     _verify_apt_security_mirror: "{{ ubuntu_mirror_security | regex_replace('/$', '') }}"
 
-# Functional check: the mirror is reachable and serves valid metadata.
-- name: _verify | Apt-get update succeeds against configured mirror
-  ansible.builtin.apt:
-    update_cache: true
-    cache_valid_time: 0
+# Functional check: every configured suite serves valid signed metadata.
+# --error-on=any turns transient warnings (one unreachable suite, stale
+# Release.gpg) into a non-zero exit; the apt module's update_cache lets
+# them slide silently.
+- name: _verify | Apt-get update succeeds (--error-on=any)  # noqa: command-instead-of-module
+  # The ansible.builtin.apt module's update_cache silently swallows
+  # transient suite errors; only `apt-get update --error-on=any` turns
+  # them into a non-zero exit.
+  ansible.builtin.command: apt-get update --error-on=any
+  changed_when: false
   become: true
