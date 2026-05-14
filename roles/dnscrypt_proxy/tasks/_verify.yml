@@ -151,7 +151,7 @@
   changed_when: false
   become: true
   failed_when:
-    - "'Anonymizing queries for [scaleway-fr]' not in _verify_journal_relay.stdout
+    - "'Anonymizing queries for [dct-fr]' not in _verify_journal_relay.stdout
        or 'Anonymizing queries for [dnscry.pt-paris-ipv4]' not in _verify_journal_relay.stdout"
 
 # require_dnssec / require_nolog / require_nofilter self-consistency: the
@@ -171,7 +171,7 @@
         with open("/var/cache/dnscrypt-proxy/public-resolvers.md") as f:
             md = f.read()
         entries = dict(re.findall(r"^## (\S+).*?(sdns://\S+)", md, re.M | re.S))
-        for name in ("dnscry.pt-paris-ipv4", "scaleway-fr"):
+        for name in ("dnscry.pt-paris-ipv4", "dct-fr"):
             stamp = entries[name]
             raw = base64.urlsafe_b64decode(stamp[7:] + "=" * (-len(stamp[7:]) % 4))
             props = int.from_bytes(raw[1:9], "little")
