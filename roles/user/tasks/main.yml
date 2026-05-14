@@ -270,6 +270,19 @@
   tags:
     - user
 
+# Pre-warm /var/lib/apt/lists/ so the python3-debian install below
+# works in check mode. Packer ships an empty cache and the apt
+# module's update_cache is a no-op under --check. See
+# roles/apt/tasks/install.yml for the full rationale.
+- name: Pre-warm apt cache (real fetch even in --check)  # noqa: command-instead-of-module
+  when: ansible_distribution_major_version | int >= 26
+  ansible.builtin.command: apt-get update
+  changed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - user
+
 # deb822_repository requires python3-debian even in check mode. See
 # netdata install.yml for the gate idiom.
 - name: Install python3-debian
