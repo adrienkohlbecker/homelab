@@ -1,0 +1,18 @@
+#!/bin/bash
+# Run a command with its stderr re-tagged as priority `err` for the
+# journal. systemd's SyslogLevelPrefix= (default true) parses <N>
+# kernel-style prefixes on captured output and applies the priority,
+# so prefixing every stderr line with <3> turns
+# `journalctl -u <unit> -p err` into a clean failure-only view.
+# No second journal stream (unlike systemd-cat), so no duplicates.
+# `wait` covers the race between the wrapped command exiting and
+# sed flushing its last line.
+set -u
+[ "$#" -ge 1 ] || {
+  echo "Usage: ${0##*/} CMD [ARGS...]" >&2
+  exit 64
+}
+"$@" 2> >(sed -u 's/^/<3>/' >&2)
+rc=$?
+wait
+exit "$rc"
