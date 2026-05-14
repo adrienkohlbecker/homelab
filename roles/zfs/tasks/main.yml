@@ -185,9 +185,16 @@
 # binds `vars:` once on the include task so every iteration ends up
 # with the same systemd_timer_args. include_tasks re-evaluates per
 # iteration, so the wrapper file's own include_role gets a fresh dict
-# each pool.
+# each pool. `apply.tags` propagates the outer tag set into the
+# included tasks — unlike import_*, include_* does NOT inherit tags
+# automatically, so without this the wrapper loads but its
+# include_role gets tag-filtered to a no-op when --tags zfs runs.
 - name: Schedule a zfs_trim timer
-  include_tasks: _trim_timer.yml
+  include_tasks:
+    file: _trim_timer.yml
+    apply:
+      tags:
+        - zfs
   loop: "{{ zfs_trim_pools }}"
   loop_control:
     label: "{{ item }}"
