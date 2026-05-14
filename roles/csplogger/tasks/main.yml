@@ -43,6 +43,18 @@
             deny all;
           }
 
+          # Allow-Origin on POST responses too (not just OPTIONS). CSP
+          # report POSTs are always cross-origin (page on
+          # <svc>.<host>.<domain> reporting to csplogger.<host>.<domain>);
+          # without this header Firefox flags every successful report as
+          # "CORS Missing Allow Origin" in devtools even though the POST
+          # was fire-and-forget. `always` so the header rides 4xx/5xx
+          # upstream responses too, otherwise an upstream rejection would
+          # blend a CORS warning into the actual error. Repeated in the
+          # OPTIONS branch below because nginx's add_header inheritance
+          # is shadowed by any child add_header.
+          add_header 'Access-Control-Allow-Origin' '*' always;
+
           # CSP reports arrive as cross-origin browser POSTs. The
           # Reporting API (Content-Type: application/reports+json) triggers
           # a CORS preflight; legacy report-uri (application/csp-report)
@@ -67,6 +79,17 @@
           # script-sample). Cap well below nginx's 16M global default so a
           # misbehaving site CSP or hostile poster can't waste bandwidth.
           client_max_body_size 64k;
+
+          # Browsers send CSP reports labelled application/csp-report
+          # (legacy report-uri) or application/reports+json (Reporting
+          # API). Fluent-bit's http input is JSON-or-msgpack only and
+          # rejects everything else with 400 "error: invalid
+          # 'Content-Type'" at the HTTP layer -- the rejection never
+          # reaches the input pipeline so it doesn't even show in the
+          # fluent-bit journal. Bodies are JSON in both browser formats,
+          # so a blanket rewrite to application/json is safe and is the
+          # only way to make real browser POSTs land.
+          proxy_set_header Content-Type application/json;
 
           # Fluent-bit's HTTP input lives on loopback; the tag is set in
           # the [INPUT] block in roles/fluentbit, not derived from the
