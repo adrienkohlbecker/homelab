@@ -181,21 +181,13 @@
   tags:
     - zfs
 
-# include_role (dynamic) because the timer-per-pool fan-out is driven by
-# zfs_trim_pools at runtime — import_role can't take a loop. `name:` is
-# resolved at task-tree expansion, before any loop iteration runs, so
-# it must not reference `item`; loop_control.label surfaces the pool
-# in the per-iteration line instead.
+# include_tasks wrapper rather than include_role-with-loop: the latter
+# binds `vars:` once on the include task so every iteration ends up
+# with the same systemd_timer_args. include_tasks re-evaluates per
+# iteration, so the wrapper file's own include_role gets a fresh dict
+# each pool.
 - name: Schedule a zfs_trim timer
-  include_role:
-    name: systemd_timer
-    tasks_from: install
-  vars:
-    systemd_timer_args:
-      name: zfs_trim_{{ item }}
-      description: Weekly ZFS trim for {{ item }}
-      on_calendar: "Thu *-*-* 00:05:00"
-      exec_start: /usr/local/bin/run_job weekly zfs_trim_{{ item }} /sbin/zpool trim {{ item }}
+  include_tasks: _trim_timer.yml
   loop: "{{ zfs_trim_pools }}"
   loop_control:
     label: "{{ item }}"
