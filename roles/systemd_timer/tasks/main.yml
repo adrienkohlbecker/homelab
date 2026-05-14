@@ -24,7 +24,6 @@
 # next caller's call.
 - name: timer | Resolve caller defaults for {{ systemd_timer_args.name }}
   set_fact:
-    _systemd_timer_name: "{{ systemd_timer_args.name }}"
     _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
     _systemd_timer_state: "{{ systemd_timer_args.state | default('present') }}"
     _systemd_timer_sentinel: "{{ systemd_timer_args.sentinel | default(true) }}"
@@ -37,34 +36,34 @@
 - name: Install timer {{ systemd_timer_args.name }}
   when: _systemd_timer_state == 'present'
   block:
-    - name: timer | Install service unit for {{ _systemd_timer_name }}
+    - name: timer | Install service unit for {{ systemd_timer_args.name }}
       import_role:
         name: systemd_unit
         tasks_from: install
       vars:
         systemd_unit_args:
           src: service.j2
-          dest: "{{ _systemd_timer_name }}.service"
+          dest: "{{ systemd_timer_args.name }}.service"
           user: "{{ _systemd_timer_user }}"
 
-    - name: timer | Install timer unit for {{ _systemd_timer_name }}
+    - name: timer | Install timer unit for {{ systemd_timer_args.name }}
       import_role:
         name: systemd_unit
         tasks_from: install
       vars:
         systemd_unit_args:
           src: timer.j2
-          dest: "{{ _systemd_timer_name }}.timer"
+          dest: "{{ systemd_timer_args.name }}.timer"
           user: "{{ _systemd_timer_user }}"
 
     # Pre-create the /var/log/jobs/<name> sentinel so custom_exporter's
     # directory scan picks up the job (with last_success=0) before its
     # first run completes -- otherwise the alert "this job hasn't run
     # recently" has nothing to evaluate against until the timer fires.
-    - name: timer | Pre-create sentinel for {{ _systemd_timer_name }}
+    - name: timer | Pre-create sentinel for {{ systemd_timer_args.name }}
       when: _systemd_timer_sentinel
       file:
-        path: /var/log/jobs/{{ _systemd_timer_name }}
+        path: /var/log/jobs/{{ systemd_timer_args.name }}
         state: touch
         access_time: preserve
         modification_time: preserve
@@ -73,13 +72,13 @@
         mode: "0644"
       become: true
 
-    - name: timer | Enable and start timer for {{ _systemd_timer_name }}
+    - name: timer | Enable and start timer for {{ systemd_timer_args.name }}
       import_role:
         name: systemd_unit
         tasks_from: service
       vars:
         systemd_unit_args:
-          src: "{{ _systemd_timer_name }}.timer"
+          src: "{{ systemd_timer_args.name }}.timer"
           user: "{{ _systemd_timer_user }}"
 
 - name: Remove timer {{ systemd_timer_args.name }}
@@ -88,9 +87,9 @@
     # failed_when:false because a never-installed timer is the steady
     # state we want — removal must be idempotent on a fresh host that
     # never had the cron entry either.
-    - name: timer | Stop and disable timer for {{ _systemd_timer_name }}
+    - name: timer | Stop and disable timer for {{ systemd_timer_args.name }}
       systemd:
-        name: "{{ _systemd_timer_name }}.timer"
+        name: "{{ systemd_timer_args.name }}.timer"
         state: stopped
         enabled: false
         scope: "{{ _systemd_timer_scope }}"
@@ -98,9 +97,9 @@
       become_user: "{{ _systemd_timer_user }}"
       failed_when: false
 
-    - name: timer | Remove unit files for {{ _systemd_timer_name }}
+    - name: timer | Remove unit files for {{ systemd_timer_args.name }}
       file:
-        path: "{{ _systemd_timer_dir }}/{{ _systemd_timer_name }}.{{ item }}"
+        path: "{{ _systemd_timer_dir }}/{{ systemd_timer_args.name }}.{{ item }}"
         state: absent
       loop:
         - service
@@ -108,7 +107,7 @@
       become: true
       register: _systemd_timer_files_removed
 
-    - name: timer | Daemon-reload after removing {{ _systemd_timer_name }}
+    - name: timer | Daemon-reload after removing {{ systemd_timer_args.name }}
       when: _systemd_timer_files_removed is changed
       systemd:
         daemon_reload: true
