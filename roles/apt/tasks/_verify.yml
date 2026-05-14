@@ -1,67 +1,66 @@
 # Assertions for the apt role. Functional checks only:
 # - 80-retries is parsed by apt (retries=3, Delay matches release).
-# - apt-cache policy enumerates every expected suite against the
-#   configured mirror (mirror-agnostic at the component level --
-#   ports.ubuntu.com is sparse on -backports components but the
-#   suite itself is published, so the suite-level check stays
-#   uniform across architectures).
+# - /var/lib/apt/lists/ carries an index file for every configured
+#   (mirror, suite) -- apt's own source of truth, not the prettyprinted
+#   apt-cache policy dump.
 # - apt-get update --error-on=any succeeds (turns transient mirror
 #   failures into a hard fail instead of a 0-exit warning).
 
 - name: _verify | Read apt's parsed retry config
-  ansible.builtin.command: apt-config dump Acquire::Retries
+  command: apt-config dump Acquire::Retries
   changed_when: false
   register: _verify_apt_retries
 
 - name: _verify | Apt parses Acquire::Retries=3
-  ansible.builtin.assert:
+  assert:
     that:
       - '''Acquire::Retries "3";'' in _verify_apt_retries.stdout_lines'
     fail_msg: apt didn't load Acquire::Retries=3 from 80-retries.
 
 - name: _verify | Apt parses Acquire::Retries::Delay on noble+ only
-  ansible.builtin.assert:
+  assert:
     that:
       - >-
         ('Acquire::Retries::Delay "true";' in _verify_apt_retries.stdout_lines)
-        == (ansible_distribution_major_version | int >= 24)
+        == (ansible_distribution_release != "jammy")
     fail_msg: >-
       Acquire::Retries::Delay presence in apt's parsed config
       doesn't match release (jammy must omit, noble+ must include).
 
-- name: _verify | Read apt-cache policy
-  ansible.builtin.command: apt-cache policy
-  changed_when: false
-  register: _verify_apt_policy
-
-- name: _verify | Apt-cache policy lists every archive suite
-  ansible.builtin.assert:
-    that:
-      - (_verify_apt_mirror ~ ' ' ~ item ~ '/') in _verify_apt_policy.stdout
-    fail_msg: "apt-cache policy missing {{ _verify_apt_mirror }} {{ item }}."
+# /var/lib/apt/lists/ filenames encode (mirror, suite, component, arch):
+# `<host>_<path>_dists_<suite>_<component>_binary-<arch>_Packages`.
+# Apt itself uses these files as its source of truth, so checking they
+# exist for each expected (mirror, suite) confirms both that the source
+# is configured AND that apt successfully fetched its index.
+- name: _verify | Each (mirror, suite) has fetched index files
+  find:
+    paths: /var/lib/apt/lists/
+    patterns: "{{ _verify_mirror_prefix }}_dists_{{ item.suite }}_main_*"
+  register: _verify_apt_lists
   vars:
-    _verify_apt_mirror: "{{ ubuntu_mirror | regex_replace('/$', '') }}"
+    _verify_mirror_prefix: "{{ item.mirror | regex_replace('^https?://', '') | regex_replace('/+$', '') | regex_replace('/', '_') }}"
   loop:
-    - "{{ ansible_distribution_release }}"
-    - "{{ ansible_distribution_release }}-updates"
-    - "{{ ansible_distribution_release }}-backports"
+    - { mirror: "{{ ubuntu_mirror }}", suite: "{{ ansible_distribution_release }}" }
+    - { mirror: "{{ ubuntu_mirror }}", suite: "{{ ansible_distribution_release }}-updates" }
+    - { mirror: "{{ ubuntu_mirror }}", suite: "{{ ansible_distribution_release }}-backports" }
+    - { mirror: "{{ ubuntu_mirror_security }}", suite: "{{ ansible_distribution_release }}-security" }
+  loop_control:
+    label: "{{ item.mirror }} {{ item.suite }}"
 
-- name: _verify | Apt-cache policy lists the security suite
-  ansible.builtin.assert:
+- name: _verify | Every suite has at least one index file
+  assert:
     that:
-      - (_verify_apt_security_mirror ~ ' ' ~ ansible_distribution_release ~ '-security/') in _verify_apt_policy.stdout
-    fail_msg: "apt-cache policy missing {{ _verify_apt_security_mirror }} {{ ansible_distribution_release }}-security."
-  vars:
-    _verify_apt_security_mirror: "{{ ubuntu_mirror_security | regex_replace('/$', '') }}"
+      - item.matched > 0
+    fail_msg: "No /var/lib/apt/lists/ entries for {{ item.item.mirror }} {{ item.item.suite }}."
+  loop: "{{ _verify_apt_lists.results }}"
+  loop_control:
+    label: "{{ item.item.mirror }} {{ item.item.suite }}"
 
 # Functional check: every configured suite serves valid signed metadata.
 # --error-on=any turns transient warnings (one unreachable suite, stale
 # Release.gpg) into a non-zero exit; the apt module's update_cache lets
 # them slide silently.
 - name: _verify | Apt-get update succeeds (--error-on=any)  # noqa: command-instead-of-module
-  # The ansible.builtin.apt module's update_cache silently swallows
-  # transient suite errors; only `apt-get update --error-on=any` turns
-  # them into a non-zero exit.
-  ansible.builtin.command: apt-get update --error-on=any
+  command: apt-get update --error-on=any
   changed_when: false
   become: true
