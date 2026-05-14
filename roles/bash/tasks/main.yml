@@ -10,20 +10,3 @@
   become: true
   tags:
     - bash
-
-- name: Install tmpfiles.d entry for F_DEBUGME logs
-  copy:
-    src: tmpfiles.conf
-    dest: /etc/tmpfiles.d/bash_debug_logs.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    # systemd-tmpfiles --dry-run was added in 250; jammy ships 249.
-    validate: >-
-      systemd-tmpfiles
-      {{ '--dry-run' if ansible_distribution_release not in ['jammy'] else '' }}
-      --create %s
-  become: true
-  tags:
-    - bash
