@@ -212,22 +212,28 @@
     logs_uri          /v1/logs
     header            Authorization {{ hyperdx_ingestion_api_key }}
     log_response_payload  false
-    # Resource is the only OTLP field fluent-bit's opentelemetry output
-    # can populate from a record body key. The default for
-    # logs_resource_metadata_key is a body-level lookup ("resource"), so
-    # otlp-shape.lua's record["resource"]["attributes"] map flows
-    # through to LogRecord.Resource and the ClickHouse exporter
-    # populates the ServiceName column. The other metadata-key options
-    # (logs_attributes_metadata_key, logs_severity_*_metadata_key) all
-    # default to fluent-bit's separate event-metadata stream which lua
-    # filters can't populate from the standard callback signature;
-    # overriding them to body keys doesn't help -- the output ignores
-    # any value that isn't sourced from the event-metadata stream.
-    # Instead we encode LogRecord attributes and severity into Body as
-    # "warn: <prose> {<json>}" and let HyperDX's collector transform
-    # processor extract them on receive. See flatten-csp.lua for the
-    # body construction.
+    # Direct body-key sources for the OTLP fields we can pin from lua:
+    #   resource          -> Resource attrs (service.name + host.name,
+    #                        what populates the ClickHouse ServiceName
+    #                        column). otlp-shape.lua writes it.
+    #   severity_text     -> LogRecord.SeverityText
+    #   severity_number   -> LogRecord.SeverityNumber
+    # The severity message-key options read from the record body
+    # (their _metadata_key siblings read fluent-bit's event-metadata
+    # stream, which lua filters can't populate from the standard
+    # callback signature). flatten-csp.lua sets both severity_text /
+    # severity_number top-level on every CSP record.
+    #
+    # LogRecord.Attributes has no _message_key variant -- the only
+    # source is the event-metadata stream. We encode the per-record
+    # attribute set as a JSON suffix inside Body instead, and rely on
+    # the HyperDX otelcontribcol transform processor's ExtractPatterns
+    # + ParseJSON + merge_maps statement (already wired into
+    # logs/out-default) to lift the JSON into log.attributes on
+    # receive. Same path that surfaces z2m's MQTT-payload fields.
     logs_resource_metadata_key         resource
+    logs_severity_text_message_key     severity_text
+    logs_severity_number_message_key   severity_number
     Retry_Limit       False
     storage.total_limit_size  50M
 {% endif %}
