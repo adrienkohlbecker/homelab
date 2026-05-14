@@ -19,13 +19,13 @@
     name: backports
     tasks_from: pin
   vars:
-    backports_name: test_chrony
+    backports_name: test_libc6_transition
     backports_packages: "{{ ntp_backport_packages }}"
 
 - name: _verify (jammy) | pin file lands at the documented path
   when: ansible_distribution_major_version == "22"
   stat:
-    path: /etc/apt/preferences.d/backports_test_chrony.pref
+    path: /etc/apt/preferences.d/backports_test_libc6_transition.pref
   register: backports_pin_stat
   failed_when: not backports_pin_stat.stat.exists
 
@@ -52,8 +52,8 @@
   when: ansible_distribution_major_version == "22"
   assert:
     that:
-      - test_chrony_backports_updated | bool
-    fail_msg: "Expected pin to install/upgrade packages, got {{ test_chrony_backports_updated }}"
+      - test_libc6_transition_backports_updated | bool
+    fail_msg: "Expected pin to install/upgrade packages, got {{ test_libc6_transition_backports_updated }}"
 
 # Re-import with the same name to verify idempotence: pin file
 # unchanged, sources unchanged, apt has nothing to do, fact flips to
@@ -64,15 +64,15 @@
     name: backports
     tasks_from: pin
   vars:
-    backports_name: test_chrony
+    backports_name: test_libc6_transition
     backports_packages: "{{ ntp_backport_packages }}"
 
 - name: _verify (jammy) | second apply is a no-op (fact flips to false)
   when: ansible_distribution_major_version == "22"
   assert:
     that:
-      - not (test_chrony_backports_updated | bool)
-    fail_msg: "Expected idempotent re-apply to report no change, got {{ test_chrony_backports_updated }}"
+      - not (test_libc6_transition_backports_updated | bool)
+    fail_msg: "Expected idempotent re-apply to report no change, got {{ test_libc6_transition_backports_updated }}"
 
 # Multi-consumer guarantee: a second import under a different name
 # lands its own pin file and its own per-call fact, and doesn't
@@ -99,7 +99,7 @@
   when: ansible_distribution_major_version == "22"
   assert:
     that:
-      - test_chrony_backports_updated is defined
+      - test_libc6_transition_backports_updated is defined
       - test_second_backports_updated is defined
     fail_msg: "Expected both per-call facts to survive a second import"
 
@@ -112,8 +112,8 @@
   when: ansible_distribution_major_version != "22"
   assert:
     that:
-      - test_chrony_backports_updated is defined
+      - test_libc6_transition_backports_updated is defined
       - test_second_backports_updated is defined
-      - not (test_chrony_backports_updated | bool)
+      - not (test_libc6_transition_backports_updated | bool)
       - not (test_second_backports_updated | bool)
     fail_msg: "Expected both per-call facts to be set to false on noble"
