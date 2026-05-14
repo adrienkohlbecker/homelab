@@ -1,9 +1,12 @@
-# Per-pool wrapper for the include_tasks loop in main.yml. import_role
-# works here (not at the top level) because include_tasks re-parses
-# this file per iteration with `item` already in scope, so the
-# import_role's vars: get a fresh systemd_timer_args each pool.
+# Per-pool wrapper for the include_tasks loop in main.yml. include_role
+# (not import_role) because systemd_timer/install.yml templates inner
+# task names from systemd_timer_args.name; under import_role the
+# expansion chain `systemd_timer_args.name` → `"zfs_trim_{{ item }}"`
+# → `item` trips at parse time even though include_tasks has item in
+# scope at execution time. include_role is dynamic, so the inner names
+# render at task-run time when `item` really is bound.
 - name: _trim_timer | Install zfs_trim timer for {{ item }}
-  import_role:
+  include_role:
     name: systemd_timer
     tasks_from: install
   vars:
