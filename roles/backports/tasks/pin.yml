@@ -1,42 +1,52 @@
-# Routes the listed packages to noble on jammy via apt pin priority
-# 991, adds noble's apt sources so the upgrade resolves, refreshes
-# the cache, and forces state: latest across the full list. Designed
-# for roles whose userspace stack ships too old in jammy (zfs 2.1.x,
-# podman 3.x). On noble (or any non-22.04 release) every task is a
-# no-op — the distro version is already current.
+# roles/backports — helper to route a specific package list to Ubuntu
+# noble (24.04) on jammy (22.04) hosts via apt pin priority. On noble
+# (or any non-22.04 release), every task is a no-op. Invoked via:
+#   import_role: name: backports, tasks_from: pin
 #
 # Inputs:
-#   backports_name: short label for the pin filename
-#                   (/etc/apt/preferences.d/backports_<name>.pref) and
-#                   the per-call output fact name.
-#   backports_packages: list of package names. Becomes both the pin
-#                       file's `Package:` line and the upgrade task's
-#                       apt: pkg list, so they can't drift.
+#   backports_name      short label matching ^[A-Za-z0-9_]+$; used
+#                       verbatim in the pin filename and as the stem of
+#                       the per-call output fact.
+#   backports_packages  non-empty list of package names. Becomes both
+#                       the pin file's Package: line and the upgrade
+#                       task's apt: pkg list, so they can't drift.
 #
-# Output fact: <backports_name>_backports_updated → true|false,
-# reflecting whether the apt upgrade actually rolled the pin set
-# forward. Consumers gate daemon restarts on this. The name is
-# per-call so two imports in the same play (podman + zfs) don't
-# clobber each other's signal — same pattern roles/systemd_unit
-# uses for *_result facts.
+# Output fact:
+#   {{ backports_name }}_backports_updated  -> bool
+#     true on a real-mode apply where apt actually rolled the pinned
+#     set forward; false on idempotent re-applies and on non-jammy
+#     releases. Consumer roles gate daemon restarts on this. The
+#     per-call name prevents multi-import collisions (podman + zfs +
+#     ntp can run in one play). Mirrors systemd_unit's *_result naming.
 #
-# policy_rc_d=101 on the upgrade task is unconditional: apt under
-# this pin almost always means a daemon-bearing package crossed a
-# major version (jammy 3.x -> noble 4.x for podman, 2.1.x -> 2.2.x
-# for zfs), and we'd rather drive the restart explicitly through
-# the output fact than have apt half-restart things on its own.
-
-# backports_name is used verbatim in the pin file path AND as the
-# stem of the per-call set_fact name. Fail loud on anything that
-# wouldn't be a valid Ansible identifier rather than silently
-# translating ('foo-bar' would write /etc/apt/preferences.d/backports_
-# foo-bar.pref but set foo_bar_backports_updated, an invisible split).
-#
-# backports_packages must be a non-empty list. A bare string would
-# `join(' ')` per-character ("c h r o n y") and produce a pin file
-# matching nothing; an empty list would render `Package: ` with the
-# same effect. Both fail silently — the pin is "applied" but the apt
-# resolver never picks a noble candidate.
+# Design notes:
+#   - policy_rc_d=101 on the upgrade is unconditional. Apt under this
+#     pin almost always crosses a major version (jammy 3.x -> noble
+#     4.x for podman, 2.1.x -> 2.2.x for zfs, libc6 t64 transition for
+#     ntp), and we'd rather drive the restart explicitly via the
+#     output fact than have apt half-restart things on its own.
+#     SECURITY CONTRACT: consumers MUST wire <name>_backports_updated
+#     into state=restarted -- otherwise a CVE-response upgrade lands
+#     the patched binary on disk while the vulnerable process keeps
+#     running. See roles/ntp/tasks/main.yml's chronyd restart for the
+#     reference consumer shape.
+#   - The pin file ships three priority bands (991 for the pinned set
+#     from noble, 500 for jammy default, -10 for the o=Ubuntu catch-
+#     all). This three-band shape is the canonical "selective
+#     backports" form documented in apt_preferences(5). The -10 band
+#     prevents apt from spontaneously upgrading unrelated jammy
+#     packages to noble; the explicit 500 band exists precisely
+#     because the -10 catch-all would otherwise suppress jammy too.
+#     _verify.yml exercises the negative path.
+#   - Input validation fails loud rather than silently translating.
+#     backports_name leaking a hyphen would write
+#     /etc/apt/preferences.d/backports_foo-bar.pref but set the fact
+#     foo_bar_backports_updated -- an invisible split. A bare-string
+#     backports_packages would `join(' ')` per-character ("c h r o
+#     n y") and the pin file would match nothing; an empty list
+#     would render `Package: ` with the same effect. Both fail
+#     silently in apt -- the pin is "applied" but the resolver never
+#     picks a noble candidate.
 - name: Validate backports inputs
   assert:
     that:
