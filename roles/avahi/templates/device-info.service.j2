@@ -6,5 +6,11 @@
    <type>_device-info._tcp</type>
    <port>0</port>
    <txt-record>model={{ avahi_device_model }}</txt-record>
+   <!-- osxvers = Darwin major; Apple's mDNSResponder publishes this
+        alongside model. Empirically model alone usually drives the
+        Finder icon, but publishing both matches the upstream shape.
+        Bump as macOS majors release; the value just needs to be
+        plausibly recent. -->
+   <txt-record>osxvers=24</txt-record>
  </service>
 </service-group>
