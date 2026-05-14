@@ -6,17 +6,15 @@
   tags:
     - zfs_autobackup
 
-- name: dest | Schedule the sync script
-  when: not (ansible_check_mode and zfs_autobackup_apt.changed)
-  cron:
-    name: zfs_autosync
-    minute: "{{ rand_order * 10 }}" # space each host out by 10 minutes so services don't stop at the same time
-    hour: 3
-    job: /usr/local/bin/run_job daily zfs_autosync /usr/local/bin/zfs_autosync
-    user: root
-    cron_file: ansible_zfs_autosync
-    backup: true
-    state: absent
-  become: true
+# dest hosts never run the autosync timer; this removal is idempotent
+# (no-op when never installed) and cleans up after older cron-based
+# installs.
+- name: dest | Remove the zfs_autosync timer
+  import_role:
+    name: systemd_timer
+  vars:
+    systemd_timer_args:
+      name: zfs_autosync
+      state: absent
   tags:
     - zfs_autobackup

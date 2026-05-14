@@ -5,7 +5,6 @@
       - python3-virtualenv
       - mbuffer
       - rsync
-      - cron # for cron module
     cache_valid_time: 3600
   become: true
   register: zfs_autobackup_apt
@@ -129,26 +128,18 @@
   tags:
     - zfs_autobackup
 
-- name: Schedule the snapshot script
-  when: not (ansible_check_mode and zfs_autobackup_apt.changed)
-  cron:
-    name: zfs_autosnapshot
-    minute: "{{ rand_order * 10 }}" # space each host out by 10 minutes so services don't stop at the same time
-    hour: 2
-    job: /usr/local/bin/run_job daily zfs_autosnapshot /usr/local/bin/zfs_autosnapshot
-    user: root
-    cron_file: ansible_zfs_autosnapshot
-    backup: true
-  become: true
-  tags:
-    - zfs_autobackup
-
-- name: Monitor snapshot script
+# rand_order is per-host (1..3) so each host's autosnapshot starts at
+# a deterministic per-host minute — preserves the original cron entry's
+# "space hosts out so services don't stop at the same time" intent.
+- name: Schedule the zfs_autosnapshot timer
   import_role:
-    name: cron
-    tasks_from: monitor
+    name: systemd_timer
   vars:
-    cron_entry: zfs_autosnapshot
+    systemd_timer_args:
+      name: zfs_autosnapshot
+      description: Daily ZFS autosnapshot
+      on_calendar: "*-*-* 02:{{ '%02d' | format(rand_order * 10) }}:00"
+      exec_start: /usr/local/bin/run_job daily zfs_autosnapshot /usr/local/bin/zfs_autosnapshot
   tags:
     - zfs_autobackup
 
