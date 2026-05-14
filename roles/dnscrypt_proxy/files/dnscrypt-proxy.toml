@@ -1,6 +1,10 @@
 # Empty listen_addresses to use systemd socket activation
 listen_addresses = []
-server_names = ['fdn', 'scaleway-fr']
+# Both Paris-local DNSCrypt resolvers, distinct operators (Scaleway/F. Denis
+# and DNSCry.pt). Both anonymizable via [anonymized_dns] below. DoH-only stamps
+# (e.g. fdn) can't be relayed in 2.0.45 -- ODoH is 2.0.46+ -- so we pick
+# DNSCrypt-protocol stamps to keep both upstreams anonymized.
+server_names = ['dnscry.pt-paris-ipv4', 'scaleway-fr']
 
 # Defensive -- server_names pins both choices today, so these fire only if we
 # ever remove the pin and pull from the public-resolvers pool.
