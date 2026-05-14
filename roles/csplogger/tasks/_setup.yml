@@ -9,3 +9,20 @@
 - name: _setup | Install fluentbit
   import_role:
     name: fluentbit
+
+# Bring up a real HyperDX stack so _verify can query ClickHouse for the
+# landed otel_logs row and assert on the OTLP wire shape end-to-end
+# (ServiceName, SeverityText/Number, LogAttributes, ResourceAttributes).
+# Without this fluent-bit's [OUTPUT] opentelemetry block retries against
+# an unbound 4318 and the assertion query has nothing to find. hyperdx
+# pulls in podman + service_user etc. via its own _setup, which we run
+# explicitly here because the harness only invokes the *current* role's
+# _setup, not transitive ones.
+- name: _setup | Install hyperdx dependencies
+  import_role:
+    name: hyperdx
+    tasks_from: _setup
+
+- name: _setup | Install hyperdx
+  import_role:
+    name: hyperdx
