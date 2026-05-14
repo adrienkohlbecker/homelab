@@ -1,57 +1,89 @@
-#!/bin/bash
-set -euo pipefail
+# shellcheck shell=bash
+# Sourced preamble for repo operator scripts.
+#
+# Side effects on caller (load-bearing; no consumer re-declares these):
+#   - set -Eeuo pipefail + shopt -s inherit_errexit (strict mode that
+#     also propagates errexit into $(...) and ERR traps into functions)
+#   - PATH pinned to system dirs (callers run via roles/systemd_timer,
+#     which inherits /etc/environment, not /etc/profile)
 
-# Set path to a known value, for use in CRON scripts
+set -Eeuo pipefail
+shopt -s inherit_errexit
+
 PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# What is the executing script (sourcing this file) named
-F_SCRIPT=$(basename "$0")
-
-# Print an error message to stderr
+# Print to stderr. printf, not echo, so a leading "-n"/"-e"/"-E" in $1
+# is treated as data, not a flag.
 f_error() {
-  echo "$@" >&2
+  printf '%s\n' "$*" >&2
 }
 
-# Print an error message to stderr and exit
+# f_error + exit 1. Constraint: when sourced from a shell function or
+# `bash -c`, `exit 1` terminates the enclosing shell -- any callee that
+# f_rescue is meant to recover from must therefore be an external
+# command or a subshell, not a shell function in the same process.
 f_fail() {
   f_error "$@"
   exit 1
 }
 
-# If F_DEBUGME is set, enable tracing and save output to a temp file
-if [ -n "${F_DEBUGME:-}" ]; then
-  # Open file descriptor to log file
-  exec 5>"$(mktemp -t "bash-$F_SCRIPT-$(printf "%(%Y%m%d-%H%M%S)T" -2)-XXXXX.log")"
-  # Set prefix used when echoing trace information `source.sh(pid) isodate lineno: `
-  PS4='+$(printf "%(%FT%T%z)T %3s" -1 $LINENO): '
-  # Send output of trace to file descriptor number 5 (our log file)
+# If F_DEBUGME is set, redirect xtrace to a private 0600 log under TMPDIR.
+# Re-source under F_DEBUGME opens a fresh log and leaks the previous fd --
+# this is opt-in debug machinery, not production logging. tmpfiles.d
+# (installed by tasks/main.yml) ages stale logs out of /tmp.
+if [[ -n "${F_DEBUGME:-}" ]]; then
+  # BASH_SOURCE[-1] is the outermost caller. Falls back to PID when
+  # sourced from `bash -c` or an interactive shell.
+  f_debug_script="${BASH_SOURCE[-1]##*/}"
+  [[ -z "$f_debug_script" || "$f_debug_script" == "bash" ]] && f_debug_script="pid$$"
+  # umask 077 inside the $(...) keeps the trace file mode 0600 -- the
+  # trace captures every expanded command line including any args that
+  # happen to carry credentials, so it must never be world-readable.
+  f_debug_log=$(umask 077 && mktemp --tmpdir \
+    "bash-${f_debug_script}-$(printf '%(%Y%m%d-%H%M%S)T' -1)-XXXXX.log")
+  exec 5>"$f_debug_log"
+  # Trace prefix: ISO timestamp + file:line + function (or "main" outside
+  # any function). ${BASH_SOURCE[0]:+...} guards against nounset at the
+  # bash -c top level where BASH_SOURCE is unset (the `if SET, expand X`
+  # form is the only paramexp that takes a value AND is set-u safe).
+  PS4='+$(printf "%(%FT%T%z)T" -1) ${BASH_SOURCE[0]:+${BASH_SOURCE[0]##*/}:}${LINENO} ${FUNCNAME[0]:-main}: '
   BASH_XTRACEFD="5"
-  # Enable trace mode
   set -x
 fi
 
-# Use f_rescue to run multiple commands that can each fail, and check f_failed afterwards for the count of failures
-f_failed=0
+# Run "$@" once; on non-zero exit, log to stderr and bump f_failed.
+# Uses an `if`/`else` rather than `set +e`/`set -e` so the caller's
+# errexit state is never mutated (the prior toggle pattern could
+# silently re-enable -e in a caller that had deliberately disabled it).
+#
+# Caveats:
+#   - f_rescue inside a subshell (parentheses or RHS of a pipeline)
+#     updates a copy of f_failed; the parent count stays at zero.
+#   - The callee must be an external command or subshell -- a shell
+#     function that calls f_fail terminates the entire script.
+declare -gi f_failed=0
 f_rescue() {
-  set +e
-  "$@"
-  local retval=$?
-  set -e
-
-  if [ $retval -ne 0 ]; then
+  if "$@"; then
+    return 0
+  else
+    # `$?` inside `else` is the condition's exit code; after `fi` it
+    # would be 0 (per `man bash`: "zero if no condition tested true").
+    local retval=$?
     f_error "Error:$(printf ' %q' "$@") failed with exit $retval"
     ((f_failed += 1))
   fi
 }
 
-# Require being a root user
+# Assert effective uid is 0. (( )) form: EUID is a bash integer special.
 f_require_root() {
-  if [ "$EUID" != "0" ]; then
+  if (( EUID != 0 )); then
     f_fail "Error: I require root"
   fi
 }
 
+# Echo a shell-quoted form of the argv to stderr (so the trace banner
+# doesn't pollute the cron-mailed stdout stream), then exec the command.
 f_trace() {
-  echo "\$$(printf ' %q' "$@")"
+  printf '$%s\n' "$(printf ' %q' "$@")" >&2
   "$@"
 }
