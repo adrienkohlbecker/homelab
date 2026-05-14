@@ -24,7 +24,7 @@ zpool status | tee $TMP_OUTPUT
 # any keyword signifying a degraded or broken array.
 echo "Checking pool health condition..."
 if zpool status | grep -q -e 'DEGRADED\|FAULTED\|OFFLINE\|UNAVAIL\|REMOVED\|FAIL\|DESTROYED\|corrupt\|cannot\|unrecover'; then
-  f_error "ERROR :: Detected pool health fault"
+  echo >&2 "ERROR :: Detected pool health fault"
   mail -s "$EMAIL_SUBJECT_PREFIX - Health fault" "$EMAIL_TO" <"$TMP_OUTPUT"
   exit 1
 fi
@@ -35,7 +35,7 @@ fi
 # faulty drive and run "zpool scrub" on the affected volume after resilvering.
 echo "Checking drive errors..."
 if zpool status | grep ONLINE | grep -v state | awk '{print $3 $4 $5}' | grep -qv 000; then
-  f_error "ERROR :: Detected drive errors"
+  echo >&2 "ERROR :: Detected drive errors"
   mail -s "$EMAIL_SUBJECT_PREFIX - Drive errors" "$EMAIL_TO" <"$TMP_OUTPUT"
   exit 1
 fi
@@ -59,7 +59,7 @@ ZFS_VOLUMES=$(zpool list -H -o name)
 
 for volume in $ZFS_VOLUMES; do
   if zpool status "$volume" | grep -q -e "scrub canceled"; then
-    f_error "ERROR :: Last scrub canceled on $volume"
+    echo >&2 "ERROR :: Last scrub canceled on $volume"
     mail -s "$EMAIL_SUBJECT_PREFIX - Last scrub canceled on $volume" "$EMAIL_TO" <"$TMP_OUTPUT"
     exit 1
   elif zpool status "$volume" | grep -q -e "scrub in progress\|resilver"; then
@@ -76,7 +76,7 @@ for volume in $ZFS_VOLUMES; do
   fi
 
   if [ $((CURRENT_DATE - SCRUB_DATE)) -ge $SCRUB_EXPIRE ]; then
-    f_error "ERROR :: Scrub expired on $volume"
+    echo >&2 "ERROR :: Scrub expired on $volume"
     mail -s "$EMAIL_SUBJECT_PREFIX - Scrub expired on $volume" "$EMAIL_TO" <"$TMP_OUTPUT"
     exit 1
   fi

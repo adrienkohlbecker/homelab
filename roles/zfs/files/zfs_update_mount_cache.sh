@@ -8,10 +8,12 @@ filesystem=$1
 cachefile=$2
 
 if [ -z "$filesystem" ] || [ -z "$cachefile" ]; then
-  f_fail "Usage: zfs_cull FILESYSTEM CACHEFILE"
+  echo >&2 "Usage: zfs_cull FILESYSTEM CACHEFILE"
+  exit 1
 fi
 if [ ! -f "/etc/zfs/zfs-list.cache/$cachefile" ]; then
-  f_fail "Cache file '$cachefile' does not exist"
+  echo >&2 "Cache file '$cachefile' does not exist"
+  exit 1
 fi
 
 canmount=$(zfs get -o value -pH canmount $filesystem)
