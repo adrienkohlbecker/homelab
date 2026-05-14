@@ -91,20 +91,20 @@
     buffer            on
     flush_ms          1000
 
-# CSP reports arrive as raw JSON; the http input takes the body as the
-# record verbatim, so there's no MESSAGE, no SYSLOG_IDENTIFIER, and the
-# OTLP output below sees a record with no `log` -> blank LogRecord Body
-# in HyperDX, and the UI filter pattern (LogAttributes.SYSLOG_IDENTIFIER)
-# documented at the bottom of this file doesn't reach them. Set both
-# fields here so CSP records show up in HyperDX alongside svc.* records.
-# `Set` (not `Add`) on SYSLOG_IDENTIFIER so a hostile poster who put one
-# in their JSON body can't shadow ours; `Add` on log so a future input
-# that already supplies a body wins.
+# CSP reports arrive as raw JSON. flatten-csp.lua normalises the two
+# wire formats (legacy report-uri + modern Reporting API) into a uniform
+# csp_* attribute set so HyperDX queries can filter on
+# LogAttributes['csp_blocked_uri'] etc. directly, instead of running
+# JSONExtract over a nested csp-report blob. It also synthesises a
+# scannable `log` body (CSP <directive> blocked <uri> on <document>) and
+# stamps SYSLOG_IDENTIFIER=csplogger on every record -- including
+# unparseable POSTs -- so the UI filter pattern documented at the bottom
+# of this file (LogAttributes.SYSLOG_IDENTIFIER) reaches them too.
 [FILTER]
-    Name              modify
+    Name              lua
     Match             csp.*
-    Set               SYSLOG_IDENTIFIER csplogger
-    Add               log csp_violation
+    script            /etc/fluent-bit/flatten-csp.lua
+    call              flatten_csp
 
 # Tag every record with the inventory hostname so cross-stream queries
 # in OpenObserve can still filter by host without parsing the stream
