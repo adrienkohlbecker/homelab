@@ -27,30 +27,6 @@ f_fail() {
   exit 1
 }
 
-# If F_DEBUGME is set, redirect xtrace to a private 0600 log under TMPDIR.
-# Re-source under F_DEBUGME opens a fresh log and leaks the previous fd --
-# this is opt-in debug machinery, not production logging. tmpfiles.d
-# (installed by tasks/main.yml) ages stale logs out of /tmp.
-if [[ -n "${F_DEBUGME:-}" ]]; then
-  # BASH_SOURCE[-1] is the outermost caller. Falls back to PID when
-  # sourced from `bash -c` or an interactive shell.
-  f_debug_script="${BASH_SOURCE[-1]##*/}"
-  [[ -z "$f_debug_script" || "$f_debug_script" == "bash" ]] && f_debug_script="pid$$"
-  # umask 077 inside the $(...) keeps the trace file mode 0600 -- the
-  # trace captures every expanded command line including any args that
-  # happen to carry credentials, so it must never be world-readable.
-  f_debug_log=$(umask 077 && mktemp --tmpdir \
-    "bash-${f_debug_script}-$(printf '%(%Y%m%d-%H%M%S)T' -1)-XXXXX.log")
-  exec 5>"$f_debug_log"
-  # Trace prefix: ISO timestamp + file:line + function (or "main" outside
-  # any function). ${BASH_SOURCE[0]:+...} guards against nounset at the
-  # bash -c top level where BASH_SOURCE is unset (the `if SET, expand X`
-  # form is the only paramexp that takes a value AND is set-u safe).
-  PS4='+$(printf "%(%FT%T%z)T" -1) ${BASH_SOURCE[0]:+${BASH_SOURCE[0]##*/}:}${LINENO} ${FUNCNAME[0]:-main}: '
-  BASH_XTRACEFD="5"
-  set -x
-fi
-
 # Run "$@" once; on non-zero exit, log to stderr and bump f_failed.
 # Uses an `if`/`else` rather than `set +e`/`set -e` so the caller's
 # errexit state is never mutated (the prior toggle pattern could
