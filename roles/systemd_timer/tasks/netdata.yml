@@ -1,0 +1,29 @@
+# Wire the systemd_timers charts.d collector + its native overdue alert
+# into netdata. Replaces the cron_next_run_timestamp /
+# cron_last_success_timestamp path through custom_exporter; the collector
+# reads each timer's LastTriggerUSec directly and emits an `overdue`
+# boolean per timer, with the period-aware threshold computed against
+# the per-timer metadata files written by install.yml.
+- name: Install systemd_timers charts.d collector
+  import_role:
+    name: netdata
+    tasks_from: charts_d
+  vars:
+    netdata_args:
+      name: systemd_timers
+      script: systemd_timers.chart.sh
+      conf: charts_d_systemd_timers.conf.j2
+  tags:
+    - systemd_timer
+
+- name: Configure systemd_timers netdata alerts
+  import_role:
+    name: netdata
+    tasks_from: health_copy
+  vars:
+    netdata_args:
+      src: systemd_timers_alerts.conf
+      dest: systemd_timers.conf
+      mode: "0600"
+  tags:
+    - systemd_timer

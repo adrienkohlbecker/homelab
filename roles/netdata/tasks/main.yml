@@ -329,6 +329,13 @@
   tags:
     - netdata
 
+- name: Install systemd_timer metrics
+  import_role:
+    name: systemd_timer
+    tasks_from: netdata
+  tags:
+    - netdata
+
 - name: Install lm_sensors metrics
   import_role:
     name: lm_sensors

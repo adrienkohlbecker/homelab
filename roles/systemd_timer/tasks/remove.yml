@@ -26,3 +26,13 @@
     systemd_unit_args:
       dest: "{{ systemd_timer_args.name }}.service"
       user: "{{ systemd_timer_args.user | default('root') }}"
+
+# Mirror install.yml's metadata write so a removed timer also stops
+# being polled by the netdata systemd_timers collector. state: absent
+# is no-op if the file was never created (monitor: false at install
+# time), so callers don't need to track which form they used.
+- name: remove | Drop systemd_timers metadata for {{ systemd_timer_args.name }}
+  file:
+    path: /etc/netdata/charts.d/systemd_timers.d/{{ systemd_timer_args.name }}.conf
+    state: absent
+  become: true
