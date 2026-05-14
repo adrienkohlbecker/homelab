@@ -5,7 +5,18 @@
 # change fires — e.g. keepalived adding the pihole VIP to eth0 on
 # MASTER transition.
 [server]
-allow-interfaces={{ ansible_default_ipv4.interface }}
+allow-interfaces={{ ansible_default_ipv4.interface | mandatory }}
+# Pin avahi's hostname to inventory; without this it reads
+# gethostname(2) which can drift from inventory after a DHCP/
+# cloud-init rename, and _verify's `getent ahosts {host}.local`
+# would then fail opaquely (daemon healthy, wrong answer).
+host-name={{ ansible_hostname }}
+# Drop incoming mDNS packets whose TTL != 255 -- i.e. anything that
+# crossed a router or TTL-decrementing bridge. Belt-and-braces to
+# the allow-interfaces pin: catches a sibling-iface echo path that
+# slipped past the L2 socket-membership pin, by enforcing direct-
+# link multicast at the IP layer.
+check-response-ttl=yes
 # IPv4-only stance: allow-interfaces above pins one IPv4 iface, but
 # avahi otherwise still binds :: and answers AAAA queries over IPv4
 # mDNS via publish-aaaa-on-ipv4. Make the v4-only intent explicit so
