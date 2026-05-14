@@ -35,6 +35,7 @@ service_ports:
   homepage: 3003
   homepage_alerts: 8765
   hyperdx: 5085
+  hyperdx_fluentforward: 24225
   hyperdx_otlp_http: 4318
   openobserve: 5080
 
