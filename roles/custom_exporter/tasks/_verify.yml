@@ -1,6 +1,10 @@
-# Functional verification of the metrics endpoint, the cron-job path, and both
-# netdata-presence gap-closers (netdata_context_present, netdata_collector_present).
-# Drive-state monitoring is no longer this exporter's job; see roles/hdparm.
+# Functional verification of the metrics endpoint and both netdata-presence
+# gap-closers (netdata_context_present, netdata_collector_present).
+# Drive-state monitoring moved to roles/hdparm (charts.d) and cron/timer
+# freshness moved to roles/systemd_timer (charts.d) -- neither lives here
+# anymore. What's left is the presence checks that have to live OUTSIDE
+# netdata because their whole job is to detect "this thing never appeared
+# in netdata's chart registry."
 
 - name: _verify | custom_exporter.service is loaded and active
   systemd:
@@ -119,125 +123,25 @@
       Expected collector_stale / collector_failing to be registered against
       netdata.plugin_data_collection_status charts. Got alarm keys: {{ _alarm_keys }}
 
-# In prod /var/log/jobs is owned by the cron role's monitor.yml. The test
-# fixture skips that role, so seed the directory here before dropping
-# cron-log fixtures into it.
-- name: _verify | ensure /var/log/jobs exists (cron role would create it in prod)
-  file:
-    path: /var/log/jobs
-    state: directory
-    owner: root
-    group: root
-    mode: "0777"
-  become: true
-
-# Fixtures exercise the branches of getCronLastSuccessTimestamp:
-#   _verify_hourly/_daily/_weekly/_monthly -- one per frequency switch arm
-#   _verify_overdue   -- valid daily line with a date well in the past so next<now
-#   _verify_empty     -- empty file, both metrics emitted as 0 (touched-but-never-run)
-#   _verify_malformed -- unparseable date; scrape returns error, no gauge emitted
-#                        for this job, exporter_errors counter increments each tick
-#   _verify_badfreq   -- unknown frequency token; same error path as malformed-date
-- name: _verify | seed cron-job fixtures
-  copy:
-    content: "{{ item.content }}"
-    dest: "/var/log/jobs/{{ item.name }}"
-    owner: root
-    group: root
-    mode: "0644"
-  loop:
-    # Use "now" rather than a literal date so the +retry*period next_run always
-    # lands clearly in the future regardless of when the suite runs.
-    - { name: _verify_hourly, content: "hourly {{ ansible_date_time.iso8601 }}\n" }
-    - { name: _verify_daily, content: "daily {{ ansible_date_time.iso8601 }}\n" }
-    - { name: _verify_weekly, content: "weekly {{ ansible_date_time.iso8601 }}\n" }
-    - { name: _verify_monthly, content: "monthly {{ ansible_date_time.iso8601 }}\n" }
-    - { name: _verify_overdue, content: "daily 2024-01-01T00:00:00+00:00\n" }
-    - { name: _verify_empty, content: "" }
-    - { name: _verify_malformed, content: "daily not-a-date\n" }
-    - { name: _verify_badfreq, content: "yearly 2026-05-13T12:00:00+00:00\n" }
-  become: true
-
-# Goroutine scrapes every 5s -- poll until the well-formed jobs have been
-# picked up. The malformed/badfreq fixtures are checked in the next tasks.
-- name: _verify | metrics reflect the well-formed cron fixtures (all four frequencies)
-  uri:
-    url: http://localhost:{{ service_ports.custom_exporter }}/metrics
-    return_content: true
-  register: _verify_cron
-  retries: 15
-  delay: 2
-  until: >-
-    _verify_cron.status == 200
-    and 'cron_last_success_timestamp{job="_verify_hourly"}' in _verify_cron.content
-    and 'cron_last_success_timestamp{job="_verify_daily"}' in _verify_cron.content
-    and 'cron_last_success_timestamp{job="_verify_weekly"}' in _verify_cron.content
-    and 'cron_last_success_timestamp{job="_verify_monthly"}' in _verify_cron.content
-    and 'cron_next_run_timestamp{job="_verify_overdue"}' in _verify_cron.content
-    and 'cron_last_success_timestamp{job="_verify_empty"} 0' in _verify_cron.content
-    and 'cron_next_run_timestamp{job="_verify_empty"} 0' in _verify_cron.content
-
-# Each frequency arm picks a different time.Add/AddDate call -- assert each
-# next_run is strictly future relative to its last_success, so a regression
-# that swaps two arms or off-by-one's the duration shows up here.
-- name: _verify | next_run > last_success for each frequency
-  vars:
-    _last: >-
-      {{ (_verify_cron.content
-          | regex_findall('cron_last_success_timestamp\{job="_verify_' + item + '"\} ([0-9.e+-]+)')
-          | first | default('0') | float | int) }}
-    _next: >-
-      {{ (_verify_cron.content
-          | regex_findall('cron_next_run_timestamp\{job="_verify_' + item + '"\} ([0-9.e+-]+)')
-          | first | default('0') | float | int) }}
-    _now: "{{ ansible_date_time.epoch | int }}"
-  assert:
-    that:
-      - _last | int > 0
-      - _next | int > _last | int
-      - _next | int > _now | int
-    fail_msg: >-
-      _verify_{{ item }}: last={{ _last }} next={{ _next }} now={{ _now }};
-      expected next > last > 0 and next > now
-  loop:
-    - hourly
-    - daily
-    - weekly
-    - monthly
-
-# The malformed fixture's parse failure surfaces as an exporter_errors tick
-# every 5s -- this is what custom_exporter_errors alert in alerts.conf fires on.
-- name: _verify | exporter_errors increments when a job log fails to parse
-  uri:
-    url: http://localhost:{{ service_ports.custom_exporter }}/metrics
-    return_content: true
-  register: _verify_errors
-  retries: 15
-  delay: 2
-  until: >-
-    _verify_errors.status == 200
-    and (_verify_errors.content
-         | regex_findall('^exporter_errors ([0-9.e+-]+)$', multiline=True)
-         | first | default('0') | float) > 0
-
-# The malformed-date and invalid-frequency branches both `continue` before
-# setting either gauge, so neither sibling label must appear -- the exporter
-# has to skip the bad job rather than emit a misleading 0.
-- name: _verify | malformed/badfreq jobs have no cron_* gauges
-  assert:
-    that:
-      - "'cron_last_success_timestamp{job=\"_verify_malformed\"}' not in _verify_errors.content"
-      - "'cron_next_run_timestamp{job=\"_verify_malformed\"}' not in _verify_errors.content"
-      - "'cron_last_success_timestamp{job=\"_verify_badfreq\"}' not in _verify_errors.content"
-      - "'cron_next_run_timestamp{job=\"_verify_badfreq\"}' not in _verify_errors.content"
-
 # gather_last_iteration_timestamp is the goroutine heartbeat -- guards the
 # wedged-loop scenario where the HTTP server keeps serving but the gather
 # routine has stalled. Should be within the last few seconds of "now".
 - name: _verify | gather heartbeat is recent
+  uri:
+    url: http://localhost:{{ service_ports.custom_exporter }}/metrics
+    return_content: true
+  register: _verify_heartbeat
+  retries: 15
+  delay: 2
+  until: >-
+    _verify_heartbeat.status == 200
+    and (_verify_heartbeat.content
+         | regex_findall('^gather_last_iteration_timestamp ([0-9.e+-]+)$', multiline=True)
+         | first | default('0') | float | int) > 0
+- name: _verify | assert heartbeat within 30s of now
   vars:
     _heartbeat: >-
-      {{ (_verify_errors.content
+      {{ (_verify_heartbeat.content
           | regex_findall('^gather_last_iteration_timestamp ([0-9.e+-]+)$', multiline=True)
           | first | default('0') | float | int) }}
     _now: "{{ ansible_date_time.epoch | int }}"
@@ -248,33 +152,3 @@
     fail_msg: >-
       gather_last_iteration_timestamp is {{ _heartbeat }};
       expected within 30s of now ({{ _now }})
-
-- name: _verify | overdue cron next_run is in the past (alert path fires)
-  vars:
-    _next: >-
-      {{ (_verify_cron.content
-          | regex_findall('cron_next_run_timestamp\{job="_verify_overdue"\} ([0-9.e+-]+)')
-          | first | default('0') | float | int) }}
-    _now: "{{ ansible_date_time.epoch | int }}"
-  assert:
-    that:
-      - _next | int > 0
-      - _next | int < _now | int
-    fail_msg: >-
-      cron_next_run_timestamp{job="_verify_overdue"} is {{ _next }};
-      expected > 0 and < now ({{ _now }})
-
-- name: _verify | remove cron-job fixtures
-  file:
-    path: "/var/log/jobs/{{ item }}"
-    state: absent
-  loop:
-    - _verify_hourly
-    - _verify_daily
-    - _verify_weekly
-    - _verify_monthly
-    - _verify_overdue
-    - _verify_empty
-    - _verify_malformed
-    - _verify_badfreq
-  become: true
