@@ -65,7 +65,20 @@ function shape_otlp(tag, ts, record)
         end
     end
 
-    record["otlp"] = { attributes = attrs }
+    local otlp = { attributes = attrs }
+    -- Promote severity fields if an upstream filter (e.g. flatten-csp.lua
+    -- for CSP records) set them at the top level. fluent-bit's OTLP
+    -- output reads severity_text / severity_number from inside the
+    -- metadata sub-map, not from the record root. Leaving them unset
+    -- here means HyperDX's transform processor will fall back to
+    -- body-keyword inference for that record.
+    if record["severity_text"] ~= nil then
+        otlp.severity_text = record["severity_text"]
+    end
+    if record["severity_number"] ~= nil then
+        otlp.severity_number = record["severity_number"]
+    end
+    record["otlp"] = otlp
 
     local resource_attrs = { ["service.name"] = service_from_tag(tag) }
     local host = record["host"]
