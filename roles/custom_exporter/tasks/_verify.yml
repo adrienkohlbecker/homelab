@@ -1,7 +1,6 @@
-# Functional verification of the metrics endpoint, the cron-job path, and the
-# netdata_context_present "ghost chart" gap-closer. Drive-state (hdparm) short-
-# circuits on the box fixture (no rotational disks); netdata_collectors=[] so
-# that path short-circuits too.
+# Functional verification of the metrics endpoint, the cron-job path, and both
+# netdata-presence gap-closers (netdata_context_present, netdata_collector_present).
+# Drive-state (hdparm) short-circuits on the box fixture (no rotational disks).
 
 - name: _verify | custom_exporter.service is loaded and active
   systemd:
@@ -89,6 +88,36 @@
     fail_msg: >-
       Expected liveness_system_cpu to be registered and liveness_ghost to be
       silently dropped (ghost chart doesn't exist). Got alarm keys: {{ _alarm_keys }}
+
+# Collector presence mirrors context presence: the configured-but-never-
+# instantiated collector (go.d:collector:fake_plugin:fake_job) lands as 0.
+# Native staleness/failure templates can't catch that case because they bind
+# at parse time to charts that exist.
+- name: _verify | netdata_collector_present reflects chart-registry state
+  uri:
+    url: http://localhost:{{ service_ports.custom_exporter }}/metrics
+    return_content: true
+  register: _verify_coll_present
+  retries: 15
+  delay: 2
+  until: >-
+    _verify_coll_present.status == 200
+    and 'netdata_collector_present{collector="go.d:collector:fake_plugin:fake_job"} 0' in _verify_coll_present.content
+
+# Confirm the native collector_stale / collector_failing templates registered
+# against at least one real go.d collector instance. The test fixture has
+# minimal go.d activity, but core collectors (logind, systemdunits, zfspool)
+# always run, so netdata.plugin_data_collection_status has instances.
+- name: _verify | collector_stale + collector_failing templates instantiated
+  vars:
+    _alarm_keys: "{{ (_verify_alarms.content | from_json).alarms.keys() | list }}"
+  assert:
+    that:
+      - _alarm_keys | select('search', 'collector_stale') | list | length > 0
+      - _alarm_keys | select('search', 'collector_failing') | list | length > 0
+    fail_msg: >-
+      Expected collector_stale / collector_failing to be registered against
+      netdata.plugin_data_collection_status charts. Got alarm keys: {{ _alarm_keys }}
 
 # In prod /var/log/jobs is owned by the cron role's monitor.yml. The test
 # fixture skips that role, so seed the directory here before dropping
