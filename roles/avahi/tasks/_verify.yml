@@ -25,24 +25,32 @@
 # in allow-interfaces, socket-option bug) which the getent above
 # could still mask via the kernel's loopback path for local queries.
 - name: _verify | avahi joined 224.0.0.251 on the pinned iface
-  command: ip -o maddr show dev {{ ansible_default_ipv4.interface }}
+  command: ip -j maddr show dev {{ ansible_default_ipv4.interface }}
   register: _verify_maddr
   changed_when: false
   failed_when: >-
     _verify_maddr.rc != 0
-    or '224.0.0.251' not in _verify_maddr.stdout
+    or '224.0.0.251' not in
+       ((_verify_maddr.stdout | from_json | first).maddr
+        | selectattr('family', 'defined')
+        | selectattr('family', 'equalto', 'inet')
+        | map(attribute='address') | list)
 
 # Proves the device-info.service XML loaded and the templated model
 # field rendered through to a TXT record. `-p` parseable, `-r`
 # resolve (TXT records appear on `=` lines), `-t` terminate after
 # one cycle. Asserts the resolved row's iface column equals the
-# pinned iface AND no resolved row for this host comes back on any
-# *other* iface -- the latter catches a regression that publishes
-# through more than one iface, the failure mode the role exists to
-# prevent. (Weak on single-NIC QEMU box but real on prod.) Pinned
+# pinned iface and the templated model field came through. Pinned
 # to ansible_hostname in the service-name column so a peer
 # publishing the same default model can't false-positive the test.
-- name: _verify | device-info service is announced on the pinned iface (only) with the configured model
+#
+# Cross-iface leak is the failure mode the role exists to prevent,
+# but every harness variant (box/lab/pug/minimal) is single-NIC
+# QEMU -- a negative "no other iface" assertion would be
+# tautologically true and not regress on a real bug. The
+# allow-interfaces pin + check-response-ttl in the conf are the
+# enforcement; this probe is functional-positive only.
+- name: _verify | device-info service is announced on the pinned iface with the configured model
   command: avahi-browse -prt _device-info._tcp
   register: _verify_browse
   retries: 20
@@ -53,7 +61,4 @@
         | select('match', '^=;' + ansible_default_ipv4.interface + ';IPv4;' + ansible_hostname + ';')
         | select('search', '"model=' + avahi_device_model + '"')
         | list | length > 0
-    - _verify_browse.stdout_lines
-        | select('match', '^=;(?!' + ansible_default_ipv4.interface + ';).*;' + ansible_hostname + ';')
-        | list | length == 0
   changed_when: false
