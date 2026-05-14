@@ -161,7 +161,6 @@ netdata_collectors:
   - go.d:collector:nginx:local
   - go.d:collector:nvme:nvme
   # - go.d:collector:pihole:local
-  - go.d:collector:prometheus:custom
   - go.d:collector:prometheus:journald
   - go.d:collector:prometheus:keepalived_exporter_local
   - go.d:collector:prometheus:minio
