@@ -59,7 +59,7 @@ table ip homelab {
         # Wireguard ingress only on the WAN iface. Pinning iif means
         # an attacker on a future LAN bridge can't speculatively send
         # to udp/51820 from inside.
-        iifname "{{ ansible_default_ipv4.interface }}" udp dport 51820 accept comment "wireguard (WAN ingress only)"
+        iifname "{{ default_interface }}" udp dport 51820 accept comment "wireguard (WAN ingress only)"
 
         # Transmission BitTorrent peer port — WAN-only, both TCP (peer
         # wire protocol) and UDP (µTP + DHT). The UDM port-forwards
@@ -68,7 +68,7 @@ table ip homelab {
         # both protocols. Without these rules, peers can find us via
         # tracker announces but can't actually connect — visible as
         # external SRC=… DPT=51413 drops in INPUT.
-        iifname "{{ ansible_default_ipv4.interface }}" meta l4proto { tcp, udp } th dport 51413 accept comment "transmission BT peers (WAN ingress)"
+        iifname "{{ default_interface }}" meta l4proto { tcp, udp } th dport 51413 accept comment "transmission BT peers (WAN ingress)"
 
         # Mosh sessions originate from admin clients on the home LAN
         # or via wireguard, never from raw WAN.
@@ -109,7 +109,7 @@ table ip homelab {
         # keepalived.conf.j2). Scope VRRP to LAN ingress + LAN saddr
         # so nothing on WAN / wg0 / podman bridges can inject proto
         # 112 packets to churn election state.
-        iifname "{{ ansible_default_ipv4.interface }}" ip saddr {{ site_subnets.home }} ip protocol vrrp accept comment "keepalived (VRRP, LAN unicast)"
+        iifname "{{ default_interface }}" ip saddr {{ site_subnets.home }} ip protocol vrrp accept comment "keepalived (VRRP, LAN unicast)"
 
         # LAN broadcast/discovery noise. Every entry here was identified
         # from a 24h journal sweep of the catch-all log+drop below; each
@@ -147,8 +147,8 @@ table ip homelab {
     # (podman0 = default bridge, podman1+ = named bridges allocated
     # from podman_bridge_pool). nft's prefix-wildcard `iifname "podman*"`
     # collapses the per-bridge fan-out into one rule. The WAN iface
-    # (eth0 on prod, enpXsY on test VMs) is templated via
-    # ansible_default_ipv4.interface because it does vary per host.
+    # (eth0 on prod, enpXsY on test VMs) is templated via the
+    # group_vars `default_interface` because it does vary per host.
     chain forward {
         type filter hook forward priority filter; policy drop;
 
@@ -171,7 +171,7 @@ table ip homelab {
         # hardcoding host-specific iface names. Cross-bridge container
         # traffic still has to go through the DNAT-reach rule below;
         # direct podman → podman is still dropped.
-        iifname "wg0" oifname "{{ ansible_default_ipv4.interface }}" accept comment "wg → WAN"
+        iifname "wg0" oifname "{{ default_interface }}" accept comment "wg → WAN"
         iifname "podman*" oifname != "podman*" accept comment "podman → external (WAN/LAN/wireguard)"
 
         # Reach containers via netavark's DNAT. Three ingress paths,
@@ -189,7 +189,7 @@ table ip homelab {
         #     semantics, even if another chain returned accept).
         # WAN/wg0 scoping still prevents reachability from any future
         # interface (guest VLAN, mgmt net) we haven't trusted.
-        iifname { "{{ ansible_default_ipv4.interface }}", "wg0" } oifname "podman*" \
+        iifname { "{{ default_interface }}", "wg0" } oifname "podman*" \
             ct status dnat accept comment "Reach containers (LAN + wireguard ingress)"
         iifname "podman*" oifname "podman*" ct status dnat \
             accept comment "container → VIP → container (cross- or same-bridge DNAT)"
@@ -208,7 +208,7 @@ table ip homelab {
     # wireguard clients reaching the internet through us.
     chain postrouting {
         type nat hook postrouting priority srcnat; policy accept;
-        ip saddr {{ podman_default_network }} oifname "{{ ansible_default_ipv4.interface }}" masquerade comment "NAT container egress"
-        ip saddr {{ wireguard_subnet }} oifname "{{ ansible_default_ipv4.interface }}" masquerade comment "NAT wireguard-client egress"
+        ip saddr {{ podman_default_network }} oifname "{{ default_interface }}" masquerade comment "NAT container egress"
+        ip saddr {{ wireguard_subnet }} oifname "{{ default_interface }}" masquerade comment "NAT wireguard-client egress"
     }
 }

@@ -68,6 +68,12 @@ mirror_pypi: 'https://{{ nexus_url ~ "/repository/pypi" if nexus_url else "pypi.
 ubuntu_mirror: '{{ (ansible_architecture == "aarch64") | ternary(mirror_apt_ubuntu_ports ~ "/", mirror_apt_ubuntu_archive ~ "/") }}'
 ubuntu_mirror_security: '{{ (ansible_architecture == "aarch64") | ternary(mirror_apt_ubuntu_ports ~ "/", mirror_apt_ubuntu_security ~ "/") }}'
 
+# Primary uplink iface. `| mandatory` fails the play loud at use-site
+# if facts caught no default route (default-via-wg0/tun0 host, or no
+# default at fact-gather) instead of silently rendering empty in
+# nft/avahi/smb configs.
+default_interface: "{{ ansible_default_ipv4.interface | mandatory }}"
+
 macvlan_parent_gateway: "{{ ansible_facts[macvlan_parent].ipv4.network | ansible.utils.ipmath(1) }}"
 macvlan_parent_subnet: "{{ ansible_facts[macvlan_parent].ipv4.network }}/{{ ansible_facts[macvlan_parent].ipv4.prefix }}"
 macvlan_host_ip: "{{ macvlan_subnet | ansible.utils.ipmath(1) }}"
