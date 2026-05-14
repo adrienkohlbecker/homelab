@@ -105,3 +105,15 @@
   register: _verify_service_post
   failed_when: _verify_service_post.status.ActiveState != "active"
   become: true
+
+# Anonymized DNSCrypt: at startup dnscrypt-proxy logs a line per (server, relay)
+# pair it has registered. Absence means the server doesn't expose the
+# "supports-relay" flag in its stamp, or the relay name is unknown -- in either
+# case queries silently fall back to direct (still encrypted, but the resolver
+# sees our IP), which defeats the point. Grep the journal to catch that.
+- name: _verify | dnscrypt-proxy is routing queries via anonymized relays
+  command: journalctl --no-pager -u dnscrypt-proxy.service
+  register: _verify_journal
+  changed_when: false
+  become: true
+  failed_when: "'Anonymized DNS' not in _verify_journal.stdout"

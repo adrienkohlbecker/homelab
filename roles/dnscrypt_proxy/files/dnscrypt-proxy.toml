@@ -31,3 +31,22 @@ ignore_system_dns = true
   minisign_key = 'RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3'
   refresh_delay = 72
   prefix = ''
+
+  # v3 is the first revision that ships relays.md as a separate file; v2
+  # public-resolvers.md above continues to work for resolver stamps. Same
+  # minisign key signs both lists.
+  [sources.'relays']
+  url = 'https://download.dnscrypt.info/resolvers-list/v3/relays.md'
+  cache_file = '/var/cache/dnscrypt-proxy/relays.md'
+  minisign_key = 'RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3'
+  refresh_delay = 72
+  prefix = ''
+
+# Relay encrypted DNSCrypt queries through a third party so the resolver
+# (fdn / scaleway-fr) sees the relay's IP, and the relay sees only ciphertext.
+# Excludes anon-scaleway* since scaleway-fr would then be both endpoints.
+# server_name='*' applies the via list to every server in server_names.
+[anonymized_dns]
+routes = [
+  { server_name = '*', via = ['anon-cs-fr', 'anon-cs-belgium', 'anon-cs-ch'] },
+]
