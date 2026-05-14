@@ -4,13 +4,18 @@
 #  - include_role (not import_role): systemd_timer/install.yml templates
 #    inner task names from systemd_timer_args.name; with import_role
 #    those names expand before `item` is bound for the iteration.
-#  - set_fact materializes systemd_timer_args at execution time: a
+#  - set_fact materializes systemd_timer_args directly (not via an
+#    intermediate name + task-level `vars:` on the include_role). A
 #    task-level `vars:` dict containing `{{ item }}` triggers a noisy
-#    parse-time templating warning (item is loop-only). set_fact's RHS
-#    is evaluated per task-run so item is in scope.
+#    parse-time templating warning (item is loop-only); set_fact's RHS
+#    evaluates per task-run so item is in scope. Going through a
+#    second name + `vars: { systemd_timer_args: "{{ _other }}" }` also
+#    fails -- the include_role's vars scope doesn't pick up the host
+#    fact from the prior task, so the inner role sees the indirect
+#    name undefined. Set the role's own input fact name directly.
 - name: _trim_timer | Build systemd_timer_args
   set_fact:
-    _trim_timer_args:
+    systemd_timer_args:
       name: "zfs_trim_{{ item }}"
       description: "Weekly ZFS trim for {{ item }}"
       frequency: weekly
@@ -21,5 +26,3 @@
   include_role:
     name: systemd_timer
     tasks_from: install
-  vars:
-    systemd_timer_args: "{{ _trim_timer_args }}"
