@@ -233,7 +233,7 @@
 - name: _verify | OTLP-end-to-end | fetch CSP row as JSON
   command: >-
     podman exec hyperdx curl --fail -s --max-time 5
-    "http://localhost:8123/?query=SELECT+Body,SeverityText,toUInt32(SeverityNumber)+AS+SeverityNumber,ServiceName,LogAttributes%5B'csp_blocked_uri'%5D+AS+csp_blocked_uri,LogAttributes%5B'csp_format'%5D+AS+csp_format,LogAttributes%5B'csp_violated_directive'%5D+AS+csp_violated_directive,LogAttributes%5B'csp_effective_directive'%5D+AS+csp_effective_directive,LogAttributes%5B'SYSLOG_IDENTIFIER'%5D+AS+syslog_identifier,LogAttributes%5B'host'%5D+AS+log_host,ResourceAttributes%5B'service.name'%5D+AS+resource_service_name,ResourceAttributes%5B'host.name'%5D+AS+resource_host_name+FROM+default.otel_logs+WHERE+LogAttributes%5B'csp_blocked_uri'%5D+LIKE+'%25{{ csplogger_otlp_marker }}%25'+ORDER+BY+Timestamp+DESC+LIMIT+1+FORMAT+JSONEachRow"
+    "http://localhost:8123/?query=SELECT+Body,SeverityText,toUInt32(SeverityNumber)+AS+SeverityNumber,ServiceName,LogAttributes%5B'csp_blocked_uri'%5D+AS+csp_blocked_uri,LogAttributes%5B'csp_format'%5D+AS+csp_format,LogAttributes%5B'csp_violated_directive'%5D+AS+csp_violated_directive,LogAttributes%5B'csp_effective_directive'%5D+AS+csp_effective_directive,LogAttributes%5B'host'%5D+AS+log_host,ResourceAttributes%5B'service.name'%5D+AS+resource_service_name,ResourceAttributes%5B'host.name'%5D+AS+resource_host_name+FROM+default.otel_logs+WHERE+LogAttributes%5B'csp_blocked_uri'%5D+LIKE+'%25{{ csplogger_otlp_marker }}%25'+ORDER+BY+Timestamp+DESC+LIMIT+1+FORMAT+JSONEachRow"
   register: csplogger_otlp_row
   changed_when: false
   become: true
@@ -256,7 +256,6 @@
       - "row.csp_format == 'legacy'"
       - "row.csp_violated_directive == 'script-src'"
       - "row.csp_effective_directive == 'script-src-elem'"
-      - "row.syslog_identifier == 'csplogger'"
       - "row.log_host == inventory_hostname"
       - "row.resource_service_name == 'csplogger'"
       - "row.resource_host_name == inventory_hostname"

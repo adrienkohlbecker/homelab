@@ -22,8 +22,10 @@
 -- Body has shape:
 --   CSP <effective-directive> blocked <blocked-uri> on <document-uri> {<csp_json>}
 --
--- where <csp_json> contains SYSLOG_IDENTIFIER, csp_format, host, and
--- the populated csp_* fields.
+-- where <csp_json> contains csp_format, host, and the populated csp_*
+-- fields. Service identity is carried in ResourceAttributes (set by
+-- otlp-shape.lua); no need to duplicate it as a LogAttribute via the
+-- old journald-style SYSLOG_IDENTIFIER trick.
 --
 -- Legacy report-uri body  : {"csp-report": {"blocked-uri": "...", ...}}
 -- Reporting API body      : [{"type":"csp-violation","body":{"blockedURL":"..."}, ...}]
@@ -80,10 +82,10 @@ function flatten_csp(tag, ts, record)
         format = "reporting-api"
     else
         -- Unrecognised shape; emit a tagged body so the record is still
-        -- discoverable under SYSLOG_IDENTIFIER=csplogger with severity=warn,
+        -- discoverable under ServiceName=csplogger with severity=warn,
         -- but with no csp_* attributes.
         record["log"] = 'csplogger received malformed POST '
-            .. '{"SYSLOG_IDENTIFIER":"csplogger","csp_format":"unknown",'
+            .. '{"csp_format":"unknown",'
             .. '"host":"' .. jsonesc(host_from_tag(tag)) .. '"}'
         return 1, ts, record
     end
@@ -107,7 +109,6 @@ function flatten_csp(tag, ts, record)
     -- LogAttributes set stays sparse and queries don't trip over
     -- empty strings.
     local parts = {
-        '"SYSLOG_IDENTIFIER":"csplogger"',
         '"csp_format":"' .. jsonesc(format) .. '"',
         '"host":"' .. jsonesc(host_from_tag(tag)) .. '"',
     }
