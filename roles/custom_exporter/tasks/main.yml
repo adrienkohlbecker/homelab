@@ -1,12 +1,3 @@
-- name: Install Go
-  apt:
-    pkg:
-      - golang
-    cache_valid_time: 3600
-  become: true
-  tags:
-    - custom_exporter
-
 - name: Create source directory
   file:
     dest: /opt/custom_exporter
@@ -19,29 +10,15 @@
   tags:
     - custom_exporter
 
-- name: Copy files
+- name: Install custom_exporter
   copy:
-    src: "{{ item }}"
-    dest: /opt/custom_exporter/{{ item }}
+    src: main.py
+    dest: /opt/custom_exporter/main.py
     owner: root
     group: root
-    mode: "0644"
+    mode: "0755"
     backup: true
-  loop:
-    - go.mod
-    - go.sum
-    - main.go
   register: custom_exporter_files
-  become: true
-  tags:
-    - custom_exporter
-
-- name: Compile source
-  command: go build main.go
-  args:
-    chdir: /opt/custom_exporter
-  changed_when: true
-  when: not (ansible_check_mode and custom_exporter_dir.changed) and custom_exporter_files.changed
   become: true
   tags:
     - custom_exporter
