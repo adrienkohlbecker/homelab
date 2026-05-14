@@ -1,17 +1,24 @@
-# Per-pool wrapper for the include_tasks loop in main.yml. include_role
-# (not import_role) because systemd_timer/install.yml templates inner
-# task names from systemd_timer_args.name; under import_role the
-# expansion chain `systemd_timer_args.name` → `"zfs_trim_{{ item }}"`
-# → `item` trips at parse time even though include_tasks has item in
-# scope at execution time. include_role is dynamic, so the inner names
-# render at task-run time when `item` really is bound.
-- name: _trim_timer | Install zfs_trim timer for {{ item }}
+# Per-pool wrapper for the include_tasks loop in main.yml. Two
+# unfixable-with-the-obvious-shape constraints meet here:
+#
+#  - include_role (not import_role): systemd_timer/install.yml templates
+#    inner task names from systemd_timer_args.name; with import_role
+#    those names expand before `item` is bound for the iteration.
+#  - set_fact materializes systemd_timer_args at execution time: a
+#    task-level `vars:` dict containing `{{ item }}` triggers a noisy
+#    parse-time templating warning (item is loop-only). set_fact's RHS
+#    is evaluated per task-run so item is in scope.
+- name: _trim_timer | Build systemd_timer_args
+  set_fact:
+    _trim_timer_args:
+      name: "zfs_trim_{{ item }}"
+      description: "Weekly ZFS trim for {{ item }}"
+      on_calendar: "Thu *-*-* 00:05:00"
+      exec_start: "/usr/local/bin/run_job weekly zfs_trim_{{ item }} /sbin/zpool trim {{ item }}"
+
+- name: _trim_timer | Install zfs_trim timer
   include_role:
     name: systemd_timer
     tasks_from: install
   vars:
-    systemd_timer_args:
-      name: zfs_trim_{{ item }}
-      description: Weekly ZFS trim for {{ item }}
-      on_calendar: "Thu *-*-* 00:05:00"
-      exec_start: /usr/local/bin/run_job weekly zfs_trim_{{ item }} /sbin/zpool trim {{ item }}
+    systemd_timer_args: "{{ _trim_timer_args }}"
