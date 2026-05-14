@@ -1,13 +1,3 @@
-- name: Install dependencies
-  apt:
-    package:
-      - cron # for cron module
-    cache_valid_time: 3600
-  become: true
-  register: pihole_apt_deps
-  tags:
-    - pihole
-
 - name: Add pihole group
   group:
     name: pihole
@@ -153,26 +143,15 @@
   tags:
     - pihole
 
-- name: Schedule updating lists
-  when: not (ansible_check_mode and pihole_apt_deps.changed)
-  cron:
-    name: pihole_list_update
-    hour: 0
-    minute: 47
-    weekday: 7
-    job: /usr/local/bin/run_job weekly pihole_list_update {{ pihole_list_update_cmd }}
-    user: root
-    cron_file: ansible_pihole_list_update
-  become: true
-  tags:
-    - pihole
-
-- name: Monitor list update script
+- name: Schedule the pihole_list_update timer
   import_role:
-    name: cron
-    tasks_from: monitor
+    name: systemd_timer
   vars:
-    cron_entry: pihole_list_update
+    systemd_timer_args:
+      name: pihole_list_update
+      description: Weekly pihole adlist/whitelist refresh
+      on_calendar: "Sun *-*-* 00:47:00"
+      exec_start: /usr/local/bin/run_job weekly pihole_list_update {{ pihole_list_update_cmd }}
   tags:
     - pihole
 
