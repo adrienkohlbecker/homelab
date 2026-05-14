@@ -17,7 +17,8 @@ done
 
 # fail if any of the above failed
 if [ $f_failed -ne 0 ]; then
-  f_fail "Error: Some backup steps have failed"
+  echo >&2 "Error: Some backup steps have failed"
+  exit 1
 fi
 
 echo "Done"
