@@ -99,11 +99,27 @@
   tags:
     - samba
 
-- name: Restart avahi
-  when: avahi_smb.changed
+# Avahi reloads /etc/avahi/services/* via SIGHUP; reload (not
+# restart) keeps the LAN's mDNS cache warm. Skipped when the unit
+# isn't already active -- samba doesn't own avahi-daemon's
+# lifecycle, so don't conjure it up here.
+- name: Check avahi-daemon state
   systemd:
     name: avahi-daemon
-    state: restarted
+  register: avahi_state
+  failed_when: false
+  changed_when: false
+  become: true
+  tags:
+    - samba
+
+- name: Signal avahi to reload its services dir
+  when:
+    - avahi_smb.changed
+    - avahi_state.status.ActiveState | default('') == 'active'
+  systemd:
+    name: avahi-daemon
+    state: reloaded
   become: true
   tags:
     - samba
