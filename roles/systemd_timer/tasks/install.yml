@@ -9,11 +9,11 @@
 #                     to the binary it invokes.
 #   on_calendar       required; OnCalendar= spec (e.g.
 #                     `*-*-* 00:55:00`, `Sun *-*-* 00:47:00`).
-#   frequency         required iff sentinel: true; one of
-#                     hourly/daily/weekly/monthly. Written verbatim
-#                     into /var/log/jobs/<name> on ExecStart success;
-#                     custom_exporter._bump() parses it to compute the
-#                     next-run timestamp, so the word matters.
+#   frequency         required iff monitor: true; one of
+#                     hourly/daily/weekly/monthly. Drives the
+#                     period_secs metadata read by the netdata
+#                     systemd_timers charts.d collector to detect
+#                     "overdue" timers (last trigger > 2 * period).
 #   description       optional; falls back to name.
 #   randomized_delay_sec  optional; emits RandomizedDelaySec=<n>.
 #   timeout_start_sec optional; emits TimeoutStartSec=<v>. Default '1h'
@@ -22,17 +22,16 @@
 #                     job legitimately needs longer. (RuntimeMaxSec=
 #                     is the natural-sounding name but has no effect
 #                     under Type=oneshot; TimeoutStartSec bounds
-#                     ExecStart + ExecStartPost together for oneshot.)
+#                     ExecStart for oneshot.)
 #   timeout_stop_sec  optional; emits TimeoutStopSec=<v>. Default '30s' —
 #                     grace period between SIGTERM and SIGKILL when a
 #                     run is being terminated (by TimeoutStartSec or
 #                     by manual systemctl stop).
-#   sentinel          default true; pre-creates /var/log/jobs/<name>
-#                     so custom_exporter sees the job before its first
-#                     run completes, and the .service unit gets an
-#                     ExecStartPost that updates it on success. Set
-#                     false for one-off timers not monitored by the
-#                     exporter (e.g. the role's own _verify fixture).
+#   monitor           default true; writes the per-timer metadata file
+#                     the netdata systemd_timers collector consumes
+#                     for the overdue check. Set false for one-off
+#                     timers that don't need cadence monitoring (e.g.
+#                     the role's own _verify fixtures).
 #   user              default 'root'; non-root drives the named user's
 #                     user manager (linger must already be on).
 #
@@ -43,38 +42,22 @@
 - name: install | Resolve caller defaults for {{ systemd_timer_args.name }}
   set_fact:
     _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
-    _systemd_timer_sentinel: "{{ systemd_timer_args.sentinel | default(true) }}"
+    _systemd_timer_monitor: "{{ systemd_timer_args.monitor | default(true) }}"
 
-# The frequency word is written verbatim into /var/log/jobs/<name> and
-# parsed by custom_exporter._bump() to compute the next-run timestamp.
-# An unknown value silently breaks the cron_*_timestamp metrics for the
-# job (exporter ticks errors, alert never fires) -- fail loud at install
-# time instead. Only gated when sentinel is on; one-off timers
-# (sentinel: false) legitimately have no frequency.
+# The frequency word maps to period_secs in the netdata-side metadata
+# file; an unknown value would silently disable the overdue check for
+# the job. Fail loud at install time instead. Only gated when monitor
+# is on; one-off timers (monitor: false) legitimately have no cadence.
 - name: install | Validate frequency for {{ systemd_timer_args.name }}
-  when: _systemd_timer_sentinel
+  when: _systemd_timer_monitor
   assert:
     that:
       - systemd_timer_args.frequency is defined
       - systemd_timer_args.frequency in ['hourly', 'daily', 'weekly', 'monthly']
     fail_msg: >-
       systemd_timer {{ systemd_timer_args.name }}: frequency must be one of
-      hourly/daily/weekly/monthly when sentinel is enabled (got
+      hourly/daily/weekly/monthly when monitor is enabled (got
       {{ systemd_timer_args.frequency | default('<unset>') }}).
-
-# /var/log/jobs is the metric-side surface custom_exporter scrapes;
-# every sentinel-emitting unit's ExecStartPost writes here. Owning the
-# directory in systemd_timer (not a separate cron role) keeps the
-# helper self-contained.
-- name: install | Ensure /var/log/jobs directory exists
-  when: _systemd_timer_sentinel
-  file:
-    path: /var/log/jobs
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
 
 # Wrapper script used by every timer's ExecStart so stderr lines land
 # in the journal at priority err. Install before the unit so
@@ -110,25 +93,42 @@
       dest: "{{ systemd_timer_args.name }}.timer"
       user: "{{ _systemd_timer_user }}"
 
-# Pre-create the /var/log/jobs/<name> sentinel so custom_exporter's
-# directory scan picks up the job (with last_success=0) before its
-# first run completes -- otherwise the alert "this job hasn't run
-# recently" has nothing to evaluate against until the timer fires.
-# Skip in check-mode-on-fresh-host: the directory-create task above
-# only *reports* creating /var/log/jobs without actually making it, so
-# touching a child here would fail with "no such file or directory".
-- name: install | Pre-create sentinel for {{ systemd_timer_args.name }}
-  when:
-    - _systemd_timer_sentinel
-    - not ansible_check_mode
+# Drop the per-timer metadata file the netdata systemd_timers collector
+# consumes. Its mtime doubles as "installed_at" -- the collector counts
+# from there until the first trigger so a freshly-installed timer
+# doesn't immediately alarm overdue. period_secs is computed from the
+# validated frequency above.
+#
+# Ensure the parent dir exists -- this task can fire before netdata is
+# installed (site.yml runs many timer-consuming roles before the netdata
+# block), so the .d directory may not yet exist. Owned by root because
+# we don't know whether netdata has even been installed yet; netdata
+# itself is fine reading a root:root parent so long as our metadata
+# files inside are netdata:netdata.
+- name: install | Ensure systemd_timers metadata dir exists
+  when: _systemd_timer_monitor
   file:
-    path: /var/log/jobs/{{ systemd_timer_args.name }}
-    state: touch
-    access_time: preserve
-    modification_time: preserve
+    path: /etc/netdata/charts.d/systemd_timers.d
+    state: directory
     owner: root
     group: root
+    mode: "0755"
+  become: true
+
+- name: install | Write systemd_timers metadata for {{ systemd_timer_args.name }}
+  when:
+    - _systemd_timer_monitor
+    - not ansible_check_mode
+  copy:
+    dest: /etc/netdata/charts.d/systemd_timers.d/{{ systemd_timer_args.name }}.conf
+    content: |
+      # Managed by ansible roles/systemd_timer/tasks/install.yml.
+      # Consumed by /usr/libexec/netdata/charts.d/systemd_timers.chart.sh.
+      period_secs={{ {'hourly': 3600, 'daily': 86400, 'weekly': 604800, 'monthly': 2592000}[systemd_timer_args.frequency] }}
+    owner: netdata
+    group: netdata
     mode: "0644"
+    backup: true
   become: true
 
 # Skip enable+start when systemd_unit just (mock-)wrote either unit file
