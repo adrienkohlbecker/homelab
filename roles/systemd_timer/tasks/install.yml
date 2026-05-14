@@ -1,17 +1,23 @@
 # Inputs: caller passes a single dict `systemd_timer_args` with keys
 #   name              required; bare name (no extension). The role
 #                     installs <name>.service + <name>.timer.
-#   exec_start        required; ExecStart= line of the oneshot service.
-#                     Typically a `run_job` call so /var/log/jobs/<name>
-#                     gets a success sentinel that custom_exporter scrapes.
+#   exec_start        required; ExecStart= line. Absolute-path the
+#                     first token (systemd doesn't PATH-resolve it).
 #   on_calendar       required; OnCalendar= spec (e.g.
 #                     `*-*-* 00:55:00`, `Sun *-*-* 00:47:00`).
+#   frequency         required iff sentinel: true; one of
+#                     hourly/daily/weekly/monthly. Written verbatim
+#                     into /var/log/jobs/<name> on ExecStart success;
+#                     custom_exporter._bump() parses it to compute the
+#                     next-run timestamp, so the word matters.
 #   description       optional; falls back to name.
 #   randomized_delay_sec  optional; emits RandomizedDelaySec=<n>.
 #   sentinel          default true; pre-creates /var/log/jobs/<name>
 #                     so custom_exporter sees the job before its first
-#                     run completes. Set false for timers whose ExecStart
-#                     isn't /usr/local/bin/run_job.
+#                     run completes, and the .service unit gets an
+#                     ExecStartPost that updates it on success. Set
+#                     false for one-off timers not monitored by the
+#                     exporter (e.g. the role's own _verify fixture).
 #   user              default 'root'; non-root drives the named user's
 #                     user manager (linger must already be on).
 #
@@ -23,6 +29,20 @@
   set_fact:
     _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
     _systemd_timer_sentinel: "{{ systemd_timer_args.sentinel | default(true) }}"
+
+# /var/log/jobs is the metric-side surface custom_exporter scrapes;
+# every sentinel-emitting unit's ExecStartPost writes here. Owning the
+# directory in systemd_timer (not a separate cron role) keeps the
+# helper self-contained.
+- name: install | Ensure /var/log/jobs directory exists
+  when: _systemd_timer_sentinel
+  file:
+    path: /var/log/jobs
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
 
 - name: install | Install service unit for {{ systemd_timer_args.name }}
   import_role:

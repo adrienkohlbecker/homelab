@@ -4,3 +4,12 @@ Description={{ systemd_timer_args.description | default(systemd_timer_args.name)
 [Service]
 Type=oneshot
 ExecStart={{ systemd_timer_args.exec_start }}
+{% if systemd_timer_args.sentinel | default(true) %}
+# ExecStartPost under Type=oneshot only runs when ExecStart exited 0,
+# matching the old run_job semantics: failed jobs leave the previous
+# success sentinel untouched. `<frequency> <timestamp>` format is
+# load-bearing -- custom_exporter._bump() parses the frequency word
+# to compute the next-run timestamp.
+ExecStartPost=/bin/sh -c 'echo "{{ systemd_timer_args.frequency }} $(date --iso-8601=seconds)" > /var/log/jobs/{{ systemd_timer_args.name }}'
+{% endif %}
+SyslogIdentifier={{ systemd_timer_args.name }}

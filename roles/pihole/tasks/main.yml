@@ -151,8 +151,9 @@
     systemd_timer_args:
       name: pihole_list_update
       description: Weekly pihole adlist/whitelist refresh
+      frequency: weekly
       on_calendar: "Sun *-*-* 00:47:00"
-      exec_start: /usr/local/bin/run_job weekly pihole_list_update {{ pihole_list_update_cmd }}
+      exec_start: "{{ pihole_list_update_cmd }}"
   tags:
     - pihole
 

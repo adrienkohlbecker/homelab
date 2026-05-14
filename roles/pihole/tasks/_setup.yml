@@ -13,13 +13,6 @@
     name: podman
     tasks_from: install
 
-# pihole_list_update timer ExecStart calls /usr/local/bin/run_job,
-# installed by the cron role. In prod site.yml runs cron first; under
-# the test harness only pihole runs, so import the dep here.
-- name: _setup | Install run_job wrapper
-  import_role:
-    name: cron
-
 - name: _test | Install dependencies
   apt:
     pkg:

@@ -13,8 +13,9 @@
     _trim_timer_args:
       name: "zfs_trim_{{ item }}"
       description: "Weekly ZFS trim for {{ item }}"
+      frequency: weekly
       on_calendar: "Thu *-*-* 00:05:00"
-      exec_start: "/usr/local/bin/run_job weekly zfs_trim_{{ item }} /sbin/zpool trim {{ item }}"
+      exec_start: "/sbin/zpool trim {{ item }}"
 
 - name: _trim_timer | Install zfs_trim timer
   include_role:
