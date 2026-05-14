@@ -1,6 +1,6 @@
 # Functional verification of the metrics endpoint, the cron-job path, and both
 # netdata-presence gap-closers (netdata_context_present, netdata_collector_present).
-# Drive-state (hdparm) short-circuits on the box fixture (no rotational disks).
+# Drive-state monitoring is no longer this exporter's job; see roles/hdparm.
 
 - name: _verify | custom_exporter.service is loaded and active
   systemd:
