@@ -322,6 +322,13 @@
   tags:
     - netdata
 
+- name: Install hdparm metrics
+  import_role:
+    name: hdparm
+    tasks_from: netdata
+  tags:
+    - netdata
+
 - name: Install lm_sensors metrics
   import_role:
     name: lm_sensors

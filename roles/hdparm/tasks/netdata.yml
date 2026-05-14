@@ -1,0 +1,27 @@
+# Wire the hdparm charts.d collector + its native alerts into netdata.
+# Replaces the path that used to go custom_exporter -> prometheus.custom.*
+# -> netdata; charts.d emits the same per-drive power-state chart into
+# netdata's own chart registry, dropping the prometheus-text round-trip.
+- name: Install hdparm charts.d collector
+  import_role:
+    name: netdata
+    tasks_from: charts_d
+  vars:
+    netdata_args:
+      name: hdparm
+      script: hdparm.chart.sh
+      conf: charts_d_hdparm.conf.j2
+  tags:
+    - hdparm
+
+- name: Configure hdparm netdata alerts
+  import_role:
+    name: netdata
+    tasks_from: health_copy
+  vars:
+    netdata_args:
+      src: hdparm_alerts.conf
+      dest: hdparm.conf
+      mode: "0600"
+  tags:
+    - hdparm

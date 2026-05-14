@@ -1,0 +1,122 @@
+# The harness runs tasks/main.yml (apt install hdparm + /etc/hdparm.conf) on
+# its own; this file applies the netdata-side integration (normally invoked
+# from roles/netdata/tasks/main.yml) and exercises the collector end-to-end.
+#
+# QEMU virtio disks all report rotational=0, so ansible_devices fact yields
+# an empty hdparm_disks list and hdparm_check() would short-circuit. We
+# overlay a fake by-id stem (_verify_ghost) so hdparm -C fails with ENOENT
+# for it, exercising the "unknown" parse branch -- the same path a flaky
+# SATA link triggers on prod hosts. That's the alert the migration replaces.
+- name: _verify | install hdparm netdata collector
+  import_tasks: netdata.yml
+
+- name: _verify | seed ghost disk + fast update_every
+  copy:
+    content: |
+      hdparm_update_every=5
+      hdparm_disks=("_verify_ghost")
+    dest: /etc/netdata/charts.d/hdparm.conf
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: true
+  become: true
+
+- name: _verify | restart netdata so charts.d rereads hdparm.conf
+  systemd:
+    name: netdata
+    state: restarted
+  become: true
+
+# Chart id is derived from _hdparm_safe(); '_verify_ghost' is already safe.
+# Gate first on the chart appearing in the registry -- the data endpoint
+# 404s for unknown charts (uri module fails the task), and an `until:`
+# expression on the data response can't run before the chart exists.
+- name: _verify | wait for hdparm._verify_ghost chart to register
+  uri:
+    url: http://localhost:19999/api/v1/charts
+    return_content: true
+  register: _verify_charts
+  retries: 30
+  delay: 2
+  until: >-
+    _verify_charts.status == 200
+    and 'hdparm._verify_ghost' in (_verify_charts.content | from_json).charts.keys()
+
+# `points=1` with no &after defaults to a 1-second window; with our
+# update_every=5s that misses 4 polls out of 5. `&after=-30` widens to
+# 30s so any healthy collector lands at least a few points in range.
+# Membership test (`'unknown' in labels`) instead of `.index(...)` so a
+# transient response shape (no dimension labels collected yet) returns
+# False cleanly rather than raising and aborting the retry loop.
+- name: _verify | hdparm._verify_ghost reports unknown=1 (active=0)
+  uri:
+    url: http://localhost:19999/api/v1/data?chart=hdparm._verify_ghost&points=1&after=-30&format=json
+    return_content: true
+  register: _verify_ghost_data
+  retries: 30
+  delay: 2
+  until: >-
+    _verify_ghost_data.status == 200
+    and 'unknown' in (_verify_ghost_data.json.labels | default([]))
+    and 'active' in _verify_ghost_data.json.labels
+    and (_verify_ghost_data.json.data | default([])) | length > 0
+    and _verify_ghost_data.json.data[0][_verify_ghost_data.json.labels.index('unknown')] | int == 1
+    and _verify_ghost_data.json.data[0][_verify_ghost_data.json.labels.index('active')] | int == 0
+
+# The chart carries the device label from CLABEL; alerts use ${label:device}
+# so the alert text identifies which drive misbehaved. Verify it's set.
+- name: _verify | hdparm._verify_ghost chart carries device label
+  uri:
+    url: http://localhost:19999/api/v1/chart?chart=hdparm._verify_ghost
+    return_content: true
+  register: _verify_ghost_chart
+- name: _verify | assert device label and shared context
+  assert:
+    that:
+      - _verify_ghost_chart.json.context == "hdparm.power_state"
+      - _verify_ghost_chart.json.chart_labels.device | default('') == "_verify_ghost"
+    fail_msg: >-
+      chart {{ _verify_ghost_chart.json.id }} context={{ _verify_ghost_chart.json.context }}
+      labels={{ _verify_ghost_chart.json.chart_labels | default({}) }}
+
+# The health templates bind on context (`on: hdparm.power_state`), so they
+# should instantiate against the new chart with the alarm name
+# `hdparm._verify_ghost.hdparm_drive_{active,unknown}`.
+- name: _verify | alerts registered against hdparm._verify_ghost
+  uri:
+    url: http://localhost:19999/api/v1/alarms?all
+    return_content: true
+  register: _verify_alarms
+  retries: 10
+  delay: 2
+  until: >-
+    _verify_alarms.status == 200
+    and (_verify_alarms.content | from_json).alarms.keys() | list
+        | select('search', 'hdparm._verify_ghost.hdparm_drive_unknown') | list | length > 0
+- name: _verify | both alert templates instantiated
+  vars:
+    _keys: "{{ (_verify_alarms.content | from_json).alarms.keys() | list }}"
+  assert:
+    that:
+      - _keys | select('search', 'hdparm._verify_ghost.hdparm_drive_active') | list | length > 0
+      - _keys | select('search', 'hdparm._verify_ghost.hdparm_drive_unknown') | list | length > 0
+    fail_msg: >-
+      Expected hdparm_drive_active + hdparm_drive_unknown to bind on
+      hdparm._verify_ghost. Got keys: {{ _keys | select('search', 'hdparm') | list }}
+
+- name: _verify | restore empty hdparm.conf
+  template:
+    src: charts_d_hdparm.conf.j2
+    dest: /etc/netdata/charts.d/hdparm.conf
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: true
+  become: true
+
+- name: _verify | restart netdata to drop ghost chart
+  systemd:
+    name: netdata
+    state: restarted
+  become: true
