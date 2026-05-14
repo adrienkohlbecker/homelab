@@ -1,5 +1,14 @@
 Acquire::Retries "3";
-{% if ansible_distribution_major_version | int >= 24 %}
+# 30s transport timeout so a half-open Nexus connection fails fast
+# enough that the retry/delay machinery below actually gets to run --
+# apt's default ~120s default would burn the retry budget on one stall.
+Acquire::http::Timeout "30";
+Acquire::https::Timeout "30";
+# Wait up to 5 minutes for dpkg's frontend lock instead of failing
+# immediately; covers raw `apt-get` calls in this role (pre-warm,
+# _verify) which don't go through the ansible apt module's lock_timeout.
+DPkg::Lock::Timeout "300";
+{% if ansible_distribution_release != "jammy" %}
 Acquire::Retries::Delay "true";
 Acquire::Retries::Delay::Maximum "30";
 {% endif %}
