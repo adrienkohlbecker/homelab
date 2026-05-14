@@ -1,0 +1,119 @@
+# Inputs: caller passes a single dict `systemd_timer_args` with keys
+#   name              required; bare name (no extension). The role
+#                     installs <name>.service + <name>.timer.
+#   exec_start        required (for state=present); ExecStart= line of
+#                     the oneshot service. Typically a `run_job` call so
+#                     /var/log/jobs/<name> gets a success sentinel that
+#                     custom_exporter scrapes.
+#   on_calendar       required (for state=present); OnCalendar= spec
+#                     (e.g. `*-*-* 00:55:00`, `Sun *-*-* 00:47:00`).
+#   description       optional; falls back to name.
+#   randomized_delay_sec  optional; emits RandomizedDelaySec=<n>.
+#   sentinel          default true; pre-creates /var/log/jobs/<name>
+#                     so custom_exporter sees the job before its first
+#                     run completes. Set false for timers whose ExecStart
+#                     isn't /usr/local/bin/run_job.
+#   user              default 'root'; non-root drives the named user's
+#                     user manager (linger must already be on).
+#   state             default 'present'; 'absent' stops+disables the
+#                     timer and removes both unit files.
+#
+# The dict form mirrors systemd_unit / podman_secret / service_user: each
+# import_role replaces the whole `systemd_timer_args` value at play-vars
+# scope so a previous caller's name/exec_start/etc. can't bleed into the
+# next caller's call.
+- name: timer | Resolve caller defaults for {{ systemd_timer_args.name }}
+  set_fact:
+    _systemd_timer_name: "{{ systemd_timer_args.name }}"
+    _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
+    _systemd_timer_state: "{{ systemd_timer_args.state | default('present') }}"
+    _systemd_timer_sentinel: "{{ systemd_timer_args.sentinel | default(true) }}"
+
+- name: timer | Derive install scope for {{ systemd_timer_args.name }}
+  set_fact:
+    _systemd_timer_scope: "{{ 'system' if _systemd_timer_user == 'root' else 'user' }}"
+    _systemd_timer_dir: "{{ '/etc/systemd/system' if _systemd_timer_user == 'root' else '/etc/systemd/user' }}"
+
+- name: Install timer {{ _systemd_timer_name }}
+  when: _systemd_timer_state == 'present'
+  block:
+    - name: timer | Install service unit for {{ _systemd_timer_name }}
+      import_role:
+        name: systemd_unit
+        tasks_from: install
+      vars:
+        systemd_unit_args:
+          src: service.j2
+          dest: "{{ _systemd_timer_name }}.service"
+          user: "{{ _systemd_timer_user }}"
+
+    - name: timer | Install timer unit for {{ _systemd_timer_name }}
+      import_role:
+        name: systemd_unit
+        tasks_from: install
+      vars:
+        systemd_unit_args:
+          src: timer.j2
+          dest: "{{ _systemd_timer_name }}.timer"
+          user: "{{ _systemd_timer_user }}"
+
+    # Pre-create the /var/log/jobs/<name> sentinel so custom_exporter's
+    # directory scan picks up the job (with last_success=0) before its
+    # first run completes -- otherwise the alert "this job hasn't run
+    # recently" has nothing to evaluate against until the timer fires.
+    # Mirrors what roles/cron/tasks/monitor.yml used to do for cron.d
+    # consumers.
+    - name: timer | Pre-create sentinel for {{ _systemd_timer_name }}
+      when: _systemd_timer_sentinel
+      file:
+        path: /var/log/jobs/{{ _systemd_timer_name }}
+        state: touch
+        access_time: preserve
+        modification_time: preserve
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+
+    - name: timer | Enable and start timer for {{ _systemd_timer_name }}
+      import_role:
+        name: systemd_unit
+        tasks_from: service
+      vars:
+        systemd_unit_args:
+          src: "{{ _systemd_timer_name }}.timer"
+          user: "{{ _systemd_timer_user }}"
+
+- name: Remove timer {{ _systemd_timer_name }}
+  when: _systemd_timer_state == 'absent'
+  block:
+    # failed_when:false because a never-installed timer is the steady
+    # state we want — removal must be idempotent on a fresh host that
+    # never had the cron entry either.
+    - name: timer | Stop and disable timer for {{ _systemd_timer_name }}
+      systemd:
+        name: "{{ _systemd_timer_name }}.timer"
+        state: stopped
+        enabled: false
+        scope: "{{ _systemd_timer_scope }}"
+      become: true
+      become_user: "{{ _systemd_timer_user }}"
+      failed_when: false
+
+    - name: timer | Remove unit files for {{ _systemd_timer_name }}
+      file:
+        path: "{{ _systemd_timer_dir }}/{{ _systemd_timer_name }}.{{ item }}"
+        state: absent
+      loop:
+        - service
+        - timer
+      become: true
+      register: _systemd_timer_files_removed
+
+    - name: timer | Daemon-reload after removing {{ _systemd_timer_name }}
+      when: _systemd_timer_files_removed is changed
+      systemd:
+        daemon_reload: true
+        scope: "{{ _systemd_timer_scope }}"
+      become: true
+      become_user: "{{ _systemd_timer_user }}"

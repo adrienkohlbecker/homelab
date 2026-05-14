@@ -1,0 +1,82 @@
+# Fixture timer that writes a known file on success. Triggered manually
+# via `systemctl start <name>.service` so we don't wait for OnCalendar
+# (the timer spec is set far in the future to avoid concurrent fires).
+- name: _verify | Install fixture timer
+  import_role:
+    name: systemd_timer
+  vars:
+    systemd_timer_args:
+      name: _verify_timer
+      description: systemd_timer self-test
+      on_calendar: "*-*-* 23:59:00"
+      exec_start: /bin/sh -c 'echo CRON_VERIFY_OK > /tmp/_verify_timer.out'
+      sentinel: false
+
+- name: _verify | Trigger the fixture service manually
+  command: systemctl start --wait _verify_timer.service
+  changed_when: false
+  become: true
+
+- name: _verify | Read service Result property
+  command: systemctl show -p Result --value _verify_timer.service
+  register: _verify_timer_result
+  changed_when: false
+  become: true
+
+- name: _verify | Read the file the service wrote
+  slurp:
+    src: /tmp/_verify_timer.out
+  register: _verify_timer_out
+  become: true
+
+- name: _verify | Read timer ActiveState
+  command: systemctl show -p ActiveState --value _verify_timer.timer
+  register: _verify_timer_active
+  changed_when: false
+  become: true
+
+- name: _verify | Functional assertions for state=present
+  assert:
+    that:
+      - _verify_timer_result.stdout == 'success'
+      - (_verify_timer_out.content | b64decode) == "CRON_VERIFY_OK\n"
+      - _verify_timer_active.stdout == 'active'
+
+# Re-import with state=absent and confirm the unit files vanish and the
+# timer is no longer known to systemd.
+- name: _verify | Remove the fixture timer
+  import_role:
+    name: systemd_timer
+  vars:
+    systemd_timer_args:
+      name: _verify_timer
+      state: absent
+
+- name: _verify | Stat unit files after removal
+  stat:
+    path: "/etc/systemd/system/_verify_timer.{{ item }}"
+  loop:
+    - service
+    - timer
+  register: _verify_timer_files
+  become: true
+
+- name: _verify | systemctl status for the removed timer
+  command: systemctl status _verify_timer.timer
+  register: _verify_timer_status
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Assertions for state=absent
+  assert:
+    that:
+      - not _verify_timer_files.results[0].stat.exists
+      - not _verify_timer_files.results[1].stat.exists
+      - _verify_timer_status.rc != 0
+
+- name: _verify | Cleanup fixture output
+  file:
+    path: /tmp/_verify_timer.out
+    state: absent
+  become: true
