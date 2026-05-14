@@ -216,6 +216,7 @@
 - name: Schedule the virsh_backup timer
   import_role:
     name: systemd_timer
+    tasks_from: install
   vars:
     systemd_timer_args:
       name: virsh_backup
