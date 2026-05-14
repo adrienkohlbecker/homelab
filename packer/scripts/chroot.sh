@@ -59,20 +59,53 @@ EOF
 # the upstream pair so the shipped image points at canonical Ubuntu
 # URLs regardless of build-time routing.
 write_sources_list() {
+  # Shape matches roles/apt/templates/sources.list.j2 -- the role
+  # overwrites this file on first apply, so keeping the two byte-similar
+  # makes a `diff` between packer-baked image and post-apply state a
+  # signal that something else moved (mirror substitution, etc).
   cat <<EOF >/etc/apt/sources.list
-# Uncomment the deb-src entries if you need source packages
+# See http://help.ubuntu.com/community/UpgradeNotes for how to upgrade to
+# newer versions of the distribution.
+deb $1 $UBUNTU_NAME main restricted
+# deb-src $1 $UBUNTU_NAME main restricted
 
-deb $1 $UBUNTU_NAME main restricted universe multiverse
-# deb-src $1 $UBUNTU_NAME main restricted universe multiverse
+# # Major bug fix updates produced after the final release of the
+# # distribution.
+deb $1 $UBUNTU_NAME-updates main restricted
+# deb-src $1 $UBUNTU_NAME-updates main restricted
 
-deb $1 $UBUNTU_NAME-updates main restricted universe multiverse
-# deb-src $1 $UBUNTU_NAME-updates main restricted universe multiverse
+# # N.B. software from this repository is ENTIRELY UNSUPPORTED by the Ubuntu
+# # team. Also, please note that software in universe WILL NOT receive any
+# # review or updates from the Ubuntu security team.
+deb $1 $UBUNTU_NAME universe
+# deb-src $1 $UBUNTU_NAME universe
+deb $1 $UBUNTU_NAME-updates universe
+# deb-src $1 $UBUNTU_NAME-updates universe
 
+# # N.B. software from this repository is ENTIRELY UNSUPPORTED by the Ubuntu
+# # team, and may not be under a free licence. Please satisfy yourself as to
+# # your rights to use the software. Also, please note that software in
+# # multiverse WILL NOT receive any review or updates from the Ubuntu
+# # security team.
+deb $1 $UBUNTU_NAME multiverse
+# deb-src $1 $UBUNTU_NAME multiverse
+deb $1 $UBUNTU_NAME-updates multiverse
+# deb-src $1 $UBUNTU_NAME-updates multiverse
+
+# # N.B. software from this repository may not have been tested as
+# # extensively as that contained in the main release, although it includes
+# # newer versions of some applications which may provide useful features.
+# # Also, please note that software in backports WILL NOT receive any review
+# # or updates from the Ubuntu security team.
 deb $1 $UBUNTU_NAME-backports main restricted universe multiverse
 # deb-src $1 $UBUNTU_NAME-backports main restricted universe multiverse
 
-deb $2 $UBUNTU_NAME-security main restricted universe multiverse
-# deb-src $2 $UBUNTU_NAME-security main restricted universe multiverse
+deb $2 $UBUNTU_NAME-security main restricted
+# deb-src $2 $UBUNTU_NAME-security main restricted
+deb $2 $UBUNTU_NAME-security universe
+# deb-src $2 $UBUNTU_NAME-security universe
+deb $2 $UBUNTU_NAME-security multiverse
+# deb-src $2 $UBUNTU_NAME-security multiverse
 EOF
 }
 

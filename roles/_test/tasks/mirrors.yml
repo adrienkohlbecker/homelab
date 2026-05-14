@@ -1,7 +1,6 @@
 - name: mirrors | Configure apt retries and sources
   import_role:
     name: apt
-    tasks_from: install
 
 - name: mirrors | Ensure /etc/containers/registries.conf.d exists
   when: nexus_url | length > 0
