@@ -7,7 +7,7 @@
 #
 # Inputs:
 #   backports_name: short label for the pin filename
-#                   (/etc/apt/preferences.d/backports-<name>) and
+#                   (/etc/apt/preferences.d/backports_<name>.pref) and
 #                   the per-call output fact name.
 #   backports_packages: list of package names. Becomes both the pin
 #                       file's `Package:` line and the upgrade task's
@@ -29,8 +29,8 @@
 # backports_name is used verbatim in the pin file path AND as the
 # stem of the per-call set_fact name. Fail loud on anything that
 # wouldn't be a valid Ansible identifier rather than silently
-# translating ('foo-bar' would write /etc/apt/preferences.d/backports-
-# foo-bar but set foo_bar_backports_updated, an invisible split).
+# translating ('foo-bar' would write /etc/apt/preferences.d/backports_
+# foo-bar.pref but set foo_bar_backports_updated, an invisible split).
 #
 # backports_packages must be a non-empty list. A bare string would
 # `join(' ')` per-character ("c h r o n y") and produce a pin file
@@ -52,14 +52,26 @@
 - name: Pin packages to noble (jammy) — {{ backports_name }}
   when: ansible_distribution_major_version == "22"
   template:
-    src: backports-pin.j2
-    dest: /etc/apt/preferences.d/backports-{{ backports_name }}
+    src: backports_pin.j2
+    dest: /etc/apt/preferences.d/backports_{{ backports_name }}.pref
     owner: root
     group: root
     mode: "0644"
     backup: true
   become: true
   register: backports_pin
+
+# Remove the pre-rename pin filename if a previous version of this
+# role wrote it. The hyphenated/extensionless form was renamed to
+# backports_<name>.pref so the file matches apt_preferences(5)'s
+# documented .pref extension and the repo's underscores convention.
+- name: Clean up legacy pin file path (pre-rename to .pref)
+  when: ansible_distribution_major_version == "22"
+  file:
+    path: /etc/apt/preferences.d/backports-{{ backports_name }}
+    state: absent
+  become: true
+  register: backports_pin_legacy_removed
 
 # Single deb822 sources file replaces the previous 4× apt_repository
 # loop. Matches the format roles/apt uses for native noble hosts, lets
@@ -109,6 +121,7 @@
     - ansible_distribution_major_version == "22"
     - backports_pin.changed
       or backports_noble_sources.changed
+      or (backports_pin_legacy_removed.changed | default(false))
       or (backports_legacy_removed.changed | default(false))
   apt:
     update_cache: true
