@@ -115,16 +115,27 @@
   become: true
   register: backports_noble_sources
 
-# Find any legacy .list files left over from the pre-deb822 role
-# (apt_repository derived filenames from the URI, so they look like
-# archive_ubuntu_com_ubuntu_noble.list etc.). Match on the inline
-# `# backports` marker the previous loop wrote on every line.
+# Find any legacy .list files left over from prior iterations of the
+# noble-on-jammy plumbing. Two historical shapes both end up here:
+#   - the apt_repository loop wrote URI-derived filenames like
+#     archive_ubuntu_com_ubuntu_noble.list with an inline `# backports`
+#     marker on every line;
+#   - the pre-backports-role per-service files (roles/podman wrote
+#     noble-podman.list, hwe_kernel wrote its own) used plain `copy:`
+#     with no marker at all.
+# Match on the noble suite itself rather than the marker -- on a jammy
+# host any .list entry referencing noble is one of ours by definition
+# (roles/apt only writes noble sources on noble hosts). Leaving any of
+# them in place after the deb822 file lands causes apt to see two
+# definitions of the same suite with conflicting Signed-By values
+# ("/usr/share/keyrings/...gpg != "), which makes the next cache
+# refresh fail outright.
 - name: Find legacy backports source files (pre-deb822 migration)
   when: ansible_distribution_major_version == "22"
   find:
     paths: /etc/apt/sources.list.d
     patterns: "*.list"
-    contains: '^deb .* # backports$'
+    contains: '^deb https?://\S+\s+noble(-(updates|backports|security))?\s+'
   register: backports_legacy_lists
   become: true
 
