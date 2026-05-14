@@ -1,0 +1,6 @@
+# getmail's timer ExecStart calls /usr/local/bin/run_job, installed by
+# the cron role. In prod site.yml runs cron before getmail; under the
+# test harness only this role runs, so import the dep here.
+- name: _setup | Install run_job wrapper
+  import_role:
+    name: cron
