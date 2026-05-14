@@ -10,7 +10,6 @@
       - libvirt-daemon-system
       - ovmf
       - libhugetlbfs-bin
-      - cron # for cron module
     cache_valid_time: 3600
   become: true
   register: apt_install_libvirt
@@ -214,25 +213,14 @@
   tags:
     - libvirt
 
-- name: Schedule the backup
-  when: not (ansible_check_mode and apt_install_libvirt.changed)
-  cron:
-    name: virsh_backup
-    minute: 5
-    hour: 0
-    job: /usr/local/bin/run_job daily virsh_backup /usr/local/bin/virsh_backup
-    user: root
-    cron_file: ansible_virsh_backup
-    backup: true
-  become: true
-  tags:
-    - libvirt
-
-- name: Monitor backup script
+- name: Schedule the virsh_backup timer
   import_role:
-    name: cron
-    tasks_from: monitor
+    name: systemd_timer
   vars:
-    cron_entry: virsh_backup
+    systemd_timer_args:
+      name: virsh_backup
+      description: Daily libvirt domain backup
+      on_calendar: "*-*-* 00:05:00"
+      exec_start: /usr/local/bin/run_job daily virsh_backup /usr/local/bin/virsh_backup
   tags:
     - libvirt
