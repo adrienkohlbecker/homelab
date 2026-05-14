@@ -95,3 +95,45 @@
       - _verify_f_trace.rc == 0
       - "'$ echo hello' in _verify_f_trace.stderr"
       - "'hello two words' in _verify_f_trace.stdout"
+
+- name: _verify | ERR trap fires on errexit with file:line:func breadcrumb
+  shell: |
+    source /usr/local/lib/functions.sh
+    false
+    echo unreached
+  args:
+    executable: /bin/bash
+  register: _verify_err_trap
+  changed_when: false
+  failed_when: false
+
+- name: _verify | ERR trap fires assertions
+  assert:
+    that:
+      - _verify_err_trap.rc == 1
+      - "'unreached' not in _verify_err_trap.stdout"
+      - "'ERR: ' in _verify_err_trap.stderr"
+      - "'false (exit 1)' in _verify_err_trap.stderr"
+      - "'in main' in _verify_err_trap.stderr"
+
+# Regression check: f_rescue uses `if "$@"; then ... else ...`, and
+# commands in if-conditions are exempt from ERR per bash semantics.
+# A future refactor that switched f_rescue to a `set +e; ...; set -e`
+# toggle would fire the trap, and this test would catch it.
+- name: _verify | ERR trap does NOT fire for failures wrapped in f_rescue
+  shell: |
+    source /usr/local/lib/functions.sh
+    f_rescue false
+    echo "after-rescue"
+  args:
+    executable: /bin/bash
+  register: _verify_err_trap_rescue
+  changed_when: false
+
+- name: _verify | ERR trap non-firing under f_rescue assertions
+  assert:
+    that:
+      - _verify_err_trap_rescue.rc == 0
+      - "'after-rescue' in _verify_err_trap_rescue.stdout"
+      - "'ERR: ' not in _verify_err_trap_rescue.stderr"
+      - "'Error: false failed' in _verify_err_trap_rescue.stderr"
