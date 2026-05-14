@@ -168,51 +168,30 @@
   tags:
     - zfs
 
-- name: Schedule the health script
-  when: not (ansible_check_mode and zfs_apt.changed)
-  cron:
-    name: zfs_health
-    minute: 55
-    hour: 0
-    job: /usr/local/bin/run_job daily zfs_health /usr/local/bin/zfs_health
-    user: root
-    cron_file: ansible_zfs_health
-    backup: true
-  become: true
-  tags:
-    - zfs
-
-- name: Monitor health script
+- name: Schedule the zfs_health timer
   import_role:
-    name: cron
-    tasks_from: monitor
+    name: systemd_timer
   vars:
-    cron_entry: zfs_health
+    systemd_timer_args:
+      name: zfs_health
+      description: Daily ZFS health check
+      on_calendar: "*-*-* 00:55:00"
+      exec_start: /usr/local/bin/run_job daily zfs_health /usr/local/bin/zfs_health
   tags:
     - zfs
 
-- name: Schedule the trim script
-  when: not (ansible_check_mode and zfs_apt.changed)
-  cron:
-    name: zfs_trim_{{ item }}
-    weekday: 4
-    hour: 0
-    minute: 5
-    job: /usr/local/bin/run_job weekly zfs_trim_{{ item }} /sbin/zpool trim {{ item }}
-    user: root
-    cron_file: ansible_zfs_trim
-    backup: true
+# include_role (dynamic) because the timer-per-pool fan-out is driven by
+# zfs_trim_pools at runtime — import_role can't take a loop.
+- name: Schedule the zfs_trim timer for {{ item }}
+  include_role:
+    name: systemd_timer
+  vars:
+    systemd_timer_args:
+      name: zfs_trim_{{ item }}
+      description: Weekly ZFS trim for {{ item }}
+      on_calendar: "Thu *-*-* 00:05:00"
+      exec_start: /usr/local/bin/run_job weekly zfs_trim_{{ item }} /sbin/zpool trim {{ item }}
   loop: "{{ zfs_trim_pools }}"
-  become: true
-  tags:
-    - zfs
-
-- name: Monitor trim scripts
-  import_role:
-    name: cron
-    tasks_from: monitor
-  vars:
-    cron_entry: "{{ ['zfs_trim_'] | product(zfs_trim_pools) | map('join') | list }}"
   tags:
     - zfs
 
