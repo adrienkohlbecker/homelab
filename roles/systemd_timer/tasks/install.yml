@@ -48,8 +48,13 @@
 # directory scan picks up the job (with last_success=0) before its
 # first run completes -- otherwise the alert "this job hasn't run
 # recently" has nothing to evaluate against until the timer fires.
+# Skip in check-mode-on-fresh-host: the cron role owns /var/log/jobs and
+# its check-mode pass only *reports* creating the dir without actually
+# making it, so touching a child here would fail.
 - name: install | Pre-create sentinel for {{ systemd_timer_args.name }}
-  when: _systemd_timer_sentinel
+  when:
+    - _systemd_timer_sentinel
+    - not ansible_check_mode
   file:
     path: /var/log/jobs/{{ systemd_timer_args.name }}
     state: touch
@@ -60,6 +65,11 @@
     mode: "0644"
   become: true
 
+# Skip enable+start when systemd_unit just (mock-)wrote either unit file
+# in check-mode — the file isn't actually on disk, so `systemctl enable`
+# would fail with "Could not find the requested service". Mirrors the
+# console role's guard for the same reason. The per-unit facts are set
+# by systemd_unit/install via set_fact `<name>_<type>_result`.
 - name: install | Enable and start timer for {{ systemd_timer_args.name }}
   import_role:
     name: systemd_unit
@@ -68,3 +78,7 @@
     systemd_unit_args:
       src: "{{ systemd_timer_args.name }}.timer"
       user: "{{ _systemd_timer_user }}"
+      condition: >-
+        {{ not (ansible_check_mode
+                and (vars[systemd_timer_args.name ~ '_service_result'].changed
+                     or vars[systemd_timer_args.name ~ '_timer_result'].changed)) }}
