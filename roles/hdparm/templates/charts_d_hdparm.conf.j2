@@ -1,0 +1,9 @@
+# Managed by ansible (roles/hdparm/templates/charts_d_hdparm.conf.j2).
+# Sourced by /usr/libexec/netdata/charts.d/hdparm.chart.sh before hdparm_check.
+# Entries are /dev/disk/by-id stems for rotational drives discovered via
+# ansible_devices (the same selector the legacy custom_exporter env file used).
+hdparm_disks=(
+{% for dev in ansible_devices.values() | selectattr('rotational', 'equalto', '1') | map(attribute='links') | map(attribute='ids') | select | map('first') | sort %}
+  "{{ dev }}"
+{% endfor %}
+)
