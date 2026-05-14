@@ -35,6 +35,19 @@ function flatten_csp(tag, ts, record)
         record["log"] = "csp_violation"
     end
 
+    -- Every CSP report is a policy violation worth seeing in the
+    -- warnings stream -- it's either a misconfigured CSP, a third-party
+    -- script that started loading something new, or an attempted
+    -- exploit. otlp-shape.lua promotes these top-level fields into
+    -- record["otlp"]["severity_*"] so fluent-bit's opentelemetry output
+    -- carries them through; without them set, HyperDX's collector
+    -- transform processor falls back to body-keyword inference, doesn't
+    -- find a level keyword in "CSP ... blocked ...", and defaults to
+    -- info. 13 is SEVERITY_NUMBER_WARN; transform leaves the pair alone
+    -- once both fields are non-empty.
+    record["severity_text"] = "warn"
+    record["severity_number"] = 13
+
     local r, format
     if type(record["csp-report"]) == "table" then
         r = record["csp-report"]
