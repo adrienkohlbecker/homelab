@@ -1,8 +1,12 @@
 # Inputs: caller passes a single dict `systemd_timer_args` with keys
 #   name              required; bare name (no extension). The role
 #                     installs <name>.service + <name>.timer.
-#   exec_start        required; ExecStart= line. Absolute-path the
-#                     first token (systemd doesn't PATH-resolve it).
+#   exec_start        required; the command (and args) handed to the
+#                     stderr_priority wrapper. The wrapper itself is
+#                     the systemd-level ExecStart=, so this string runs
+#                     under bash and PATH lookup applies; prefer
+#                     absolute paths anyway so the unit stays grep-able
+#                     to the binary it invokes.
 #   on_calendar       required; OnCalendar= spec (e.g.
 #                     `*-*-* 00:55:00`, `Sun *-*-* 00:47:00`).
 #   frequency         required iff sentinel: true; one of
@@ -40,6 +44,23 @@
   set_fact:
     _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
     _systemd_timer_sentinel: "{{ systemd_timer_args.sentinel | default(true) }}"
+
+# The frequency word is written verbatim into /var/log/jobs/<name> and
+# parsed by custom_exporter._bump() to compute the next-run timestamp.
+# An unknown value silently breaks the cron_*_timestamp metrics for the
+# job (exporter ticks errors, alert never fires) -- fail loud at install
+# time instead. Only gated when sentinel is on; one-off timers
+# (sentinel: false) legitimately have no frequency.
+- name: install | Validate frequency for {{ systemd_timer_args.name }}
+  when: _systemd_timer_sentinel
+  assert:
+    that:
+      - systemd_timer_args.frequency is defined
+      - systemd_timer_args.frequency in ['hourly', 'daily', 'weekly', 'monthly']
+    fail_msg: >-
+      systemd_timer {{ systemd_timer_args.name }}: frequency must be one of
+      hourly/daily/weekly/monthly when sentinel is enabled (got
+      {{ systemd_timer_args.frequency | default('<unset>') }}).
 
 # /var/log/jobs is the metric-side surface custom_exporter scrapes;
 # every sentinel-emitting unit's ExecStartPost writes here. Owning the
@@ -93,9 +114,9 @@
 # directory scan picks up the job (with last_success=0) before its
 # first run completes -- otherwise the alert "this job hasn't run
 # recently" has nothing to evaluate against until the timer fires.
-# Skip in check-mode-on-fresh-host: the cron role owns /var/log/jobs and
-# its check-mode pass only *reports* creating the dir without actually
-# making it, so touching a child here would fail.
+# Skip in check-mode-on-fresh-host: the directory-create task above
+# only *reports* creating /var/log/jobs without actually making it, so
+# touching a child here would fail with "no such file or directory".
 - name: install | Pre-create sentinel for {{ systemd_timer_args.name }}
   when:
     - _systemd_timer_sentinel
