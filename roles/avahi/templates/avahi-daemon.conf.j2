@@ -5,7 +5,7 @@
 # change fires — e.g. keepalived adding the pihole VIP to eth0 on
 # MASTER transition.
 [server]
-allow-interfaces={{ ansible_default_ipv4.interface | mandatory }}
+allow-interfaces={{ default_interface }}
 # Pin avahi's hostname to inventory; without this it reads
 # gethostname(2) which can drift from inventory after a DHCP/
 # cloud-init rename, and _verify's `getent ahosts {host}.local`

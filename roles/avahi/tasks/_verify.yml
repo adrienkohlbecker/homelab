@@ -25,7 +25,7 @@
 # in allow-interfaces, socket-option bug) which the getent above
 # could still mask via the kernel's loopback path for local queries.
 - name: _verify | avahi joined 224.0.0.251 on the pinned iface
-  command: ip -j maddr show dev {{ ansible_default_ipv4.interface }}
+  command: ip -j maddr show dev {{ default_interface }}
   register: _verify_maddr
   changed_when: false
   failed_when: >-
@@ -58,7 +58,7 @@
   until:
     - _verify_browse.rc == 0
     - _verify_browse.stdout_lines
-        | select('match', '^=;' + ansible_default_ipv4.interface + ';IPv4;' + ansible_hostname + ';')
+        | select('match', '^=;' + default_interface + ';IPv4;' + ansible_hostname + ';')
         | select('search', '"model=' + avahi_device_model + '"')
         | list | length > 0
   changed_when: false
