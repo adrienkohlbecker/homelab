@@ -1,0 +1,102 @@
+# Inputs: caller passes a single dict `systemd_unit_args` with keys
+#   dest              required (unless `src` or `for` is set); on-disk
+#                     unit filename (e.g. "foo.service").
+#   src               optional shorthand: if set and dest isn't, dest
+#                     defaults to src with .j2 stripped. Lets callers
+#                     hand the same dict shape to install and remove.
+#   for               drop-in only: parent unit, derives
+#                     dest=<for>.d/override.conf
+#   user              default 'root'; non-root acts on the named user's
+#                     user manager (linger must already be on).
+#   condition         default true; gates the whole call.
+#
+# Symmetric with install.yml: stops and disables the unit (idempotent
+# on already-gone units), deletes the on-disk file, reloads the daemon
+# only if a file was actually removed, then records the outcome under
+# the same <basename>_<type>_result fact name install.yml uses. Refuses
+# to remove a masked unit (symlink to /dev/null) for the same reason
+# install.yml refuses to overwrite one -- the mask encodes operator
+# intent that a quiet `rm` would silently undo.
+- name: remove | Resolve caller defaults for {{ systemd_unit_args.dest | default(systemd_unit_args.src | default('?')) }}
+  set_fact:
+    _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
+    _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
+    _systemd_unit_name: >-
+      {{ systemd_unit_args.dest
+         | default((systemd_unit_args.for ~ '.d/override.conf') if systemd_unit_args.for is defined
+                   else (systemd_unit_args.src | regex_replace('\.j2$', ''))) }}
+
+- name: remove | Derive scope for {{ _systemd_unit_name }}
+  set_fact:
+    _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
+    _systemd_unit_dir: "{{ '/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user' }}"
+
+- name: remove | Verify user-scope linger marker exists for {{ _systemd_unit_user }}
+  when:
+    - _systemd_unit_condition
+    - _systemd_unit_scope == 'user'
+  stat:
+    path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
+  register: _systemd_unit_linger
+  failed_when: not _systemd_unit_linger.stat.exists
+
+# Mask check before stop/disable: stop on a masked unit is a no-op
+# (state=stopped + failed_when:false swallows it), but the file delete
+# would clobber the operator's `systemctl mask` and silently unmask.
+- name: remove | Stat unit path to detect a pre-existing mask
+  when: _systemd_unit_condition
+  stat:
+    path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
+  register: _systemd_unit_mask
+  become: true
+
+- name: remove | Refuse to delete masked unit
+  when:
+    - _systemd_unit_condition
+    - _systemd_unit_mask.stat.islnk | default(false)
+    - _systemd_unit_mask.stat.lnk_target | default('') == '/dev/null'
+  fail:
+    msg: >-
+      Refusing to remove {{ _systemd_unit_dir }}/{{ _systemd_unit_name }}:
+      it is masked (symlink to /dev/null). Unmask with
+      `systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} unmask {{ _systemd_unit_name }}`
+      before re-running, or --limit the play to skip this role.
+
+# failed_when:false because the steady state we want IS "this unit is
+# gone" -- stopping a non-existent unit must be a no-op. The systemd
+# module returns module-level failure on "unit not found", which we
+# explicitly tolerate here.
+- name: remove | Stop and disable {{ _systemd_unit_name }}
+  when: _systemd_unit_condition
+  systemd:
+    name: "{{ _systemd_unit_name }}"
+    state: stopped
+    enabled: false
+    scope: "{{ _systemd_unit_scope }}"
+  become: true
+  become_user: "{{ _systemd_unit_user }}"
+  failed_when: false
+
+- name: remove | Delete the unit file
+  when: _systemd_unit_condition
+  file:
+    path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
+    state: absent
+  become: true
+  register: systemd_unit
+
+- name: remove | Reload daemon
+  when:
+    - _systemd_unit_condition
+    - systemd_unit.changed
+  systemd:
+    daemon_reload: true
+    scope: "{{ _systemd_unit_scope }}"
+  become: true
+  become_user: "{{ _systemd_unit_user }}"
+
+# Same fact name install.yml uses, so callers can read `.changed` off
+# `<name>_<type>_result` regardless of which operation just ran.
+- name: remove | Record removal result for {{ _systemd_unit_name }}
+  set_fact:
+    "{{ _systemd_unit_name | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ systemd_unit }}"

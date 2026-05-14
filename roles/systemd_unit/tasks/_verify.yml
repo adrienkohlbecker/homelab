@@ -315,3 +315,83 @@
   systemd:
     daemon_reload: true
   become: true
+
+# Remove-path coverage: parallels the install-path block above. Install a
+# fresh fixture so this section is independent of state left by prior
+# scenarios, then exercise the three observable behaviours of
+# tasks_from=remove: deletes-on-first-call, idempotent on second call,
+# refuses to delete a mask.
+- name: _verify | install fixture for remove-path tests
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: systemd_unit_verify_ok.service.j2
+
+- name: _verify | remove via tasks_from=remove
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: systemd_unit_verify_ok.service
+
+- name: _verify | first remove deleted the file and reported changed
+  block:
+    - stat:
+        path: /etc/systemd/system/systemd_unit_verify_ok.service
+      register: _verify_removed_stat
+    - assert:
+        that:
+          - systemd_unit_verify_ok_service_result is defined
+          - systemd_unit_verify_ok_service_result.changed
+          - not _verify_removed_stat.stat.exists
+
+- name: _verify | re-remove same unit is idempotent
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: systemd_unit_verify_ok.service
+
+- name: _verify | second remove reported no change
+  assert:
+    that: not systemd_unit_verify_ok_service_result.changed
+
+# Mask guardrail (symmetric with the install-path mask test): a
+# pre-existing symlink to /dev/null is operator intent that `rm`
+# must not silently undo.
+- name: _verify | pre-mask a test unit path
+  file:
+    src: /dev/null
+    dest: /etc/systemd/system/systemd_unit_remove_mask_test.service
+    state: link
+    force: true
+  become: true
+
+- name: _verify | remove a masked unit (expect failure)
+  block:
+    - import_role:
+        name: systemd_unit
+        tasks_from: remove
+      vars:
+        systemd_unit_args:
+          dest: systemd_unit_remove_mask_test.service
+    - fail:
+        msg: remove of a masked unit should have refused but did not
+  rescue:
+    - stat:
+        path: /etc/systemd/system/systemd_unit_remove_mask_test.service
+      register: _verify_remove_masked_stat
+    - assert:
+        that:
+          - _verify_remove_masked_stat.stat.islnk
+          - _verify_remove_masked_stat.stat.lnk_target == '/dev/null'
+
+- name: _verify | unmask + remove the mask-test fixture
+  file:
+    path: /etc/systemd/system/systemd_unit_remove_mask_test.service
+    state: absent
+  become: true
