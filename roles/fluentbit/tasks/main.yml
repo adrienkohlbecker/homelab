@@ -114,6 +114,20 @@
   tags:
     - fluentbit
 
+- name: Install fluent-bit otlp-shape Lua filter
+  copy:
+    src: otlp-shape.lua
+    dest: /etc/fluent-bit/otlp-shape.lua
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: fluentbit_lua_otlp_shape
+  when: not (ansible_check_mode and fluentbit_apt.changed)
+  tags:
+    - fluentbit
+
 - name: Configure fluent-bit
   template:
     src: fluent-bit.conf.j2
@@ -125,7 +139,7 @@
     validate: /opt/fluent-bit/bin/fluent-bit --config %s --dry-run
   become: true
   register: fluentbit_cfg
-  when: not (ansible_check_mode and (fluentbit_apt.changed or fluentbit_lua.changed or fluentbit_lua_csp.changed))
+  when: not (ansible_check_mode and (fluentbit_apt.changed or fluentbit_lua.changed or fluentbit_lua_csp.changed or fluentbit_lua_otlp_shape.changed))
   tags:
     - fluentbit
 
@@ -137,7 +151,7 @@
     systemd_unit_args:
       src: fluent-bit
       condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or fluentbit_repository.changed)) }}"
-      restart: "{{ fluentbit_cfg.changed or fluentbit_lua.changed or fluentbit_lua_csp.changed or fluentbit_apt.changed }}"
+      restart: "{{ fluentbit_cfg.changed or fluentbit_lua.changed or fluentbit_lua_csp.changed or fluentbit_lua_otlp_shape.changed or fluentbit_apt.changed }}"
   tags:
     - fluentbit
 
