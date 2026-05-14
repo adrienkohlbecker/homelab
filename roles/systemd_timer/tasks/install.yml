@@ -19,6 +19,10 @@
 #                     is the natural-sounding name but has no effect
 #                     under Type=oneshot; TimeoutStartSec bounds
 #                     ExecStart + ExecStartPost together for oneshot.)
+#   timeout_stop_sec  optional; emits TimeoutStopSec=<v>. Default '30s' —
+#                     grace period between SIGTERM and SIGKILL when a
+#                     run is being terminated (by TimeoutStartSec or
+#                     by manual systemctl stop).
 #   sentinel          default true; pre-creates /var/log/jobs/<name>
 #                     so custom_exporter sees the job before its first
 #                     run completes, and the .service unit gets an
@@ -49,6 +53,20 @@
     owner: root
     group: root
     mode: "0755"
+  become: true
+
+# Wrapper script used by every timer's ExecStart so stderr lines land
+# in the journal at priority err. Install before the unit so
+# systemd-analyze's "ExecStart executable exists" check passes.
+- name: install | Install stderr_priority wrapper
+  copy:
+    src: stderr_priority
+    dest: /usr/local/bin/stderr_priority
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
   become: true
 
 - name: install | Install service unit for {{ systemd_timer_args.name }}

@@ -3,7 +3,11 @@ Description={{ systemd_timer_args.description | default(systemd_timer_args.name)
 
 [Service]
 Type=oneshot
-ExecStart={{ systemd_timer_args.exec_start }}
+# Wrap so stderr lines land in the journal at priority err instead
+# of info; lets `journalctl -u <unit> -p err` surface only real
+# failure output. See /usr/local/bin/stderr_priority for the
+# implementation (single sed pipe, no second journal stream).
+ExecStart=/usr/local/bin/stderr_priority {{ systemd_timer_args.exec_start }}
 {% if systemd_timer_args.sentinel | default(true) %}
 # ExecStartPost under Type=oneshot only runs when ExecStart exited 0,
 # matching the old run_job semantics: failed jobs leave the previous
@@ -20,3 +24,8 @@ SyslogIdentifier={{ systemd_timer_args.name }}
 # job we ship completes in seconds to minutes; 1h is generous
 # enough that a legitimate run never trips it.
 TimeoutStartSec={{ systemd_timer_args.timeout_start_sec | default('1h') }}
+# Grace period between SIGTERM and SIGKILL during shutdown. 30s is
+# plenty for our jobs (zfs ops finish in seconds, getmail hangs on
+# network locks but releases quickly, etc.); raise it if a future
+# job needs longer to flush state before being killed.
+TimeoutStopSec={{ systemd_timer_args.timeout_stop_sec | default('30s') }}
