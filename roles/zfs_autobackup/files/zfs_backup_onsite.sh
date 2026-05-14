@@ -8,7 +8,8 @@ SSH_SOURCE=${1:-}
 DEST_DATASET=${2:-}
 
 if [ -z "$SSH_SOURCE" ] || [ -z "$DEST_DATASET" ]; then
-  f_fail "Usage: zfs_backup_onsite SSH_SOURCE DEST_DATASET"
+  echo >&2 "Usage: zfs_backup_onsite SSH_SOURCE DEST_DATASET"
+  exit 1
 fi
 
 f_trace zfs-autobackup \

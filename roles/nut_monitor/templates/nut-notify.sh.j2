@@ -5,8 +5,9 @@ source /usr/local/lib/functions.sh
 EVENT=${1:-}
 case $EVENT in
 "")
-  f_error "Missing event argument"
-  f_fail "Usage: nut-notify EVENT"
+  echo >&2 "Missing event argument"
+  echo >&2 "Usage: nut-notify EVENT"
+  exit 1
   ;;
 online)
   MSG="UPS is back online"
@@ -39,7 +40,8 @@ noparent)
   MSG="upsmon parent process died - shutdown impossible"
   ;;
 *)
-  f_fail "unexpected event $EVENT"
+  echo >&2 "unexpected event $EVENT"
+  exit 1
   ;;
 esac
 

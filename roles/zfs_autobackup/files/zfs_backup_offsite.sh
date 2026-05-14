@@ -8,7 +8,8 @@ OFFSITE_IP=${1:-}
 DATASET=${2:-}
 
 if [ -z "$OFFSITE_IP" ] || [ -z "$DATASET" ]; then
-  f_fail "Usage: zfs_backup_offsite OFFSITE_IP DATASET"
+  echo >&2 "Usage: zfs_backup_offsite OFFSITE_IP DATASET"
+  exit 1
 fi
 
 MOUNTPOINT=$(zfs get mountpoint -H -o value "$DATASET")
