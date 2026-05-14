@@ -25,12 +25,14 @@ check-response-ttl=yes
 # defends against, just over a different record type.
 use-ipv4=yes
 use-ipv6=no
-# Refuse to share UDP 5353 with another mDNS responder. Ubuntu noble
-# ships systemd-resolved with MulticastDNS=resolve on by default; two
-# responders on the same socket race to answer the same query and
-# cause intermittent collision-renames (a different cause from the
-# echo-loop but the same symptom). With this set, a startup conflict
-# fails loud instead of flapping silently.
+# Refuse to share UDP 5353 with another mDNS responder. Defense-
+# in-depth: roles/resolved pins MulticastDNS=no on Ubuntu noble's
+# systemd-resolved (whose default `MulticastDNS=resolve` would
+# otherwise race avahi for the multicast socket on cold boot). If
+# that pin is ever lost, or another mDNS responder lands here, this
+# catches the conflict at avahi startup -- loud failure, not the
+# silent collision-rename flap that two responders on the same
+# socket would otherwise cause.
 disallow-other-stacks=yes
 
 [publish]
