@@ -11,10 +11,9 @@
   tags:
     - cron
 
-# Created here (not in monitor.yml) so the role is self-contained: run_job's
-# success-side `echo > /var/log/jobs/$id` and custom_exporter's directory
-# scan both assume the dir exists, independent of whether any consumer has
-# called tasks_from: monitor yet.
+# run_job's success-side `echo > /var/log/jobs/$id` and custom_exporter's
+# directory scan both assume the dir exists; systemd_timer's per-job
+# sentinel touch needs it too.
 - name: Ensure job log directory exists
   file:
     dest: /var/log/jobs
