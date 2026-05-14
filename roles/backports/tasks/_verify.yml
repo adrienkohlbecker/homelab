@@ -25,7 +25,7 @@
 - name: _verify (jammy) | pin file lands at the documented path
   when: ansible_distribution_major_version == "22"
   stat:
-    path: /etc/apt/preferences.d/backports-test_chrony
+    path: /etc/apt/preferences.d/backports_test_chrony.pref
   register: backports_pin_stat
   failed_when: not backports_pin_stat.stat.exists
 
@@ -91,7 +91,7 @@
 - name: _verify (jammy) | second import lands its own pin file
   when: ansible_distribution_major_version == "22"
   stat:
-    path: /etc/apt/preferences.d/backports-test_second
+    path: /etc/apt/preferences.d/backports_test_second.pref
   register: backports_second_stat
   failed_when: not backports_second_stat.stat.exists
 
