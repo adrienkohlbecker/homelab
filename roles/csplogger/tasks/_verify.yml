@@ -243,12 +243,13 @@
     row: "{{ csplogger_otlp_row.stdout | from_json }}"
   assert:
     that:
-      # Body shape: "warn: CSP <effective> blocked <uri> on <doc> {<json>}".
-      # The "warn:" prefix is what HyperDX's transform processor matches
-      # to set SeverityText/Number; the JSON suffix is what populates
-      # LogAttributes via ExtractPatterns + merge_maps. Each that-item
-      # is quoted as a string -- ansible 2.16+ rejects bare expressions.
-      - "row.Body is match('^warn: CSP ')"
+      # Body shape: "CSP <effective> blocked <uri> on <doc> {<json>}".
+      # The JSON suffix populates LogAttributes via HyperDX collector's
+      # ExtractPatterns + merge_maps, AND its first key "level":"warn"
+      # is what the severity-keyword regex matches to set
+      # SeverityText/Number. Each that-item is quoted as a string --
+      # ansible 2.16+ rejects bare expressions.
+      - "row.Body is match('^CSP ')"
       - "row.SeverityText == 'warn'"
       - "row.SeverityNumber | int == 13"
       - "row.ServiceName == 'csplogger'"

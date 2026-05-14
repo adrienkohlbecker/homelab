@@ -4,26 +4,26 @@
 --
 -- Wire path: fluent-bit OTLP HTTP output -> hyperdx otelcontribcol's
 -- otlp/hyperdx receiver -> transform processor -> ClickHouse otel_logs.
--- The transform processor has two statements we exploit here:
---   1. ExtractPatterns("(?P<0>(\\{.*\\}))") on log.body + merge_maps
---      into log.attributes -- any JSON object substring in Body becomes
---      flat LogAttributes (this is how z2m's MQTT payloads become
---      LogAttributes['linkquality'] etc.)
---   2. A severity-keyword regex on Body when severity is unset --
---      "warn", "warning", "notice" all map to SEVERITY_NUMBER_WARN (13).
--- Both run unconditionally on every log record, so we don't need
--- fluent-bit's opentelemetry output to ship per-record attributes or
--- severity over the wire (it can't anyway -- its _metadata_key options
--- read from the event-metadata stream, which lua filters have no API
--- to populate).
+-- Severity is shipped directly: we set record["severity_text"] /
+-- record["severity_number"] at the body top level, and the [OUTPUT]
+-- opentelemetry block's logs_severity_*_message_key options point
+-- fluent-bit at those body keys (the default $SeverityText reads from
+-- fluent-bit's separate event-metadata stream, which lua filters have
+-- no API to populate).
 --
--- The body has shape:
---   warn: CSP <effective-directive> blocked <blocked-uri> on <document-uri> {<csp_json>}
+-- LogAttributes don't have a body-side message_key option, so we lean
+-- on HyperDX's transform processor: it runs
+-- ExtractPatterns("(?P<0>(\\{.*\\}))") on log.body + ParseJSON +
+-- merge_maps into log.attributes unconditionally, so any JSON object
+-- substring in Body becomes flat LogAttributes (this is the same path
+-- that already populates z2m's MQTT-payload bodies as
+-- LogAttributes['linkquality'] etc.).
 --
--- The leading "warn:" gets the level-inference regex to set
--- SeverityText="warn"/SeverityNumber=13. The trailing JSON gets
--- ExtractPatterns to surface csp_* / SYSLOG_IDENTIFIER / host as
--- LogAttributes. The middle is the timeline-readable summary.
+-- Body has shape:
+--   CSP <effective-directive> blocked <blocked-uri> on <document-uri> {<csp_json>}
+--
+-- where <csp_json> contains SYSLOG_IDENTIFIER, csp_format, host, and
+-- the populated csp_* fields.
 --
 -- Legacy report-uri body  : {"csp-report": {"blocked-uri": "...", ...}}
 -- Reporting API body      : [{"type":"csp-violation","body":{"blockedURL":"..."}, ...}]
@@ -64,6 +64,13 @@ local function host_from_tag(tag)
 end
 
 function flatten_csp(tag, ts, record)
+    -- Every CSP report is a policy violation worth surfacing at warn.
+    -- These top-level body keys are mapped to LogRecord.severity_* by
+    -- fluent-bit's [OUTPUT] opentelemetry logs_severity_*_message_key
+    -- options. 13 is OTLP SEVERITY_NUMBER_WARN.
+    record["severity_text"] = "warn"
+    record["severity_number"] = 13
+
     local r, format
     if type(record["csp-report"]) == "table" then
         r = record["csp-report"]
@@ -75,7 +82,7 @@ function flatten_csp(tag, ts, record)
         -- Unrecognised shape; emit a tagged body so the record is still
         -- discoverable under SYSLOG_IDENTIFIER=csplogger with severity=warn,
         -- but with no csp_* attributes.
-        record["log"] = 'warn: csplogger received malformed POST '
+        record["log"] = 'csplogger received malformed POST '
             .. '{"SYSLOG_IDENTIFIER":"csplogger","csp_format":"unknown",'
             .. '"host":"' .. jsonesc(host_from_tag(tag)) .. '"}'
         return 1, ts, record
@@ -123,7 +130,7 @@ function flatten_csp(tag, ts, record)
     if status_code ~= nil then parts[#parts + 1] = '"csp_status_code":"' .. tostring(status_code) .. '"' end
 
     record["log"] = string.format(
-        "warn: CSP %s blocked %s on %s {%s}",
+        "CSP %s blocked %s on %s {%s}",
         effective or "?",
         blocked or "?",
         document or "?",
