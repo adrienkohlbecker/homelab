@@ -1,0 +1,6 @@
+[Unit]
+Description={{ systemd_timer_args.description | default(systemd_timer_args.name) }}
+
+[Service]
+Type=oneshot
+ExecStart={{ systemd_timer_args.exec_start }}
