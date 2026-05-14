@@ -93,8 +93,23 @@
     owner: root
     group: root
     mode: "0644"
+    backup: true
   become: true
   register: fluentbit_lua
+  when: not (ansible_check_mode and fluentbit_apt.changed)
+  tags:
+    - fluentbit
+
+- name: Install fluent-bit flatten-csp Lua filter
+  copy:
+    src: flatten-csp.lua
+    dest: /etc/fluent-bit/flatten-csp.lua
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: fluentbit_lua_csp
   when: not (ansible_check_mode and fluentbit_apt.changed)
   tags:
     - fluentbit
@@ -110,7 +125,7 @@
     validate: /opt/fluent-bit/bin/fluent-bit --config %s --dry-run
   become: true
   register: fluentbit_cfg
-  when: not (ansible_check_mode and (fluentbit_apt.changed or fluentbit_lua.changed))
+  when: not (ansible_check_mode and (fluentbit_apt.changed or fluentbit_lua.changed or fluentbit_lua_csp.changed))
   tags:
     - fluentbit
 
@@ -122,7 +137,7 @@
     systemd_unit_args:
       src: fluent-bit
       condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or fluentbit_repository.changed)) }}"
-      restart: "{{ fluentbit_cfg.changed or fluentbit_lua.changed or fluentbit_apt.changed }}"
+      restart: "{{ fluentbit_cfg.changed or fluentbit_lua.changed or fluentbit_lua_csp.changed or fluentbit_apt.changed }}"
   tags:
     - fluentbit
 
