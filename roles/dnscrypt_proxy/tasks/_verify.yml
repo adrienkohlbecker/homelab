@@ -112,12 +112,13 @@
 #    [anonymized_dns] block was parsed and routes registered. Doesn't prove
 #    anything actually traversed a relay.
 #
-# 2. Per-query grep ("Anonymizing queries for [scaleway-fr] via [anon-...]")
-#    is emitted the first time the load balancer routes a real query to that
-#    (server, relay) pair. Drive 20 queries to make p2 picking scaleway-fr at
-#    least once near-certain (P(fail) = 0.5^20 ~ 1e-6). Only scaleway-fr is
-#    checked: fdn is a DoH server (sdns://Agc...), and 2.0.45 can't relay DoH
-#    -- ODoH support is 2.0.46+. fdn queries go direct; that's a known gap.
+# 2. Per-query grep ("Anonymizing queries for [<server>] via [anon-...]") is
+#    emitted the first time the load balancer routes a real query to that
+#    (server, relay) pair. Drive 20 queries so p2 picks each of the two
+#    servers at least once near-certain (P(fail per server) = 0.5^20 ~ 1e-6).
+#    Both servers are DNSCrypt-protocol stamps, so both should appear; if one
+#    is missing, that server's stamp doesn't advertise the supports-relay flag
+#    and queries to it silently fall back to direct.
 - name: _verify | dnscrypt-proxy registered anonymized routes at startup
   command: journalctl --no-pager -u dnscrypt-proxy.service
   register: _verify_journal_startup
@@ -144,16 +145,18 @@
             s.close()
   changed_when: false
 
-- name: _verify | At least one query traversed a relay (scaleway-fr)
+- name: _verify | Both pinned servers had a query traverse a relay
   command: journalctl --no-pager -u dnscrypt-proxy.service
   register: _verify_journal_relay
   changed_when: false
   become: true
-  failed_when: "'Anonymizing queries for [scaleway-fr]' not in _verify_journal_relay.stdout"
+  failed_when:
+    - "'Anonymizing queries for [scaleway-fr]' not in _verify_journal_relay.stdout
+       or 'Anonymizing queries for [dnscry.pt-paris-ipv4]' not in _verify_journal_relay.stdout"
 
 # require_dnssec / require_nolog / require_nofilter self-consistency: the
-# filters are inert today because server_names pins fdn and scaleway-fr, but
-# they'd reject those same servers if we ever dropped the pin. Parse the
+# filters are inert today because server_names pins both choices, but they'd
+# reject those same servers if we ever dropped the pin. Parse the
 # cached resolvers list, decode each pinned server's DNS stamp, and assert
 # its property bitfield advertises dnssec+nolog+nofilter -- so the pin and
 # the filters can't silently disagree. Stamp format: protocol byte, then a
@@ -168,7 +171,7 @@
         with open("/var/cache/dnscrypt-proxy/public-resolvers.md") as f:
             md = f.read()
         entries = dict(re.findall(r"^## (\S+).*?(sdns://\S+)", md, re.M | re.S))
-        for name in ("fdn", "scaleway-fr"):
+        for name in ("dnscry.pt-paris-ipv4", "scaleway-fr"):
             stamp = entries[name]
             raw = base64.urlsafe_b64decode(stamp[7:] + "=" * (-len(stamp[7:]) % 4))
             props = int.from_bytes(raw[1:9], "little")
