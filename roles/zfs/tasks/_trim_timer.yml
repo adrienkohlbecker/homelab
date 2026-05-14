@@ -1,9 +1,9 @@
-# Per-pool include_role wrapper. include_tasks re-evaluates `vars:` on
-# each iteration (include_role + loop binds vars once on the include
-# task, so every iteration ends up with the same systemd_timer_args).
-# Caller passes the pool name as `item`.
+# Per-pool wrapper for the include_tasks loop in main.yml. import_role
+# works here (not at the top level) because include_tasks re-parses
+# this file per iteration with `item` already in scope, so the
+# import_role's vars: get a fresh systemd_timer_args each pool.
 - name: _trim_timer | Install zfs_trim timer for {{ item }}
-  include_role:
+  import_role:
     name: systemd_timer
     tasks_from: install
   vars:
