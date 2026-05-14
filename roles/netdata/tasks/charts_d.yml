@@ -1,0 +1,121 @@
+# Install a charts.d.plugin shell collector. Drops the caller-provided
+# script under /usr/libexec/netdata/charts.d/ and the caller-provided conf
+# under /etc/netdata/charts.d/, then restarts netdata when anything changed.
+#
+# Inputs: caller passes a single dict `netdata_args` with keys
+#   name        required; collector module name (e.g. 'hdparm'). Used as
+#               the on-disk basename: charts.d/<name>.chart.sh and
+#               charts.d/<name>.conf. charts.d.plugin discovers modules
+#               by the <name>.chart.sh filename and sources the matching
+#               <name>.conf before <name>_check.
+#   script      required; file under caller's files/ to install as the
+#               chart.sh. Always copied verbatim (no template form — chart
+#               scripts shouldn't carry host-specific values; put those in
+#               the conf instead).
+#   conf        required; file under caller's files/ (or templates/, if the
+#               name ends in .j2) to install as the charts.d conf.
+#   condition   optional bool, default true; gates the whole call
+#   restart     optional bool, default true; restart netdata after a change
+#
+# The dict form prevents inter-call leakage at play-vars scope (see
+# template.yml for the longer rationale; same shape).
+- name: charts_d | Resolve caller defaults for {{ netdata_args.name }}
+  set_fact:
+    _netdata_charts_d_script: "{{ netdata_args.script }}"
+    _netdata_charts_d_conf: "{{ netdata_args.conf }}"
+    _netdata_charts_d_condition: "{{ netdata_args.condition | default(true) }}"
+    _netdata_charts_d_restart: "{{ netdata_args.restart | default(true) }}"
+
+# charts.d.plugin is shipped in a separate package on the netdata.cloud
+# apt repo (the main netdata package doesn't pull it in). Idempotent
+# apt: cache_valid_time=3600 keeps repeated calls cheap.
+- name: charts_d | Install netdata-plugin-chartsd
+  when:
+    - _netdata_charts_d_condition
+    - not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed))
+  apt:
+    pkg:
+      - netdata-plugin-chartsd
+    cache_valid_time: 3600
+  register: _netdata_charts_d_apt
+  become: true
+
+- name: charts_d | Install {{ netdata_args.name }}.chart.sh
+  when: _netdata_charts_d_condition
+  copy:
+    src: "{{ _netdata_charts_d_script }}"
+    dest: /usr/libexec/netdata/charts.d/{{ netdata_args.name }}.chart.sh
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+  register: _netdata_charts_d_chart_sh
+  become: true
+
+- name: charts_d | Ensure /etc/netdata/charts.d/ exists
+  when: _netdata_charts_d_condition
+  file:
+    path: /etc/netdata/charts.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+# Inline rather than via netdata/template: charts.d collectors have no
+# meaningful upstream config stub to seed from, and the helper's restart
+# hook fires only on its own template-change, missing chart.sh / package
+# changes that also need a daemon respawn.
+- name: charts_d | Install charts.d/{{ netdata_args.name }}.conf ({{ 'template' if _netdata_charts_d_conf.endswith('.j2') else 'copy' }})
+  when:
+    - _netdata_charts_d_condition
+    - not (ansible_check_mode and _netdata_charts_d_apt.changed)
+  vars:
+    _module: "{{ 'template' if _netdata_charts_d_conf.endswith('.j2') else 'copy' }}"
+  action: "{{ _module }}"
+  args:
+    src: "{{ _netdata_charts_d_conf }}"
+    dest: /etc/netdata/charts.d/{{ netdata_args.name }}.conf
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: true
+  register: _netdata_charts_d_conf_result
+  become: true
+
+- name: charts_d | Restart netdata for {{ netdata_args.name }} collector changes
+  when:
+    - _netdata_charts_d_condition
+    - _netdata_charts_d_restart
+    - not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed or _netdata_charts_d_apt.changed))
+    - _netdata_charts_d_apt.changed or _netdata_charts_d_chart_sh.changed or _netdata_charts_d_conf_result.changed
+  systemd:
+    name: netdata
+    state: restarted
+  become: true
+  register: _netdata_charts_d_restart_result
+
+# netdata's Type=notify ExecStartPost signals READY=1 before the listener +
+# control socket are fully up, so `state: restarted` returns "early" and an
+# immediately-following `netdatacli reload-health` would race against
+# /run/netdata/netdata.pipe. netdata/main.yml installs an ExecStartPost
+# drop-in that polls /api/v1/info to close that race; callers that
+# invoke charts_d outside that flow (e.g. role _setup paths) need this
+# wait_for as the equivalent backstop.
+- name: charts_d | Wait for netdata control socket
+  when:
+    - _netdata_charts_d_condition
+    - _netdata_charts_d_restart_result.changed | default(false)
+  wait_for:
+    path: /run/netdata/netdata.pipe
+    timeout: 120
+  become: true
+
+# Expose a per-collector "did anything change" fact so callers can chain
+# downstream restart triggers (e.g. an alerts.conf reload-health gated on
+# the collector being live). Name is sanitized to match the systemd_unit
+# helper's per-unit fact convention.
+- name: charts_d | Record install result for {{ netdata_args.name }}
+  set_fact:
+    "netdata_charts_d_{{ netdata_args.name | regex_replace('[^A-Za-z0-9_]', '_') }}_result":
+      changed: "{{ _netdata_charts_d_apt.changed or _netdata_charts_d_chart_sh.changed or _netdata_charts_d_conf_result.changed }}"
