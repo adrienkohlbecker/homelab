@@ -176,8 +176,9 @@
     systemd_timer_args:
       name: zfs_health
       description: Daily ZFS health check
+      frequency: daily
       on_calendar: "*-*-* 00:55:00"
-      exec_start: /usr/local/bin/run_job daily zfs_health /usr/local/bin/zfs_health
+      exec_start: /usr/local/bin/zfs_health
   tags:
     - zfs
 

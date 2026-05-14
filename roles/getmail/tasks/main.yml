@@ -64,7 +64,8 @@
     systemd_timer_args:
       name: getmail
       description: Fetch mail via getmail
+      frequency: daily
       on_calendar: "*-*-* 00:24:00"
-      exec_start: /usr/local/bin/run_job daily getmail su {{ ansible_user }} -c getmail
+      exec_start: /usr/bin/su {{ ansible_user }} -c getmail
   tags:
     - getmail

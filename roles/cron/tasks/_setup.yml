@@ -1,3 +1,0 @@
-- name: _setup | Install bash helpers
-  import_role:
-    name: bash
