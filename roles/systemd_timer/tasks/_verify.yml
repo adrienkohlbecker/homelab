@@ -81,3 +81,82 @@
     path: /tmp/_verify_timer.out
     state: absent
   become: true
+
+# Second fixture: sentinel-enabled run that emits to both stdout and
+# stderr. Two contracts under test:
+#  - ExecStartPost writes "<frequency> <iso-8601-ts>" to /var/log/jobs/<name>
+#    (the format custom_exporter._bump() parses).
+#  - stderr_priority re-tags stderr at priority err, so
+#    `journalctl -u <unit> -p err` surfaces the stderr line but not the
+#    stdout line (which lands at info).
+- name: _verify | Capture pre-run timestamp for journal filter
+  command: date +%s
+  register: _verify_sentinel_t0
+  changed_when: false
+
+- name: _verify | Install sentinel fixture timer
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_sentinel
+      description: systemd_timer sentinel + stderr_priority self-test
+      frequency: daily
+      on_calendar: "*-*-* 23:59:00"
+      # Two echoes via /bin/sh so both streams come from a real
+      # process under the stderr_priority wrapper.
+      exec_start: /bin/sh -c 'echo STDOUT_VERIFY_LINE; echo STDERR_VERIFY_LINE >&2'
+
+- name: _verify | Trigger the sentinel fixture manually
+  command: systemctl start --wait _verify_timer_sentinel.service
+  changed_when: false
+  become: true
+
+# Force a synchronous journal flush so the journalctl read below sees
+# the run's output without racing the async writer.
+- name: _verify | Sync journal before reading
+  command: journalctl --sync
+  changed_when: false
+  become: true
+
+- name: _verify | Read sentinel file
+  slurp:
+    src: /var/log/jobs/_verify_timer_sentinel
+  register: _verify_sentinel_file
+  become: true
+
+- name: _verify | Read journal at priority err for the sentinel unit
+  command: >-
+    journalctl -u _verify_timer_sentinel.service -p err
+    --since=@{{ _verify_sentinel_t0.stdout }} --no-pager --output=cat
+  register: _verify_sentinel_journal_err
+  changed_when: false
+  become: true
+
+- name: _verify | Functional assertions for sentinel + stderr_priority
+  assert:
+    that:
+      # Sentinel format: `<frequency> <iso-8601-ts>` -- the contract
+      # custom_exporter._bump() parses. date --iso-8601=seconds emits
+      # e.g. 2026-05-14T10:30:00+02:00.
+      - (_verify_sentinel_file.content | b64decode | trim)
+        is match('^daily \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$')
+      # Stderr line surfaces at priority err; stdout line (priority
+      # info by default) is filtered out by `-p err`.
+      - "'STDERR_VERIFY_LINE' in _verify_sentinel_journal_err.stdout"
+      - "'STDOUT_VERIFY_LINE' not in _verify_sentinel_journal_err.stdout"
+
+- name: _verify | Remove the sentinel fixture timer
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_sentinel
+
+- name: _verify | Cleanup sentinel file
+  file:
+    path: /var/log/jobs/_verify_timer_sentinel
+    state: absent
+  become: true
