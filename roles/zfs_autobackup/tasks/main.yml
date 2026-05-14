@@ -134,6 +134,7 @@
 - name: Schedule the zfs_autosnapshot timer
   import_role:
     name: systemd_timer
+    tasks_from: install
   vars:
     systemd_timer_args:
       name: zfs_autosnapshot

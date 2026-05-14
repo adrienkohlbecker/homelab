@@ -59,6 +59,7 @@
 - name: Schedule the getmail timer
   import_role:
     name: systemd_timer
+    tasks_from: install
   vars:
     systemd_timer_args:
       name: getmail
