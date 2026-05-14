@@ -9,8 +9,9 @@
     name: backports
     tasks_from: pin
   vars:
-    backports_name: ntp
-    backports_packages: '{{ ntp_backport_packages }}'
+    backports_args:
+      name: ntp
+      packages: '{{ ntp_backport_packages }}'
   tags:
     - ntp
 

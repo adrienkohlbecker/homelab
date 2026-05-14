@@ -2,7 +2,7 @@
 # full pin list lives in podman_backport_packages so the pin file's
 # `Package:` line and the upgrade task share a single source of
 # truth. The role exports podman_backports_updated (derived from
-# backports_name), consumed by main.yml's `Enable podman.socket`
+# backports_args.name), consumed by main.yml's `Enable podman.socket`
 # task to force a restart when noble's binary replaced jammy's
 # underneath the running daemon.
 - name: install | Apply podman backports pin + upgrade (jammy)
@@ -10,8 +10,9 @@
     name: backports
     tasks_from: pin
   vars:
-    backports_name: podman
-    backports_packages: '{{ podman_backport_packages }}'
+    backports_args:
+      name: podman
+      packages: '{{ podman_backport_packages }}'
   tags:
     - podman
 

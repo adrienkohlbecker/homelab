@@ -22,8 +22,9 @@
     name: backports
     tasks_from: pin
   vars:
-    backports_name: test_libc6_transition
-    backports_packages: "{{ ntp_backport_packages }}"
+    backports_args:
+      name: test_libc6_transition
+      packages: "{{ ntp_backport_packages }}"
 
 - name: _verify (jammy) | pin file lands at the documented path
   when: ansible_distribution_major_version == "22"
@@ -32,48 +33,59 @@
   register: backports_pin_stat
   failed_when: not backports_pin_stat.stat.exists
 
-# Cross-arch mirror sanity: all four noble suites must have resolved
-# during the cache refresh. apt-get update returns 0 even on partial
-# failure (any source success), so don't trust its rc. Instead check
-# that an InRelease file exists for each of the four expected suites
-# under /var/lib/apt/lists/ -- apt only writes those after a
-# successful signed fetch. amd64 hits archive.ubuntu.com-class
-# mirrors; aarch64 hits ports.ubuntu.com-class; both produce the same
-# per-suite filename shape ending in `<suite>_InRelease`. A bad
-# ternary in group_vars/all.yml's ubuntu_mirror or a typo in the
-# deb822 template would otherwise produce a silent partial-mirror
-# failure that the rest of the verify wouldn't catch.
-- name: _verify (jammy) | all four noble suites have signed InRelease metadata
+# Cross-arch mirror sanity: ask apt itself which sources it would
+# fetch from, and require all four noble suites are present. amd64
+# hits archive.ubuntu.com-class mirrors; aarch64 hits
+# ports.ubuntu.com-class; either way `apt-get indextargets` enumerates
+# them straight from apt's parsed sources tree, so a bad ternary in
+# group_vars/all.yml's ubuntu_mirror or a typo in the deb822 template
+# produces a missing suite here rather than a silent partial-mirror
+# failure later. We parse the default RFC822 stanzas for `Suite:`
+# lines (one per suite × component × arch target) rather than
+# `--format '$(SUITE)'` — that placeholder is unsubstituted on
+# jammy's apt 2.4 and lands in stdout as the literal "$(SUITE)".
+- name: _verify (jammy) | all four noble suites are configured index targets
   when: ansible_distribution_major_version == "22"
-  find:
-    paths: /var/lib/apt/lists
-    patterns:
-      - "*_dists_noble_InRelease"
-      - "*_dists_noble-updates_InRelease"
-      - "*_dists_noble-backports_InRelease"
-      - "*_dists_noble-security_InRelease"
-  register: backports_noble_release_files
-  failed_when: backports_noble_release_files.matched < 4
+  command:
+    argv: [ apt-get, indextargets ]
+  register: backports_noble_indextargets
+  changed_when: false
+  failed_when: >
+    backports_noble_indextargets.rc != 0
+    or (backports_noble_indextargets.stdout_lines
+        | select('match', '^Suite:\s+noble(-updates|-backports|-security)?$')
+        | map('regex_replace', '^Suite:\s+', '')
+        | unique | list | length) < 4
 
 # Functional check: the role's job is to make the apt resolver prefer
-# noble candidates for the listed packages. apt-cache policy reports
-# the pin priority next to each candidate version; our pin file is the
-# only thing in this image stamping 991 onto packages, so an installed
-# version at priority 991 means the pin took effect. Match the
-# priority on its own field (preceded by the *** installed marker) to
-# avoid false-positives from a version string that happens to contain
-# "991".
+# noble candidates for the listed packages. We prove that by pairing
+# dpkg's installed version (via package_facts) with apt-cache madison's
+# pipe-separated `<pkg> | <ver> | <site> <suite>/<comp> <arch> Packages`
+# output -- if the installed version appears on a noble* row, apt picked
+# a noble candidate. madison's structured form replaces the prior
+# approach of regex'ing apt-cache policy's priority column, which was
+# sensitive to whitespace and the leading `***` marker. The pin is the
+# only thing that could have made apt prefer noble over jammy, so a
+# noble installed version implies the 991 band took effect.
+- name: _verify (jammy) | gather installed package versions
+  when: ansible_distribution_major_version == "22"
+  package_facts:
+    manager: apt
+
 - name: _verify (jammy) | apt picks the noble candidate for every pinned package
   when: ansible_distribution_major_version == "22"
-  command: apt-cache policy {{ item }}
-  register: backports_policy
+  command:
+    argv: [ apt-cache, madison, "{{ item }}" ]
+  register: backports_madison
   changed_when: false
   loop: "{{ ntp_backport_packages }}"
   failed_when: >
-    backports_policy.rc != 0
-    or 'Candidate: (none)' in backports_policy.stdout
-    or backports_policy.stdout_lines
-       | select('match', '^\s+\*\*\* .* 991\s*$')
+    backports_madison.rc != 0
+    or (ansible_facts.packages[item] | default([{}]))[0].version | default('') == ''
+    or backports_madison.stdout_lines
+       | select('search', '\|\s*'
+                ~ ((ansible_facts.packages[item] | default([{}]))[0].version | default('!UNINSTALLED!') | regex_escape)
+                ~ '\s*\|.*\snoble(?:-(?:updates|backports|security))?/')
        | list | length == 0
 
 # Negative pin band: the template's `Pin: release o=Ubuntu Pin-Priority: -10`
@@ -114,8 +126,9 @@
     name: backports
     tasks_from: pin
   vars:
-    backports_name: test_libc6_transition
-    backports_packages: "{{ ntp_backport_packages }}"
+    backports_args:
+      name: test_libc6_transition
+      packages: "{{ ntp_backport_packages }}"
 
 - name: _verify (jammy) | second apply is a no-op (fact flips to false)
   when: ansible_distribution_major_version == "22"
@@ -135,8 +148,9 @@
     name: backports
     tasks_from: pin
   vars:
-    backports_name: test_second
-    backports_packages: [ libc6 ]
+    backports_args:
+      name: test_second
+      packages: [ libc6 ]
 
 - name: _verify (jammy) | second import lands its own pin file
   when: ansible_distribution_major_version == "22"

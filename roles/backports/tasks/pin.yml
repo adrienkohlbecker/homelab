@@ -3,16 +3,21 @@
 # (or any non-22.04 release), every task is a no-op. Invoked via:
 #   import_role: name: backports, tasks_from: pin
 #
-# Inputs:
-#   backports_name      short label matching ^[A-Za-z0-9_]+$; used
-#                       verbatim in the pin filename and as the stem of
-#                       the per-call output fact.
-#   backports_packages  non-empty list of package names. Becomes both
-#                       the pin file's Package: line and the upgrade
-#                       task's apt: pkg list, so they can't drift.
+# Inputs: caller passes a single dict `backports_args` with keys
+#   name      required; short label matching ^[A-Za-z0-9_]+$. Used
+#             verbatim in the pin filename and as the stem of the
+#             per-call output fact.
+#   packages  required; non-empty list of package names. Becomes both
+#             the pin file's Package: line and the upgrade task's
+#             apt: pkg list, so they can't drift.
+#
+# The dict form prevents inter-call leakage at play-vars scope: each
+# import_role pass replaces the whole `backports_args` value, so a
+# previous caller's name/packages can't bleed into the next caller's
+# call. Mirrors service_user_args / podman_secret_args / systemd_unit_args.
 #
 # Output fact:
-#   {{ backports_name }}_backports_updated  -> bool
+#   {{ backports_args.name }}_backports_updated  -> bool
 #     true on a real-mode apply where apt actually rolled the pinned
 #     set forward; false on idempotent re-applies and on non-jammy
 #     releases. Consumer roles gate daemon restarts on this. The
@@ -39,31 +44,36 @@
 #     because the -10 catch-all would otherwise suppress jammy too.
 #     _verify.yml exercises the negative path.
 #   - Input validation fails loud rather than silently translating.
-#     backports_name leaking a hyphen would write
+#     A name leaking a hyphen would write
 #     /etc/apt/preferences.d/backports_foo-bar.pref but set the fact
 #     foo_bar_backports_updated -- an invisible split. A bare-string
-#     backports_packages would `join(' ')` per-character ("c h r o
-#     n y") and the pin file would match nothing; an empty list
-#     would render `Package: ` with the same effect. Both fail
-#     silently in apt -- the pin is "applied" but the resolver never
-#     picks a noble candidate.
+#     packages value would `join(' ')` per-character ("c h r o n y")
+#     and the pin file would match nothing; an empty list would
+#     render `Package: ` with the same effect. Both fail silently in
+#     apt -- the pin is "applied" but the resolver never picks a
+#     noble candidate.
+- name: Resolve caller defaults for {{ backports_args.name }}
+  set_fact:
+    _backports_name: "{{ backports_args.name }}"
+    _backports_packages: "{{ backports_args.packages }}"
+
 - name: Validate backports inputs
   assert:
     that:
-      - backports_name is match('^[A-Za-z0-9_]+$')
-      - backports_packages is sequence
-      - backports_packages is not string
-      - backports_packages | length > 0
+      - _backports_name is match('^[A-Za-z0-9_]+$')
+      - _backports_packages is sequence
+      - _backports_packages is not string
+      - _backports_packages | length > 0
     fail_msg: >-
-      backports_name must match [A-Za-z0-9_]+ (got {{ backports_name | to_json }})
-      and backports_packages must be a non-empty list
-      (got {{ backports_packages | to_json }})
+      backports_args.name must match [A-Za-z0-9_]+ (got {{ _backports_name | to_json }})
+      and backports_args.packages must be a non-empty list
+      (got {{ _backports_packages | to_json }})
 
-- name: Pin packages to noble (jammy) — {{ backports_name }}
+- name: Pin packages to noble (jammy) — {{ _backports_name }}
   when: ansible_distribution_major_version == "22"
   template:
     src: backports_pin.j2
-    dest: /etc/apt/preferences.d/backports_{{ backports_name }}.pref
+    dest: /etc/apt/preferences.d/backports_{{ _backports_name }}.pref
     owner: root
     group: root
     mode: "0644"
@@ -83,7 +93,7 @@
 - name: Clean up legacy pin file path (pre-rename to .pref)
   when: ansible_distribution_major_version == "22"
   file:
-    path: /etc/apt/preferences.d/backports-{{ backports_name }}
+    path: /etc/apt/preferences.d/backports-{{ _backports_name }}
     state: absent
   become: true
   register: backports_pin_legacy_removed
@@ -167,7 +177,7 @@
     - ansible_distribution_major_version == "22"
     - not (ansible_check_mode and (backports_pin.changed or backports_noble_sources.changed))
   apt:
-    pkg: '{{ backports_packages | unique }}'
+    pkg: '{{ _backports_packages | unique }}'
     state: latest
     policy_rc_d: 101
   register: backports_upgrade
@@ -177,7 +187,7 @@
 # is visible in the playbook log. Combined with policy_rc_d=101 the
 # operator otherwise has no signal of "which daemons just got a new
 # binary on disk" until the consumer's restart fires.
-- name: Show upgrade summary for {{ backports_name }}
+- name: Show upgrade summary for {{ _backports_name }}
   when:
     - ansible_distribution_major_version == "22"
     - backports_upgrade.changed | default(false)
@@ -190,15 +200,19 @@
 # handle is reused on the next import). Mirrors systemd_unit's
 # *_result pattern — derive the fact name from an existing input
 # rather than taking another argument. The validate-shape assert
-# above is what lets us use backports_name verbatim here without a
+# above is what lets us use _backports_name verbatim here without a
 # regex_replace silently diverging from the pin file's path.
 #
 # On non-jammy releases every preceding task was skipped and
 # backports_upgrade is a skipped-result; hardcode false rather than
 # relying on Ansible's skipped-register .changed semantics so the
 # noble-path contract is local to this task.
-- name: Record upgrade outcome for {{ backports_name }}
+#
+# `| bool` coerces to a real Python boolean so consumers can write
+# `when: <name>_backports_updated` without `| bool`. Without it the
+# rendered value is the string "True"/"False" -- both truthy.
+- name: Record upgrade outcome for {{ _backports_name }}
   set_fact:
-    "{{ backports_name }}_backports_updated": >-
-      {{ (backports_upgrade.changed | default(false))
-         if ansible_distribution_major_version == "22" else false }}
+    "{{ _backports_name }}_backports_updated": >-
+      {{ ((backports_upgrade.changed | default(false))
+          if ansible_distribution_major_version == "22" else false) | bool }}
