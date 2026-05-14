@@ -3,11 +3,14 @@
 built-in collectors:
   * hdparm power state for rotational drives (DRIVE_HDPARM_DEVICES)
   * /var/log/jobs/* cron job last-success / next-run timestamps
-  * netdata context + collector liveness, scraped from the local netdata API
+  * netdata context *presence* and collector liveness, via the local netdata API
 
-The wire shape (metric names + labels + 5s gather cadence) matches the prior
-Go implementation so alerts.conf and the netdata-prometheus scrape config are
-unchanged.
+Per-context staleness is handled natively by the context_liveness.conf.j2
+health template (it uses $last_collected_t on each chart). What native
+templates can't catch is a context that never appeared in netdata's chart
+registry -- a template with on:<missing-chart> silently fails to instantiate.
+The netdata_context_present metric here closes that gap: 1 if the configured
+context id is in /api/v2/contexts, 0 otherwise.
 """
 
 from __future__ import annotations
@@ -175,23 +178,19 @@ def _netdata_json(path: str):
         return json.load(r)
 
 
-def _netdata_context_lines() -> tuple[list[str], bool]:
+def _netdata_context_present_lines() -> tuple[list[str], bool]:
     if not CONTEXTS:
         return [], False
     try:
         data = _netdata_json("/api/v2/contexts")
     except Exception:
-        # Skip emission on API failure; the 60s lookup window will age the
-        # last-known value out so the alert eventually fires.
         return [], True
-    live = {
-        CONTEXTS[cid]
-        for cid, c in data.get("contexts", {}).items()
-        if cid in CONTEXTS and c.get("live")
-    }
+    present = set(data.get("contexts", {}).keys())
+    # Iterate CONTEXTS so the metric is emitted for every *configured* context,
+    # including ones not in the API response (those land as 0 -> alert fires).
     return (
-        [f'netdata_context_up{{context="{n}"}} {int(n in live)}'
-         for n in sorted(set(CONTEXTS.values()))],
+        [f'netdata_context_present{{context="{name}"}} {int(ctx_id in present)}'
+         for ctx_id, name in CONTEXTS.items()],
         False,
     )
 
@@ -227,7 +226,7 @@ def _gather() -> None:
         errs = 0
         lines = ["exporter_up 1"]
         for fn in (_hdparm_lines, _cron_lines,
-                   _netdata_context_lines, _netdata_collector_lines):
+                   _netdata_context_present_lines, _netdata_collector_lines):
             try:
                 got, e = fn()
                 lines += got
