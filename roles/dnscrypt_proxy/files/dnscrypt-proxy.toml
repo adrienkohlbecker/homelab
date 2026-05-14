@@ -1,10 +1,12 @@
 # Empty listen_addresses to use systemd socket activation
 listen_addresses = []
-# Both Paris-local DNSCrypt resolvers, distinct operators (Scaleway/F. Denis
-# and DNSCry.pt). Both anonymizable via [anonymized_dns] below. DoH-only stamps
-# (e.g. fdn) can't be relayed in 2.0.45 -- ODoH is 2.0.46+ -- so we pick
-# DNSCrypt-protocol stamps to keep both upstreams anonymized.
-server_names = ['dnscry.pt-paris-ipv4', 'scaleway-fr']
+# Both Paris-local DNSCrypt resolvers, distinct operators (DNSCry.pt and dct).
+# Both anonymizable via [anonymized_dns] below. DoH-only stamps (e.g. fdn) can't
+# be relayed in 2.0.45 -- ODoH is 2.0.46+ -- so we pick DNSCrypt-protocol stamps
+# to keep both upstreams anonymized. Scaleway-fr (Frank Denis) is intentionally
+# excluded here so we can use anon-scaleway* relays without collapsing the
+# resolver and relay to a single operator.
+server_names = ['dnscry.pt-paris-ipv4', 'dct-fr']
 
 # Defensive -- server_names pins both choices today, so these fire only if we
 # ever remove the pin and pull from the public-resolvers pool.
@@ -46,11 +48,17 @@ ignore_system_dns = true
   refresh_delay = 72
   prefix = ''
 
-# Relay encrypted DNSCrypt queries through a third party so the resolver
-# (fdn / scaleway-fr) sees the relay's IP, and the relay sees only ciphertext.
-# Excludes anon-scaleway* since scaleway-fr would then be both endpoints.
-# server_name='*' applies the via list to every server in server_names.
+# Relay encrypted DNSCrypt queries through a third party so the resolver sees
+# the relay's IP, and the relay sees only ciphertext. Two relay operators
+# (Cryptostorm via cs-* and Frank Denis/Scaleway via scaleway*) for diversity --
+# if one operator has an outage, the other still anonymizes. Neither matches
+# either of our resolvers (DNSCry.pt, dct), so no single party sees both our IP
+# and our queries. server_name='*' applies the via list to every server in
+# server_names.
 [anonymized_dns]
 routes = [
-  { server_name = '*', via = ['anon-cs-fr', 'anon-cs-belgium', 'anon-cs-ch'] },
+  { server_name = '*', via = [
+    'anon-cs-fr', 'anon-cs-belgium', 'anon-cs-ch',
+    'anon-scaleway', 'anon-scaleway2',
+  ] },
 ]
