@@ -2,6 +2,15 @@
 listen_addresses = []
 server_names = ['fdn', 'scaleway-fr']
 
+# Defensive -- server_names pins both choices today, so these fire only if we
+# ever remove the pin and pull from the public-resolvers pool.
+require_dnssec = true
+require_nolog = true
+require_nofilter = true
+
+# Fresh DNSCrypt key per query: resolver can't link our queries together.
+dnscrypt_ephemeral_keys = true
+
 # Resolver-list refresh (download.dnscrypt.info, every 72h per [sources])
 # needs DNS for the URL host. Without ignore_system_dns, dnscrypt asks
 # getaddrinfo, which on these hosts walks /etc/resolv.conf -> pihole ->
