@@ -34,7 +34,7 @@
     _systemd_timer_scope: "{{ 'system' if _systemd_timer_user == 'root' else 'user' }}"
     _systemd_timer_dir: "{{ '/etc/systemd/system' if _systemd_timer_user == 'root' else '/etc/systemd/user' }}"
 
-- name: Install timer {{ _systemd_timer_name }}
+- name: Install timer {{ systemd_timer_args.name }}
   when: _systemd_timer_state == 'present'
   block:
     - name: timer | Install service unit for {{ _systemd_timer_name }}
@@ -84,7 +84,7 @@
           src: "{{ _systemd_timer_name }}.timer"
           user: "{{ _systemd_timer_user }}"
 
-- name: Remove timer {{ _systemd_timer_name }}
+- name: Remove timer {{ systemd_timer_args.name }}
   when: _systemd_timer_state == 'absent'
   block:
     # failed_when:false because a never-installed timer is the steady
