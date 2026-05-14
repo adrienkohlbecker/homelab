@@ -1,35 +1,59 @@
-- name: _verify | avahi-daemon is loaded and active
-  systemd:
-    name: avahi-daemon
-  register: _verify_unit
-  failed_when: >-
-    _verify_unit.status.LoadState != "loaded"
-    or _verify_unit.status.ActiveState != "active"
-  become: true
-
-# Proves the daemon is actually publishing its A record on the pinned
-# uplink. Retried because there's a sub-second gap between unit-active and
-# first multicast announcement.
-- name: _verify | avahi resolves the host's own .local name
-  command: avahi-resolve-host-name -4 {{ ansible_hostname }}.local
+# Wire-path check: getent ahosts <host>.local routes through
+# libnss-mdns (mdns4_minimal), which sends its own multicast query
+# to 224.0.0.251 and is *not* a D-Bus self-query of avahi -- this
+# verifies the daemon answers on the wire, not just over the local
+# socket. If allow-interfaces regressed to lo-only, the multicast
+# group on the real uplink wouldn't be joined and this would fail.
+# Retried because the first multicast announcement lags unit-active
+# by several seconds on cold start (esp. in QEMU).
+- name: _verify | host's own .local name resolves via mDNS on the wire
+  command: getent ahosts {{ ansible_hostname }}.local
   register: _verify_resolve
-  retries: 10
-  delay: 1
-  until: _verify_resolve.rc == 0
+  retries: 20
+  delay: 2
+  until:
+    - _verify_resolve.rc == 0
+    - ansible_default_ipv4.address in _verify_resolve.stdout
   changed_when: false
-  become: true
 
-# Proves the device-info.service XML loaded and the templated model field
-# rendered through to a TXT record. `-p` parseable, `-r` resolve (TXT
-# records appear on `=` lines), `-t` terminate after one cycle. Avahi
-# quotes the TXT value so a literal substring match is enough.
-- name: _verify | device-info service is announced with the configured model
+# Confirms avahi joined the mDNS multicast group (224.0.0.251) on
+# the pinned iface. Avahi binds 0.0.0.0:5353 for multicast reception
+# (kernel requirement), so the iface pin lives at the IGMP-membership
+# layer rather than the bind layer -- ss would always show the
+# wildcard bind regardless of allow-interfaces. Positive check:
+# catches a regression that failed to join the group at all (typo
+# in allow-interfaces, socket-option bug) which the getent above
+# could still mask via the kernel's loopback path for local queries.
+- name: _verify | avahi joined 224.0.0.251 on the pinned iface
+  command: ip -o maddr show dev {{ ansible_default_ipv4.interface }}
+  register: _verify_maddr
+  changed_when: false
+  failed_when: >-
+    _verify_maddr.rc != 0
+    or '224.0.0.251' not in _verify_maddr.stdout
+
+# Proves the device-info.service XML loaded and the templated model
+# field rendered through to a TXT record. `-p` parseable, `-r`
+# resolve (TXT records appear on `=` lines), `-t` terminate after
+# one cycle. Asserts the resolved row's iface column equals the
+# pinned iface AND no resolved row for this host comes back on any
+# *other* iface -- the latter catches a regression that publishes
+# through more than one iface, the failure mode the role exists to
+# prevent. (Weak on single-NIC QEMU box but real on prod.) Pinned
+# to ansible_hostname in the service-name column so a peer
+# publishing the same default model can't false-positive the test.
+- name: _verify | device-info service is announced on the pinned iface (only) with the configured model
   command: avahi-browse -prt _device-info._tcp
   register: _verify_browse
-  retries: 10
-  delay: 1
+  retries: 20
+  delay: 2
   until:
     - _verify_browse.rc == 0
-    - ('"model=' + avahi_device_model + '"') in _verify_browse.stdout
+    - _verify_browse.stdout_lines
+        | select('match', '^=;' + ansible_default_ipv4.interface + ';IPv4;' + ansible_hostname + ';')
+        | select('search', '"model=' + avahi_device_model + '"')
+        | list | length > 0
+    - _verify_browse.stdout_lines
+        | select('match', '^=;(?!' + ansible_default_ipv4.interface + ';).*;' + ansible_hostname + ';')
+        | list | length == 0
   changed_when: false
-  become: true
