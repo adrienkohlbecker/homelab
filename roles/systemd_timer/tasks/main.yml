@@ -61,8 +61,6 @@
     # directory scan picks up the job (with last_success=0) before its
     # first run completes -- otherwise the alert "this job hasn't run
     # recently" has nothing to evaluate against until the timer fires.
-    # Mirrors what roles/cron/tasks/monitor.yml used to do for cron.d
-    # consumers.
     - name: timer | Pre-create sentinel for {{ _systemd_timer_name }}
       when: _systemd_timer_sentinel
       file:
