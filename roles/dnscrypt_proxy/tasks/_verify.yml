@@ -106,14 +106,74 @@
   failed_when: _verify_service_post.status.ActiveState != "active"
   become: true
 
-# Anonymized DNSCrypt: at startup dnscrypt-proxy logs a line per (server, relay)
-# pair it has registered. Absence means the server doesn't expose the
-# "supports-relay" flag in its stamp, or the relay name is unknown -- in either
-# case queries silently fall back to direct (still encrypted, but the resolver
-# sees our IP), which defeats the point. Grep the journal to catch that.
-- name: _verify | dnscrypt-proxy is routing queries via anonymized relays
+# Anonymized DNSCrypt -- two layers:
+#
+# 1. Startup grep ("Anonymized DNS: routing everything via [...]") proves the
+#    [anonymized_dns] block was parsed and routes registered. Doesn't prove
+#    anything actually traversed a relay.
+#
+# 2. Per-query grep ("Anonymizing queries for [scaleway-fr] via [anon-...]")
+#    is emitted the first time the load balancer routes a real query to that
+#    (server, relay) pair. Drive 20 queries to make p2 picking scaleway-fr at
+#    least once near-certain (P(fail) = 0.5^20 ~ 1e-6). Only scaleway-fr is
+#    checked: fdn is a DoH server (sdns://Agc...), and 2.0.45 can't relay DoH
+#    -- ODoH support is 2.0.46+. fdn queries go direct; that's a known gap.
+- name: _verify | dnscrypt-proxy registered anonymized routes at startup
   command: journalctl --no-pager -u dnscrypt-proxy.service
-  register: _verify_journal
+  register: _verify_journal_startup
   changed_when: false
   become: true
-  failed_when: "'Anonymized DNS' not in _verify_journal.stdout"
+  failed_when: "'Anonymized DNS: routing' not in _verify_journal_startup.stdout"
+
+- name: _verify | Drive 20 queries so the load balancer picks scaleway-fr
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import socket, struct
+        q = struct.pack(">HHHHHH", 0x1234, 0x0100, 1, 0, 0, 0)
+        for p in b"example.com".split(b"."):
+            q += bytes([len(p)]) + p
+        q += b"\x00\x00\x01\x00\x01"
+        for _ in range(20):
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(2)
+            s.sendto(q, ("127.0.0.1", {{ service_ports.dnscrypt_proxy }}))
+            s.recvfrom(512)
+            s.close()
+  changed_when: false
+
+- name: _verify | At least one query traversed a relay (scaleway-fr)
+  command: journalctl --no-pager -u dnscrypt-proxy.service
+  register: _verify_journal_relay
+  changed_when: false
+  become: true
+  failed_when: "'Anonymizing queries for [scaleway-fr]' not in _verify_journal_relay.stdout"
+
+# require_dnssec / require_nolog / require_nofilter self-consistency: the
+# filters are inert today because server_names pins fdn and scaleway-fr, but
+# they'd reject those same servers if we ever dropped the pin. Parse the
+# cached resolvers list, decode each pinned server's DNS stamp, and assert
+# its property bitfield advertises dnssec+nolog+nofilter -- so the pin and
+# the filters can't silently disagree. Stamp format: protocol byte, then a
+# u64-LE properties field; bit 0 = dnssec, bit 1 = no logs, bit 2 = no filter.
+- name: _verify | Pinned servers satisfy require_dnssec/nolog/nofilter
+  command:
+    argv:
+      - python3
+      - -c
+      - |
+        import base64, re
+        with open("/var/cache/dnscrypt-proxy/public-resolvers.md") as f:
+            md = f.read()
+        entries = dict(re.findall(r"^## (\S+).*?(sdns://\S+)", md, re.M | re.S))
+        for name in ("fdn", "scaleway-fr"):
+            stamp = entries[name]
+            raw = base64.urlsafe_b64decode(stamp[7:] + "=" * (-len(stamp[7:]) % 4))
+            props = int.from_bytes(raw[1:9], "little")
+            flags = {"dnssec": props & 1, "nolog": props & 2, "nofilter": props & 4}
+            missing = [k for k, v in flags.items() if not v]
+            assert not missing, f"{name} missing: {missing} (props=0b{props:b})"
+  changed_when: false
+  become: true
