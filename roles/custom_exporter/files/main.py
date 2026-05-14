@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """Prometheus exporter for host-specific signals not covered by netdata's
 built-in collectors:
-  * hdparm power state for rotational drives (DRIVE_HDPARM_DEVICES)
   * /var/log/jobs/* cron job last-success / next-run timestamps
   * netdata context and collector *presence*, via the local netdata API
 
@@ -13,6 +12,9 @@ case where the configured chart or collector never appeared in netdata's chart
 registry -- a template with on:<missing-chart> silently fails to instantiate.
 The netdata_context_present and netdata_collector_present metrics here close
 that gap: 1 if the configured id resolves to a registered chart, 0 otherwise.
+
+Drive power state was the third leg of this exporter; it now ships as the
+netdata charts.d collector at roles/hdparm/files/hdparm.chart.sh.
 """
 
 from __future__ import annotations
@@ -20,9 +22,7 @@ from __future__ import annotations
 import http.server
 import json
 import os
-import re
 import stat
-import subprocess
 import sys
 import threading
 import time
@@ -30,7 +30,6 @@ import urllib.request
 from datetime import datetime, timedelta
 
 LISTEN = os.environ.get("LISTEN_ADDRESS", "127.0.0.1:19392")
-DRIVES = [d for d in os.environ.get("DRIVE_HDPARM_DEVICES", "").split(",") if d]
 COLLECTORS = [c for c in os.environ.get("NETDATA_COLLECTORS", "").split(",") if c]
 
 
@@ -58,45 +57,9 @@ except ValueError as e:
     print(f"fatal: {e}", file=sys.stderr)
     sys.exit(1)
 
-HDPARM_RE = re.compile(
-    r"/dev/disk/by-id/([^/ ]+):\n drive state is:  ([\w/]+)\n"
-)
-
 _lock = threading.Lock()
 _errors = 0
 _text = "exporter_up 0\n"
-
-
-def _hdparm_lines() -> tuple[list[str], bool]:
-    if not DRIVES:
-        return [], False
-    # hdparm continues past per-drive failures and emits valid sections for the
-    # drives that did respond; parse stdout even on non-zero exit so a single
-    # flaky drive doesn't pin the rest at stale gauge values. Drives missing
-    # from the parsed output fall through to unknown=1.
-    try:
-        r = subprocess.run(
-            ["hdparm", "-C", *[f"/dev/disk/by-id/{d}" for d in DRIVES]],
-            capture_output=True, text=True, timeout=10,
-        )
-        text = r.stdout
-        run_err = r.returncode != 0
-    except (OSError, subprocess.TimeoutExpired):
-        text = ""
-        run_err = True
-
-    parsed = dict(HDPARM_RE.findall(text))
-    out: list[str] = []
-    for d in DRIVES:
-        s = parsed.get(d, "unknown")
-        for label, match in (
-            ("active", "active/idle"),
-            ("standby", "standby"),
-            ("sleeping", "sleeping"),
-            ("unknown", "unknown"),
-        ):
-            out.append(f'hdparm_drive_{label}{{device="{d}"}} {int(s == match)}')
-    return out, run_err or not parsed
 
 
 def _bump(freq: str, t: datetime) -> datetime | None:
@@ -229,7 +192,7 @@ def _gather() -> None:
     while True:
         errs = 0
         lines = ["exporter_up 1"]
-        for fn in (_hdparm_lines, _cron_lines,
+        for fn in (_cron_lines,
                    _netdata_context_present_lines,
                    _netdata_collector_present_lines):
             try:
