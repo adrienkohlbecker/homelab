@@ -146,6 +146,7 @@
 - name: Schedule the pihole_list_update timer
   import_role:
     name: systemd_timer
+    tasks_from: install
   vars:
     systemd_timer_args:
       name: pihole_list_update

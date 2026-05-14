@@ -1,0 +1,70 @@
+# Inputs: caller passes a single dict `systemd_timer_args` with keys
+#   name              required; bare name (no extension). The role
+#                     installs <name>.service + <name>.timer.
+#   exec_start        required; ExecStart= line of the oneshot service.
+#                     Typically a `run_job` call so /var/log/jobs/<name>
+#                     gets a success sentinel that custom_exporter scrapes.
+#   on_calendar       required; OnCalendar= spec (e.g.
+#                     `*-*-* 00:55:00`, `Sun *-*-* 00:47:00`).
+#   description       optional; falls back to name.
+#   randomized_delay_sec  optional; emits RandomizedDelaySec=<n>.
+#   sentinel          default true; pre-creates /var/log/jobs/<name>
+#                     so custom_exporter sees the job before its first
+#                     run completes. Set false for timers whose ExecStart
+#                     isn't /usr/local/bin/run_job.
+#   user              default 'root'; non-root drives the named user's
+#                     user manager (linger must already be on).
+#
+# The dict form mirrors systemd_unit / podman_secret / service_user: each
+# import_role replaces the whole `systemd_timer_args` value at play-vars
+# scope so a previous caller's name/exec_start/etc. can't bleed into the
+# next caller's call.
+- name: install | Resolve caller defaults for {{ systemd_timer_args.name }}
+  set_fact:
+    _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
+    _systemd_timer_sentinel: "{{ systemd_timer_args.sentinel | default(true) }}"
+
+- name: install | Install service unit for {{ systemd_timer_args.name }}
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: service.j2
+      dest: "{{ systemd_timer_args.name }}.service"
+      user: "{{ _systemd_timer_user }}"
+
+- name: install | Install timer unit for {{ systemd_timer_args.name }}
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: timer.j2
+      dest: "{{ systemd_timer_args.name }}.timer"
+      user: "{{ _systemd_timer_user }}"
+
+# Pre-create the /var/log/jobs/<name> sentinel so custom_exporter's
+# directory scan picks up the job (with last_success=0) before its
+# first run completes -- otherwise the alert "this job hasn't run
+# recently" has nothing to evaluate against until the timer fires.
+- name: install | Pre-create sentinel for {{ systemd_timer_args.name }}
+  when: _systemd_timer_sentinel
+  file:
+    path: /var/log/jobs/{{ systemd_timer_args.name }}
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: install | Enable and start timer for {{ systemd_timer_args.name }}
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: "{{ systemd_timer_args.name }}.timer"
+      user: "{{ _systemd_timer_user }}"

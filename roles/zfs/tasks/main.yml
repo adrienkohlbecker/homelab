@@ -171,6 +171,7 @@
 - name: Schedule the zfs_health timer
   import_role:
     name: systemd_timer
+    tasks_from: install
   vars:
     systemd_timer_args:
       name: zfs_health
@@ -185,6 +186,7 @@
 - name: Schedule the zfs_trim timer for {{ item }}
   include_role:
     name: systemd_timer
+    tasks_from: install
   vars:
     systemd_timer_args:
       name: zfs_trim_{{ item }}

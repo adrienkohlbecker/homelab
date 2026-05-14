@@ -4,6 +4,7 @@
 - name: _verify | Install fixture timer
   import_role:
     name: systemd_timer
+    tasks_from: install
   vars:
     systemd_timer_args:
       name: _verify_timer
@@ -47,10 +48,10 @@
 - name: _verify | Remove the fixture timer
   import_role:
     name: systemd_timer
+    tasks_from: remove
   vars:
     systemd_timer_args:
       name: _verify_timer
-      state: absent
 
 - name: _verify | Stat unit files after removal
   stat:

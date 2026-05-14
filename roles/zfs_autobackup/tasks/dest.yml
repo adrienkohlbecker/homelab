@@ -12,9 +12,9 @@
 - name: dest | Remove the zfs_autosync timer
   import_role:
     name: systemd_timer
+    tasks_from: remove
   vars:
     systemd_timer_args:
       name: zfs_autosync
-      state: absent
   tags:
     - zfs_autobackup

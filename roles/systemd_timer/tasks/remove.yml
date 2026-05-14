@@ -1,0 +1,49 @@
+# Inputs: caller passes a single dict `systemd_timer_args` with keys
+#   name              required; bare name (no extension). Removes both
+#                     <name>.service and <name>.timer.
+#   user              default 'root'; non-root targets the named user's
+#                     user manager.
+#
+# Idempotent on fresh hosts (no-op if the timer was never installed),
+# so callers can leave a `tasks_from: remove` call in place on host
+# groups that aren't supposed to run the timer (e.g. zfs_autobackup
+# dest hosts).
+- name: remove | Resolve caller defaults for {{ systemd_timer_args.name }}
+  set_fact:
+    _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
+
+- name: remove | Derive scope for {{ systemd_timer_args.name }}
+  set_fact:
+    _systemd_timer_scope: "{{ 'system' if _systemd_timer_user == 'root' else 'user' }}"
+    _systemd_timer_dir: "{{ '/etc/systemd/system' if _systemd_timer_user == 'root' else '/etc/systemd/user' }}"
+
+# failed_when:false because a never-installed timer is the steady state
+# we want for some hosts; removal must be a no-op when there's nothing
+# to remove.
+- name: remove | Stop and disable timer for {{ systemd_timer_args.name }}
+  systemd:
+    name: "{{ systemd_timer_args.name }}.timer"
+    state: stopped
+    enabled: false
+    scope: "{{ _systemd_timer_scope }}"
+  become: true
+  become_user: "{{ _systemd_timer_user }}"
+  failed_when: false
+
+- name: remove | Delete unit files for {{ systemd_timer_args.name }}
+  file:
+    path: "{{ _systemd_timer_dir }}/{{ systemd_timer_args.name }}.{{ item }}"
+    state: absent
+  loop:
+    - service
+    - timer
+  become: true
+  register: _systemd_timer_files_removed
+
+- name: remove | Daemon-reload after removing {{ systemd_timer_args.name }}
+  when: _systemd_timer_files_removed is changed
+  systemd:
+    daemon_reload: true
+    scope: "{{ _systemd_timer_scope }}"
+  become: true
+  become_user: "{{ _systemd_timer_user }}"
