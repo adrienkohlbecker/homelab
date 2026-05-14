@@ -146,7 +146,7 @@
       # datasets can legitimately take hours; 23h gives the script
       # nearly the whole day to finish and still leaves a buffer
       # before the next fire.
-      runtime_max_sec: 23h
+      timeout_start_sec: 23h
   tags:
     - zfs_autobackup
 
