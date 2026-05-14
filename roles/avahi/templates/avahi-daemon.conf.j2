@@ -6,6 +6,21 @@
 # MASTER transition.
 [server]
 allow-interfaces={{ ansible_default_ipv4.interface }}
+# IPv4-only stance: allow-interfaces above pins one IPv4 iface, but
+# avahi otherwise still binds :: and answers AAAA queries over IPv4
+# mDNS via publish-aaaa-on-ipv4. Make the v4-only intent explicit so
+# AAAA records for podman bridges / virbr0 / macvlan parent don't
+# leak through the same echo-loop class the allow-interfaces pin
+# defends against, just over a different record type.
+use-ipv4=yes
+use-ipv6=no
+# Refuse to share UDP 5353 with another mDNS responder. Ubuntu noble
+# ships systemd-resolved with MulticastDNS=resolve on by default; two
+# responders on the same socket race to answer the same query and
+# cause intermittent collision-renames (a different cause from the
+# echo-loop but the same symptom). With this set, a startup conflict
+# fails loud instead of flapping silently.
+disallow-other-stacks=yes
 
 [publish]
 # Suppress _workstation._tcp (avahi upstream default = yes; Ubuntu's
@@ -16,7 +31,10 @@ allow-interfaces={{ ansible_default_ipv4.interface }}
 # the Finder sidebar alongside the _device-info-driven entry this
 # role already publishes.
 publish-workstation=no
-# Defensive: avahi's upstream default is already `no`, set explicitly
-# to insure against a future upstream change re-enabling HINFO (CPU /
-# OS architecture broadcast over mDNS).
+# Defensive: pin against a future upstream re-enable of HINFO
+# (CPU/arch broadcast); upstream default is already `no`.
 publish-hinfo=no
+# Match the IPv4-only stance above: don't synthesize AAAA on IPv4 or
+# A on IPv6. Upstream defaults are yes for both.
+publish-aaaa-on-ipv4=no
+publish-a-on-ipv6=no
