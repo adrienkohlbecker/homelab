@@ -13,3 +13,9 @@ ExecStart={{ systemd_timer_args.exec_start }}
 ExecStartPost=/bin/sh -c 'echo "{{ systemd_timer_args.frequency }} $(date --iso-8601=seconds)" > /var/log/jobs/{{ systemd_timer_args.name }}'
 {% endif %}
 SyslogIdentifier={{ systemd_timer_args.name }}
+# Kill-switch for wedged runs. Every job we ship completes in seconds
+# to minutes; 1h is generous enough that a legitimate run never trips
+# it. Without a cap a hung process holds locks (mbox / qemu-img / zfs)
+# indefinitely; Type=oneshot serialises the next OnCalendar fire
+# behind the active run, so a wedge silently stops the schedule.
+RuntimeMaxSec={{ systemd_timer_args.runtime_max_sec | default('1h') }}
