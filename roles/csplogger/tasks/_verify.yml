@@ -65,6 +65,44 @@
         referrer: ""
         violated-directive: "script-src"
     status_code: 204
+  register: csplogger_verify_nginx_post
+  failed_when: >-
+    csplogger_verify_nginx_post.status != 204
+    or '*' not in (csplogger_verify_nginx_post.access_control_allow_origin | default(''))
+
+# Browsers label CSP report POSTs with application/csp-report (legacy)
+# or application/reports+json (Reporting API), not application/json --
+# fluent-bit's http input is application/json-only and the nginx site
+# rewrites Content-Type on the upstream request to make this work.
+# Ansible's uri module defaults to application/json with body_format:
+# json, so without these explicit-Content-Type cases the regression that
+# the rewrite is fixing would stay hidden. body_format: raw + a literal
+# JSON body so the headers.Content-Type wins.
+- name: _verify | POST /log with legacy report-uri Content-Type
+  uri:
+    url: https://localhost/log
+    method: POST
+    headers:
+      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
+      Origin: "https://_verify.example"
+      Content-Type: application/csp-report
+    validate_certs: false
+    body_format: raw
+    body: '{"csp-report":{"blocked-uri":"https://_verify.example/ct-legacy","document-uri":"https://_verify.example/","violated-directive":"script-src","original-policy":"default-src ''self''"}}'
+    status_code: 204
+
+- name: _verify | POST /log with Reporting-API Content-Type
+  uri:
+    url: https://localhost/log
+    method: POST
+    headers:
+      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
+      Origin: "https://_verify.example"
+      Content-Type: application/reports+json
+    validate_certs: false
+    body_format: raw
+    body: '[{"type":"csp-violation","age":0,"url":"https://_verify.example/","user_agent":"_verify/1.0","body":{"blockedURL":"https://_verify.example/ct-rapi","documentURL":"https://_verify.example/","effectiveDirective":"script-src-elem","originalPolicy":"default-src ''self''","disposition":"enforce"}}]'
+    status_code: 204
 
 - name: _verify | OPTIONS preflight returns CORS allow-POST
   uri:
