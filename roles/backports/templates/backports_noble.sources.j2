@@ -1,0 +1,16 @@
+## Ubuntu noble (24.04) backports for selected packages on jammy hosts.
+## Pin priorities in /etc/apt/preferences.d/backports-* decide which
+## packages actually resolve from these suites; this file just makes the
+## noble candidate visible to apt. See roles/apt/templates/ubuntu.sources.j2
+## for the same shape used on native noble hosts.
+Types: deb
+URIs: {{ ubuntu_mirror }}
+Suites: noble noble-updates noble-backports
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: deb
+URIs: {{ ubuntu_mirror_security }}
+Suites: noble-security
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg

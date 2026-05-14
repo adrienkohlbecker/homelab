@@ -61,22 +61,55 @@
   become: true
   register: backports_pin
 
+# Single deb822 sources file replaces the previous 4× apt_repository
+# loop. Matches the format roles/apt uses for native noble hosts, lets
+# us declare Signed-By explicitly rather than relying on the
+# system-wide trusted keyring, and gives a deterministic file path so
+# cleanup is unambiguous.
 - name: Add noble apt sources (jammy)
   when: ansible_distribution_major_version == "22"
-  apt_repository:
-    repo: "{{ item }}"
+  template:
+    src: backports_noble.sources.j2
+    dest: /etc/apt/sources.list.d/backports_noble.sources
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
   become: true
   register: backports_noble_sources
-  loop:
-    - 'deb {{ ubuntu_mirror }} noble main restricted universe multiverse # backports'
-    - 'deb {{ ubuntu_mirror }} noble-updates main restricted universe multiverse # backports'
-    - 'deb {{ ubuntu_mirror }} noble-backports main restricted universe multiverse # backports'
-    - 'deb {{ ubuntu_mirror_security }} noble-security main restricted universe multiverse # backports'
+
+# Find any legacy .list files left over from the pre-deb822 role
+# (apt_repository derived filenames from the URI, so they look like
+# archive_ubuntu_com_ubuntu_noble.list etc.). Match on the inline
+# `# backports` marker the previous loop wrote on every line.
+- name: Find legacy backports source files (pre-deb822 migration)
+  when: ansible_distribution_major_version == "22"
+  find:
+    paths: /etc/apt/sources.list.d
+    patterns: "*.list"
+    contains: '^deb .* # backports$'
+  register: backports_legacy_lists
+  become: true
+
+- name: Remove legacy backports source files (migrated to deb822)
+  when:
+    - ansible_distribution_major_version == "22"
+    - backports_legacy_lists.files | length > 0
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ backports_legacy_lists.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
+  register: backports_legacy_removed
 
 - name: Refresh apt cache after noble setup
   when:
     - ansible_distribution_major_version == "22"
-    - backports_pin.changed or backports_noble_sources.changed
+    - backports_pin.changed
+      or backports_noble_sources.changed
+      or (backports_legacy_removed.changed | default(false))
   apt:
     update_cache: true
   become: true
