@@ -7,11 +7,9 @@
     - headphones
 
 - name: Add media group
-  group:
+  import_role:
     name: media
-    system: true
-  become: true
-  register: media_group
+    tasks_from: group
   tags:
     - headphones
 
