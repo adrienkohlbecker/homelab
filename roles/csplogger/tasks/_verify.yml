@@ -5,13 +5,15 @@
     timeout: 30
 
 # Shared body fixtures so the legacy + reporting-api shapes are defined
-# once and reused across the direct-to-fluent-bit POST, the through-nginx
-# happy path, the Content-Type variant tests, and the oversize test (via
-# combine). Each test asserts only on status_code (or response headers),
-# never on the body content, so a fixed URI is fine — the per-task name
-# is the diagnostic distinguisher.
+# once and reused across the direct-to-fluent-bit POST, the Content-Type
+# variant tests, and the oversize test (via combine). Each test asserts
+# only on status_code (or response headers), never on the body content,
+# so a fixed URI is fine — the per-task name is the diagnostic
+# distinguisher. The shared Origin matches the production allowlist
+# regex (host + domain) so through-nginx tests reach the proxied path.
 - name: _verify | shared CSP body fixtures
   set_fact:
+    csplogger_verify_origin: "https://verify.{{ inventory_hostname }}.{{ domain }}"
     csp_legacy_body:
       csp-report:
         blocked-uri: "https://_verify.example/"
@@ -55,41 +57,24 @@
     body: "{{ csp_reporting_api_body }}"
     status_code: 204
 
-# Test through nginx using a Host header so the request hits the
-# csplogger server block without needing DNS. Snakeoil certs in test
-# mode → validate_certs: false. Origin set so the response carries any
-# CORS headers (browser CSP reports come from arbitrary origins).
-- name: _verify | POST /log through the public nginx shim
-  uri:
-    url: https://localhost/log
-    method: POST
-    headers:
-      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
-      Origin: "https://_verify.example"
-    validate_certs: false
-    body_format: json
-    body: "{{ csp_legacy_body }}"
-    status_code: 204
-  register: csplogger_verify_nginx_post
-  failed_when: >-
-    csplogger_verify_nginx_post.status != 204
-    or '*' not in (csplogger_verify_nginx_post.access_control_allow_origin | default(''))
-
 # Browsers label CSP report POSTs with application/csp-report (legacy)
-# or application/reports+json (Reporting API), not application/json --
-# fluent-bit's http input is application/json-only and the nginx site
+# or application/reports+json (Reporting API), not application/json.
+# Fluent-bit's http input is application/json-only and the nginx site
 # rewrites Content-Type on the upstream request to make this work.
 # Ansible's uri module defaults to application/json with body_format:
 # json; the explicit Content-Type in headers overrides that default, so
 # the body still serialises as JSON while the request bears the real
-# browser Content-Type that exercises the nginx rewrite.
+# browser Content-Type that exercises the nginx rewrite. Host header
+# substitutes for DNS (snakeoil certs in test mode → validate_certs:
+# false). Origin matches the production allowlist so the request reaches
+# the proxied path (foreign Origins get silently 204'd — see below).
 - name: _verify | POST /log with legacy report-uri Content-Type
   uri:
     url: https://localhost/log
     method: POST
     headers:
       Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
-      Origin: "https://_verify.example"
+      Origin: "{{ csplogger_verify_origin }}"
       Content-Type: application/csp-report
     validate_certs: false
     body_format: json
@@ -102,12 +87,52 @@
     method: POST
     headers:
       Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
-      Origin: "https://_verify.example"
+      Origin: "{{ csplogger_verify_origin }}"
       Content-Type: application/reports+json
     validate_certs: false
     body_format: json
     body: "{{ csp_reporting_api_body }}"
     status_code: 204
+
+# Origin allowlist: a POST from outside the host's domain (or with no
+# Origin header at all) must be silently 204'd with no ACAO. The
+# silent-drop response shape keeps misconfigured legitimate browsers'
+# report queues happy; the missing ACAO ensures attacker JS can't read
+# the response for any probing-oracle signal.
+- name: _verify | POST /log with foreign Origin is silently dropped
+  uri:
+    url: https://localhost/log
+    method: POST
+    headers:
+      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
+      Origin: "https://attacker.example"
+      Content-Type: application/csp-report
+    validate_certs: false
+    body_format: json
+    body: "{{ csp_legacy_body }}"
+    status_code: 204
+  register: csplogger_verify_foreign
+  failed_when: >-
+    csplogger_verify_foreign.status != 204
+    or csplogger_verify_foreign.access_control_allow_origin is defined
+
+# Content-Type allowlist: a POST from a friendly Origin but bearing a
+# non-CSP Content-Type (e.g. application/json — the value the upstream
+# rewrite normalises to) must be rejected with 415 before it reaches
+# fluent-bit. Stops a hostile poster from wedging fluent-bit's HTTP
+# input with pathological JSON-shaped bodies under the blanket rewrite.
+- name: _verify | POST /log with disallowed Content-Type is 415'd
+  uri:
+    url: https://localhost/log
+    method: POST
+    headers:
+      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
+      Origin: "{{ csplogger_verify_origin }}"
+      Content-Type: application/json
+    validate_certs: false
+    body_format: json
+    body: "{{ csp_legacy_body }}"
+    status_code: 415
 
 - name: _verify | OPTIONS preflight returns CORS allow-POST
   uri:
@@ -115,7 +140,7 @@
     method: OPTIONS
     headers:
       Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
-      Origin: "https://_verify.example"
+      Origin: "{{ csplogger_verify_origin }}"
       Access-Control-Request-Method: POST
       Access-Control-Request-Headers: Content-Type
     validate_certs: false
@@ -129,12 +154,16 @@
 
 # Exercise the body-size cap on /log. CSP reports are tiny; the cap
 # stops a runaway site CSP or hostile poster from chewing bandwidth.
+# Needs friendly Origin + allowed Content-Type so the body limit is
+# actually what fires (otherwise the request would 204 or 415 first).
 - name: _verify | /log rejects oversize bodies (>64K)
   uri:
     url: https://localhost/log
     method: POST
     headers:
       Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
+      Origin: "{{ csplogger_verify_origin }}"
+      Content-Type: application/csp-report
     validate_certs: false
     body_format: json
     body:

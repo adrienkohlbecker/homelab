@@ -2,19 +2,46 @@
 # csplogger.<host>.<domain> is wired up here as a thin nginx → fluent-bit
 # pipe (the HTTP input lives in roles/fluentbit). Endpoint URL stays
 # unchanged so the central report-uri / Reporting-Endpoints headers in
-# roles/nginx/templates/site.conf.j2 don't need to move.
+# roles/nginx/templates/site.conf.j2:13 (report-uri) and :16
+# (Reporting-Endpoints) don't need to move.
 
-# Rate-limit the public endpoint at the nginx level: CSP reports are
-# browser-driven and untrusted; a misbehaving site CSP can flood this
-# from every visitor it has. limit_req_zone has to live in http{} scope,
-# not server{}, hence the conf.d drop rather than a snippet inside the
-# site config.
-- name: Install CSP report rate-limit zone
+# Rate-limit zone and request-shape allow-lists live in conf.d/ because
+# limit_req_zone and map both require http{} scope; the nginx_site_args
+# helper only emits server{}-scope config.
+- name: Install CSP rate-limit zone and request-shape allow-lists
   copy:
     content: |
       # Managed by roles/csplogger.
-      # 10 r/s per IP, 1MB zone (~16k tracked IPs). Burst handled per-location.
+
+      # Per-IP rate-limit: 10 r/s, 1MB zone (~16k tracked IPs). Burst
+      # handled per-location (see /log block).
       limit_req_zone $binary_remote_addr zone=cspreports:1m rate=10r/s;
+
+      # Origin allowlist. Browsers always send Origin on cross-origin
+      # POSTs (which CSP report POSTs are by construction). A foreign or
+      # absent Origin gets silently 204'd in /log: the response carries
+      # no ACAO so a script that triggered the POST can't read it, and
+      # the browser's report queue still drops the entry as "sent."
+      # Defends against arbitrary-internet POSTs writing junk into
+      # ClickHouse without rejecting on a status code that would invite
+      # retry. Pattern matches bare host plus any subdomain depth, with
+      # optional port.
+      map $http_origin $csp_origin_ok {
+          default 0;
+          "~^https://([a-zA-Z0-9_-]+\.)*{{ inventory_hostname | regex_escape }}\.{{ domain | regex_escape }}(:[0-9]+)?$" 1;
+      }
+
+      # Content-Type allowlist for POSTs (OPTIONS preflights are exempt
+      # — they don't carry a body). Anything not in the two real-browser
+      # CSP content-types gets 415: a hostile poster can't wedge fluent-
+      # bit's single-threaded HTTP input by submitting pathological JSON
+      # bodies that the blanket Content-Type rewrite below would relabel.
+      map "$request_method:$content_type" $csp_post_allow {
+          default                                       0;
+          "~*^OPTIONS"                                  1;
+          "~*^POST:application/csp-report"              1;
+          "~*^POST:application/reports\+json"           1;
+      }
     dest: /etc/nginx/conf.d/csp_ratelimit.conf
     owner: root
     group: root
@@ -34,7 +61,10 @@
       subdomain: csplogger
       # No site-wide proxy_pass; the only valid path is /log. Anything
       # else gets a 404 so probes and misdirected traffic don't fall
-      # through to the default location { } empty block.
+      # through to the default location { } empty block. (Note: the
+      # nginx site template provides a no-op /robots.txt location at
+      # server scope; we can't override it from server_conf without
+      # tripping nginx's "duplicate location" check.)
       location_conf: |
         return 404;
       server_conf: |
@@ -43,22 +73,28 @@
             deny all;
           }
 
-          # Allow-Origin on POST responses too (not just OPTIONS). CSP
-          # report POSTs are always cross-origin (page on
-          # <svc>.<host>.<domain> reporting to csplogger.<host>.<domain>);
-          # without this header Firefox flags every successful report as
-          # "CORS Missing Allow Origin" in devtools even though the POST
-          # was fire-and-forget. `always` so the header rides 4xx/5xx
-          # upstream responses too, otherwise an upstream rejection would
-          # blend a CORS warning into the actual error. Repeated in the
-          # OPTIONS branch below because nginx's add_header inheritance
-          # is shadowed by any child add_header.
-          add_header 'Access-Control-Allow-Origin' '*' always;
+          # Drop foreign-origin and Origin-less POSTs silently. The
+          # response is 204 with no ACAO; browsers count it as sent and
+          # don't retry, an attacker on a foreign origin can't read the
+          # response, and the request never reaches fluent-bit so no
+          # junk lands in ClickHouse. The Origin map lives in conf.d/.
+          if ($csp_origin_ok = 0) { return 204; }
 
-          # CSP reports arrive as cross-origin browser POSTs. The
-          # Reporting API (Content-Type: application/reports+json) triggers
-          # a CORS preflight; legacy report-uri (application/csp-report)
-          # historically doesn't, but handling OPTIONS costs nothing.
+          # Reject non-CSP POSTs at the front door so the Content-Type
+          # rewrite below only ever relabels real CSP report bodies.
+          # The composite key map (request_method + content_type) lives
+          # in conf.d/ and exempts OPTIONS preflights.
+          if ($csp_post_allow = 0) { return 415; }
+
+          # CORS preflight. `if + add_header + return` is the canonical
+          # CORS-on-nginx idiom; nginx docs flag `if` in `location` as
+          # tricky in general but call out `return` as one of the two
+          # "100% safe" cases — and add_header inside the branch fires
+          # correctly because no proxy_pass / rewrite follows. ACAO is
+          # emitted ONLY here, not on POST responses: browsers fire-and-
+          # forget the POST so they don't read its response, and
+          # emitting ACAO on POST would let attacker JS observe rate-
+          # limit state per-victim as a probing oracle.
           if ($request_method = 'OPTIONS') {
             add_header 'Access-Control-Allow-Origin' '*' always;
             add_header 'Access-Control-Allow-Methods' 'POST, OPTIONS' always;
@@ -82,13 +118,10 @@
 
           # Browsers send CSP reports labelled application/csp-report
           # (legacy report-uri) or application/reports+json (Reporting
-          # API). Fluent-bit's http input is JSON-or-msgpack only and
-          # rejects everything else with 400 "error: invalid
-          # 'Content-Type'" at the HTTP layer -- the rejection never
-          # reaches the input pipeline so it doesn't even show in the
-          # fluent-bit journal. Bodies are JSON in both browser formats,
-          # so a blanket rewrite to application/json is safe and is the
-          # only way to make real browser POSTs land.
+          # API). Fluent-bit's http input is application/json-only;
+          # bodies are JSON in both browser formats, so the blanket
+          # rewrite is safe AFTER the Content-Type allowlist check
+          # above has confirmed the body really is one of those.
           proxy_set_header Content-Type application/json;
 
           # Fluent-bit's HTTP input lives on loopback; the tag is set in
