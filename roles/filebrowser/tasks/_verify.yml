@@ -1,63 +1,58 @@
 ---
-- name: _verify | Filebrowser user exists
-  command: getent passwd filebrowser
-  changed_when: false
-  become: true
-
-- name: _verify | Filebrowser config dir is owned by filebrowser
-  stat:
-    path: /mnt/services/filebrowser
-  register: _verify_config_dir
-  failed_when: not _verify_config_dir.stat.exists or _verify_config_dir.stat.pw_name != 'filebrowser'
-  become: true
-
-- name: _verify | Filebrowser sqlite dir is owned by filebrowser
-  stat:
-    path: /mnt/services/sqlite/filebrowser
-  register: _verify_sqlite_dir
-  failed_when: not _verify_sqlite_dir.stat.exists or _verify_sqlite_dir.stat.pw_name != 'filebrowser'
-  become: true
-
-- name: _verify | Filebrowser.service is loaded and active
-  systemd:
-    name: filebrowser
-  register: _verify_unit
-  failed_when: >-
-    _verify_unit.status.LoadState != "loaded"
-    or _verify_unit.status.ActiveState != "active"
-  become: true
-
-- name: _verify | Filebrowser answers on its loopback port
+- name: _verify | Filebrowser root autoindex lists configured trees
   uri:
-    url: http://localhost:{{ service_ports.filebrowser }}/health
-    status_code: 200
-  register: _verify_http
-  retries: 60
-  delay: 2
-  until: _verify_http.status == 200
-
-- name: _verify | Nginx vhost forwards to filebrowser
-  uri:
-    url: https://localhost/health
+    url: https://localhost/
     headers:
       Host: filebrowser.{{ inventory_hostname }}.{{ domain }}
     validate_certs: false
+    return_content: true
     status_code: 200
-  register: _verify_nginx
+  register: _verify_root
   retries: 10
   delay: 2
-  until: _verify_nginx.status == 200
+  until: _verify_root.status == 200
 
-# Functional uidmap check: filebrowser creates filebrowser.db on first
-# start via its quick-setup path; with --user 0:0 +
-# --uidmap=+0:filebrowser_user.uid:1 the file should land owned by the
-# host filebrowser user, not root or a random rootless-namespace uid.
-# Regression would silently change ownership across a zfs send|recv.
-- name: _verify | Filebrowser sqlite db is owned by filebrowser
-  stat:
-    path: /mnt/services/sqlite/filebrowser/filebrowser.db
-  register: _verify_db
-  failed_when: >-
-    not _verify_db.stat.exists
-    or _verify_db.stat.pw_name != 'filebrowser'
-  become: true
+- name: _verify | Root listing contains every expected tree symlink
+  assert:
+    that:
+      - "'Index of /' in _verify_root.content"
+      - "'href=\"home/\"' in _verify_root.content"
+      - "(not zfs_has_data_mount) or 'href=\"data/\"' in _verify_root.content"
+      - "(not zfs_has_media_mount) or 'href=\"media/\"' in _verify_root.content"
+      - "(not zfs_has_services_mount) or 'href=\"services/\"' in _verify_root.content"
+
+- name: _verify | Filebrowser /data/ autoindex renders
+  when: zfs_has_data_mount
+  uri:
+    url: https://localhost/data/
+    headers:
+      Host: filebrowser.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    return_content: true
+    status_code: 200
+  register: _verify_data
+  failed_when: _verify_data.status != 200 or 'Index of /data/' not in _verify_data.content
+
+- name: _verify | Filebrowser /media/ autoindex renders
+  when: zfs_has_media_mount
+  uri:
+    url: https://localhost/media/
+    headers:
+      Host: filebrowser.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    return_content: true
+    status_code: 200
+  register: _verify_media
+  failed_when: _verify_media.status != 200 or 'Index of /media/' not in _verify_media.content
+
+- name: _verify | Filebrowser /services/ autoindex renders
+  when: zfs_has_services_mount
+  uri:
+    url: https://localhost/services/
+    headers:
+      Host: filebrowser.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    return_content: true
+    status_code: 200
+  register: _verify_services
+  failed_when: _verify_services.status != 200 or 'Index of /services/' not in _verify_services.content
