@@ -175,20 +175,25 @@ resource "nexus_repository_raw_proxy" "this" {
   }
 }
 
-# Hosted (not proxy) docker repo for images we build in CI. Today the
-# only consumer is the ci-image workflow, which pushes
-# nexus.lab.fahm.fr/repository/homelab/ci:<sha> + :latest after
-# rebuilding the runner image. Anonymous pulls are on (so unauthenticated
-# `podman pull` from CI / lab hosts works); push requires basic auth
-# against the homelab_push user (defined below; credentials get pushed
-# to GitHub Actions via terraform/github.tf). Force-basic-auth ON keeps
-# anonymous Bearer-token paths from accidentally accepting pushes.
+# Hosted (not proxy) docker repos for images we build off-host:
+#   - homelab: the ci-image workflow pushes
+#     nexus.lab.fahm.fr/repository/homelab/ci:<sha> + :latest after
+#     rebuilding the runner image.
+#   - compta: the adrienkohlbecker/compta repo's build workflow
+#     pushes nexus.lab.fahm.fr/repository/compta/compta:<sha> +
+#     :latest; the compta ansible role pulls from there.
+# Anonymous pulls are on (so unauthenticated `podman pull` from CI /
+# lab hosts works); push requires basic auth against the repo's
+# dedicated <name>-push user (one per repo, defined below; credentials
+# get pushed to each repo's GitHub Actions secrets via terraform/
+# github.tf). Force-basic-auth ON keeps anonymous Bearer-token paths
+# from accidentally accepting pushes.
 #
-# write_policy ALLOW (not ALLOW_ONCE) because the ci-image
-# workflow re-pushes :latest on every successful build. ALLOW_ONCE
-# would reject the second push.
+# write_policy ALLOW (not ALLOW_ONCE) because the workflows re-push
+# :latest on every successful build. ALLOW_ONCE would reject the
+# second push.
 resource "nexus_repository_docker_hosted" "this" {
-  for_each = toset(["homelab"])
+  for_each = toset(["homelab", "compta"])
 
   name   = each.key
   online = true
@@ -204,42 +209,65 @@ resource "nexus_repository_docker_hosted" "this" {
   }
 }
 
-# Least-privileged role + user for CI pushes to the homelab docker repo.
-# The wildcard view privilege covers browse / read / edit / add / delete
-# on this single repo (Nexus auto-creates these per repo); no admin /
-# config rights, and no scope outside docker-homelab. Repo creation has
-# to land first so the privileges Nexus auto-generates exist before this
-# role tries to reference them.
-resource "nexus_security_role" "homelab_push" {
-  roleid      = "homelab-push"
-  name        = "homelab-push"
-  description = "Push images to the homelab docker hosted repo"
+# Least-privileged role + user pair per docker hosted repo. The wildcard
+# view privilege covers browse / read / edit / add / delete on the named
+# repo (Nexus auto-creates these per repo); no admin / config rights, and
+# no scope outside the named repo. One user per repo so a leaked
+# credential is scoped to a single repo's images. for_each is keyed off
+# the docker_hosted resource so adding a hosted repo above automatically
+# provisions its push role + user.
+resource "nexus_security_role" "push" {
+  for_each = nexus_repository_docker_hosted.this
+
+  roleid      = "${each.key}-push"
+  name        = "${each.key}-push"
+  description = "Push images to the ${each.key} docker hosted repo"
   privileges = [
-    "nx-repository-view-docker-homelab-*",
+    "nx-repository-view-docker-${each.key}-*",
   ]
   roles = []
-
-  depends_on = [nexus_repository_docker_hosted.this]
 }
 
 # Generated once and pinned in encrypted state; rotate by tainting the
-# random_password resource (`tofu apply -replace=random_password.
-# nexus_homelab_push`). 32 chars, alphanumeric only -- some HTTP basic
-# auth shells (and the docker `--password-stdin` round-trip) misbehave
-# on punctuation.
-resource "random_password" "nexus_homelab_push" {
+# random_password resource (`tofu apply -replace='random_password.
+# nexus_push["<name>"]'`). 32 chars, alphanumeric only -- some HTTP
+# basic auth shells (and the docker `--password-stdin` round-trip)
+# misbehave on punctuation.
+resource "random_password" "nexus_push" {
+  for_each = nexus_repository_docker_hosted.this
+
   length  = 32
   special = false
 }
 
-resource "nexus_security_user" "homelab_push" {
-  userid    = "homelab-push"
-  firstname = "homelab"
+resource "nexus_security_user" "push" {
+  for_each = nexus_repository_docker_hosted.this
+
+  userid    = "${each.key}-push"
+  firstname = each.key
   lastname  = "push"
-  email     = "homelab-push@noreply.invalid"
-  password  = random_password.nexus_homelab_push.result
-  roles     = [nexus_security_role.homelab_push.roleid]
+  email     = "${each.key}-push@noreply.invalid"
+  password  = random_password.nexus_push[each.key].result
+  roles     = [nexus_security_role.push[each.key].roleid]
   status    = "active"
+}
+
+# Migrate the pre-for_each resources so the existing homelab-push role/
+# user/password keep their state (no destroy-and-recreate, no password
+# rotation, no GitHub-secret churn).
+moved {
+  from = nexus_security_role.homelab_push
+  to   = nexus_security_role.push["homelab"]
+}
+
+moved {
+  from = random_password.nexus_homelab_push
+  to   = random_password.nexus_push["homelab"]
+}
+
+moved {
+  from = nexus_security_user.homelab_push
+  to   = nexus_security_user.push["homelab"]
 }
 
 resource "nexus_repository_docker_proxy" "this" {
