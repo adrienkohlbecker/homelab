@@ -18,53 +18,50 @@
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Build-time toggle for the homelab nexus mirror redirects below
+# (apt + pip + uv). Default 1 = route through nexus.lab.fahm.fr because
+# that's the CI path. Set to 0 for builds outside the lab network:
+# `podman build --build-arg USE_NEXUS_MIRRORS=0 .`. When off, the
+# noble image's stock /etc/apt/sources.list.d/ubuntu.sources stays put
+# and pip+uv inherit their package-manager defaults (PyPI).
+ARG USE_NEXUS_MIRRORS=1
+
 # Route apt through the homelab nexus proxy. Same arch split as
 # group_vars/all.yml's mirror_apt_ubuntu_* vars: amd64 hits ubuntu-archive
 # + ubuntu-security; arm64 hits ubuntu-ports for both (ports.ubuntu.com
-# carries -security on non-x86 arches). HTTP because nexus's docker /
-# apt proxies serve plaintext on port 80; the upstream Signed-By trust
+# carries -security on non-x86 arches). HTTP because nexus's apt
+# proxies serve plaintext on port 80; the upstream Signed-By trust
 # chain is unchanged so apt still verifies package signatures end-to-end.
 # Overwriting /etc/apt/sources.list.d/ubuntu.sources (the deb822 file
 # noble ships) means the upstream URIs are gone for the rest of the
 # build -- if nexus is unreachable, apt-get fails loudly here rather
-# than silently fanning out to upstream.
-RUN arch=$(dpkg --print-architecture); \
-    if [ "$arch" = "amd64" ]; then \
-      arch_url="http://nexus.lab.fahm.fr/repository/ubuntu-archive"; \
-      sec_url="http://nexus.lab.fahm.fr/repository/ubuntu-security"; \
-    else \
-      arch_url="http://nexus.lab.fahm.fr/repository/ubuntu-ports"; \
-      sec_url="http://nexus.lab.fahm.fr/repository/ubuntu-ports"; \
-    fi && \
-    cat > /etc/apt/sources.list.d/ubuntu.sources <<EOF
-Types: deb
-URIs: $arch_url
-Suites: noble noble-updates noble-backports
-Components: main restricted universe multiverse
-Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-
-Types: deb
-URIs: $sec_url
-Suites: noble-security
-Components: main restricted universe multiverse
-Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
-EOF
+# than silently fanning out to upstream. printf (vs heredoc) so the
+# whole conditional fits one \-continuation RUN.
+RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
+      arch=$(dpkg --print-architecture); \
+      if [ "$arch" = "amd64" ]; then \
+        archive_url="http://nexus.lab.fahm.fr/repository/ubuntu-archive"; \
+        security_url="http://nexus.lab.fahm.fr/repository/ubuntu-security"; \
+      else \
+        archive_url="http://nexus.lab.fahm.fr/repository/ubuntu-ports"; \
+        security_url="http://nexus.lab.fahm.fr/repository/ubuntu-ports"; \
+      fi; \
+      printf 'Types: deb\nURIs: %s\nSuites: noble noble-updates noble-backports\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n\nTypes: deb\nURIs: %s\nSuites: noble-security\nComponents: main restricted universe multiverse\nSigned-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg\n' \
+        "$archive_url" "$security_url" \
+        > /etc/apt/sources.list.d/ubuntu.sources; \
+    fi
 
 # Route pip + uv at the homelab nexus pypi proxy. Same pattern
-# roles/_test/tasks/mirrors.yml uses for test VMs. /etc-scoped so
-# the config applies to every user / venv inside the image. HTTPS
-# (vs HTTP for apt) because pypi is published over TLS-only on the
-# nexus side.
-RUN install -dm 755 /etc/uv && \
-    cat > /etc/uv/uv.toml <<'EOF'
-[[index]]
-url = "https://nexus.lab.fahm.fr/repository/pypi/simple/"
-default = true
-EOF
-RUN cat > /etc/pip.conf <<'EOF'
-[global]
-index-url = https://nexus.lab.fahm.fr/repository/pypi/simple/
-EOF
+# roles/_test/tasks/mirrors.yml uses for test VMs. /etc-scoped so the
+# config applies to every user / venv inside the image. HTTPS (vs HTTP
+# for apt) because pypi is published over TLS-only on the nexus side.
+RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
+      install -dm 755 /etc/uv; \
+      printf '[[index]]\nurl = "https://nexus.lab.fahm.fr/repository/pypi/simple/"\ndefault = true\n' \
+        > /etc/uv/uv.toml; \
+      printf '[global]\nindex-url = https://nexus.lab.fahm.fr/repository/pypi/simple/\n' \
+        > /etc/pip.conf; \
+    fi
 
 # Harness needs qemu-system-x86 + qemu-utils for booting test VMs;
 # openssh-client for talking to the guests; xorriso + cloud-image-utils
