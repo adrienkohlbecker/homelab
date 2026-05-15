@@ -1,14 +1,12 @@
 # Exercises the docker_client role's contract:
 # 1) docker / docker-buildx-plugin / docker-compose-plugin are
 #    installed and runnable (binary exec, not just dpkg state).
-# 2) /etc/profile.d/docker_client.sh actually fires in a login shell
-#    AND the docker binary consumes the DOCKER_HOST it exports --
-#    we don't just echo the env var, we make docker attempt a
-#    connection and assert the failure message names the configured
-#    socket path. The test VM has no podman, so we stop at "tried to
-#    reach the right socket"; the podman role's contract owns the
-#    "and the socket actually answers" half of the chain.
-# 3) ansible_user shows up in the podman-socket group via nsswitch.
+# 2) /etc/profile.d/docker_client.sh fires in a login shell and
+#    exports DOCKER_HOST=unix:///run/podman/podman.sock. docker
+#    itself honoring $DOCKER_HOST is upstream's contract; the
+#    podman role's contract owns whether the socket answers.
+# 3) ansible_user resolves to a podman-socket member via nsswitch
+#    (post-reset_connection, i.e. what a fresh login picks up).
 
 # docker version returns rc=1 when it can't reach the daemon, even
 # when --format only asks for client fields -- the server query is
@@ -27,6 +25,9 @@
   assert:
     that:
       - _verify_docker_version.stdout is match('^[0-9]+\.[0-9]+\.[0-9]+')
+    fail_msg: >-
+      Expected docker client version like X.Y.Z,
+      got stdout={{ _verify_docker_version.stdout | default('') }}
 
 - name: _verify | buildx plugin loads
   command: docker buildx version
@@ -37,6 +38,9 @@
   assert:
     that:
       - _verify_buildx_version.stdout | length > 0
+    fail_msg: >-
+      docker buildx version produced no stdout;
+      got stdout={{ _verify_buildx_version.stdout | default('') }}
 
 - name: _verify | compose plugin loads
   command: docker compose version --short
@@ -47,6 +51,9 @@
   assert:
     that:
       - _verify_compose_version.stdout | length > 0
+    fail_msg: >-
+      docker compose version --short produced no stdout;
+      got stdout={{ _verify_compose_version.stdout | default('') }}
 
 # bash -lc starts a login shell, which sources /etc/profile and
 # therefore /etc/profile.d/docker_client.sh. A non-login shell would
@@ -85,3 +92,7 @@
   assert:
     that:
       - "'podman-socket' in _verify_ansible_user_groups.stdout.split()"
+    fail_msg: >-
+      Expected {{ ansible_user }} to have podman-socket in its
+      supplementary group set; got
+      {{ _verify_ansible_user_groups.stdout | default('') }}
