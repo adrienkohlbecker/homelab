@@ -67,6 +67,7 @@
     - compta
 
 - name: Build a podman image
+  when: not ansible_check_mode
   containers.podman.podman_image:
     name: compta:latest
     path: "{{ ansible_user_dir }}/compta"
