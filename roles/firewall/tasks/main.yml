@@ -160,36 +160,6 @@
   tags:
     - firewall
 
-# Cohabitation cleanup: the old iptables-restore set policy DROP on
-# `ip filter` chains via `:INPUT DROP` etc. Now that our rules live
-# in `ip homelab` with its own policy, the leftover DROP on
-# `ip filter` would silently drop packets that aren't matched there —
-# specifically anything netavark / libvirt / fail2ban added an
-# explicit ACCEPT for. Reset to ACCEPT.
-#
-# Only on jammy/noble — resolute+ has nothing using iptables-nft
-# compat (netavark / libvirt / fail2ban all on native-nft drivers),
-# so calling iptables -P there would *create* the empty chains we
-# don't want. Drop these releases from the list as each one ages out.
-#
-# In prod the iptables binary arrives via the podman role; in test
-# _setup.yml installs it explicitly.
-- name: Reset iptables-nft compat chain policies (cohabitation cleanup)
-  when: ansible_distribution_release in ["jammy", "noble"]
-  ansible.builtin.iptables:
-    table: "{{ item.table | default('filter') }}"
-    chain: "{{ item.chain }}"
-    policy: ACCEPT
-  loop:
-    - { chain: INPUT }
-    - { chain: FORWARD }
-    - { chain: OUTPUT }
-    - { chain: PREROUTING, table: nat }
-    - { chain: POSTROUTING, table: nat }
-  become: true
-  tags:
-    - firewall
-
 # On resolute+ the compat layer has no users — drop the package so
 # `iptables -L` doesn't quietly resurrect empty `ip filter` chains
 # (and so an operator looking for the ruleset doesn't get a confusing
@@ -201,22 +171,6 @@
     pkg:
       - iptables
     state: absent
-  become: true
-  tags:
-    - firewall
-
-# Transition cleanup: the role-rename to roles/firewall left the old
-# sysctl/modules-load files on already-deployed hosts. The new files
-# (30-firewall-hardening.conf) coexist with the legacy ones unless
-# we explicitly delete them. Drop this task after a release cycle
-# once every host has converged.
-- name: Remove legacy 30-iptables-hardening.conf (sysctl + modules-load)
-  file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /etc/sysctl.d/30-iptables-hardening.conf
-    - /etc/modules-load.d/30-iptables-hardening.conf
   become: true
   tags:
     - firewall
