@@ -109,11 +109,16 @@
 # Tag every record with the inventory hostname so cross-stream queries
 # in OpenObserve can still filter by host without parsing the stream
 # name. systemd input also sets HOSTNAME from the journal, but tails
-# don't — this normalises both.
+# don't — this normalises both. Use `Set` not `Add`: the CSP HTTP
+# input lets an attacker put `{"host":"lab", ...}` at the top of the
+# POST body, which would otherwise land as a record key and `Add`
+# (insert-if-absent semantics) would refuse to overwrite. With `Set`
+# our value always wins, so attacker-spoofed `host` can't pollute
+# per-host facets in HyperDX/OpenObserve.
 [FILTER]
     Name              modify
     Match             *
-    Add               host {{ inventory_hostname }}
+    Set               host {{ inventory_hostname }}
 
 # Mirror journald's MESSAGE into `log` so the parallel HyperDX OTLP
 # output below picks it up as the LogRecord Body (fluent-bit's
