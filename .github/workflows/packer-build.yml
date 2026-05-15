@@ -30,7 +30,7 @@ jobs:
   build:
     runs-on: [ self-hosted, lab ]
     container:
-      image: nexus.lab.fahm.fr/repository/homelab/ci:latest
+      image: nexus.lab.fahm.fr/homelab/ci:latest
       # --group-add 1 maps to host kvm gid via /etc/subgid (see
       # roles/github_runner notes). rw mount because packer-build is
       # the only writer of the qcow2 tree.

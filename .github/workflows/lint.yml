@@ -16,7 +16,7 @@ jobs:
   lint:
     runs-on: [ self-hosted, lab ]
     container:
-      image: nexus.lab.fahm.fr/repository/homelab/ci:latest
+      image: nexus.lab.fahm.fr/homelab/ci:latest
     steps:
       - uses: actions/checkout@v4
       # mise + uv + the resolved tool dir (ansible-lint, black, ruff,
