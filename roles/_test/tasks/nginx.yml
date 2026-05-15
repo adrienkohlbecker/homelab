@@ -20,7 +20,6 @@
     executable: /bin/bash
     creates: /etc/letsencrypt/live/{{ item }}
   loop:
-    - "{{ domain }}"
     - "{{ inventory_hostname }}.{{ domain }}"
   become: true
 

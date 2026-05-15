@@ -24,5 +24,4 @@
     creates: /etc/letsencrypt/live/{{ item }}
   become: true
   loop:
-    - '{{ domain }}'
     - '{{ inventory_hostname }}.{{ domain }}'

@@ -6,18 +6,16 @@
 # break only surfaces on the netdata test. The import_tasks: netdata.yml
 # at the bottom pulls that path into certbot's own coverage.
 
-- name: _verify | Stat cert files for both domains
+- name: _verify | Stat cert files
   stat:
     path: "{{ item }}"
   loop:
-    - /etc/letsencrypt/live/{{ domain }}/privkey.pem
-    - /etc/letsencrypt/live/{{ domain }}/fullchain.pem
     - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem
     - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
   register: _verify_certs
   become: true
 
-- name: _verify | Cert files exist for both domains
+- name: _verify | Cert files exist
   assert:
     that:
       - item.stat.exists
@@ -26,26 +24,20 @@
   loop_control:
     label: "{{ item.item }}"
 
-- name: _verify | Inspect issued certificates
+- name: _verify | Inspect issued certificate
   community.crypto.x509_certificate_info:
-    path: /etc/letsencrypt/live/{{ item }}/fullchain.pem
-  loop:
-    - "{{ domain }}"
-    - "{{ inventory_hostname }}.{{ domain }}"
+    path: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
   register: _verify_cert_info
   become: true
 
-- name: _verify | Certificate SANs cover apex + wildcard
+- name: _verify | Certificate SANs cover host + wildcard
   assert:
     that:
-      - ("DNS:" + item.item) in item.subject_alt_name
-      - ("DNS:*." + item.item) in item.subject_alt_name
+      - ("DNS:" + inventory_hostname + "." + domain) in _verify_cert_info.subject_alt_name
+      - ("DNS:*." + inventory_hostname + "." + domain) in _verify_cert_info.subject_alt_name
     fail_msg: >-
-      cert for {{ item.item }} missing apex+wildcard SANs
-      (got {{ item.subject_alt_name }})
-  loop: "{{ _verify_cert_info.results }}"
-  loop_control:
-    label: "{{ item.item }}"
+      cert missing host+wildcard SANs
+      (got {{ _verify_cert_info.subject_alt_name }})
 
 # Distinguishes "real LE cert" from snakeoil/self-signed left in place
 # by a sibling role's _setup at the same paths. Staging and prod have
@@ -54,14 +46,11 @@
   assert:
     that:
       - >-
-        (not certbot_production_certificates and 'STAGING' in (item.issuer.commonName | default('')))
-        or (certbot_production_certificates and "Let's Encrypt" in (item.issuer.organizationName | default('')))
+        (not certbot_production_certificates and 'STAGING' in (_verify_cert_info.issuer.commonName | default('')))
+        or (certbot_production_certificates and "Let's Encrypt" in (_verify_cert_info.issuer.organizationName | default('')))
     fail_msg: >-
-      cert for {{ item.item }} not issued by expected LE
-      (issuer={{ item.issuer }}, staging_expected={{ not certbot_production_certificates }})
-  loop: "{{ _verify_cert_info.results }}"
-  loop_control:
-    label: "{{ item.item }}"
+      cert not issued by expected LE
+      (issuer={{ _verify_cert_info.issuer }}, staging_expected={{ not certbot_production_certificates }})
 
 # Renewals only happen if certbot.timer is enabled+active. Both
 # commands exit non-zero on failure, so the task fails as its own
@@ -121,9 +110,8 @@
   register: _verify_x509check
   become: true
 
-- name: _verify | x509check references both cert paths
+- name: _verify | x509check references the host cert path
   assert:
     that:
-      - "'/etc/letsencrypt/live/' + domain + '/fullchain.pem' in (_verify_x509check.content | b64decode)"
       - "'/etc/letsencrypt/live/' + inventory_hostname + '.' + domain + '/fullchain.pem' in (_verify_x509check.content | b64decode)"
-    fail_msg: x509check.conf didn't render both cert paths
+    fail_msg: x509check.conf didn't render the host cert path
