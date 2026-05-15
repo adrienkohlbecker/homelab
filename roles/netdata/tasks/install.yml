@@ -126,6 +126,20 @@
   tags:
     - netdata
 
+# Letsencrypt live/ + archive/ are 0750 root:ssl-cert (see
+# roles/certbot/tasks/main.yml); netdata's go.d/x509check reads
+# /etc/letsencrypt/live/<host>/fullchain.pem, so the netdata user
+# needs ssl-cert to traverse those dirs.
+- name: install | Add netdata to ssl-cert group
+  when: not (ansible_check_mode and netdata_apt.changed)
+  user:
+    name: netdata
+    groups: ssl-cert
+    append: true
+  become: true
+  tags:
+    - netdata
+
 - name: install | Install netdata plugins
   when: not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed))
   apt:
