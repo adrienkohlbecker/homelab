@@ -63,6 +63,7 @@
     owner: root
     group: root
     backup: true
+  register: certbot_cf_creds
   become: true
   no_log: true
   when: not (ansible_check_mode and certbot_apt.changed)
@@ -144,5 +145,20 @@
   when:
     - not (ansible_check_mode and certbot_apt.changed)
     - (not certbot_cert_stat.stat.exists) or certbot_sans_drifted
+  tags:
+    - certbot
+
+# Exercise the renewal path immediately when the cloudflare token
+# rotates, so a bad/empty/wrongly-scoped token surfaces now instead
+# of at the next 60-day timer fire (silent until nginx serves an
+# expired cert). Gated on the cert already existing -- on a fresh
+# host the Issue certificate task above already exercises the new
+# token end-to-end.
+- name: Exercise renewal after cloudflare token rotation  # noqa: no-changed-when -- diagnostic dry-run
+  command: certbot renew --dry-run --no-random-sleep-on-renew
+  become: true
+  when:
+    - certbot_cf_creds.changed
+    - certbot_cert_stat.stat.exists
   tags:
     - certbot
