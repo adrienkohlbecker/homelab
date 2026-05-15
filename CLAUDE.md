@@ -102,7 +102,11 @@ Variant escalation: [.github/ci-lab-roles.txt](.github/ci-lab-roles.txt) lists r
 
 Notifications go through Mailgun's HTTP API (not the host's postfix) — two GitHub repo secrets `MAILGUN_API_KEY` and `MAILGUN_DOMAIN` populated once from `group_vars/prod.yml`. `mise run ci:mail-cross-cut` and `mise run ci:mail-failures` are the entry points; both fail loudly on missing secrets.
 
-The `lab-runtime-build` workflow needs three additional GitHub repo secrets: `NEXUS_USERNAME` and `NEXUS_PASSWORD` (push credentials for the homelab docker hosted repo on Nexus; same op:// item that `mise.toml [env]` references for tofu) and `MISE_GITHUB_TOKEN` (raises mise's anon 60/hr GitHub API rate limit during `mise install`; same value as `mise_github_token` in [group_vars/prod.yml](group_vars/prod.yml)).
+The `lab-runtime-build` workflow needs three additional GitHub repo secrets, all managed end-to-end by terraform — see [terraform/github.tf](terraform/github.tf):
+- `NEXUS_USERNAME` and `NEXUS_PASSWORD` — the homelab_push Nexus user/role live in [terraform/nexus.tf](terraform/nexus.tf); rotate with `tofu apply -replace=random_password.nexus_homelab_push`.
+- `MISE_GITHUB_TOKEN` — raises mise's anon 60/hr GitHub API rate limit during `mise install`. Dedicated fine-grained GitHub PAT minted in the GitHub UI with **no scopes** (so a CI compromise can't pivot), stored once in 1Password as item `github-mise-token` field `credential`, surfaced into terraform via `TF_VAR_mise_github_token` in [mise.toml](mise.toml). Rotate by generating a new PAT, updating the 1P field, and re-applying.
+
+The terraform github provider authenticates separately via `gh auth token` (operator's gh CLI keyring). That token is *only* used for terraform's repo-management calls; it never lands in any CI secret.
 
 To trigger a targeted subset manually: Actions tab → `test` → Run workflow → set `roles=foo,bar:lab,baz`. `roles=ALL` runs the entire universe. `roles=foo` (no `:variant`) auto-escalates to lab if foo is in `ci-lab-roles.txt`; `roles=foo:box` (explicit) is exact, no escalation.
 
