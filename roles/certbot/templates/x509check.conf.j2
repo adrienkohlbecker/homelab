@@ -2,4 +2,5 @@
 jobs:
   - name: host_cert
     source: file:///etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
+    check_full_chain: yes
     autodetection_retry: 60
