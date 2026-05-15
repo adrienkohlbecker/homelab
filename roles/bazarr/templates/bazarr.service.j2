@@ -25,7 +25,7 @@ PartOf=zfs_autosnapshot.target
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
-TimeoutSec=300
+TimeoutSec=120
 RestartSec=5
 Type=notify
 NotifyAccess=all
@@ -55,7 +55,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
-    --stop-timeout 300 \
+    --stop-timeout 60 \
     docker.io/linuxserver/bazarr:1.5.2
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
