@@ -25,6 +25,7 @@ ExecStart=/usr/bin/podman run \
     --detach \
     --replace \
     --rm \
+    --init \
     --name compta \
     --log-driver journald \
     --log-opt tag="compta" \
