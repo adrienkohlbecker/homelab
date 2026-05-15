@@ -49,6 +49,16 @@
   tags:
     - github_runner
 
+# Skip dynamic per-instance state that may end up under runner/ at
+# runtime: Runner.Listener resolves `_diag` (and similar paths) via
+# its own binary location, which (after symlink resolution) is
+# runner/bin/Runner.Listener -- so logs land in runner/_diag for every
+# runner. We don't want to symlink runner/_diag back into per-repo dirs
+# (the migration already created homelab/_diag, and `file: state: link
+# force: true` refuses to overwrite a non-empty directory). Same for
+# any .runner / .credentials that hypothetically end up at the shared
+# level via a botched migration. The runner's actual state files live
+# in the per-repo dir, written by config.sh with that dir as CWD.
 - name: _register | Symlink shared runner entries into {{ runner_repo }}/
   file:
     src: ../runner/{{ item.path | basename }}
@@ -58,6 +68,15 @@
     follow: false
     owner: github_runner
     group: github_runner
+  when: >-
+    item.path | basename not in [
+      '_diag',
+      '_work',
+      '.runner',
+      '.credentials',
+      '.credentials_rsaparams',
+      'svc.sh',
+    ]
   loop: "{{ github_runner_shared_entries.files }}"
   loop_control:
     label: "{{ item.path | basename }}"
