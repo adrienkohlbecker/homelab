@@ -1,14 +1,16 @@
 # Functional verify for the three site datasets created by main.yml.
 #
-# community.general.zfs silently no-ops property updates on existing
-# datasets (see roles/zfsbootmenu/tasks/cmdline.yml:57), so an idempotent
-# converge is not evidence extra_properties actually landed -- only
-# `zfs get` is. Source must be `local`, not just the right value:
+# An idempotent converge is not evidence extra_properties actually
+# landed -- community.general.zfs treats a property whose source is
+# anything other than local|received|- as absent, so a property
+# silently inherited from a parent dataset can read back as the right
+# value while never being set locally. `zfs get` is the only reliable
+# witness. Source must be `local`, not just the right value:
 # zfs-autobackup's picker filters with `-s local`
 # (roles/zfs_autobackup/templates/zfs_autosnapshot.sh.j2:14), so an
 # inherited `autobackup:bak=true` would test-pass but never get backed
-# up. Asserting `local` for both properties keeps the role's "I set
-# this explicitly" contract honest.
+# up. Asserting `local` for the mountpoint as well as the extra
+# properties keeps the role's "I set this explicitly" contract honest.
 
 - name: _verify | Compose dataset list
   set_fact:
@@ -23,19 +25,37 @@
 
 - name: _verify | Dataset exists
   when: zfs_root
-  command: zfs list -H -o name {{ _data_pool }}/{{ item.name }}
+  command:
+    argv:
+      - zfs
+      - list
+      - -H
+      - -o
+      - name
+      - "{{ _data_pool }}/{{ item.name }}"
   changed_when: false
   loop: '{{ _data_datasets }}'
   loop_control:
     label: '{{ _data_pool }}/{{ item.name }}'
   become: true
 
-- name: _verify | Mountpoint property matches
+- name: _verify | Mountpoint property set locally with expected value
   when: zfs_root
-  command: zfs get -H -p -o value mountpoint {{ _data_pool }}/{{ item.name }}
+  command:
+    argv:
+      - zfs
+      - get
+      - -H
+      - -p
+      - -o
+      - source,value
+      - mountpoint
+      - "{{ _data_pool }}/{{ item.name }}"
   register: data_verify_mountpoint
   changed_when: false
-  failed_when: data_verify_mountpoint.stdout | trim != item.mountpoint
+  failed_when: >-
+    (data_verify_mountpoint.stdout.split('\t') | first | trim) != 'local'
+    or (data_verify_mountpoint.stdout.split('\t') | last | trim) != item.mountpoint
   loop: '{{ _data_datasets }}'
   loop_control:
     label: '{{ _data_pool }}/{{ item.name }} mountpoint={{ item.mountpoint }}'
@@ -43,7 +63,13 @@
 
 - name: _verify | Dataset mounted at mountpoint
   when: zfs_root
-  command: findmnt --noheadings --output SOURCE {{ item.mountpoint }}
+  command:
+    argv:
+      - findmnt
+      - --noheadings
+      - --output
+      - SOURCE
+      - "{{ item.mountpoint }}"
   register: data_verify_findmnt
   changed_when: false
   failed_when: data_verify_findmnt.stdout | trim != _data_pool ~ '/' ~ item.name
@@ -54,7 +80,16 @@
 
 - name: _verify | Extra property set locally with expected value
   when: zfs_root
-  command: zfs get -H -p -o source,value {{ item.1.key }} {{ _data_pool }}/{{ item.0.name }}
+  command:
+    argv:
+      - zfs
+      - get
+      - -H
+      - -p
+      - -o
+      - source,value
+      - "{{ item.1.key }}"
+      - "{{ _data_pool }}/{{ item.0.name }}"
   register: data_verify_prop
   changed_when: false
   failed_when: >-
@@ -62,5 +97,5 @@
     or (data_verify_prop.stdout.split('\t') | last | trim) != item.1.value
   loop: '{{ _data_datasets | product(_data_extra_properties | dict2items) | list }}'
   loop_control:
-    label: '{{ _data_pool }}/{{ item.0.name }} {{ item.1.key }}={{ item.1.value }} (local)'
+    label: '{{ _data_pool }}/{{ item.0.name }} {{ item.1.key }}={{ item.1.value }}'
   become: true
