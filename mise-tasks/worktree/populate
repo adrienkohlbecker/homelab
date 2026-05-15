@@ -17,6 +17,10 @@ if [ ! -e "$wt/packer/artifacts" ] && [ ! -L "$wt/packer/artifacts" ]; then
   ln -s "$repo/packer/artifacts" "$wt/packer/artifacts"
 fi
 
+if [ ! -e "$wt/terraform/.terraform" ] && [ ! -L "$wt/terraform/.terraform" ]; then
+  ln -s "$repo/terraform/.terraform" "$wt/terraform/.terraform"
+fi
+
 if [ -f "$repo/.worktreeinclude" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     case "$line" in '' | '#'*) continue ;; esac
