@@ -175,6 +175,37 @@ resource "nexus_repository_raw_proxy" "this" {
   }
 }
 
+# Hosted (not proxy) docker repo for images we build in CI. Today the
+# only consumer is the lab-runtime-build workflow, which pushes
+# nexus.lab.fahm.fr/repository/homelab/lab-runtime:<sha> + :latest after
+# rebuilding the runner image. Anonymous pulls are on (so unauthenticated
+# `podman pull` from CI / lab hosts works); push requires basic auth
+# against a Nexus user with nx-repository-edit-docker-homelab-add /
+# -edit / -delete privileges (created once via the Nexus UI; the
+# datadrivers provider does not yet expose user/role/privilege
+# resources). Force-basic-auth ON keeps anonymous Bearer-token paths
+# from accidentally accepting pushes.
+#
+# write_policy ALLOW (not ALLOW_ONCE) because the lab-runtime-build
+# workflow re-pushes :latest on every successful build. ALLOW_ONCE
+# would reject the second push.
+resource "nexus_repository_docker_hosted" "this" {
+  for_each = toset(["homelab"])
+
+  name   = each.key
+  online = true
+
+  docker {
+    force_basic_auth = true
+    v1_enabled       = false
+  }
+  storage {
+    blob_store_name                = "default"
+    strict_content_type_validation = true
+    write_policy                   = "ALLOW"
+  }
+}
+
 resource "nexus_repository_docker_proxy" "this" {
   for_each = local.docker_proxies
 
