@@ -58,6 +58,21 @@
   tags:
     - eaton_ipp
 
+# The eaton-ipp daemon binds 0.0.0.0:4679 (HTTP) and 0.0.0.0:4680
+# (HTTPS) — config.js's "httpServers" block is not configurable down
+# to loopback. External access is dropped by roles/firewall's
+# default-drop input chain (nothing in nftables.conf.j2 accepts those
+# ports), and confirmed by a probe: external TCP gets a RST while
+# nginx reaches the UI via iif lo accept. Default admin/admin login
+# is therefore only reachable via the nginx subdomain (which fronts a
+# real TLS cert and could later carry CSP/auth) or via host-local
+# processes, not from the broader LAN.
+#
+# Eaton's own ports table: TCP 4679 = "Eaton Supervision" (HTTP UI),
+# TCP 4680 = "Eaton SSL Supervision" (HTTPS UI). UDP 4679/4680 are
+# "Eaton Notification/Alarms Broadcast"; IPP polls the UPS over SNMP
+# (UDP 161/162), so the UDP-4679-IN broadcast path isn't load-bearing
+# here.
 - name: Configure nginx
   import_role:
     name: nginx
