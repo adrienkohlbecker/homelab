@@ -1,4 +1,4 @@
-- name: Install dependencies
+- name: Install compta dependencies
   apt:
     package:
       - git
