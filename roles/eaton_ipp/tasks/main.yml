@@ -6,17 +6,13 @@
   tags:
     - eaton_ipp
 
-- name: Install curl
-  apt:
-    pkg:
-      - curl
-    cache_valid_time: 3600
-  become: true
-  tags:
-    - eaton_ipp
-
+# `default([{}])` catches the package-missing case so we don't trip on
+# undefined attribute; `default('')` catches the no-version case so the
+# comparison always has a string. Same idiom as roles/backports/_verify.
 - name: Install eaton ipp if needed
-  when: ansible_architecture == "x86_64" and ("ipp-linux" not in ansible_facts.packages or ansible_facts.packages["ipp-linux"][0].version != "1.75.183")
+  when:
+    - ansible_architecture == "x86_64"
+    - (ansible_facts.packages["ipp-linux"] | default([{}]))[0].version | default('') != eaton_ipp_version
   become: true
   tags:
     - eaton_ipp
@@ -25,19 +21,27 @@
     - name: Download ipp-linux deb
       check_mode: false
       get_url:
-        url: "{{ mirror_gitea_lab }}/api/packages/adrienkohlbecker/generic/eaton_ipp/1.75/ipp-linux_1.75.183-1_amd64.deb"
+        url: "{{ eaton_ipp_release[ansible_architecture].url }}"
         dest: /tmp/ipp-linux.deb
         mode: '0644'
         owner: root
         group: root
-        checksum: "sha256:{{ mirror_gitea_lab }}/api/packages/adrienkohlbecker/generic/eaton_ipp/1.75/checksum.ipp-linux_1.75.183-1_amd64.deb.sha256"
+        checksum: "sha256:{{ eaton_ipp_release[ansible_architecture].sha256 }}"
+        timeout: 30
+      register: ipp_linux_download
+      retries: 3
+      delay: 5
+      until: ipp_linux_download is succeeded
 
     - name: Install ipp-linux
       apt:
         deb: /tmp/ipp-linux.deb
       register: ipp_linux_installed
 
+  always:
+
     - name: Delete deb file
+      check_mode: false
       file:
         path: /tmp/ipp-linux.deb
         state: absent
