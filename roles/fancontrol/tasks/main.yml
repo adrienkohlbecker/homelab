@@ -86,6 +86,11 @@
     group: root
     mode: "0644"
     backup: true
+    # Catches malformed configs (missing FCTEMPS, INTERVAL<=0, etc.)
+    # before the daemon sees them. fancontrol exits non-zero on parse
+    # failure, so ansible refuses the write instead of leaving the box
+    # wedged at next service start.
+    validate: fancontrol -t -f %s
   register: fancontrol_conf
   become: true
   tags:
