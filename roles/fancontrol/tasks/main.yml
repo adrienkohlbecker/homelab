@@ -8,6 +8,23 @@
   tags:
     - fancontrol
 
+# Upstream fancontrol.service sets no Restart=, but the daemon's own
+# failure path is `restorefans 1` (set fans to 100%) then exit. Without
+# auto-restart a transient sysfs error leaves the box loud forever.
+# on-failure (not always) so a clean shutdown doesn't respawn, and a
+# config validation failure surfaces rather than loops.
+- name: Install fancontrol restart drop-in
+  import_role:
+    name: systemd_unit
+    tasks_from: dropin
+  vars:
+    systemd_unit_args:
+      src: restart.conf
+      for: fancontrol.service
+      condition: "{{ not (ansible_check_mode and fancontrol_apt.changed) }}"
+  tags:
+    - fancontrol
+
 # hwmonN numbering shifts across kernel upgrades and module load order;
 # DEVPATH for sata-attached chips (drivetemp) shifts when SATA cables
 # move. Resolve both at apply time so host_vars can refer to chips by
@@ -130,6 +147,9 @@
     systemd_unit_args:
       src: fancontrol
       condition: "{{ not (ansible_check_mode and fancontrol_apt.changed) }}"
-      restart: "{{ fancontrol_conf.changed | default(false) }}"
+      restart: >-
+        {{ fancontrol_apt.changed
+           or fancontrol_conf.changed | default(false)
+           or fancontrol_service_d_override_conf_result.changed | default(false) }}
   tags:
     - fancontrol
