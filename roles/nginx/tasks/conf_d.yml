@@ -23,6 +23,9 @@
 #               exclusive with src.
 #   condition   optional bool, default true; gates the whole call
 #   mode        optional, default '0644'
+#   reload      optional bool, default true; reload nginx after a
+#               successful change. Set false to batch multiple drops
+#               under one explicit reload at the caller.
 #
 # The dict form prevents inter-call leakage at play-vars scope: each
 # import_role pass replaces the whole `nginx_conf_d_args` value, so a
@@ -39,6 +42,7 @@
     _nginx_conf_d_condition: "{{ nginx_conf_d_args.condition | default(true) }}"
     _nginx_conf_d_name: "{{ nginx_conf_d_args.name }}"
     _nginx_conf_d_mode: "{{ nginx_conf_d_args.mode | default('0644') }}"
+    _nginx_conf_d_reload: "{{ nginx_conf_d_args.reload | default(true) }}"
 
 - name: conf_d | Install {{ nginx_conf_d_args.name }}
   when: _nginx_conf_d_condition
@@ -69,6 +73,22 @@
     - name: conf_d | Record install result for {{ nginx_conf_d_args.name }}
       set_fact:
         "{{ _nginx_conf_d_name | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ nginx_conf_d }}"
+
+    # site.yml's per-site reload only fires when the per-site template
+    # changes, so without an explicit reload here a conf.d drop change
+    # would land on disk and pass validate, but the running nginx would
+    # keep its old http{} state until the next unrelated trigger. Reload
+    # inside the block so a rescue (rollback) skips this -- the previous
+    # config is still what's running. Callers that want to batch
+    # multiple drops under one reload pass `reload: false`.
+    - name: conf_d | Reload nginx for {{ nginx_conf_d_args.name }}
+      when:
+        - _nginx_conf_d_reload
+        - nginx_conf_d.changed
+      systemd:
+        name: nginx
+        state: reloaded
+      become: true
 
   # nginx -t reads files at their on-disk locations, so the conf.d drop
   # has to land at its production path first and is then validated in
