@@ -213,3 +213,26 @@
     name: netdata
     state: restarted
   become: true
+
+# Cover the cross-role coupling: netdata's main.yml imports certbot's
+# tasks_from: netdata to render x509check.conf. A break in the
+# certbot-side template (x509check.conf.j2) or the netdata template
+# helper would surface here.
+- name: _verify | Slurp rendered x509check config
+  slurp:
+    src: /etc/netdata/go.d/x509check.conf
+  register: _verify_x509check
+  become: true
+
+- name: _verify | x509check renders structurally-valid YAML pointing at the host cert
+  vars:
+    _x509check: "{{ _verify_x509check.content | b64decode | from_yaml }}"
+    _expected_source: "file:///etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem"
+  assert:
+    that:
+      - _x509check.jobs | length == 1
+      - _x509check.jobs[0].source == _expected_source
+      - _x509check.jobs[0].check_full_chain
+    fail_msg: >-
+      x509check.conf didn't render the host cert path correctly
+      (parsed={{ _x509check }}, expected source={{ _expected_source }})

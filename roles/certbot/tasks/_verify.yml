@@ -1,10 +1,9 @@
 # Functional checks for the certbot role. The role's main.yml fails
 # loudly if the certbot subprocess errors, but that doesn't catch
 # regressions like "wrong SANs", "snakeoil left from a sibling _setup
-# masquerading as the real cert", or "x509check.conf.j2 broke" --
-# x509check.conf is rendered from roles/netdata/tasks/main.yml so a
-# break only surfaces on the netdata test. The import_tasks: netdata.yml
-# at the bottom pulls that path into certbot's own coverage.
+# masquerading as the real cert". x509check.conf rendering (cross-role
+# coupling with netdata) is covered on the consumer side in
+# roles/netdata/tasks/_verify.yml.
 
 - name: _verify | Stat cert files
   stat:
@@ -148,49 +147,13 @@
   loop_control:
     label: "{{ item.item }}"
 
-# Cover the cross-role coupling: roles/netdata/tasks/main.yml calls
-# into roles/certbot/tasks/netdata.yml, so a break in x509check.conf.j2
-# would otherwise only surface on the netdata test. This is test
-# scaffolding (netdata isn't a real certbot dependency), so the
-# install lives here in _verify rather than _setup. netdata_restart
-# is false because policy_rc_d=101 keeps the unit out of the running
-# set under test -- restarting would be a no-op noise either way.
-- name: _verify | Install netdata
-  import_role:
-    name: netdata
-    tasks_from: install
-
-- name: _verify | Render netdata x509check config
-  import_tasks: netdata.yml
-  vars:
-    netdata_restart: false
-
-- name: _verify | Read rendered x509check config
-  slurp:
-    src: /etc/netdata/go.d/x509check.conf
-  register: _verify_x509check
-  become: true
-
-- name: _verify | x509check renders structurally-valid YAML pointing at the host cert
-  vars:
-    _x509check: "{{ _verify_x509check.content | b64decode | from_yaml }}"
-    _expected_source: "file:///etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem"
-  assert:
-    that:
-      - _x509check.jobs | length == 1
-      - _x509check.jobs[0].source == _expected_source
-    fail_msg: >-
-      x509check.conf didn't render the host cert path correctly
-      (parsed={{ _x509check }}, expected source={{ _expected_source }})
-
 # End-to-end functional check: --dry-run exercises the credentials
 # file, the DNS-cloudflare plugin, and the persisted --deploy-hook in
-# one shot. Always hits the LE staging endpoint regardless of
-# certbot_production_certificates, so it doesn't burn prod rate-limit
-# slots if a future change wires _verify into a non-test path. Catches
-# regressions like "credentials file rotation didn't propagate",
-# "renewal config lost --deploy-hook", or "DNS plugin failed" that the
-# stat/SAN checks above would happily pass.
+# one shot. Catches regressions like "credentials file rotation didn't
+# propagate", "renewal config lost --deploy-hook", or "DNS plugin
+# failed" that the stat/SAN checks above would happily pass. The
+# dry-run reads the server URL from renewal/<name>.conf, so a
+# prod-issued lineage will hit LE prod (rate-limit slots).
 - name: _verify | certbot renew --dry-run exercises the renewal path
   command: certbot renew --dry-run --no-random-sleep-on-renew
   changed_when: false
