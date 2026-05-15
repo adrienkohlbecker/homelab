@@ -73,21 +73,23 @@
   loop_control:
     label: "{{ item.fancontrol_chip }}"
 
-# Reads fan*_input directly from sysfs. Wait up to 30s for the daemon
-# to evaluate temps and bring the fan above MINSTART -- on a cold start
-# the first INTERVAL pass may run before the fan has spun up. If this
-# never crosses 0, either the fan isn't physically wired or MINSTART /
-# MINSTOP / MINPWM are below the fan's stall threshold and need a
-# higher value in host_vars.
-- name: _verify | Assert first fan reports non-zero RPM
+# Reads fan*_input directly from sysfs for every fan. Wait up to 30s
+# per fan for the daemon to evaluate temps and bring it above MINSTART
+# -- on a cold start the first INTERVAL pass may run before the fan
+# has spun up. If a fan never crosses 0, either it isn't physically
+# wired or MINSTART / MINSTOP / MINPWM are below its stall threshold
+# and need a higher value in host_vars. Looping per-fan catches
+# regressions where one of N fans is misconfigured but the others
+# spin (e.g. an FCFANS mismap that the chip-existence assert can't
+# see).
+- name: _verify | Assert each fan reports non-zero RPM
   when: fancontrol_settings.fans | length > 0
-  vars:
-    _first_fan: "{{ fancontrol_settings.fans[0].fan }}"
-    _first_fan_chip: "{{ _first_fan.split('/')[0] }}"
-    _first_fan_input: "{{ _first_fan.split('/')[1] }}"
   slurp:
-    src: "/sys/class/hwmon/{{ fancontrol_chip_map[_first_fan_chip].hwmon }}/{{ _first_fan_input }}"
-  register: fancontrol_first_fan_rpm
-  until: (fancontrol_first_fan_rpm.content | b64decode | trim | int) > 0
+    src: "/sys/class/hwmon/{{ fancontrol_chip_map[item.fan.split('/')[0]].hwmon }}/{{ item.fan.split('/')[1] }}"
+  loop: "{{ fancontrol_settings.fans }}"
+  loop_control:
+    label: "{{ item.name }} ({{ item.fan }})"
+  register: fancontrol_fan_rpm
+  until: (fancontrol_fan_rpm.content | b64decode | trim | int) > 0
   retries: 10
   delay: 3
