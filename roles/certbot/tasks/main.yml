@@ -46,6 +46,7 @@
       key-type = ecdsa
       elliptic-curve = secp384r1
       dns-cloudflare-credentials = /etc/letsencrypt/cloudflare.ini
+      dns-cloudflare-propagation-seconds = 30
     mode: "0644"
     owner: root
     group: root
