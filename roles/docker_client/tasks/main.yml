@@ -75,15 +75,16 @@
 
 # Coalesce the version-gated registers so downstream tasks keep
 # referencing apt_repository_docker_client.changed without caring
-# which branch ran. Includes apt_install_python3_debian so check
-# mode on resolute (where the deb822 task is gated out by the
-# prereq install) still propagates a "would-change" signal --
+# which branch ran. Includes the per-branch prereq installs
+# (apt_install_gpg on jammy, apt_install_python3_debian on
+# resolute) so check mode -- where the repo task is gated out by
+# the prereq install -- still propagates a "would-change" signal;
 # otherwise install docker client would run in check mode against
 # an unconfigured repo.
 - name: Track repository changes
   set_fact:
     apt_repository_docker_client:
-      changed: "{{ apt_repository_docker_client_legacy is changed or apt_repository_docker_client_deb822 is changed or apt_install_python3_debian is changed }}"
+      changed: "{{ apt_repository_docker_client_legacy is changed or apt_repository_docker_client_deb822 is changed or apt_install_gpg is changed or apt_install_python3_debian is changed }}"
   tags:
     - docker_client
 
