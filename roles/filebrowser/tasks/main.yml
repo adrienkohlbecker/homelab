@@ -1,3 +1,9 @@
+# Read-only directory autoindex via nginx — no daemon, no auth (LAN/WG-fronted),
+# no upload/delete. Publishes /srv/filebrowser at filebrowser.<host>.<domain>.
+# Consumes zfs_has_<name>_mount flags to gate which trees are symlinked in;
+# `home` always points at the connecting operator's $HOME (ansible_user_dir).
+# Theme CSS lives at /etc/nginx/snippets/filebrowser_theme.css and is aliased
+# into the site at /.theme.css.
 - name: Create filebrowser autoindex root
   file:
     path: /srv/filebrowser
