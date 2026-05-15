@@ -170,3 +170,20 @@ jobs:
               "${IMAGE_ID}" "${REGISTRY}/${REPO}:latest"
           fi
           podman rmi "${REGISTRY}/${REPO}:${GITHUB_SHA}" 2>/dev/null || true
+
+      # Downstream workflows (test.yml's wait-for-ci-image) poll this
+      # sentinel before letting their test-role cells resolve :latest.
+      # Same /mnt/scratch/qemu/_sentinels/ dir as packer-build (it's the
+      # only shared sentinel location already bind-mounted into the
+      # downstream containers); distinct filename prefix. Only writes on
+      # master because :latest is only published from master --
+      # feature-branch dispatches have nothing for downstream to wait on.
+      # Step only fires after a successful push: a failed push leaves no
+      # sentinel, the waiter times out, and test-role skips rather than
+      # asserting against the previous :latest mid-rebuild.
+      - name: Mark ci-image complete for waiters
+        if: github.ref == 'refs/heads/master'
+        run: |
+          set -euo pipefail
+          mkdir -p /mnt/scratch/qemu/_sentinels
+          touch "/mnt/scratch/qemu/_sentinels/ci-image-${GITHUB_SHA}"

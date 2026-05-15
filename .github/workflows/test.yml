@@ -29,6 +29,7 @@ jobs:
       matrix: ${{ steps.detect.outputs.matrix }}
       cross_cut: ${{ steps.detect.outputs.cross_cut }}
       packer_changed: ${{ steps.detect.outputs.packer_changed }}
+      ci_image_changed: ${{ steps.detect.outputs.ci_image_changed }}
     steps:
       - uses: actions/checkout@v4
         # 50 commits is enough for HEAD~1 plus a typical session of pushes;
@@ -89,6 +90,41 @@ jobs:
           done
           echo "Found $target -- releasing test-role."
 
+  wait-for-ci-image:
+    # When this push touched a ci-image.yml input (Dockerfile / mise.toml
+    # / pyproject.toml / uv.lock / packer/qemu.pkr.hcl) on master, detect
+    # emits ci_image_changed=true and this job blocks test-role on
+    # ci-image.yml finishing its push to :latest. Without this, test-role's
+    # container: block can resolve the OLD :latest while the new image is
+    # mid-build, and tests run against a stale toolchain. The triple gate
+    # in detect-roles (event=push + ref=master + input-diff) ensures
+    # workflow_dispatch / feature-branch / unrelated-paths cases land here
+    # as false -- the wait never blocks on a build that won't happen.
+    needs: detect
+    if: needs.detect.outputs.ci_image_changed == 'true'
+    runs-on: [ self-hosted, lab ]
+    container:
+      image: nexus.lab.fahm.fr/repository/homelab/ci:latest
+      options: --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
+    timeout-minutes: 30
+    steps:
+      - name: Wait for ci-image sentinel for this SHA
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          target=/mnt/scratch/qemu/_sentinels/ci-image-$SHA
+          deadline=$(( $(date +%s) + 25 * 60 ))
+          while [ ! -f "$target" ]; do
+            if [ "$(date +%s)" -gt "$deadline" ]; then
+              echo >&2 "Timed out waiting for $target after 25min --"
+              echo >&2 "ci-image build for this SHA likely failed or wasn't dispatched."
+              exit 1
+            fi
+            sleep 15
+          done
+          echo "Found $target -- releasing test-role."
+
   test-role:
     # Reader half of the lab-qemu-artifacts mutex (packer-build is the
     # writer). At job level rather than workflow level so
@@ -101,17 +137,21 @@ jobs:
     needs:
       - detect
       - wait-for-packer-build
-    # always() lets this evaluate even when wait-for-packer-build was
-    # skipped (its default when packer_changed=false); the (success ||
-    # skipped) clause filters out the genuine failure case (sentinel
-    # timeout) so test-role doesn't read against a stale or half-rebuilt
-    # qcow2 tree. The matrix-not-empty guard short-circuits the no-op
-    # case (cross-cut push, empty matrix) without spinning a runner.
+      - wait-for-ci-image
+    # always() lets this evaluate even when wait-for-packer-build or
+    # wait-for-ci-image was skipped (their default when packer_changed /
+    # ci_image_changed is false); the (success || skipped) clauses filter
+    # out the genuine failure cases (sentinel timeout) so test-role doesn't
+    # read against a stale or half-rebuilt qcow2 tree, nor against a
+    # mid-rebuild :latest. The matrix-not-empty guard short-circuits the
+    # no-op case (cross-cut push, empty matrix) without spinning a runner.
     if: |
       always()
       && needs.detect.result == 'success'
       && (needs.wait-for-packer-build.result == 'success'
           || needs.wait-for-packer-build.result == 'skipped')
+      && (needs.wait-for-ci-image.result == 'success'
+          || needs.wait-for-ci-image.result == 'skipped')
       && needs.detect.outputs.matrix != '[]'
       && needs.detect.outputs.matrix != ''
     runs-on: [ self-hosted, lab ]
