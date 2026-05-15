@@ -18,3 +18,117 @@
     _verify_unit.status.LoadState != "loaded"
     or _verify_unit.status.ActiveState != "active"
   become: true
+
+# End-to-end CSP-through-OTLP shape assertion. POST a marked CSP report
+# at fluent-bit's HTTP input, let it flow through:
+#   fluent-bit HTTP input
+#     -> flatten-csp.lua  (legacy/reporting-api -> common flat shape)
+#     -> level-from-message.lua  (severity keyword extraction)
+#     -> otlp-shape.lua   (flat -> record.otlp.attributes/resource)
+#     -> opentelemetry output -> hyperdx otel-collector -> ClickHouse
+# Then query the landed otel_logs row to confirm every column ended up
+# where the downstream UI expects:
+#   ServiceName       = csplogger      (drives "Services" view; sourced
+#                                       from Resource.service.name)
+#   SeverityText      = "warn"         (flatten-csp pins; transform
+#                                       processor's body-keyword
+#                                       fallback only fires when
+#                                       severity is unset)
+#   SeverityNumber    = 13             (OTel SEVERITY_NUMBER_WARN)
+#   Body              startswith "CSP" (flatten-csp synthesises)
+#   LogAttributes contains csp_* + SYSLOG_IDENTIFIER + host
+#   ResourceAttributes contains service.name + host.name
+# _setup imports hyperdx so the box test VM has the real OTLP receiver
+# + ClickHouse stack stood up.
+- name: _verify | OTLP-end-to-end | build per-run marker
+  set_fact:
+    fluentbit_otlp_csp_marker: "verify_otlp_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+
+- name: _verify | OTLP-end-to-end | POST marked CSP report at fluent-bit
+  uri:
+    url: http://127.0.0.1:{{ service_ports.csp_ingest }}/
+    method: POST
+    body_format: json
+    body:
+      csp-report:
+        blocked-uri: "https://verify.example/{{ fluentbit_otlp_csp_marker }}"
+        document-uri: "https://verify.example/"
+        violated-directive: "script-src"
+        effective-directive: "script-src-elem"
+        original-policy: "default-src 'self'"
+    status_code: 204
+
+# Wait for the row to land. fluent-bit's Flush=5s plus collector batch
+# timeout (5s) means up to ~10s typical, with retries on initial cold
+# start of the collector pipeline.
+#
+# Match on LogAttributes['csp_blocked_uri'] rather than Body LIKE: the
+# query command itself ends up in ansible's own task-output journal
+# entry (SYSLOG_IDENTIFIER=ansible-ansible.legacy.command), which
+# fluent-bit's systemd input ships back to ClickHouse with the marker
+# baked into its Body -- Body LIKE matches that decoy instead of the
+# real CSP record. csp_blocked_uri is only populated by flatten-csp.lua.
+#
+# Query body is passed via stdin (-i on podman exec, --data-binary @-
+# on curl) so the SQL stays human-readable in the role rather than as
+# a URL-encoded blob of %5B/%5D/%25.
+- name: _verify | OTLP-end-to-end | wait for ClickHouse row matching marker
+  command:
+    cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
+    stdin: "SELECT count() FROM default.otel_logs WHERE LogAttributes['csp_blocked_uri'] LIKE '%{{ fluentbit_otlp_csp_marker }}%'"
+  register: fluentbit_otlp_count
+  changed_when: false
+  failed_when: false
+  retries: 30
+  delay: 2
+  until: fluentbit_otlp_count.rc == 0 and (fluentbit_otlp_count.stdout | trim | int) > 0
+  become: true
+
+- name: _verify | OTLP-end-to-end | fetch CSP row as JSON
+  command:
+    cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
+    stdin: >-
+      SELECT
+        Body,
+        SeverityText,
+        toUInt32(SeverityNumber) AS SeverityNumber,
+        ServiceName,
+        LogAttributes['csp_blocked_uri']        AS csp_blocked_uri,
+        LogAttributes['csp_format']             AS csp_format,
+        LogAttributes['csp_violated_directive'] AS csp_violated_directive,
+        LogAttributes['csp_effective_directive'] AS csp_effective_directive,
+        LogAttributes['host']                   AS log_host,
+        ResourceAttributes['service.name']      AS resource_service_name,
+        ResourceAttributes['host.name']         AS resource_host_name
+      FROM default.otel_logs
+      WHERE LogAttributes['csp_blocked_uri'] LIKE '%{{ fluentbit_otlp_csp_marker }}%'
+      ORDER BY Timestamp DESC
+      LIMIT 1
+      FORMAT JSONEachRow
+  register: fluentbit_otlp_row
+  changed_when: false
+  become: true
+
+- name: _verify | OTLP-end-to-end | assert landed row shape
+  vars:
+    row: "{{ fluentbit_otlp_row.stdout | from_json }}"
+  assert:
+    that:
+      # Body shape: "CSP <effective> blocked <uri> on <doc> {<json>}".
+      # The JSON suffix populates LogAttributes via HyperDX collector's
+      # ExtractPatterns + merge_maps, AND its first key "level":"warn"
+      # is what the severity-keyword regex matches to set
+      # SeverityText/Number. Each that-item is quoted as a string --
+      # ansible 2.16+ rejects bare expressions.
+      - "row.Body is match('^CSP ')"
+      - "row.SeverityText == 'warn'"
+      - "row.SeverityNumber | int == 13"
+      - "row.ServiceName == 'csplogger'"
+      - "row.csp_format == 'legacy'"
+      - "row.csp_violated_directive == 'script-src'"
+      - "row.csp_effective_directive == 'script-src-elem'"
+      - "row.log_host == inventory_hostname"
+      - "row.resource_service_name == 'csplogger'"
+      - "row.resource_host_name == inventory_hostname"
+      - "fluentbit_otlp_csp_marker in row.csp_blocked_uri"
+    fail_msg: "CSP record landed in ClickHouse but with wrong shape: {{ row }}"

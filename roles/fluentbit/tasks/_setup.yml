@@ -2,3 +2,20 @@
   import_role:
     name: _test
     tasks_from: nginx
+
+# fluentbit's _verify exercises the CSP-through-OTLP path end-to-end:
+# POST a marked CSP report at fluent-bit's HTTP input, let flatten-csp.lua
+# + otlp-shape.lua reshape it, and confirm the OTLP output landed it in
+# ClickHouse with the right column shape. That needs a real OTLP receiver
+# + ClickHouse stack on the box, which hyperdx provides. hyperdx pulls in
+# podman + service_user etc. via its own _setup, which we run explicitly
+# here because the harness only invokes the current role's _setup, not
+# transitive ones.
+- name: _setup | Install hyperdx dependencies
+  import_role:
+    name: hyperdx
+    tasks_from: _setup
+
+- name: _setup | Install hyperdx
+  import_role:
+    name: hyperdx

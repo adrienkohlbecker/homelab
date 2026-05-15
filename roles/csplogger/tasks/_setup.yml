@@ -10,19 +10,44 @@
   import_role:
     name: fluentbit
 
-# Bring up a real HyperDX stack so _verify can query ClickHouse for the
-# landed otel_logs row and assert on the OTLP wire shape end-to-end
-# (ServiceName, SeverityText/Number, LogAttributes, ResourceAttributes).
-# Without this fluent-bit's [OUTPUT] opentelemetry block retries against
-# an unbound 4318 and the assertion query has nothing to find. hyperdx
-# pulls in podman + service_user etc. via its own _setup, which we run
-# explicitly here because the harness only invokes the *current* role's
-# _setup, not transitive ones.
-- name: _setup | Install hyperdx dependencies
-  import_role:
-    name: hyperdx
-    tasks_from: _setup
+# Stand up a dummy HTTP listener at hyperdx's OTLP port (4318) so
+# fluent-bit's [OUTPUT] opentelemetry block lands its POSTs against a
+# real listener instead of retrying forever against an unbound port.
+# _verify reads the listener's request log to confirm the nginx ->
+# fluent-bit -> OTLP-out path works. Lighter than standing up the full
+# hyperdx stack (clickhouse + mongo + collector + ui) just to assert
+# "a record left fluent-bit"; full-pipeline shape assertions live in
+# roles/fluentbit's _verify, which does pull in hyperdx.
+- name: _setup | Install OTLP dummy listener script
+  copy:
+    src: otlp_dummy.py
+    dest: /usr/local/bin/otlp_dummy.py
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  register: csplogger_otlp_dummy_script
 
-- name: _setup | Install hyperdx
-  import_role:
-    name: hyperdx
+- name: _setup | Install OTLP dummy listener unit
+  copy:
+    src: otlp_dummy.service
+    dest: /etc/systemd/system/otlp_dummy.service
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: csplogger_otlp_dummy_unit
+
+- name: _setup | Start OTLP dummy listener
+  systemd:
+    name: otlp_dummy
+    enabled: true
+    state: "{{ 'restarted' if (csplogger_otlp_dummy_script.changed or csplogger_otlp_dummy_unit.changed) else 'started' }}"
+    daemon_reload: true
+  become: true
+
+- name: _setup | Wait for OTLP dummy listener to bind 4318
+  wait_for:
+    host: 127.0.0.1
+    port: 4318
+    timeout: 15
