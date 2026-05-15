@@ -56,7 +56,7 @@ Issue #1506 (the parent of #1519) reported a closely-related symptom in 2021 and
 |---|---|
 | Stand up stub sonarr/radarr in `_setup.yml` | Large complexity for the integration value gained; can't cheaply fake the v3 `/api/system/status` JSON response shape across bazarr's branching. |
 | Make DNS not resolve for `*.box.fahm.fr` | Wildcard is defined in Cloudflare; removing test-host subdomains breaks other roles that legitimately need them to *route* (even if not reach). |
-| Lower `TimeoutSec` in the unit | The 300s headroom was load-bearing *because of this bug*; with the bug avoided we'd just have an empty buffer. Left as-is so QEMU still has slack for genuinely slow-disk paths. |
+| Lower `TimeoutSec` in the unit | Originally kept at 300s to absorb this bug. Once the config gate fixed cold-start to <1s, that became pure padding; tightened to 120s (and `--stop-timeout` to 60s) -- still 5-6× real boot/stop, with slack for genuinely slow-disk paths. |
 | Patch bazarr's `analytics.py` | Carries a vendored-image-mod cost forever and would re-break on every linuxserver/bazarr image bump; the config gate is image-version-independent. |
 
 ## Forward signals
