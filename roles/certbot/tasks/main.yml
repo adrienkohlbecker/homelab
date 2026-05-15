@@ -33,6 +33,28 @@
   tags:
     - certbot
 
+# Pin crypto posture, email, and creds path globally so a hand-run
+# `certbot certonly` / `certbot renew` on the box gets the same shape
+# as ansible's invocation. cli.ini values are defaults; per-cert
+# renewal/<name>.conf (and explicit argv flags) still override.
+- name: Write certbot cli.ini
+  copy:
+    dest: /etc/letsencrypt/cli.ini
+    content: |
+      agree-tos = true
+      email = {{ root_email }}
+      key-type = ecdsa
+      elliptic-curve = secp384r1
+      dns-cloudflare-credentials = /etc/letsencrypt/cloudflare.ini
+    mode: "0644"
+    owner: root
+    group: root
+    backup: true
+  become: true
+  when: not (ansible_check_mode and certbot_apt.changed)
+  tags:
+    - certbot
+
 - name: Write cloudflare credentials
   copy:
     dest: /etc/letsencrypt/cloudflare.ini
@@ -52,14 +74,17 @@
 #       from the first -d SAN, so reordering or adding a SAN later
 #       silently rolls live/<name>-0001/ and breaks every consumer
 #       (nginx, x509check.conf, services reading fullchain.pem).
-#   --key-type/--elliptic-curve pin the crypto posture against future
-#       certbot-default flips. Existing RSA-keyed certs aren't re-keyed
-#       automatically (--reuse-key below); migrate an existing host
-#       once with `sudo certbot certonly --force-renewal --cert-name X
+#   Crypto posture (key-type=ecdsa, elliptic-curve=secp384r1), email,
+#       agree-tos, and the cloudflare creds path are pinned in
+#       /etc/letsencrypt/cli.ini above so they apply to hand-run
+#       certbot too. Existing RSA-keyed hosts need a one-shot
+#       migration: `sudo certbot certonly --force-renewal --cert-name X
 #       --key-type ecdsa --elliptic-curve secp384r1 ...`.
-#   --reuse-key keeps SPKI stable across renewals so monitoring
-#       (netdata x509check, external pinning) doesn't churn every
-#       60 days. A leaked key is mitigated by revoke-and-reissue.
+#   We do NOT pass --reuse-key. Renewals rotate the SPKI every ~60d,
+#       narrowing the blast radius if privkey.pem leaks through the
+#       ssl-cert group. Hosts previously issued with --reuse-key keep
+#       it baked into renewal/<name>.conf; rotate once with
+#       `sudo certbot renew --cert-name X --force-renewal --no-reuse-key`.
 #   --deploy-hook is persisted into renewal/<name>.conf so the
 #       out-of-band certbot.timer renewal reloads nginx without a
 #       separate /etc/letsencrypt/renewal-hooks/deploy/ script.
@@ -72,15 +97,11 @@
 # prod is unaffected, but a future composed harness fixture applying
 # those snakeoils before this role on the same VM would silently skip
 # real issuance.
-- name: Get certificate
+- name: Issue certificate
   command:
     argv: >-
-      {{ ['certbot', 'certonly', '--agree-tos', '-m', root_email,
-          '--noninteractive', '--dns-cloudflare',
-          '--dns-cloudflare-credentials', '/etc/letsencrypt/cloudflare.ini',
+      {{ ['certbot', 'certonly', '--noninteractive', '--dns-cloudflare',
           '--cert-name', inventory_hostname + '.' + domain,
-          '--key-type', 'ecdsa', '--elliptic-curve', 'secp384r1',
-          '--reuse-key',
           '--deploy-hook', certbot_deploy_hook,
           '-d', inventory_hostname + '.' + domain,
           '-d', '*.' + inventory_hostname + '.' + domain]
