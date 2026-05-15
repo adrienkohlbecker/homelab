@@ -46,6 +46,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name bazarr \
+    --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="bazarr" \
     {# Still on PUID/PGID rather than the canonical --user 0:0 + --uidmap=+0:N:1
