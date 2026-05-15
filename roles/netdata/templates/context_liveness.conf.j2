@@ -4,7 +4,20 @@
    re-exposing the result as a Prometheus gauge. The configured-but-
    never-instantiated case (where the named context never appears in
    the chart registry at all, so a template with `on: <missing>` silently
-   drops) is covered by netdata_presence.chart.sh + netdata_presence_alerts.conf. #}
+   drops) is covered by netdata_presence.chart.sh + netdata_presence_alerts.conf.
+
+   Do NOT add per-instance contexts here. apps.plugin emits one chart
+   per app/user/usergroup under `app.cpu_utilization`,
+   `user.cpu_utilization`, `usergroup.cpu_utilization`, etc., so a
+   template with `on: app.cpu_utilization` fans out to ~50 alerts --
+   one per group. Transient groups (postdrop, _apt, build,
+   packagemanager, container subuids that map to ephemeral pids) stop
+   updating the moment no matching processes are running, so their
+   $last_collected_t goes stale and the alert fires forever. Only
+   list contexts that resolve to a single always-on chart. apps.plugin
+   liveness as a whole is covered by netdata.service's systemd unit
+   alerts in systemdunits.conf -- if it crashes, the parent restarts
+   it, so silent apps-only failures are not in scope here. #}
 {% for name, ctx in netdata_contexts.items() %}
 template: liveness_{{ name }}
       on: {{ ctx }}
