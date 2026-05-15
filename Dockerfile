@@ -1,11 +1,11 @@
 # Container image consumed by every github-actions workflow in this
-# repo. Built and pushed exclusively by the lab-runtime-build workflow
+# repo. Built and pushed exclusively by the ci-image workflow
 # to the homelab nexus docker hosted repo at
-# nexus.lab.fahm.fr/repository/homelab/lab-runtime:latest. Other
+# nexus.lab.fahm.fr/repository/homelab/ci:latest. Other
 # workflows reference that URL directly in their `container:` block;
 # anonymous pulls are enabled on Nexus so the runner just fetches it.
 # On a brand-new lab runner with no prior image in nexus, kick the
-# lab-runtime-build workflow once via `workflow_dispatch` before any
+# ci-image workflow once via `workflow_dispatch` before any
 # other workflow can succeed. Layered FROM ubuntu:24.04 with everything
 # the test harness, lint, and packer-build need pre-installed so jobs
 # cold-start in ~3s.
@@ -114,7 +114,7 @@ COPY mise.toml pyproject.toml uv.lock ./
 
 # The mise_github_token build secret raises mise's GitHub API rate
 # limit (mise pulls tool releases from gh; anonymous is 60/hr,
-# authenticated is 5000/hr). Forwarded by lab-runtime-build.yml from
+# authenticated is 5000/hr). Forwarded by ci-image.yml from
 # the MISE_GITHUB_TOKEN repo secret (a long-lived PAT with no scopes
 # beyond public read). Mounted only for this RUN -- never lands in any
 # image layer.

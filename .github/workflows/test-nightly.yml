@@ -21,7 +21,7 @@ jobs:
   gate:
     runs-on: [ self-hosted, lab-runtime ]
     container:
-      image: nexus.lab.fahm.fr/repository/homelab/lab-runtime:latest
+      image: nexus.lab.fahm.fr/repository/homelab/ci:latest
     outputs:
       matrix: ${{ steps.gate.outputs.matrix }}
     steps:
@@ -55,14 +55,14 @@ jobs:
     if: needs.gate.outputs.matrix != '[]' && needs.gate.outputs.matrix != ''
     runs-on: [ self-hosted, lab-runtime ]
     container:
-      image: nexus.lab.fahm.fr/repository/homelab/lab-runtime:latest
+      image: nexus.lab.fahm.fr/repository/homelab/ci:latest
       # See test.yml's test-role container.options comment for the
       # --group-add 1 / per-cell workdir rationale.
       options: >-
         --device /dev/kvm
         --group-add 1
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
-        --volume /mnt/scratch/github_runner/lab-runtime-workdir/${{ github.run_id }}-${{ strategy.job-index }}:/lab-runtime-workdir:rw
+        --volume /mnt/scratch/github_runner/scratch/${{ github.run_id }}-${{ strategy.job-index }}:/scratch:rw
     strategy:
       fail-fast: false
       # Nightly runs unattended; saturate runner capacity (vs 2 on the
@@ -89,7 +89,7 @@ jobs:
             echo "ROLE=$role"
             echo "VARIANT=$variant"
           } >>"$GITHUB_ENV"
-          test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /lab-runtime-workdir
+          test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /scratch
       - name: Upload harness output on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -97,7 +97,7 @@ jobs:
           name: testout-${{ env.ROLE }}-${{ env.VARIANT }}
           path: |
             test/out/${{ env.VARIANT }}.${{ env.ROLE }}.*
-            /lab-runtime-workdir/**
+            /scratch/**
           retention-days: 30
           if-no-files-found: warn
 
@@ -106,7 +106,7 @@ jobs:
     if: failure()
     runs-on: [ self-hosted, lab-runtime ]
     container:
-      image: nexus.lab.fahm.fr/repository/homelab/lab-runtime:latest
+      image: nexus.lab.fahm.fr/repository/homelab/ci:latest
     steps:
       - uses: actions/checkout@v4
       - run: mise run ci:mail-failures

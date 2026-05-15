@@ -176,15 +176,15 @@ resource "nexus_repository_raw_proxy" "this" {
 }
 
 # Hosted (not proxy) docker repo for images we build in CI. Today the
-# only consumer is the lab-runtime-build workflow, which pushes
-# nexus.lab.fahm.fr/repository/homelab/lab-runtime:<sha> + :latest after
+# only consumer is the ci-image workflow, which pushes
+# nexus.lab.fahm.fr/repository/homelab/ci:<sha> + :latest after
 # rebuilding the runner image. Anonymous pulls are on (so unauthenticated
 # `podman pull` from CI / lab hosts works); push requires basic auth
 # against the homelab_push user (defined below; credentials get pushed
 # to GitHub Actions via terraform/github.tf). Force-basic-auth ON keeps
 # anonymous Bearer-token paths from accidentally accepting pushes.
 #
-# write_policy ALLOW (not ALLOW_ONCE) because the lab-runtime-build
+# write_policy ALLOW (not ALLOW_ONCE) because the ci-image
 # workflow re-pushes :latest on every successful build. ALLOW_ONCE
 # would reject the second push.
 resource "nexus_repository_docker_hosted" "this" {
