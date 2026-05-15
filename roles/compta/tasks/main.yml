@@ -61,6 +61,7 @@
     path: "{{ ansible_user_dir }}/compta"
     build:
       format: oci
+      pull: true
     state: build
     force: "{{ compta_git.changed }}"
   register: compta_podman
