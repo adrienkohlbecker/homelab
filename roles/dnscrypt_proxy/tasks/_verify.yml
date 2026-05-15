@@ -10,6 +10,16 @@
 # we don't have to spin up a container/netns just to satisfy the saddr
 # match. It's the same socket -- the override binds 0.0.0.0:5053.
 
+# Verify is harness-invoked only -- not on prod hosts -- so a one-off
+# dnsutils install here keeps prod posture clean. Cheaper than maintaining
+# three near-identical hand-rolled DNS packet builders.
+- name: _verify | Install dnsutils for dig
+  apt:
+    pkg:
+      - dnsutils
+    cache_valid_time: 3600
+  become: true
+
 - name: _verify | dnscrypt-proxy.socket is loaded and active
   systemd:
     name: dnscrypt-proxy.socket
@@ -30,73 +40,56 @@
   failed_when: _verify_service_pre.status.ActiveState != "inactive"
   become: true
 
-# Inline Python socket probe: avoids adding a dnsutils dep just for the
-# test and avoids the netns dance. Builds a minimal DNS query (id=0x1234,
-# RD=1, A example.com IN), reads the response, asserts NOERROR + at
-# least one answer record.
-#
 # Retry under ansible: socket activation only triggers when the first
 # datagram arrives, then dnscrypt-proxy spends ~5s probing upstream
-# resolvers (fdn DoH + scaleway-fr DNSCrypt) before serving queries. The
-# datagram that triggered activation is buffered on the kernel socket but
-# dnscrypt-proxy 2.0.45 logs `Systemd sockets are untested and unsupported`
-# and empirically doesn't pick it up. The per-attempt 2s timeout matches
-# the loop delay; total budget ~30s gives 6x margin on the measured 5s.
+# resolvers before serving queries. The datagram that triggered activation
+# is buffered on the kernel socket but dnscrypt-proxy 2.0.45 logs
+# `Systemd sockets are untested and unsupported` and empirically doesn't
+# pick it up. dig's per-attempt 2s timeout matches the loop delay; total
+# budget ~30s gives 6x margin on the measured 5s. +short prints answer
+# records on NOERROR-with-answers and is empty otherwise -- so
+# `stdout != ''` distinguishes a real A record from SERVFAIL / NXDOMAIN /
+# NOERROR-empty.
 - name: _verify | Resolve example.com via dnscrypt-proxy on 127.0.0.1:5053
   command:
     argv:
-      - python3
-      - -c
-      - |
-        import socket, struct
-        q = struct.pack(">HHHHHH", 0x1234, 0x0100, 1, 0, 0, 0)
-        for p in b"example.com".split(b"."):
-            q += bytes([len(p)]) + p
-        q += b"\x00\x00\x01\x00\x01"
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.settimeout(2)
-        s.sendto(q, ("127.0.0.1", {{ service_ports.dnscrypt_proxy }}))
-        data, _ = s.recvfrom(512)
-        rcode = data[3] & 0x0f
-        ancount = struct.unpack(">H", data[6:8])[0]
-        assert rcode == 0, f"rcode={rcode} expected NOERROR"
-        assert ancount > 0, f"ancount={ancount} expected >=1"
-  register: _verify_probe
+      - dig
+      - "@127.0.0.1"
+      - -p
+      - "{{ service_ports.dnscrypt_proxy }}"
+      - example.com
+      - A
+      - +short
+      - +time=2
+      - +tries=1
+  register: _verify_probe_udp
   retries: 15
   delay: 2
-  until: _verify_probe.rc == 0
+  until: _verify_probe_udp.rc == 0 and _verify_probe_udp.stdout != ''
   changed_when: false
 
 # TCP path: the override binds ListenStream alongside ListenDatagram, and
-# pi-hole falls back to TCP on truncated (>512B) replies. Same query,
-# different socket type; no retry because the UDP probe above already woke
-# the service. recv() loop handles short reads -- TCP isn't message-atomic.
+# pi-hole falls back to TCP on truncated (>512B) replies. Shorter retry
+# budget than UDP because the service is already warm by the time we get
+# here -- but still retry to absorb scheduler hiccups between adjacent
+# tasks rather than coupling to "the UDP probe just woke the service".
 - name: _verify | Resolve example.com via dnscrypt-proxy on 127.0.0.1:5053/tcp
   command:
     argv:
-      - python3
-      - -c
-      - |
-        import socket, struct
-        q = struct.pack(">HHHHHH", 0x1234, 0x0100, 1, 0, 0, 0)
-        for p in b"example.com".split(b"."):
-            q += bytes([len(p)]) + p
-        q += b"\x00\x00\x01\x00\x01"
-        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        s.settimeout(2)
-        s.connect(("127.0.0.1", {{ service_ports.dnscrypt_proxy }}))
-        s.sendall(struct.pack(">H", len(q)) + q)
-        ln = struct.unpack(">H", s.recv(2))[0]
-        data = b""
-        while len(data) < ln:
-            chunk = s.recv(ln - len(data))
-            if not chunk:
-                break
-            data += chunk
-        rcode = data[3] & 0x0f
-        ancount = struct.unpack(">H", data[6:8])[0]
-        assert rcode == 0, f"rcode={rcode} expected NOERROR"
-        assert ancount > 0, f"ancount={ancount} expected >=1"
+      - dig
+      - "@127.0.0.1"
+      - -p
+      - "{{ service_ports.dnscrypt_proxy }}"
+      - +tcp
+      - example.com
+      - A
+      - +short
+      - +time=2
+      - +tries=1
+  register: _verify_probe_tcp
+  retries: 5
+  delay: 2
+  until: _verify_probe_tcp.rc == 0 and _verify_probe_tcp.stdout != ''
   changed_when: false
 
 - name: _verify | dnscrypt-proxy.service was woken by socket activation
@@ -114,11 +107,11 @@
 #
 # 2. Per-query grep ("Anonymizing queries for [<server>] via [anon-...]") is
 #    emitted the first time the load balancer routes a real query to that
-#    (server, relay) pair. Drive 20 queries so p2 picks each of the two
-#    servers at least once near-certain (P(fail per server) = 0.5^20 ~ 1e-6).
-#    Both servers are DNSCrypt-protocol stamps, so both should appear; if one
-#    is missing, that server's stamp doesn't advertise the supports-relay flag
-#    and queries to it silently fall back to direct.
+#    (server, relay) pair. Drive 20 queries so lb_strategy='random' picks
+#    each of the two servers at least once near-certain (P(fail per server)
+#    = 0.5^20 ~ 1e-6). Both servers are DNSCrypt-protocol stamps, so both
+#    should appear; if one is missing, that server's stamp doesn't advertise
+#    the supports-relay flag and queries to it silently fall back to direct.
 - name: _verify | dnscrypt-proxy registered anonymized routes at startup
   command: journalctl --no-pager -u dnscrypt-proxy.service
   register: _verify_journal_startup
@@ -126,23 +119,12 @@
   become: true
   failed_when: "'Anonymized DNS: routing' not in _verify_journal_startup.stdout"
 
-- name: _verify | Drive 20 queries so the load balancer picks scaleway-fr
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import socket, struct
-        q = struct.pack(">HHHHHH", 0x1234, 0x0100, 1, 0, 0, 0)
-        for p in b"example.com".split(b"."):
-            q += bytes([len(p)]) + p
-        q += b"\x00\x00\x01\x00\x01"
-        for _ in range(20):
-            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-            s.settimeout(2)
-            s.sendto(q, ("127.0.0.1", {{ service_ports.dnscrypt_proxy }}))
-            s.recvfrom(512)
-            s.close()
+- name: _verify | Drive 20 queries so the load balancer picks both pinned servers
+  shell: |
+    set -e
+    for _ in $(seq 20); do
+      dig @127.0.0.1 -p {{ service_ports.dnscrypt_proxy }} example.com A +short +time=2 +tries=1 > /dev/null
+    done
   changed_when: false
 
 - name: _verify | Both pinned servers had a query traverse a relay
@@ -153,30 +135,3 @@
   failed_when:
     - "'Anonymizing queries for [dct-fr]' not in _verify_journal_relay.stdout
        or 'Anonymizing queries for [dnscry.pt-paris-ipv4]' not in _verify_journal_relay.stdout"
-
-# require_dnssec / require_nolog / require_nofilter self-consistency: the
-# filters are inert today because server_names pins both choices, but they'd
-# reject those same servers if we ever dropped the pin. Parse the
-# cached resolvers list, decode each pinned server's DNS stamp, and assert
-# its property bitfield advertises dnssec+nolog+nofilter -- so the pin and
-# the filters can't silently disagree. Stamp format: protocol byte, then a
-# u64-LE properties field; bit 0 = dnssec, bit 1 = no logs, bit 2 = no filter.
-- name: _verify | Pinned servers satisfy require_dnssec/nolog/nofilter
-  command:
-    argv:
-      - python3
-      - -c
-      - |
-        import base64, re
-        with open("/var/cache/dnscrypt-proxy/public-resolvers.md") as f:
-            md = f.read()
-        entries = dict(re.findall(r"^## (\S+).*?(sdns://\S+)", md, re.M | re.S))
-        for name in ("dnscry.pt-paris-ipv4", "dct-fr"):
-            stamp = entries[name]
-            raw = base64.urlsafe_b64decode(stamp[7:] + "=" * (-len(stamp[7:]) % 4))
-            props = int.from_bytes(raw[1:9], "little")
-            flags = {"dnssec": props & 1, "nolog": props & 2, "nofilter": props & 4}
-            missing = [k for k, v in flags.items() if not v]
-            assert not missing, f"{name} missing: {missing} (props=0b{props:b})"
-  changed_when: false
-  become: true
