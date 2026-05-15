@@ -18,6 +18,7 @@ github_runner_labels: "self-hosted,{{ inventory_hostname }}"
 github_runner_owner: "adrienkohlbecker"
 github_runner_repos:
   - homelab
+  - compta
 
 github_runner_release:
   x86_64:
