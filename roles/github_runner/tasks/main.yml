@@ -27,13 +27,12 @@
   become: true
   loop:
     - /mnt/services/github_runner
+    # Shared actions/runner extract target. One copy of bin/ + externals/
+    # + run.sh + config.sh + .path, symlinked into each per-repo state
+    # dir; see _register.yml.
+    - /mnt/services/github_runner/runner
     - /mnt/services/github_runner/.tarballs
     - /mnt/scratch/github_runner/cache
-    # actions/runner's _work folder, passed via `--work` at config.sh
-    # time below. Lives on /mnt/scratch instead of next to the binary
-    # under /mnt/services so checkouts/artifacts/caches don't squeeze
-    # the rpool zvol.
-    - /mnt/scratch/github_runner/workdir
     # Bind-mounted into test cells via container.options for the harness's
     # --workdir-parent. Lives on /mnt/scratch (terabytes) instead of the
     # container's writable overlay so concurrent qcow2 overlays + role
@@ -160,17 +159,25 @@
   tags:
     - github_runner
 
+# Migrate the pre-multi-repo single-instance layout (top-level .runner /
+# bin / etc under /mnt/services/github_runner) into the per-repo layout.
+# No-op when the layout is already migrated or on a fresh install.
+# Runs BEFORE the tarball extract so it can move the legacy bin/ into
+# runner/; the extract task's version sentinel then sees runner/ in the
+# expected post-migration state.
+- import_tasks: _migrate.yml
+
 # Install / upgrade actions/runner from the upstream tarball. The
-# version sentinel (.version-<ver>) is what `unarchive` keys off via
-# `creates:` -- on a version bump we delete the sentinel via the
-# pre-task, the unarchive overwrites everything in /mnt/services/
-# github_runner/, and the post-task writes the new sentinel. The
-# tarball is kept under .tarballs/ so the apt-style upgrade-then-clean
-# pattern is auditable (and a rollback is one `cp` away).
+# version sentinel (runner/.version-<ver>) is what `unarchive` keys off
+# via `creates:` -- on a version bump we delete the sentinel via the
+# pre-task, the unarchive overwrites everything in runner/, and the
+# post-task writes the new sentinel. The tarball is kept under
+# .tarballs/ so the apt-style upgrade-then-clean pattern is auditable
+# (and a rollback is one `cp` away).
 - name: Check current github_runner version
   when: not (ansible_check_mode and github_runner_user.changed)
   stat:
-    path: /mnt/services/github_runner/.version-{{ github_runner_version }}
+    path: /mnt/services/github_runner/runner/.version-{{ github_runner_version }}
   register: github_runner_version_sentinel
   become: true
   tags:
@@ -198,13 +205,14 @@
     - not github_runner_version_sentinel.stat.exists
   unarchive:
     src: /mnt/services/github_runner/.tarballs/actions-runner-{{ github_runner_version }}.tar.gz
-    dest: /mnt/services/github_runner/
+    dest: /mnt/services/github_runner/runner/
     remote_src: true
     owner: github_runner
     group: github_runner
-    # Don't blow away .runner / .credentials / _work; the tarball
-    # doesn't include them but `extra_opts` keeps `tar` from messing
-    # with files it never created.
+    # Don't blow away symlinks the per-repo state dirs use to reach
+    # back into runner/; the tarball doesn't write into those, but
+    # --no-overwrite-dir keeps `tar` from messing with files it never
+    # created.
     extra_opts:
       - "--no-overwrite-dir"
   become: true
@@ -217,68 +225,12 @@
     - not (ansible_check_mode and github_runner_user.changed)
     - not github_runner_version_sentinel.stat.exists
   copy:
-    dest: /mnt/services/github_runner/.version-{{ github_runner_version }}
+    dest: /mnt/services/github_runner/runner/.version-{{ github_runner_version }}
     content: "{{ github_runner_version }}\n"
     owner: github_runner
     group: github_runner
     mode: "0644"
   become: true
-  tags:
-    - github_runner
-
-- name: Check if github_runner is already registered
-  stat:
-    path: /mnt/services/github_runner/.runner
-  register: github_runner_registered
-  become: true
-  tags:
-    - github_runner
-
-# Registration token (1h TTL, can't be vaulted). Fetched from the
-# controller via `gh api`, which authenticates through the operator's
-# existing gh login (keyring) or a $GITHUB_TOKEN env var (resolved by
-# mise's [env] from op://). Skipped under qemu_test -- there's no
-# GitHub fixture to register against; tests verify the static layout
-# only.
-- name: Fetch GitHub runner registration token
-  when:
-    - not qemu_test
-    - not github_runner_registered.stat.exists
-  command: gh api -X POST /repos/{{ github_runner_owner }}/{{ github_runner_repo }}/actions/runners/registration-token --jq .token
-  register: github_runner_token_result
-  delegate_to: localhost
-  become: false
-  changed_when: false
-  check_mode: false
-  no_log: true
-  tags:
-    - github_runner
-
-# --work points actions/runner's _work folder at /mnt/scratch (terabytes)
-# instead of the default `_work/` next to config.sh, which would land on
-# the rpool zvol holding /mnt/services. The path is baked into .runner
-# at registration -- to change it on an already-registered runner, stop
-# the unit, run `./config.sh remove --token <removal-token>` from
-# /mnt/services/github_runner/, delete .runner, then re-apply the role.
-- name: Register runner with GitHub
-  when:
-    - not qemu_test
-    - not github_runner_registered.stat.exists
-  command: >-
-    ./config.sh
-    --url https://github.com/{{ github_runner_owner }}/{{ github_runner_repo }}
-    --token {{ github_runner_token_result.stdout }}
-    --name {{ inventory_hostname }}
-    --labels {{ github_runner_labels }}
-    --work /mnt/scratch/github_runner/workdir
-    --unattended
-    --replace
-  args:
-    chdir: /mnt/services/github_runner
-    creates: /mnt/services/github_runner/.runner
-  become: true
-  become_user: github_runner
-  no_log: true
   tags:
     - github_runner
 
@@ -315,33 +267,14 @@
   tags:
     - github_runner
 
-# System-scope unit (User=github_runner in the unit file lets the system
-# manager run the process as that user without making the unit user-scope).
-# The default user inside systemd_unit is 'root', so no override needed.
-- name: Install github_runner service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: github_runner.service.j2
-      condition: "{{ not (ansible_check_mode and github_runner_user.changed) }}"
-  tags:
-    - github_runner
-
-# Under qemu_test the runner isn't registered, so run.sh would loop on
-# "configure first" -- skip the service-start step. The unit file itself
-# is still installed above so syntax / dependency errors surface in
-# check-mode and integration tests.
-- name: Enable github_runner service
-  when: not qemu_test
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: github_runner
-      condition: "{{ not (ansible_check_mode and (systemd_unit.changed or github_runner_user.changed)) }}"
-      restart: "{{ systemd_unit.changed or github_runner_extracted.changed }}"
+# Per-repo registration + systemd unit install. include_tasks (not
+# include_role + loop) so vars: re-evaluate per iteration -- see
+# memory feedback_include_role_loop_vars for the trap. loop_var: the
+# repo name; _register.yml references it as {{ runner_repo }}.
+- name: Register and enable per-repo github_runner instances
+  include_tasks: _register.yml
+  loop: "{{ github_runner_repos }}"
+  loop_control:
+    loop_var: runner_repo
   tags:
     - github_runner
