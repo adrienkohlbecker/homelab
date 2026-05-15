@@ -45,40 +45,94 @@
 #   1. consoleblank=0 on the kernel cmdline (below) — disables the VT
 #      idle-blank timer from before userspace exists, so an early-boot
 #      panic stays on screen instead of blanking 10 minutes later.
-#   2. console-noblank.service (above) — runs `setterm --powersave off
+#   2. console_noblank.service (above) — runs `setterm --powersave off
 #      --powerdown 0` to disable DPMS, which is monitor-side state the
 #      kernel cmdline can't reach.
 #
 # Both matter for walk-up/KVM-IP debugging: (1) handles the kernel
 # timer, (2) keeps the monitor from sleeping on top of that.
-- name: Install console-noblank.service
+- name: Remove legacy console-noblank.service (renamed to console_noblank)
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: console-noblank.service
+  tags:
+    - console
+
+- name: Install console_noblank.service
   import_role:
     name: systemd_unit
     tasks_from: install
   vars:
     systemd_unit_args:
-      src: console-noblank.service
+      src: console_noblank.service
   tags:
     - console
 
-- name: Enable console-noblank.service
+- name: Enable console_noblank.service
   import_role:
     name: systemd_unit
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: console-noblank.service
+      src: console_noblank.service
       condition: "{{ not (ansible_check_mode and console_noblank_service_result.changed) }}"
       restart: "{{ console_noblank_service_result.changed }}"
   tags:
     - console
 
-- name: Set ZBM commandline (consoleblank=0)
+- name: Set GRUB cmdline (consoleblank=0)
+  when: grub_bootloader
+  copy:
+    dest: /etc/default/grub.d/99-console.cfg
+    content: "GRUB_CMDLINE_LINUX_DEFAULT=\"$GRUB_CMDLINE_LINUX_DEFAULT consoleblank=0\"\n"
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  register: console_grub_cfg
+  become: true
+  tags:
+    - console
+
+- name: Remove legacy ZBM cmdline file (renamed to `consoleblank`)
+  when: not grub_bootloader
+  file:
+    path: /etc/zfsbootmenu/console
+    state: absent
+  become: true
+  tags:
+    - console
+
+- name: Set ZBM cmdline (consoleblank=0)
+  when: not grub_bootloader
   import_role:
     name: zfsbootmenu
     tasks_from: cmdline
   vars:
-    zfsbootmenu_cmdline_file: console
+    zfsbootmenu_cmdline_file: consoleblank
     zfsbootmenu_cmdline_contents: consoleblank=0
+  tags:
+    - console
+
+- name: Update grub
+  when: grub_bootloader and console_grub_cfg.changed
+  command: update-grub
+  changed_when: true
+  become: true
+  tags:
+    - console
+
+- name: Ask to reboot (GRUB cmdline)
+  when: grub_bootloader and console_grub_cfg.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
   tags:
     - console

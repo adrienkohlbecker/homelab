@@ -68,23 +68,23 @@
   failed_when: "'etc/default/console-setup' not in _verify_console_initrd.stdout"
   become: true
 
-# console-noblank.service is Type=oneshot RemainAfterExit=true, so
+# console_noblank.service is Type=oneshot RemainAfterExit=true, so
 # `active` after the start means setterm's ExecStart returned 0 — the
 # escape sequence was written to /dev/tty0 successfully. The VT
 # blanking/powersave state itself isn't exposed via sysfs (the
 # consoleblank module-parameter file shows the boot value, not the
 # runtime VT state), so an exit-code check is the strongest functional
 # probe available from a headless test.
-- name: _verify | console-noblank.service is enabled
-  command: systemctl is-enabled console-noblank.service
+- name: _verify | console_noblank.service is enabled
+  command: systemctl is-enabled console_noblank.service
   register: _verify_noblank_enabled
   changed_when: false
   failed_when:
     - _verify_noblank_enabled.rc != 0 or _verify_noblank_enabled.stdout not in ['enabled', 'static']
   become: true
 
-- name: _verify | console-noblank.service is active
-  command: systemctl is-active console-noblank.service
+- name: _verify | console_noblank.service is active
+  command: systemctl is-active console_noblank.service
   register: _verify_noblank_active
   changed_when: false
   failed_when: _verify_noblank_active.stdout | trim != 'active'
@@ -95,9 +95,17 @@
 # this is the strongest assertion we can make from the running system
 # (the harness QEMU /proc/cmdline comes from -append, not from ZBM).
 - name: _verify | ZBM commandline includes consoleblank=0
-  when: zfs_root
+  when: not grub_bootloader
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
   register: _verify_console_zbm_cmdline
   changed_when: false
   failed_when: "'consoleblank=0' not in _verify_console_zbm_cmdline.stdout"
+  become: true
+
+- name: _verify | GRUB cmdline file includes consoleblank=0
+  when: grub_bootloader
+  slurp:
+    src: /etc/default/grub.d/99-console.cfg
+  register: _verify_console_grub_cfg
+  failed_when: "'consoleblank=0' not in (_verify_console_grub_cfg.content | b64decode)"
   become: true
