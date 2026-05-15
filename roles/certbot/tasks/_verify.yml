@@ -47,7 +47,7 @@
     fail_msg: >-
       cert missing host+wildcard SANs or expiring soon
       (SANs={{ _verify_cert_info.subject_alt_name }},
-      not_valid_after={{ _verify_cert_info.not_valid_after }},
+      not_after={{ _verify_cert_info.not_after }},
       valid_at={{ _verify_cert_info.valid_at }})
 
 # Distinguishes "real LE cert" from snakeoil/self-signed left in place
