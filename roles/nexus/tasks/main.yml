@@ -148,14 +148,31 @@
       # Rewrite docker registry v2 URLs from the shape podman generates
       # (/v2/<repo-prefix-as-image-namespace>/...) to Nexus's actual path
       # (/repository/<repo>/v2/...). With this, a single nexus.lab.fahm.fr
-      # serves as a docker mirror for any number of nexus_repository_docker_proxy
-      # repos. Without it, podman's mirror config is incompatible with
-      # Nexus's path-based v2 API: podman bakes the location's path into
-      # the image namespace and emits /v2/<path>/<image>/manifests/...
-      # while Nexus expects /repository/<repo>/v2/<image>/manifests/...
+      # serves as a docker mirror AND hosted registry for any number of
+      # nexus_repository_docker_{proxy,hosted} repos. Without it, podman's
+      # mirror config is incompatible with Nexus's path-based v2 API:
+      # podman bakes the location's path into the image namespace and
+      # emits /v2/<path>/<image>/manifests/... while Nexus expects
+      # /repository/<repo>/v2/<image>/manifests/...
       # The matching mirror config is in roles/_test/tasks/mirrors.yml.
+      #
+      # Two proxy_redirect rewrites are needed because Nexus returns
+      # Locations in two shapes depending on the request:
+      #   - For chunked upload init (POST /v2/.../blobs/uploads/),
+      #     Nexus returns Location <host>/v2/<ns>/blobs/uploads/<uuid>
+      #     using its internal docker namespace view (the part after
+      #     /v2/ inside the /repository/<repo>/v2/ prefix). Without
+      #     rewriting, the docker client follows that Location and
+      #     PATCHes a URL that bypasses the v2/repository rewrite
+      #     above -- Nexus then has no docker route for /v2/<ns>/...
+      #     and returns 501.
+      #   - For other operations that return /repository/<repo>/v2/...
+      #     shape Locations, the second rewrite converts them back to
+      #     the docker client's v2/repository/<repo>/<ns>/... shape.
+      # The location regex uses a named capture (?<repo>...) so the
+      # repo name is available to proxy_redirect as $repo.
       server_conf: |
-        location ~ ^/v2/repository/([^/]+)/(.*)$ {
+        location ~ ^/v2/repository/(?<repo>[^/]+)/(.*)$ {
           rewrite ^/v2/repository/([^/]+)/(.*)$ /repository/$1/v2/$2 break;
           proxy_pass http://localhost:8082;
           proxy_http_version 1.1;
@@ -163,6 +180,7 @@
           proxy_set_header X-Real-IP $remote_addr;
           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
           proxy_set_header X-Forwarded-Proto $scheme;
+          proxy_redirect ~^https?://[^/]+/v2/(?!repository/)([^/]+)/(.*)$ https://$http_host/v2/repository/$repo/$1/$2;
           proxy_redirect ~^https?://[^/]+/repository/([^/]+)/v2/(.*)$ https://$http_host/v2/repository/$1/$2;
           proxy_buffering off;
           proxy_request_buffering off;
