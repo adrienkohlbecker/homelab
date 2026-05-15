@@ -1,27 +1,9 @@
-# netdata's go.d/fail2ban collector talks to /var/run/fail2ban/fail2ban.sock
-# (root:fail2ban 0660). Without this membership the collector returns no
-# data and the host_vars presence alert fires.
-#
-# The socket has no read/write split — anyone connected can issue
-# `set <jail> banip` / `unbanip` / `stop`, so adding netdata to this
-# group implicitly trusts the netdata daemon (RCE in the netdata
-# parser would pivot to fail2ban control). Acceptable in this home
-# env; would warrant an AppArmor profile or a read-only sidecar
-# socket in a corp setting.
-- name: Add netdata to fail2ban group
-  user:
-    name: netdata
-    groups: fail2ban
-    append: true
-  become: true
-  register: netdata_fail2ban_group
-  tags:
-    - fail2ban
-
-# Supplementary-group changes only apply to new processes; without
-# the OR below the very first apply leaves netdata running with its
-# old group list, so the collector hits EACCES on the socket until
-# something else restarts netdata.
+# netdata's go.d/fail2ban collector invokes `fail2ban-client status`
+# via the setuid-root `ndsudo` helper (allowlisted subcommands in
+# upstream's src/collectors/utils/ndsudo.c — `fail2ban-client-status`
+# and `fail2ban-client-status-jail`). The collector never opens the
+# control socket directly, so no fail2ban-group membership is
+# required on the netdata user.
 - name: Configure fail2ban metrics
   import_role:
     name: netdata
@@ -30,6 +12,6 @@
     netdata_args:
       src: fail2ban.conf
       dest: go.d/fail2ban.conf
-      restart: "{{ netdata_restart or netdata_fail2ban_group.changed }}"
+      restart: "{{ netdata_restart }}"
   tags:
     - fail2ban
