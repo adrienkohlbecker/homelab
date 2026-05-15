@@ -94,23 +94,44 @@ zfs_autobackup_source_host: pug
 zfs_autobackup_dest_dataset: tank/pug
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDp277oY86WuDWYdU4Xr8eBUMAZ7L089F5SjBhmZzRS8 root@pug
 
-fancontrol_settings: |
-  # hwmon11/pwm2 => CPU_FAN
-  # hwmon11/pwm1 => CHA_FAN1 => exhaust
-  # hwmon11/pwm3 => CHA_FAN2 => intake
-  # hwmon11/pwm4 => CHA_FAN3 => intake
-  # hwmon11/temp2_input => CPU temp
-  # hwmon4/temp1_input => HDD temp?
-  INTERVAL=10
-  DEVPATH=hwmon11=devices/platform/nct6775.656 hwmon4=devices/pci0000:00/0000:00:17.0/ata1/host0/target0:0:0/0:0:0:0
-  DEVNAME=hwmon11=nct6798 hwmon4=drivetemp
-  FCTEMPS=hwmon11/pwm2=hwmon11/temp2_input hwmon11/pwm1=hwmon11/temp2_input hwmon11/pwm4=hwmon4/temp1_input hwmon11/pwm3=hwmon4/temp1_input
-  FCFANS=hwmon11/pwm2=hwmon11/fan2_input hwmon11/pwm1=hwmon11/fan1_input hwmon11/pwm4=hwmon11/fan4_input hwmon11/pwm3=hwmon11/fan3_input
-  MINTEMP=hwmon11/pwm2=30 hwmon11/pwm1=30 hwmon11/pwm4=40 hwmon11/pwm3=40
-  MAXTEMP=hwmon11/pwm2=60 hwmon11/pwm1=60 hwmon11/pwm4=55 hwmon11/pwm3=55
-  MINSTART=hwmon11/pwm2=58 hwmon11/pwm1=46 hwmon11/pwm4=46 hwmon11/pwm3=46
-  MINSTOP=hwmon11/pwm2=28 hwmon11/pwm1=16 hwmon11/pwm4=16 hwmon11/pwm3=16
-  MINPWM=hwmon11/pwm2=28 hwmon11/pwm1=16 hwmon11/pwm4=16 hwmon11/pwm3=16
+fancontrol_settings:
+  fans:
+    - name: CPU_FAN
+      pwm: nct6798/pwm2
+      temp: nct6798/temp2_input
+      fan: nct6798/fan2_input
+      mintemp: 30
+      maxtemp: 60
+      minstart: 58
+      minstop: 28
+      minpwm: 28
+    - name: CHA_FAN1 (exhaust)
+      pwm: nct6798/pwm1
+      temp: nct6798/temp2_input
+      fan: nct6798/fan1_input
+      mintemp: 30
+      maxtemp: 60
+      minstart: 46
+      minstop: 16
+      minpwm: 16
+    - name: CHA_FAN3 (intake, HDD temp)
+      pwm: nct6798/pwm4
+      temp: drivetemp/temp1_input
+      fan: nct6798/fan4_input
+      mintemp: 40
+      maxtemp: 55
+      minstart: 46
+      minstop: 16
+      minpwm: 16
+    - name: CHA_FAN2 (intake, HDD temp)
+      pwm: nct6798/pwm3
+      temp: drivetemp/temp1_input
+      fan: nct6798/fan3_input
+      mintemp: 40
+      maxtemp: 55
+      minstart: 46
+      minstop: 16
+      minpwm: 16
 
 pihole_keepalived_role: MASTER
 pihole_keepalived_priority: 100

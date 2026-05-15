@@ -52,21 +52,26 @@ zfs_autobackup_source_host: lab
 zfs_autobackup_dest_dataset: apoc/lab
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab
 
-fancontrol_settings: |
-  # hwmon4/pwm2 => CHA_FAN_1
-  # hwmon4/pwm3 => CHA_FAN_2
-  # hwmon4/temp1_input => cpu?
-  # hwmon2/temp1_input => drivetemp
-  INTERVAL=10
-  DEVPATH=hwmon2=devices/pci0000:00/0000:00:17.0/ata2/host1/target1:0:0/1:0:0:0 hwmon4=devices/platform/nct6775.672
-  DEVNAME=hwmon2=drivetemp hwmon4=nct6798
-  FCTEMPS=hwmon4/pwm3=hwmon4/temp1_input hwmon4/pwm2=hwmon2/temp1_input
-  FCFANS=hwmon4/pwm3=hwmon4/fan3_input hwmon4/pwm2=hwmon4/fan2_input
-  MINTEMP=hwmon4/pwm3=40 hwmon4/pwm2=40
-  MAXTEMP=hwmon4/pwm3=60 hwmon4/pwm2=55
-  MINSTART=hwmon4/pwm3=40 hwmon4/pwm2=120
-  MINSTOP=hwmon4/pwm3=10 hwmon4/pwm2=90
-  MINPWM=hwmon4/pwm3=10 hwmon4/pwm2=90
+fancontrol_settings:
+  fans:
+    - name: CHA_FAN_2
+      pwm: nct6798/pwm3
+      temp: nct6798/temp1_input
+      fan: nct6798/fan3_input
+      mintemp: 40
+      maxtemp: 60
+      minstart: 40
+      minstop: 10
+      minpwm: 10
+    - name: CHA_FAN_1 (HDD temp)
+      pwm: nct6798/pwm2
+      temp: drivetemp/temp1_input
+      fan: nct6798/fan2_input
+      mintemp: 40
+      maxtemp: 55
+      minstart: 120
+      minstop: 90
+      minpwm: 90
 
 pihole_keepalived_role: BACKUP
 pihole_keepalived_priority: 10
