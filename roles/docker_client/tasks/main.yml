@@ -37,7 +37,7 @@
 # roles/apt/tasks/install.yml for the full rationale.
 - name: Pre-warm apt cache (real fetch even in --check)  # noqa: command-instead-of-module
   when: ansible_distribution_major_version | int >= 26
-  ansible.builtin.command: apt-get update
+  command: apt-get update
   changed_when: false
   check_mode: false
   become: true
@@ -60,7 +60,7 @@
   when:
     - ansible_distribution_major_version | int >= 26
     - not (ansible_check_mode and apt_install_python3_debian.changed)
-  ansible.builtin.deb822_repository:
+  deb822_repository:
     name: docker
     types: deb
     uris: "{{ mirror_apt_docker }}"
@@ -127,7 +127,7 @@
     group: root
     mode: "0644"
     backup: true
-    validate: sh -n %s
+    validate: bash -n %s
   become: true
   tags:
     - docker_client
