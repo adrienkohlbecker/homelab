@@ -1,0 +1,8 @@
+# Prevent snapd from being reinstalled by a future `apt install` of a
+# package whose chain of recommends/depends pulls in a snap-shimmed
+# transitional package (e.g. firefox, chromium-browser). Pin-Priority
+# below 0 makes apt refuse to install the package even when explicitly
+# requested, so a regression is loud rather than silent.
+Package: snapd
+Pin: release a=*
+Pin-Priority: -10
