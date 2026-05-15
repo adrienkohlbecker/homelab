@@ -1,14 +1,20 @@
-# Container image used as the gitea-actions runner for homelab CI.
-# Built and tagged on the lab host by the act_runner role; never pushed to
-# a registry. Layered FROM ubuntu:24.04 with everything the test harness,
-# lint, and packer-build need pre-installed so jobs cold-start in ~3s.
+# Container image consumed by every github-actions workflow in this
+# repo. Built and pushed exclusively by the lab-runtime-build workflow
+# to the homelab nexus docker hosted repo at
+# nexus.lab.fahm.fr/repository/homelab/lab-runtime:latest. Other
+# workflows reference that URL directly in their `container:` block;
+# anonymous pulls are enabled on Nexus so the runner just fetches it.
+# On a brand-new lab runner with no prior image in nexus, kick the
+# lab-runtime-build workflow once via `workflow_dispatch` before any
+# other workflow can succeed. Layered FROM ubuntu:24.04 with everything
+# the test harness, lint, and packer-build need pre-installed so jobs
+# cold-start in ~3s.
 #
 # Build inputs (mise.toml / pyproject.toml / uv.lock /
 # packer/qemu.pkr.hcl) are COPYed in so a bump to any of them
 # invalidates the dependency layers and triggers a fresh `mise
-# install` + `uv sync` + `packer init`. The act_runner role stages
-# them into a per-apply temp dir on the build host, preserving the
-# repo's relative paths via `rsync --relative`.
+# install` + `uv sync` + `packer init`. Build context root is the repo
+# root; the workflow uses actions/checkout's workspace directly.
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
