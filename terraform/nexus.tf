@@ -206,7 +206,7 @@ resource "nexus_repository_docker_hosted" "this" {
   # The provider leaves the field alone (it isn't in v2.7.1's schema),
   # so apply is a no-op and the manual setting persists.
   docker {
-    force_basic_auth = true
+    force_basic_auth = false
     v1_enabled       = false
   }
   storage {
