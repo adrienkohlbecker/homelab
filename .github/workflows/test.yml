@@ -24,7 +24,7 @@ jobs:
   detect:
     runs-on: [ self-hosted, lab-runtime ]
     container:
-      image: nexus.lab.fahm.fr/repository/homelab/lab-runtime:latest
+      image: nexus.lab.fahm.fr/repository/homelab/ci:latest
     outputs:
       matrix: ${{ steps.detect.outputs.matrix }}
       cross_cut: ${{ steps.detect.outputs.cross_cut }}
@@ -45,7 +45,7 @@ jobs:
     if: needs.detect.outputs.cross_cut == 'true'
     runs-on: [ self-hosted, lab-runtime ]
     container:
-      image: nexus.lab.fahm.fr/repository/homelab/lab-runtime:latest
+      image: nexus.lab.fahm.fr/repository/homelab/ci:latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 50 }
@@ -68,7 +68,7 @@ jobs:
     if: needs.detect.outputs.packer_changed == 'true'
     runs-on: [ self-hosted, lab-runtime ]
     container:
-      image: nexus.lab.fahm.fr/repository/homelab/lab-runtime:latest
+      image: nexus.lab.fahm.fr/repository/homelab/ci:latest
       options: --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
     timeout-minutes: 90
     steps:
@@ -116,7 +116,7 @@ jobs:
       && needs.detect.outputs.matrix != ''
     runs-on: [ self-hosted, lab-runtime ]
     container:
-      image: nexus.lab.fahm.fr/repository/homelab/lab-runtime:latest
+      image: nexus.lab.fahm.fr/repository/homelab/ci:latest
       # /dev/kvm via --device for qemu acceleration. --group-add 1 is
       # the container-side gid that maps to host kvm via /etc/subgid +
       # the rootless gidmap (see roles/github_runner/templates/
@@ -125,7 +125,7 @@ jobs:
       # you add another single-id range to subid_extra_subgid_groups
       # for github_runner.
       #
-      # lab-runtime-workdir is bind-mounted per-cell. The host path
+      # scratch is bind-mounted per-cell. The host path
       # embeds run_id + job-index so two concurrent test cells never
       # share a workdir parent -- without this, a sibling cell's startup
       # sweep (or any other reaper running in its container, where ps
@@ -136,7 +136,7 @@ jobs:
         --device /dev/kvm
         --group-add 1
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
-        --volume /mnt/scratch/github_runner/lab-runtime-workdir/${{ github.run_id }}-${{ strategy.job-index }}:/lab-runtime-workdir:rw
+        --volume /mnt/scratch/github_runner/scratch/${{ github.run_id }}-${{ strategy.job-index }}:/scratch:rw
     strategy:
       fail-fast: false
       max-parallel: 2
@@ -176,7 +176,7 @@ jobs:
             echo "ROLE=$role"
             echo "VARIANT=$variant"
           } >>"$GITHUB_ENV"
-          test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /lab-runtime-workdir
+          test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /scratch
       - name: Upload harness output on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -187,6 +187,6 @@ jobs:
           name: testout-${{ env.ROLE }}-${{ env.VARIANT }}
           path: |
             test/out/${{ env.VARIANT }}.${{ env.ROLE }}.*
-            /lab-runtime-workdir/**
+            /scratch/**
           retention-days: 14
           if-no-files-found: warn
