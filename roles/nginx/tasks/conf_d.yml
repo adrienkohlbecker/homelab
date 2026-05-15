@@ -1,0 +1,111 @@
+# Install an nginx http{}-scope drop into /etc/nginx/conf.d/ with
+# place-and-validate-then-rollback semantics. Mirrors the systemd_unit
+# install pattern: write the file with backup: true, run `nginx -t` to
+# validate in place, on failure restore the previous version from the
+# backup (or delete the freshly-added file if there is none) and fail
+# loudly. Without this any typo bricks the next nginx reload host-wide
+# (conf.d/ is read globally, so the blast radius is every site on the
+# host).
+#
+# ansible's `copy: validate:` would let us check before placing, but
+# nginx -t expects a full nginx.conf (events{}, http{}, etc.), not a
+# conf.d snippet. Same constraint roles/systemd_unit hits — systemd-
+# analyze verify takes a path — so the place-and-validate-then-rollback
+# shape ports cleanly.
+#
+# Inputs: caller passes a single dict `nginx_conf_d_args` with keys
+#   name        required; filename under /etc/nginx/conf.d/ (e.g.
+#               `csp_ratelimit.conf`)
+#   src         file under the calling role's files/ to copy. Mutually
+#               exclusive with content.
+#   content     inline content string (Jinja is evaluated in the calling
+#               role's vars scope before this role sees it). Mutually
+#               exclusive with src.
+#   condition   optional bool, default true; gates the whole call
+#   mode        optional, default '0644'
+#
+# The dict form prevents inter-call leakage at play-vars scope: each
+# import_role pass replaces the whole `nginx_conf_d_args` value, so a
+# previous caller's content/condition/mode can't bleed into the next
+# caller that doesn't explicitly override.
+#
+# Exposes a per-name fact `<sanitized_name>_result` (e.g.
+# `csp_ratelimit_conf_result`) holding the install task's result —
+# callers reference its `.changed` to wire reload triggers (same pattern
+# as systemd_unit's per-unit `<name>_result`).
+
+- name: conf_d | Resolve caller defaults for {{ nginx_conf_d_args.name }}
+  set_fact:
+    _nginx_conf_d_condition: "{{ nginx_conf_d_args.condition | default(true) }}"
+    _nginx_conf_d_name: "{{ nginx_conf_d_args.name }}"
+    _nginx_conf_d_mode: "{{ nginx_conf_d_args.mode | default('0644') }}"
+
+- name: conf_d | Install {{ nginx_conf_d_args.name }}
+  when: _nginx_conf_d_condition
+  block:
+    - name: conf_d | Write {{ nginx_conf_d_args.name }}
+      copy:
+        src: "{{ nginx_conf_d_args.src | default(omit) }}"
+        content: "{{ nginx_conf_d_args.content | default(omit) }}"
+        dest: "/etc/nginx/conf.d/{{ _nginx_conf_d_name }}"
+        owner: root
+        group: root
+        mode: "{{ _nginx_conf_d_mode }}"
+        backup: true
+      become: true
+      register: nginx_conf_d
+
+    - name: conf_d | Validate nginx config in place
+      when: nginx_conf_d.changed
+      command: nginx -t
+      changed_when: false
+      become: true
+
+    # Expose the install result under a per-file fact so callers can
+    # avoid the shared `nginx_conf_d` register (which is the role-
+    # scoped name and would be clobbered by a second conf.d call in the
+    # same play). New callers reference <sanitized_name>_result —
+    # e.g. csp_ratelimit.conf -> csp_ratelimit_conf_result.
+    - name: conf_d | Record install result for {{ nginx_conf_d_args.name }}
+      set_fact:
+        "{{ _nginx_conf_d_name | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ nginx_conf_d }}"
+
+  # nginx -t reads files at their on-disk locations, so the conf.d drop
+  # has to land at its production path first and is then validated in
+  # place. If validate fails, the broken file is already on disk and
+  # would break the next reload for every site on the host. Restore the
+  # previous version from the .backup if one was made, otherwise delete
+  # the freshly-added file. Don't trim this — without it any typo in
+  # the snippet bricks `nginx -s reload` host-wide.
+  rescue:
+    - name: conf_d | Copy backup file to original
+      when: '"backup_file" in nginx_conf_d'
+      copy:
+        remote_src: true
+        dest: "/etc/nginx/conf.d/{{ _nginx_conf_d_name }}"
+        src: "{{ nginx_conf_d.backup_file }}"
+        owner: root
+        group: root
+        mode: "{{ _nginx_conf_d_mode }}"
+      become: true
+
+    - name: conf_d | Delete backup file
+      when: '"backup_file" in nginx_conf_d'
+      file:
+        path: "{{ nginx_conf_d.backup_file }}"
+        state: absent
+      become: true
+
+    - name: conf_d | Delete newly added file
+      when: nginx_conf_d.changed and "backup_file" not in nginx_conf_d
+      file:
+        path: "/etc/nginx/conf.d/{{ _nginx_conf_d_name }}"
+        state: absent
+      become: true
+
+    - name: conf_d | Record failure
+      fail:
+        msg: >-
+          nginx -t failed after writing /etc/nginx/conf.d/{{ _nginx_conf_d_name }};
+          previous state restored. Inspect the validate output above
+          and the managed content in the calling role.
