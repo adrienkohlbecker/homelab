@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'Dockerfile.lab-runtime'
+      - 'Dockerfile'
       - 'mise.toml'
       - 'pyproject.toml'
       - 'uv.lock'
@@ -63,7 +63,6 @@ jobs:
             --label "homelab.git_sha=${GITHUB_SHA}" \
             --tag "${REGISTRY}/${REPO}:${GITHUB_SHA}" \
             --tag "${REGISTRY}/${REPO}:latest" \
-            --file Dockerfile.lab-runtime \
             .
 
       # Login + push + logout in a single step so the auth file under
