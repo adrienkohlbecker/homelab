@@ -28,27 +28,39 @@
     - github_runner
 
 # config.sh and run.sh resolve bin/ via $0 dirname (the directory of the
-# script itself, not CWD), so symlinking the shared binary entries into
-# each per-repo dir makes them work as if installed locally -- while
-# the ~150 MB extracted tree lives once. force: true heals a stale
-# symlink target if the shared layout ever shifts.
-- name: _register | Symlink shared binary entries into {{ runner_repo }}/
+# script itself, not CWD), so symlinking the shared tree into each
+# per-repo dir makes them work as if installed locally -- while the
+# ~150 MB extracted tree lives once. Enumerate runner/ via find rather
+# than a hardcoded list because actions/runner ships a moving set of
+# top-level scripts (run.sh, run-helper.sh.template, config.sh,
+# config-helper.sh.template, env.sh, safe_directories, .path, license
+# files, etc.) and any upgrade that adds a new top-level entry would
+# otherwise be missed -- run.sh does `cp run-helper.sh.template
+# run-helper.sh` at startup, so a missed template silently breaks
+# the runner with a `cp: cannot stat` at boot.
+- name: _register | Enumerate shared runner entries
+  find:
+    paths: /mnt/services/github_runner/runner
+    file_type: any
+    hidden: true
+    recurse: false
+  register: github_runner_shared_entries
+  become: true
+  tags:
+    - github_runner
+
+- name: _register | Symlink shared runner entries into {{ runner_repo }}/
   file:
-    src: ../runner/{{ entry }}
-    dest: /mnt/services/github_runner/{{ runner_repo }}/{{ entry }}
+    src: ../runner/{{ item.path | basename }}
+    dest: /mnt/services/github_runner/{{ runner_repo }}/{{ item.path | basename }}
     state: link
     force: true
     follow: false
     owner: github_runner
     group: github_runner
-  loop:
-    - bin
-    - externals
-    - run.sh
-    - config.sh
-    - .path
+  loop: "{{ github_runner_shared_entries.files }}"
   loop_control:
-    loop_var: entry
+    label: "{{ item.path | basename }}"
   become: true
   tags:
     - github_runner
