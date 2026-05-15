@@ -2,6 +2,7 @@
   apt:
     pkg:
       - fancontrol
+    policy_rc_d: 101
     cache_valid_time: 3600
   become: true
   register: fancontrol_apt
