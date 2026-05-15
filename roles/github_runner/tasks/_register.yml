@@ -1,0 +1,132 @@
+# Per-repo registration + unit install. Looped from main.yml over
+# github_runner_repos with loop_var: runner_repo. Shared binary at
+# /mnt/services/github_runner/runner/ is already extracted by main.yml;
+# this file creates the per-repo state dir, symlinks the binary into
+# it, runs config.sh against GitHub, and installs/enables the
+# github_runner_<repo>.service unit.
+
+- name: _register | Create install dir for {{ runner_repo }}
+  file:
+    path: /mnt/services/github_runner/{{ runner_repo }}
+    state: directory
+    owner: github_runner
+    group: github_runner
+    mode: "0755"
+  become: true
+  tags:
+    - github_runner
+
+- name: _register | Create workdir for {{ runner_repo }}
+  file:
+    path: /mnt/scratch/github_runner/workdir-{{ runner_repo }}
+    state: directory
+    owner: github_runner
+    group: github_runner
+    mode: "0755"
+  become: true
+  tags:
+    - github_runner
+
+# config.sh and run.sh resolve bin/ via $0 dirname (the directory of the
+# script itself, not CWD), so symlinking the shared binary entries into
+# each per-repo dir makes them work as if installed locally -- while
+# the ~150 MB extracted tree lives once. force: true heals a stale
+# symlink target if the shared layout ever shifts.
+- name: _register | Symlink shared binary entries into {{ runner_repo }}/
+  file:
+    src: ../runner/{{ entry }}
+    dest: /mnt/services/github_runner/{{ runner_repo }}/{{ entry }}
+    state: link
+    force: true
+    follow: false
+    owner: github_runner
+    group: github_runner
+  loop:
+    - bin
+    - externals
+    - run.sh
+    - config.sh
+    - .path
+  loop_control:
+    loop_var: entry
+  become: true
+  tags:
+    - github_runner
+
+- name: _register | Check if {{ runner_repo }} is already registered
+  stat:
+    path: /mnt/services/github_runner/{{ runner_repo }}/.runner
+  register: github_runner_registered
+  become: true
+  tags:
+    - github_runner
+
+# Registration token (1h TTL, can't be vaulted). Fetched from the
+# controller via `gh api` against the per-repo URL. Skipped under
+# qemu_test -- there's no GitHub fixture to register against.
+- name: _register | Fetch registration token for {{ runner_repo }}
+  when:
+    - not qemu_test
+    - not github_runner_registered.stat.exists
+  command: gh api -X POST /repos/{{ github_runner_owner }}/{{ runner_repo }}/actions/runners/registration-token --jq .token
+  register: github_runner_token_result
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  check_mode: false
+  no_log: true
+  tags:
+    - github_runner
+
+- name: _register | Register {{ runner_repo }} runner with GitHub
+  when:
+    - not qemu_test
+    - not github_runner_registered.stat.exists
+  command: >-
+    ./config.sh
+    --url https://github.com/{{ github_runner_owner }}/{{ runner_repo }}
+    --token {{ github_runner_token_result.stdout }}
+    --name {{ inventory_hostname }}
+    --labels {{ github_runner_labels }}
+    --work /mnt/scratch/github_runner/workdir-{{ runner_repo }}
+    --unattended
+    --replace
+  args:
+    chdir: /mnt/services/github_runner/{{ runner_repo }}
+    creates: /mnt/services/github_runner/{{ runner_repo }}/.runner
+  become: true
+  become_user: github_runner
+  no_log: true
+  tags:
+    - github_runner
+
+- name: _register | Install github_runner_{{ runner_repo }} service
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: github_runner.service.j2
+      dest: github_runner_{{ runner_repo }}.service
+      condition: "{{ not (ansible_check_mode and github_runner_user.changed) }}"
+  tags:
+    - github_runner
+
+- name: _register | Enable github_runner_{{ runner_repo }} service
+  when: not qemu_test
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: github_runner_{{ runner_repo }}
+      condition: "{{ not (ansible_check_mode and (github_runner_user.changed or github_runner_extracted.changed)) }}"
+      restart: >-
+        {{
+          lookup('vars',
+                 'github_runner_' ~ runner_repo ~ '_service_result',
+                 default={'changed': false}).changed
+          or github_runner_extracted.changed
+        }}
+  tags:
+    - github_runner
