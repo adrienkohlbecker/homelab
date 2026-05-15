@@ -55,6 +55,40 @@
       interpolation of site_subnets.home or wireguard_subnet.
       Got: {{ _verify_ignoreip.stdout }}
 
+# Function check for backend=systemd: the daemon's status output
+# names the active backend (`Journal matches:` for systemd vs.
+# `File list:` for file). A regression where `backend = auto`
+# re-takes effect on a host without /var/log/auth.log would
+# silently report zero failures and pass every other assertion;
+# this catches it. Also doubles as a journalmatch assert — if
+# the upstream stock filter's `_SYSTEMD_UNIT=sshd.service` AND
+# clobbered our `_COMM=sshd` override (e.g. via a future Ubuntu
+# deb shuffle of filter.d), the noble socket-activation layout
+# would silently stop matching.
+#
+# A full functional test would inject failed-auth lines via
+# systemd-cat, but our journalmatch is intentionally `_COMM=sshd`
+# (so a local user with `logger -t sshd ...` cannot trigger bans
+# of arbitrary IPs), and only the real sshd binary processes
+# carry `_COMM=sshd`. So we state-check the backend wiring and
+# leave the BanManager-via-CLI path to the synthetic-ban below.
+- name: _verify | sshd jail uses the systemd journal backend
+  command: fail2ban-client status sshd
+  register: _verify_status_sshd
+  changed_when: false
+  become: true
+
+- name: _verify | Journal backend is engaged with our journalmatch
+  assert:
+    that:
+      - "'Journal matches:' in _verify_status_sshd.stdout"
+      - "'_COMM=sshd' in _verify_status_sshd.stdout"
+    fail_msg: >-
+      sshd jail status missing the journal backend's "Journal matches:"
+      line or our pinned `_COMM=sshd` filter. Backend may have silently
+      reverted to file-mode (auto-mode without /var/log/auth.log present
+      means zero failure detection). Got: {{ _verify_status_sshd.stdout }}
+
 # Synthetic ban against TEST-NET-1 (RFC 5737); never matches a real client.
 - name: _verify | Issue a synthetic ban
   command: fail2ban-client set sshd banip 192.0.2.1
