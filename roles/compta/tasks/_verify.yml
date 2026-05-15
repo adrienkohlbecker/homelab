@@ -1,6 +1,6 @@
 # Loopback probe — exercises the container directly. Provides the
-# cold-start retry window for compta's slow rails-ish boot
-# (--health-start-period is 100s).
+# cold-start retry window (--health-start-period is 15s; retries
+# below give 2 minutes total to cover restart-after-deploy too).
 - name: _verify | Compta answers on its loopback port
   uri:
     url: http://localhost:{{ service_ports.compta }}/
