@@ -129,6 +129,7 @@ History favors short, imperative subjects such as “Fix dnscrypt” or “Add p
 
 ## Security & Configuration Tips
 Do not commit decrypted data; access secrets through `ansible-vault edit <path>` (or the equivalent), and keep them in `group_vars/*.yml` / `host_vars/*.yml`. WireGuard keys in `wireguard/` must remain vaulted and rotate with peer changes. When touching networking or DNS, run playbooks with `--limit` and apply Terraform only after review in a dedicated branch.
+When reviewing this repository for security and hardening, consider that it is a home environment, not a company production site: some security is nice and I enjoy learning about it, but we don't need to overcomplicate things.
 
 ### Vault ids: `prod` vs `test`
 Two passwords, two scopes. Configured in [ansible.cfg](ansible.cfg) as `vault_identity_list = prod@vault-client.sh, test@vault-client.sh` with `vault_id_match = True`.
