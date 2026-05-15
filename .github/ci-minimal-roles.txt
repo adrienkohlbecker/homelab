@@ -1,0 +1,12 @@
+# Roles whose CI matrix entry should include the `minimal` variant
+# (vanilla Ubuntu cloud image: ext4, snapd + cloud-init preinstalled)
+# on top of the default `box` (debootstrap'd ZFS rpool).
+#
+# Read by mise-tasks/ci/detect-roles. Same shape as ci-lab-roles.txt:
+# one role per line; comments + blank lines OK. Add roles here when
+# behaviour genuinely differs against a host where the upstream-
+# shipped packages it removes/replaces are actually present — e.g.
+# cleanup exercises the snap-removal path only when snapd was
+# preinstalled.
+
+cleanup
