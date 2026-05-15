@@ -19,16 +19,17 @@
         port: 4680
         timeout: 60
 
-    # Self-signed cert on the daemon; we're on loopback so there's no
-    # TLS-trust guarantee to verify. IPP's index typically redirects
-    # to a login page on a fresh install — accept any reasonable
-    # 2xx/3xx/4xx so the probe doesn't pin a specific UI flow. We
-    # want to catch 5xx / connection failures (daemon bound but not
-    # actually serving).
-    - name: _verify | IPP serves HTTPS on 4680
+    # IPP serves the same UI on plain HTTP (4679) — Eaton's port
+    # table: TCP 4679 = "Eaton Supervision" (HTTP UI), TCP 4680 =
+    # "Eaton SSL Supervision" (HTTPS UI). We probe via HTTP so we
+    # don't have to TLS-handshake to a self-signed loopback cert.
+    # IPP's index typically redirects to a login page on a fresh
+    # install — accept any reasonable 2xx/3xx/4xx so the probe
+    # doesn't pin a specific UI flow. We want to catch 5xx /
+    # connection failures (daemon bound but not actually serving).
+    - name: _verify | IPP serves HTTP on 4679
       uri:
-        url: https://localhost:4680/
-        validate_certs: false
+        url: http://localhost:{{ service_ports.eaton_ipp }}/
         status_code: [ 200, 301, 302, 303, 401, 403 ]
       register: _verify_http_direct
       retries: 15

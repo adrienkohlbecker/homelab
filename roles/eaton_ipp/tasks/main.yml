@@ -81,7 +81,7 @@
     nginx_site_args:
       condition: '{{ ansible_architecture == "x86_64" }}'
       subdomain: ipp
-      proxy_pass: https://localhost:4680/
+      proxy_pass: http://localhost:{{ service_ports.eaton_ipp }}/
       location_conf: |
         # By default the header name is lowercase, and this app expects it in capitalized form, otherwise we can't login.
         proxy_set_header Content-Type      $content_type;
