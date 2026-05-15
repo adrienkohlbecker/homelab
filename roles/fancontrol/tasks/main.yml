@@ -81,6 +81,21 @@
       loop_control:
         label: "{{ item.1.content | b64decode | trim }}"
 
+    # The DEVPATH regex assumes /sys/<devpath>/hwmon/hwmonN; on a chip
+    # whose readlink target deviates (virtual hwmons, future kernel
+    # subsystems, etc.) regex_replace returns the input unchanged, and
+    # /etc/fancontrol would silently carry an unstripped DEVPATH=. Fail
+    # loudly here instead of letting the daemon misroute on next start.
+    - name: Assert hwmon DEVPATH regex matched on every discovered chip
+      assert:
+        that: not (item.value.devpath | regex_search('^/sys/'))
+        fail_msg: >-
+          chip {{ item.key }} resolved to devpath {{ item.value.devpath }};
+          expected a /sys/-stripped path but the regex did not match.
+      loop: "{{ fancontrol_chip_map | dict2items }}"
+      loop_control:
+        label: "{{ item.key }}"
+
 - name: Assert all chips referenced by fancontrol_settings.fans exist
   when: fancontrol_settings.fans | length > 0
   assert:
