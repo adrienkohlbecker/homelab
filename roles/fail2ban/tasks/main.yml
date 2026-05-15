@@ -59,8 +59,26 @@
       banaction_allports = nftables-allports
       backend = systemd
       ignoreip = 127.0.0.1/8 ::1 {{ site_subnets.home }} {{ wireguard_subnet }}
+
+      # systemd-journal entries carry IPs, not hostnames; rDNS resolve
+      # is wasted and risks banning the wrong IP on asymmetric DNS.
+      usedns = no
+
+      # Pinned explicitly so a future Ubuntu fail2ban deb can't shift
+      # the threshold under us; values match the current upstream
+      # defaults so apply is a no-op until policy changes.
+      bantime = 10m
+      findtime = 10m
+      maxretry = 5
+
+      # Escalating curve up to 1w; rndtime jitter prevents botnets
+      # timing retries to ban-expiry. dbpurgeage must outlast maxtime
+      # or repeat offenders' history is dropped before escalation
+      # peaks, capping the effective ceiling at the default 24h.
       bantime.increment = true
       bantime.maxtime = 1w
+      bantime.rndtime = 10m
+      dbpurgeage = 2w
 
       [sshd]
       enabled = true
