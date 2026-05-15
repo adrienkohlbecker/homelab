@@ -22,7 +22,7 @@ defaults:
 
 jobs:
   detect:
-    runs-on: [ self-hosted, lab-runtime ]
+    runs-on: [ self-hosted, lab ]
     container:
       image: nexus.lab.fahm.fr/repository/homelab/ci:latest
     outputs:
@@ -43,7 +43,7 @@ jobs:
   notify-cross-cut:
     needs: detect
     if: needs.detect.outputs.cross_cut == 'true'
-    runs-on: [ self-hosted, lab-runtime ]
+    runs-on: [ self-hosted, lab ]
     container:
       image: nexus.lab.fahm.fr/repository/homelab/ci:latest
     steps:
@@ -66,7 +66,7 @@ jobs:
     # was never dispatched.
     needs: detect
     if: needs.detect.outputs.packer_changed == 'true'
-    runs-on: [ self-hosted, lab-runtime ]
+    runs-on: [ self-hosted, lab ]
     container:
       image: nexus.lab.fahm.fr/repository/homelab/ci:latest
       options: --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
@@ -114,7 +114,7 @@ jobs:
           || needs.wait-for-packer-build.result == 'skipped')
       && needs.detect.outputs.matrix != '[]'
       && needs.detect.outputs.matrix != ''
-    runs-on: [ self-hosted, lab-runtime ]
+    runs-on: [ self-hosted, lab ]
     container:
       image: nexus.lab.fahm.fr/repository/homelab/ci:latest
       # /dev/kvm via --device for qemu acceleration. --group-add 1 is

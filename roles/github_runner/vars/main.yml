@@ -1,11 +1,12 @@
 github_runner_version: "2.334.0"
 
-# Labels reported to GitHub on registration. `self-hosted` is the implicit
-# label GitHub adds to every self-hosted runner; we list it explicitly so
-# workflows' `runs-on: [self-hosted, lab-runtime]` selector resolves
-# unambiguously. lab-runtime is the custom label workflows match on; the
-# container image of the same name is built by this role.
-github_runner_labels: "self-hosted,lab-runtime"
+# Labels reported to GitHub on registration. `self-hosted` is the
+# implicit label GitHub adds to every self-hosted runner; we list it
+# explicitly so workflows' `runs-on: [self-hosted, <host>]` selector
+# resolves unambiguously. The host-named label is what workflows match
+# on -- gives each runner an addressable identity (lab vs pug vs ...)
+# without depending on image-name conventions.
+github_runner_labels: "self-hosted,{{ inventory_hostname }}"
 
 # GitHub repo to register against. Overridable from host_vars when we
 # eventually have more than one consumer of this role.

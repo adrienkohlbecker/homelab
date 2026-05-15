@@ -24,11 +24,11 @@ defaults:
 jobs:
   build:
     # Runs on the lab github_runner directly (no `container:` block) --
-    # the whole point of this workflow is to build the lab-runtime
-    # *image*, so it can't run inside that image. The runner process
-    # already executes as the github_runner user with rootless podman
+    # the whole point of this workflow is to build the ci image, so
+    # it can't run inside that image. The runner process already
+    # executes as the github_runner user with rootless podman
     # configured, which is exactly what we need to build + push.
-    runs-on: [ self-hosted, lab-runtime ]
+    runs-on: [ self-hosted, lab ]
     timeout-minutes: 30
     env:
       REGISTRY: nexus.lab.fahm.fr
