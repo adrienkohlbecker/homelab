@@ -50,23 +50,24 @@
 
 # bash -lc starts a login shell, which sources /etc/profile and
 # therefore /etc/profile.d/docker_client.sh. A non-login shell would
-# miss the shim and silently inherit ansible's own env -- which
-# would tell us nothing about the role's contract.
-- name: _verify | docker info routes via the login-shell DOCKER_HOST
-  command: bash -lc 'docker info'
+# miss the shim and silently inherit ansible's own env. Probing
+# $DOCKER_HOST directly checks the contract the role promises
+# without depending on a running daemon or on docker subcommand
+# quirks -- e.g. `docker context inspect default` returns the
+# static context's stored endpoint, which DOCKER_HOST overrides
+# at the resolver level rather than mutating.
+- name: _verify | login-shell shim exports DOCKER_HOST
+  command: bash -lc 'printf %s "$DOCKER_HOST"'
   changed_when: false
-  failed_when: false
-  register: _verify_docker_info
+  register: _verify_docker_host_env
 
-- name: _verify | docker tried to reach the configured podman socket
+- name: _verify | DOCKER_HOST resolves to the podman socket
   assert:
     that:
-      - _verify_docker_info.rc != 0
-      - "'/run/podman/podman.sock' in (_verify_docker_info.stdout ~ _verify_docker_info.stderr)"
+      - _verify_docker_host_env.stdout == 'unix:///run/podman/podman.sock'
     fail_msg: >-
-      Expected docker info to fail with a reference to /run/podman/podman.sock;
-      got rc={{ _verify_docker_info.rc }}, stdout={{ _verify_docker_info.stdout }},
-      stderr={{ _verify_docker_info.stderr }}
+      Expected DOCKER_HOST=unix:///run/podman/podman.sock,
+      got {{ _verify_docker_host_env.stdout }}
 
 - name: _verify | Read podman-socket group membership
   command: getent group podman-socket
