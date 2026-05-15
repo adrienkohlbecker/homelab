@@ -50,18 +50,17 @@
       not_after={{ _verify_cert_info.not_after }},
       valid_at={{ _verify_cert_info.valid_at }})
 
-# Distinguishes "real LE cert" from snakeoil/self-signed left in place
-# by a sibling role's _setup at the same paths. Staging and prod have
-# different issuer shapes; pick the marker that's stable in each.
-- name: _verify | Certificate is from Let's Encrypt
+# Distinguishes a real CA-issued cert from a self-signed snakeoil
+# left in place by a sibling role's _setup at the same paths.
+# Snakeoils satisfy issuer == subject; LE (staging or prod) never
+# does. Robust against LE intermediate rotations (R3 -> R10 -> ...).
+- name: _verify | Certificate is not self-signed
   assert:
     that:
-      - >-
-        (not certbot_production_certificates and 'STAGING' in (_verify_cert_info.issuer.commonName | default('')))
-        or (certbot_production_certificates and "Let's Encrypt" in (_verify_cert_info.issuer.organizationName | default('')))
+      - _verify_cert_info.issuer != _verify_cert_info.subject
     fail_msg: >-
-      cert not issued by expected LE
-      (issuer={{ _verify_cert_info.issuer }}, staging_expected={{ not certbot_production_certificates }})
+      cert is self-signed (likely a snakeoil)
+      (issuer={{ _verify_cert_info.issuer }}, subject={{ _verify_cert_info.subject }})
 
 # Renewals only happen if certbot.timer is enabled+active. The
 # systemd module returns the full unit status dict so a single
@@ -98,6 +97,29 @@
       - _verify_cf.stat.pw_name == "root"
       - _verify_cf.stat.gr_name == "root"
     fail_msg: "cloudflare.ini has wrong perms or owner ({{ _verify_cf.stat }})"
+
+# The whole rationale for --deploy-hook (over renewal-hooks/deploy/)
+# is that it's persisted into renewal/<name>.conf at issuance time
+# and survives renewals. A regression that loses the hook would only
+# surface 60 days later when certbot.timer renews and nginx never
+# reloads with the fresh cert.
+- name: _verify | Slurp renewal config
+  slurp:
+    src: /etc/letsencrypt/renewal/{{ inventory_hostname }}.{{ domain }}.conf
+  register: _verify_renewal
+  become: true
+
+- name: _verify | Renewal config persists the nginx-reload deploy hook
+  vars:
+    _verify_renewal_text: "{{ _verify_renewal.content | b64decode }}"
+  assert:
+    that:
+      - "'renew_hook' in _verify_renewal_text"
+      - "'systemctl reload nginx' in _verify_renewal_text"
+    fail_msg: >-
+      deploy-hook missing from renewal config
+      (file={{ _verify_renewal.source }},
+      excerpt={{ _verify_renewal_text | regex_search('renew_hook[^\n]*') | default('<no renew_hook line>') }})
 
 # Directory perms are load-bearing: wildcard SAN + lax dir mode = any
 # local-uid read of privkey.pem grants forever-cert for the host's
@@ -170,6 +192,6 @@
 # "renewal config lost --deploy-hook", or "DNS plugin failed" that the
 # stat/SAN checks above would happily pass.
 - name: _verify | certbot renew --dry-run exercises the renewal path
-  command: certbot renew --dry-run
+  command: certbot renew --dry-run --no-random-sleep-on-renew
   changed_when: false
   become: true
