@@ -96,6 +96,21 @@
   tags:
     - fancontrol
 
+# Active stop+disable on transition to empty fans -- without this, the
+# running daemon keeps its in-memory config until reboot, potentially
+# driving PWMs from a config that no longer matches hardware.
+- name: Stop and disable fancontrol service (no fan settings)
+  when:
+    - fancontrol_settings.fans | length == 0
+    - not (ansible_check_mode and fancontrol_apt.changed)
+  systemd:
+    name: fancontrol
+    state: stopped
+    enabled: false
+  become: true
+  tags:
+    - fancontrol
+
 - name: Remove /etc/fancontrol (no fan settings)
   when: fancontrol_settings.fans | length == 0
   file:
@@ -106,7 +121,8 @@
   tags:
     - fancontrol
 
-- name: Enable fancontrol service
+- name: Enable and start fancontrol service
+  when: fancontrol_settings.fans | length > 0
   import_role:
     name: systemd_unit
     tasks_from: service
@@ -114,7 +130,6 @@
     systemd_unit_args:
       src: fancontrol
       condition: "{{ not (ansible_check_mode and fancontrol_apt.changed) }}"
-      restart: "{{ fancontrol_conf.changed | default(false) or fancontrol_removed.changed | default(false) }}"
-      start: "{{ fancontrol_settings.fans | length > 0 }}"
+      restart: "{{ fancontrol_conf.changed | default(false) }}"
   tags:
     - fancontrol
