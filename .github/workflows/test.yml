@@ -24,7 +24,7 @@ jobs:
   detect:
     runs-on: [ self-hosted, lab ]
     container:
-      image: nexus.lab.fahm.fr/repository/homelab/ci:latest
+      image: nexus.lab.fahm.fr/homelab/ci:latest
     outputs:
       matrix: ${{ steps.detect.outputs.matrix }}
       cross_cut: ${{ steps.detect.outputs.cross_cut }}
@@ -46,7 +46,7 @@ jobs:
     if: needs.detect.outputs.cross_cut == 'true'
     runs-on: [ self-hosted, lab ]
     container:
-      image: nexus.lab.fahm.fr/repository/homelab/ci:latest
+      image: nexus.lab.fahm.fr/homelab/ci:latest
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 50 }
@@ -69,7 +69,7 @@ jobs:
     if: needs.detect.outputs.packer_changed == 'true'
     runs-on: [ self-hosted, lab ]
     container:
-      image: nexus.lab.fahm.fr/repository/homelab/ci:latest
+      image: nexus.lab.fahm.fr/homelab/ci:latest
       options: --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
     timeout-minutes: 90
     steps:
@@ -104,7 +104,7 @@ jobs:
     if: needs.detect.outputs.ci_image_changed == 'true'
     runs-on: [ self-hosted, lab ]
     container:
-      image: nexus.lab.fahm.fr/repository/homelab/ci:latest
+      image: nexus.lab.fahm.fr/homelab/ci:latest
       options: --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
     timeout-minutes: 30
     steps:
@@ -156,7 +156,7 @@ jobs:
       && needs.detect.outputs.matrix != ''
     runs-on: [ self-hosted, lab ]
     container:
-      image: nexus.lab.fahm.fr/repository/homelab/ci:latest
+      image: nexus.lab.fahm.fr/homelab/ci:latest
       # /dev/kvm via --device for qemu acceleration. --group-add 1 is
       # the container-side gid that maps to host kvm via /etc/subgid +
       # the rootless gidmap (see roles/github_runner/templates/

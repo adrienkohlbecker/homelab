@@ -38,7 +38,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-timeout "5s" \
     --health-start-period "15s" \
     --stop-timeout 10 \
-    nexus.lab.fahm.fr/repository/compta/compta:latest
+    nexus.lab.fahm.fr/compta/compta:latest
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 

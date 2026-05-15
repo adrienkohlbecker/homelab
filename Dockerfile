@@ -1,7 +1,7 @@
 # Container image consumed by every github-actions workflow in this
 # repo. Built and pushed exclusively by the ci-image workflow
 # to the homelab nexus docker hosted repo at
-# nexus.lab.fahm.fr/repository/homelab/ci:latest. Other
+# nexus.lab.fahm.fr/homelab/ci:latest. Other
 # workflows reference that URL directly in their `container:` block;
 # anonymous pulls are enabled on Nexus so the runner just fetches it.
 # On a brand-new lab runner with no prior image in nexus, kick the
