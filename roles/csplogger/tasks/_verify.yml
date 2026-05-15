@@ -122,8 +122,10 @@
     status_code: 204
   register: csplogger_verify_preflight
   failed_when: >-
-    'POST' not in (csplogger_verify_preflight.access_control_allow_methods | default(''))
-    or '*' not in (csplogger_verify_preflight.access_control_allow_origin | default(''))
+    csplogger_verify_preflight.access_control_allow_methods | default('') != 'POST, OPTIONS'
+    or csplogger_verify_preflight.access_control_allow_origin | default('') != '*'
+    or 'Content-Type' not in (csplogger_verify_preflight.access_control_allow_headers | default(''))
+    or (csplogger_verify_preflight.access_control_max_age | default('') | string) != '86400'
 
 # Exercise the body-size cap on /log. CSP reports are tiny; the cap
 # stops a runaway site CSP or hostile poster from chewing bandwidth.
