@@ -53,8 +53,8 @@
   vars:
     systemd_unit_args:
       src: eaton-ipp
-      condition: '{{ not (ansible_check_mode and ipp_linux_installed.changed) and ansible_architecture == "x86_64" }}'
-      restart: false
+      condition: '{{ not (ansible_check_mode and (ipp_linux_installed.changed | default(false))) and ansible_architecture == "x86_64" }}'
+      restart: '{{ ipp_linux_installed.changed | default(false) }}'
   tags:
     - eaton_ipp
 
