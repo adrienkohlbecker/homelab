@@ -45,6 +45,8 @@
     repo: git@github.com:adrienkohlbecker/compta.git
     dest: "{{ ansible_user_dir }}/compta"
     version: master
+    depth: 1
+    single_branch: true
     force: true
     accept_newhostkey: true
   environment:
