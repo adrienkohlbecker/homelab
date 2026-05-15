@@ -15,3 +15,6 @@ MAXTEMP={% for f in fancontrol_settings.fans %}{{ hp(f.pwm) }}={{ f.maxtemp }}{%
 MINSTART={% for f in fancontrol_settings.fans %}{{ hp(f.pwm) }}={{ f.minstart }}{% if not loop.last %} {% endif %}{% endfor %}
 MINSTOP={% for f in fancontrol_settings.fans %}{{ hp(f.pwm) }}={{ f.minstop }}{% if not loop.last %} {% endif %}{% endfor %}
 MINPWM={% for f in fancontrol_settings.fans %}{{ hp(f.pwm) }}={{ f.minpwm }}{% if not loop.last %} {% endif %}{% endfor %}
+{% if fancontrol_settings.fans | selectattr('average', 'defined') | list | length > 0 %}
+AVERAGE={% for f in fancontrol_settings.fans %}{{ hp(f.pwm) }}={{ f.average | default(1) }}{% if not loop.last %} {% endif %}{% endfor %}
+{% endif %}
