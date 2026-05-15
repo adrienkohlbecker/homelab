@@ -14,7 +14,6 @@
     - console
     - timezone
     - subid
-    - fancontrol
     - unattended_upgrades
     - logrotate
     - journald
@@ -29,6 +28,7 @@
     - hd_idle
     - smart
     - lm_sensors
+    - fancontrol
     - powertop
     - zfs
     - ssh_root
