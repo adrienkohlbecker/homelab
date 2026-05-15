@@ -7,48 +7,11 @@
 
 # Rate-limit zone and request-shape allow-lists live in conf.d/ because
 # limit_req_zone and map both require http{} scope; the nginx_site_args
-# helper only emits server{}-scope config.
+# helper only emits server{}-scope config. The install task validates
+# the drop via `nginx -t` before any reload picks it up and rolls back
+# on failure — see _install_conf_d.yml for the rationale.
 - name: Install CSP rate-limit zone and request-shape allow-lists
-  copy:
-    content: |
-      # Managed by roles/csplogger.
-
-      # Per-IP rate-limit: 10 r/s, 1MB zone (~16k tracked IPs). Burst
-      # handled per-location (see /log block).
-      limit_req_zone $binary_remote_addr zone=cspreports:1m rate=10r/s;
-
-      # Origin allowlist. Browsers always send Origin on cross-origin
-      # POSTs (which CSP report POSTs are by construction). A foreign or
-      # absent Origin gets silently 204'd in /log: the response carries
-      # no ACAO so a script that triggered the POST can't read it, and
-      # the browser's report queue still drops the entry as "sent."
-      # Defends against arbitrary-internet POSTs writing junk into
-      # ClickHouse without rejecting on a status code that would invite
-      # retry. Pattern matches bare host plus any subdomain depth, with
-      # optional port.
-      map $http_origin $csp_origin_ok {
-          default 0;
-          "~^https://([a-zA-Z0-9_-]+\.)*{{ inventory_hostname | regex_escape }}\.{{ domain | regex_escape }}(:[0-9]+)?$" 1;
-      }
-
-      # Content-Type allowlist for POSTs (OPTIONS preflights are exempt
-      # — they don't carry a body). Anything not in the two real-browser
-      # CSP content-types gets 415: a hostile poster can't wedge fluent-
-      # bit's single-threaded HTTP input by submitting pathological JSON
-      # bodies that the blanket Content-Type rewrite below would relabel.
-      map "$request_method:$content_type" $csp_post_allow {
-          default                                       0;
-          "~*^OPTIONS"                                  1;
-          "~*^POST:application/csp-report"              1;
-          "~*^POST:application/reports\+json"           1;
-      }
-    dest: /etc/nginx/conf.d/csp_ratelimit.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
-  register: csplogger_ratelimit_conf
+  import_tasks: _install_conf_d.yml
   tags:
     - csplogger
 
