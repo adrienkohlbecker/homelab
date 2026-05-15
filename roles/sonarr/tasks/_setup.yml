@@ -9,10 +9,12 @@
     tasks_from: install
 
 - name: _test | Setup dependencies
-  shell: |
-    set -euo pipefail
-    mkdir /mnt/{services,scratch,media}
-  args:
-    executable: /bin/bash
-    creates: /mnt/services
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /mnt/services
+    - /mnt/scratch
+    - /mnt/media
   become: true
