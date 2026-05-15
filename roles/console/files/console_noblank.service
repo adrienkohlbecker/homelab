@@ -10,6 +10,12 @@
 # boot.
 [Unit]
 Description=Disable VT console blanking and DPMS powersave
+# Order after the units that reset the VT — otherwise their reset
+# wipes our setterm escapes. Wants= for console-setup.service so the
+# ordering applies even if console-setup is masked (then After= is
+# a no-op rather than a circular dep).
+After=systemd-vconsole-setup.service console-setup.service
+Wants=console-setup.service
 ConditionPathExists=/dev/tty0
 
 [Service]
@@ -25,7 +31,7 @@ Environment=TERM=linux
 # write to tty0 propagates to all VTs.
 StandardOutput=tty
 TTYPath=/dev/tty0
-ExecStart=/usr/bin/setterm --blank 0 --powersave off --powerdown 0
+ExecStart=/usr/bin/setterm --blank 0 --powersave off --powerdown 0 --msg on
 SyslogIdentifier=%N
 
 [Install]
