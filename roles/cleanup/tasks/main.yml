@@ -1,47 +1,122 @@
-- name: Gather the package facts
-  package_facts:
-    manager: apt
+# Purge baseline packages we don't want and any snaps that came with
+# the upstream image. Converges two host lineages: packer-built ZFS
+# boxes (debootstrap'd — none of this is ever present, role no-ops)
+# and vanilla Ubuntu cloud images / server ISOs (the `minimal` test
+# variant + any future cloud VMs) where cloud-init / snapd / fwupd
+# come preinstalled.
+
+- name: Probe for snap binary
+  stat:
+    path: /usr/bin/snap
+  register: _cleanup_snap_bin
+  check_mode: false
   tags:
     - cleanup
-  check_mode: false
 
 - name: List installed snaps
-  command: snap list
+  # --all surfaces disabled prior revisions (whose squashfs stays
+  # mounted), --unicode=never --color=never pins machine-readable
+  # output regardless of TERM. snap list exits 1 with "No snaps are
+  # installed yet." on a snapd-but-no-snaps host — that's success
+  # for us; anything else (snapd socket dead, etc.) should surface.
+  command: snap list --all --unicode=never --color=never
   register: _cleanup_snap_list
   changed_when: false
-  failed_when: false
+  failed_when:
+    - _cleanup_snap_list.rc != 0
+    - "'No snaps are installed' not in _cleanup_snap_list.stderr | default('')"
   check_mode: false
-  when: "'snapd' in ansible_facts.packages"
+  when: _cleanup_snap_bin.stat.exists
   tags:
     - cleanup
 
-- name: Uninstall snaps
-  # Removal order matters: app snaps depend on their base (e.g. an `lxd`
-  # snap pins `core22`), so the base can't be removed first or snap
-  # refuses with "snap X requires base Y". And snapd itself must come
-  # last because removing it while any snap is still mounted fails.
-  # We split the discovered list by the Notes column (last whitespace
-  # field): apps (Notes is `-`, `disabled`, `classic`, ...) → bases
-  # (Notes contains `base`) → snapd literal. snapd is filtered out of
-  # both selectattr/rejectattr passes by the regex and re-appended
-  # explicitly, so it always lands last regardless of where it sat in
-  # `snap list`'s alphabetic output.
-  when:
-    - "'snapd' in ansible_facts.packages"
-    - _cleanup_snap_list.rc == 0
-    - _cleanup_snap_list.stdout_lines | length > 1
-  snap:
-    name: "{{ item }}"
-    state: absent
-  become: true
-  loop: >-
-    {{
-      (_cleanup_snap_rows | rejectattr(-1, 'search', '(^|,)(base|snapd)($|,)') | map(attribute=0) | list)
-      + (_cleanup_snap_rows | selectattr(-1, 'search', '(^|,)base($|,)') | map(attribute=0) | list)
-      + ['snapd']
-    }}
+- name: Partition snaps by Notes column type
+  # The Notes column is the last whitespace-delimited token; the
+  # comma-separated tags inside (e.g. `disabled,classic`) match a
+  # comma-anchored regex. Recognize every dependency-bearing type
+  # — without `core`, a host that still has the monolithic `core`
+  # snap (legacy upgrade path) would error "snap 'core' is required
+  # by other snaps" if removed before its dependents.
+  set_fact:
+    _cleanup_snap_apps: >-
+      {{ _cleanup_snap_rows | rejectattr(-1, 'search', '(^|,)(base|core|kernel|gadget|os|snapd)($|,)') | map(attribute=0) | list }}
+    _cleanup_snap_bases: >-
+      {{ _cleanup_snap_rows | selectattr(-1, 'search', '(^|,)(base|core|kernel|gadget|os)($|,)') | map(attribute=0) | list }}
   vars:
-    _cleanup_snap_rows: "{{ _cleanup_snap_list.stdout_lines[1:] | map('split') | list }}"
+    _cleanup_snap_rows: "{{ (_cleanup_snap_list.stdout_lines | default([]))[1:] | map('split') | list }}"
+  when:
+    - _cleanup_snap_bin.stat.exists
+    - _cleanup_snap_list.rc | default(1) == 0
+  tags:
+    - cleanup
+
+- name: Uninstall snaps in dependency order (apps → bases → snapd)
+  community.general.snap:
+    name: "{{ _cleanup_snap_apps + _cleanup_snap_bases + ['snapd'] }}"
+    state: absent
+  when:
+    - _cleanup_snap_bin.stat.exists
+    - _cleanup_snap_list.rc | default(1) == 0
+  become: true
+  tags:
+    - cleanup
+
+# Safety net for snap deps the Notes partition can't model
+# (content-interface ties between apps). Re-list and force-purge
+# whatever survived; the until-loop converges in one iteration
+# when the partition got everything.
+- name: Force-purge any straggler snaps
+  shell: |
+    set -uo pipefail
+    out=$(snap list --all --unicode=never --color=never 2>&1) || true
+    s=$(echo "$out" | awk 'NR>1 && $1!="" {print $1}' | sort -u | head -1)
+    if [ -n "$s" ]; then
+      snap remove --purge "$s"
+      echo "removed: $s"
+    fi
+  register: _cleanup_snap_straggler
+  changed_when: "'removed:' in _cleanup_snap_straggler.stdout"
+  until: "'removed:' not in _cleanup_snap_straggler.stdout"
+  retries: 10
+  delay: 1
+  when: _cleanup_snap_bin.stat.exists
+  become: true
+  tags:
+    - cleanup
+
+# community.general.snap doesn't pass --purge, so the module removals
+# above leave snapshots in /var/lib/snapd/snapshots/. snapd's postrm
+# during the apt-purge below would wipe them anyway, but forgetting
+# them here means a transient apt failure can't leak multi-MB
+# tarballs onto disk.
+- name: Forget any snap snapshots
+  shell: |
+    set -uo pipefail
+    out=$(snap saved --unicode=never --color=never 2>&1) || true
+    echo "$out" | awk 'NR>1 && $1!="" {print $1}' | xargs -r -n1 snap forget
+  register: _cleanup_snap_forget
+  changed_when: _cleanup_snap_forget.stdout | trim | length > 0
+  when: _cleanup_snap_bin.stat.exists
+  become: true
+  tags:
+    - cleanup
+
+# Snap mounts can survive dpkg --purge if snap-*.mount units fail
+# to stop in time (snapd's prerm tries, but a stuck unit blocks it).
+# Stop them explicitly so the apt-purge below has nothing to fight.
+- name: Stop lingering snap mount units
+  shell: |
+    set -uo pipefail
+    units=$(systemctl list-units --no-legend --type=mount 'snap-*.mount' 2>/dev/null \
+            | awk '$1 ~ /\.mount$/ {print $1}')
+    for u in $units; do
+      systemctl stop "$u"
+    done
+    echo "stopped:$(echo "$units" | wc -w)"
+  register: _cleanup_snap_mounts
+  changed_when: "'stopped:0' not in _cleanup_snap_mounts.stdout"
+  when: _cleanup_snap_bin.stat.exists
+  become: true
   tags:
     - cleanup
 
@@ -56,6 +131,7 @@
     state: absent
     autoremove: true
     purge: true
+    clean: true
   become: true
   tags:
     - cleanup

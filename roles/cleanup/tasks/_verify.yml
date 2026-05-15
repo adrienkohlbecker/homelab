@@ -9,16 +9,21 @@
   changed_when: false
   failed_when: _cleanup_verify_snap_bin.rc == 0
 
-- name: _verify | List residual snapd unit files
-  command: systemctl list-unit-files --no-legend 'snapd.*'
+- name: _verify | Find residual snapd unit files on disk
+  find:
+    paths:
+      - /lib/systemd/system
+      - /etc/systemd/system
+    patterns: snapd*
+    file_type: any
+    recurse: true
   register: _cleanup_verify_snapd_units
-  changed_when: false
 
 - name: _verify | Assert no snapd systemd unit files remain
   assert:
     that:
-      - _cleanup_verify_snapd_units.stdout | trim | length == 0
-    fail_msg: "Residual snapd unit files:\n{{ _cleanup_verify_snapd_units.stdout }}"
+      - _cleanup_verify_snapd_units.files | length == 0
+    fail_msg: "Residual snapd unit files: {{ _cleanup_verify_snapd_units.files | map(attribute='path') | list }}"
 
 - name: _verify | Look for residual squashfs mounts (snap leftovers)
   # findmnt(8): rc=0 = match found, rc=1 = no match. Any other rc
