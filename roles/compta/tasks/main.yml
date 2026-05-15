@@ -1,13 +1,3 @@
-- name: Install compta dependencies
-  apt:
-    package:
-      - git
-    cache_valid_time: 3600
-  register: compta_apt_deps
-  become: true
-  tags:
-    - compta
-
 # compta is stateless: no config files, no on-host data. Skip the
 # /mnt/services/compta dir the helper creates by default; the unit
 # runs the image as compta:compta and bind-mounts nothing.
@@ -22,61 +12,17 @@
   tags:
     - compta
 
-# Pin SSH_AUTH_SOCK into the git task's env; mitogen's reused interpreter
-# has dropped the forwarded socket on us before.
-# check_mode: false because the `command` module is skipped in check mode
-# by default, which leaves compta_ssh_auth_sock.stdout undefined and
-# blows up the git task's environment lookup on any second-pass check
-# run (apt unchanged, gate True, env eval misses .stdout).
-- name: Read forwarded SSH_AUTH_SOCK
-  when: not (ansible_check_mode and compta_apt_deps.changed)
-  command: printenv SSH_AUTH_SOCK
-  changed_when: false
-  check_mode: false
-  failed_when: false
-  register: compta_ssh_auth_sock
-  tags:
-    - compta
-
-- name: Assert SSH agent forwarding is active
-  when: not (ansible_check_mode and compta_apt_deps.changed)
-  assert:
-    that: compta_ssh_auth_sock.stdout | length > 0
-    fail_msg: >-
-      SSH_AUTH_SOCK not set on the target host. compta clones a
-      private GitHub repo and needs the operator's SSH agent
-      forwarded — re-run with `ssh -A` enabled (or `ForwardAgent yes`
-      in ~/.ssh/config for this host).
-  tags:
-    - compta
-
-- name: Download compta
-  when: not (ansible_check_mode and compta_apt_deps.changed)
-  git:
-    repo: git@github.com:adrienkohlbecker/compta.git
-    dest: "{{ ansible_user_dir }}/compta"
-    version: master
-    depth: 1
-    single_branch: true
-    force: true
-    accept_newhostkey: true
-  environment:
-    SSH_AUTH_SOCK: "{{ compta_ssh_auth_sock.stdout }}"
-  register: compta_git
-  tags:
-    - compta
-
-- name: Build a podman image
+# Pull the latest compta image up front so the unit's restart trigger
+# below catches a digest change. systemd_unit/service helper also pre-
+# pulls images but doesn't expose a single .changed signal across its
+# loop; pulling explicitly here gives us compta_image_pull.changed.
+# Image is built + pushed by the workflow in adrienkohlbecker/compta
+# against nexus.lab.fahm.fr/repository/compta (see terraform/nexus.tf).
+- name: Pull compta image
   when: not ansible_check_mode
   containers.podman.podman_image:
-    name: compta:latest
-    path: "{{ ansible_user_dir }}/compta"
-    build:
-      format: oci
-      extra_args: "--pull=always"
-    state: build
-    force: "{{ compta_git.changed }}"
-  register: compta_podman
+    name: nexus.lab.fahm.fr/repository/compta/compta:latest
+  register: compta_image_pull
   become: true
   tags:
     - compta
@@ -100,7 +46,7 @@
     systemd_unit_args:
       src: compta
       condition: "{{ not (ansible_check_mode and (compta_user.changed or compta_service_result.changed)) }}"
-      restart: "{{ compta_service_result.changed or compta_podman.changed }}"
+      restart: "{{ compta_service_result.changed or compta_image_pull.changed }}"
   tags:
     - compta
 
