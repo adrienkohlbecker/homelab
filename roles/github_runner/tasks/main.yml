@@ -234,6 +234,38 @@
   tags:
     - github_runner
 
+# Safety-net: move any top-level entries that aren't runner/ + .tarballs/
+# + per-repo state dirs into runner/. Catches files the legacy _migrate
+# missed (env.sh, run-helper.sh.template, config-helper.sh.template,
+# safe_directories, license/notice files) without needing the
+# migration to enumerate the full set. Idempotent: on a host whose
+# top level is already cleaned up there are no orphans to move.
+- name: Consolidate orphaned top-level entries into runner/
+  shell: |
+    set -euo pipefail
+    cd /mnt/services/github_runner
+    shopt -s dotglob nullglob
+    moved=0
+    for entry in *; do
+      case "$entry" in
+        runner|.tarballs|{{ github_runner_repos | join('|') }}|.runner|.credentials|.credentials_rsaparams|_diag|_work|svc.sh|.version-*)
+          continue
+          ;;
+      esac
+      if [ -e "$entry" ] && [ ! -L "$entry" ]; then
+        mv -- "$entry" runner/
+        moved=$((moved + 1))
+      fi
+    done
+    echo "moved=$moved"
+  args:
+    executable: /bin/bash
+  register: github_runner_consolidate
+  changed_when: "'moved=0' not in github_runner_consolidate.stdout"
+  become: true
+  tags:
+    - github_runner
+
 - name: Enable rootless podman socket
   when: not (ansible_check_mode and (github_runner_user.changed or github_runner_linger.changed))
   systemd:
