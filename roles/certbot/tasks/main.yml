@@ -5,6 +5,7 @@
       - python3-certbot-dns-cloudflare
       - ssl-cert
     cache_valid_time: 3600
+  register: certbot_apt
   become: true
   tags:
     - certbot
@@ -28,6 +29,7 @@
     - live
     - archive
   become: true
+  when: not (ansible_check_mode and certbot_apt.changed)
   tags:
     - certbot
 
@@ -41,6 +43,7 @@
     backup: true
   become: true
   no_log: true
+  when: not (ansible_check_mode and certbot_apt.changed)
   tags:
     - certbot
 
@@ -90,5 +93,6 @@
     creates: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem
   become: true
   no_log: true
+  when: not (ansible_check_mode and certbot_apt.changed)
   tags:
     - certbot
