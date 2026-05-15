@@ -31,7 +31,6 @@ service_ports:
   csp_ingest: 9880
   dnscrypt_proxy: 5053
   eaton_ipp: 4679
-  filebrowser: 5890
   healthchecks: 8000
   homepage: 3003
   homepage_alerts: 8765

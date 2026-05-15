@@ -1,45 +1,42 @@
-- name: Set up filebrowser system user, group, and config dir
-  import_role:
-    name: service_user
-    tasks_from: user
-  vars:
-    service_user_args:
-      name: filebrowser
-  tags:
-    - filebrowser
-
-- name: Create filebrowser sqlite directory
-  when: not (ansible_check_mode and filebrowser_user.changed)
+- name: Create filebrowser autoindex root
   file:
-    dest: /mnt/services/sqlite/filebrowser
+    path: /srv/filebrowser
     state: directory
-    owner: filebrowser
-    group: filebrowser
+    owner: root
+    group: root
     mode: "0755"
   become: true
   tags:
     - filebrowser
 
-- name: Install filebrowser service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: filebrowser.service.j2
-      condition: "{{ not (ansible_check_mode and filebrowser_user.changed) }}"
+# Symlinks per available tree. Toggling a zfs_has_*_mount flag flips
+# the corresponding link between `present` and `absent` so a flag
+# change is reflected on the next converge without a manual cleanup.
+# `src` must be omitted when state != link/hard, hence the ternary.
+- name: Place filebrowser tree symlinks under /srv/filebrowser
+  file:
+    path: /srv/filebrowser/{{ item.name }}
+    src: "{{ item.src if item.enabled | bool else omit }}"
+    state: "{{ 'link' if item.enabled | bool else 'absent' }}"
+    force: true
+  loop:
+    - { name: home, src: "{{ ansible_user_dir }}", enabled: true }
+    - { name: data, src: /mnt/data, enabled: "{{ zfs_has_data_mount }}" }
+    - { name: media, src: /mnt/media, enabled: "{{ zfs_has_media_mount }}" }
+    - { name: services, src: /mnt/services, enabled: "{{ zfs_has_services_mount }}" }
+  become: true
   tags:
     - filebrowser
 
-- name: Enable filebrowser service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: filebrowser
-      condition: "{{ not (ansible_check_mode and (filebrowser_service_result.changed or filebrowser_user.changed)) }}"
-      restart: "{{ filebrowser_service_result.changed }}"
+- name: Install filebrowser nginx theme stylesheet
+  copy:
+    src: theme.css
+    dest: /etc/nginx/snippets/filebrowser_theme.css
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
   tags:
     - filebrowser
 
@@ -50,6 +47,21 @@
   vars:
     nginx_site_args:
       subdomain: filebrowser
-      proxy_pass: http://localhost:{{ service_ports.filebrowser }}/
+      # sub_filter rewrites the autoindex HTML so it picks up viewport
+      # meta + the stylesheet on the fly. The CSS lives outside
+      # /srv/filebrowser (aliased under `location =`) so it doesn't
+      # show up in the autoindex listing.
+      location_conf: |
+        root /srv/filebrowser;
+        autoindex on;
+        autoindex_exact_size off;
+        autoindex_localtime on;
+        sub_filter '<head>' '<head><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/.theme.css">';
+        sub_filter '<body bgcolor="white">' '<body>';
+        sub_filter_types text/html;
+      server_conf: |
+        location = /.theme.css {
+          alias /etc/nginx/snippets/filebrowser_theme.css;
+        }
   tags:
     - filebrowser
