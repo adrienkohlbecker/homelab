@@ -1,8 +1,14 @@
+# policy_rc_d suppresses the dpkg post-install auto-start. Without it
+# fail2ban comes up briefly with the stock iptables-multiport banaction
+# before the nftables drop-in below lands; any ban issued in that window
+# writes into the iptables-nft compat `ip filter` table, orphaned from
+# the firewall role's nftables ruleset.
 - name: Install fail2ban
   apt:
     pkg:
       - fail2ban
     cache_valid_time: 3600
+    policy_rc_d: 101
   become: true
   register: apt_install_fail2ban
   tags:
@@ -10,8 +16,11 @@
 
 # Use the nftables banaction set so f2b-* chains land in `inet f2b-table`
 # instead of the iptables-nft compat `ip filter`. Active bans persist in
-# fail2ban's database and get re-applied to the new framework on the
-# restart below.
+# fail2ban's database and get re-applied to the new framework on reload.
+#
+# Ubuntu's fail2ban deb ships every jail at `enabled = false`, so the
+# sshd jail is pinned explicitly here rather than left contingent on
+# upstream defaults.
 - name: Use nftables banaction
   copy:
     dest: /etc/fail2ban/jail.d/00-nftables.local
@@ -19,6 +28,13 @@
       [DEFAULT]
       banaction = nftables-multiport
       banaction_allports = nftables-allports
+      backend = systemd
+      ignoreip = 127.0.0.1/8 ::1 {{ site_subnets.home }} {{ wireguard_subnet }}
+      bantime.increment = true
+      bantime.maxtime = 1w
+
+      [sshd]
+      enabled = true
     owner: root
     group: root
     mode: "0644"
@@ -28,6 +44,20 @@
   tags:
     - fail2ban
 
+# Surface jail-config typos at copy time rather than at reload, where a
+# failed reload would leave fail2ban dead silently.
+- name: Validate fail2ban config
+  when:
+    - fail2ban_banaction.changed
+    - not ansible_check_mode
+  command: fail2ban-client -t
+  changed_when: false
+  become: true
+  tags:
+    - fail2ban
+
+# apt upgrade swaps the binary -> full restart. Config-only edits reload
+# via SIGHUP to preserve in-memory ban state.
 - name: Enable fail2ban service
   import_role:
     name: systemd_unit
@@ -36,6 +66,7 @@
     systemd_unit_args:
       src: fail2ban
       condition: "{{ not (ansible_check_mode and apt_install_fail2ban.changed) }}"
-      restart: "{{ fail2ban_banaction.changed }}"
+      restart: "{{ apt_install_fail2ban.changed }}"
+      reload: "{{ fail2ban_banaction.changed and not apt_install_fail2ban.changed }}"
   tags:
     - fail2ban
