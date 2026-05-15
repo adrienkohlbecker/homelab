@@ -13,6 +13,12 @@
 #                                              (operator gets a mail and
 #                                              dispatches a targeted subset
 #                                              manually).
+#   packer_changed=true|false               -- whether the change touches
+#                                              packer/ or mise-tasks/packer/
+#                                              (gates wait-for-packer-build).
+#   ci_image_changed=true|false             -- whether the change touches a
+#                                              ci-image.yml input on a master
+#                                              push (gates wait-for-ci-image).
 #
 # A change to a helper role (one with no roles/<name>/tasks/main.yml) is
 # expanded via ci:role-deps into the set of consumer roles. So editing
@@ -68,17 +74,19 @@ is_minimal_role() {
 CROSS_CUT_RE='^(group_vars/all\.yml|group_vars/test\.yml|host_vars/.*-qemu.*\.yml|test/(testrole|testall|machine)\.py|mise\.toml)$'
 
 emit() {
-  local matrix=$1 cross_cut=$2 packer_changed=${3:-false}
+  local matrix=$1 cross_cut=$2 packer_changed=${3:-false} ci_image_changed=${4:-false}
   if [ -n "${GITHUB_OUTPUT:-}" ]; then
     {
       echo "matrix=$matrix"
       echo "cross_cut=$cross_cut"
       echo "packer_changed=$packer_changed"
+      echo "ci_image_changed=$ci_image_changed"
     } >>"$GITHUB_OUTPUT"
   else
     echo "matrix=$matrix"
     echo "cross_cut=$cross_cut"
     echo "packer_changed=$packer_changed"
+    echo "ci_image_changed=$ci_image_changed"
   fi
 }
 
@@ -221,5 +229,20 @@ if echo "$CHANGED" | grep -qE '^(packer/|mise-tasks/packer/)'; then
   packer_changed=true
 fi
 
+# Any change to a ci-image.yml input means ci-image.yml is publishing
+# a new :latest for this SHA; downstream workflows must wait on
+# wait-for-ci-image before resolving their container: blocks.
+# ci-image.yml only fires on master pushes (branches: [master] in its
+# `on:`), so triple-gate on event=push + ref=master + input-diff;
+# anything else (workflow_dispatch, feature-branch push, no input
+# touched) leaves the boolean false and the waiter is skipped --
+# downstream never blocks on a build that won't happen.
+ci_image_changed=false
+if [ "${GITHUB_EVENT_NAME:-}" = "push" ] &&
+  [ "${GITHUB_REF:-}" = "refs/heads/master" ] &&
+  echo "$CHANGED" | grep -qE '^(Dockerfile|mise\.toml|pyproject\.toml|uv\.lock|packer/qemu\.pkr\.hcl)$'; then
+  ci_image_changed=true
+fi
+
 ROLES_DEDUPED=$(echo "$ROLES" | tr ' ' '\n' | grep -v '^$' | sort -u || true)
-emit "$(build_matrix "$ROLES_DEDUPED")" "false" "$packer_changed"
+emit "$(build_matrix "$ROLES_DEDUPED")" "false" "$packer_changed" "$ci_image_changed"
