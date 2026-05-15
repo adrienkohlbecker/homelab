@@ -1,4 +1,0 @@
-- name: _setup | Install netdata
-  import_role:
-    name: netdata
-    tasks_from: install
