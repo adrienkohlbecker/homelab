@@ -147,7 +147,6 @@ minio_buckets:
   - test
 netdata_contexts:
   aer:             pci.rootport_aer_correctable
-  apps:            app.cpu_utilization
   conntrack:       netfilter.conntrack_sockets
   containers:      cgroup.cpu_limit
   diskspace:       disk.space
@@ -169,8 +168,6 @@ netdata_contexts:
   softirqs:        system.softirqs
   systemd_service: systemd.service.cpu.utilization
   uptime:          system.uptime
-  usergroups:      usergroup.cpu_utilization
-  users:           user.cpu_utilization
   vmstat:          mem.swapio
   zfs:             zfs.arc_size
 netdata_collectors:
