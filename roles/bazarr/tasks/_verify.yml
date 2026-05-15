@@ -56,3 +56,21 @@
   delay: 2
   until: _verify_http.status == 200
   failed_when: (_verify_http.json.data | default({})) | length == 0
+
+# Exercise the nginx-proxied path too, not just loopback. A regression in
+# the nginx_site wiring (typo'd subdomain, broken proxy_pass) would pass
+# the loopback probes above silently.
+- name: _verify | bazarr answers via nginx vhost
+  uri:
+    url: https://localhost/api/system/status
+    headers:
+      Host: "bazarr.{{ inventory_hostname }}.{{ domain }}"
+      X-API-KEY: "{{ bazarr_api_key }}"
+    validate_certs: false
+    status_code: 200
+    return_content: true
+  register: _verify_http_nginx
+  retries: 30
+  delay: 2
+  until: _verify_http_nginx.status == 200
+  failed_when: (_verify_http_nginx.json.data | default({})) | length == 0
