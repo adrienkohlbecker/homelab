@@ -1,0 +1,97 @@
+# Two branches, gated on the actual state of fancontrol_settings.fans.
+# Empty-fans branch: state checks (file removed, service stopped+disabled)
+# are the function -- there's no daemon behavior to observe.
+# Non-empty-fans branch: functional checks (daemon active, hwmon names
+# match, fan spinning). Implicitly real-hardware-only: main.yml's
+# chip-existence assert fails earlier on qemu (where nct6798 / drivetemp
+# don't exist), so reaching _verify with fans populated means the host
+# actually has the chips.
+
+# ---- empty branch ----
+
+- name: _verify | Assert /etc/fancontrol is absent (no fan settings)
+  when: fancontrol_settings.fans | length == 0
+  stat:
+    path: /etc/fancontrol
+  register: fancontrol_conf_absent
+  failed_when: fancontrol_conf_absent.stat.exists
+
+- name: _verify | Assert fancontrol service is inactive and disabled (no fan settings)
+  when: fancontrol_settings.fans | length == 0
+  systemd:
+    name: fancontrol
+  register: fancontrol_unit_empty
+  failed_when: >-
+    fancontrol_unit_empty.status.ActiveState == "active"
+    or fancontrol_unit_empty.status.UnitFileState not in ["disabled", "static"]
+  become: true
+
+# ---- non-empty branch ----
+
+- name: _verify | Assert /etc/fancontrol exists, mode 0644 root:root (fans configured)
+  when: fancontrol_settings.fans | length > 0
+  stat:
+    path: /etc/fancontrol
+  register: fancontrol_conf_present
+  failed_when: >-
+    not fancontrol_conf_present.stat.exists
+    or fancontrol_conf_present.stat.mode != "0644"
+    or fancontrol_conf_present.stat.pw_name != "root"
+    or fancontrol_conf_present.stat.gr_name != "root"
+
+- name: _verify | Assert fancontrol service is loaded, active, enabled (fans configured)
+  when: fancontrol_settings.fans | length > 0
+  systemd:
+    name: fancontrol
+  register: fancontrol_unit_present
+  failed_when: >-
+    fancontrol_unit_present.status.LoadState != "loaded"
+    or fancontrol_unit_present.status.ActiveState != "active"
+    or fancontrol_unit_present.status.UnitFileState != "enabled"
+  become: true
+
+- name: _verify | Read hwmon name for each chip referenced in fans
+  when: fancontrol_settings.fans | length > 0
+  slurp:
+    src: "/sys/class/hwmon/{{ fancontrol_chip_map[fancontrol_chip].hwmon }}/name"
+  loop: >-
+    {{ (fancontrol_settings.fans | map(attribute='pwm')  | list
+       + fancontrol_settings.fans | map(attribute='temp') | list
+       + fancontrol_settings.fans | map(attribute='fan')  | list
+    ) | map('regex_replace', '/.*$', '') | unique | list }}
+  loop_control:
+    loop_var: fancontrol_chip
+    label: "{{ fancontrol_chip }}"
+  register: fancontrol_hwmon_names_verify
+
+- name: _verify | Assert each hwmon name matches the chip referenced
+  when: fancontrol_settings.fans | length > 0
+  assert:
+    that: (item.content | b64decode | trim) == item.fancontrol_chip
+    fail_msg: >-
+      hwmon{{ fancontrol_chip_map[item.fancontrol_chip].hwmon }} reports name
+      {{ item.content | b64decode | trim }}, expected {{ item.fancontrol_chip }}.
+      Chip numbering may have drifted -- re-run the role to refresh
+      fancontrol_chip_map.
+  loop: "{{ fancontrol_hwmon_names_verify.results }}"
+  loop_control:
+    label: "{{ item.fancontrol_chip }}"
+
+# Reads fan*_input directly from sysfs. Wait up to 30s for the daemon
+# to evaluate temps and bring the fan above MINSTART -- on a cold start
+# the first INTERVAL pass may run before the fan has spun up. If this
+# never crosses 0, either the fan isn't physically wired or MINSTART /
+# MINSTOP / MINPWM are below the fan's stall threshold and need a
+# higher value in host_vars.
+- name: _verify | Assert first fan reports non-zero RPM
+  when: fancontrol_settings.fans | length > 0
+  vars:
+    _first_fan: "{{ fancontrol_settings.fans[0].fan }}"
+    _first_fan_chip: "{{ _first_fan.split('/')[0] }}"
+    _first_fan_input: "{{ _first_fan.split('/')[1] }}"
+  slurp:
+    src: "/sys/class/hwmon/{{ fancontrol_chip_map[_first_fan_chip].hwmon }}/{{ _first_fan_input }}"
+  register: fancontrol_first_fan_rpm
+  until: (fancontrol_first_fan_rpm.content | b64decode | trim | int) > 0
+  retries: 10
+  delay: 3

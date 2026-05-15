@@ -61,8 +61,12 @@
       changed_when: false
       check_mode: false
 
+    # cacheable: true persists the fact across plays so _verify.yml
+    # (which runs as a separate play) can reuse the discovery instead
+    # of rediscovering.
     - name: Build fancontrol_chip_map
       set_fact:
+        cacheable: true
         fancontrol_chip_map: >-
           {{
             fancontrol_chip_map | default({}) | combine({
