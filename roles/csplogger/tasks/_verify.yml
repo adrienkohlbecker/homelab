@@ -167,10 +167,15 @@
 # is per-record (fluent-bit still returns 204), so without this the only
 # symptom would be silently-dropped attributes in HyperDX.
 - name: _verify | fluent-bit lua filters logged no runtime errors
-  command: journalctl -u fluent-bit --since "5 minutes ago" --no-pager
+  # journalctl --grep exits 0 on match, 1 on no-match; rc == 0 here means
+  # an error line was found, which is the failure. rc > 1 means journalctl
+  # itself failed (unit unknown, permission denied), also a failure.
+  command: >-
+    journalctl -u fluent-bit --since "5 minutes ago" --no-pager
+    --grep '\[error\].*(flatten-csp|otlp-shape|level-from-message)\.lua'
   register: csplogger_verify_journal
   changed_when: false
-  failed_when: csplogger_verify_journal.stdout is regex('\[error\].*(flatten-csp|otlp-shape|level-from-message)\.lua')
+  failed_when: csplogger_verify_journal.rc != 1
   become: true
 
 # End-to-end shape assertion: POST a CSP report through the live
