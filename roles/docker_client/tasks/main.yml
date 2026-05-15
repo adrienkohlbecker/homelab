@@ -111,35 +111,30 @@
   tags:
     - docker_client
 
-- name: Gather package facts
-  package_facts:
-    manager: apt
-  no_log: true
-  check_mode: false
-  tags:
-    - docker_client
-
 # Docker CLI defaults to /var/run/docker.sock; point it at the rootful podman
-# socket instead. /etc/profile.d/ covers login shells for humans; services that
-# shell out to `docker` need DOCKER_HOST set in their unit env directly.
+# socket instead. POSIX `:=` form so an operator-set DOCKER_HOST (e.g. for
+# debugging against a remote daemon) survives a login. /etc/profile.d/ covers
+# login shells for humans; services that shell out to `docker` need
+# DOCKER_HOST set in their unit env directly.
 - name: Point docker CLI at podman socket
-  when: "'docker-ce' not in ansible_facts.packages"
   copy:
-    dest: /etc/profile.d/docker-client.sh
+    dest: /etc/profile.d/docker_client.sh
     content: |
-      export DOCKER_HOST=unix:///run/podman/podman.sock
+      : "${DOCKER_HOST:=unix:///run/podman/podman.sock}"
+      export DOCKER_HOST
     owner: root
     group: root
     mode: "0644"
     backup: true
+    validate: sh -n %s
   become: true
   tags:
     - docker_client
 
-# When dockerd is installed alongside, it owns /var/run/docker.sock; drop
-# the override so the CLI goes to the local daemon, not podman.
-- name: Remove docker socket override when dockerd is present
-  when: "'docker-ce' in ansible_facts.packages"
+# Transitional: prior versions of this role wrote a hyphenated filename;
+# delete it so prod hosts converge cleanly. Drop this task once every host
+# has applied the rename.
+- name: Remove legacy hyphenated profile.d shim
   file:
     path: /etc/profile.d/docker-client.sh
     state: absent
