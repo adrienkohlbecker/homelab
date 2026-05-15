@@ -1,36 +1,41 @@
 # Stand up the upstream stub that takes fluent-bit's place. Listens on
-# service_ports.csp_ingest, returns 204, and appends each accepted POST
-# as one JSON record per line to /var/log/csplogger_upstream/log. Letting
-# the stub replace fluent-bit keeps this role's _verify scope to "csplogger
-# nginx config does its job"; the lua/OTLP pipeline lives in roles/fluentbit
-# and is exercised there end-to-end.
-- name: _verify | Copy upstream stub script
-  copy:
-    src: csplogger_upstream.py
-    dest: /usr/local/bin/csplogger_upstream.py
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-  register: csplogger_upstream_source
+# service_ports.csp_ingest, returns 204, and prints the Content-Type of
+# each accepted POST to its stdout (-> journal). Letting the stub replace
+# fluent-bit keeps this role's _verify scope to "csplogger nginx config
+# does its job"; the lua/OTLP pipeline lives in roles/fluentbit and is
+# exercised there end-to-end. Pattern lifted from
+# roles/firewall/tasks/_verify.yml's python3 -m http.server probes, with
+# the body inlined since we need POST handling + a 204 reply (which
+# python -m http.server can't do). HTTP/1.1 matches nginx's
+# proxy_http_version 1.1 keepalive set in main.yml. Fresh QEMU VM per
+# harness run, so no `--unit X already exists` collision to handle.
+- name: _verify | Start upstream stub via systemd-run
+  command:
+    argv:
+      - systemd-run
+      - --unit=csplogger_upstream
+      - python3
+      - -c
+      - |
+        import http.server
+        PORT = {{ service_ports.csp_ingest }}
+
+        class H(http.server.BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1"
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                print(self.headers.get("Content-Type", ""), flush=True)
+                self.send_response(204)
+                self.end_headers()
+
+        # Emit one startup line so the cursor-capture below finds the
+        # unit's journal non-empty (journalctl --show-cursor exits 1 on
+        # "-- No entries --").
+        print("ready", flush=True)
+        http.server.HTTPServer(("127.0.0.1", PORT), H).serve_forever()
+  changed_when: true
   become: true
-
-- name: _verify | Install upstream stub unit
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: csplogger_upstream.service.j2
-
-- name: _verify | Enable upstream stub
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: csplogger_upstream
-      restart: "{{ csplogger_upstream_source.changed or csplogger_upstream_service_result.changed }}"
 
 - name: _verify | Wait for upstream stub to bind csp_ingest port
   wait_for:
@@ -38,25 +43,22 @@
     port: "{{ service_ports.csp_ingest }}"
     timeout: 15
 
-# Drop any prior run's records so the count/shape assertions below
-# only see this run. Must NOT recreate the file as root: the stub
-# runs under DynamicUser= and would EACCES on the next append. The
-# `file: state=absent` lets the parent dir (owned by the dynamic uid
-# via LogsDirectory=) stay, while the stub's `open("a")` re-creates
-# the file under that uid on the first POST. The delete is racing
-# nothing -- the stub doesn't receive POSTs until the probes below.
-- name: _verify | Drop prior upstream stub log
-  file:
-    path: /var/log/csplogger_upstream/log
-    state: absent
+# Capture the stub's journal cursor *before* probes so the post-probe
+# read sees only this run's output. Mirrors roles/fluentbit/tasks/_verify.yml's
+# pattern for the lua-error scan.
+- name: _verify | Capture pre-probe upstream journal cursor
+  command: journalctl -u csplogger_upstream -n 0 --show-cursor
+  register: csplogger_upstream_cursor
+  changed_when: false
   become: true
 
 # Shared body fixtures. Each probe's status_code assertion runs against
 # nginx's response; whether a probe ALSO reached the upstream stub is
-# verified at the end by reading the stub's JSONL log and asserting the
-# expected number of records landed with Content-Type rewritten to
-# application/json. The shared Origin matches the production allowlist
-# regex (host + domain) so through-nginx probes reach the proxied path.
+# verified at the end by reading the stub's journal between the cursor
+# above and now, and asserting the expected number of POSTs landed with
+# Content-Type rewritten to application/json. The shared Origin matches
+# the production allowlist regex (any subdomain of {{ domain }}) so
+# through-nginx probes reach the proxied path.
 - name: _verify | shared CSP body fixtures
   set_fact:
     csplogger_verify_host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
@@ -156,8 +158,8 @@
 # with no ACAO. The silent-drop response shape keeps misconfigured
 # legitimate browsers' report queues happy; the missing ACAO ensures
 # attacker JS can't read the response for any probing-oracle signal. The
-# stub log assertion below additionally verifies the request didn't
-# forward upstream.
+# upstream-journal assertion below additionally verifies the request
+# didn't forward upstream.
 - name: _verify | POST /log with foreign Origin is silently dropped
   uri:
     url: https://localhost/log
@@ -193,33 +195,43 @@
     or 'Content-Type' not in (csplogger_verify_preflight.access_control_allow_headers | default(''))
     or (csplogger_verify_preflight.access_control_max_age | default('') | string) != '86400'
 
-# Read what reached the upstream stub. Exactly the two friendly-Origin +
-# allowed-Content-Type POSTs above should have landed; the six blocked
-# probes (bad CT, oversize, GET /log, GET /, foreign Origin, OPTIONS
-# preflight) wrote nothing. The Content-Type on each landed record must
-# be the
-# application/json value nginx rewrote to -- proves the rewrite at
-# main.yml:126 fires after the allowlist check (a regression that lets
-# the original Content-Type through would surface here).
-- name: _verify | Read upstream stub log
-  slurp:
-    src: /var/log/csplogger_upstream/log
-  register: csplogger_upstream_log
+# Read what reached the upstream stub via its journal. Exactly the two
+# friendly-Origin + allowed-Content-Type POSTs above should have landed;
+# the six blocked probes (bad CT, oversize, GET /log, GET /, foreign
+# Origin, OPTIONS preflight) wrote nothing. Each landed POST prints its
+# Content-Type to stdout -- the assertion both counts the POSTs and
+# checks the rewrite at main.yml fires after the allowlist check (a
+# regression letting the original csp-report/reports+json type through
+# would surface as a non-application/json line here). `-o cat` strips
+# journald metadata so stdout_lines is just the unit's stdout/stderr.
+- name: _verify | Read upstream stub journal
+  command: >-
+    journalctl -u csplogger_upstream
+    --after-cursor={{ (csplogger_upstream_cursor.stdout_lines
+                       | select('match', '^-- cursor:')
+                       | first
+                       | regex_replace('^-- cursor: ?', '')) | quote }}
+    --no-pager -o cat
+  register: csplogger_upstream_journal
+  changed_when: false
   become: true
 
-- name: _verify | Parse upstream stub records
-  set_fact:
-    csplogger_upstream_records: >-
-      {{ (csplogger_upstream_log.content | b64decode).splitlines()
-         | reject('equalto', '') | map('from_json') | list }}
-
 - name: _verify | Exactly the legitimate POSTs reached upstream
+  vars:
+    # The stub prints one Content-Type line per POST it accepted.
+    # BaseHTTPRequestHandler's default log_message also emits a
+    # "<addr> - - [<date>] "POST / HTTP/1.1" 204 -" line per request
+    # to stderr -> journal; equalto-filter on the exact MIME string
+    # picks out just the print() lines and ignores those.
+    received: >-
+      {{ csplogger_upstream_journal.stdout_lines
+         | select('equalto', 'application/json')
+         | list }}
   assert:
     that:
-      - csplogger_upstream_records | length == 2
-      - csplogger_upstream_records | map(attribute='content_type') | unique | list == ['application/json']
+      - received | length == 2
     fail_msg: >-
-      Expected exactly 2 POSTs (legacy CSP, Reporting API) to reach the
-      upstream stub with Content-Type rewritten to application/json.
-      Got {{ csplogger_upstream_records | length }} records:
-      {{ csplogger_upstream_records | map(attribute='content_type') | list }}.
+      Expected exactly 2 POSTs to reach the upstream stub with
+      Content-Type rewritten to application/json. Got
+      {{ received | length }} matching lines. Full upstream journal:
+      {{ csplogger_upstream_journal.stdout_lines }}.
