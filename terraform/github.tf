@@ -22,7 +22,7 @@ provider "github" {
   owner = "adrienkohlbecker"
 }
 
-# NEXUS_USERNAME / NEXUS_PASSWORD power the lab-runtime-build workflow's
+# NEXUS_USERNAME / NEXUS_PASSWORD power the ci-image workflow's
 # `podman login nexus.lab.fahm.fr` step. Both pull from the homelab_push
 # user defined in nexus.tf, so a password rotation
 # (`tofu apply -replace=random_password.nexus_homelab_push`) updates the
@@ -40,7 +40,7 @@ resource "github_actions_secret" "nexus_password" {
 }
 
 # MISE_GITHUB_TOKEN raises mise's anonymous 60/hr GitHub API rate limit
-# during `mise install` in the lab-runtime-build workflow. mise just
+# during `mise install` in the ci-image workflow. mise just
 # needs an authenticated token; the value here is a dedicated
 # fine-grained PAT minted in the GitHub UI with *no* scopes (public
 # read is implicit) so a CI compromise can't pivot. Sourced from

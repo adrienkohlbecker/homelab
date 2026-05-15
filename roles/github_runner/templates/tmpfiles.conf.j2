@@ -1,12 +1,12 @@
-# Reap idle per-cell test workdirs created by the lab-runtime CI
-# workflows. Each cell bind-mounts a unique subdir under here (host path
-# embeds github.run_id + strategy.job-index; see .github/workflows/test.yml).
+# Reap idle per-cell test workdirs created by the CI workflows. Each
+# cell bind-mounts a unique subdir under here (host path embeds
+# github.run_id + strategy.job-index; see .github/workflows/test.yml).
 # Cleanup mechanics: `e` cleans files older than the Age field, then
 # recursively removes empty subdirs that are also old enough -- so a
 # completed/crashed cell's tree gets eaten once its contents are >1d
-# stale. lab-runtime-workdir itself is the rule target and stays.
-# Age=1d is comfortably beyond the harness's 1500s timeout, so a live
-# cell can't be reaped mid-run.
+# stale. The scratch dir itself is the rule target and stays. Age=1d
+# is comfortably beyond the harness's 1500s timeout, so a live cell
+# can't be reaped mid-run.
 #
 # The /mnt/scratch/qemu/_sentinels d+e rules are intentionally absent
 # during the act_runner -> github_runner transition: both runners would
@@ -16,8 +16,8 @@
 # tmpfiles.conf owns those rules until the cutover commit, which moves
 # them here as act_runner.conf is deleted.
 #
-# Type Path                                                Mode UID GID Age  Argument
-e      /mnt/scratch/github_runner/lab-runtime-workdir      -    -   -   1d
+# Type Path                                       Mode UID GID Age  Argument
+e      /mnt/scratch/github_runner/scratch         -    -   -   1d
 
 # actions/runner hardcodes `-v /var/run/docker.sock:/var/run/docker.sock`
 # on every `docker create` so workflow steps can talk to a Docker daemon
