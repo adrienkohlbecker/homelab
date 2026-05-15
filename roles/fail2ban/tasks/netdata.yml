@@ -14,9 +14,14 @@
     groups: fail2ban
     append: true
   become: true
+  register: netdata_fail2ban_group
   tags:
     - fail2ban
 
+# Supplementary-group changes only apply to new processes; without
+# the OR below the very first apply leaves netdata running with its
+# old group list, so the collector hits EACCES on the socket until
+# something else restarts netdata.
 - name: Configure fail2ban metrics
   import_role:
     name: netdata
@@ -25,6 +30,6 @@
     netdata_args:
       src: fail2ban.conf
       dest: go.d/fail2ban.conf
-      restart: "{{ netdata_restart }}"
+      restart: "{{ netdata_restart or netdata_fail2ban_group.changed }}"
   tags:
     - fail2ban
