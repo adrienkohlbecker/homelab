@@ -80,17 +80,28 @@ jobs:
       # interactive login session can hit "Failed to connect to bus" on
       # systemd cgroup ops; cgroupfs sidesteps the user-bus dependency.
       #
-      # --pull=newer refreshes the FROM ubuntu:24.04 base when Docker Hub
-      # has a newer digest -- the paths: filter doesn't fire on upstream
-      # CVE drops, so without this the runner's local image store can
-      # hold a stale base for weeks across rebuilds triggered by other
-      # input changes.
+      # Base image refresh + layer cache strategy:
       #
-      # --layers + --cache-from reuses the previously-pushed :latest as
-      # a layer cache source so a fresh runner cold-boots without redoing
-      # apt/mise/uv work. Read-only against the registry (anonymous
-      # pulls are allowed on homelab/ci); silently no-ops on bootstrap
-      # when no :latest exists yet.
+      # We want both (a) the FROM ubuntu:24.04 base to absorb upstream
+      # CVE drops on its own cadence (the paths: filter doesn't fire on
+      # base bumps, and a stale base lingers for weeks otherwise), and
+      # (b) layer cache reuse so a rebuild that doesn't touch apt/mise
+      # cold-starts in seconds. The naive combination of --pull=newer +
+      # --layers --cache-from breaks: when the upstream digest moves,
+      # --layers still selects cached layers built against the previous
+      # digest, dpkg in those layers tries to overwrite files whose
+      # inodes were captured against the old lower dir, and overlayfs
+      # returns ESTALE on inode mismatch (linux-libc-dev's netfilter
+      # headers are the canonical victim -- ~hundreds of files, all
+      # under /usr/include/linux/netfilter*/).
+      #
+      # Gate the cache on the base digest: pull ubuntu:24.04 first,
+      # compare its post-pull digest to the pre-pull one, and skip
+      # --cache-from when the base moved. The first build after a base
+      # bump rebuilds from scratch (~5-10 min on the lab runner); every
+      # other build still gets the layer cache. Per-cycle base bumps
+      # are infrequent enough (~weekly) that the amortized cost is
+      # small. Build runs with --pull=never since we just pulled.
       #
       # --iidfile captures the freshly-built image ID; the push step
       # references the image by ID rather than tag, so a parallel
@@ -105,6 +116,20 @@ jobs:
           MISE_GITHUB_TOKEN: ${{ secrets.MISE_GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          base_before=""
+          if podman image exists ubuntu:24.04; then
+            base_before=$(podman image inspect ubuntu:24.04 \
+              --format '{{.Digest}}' 2>/dev/null || true)
+          fi
+          podman pull ubuntu:24.04
+          base_after=$(podman image inspect ubuntu:24.04 \
+            --format '{{.Digest}}')
+          cache_flags=( --layers --cache-from "${REGISTRY}/${REPO}" )
+          if [ -n "$base_before" ] && [ "$base_before" != "$base_after" ]; then
+            echo "ubuntu:24.04 digest moved ($base_before -> $base_after); skipping --cache-from to avoid overlay ESTALE on rebuild against the new base"
+            podman rmi "${REGISTRY}/${REPO}:latest" 2>/dev/null || true
+            cache_flags=()
+          fi
           iidfile=$(mktemp)
           trap 'rm -f "$iidfile"' EXIT
           tags=( --tag "${REGISTRY}/${REPO}:${GITHUB_SHA}" )
@@ -112,9 +137,8 @@ jobs:
             tags+=( --tag "${REGISTRY}/${REPO}:latest" )
           fi
           podman build \
-            --pull=newer \
-            --layers \
-            --cache-from "${REGISTRY}/${REPO}" \
+            --pull=never \
+            "${cache_flags[@]}" \
             --cgroup-manager=cgroupfs \
             --secret id=mise_github_token,env=MISE_GITHUB_TOKEN \
             --iidfile "$iidfile" \
