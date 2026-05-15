@@ -1,30 +1,36 @@
-# Per-pool wrapper for the include_tasks loop in main.yml. Two
-# unfixable-with-the-obvious-shape constraints meet here:
+# Per-pool wrapper for the include_tasks loop in main.yml. Uses
+# import_role + inline `vars:` (not include_role + set_fact) so the
+# systemd_timer_args dict is bound at task scope and doesn't leak
+# across role boundaries.
 #
-#  - include_role (not import_role): systemd_timer/install.yml templates
-#    inner task names from systemd_timer_args.name; with import_role
-#    those names expand before `item` is bound for the iteration.
-#  - set_fact materializes systemd_timer_args directly (not via an
-#    intermediate name + task-level `vars:` on the include_role). A
-#    task-level `vars:` dict containing `{{ item }}` triggers a noisy
-#    parse-time templating warning (item is loop-only); set_fact's RHS
-#    evaluates per task-run so item is in scope. Going through a
-#    second name + `vars: { systemd_timer_args: "{{ _other }}" }` also
-#    fails -- the include_role's vars scope doesn't pick up the host
-#    fact from the prior task, so the inner role sees the indirect
-#    name undefined. Set the role's own input fact name directly.
-# noqa: var-naming[no-role-prefix] -- systemd_timer_args is the
-# consumed role's required input name, not a zfs role-internal var.
-- name: _trim_timer | Build systemd_timer_args
-  set_fact:
-    systemd_timer_args:  # noqa: var-naming[no-role-prefix]
+# The leak it avoids: under ansible 2.20 + mitogen, `set_fact:
+# systemd_timer_args:` or `include_role` with `vars: { systemd_timer_args:
+# ... }` leaves the value visible to later tasks in the play -- including
+# inside a sibling role's `import_role: name: systemd_timer` even when
+# that import explicitly passes its own `vars: { systemd_timer_args: ... }`.
+# The leftover value (always the LAST trim iteration -- tank on lab,
+# rpool on pug) silently retargets later systemd_timer calls. Most
+# visibly: zfs_autobackup/dest.yml's "Remove the zfs_autosync timer"
+# task (idempotent no-op on hosts where the timer was never installed)
+# ends up removing zfs_trim_<last-pool> instead, and main.yml's
+# "Schedule the zfs_autosnapshot timer" reinstalls the same name --
+# flapping the per-pool trim timer on every apply.
+#
+# The original blocker for import_role here was that
+# systemd_timer/install.yml had `name: install | Install service unit
+# for {{ systemd_timer_args.name }}` on its nested import_role tasks,
+# which import_role templated at parse time before `item` was bound.
+# Those names are now static (see roles/systemd_timer/tasks/install.yml),
+# so import_role-with-inline-vars works here without a parse-time
+# template warning.
+- name: _trim_timer | Install zfs_trim timer for {{ item }}
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
       name: "zfs_trim_{{ item }}"
       description: "Weekly ZFS trim for {{ item }}"
       frequency: weekly
       on_calendar: "Thu *-*-* 00:05:00"
       exec_start: "/sbin/zpool trim {{ item }}"
-
-- name: _trim_timer | Install zfs_trim timer
-  include_role:
-    name: systemd_timer
-    tasks_from: install
