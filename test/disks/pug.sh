@@ -16,6 +16,11 @@ if zpool list -H apoc >/dev/null 2>&1; then
   exit 0
 fi
 
+# exec=off intentionally omitted (default exec=on): bind-mounts of
+# pool-resident paths into rootless containers inherit the source
+# mount's noexec flag, which surfaces as EACCES on execve from the
+# checkout (see test/disks/lab.sh for the github_runner-on-dozer
+# precedent). setuid=off + devices=off stay for hardening.
 zpool create \
   -o ashift=12 \
   -o autotrim=off \
@@ -29,7 +34,6 @@ zpool create \
   -O compression=zstd \
   -O devices=off \
   -O dnodesize=auto \
-  -O exec=off \
   -O overlay=off \
   -O relatime=on \
   -O setuid=off \
