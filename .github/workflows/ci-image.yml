@@ -136,11 +136,12 @@ jobs:
       # tempfile. `unset NEXUS_PASSWORD` after login so anything spawned
       # later in the step can't read it from /proc/<pid>/environ.
       #
-      # --retry=5 --retry-delay=10s covers transient Nexus 502s during
-      # its own GC; bumping from the podman default (3 / 2s) because
-      # the workflow rerun cost is high (dispatch-only, blocks the next
-      # CI cell). Push by IMAGE_ID rather than tag so a parallel build
-      # on the same runner can't redirect what we publish.
+      # A small bash retry loop covers transient Nexus 502s during its
+      # own GC; the workflow rerun cost is high (dispatch-only, blocks
+      # the next CI cell). podman 4.9.3 (ubuntu 24.04) doesn't have
+      # --retry on `push` (only on `pull`); the flag landed in podman
+      # 5.0. Push by IMAGE_ID rather than tag so a parallel build on
+      # the same runner can't redirect what we publish.
       #
       # After push, drop the local :sha tag (keep :latest as the cache
       # source for the next build). The image layers stay alive under
@@ -168,11 +169,22 @@ jobs:
             --username "${NEXUS_USERNAME}" \
             --password-stdin
           unset NEXUS_PASSWORD
-          podman push --retry=5 --retry-delay=10s \
-            "${IMAGE_ID}" "${REGISTRY}/${REPO}:${GITHUB_SHA}"
+          push_with_retry() {
+            local attempts=5 delay=10 i
+            for i in $(seq 1 "$attempts"); do
+              if podman push "$@"; then
+                return 0
+              fi
+              if [ "$i" -lt "$attempts" ]; then
+                echo >&2 "podman push attempt $i/$attempts failed; retrying in ${delay}s..."
+                sleep "$delay"
+              fi
+            done
+            return 1
+          }
+          push_with_retry "${IMAGE_ID}" "${REGISTRY}/${REPO}:${GITHUB_SHA}"
           if [ "$GITHUB_REF" = "refs/heads/master" ]; then
-            podman push --retry=5 --retry-delay=10s \
-              "${IMAGE_ID}" "${REGISTRY}/${REPO}:latest"
+            push_with_retry "${IMAGE_ID}" "${REGISTRY}/${REPO}:latest"
           fi
           podman rmi "${REGISTRY}/${REPO}:${GITHUB_SHA}" 2>/dev/null || true
 
