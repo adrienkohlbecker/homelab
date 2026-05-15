@@ -34,6 +34,13 @@ zfs_autobackup_source_host: box
 zfs_autobackup_dest_dataset:
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFyjxLhHELJkvSWbVs696fArHKeBM6k6EvmqDckAic5Z root@box
 
+# fancontrol_settings stays unset (defaults to fans: [] from
+# roles/fancontrol/defaults/main.yml). Box is the qemu-harness test
+# machine and qemu exposes no PWM hardware -- a stub config would
+# fail fancontrol's startup PWM probe regardless of how we shape it.
+# _verify.yml exercises the empty-fans branch here; the non-empty
+# branch runs on real hardware (lab, pug) at apply time.
+
 pihole_keepalived_role: BACKUP
 pihole_keepalived_priority: 5
 
