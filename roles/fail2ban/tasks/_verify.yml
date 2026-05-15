@@ -74,7 +74,7 @@
   command: nft list table ip filter
   register: _verify_ip_filter
   changed_when: false
-  failed_when: _verify_ip_filter.rc == 0 and 'f2b-sshd' in _verify_ip_filter.stdout
+  failed_when: _verify_ip_filter.rc == 0 and 'chain f2b-' in _verify_ip_filter.stdout
   become: true
 
 - name: _verify | Unban the synthetic IP
