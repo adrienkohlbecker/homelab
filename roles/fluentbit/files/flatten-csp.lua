@@ -41,19 +41,57 @@ local function pick(t, ...)
     return nil
 end
 
--- Minimal JSON string escaper: backslash and double-quote (everything
--- else in CSP-report bodies is URL-safe ASCII in practice). The
--- downstream consumer is otelcontribcol's ParseJSON, which is strict --
--- a malformed value just means that record's attributes don't get
--- extracted, not a pipeline failure. Belt-and-braces: also strip
--- control chars below 0x20 since browsers occasionally include
--- tab/newline in script-sample for multi-line inline scripts.
+-- Per-field truncation bound for the JSON suffix that lands as
+-- LogAttributes downstream. CSP report fields are tiny in real
+-- traffic (URIs, directive names, short policy strings); the bound
+-- exists to cap attacker-controlled fields (script-sample,
+-- blocked-uri) that could otherwise bloat Body up to nginx's 64KB
+-- request limit.
+local MAX_FIELD_BYTES = 1024
+
+-- JSON string escaper for the LogAttributes-as-suffix encoding.
+-- Defends three classes of input:
+--   1. Control bytes (\x00-\x1F + DEL) -- browsers occasionally
+--      include tab/newline in script-sample for multi-line inline
+--      scripts; downstream readers handle them inconsistently and
+--      they can smuggle log-format separators (CRLF, ANSI escapes).
+--   2. Non-ASCII bytes (\x80-\xFF) -- dropped wholesale to neutralise
+--      Unicode bidi-override attacks (U+202A-U+202E and U+2066-U+2069
+--      in UTF-8) that can make a row's apparent text read backwards
+--      in any consumer that renders Body as Unicode. Legitimate non-
+--      ASCII content in CSP report fields is vanishingly rare (URIs
+--      are already percent-encoded, directive names are ASCII).
+--   3. HTML breakouts via forward slash -- escaping "/" as "\/" is
+--      legal JSON and defeats "</script>" sequences in attacker-
+--      supplied URIs if anything downstream renders Body in an HTML
+--      context (HyperDX log detail pane, future dashboards). JSON
+--      doesn't require this; it's a defence-in-depth measure.
+-- After the strip + escape we cap the result at MAX_FIELD_BYTES so
+-- a hostile poster can't bloat Body by stuffing one field with 64KB
+-- of escaped-but-legal content.
 local function jsonesc(s)
     if s == nil then return "" end
     s = tostring(s)
-    s = s:gsub("\\", "\\\\"):gsub('"', '\\"')
-    s = s:gsub("[%c]", "")
+    s = s:gsub("[%c\127-\255]", "")
+    s = s:gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("/", "\\/")
+    if #s > MAX_FIELD_BYTES then s = s:sub(1, MAX_FIELD_BYTES) end
     return s
+end
+
+-- Strip query string and fragment from URLs before they land in
+-- LogAttributes. The CSP spec asks browsers to truncate path+query on
+-- cross-origin blocked/document URIs, but enforcement is patchy
+-- (Firefox truncates path, Chromium has carve-outs, the Reporting
+-- API surfaces the full URL). Without this, any first-party site
+-- behind our report-uri leaks its own users' session tokens, magic-
+-- link tokens, OAuth `code` params, etc. through the CSP-report
+-- channel to anyone with HyperDX access. Scheme+host+path is enough
+-- to debug a CSP violation; the query string almost never is.
+local function strip_url_meta(url)
+    if url == nil or url == "" then return url end
+    local q = url:find("[?#]")
+    if q then return url:sub(1, q - 1) end
+    return url
 end
 
 -- host.<hostname> comes from the fluent-bit tag; the upstream input
@@ -90,16 +128,16 @@ function flatten_csp(tag, ts, record)
         return 1, ts, record
     end
 
-    local blocked   = pick(r, "blocked-uri", "blockedURL")
-    local document  = pick(r, "document-uri", "documentURL")
+    local blocked   = strip_url_meta(pick(r, "blocked-uri", "blockedURL"))
+    local document  = strip_url_meta(pick(r, "document-uri", "documentURL"))
     local violated  = pick(r, "violated-directive", "violatedDirective",
                               "effective-directive", "effectiveDirective")
     local effective = pick(r, "effective-directive", "effectiveDirective",
                               "violated-directive", "violatedDirective")
     local policy    = pick(r, "original-policy", "originalPolicy")
     local disposition = pick(r, "disposition")
-    local referrer    = pick(r, "referrer")
-    local source_file = pick(r, "source-file", "sourceFile")
+    local referrer    = strip_url_meta(pick(r, "referrer"))
+    local source_file = strip_url_meta(pick(r, "source-file", "sourceFile"))
     local sample      = pick(r, "script-sample", "sample")
     local line_no     = pick(r, "line-number", "lineNumber")
     local col_no      = pick(r, "column-number", "columnNumber")
