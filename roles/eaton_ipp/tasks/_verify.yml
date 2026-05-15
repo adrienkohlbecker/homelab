@@ -1,0 +1,50 @@
+# Eaton IPP is x86_64-only — the install block in main.yml is gated
+# to that arch, so there's nothing to verify on aarch64.
+- name: _verify | IPP install and reachability
+  when: ansible_architecture == "x86_64"
+  block:
+
+    - name: _verify | eaton-ipp.service is loaded and active
+      systemd:
+        name: eaton-ipp
+      register: _verify_unit
+      failed_when: >-
+        _verify_unit.status.LoadState != "loaded"
+        or _verify_unit.status.ActiveState != "active"
+      become: true
+
+    - name: _verify | IPP listens on 4680
+      wait_for:
+        host: 127.0.0.1
+        port: 4680
+        timeout: 60
+
+    # Self-signed cert on the daemon; we're on loopback so there's no
+    # TLS-trust guarantee to verify. IPP's index typically redirects
+    # to a login page on a fresh install — accept any reasonable
+    # 2xx/3xx/4xx so the probe doesn't pin a specific UI flow. We
+    # want to catch 5xx / connection failures (daemon bound but not
+    # actually serving).
+    - name: _verify | IPP serves HTTPS on 4680
+      uri:
+        url: https://localhost:4680/
+        validate_certs: false
+        status_code: [ 200, 301, 302, 303, 401, 403 ]
+      register: _verify_http_direct
+      retries: 15
+      delay: 2
+      until: _verify_http_direct is succeeded
+
+    # Hit the nginx route via Host header so DNS isn't required.
+    # Snakeoil certs in test → validate_certs: false.
+    - name: _verify | IPP reachable through nginx subdomain
+      uri:
+        url: https://localhost/
+        headers:
+          Host: "ipp.{{ inventory_hostname }}.{{ domain }}"
+        validate_certs: false
+        status_code: [ 200, 301, 302, 303, 401, 403 ]
+      register: _verify_http_nginx
+      retries: 5
+      delay: 2
+      until: _verify_http_nginx is succeeded
