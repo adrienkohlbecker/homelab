@@ -91,13 +91,35 @@
 #       Migrate existing prod hosts with `sudo certbot reconfigure
 #       --cert-name X --deploy-hook '<cmd>'`.
 #
+# Detect SAN drift so an inventory_hostname rename, domain change, or
+# manual SAN addition triggers re-issuance instead of silently
+# no-op'ing forever. A bare `creates:` gate on privkey.pem fires
+# regardless of cert content.
+#
 # Snakeoils from roles/nginx/_setup.yml and roles/_test/nginx.yml write
-# to /etc/letsencrypt/live/<dom>/privkey.pem -- same path the `creates:`
-# gate checks. _setup.yml is test-only (never invoked by site.yml) so
-# prod is unaffected, but a future composed harness fixture applying
-# those snakeoils before this role on the same VM would silently skip
-# real issuance.
-- name: Issue certificate
+# to /etc/letsencrypt/live/<dom>/privkey.pem; _setup.yml is test-only
+# (never invoked by site.yml) so prod is unaffected, but a future
+# composed harness fixture applying those snakeoils before this role
+# on the same VM would have their SAN set inspected here and trigger
+# a --force-renewal, which is the right behavior.
+- name: Stat existing certificate
+  stat:
+    path: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
+  register: certbot_cert_stat
+  become: true
+  tags:
+    - certbot
+
+- name: Read existing certificate SANs
+  community.crypto.x509_certificate_info:
+    path: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
+  register: certbot_cert_info
+  when: certbot_cert_stat.stat.exists
+  become: true
+  tags:
+    - certbot
+
+- name: Issue certificate  # noqa: no-changed-when -- when: gates execution, like creates: did
   command:
     argv: >-
       {{ ['certbot', 'certonly', '--noninteractive', '--dns-cloudflare',
@@ -105,15 +127,22 @@
           '--deploy-hook', certbot_deploy_hook,
           '-d', inventory_hostname + '.' + domain,
           '-d', '*.' + inventory_hostname + '.' + domain]
+         + (certbot_sans_drifted | ternary(['--force-renewal'], []))
          + (certbot_production_certificates | ternary([], ['--test-cert'])) }}
   vars:
     certbot_deploy_hook: >-
       logger -t certbot-deploy "reloading nginx for ${RENEWED_LINEAGE:-?}";
       systemctl is-active --quiet nginx && systemctl reload nginx
-  args:
-    creates: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem
+    certbot_expected_sans:
+      - "DNS:{{ inventory_hostname }}.{{ domain }}"
+      - "DNS:*.{{ inventory_hostname }}.{{ domain }}"
+    certbot_sans_drifted: >-
+      {{ certbot_cert_stat.stat.exists
+         and (certbot_cert_info.subject_alt_name | sort) != (certbot_expected_sans | sort) }}
   become: true
   no_log: true
-  when: not (ansible_check_mode and certbot_apt.changed)
+  when:
+    - not (ansible_check_mode and certbot_apt.changed)
+    - (not certbot_cert_stat.stat.exists) or certbot_sans_drifted
   tags:
     - certbot
