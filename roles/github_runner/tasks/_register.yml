@@ -1,9 +1,11 @@
 # Per-repo registration + unit install. Looped from main.yml over
-# github_runner_repos with loop_var: runner_repo. Shared binary at
-# /mnt/services/github_runner/runner/ is already extracted by main.yml;
-# this file creates the per-repo state dir, symlinks the binary into
-# it, runs config.sh against GitHub, and installs/enables the
-# github_runner_<repo>.service unit.
+# github_runner_repos with loop_var: runner_repo. Each per-repo dir
+# gets its own full actions/runner extract -- the shared-binary
+# experiment didn't survive contact with Runner.Listener's
+# Assembly.Location-based state-file paths (symlinks resolve through
+# to the binary location, so state files like .runner_migrated, .env,
+# _diag/ all landed in the shared dir and collided across runners).
+# 150 MB per extra runner is cheap on lab's storage.
 
 - name: _register | Create install dir for {{ runner_repo }}
   file:
@@ -27,59 +29,43 @@
   tags:
     - github_runner
 
-# config.sh and run.sh resolve bin/ via $0 dirname (the directory of the
-# script itself, not CWD), so symlinking the shared tree into each
-# per-repo dir makes them work as if installed locally -- while the
-# ~150 MB extracted tree lives once. Enumerate runner/ via find rather
-# than a hardcoded list because actions/runner ships a moving set of
-# top-level scripts (run.sh, run-helper.sh.template, config.sh,
-# config-helper.sh.template, env.sh, safe_directories, .path, license
-# files, etc.) and any upgrade that adds a new top-level entry would
-# otherwise be missed -- run.sh does `cp run-helper.sh.template
-# run-helper.sh` at startup, so a missed template silently breaks
-# the runner with a `cp: cannot stat` at boot.
-- name: _register | Enumerate shared runner entries
-  find:
-    paths: /mnt/services/github_runner/runner
-    file_type: any
-    hidden: true
-    recurse: false
-  register: github_runner_shared_entries
+# Install / upgrade actions/runner from the shared tarball cache. The
+# version sentinel (.version-<ver>) lives in the per-repo dir so a
+# version bump triggers re-extraction for each repo independently.
+- name: _register | Check current actions/runner version for {{ runner_repo }}
+  stat:
+    path: /mnt/services/github_runner/{{ runner_repo }}/.version-{{ github_runner_version }}
+  register: github_runner_version_sentinel
   become: true
   tags:
     - github_runner
 
-# Skip dynamic per-instance state that may end up under runner/ at
-# runtime: Runner.Listener resolves `_diag` (and similar paths) via
-# its own binary location, which (after symlink resolution) is
-# runner/bin/Runner.Listener -- so logs land in runner/_diag for every
-# runner. We don't want to symlink runner/_diag back into per-repo dirs
-# (the migration already created homelab/_diag, and `file: state: link
-# force: true` refuses to overwrite a non-empty directory). Same for
-# any .runner / .credentials that hypothetically end up at the shared
-# level via a botched migration. The runner's actual state files live
-# in the per-repo dir, written by config.sh with that dir as CWD.
-- name: _register | Symlink shared runner entries into {{ runner_repo }}/
-  file:
-    src: ../runner/{{ item.path | basename }}
-    dest: /mnt/services/github_runner/{{ runner_repo }}/{{ item.path | basename }}
-    state: link
-    force: true
-    follow: false
+- name: _register | Extract actions/runner tarball into {{ runner_repo }}
+  when: not github_runner_version_sentinel.stat.exists
+  unarchive:
+    src: /mnt/services/github_runner/.tarballs/actions-runner-{{ github_runner_version }}.tar.gz
+    dest: /mnt/services/github_runner/{{ runner_repo }}/
+    remote_src: true
     owner: github_runner
     group: github_runner
-  when: >-
-    item.path | basename not in [
-      '_diag',
-      '_work',
-      '.runner',
-      '.credentials',
-      '.credentials_rsaparams',
-      'svc.sh',
-    ]
-  loop: "{{ github_runner_shared_entries.files }}"
-  loop_control:
-    label: "{{ item.path | basename }}"
+    # Don't blow away .runner / .credentials / _work; the tarball
+    # doesn't include them, but --no-overwrite-dir keeps `tar` from
+    # messing with files it never created.
+    extra_opts:
+      - "--no-overwrite-dir"
+  become: true
+  register: github_runner_extracted
+  tags:
+    - github_runner
+
+- name: _register | Mark current actions/runner version for {{ runner_repo }}
+  when: not github_runner_version_sentinel.stat.exists
+  copy:
+    dest: /mnt/services/github_runner/{{ runner_repo }}/.version-{{ github_runner_version }}
+    content: "{{ github_runner_version }}\n"
+    owner: github_runner
+    group: github_runner
+    mode: "0644"
   become: true
   tags:
     - github_runner
