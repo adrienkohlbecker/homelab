@@ -27,10 +27,6 @@
   become: true
   loop:
     - /mnt/services/github_runner
-    # Shared actions/runner extract target. One copy of bin/ + externals/
-    # + run.sh + config.sh + .path, symlinked into each per-repo state
-    # dir; see _register.yml.
-    - /mnt/services/github_runner/runner
     - /mnt/services/github_runner/.tarballs
     - /mnt/scratch/github_runner/cache
     # Bind-mounted into test cells via container.options for the harness's
@@ -159,34 +155,13 @@
   tags:
     - github_runner
 
-# Migrate the pre-multi-repo single-instance layout (top-level .runner /
-# bin / etc under /mnt/services/github_runner) into the per-repo layout.
-# No-op when the layout is already migrated or on a fresh install.
-# Runs BEFORE the tarball extract so it can move the legacy bin/ into
-# runner/; the extract task's version sentinel then sees runner/ in the
-# expected post-migration state.
-- import_tasks: _migrate.yml
-
-# Install / upgrade actions/runner from the upstream tarball. The
-# version sentinel (runner/.version-<ver>) is what `unarchive` keys off
-# via `creates:` -- on a version bump we delete the sentinel via the
-# pre-task, the unarchive overwrites everything in runner/, and the
-# post-task writes the new sentinel. The tarball is kept under
-# .tarballs/ so the apt-style upgrade-then-clean pattern is auditable
-# (and a rollback is one `cp` away).
-- name: Check current github_runner version
-  when: not (ansible_check_mode and github_runner_user.changed)
-  stat:
-    path: /mnt/services/github_runner/runner/.version-{{ github_runner_version }}
-  register: github_runner_version_sentinel
-  become: true
-  tags:
-    - github_runner
-
+# Download the actions/runner tarball once into the shared cache; each
+# per-repo register task extracts it into its own install dir. Sized
+# at the latest pinned version -- bumping github_runner_version
+# downloads the new tarball and forces re-extraction per repo via the
+# per-repo .version-<ver> sentinel inside _register.yml.
 - name: Download actions/runner tarball
-  when:
-    - not (ansible_check_mode and github_runner_user.changed)
-    - not github_runner_version_sentinel.stat.exists
+  when: not (ansible_check_mode and github_runner_user.changed)
   get_url:
     url: "{{ github_runner_release[ansible_architecture].url }}"
     checksum: "sha256:{{ github_runner_release[ansible_architecture].sha256 }}"
@@ -196,73 +171,6 @@
     mode: "0644"
   become: true
   register: github_runner_tarball
-  tags:
-    - github_runner
-
-- name: Extract actions/runner tarball
-  when:
-    - not (ansible_check_mode and github_runner_user.changed)
-    - not github_runner_version_sentinel.stat.exists
-  unarchive:
-    src: /mnt/services/github_runner/.tarballs/actions-runner-{{ github_runner_version }}.tar.gz
-    dest: /mnt/services/github_runner/runner/
-    remote_src: true
-    owner: github_runner
-    group: github_runner
-    # Don't blow away symlinks the per-repo state dirs use to reach
-    # back into runner/; the tarball doesn't write into those, but
-    # --no-overwrite-dir keeps `tar` from messing with files it never
-    # created.
-    extra_opts:
-      - "--no-overwrite-dir"
-  become: true
-  register: github_runner_extracted
-  tags:
-    - github_runner
-
-- name: Mark current github_runner version
-  when:
-    - not (ansible_check_mode and github_runner_user.changed)
-    - not github_runner_version_sentinel.stat.exists
-  copy:
-    dest: /mnt/services/github_runner/runner/.version-{{ github_runner_version }}
-    content: "{{ github_runner_version }}\n"
-    owner: github_runner
-    group: github_runner
-    mode: "0644"
-  become: true
-  tags:
-    - github_runner
-
-# Safety-net: move any top-level entries that aren't runner/ + .tarballs/
-# + per-repo state dirs into runner/. Catches files the legacy _migrate
-# missed (env.sh, run-helper.sh.template, config-helper.sh.template,
-# safe_directories, license/notice files) without needing the
-# migration to enumerate the full set. Idempotent: on a host whose
-# top level is already cleaned up there are no orphans to move.
-- name: Consolidate orphaned top-level entries into runner/
-  shell: |
-    set -euo pipefail
-    cd /mnt/services/github_runner
-    shopt -s dotglob nullglob
-    moved=0
-    for entry in *; do
-      case "$entry" in
-        runner|.tarballs|{{ github_runner_repos | join('|') }}|.runner|.credentials|.credentials_rsaparams|_diag|_work|svc.sh|.version-*)
-          continue
-          ;;
-      esac
-      if [ -e "$entry" ] && [ ! -L "$entry" ]; then
-        mv -- "$entry" runner/
-        moved=$((moved + 1))
-      fi
-    done
-    echo "moved=$moved"
-  args:
-    executable: /bin/bash
-  register: github_runner_consolidate
-  changed_when: "'moved=0' not in github_runner_consolidate.stdout"
-  become: true
   tags:
     - github_runner
 
