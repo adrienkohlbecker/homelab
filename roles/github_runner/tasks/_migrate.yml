@@ -86,8 +86,8 @@
     for entry in .runner .credentials .credentials_rsaparams _diag svc.sh; do
       if [ -e "$entry" ]; then mv -- "$entry" homelab/; fi
     done
-    # The runner's _work directory is typically a symlink (because of
-    # --work at config.sh time pointing it at /mnt/scratch/...).
+    # _work is typically a symlink because the --work flag at config.sh
+    # time pointed it at /mnt/scratch/...
     if [ -L _work ] || [ -e _work ]; then mv -- _work homelab/; fi
   args:
     executable: /bin/bash
