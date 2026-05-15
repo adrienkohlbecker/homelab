@@ -19,7 +19,7 @@ defaults:
 
 jobs:
   gate:
-    runs-on: [ self-hosted, lab-runtime ]
+    runs-on: [ self-hosted, lab ]
     container:
       image: nexus.lab.fahm.fr/repository/homelab/ci:latest
     outputs:
@@ -53,7 +53,7 @@ jobs:
       cancel-in-progress: false
     needs: gate
     if: needs.gate.outputs.matrix != '[]' && needs.gate.outputs.matrix != ''
-    runs-on: [ self-hosted, lab-runtime ]
+    runs-on: [ self-hosted, lab ]
     container:
       image: nexus.lab.fahm.fr/repository/homelab/ci:latest
       # See test.yml's test-role container.options comment for the
@@ -104,7 +104,7 @@ jobs:
   notify:
     needs: test-role
     if: failure()
-    runs-on: [ self-hosted, lab-runtime ]
+    runs-on: [ self-hosted, lab ]
     container:
       image: nexus.lab.fahm.fr/repository/homelab/ci:latest
     steps:

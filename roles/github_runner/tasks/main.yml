@@ -7,7 +7,7 @@
       name: github_runner
       home: /mnt/scratch/github_runner
       createhome: true
-      # kvm so podman can hand /dev/kvm to lab-runtime containers via
+      # kvm so podman can hand /dev/kvm to ci containers via
       # --device + --group-add 1 (rootless userns doesn't map the host
       # kvm gid through by default; see roles/gitea_runner's git history
       # -- formerly act_runner -- for the full rationale, which is
@@ -147,7 +147,7 @@
     # initialised without a driver setting -- which is what
     # github_runner ends up with on a fresh apply, because the user's
     # first podman invocation (any CI workflow's pull/run of the
-    # lab-runtime image) happens before this file is written. The
+    # ci image) happens before this file is written. The
     # warning is harmless; the database mismatch is fatal. Leave it
     # implicit.
     content: |
