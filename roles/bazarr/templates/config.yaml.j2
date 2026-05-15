@@ -211,7 +211,7 @@ radarr:
   full_update: Daily
   full_update_day: 6
   full_update_hour: 2
-  http_timeout: 5
+  http_timeout: 60
   ip: radarr.{{ inventory_hostname }}.{{ domain }}
   movies_sync: 60
   only_monitored: false
@@ -242,7 +242,7 @@ sonarr:
   full_update: Daily
   full_update_day: 6
   full_update_hour: 2
-  http_timeout: 5
+  http_timeout: 60
   ip: sonarr.{{ inventory_hostname }}.{{ domain }}
   only_monitored: false
   port: 443

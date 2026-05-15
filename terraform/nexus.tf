@@ -177,10 +177,10 @@ resource "nexus_repository_raw_proxy" "this" {
 
 # Hosted (not proxy) docker repos for images we build off-host:
 #   - homelab: the ci-image workflow pushes
-#     nexus.lab.fahm.fr/repository/homelab/ci:<sha> + :latest after
+#     nexus.lab.fahm.fr/homelab/ci:<sha> + :latest after
 #     rebuilding the runner image.
 #   - compta: the adrienkohlbecker/compta repo's build workflow
-#     pushes nexus.lab.fahm.fr/repository/compta/compta:<sha> +
+#     pushes nexus.lab.fahm.fr/compta/compta:<sha> +
 #     :latest; the compta ansible role pulls from there.
 # Anonymous pulls are on (so unauthenticated `podman pull` from CI /
 # lab hosts works); push requires basic auth against the repo's
