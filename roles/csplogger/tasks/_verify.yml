@@ -207,93 +207,69 @@
   failed_when: csplogger_verify_journal.rc != 1
   become: true
 
-# End-to-end shape assertion: POST a CSP report through the live
-# pipeline (nginx -> fluent-bit -> flatten-csp.lua -> otlp-shape.lua ->
-# OTLP HTTP -> hyperdx otel-collector -> ClickHouse) and query the
-# landed otel_logs row to confirm every column ended up where the
-# downstream UI expects:
-#   ServiceName       = csplogger      (drives "Services" view; sourced
-#                                       from Resource.service.name)
-#   SeverityText      = "warn"         (flatten-csp pins; transform
-#                                       processor's body-keyword
-#                                       fallback only fires when
-#                                       severity is unset)
-#   SeverityNumber    = 13             (OTel SEVERITY_NUMBER_WARN)
-#   Body              startswith "CSP" (flatten-csp synthesises)
-#   LogAttributes contains csp_* + SYSLOG_IDENTIFIER + host
-#   ResourceAttributes contains service.name + host.name
-# csplogger's _setup imports hyperdx so the box test VM has the real
-# OTLP receiver + ClickHouse stack stood up. Without that import,
-# fluent-bit's OTLP output would retry against an unbound port and the
-# query below would find nothing.
-- name: _verify | OTLP-end-to-end | build per-run marker
+# OTLP-out reachability assertion. Stands in for the full hyperdx-into-
+# ClickHouse round-trip that previously lived here (moved to roles/
+# fluentbit's _verify, where the lua filters being exercised actually
+# live). Here we only need to prove csplogger's surface delivered to
+# fluent-bit, and fluent-bit's OTLP output emitted *something* to the
+# downstream port — which the dummy listener at 127.0.0.1:4318 (stood
+# up in _setup) captures by appending every POST body to a log file.
+# A per-run marker baked into the CSP report's blocked-uri is what we
+# grep for: it propagates through flatten-csp.lua into LogAttributes,
+# which fluent-bit's opentelemetry output puts into the protobuf body
+# verbatim as a UTF-8 string.
+- name: _verify | OTLP-via-dummy | build per-run marker
   set_fact:
-    csplogger_otlp_marker: "verify_otlp_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    csplogger_otlp_marker: "verify_dummy_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
-- name: _verify | OTLP-end-to-end | POST marked CSP report through nginx
+# Truncate so a prior test's marker doesn't satisfy the grep below.
+- name: _verify | OTLP-via-dummy | truncate dummy listener log
+  copy:
+    dest: /var/log/otlp_dummy.log
+    content: ""
+    force: true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify | OTLP-via-dummy | POST marked CSP report through nginx
   uri:
-    url: http://127.0.0.1:{{ service_ports.csp_ingest }}/
+    url: https://localhost/log
     method: POST
+    headers:
+      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
+      Origin: "{{ csplogger_verify_origin }}"
+      Content-Type: application/csp-report
+    validate_certs: false
     body_format: json
     body:
       csp-report:
-        blocked-uri: "https://_verify.example/{{ csplogger_otlp_marker }}"
-        document-uri: "https://_verify.example/"
+        blocked-uri: "https://verify.example/{{ csplogger_otlp_marker }}"
+        document-uri: "https://verify.example/"
         violated-directive: "script-src"
         effective-directive: "script-src-elem"
         original-policy: "default-src 'self'"
     status_code: 204
 
-# Wait for the row to land. fluent-bit's Flush=5s plus collector batch
-# timeout (5s) means up to ~10s typical, with retries on initial cold
-# start of the collector pipeline.
-#
-# Match on LogAttributes['csp_blocked_uri'] rather than Body LIKE: the
-# query command itself ends up in ansible's own task-output journal
-# entry (SYSLOG_IDENTIFIER=ansible-ansible.legacy.command), which
-# fluent-bit's systemd input ships back to ClickHouse with the marker
-# baked into its Body -- Body LIKE matches that decoy instead of the
-# real CSP record. csp_blocked_uri is only populated by flatten-csp.lua.
-- name: _verify | OTLP-end-to-end | wait for ClickHouse row matching marker
-  command: >-
-    podman exec hyperdx curl --fail -s --max-time 5
-    "http://localhost:8123/?query=SELECT+count()+FROM+default.otel_logs+WHERE+LogAttributes%5B'csp_blocked_uri'%5D+LIKE+'%25{{ csplogger_otlp_marker }}%25'"
-  register: csplogger_otlp_count
+# fluent-bit's Flush=5s plus OTLP output's batch timeout means up to
+# ~10s typical for the record to leave. 30 retries × 2s allows for
+# cold-start retries when the collector pipeline is still settling.
+- name: _verify | OTLP-via-dummy | wait for marker in dummy listener log
+  command: grep -F "{{ csplogger_otlp_marker }}" /var/log/otlp_dummy.log
+  register: csplogger_otlp_dummy_grep
   changed_when: false
   failed_when: false
   retries: 30
   delay: 2
-  until: csplogger_otlp_count.rc == 0 and (csplogger_otlp_count.stdout | trim | int) > 0
+  until: csplogger_otlp_dummy_grep.rc == 0
   become: true
 
-- name: _verify | OTLP-end-to-end | fetch CSP row as JSON
-  command: >-
-    podman exec hyperdx curl --fail -s --max-time 5
-    "http://localhost:8123/?query=SELECT+Body,SeverityText,toUInt32(SeverityNumber)+AS+SeverityNumber,ServiceName,LogAttributes%5B'csp_blocked_uri'%5D+AS+csp_blocked_uri,LogAttributes%5B'csp_format'%5D+AS+csp_format,LogAttributes%5B'csp_violated_directive'%5D+AS+csp_violated_directive,LogAttributes%5B'csp_effective_directive'%5D+AS+csp_effective_directive,LogAttributes%5B'host'%5D+AS+log_host,ResourceAttributes%5B'service.name'%5D+AS+resource_service_name,ResourceAttributes%5B'host.name'%5D+AS+resource_host_name+FROM+default.otel_logs+WHERE+LogAttributes%5B'csp_blocked_uri'%5D+LIKE+'%25{{ csplogger_otlp_marker }}%25'+ORDER+BY+Timestamp+DESC+LIMIT+1+FORMAT+JSONEachRow"
-  register: csplogger_otlp_row
-  changed_when: false
-  become: true
-
-- name: _verify | OTLP-end-to-end | assert landed row shape
-  vars:
-    row: "{{ csplogger_otlp_row.stdout | from_json }}"
+- name: _verify | OTLP-via-dummy | assert marker reached the dummy listener
   assert:
-    that:
-      # Body shape: "CSP <effective> blocked <uri> on <doc> {<json>}".
-      # The JSON suffix populates LogAttributes via HyperDX collector's
-      # ExtractPatterns + merge_maps, AND its first key "level":"warn"
-      # is what the severity-keyword regex matches to set
-      # SeverityText/Number. Each that-item is quoted as a string --
-      # ansible 2.16+ rejects bare expressions.
-      - "row.Body is match('^CSP ')"
-      - "row.SeverityText == 'warn'"
-      - "row.SeverityNumber | int == 13"
-      - "row.ServiceName == 'csplogger'"
-      - "row.csp_format == 'legacy'"
-      - "row.csp_violated_directive == 'script-src'"
-      - "row.csp_effective_directive == 'script-src-elem'"
-      - "row.log_host == inventory_hostname"
-      - "row.resource_service_name == 'csplogger'"
-      - "row.resource_host_name == inventory_hostname"
-      - "csplogger_otlp_marker in row.csp_blocked_uri"
-    fail_msg: "CSP record landed in ClickHouse but with wrong shape: {{ row }}"
+    that: csplogger_otlp_dummy_grep.rc == 0
+    fail_msg: >-
+      CSP marker {{ csplogger_otlp_marker }} never reached the OTLP
+      dummy listener at 127.0.0.1:4318 within 60s. Inspect
+      /var/log/otlp_dummy.log and `journalctl -u fluent-bit` for the
+      OTLP output's retry state.
