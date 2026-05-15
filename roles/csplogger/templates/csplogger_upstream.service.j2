@@ -1,0 +1,26 @@
+[Unit]
+Description=csplogger upstream stub (replaces fluent-bit in _verify)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/local/bin/csplogger_upstream.py
+Environment=LISTEN_PORT={{ service_ports.csp_ingest }}
+# DynamicUser + LogsDirectory: per-boot uid owning /var/log/csplogger_upstream/,
+# read via LOGS_DIRECTORY env in the script. Test fixture only, but the
+# hardening directives below are essentially free for a stdlib http.server
+# that does nothing but bind loopback and append a file.
+DynamicUser=yes
+LogsDirectory=csplogger_upstream
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+RestrictAddressFamilies=AF_INET
+IPAddressAllow=127.0.0.0/8
+IPAddressDeny=any
+Restart=on-failure
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target
