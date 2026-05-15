@@ -9,6 +9,17 @@ data_datasets:
   - { name: eckwersheim, mountpoint: /mnt/eckwersheim }
 
 # Extra zfs properties applied to every site dataset.
+#
+# autobackup:bak=true tags the dataset for zfs-autobackup; the picker
+# filters with `-s local` -- see _verify.yml's header for why source
+# matters here.
+#
+# special_small_blocks=32K routes records <=32K to the pool's special
+# (allocation-class) vdev; pairs with the default 128K recordsize.
+# Inert today on tank (no special vdev) and rpool (single-disk), kept
+# set so existing data already lands on the special vdev the day one
+# attaches. roles/media uses the same 32K threshold paired with a 1MB
+# recordsize, making the threshold proportionally stronger.
 data_extra_properties:
   'autobackup:bak': 'true'
   special_small_blocks: '32768'
