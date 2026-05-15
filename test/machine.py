@@ -465,7 +465,7 @@ class Machine:
 
         # mise.toml + uv lock + pyproject are repo-root files that some
         # roles reference via `{{ playbook_dir }}/<file>` (e.g. github_runner
-        # bakes them into its lab-runtime container build context).
+        # bakes them into its ci-image container build context).
         # Stage them so the harness's workdir mirrors what ansible sees
         # on a production controller run.
         for repo_root_file in ("mise.toml", "pyproject.toml", "uv.lock"):
@@ -473,7 +473,7 @@ class Machine:
             if src.exists():
                 src.copy_into(self.workdir.name)
 
-        # github_runner's lab-runtime build COPYs packer/qemu.pkr.hcl
+        # github_runner's ci-image build COPYs packer/qemu.pkr.hcl
         # into its container build context (so the image bakes in the
         # packer plugins our packer-build workflow uses) and our input-
         # hash gating lookups it from playbook_dir. Stage just the .hcl
@@ -755,7 +755,7 @@ def sweep_stale_workdirs(imagedir: Path) -> None:
       live (skip), uncontended = orphan (reap). flock is inode-scoped, so it
       works across PID namespaces -- critical because Gitea Actions test cells
       run in separate containers that bind-mount a shared workdir parent
-      (/lab-runtime-workdir), and the prior ps-based check couldn't see
+      (/scratch), and the prior ps-based check couldn't see
       sibling cells' qemu/ansible. The mtime grace still guards the tiny
       window between mkdtemp and Machine.__post_init__'s flock acquisition.
 

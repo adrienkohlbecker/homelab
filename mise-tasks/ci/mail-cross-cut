@@ -4,7 +4,7 @@
 # Called from the notify-cross-cut job of test.yml when the detect job
 # reported cross_cut=true. Sends mail via the Mailgun HTTP API directly
 # rather than going through the host's postfix relay (the runner runs
-# inside lab-runtime and would have to widen lab's postfix to listen on
+# inside ci-image and would have to widen lab's postfix to listen on
 # the podman bridge -- not worth it for one notification path).
 #
 # Required env (GitHub Actions repo secrets, set in the workflow's `env:`):
