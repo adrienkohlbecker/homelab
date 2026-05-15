@@ -1,3 +1,8 @@
+- name: _setup | Add media group
+  import_role:
+    name: media
+    tasks_from: group
+
 - name: _setup | Install nginx
   import_role:
     name: _test
