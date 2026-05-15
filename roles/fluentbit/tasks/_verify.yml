@@ -44,6 +44,18 @@
   set_fact:
     fluentbit_otlp_csp_marker: "verify_otlp_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
+# Capture the fluent-bit journal cursor *before* the marked POST so the
+# lua-filter error scan below sees only what this run produced. The
+# `-- cursor: ...` line on the last stdout row is the cursor token --
+# parsed out, it's the input to --after-cursor on the scan below. This
+# replaces an older `--since "5 minutes ago"` that could catch a prior
+# run's error or miss a slow current run.
+- name: _verify | OTLP-end-to-end | capture pre-POST journal cursor
+  command: journalctl -u fluent-bit -n 0 --show-cursor
+  register: fluentbit_journal_cursor
+  changed_when: false
+  become: true
+
 - name: _verify | OTLP-end-to-end | POST marked CSP report at fluent-bit
   uri:
     url: http://127.0.0.1:{{ service_ports.csp_ingest }}/
@@ -57,6 +69,29 @@
         effective-directive: "script-src-elem"
         original-policy: "default-src 'self'"
     status_code: 204
+
+# fluent-bit's install-time dry-run validates lua *load* (syntax / module
+# import); nil-deref or type-mismatch bugs only surface when a real
+# record runs through the filter. Without this scan the only symptom of
+# a regression in flatten-csp / level-from-message / otlp-shape would be
+# silently-dropped attributes in HyperDX -- per-record errors don't bubble
+# up to the HTTP 204 fluent-bit returns to nginx, and the ClickHouse-row
+# assert below only catches *visible* malformation, not dropped fields.
+# journalctl --grep exits 0 on match (= failure here), 1 on no-match
+# (= pass), rc>1 means journalctl itself failed (also failure).
+- name: _verify | OTLP-end-to-end | fluent-bit lua filters logged no runtime errors
+  command: >-
+    journalctl -u fluent-bit
+    --after-cursor={{ (fluentbit_journal_cursor.stdout_lines
+                       | select('match', '^-- cursor:')
+                       | first
+                       | regex_replace('^-- cursor: ?', '')) | quote }}
+    --no-pager
+    --grep '\[error\].*(flatten-csp|otlp-shape|level-from-message)\.lua'
+  register: fluentbit_lua_errors
+  changed_when: false
+  failed_when: fluentbit_lua_errors.rc != 1
+  become: true
 
 # Wait for the row to land. fluent-bit's Flush=5s plus collector batch
 # timeout (5s) means up to ~10s typical, with retries on initial cold
