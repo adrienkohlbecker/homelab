@@ -2,8 +2,8 @@
 # no upload/delete. Publishes /srv/filebrowser at filebrowser.<host>.<domain>.
 # Consumes zfs_has_<name>_mount flags to gate which trees are symlinked in;
 # `home` always points at the connecting operator's $HOME (ansible_user_dir).
-# Theme CSS lives at /etc/nginx/snippets/filebrowser_theme.css and is aliased
-# into the site at /.theme.css.
+# Theme CSS lives at /var/www/filebrowser/.theme.css and is aliased into
+# the site at /.theme.css.
 - name: Create filebrowser autoindex root
   file:
     path: /srv/filebrowser
@@ -34,10 +34,32 @@
   tags:
     - filebrowser
 
+- name: Create filebrowser theme directory
+  file:
+    path: /var/www/filebrowser
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - filebrowser
+
+# Transitional: legacy theme.css path under /etc/nginx/snippets/ (the role
+# briefly used it after the container -> autoindex migration). Drop after
+# this has converged everywhere.
+- name: Remove legacy filebrowser theme location
+  file:
+    path: /etc/nginx/snippets/filebrowser_theme.css
+    state: absent
+  become: true
+  tags:
+    - filebrowser
+
 - name: Install filebrowser nginx theme stylesheet
   copy:
     src: theme.css
-    dest: /etc/nginx/snippets/filebrowser_theme.css
+    dest: /var/www/filebrowser/.theme.css
     owner: root
     group: root
     mode: "0644"
@@ -78,7 +100,7 @@
         sub_filter_last_modified on;
       server_conf: |
         location = /.theme.css {
-          alias /etc/nginx/snippets/filebrowser_theme.css;
+          alias /var/www/filebrowser/.theme.css;
         }
   tags:
     - filebrowser
