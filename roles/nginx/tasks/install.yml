@@ -53,16 +53,16 @@
   tags:
     - nginx
 
+# stub_status drop is what netdata's web_log collector (and any other
+# in-cluster nginx-stats consumer) reads. Validate-and-rollback shape
+# protects every site on the host from a typo here — same conf.d/
+# blast-radius concern as csplogger.
 - name: install | Enable stub_status
-  copy:
-    src: status.conf
-    dest: /etc/nginx/conf.d/status.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
-  register: nginx_status_conf
+  import_tasks: conf_d.yml
+  vars:
+    nginx_conf_d_args:
+      name: status.conf
+      src: status.conf
   tags:
     - nginx
 
@@ -74,6 +74,6 @@
     systemd_unit_args:
       src: nginx
       condition: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
-      restart: "{{ nginx_apt.changed or nginx_default_conf.changed or nginx_conf.changed or nginx_status_conf.changed }}"
+      restart: "{{ nginx_apt.changed or nginx_default_conf.changed or nginx_conf.changed or status_conf_result.changed }}"
   tags:
     - nginx
