@@ -1,0 +1,6 @@
+# Empty `fans` leaves /etc/fancontrol removed and the service stopped
+# but the package installed. Per-host configs override in host_vars.
+# `interval` defaults to 10s inside the template; set it explicitly in
+# host_vars to override.
+fancontrol_settings:
+  fans: []
