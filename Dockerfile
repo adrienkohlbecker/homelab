@@ -18,6 +18,54 @@
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Route apt through the homelab nexus proxy. Same arch split as
+# group_vars/all.yml's mirror_apt_ubuntu_* vars: amd64 hits ubuntu-archive
+# + ubuntu-security; arm64 hits ubuntu-ports for both (ports.ubuntu.com
+# carries -security on non-x86 arches). HTTP because nexus's docker /
+# apt proxies serve plaintext on port 80; the upstream Signed-By trust
+# chain is unchanged so apt still verifies package signatures end-to-end.
+# Overwriting /etc/apt/sources.list.d/ubuntu.sources (the deb822 file
+# noble ships) means the upstream URIs are gone for the rest of the
+# build -- if nexus is unreachable, apt-get fails loudly here rather
+# than silently fanning out to upstream.
+RUN arch=$(dpkg --print-architecture); \
+    if [ "$arch" = "amd64" ]; then \
+      arch_url="http://nexus.lab.fahm.fr/repository/ubuntu-archive"; \
+      sec_url="http://nexus.lab.fahm.fr/repository/ubuntu-security"; \
+    else \
+      arch_url="http://nexus.lab.fahm.fr/repository/ubuntu-ports"; \
+      sec_url="http://nexus.lab.fahm.fr/repository/ubuntu-ports"; \
+    fi && \
+    cat > /etc/apt/sources.list.d/ubuntu.sources <<EOF
+Types: deb
+URIs: $arch_url
+Suites: noble noble-updates noble-backports
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+
+Types: deb
+URIs: $sec_url
+Suites: noble-security
+Components: main restricted universe multiverse
+Signed-By: /usr/share/keyrings/ubuntu-archive-keyring.gpg
+EOF
+
+# Route pip + uv at the homelab nexus pypi proxy. Same pattern
+# roles/_test/tasks/mirrors.yml uses for test VMs. /etc-scoped so
+# the config applies to every user / venv inside the image. HTTPS
+# (vs HTTP for apt) because pypi is published over TLS-only on the
+# nexus side.
+RUN install -dm 755 /etc/uv && \
+    cat > /etc/uv/uv.toml <<'EOF'
+[[index]]
+url = "https://nexus.lab.fahm.fr/repository/pypi/simple/"
+default = true
+EOF
+RUN cat > /etc/pip.conf <<'EOF'
+[global]
+index-url = https://nexus.lab.fahm.fr/repository/pypi/simple/
+EOF
+
 # Harness needs qemu-system-x86 + qemu-utils for booting test VMs;
 # openssh-client for talking to the guests; xorriso + cloud-image-utils
 # for the `minimal` variant's seed iso; python3-yaml so mise-tasks/ci
@@ -66,6 +114,7 @@ RUN install -dm 755 /etc/apt/keyrings && \
 # resolve in seconds instead of minutes.
 WORKDIR /tmp/build
 COPY mise.toml pyproject.toml uv.lock ./
+
 # The mise_github_token build secret raises mise's GitHub API rate
 # limit (mise pulls tool releases from gh; anonymous is 60/hr,
 # authenticated is 5000/hr). Forwarded by lab-runtime-build.yml from
