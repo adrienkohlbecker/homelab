@@ -69,12 +69,19 @@
       Expected DOCKER_HOST=unix:///run/podman/podman.sock,
       got {{ _verify_docker_host_env.stdout }}
 
-- name: _verify | Read podman-socket group membership
-  command: getent group podman-socket
+# id -nG reports the groups nsswitch resolves for the user, i.e.
+# the supplementary set a fresh login shell or service would pick
+# up. That's a stronger check than parsing /etc/group via getent:
+# it exercises the same path that consumers (login shells, the
+# rootful podman socket's permission check) actually use, and it
+# witnesses the post-reset_connection state that usergroup_immediate
+# is named for.
+- name: _verify | Read ansible_user supplementary groups
+  command: id -nG {{ ansible_user }}
   changed_when: false
-  register: _verify_podman_socket_group
+  register: _verify_ansible_user_groups
 
-- name: _verify | ansible_user is a member of podman-socket
+- name: _verify | ansible_user resolves to podman-socket member
   assert:
     that:
-      - ansible_user in (_verify_podman_socket_group.stdout.split(':')[-1].split(','))
+      - "'podman-socket' in _verify_ansible_user_groups.stdout.split()"
