@@ -21,9 +21,17 @@
   tags:
     - console
 
+- name: Apply console-setup to live ttys
+  when: console_cfg.changed and not ansible_check_mode
+  command: setupcon --save --force
+  changed_when: true
+  become: true
+  tags:
+    - console
+
 - name: Update initramfs
   when: console_cfg.changed
-  command: update-initramfs -u -k all
+  command: update-initramfs -u -k all -v
   become: true
   tags:
     - console
