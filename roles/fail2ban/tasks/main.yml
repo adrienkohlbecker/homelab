@@ -27,7 +27,19 @@
       - wireguard_subnet | length > 0
     fail_msg: >-
       site_subnets.home and wireguard_subnet must be defined and non-empty;
-      they compose ignoreip in /etc/fail2ban/jail.d/00-nftables.local.
+      they compose ignoreip in /etc/fail2ban/jail.d/99-nftables.local.
+  tags:
+    - fail2ban
+
+# fail2ban reads jail.d/*.local alphabetically with last-wins precedence
+# for keys; the override used to live at 00-nftables.local where any
+# higher-prefix sibling would silently win. Cleanup-on-migration.
+- name: Drop legacy 00-nftables.local override
+  file:
+    path: /etc/fail2ban/jail.d/00-nftables.local
+    state: absent
+  become: true
+  register: fail2ban_legacy_override
   tags:
     - fail2ban
 
@@ -40,7 +52,7 @@
 # upstream defaults.
 - name: Use nftables banaction
   copy:
-    dest: /etc/fail2ban/jail.d/00-nftables.local
+    dest: /etc/fail2ban/jail.d/99-nftables.local
     content: |
       [DEFAULT]
       banaction = nftables-multiport
@@ -84,6 +96,6 @@
       src: fail2ban
       condition: "{{ not (ansible_check_mode and apt_install_fail2ban.changed) }}"
       restart: "{{ apt_install_fail2ban.changed }}"
-      reload: "{{ fail2ban_banaction.changed and not apt_install_fail2ban.changed }}"
+      reload: "{{ (fail2ban_banaction.changed or fail2ban_legacy_override.changed) and not apt_install_fail2ban.changed }}"
   tags:
     - fail2ban
