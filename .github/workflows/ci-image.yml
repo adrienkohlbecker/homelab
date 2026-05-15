@@ -51,7 +51,7 @@ jobs:
     timeout-minutes: 30
     env:
       REGISTRY: nexus.lab.fahm.fr
-      REPO: homelab/ci
+      REPO: repository/homelab/ci
     steps:
       - uses: actions/checkout@v4
         with:
