@@ -44,8 +44,22 @@ LAB_ROLES=$(
   fi
 )
 
+# Minimal-variant escalation list. Same shape as the lab list, but
+# the extra entry is `<role>:minimal` (vanilla Ubuntu cloud image)
+# rather than `<role>:lab`.
+MINIMAL_ROLES_FILE=".github/ci-minimal-roles.txt"
+MINIMAL_ROLES=$(
+  if [ -f "$MINIMAL_ROLES_FILE" ]; then
+    grep -vE '^[[:space:]]*(#|$)' "$MINIMAL_ROLES_FILE" || true
+  fi
+)
+
 is_lab_role() {
   grep -qx -- "$1" <<<"$LAB_ROLES"
+}
+
+is_minimal_role() {
+  grep -qx -- "$1" <<<"$MINIMAL_ROLES"
 }
 
 # Cross-cut regex: changes to these paths invalidate every role's matrix
@@ -85,6 +99,9 @@ build_matrix() {
     entries+=("\"$role:box\"")
     if is_lab_role "$role"; then
       entries+=("\"$role:lab\"")
+    fi
+    if is_minimal_role "$role"; then
+      entries+=("\"$role:minimal\"")
     fi
   done <<<"$roles"
   if [ ${#entries[@]} -eq 0 ]; then
@@ -133,6 +150,9 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}
       entries+=("\"$role:box\"")
       if is_lab_role "$role"; then
         entries+=("\"$role:lab\"")
+      fi
+      if is_minimal_role "$role"; then
+        entries+=("\"$role:minimal\"")
       fi
     fi
   done
