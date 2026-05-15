@@ -1,0 +1,63 @@
+---
+- name: _verify | Filebrowser user exists
+  command: getent passwd filebrowser
+  changed_when: false
+  become: true
+
+- name: _verify | Filebrowser config dir is owned by filebrowser
+  stat:
+    path: /mnt/services/filebrowser
+  register: _verify_config_dir
+  failed_when: not _verify_config_dir.stat.exists or _verify_config_dir.stat.pw_name != 'filebrowser'
+  become: true
+
+- name: _verify | Filebrowser sqlite dir is owned by filebrowser
+  stat:
+    path: /mnt/services/sqlite/filebrowser
+  register: _verify_sqlite_dir
+  failed_when: not _verify_sqlite_dir.stat.exists or _verify_sqlite_dir.stat.pw_name != 'filebrowser'
+  become: true
+
+- name: _verify | Filebrowser.service is loaded and active
+  systemd:
+    name: filebrowser
+  register: _verify_unit
+  failed_when: >-
+    _verify_unit.status.LoadState != "loaded"
+    or _verify_unit.status.ActiveState != "active"
+  become: true
+
+- name: _verify | Filebrowser answers on its loopback port
+  uri:
+    url: http://localhost:{{ service_ports.filebrowser }}/health
+    status_code: 200
+  register: _verify_http
+  retries: 60
+  delay: 2
+  until: _verify_http.status == 200
+
+- name: _verify | Nginx vhost forwards to filebrowser
+  uri:
+    url: https://localhost/health
+    headers:
+      Host: filebrowser.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    status_code: 200
+  register: _verify_nginx
+  retries: 10
+  delay: 2
+  until: _verify_nginx.status == 200
+
+# Functional uidmap check: filebrowser creates filebrowser.db on first
+# start via its quick-setup path; with --user 0:0 +
+# --uidmap=+0:filebrowser_user.uid:1 the file should land owned by the
+# host filebrowser user, not root or a random rootless-namespace uid.
+# Regression would silently change ownership across a zfs send|recv.
+- name: _verify | Filebrowser sqlite db is owned by filebrowser
+  stat:
+    path: /mnt/services/sqlite/filebrowser/filebrowser.db
+  register: _verify_db
+  failed_when: >-
+    not _verify_db.stat.exists
+    or _verify_db.stat.pw_name != 'filebrowser'
+  become: true
