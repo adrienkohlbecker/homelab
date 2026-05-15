@@ -1,53 +1,9 @@
+# csplogger's runtime deps are just nginx -- everything past /log is gated
+# inside fluent-bit (a separate role with its own _verify). The verify path
+# stubs fluent-bit out via csplogger_upstream.py so this role's test stays
+# focused on the nginx config it actually installs; the stub is brought up
+# inside _verify, not here.
 - name: _setup | Install nginx
   import_role:
     name: _test
     tasks_from: nginx
-
-# The csplogger nginx site is a thin proxy onto fluent-bit's HTTP input;
-# without fluent-bit listening, /log POSTs would 502. Bring up the full
-# fluentbit role so _verify can exercise the end-to-end path.
-- name: _setup | Install fluentbit
-  import_role:
-    name: fluentbit
-
-# Stand up a dummy HTTP listener at hyperdx's OTLP port (4318) so
-# fluent-bit's [OUTPUT] opentelemetry block lands its POSTs against a
-# real listener instead of retrying forever against an unbound port.
-# _verify reads the listener's request log to confirm the nginx ->
-# fluent-bit -> OTLP-out path works. Lighter than standing up the full
-# hyperdx stack (clickhouse + mongo + collector + ui) just to assert
-# "a record left fluent-bit"; full-pipeline shape assertions live in
-# roles/fluentbit's _verify, which does pull in hyperdx.
-- name: _setup | Install OTLP dummy listener script
-  copy:
-    src: otlp_dummy.py
-    dest: /usr/local/bin/otlp_dummy.py
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  register: csplogger_otlp_dummy_script
-
-- name: _setup | Install OTLP dummy listener unit
-  copy:
-    src: otlp_dummy.service
-    dest: /etc/systemd/system/otlp_dummy.service
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-  register: csplogger_otlp_dummy_unit
-
-- name: _setup | Start OTLP dummy listener
-  systemd:
-    name: otlp_dummy
-    enabled: true
-    state: "{{ 'restarted' if (csplogger_otlp_dummy_script.changed or csplogger_otlp_dummy_unit.changed) else 'started' }}"
-    daemon_reload: true
-  become: true
-
-- name: _setup | Wait for OTLP dummy listener to bind 4318
-  wait_for:
-    host: 127.0.0.1
-    port: 4318
-    timeout: 15

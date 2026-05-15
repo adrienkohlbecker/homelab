@@ -31,11 +31,14 @@
         # it, and the browser's report queue still drops the entry as
         # "sent." Defends against arbitrary-internet POSTs writing junk
         # into ClickHouse without rejecting on a status code that would
-        # invite retry. Pattern matches bare host plus any subdomain
-        # depth, with optional port.
+        # invite retry. Pattern matches any subdomain depth of the bare
+        # deployment domain (not just the inventory_hostname-scoped
+        # subtree), with optional port -- so e.g. app.lab.{{ domain }}
+        # and dash.pug.{{ domain }} can both report to a shared csplogger
+        # host once we consolidate.
         map $http_origin $csp_origin_ok {
             default 0;
-            "~^https://([a-zA-Z0-9_-]+\.)*{{ inventory_hostname | regex_escape }}\.{{ domain | regex_escape }}(:[0-9]+)?$" 1;
+            "~^https://([a-zA-Z0-9_-]+\.)*{{ domain | regex_escape }}(:[0-9]+)?$" 1;
         }
 
         # Content-Type allowlist for POSTs (OPTIONS preflights are
@@ -70,9 +73,13 @@
         return 404;
       server_conf: |
         location = /log {
-          limit_except POST OPTIONS {
-            deny all;
-          }
+          # Method gate: only POST (real reports) and OPTIONS (CORS
+          # preflight) reach the gating below. nginx's `limit_except`
+          # returns 403 (via http_access_module) which conflates method
+          # rejection with authorization failure; `if + return` gives a
+          # spec-correct 405 and is one of the two "100% safe" `if`
+          # idioms per the nginx docs.
+          if ($request_method !~ ^(POST|OPTIONS)$) { return 405; }
 
           # Drop foreign-origin and Origin-less POSTs silently. The
           # response is 204 with no ACAO; browsers count it as sent and
@@ -86,6 +93,20 @@
           # The composite key map (request_method + content_type) lives
           # in conf.d/ and exempts OPTIONS preflights.
           if ($csp_post_allow = 0) { return 415; }
+
+          # Rate-limit. Placed BEFORE the OPTIONS branch so preflights
+          # are rate-limited too -- without this, an attacker on a
+          # friendly origin could hammer OPTIONS /log to burn nginx
+          # cycles emitting CORS headers at line rate. Foreign-origin
+          # requests have already been shed by the Origin gate above,
+          # so they don't burn rate-limit slots. 20-request burst
+          # absorbs CSP-storm spikes (page reload, ad network with
+          # several violations); sustained rate above 10/s/IP gets shed
+          # with 429. Browsers ignore the response, but 429 is
+          # semantically right and keeps rate-limit drops from blending
+          # into 5xx upstream-outage noise in logs.
+          limit_req zone=cspreports burst=20 nodelay;
+          limit_req_status 429;
 
           # CORS preflight. `if + add_header + return` is the canonical
           # CORS-on-nginx idiom; nginx docs flag `if` in `location` as
@@ -104,18 +125,17 @@
             return 204;
           }
 
-          # 20-request burst absorbs CSP-storm spikes (page reload, ad
-          # network with several violations) without dropping; sustained
-          # rate above 10/s/IP gets shed with 429. Browsers ignore the
-          # response, but 429 is semantically right and keeps rate-limit
-          # drops from blending into 5xx upstream-outage noise in logs.
-          limit_req zone=cspreports burst=20 nodelay;
-          limit_req_status 429;
-
           # CSP reports are tiny (a few KB typical, ~30KB worst case with
-          # script-sample). Cap well below nginx's 16M global default so a
-          # misbehaving site CSP or hostile poster can't waste bandwidth.
-          client_max_body_size 64k;
+          # script-sample). 32k caps just above realistic worst-case while
+          # bounding the per-request bandwidth an attacker can chew through
+          # the per-IP rate-limit -- well below nginx's 16M global default.
+          client_max_body_size 32k;
+
+          # CSP reports already ship to HyperDX as first-class events
+          # (the whole point of this endpoint); the duplicate nginx access
+          # log line per report dilutes the site access log without adding
+          # signal. 429s still surface via limit_req's own error_log path.
+          access_log off;
 
           # Browsers send CSP reports labelled application/csp-report
           # (legacy report-uri) or application/reports+json (Reporting
@@ -125,23 +145,22 @@
           # above has confirmed the body really is one of those.
           proxy_set_header Content-Type application/json;
 
+          # HTTP/1.1 + Connection clear so nginx can hold the upstream
+          # socket open across CSP reports instead of three-way-handshaking
+          # to loopback on every POST. The site template's proxy_pass-
+          # adjacent directives only apply at server scope; this location
+          # block defines its own proxy_pass so it needs them set inline.
+          proxy_http_version 1.1;
+          proxy_set_header Connection "";
+
+          # Loopback upstream returns 204 with an empty body -- response
+          # buffering buys nothing and adds a buffer-alloc per request.
+          proxy_buffering off;
+
           # Fluent-bit's HTTP input lives on loopback; the tag is set in
           # the [INPUT] block in roles/fluentbit, not derived from the
           # URI here, so the upstream path is irrelevant.
           proxy_pass http://127.0.0.1:{{ service_ports.csp_ingest }}/;
         }
-  tags:
-    - csplogger
-
-# site.yml only reloads nginx when the per-site template changes, not
-# when conf.d/ drops do. Catch the ratelimit-only-changed case here so
-# zone tweaks land without a manual reload. The per-file fact comes
-# from the conf_d helper (csp_ratelimit.conf -> csp_ratelimit_conf_result).
-- name: Reload nginx after rate-limit zone change
-  when: csp_ratelimit_conf_result.changed
-  systemd:
-    name: nginx
-    state: reloaded
-  become: true
   tags:
     - csplogger

@@ -1,19 +1,69 @@
-- name: _verify | fluent-bit listens on the CSP ingest port
+# Stand up the upstream stub that takes fluent-bit's place. Listens on
+# service_ports.csp_ingest, returns 204, and appends each accepted POST
+# as one JSON record per line to /var/log/csplogger_upstream/log. Letting
+# the stub replace fluent-bit keeps this role's _verify scope to "csplogger
+# nginx config does its job"; the lua/OTLP pipeline lives in roles/fluentbit
+# and is exercised there end-to-end.
+- name: _verify | Copy upstream stub script
+  copy:
+    src: csplogger_upstream.py
+    dest: /usr/local/bin/csplogger_upstream.py
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+  register: csplogger_upstream_source
+  become: true
+
+- name: _verify | Install upstream stub unit
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: csplogger_upstream.service.j2
+
+- name: _verify | Enable upstream stub
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: csplogger_upstream
+      restart: "{{ csplogger_upstream_source.changed or csplogger_upstream_service_result.changed }}"
+
+- name: _verify | Wait for upstream stub to bind csp_ingest port
   wait_for:
     host: 127.0.0.1
     port: "{{ service_ports.csp_ingest }}"
-    timeout: 30
+    timeout: 15
 
-# Shared body fixtures so the legacy + reporting-api shapes are defined
-# once and reused across the direct-to-fluent-bit POST, the Content-Type
-# variant tests, and the oversize test (via combine). Each test asserts
-# only on status_code (or response headers), never on the body content,
-# so a fixed URI is fine — the per-task name is the diagnostic
-# distinguisher. The shared Origin matches the production allowlist
-# regex (host + domain) so through-nginx tests reach the proxied path.
+# Drop any prior run's records so the count/shape assertions below
+# only see this run. Must NOT recreate the file as root: the stub
+# runs under DynamicUser= and would EACCES on the next append. The
+# `file: state=absent` lets the parent dir (owned by the dynamic uid
+# via LogsDirectory=) stay, while the stub's `open("a")` re-creates
+# the file under that uid on the first POST. The delete is racing
+# nothing -- the stub doesn't receive POSTs until the probes below.
+- name: _verify | Drop prior upstream stub log
+  file:
+    path: /var/log/csplogger_upstream/log
+    state: absent
+  become: true
+
+# Shared body fixtures. Each probe's status_code assertion runs against
+# nginx's response; whether a probe ALSO reached the upstream stub is
+# verified at the end by reading the stub's JSONL log and asserting the
+# expected number of records landed with Content-Type rewritten to
+# application/json. The shared Origin matches the production allowlist
+# regex (host + domain) so through-nginx probes reach the proxied path.
 - name: _verify | shared CSP body fixtures
   set_fact:
-    csplogger_verify_origin: "https://verify.{{ inventory_hostname }}.{{ domain }}"
+    csplogger_verify_host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
+    # Pick an origin under {{ domain }} that does NOT include the
+    # inventory_hostname segment, so this probe would fail if the
+    # allowlist regex ever regressed back to per-host scoping.
+    csplogger_verify_origin: "https://verify.{{ domain }}"
     csp_legacy_body:
       csp-report:
         blocked-uri: "https://_verify.example/"
@@ -33,78 +83,87 @@
           originalPolicy: "default-src 'self'"
           disposition: "enforce"
 
-# Bypass nginx and POST straight at the fluent-bit HTTP input. Verifies
-# the ingest side works in isolation — separates a fluent-bit config
-# failure from an nginx routing failure when something breaks.
-- name: _verify | POST a synthetic CSP report directly to fluent-bit (legacy)
+# Browsers label CSP report POSTs with application/csp-report (legacy) or
+# application/reports+json (Reporting API), not application/json; nginx
+# rewrites Content-Type on the upstream request to make fluent-bit's
+# application/json-only http input happy. The "should reach upstream"
+# cases use the friendly Origin + an allowed Content-Type; the "should
+# be blocked" cases change one axis each (Origin, Content-Type, size,
+# method, path) to exercise one gate at a time. Host header substitutes
+# for DNS (snakeoil certs in test mode -> validate_certs: false). The
+# two standalone probes below (foreign Origin, OPTIONS preflight) carry
+# bespoke failed_when on response headers that don't compose cleanly
+# with the loop.
+- name: _verify | per-case nginx probes
   uri:
-    url: http://127.0.0.1:{{ service_ports.csp_ingest }}/
-    method: POST
-    body_format: json
-    body: "{{ csp_legacy_body }}"
-    status_code: 204
-
-# Reporting API shape: a JSON array of csp-violation reports. Distinct
-# from the legacy POST above because fluent-bit's http input splits the
-# array into per-record items and the flatten-csp lua filter takes a
-# different branch (camelCase keys, body-nested fields). Exercising both
-# branches catches a regression in either alias set.
-- name: _verify | POST a synthetic CSP report directly to fluent-bit (reporting-api)
-  uri:
-    url: http://127.0.0.1:{{ service_ports.csp_ingest }}/
-    method: POST
-    body_format: json
-    body: "{{ csp_reporting_api_body }}"
-    status_code: 204
-
-# Browsers label CSP report POSTs with application/csp-report (legacy)
-# or application/reports+json (Reporting API), not application/json.
-# Fluent-bit's http input is application/json-only and the nginx site
-# rewrites Content-Type on the upstream request to make this work.
-# Ansible's uri module defaults to application/json with body_format:
-# json; the explicit Content-Type in headers overrides that default, so
-# the body still serialises as JSON while the request bears the real
-# browser Content-Type that exercises the nginx rewrite. Host header
-# substitutes for DNS (snakeoil certs in test mode → validate_certs:
-# false). Origin matches the production allowlist so the request reaches
-# the proxied path (foreign Origins get silently 204'd — see below).
-- name: _verify | POST /log with legacy report-uri Content-Type
-  uri:
-    url: https://localhost/log
-    method: POST
-    headers:
-      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
-      Origin: "{{ csplogger_verify_origin }}"
-      Content-Type: application/csp-report
+    url: "{{ item.url | default('https://localhost/log') }}"
+    method: "{{ item.method | default('POST') }}"
+    headers: "{{ {'Host': csplogger_verify_host} | combine(item.headers | default({})) }}"
     validate_certs: false
     body_format: json
-    body: "{{ csp_legacy_body }}"
-    status_code: 204
+    body: "{{ item.body | default(omit) }}"
+    status_code: "{{ item.status_code }}"
+  loop_control:
+    label: "{{ item.name }} -> {{ item.status_code }}"
+  loop:
+    - name: legacy report-uri Content-Type accepted
+      headers:
+        Origin: "{{ csplogger_verify_origin }}"
+        Content-Type: application/csp-report
+      body: "{{ csp_legacy_body }}"
+      status_code: 204
+    - name: Reporting-API Content-Type accepted
+      headers:
+        Origin: "{{ csplogger_verify_origin }}"
+        Content-Type: application/reports+json
+      body: "{{ csp_reporting_api_body }}"
+      status_code: 204
+    # Content-Type allowlist: friendly Origin but a non-CSP Content-Type
+    # (e.g. application/json -- the value the upstream rewrite normalises
+    # to) must be rejected with 415 before it reaches the upstream. Stops
+    # a hostile poster from wedging fluent-bit's HTTP input with pathological
+    # JSON-shaped bodies under the blanket rewrite.
+    - name: disallowed Content-Type rejected with 415
+      headers:
+        Origin: "{{ csplogger_verify_origin }}"
+        Content-Type: application/json
+      body: "{{ csp_legacy_body }}"
+      status_code: 415
+    # Body-size cap. CSP reports are tiny; the cap stops a runaway site CSP
+    # or hostile poster from chewing bandwidth. Needs friendly Origin +
+    # allowed Content-Type so the body limit is actually what fires
+    # (otherwise the request would 204 or 415 first). 40000 stays well
+    # above the 32k cap (regression catches: cap inadvertently raised
+    # past ~39k) and below asyncio's 64K-per-line stream-reader limit
+    # in test/utils.py, which ansible's per-iteration loop-item echo
+    # would otherwise blow when dumping `body:` on one line.
+    - name: oversize body rejected with 413
+      headers:
+        Origin: "{{ csplogger_verify_origin }}"
+        Content-Type: application/csp-report
+      body:
+        csp-report: "{{ csp_legacy_body['csp-report'] | combine({'script-sample': 'A' * 40000}) }}"
+      status_code: 413
+    - name: GET /log rejected with 405 (POST/OPTIONS only)
+      method: GET
+      status_code: 405
+    - name: GET / on csplogger subdomain returns 404
+      url: https://localhost/
+      method: GET
+      status_code: 404
 
-- name: _verify | POST /log with Reporting-API Content-Type
-  uri:
-    url: https://localhost/log
-    method: POST
-    headers:
-      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
-      Origin: "{{ csplogger_verify_origin }}"
-      Content-Type: application/reports+json
-    validate_certs: false
-    body_format: json
-    body: "{{ csp_reporting_api_body }}"
-    status_code: 204
-
-# Origin allowlist: a POST from outside the host's domain (or with no
-# Origin header at all) must be silently 204'd with no ACAO. The
-# silent-drop response shape keeps misconfigured legitimate browsers'
-# report queues happy; the missing ACAO ensures attacker JS can't read
-# the response for any probing-oracle signal.
+# Origin allowlist: a POST from outside the domain must be silently 204'd
+# with no ACAO. The silent-drop response shape keeps misconfigured
+# legitimate browsers' report queues happy; the missing ACAO ensures
+# attacker JS can't read the response for any probing-oracle signal. The
+# stub log assertion below additionally verifies the request didn't
+# forward upstream.
 - name: _verify | POST /log with foreign Origin is silently dropped
   uri:
     url: https://localhost/log
     method: POST
     headers:
-      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
+      Host: "{{ csplogger_verify_host }}"
       Origin: "https://attacker.example"
       Content-Type: application/csp-report
     validate_certs: false
@@ -116,30 +175,12 @@
     csplogger_verify_foreign.status != 204
     or csplogger_verify_foreign.access_control_allow_origin is defined
 
-# Content-Type allowlist: a POST from a friendly Origin but bearing a
-# non-CSP Content-Type (e.g. application/json — the value the upstream
-# rewrite normalises to) must be rejected with 415 before it reaches
-# fluent-bit. Stops a hostile poster from wedging fluent-bit's HTTP
-# input with pathological JSON-shaped bodies under the blanket rewrite.
-- name: _verify | POST /log with disallowed Content-Type is 415'd
-  uri:
-    url: https://localhost/log
-    method: POST
-    headers:
-      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
-      Origin: "{{ csplogger_verify_origin }}"
-      Content-Type: application/json
-    validate_certs: false
-    body_format: json
-    body: "{{ csp_legacy_body }}"
-    status_code: 415
-
 - name: _verify | OPTIONS preflight returns CORS allow-POST
   uri:
     url: https://localhost/log
     method: OPTIONS
     headers:
-      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
+      Host: "{{ csplogger_verify_host }}"
       Origin: "{{ csplogger_verify_origin }}"
       Access-Control-Request-Method: POST
       Access-Control-Request-Headers: Content-Type
@@ -152,124 +193,33 @@
     or 'Content-Type' not in (csplogger_verify_preflight.access_control_allow_headers | default(''))
     or (csplogger_verify_preflight.access_control_max_age | default('') | string) != '86400'
 
-# Exercise the body-size cap on /log. CSP reports are tiny; the cap
-# stops a runaway site CSP or hostile poster from chewing bandwidth.
-# Needs friendly Origin + allowed Content-Type so the body limit is
-# actually what fires (otherwise the request would 204 or 415 first).
-- name: _verify | /log rejects oversize bodies (>64K)
-  uri:
-    url: https://localhost/log
-    method: POST
-    headers:
-      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
-      Origin: "{{ csplogger_verify_origin }}"
-      Content-Type: application/csp-report
-    validate_certs: false
-    body_format: json
-    body:
-      csp-report: "{{ csp_legacy_body['csp-report'] | combine({'script-sample': 'A' * 70000}) }}"
-    status_code: 413
-
-- name: _verify | GET /log is rejected (POST/OPTIONS only)
-  uri:
-    url: https://localhost/log
-    method: GET
-    headers:
-      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
-    validate_certs: false
-    status_code: 403
-
-- name: _verify | GET / on csplogger subdomain returns 404
-  uri:
-    url: https://localhost/
-    method: GET
-    headers:
-      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
-    validate_certs: false
-    status_code: 404
-
-# Runtime check on flatten-csp.lua: the dry-run validator in roles/fluentbit
-# catches lua *load* errors at config time, but nil-deref / type-mismatch
-# bugs only show up when a real record runs through the filter. After the
-# legacy + reporting-api POSTs above, scan fluent-bit's journal for any
-# [error] line mentioning either lua script and fail loudly. Failure mode
-# is per-record (fluent-bit still returns 204), so without this the only
-# symptom would be silently-dropped attributes in HyperDX.
-- name: _verify | fluent-bit lua filters logged no runtime errors
-  # journalctl --grep exits 0 on match, 1 on no-match; rc == 0 here means
-  # an error line was found, which is the failure. rc > 1 means journalctl
-  # itself failed (unit unknown, permission denied), also a failure.
-  command: >-
-    journalctl -u fluent-bit --since "5 minutes ago" --no-pager
-    --grep '\[error\].*(flatten-csp|otlp-shape|level-from-message)\.lua'
-  register: csplogger_verify_journal
-  changed_when: false
-  failed_when: csplogger_verify_journal.rc != 1
+# Read what reached the upstream stub. Exactly the two friendly-Origin +
+# allowed-Content-Type POSTs above should have landed; the six blocked
+# probes (bad CT, oversize, GET /log, GET /, foreign Origin, OPTIONS
+# preflight) wrote nothing. The Content-Type on each landed record must
+# be the
+# application/json value nginx rewrote to -- proves the rewrite at
+# main.yml:126 fires after the allowlist check (a regression that lets
+# the original Content-Type through would surface here).
+- name: _verify | Read upstream stub log
+  slurp:
+    src: /var/log/csplogger_upstream/log
+  register: csplogger_upstream_log
   become: true
 
-# OTLP-out reachability assertion. Stands in for the full hyperdx-into-
-# ClickHouse round-trip that previously lived here (moved to roles/
-# fluentbit's _verify, where the lua filters being exercised actually
-# live). Here we only need to prove csplogger's surface delivered to
-# fluent-bit, and fluent-bit's OTLP output emitted *something* to the
-# downstream port — which the dummy listener at 127.0.0.1:4318 (stood
-# up in _setup) captures by appending every POST body to a log file.
-# A per-run marker baked into the CSP report's blocked-uri is what we
-# grep for: it propagates through flatten-csp.lua into LogAttributes,
-# which fluent-bit's opentelemetry output puts into the protobuf body
-# verbatim as a UTF-8 string.
-- name: _verify | OTLP-via-dummy | build per-run marker
+- name: _verify | Parse upstream stub records
   set_fact:
-    csplogger_otlp_marker: "verify_dummy_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+    csplogger_upstream_records: >-
+      {{ (csplogger_upstream_log.content | b64decode).splitlines()
+         | reject('equalto', '') | map('from_json') | list }}
 
-# Truncate so a prior test's marker doesn't satisfy the grep below.
-- name: _verify | OTLP-via-dummy | truncate dummy listener log
-  copy:
-    dest: /var/log/otlp_dummy.log
-    content: ""
-    force: true
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-
-- name: _verify | OTLP-via-dummy | POST marked CSP report through nginx
-  uri:
-    url: https://localhost/log
-    method: POST
-    headers:
-      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
-      Origin: "{{ csplogger_verify_origin }}"
-      Content-Type: application/csp-report
-    validate_certs: false
-    body_format: json
-    body:
-      csp-report:
-        blocked-uri: "https://verify.example/{{ csplogger_otlp_marker }}"
-        document-uri: "https://verify.example/"
-        violated-directive: "script-src"
-        effective-directive: "script-src-elem"
-        original-policy: "default-src 'self'"
-    status_code: 204
-
-# fluent-bit's Flush=5s plus OTLP output's batch timeout means up to
-# ~10s typical for the record to leave. 30 retries × 2s allows for
-# cold-start retries when the collector pipeline is still settling.
-- name: _verify | OTLP-via-dummy | wait for marker in dummy listener log
-  command: grep -F "{{ csplogger_otlp_marker }}" /var/log/otlp_dummy.log
-  register: csplogger_otlp_dummy_grep
-  changed_when: false
-  failed_when: false
-  retries: 30
-  delay: 2
-  until: csplogger_otlp_dummy_grep.rc == 0
-  become: true
-
-- name: _verify | OTLP-via-dummy | assert marker reached the dummy listener
+- name: _verify | Exactly the legitimate POSTs reached upstream
   assert:
-    that: csplogger_otlp_dummy_grep.rc == 0
+    that:
+      - csplogger_upstream_records | length == 2
+      - csplogger_upstream_records | map(attribute='content_type') | unique | list == ['application/json']
     fail_msg: >-
-      CSP marker {{ csplogger_otlp_marker }} never reached the OTLP
-      dummy listener at 127.0.0.1:4318 within 60s. Inspect
-      /var/log/otlp_dummy.log and `journalctl -u fluent-bit` for the
-      OTLP output's retry state.
+      Expected exactly 2 POSTs (legacy CSP, Reporting API) to reach the
+      upstream stub with Content-Type rewritten to application/json.
+      Got {{ csplogger_upstream_records | length }} records:
+      {{ csplogger_upstream_records | map(attribute='content_type') | list }}.
