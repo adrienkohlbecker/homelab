@@ -157,6 +157,11 @@ jobs:
             exit 1
           }
           REGISTRY_AUTH_FILE=$(mktemp -p "${RUNNER_TEMP:-/tmp}" auth.XXXXXX.json)
+          # mktemp creates the file empty; podman login reads it before
+          # writing (to merge with existing auth) and bails on the empty
+          # file with "unexpected end of JSON input". Delete the empty
+          # file so login creates a fresh one.
+          rm -f "$REGISTRY_AUTH_FILE"
           export REGISTRY_AUTH_FILE
           trap 'rm -f "$REGISTRY_AUTH_FILE"' EXIT
           printf '%s' "${NEXUS_PASSWORD}" | podman login "${REGISTRY}" \
