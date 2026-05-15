@@ -109,10 +109,16 @@
 
 # Cover the cross-role coupling: roles/netdata/tasks/main.yml calls
 # into roles/certbot/tasks/netdata.yml, so a break in x509check.conf.j2
-# would otherwise only surface on the netdata test. netdata_restart is
-# false because the harness installed netdata with policy_rc_d=101 in
-# _setup.yml -- the unit isn't running, and restarting would be a no-op
-# noise either way.
+# would otherwise only surface on the netdata test. This is test
+# scaffolding (netdata isn't a real certbot dependency), so the
+# install lives here in _verify rather than _setup. netdata_restart
+# is false because policy_rc_d=101 keeps the unit out of the running
+# set under test -- restarting would be a no-op noise either way.
+- name: _verify | Install netdata
+  import_role:
+    name: netdata
+    tasks_from: install
+
 - name: _verify | Render netdata x509check config
   import_tasks: netdata.yml
   vars:
