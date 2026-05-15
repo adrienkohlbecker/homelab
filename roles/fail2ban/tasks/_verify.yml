@@ -27,6 +27,31 @@
   changed_when: false
   become: true
 
+# State-only assertion (function-test would need synthetic sshd-failure
+# journal injection + findtime wait, and fail2ban-client `set banip`
+# explicitly bypasses ignoreip — manual bans skip BanManager's filter,
+# so a "ban an ignored IP" test would always land in f2b-table). This
+# proves the daemon parsed the rendered jail and loaded each expected
+# entry — catches empty-interpolation regressions of site_subnets.home
+# or wireguard_subnet that would silently shrink the whitelist.
+- name: _verify | fail2ban-client knows the configured ignoreip
+  command: fail2ban-client get sshd ignoreip
+  register: _verify_ignoreip
+  changed_when: false
+  become: true
+
+- name: _verify | Configured ignoreip includes all expected entries
+  assert:
+    that:
+      - "'127.0.0.1/8' in _verify_ignoreip.stdout"
+      - "'::1' in _verify_ignoreip.stdout"
+      - site_subnets.home in _verify_ignoreip.stdout
+      - wireguard_subnet in _verify_ignoreip.stdout
+    fail_msg: >-
+      sshd jail ignoreip missing expected entries; check empty
+      interpolation of site_subnets.home or wireguard_subnet.
+      Got: {{ _verify_ignoreip.stdout }}
+
 # Synthetic ban against TEST-NET-1 (RFC 5737); never matches a real client.
 - name: _verify | Issue a synthetic ban
   command: fail2ban-client set sshd banip 192.0.2.1
