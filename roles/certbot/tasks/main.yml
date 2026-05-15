@@ -5,7 +5,6 @@
       - python3-certbot-dns-cloudflare
     cache_valid_time: 3600
   become: true
-  register: certbot_apt
   tags:
     - certbot
 
@@ -25,33 +24,6 @@
   tags:
     - certbot
 
-# Renewal happens out-of-band via the certbot.timer that the apt package
-# ships. Without this hook nginx would keep serving the pre-renewal cert
-# until something else restarted it. The Ubuntu certbot package doesn't
-# pre-create renewal-hooks/deploy, so we own it here.
-- name: Create renewal-hooks deploy directory
-  file:
-    dest: /etc/letsencrypt/renewal-hooks/deploy
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - certbot
-
-- name: Install nginx reload deploy-hook
-  copy:
-    src: reload_nginx.sh
-    dest: /etc/letsencrypt/renewal-hooks/deploy/reload_nginx.sh
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-  become: true
-  tags:
-    - certbot
-
 - name: Write cloudflare credentials
   copy:
     dest: /etc/letsencrypt/cloudflare.ini
@@ -65,28 +37,51 @@
   tags:
     - certbot
 
-- name: Get certificates
-  command: certbot certonly --agree-tos -m {{ root_email }} --noninteractive {{ certbot_production_certificates|ternary('', '--test-cert') }} --dns-cloudflare --dns-cloudflare-credentials /etc/letsencrypt/cloudflare.ini --dns-cloudflare-propagation-seconds 30 -d "{{ item }}" -d "*.{{ item }}"
+# Flag notes:
+#   --cert-name pins the lineage path. Without it certbot derives it
+#       from the first -d SAN, so reordering or adding a SAN later
+#       silently rolls live/<name>-0001/ and breaks every consumer
+#       (nginx, x509check.conf, services reading fullchain.pem).
+#   --key-type/--elliptic-curve pin the crypto posture against future
+#       certbot-default flips. Existing RSA-keyed certs aren't re-keyed
+#       automatically (--reuse-key below); migrate an existing host
+#       once with `sudo certbot certonly --force-renewal --cert-name X
+#       --key-type ecdsa --elliptic-curve secp384r1 ...`.
+#   --reuse-key keeps SPKI stable across renewals so monitoring
+#       (netdata x509check, external pinning) doesn't churn every
+#       60 days. A leaked key is mitigated by revoke-and-reissue.
+#   --deploy-hook is persisted into renewal/<name>.conf so the
+#       out-of-band certbot.timer renewal reloads nginx without a
+#       separate /etc/letsencrypt/renewal-hooks/deploy/ script.
+#       Migrate existing prod hosts with `sudo certbot reconfigure
+#       --cert-name X --deploy-hook '<cmd>'`.
+#
+# Snakeoils from roles/nginx/_setup.yml and roles/_test/nginx.yml write
+# to /etc/letsencrypt/live/<dom>/privkey.pem -- same path the `creates:`
+# gate checks. _setup.yml is test-only (never invoked by site.yml) so
+# prod is unaffected, but a future composed harness fixture applying
+# those snakeoils before this role on the same VM would silently skip
+# real issuance.
+- name: Get certificate
+  command:
+    argv: >-
+      {{ ['certbot', 'certonly', '--agree-tos', '-m', root_email,
+          '--noninteractive', '--dns-cloudflare',
+          '--dns-cloudflare-credentials', '/etc/letsencrypt/cloudflare.ini',
+          '--cert-name', inventory_hostname + '.' + domain,
+          '--key-type', 'ecdsa', '--elliptic-curve', 'secp384r1',
+          '--reuse-key',
+          '--deploy-hook', certbot_deploy_hook,
+          '-d', inventory_hostname + '.' + domain,
+          '-d', '*.' + inventory_hostname + '.' + domain]
+         + (certbot_production_certificates | ternary([], ['--test-cert'])) }}
+  vars:
+    certbot_deploy_hook: >-
+      logger -t certbot-deploy "reloading nginx for ${RENEWED_LINEAGE:-?}";
+      systemctl is-active --quiet nginx && systemctl reload nginx
   args:
-    creates: /etc/letsencrypt/live/{{ item }}/privkey.pem
+    creates: /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem
   become: true
-  loop:
-    - "{{ domain }}"
-    - "{{ inventory_hostname }}.{{ domain }}"
-  tags:
-    - certbot
-
-# Renewal happens out-of-band via certbot.timer. The apt package's
-# systemd preset enables it, but assert explicitly so a manual
-# `systemctl disable` (or a future preset change) doesn't silently
-# leave certs to expire. Gated so check mode against a host that
-# doesn't have certbot installed yet doesn't fail on the missing unit.
-- name: Ensure certbot.timer is enabled and running
-  systemd:
-    name: certbot.timer
-    enabled: true
-    state: started
-  when: not (ansible_check_mode and certbot_apt.changed)
-  become: true
+  no_log: true
   tags:
     - certbot
