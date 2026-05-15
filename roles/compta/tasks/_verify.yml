@@ -1,26 +1,31 @@
-- name: _verify | Compta user exists
-  command: getent passwd compta
-  changed_when: false
-  become: true
-
-- name: _verify | Compta.service is loaded and active
-  systemd:
-    name: compta
-  register: compta_verify_unit
-  failed_when: >-
-    compta_verify_unit.status.LoadState != "loaded"
-    or compta_verify_unit.status.ActiveState != "active"
-  become: true
-
-# Same probe as the container's health-cmd, run from the host. compta is
-# a slow-booting rails-ish app — the unit's health-start-period is 100s,
-# so retries here have to give it at least that long before failing.
+# Loopback probe — exercises the container directly. Provides the
+# cold-start retry window for compta's slow rails-ish boot
+# (--health-start-period is 100s).
 - name: _verify | Compta answers on its loopback port
   uri:
     url: http://localhost:{{ service_ports.compta }}/
     status_code: 200
-  register: compta_verify_http
+    return_content: true
+  register: compta_verify_loopback
   retries: 60
   delay: 2
-  until: compta_verify_http.status == 200
+  until:
+    - compta_verify_loopback.status == 200
+    - "'OK!' in compta_verify_loopback.content"
+  become: true
+
+# nginx Host-header probe — exercises the full reverse-proxy chain
+# so a typo in nginx_site_args / proxy_pass fails here even though
+# the loopback probe above passes.
+- name: _verify | Compta is reachable through nginx
+  uri:
+    url: https://localhost/
+    headers:
+      Host: compta.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    return_content: true
+  register: compta_verify_nginx
+  failed_when: >-
+    compta_verify_nginx.status != 200
+    or "OK!" not in compta_verify_nginx.content
   become: true
