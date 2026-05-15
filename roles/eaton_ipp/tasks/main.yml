@@ -40,6 +40,8 @@
 
   always:
 
+    # Cleanup pairs with the check_mode: false download above so /tmp
+    # doesn't carry the deb past a --check run.
     - name: Delete deb file
       check_mode: false
       file:
