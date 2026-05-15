@@ -9,12 +9,15 @@
     tasks_from: nginx
 
 - name: _test | Setup dependencies
-  shell: |
-    set -euo pipefail
-    mkdir /mnt/{services,scratch,media,data}
-    mkdir -p "/mnt/data/MacbookPro/Music/iTunes/iTunes Media/Music"
-    mkdir -p /mnt/data/Musique/Records
-  args:
-    executable: /bin/bash
-    creates: /mnt/services
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /mnt/services
+    - /mnt/scratch
+    - /mnt/media
+    - /mnt/data
+    - "/mnt/data/MacbookPro/Music/iTunes/iTunes Media/Music"
+    - /mnt/data/Musique/Records
   become: true

@@ -9,10 +9,11 @@
     tasks_from: nginx
 
 - name: _test | Setup dependencies
-  shell: |
-    set -euo pipefail
-    mkdir /mnt/{services,media}
-  args:
-    executable: /bin/bash
-    creates: /mnt/services
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /mnt/services
+    - /mnt/media
   become: true
