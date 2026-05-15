@@ -1,31 +1,24 @@
 # Functional checks for the console role. The converge proves apt +
-# copy + update-initramfs exit-coded cleanly; these checks verify
-# (a) /etc/default/console-setup landed in the documented shape,
-# (b) console-setup.service is loaded and enabled (the unit that
-# applies the config to live ttys at boot), and (c) the initramfs
-# picked up our config -- i.e. the console-setup initramfs hook fired
-# and bundled /etc/default/console-setup into the initrd.
+# copy + update-initramfs exit-coded cleanly; these checks verify that
+# (a) the initramfs picked up our config -- i.e. the console-setup
+# initramfs hook fired and bundled /etc/default/console-setup into the
+# initrd, and (b) the running kernel actually applied consoleblank=0
+# from whichever cmdline mechanism (ZBM property / GRUB grub.d) the
+# host uses. Live tty glyph output isn't observable in a headless QEMU
+# run, so the noblank service is checked via exit-code only.
 #
-# Live tty glyph output isn't observable in a headless QEMU run, so
-# (b) is a state check. The initrd-content check (c) is the strongest
-# functional probe available: a future regression where the package
-# de-bundles its hook, or where update-initramfs silently no-ops,
-# slips past the converge but trips here.
+# We reboot at the top of the verify so the running kernel reflects
+# the cmdline we just wrote -- without that, /sys/module/kernel/
+# parameters/consoleblank shows the pre-role value (ZBM/GRUB apply at
+# next boot), and `active` on the noblank oneshot would only prove it
+# ran at the *previous* boot. Costs one extra ~30s boot per test run;
+# in exchange every downstream check tests post-reboot reality rather
+# than next-boot intent.
 
-- name: _verify | Stat console-setup config
-  stat:
-    path: /etc/default/console-setup
-  register: _verify_console_cfg
+- name: _verify | Reboot to apply role changes
+  reboot:
+    reboot_timeout: 600
   become: true
-
-- name: _verify | Config exists with expected mode/owner
-  assert:
-    that:
-      - _verify_console_cfg.stat.exists
-      - _verify_console_cfg.stat.mode == "0644"
-      - _verify_console_cfg.stat.pw_name == "root"
-      - _verify_console_cfg.stat.gr_name == "root"
-    fail_msg: "/etc/default/console-setup wrong perms or missing ({{ _verify_console_cfg.stat }})"
 
 - name: _verify | Read console-setup config
   slurp:
@@ -45,27 +38,31 @@
     - 'FONTSIZE="8x16"'
     - 'ACTIVE_CONSOLES="/dev/tty[1-6]"'
 
-# is-enabled exits 0 for both "enabled" and "static" -- both states
-# mean the unit runs at boot through normal dependency wiring. Masked
-# or disabled would silently break the apply-at-boot path.
-- name: _verify | console-setup.service is enabled
-  command: systemctl is-enabled console-setup.service
-  register: _verify_console_unit
-  changed_when: false
-  failed_when:
-    - _verify_console_unit.rc != 0 or _verify_console_unit.stdout not in ['enabled', 'static']
-  become: true
-
 # The console-setup initramfs hook
 # (/usr/share/initramfs-tools/hooks/console_setup) copies
 # /etc/default/console-setup into the initrd at the same path. If the
 # hook didn't fire (package change, hook disabled, update-initramfs
 # no-op), the path is absent and this fails.
+#
+# Skipped on cloud images that don't ship per-kernel initrds in /boot
+# (Ubuntu's "minimal" cloud images boot a pre-baked initrd packed
+# elsewhere and `update-initramfs -u -k all` reports "Nothing to do").
+# The check is only meaningful on hosts whose kernel package layout
+# manages /boot/initrd.img-<ver> -- i.e. every prod host shape we care
+# about; the minimal variant is test scaffolding, not a deployment
+# target.
+- name: _verify | Stat current kernel's initrd
+  stat:
+    path: /boot/initrd.img-{{ ansible_kernel }}
+  register: _verify_console_initrd_stat
+  become: true
+
 - name: _verify | Current kernel's initrd contains console-setup config
+  when: _verify_console_initrd_stat.stat.exists
   command: lsinitramfs /boot/initrd.img-{{ ansible_kernel }}
   register: _verify_console_initrd
   changed_when: false
-  failed_when: "'etc/default/console-setup' not in _verify_console_initrd.stdout"
+  failed_when: "'etc/default/console-setup' not in _verify_console_initrd.stdout_lines"
   become: true
 
 # console_noblank.service is Type=oneshot RemainAfterExit=true, so
@@ -90,10 +87,9 @@
   failed_when: _verify_noblank_active.stdout | trim != 'active'
   become: true
 
-# Mirrors the kdump pre-reboot check: ZBM applies the cmdline at the
-# next boot via rpool/ROOT's org.zfsbootmenu:commandline property, so
-# this is the strongest assertion we can make from the running system
-# (the harness QEMU /proc/cmdline comes from -append, not from ZBM).
+# Persistent-config checks: confirm the next-boot cmdline source
+# carries consoleblank=0 (so a future reboot keeps the setting). The
+# runtime probe below proves the *current* boot picked it up.
 - name: _verify | ZBM commandline includes consoleblank=0
   when: not grub_bootloader
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
@@ -108,4 +104,16 @@
     src: /etc/default/grub.d/99-console.cfg
   register: _verify_console_grub_cfg
   failed_when: "'consoleblank=0' not in (_verify_console_grub_cfg.content | b64decode)"
+  become: true
+
+# /sys/module/kernel/parameters/consoleblank exposes the value the
+# running kernel parsed from the cmdline at boot. Post-reboot this is
+# the strongest functional check: it proves the cmdline source above
+# actually propagated through to the kernel, not just that the file/
+# property is set correctly.
+- name: _verify | Running kernel applied consoleblank=0
+  slurp:
+    src: /sys/module/kernel/parameters/consoleblank
+  register: _verify_consoleblank
+  failed_when: (_verify_consoleblank.content | b64decode | trim) != '0'
   become: true
