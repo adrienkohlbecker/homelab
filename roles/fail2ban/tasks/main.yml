@@ -27,37 +27,41 @@
       - wireguard_subnet | length > 0
     fail_msg: >-
       site_subnets.home and wireguard_subnet must be defined and non-empty;
-      they compose ignoreip in /etc/fail2ban/jail.d/99-nftables.local.
+      they compose ignoreip in /etc/fail2ban/jail.local.
   tags:
     - fail2ban
 
-# fail2ban reads jail.d/*.local alphabetically with last-wins precedence
-# for keys; the override used to live at 00-nftables.local where any
-# higher-prefix sibling would silently win. Cleanup-on-migration.
-- name: Drop legacy 00-nftables.local override
+# fail2ban loads jail.conf -> jail.d/*.conf -> jail.local -> jail.d/*.local
+# alphabetically with last-wins precedence. We now write our DEFAULT
+# block at /etc/fail2ban/jail.local (the upstream-canonical override
+# path); two earlier prefix iterations under jail.d/ are cleaned up.
+- name: Drop legacy jail.d overrides
   file:
-    path: /etc/fail2ban/jail.d/00-nftables.local
+    path: "/etc/fail2ban/jail.d/{{ item }}"
     state: absent
+  loop:
+    - 00-nftables.local
+    - 99-nftables.local
   become: true
   register: fail2ban_legacy_override
   tags:
     - fail2ban
 
-# Use the nftables banaction set so f2b-* chains land in `inet f2b-table`
-# instead of the iptables-nft compat `ip filter`. Active bans persist in
-# fail2ban's database and get re-applied to the new framework on reload.
+# [DEFAULT] block: banaction routes f2b-* chains into `inet f2b-table`
+# (nftables-native) instead of the iptables-nft compat `ip filter`.
+# Active bans persist in fail2ban's database and re-apply on restart.
 #
-# Ubuntu's fail2ban deb ships every jail at `enabled = false`, so the
-# sshd jail is pinned explicitly here rather than left contingent on
-# upstream defaults.
-- name: Use nftables banaction
+# `backend = ...` is intentionally NOT pinned here — keeping it at the
+# default lets each jail pick its own (sshd uses systemd; a future
+# logpath-based jail like postfix-sasl would silently break if forced
+# onto the journal without a matching journalmatch).
+- name: Write fail2ban defaults
   copy:
-    dest: /etc/fail2ban/jail.d/99-nftables.local
+    dest: /etc/fail2ban/jail.local
     content: |
       [DEFAULT]
       banaction = nftables-multiport
       banaction_allports = nftables-allports
-      backend = systemd
       ignoreip = 127.0.0.1/8 ::1 {{ site_subnets.home }} {{ wireguard_subnet }}
 
       # systemd-journal entries carry IPs, not hostnames; rDNS resolve
@@ -80,31 +84,62 @@
       bantime.rndtime = 10m
       dbpurgeage = 2w
 
-      [sshd]
-      enabled = true
+      # action_mwl: ban event + whois + offending journal lines via
+      # the local MTA (postfix -> mailgun). Postmortem does not need
+      # ssh'ing to the host. Sender defaults to root@<host>; postfix
+      # rewrites the envelope on its way to mailgun.
+      destemail = {{ root_email }}
+      action = %(action_mwl)s
     owner: root
     group: root
     mode: "0640"
     backup: true
-  register: fail2ban_banaction
+  register: fail2ban_default
   become: true
   tags:
     - fail2ban
 
-# Surface jail-config typos at copy time rather than at reload, where a
-# failed reload would leave fail2ban dead silently.
+# Per-jail sshd config. `backend = systemd` is scoped here (not in
+# [DEFAULT], see jail.local comment). journalmatch is pinned to
+# `_COMM=sshd` so the filter catches both jammy's `ssh.service` and
+# noble's `ssh.socket` + `ssh@N-.service` template-unit layout — the
+# stock filter ANDs on `_SYSTEMD_UNIT=sshd.service` and silently
+# misses the latter.
+- name: Write fail2ban sshd jail
+  copy:
+    dest: /etc/fail2ban/jail.d/sshd.local
+    content: |
+      [sshd]
+      enabled = true
+      backend = systemd
+      journalmatch = _COMM=sshd
+    owner: root
+    group: root
+    mode: "0640"
+    backup: true
+  register: fail2ban_sshd_jail
+  become: true
+  tags:
+    - fail2ban
+
+# Surface jail-config typos at apply time. Runs every apply (not
+# gated on .changed) so a previous failed apply that left a broken
+# file on disk doesn't get silently skipped on idempotent re-runs.
+# fail2ban-client lacks a single-file validate mode, so this can't
+# move to the copy task's `validate:` parameter.
 - name: Validate fail2ban config
-  when:
-    - fail2ban_banaction.changed
-    - not ansible_check_mode
+  when: not (ansible_check_mode and apt_install_fail2ban.changed)
   command: fail2ban-client -t
   changed_when: false
   become: true
   tags:
     - fail2ban
 
-# apt upgrade swaps the binary -> full restart. Config-only edits reload
-# via SIGHUP to preserve in-memory ban state.
+# Banaction-class changes live in jail.local -> restart, since
+# fail2ban-client reload does NOT migrate already-active f2b-*
+# chains to a new banaction's table. Per-jail tweaks (jail.d/*.local
+# or the legacy-cleanup) keep using SIGHUP reload to preserve
+# in-memory ban state; the on-disk db replays on restart anyway.
 - name: Enable fail2ban service
   import_role:
     name: systemd_unit
@@ -113,7 +148,7 @@
     systemd_unit_args:
       src: fail2ban
       condition: "{{ not (ansible_check_mode and apt_install_fail2ban.changed) }}"
-      restart: "{{ apt_install_fail2ban.changed }}"
-      reload: "{{ (fail2ban_banaction.changed or fail2ban_legacy_override.changed) and not apt_install_fail2ban.changed }}"
+      restart: "{{ apt_install_fail2ban.changed or (fail2ban_default.changed and not apt_install_fail2ban.changed) }}"
+      reload: "{{ (fail2ban_sshd_jail.changed or fail2ban_legacy_override.changed) and not apt_install_fail2ban.changed and not fail2ban_default.changed }}"
   tags:
     - fail2ban
