@@ -118,11 +118,20 @@ COPY mise.toml pyproject.toml uv.lock ./
 # the MISE_GITHUB_TOKEN repo secret (a long-lived PAT with no scopes
 # beyond public read). Mounted only for this RUN -- never lands in any
 # image layer.
+#
+# GITHUB_TOKEN is scoped to the single `mise install` invocation via
+# inline-env rather than `export`ed for the whole RUN: a mise plugin
+# post-install hook that dumps env into a cached file under
+# MISE_DATA_DIR (/opt/mise) or ~/.cache/uv would otherwise bake the
+# token into the layer. mise trust is a local file op and uv sync
+# doesn't need GitHub auth, so both run without the token visible.
 RUN --mount=type=secret,id=mise_github_token \
+    mise trust && \
     if [ -s /run/secrets/mise_github_token ]; then \
-      export GITHUB_TOKEN=$(cat /run/secrets/mise_github_token); \
+      GITHUB_TOKEN=$(cat /run/secrets/mise_github_token) mise install; \
+    else \
+      mise install; \
     fi && \
-    mise trust && mise install && \
     mise exec -- uv sync --frozen && \
     rm -rf /tmp/build/.venv
 
