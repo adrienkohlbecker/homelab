@@ -53,6 +53,10 @@
         checksum: sha256:{{ static_curl_release[ansible_architecture].sha256 }}
         mode: "0644"
       check_mode: false
+      register: static_curl_download
+      retries: 3
+      delay: 5
+      until: static_curl_download is succeeded
 
     # `include: [curl]` keeps trurl + SHA256SUMS out of /usr/local/bin;
     # `--transform` renames the binary so it doesn't collide with the
