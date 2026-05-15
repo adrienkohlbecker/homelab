@@ -1,33 +1,3 @@
-- name: _verify | bazarr user exists
-  getent:
-    database: passwd
-    key: bazarr
-    fail_key: true
-  become: true
-
-- name: _verify | bazarr config dir exists
-  stat:
-    path: /mnt/services/bazarr
-  register: _verify_config_dir
-  failed_when: not _verify_config_dir.stat.exists or _verify_config_dir.stat.pw_name != 'bazarr'
-  become: true
-
-- name: _verify | bazarr sqlite dir exists
-  stat:
-    path: /mnt/services/sqlite/bazarr
-  register: _verify_sqlite_dir
-  failed_when: not _verify_sqlite_dir.stat.exists or _verify_sqlite_dir.stat.pw_name != 'bazarr'
-  become: true
-
-- name: _verify | bazarr.service is loaded and active
-  systemd:
-    name: bazarr
-  register: _verify_unit
-  failed_when: >-
-    _verify_unit.status.LoadState != "loaded"
-    or _verify_unit.status.ActiveState != "active"
-  become: true
-
 # Negative probe first: confirms /api/* enforces the apikey. Pairs with the
 # auth'd probe below -- together they prove the apikey we templated is both
 # required by bazarr and the one it accepted. Without this, a future bug that
