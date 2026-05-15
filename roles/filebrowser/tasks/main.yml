@@ -53,6 +53,9 @@
   vars:
     nginx_site_args:
       subdomain: filebrowser
+      # No other site should embed the autoindex — defense-in-depth for the
+      # case where attacker-influenced filenames make it onto disk.
+      csp_frame_ancestors: "'none'"
       # sub_filter rewrites the autoindex HTML so it picks up viewport
       # meta + the stylesheet on the fly. The CSS lives outside
       # /srv/filebrowser (aliased under `location =`) so it doesn't
@@ -60,6 +63,13 @@
       location_conf: |
         root /srv/filebrowser;
         charset utf-8;
+        # MIME map wiped so every served file is application/octet-stream —
+        # browsers download instead of rendering HTML/SVG planted in the
+        # mounted trees by upstream services (sabnzbd, *arr, etc.). nginx
+        # synthesises the autoindex response with a hard-coded text/html
+        # and bypasses `types`, so the listing itself still renders.
+        types { }
+        default_type application/octet-stream;
         autoindex on;
         autoindex_exact_size off;
         autoindex_localtime on;
