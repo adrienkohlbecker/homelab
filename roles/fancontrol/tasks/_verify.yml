@@ -23,7 +23,7 @@
   register: fancontrol_unit_empty
   failed_when: >-
     fancontrol_unit_empty.status.ActiveState == "active"
-    or fancontrol_unit_empty.status.UnitFileState not in ["disabled", "static"]
+    or fancontrol_unit_empty.status.UnitFileState != "disabled"
   become: true
 
 # ---- non-empty branch ----
