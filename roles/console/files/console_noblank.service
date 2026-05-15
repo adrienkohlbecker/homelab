@@ -1,6 +1,8 @@
 # consoleblank=0 on the kernel cmdline (set in roles/console via
-# zfsbootmenu_cmdline_file: console) already disables the VT idle-blank
-# timer from early boot. This unit covers the DPMS half of the picture:
+# zfsbootmenu_cmdline_file: consoleblank on ZBM hosts, or
+# /etc/default/grub.d/99-console.cfg on GRUB hosts) already disables
+# the VT idle-blank timer from early boot. This unit covers the DPMS
+# half of the picture:
 # --powersave / --powerdown drive the monitor's sleep state via VT
 # escape sequences and aren't reachable from the kernel cmdline. --blank
 # is set defensively too, so a reset that clears the kernel timer (rare,
