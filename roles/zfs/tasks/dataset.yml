@@ -16,6 +16,16 @@
 # that doesn't explicitly override.
 
 - block:
+    - name: Reject mountpoint inside extra_properties for {{ _zfs_dataset_resolved }}
+      assert:
+        that: "'mountpoint' not in (zfs_dataset_args.extra_properties | default({}))"
+        fail_msg: >-
+          zfs_dataset_args.extra_properties.mountpoint silently loses to the
+          top-level zfs_dataset_args.mountpoint -- the helper does
+          `combine({'mountpoint': zfs_dataset_args.mountpoint})` and Jinja's
+          combine is right-key-wins. Pass mountpoint only as the top-level
+          key, not inside extra_properties.
+
     - name: Create zfs filesystem {{ _zfs_dataset_resolved }}
       when: zfs_root
       zfs:
