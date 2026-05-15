@@ -182,6 +182,12 @@
           proxy_set_header X-Forwarded-Proto $scheme;
           proxy_redirect ~^https?://[^/]+/v2/(?!repository/)([^/]+)/(.*)$ https://$http_host/v2/repository/$repo/$1/$2;
           proxy_redirect ~^https?://[^/]+/repository/([^/]+)/v2/(.*)$ https://$http_host/v2/repository/$1/$2;
+          # Nexus may also emit a relative-path Location (no scheme/host).
+          # Cover that case so the docker client follows back into this
+          # location block instead of falling through to / (which 501s
+          # on PATCH because Nexus has no /v2/<ns>/... docker route).
+          proxy_redirect ~^/v2/(?!repository/)([^/]+)/(.*)$ /v2/repository/$repo/$1/$2;
+          proxy_redirect ~^/repository/([^/]+)/v2/(.*)$ /v2/repository/$1/$2;
           proxy_buffering off;
           proxy_request_buffering off;
           client_max_body_size 0;
