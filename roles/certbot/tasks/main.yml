@@ -3,20 +3,27 @@
     pkg:
       - certbot
       - python3-certbot-dns-cloudflare
+      - ssl-cert
     cache_valid_time: 3600
   become: true
   tags:
     - certbot
 
-# Relax apt's default 0700 on live/ and archive/ to 0755 so non-root
-# services (e.g. www-data) can traverse into <domain>/ to read fullchain.
+# Relax apt's default 0700 on live/ and archive/ to 0750 with group
+# ssl-cert so non-root consumers (nginx as www-data, netdata) can
+# traverse into <domain>/ to read fullchain.pem. Plain 0755 would
+# expose directory traversal to every local UID and bind-mounted
+# container; combined with the wildcard SAN on the per-host cert
+# that's a forever-cert blast radius if any uid lands in a position
+# to read privkey.pem. Consumer roles add their service user to
+# ssl-cert in their own install.yml.
 - name: Set permissions on storage directories
   file:
     dest: /etc/letsencrypt/{{ item }}
     state: directory
     owner: root
-    group: root
-    mode: "0755"
+    group: ssl-cert
+    mode: "0750"
   loop:
     - live
     - archive

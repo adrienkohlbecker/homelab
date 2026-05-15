@@ -9,6 +9,19 @@
   tags:
     - nginx
 
+# Letsencrypt live/ + archive/ are 0750 root:ssl-cert (see
+# roles/certbot/tasks/main.yml); www-data needs to be in ssl-cert
+# to traverse them and read fullchain.pem / privkey.pem.
+- name: install | Add www-data to ssl-cert group
+  when: not (ansible_check_mode and nginx_apt.changed)
+  user:
+    name: www-data
+    groups: ssl-cert
+    append: true
+  become: true
+  tags:
+    - nginx
+
 - name: install | Disable default site
   file:
     path: /etc/nginx/sites-enabled/default
