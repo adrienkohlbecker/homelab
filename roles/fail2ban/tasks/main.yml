@@ -14,6 +14,23 @@
   tags:
     - fail2ban
 
+# Empty / undefined interpolation silently strips ignoreip entries —
+# fail2ban-client -t accepts "ignoreip = 127.0.0.1/8 ::1  " as valid,
+# so a typo'd refactor of either var would lock admin traffic out
+# without surfacing in --check.
+- name: Assert ignoreip inputs are defined
+  assert:
+    that:
+      - site_subnets.home is defined
+      - site_subnets.home | length > 0
+      - wireguard_subnet is defined
+      - wireguard_subnet | length > 0
+    fail_msg: >-
+      site_subnets.home and wireguard_subnet must be defined and non-empty;
+      they compose ignoreip in /etc/fail2ban/jail.d/00-nftables.local.
+  tags:
+    - fail2ban
+
 # Use the nftables banaction set so f2b-* chains land in `inet f2b-table`
 # instead of the iptables-nft compat `ip filter`. Active bans persist in
 # fail2ban's database and get re-applied to the new framework on reload.
