@@ -143,6 +143,23 @@
   tags:
     - firewall
 
+# Vanilla Ubuntu cloud images / server ISOs ship ufw enabled with
+# its own iptables ruleset; we replace it with the nftables config
+# above. Purge here (after nftables is up) rather than in roles/
+# cleanup so the host is never without a firewall — cleanup runs
+# ~19 roles before this one, and removing ufw there would leave a
+# window with no host firewall during first-boot bootstrap.
+- name: Purge ufw (superseded by nftables)
+  apt:
+    pkg:
+      - ufw
+    state: absent
+    autoremove: true
+    purge: true
+  become: true
+  tags:
+    - firewall
+
 # Cohabitation cleanup: the old iptables-restore set policy DROP on
 # `ip filter` chains via `:INPUT DROP` etc. Now that our rules live
 # in `ip homelab` with its own policy, the leftover DROP on

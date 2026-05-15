@@ -123,7 +123,6 @@
 - name: Uninstall unneeded packages
   apt:
     pkg:
-      - ufw
       - cloud-init
       - snapd
       - fwupd
