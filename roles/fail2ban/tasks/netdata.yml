@@ -1,6 +1,13 @@
 # netdata's go.d/fail2ban collector talks to /var/run/fail2ban/fail2ban.sock
 # (root:fail2ban 0660). Without this membership the collector returns no
 # data and the host_vars presence alert fires.
+#
+# The socket has no read/write split — anyone connected can issue
+# `set <jail> banip` / `unbanip` / `stop`, so adding netdata to this
+# group implicitly trusts the netdata daemon (RCE in the netdata
+# parser would pivot to fail2ban control). Acceptable in this home
+# env; would warrant an AppArmor profile or a read-only sidecar
+# socket in a corp setting.
 - name: Add netdata to fail2ban group
   user:
     name: netdata
