@@ -1,3 +1,15 @@
+# netdata's go.d/fail2ban collector talks to /var/run/fail2ban/fail2ban.sock
+# (root:fail2ban 0660). Without this membership the collector returns no
+# data and the host_vars presence alert fires.
+- name: Add netdata to fail2ban group
+  user:
+    name: netdata
+    groups: fail2ban
+    append: true
+  become: true
+  tags:
+    - fail2ban
+
 - name: Configure fail2ban metrics
   import_role:
     name: netdata
