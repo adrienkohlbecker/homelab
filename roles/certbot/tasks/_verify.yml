@@ -80,18 +80,32 @@
       - _verify_cf.stat.gr_name == "root"
     fail_msg: "cloudflare.ini has wrong perms or owner ({{ _verify_cf.stat }})"
 
-- name: _verify | Stat nginx reload deploy-hook
+# Directory perms are load-bearing: wildcard SAN + lax dir mode = any
+# local-uid read of privkey.pem grants forever-cert for the host's
+# entire subdomain tree. 0750 root:ssl-cert restricts traversal to
+# explicit consumers (www-data, netdata) added to ssl-cert by their
+# own roles. A regression to 0755 / group:root would be silent
+# without this assertion.
+- name: _verify | Stat LE storage directories
   stat:
-    path: /etc/letsencrypt/renewal-hooks/deploy/reload_nginx.sh
-  register: _verify_hook
+    path: /etc/letsencrypt/{{ item }}
+  loop:
+    - live
+    - archive
+  register: _verify_le_dirs
   become: true
 
-- name: _verify | Deploy-hook is installed and executable
+- name: _verify | LE storage directories are 0750 root:ssl-cert
   assert:
     that:
-      - _verify_hook.stat.exists
-      - _verify_hook.stat.mode == "0755"
-    fail_msg: "reload_nginx.sh missing or wrong mode ({{ _verify_hook.stat }})"
+      - item.stat.exists
+      - item.stat.mode == "0750"
+      - item.stat.pw_name == "root"
+      - item.stat.gr_name == "ssl-cert"
+    fail_msg: "{{ item.item }} has wrong perms or owner ({{ item.stat }})"
+  loop: "{{ _verify_le_dirs.results }}"
+  loop_control:
+    label: "{{ item.item }}"
 
 # Cover the cross-role coupling: roles/netdata/tasks/main.yml calls
 # into roles/certbot/tasks/netdata.yml, so a break in x509check.conf.j2
