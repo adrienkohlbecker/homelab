@@ -25,6 +25,12 @@ TANK3=$5
 TANK4=$6
 
 if ! zpool list -H dozer >/dev/null 2>&1; then
+  # exec=on (not the data-pool default exec=off) because github_runner's
+  # actions/runner --work folder lives on dozer/scratch/github_runner/ and
+  # CI workflows bind-mount that into containers that need to execve scripts
+  # from the checkout. Bind-mounts inherit the source mount's noexec flag,
+  # so pool-level exec=off propagates into the container as a hard EACCES
+  # on `mise run ...` etc. setuid=off + devices=off stay for hardening.
   zpool create \
     -o ashift=12 \
     -o autotrim=on \
@@ -38,7 +44,6 @@ if ! zpool list -H dozer >/dev/null 2>&1; then
     -O compression=zstd \
     -O devices=off \
     -O dnodesize=auto \
-    -O exec=off \
     -O overlay=off \
     -O relatime=on \
     -O setuid=off \
@@ -65,6 +70,7 @@ sync
 sleep 2
 
 if ! zpool list -H tank >/dev/null 2>&1; then
+  # See dozer block above for why exec=off is dropped.
   zpool create \
     -o ashift=12 \
     -o autotrim=off \
@@ -78,7 +84,6 @@ if ! zpool list -H tank >/dev/null 2>&1; then
     -O compression=zstd \
     -O devices=off \
     -O dnodesize=auto \
-    -O exec=off \
     -O overlay=off \
     -O relatime=on \
     -O setuid=off \
@@ -91,6 +96,7 @@ if ! zpool list -H tank >/dev/null 2>&1; then
 fi
 
 if ! zpool list -H mouse >/dev/null 2>&1; then
+  # See dozer block above for why exec=off is dropped.
   zpool create \
     -o ashift=12 \
     -o autotrim=off \
@@ -104,7 +110,6 @@ if ! zpool list -H mouse >/dev/null 2>&1; then
     -O compression=zstd \
     -O devices=off \
     -O dnodesize=auto \
-    -O exec=off \
     -O overlay=off \
     -O relatime=on \
     -O setuid=off \
