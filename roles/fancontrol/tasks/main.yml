@@ -107,11 +107,7 @@
       fancontrol_settings references chip {{ fancontrol_chip }} -- not
       present in /sys/class/hwmon. Check the chip name in host_vars or
       load the right kernel module.
-  loop: >-
-    {{ (fancontrol_settings.fans | map(attribute='pwm')  | list
-       + fancontrol_settings.fans | map(attribute='temp') | list
-       + fancontrol_settings.fans | map(attribute='fan')  | list
-    ) | map('regex_replace', '/.*$', '') | unique | list }}
+  loop: "{{ fancontrol_referenced_chips }}"
   loop_control:
     loop_var: fancontrol_chip
   tags:

@@ -54,11 +54,7 @@
   when: fancontrol_settings.fans | length > 0
   slurp:
     src: "/sys/class/hwmon/{{ fancontrol_chip_map[fancontrol_chip].hwmon }}/name"
-  loop: >-
-    {{ (fancontrol_settings.fans | map(attribute='pwm')  | list
-       + fancontrol_settings.fans | map(attribute='temp') | list
-       + fancontrol_settings.fans | map(attribute='fan')  | list
-    ) | map('regex_replace', '/.*$', '') | unique | list }}
+  loop: "{{ fancontrol_referenced_chips }}"
   loop_control:
     loop_var: fancontrol_chip
     label: "{{ fancontrol_chip }}"

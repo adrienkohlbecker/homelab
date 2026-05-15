@@ -1,0 +1,10 @@
+# Set of stable chip names referenced by fancontrol_settings.fans
+# (e.g. ["nct6798", "drivetemp"]). Lazy Jinja so main.yml's assert
+# loop, _verify.yml's slurp loop, and the template all see the same
+# derivation -- and so a future schema change (additional fan-key
+# referencing a chip) only edits this expression once.
+fancontrol_referenced_chips: >-
+  {{ (fancontrol_settings.fans | map(attribute='pwm')  | list
+    +  fancontrol_settings.fans | map(attribute='temp') | list
+    +  fancontrol_settings.fans | map(attribute='fan')  | list
+  ) | map('regex_replace', '/.*$', '') | unique | list }}
