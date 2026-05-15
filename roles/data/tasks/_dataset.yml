@@ -1,0 +1,21 @@
+# Per-dataset wrapper for the include_tasks loop in main.yml. Uses
+# include_tasks + include_role + set_fact (rather than the cheaper
+# import_role + loop + task-level vars) for the same reasons documented
+# in roles/zfs/tasks/_trim_timer.yml:1-15: import_role expands inner
+# task names at parse time before item is bound, and a task-level
+# `vars:` dict referencing {{ item }} on include_role triggers a
+# parse-time templating warning. Set the consumed role's input fact
+# (zfs_dataset_args) directly.
+# noqa: var-naming[no-role-prefix] -- zfs_dataset_args is the consumed
+# role's required input name, not a data role-internal var.
+- name: _dataset | Build zfs_dataset_args
+  set_fact:
+    zfs_dataset_args:  # noqa: var-naming[no-role-prefix]
+      dataset: "tank/{{ item.name }}"
+      mountpoint: "{{ item.mountpoint }}"
+      extra_properties: "{{ data_extra_properties }}"
+
+- name: _dataset | Configure dataset
+  include_role:
+    name: zfs
+    tasks_from: dataset
