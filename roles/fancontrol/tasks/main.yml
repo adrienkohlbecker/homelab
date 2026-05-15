@@ -110,8 +110,10 @@
     # Catches malformed configs (missing FCTEMPS, INTERVAL<=0, etc.)
     # before the daemon sees them. fancontrol exits non-zero on parse
     # failure, so ansible refuses the write instead of leaving the box
-    # wedged at next service start.
-    validate: fancontrol -t -f %s
+    # wedged at next service start. `--check` is the only positional
+    # mode the upstream script understands -- it loads $1, validates,
+    # exits 0 without entering the daemon loop.
+    validate: fancontrol --check %s
   register: fancontrol_conf
   become: true
   tags:
