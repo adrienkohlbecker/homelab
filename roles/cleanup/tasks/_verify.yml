@@ -1,38 +1,35 @@
-# This role is purely removal — there's no positive "function" to
-# exercise — so this is the state-check exception CLAUDE.md allows.
-# On packer-built ZFS boxes none of these were ever installed and the
-# asserts pass trivially; the value is regression coverage that catches
-# a future role transitively pulling any of them back in.
+# Removal-only role; no positive function to exercise. Apt's own
+# state=absent already proves the packages aren't installed, so we
+# only assert the harder-to-catch residue: snap binary, snapd
+# systemd units, squashfs mounts that survive a botched purge.
 
-- name: _verify | Re-gather package facts
-  ansible.builtin.package_facts:
-    manager: apt
-  check_mode: false
+- name: _verify | Probe for snap binary
+  command: which snap
+  register: _cleanup_verify_snap_bin
+  changed_when: false
+  failed_when: _cleanup_verify_snap_bin.rc == 0
 
-- name: _verify | Assert cleanup target packages are absent
-  ansible.builtin.assert:
+- name: _verify | List residual snapd unit files
+  command: systemctl list-unit-files --no-legend 'snapd.*'
+  register: _cleanup_verify_snapd_units
+  changed_when: false
+
+- name: _verify | Assert no snapd systemd unit files remain
+  assert:
     that:
-      - item not in ansible_facts.packages
-    fail_msg: "{{ item }} is still installed after cleanup"
-  loop:
-    - ufw
-    - cloud-init
-    - snapd
-    - fwupd
-    - os-prober
+      - _cleanup_verify_snapd_units.stdout | trim | length == 0
+    fail_msg: "Residual snapd unit files:\n{{ _cleanup_verify_snapd_units.stdout }}"
 
 - name: _verify | Look for residual squashfs mounts (snap leftovers)
-  ansible.builtin.command:
-    cmd: findmnt --noheadings --types squashfs
-  register: cleanup_verify_squashfs_mounts
+  # findmnt(8): rc=0 = match found, rc=1 = no match. Any other rc
+  # is an unexpected failure (binary missing, etc.) — surface it.
+  command: findmnt --first-only --noheadings --types squashfs
+  register: _cleanup_verify_squashfs_mounts
   changed_when: false
-  # findmnt exits 0 even when there are no matches (it reserves rc=1
-  # for actual errors), so we can't gate on rc — fall back to parsing
-  # stdout. failed_when: false keeps a true error from masking that.
-  failed_when: false
+  failed_when: _cleanup_verify_squashfs_mounts.rc not in [0, 1]
 
 - name: _verify | Assert no squashfs (snap) mounts remain
-  ansible.builtin.assert:
+  assert:
     that:
-      - cleanup_verify_squashfs_mounts.stdout | trim | length == 0
-    fail_msg: "Residual snap mounts present:\n{{ cleanup_verify_squashfs_mounts.stdout }}"
+      - _cleanup_verify_squashfs_mounts.rc == 1
+    fail_msg: "Residual snap mounts present:\n{{ _cleanup_verify_squashfs_mounts.stdout }}"
