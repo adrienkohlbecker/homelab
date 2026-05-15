@@ -99,7 +99,9 @@
     - fancontrol
 
 - name: Template /etc/fancontrol
-  when: fancontrol_settings.fans | length > 0
+  when:
+    - fancontrol_settings.fans | length > 0
+    - not (ansible_check_mode and fancontrol_apt.changed)
   template:
     src: fancontrol.j2
     dest: /etc/fancontrol
