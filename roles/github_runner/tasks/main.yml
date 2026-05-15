@@ -133,24 +133,46 @@
   when: not (ansible_check_mode and github_runner_user.changed)
   copy:
     dest: /mnt/scratch/github_runner/.config/containers/storage.conf
-    # Only the mountopt override (xino=off); see roles/gitea_runner's
-    # git history (formerly act_runner) for the printk-suppression
-    # rationale. Pinning the driver explicitly via [storage] driver =
-    # "overlay" would silence podman's cosmetic "auto-picked a driver"
-    # warning, but ALSO triggers a "database graph driver mismatch"
-    # error against any podman storage database that was first
-    # initialised without a driver setting -- which is what
-    # github_runner ends up with on a fresh apply, because the user's
-    # first podman invocation (any CI workflow's pull/run of the
-    # ci image) happens before this file is written. The
-    # warning is harmless; the database mismatch is fatal. Leave it
-    # implicit.
+    # Two things at once:
+    #
+    # rootless_storage_path -- restate the value /etc/containers/storage.conf
+    # already sets, because podman 4.9 treats the user-level
+    # ~/.config/containers/storage.conf as a full REPLACEMENT of the system
+    # config rather than a merge. Without this line, the user file (added
+    # below for the xino mountopt) silently strips rootless_storage_path
+    # and graphroot falls back to XDG_DATA_HOME = /mnt/scratch/$USER/.local/
+    # share/containers/storage. That path is on ZFS, and native kernel
+    # overlay on ZFS produces ESTALE during dpkg unpacks with many file
+    # ops (linux-libc-dev's netfilter headers are the canonical victim),
+    # breaking ci-image builds. The system-level path routes onto the
+    # rpool/podman zvol (ext4) where overlay is solid.
+    #
+    # mountopt = xino=off -- silence the kernel's "overlayfs: fs on '...'
+    # does not support file handles, falling back to xino=off" printk
+    # that fires on every rootless overlay mount. The fallback is
+    # unavoidable in a rootless userns (CAP_DAC_READ_SEARCH isn't held in
+    # the init namespace, so the kernel disables file-handle support
+    # regardless of underlying fs), and CI churn emits the warning
+    # ~160x/day. Pre-declaring xino=off makes the kernel skip the probe
+    # -- same end state, no printk. nodev preserves the upstream default;
+    # userxattr is force-added by podman internally for rootless, so we
+    # don't restate it.
+    #
+    # Pinning the driver explicitly via [storage] driver = "overlay" would
+    # silence podman's cosmetic "auto-picked a driver" warning, but ALSO
+    # triggers a "database graph driver mismatch" error against any podman
+    # storage database that was first initialised without a driver setting.
+    # The warning is harmless; the database mismatch is fatal. Leave the
+    # driver implicit.
     content: |
+      [storage]
+      rootless_storage_path = "/var/lib/containers/rootless/$USER"
       [storage.options.overlay]
       mountopt = "nodev,xino=off"
     owner: github_runner
     group: github_runner
     mode: "0644"
+    backup: true
   become: true
   tags:
     - github_runner
