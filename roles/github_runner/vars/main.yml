@@ -8,10 +8,16 @@ github_runner_version: "2.334.0"
 # without depending on image-name conventions.
 github_runner_labels: "self-hosted,{{ inventory_hostname }}"
 
-# GitHub repo to register against. Overridable from host_vars when we
-# eventually have more than one consumer of this role.
+# GitHub repos to register a runner against. One actions/runner listener
+# process + state dir per entry; the upstream tarball is extracted once
+# into /mnt/services/github_runner/runner/ and per-repo state dirs
+# symlink the binary entries (bin, externals, run.sh, config.sh, .path)
+# into themselves so the ~150 MB extracted tree isn't duplicated. All
+# repos must live under the single owner below (personal-account
+# constraint -- no org, no shared runner groups).
 github_runner_owner: "adrienkohlbecker"
-github_runner_repo: "homelab"
+github_runner_repos:
+  - homelab
 
 github_runner_release:
   x86_64:

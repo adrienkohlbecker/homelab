@@ -1,0 +1,138 @@
+# One-shot migration of the pre-multi-repo single-instance layout into
+# the per-repo layout. Detect via `/mnt/services/github_runner/.runner`
+# at the top level (the legacy install dir). Subsequent applies skip
+# everything below.
+#
+# Layout before  /mnt/services/github_runner/
+#                  bin/  externals/  run.sh  config.sh  .path  .version-*
+#                  .runner  .credentials  _diag/  _work
+#                /mnt/scratch/github_runner/workdir/
+#
+# Layout after   /mnt/services/github_runner/
+#                  runner/        bin/  externals/  run.sh  config.sh  .path  .version-*
+#                  homelab/       .runner  .credentials  _diag/
+#                /mnt/scratch/github_runner/workdir-homelab/
+#                (and per-repo symlinks bin / externals / ... back into
+#                runner/ are created by _register.yml on the same apply.)
+
+- name: _migrate | Check for legacy single-instance layout
+  stat:
+    path: /mnt/services/github_runner/.runner
+  register: github_runner_legacy
+  become: true
+  tags:
+    - github_runner
+
+# Stopping the old unit before moving its install dir avoids a
+# half-running runner picking up stale file paths between move and
+# new-unit-start. `state: stopped` is idempotent; `enabled: false`
+# happens because we delete the unit file below.
+- name: _migrate | Stop legacy github_runner.service
+  when: github_runner_legacy.stat.exists
+  systemd:
+    name: github_runner
+    state: stopped
+  become: true
+  tags:
+    - github_runner
+
+- name: _migrate | Ensure runner/ and homelab/ subdirs exist
+  when: github_runner_legacy.stat.exists
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: github_runner
+    group: github_runner
+    mode: "0755"
+  loop:
+    - /mnt/services/github_runner/runner
+    - /mnt/services/github_runner/homelab
+    - /mnt/scratch/github_runner/workdir-homelab
+  become: true
+  tags:
+    - github_runner
+
+# Shared bits (binary + libs + version sentinel) → runner/
+# Per-repo bits (state + secrets + work) → homelab/
+# Use `find` + `mv` via shell so we don't have to enumerate every
+# possible .version-* sentinel by hand. Idempotent because the next
+# apply finds the top-level .runner gone and skips everything.
+- name: _migrate | Relocate shared entries into runner/
+  when: github_runner_legacy.stat.exists
+  shell: |
+    set -euo pipefail
+    cd /mnt/services/github_runner
+    for entry in bin externals run.sh config.sh .path; do
+      if [ -e "$entry" ] && [ ! -L "$entry" ]; then
+        mv -- "$entry" runner/
+      fi
+    done
+    # .version-X.Y.Z lives at the shared level; glob may not match.
+    for entry in .version-*; do
+      [ -e "$entry" ] || continue
+      mv -- "$entry" runner/
+    done
+  args:
+    executable: /bin/bash
+  become: true
+  tags:
+    - github_runner
+
+- name: _migrate | Relocate homelab-specific state into homelab/
+  when: github_runner_legacy.stat.exists
+  shell: |
+    set -euo pipefail
+    cd /mnt/services/github_runner
+    for entry in .runner .credentials .credentials_rsaparams _diag svc.sh; do
+      if [ -e "$entry" ]; then mv -- "$entry" homelab/; fi
+    done
+    # The runner's _work directory is typically a symlink (because of
+    # --work at config.sh time pointing it at /mnt/scratch/...).
+    if [ -L _work ] || [ -e _work ]; then mv -- _work homelab/; fi
+  args:
+    executable: /bin/bash
+  become: true
+  tags:
+    - github_runner
+
+# Move the workdir to its repo-suffixed name AND update .runner to
+# match. .runner is JSON with a "workFolder" field; a literal-string
+# substitution is sufficient because the old path is unique.
+- name: _migrate | Move workdir to workdir-homelab
+  when: github_runner_legacy.stat.exists
+  command: mv /mnt/scratch/github_runner/workdir /mnt/scratch/github_runner/workdir-homelab
+  args:
+    removes: /mnt/scratch/github_runner/workdir
+  become: true
+  tags:
+    - github_runner
+
+- name: _migrate | Repoint homelab .runner workFolder to workdir-homelab
+  when: github_runner_legacy.stat.exists
+  replace:
+    path: /mnt/services/github_runner/homelab/.runner
+    regexp: '"workFolder":\s*"/mnt/scratch/github_runner/workdir"'
+    replace: '"workFolder": "/mnt/scratch/github_runner/workdir-homelab"'
+  become: true
+  tags:
+    - github_runner
+
+# Old unit file goes away; _register.yml installs github_runner_<repo>
+# units on the same apply, so the runner doesn't stay down.
+- name: _migrate | Remove legacy github_runner.service unit file
+  when: github_runner_legacy.stat.exists
+  file:
+    path: /etc/systemd/system/github_runner.service
+    state: absent
+  become: true
+  register: github_runner_legacy_unit
+  tags:
+    - github_runner
+
+- name: _migrate | Reload systemd after legacy unit removal
+  when: github_runner_legacy_unit.changed
+  systemd:
+    daemon_reload: true
+  become: true
+  tags:
+    - github_runner
