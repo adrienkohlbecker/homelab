@@ -54,7 +54,10 @@
 
     - name: Resolve hwmon device sysfs paths
       command:
-        cmd: readlink -f "{{ item.path }}"
+        argv:
+          - readlink
+          - -f
+          - "{{ item.path }}"
       loop: "{{ fancontrol_hwmon_dirs.files }}"
       loop_control:
         label: "{{ item.path | basename }}"
