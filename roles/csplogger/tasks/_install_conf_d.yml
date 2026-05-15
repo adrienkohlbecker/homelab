@@ -1,0 +1,106 @@
+# Install the csplogger nginx http{}-scope drop and validate it via
+# `nginx -t` before letting any subsequent reload pick it up. Pattern
+# mirrors roles/systemd_unit/tasks/install.yml: write the file (with
+# backup: true), validate in place, on failure restore the previous
+# version from the backup (or delete the freshly-added file if there
+# is none) and fail loudly. Without this any typo in the limit_req_zone
+# / map blocks would brick the next nginx reload host-wide — conf.d/ is
+# read globally, so the blast radius is every site on the host, not
+# just csplogger.
+#
+# ansible's `copy: validate:` would let us check before placing, but
+# nginx -t expects a full nginx.conf (events{}, http{}, etc.), not a
+# conf.d snippet. Same constraint roles/systemd_unit hits — `systemd-
+# analyze verify` is a path-based check too — so the place-and-validate-
+# then-rollback shape ports cleanly.
+- name: conf_d | Install CSP rate-limit zone and request-shape allow-lists
+  block:
+    - name: conf_d | Write the conf.d file
+      copy:
+        content: |
+          # Managed by roles/csplogger.
+
+          # Per-IP rate-limit: 10 r/s, 1MB zone (~16k tracked IPs). Burst
+          # handled per-location (see /log block).
+          limit_req_zone $binary_remote_addr zone=cspreports:1m rate=10r/s;
+
+          # Origin allowlist. Browsers always send Origin on cross-origin
+          # POSTs (which CSP report POSTs are by construction). A foreign
+          # or absent Origin gets silently 204'd in /log: the response
+          # carries no ACAO so a script that triggered the POST can't read
+          # it, and the browser's report queue still drops the entry as
+          # "sent." Defends against arbitrary-internet POSTs writing junk
+          # into ClickHouse without rejecting on a status code that would
+          # invite retry. Pattern matches bare host plus any subdomain
+          # depth, with optional port.
+          map $http_origin $csp_origin_ok {
+              default 0;
+              "~^https://([a-zA-Z0-9_-]+\.)*{{ inventory_hostname | regex_escape }}\.{{ domain | regex_escape }}(:[0-9]+)?$" 1;
+          }
+
+          # Content-Type allowlist for POSTs (OPTIONS preflights are
+          # exempt — they don't carry a body). Anything not in the two
+          # real-browser CSP content-types gets 415: a hostile poster
+          # can't wedge fluent-bit's single-threaded HTTP input by
+          # submitting pathological JSON bodies that the blanket Content-
+          # Type rewrite below would relabel.
+          map "$request_method:$content_type" $csp_post_allow {
+              default                                       0;
+              "~*^OPTIONS"                                  1;
+              "~*^POST:application/csp-report"              1;
+              "~*^POST:application/reports\+json"           1;
+          }
+        dest: /etc/nginx/conf.d/csp_ratelimit.conf
+        owner: root
+        group: root
+        mode: "0644"
+        backup: true
+      become: true
+      register: csplogger_ratelimit_conf
+
+    - name: conf_d | Validate nginx config in place
+      when: csplogger_ratelimit_conf.changed
+      command: nginx -t
+      register: csplogger_nginx_validate
+      changed_when: false
+      become: true
+
+  # nginx -t reads files at their on-disk locations, so the conf.d
+  # drop has to land at its production path first and is then validated
+  # in place. If validate fails, the broken file is already on disk
+  # and would break the next reload for every site on the host. Restore
+  # the previous version from the .backup if one was made, otherwise
+  # delete the freshly-added file. Don't trim this — without it any
+  # typo in the maps or zone bricks `nginx -s reload` host-wide.
+  rescue:
+    - name: conf_d | Copy backup file to original
+      when: '"backup_file" in csplogger_ratelimit_conf'
+      copy:
+        remote_src: true
+        dest: /etc/nginx/conf.d/csp_ratelimit.conf
+        src: "{{ csplogger_ratelimit_conf.backup_file }}"
+        owner: root
+        group: root
+        mode: "0644"
+      become: true
+
+    - name: conf_d | Delete backup file
+      when: '"backup_file" in csplogger_ratelimit_conf'
+      file:
+        path: "{{ csplogger_ratelimit_conf.backup_file }}"
+        state: absent
+      become: true
+
+    - name: conf_d | Delete newly added file
+      when: csplogger_ratelimit_conf.changed and "backup_file" not in csplogger_ratelimit_conf
+      file:
+        path: /etc/nginx/conf.d/csp_ratelimit.conf
+        state: absent
+      become: true
+
+    - name: conf_d | Record failure
+      fail:
+        msg: >-
+          nginx -t failed after csplogger conf.d drop; previous state
+          restored. Inspect the validate output above and fix the
+          managed content in roles/csplogger/tasks/_install_conf_d.yml.
