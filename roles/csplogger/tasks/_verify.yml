@@ -4,6 +4,33 @@
     port: "{{ service_ports.csp_ingest }}"
     timeout: 30
 
+# Shared body fixtures so the legacy + reporting-api shapes are defined
+# once and reused across the direct-to-fluent-bit POST, the through-nginx
+# happy path, the Content-Type variant tests, and the oversize test (via
+# combine). Each test asserts only on status_code (or response headers),
+# never on the body content, so a fixed URI is fine — the per-task name
+# is the diagnostic distinguisher.
+- name: _verify | shared CSP body fixtures
+  set_fact:
+    csp_legacy_body:
+      csp-report:
+        blocked-uri: "https://_verify.example/"
+        document-uri: "https://_verify.example/"
+        original-policy: "default-src 'self'"
+        referrer: ""
+        violated-directive: "script-src"
+    csp_reporting_api_body:
+      - type: "csp-violation"
+        age: 0
+        url: "https://_verify.example/"
+        user_agent: "_verify/1.0"
+        body:
+          blockedURL: "https://_verify.example/"
+          documentURL: "https://_verify.example/"
+          effectiveDirective: "script-src-elem"
+          originalPolicy: "default-src 'self'"
+          disposition: "enforce"
+
 # Bypass nginx and POST straight at the fluent-bit HTTP input. Verifies
 # the ingest side works in isolation — separates a fluent-bit config
 # failure from an nginx routing failure when something breaks.
@@ -12,13 +39,7 @@
     url: http://127.0.0.1:{{ service_ports.csp_ingest }}/
     method: POST
     body_format: json
-    body:
-      csp-report:
-        blocked-uri: "https://_verify.example/{{ ansible_date_time.iso8601_basic_short }}"
-        document-uri: "https://_verify.example/"
-        original-policy: "default-src 'self'"
-        referrer: ""
-        violated-directive: "script-src"
+    body: "{{ csp_legacy_body }}"
     status_code: 204
 
 # Reporting API shape: a JSON array of csp-violation reports. Distinct
@@ -31,17 +52,7 @@
     url: http://127.0.0.1:{{ service_ports.csp_ingest }}/
     method: POST
     body_format: json
-    body:
-      - type: "csp-violation"
-        age: 0
-        url: "https://_verify.example/"
-        user_agent: "_verify/1.0"
-        body:
-          blockedURL: "https://_verify.example/reporting-api/{{ ansible_date_time.iso8601_basic_short }}"
-          documentURL: "https://_verify.example/"
-          effectiveDirective: "script-src-elem"
-          originalPolicy: "default-src 'self'"
-          disposition: "enforce"
+    body: "{{ csp_reporting_api_body }}"
     status_code: 204
 
 # Test through nginx using a Host header so the request hits the
@@ -57,13 +68,7 @@
       Origin: "https://_verify.example"
     validate_certs: false
     body_format: json
-    body:
-      csp-report:
-        blocked-uri: "https://_verify.example/"
-        document-uri: "https://_verify.example/"
-        original-policy: "default-src 'self'"
-        referrer: ""
-        violated-directive: "script-src"
+    body: "{{ csp_legacy_body }}"
     status_code: 204
   register: csplogger_verify_nginx_post
   failed_when: >-
@@ -75,9 +80,9 @@
 # fluent-bit's http input is application/json-only and the nginx site
 # rewrites Content-Type on the upstream request to make this work.
 # Ansible's uri module defaults to application/json with body_format:
-# json, so without these explicit-Content-Type cases the regression that
-# the rewrite is fixing would stay hidden. body_format: raw + a literal
-# JSON body so the headers.Content-Type wins.
+# json; the explicit Content-Type in headers overrides that default, so
+# the body still serialises as JSON while the request bears the real
+# browser Content-Type that exercises the nginx rewrite.
 - name: _verify | POST /log with legacy report-uri Content-Type
   uri:
     url: https://localhost/log
@@ -87,8 +92,8 @@
       Origin: "https://_verify.example"
       Content-Type: application/csp-report
     validate_certs: false
-    body_format: raw
-    body: '{"csp-report":{"blocked-uri":"https://_verify.example/ct-legacy","document-uri":"https://_verify.example/","violated-directive":"script-src","original-policy":"default-src ''self''"}}'
+    body_format: json
+    body: "{{ csp_legacy_body }}"
     status_code: 204
 
 - name: _verify | POST /log with Reporting-API Content-Type
@@ -100,8 +105,8 @@
       Origin: "https://_verify.example"
       Content-Type: application/reports+json
     validate_certs: false
-    body_format: raw
-    body: '[{"type":"csp-violation","age":0,"url":"https://_verify.example/","user_agent":"_verify/1.0","body":{"blockedURL":"https://_verify.example/ct-rapi","documentURL":"https://_verify.example/","effectiveDirective":"script-src-elem","originalPolicy":"default-src ''self''","disposition":"enforce"}}]'
+    body_format: json
+    body: "{{ csp_reporting_api_body }}"
     status_code: 204
 
 - name: _verify | OPTIONS preflight returns CORS allow-POST
@@ -131,12 +136,7 @@
     validate_certs: false
     body_format: json
     body:
-      csp-report:
-        blocked-uri: "https://_verify.example/oversize"
-        document-uri: "https://_verify.example/"
-        original-policy: "default-src 'self'"
-        violated-directive: "script-src"
-        script-sample: "{{ 'A' * 70000 }}"
+      csp-report: "{{ csp_legacy_body['csp-report'] | combine({'script-sample': 'A' * 70000}) }}"
     status_code: 413
 
 - name: _verify | GET /log is rejected (POST/OPTIONS only)
