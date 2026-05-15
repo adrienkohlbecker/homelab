@@ -103,7 +103,7 @@
 # when conf.d/ drops do. Catch the ratelimit-only-changed case here so
 # zone tweaks land without a manual reload.
 - name: Reload nginx after rate-limit zone change
-  when: csplogger_ratelimit_conf.changed and not ansible_check_mode
+  when: csplogger_ratelimit_conf.changed
   systemd:
     name: nginx
     state: reloaded
