@@ -2,6 +2,12 @@ name: ci-image
 on:
   workflow_dispatch:
   push:
+    # Branch gate: only master pushes trigger automatic builds. A feature
+    # branch that happens to touch a build-input file shouldn't silently
+    # republish :latest under everyone else; workflow_dispatch can still
+    # build from any ref (the :latest tag gate further down handles the
+    # tag policy for the dispatch case).
+    branches: [ master ]
     paths:
       - 'Dockerfile'
       - 'mise.toml'
@@ -9,10 +15,23 @@ on:
       - 'uv.lock'
       - 'packer/qemu.pkr.hcl'
 
+# Workflow only reads the repo; Nexus push uses out-of-band creds. Drop
+# the repo-default GITHUB_TOKEN scope so a future shell injection can't
+# pivot into a repo write.
+permissions:
+  contents: read
+
 # Serialize concurrent builds against each other (rapid follow-up pushes
 # would otherwise race on podman's image store + the floating :latest
 # push). cancel-in-progress=false because a half-pushed manifest is
 # strictly worse than a delayed run.
+#
+# Known same-push race with sibling workflows: a push that simultaneously
+# touches a build-input AND a role fires ci-image + test.yml in parallel.
+# test.yml's wait-for-ci-image job (gated on detect's ci_image_changed
+# output) blocks its test-role cells on the sentinel this workflow writes
+# at the end of the build, so test-role's container: resolves the new
+# :latest rather than the stale one.
 concurrency:
   group: ci-image
   cancel-in-progress: false
@@ -35,6 +54,14 @@ jobs:
       REPO: homelab/ci
     steps:
       - uses: actions/checkout@v4
+        with:
+          # No git history needed -- Dockerfile COPY references working-tree
+          # files only. persist-credentials=false drops checkout's default
+          # of writing GITHUB_TOKEN into .git/config; on a self-hosted
+          # runner the token would otherwise be reachable from the build
+          # context for any tool that decides to grep .git.
+          fetch-depth: 1
+          persist-credentials: false
 
       # Build context = repo root. The Dockerfile's COPY lines reference
       # mise.toml / pyproject.toml / uv.lock / packer/qemu.pkr.hcl by
@@ -52,36 +79,94 @@ jobs:
       # same reason: rootless podman under a user with linger but no
       # interactive login session can hit "Failed to connect to bus" on
       # systemd cgroup ops; cgroupfs sidesteps the user-bus dependency.
+      #
+      # --pull=newer refreshes the FROM ubuntu:24.04 base when Docker Hub
+      # has a newer digest -- the paths: filter doesn't fire on upstream
+      # CVE drops, so without this the runner's local image store can
+      # hold a stale base for weeks across rebuilds triggered by other
+      # input changes.
+      #
+      # --layers + --cache-from reuses the previously-pushed :latest as
+      # a layer cache source so a fresh runner cold-boots without redoing
+      # apt/mise/uv work. Read-only against the registry (anonymous
+      # pulls are allowed on homelab/ci); silently no-ops on bootstrap
+      # when no :latest exists yet.
+      #
+      # --iidfile captures the freshly-built image ID; the push step
+      # references the image by ID rather than tag, so a parallel
+      # podman build on the same runner can't redirect what we publish
+      # between this step and the push.
+      #
+      # :latest is tagged only on master so workflow_dispatch from a
+      # feature branch can still produce an inspectable :<sha> without
+      # overwriting the tag every other workflow's container: pins.
       - name: Build image
         env:
           MISE_GITHUB_TOKEN: ${{ secrets.MISE_GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          iidfile=$(mktemp)
+          trap 'rm -f "$iidfile"' EXIT
+          tags=( --tag "${REGISTRY}/${REPO}:${GITHUB_SHA}" )
+          if [ "$GITHUB_REF" = "refs/heads/master" ]; then
+            tags+=( --tag "${REGISTRY}/${REPO}:latest" )
+          fi
           podman build \
+            --pull=newer \
+            --layers \
+            --cache-from "${REGISTRY}/${REPO}:latest" \
             --cgroup-manager=cgroupfs \
             --secret id=mise_github_token,env=MISE_GITHUB_TOKEN \
-            --label "homelab.git_sha=${GITHUB_SHA}" \
-            --tag "${REGISTRY}/${REPO}:${GITHUB_SHA}" \
-            --tag "${REGISTRY}/${REPO}:latest" \
+            --iidfile "$iidfile" \
+            "${tags[@]}" \
             .
+          echo "IMAGE_ID=$(cat "$iidfile")" >>"$GITHUB_ENV"
 
-      # Login + push + logout in a single step so the auth file under
-      # ~/.config/containers/auth.json doesn't outlive the workflow run.
-      # `podman logout --all` runs unconditionally to cover failed
-      # pushes. Other workflows reference the image by its nexus URL
-      # (`container: nexus.lab.fahm.fr/repository/homelab/ci:
-      # latest`), so the next CI cell on this runner picks up the fresh
-      # :latest via the actions/runner's normal `docker pull` round-trip
-      # to nexus -- no separate localhost re-tag needed.
+      # Per-run REGISTRY_AUTH_FILE under $RUNNER_TEMP keeps credentials
+      # out of the user-shared ~/.config/containers/auth.json -- on a
+      # self-hosted runner where sibling workflows execute as the same
+      # user concurrently (gitea_runner, other CI cells), that path
+      # would be readable to them during the push window. The mktemp +
+      # trap rm pattern also survives SIGKILL (runner cancellation,
+      # OOM-kill), unlike `podman logout` which only fires on a clean
+      # EXIT trap.
+      #
+      # printf | --password-stdin instead of `<<<` herestring so the
+      # password never materializes as a (microsecond-lived) shell
+      # tempfile. `unset NEXUS_PASSWORD` after login so anything spawned
+      # later in the step can't read it from /proc/<pid>/environ.
+      #
+      # --retry=5 --retry-delay=10s covers transient Nexus 502s during
+      # its own GC; bumping from the podman default (3 / 2s) because
+      # the workflow rerun cost is high (dispatch-only, blocks the next
+      # CI cell). Push by IMAGE_ID rather than tag so a parallel build
+      # on the same runner can't redirect what we publish.
+      #
+      # After push, drop the local :sha tag (keep :latest as the cache
+      # source for the next build). The image layers stay alive under
+      # :latest; untagged orphans from past builds are reaped out of
+      # band.
       - name: Push to nexus
         env:
           NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
           NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
         run: |
           set -euo pipefail
-          trap 'podman logout --all || true' EXIT
-          podman login "${REGISTRY}" \
+          [[ -n "${NEXUS_USERNAME:-}" && -n "${NEXUS_PASSWORD:-}" ]] || {
+            echo >&2 "NEXUS_USERNAME/NEXUS_PASSWORD secrets missing; rotate via terraform/nexus.tf"
+            exit 1
+          }
+          REGISTRY_AUTH_FILE=$(mktemp -p "${RUNNER_TEMP:-/tmp}" auth.XXXXXX.json)
+          export REGISTRY_AUTH_FILE
+          trap 'rm -f "$REGISTRY_AUTH_FILE"' EXIT
+          printf '%s' "${NEXUS_PASSWORD}" | podman login "${REGISTRY}" \
             --username "${NEXUS_USERNAME}" \
-            --password-stdin <<<"${NEXUS_PASSWORD}"
-          podman push "${REGISTRY}/${REPO}:${GITHUB_SHA}"
-          podman push "${REGISTRY}/${REPO}:latest"
+            --password-stdin
+          unset NEXUS_PASSWORD
+          podman push --retry=5 --retry-delay=10s \
+            "${IMAGE_ID}" "${REGISTRY}/${REPO}:${GITHUB_SHA}"
+          if [ "$GITHUB_REF" = "refs/heads/master" ]; then
+            podman push --retry=5 --retry-delay=10s \
+              "${IMAGE_ID}" "${REGISTRY}/${REPO}:latest"
+          fi
+          podman rmi "${REGISTRY}/${REPO}:${GITHUB_SHA}" 2>/dev/null || true
