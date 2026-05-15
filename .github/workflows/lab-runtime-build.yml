@@ -1,0 +1,88 @@
+name: lab-runtime-build
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'Dockerfile.lab-runtime'
+      - 'mise.toml'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'packer/qemu.pkr.hcl'
+
+# Serialize concurrent builds against each other (rapid follow-up pushes
+# would otherwise race on podman's image store + the floating :latest
+# push). cancel-in-progress=false because a half-pushed manifest is
+# strictly worse than a delayed run.
+concurrency:
+  group: lab-runtime-build
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    # Runs on the lab github_runner directly (no `container:` block) --
+    # the whole point of this workflow is to build the lab-runtime
+    # *image*, so it can't run inside that image. The runner process
+    # already executes as the github_runner user with rootless podman
+    # configured, which is exactly what we need to build + push.
+    runs-on: [ self-hosted, lab-runtime ]
+    timeout-minutes: 30
+    env:
+      REGISTRY: nexus.lab.fahm.fr
+      REPO: homelab/lab-runtime
+    steps:
+      - uses: actions/checkout@v4
+
+      # Build context = repo root. The Dockerfile's COPY lines reference
+      # mise.toml / pyproject.toml / uv.lock / packer/qemu.pkr.hcl by
+      # repo-relative paths, so no staging tempdir is needed (unlike the
+      # ansible role's path, which has to materialize a build context
+      # over an SSH connection).
+      #
+      # --secret env=mise_github_token forwards $MISE_GITHUB_TOKEN into
+      # the build's `--mount=type=secret,id=mise_github_token` step
+      # without ever landing on disk. The Dockerfile no-ops the secret
+      # use when the file is empty, so a missing secret degrades to
+      # rate-limited mise installs rather than a hard failure.
+      #
+      # --cgroup-manager=cgroupfs matches the ansible-side build for the
+      # same reason: rootless podman under a user with linger but no
+      # interactive login session can hit "Failed to connect to bus" on
+      # systemd cgroup ops; cgroupfs sidesteps the user-bus dependency.
+      - name: Build image
+        env:
+          MISE_GITHUB_TOKEN: ${{ secrets.MISE_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          podman build \
+            --cgroup-manager=cgroupfs \
+            --secret id=mise_github_token,env=MISE_GITHUB_TOKEN \
+            --label "homelab.git_sha=${GITHUB_SHA}" \
+            --tag "${REGISTRY}/${REPO}:${GITHUB_SHA}" \
+            --tag "${REGISTRY}/${REPO}:latest" \
+            --file Dockerfile.lab-runtime \
+            .
+
+      # Login + push + logout in a single step so the auth file under
+      # ~/.config/containers/auth.json doesn't outlive the workflow run.
+      # `podman logout --all` runs unconditionally to cover failed
+      # pushes. Other workflows reference the image by its nexus URL
+      # (`container: nexus.lab.fahm.fr/repository/homelab/lab-runtime:
+      # latest`), so the next CI cell on this runner picks up the fresh
+      # :latest via the actions/runner's normal `docker pull` round-trip
+      # to nexus -- no separate localhost re-tag needed.
+      - name: Push to nexus
+        env:
+          NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+        run: |
+          set -euo pipefail
+          trap 'podman logout --all || true' EXIT
+          podman login "${REGISTRY}" \
+            --username "${NEXUS_USERNAME}" \
+            --password-stdin <<<"${NEXUS_PASSWORD}"
+          podman push "${REGISTRY}/${REPO}:${GITHUB_SHA}"
+          podman push "${REGISTRY}/${REPO}:latest"

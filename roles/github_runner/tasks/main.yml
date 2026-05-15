@@ -88,10 +88,9 @@
   tags:
     - github_runner
 
-# Linger has to be on BEFORE the lab-runtime build runs: rootless
-# podman's runtime (crun) makes sd-bus calls when creating the build's
-# intermediate containers, which fail with "Permission denied" if the
-# user has no systemd manager. `loginctl enable-linger` starts
+# Linger so rootless podman has a user systemd manager up at all times:
+# crun makes sd-bus calls when creating containers, which fail with
+# "Permission denied" without one. `loginctl enable-linger` starts
 # user@<uid>.service which provides the dbus + cgroup hierarchy crun
 # expects.
 - name: Turn on linger
@@ -103,9 +102,10 @@
   tags:
     - github_runner
 
-# linger triggers user@<uid>.service asynchronously; the build task
-# immediately following needs it fully up so crun's sd-bus calls
-# succeed. systemd module with state=started blocks until active.
+# linger triggers user@<uid>.service asynchronously; subsequent rootless
+# podman tasks (and the github_runner.service start) need it fully up so
+# crun's sd-bus calls succeed. systemd module with state=started blocks
+# until active.
 - name: Ensure github_runner user systemd manager is running
   when: not (ansible_check_mode and github_runner_user.changed)
   systemd:
@@ -130,43 +130,22 @@
   tags:
     - github_runner
 
-# actions/runner shells out to `docker pull <image>` unconditionally
-# before creating a job container, and the docker-compat socket path
-# in podman always tries the registry -- our locally-built lab-runtime
-# image lives at localhost/lab-runtime:latest in podman storage but
-# "localhost" gets parsed as a registry host and connects to lab's
-# nginx instead. Install a /usr/local/bin/docker wrapper that
-# intercepts pull -> podman pull --policy=missing (CLI path, honours
-# local storage); everything else passes through to /usr/bin/docker.
-# The github_runner systemd unit inherits PATH=/usr/local/bin:/usr/bin
-# so the wrapper wins.
-- name: Install docker-pull wrapper for actions/runner
-  copy:
-    src: docker_pull_wrapper.sh
-    dest: /usr/local/bin/docker
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-  become: true
-  tags:
-    - github_runner
-
 - name: Configure rootless overlay storage opts
   when: not (ansible_check_mode and github_runner_user.changed)
   copy:
     dest: /mnt/scratch/github_runner/.config/containers/storage.conf
     # Only the mountopt override (xino=off); see roles/gitea_runner's
     # git history (formerly act_runner) for the printk-suppression
-    # rationale. Pinning the driver
-    # explicitly via [storage] driver = "overlay" would silence podman's
-    # cosmetic "auto-picked a driver" warning, but ALSO triggers a
-    # "database graph driver mismatch" error against any podman storage
-    # database that was first initialised without a driver setting --
-    # which is what github_runner ends up with on a fresh apply, because
-    # the user's first podman invocation (the lab-runtime build) happens
-    # before this file is written. The warning is harmless; the database
-    # mismatch is fatal. Leave it implicit.
+    # rationale. Pinning the driver explicitly via [storage] driver =
+    # "overlay" would silence podman's cosmetic "auto-picked a driver"
+    # warning, but ALSO triggers a "database graph driver mismatch"
+    # error against any podman storage database that was first
+    # initialised without a driver setting -- which is what
+    # github_runner ends up with on a fresh apply, because the user's
+    # first podman invocation (any CI workflow's pull/run of the
+    # lab-runtime image) happens before this file is written. The
+    # warning is harmless; the database mismatch is fatal. Leave it
+    # implicit.
     content: |
       [storage.options.overlay]
       mountopt = "nodev,xino=off"
@@ -176,160 +155,6 @@
   become: true
   tags:
     - github_runner
-
-# Build the lab-runtime container image used by every CI workflow. The
-# image lives only in the github_runner user's local podman image store --
-# no registry, no push.
-#
-# Idempotence: hash the five build inputs (Dockerfile + mise.toml +
-# pyproject.toml + uv.lock + packer/qemu.pkr.hcl), stamp the digest on
-# the image as the `homelab.input_hash` label, and skip the block when
-# the existing image's label matches. Same shape as the podman_secret
-# helper (sha256 stored as a label on the resource itself). podman's
-# layer cache would already make a forced rebuild fast (~200ms when
-# inputs are unchanged), but the label gate is what keeps ansible
-# honest about reporting changed -- without it, force: true reports
-# changed=true on every apply and the harness's idempotence check
-# fails.
-#
-# Build inputs are staged into a per-apply temp dir on the remote via
-# `rsync --relative` so the repo's relative paths survive into the
-# build context (Dockerfile's `COPY packer/qemu.pkr.hcl ...` depends
-# on that). The temp dir, plus the GitHub token tmpfile used for
-# `podman build --secret`, are both torn down in `always:` so a build
-# crash doesn't leak state.
-- name: Compute lab-runtime build inputs hash
-  set_fact:
-    github_runner_lab_runtime_input_hash: >-
-      {{ [(lookup('file', playbook_dir + '/roles/github_runner/files/Dockerfile.lab-runtime') | hash('sha256')),
-      (lookup('file', playbook_dir + '/mise.toml') | hash('sha256')),
-      (lookup('file', playbook_dir + '/pyproject.toml') | hash('sha256')),
-      (lookup('file', playbook_dir + '/uv.lock') | hash('sha256')),
-      (lookup('file', playbook_dir + '/packer/qemu.pkr.hcl') | hash('sha256'))] | join('') | hash('sha256') }}
-  tags:
-    - github_runner
-
-# Reads the label off the existing image, if any. Returns rc!=0 with
-# empty stdout when the image doesn't exist yet (first apply) -- which
-# compares unequal to the freshly-computed hash and triggers a build,
-# so failed_when: false is the right shape here. When the image exists
-# but predates this label (upgraded from an earlier version of the
-# role), the Go-template `index` on a missing key prints empty/<no
-# value>, which likewise won't match and triggers a re-stamping build.
-#
-# Gated on the check-mode pattern: in check mode the github_runner
-# user was only *reported* as created by service_user, so a become_user
-# to it would error with "unknown user". When skipped the register has
-# no .stdout; the build block's `default('')` handles that, and the
-# block's `not ansible_check_mode` predicate keeps the build out of
-# check mode regardless.
-- name: Read existing lab-runtime image input hash
-  when: not (ansible_check_mode and github_runner_user.changed)
-  ansible.builtin.command:
-    argv:
-      - podman
-      - image
-      - inspect
-      - lab-runtime:latest
-      - --format
-      - '{% raw %}{{ index .Config.Labels "homelab.input_hash" }}{% endraw %}'
-  register: github_runner_lab_runtime_existing_hash
-  changed_when: false
-  failed_when: false
-  become: true
-  become_user: github_runner
-  environment:
-    XDG_RUNTIME_DIR: /run/user/{{ github_runner_user.uid | default('0') }}
-    DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ github_runner_user.uid | default('0') }}/bus
-  tags:
-    - github_runner
-
-- name: Build lab-runtime image
-  when:
-    - not ansible_check_mode
-    - (github_runner_lab_runtime_existing_hash.stdout | default('') | trim) != github_runner_lab_runtime_input_hash
-  tags:
-    - github_runner
-  become: true
-  become_user: github_runner
-  block:
-    - name: Create temp build context for lab-runtime image
-      ansible.builtin.tempfile:
-        state: directory
-        prefix: lab-runtime-build-
-      register: github_runner_lab_runtime_buildctx
-
-    # Re-create the input paths inside the tempdir so the Dockerfile's
-    # `COPY packer/qemu.pkr.hcl ...` and the role-relative Dockerfile
-    # path land at the layout the build expects. copy doesn't mkdir
-    # intermediate dirs on its own.
-    - name: Create build context subdirs
-      ansible.builtin.file:
-        path: "{{ github_runner_lab_runtime_buildctx.path }}/{{ item }}"
-        state: directory
-        mode: "0755"
-      loop:
-        - roles/github_runner/files
-        - packer
-
-    # Stages each file individually via ansible's standard connection.
-    # synchronize would be terser (one rsync invocation, --relative
-    # preserves paths) but its action plugin uses inventory_hostname
-    # for the rsync destination -- which doesn't translate to the
-    # harness's 127.0.0.1:<forwarded-port> SSH setup, so test runs
-    # blow up on "ssh: connect to host box: ...". copy goes through
-    # the same connection plugin as everything else and Just Works.
-    - name: Stage build inputs into temp build context
-      ansible.builtin.copy:
-        src: "{{ playbook_dir }}/{{ item }}"
-        dest: "{{ github_runner_lab_runtime_buildctx.path }}/{{ item }}"
-        mode: "0644"
-      loop:
-        - roles/github_runner/files/Dockerfile.lab-runtime
-        - mise.toml
-        - pyproject.toml
-        - uv.lock
-        - packer/qemu.pkr.hcl
-
-    - name: Stage GitHub token tmpfile for the lab-runtime build
-      when: not ansible_check_mode
-      copy:
-        dest: /run/user/{{ github_runner_user.uid | default('0') }}/lab-runtime-build-token
-        content: "{{ mise_github_token }}"
-        mode: "0400"
-      no_log: true
-
-    - name: Build lab-runtime image
-      when: not ansible_check_mode
-      environment:
-        XDG_RUNTIME_DIR: /run/user/{{ github_runner_user.uid | default('0') }}
-        DBUS_SESSION_BUS_ADDRESS: unix:path=/run/user/{{ github_runner_user.uid | default('0') }}/bus
-      containers.podman.podman_image:
-        name: lab-runtime
-        tag: latest
-        state: build
-        path: "{{ github_runner_lab_runtime_buildctx.path }}"
-        force: true
-        build:
-          file: "{{ github_runner_lab_runtime_buildctx.path }}/roles/github_runner/files/Dockerfile.lab-runtime"
-          extra_args: >-
-            --cgroup-manager=cgroupfs
-            --secret id=mise_github_token,src=/run/user/{{ github_runner_user.uid | default('0') }}/lab-runtime-build-token
-            --label homelab.input_hash={{ github_runner_lab_runtime_input_hash }}
-      register: github_runner_lab_runtime_build
-
-  always:
-    - name: Remove temp build context
-      when: github_runner_lab_runtime_buildctx.path is defined
-      file:
-        path: "{{ github_runner_lab_runtime_buildctx.path }}"
-        state: absent
-
-    - name: Remove staged GitHub token tmpfile
-      when: not ansible_check_mode
-      file:
-        path: /run/user/{{ github_runner_user.uid | default('0') }}/lab-runtime-build-token
-        state: absent
 
 # Install / upgrade actions/runner from the upstream tarball. The
 # version sentinel (.version-<ver>) is what `unarchive` keys off via
