@@ -12,17 +12,6 @@
 # up. Asserting `local` for the mountpoint as well as the extra
 # properties keeps the role's "I set this explicitly" contract honest.
 
-- name: _verify | Compose dataset list
-  set_fact:
-    _data_pool: '{{ zfs_tank_filesystem | default("tank") }}'
-    _data_datasets:
-      - { name: data, mountpoint: /mnt/data }
-      - { name: brumath, mountpoint: /mnt/brumath }
-      - { name: eckwersheim, mountpoint: /mnt/eckwersheim }
-    _data_extra_properties:
-      'autobackup:bak': 'true'
-      special_small_blocks: '32768'
-
 - name: _verify | Dataset exists
   when: zfs_root
   command:
@@ -32,11 +21,11 @@
       - -H
       - -o
       - name
-      - "{{ _data_pool }}/{{ item.name }}"
+      - "{{ data_pool }}/{{ item.name }}"
   changed_when: false
-  loop: '{{ _data_datasets }}'
+  loop: '{{ data_datasets }}'
   loop_control:
-    label: '{{ _data_pool }}/{{ item.name }}'
+    label: '{{ data_pool }}/{{ item.name }}'
   become: true
 
 - name: _verify | Mountpoint property set locally with expected value
@@ -50,15 +39,15 @@
       - -o
       - source,value
       - mountpoint
-      - "{{ _data_pool }}/{{ item.name }}"
+      - "{{ data_pool }}/{{ item.name }}"
   register: data_verify_mountpoint
   changed_when: false
   failed_when: >-
     (data_verify_mountpoint.stdout.split('\t') | first | trim) != 'local'
     or (data_verify_mountpoint.stdout.split('\t') | last | trim) != item.mountpoint
-  loop: '{{ _data_datasets }}'
+  loop: '{{ data_datasets }}'
   loop_control:
-    label: '{{ _data_pool }}/{{ item.name }} mountpoint={{ item.mountpoint }}'
+    label: '{{ data_pool }}/{{ item.name }} mountpoint={{ item.mountpoint }}'
   become: true
 
 - name: _verify | Dataset mounted at mountpoint
@@ -72,10 +61,10 @@
       - "{{ item.mountpoint }}"
   register: data_verify_findmnt
   changed_when: false
-  failed_when: data_verify_findmnt.stdout | trim != _data_pool ~ '/' ~ item.name
-  loop: '{{ _data_datasets }}'
+  failed_when: data_verify_findmnt.stdout | trim != data_pool ~ '/' ~ item.name
+  loop: '{{ data_datasets }}'
   loop_control:
-    label: '{{ item.mountpoint }} <- {{ _data_pool }}/{{ item.name }}'
+    label: '{{ item.mountpoint }} <- {{ data_pool }}/{{ item.name }}'
   become: true
 
 - name: _verify | Extra property set locally with expected value
@@ -89,13 +78,13 @@
       - -o
       - source,value
       - "{{ item.1.key }}"
-      - "{{ _data_pool }}/{{ item.0.name }}"
+      - "{{ data_pool }}/{{ item.0.name }}"
   register: data_verify_prop
   changed_when: false
   failed_when: >-
     (data_verify_prop.stdout.split('\t') | first | trim) != 'local'
     or (data_verify_prop.stdout.split('\t') | last | trim) != item.1.value
-  loop: '{{ _data_datasets | product(_data_extra_properties | dict2items) | list }}'
+  loop: '{{ data_datasets | product(data_extra_properties | dict2items) | list }}'
   loop_control:
-    label: '{{ _data_pool }}/{{ item.0.name }} {{ item.1.key }}={{ item.1.value }}'
+    label: '{{ data_pool }}/{{ item.0.name }} {{ item.1.key }}={{ item.1.value }}'
   become: true
