@@ -268,6 +268,69 @@
   tags:
     - netdata
 
+# Un-silence the two predictive disk-fill alarms shipped in upstream
+# /usr/lib/netdata/conf.d/health.d/disks.conf. Upstream sets
+# `to: silent` on out_of_disk_space_time and out_of_disk_inodes_time
+# because the 1h linear extrapolation can be noisy on bursty cloud
+# workloads. On lab/pug the workload is stable enough that the
+# prediction is a useful early warning -- the static disk_space_usage
+# alarm only escalates to CRITICAL at 98% used + <5GB free, which
+# leaves no room to react (the 2026-05-15 /var/lib/containers fill
+# went WARNING -> CRITICAL in ~10s as the zvol passed 98%, with no
+# usable lead time).
+#
+# Patching disks.conf rather than re-declaring the templates because
+# the upstream calc depends on $disk_fill_rate (a sibling template);
+# re-declaring would require maintaining that whole chain in-tree and
+# is brittle across netdata upgrades. The `replace` regex is anchored
+# to each template's name so the other `to: silent` entries in the
+# file (10min_disk_utilization, 10min_disk_backlog -- legitimately
+# silent) are preserved.
+- name: Stage upstream disks.conf into /etc/netdata/health.d
+  command: cp /usr/lib/netdata/conf.d/health.d/disks.conf /etc/netdata/health.d/disks.conf
+  args:
+    creates: /etc/netdata/health.d/disks.conf
+  register: netdata_disks_staged
+  become: true
+  tags:
+    - netdata
+
+- name: Un-silence out_of_disk_space_time
+  when: not (ansible_check_mode and netdata_disks_staged.changed)
+  replace:
+    path: /etc/netdata/health.d/disks.conf
+    # (?s) = dotall so .*? spans newlines; non-greedy stops at the
+    # FIRST `to: silent` after the template header, which is the one
+    # belonging to this template (other templates intervene with their
+    # own `to:` fields before another silent one appears).
+    regexp: '(?s)(template:\s*out_of_disk_space_time\b.*?\bto:\s*)silent'
+    replace: '\1sysadmin'
+    backup: true
+  register: netdata_disks_space_unsilenced
+  become: true
+  tags:
+    - netdata
+
+- name: Un-silence out_of_disk_inodes_time
+  when: not (ansible_check_mode and netdata_disks_staged.changed)
+  replace:
+    path: /etc/netdata/health.d/disks.conf
+    regexp: '(?s)(template:\s*out_of_disk_inodes_time\b.*?\bto:\s*)silent'
+    replace: '\1sysadmin'
+    backup: true
+  register: netdata_disks_inodes_unsilenced
+  become: true
+  tags:
+    - netdata
+
+- name: Reload netdata health after disks.conf edits
+  when: netdata_disks_staged.changed or netdata_disks_space_unsilenced.changed or netdata_disks_inodes_unsilenced.changed
+  command: netdatacli reload-health
+  changed_when: true
+  become: true
+  tags:
+    - netdata
+
 - name: Configure systemdunits metrics
   import_role:
     name: netdata
