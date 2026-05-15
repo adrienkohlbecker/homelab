@@ -180,11 +180,9 @@ resource "nexus_repository_raw_proxy" "this" {
 # nexus.lab.fahm.fr/repository/homelab/lab-runtime:<sha> + :latest after
 # rebuilding the runner image. Anonymous pulls are on (so unauthenticated
 # `podman pull` from CI / lab hosts works); push requires basic auth
-# against a Nexus user with nx-repository-edit-docker-homelab-add /
-# -edit / -delete privileges (created once via the Nexus UI; the
-# datadrivers provider does not yet expose user/role/privilege
-# resources). Force-basic-auth ON keeps anonymous Bearer-token paths
-# from accidentally accepting pushes.
+# against the homelab_push user (defined below; credentials get pushed
+# to GitHub Actions via terraform/github.tf). Force-basic-auth ON keeps
+# anonymous Bearer-token paths from accidentally accepting pushes.
 #
 # write_policy ALLOW (not ALLOW_ONCE) because the lab-runtime-build
 # workflow re-pushes :latest on every successful build. ALLOW_ONCE
@@ -204,6 +202,44 @@ resource "nexus_repository_docker_hosted" "this" {
     strict_content_type_validation = true
     write_policy                   = "ALLOW"
   }
+}
+
+# Least-privileged role + user for CI pushes to the homelab docker repo.
+# The wildcard view privilege covers browse / read / edit / add / delete
+# on this single repo (Nexus auto-creates these per repo); no admin /
+# config rights, and no scope outside docker-homelab. Repo creation has
+# to land first so the privileges Nexus auto-generates exist before this
+# role tries to reference them.
+resource "nexus_security_role" "homelab_push" {
+  roleid      = "homelab-push"
+  name        = "homelab-push"
+  description = "Push images to the homelab docker hosted repo"
+  privileges = [
+    "nx-repository-view-docker-homelab-*",
+  ]
+  roles = []
+
+  depends_on = [nexus_repository_docker_hosted.this]
+}
+
+# Generated once and pinned in encrypted state; rotate by tainting the
+# random_password resource (`tofu apply -replace=random_password.
+# nexus_homelab_push`). 32 chars, alphanumeric only -- some HTTP basic
+# auth shells (and the docker `--password-stdin` round-trip) misbehave
+# on punctuation.
+resource "random_password" "nexus_homelab_push" {
+  length  = 32
+  special = false
+}
+
+resource "nexus_security_user" "homelab_push" {
+  userid    = "homelab-push"
+  firstname = "homelab"
+  lastname  = "push"
+  email     = "homelab-push@noreply.invalid"
+  password  = random_password.nexus_homelab_push.result
+  roles     = [nexus_security_role.homelab_push.roleid]
+  status    = "active"
 }
 
 resource "nexus_repository_docker_proxy" "this" {

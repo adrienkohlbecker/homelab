@@ -68,9 +68,10 @@ WORKDIR /tmp/build
 COPY mise.toml pyproject.toml uv.lock ./
 # The mise_github_token build secret raises mise's GitHub API rate
 # limit (mise pulls tool releases from gh; anonymous is 60/hr,
-# authenticated is 5000/hr). Sourced from a podman secret of the same
-# name managed by the act_runner role. Mounted only for this RUN --
-# never lands in any image layer.
+# authenticated is 5000/hr). Forwarded by lab-runtime-build.yml from
+# the MISE_GITHUB_TOKEN repo secret (a long-lived PAT with no scopes
+# beyond public read). Mounted only for this RUN -- never lands in any
+# image layer.
 RUN --mount=type=secret,id=mise_github_token \
     if [ -s /run/secrets/mise_github_token ]; then \
       export GITHUB_TOKEN=$(cat /run/secrets/mise_github_token); \

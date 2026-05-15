@@ -13,6 +13,11 @@ AWS_SECRET_ACCESS_KEY = "op://Lab/iiis755ps5mhhlpmcv25lrctgu/password"
 # op:// reference at exec time, so the passphrase only ever materializes
 # inside the wrapped tofu process.
 TF_VAR_state_passphrase = "op://Lab/vztgbtb2i3nlgrift46fc7r4f4/password"
+# Dedicated fine-grained GitHub PAT (no scopes) pushed by terraform to
+# the MISE_GITHUB_TOKEN repo secret -- raises mise's anon 60/hr API
+# rate limit during the lab-runtime-build workflow's `mise install`
+# step. See terraform/github.tf for the rotation path.
+TF_VAR_mise_github_token = "op://Lab/zs75mteaj6dk422zta2zpbuaki/password"
 # Expose [vars] entries as env so file-based mise-tasks/ scripts can read
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.

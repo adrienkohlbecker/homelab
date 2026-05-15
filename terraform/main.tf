@@ -8,6 +8,18 @@ terraform {
       source  = "datadrivers/nexus"
       version = "~> 2"
     }
+    github = {
+      source  = "integrations/github"
+      version = "~> 6"
+    }
+    external = {
+      source  = "hashicorp/external"
+      version = "~> 2"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3"
+    }
   }
 
   required_version = ">= 1.11.4"

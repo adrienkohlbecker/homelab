@@ -221,11 +221,6 @@ nexus_encryption_iv: changeme
 # Shrink the JVM so nexus fits the 3.6 GB podman test VM. Real prod
 # uses the 4G/4G/2g defaults baked into the template.
 nexus_jvm_params: -Xms512M -Xmx1G -XX:MaxDirectMemorySize=512m
-# Empty in test so the lab-runtime Dockerfile's `[ -s /run/secrets/... ]`
-# gate skips the GITHUB_TOKEN export and mise falls back to the anon
-# GitHub API (60/hr, plenty for one build). A placeholder string would
-# get exported and trip mise's attestation check with a 401.
-mise_github_token: ""
 
 minio_users:
   - access_key: test
