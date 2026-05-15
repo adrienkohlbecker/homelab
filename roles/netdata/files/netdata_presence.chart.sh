@@ -78,11 +78,18 @@ _netdata_presence_fetch_charts() {
     | jq -r '.charts | keys[]' 2>/dev/null
 }
 
-# go.d:collector:<plugin>:<job> -> netdata.go_d_<plugin>[_<job>]_data_collection_status
-# When plugin == job (e.g. zfspool:zfspool), netdata dedupes the suffix.
-# Returns empty string for anything that isn't a go.d collector id so
-# the caller can mark it unknown rather than guess.
-_netdata_presence_collector_chart() {
+# go.d:collector:<plugin>:<job> -> chart-id prefix used by that job.
+# netdata 1.46 doesn't expose a per-job liveness chart -- the 2.x
+# `netdata.go_d_<plugin>_<job>_data_collection_status` family doesn't
+# exist on this version. The presence-of-the-collector signal we have
+# is "did this collector emit any chart at all" -- so we look up by
+# chart-id prefix.
+#
+# Naming rule (observed on 1.46): the chart-id is "<plugin>.<context>"
+# when plugin==job (e.g. zfspool, nvme, fail2ban), otherwise
+# "<plugin>_<job>.<context>" (e.g. chrony_local, x509check_host_cert).
+# Returns the prefix WITHOUT the trailing dot. Empty for non-go.d ids.
+_netdata_presence_collector_chart_prefix() {
   local cid=$1
   local IFS=:
   read -r p1 p2 plugin job _rest <<<"$cid"
@@ -91,14 +98,14 @@ _netdata_presence_collector_chart() {
     return
   fi
   if [ "$plugin" = "$job" ]; then
-    printf 'netdata.go_d_%s_data_collection_status' "$plugin"
+    printf '%s' "$plugin"
   else
-    printf 'netdata.go_d_%s_%s_data_collection_status' "$plugin" "$job"
+    printf '%s_%s' "$plugin" "$job"
   fi
 }
 
 netdata_presence_update() {
-  local entry name ctx_id present safe expected line
+  local entry name ctx_id present safe expected line _chart_id
   local -A api_contexts=()
   local -A api_charts=()
 
@@ -148,11 +155,19 @@ EOF
 
   for entry in "${netdata_presence_collectors[@]}"; do
     [ -n "$entry" ] || continue
-    expected=$(_netdata_presence_collector_chart "$entry")
+    expected=$(_netdata_presence_collector_chart_prefix "$entry")
     safe=$(_netdata_presence_safe "$entry")
     present=0
-    if [ -n "$expected" ] && [ -n "${api_charts[$expected]:-}" ]; then
-      present=1
+    if [ -n "$expected" ]; then
+      # Iterate api_charts keys looking for one that starts with the
+      # prefix followed by a dot. Bash 4 associative arrays don't have a
+      # native "any key matches glob" so we walk the keyset; ~6k charts
+      # on lab takes O(ms) at 60s update cadence.
+      for _chart_id in "${!api_charts[@]}"; do
+        case "$_chart_id" in
+          "$expected".*) present=1; break ;;
+        esac
+      done
     fi
     if [ -z "${_netdata_presence_seen_collectors[$entry]:-}" ]; then
       cat <<EOF
