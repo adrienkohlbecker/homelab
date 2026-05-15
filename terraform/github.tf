@@ -22,21 +22,37 @@ provider "github" {
   owner = "adrienkohlbecker"
 }
 
-# NEXUS_USERNAME / NEXUS_PASSWORD power the ci-image workflow's
-# `podman login nexus.lab.fahm.fr` step. Both pull from the homelab_push
-# user defined in nexus.tf, so a password rotation
-# (`tofu apply -replace=random_password.nexus_homelab_push`) updates the
-# user, the github secret, and any subsequent CI run in one apply.
+# NEXUS_USERNAME / NEXUS_PASSWORD secrets pushed into each GitHub repo
+# that has a matching nexus hosted-docker repo. Each repo's build
+# workflow uses its own scoped credential against nexus.lab.fahm.fr;
+# a password rotation (`tofu apply -replace='random_password.
+# nexus_push["<name>"]'`) updates the user, the matching github secret,
+# and any subsequent CI run in one apply. Assumes the GitHub repo name
+# matches the nexus hosted-repo name (true today for homelab + compta).
 resource "github_actions_secret" "nexus_username" {
-  repository  = "homelab"
+  for_each = nexus_security_user.push
+
+  repository  = each.key
   secret_name = "NEXUS_USERNAME"
-  value       = nexus_security_user.homelab_push.userid
+  value       = each.value.userid
 }
 
 resource "github_actions_secret" "nexus_password" {
-  repository  = "homelab"
+  for_each = nexus_security_user.push
+
+  repository  = each.key
   secret_name = "NEXUS_PASSWORD"
-  value       = random_password.nexus_homelab_push.result
+  value       = random_password.nexus_push[each.key].result
+}
+
+moved {
+  from = github_actions_secret.nexus_username
+  to   = github_actions_secret.nexus_username["homelab"]
+}
+
+moved {
+  from = github_actions_secret.nexus_password
+  to   = github_actions_secret.nexus_password["homelab"]
 }
 
 # MISE_GITHUB_TOKEN raises mise's anonymous 60/hr GitHub API rate limit
