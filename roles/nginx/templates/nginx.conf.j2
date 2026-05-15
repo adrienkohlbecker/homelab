@@ -53,12 +53,9 @@ http {
     resolver_timeout       2s;
 
     # SSL
-    ssl_certificate         /etc/letsencrypt/live/{{ domain }}/fullchain.pem;
-    ssl_certificate_key     /etc/letsencrypt/live/{{ domain }}/privkey.pem;
-    ssl_trusted_certificate /etc/letsencrypt/live/{{ domain }}/chain.pem;
     ssl_certificate         /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem;
     ssl_certificate_key     /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem;
-    # ssl_trusted_certificate /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/chain.pem; # this directive can only be used once, but the chain for both domains is identical
+    ssl_trusted_certificate /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/chain.pem;
 
     # Connection header for WebSocket reverse proxy
     map $http_upgrade $connection_upgrade {

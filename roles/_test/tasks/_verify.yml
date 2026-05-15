@@ -136,15 +136,12 @@
   ansible.builtin.stat:
     path: "{{ item }}"
   loop:
-    - /etc/letsencrypt/live/{{ domain }}/privkey.pem
-    - /etc/letsencrypt/live/{{ domain }}/chain.pem
-    - /etc/letsencrypt/live/{{ domain }}/fullchain.pem
     - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/privkey.pem
     - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/chain.pem
     - /etc/letsencrypt/live/{{ inventory_hostname }}.{{ domain }}/fullchain.pem
   register: _verify_letsencrypt
 
-- name: _verify | Letsencrypt cert files exist for both domains
+- name: _verify | Letsencrypt cert files exist
   ansible.builtin.assert:
     that:
       - item.stat.exists
