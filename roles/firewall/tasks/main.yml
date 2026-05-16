@@ -131,6 +131,39 @@
   tags:
     - firewall
 
+# Auto-revert safety net. `nft -c -f` validates SYNTAX (good — see
+# next task) but can't detect "the new ruleset drops the operator's
+# own SSH path", which silently locks them out at reload time.
+# Mitigation: snapshot the currently-loaded ruleset, schedule a
+# systemd-run timer to re-apply that snapshot 60s from now, run the
+# reload, and cancel the timer once ansible can still reach the host
+# after the reload. If anything between scheduling and cancellation
+# loses the SSH connection (the new rules killed it, the host
+# panicked, the network blipped), the timer fires and restores the
+# previous-good ruleset.
+# Gated on nftables.service already being active — first install has
+# no working ruleset to revert TO, and the systemd_unit helper below
+# will start the service fresh anyway.
+- name: Check if nftables.service is currently active (gates auto-revert)
+  command: systemctl is-active nftables.service
+  register: firewall_nftables_pre_active
+  changed_when: false
+  failed_when: false
+  become: true
+  tags:
+    - firewall
+
+- name: Snapshot current nftables.conf for auto-revert
+  when: firewall_nftables_pre_active.rc == 0
+  copy:
+    src: /etc/nftables.conf
+    dest: /etc/nftables.conf.pre-reload
+    remote_src: true
+    mode: "0644"
+  become: true
+  tags:
+    - firewall
+
 # `nft -c -f %s` validates the assembled ruleset before it ever
 # touches the kernel — a real correctness improvement over
 # iptables-restore, which had no equivalent dry-run path used by the
@@ -176,6 +209,25 @@
   tags:
     - firewall
 
+# Schedule the auto-revert. The pre-stop / reset-failed dance
+# idempotently clears any leftover unit from a prior interrupted
+# run so the --unit name is free for systemd-run. shell{} (not
+# command{}) because we chain three commands.
+- name: Schedule auto-revert timer (60s — cancelled on successful reload)
+  when:
+    - firewall_nftables_pre_active.rc == 0
+    - firewall_ruleset.changed
+  shell: |
+    set -e
+    systemctl stop firewall_emergency_revert.timer 2>/dev/null || true
+    systemctl reset-failed firewall_emergency_revert.timer firewall_emergency_revert.service 2>/dev/null || true
+    systemd-run --unit firewall_emergency_revert --on-active=60 /usr/sbin/nft -f /etc/nftables.conf.pre-reload
+  args: { executable: /bin/bash }
+  changed_when: true
+  become: true
+  tags:
+    - firewall
+
 # Apply ruleset + service lifecycle via the systemd_unit helper. The
 # ExecReload drop-in installed above maps `state: reloaded` to atomic
 # `nft -f` (per-table flush+rebuild inside the file replaces only our
@@ -195,6 +247,23 @@
       src: nftables
       condition: "{{ not (ansible_check_mode and firewall_apt_nftables.changed) }}"
       reload: "{{ firewall_ruleset.changed or nftables_service_d_override_conf_result.changed }}"
+  tags:
+    - firewall
+
+# Cancel the auto-revert. The reload completed and ansible can still
+# reach the host. If we never get here (reload broke SSH, role
+# errored, network blip), the systemd-run timer fires in 60s and
+# restores /etc/nftables.conf.pre-reload via `nft -f`.
+- name: Cancel auto-revert timer (post-reload alive)
+  when:
+    - firewall_nftables_pre_active.rc == 0
+    - firewall_ruleset.changed
+  shell: |
+    systemctl stop firewall_emergency_revert.timer 2>/dev/null || true
+    systemctl reset-failed firewall_emergency_revert.timer firewall_emergency_revert.service 2>/dev/null || true
+  args: { executable: /bin/bash }
+  changed_when: true
+  become: true
   tags:
     - firewall
 
