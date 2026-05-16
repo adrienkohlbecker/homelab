@@ -142,9 +142,12 @@ table ip homelab {
 
         # ICMP — only echo-request, rate-limited. Other ICMP types
         # come back as RELATED. Overflow drops silently rather than
-        # falling through to the catch-all reject.
+        # falling through to the catch-all reject. `counter` so the
+        # overflow path can be functionally verified — without it, a
+        # regression that raises the rate to 1000/sec or drops the
+        # trailing drop would not be caught.
         icmp type echo-request limit rate 10/second burst 20 packets accept
-        icmp type echo-request drop
+        icmp type echo-request counter drop comment "icmp echo overflow drop"
 
         # keepalived runs in unicast mode (not multicast 224.0.0.18)
         # with peers on the home LAN (see roles/pihole/templates/
