@@ -8,13 +8,16 @@ on:
         required: false
         default: ''
 
-# Mutex on /mnt/scratch/qemu lives at the test-role job level (further
-# down), not workflow level: a workflow-level lock would block
-# wait-for-packer-build from polling for the same push's packer-build
-# completion (deadlock -- test holds the lock, packer-build can't run,
-# wait-for-packer-build never returns). The per-cell test-role lock
-# preserves the same "no qcow2 reads while packer-build rewrites"
-# guarantee while letting detect/wait/notify run free.
+# Concurrency: no workflow- or job-level group on test-role any more.
+# The cap on concurrent VMs comes from the runner pool (4 lab-vm
+# runners on lab; see host_vars/lab.yml's github_runner_instances), and
+# the packer-vs-test mutex is enforced by a brief flock around packer's
+# install post-processor + the harness's overlay-create/qemu-launch
+# (see notes/concurrency_rework.md). The previous static
+# `lab-qemu-artifacts` on test-role made every matrix cell compete for
+# one slot and cancel all but one. Detect / wait-for-* / notify run on
+# the lab pool (disjoint from lab-vm) so they never compete with VM
+# jobs for capacity.
 
 defaults:
   run:
@@ -126,14 +129,15 @@ jobs:
           echo "Found $target -- releasing test-role."
 
   test-role:
-    # Reader half of the lab-qemu-artifacts mutex (packer-build is the
-    # writer). At job level rather than workflow level so
-    # wait-for-packer-build above doesn't hold the lock while polling
-    # the packer-build sentinel -- otherwise packer-build for this same
-    # push couldn't run, and the wait would deadlock.
-    concurrency:
-      group: lab-qemu-artifacts
-      cancel-in-progress: false
+    # Lands on the lab-vm pool (4 runners) -- the cap on concurrent
+    # qemu VMs is exactly the pool size. Packer-build and test-role
+    # share the pool; packer-build's qcow2 publish is brief-flock'd
+    # against test-role's overlay-create + qemu launch (see step 4 of
+    # the concurrency rework), so a publish-window race that lands in
+    # parallel doesn't tear file reads. No job-level concurrency group:
+    # the previous shape used a static `lab-qemu-artifacts` here, which
+    # made every matrix cell compete for one slot and cancel all but
+    # one -- see notes/concurrency_rework.md for the symptom.
     needs:
       - detect
       - wait-for-packer-build
@@ -154,7 +158,7 @@ jobs:
           || needs.wait-for-ci-image.result == 'skipped')
       && needs.detect.outputs.matrix != '[]'
       && needs.detect.outputs.matrix != ''
-    runs-on: [ self-hosted, lab ]
+    runs-on: [ self-hosted, lab-vm ]
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest
       # /dev/kvm via --device for qemu acceleration. --group-add 1 is
