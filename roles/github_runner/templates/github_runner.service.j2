@@ -46,6 +46,18 @@ SyslogIdentifier=%N
 User=github_runner
 Group=github_runner
 
+# %t resolves to /run on a system unit (system runtime dir), regardless
+# of User=. podman's --cidfile would then try to write directly under
+# /run, which github_runner can't. RuntimeDirectory=%N tells systemd
+# to mkdir /run/<unit-name> with mode 0755 owned by User=/Group=
+# (here github_runner:github_runner), and tear it down when the unit
+# stops. The --cidfile / --cidfile-cleanup paths below all reference
+# %t/%N/ctr-id to land inside it. Sibling podman roles (healthchecks,
+# openobserve, ...) skip this dance because they run the unit as root
+# at the systemd layer; we keep User= so a podman crash + escape
+# lands at github_runner, not root.
+RuntimeDirectory=%N
+
 # Wait for the github_runner user manager to bring its rootless
 # podman.socket up. Bounded 60 x 1s, well inside TimeoutStartSec. If the
 # socket never appears, the journal records the explicit cause rather
@@ -94,9 +106,9 @@ ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S /run/user/{{ github_runne
 # --health-start-period 30s: first-start runs the entrypoint's curl
 #   POST to GitHub before run.sh. 30s leaves headroom for a slow API
 #   response without flapping the unit unhealthy on boot.
-ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStartPre=/bin/rm -f %t/%N/ctr-id
 ExecStart=/usr/bin/podman run \
-  --cidfile=%t/%n.ctr-id \
+  --cidfile=%t/%N/ctr-id \
   --cgroups=split \
   --sdnotify=healthy \
   --detach \
@@ -121,8 +133,8 @@ ExecStart=/usr/bin/podman run \
   --health-start-period "30s" \
   --stop-timeout 30 \
   nexus.lab.fahm.fr/homelab/runner:latest
-ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
-ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%N/ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%N/ctr-id
 
 [Install]
 WantedBy=default.target
