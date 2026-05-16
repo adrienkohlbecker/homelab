@@ -75,7 +75,7 @@
                        | first
                        | regex_replace('^-- cursor: ?', '')) | quote }}
     --no-pager
-    --grep '\[error\].*(flatten-csp|otlp-shape|level-from-message)\.lua'
+    --grep '\[(error|warn)\].*(filter[_:]lua|flatten[_-]csp|otlp[_-]shape|level[_-]from[_-]message)'
   register: fluentbit_lua_errors
   changed_when: false
   failed_when: fluentbit_lua_errors.rc != 1
