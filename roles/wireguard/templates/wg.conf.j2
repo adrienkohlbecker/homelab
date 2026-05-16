@@ -40,5 +40,16 @@ Endpoint = {{ peer.endpoint.local }}
 Endpoint = {{ host }}:{{ port }}
 {% endif %}
 {% endif %}
+{# Peer-pair keepalive: emit PersistentKeepalive only when own_peer is
+   listed in peer.keepalive_from. Per-pair (rather than per-peer) so
+   battery-sensitive mobile peers don't get a forced 25s heartbeat
+   they don't need. Currently used to make lab/pug's view of bunk's
+   handshake_ago stay fresh enough for the netdata
+   wireguard_peer_handshake_stale alarm to be meaningful -- without
+   it, bunk's handshake only refreshes during nightly zfs sends and
+   the alarm fires all day. #}
+{% if own_peer.name in peer.get('keepalive_from', []) %}
+PersistentKeepalive = 25
+{% endif %}
 
 {% endfor %}
