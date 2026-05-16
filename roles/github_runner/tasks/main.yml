@@ -270,7 +270,11 @@
 # include_tasks (not include_role + loop) so vars: re-evaluate per
 # iteration -- see memory feedback_include_role_loop_vars for the trap.
 - name: Register and enable github_runner instances
-  include_tasks: _register.yml
+  include_tasks:
+    file: _register.yml
+    apply:
+      tags:
+        - github_runner
   loop: "{{ github_runner_instances }}"
   loop_control:
     loop_var: runner_instance
