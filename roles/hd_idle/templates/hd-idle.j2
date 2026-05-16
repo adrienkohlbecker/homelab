@@ -5,15 +5,16 @@
 # In order to make init.d script and systemd service consistent, hd-idle
 # defaults file supports only one option - HD_IDLE_OPTS.
 
-# Don't start hd-idle by defaulit. By specifying "-h" in HD_IDEL_OPTS,
+# Don't start hd-idle by default. By specifying "-h" in HD_IDLE_OPTS,
 # hd-idle daemon will print usage and successfully exit both for systemd
 # and systemv scripts
-# properly update HD_IDLE_OPTS in order to star hd-idle
+# properly update HD_IDLE_OPTS in order to start hd-idle
 
 #HD_IDLE_OPTS="-h"
 
-# Resolute (26.04) gates the daemon on START_HD_IDLE=true; older
-# releases don't read this variable so it's a harmless no-op there.
+# Newer releases (>= resolute / 26.04) gate the daemon on
+# START_HD_IDLE=true; older releases don't read this variable so it's a
+# harmless no-op there.
 START_HD_IDLE=true
 
 # hd-idle command line options
@@ -34,7 +35,7 @@ START_HD_IDLE=true
 #                          this option should not cause any additional spinups.
 #
 # Options not exactly useful here:
-#  -t <disk>               Spin-down the specfified disk immediately and exit.
+#  -t <disk>               Spin-down the specified disk immediately and exit.
 #  -d                      Debug mode. This will prevent hd-idle from
 #                          becoming a daemon and print debugging info to
 #                          stdout/stderr
