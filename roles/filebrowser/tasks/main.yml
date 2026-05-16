@@ -30,6 +30,8 @@
     - { name: data, src: /mnt/data, enabled: "{{ zfs_has_data_mount }}" }
     - { name: media, src: /mnt/media, enabled: "{{ zfs_has_media_mount }}" }
     - { name: services, src: /mnt/services, enabled: "{{ zfs_has_services_mount }}" }
+  loop_control:
+    label: "{{ item.name }}"
   become: true
   tags:
     - filebrowser
