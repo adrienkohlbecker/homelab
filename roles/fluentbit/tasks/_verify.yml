@@ -7,6 +7,28 @@
     or _verify_unit.status.ActiveState != "active"
   become: true
 
+- name: _verify | state-directory perms | stat
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /var/lib/fluent-bit
+    - /var/lib/fluent-bit/storage
+  register: _verify_state_dirs
+  become: true
+
+- name: _verify | state-directory perms | assert 0700 root:root
+  assert:
+    that:
+      - item.stat.exists
+      - item.stat.isdir
+      - item.stat.mode == '0700'
+      - item.stat.pw_name == 'root'
+      - item.stat.gr_name == 'root'
+    fail_msg: "fluent-bit state dir leaked perms: {{ item.stat.path }} mode={{ item.stat.mode }} owner={{ item.stat.pw_name }}:{{ item.stat.gr_name }}"
+  loop: "{{ _verify_state_dirs.results }}"
+  loop_control:
+    label: "{{ item.stat.path }}"
+
 # End-to-end CSP-through-OTLP shape assertion. POST a marked CSP report
 # at fluent-bit's HTTP input, let it flow through:
 #   fluent-bit HTTP input

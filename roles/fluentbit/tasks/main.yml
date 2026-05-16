@@ -99,6 +99,28 @@
   tags:
     - fluentbit
 
+# fluent-bit's filesystem backlog under /var/lib/fluent-bit/storage/
+# queues records during a HyperDX outage -- journal entries (sudo argv,
+# auth failures), CSP report bodies, anything in transit. The package
+# leaves /var/lib/fluent-bit/ at 0755 and fluent-bit creates storage/
+# with the unit's default umask (0755). Tighten both to 0700 so a local
+# user can't traverse the queue; fluent-bit itself runs as root (the
+# conf below is 0600), so 0700 doesn't break the runtime.
+- name: Tighten fluent-bit state directory perms
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  loop:
+    - /var/lib/fluent-bit
+    - /var/lib/fluent-bit/storage
+  become: true
+  when: not (ansible_check_mode and fluentbit_apt.changed)
+  tags:
+    - fluentbit
+
 - name: Install fluent-bit Lua filters
   copy:
     src: "{{ item }}"
