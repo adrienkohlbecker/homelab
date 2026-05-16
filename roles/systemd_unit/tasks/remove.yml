@@ -31,6 +31,7 @@
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_dir: "{{ '/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user' }}"
 
+# Check-mode tolerance on the linger-marker stat: see install.yml.
 - name: remove | Verify user-scope linger marker exists for {{ _systemd_unit_user }}
   when:
     - _systemd_unit_condition
@@ -38,7 +39,7 @@
   stat:
     path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
   register: _systemd_unit_linger
-  failed_when: not _systemd_unit_linger.stat.exists
+  failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
 
 # Mask check before stop/disable: stop on a masked unit is a no-op
 # (state=stopped + failed_when:false swallows it), but the file delete
