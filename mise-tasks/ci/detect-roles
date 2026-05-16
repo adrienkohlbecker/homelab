@@ -27,7 +27,7 @@
 #
 # Local testing:
 #   mise run ci:detect-roles                # uses git diff HEAD~1 HEAD
-#   INPUTS_ROLES=foo,bar:lab GITHUB_EVENT_NAME=workflow_dispatch mise run ci:detect-roles
+#   INPUTS_ROLES=foo,bar:minimal GITHUB_EVENT_NAME=workflow_dispatch mise run ci:detect-roles
 #   mise run ci:detect-roles --all
 set -euo pipefail
 
@@ -42,27 +42,17 @@ in_universe() {
   grep -qx -- "$1" <<<"$UNIVERSE"
 }
 
-# Lab-variant escalation list. One role per line; comments + blank lines OK.
-LAB_ROLES_FILE=".github/ci-lab-roles.txt"
-LAB_ROLES=$(
-  if [ -f "$LAB_ROLES_FILE" ]; then
-    grep -vE '^[[:space:]]*(#|$)' "$LAB_ROLES_FILE" || true
-  fi
-)
-
-# Minimal-variant escalation list. Same shape as the lab list, but
-# the extra entry is `<role>:minimal` (vanilla Ubuntu cloud image)
-# rather than `<role>:lab`.
+# Minimal-variant escalation list. One role per line; comments + blank
+# lines OK. Each entry adds a `<role>:minimal` cell (vanilla Ubuntu
+# cloud image, ext4, snapd preinstalled) on top of the default
+# `<role>:box` cell. Used when behaviour depends on
+# upstream-shipped packages actually being present.
 MINIMAL_ROLES_FILE=".github/ci-minimal-roles.txt"
 MINIMAL_ROLES=$(
   if [ -f "$MINIMAL_ROLES_FILE" ]; then
     grep -vE '^[[:space:]]*(#|$)' "$MINIMAL_ROLES_FILE" || true
   fi
 )
-
-is_lab_role() {
-  grep -qx -- "$1" <<<"$LAB_ROLES"
-}
 
 is_minimal_role() {
   grep -qx -- "$1" <<<"$MINIMAL_ROLES"
@@ -71,7 +61,10 @@ is_minimal_role() {
 # Cross-cut regex: changes to these paths invalidate every role's matrix
 # entry, so we don't try to be clever -- emit empty matrix + cross_cut=true
 # and let the operator pick a targeted subset via workflow_dispatch.
-CROSS_CUT_RE='^(group_vars/all\.yml|group_vars/test\.yml|host_vars/.*-qemu.*\.yml|test/(testrole|testall|machine)\.py|mise\.toml)$'
+# host_vars/box.yml and host_vars/minimal.yml are the test fixtures that
+# every push cell consumes; lab-qemu.yml / pug-qemu.yml only matter for
+# on-demand --machine lab/pug runs and aren't cross-cut for push CI.
+CROSS_CUT_RE='^(group_vars/all\.yml|group_vars/test\.yml|host_vars/(box|minimal)\.yml|test/(testrole|testall|machine)\.py|mise\.toml)$'
 
 emit() {
   local matrix=$1 cross_cut=$2 packer_changed=${3:-false} ci_image_changed=${4:-false}
@@ -91,8 +84,10 @@ emit() {
 }
 
 # Build a JSON array of "role:variant" strings from a newline-separated
-# role list. Each role gets a "role:box" entry; roles in LAB_ROLES
-# additionally get a "role:lab" entry.
+# role list. Each role gets a "role:box" entry; roles in MINIMAL_ROLES
+# additionally get a "role:minimal" entry. lab/pug variants stay
+# available via the harness for on-demand debug + nightly, but they
+# don't fan out from push CI.
 #
 # Flat strings (not {role, variant} objects) keep workflow parsing
 # simple: a single ${SPEC%%:*} / ${SPEC##*:} pair in bash gets both
@@ -105,9 +100,6 @@ build_matrix() {
   while IFS= read -r role; do
     [ -z "$role" ] && continue
     entries+=("\"$role:box\"")
-    if is_lab_role "$role"; then
-      entries+=("\"$role:lab\"")
-    fi
     if is_minimal_role "$role"; then
       entries+=("\"$role:minimal\"")
     fi
@@ -133,8 +125,10 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}
     exit 0
   fi
   # Comma-separated list. Each token is `role` (variant defaulted, with
-  # lab escalation applied if the role is in ci-lab-roles.txt) or
+  # minimal escalation applied if the role is in ci-minimal-roles.txt) or
   # `role:variant` (exact, no escalation -- user said what they wanted).
+  # `role:lab` / `role:pug` are valid as explicit tokens but are not
+  # auto-emitted on push fan-out; they exist for on-demand manual runs.
   # Output entries are "role:variant" strings; see build_matrix() for why.
   entries=()
   IFS=',' read -ra tokens <<<"$INPUTS_ROLES"
@@ -156,9 +150,6 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}
         exit 1
       fi
       entries+=("\"$role:box\"")
-      if is_lab_role "$role"; then
-        entries+=("\"$role:lab\"")
-      fi
       if is_minimal_role "$role"; then
         entries+=("\"$role:minimal\"")
       fi
