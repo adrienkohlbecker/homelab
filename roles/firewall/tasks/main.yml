@@ -21,11 +21,17 @@
   tags:
     - firewall
 
+# policy_rc_d: 101 prevents the dpkg postinst from auto-starting
+# nftables.service before our drop-in / template lands. Without it
+# there's a sub-second window where stock Ubuntu's example ruleset
+# (or no ruleset) is active. Matches the pattern used by keepalived /
+# fail2ban / dnscrypt_proxy.
 - name: Install nftables
   apt:
     pkg:
       - nftables
     cache_valid_time: 3600
+    policy_rc_d: 101
   register: firewall_apt_nftables
   become: true
   tags:
