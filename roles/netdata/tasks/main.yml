@@ -304,6 +304,18 @@
   tags:
     - netdata
 
+- name: Configure netdata SMART + NVMe wear alerts
+  import_role:
+    name: netdata
+    tasks_from: health_copy
+  vars:
+    netdata_args:
+      src: disk_health_alerts.conf
+      dest: disk_health.conf
+      restart: "{{ not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed)) }}"
+  tags:
+    - netdata
+
 # Un-silence the two predictive disk-fill alarms shipped in upstream
 # /usr/lib/netdata/conf.d/health.d/disks.conf. Upstream sets
 # `to: silent` on out_of_disk_space_time and out_of_disk_inodes_time
