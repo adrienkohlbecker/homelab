@@ -59,20 +59,9 @@ class QemuMachineSpec(NamedTuple):
     # Packer image directory under /mnt/scratch/qemu/<ubuntu_name>/. None means the
     # variant uses an Ubuntu cloud image instead (minimal).
     packer_image: str | None
-    # Sizes of additional empty qcow2 disks attached at boot beyond the OS
-    # disk, e.g. ["1G", "1G"] for pug. The OS disk is always vda; these get
-    # vdb, vdc, ... in attachment order. The disk_setup_script consumes them
-    # by position.
-    extra_disks: list[str]
-    # Path to a shell script under test/disks/ run via SSH+sudo after the VM
-    # is reachable, before any role/_setup playbook. Receives the extra disk
-    # devices as positional args. None means no setup needed.
-    disk_setup_script: str | None
     # Number of disks the packer image stages as part of the OS install
     # (includes rpool + every extra pool disk). prepare() overlays
-    # packer-ubuntu-1..N.{raw,qcow2} for those, then attaches the variant's
-    # extra_disks starting at vd[a+N]. extra_disks is empty for variants
-    # whose pools are all baked in by packer. Unused on minimal
+    # packer-ubuntu-1..N.{raw,qcow2} for those. Unused on minimal
     # (packer_image=None), where the cloud-image branch returns early.
     os_disk_count: int = 0
     # Guest RAM in MiB and vcpu count, plumbed into qemu's -m / -smp.
@@ -90,8 +79,6 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         ssh_user="ubuntu",
         inventory_host="minimal",
         packer_image=None,
-        extra_disks=[],
-        disk_setup_script=None,
         memory_mb=2048,
         vcpus=4,
     ),
@@ -99,11 +86,9 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         ssh_user="vagrant",
         inventory_host="box",
         # box: 2-disk mirror rpool + apoc mirror + dozer mirror + tank
-        # raidz2 + mouse mirror, all baked in by packer (no post-boot
-        # disk-setup script). Synthetic union fixture used by push CI.
+        # raidz2 + mouse mirror, all baked in by packer. Synthetic
+        # union fixture used by push CI.
         packer_image="box",
-        extra_disks=[],
-        disk_setup_script=None,
         os_disk_count=10,
     ),
     "lab": QemuMachineSpec(
@@ -114,8 +99,6 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         # Push CI no longer fans out to lab; kept for on-demand
         # --machine lab debug + nightly + packer script regression.
         packer_image="lab",
-        extra_disks=[],
-        disk_setup_script=None,
         os_disk_count=9,
     ),
     "pug": QemuMachineSpec(
@@ -126,8 +109,6 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         # kept for on-demand --machine pug + nightly + packer script
         # regression.
         packer_image="pug",
-        extra_disks=[],
-        disk_setup_script=None,
         os_disk_count=3,
     ),
 }
@@ -336,8 +317,9 @@ class Machine:
         # agent-forwarding channel. Otherwise ansible's later
         # ForwardAgent=yes silently reuses the agent-less master and
         # breaks roles that ssh out to git@github.com from the target
-        # (compta on lab: run_disk_setup's scp wins the race over the
-        # mirrors playbook's ssh and the master comes up agent-less).
+        # (e.g. compta: the harness's pre-playbook scp can win the race
+        # over the mirrors playbook's ssh and the master comes up
+        # agent-less).
         base = [
             "ssh",
             "-i",
@@ -444,15 +426,6 @@ class Machine:
         """Execute ansible-playbook with machine-specific SSH overrides."""
 
         return await run_command(self.format_ansible_cmd(*cmd), check=check, env=self.ansible_env())
-
-    async def run_disk_setup(self) -> None:
-        """Run the variant's post-boot disk-setup script over SSH, if any.
-
-        Default no-op for machines that don't carry extra disks (container,
-        minimal, box). QemuMachine overrides for variants whose spec sets a
-        disk_setup_script (lab, pug).
-        """
-        return
 
     async def prepare(self) -> None:
         """Stage a temporary workdir with inventory snippets and the static playbooks."""
@@ -851,9 +824,6 @@ class QemuMachine(Machine):
     """Start disposable QEMU guests for role-level integration tests."""
 
     drives: list[str]
-    # Device paths (e.g. ["/dev/vdb", "/dev/vdc"]) for disks attached beyond
-    # the OS disk. Populated by prepare() and consumed by run_disk_setup().
-    _extra_disk_devices: list[str]
     # VNC display number (0..99) chosen in prepare() when keep_vm is True;
     # consumed by _boot_command for the `-display vnc=` argument. Bound on
     # 5900+display so qemu won't try to walk the band itself.
@@ -1003,7 +973,6 @@ class QemuMachine(Machine):
         """Create overlay images and seed data required for the selected QEMU template."""
 
         await super().prepare()
-        self._extra_disk_devices = []
         self._direct_boot = None
 
         # Pre-pick a free TCP port on 127.0.0.1 and pin qemu's hostfwd to it.
@@ -1082,21 +1051,7 @@ class QemuMachine(Machine):
                 await self._create_overlay(src, dest)
                 os_disk_paths.append(dest)
 
-            # Empty qcow2 disks for the variant's extra pools. test/disks/<variant>.sh
-            # partitions / zpool-creates them after the VM boots.
-            extra_paths: list[str] = []
-            for idx, size in enumerate(self._spec.extra_disks, start=os_disk_count + 1):
-                path = f"{self.workdir.name}/packer-ubuntu-{idx}"
-                await run_command(["qemu-img", "create", "-f", "qcow2", path, size])
-                extra_paths.append(path)
-
-            # OS disks take vda..vd[a+N-1]; extras attach right after, in spec order.
-            self._extra_disk_devices = [f"/dev/vd{chr(ord('a') + os_disk_count + i)}" for i in range(len(extra_paths))]
-
-            self.drives = [
-                *(self._virtio_drive(path) for path in os_disk_paths),
-                *(self._virtio_drive(path) for path in extra_paths),
-            ]
+            self.drives = [self._virtio_drive(path) for path in os_disk_paths]
             await self._copy_efivars_from(image_dir)
             self.drives += await self._uefi_drives()
 
@@ -1114,19 +1069,6 @@ class QemuMachine(Machine):
         want_pflash = self._with_pflash or self._efi_code is not None or self._efi_vars is not None
         if want_pflash and not any("if=pflash" in d for d in self.drives):
             self.drives += await self._uefi_drives()
-
-    async def run_disk_setup(self) -> None:
-        """Push test/disks/<variant>.sh to the VM and run it via sudo.
-
-        Receives the extra disk devices as positional args. The script is
-        idempotent (skips already-existing pools) so --keep re-runs work.
-        """
-        script_path = self._spec.disk_setup_script
-        if not script_path or not self._extra_disk_devices:
-            return
-        remote_path = "/tmp/disk_setup.sh"
-        await run_command(self.format_scp_cmd(script_path, remote_path))
-        await self.ssh_command("sudo", "bash", remote_path, *self._extra_disk_devices)
 
     async def _create_overlay(self, src: str, dest: str, size: str | None = None) -> None:
         """Create a qcow2 overlay pointing at *src* with optional resize.

@@ -225,12 +225,6 @@ async def run_test(
                             await m.ensure_ssh()
                         print_line("SSH up")
 
-                        # Per-variant disk setup (lab / pug create their
-                        # extra ZFS pools here). No-op for variants whose
-                        # spec leaves disk_setup_script unset.
-                        async with _phase("disk setup"):
-                            await m.run_disk_setup()
-
                         # Mirror setup playbook: apt sources, podman registries,
                         # /etc/pip.conf, /etc/uv/uv.toml. Routes everything
                         # through the lab Nexus when nexus_url is set
