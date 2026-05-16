@@ -98,6 +98,19 @@ SyslogIdentifier=%N
 # --env-file: per-instance REPO_OWNER / REPO_NAME / RUNNER_NAME /
 #   RUNNER_LABELS / GITHUB_PAT_FILE, written by the role to
 #   /etc/default/github_runner@%i.
+# --env CONTAINER_HOST / DOCKER_HOST: point in-container podman /
+#   docker CLIs at the bind-mounted DooD socket. Without these, a
+#   workflow step that runs `podman build` (or `docker build`) tries
+#   to do nested rootless podman inside the runner container -- which
+#   fails because the container doesn't have CAP_SYS_ADMIN to do its
+#   own mount-namespace setup (errors with "remount /, flags: 0x44000:
+#   permission denied" during ApplyLayer). With these set, the CLI
+#   transparently uploads the build context to the host's rootless
+#   podman over the socket, builds happen there (where mount-ns
+#   operations have the privileges they need), and resulting images
+#   land in github_runner's host-side storage. Setting both var names
+#   covers podman CLI (uses CONTAINER_HOST) and the podman-docker
+#   alias / any real docker client (uses DOCKER_HOST).
 # --secret github_runner_pat: long-lived fine-grained PAT consumed by
 #   the entrypoint on every container start (mints a fresh JIT config
 #   via /actions/runners/generate-jitconfig). Mount-type, not env-type,
@@ -171,6 +184,8 @@ ExecStart=/usr/bin/podman run \
   --volume %t/user/{{ github_runner_user.uid }}/podman/podman.sock:/var/run/docker.sock \
   --volume /mnt/scratch/github_runner/workdir_%i:/work:rw \
   --env-file /etc/default/github_runner@%i \
+  --env CONTAINER_HOST=unix:///var/run/docker.sock \
+  --env DOCKER_HOST=unix:///var/run/docker.sock \
   --secret github_runner_pat,type=mount,target=/run/secrets/github_pat \
   --health-cmd         "pgrep -f Runner.Listener >/dev/null" \
   --health-startup-cmd "pgrep -f Runner.Listener >/dev/null" \
