@@ -1,29 +1,19 @@
-github_runner_version: "2.334.0"
+# Runner container image, built by .github/workflows/runner-image.yml
+# and published to nexus. The actions/runner binary + version pin lives
+# inside the image (runner/Dockerfile's ACTIONS_RUNNER_VERSION arg);
+# bumping it means re-running the runner-image workflow and then this
+# role to restart the containers.
+github_runner_image: "nexus.lab.fahm.fr/homelab/runner:latest"
 
-# Labels reported to GitHub on registration. `self-hosted` is the
-# implicit label GitHub adds to every self-hosted runner; we list it
-# explicitly so workflows' `runs-on: [self-hosted, <host>]` selector
-# resolves unambiguously. The host-named label is what workflows match
-# on -- gives each runner an addressable identity (lab vs pug vs ...)
-# without depending on image-name conventions.
-github_runner_labels: "self-hosted,{{ inventory_hostname }}"
-
-# GitHub repos to register a runner against. One actions/runner listener
-# process + state dir per entry; the upstream tarball is extracted once
-# into /mnt/services/github_runner/runner/ and per-repo state dirs
-# symlink the binary entries (bin, externals, run.sh, config.sh, .path)
-# into themselves so the ~150 MB extracted tree isn't duplicated. All
-# repos must live under the single owner below (personal-account
-# constraint -- no org, no shared runner groups).
+# GitHub owner under which the repos listed in github_runner_instances
+# live. Personal-account constraint -- no org, so all repos share one
+# owner.
 github_runner_owner: "adrienkohlbecker"
-github_runner_repos:
-  - homelab
-  - compta
 
-github_runner_release:
-  x86_64:
-    url: "https://github.com/actions/runner/releases/download/v{{ github_runner_version }}/actions-runner-linux-x64-{{ github_runner_version }}.tar.gz"
-    sha256: "048024cd2c848eb6f14d5646d56c13a4def2ae7ee3ad12122bee960c56f3d271"
-  aarch64:
-    url: "https://github.com/actions/runner/releases/download/v{{ github_runner_version }}/actions-runner-linux-arm64-{{ github_runner_version }}.tar.gz"
-    sha256: "f44255bd3e80160eb25f71bc83d06ea025f6908748807a584687b3184759f7e4"
+# Per-host instance list lives in host_vars/<host>.yml. Each entry:
+#   - { repo: <repo-name>, suffix: <unique-suffix>, labels: "..." }
+# Instance identity = <repo>_<suffix>; that's the systemd template
+# instance name (github_runner@<repo>_<suffix>.service), the on-disk
+# state-dir name, and the podman container name suffix. Default to
+# empty so a host that doesn't run runners stays a no-op.
+github_runner_instances: []

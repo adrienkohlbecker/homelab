@@ -7,16 +7,19 @@
       name: github_runner
       home: /mnt/scratch/github_runner
       createhome: true
-      # kvm so podman can hand /dev/kvm to ci containers via
-      # --device + --group-add 1 (rootless userns doesn't map the host
-      # kvm gid through by default; see roles/gitea_runner's git history
-      # -- formerly act_runner -- for the full rationale, which is
-      # unchanged here).
+      # kvm so sibling workflow containers (spawned by the in-container
+      # runner via the bind-mounted rootless podman socket) can claim
+      # /dev/kvm via --device + --group-add 1. The runner container
+      # itself doesn't need /dev/kvm -- it just orchestrates -- but the
+      # qemu-running siblings do. See CLAUDE.md "The runner uses
+      # --device /dev/kvm --group-add 1" for the userns wiring.
       extra_groups: [ kvm ]
   tags:
     - github_runner
 
-- name: Create runtime directories
+# Top-level dirs shared by all instances. Per-instance state/work dirs
+# are created inside _register.yml.
+- name: Create top-level runtime directories
   when: not (ansible_check_mode and github_runner_user.changed)
   file:
     dest: "{{ item }}"
@@ -27,14 +30,14 @@
   become: true
   loop:
     - /mnt/services/github_runner
-    - /mnt/services/github_runner/.tarballs
     - /mnt/scratch/github_runner/cache
-    # Bind-mounted into test cells via container.options for the harness's
-    # --workdir-parent. Lives on /mnt/scratch (terabytes) instead of the
-    # container's writable overlay so concurrent qcow2 overlays + role
-    # checkouts can't ENOSPC the cell. Each cell mounts a unique subdir
-    # underneath this so two concurrent cells can't see each other; the
-    # tmpfiles.d entry below reaps the per-cell subdirs after they idle.
+    # Bind-mounted into sibling workflow containers via the workflow's
+    # container.options for the harness's --workdir-parent. Lives on
+    # /mnt/scratch (terabytes) instead of the container's writable
+    # overlay so concurrent qcow2 overlays + role checkouts can't
+    # ENOSPC the cell. Each cell mounts a unique subdir underneath so
+    # two concurrent cells can't see each other; the tmpfiles.d entry
+    # below reaps the per-cell subdirs after they idle.
     - /mnt/scratch/github_runner/scratch
   tags:
     - github_runner
@@ -65,28 +68,6 @@
   tags:
     - github_runner
 
-# actions/runner bind-mounts /var/run/docker.sock into every job
-# container. Without dockerd on lab, this path doesn't exist, so
-# `docker create` fails with "permission denied" trying to mkdir it as
-# the volume mountpoint under /var/run (root-only writable). Point the
-# path at github_runner's rootless podman socket -- the bind-mount
-# succeeds, AND workflow steps that try to use docker inside a job
-# container reach podman's docker-compat API. /var/run is tmpfs, so
-# the L rule in tmpfiles.d/github_runner.conf above re-creates this
-# symlink at boot; this task is the immediate-apply equivalent. force:
-# true so a stale or differently-targeted prior symlink gets fixed.
-- name: Symlink /var/run/docker.sock to github_runner's rootless podman socket
-  when: not (ansible_check_mode and github_runner_user.changed)
-  file:
-    src: /run/user/{{ github_runner_user.uid }}/podman/podman.sock
-    dest: /var/run/docker.sock
-    state: link
-    force: true
-    follow: false
-  become: true
-  tags:
-    - github_runner
-
 # Linger so rootless podman has a user systemd manager up at all times:
 # crun makes sd-bus calls when creating containers, which fail with
 # "Permission denied" without one. `loginctl enable-linger` starts
@@ -102,9 +83,9 @@
     - github_runner
 
 # linger triggers user@<uid>.service asynchronously; subsequent rootless
-# podman tasks (and the github_runner.service start) need it fully up so
-# crun's sd-bus calls succeed. systemd module with state=started blocks
-# until active.
+# podman tasks (and the github_runner@*.service starts) need it fully
+# up so crun's sd-bus calls succeed. systemd module with state=started
+# blocks until active.
 - name: Ensure github_runner user systemd manager is running
   when: not (ansible_check_mode and github_runner_user.changed)
   systemd:
@@ -114,9 +95,12 @@
   tags:
     - github_runner
 
-# Same xino=off override as gitea_runner (formerly act_runner) had; see
-# that role's git history for the kernel printk rationale. Scoped to
-# github_runner so the rootful overlay's working xino is unaffected.
+# Same xino=off + rootless_storage_path override as before; see the
+# previous host-process version's long comment for the dpkg ESTALE +
+# printk-suppression rationale -- unchanged under the new container
+# model because rootless podman still hits the same overlay-on-ZFS
+# path when github_runner's containers (the runner image + sibling
+# workflow containers) start.
 - name: Create rootless containers config directory
   when: not (ansible_check_mode and github_runner_user.changed)
   file:
@@ -133,37 +117,6 @@
   when: not (ansible_check_mode and github_runner_user.changed)
   copy:
     dest: /mnt/scratch/github_runner/.config/containers/storage.conf
-    # Two things at once:
-    #
-    # rootless_storage_path -- restate the value /etc/containers/storage.conf
-    # already sets, because podman 4.9 treats the user-level
-    # ~/.config/containers/storage.conf as a full REPLACEMENT of the system
-    # config rather than a merge. Without this line, the user file (added
-    # below for the xino mountopt) silently strips rootless_storage_path
-    # and graphroot falls back to XDG_DATA_HOME = /mnt/scratch/$USER/.local/
-    # share/containers/storage. That path is on ZFS, and native kernel
-    # overlay on ZFS produces ESTALE during dpkg unpacks with many file
-    # ops (linux-libc-dev's netfilter headers are the canonical victim),
-    # breaking ci-image builds. The system-level path routes onto the
-    # rpool/podman zvol (ext4) where overlay is solid.
-    #
-    # mountopt = xino=off -- silence the kernel's "overlayfs: fs on '...'
-    # does not support file handles, falling back to xino=off" printk
-    # that fires on every rootless overlay mount. The fallback is
-    # unavoidable in a rootless userns (CAP_DAC_READ_SEARCH isn't held in
-    # the init namespace, so the kernel disables file-handle support
-    # regardless of underlying fs), and CI churn emits the warning
-    # ~160x/day. Pre-declaring xino=off makes the kernel skip the probe
-    # -- same end state, no printk. nodev preserves the upstream default;
-    # userxattr is force-added by podman internally for rootless, so we
-    # don't restate it.
-    #
-    # Pinning the driver explicitly via [storage] driver = "overlay" would
-    # silence podman's cosmetic "auto-picked a driver" warning, but ALSO
-    # triggers a "database graph driver mismatch" error against any podman
-    # storage database that was first initialised without a driver setting.
-    # The warning is harmless; the database mismatch is fatal. Leave the
-    # driver implicit.
     content: |
       [storage]
       rootless_storage_path = "/var/lib/containers/rootless/$USER"
@@ -174,25 +127,6 @@
     mode: "0644"
     backup: true
   become: true
-  tags:
-    - github_runner
-
-# Download the actions/runner tarball once into the shared cache; each
-# per-repo register task extracts it into its own install dir. Sized
-# at the latest pinned version -- bumping github_runner_version
-# downloads the new tarball and forces re-extraction per repo via the
-# per-repo .version-<ver> sentinel inside _register.yml.
-- name: Download actions/runner tarball
-  when: not (ansible_check_mode and github_runner_user.changed)
-  get_url:
-    url: "{{ github_runner_release[ansible_architecture].url }}"
-    checksum: "sha256:{{ github_runner_release[ansible_architecture].sha256 }}"
-    dest: /mnt/services/github_runner/.tarballs/actions-runner-{{ github_runner_version }}.tar.gz
-    owner: github_runner
-    group: github_runner
-    mode: "0644"
-  become: true
-  register: github_runner_tarball
   tags:
     - github_runner
 
@@ -212,7 +146,6 @@
   systemd:
     name: podman.socket
     state: started
-    scope: user
   become: true
   become_user: github_runner
   tags:
@@ -229,14 +162,29 @@
   tags:
     - github_runner
 
-# Per-repo registration + systemd unit install. include_tasks (not
-# include_role + loop) so vars: re-evaluate per iteration -- see
-# memory feedback_include_role_loop_vars for the trap. loop_var: the
-# repo name; _register.yml references it as {{ runner_repo }}.
-- name: Register and enable per-repo github_runner instances
+# Install the templated unit once. Per-instance enablement happens in
+# _register.yml via systemctl on the instantiated name
+# (github_runner@<repo>_<suffix>.service).
+- name: Install github_runner@.service template
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: github_runner.service.j2
+      dest: github_runner@.service
+      condition: "{{ not (ansible_check_mode and github_runner_user.changed) }}"
+  tags:
+    - github_runner
+
+# Per-instance registration + env file + container deploy.
+# include_tasks (not include_role + loop) so vars: re-evaluate per
+# iteration -- see memory feedback_include_role_loop_vars for the trap.
+- name: Register and enable github_runner instances
   include_tasks: _register.yml
-  loop: "{{ github_runner_repos }}"
+  loop: "{{ github_runner_instances }}"
   loop_control:
-    loop_var: runner_repo
+    loop_var: runner_instance
+    label: "{{ runner_instance.repo }}_{{ runner_instance.suffix }}"
   tags:
     - github_runner
