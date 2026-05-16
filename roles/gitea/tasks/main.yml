@@ -109,7 +109,10 @@
     group: git
     mode: "0600"
     backup: true
-    validate: python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True).read("%s")'
+    # Prepend a dummy section so the parser accepts gitea's top-level keys
+    # (APP_NAME, RUN_USER, ...) that sit before [database]. allow_unnamed_section
+    # would do the same but is Python 3.13+ only; jammy ships 3.10.
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser(allow_no_value=True).read_string("[__top__]\n" + open(sys.argv[1]).read())' "%s"
   register: gitea_conf
   become: true
   tags:
