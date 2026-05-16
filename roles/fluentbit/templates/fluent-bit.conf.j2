@@ -12,7 +12,14 @@
     Log_Level         warn
     Daemon            off
     Parsers_File      parsers.conf
-    HTTP_Server       off
+    # HTTP_Server exposes /api/v1/metrics/prometheus on the loopback for
+    # netdata's prometheus collector. The output_dropped_records_total
+    # counter increases when fluent-bit exhausts retries against an
+    # ingestion endpoint and drops records -- silent log loss otherwise.
+    # 127.0.0.1 only, no exposure beyond the host.
+    HTTP_Server       on
+    HTTP_Listen       127.0.0.1
+    HTTP_Port         2020
     storage.path      /var/lib/fluent-bit/storage/
     storage.sync      normal
     storage.checksum  off

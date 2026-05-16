@@ -7,6 +7,14 @@ jobs:
     max_time_series: 10000 # there is many series per individual systemd service, including temporary ones. Let's see if this is enough
     autodetection_retry: 60
 
+  # fluent-bit's HTTP_Server exposes a prometheus endpoint with
+  # output_dropped_records_total + output_retried_records_total. Dropped
+  # records mean fluent-bit gave up after exhausting retries against
+  # OpenObserve/HyperDX -- silent log loss otherwise.
+  - name: fluentbit
+    url: http://127.0.0.1:2020/api/v1/metrics/prometheus
+    autodetection_retry: 60
+
 {% if prometheus_enabled|default(false) %}
 
   - name: prometheus
