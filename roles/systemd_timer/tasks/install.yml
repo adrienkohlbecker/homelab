@@ -34,6 +34,15 @@
 #                     the role's own _verify fixtures).
 #   user              default 'root'; non-root drives the named user's
 #                     user manager (linger must already be on).
+#   run_as            optional; only valid when user is 'root' (default).
+#                     Emits User=<name> + Group=<name>/<run_as_group> in
+#                     the [Service] section so the system-scope unit
+#                     drops privileges to <name> for the ExecStart. Use
+#                     this instead of a user-scope timer when the work
+#                     needs an unprivileged identity but the unit
+#                     should still be visible to system-bus tooling
+#                     (netdata systemdunits, system journal, etc.).
+#   run_as_group      optional; defaults to run_as.
 #
 # The dict form mirrors systemd_unit / podman_secret / service_user: each
 # import_role replaces the whole `systemd_timer_args` value at play-vars
@@ -43,6 +52,20 @@
   set_fact:
     _systemd_timer_user: "{{ systemd_timer_args.user | default('root') }}"
     _systemd_timer_monitor: "{{ systemd_timer_args.monitor | default(true) }}"
+
+# run_as only makes sense for system-scope units; a user-scope unit
+# already runs as the named user, and User= in /etc/systemd/user/ is
+# invalid. Reject early with a clear message instead of letting the
+# unit template emit something systemd would reject at load time.
+- name: install | Reject run_as on user-scope timer for {{ systemd_timer_args.name }}
+  when: systemd_timer_args.run_as is defined
+  assert:
+    that:
+      - _systemd_timer_user == 'root'
+    fail_msg: >-
+      systemd_timer {{ systemd_timer_args.name }}: run_as is only valid
+      for system-scope units (user: root). user-scope units already
+      run as the named user; User= in /etc/systemd/user/ is invalid.
 
 # The frequency word maps to period_secs in the netdata-side metadata
 # file; an unknown value would silently disable the overdue check for
