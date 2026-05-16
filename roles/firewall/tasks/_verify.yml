@@ -375,6 +375,17 @@
   changed_when: false
   become: true
 
+# FORWARD "podman → external" rule deliberately covers every non-podman
+# egress iface (WAN, home LAN, wg, libvirt, macvlan) — the container →
+# example.com probe above exercises the WAN case; this one hits a
+# non-WAN destination (extns over wg0) so a future tightening to WAN-
+# only fails loudly. ICMP rather than HTTP because extns has no
+# listener bound to its veth IP.
+- name: _verify | FORWARD — container egress to non-WAN iface (wg0) reachable
+  command: podman exec firewall_verify_httpd ping -c 1 -W 3 10.99.0.2
+  changed_when: false
+  become: true
+
 # Wireguard-source-egress MASQUERADE — exercises -s wireguard_subnet
 # -j MASQUERADE. extns alias {{ probe_wg }} sits in wireguard_subnet;
 # egress hits FORWARD wg0→WAN ACCEPT, then the matching POSTROUTING
