@@ -59,7 +59,7 @@
 # under load (2-second deadlines, per-packet socat shell fork) and
 # could only signal accept-or-reject without seeing which rule fired.
 - name: _verify_input | Reset nftables counters before UDP and crafted-packet probes
-  command: nft reset counters table ip homelab
+  command: nft reset counters table inet homelab
   changed_when: false
   become: true
 
@@ -287,7 +287,7 @@
 # more stable than text against nft's canonicalization quirks
 # (e.g. `ip protocol 112` ↔ `ip protocol vrrp`).
 - name: _verify_input | INPUT — get nft ruleset (JSON, for VRRP scope check)
-  command: nft -j list table ip homelab
+  command: nft -j list table inet homelab
   register: nft_ruleset_vrrp
   changed_when: false
   become: true

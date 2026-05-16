@@ -5,7 +5,7 @@
 # loaded at sysctl-write time.
 
 - name: _verify_counters | Capture nftables counters after crafted-packet probes
-  command: nft -j list table ip homelab
+  command: nft -j list table inet homelab
   register: counters_after_crafted
   changed_when: false
   become: true
