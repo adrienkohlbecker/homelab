@@ -14,7 +14,7 @@
 --   CSP <effective-directive> blocked <blocked-uri> on <document-uri>
 --
 -- Service identity (csplogger) is carried in ResourceAttributes by
--- otlp-shape.lua; no need to duplicate it as a LogAttribute.
+-- otlp_shape.lua; no need to duplicate it as a LogAttribute.
 --
 -- Legacy report-uri body  : {"csp-report": {"blocked-uri": "...", ...}}
 -- Reporting API body      : [{"type":"csp-violation","body":{"blockedURL":"..."}, ...}]

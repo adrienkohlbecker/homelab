@@ -19,7 +19,7 @@
 --
 -- Reads from record["log"]. An upstream modify filter renames journald's
 -- MESSAGE to log, so this is the only field that needs inspecting.
--- Skips records where an upstream filter (flatten-csp.lua) already pinned
+-- Skips records where an upstream filter (flatten_csp.lua) already pinned
 -- a severity.
 
 local function has(head, token)
@@ -29,7 +29,7 @@ end
 function set_priority(tag, ts, group, metadata, record)
     metadata.otlp = metadata.otlp or {}
     if metadata.otlp.severity_text ~= nil then
-        -- Upstream filter (flatten-csp.lua for CSP records) already
+        -- Upstream filter (flatten_csp.lua for CSP records) already
         -- pinned the severity; leave it alone.
         return 0, ts, metadata, record
     end

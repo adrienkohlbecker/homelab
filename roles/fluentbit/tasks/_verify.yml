@@ -10,20 +10,20 @@
 # End-to-end CSP-through-OTLP shape assertion. POST a marked CSP report
 # at fluent-bit's HTTP input, let it flow through:
 #   fluent-bit HTTP input
-#     -> flatten-csp.lua  (legacy/reporting-api -> common flat shape)
-#     -> level-from-message.lua  (severity keyword extraction)
-#     -> otlp-shape.lua   (flat -> record.otlp.attributes/resource)
+#     -> flatten_csp.lua  (legacy/reporting-api -> common flat shape)
+#     -> level_from_message.lua  (severity keyword extraction)
+#     -> otlp_shape.lua   (flat -> record.otlp.attributes/resource)
 #     -> opentelemetry output -> hyperdx otel-collector -> ClickHouse
 # Then query the landed otel_logs row to confirm every column ended up
 # where the downstream UI expects:
 #   ServiceName       = csplogger      (drives "Services" view; sourced
 #                                       from Resource.service.name)
-#   SeverityText      = "warn"         (flatten-csp pins; transform
+#   SeverityText      = "warn"         (flatten_csp pins; transform
 #                                       processor's body-keyword
 #                                       fallback only fires when
 #                                       severity is unset)
 #   SeverityNumber    = 13             (OTel SEVERITY_NUMBER_WARN)
-#   Body              startswith "CSP" (flatten-csp synthesises)
+#   Body              startswith "CSP" (flatten_csp synthesises)
 #   LogAttributes contains csp_* + SYSLOG_IDENTIFIER + host
 #   ResourceAttributes contains service.name + host.name
 # _setup imports hyperdx so the box test VM has the real OTLP receiver
@@ -61,7 +61,7 @@
 # fluent-bit's install-time dry-run validates lua *load* (syntax / module
 # import); nil-deref or type-mismatch bugs only surface when a real
 # record runs through the filter. Without this scan the only symptom of
-# a regression in flatten-csp / level-from-message / otlp-shape would be
+# a regression in flatten_csp / level_from_message / otlp_shape would be
 # silently-dropped attributes in HyperDX -- per-record errors don't bubble
 # up to the HTTP 204 fluent-bit returns to nginx, and the ClickHouse-row
 # assert below only catches *visible* malformation, not dropped fields.
@@ -75,7 +75,7 @@
                        | first
                        | regex_replace('^-- cursor: ?', '')) | quote }}
     --no-pager
-    --grep '\[(error|warn)\].*(filter[_:]lua|flatten[_-]csp|otlp[_-]shape|level[_-]from[_-]message)'
+    --grep '\[(error|warn)\].*(filter[_:]lua|flatten_csp|otlp_shape|level_from_message)'
   register: fluentbit_lua_errors
   changed_when: false
   failed_when: fluentbit_lua_errors.rc != 1
@@ -90,7 +90,7 @@
 # entry (SYSLOG_IDENTIFIER=ansible-ansible.legacy.command), which
 # fluent-bit's systemd input ships back to ClickHouse with the marker
 # baked into its Body -- Body LIKE matches that decoy instead of the
-# real CSP record. csp_blocked_uri is only populated by flatten-csp.lua.
+# real CSP record. csp_blocked_uri is only populated by flatten_csp.lua.
 #
 # Query body is passed via stdin (-i on podman exec, --data-binary @-
 # on curl) so the SQL stays human-readable in the role rather than as

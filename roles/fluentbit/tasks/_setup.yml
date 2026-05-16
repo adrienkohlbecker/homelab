@@ -4,8 +4,8 @@
     tasks_from: nginx
 
 # fluentbit's _verify exercises the CSP-through-OTLP path end-to-end:
-# POST a marked CSP report at fluent-bit's HTTP input, let flatten-csp.lua
-# + otlp-shape.lua reshape it, and confirm the OTLP output landed it in
+# POST a marked CSP report at fluent-bit's HTTP input, let flatten_csp.lua
+# + otlp_shape.lua reshape it, and confirm the OTLP output landed it in
 # ClickHouse with the right column shape. That needs a real OTLP receiver
 # + ClickHouse stack on the box, which hyperdx provides. hyperdx pulls in
 # podman + service_user etc. via its own _setup, which we run explicitly

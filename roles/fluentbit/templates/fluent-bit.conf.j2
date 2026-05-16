@@ -123,7 +123,7 @@
     emitter_name      multiline_emitter
     emitter_storage.type  filesystem
 
-# CSP reports arrive as raw JSON. flatten-csp.lua normalises the two
+# CSP reports arrive as raw JSON. flatten_csp.lua normalises the two
 # wire formats (legacy report-uri + modern Reporting API) into a uniform
 # csp_* attribute set so HyperDX queries can filter on
 # LogAttributes['csp_blocked_uri'] etc. directly, instead of running
@@ -135,7 +135,7 @@
 [FILTER]
     Name              lua
     Match             csp.*
-    script            /etc/fluent-bit/flatten-csp.lua
+    script            /etc/fluent-bit/flatten_csp.lua
     call              flatten_csp
 
 # Tag every record with the inventory hostname so cross-stream queries
@@ -169,7 +169,7 @@
 # happily upgrade to FATAL/WARN/ERROR (it uses \b not non-word borders
 # on both sides). Stamp info up-front to keep that body-regex
 # inference from firing on URL noise, and to skip the 120-char
-# keyword scan in level-from-message.lua for high-volume access logs.
+# keyword scan in level_from_message.lua for high-volume access logs.
 # The lua filter sees record["severity_text"] and lifts it into the
 # OTLP metadata stream (which is what the OTLP output reads).
 [FILTER]
@@ -190,7 +190,7 @@
 [FILTER]
     Name              lua
     Match             *
-    script            /etc/fluent-bit/level-from-message.lua
+    script            /etc/fluent-bit/level_from_message.lua
     call              set_priority
 
 # Restructure the now-finalised flat record into the OTLP-native shape
@@ -198,11 +198,11 @@
 # -> LogAttributes, record["resource"]["attributes"] -> Resource
 # including service.name for the ClickHouse ServiceName column). Runs
 # last so it captures every flat key the upstream filters set. See
-# files/otlp-shape.lua for the per-tag service.name derivation.
+# files/otlp_shape.lua for the per-tag service.name derivation.
 [FILTER]
     Name              lua
     Match             *
-    script            /etc/fluent-bit/otlp-shape.lua
+    script            /etc/fluent-bit/otlp_shape.lua
     call              shape_otlp
 
 # Co-located on lab → hit the OTel receiver on loopback. Off-host (pug
