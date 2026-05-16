@@ -143,6 +143,8 @@ influxdb_root_user: ak
 influxdb_root_password: changeme
 pihole_password: changeme
 pihole_keepalived_ip: changeme
+filebrowser_basic_auth_user: changeme
+filebrowser_basic_auth_password: changeme
 # Override prod's firebog tick meta-list (fans out to ~50 external adlists
 # that bypass the nexus cache) with a single small list served through the
 # raw-githubusercontent mirror. Keeps `pihole -g` exercised end-to-end at a
