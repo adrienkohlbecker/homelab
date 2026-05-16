@@ -24,10 +24,26 @@
     storage.checksum  off
     storage.metrics   on
     storage.backlog.mem_limit  5M
+    # Drain in-memory + on-disk backlog before exit so role-triggered
+    # restarts (conf / lua changes) don't drop records mid-flight.
+    storage.backlog.flush_on_shutdown  on
 
 # Everything that logs via systemd journal (which on modern Ubuntu is
 # nearly every service — including apt/dpkg/unattended-upgrades that
 # the legacy vector role had to tail individually).
+#
+# Read_From_Tail is a first-install knob: when fluent-bit starts with
+# no cursor in journal.db, `on` skips the existing journal (could be
+# weeks of retained records on a long-running host); `off` would replay
+# everything from disk. Once the cursor exists, the flag is moot —
+# fluent-bit resumes from the stored cursor regardless. We keep it on
+# rather than gating on journal.db existence: a dynamic value would
+# render different conf bytes pre- vs post-first-install and break the
+# harness's second-apply idempotence check. The behavioural side-effect
+# is that a manual `rm /var/lib/fluent-bit/journal.db` recovery also
+# skips to tail; in practice that matches what an operator deleting
+# the cursor wants (resume live shipping, not replay days of stale
+# journal).
 [INPUT]
     Name              systemd
     Tag               svc.*
@@ -36,6 +52,7 @@
     Read_From_Tail    on
     Strip_Underscores on
     storage.type      filesystem
+    storage.pause_on_chunks_overlimit  on
 
 # Browser-emitted CSP violation reports. nginx on csplogger.<host>.<domain>
 # proxies POST /log here; the public endpoint stays public-by-design (CSP
@@ -48,7 +65,9 @@
     Listen            127.0.0.1
     Port              {{ service_ports.csp_ingest }}
     Successful_response_code  204
+    Buffer_Max_Size   256k
     storage.type      filesystem
+    storage.pause_on_chunks_overlimit  on
 
 # nginx access/error logs don't go through journald by default.
 [INPUT]
@@ -60,8 +79,11 @@
     Path_Key          filepath
     Refresh_Interval  5
     Skip_Long_Lines   on
+    Skip_Empty_Lines  on
+    Rotate_Wait       30
     Buffer_Max_Size   256k
     storage.type      filesystem
+    storage.pause_on_chunks_overlimit  on
 
 [INPUT]
     Name              tail
@@ -72,8 +94,11 @@
     Path_Key          filepath
     Refresh_Interval  5
     Skip_Long_Lines   on
+    Skip_Empty_Lines  on
+    Rotate_Wait       30
     Buffer_Max_Size   256k
     storage.type      filesystem
+    storage.pause_on_chunks_overlimit  on
 
 # Join python / go / java / ruby tracebacks into a single record per
 # stack so HyperDX doesn't scatter the frames across 10+ rows. Records
@@ -95,6 +120,8 @@
     multiline.key_content  MESSAGE
     buffer            on
     flush_ms          1000
+    emitter_name      multiline_emitter
+    emitter_storage.type  filesystem
 
 # CSP reports arrive as raw JSON. flatten-csp.lua normalises the two
 # wire formats (legacy report-uri + modern Reporting API) into a uniform
@@ -208,11 +235,17 @@
     Port              443
     tls               on
     tls.verify        on
-    compress          zstd
+    tls.verify_hostname  on
 {% endif %}
+    compress          zstd
+    workers           1
     logs_uri          /v1/logs
     header            Authorization {{ hyperdx_ingestion_api_key }}
     log_response_payload  false
     logs_metadata_key  otlp
-    Retry_Limit       5
+    # Retry_Limit false = no per-chunk retry cap. The backlog is bounded
+    # by storage.total_limit_size below (50M on disk), not by retry
+    # count: a HyperDX outage longer than ~2min would otherwise discard
+    # chunks despite the disk reservation being there to absorb them.
+    Retry_Limit       false
     storage.total_limit_size  50M
