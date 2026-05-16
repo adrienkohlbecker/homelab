@@ -77,9 +77,9 @@ locals {
   nexus_base = "http://nexus.lab.fahm.fr/repository"
   arch_table = {
     x86_64 = {
-      qemu_binary        = "qemu-system-x86_64"
-      machine_type       = "q35"
-      accelerator        = "kvm"
+      qemu_binary  = "qemu-system-x86_64"
+      machine_type = "q35"
+      accelerator  = "kvm"
       # 4M variants because Ubuntu 24.04 dropped the legacy non-4M
       # OVMF_{CODE,VARS}.fd from the `ovmf` package; jammy ships both,
       # noble only the 4M ones. test/arch.py:uefi_code_candidates carries
@@ -119,29 +119,57 @@ locals {
   # Per-source config consumed downstream:
   # - machine: the test machine spec verify-boot drives.
   # - disks: space-delimited list of whole-disk paths the build VM
-  #   exposes to provision.sh as $DISKS. The qemu source declares the
-  #   disks in disk_additional_size; this string mirrors what they end
-  #   up as inside the guest.
-  # - disks_sizes: array of disk sizes.
-  # - layout: zpool create layout token — "" for single-disk, "mirror"
-  #   for an rpool mirror. Consumed by provision.sh and chroot.sh.
-  # Add an entry whenever a new source "qemu.ubuntu" block joins the build.
+  #   exposes to provision.sh as $DISKS. These become the rpool
+  #   partitioned disks. The qemu source declares disk_additional_size
+  #   covering rpool + extras; this string is just the rpool slice.
+  # - extra_disks: space-delimited list of the remaining attached
+  #   disks (not in $DISKS). pools.sh consumes these in order for
+  #   the non-rpool pools named in extra_pools.
+  # - disk_sizes: array of all attached disk sizes, rpool first.
+  #   disk_additional_size cardinality must equal len(disks) +
+  #   len(extra_disks).
+  # - layout: rpool zpool create layout token. "" for single-disk,
+  #   "mirror" for an rpool mirror. Consumed by provision.sh and
+  #   chroot.sh.
+  # - extra_pools: space-delimited list of non-rpool pool layouts
+  #   pools.sh creates after the rpool arch-chroot completes.
+  #   Layouts: apoc (mirror, 2 disks), dozer (mirror, 2 disks),
+  #   tank_mouse (4 disks; tank raidz2 + mouse mirror over shared
+  #   partitions, matches lab prod). Empty => rpool-only image.
+  #
+  # Add an entry whenever a new source "qemu.ubuntu" block joins the
+  # build.
   variant_config = {
-    # zfs: single-disk rpool. Consumed by the box and pug test variants ;
-    # matches the pug prod host.
-    zfs = {
-      machine    = "box"
-      disks      = "/dev/vdb"
-      disk_sizes = ["40G"]
-      layout     = ""
+    # pug: single-disk rpool + apoc mirror. Matches the pug prod host.
+    pug = {
+      machine     = "pug"
+      disks       = "/dev/vdb"
+      extra_disks = "/dev/vdc /dev/vdd"
+      disk_sizes  = ["40G", "1G", "1G"]
+      layout      = ""
+      extra_pools = "apoc"
     }
-    # zfs-lab: mdadm-EFI + mdadm-swap + 3-disk mirror rpool. Consumed
-    # by the lab test variant; matches the lab prod host.
-    zfs-lab = {
-      machine    = "lab"
-      disks      = "/dev/vdb /dev/vdc /dev/vdd"
-      disk_sizes = ["40G", "40G", "40G"]
-      layout     = "mirror"
+    # lab: mdadm-EFI + mdadm-swap + 3-disk mirror rpool + dozer mirror +
+    # tank raidz2 + mouse mirror. Matches the lab prod host.
+    lab = {
+      machine     = "lab"
+      disks       = "/dev/vdb /dev/vdc /dev/vdd"
+      extra_disks = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
+      disk_sizes  = ["40G", "40G", "40G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
+      layout      = "mirror"
+      extra_pools = "dozer tank_mouse"
+    }
+    # box: 2-disk mirror rpool + apoc + dozer + tank_mouse. Synthetic
+    # superset that exercises every consumer-side pool layout. Only
+    # variant consumed by push CI (lab/pug images stay for the packer
+    # script regression and on-demand --machine lab/pug debug).
+    box = {
+      machine     = "box"
+      disks       = "/dev/vdb /dev/vdc"
+      extra_disks = "/dev/vdd /dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj /dev/vdk"
+      disk_sizes  = ["40G", "40G", "1G", "1G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
+      layout      = "mirror"
+      extra_pools = "apoc dozer tank_mouse"
     }
   }
 
@@ -242,13 +270,19 @@ source "qemu" "ubuntu" {
 build {
 
   source "qemu.ubuntu" {
-    name                 = "zfs"
+    name                 = "pug"
     output_directory     = "${var.build_directory}/${source.name}"
     disk_additional_size = local.variant_config[source.name].disk_sizes
   }
 
   source "qemu.ubuntu" {
-    name                 = "zfs-lab"
+    name                 = "lab"
+    output_directory     = "${var.build_directory}/${source.name}"
+    disk_additional_size = local.variant_config[source.name].disk_sizes
+  }
+
+  source "qemu.ubuntu" {
+    name                 = "box"
     output_directory     = "${var.build_directory}/${source.name}"
     disk_additional_size = local.variant_config[source.name].disk_sizes
   }
@@ -275,7 +309,9 @@ build {
     env = {
       "SOURCE_NAME"                     = "${source.name}"
       "DISKS"                           = local.variant_config[source.name].disks
+      "EXTRA_DISKS"                     = local.variant_config[source.name].extra_disks
       "LAYOUT"                          = local.variant_config[source.name].layout
+      "EXTRA_POOLS"                     = local.variant_config[source.name].extra_pools
       "UBUNTU_NAME"                     = "${var.ubuntu_name}"
       "UBUNTU_MIRROR"                   = local.build_archive
       "UBUNTU_MIRROR_SECURITY"          = local.build_security

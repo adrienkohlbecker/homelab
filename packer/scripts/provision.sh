@@ -11,7 +11,7 @@
 #    the publicly-known vagrant insecure pubkey) and remove
 #    /etc/sudoers.d/vagrant before the host gets a routable IP. The
 #    shipped image is otherwise a free root shell on any lab LAN.
-#  - on the zfs-lab variant, supply matching-size disks. The
+#  - on mirror-rpool variants, supply matching-size disks. The
 #    rpool mirror caps at the smallest disk's partition 3, so a
 #    2T+4T+4T mix silently halves usable rpool capacity.
 #  - verify the rpool ashift=12 below matches the disks. 4 KiB is
@@ -27,11 +27,13 @@
 #    refuse to load it.
 set -euxo pipefail
 
-# DISKS, LAYOUT, SOURCE_NAME, UBUNTU_NAME, UBUNTU_MIRROR come from
-# packer's shell-provisioner env block (see qemu.pkr.hcl's
-# variant_config map for DISKS/LAYOUT). Bare-metal callers export
-# them by hand before running. The ZBM_*/REFIND_*/UBUNTU_MIRROR_*
-# vars used downstream are documented at the top of chroot.sh.
+# DISKS, EXTRA_DISKS, LAYOUT, EXTRA_POOLS, SOURCE_NAME, UBUNTU_NAME,
+# UBUNTU_MIRROR come from packer's shell-provisioner env block (see
+# qemu.pkr.hcl's variant_config map). Bare-metal callers export them
+# by hand before running. EXTRA_DISKS/EXTRA_POOLS are consumed by
+# pools.sh; the others by this script and chroot.sh. The
+# ZBM_*/REFIND_*/UBUNTU_MIRROR_* vars used downstream are documented
+# at the top of chroot.sh.
 
 export DISKS_COUNT
 DISKS_COUNT=$(wc -w <<<"$DISKS")
@@ -60,8 +62,9 @@ partdev() {
 # Per-disk partition paths, computed once and exported as space-delimited
 # strings so chroot.sh consumes them directly without re-running partdev.
 # Partition layout (sgdisk below): 1 = EFI, 2 = swap, 3 = rpool. The
-# zfs-lab metadata vdev (partition 5) is created at the same time but
-# isn't in this trio — it's used inline in the zpool create.
+# future-use metadata-vdev slot (partition 5) is reserved on the
+# mirror-rpool variants only; nothing consumes it yet (see
+# notes/special-vdev-sizing.md for the planned wiring).
 PARTITIONS_EFI=""
 PARTITIONS_SWAP=""
 PARTITIONS_RPOOL=""
@@ -119,7 +122,7 @@ for disk in $DISKS; do
     sgdisk -n2:0:+4G -t2:FD00 "$disk" # Swap (FD00 = Linux RAID)
   fi
 
-  if [ "$SOURCE_NAME" = "zfs-lab" ]; then
+  if [ "$LAYOUT" = "mirror" ]; then
     sgdisk -n5:-2G:0 -t5:BF01 "$disk" # metadata vdev (BF01 = Solaris /usr & Mac ZFS, default when doing zpool create)
   fi
   sgdisk -n3:0:0 -t3:BF00 "$disk" # rpool (BF00 = Solaris root)
@@ -228,19 +231,33 @@ EOF
 # consumes it the same way via unquoted `for d in $DISKS` word-splitting.
 unshare --mount --propagation private arch-chroot /mnt bash </home/vagrant/chroot.sh
 
+# Create the non-rpool ZFS pools requested by the variant (apoc/dozer/
+# tank/mouse). Runs while /mnt is still rpool's root so pools.sh can
+# copy /etc/zfs/zpool.cache into the shipped install -- without that,
+# zfs-import-cache.service on first boot has nothing to import and the
+# pools are present on disk but unmounted.
+bash /home/vagrant/pools.sh
+
 # Only the rpool root dataset itself remains mounted in the host namespace.
 zfs unmount "rpool/ROOT/$UBUNTU_NAME"
 sync
 
-# Export. The intermittent "pool is busy" failures we used to hit are
-# udev/systemd handles lingering on the freshly-bootstrapped root
+# Export every pool. The intermittent "pool is busy" failures we used to
+# hit are udev/systemd handles lingering on the freshly-bootstrapped root
 # (matches upstream openzfs/zfs#16036), not autotrim — `zpool export
 # -f` doesn't bypass the spa_refcount EBUSY gate either, so force is
 # pointless. udevadm settle drains pending uevents; one retry after 5s
 # covers the rare slow-drain case. If both attempts fail the pool is
 # genuinely wedged and we want the build to fail rather than ship an
-# image that wasn't cleanly quiesced.
+# image that wasn't cleanly quiesced. Extra pools go first; rpool last
+# because zfs unmount above has already quiesced its root dataset.
 udevadm settle
+for pool in $(zpool list -H -o name | grep -vx rpool); do
+  if ! zpool export "$pool"; then
+    sleep 5
+    zpool export "$pool"
+  fi
+done
 if ! zpool export rpool; then
   sleep 5
   zpool export rpool

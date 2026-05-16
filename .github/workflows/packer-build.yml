@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       sources:
-        description: 'packer sources to build (e.g. "zfs zfs-lab"). Empty = all.'
+        description: 'packer sources to build (e.g. "box pug"). Empty = all.'
         required: false
         default: ''
       ubuntu:
