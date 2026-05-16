@@ -39,6 +39,28 @@
     # the FORWARD chain's iif=wg0/oif=podman0 path resolves to.
     probe_container_dest: "{{ podman_default_network | ansible.utils.ipmath(2) }}"
 
+# Guard the harness against a future site-subnet shrink: ipmath(250)
+# silently overflows the subnet if the prefix is too narrow, and the
+# /32 host routes would then alias another subnet — every probe would
+# fail with confusing rejects rather than a clean "test rig outgrew
+# its addressing" error.
+- name: _verify | Assert probe addresses are in-prefix and pairwise distinct
+  assert:
+    # network_in_network(value, test) — `value` is the outer network,
+    # `test` is the address being tested. Pipe the subnet so the IP
+    # is the argument; otherwise the semantics invert.
+    that:
+      - site_subnets.home | ansible.utils.network_in_network(probe_home)
+      - wireguard_subnet | ansible.utils.network_in_network(probe_wg)
+      - podman_default_network | ansible.utils.network_in_network(probe_podman)
+      - podman_bridge_pool | ansible.utils.network_in_network(probe_podman_pool)
+      - ([probe_home, probe_wg, probe_podman, probe_podman_pool] | unique | length) == 4
+    fail_msg: >-
+      Probe address ipmath(250) overflowed its subnet OR collided with
+      another subnet. The harness assumes /24-or-bigger subnets and no
+      overlap between site_subnets.home / wireguard_subnet /
+      podman_default_network / podman_bridge_pool.
+
 # Use the real prod podman install path (jammy backports pin, netavark
 # backend, zvol setup) — keeps the test rig faithful to what runs on
 # real hosts and avoids re-implementing package selection here.
