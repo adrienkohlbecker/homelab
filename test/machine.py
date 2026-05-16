@@ -85,11 +85,12 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
     "box": QemuMachineSpec(
         ssh_user="vagrant",
         inventory_host="box",
-        # box: 2-disk mirror rpool + apoc mirror + dozer mirror + tank
+        # box: 3-disk mirror rpool + apoc mirror + dozer mirror + tank
         # raidz2 + mouse mirror, all baked in by packer. Synthetic
-        # union fixture used by push CI.
+        # union fixture used by push CI; rpool matches lab's 3-way
+        # mirror so every prod-shape rpool topology gets exercised.
         packer_image="box",
-        os_disk_count=10,
+        os_disk_count=11,
     ),
     "lab": QemuMachineSpec(
         ssh_user="vagrant",
