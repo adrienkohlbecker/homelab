@@ -31,6 +31,8 @@ START_HD_IDLE=true
 #                          powered up after the daemon started get tracked
 #                          (USB hotplug, late-arriving SAS expanders). The
 #                          0 default silently never tracks them.
+#                          Only emitted on releases newer than jammy/noble;
+#                          older hd-idle packages predate the flag.
 #
 # Options not exactly useful here:
 #  -l <logfile>            Name of logfile. We omit this so hd-idle writes
@@ -48,4 +50,4 @@ START_HD_IDLE=true
 # HDDs out of the list — they tend to be backup targets where mid-write
 # spindown is harmful, and the kernel's removable flag is the cheapest
 # discriminator.
-HD_IDLE_OPTS="-i 0 -s 1{% for dev in ansible_devices.values() | selectattr('rotational', 'equalto', '1') | selectattr('removable', 'equalto', '0') | map(attribute='links') | map(attribute='ids') | select | map('first') | sort %} -a /dev/disk/by-id/{{ dev }} -i 1200{% endfor %}"
+HD_IDLE_OPTS="-i 0{% if ansible_distribution_release not in ["jammy", "noble"] %} -s 1{% endif %}{% for dev in ansible_devices.values() | selectattr('rotational', 'equalto', '1') | selectattr('removable', 'equalto', '0') | map(attribute='links') | map(attribute='ids') | select | map('first') | sort %} -a /dev/disk/by-id/{{ dev }} -i 1200{% endfor %}"
