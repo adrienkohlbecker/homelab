@@ -238,3 +238,4 @@ minio_users:
 hyperdx_ingestion_api_key: changeme
 # Must satisfy HyperDX registrationSchema: 12+ chars, lower+upper, digit, special.
 hyperdx_admin_password: Changeme123!
+github_runner_pat: changeme
