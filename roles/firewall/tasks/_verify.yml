@@ -79,14 +79,12 @@
   changed_when: "'Storing signatures' in firewall_verify_pull.stdout or 'Writing manifest' in firewall_verify_pull.stdout"
   become: true
 
-# Publish 32400:32400 (not :80) because :80 is already taken by the
-# python http.server INPUT probe; otherwise the port is arbitrary —
-# the FORWARD rule scopes by --ctstate DNAT, not by dport. Run busybox
-# httpd on 32400 inside the container to serve a tiny known-content
-# page the probe can grep for. --cap-add=NET_RAW restores the
-# capability podman 5.x dropped from default_capabilities — the
-# container-egress probe below uses busybox ping (SOCK_RAW), which
-# fails with "permission denied" without it.
+# Publish 32400:32400 — port is arbitrary; the FORWARD rule scopes by
+# --ctstate DNAT, not by dport. Run busybox httpd on 32400 inside the
+# container to serve a tiny known-content page the probe can grep for.
+# --cap-add=NET_RAW restores the capability podman 5.x dropped from
+# default_capabilities — the container-egress probe below uses busybox
+# ping (SOCK_RAW), which fails with "permission denied" without it.
 - name: _verify | Run busybox httpd test container with --publish on 32400
   command: >
     podman run -d --replace --name firewall_verify_httpd
@@ -97,23 +95,18 @@
   changed_when: true
   become: true
 
-# TCP listeners — one python http.server per port. Probes that source
-# from an allowed range get HTTP 200 (curl --connect-timeout exits 0);
-# probes from a denied source hit the catch-all REJECT and curl exits
-# non-zero with "Connection refused".
-- name: _verify | Bind python http.server on TCP listeners
-  command: >
-    systemd-run --unit firewall_verify_tcp_{{ item }} --remain-after-exit
-      python3 -m http.server {{ item }} --bind 0.0.0.0
-  loop:
-    - 80     # unscoped INPUT-allow probe target
-    - 443    # unscoped INPUT-allow (HTTPS port; serves plain HTTP for the probe)
-    - 445    # Samba probe target (-s site_subnets.home / wireguard_subnet)
-    - 3493   # nut probe target (-s site_subnets.home / wireguard_subnet)
-    - "{{ service_ports.dnscrypt_proxy }}"  # dnscrypt-proxy TCP fallback (-s podman_default_network)
-    - 51413  # transmission BT peer port (-i WAN; negative probe only — no WAN hostfwd)
-  changed_when: true
-  become: true
+# TCP listeners aren't bound for INPUT probes any more — every TCP
+# accept rule carries a named counter and the assertion block at the
+# end of _verify checks each counter incremented (positive cases) or
+# stayed at 0 (negative cases). Without a listener, a positive probe
+# gets RST from the kernel and curl exits non-zero; we drive that via
+# `failed_when: false` because the load-bearing signal is the counter,
+# not the rc. Trade-off: per-probe granularity is lost (multiple
+# positives merge into a single >= 1 assertion), and a regression that
+# breaks just one of N positive paths won't surface as long as another
+# still fires the same counter. The busybox httpd above stays because
+# the DNAT body-grep probe asserts the response payload, which a
+# counter alone cannot prove.
 
 # Multi-aliased extns netns + matching host /32 routes. The aliases
 # let curl/nc source-bind from each representative subnet without
@@ -149,11 +142,6 @@
   changed_when: true
   become: true
 
-- name: _verify | Wait for TCP listeners
-  wait_for: { host: 127.0.0.1, port: "{{ item }}", timeout: 10 }
-  loop: [80, 443, 445, 3493, "{{ service_ports.dnscrypt_proxy }}", 51413]
-  become: true
-
 - name: _verify | Wait for httpd container
   wait_for: { host: 127.0.0.1, port: 32400, timeout: 30 }
   become: true
@@ -164,27 +152,30 @@
 - name: _verify | INPUT allow — port 80 reachable from extns (unscoped)
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:80/
   changed_when: false
+  failed_when: false
   become: true
 
-- name: _verify | INPUT deny — port 18080 (no rule, no listener) is rejected
+- name: _verify | INPUT deny — port 18080 (no rule, no listener) hits catch-all
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:18080/
-  register: probe_18080
   changed_when: false
-  failed_when: probe_18080.rc == 0
+  failed_when: false
   become: true
 
 - name: _verify | INPUT allow — port 443 reachable from extns (unscoped)
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:443/
   changed_when: false
+  failed_when: false
   become: true
 
-# Loopback accept (`iif lo accept`). The python http.server on :80
-# binds 0.0.0.0 so 127.0.0.1 also gets traffic; a regression that
-# breaks the iif=lo rule (typo, removal) makes the catch-all silent
-# drop kick in and curl times out.
+# Loopback accept (`iif lo accept`). No listener on :80 — the rule
+# fires (counter `input_loopback` increments) before the kernel
+# decides there's nowhere to deliver the SYN. A regression that
+# breaks the iif=lo rule diverts the packet to the catch-all chain;
+# the counter assertion at the end of _verify catches that.
 - name: _verify | INPUT allow — iif lo (loopback 127.0.0.1:80 from host)
   command: curl --connect-timeout 3 --max-time 5 -sf http://127.0.0.1:80/
   changed_when: false
+  failed_when: false
   become: true
 
 # SSH (22/tcp) is in the unscoped `tcp dport { 22, 80, 443 } accept`
@@ -238,9 +229,8 @@
 # drops the iif scope and exposes 51413 to wg peers.
 - name: _verify | INPUT — transmission (51413/tcp) rejected on wg0 ingress (iif scope)
   command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:51413/
-  register: probe_transmission_iif
   changed_when: false
-  failed_when: probe_transmission_iif.rc == 0
+  failed_when: false
   become: true
 
 # Admin services (mosh/samba/nut/NetBIOS) use the concatenated set
@@ -282,24 +272,23 @@
     ip netns exec extns curl --interface {{ probe_wg }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
   changed_when: false
+  failed_when: false
   become: true
 
 - name: _verify | INPUT — Samba (445/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
   command: >
     ip netns exec extns curl --interface {{ probe_home }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
-  register: probe_samba_iif_mismatch
   changed_when: false
-  failed_when: probe_samba_iif_mismatch.rc == 0
+  failed_when: false
   become: true
 
 - name: _verify | INPUT — Samba (445/tcp) rejected from non-scope source
   command: >
     ip netns exec extns curl --interface {{ probe_nonscope }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
-  register: probe_samba_oos
   changed_when: false
-  failed_when: probe_samba_oos.rc == 0
+  failed_when: false
   become: true
 
 - name: _verify | INPUT — nut (3493/tcp) reachable from wireguard source
@@ -307,24 +296,23 @@
     ip netns exec extns curl --interface {{ probe_wg }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
   changed_when: false
+  failed_when: false
   become: true
 
 - name: _verify | INPUT — nut (3493/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
   command: >
     ip netns exec extns curl --interface {{ probe_home }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
-  register: probe_nut_iif_mismatch
   changed_when: false
-  failed_when: probe_nut_iif_mismatch.rc == 0
+  failed_when: false
   become: true
 
 - name: _verify | INPUT — nut (3493/tcp) rejected from non-scope source
   command: >
     ip netns exec extns curl --interface {{ probe_nonscope }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
-  register: probe_nut_oos
   changed_when: false
-  failed_when: probe_nut_oos.rc == 0
+  failed_when: false
   become: true
 
 # Separate rule: containers on any podman bridge can reach nut (HA's
@@ -336,6 +324,7 @@
     ip netns exec extns curl --interface {{ probe_podman_pool }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:3493/
   changed_when: false
+  failed_when: false
   become: true
 
 # NetBIOS uses the same lan_admin_pairs (iif, saddr) intersection.
@@ -375,6 +364,7 @@
     ip netns exec extns curl --interface {{ probe_podman }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.dnscrypt_proxy }}/
   changed_when: false
+  failed_when: false
   become: true
 
 - name: _verify | INPUT — aardvark-dns (5333/udp) reachable from default-bridge source
@@ -728,6 +718,17 @@
     aardvark_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'aardvark_accept') | first).packets }}"
     wireguard_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'wireguard_accept') | first).packets }}"
     mdns_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'mdns_accept') | first).packets }}"
+    # TCP accept rule counters — listeners were dropped (see header
+    # comment near the httpd container task); each TCP rule carries a
+    # named counter and the rc-vs-listener signal is gone. Positives
+    # assert >= 1; transmission is negative-only here because positive
+    # WAN ingress would need a slirp hostfwd extension.
+    input_unscoped_tcp_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_unscoped_tcp') | first).packets }}"
+    input_admin_tcp_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_admin_tcp') | first).packets }}"
+    input_transmission_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_transmission') | first).packets }}"
+    input_nut_podman_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_nut_podman') | first).packets }}"
+    input_loopback_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_loopback') | first).packets }}"
+    input_icmp_accept_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_icmp_accept') | first).packets }}"
   assert:
     that:
       - input_nonsyn_pkts | int >= 1
@@ -743,14 +744,22 @@
       - aardvark_pkts | int >= 2  # two probes: default-bridge + non-default-bridge
       - wireguard_pkts | int >= 1
       - mdns_pkts | int == 0  # both probes negative (iif + saddr scope rejections)
+      - input_unscoped_tcp_pkts | int >= 1   # extns→:80, :443, :22 via bash /dev/tcp
+      - input_admin_tcp_pkts | int >= 1      # samba/nut positives from wg saddr
+      - input_transmission_pkts | int == 0   # negative-only: wg0 ingress must miss WAN iif scope
+      - input_nut_podman_pkts | int >= 1     # nut positive from podman_bridge_pool source
+      - input_loopback_pkts | int >= 1       # host curl 127.0.0.1:80
+      - input_icmp_accept_pkts | int >= 1    # ping probe + first 20 of the flood
     fail_msg: >-
-      Counter-based probes didn't fire all expected drop rules:
-      non-SYN (input/forward), forward catch-all, icmp overflow,
-      input silenced-noise, or input catch-all; OR the VRRP rule's
-      iif scope accepted a wg0-ingress packet (vrrp_pkts > 0).
-      Either a rule is missing, the probe didn't reach the chain,
-      or another rule
-      swallowed the packet first.
+      Counter-based probes didn't fire all expected rules: non-SYN
+      (input/forward), forward catch-all, icmp overflow, input
+      silenced-noise, or input catch-all; OR the VRRP rule's iif scope
+      accepted a wg0-ingress packet (vrrp_pkts > 0); OR a TCP accept
+      rule failed to fire (unscoped 22/80/443, admin samba/nut,
+      podman-pool nut, loopback, icmp accept); OR the transmission
+      iif scope accepted a wg0-ingress packet (input_transmission > 0).
+      Either a rule is missing, the probe didn't reach the chain, or
+      another rule swallowed the packet first.
 
 # Re-apply coverage. With iptables-restore the apply was destructive
 # (wiped netavark's chains), so the verify forced a re-flush + podman
