@@ -160,12 +160,15 @@ EOF
     present=0
     if [ -n "$expected" ]; then
       # Iterate api_charts keys looking for one that starts with the
-      # prefix followed by a dot. Bash 4 associative arrays don't have a
-      # native "any key matches glob" so we walk the keyset; ~6k charts
-      # on lab takes O(ms) at 60s update cadence.
+      # prefix followed by `.` (single-instance collectors like
+      # chrony_local.system_status) OR `_<instance>.<metric>`
+      # (per-instance collectors like upsd_local_eaton.battery_charge_-
+      # percentage, where `eaton` is the UPS name). Bash 4 associative
+      # arrays don't have a native "any key matches glob" so we walk
+      # the keyset; ~6k charts on lab takes O(ms) at 60s update cadence.
       for _chart_id in "${!api_charts[@]}"; do
         case "$_chart_id" in
-          "$expected".*) present=1; break ;;
+          "$expected".*|"$expected"_*) present=1; break ;;
         esac
       done
     fi
