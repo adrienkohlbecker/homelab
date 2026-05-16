@@ -26,6 +26,11 @@ START_HD_IDLE=true
 #                          parameter. This can also be a symlink
 #                          (e.g. /dev/disk/by-uuid/...)
 #  -i <idle_time>          Idle time in seconds.
+#  -s <policy>             Symlink resolution policy. 1 = re-resolve missing
+#                          /dev/disk/by-id/ symlinks at runtime, so disks
+#                          powered up after the daemon started get tracked
+#                          (USB hotplug, late-arriving SAS expanders). The
+#                          0 default silently never tracks them.
 #
 # Options not exactly useful here:
 #  -l <logfile>            Name of logfile. We omit this so hd-idle writes
@@ -38,4 +43,9 @@ START_HD_IDLE=true
 #                          becoming a daemon and print debugging info to
 #                          stdout/stderr
 #  -h                      Print usage information.
-HD_IDLE_OPTS="-i 0{% for dev in ansible_devices.values() | selectattr('rotational', 'equalto', '1') | map(attribute='links') | map(attribute='ids') | select | map('first') | sort %} -a /dev/disk/by-id/{{ dev }} -i 1200{% endfor %}"
+#
+# Filter chain: rotational + removable=0. removable=0 keeps USB-attached
+# HDDs out of the list — they tend to be backup targets where mid-write
+# spindown is harmful, and the kernel's removable flag is the cheapest
+# discriminator.
+HD_IDLE_OPTS="-i 0 -s 1{% for dev in ansible_devices.values() | selectattr('rotational', 'equalto', '1') | selectattr('removable', 'equalto', '0') | map(attribute='links') | map(attribute='ids') | select | map('first') | sort %} -a /dev/disk/by-id/{{ dev }} -i 1200{% endfor %}"
