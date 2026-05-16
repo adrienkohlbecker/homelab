@@ -493,14 +493,20 @@
   register: reboot_required_stat
   become: true
 
-- name: _verify | reboot signal — assert reboot was signaled
+# Require recent mtime so a stale file from a prior --keep'd run
+# doesn't false-pass. The role's apply is well within an hour of
+# verify on a normal harness cycle (~10 min total); cross-session
+# --keep'd re-runs (file from yesterday) correctly fail.
+- name: _verify | reboot signal — assert reboot was signaled this run
   assert:
     that:
       - reboot_required_stat.stat.exists
+      - reboot_required_stat.stat.mtime > (ansible_date_time.epoch | int) - 3600
     fail_msg: >-
-      /var/run/reboot-required wasn't created. With nf_conntrack
-      not pre-loaded, the conntrack sysctl can't take effect until
-      reboot — the role should have signaled.
+      /var/run/reboot-required is missing or stale (mtime older than
+      1 hour). With nf_conntrack not pre-loaded, the conntrack sysctl
+      can't take effect until reboot — the role should have signaled
+      this run.
 
 # Match `counter packets N bytes M drop comment "..."` with N >= 1
 # (non-zero pkts), confirming the rule actually saw a packet rather
