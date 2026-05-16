@@ -3,7 +3,13 @@ type = SimpleIMAPSSLRetriever
 server = imap.gmail.com
 port = 993
 username = {{ root_email }}
-password = {{ gmail_app_password }}
+# Gmail's UI displays 16-char app passwords as 4 space-separated groups
+# (`xxxx xxxx xxxx xxxx`) for readability — the actual auth string is
+# the 16-char form without spaces. trim handles any trailing newline
+# from vault round-tripping; replace handles a copy-pasted-from-UI
+# password that kept its display spaces. Both are no-ops if the secret
+# was already stored in canonical form.
+password = {{ gmail_app_password | trim | replace(' ', '') }}
 # Verify the server cert against the system CA bundle and require its
 # subject CN/SAN to match imap.gmail.com. Without these, getmail6 will
 # happily complete an IMAPS handshake against any cert the system
