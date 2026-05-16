@@ -65,6 +65,11 @@
 # "undefined" before we ever get past the import. The caller var
 # is always available because import_role.vars: are part of the
 # import-time scope.
+#
+# Tolerate check mode: the upstream linger task may have reported
+# "would have enabled" without actually creating the sentinel, so a
+# false positive here would block check-mode runs on a fresh host.
+# Real-apply still fail-closes.
 - name: Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
   when:
     - _systemd_unit_condition
@@ -72,7 +77,7 @@
   stat:
     path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
   register: _systemd_unit_linger
-  failed_when: not _systemd_unit_linger.stat.exists
+  failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
 
 # Refuse to overwrite a masked unit. `systemctl mask` creates a /dev/null
 # symlink at the unit's location — the standard "do not start this"

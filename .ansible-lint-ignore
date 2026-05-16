@@ -9,3 +9,8 @@ roles/gitea_runner/tasks/main.yml  no-changed-when
 roles/gitea_runner/tasks/main.yml  var-naming[no-role-prefix]
 roles/github_runner/tasks/_register.yml  name[template]
 roles/github_runner/tasks/main.yml  loop-var-prefix[wrong]
+roles/systemd_unit/tasks/install.yml  name[prefix]
+roles/systemd_unit/tasks/install.yml  var-naming[no-role-prefix]
+roles/systemd_unit/tasks/remove.yml  var-naming[no-role-prefix]
+roles/systemd_unit/tasks/service.yml  name[prefix]
+roles/systemd_unit/tasks/service.yml  var-naming[no-role-prefix]
