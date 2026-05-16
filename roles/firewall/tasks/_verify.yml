@@ -317,16 +317,31 @@
 # VRRP (proto 112) scoping is asserted statically because slirp
 # doesn't pass arbitrary L4 protocols, so a functional probe across
 # the netns harness isn't feasible. Confirm the rendered rule still
-# carries the iifname + LAN-saddr scope — guards against someone
-# unscoping it back to `ip protocol vrrp accept`. nft canonicalizes
-# `ip protocol 112` to `ip protocol vrrp` on output, hence the match.
-- name: _verify | INPUT — VRRP rule renders with iifname + LAN-saddr scope
-  command: nft list table ip homelab
-  register: vrrp_rule_dump
+# carries the iifname + protocol scope — guards against someone
+# unscoping it back to `ip protocol vrrp accept`. JSON output is
+# more stable than text against nft's canonicalization quirks
+# (e.g. `ip protocol 112` ↔ `ip protocol vrrp`).
+- name: _verify | INPUT — get nft ruleset (JSON, for VRRP scope check)
+  command: nft -j list table ip homelab
+  register: nft_ruleset_vrrp
   changed_when: false
-  failed_when: >
-    ('iifname "' + default_interface + '" ip saddr ' + site_subnets.home + ' ip protocol vrrp accept') not in vrrp_rule_dump.stdout
   become: true
+
+- name: _verify | INPUT — VRRP rule renders with iifname + protocol scope
+  vars:
+    nft_rules: "{{ (nft_ruleset_vrrp.stdout | from_json).nftables
+                   | selectattr('rule', 'defined')
+                   | map(attribute='rule') | list }}"
+    vrrp_matches: "{{ (nft_rules | selectattr('comment', 'eq', 'keepalived (VRRP, LAN unicast)') | first).expr
+                      | selectattr('match', 'defined')
+                      | map(attribute='match') | list }}"
+  assert:
+    that:
+      - (vrrp_matches | selectattr('left.meta', 'defined') | selectattr('left.meta.key', 'eq', 'iifname') | map(attribute='right') | first) == default_interface
+      - (vrrp_matches | selectattr('left.payload', 'defined') | selectattr('left.payload.field', 'eq', 'protocol') | map(attribute='right') | first) in ['vrrp', 112]
+    fail_msg: >-
+      VRRP rule by comment 'keepalived (VRRP, LAN unicast)' missing
+      iifname={{ default_interface }} or protocol=vrrp scope.
 
 # FORWARD/DNAT — published container reachable via wg0 ingress.
 - name: _verify | FORWARD/DNAT — published 32400 reachable via wg0 ingress
@@ -450,7 +465,7 @@
   become: true
 
 - name: _verify | Capture nftables counters after crafted-packet probes
-  command: nft list table ip homelab
+  command: nft -j list table ip homelab
   register: counters_after_crafted
   changed_when: false
   become: true
@@ -508,16 +523,26 @@
       can't take effect until reboot — the role should have signaled
       this run.
 
-# Match `counter packets N bytes M drop comment "..."` with N >= 1
-# (non-zero pkts), confirming the rule actually saw a packet rather
-# than just being present. The comment disambiguates the three
-# counter-drop rules.
+# Look up each counter-bearing rule by comment and confirm packets
+# >= 1 (the rule actually saw traffic, not just present). JSON access
+# is stable across nft text-formatting changes (the previous regex
+# match was sensitive to spacing / attribute order).
 - name: _verify | Counter-checked drop rules each fired ≥ 1 time
+  vars:
+    nft_rules: "{{ (counters_after_crafted.stdout | from_json).nftables
+                   | selectattr('rule', 'defined')
+                   | map(attribute='rule') | list }}"
+    input_nonsyn_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'input non-syn drop') | first).expr
+                           | selectattr('counter', 'defined') | first).counter.packets }}"
+    forward_nonsyn_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'forward non-syn drop') | first).expr
+                             | selectattr('counter', 'defined') | first).counter.packets }}"
+    forward_catchall_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'forward catch-all') | first).expr
+                               | selectattr('counter', 'defined') | first).counter.packets }}"
   assert:
     that:
-      - counters_after_crafted.stdout is search('counter packets [1-9][0-9]* bytes [0-9]+ drop comment "input non-syn drop"')
-      - counters_after_crafted.stdout is search('counter packets [1-9][0-9]* bytes [0-9]+ drop comment "forward non-syn drop"')
-      - counters_after_crafted.stdout is search('counter packets [1-9][0-9]* bytes [0-9]+ drop comment "forward catch-all"')
+      - input_nonsyn_pkts | int >= 1
+      - forward_nonsyn_pkts | int >= 1
+      - forward_catchall_pkts | int >= 1
     fail_msg: >-
       Counter-based probes didn't fire all expected drop rules:
       non-SYN (input/forward) or the forward catch-all. Either a rule
