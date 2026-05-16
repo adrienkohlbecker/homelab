@@ -30,6 +30,14 @@
     probe_wg: "{{ wireguard_subnet | ansible.utils.ipmath(250) }}"
     probe_podman: "{{ podman_default_network | ansible.utils.ipmath(250) }}"
     probe_podman_pool: "{{ podman_bridge_pool | ansible.utils.ipmath(250) }}"
+    # Non-scope source: in-subnet on the netns veth (10.99.0.0/24, see
+    # the topology header above) but outside any allowlisted saddr —
+    # used by the OOS negative probes (samba, nut, mosh, dnscrypt).
+    probe_nonscope: 10.99.0.2
+    # Container target for crafted-packet probes — an unused IP in
+    # podman_default_network; not a real container, just a destination
+    # the FORWARD chain's iif=wg0/oif=podman0 path resolves to.
+    probe_container_dest: "{{ podman_default_network | ansible.utils.ipmath(2) }}"
 
 # Use the real prod podman install path (jammy backports pin, netavark
 # backend, zvol setup) — keeps the test rig faithful to what runs on
@@ -128,7 +136,7 @@
     fi
     ip addr replace 10.99.0.1/24 dev wg0
     ip link set wg0 up
-    ip -n extns addr replace 10.99.0.2/24 dev veth_ext
+    ip -n extns addr replace {{ probe_nonscope }}/24 dev veth_ext
     ip -n extns addr replace {{ probe_home }}/32 dev veth_ext
     ip -n extns addr replace {{ probe_wg }}/32 dev veth_ext
     ip -n extns addr replace {{ probe_podman }}/32 dev veth_ext
@@ -223,7 +231,7 @@
 
 - name: _verify | INPUT — mosh (60000/udp) rejected from non-scope source
   shell: |
-    echo ping | ip netns exec extns nc -u -w 2 -s 10.99.0.2 10.99.0.1 60000 | grep -q pong
+    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_nonscope }} 10.99.0.1 60000 | grep -q pong
   args: { executable: /bin/bash }
   register: probe_mosh_oos
   changed_when: false
@@ -243,9 +251,9 @@
   changed_when: false
   become: true
 
-- name: _verify | INPUT — Samba (445/tcp) rejected from non-scope source 10.99.0.2
+- name: _verify | INPUT — Samba (445/tcp) rejected from non-scope source
   command: >
-    ip netns exec extns curl --interface 10.99.0.2
+    ip netns exec extns curl --interface {{ probe_nonscope }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
   register: probe_samba_oos
   changed_when: false
@@ -263,9 +271,9 @@
   changed_when: false
   become: true
 
-- name: _verify | INPUT — nut (3493/tcp) rejected from non-scope source 10.99.0.2
+- name: _verify | INPUT — nut (3493/tcp) rejected from non-scope source
   command: >
-    ip netns exec extns curl --interface 10.99.0.2
+    ip netns exec extns curl --interface {{ probe_nonscope }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:3493/
   register: probe_nut_oos
   changed_when: false
@@ -305,7 +313,7 @@
 
 - name: _verify | INPUT — dnscrypt (5053/udp) rejected from non-scope source
   shell: |
-    echo ping | ip netns exec extns nc -u -w 2 -s 10.99.0.2 10.99.0.1 {{ service_ports.dnscrypt_proxy }} | grep -q pong
+    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_nonscope }} 10.99.0.1 {{ service_ports.dnscrypt_proxy }} | grep -q pong
   register: probe_dns_oos
   changed_when: false
   failed_when: probe_dns_oos.rc == 0
@@ -468,7 +476,7 @@
 # only fails loudly. ICMP rather than HTTP because extns has no
 # listener bound to its veth IP.
 - name: _verify | FORWARD — container egress to non-WAN iface (wg0) reachable
-  command: podman exec firewall_verify_httpd ping -c 1 -W 3 10.99.0.2
+  command: podman exec firewall_verify_httpd ping -c 1 -W 3 {{ probe_nonscope }}
   changed_when: false
   become: true
 
@@ -507,7 +515,7 @@
   become: true
 
 - name: _verify | forward — TCP-ACK (no SYN) from extns to a container hits the non-SYN drop
-  command: ip netns exec extns hping3 -A -p 32400 -c 1 --quiet 10.88.0.2
+  command: ip netns exec extns hping3 -A -p 32400 -c 1 --quiet {{ probe_container_dest }}
   changed_when: false
   failed_when: false
   become: true
@@ -518,7 +526,7 @@
 # and the scoped allows all not matching, the packet falls through
 # to the trailing counter-drop.
 - name: _verify | forward — direct-to-container TCP-SYN with no DNAT hits the catch-all drop
-  command: ip netns exec extns curl --connect-timeout 2 --max-time 3 -sf http://10.88.0.2:80/
+  command: ip netns exec extns curl --connect-timeout 2 --max-time 3 -sf http://{{ probe_container_dest }}:80/
   register: probe_forward_drop
   changed_when: false
   failed_when: probe_forward_drop.rc == 0
