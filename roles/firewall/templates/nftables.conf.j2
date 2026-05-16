@@ -180,11 +180,13 @@ table ip homelab {
         # saddr-in-its-own-subnet packet whose daddr is outside that
         # subnet, so we don't have to add SNAT rules per bridge here.
         # The egress oifname set is "anything that isn't another
-        # podman bridge" — covers WAN, host VLAN sub-interfaces (the
-        # iot macvlan parent on lab), wireguard, libvirt — without
-        # hardcoding host-specific iface names. Cross-bridge container
-        # traffic still has to go through the DNAT-reach rule below;
-        # direct podman → podman is still dropped.
+        # podman bridge" — deliberately covers WAN, the home LAN
+        # (containers reaching the UDM / other LAN hosts), host VLAN
+        # sub-interfaces (the iot macvlan parent on lab), wireguard,
+        # libvirt — without hardcoding host-specific iface names.
+        # Cross-bridge container traffic still has to go through the
+        # DNAT-reach rule below; direct podman → podman is still
+        # dropped.
         iifname "wg0" oifname $WAN_IFACE accept comment "wg → WAN"
         iifname "podman*" oifname != "podman*" accept comment "podman → external (WAN/LAN/wireguard)"
 
