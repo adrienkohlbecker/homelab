@@ -81,7 +81,7 @@
 # non-zero with "Connection refused".
 - name: _verify | Bind python http.server on TCP listeners
   command: >
-    systemd-run --unit firewall-verify-tcp-{{ item }} --remain-after-exit
+    systemd-run --unit firewall_verify_tcp_{{ item }} --remain-after-exit
       python3 -m http.server {{ item }} --bind 0.0.0.0
   loop:
     - 80     # unscoped INPUT-allow probe target
@@ -99,7 +99,7 @@
 # listener and REJECT produce ICMP port-unreachable).
 - name: _verify | Bind socat UDP echo listeners
   command: >
-    systemd-run --unit firewall-verify-udp-{{ item }} --remain-after-exit
+    systemd-run --unit firewall_verify_udp_{{ item }} --remain-after-exit
       socat UDP-RECVFROM:{{ item }},fork SYSTEM:'echo pong'
   loop:
     - "{{ service_ports.dnscrypt_proxy }}"  # dnscrypt-proxy (-s podman_default_network)
