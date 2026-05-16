@@ -20,10 +20,17 @@
 # The dict form mirrors service_user / systemd_timer / podman_secret:
 # each import_role replaces the whole `linger_args` value at play-vars
 # scope so a previous caller's name/uid can't bleed into the next call.
+# check_mode: false because consumers that drive systemd_unit (e.g.
+# anything going through systemd_timer) hit a linger-marker stat at
+# roles/systemd_unit/tasks/install.yml:60 that fail-closed when the
+# sentinel is missing. Without this, --check phases fail at the stat
+# before reaching apply. The command is creates:-gated and idempotent,
+# so really running it in check mode is benign.
 - name: linger | Enable linger for {{ linger_args.name }}
   command: loginctl enable-linger {{ linger_args.name }}
   args:
     creates: /var/lib/systemd/linger/{{ linger_args.name }}
+  check_mode: false
   become: true
   register: _linger_result
 
