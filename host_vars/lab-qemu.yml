@@ -1,3 +1,9 @@
+# Test-only overlay applied via -e on top of inventory-loaded
+# host_vars/lab.yml. Activated by test/machine.py when --machine lab
+# is requested -- push CI no longer fans out to lab, but nightly
+# and on-demand `testrole.py --machine lab` still go through here.
+qemu_test: true
+
 zfs_has_services_mount: false
 zfs_has_scratch_mount: false
 zfs_has_media_mount: false

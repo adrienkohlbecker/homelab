@@ -75,11 +75,6 @@ class QemuMachineSpec(NamedTuple):
     # whose pools are all baked in by packer. Unused on minimal
     # (packer_image=None), where the cloud-image branch returns early.
     os_disk_count: int = 0
-    # True for the cloud-image-only "minimal" variant. Toggles
-    # qemu_test_minimal in the role's ansible vars and picks the
-    # `<inventory_host>-qemu-minimal.yml` host_vars file instead of the
-    # default `<inventory_host>-qemu.yml`.
-    qemu_test_minimal: bool = False
     # Guest RAM in MiB and vcpu count, plumbed into qemu's -m / -smp.
     # Defaults match the historical 4096M / 8-vcpu sizing so existing
     # variants are unchanged; minimal trims to 2048/4 since the cloud-
@@ -93,11 +88,10 @@ class QemuMachineSpec(NamedTuple):
 QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
     "minimal": QemuMachineSpec(
         ssh_user="ubuntu",
-        inventory_host="box",
+        inventory_host="minimal",
         packer_image=None,
         extra_disks=[],
         disk_setup_script=None,
-        qemu_test_minimal=True,
         memory_mb=2048,
         vcpus=4,
     ),
@@ -143,19 +137,22 @@ MACHINE_CHOICES: tuple[str, ...] = tuple(QEMU_MACHINE_SPECS)
 
 
 def _qemu_ansible_args(spec: QemuMachineSpec) -> list[str]:
-    """Derive the per-spec -e args for ansible-playbook.
+    """Return any -e overlay needed on top of inventory-loaded host_vars.
 
-    Two -e bundles: a JSON blob toggling qemu_test / qemu_test_minimal,
-    and a host_vars file matching the inventory host. Centralising the
-    derivation keeps QEMU_MACHINE_SPECS a pure data table.
+    For test-only inventory hosts (box, minimal) the test fixture lives
+    directly in host_vars/<host>.yml and ansible loads it naturally; no
+    extra-vars layer is needed. For variants whose inventory host
+    doubles as a prod host (lab, pug), host_vars/<host>-qemu.yml carries
+    the VM-incompatible overrides (qemu_test, fake netplan, no UPS,
+    test-mode macos_vm) on top of the prod-shaped host_vars/<host>.yml
+    that inventory loads; we force-load it via -e so its values beat
+    the prod host_vars regardless of merge order. qemu_test itself
+    lives inside each fixture/overlay file, no longer harness-injected.
     """
-    suffix = "-minimal" if spec.qemu_test_minimal else ""
-    return [
-        "-e",
-        f'{{"qemu_test":true,"qemu_test_minimal":{str(spec.qemu_test_minimal).lower()}}}',
-        "-e",
-        f"@host_vars/{spec.inventory_host}-qemu{suffix}.yml",
-    ]
+    override = Path(f"host_vars/{spec.inventory_host}-qemu.yml")
+    if not override.exists():
+        return []
+    return ["-e", f"@{override}"]
 
 
 SSH_WAIT_TIMEOUT = 120

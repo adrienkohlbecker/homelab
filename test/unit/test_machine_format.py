@@ -86,7 +86,7 @@ def test_format_ansible_cmd_default_envelope(
     m = machine_factory(
         ssh_port=2222,
         ssh_user="vagrant",
-        ansible_args=["-e", '{"qemu_test":true}', "-e", "@host_vars/box-qemu.yml"],
+        ansible_args=["-e", "@host_vars/lab-qemu.yml"],
     )
     cmd = m.format_ansible_cmd("site.yml")
 
@@ -147,7 +147,7 @@ def test_format_ansible_cmd_no_positional(
     machine_factory: Callable[..., machine.Machine],
 ) -> None:
     m = machine_factory(
-        ansible_args=["-e", '{"qemu_test":true}', "-e", "@host_vars/box-qemu.yml"],
+        ansible_args=["-e", "@host_vars/lab-qemu.yml"],
     )
     cmd = m.format_ansible_cmd()
 
