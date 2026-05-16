@@ -75,6 +75,11 @@
     storage.pause_on_chunks_overlimit  on
 
 # nginx access/error logs don't go through journald by default.
+# Rotate_Wait holds the pre-rotation inode open for 30s after a
+# detected rotation. Ubuntu's /etc/logrotate.d/nginx uses rename+USR1
+# (not copytruncate), so the inode changes; 30s vs the upstream
+# default 5s buys headroom for high-volume access logs to flush
+# their tail-input buffers before fluent-bit closes the old fd.
 [INPUT]
     Name              tail
     Tag               nginx.access
