@@ -1,27 +1,17 @@
-# Runtime identity is ansible_user — the human reading the mail — rather
-# than a dedicated service_user. The maildir is meant to be browsed directly
-# by the operator; a system user would just add a sudo step.
+# Runtime identity is ansible_user — the human reading the mail.
+# Implemented as a system-scope timer with User=ansible_user in the
+# service unit (via systemd_timer's run_as arg) rather than a
+# user-scope timer: every operation works via regular
+# systemctl/journalctl, netdata's systemdunits collector sees the
+# unit on the system bus, and there's a single permission/user-mapping
+# model to reason about. The maildir stays operator-owned (0700) so
+# the human can browse it without sudo.
 - name: Install getmail
   apt:
     package:
       - getmail6
     cache_valid_time: 3600
   become: true
-  tags:
-    - getmail
-
-# roles/user already lingers ansible_user on prod, but the harness may
-# run getmail alone — the linger helper is idempotent so the prod
-# double-call is a no-op. The helper also ensures user@<uid>.service is
-# up before the systemd_timer helper drives `systemctl --user enable`.
-- name: Ensure linger + user manager are up for ansible_user
-  import_role:
-    name: linger
-    tasks_from: linger
-  vars:
-    linger_args:
-      name: "{{ ansible_user }}"
-      uid: "{{ ansible_user_uid }}"
   tags:
     - getmail
 
@@ -45,10 +35,10 @@
     - getmail
 
 # getmail creates messages.log on first run under whatever umask the
-# user manager has (typically 0644). Pre-create it 0600 so even if
-# the parent dir's 0700 ever drifts, the per-message metadata
-# (msgid / sender / recipient / size) is still owner-only. The
-# preserve flags keep the task idempotent on re-runs.
+# service inherits (systemd's default produces 0644). Pre-create it
+# 0600 so even if the parent dir's 0700 ever drifts, the per-message
+# metadata (msgid / sender / recipient / size) is still owner-only.
+# The preserve flags keep the task idempotent on re-runs.
 - name: Pre-create messages.log
   file:
     path: /mnt/services/getmail/messages.log
@@ -106,7 +96,7 @@
         /usr/bin/getmail
         --rcfile /mnt/services/getmail/getmailrc
         --getmaildir /mnt/services/getmail
-      user: "{{ ansible_user }}"
+      run_as: "{{ ansible_user }}"
       timeout_start_sec: 15m
   tags:
     - getmail
