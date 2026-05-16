@@ -204,6 +204,15 @@
   changed_when: false
   become: true
 
+# Loopback accept (`iif lo accept`). The python http.server on :80
+# binds 0.0.0.0 so 127.0.0.1 also gets traffic; a regression that
+# breaks the iif=lo rule (typo, removal) makes the catch-all silent
+# drop kick in and curl times out.
+- name: _verify | INPUT allow — iif lo (loopback 127.0.0.1:80 from host)
+  command: curl --connect-timeout 3 --max-time 5 -sf http://127.0.0.1:80/
+  changed_when: false
+  become: true
+
 # Wireguard 51820 is scoped to -i WAN. Two probes — positive via
 # the controller-side UDP hostfwd (slirp ingresses on enp0s2, which
 # is the WAN iface in the test VM) and negative from the netns where
