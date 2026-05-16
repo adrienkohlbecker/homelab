@@ -51,17 +51,40 @@ end
 -- could otherwise bloat the record up to nginx's client_max_body_size.
 local MAX_FIELD_BYTES = 1024
 
--- Strip just the unicode bidi-override codepoints (U+202A-U+202E and
--- U+2066-U+2069 in UTF-8) so an attacker-supplied URL can't reorder a
--- log line visually in any UI that renders text as Unicode. Other
--- non-ASCII bytes pass through -- legitimate IDN hostnames and unicode
--- path segments stay readable in HyperDX. Then cap at MAX_FIELD_BYTES.
+-- Strip:
+-- - Unicode bidi-override codepoints (U+202A-U+202E and U+2066-U+2069
+--   in UTF-8) so an attacker-supplied URL can't reorder a log line in
+--   any UI that renders text as Unicode.
+-- - C0 control bytes + DEL (preserving \t, \n, \r) so terminal escapes
+--   from attacker-controlled fields don't leak into journalctl /
+--   clickhouse-client operator views. ESC (\x1b) is in C0, so ANSI
+--   escape sequences lose their leader and the remainder is harmless.
+-- Other non-ASCII bytes pass through -- legitimate IDN hostnames and
+-- unicode path segments stay readable in HyperDX. Then cap at
+-- MAX_FIELD_BYTES, walking back to drop any trailing incomplete UTF-8
+-- sequence the byte-cut may have split.
 local function scrub(s)
     if s == nil then return nil end
     s = tostring(s)
     s = s:gsub("\xE2\x80[\xAA-\xAE]", "")
     s = s:gsub("\xE2\x81[\xA6-\xA9]", "")
-    if #s > MAX_FIELD_BYTES then s = s:sub(1, MAX_FIELD_BYTES) end
+    s = s:gsub("[%z\1-\8\11\12\14-\31\127]", "")
+    if #s > MAX_FIELD_BYTES then
+        s = s:sub(1, MAX_FIELD_BYTES)
+        -- Walk back up to 3 bytes (max continuation length) to find
+        -- the most recent leader; if its declared length overruns the
+        -- truncated buffer, chop from the leader onward.
+        for i = #s, math.max(1, #s - 3), -1 do
+            local b = s:byte(i)
+            if b < 0x80 then break end           -- ASCII; prefix complete
+            if b >= 0xC0 then                    -- multi-byte leader
+                local expected = (b < 0xE0) and 2 or (b < 0xF0) and 3 or 4
+                if #s - i + 1 < expected then s = s:sub(1, i - 1) end
+                break
+            end
+            -- continuation byte; keep walking
+        end
+    end
     return s
 end
 
