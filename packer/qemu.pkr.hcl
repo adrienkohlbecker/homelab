@@ -159,15 +159,15 @@ locals {
       layout      = "mirror"
       extra_pools = "dozer tank_mouse"
     }
-    # box: 2-disk mirror rpool + apoc + dozer + tank_mouse. Synthetic
-    # superset that exercises every consumer-side pool layout. Only
-    # variant consumed by push CI (lab/pug images stay for the packer
-    # script regression and on-demand --machine lab/pug debug).
+    # box: 3-disk mirror rpool (matches lab) + apoc + dozer + tank_mouse.
+    # Synthetic superset that exercises every consumer-side pool layout.
+    # Only variant consumed by push CI (lab/pug images stay for the
+    # packer script regression and on-demand --machine lab/pug debug).
     box = {
       machine     = "box"
-      disks       = "/dev/vdb /dev/vdc"
-      extra_disks = "/dev/vdd /dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj /dev/vdk"
-      disk_sizes  = ["40G", "40G", "1G", "1G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
+      disks       = "/dev/vdb /dev/vdc /dev/vdd"
+      extra_disks = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj /dev/vdk /dev/vdl"
+      disk_sizes  = ["40G", "40G", "40G", "1G", "1G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
       layout      = "mirror"
       extra_pools = "apoc dozer tank_mouse"
     }
