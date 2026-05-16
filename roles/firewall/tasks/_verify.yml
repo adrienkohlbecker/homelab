@@ -61,11 +61,15 @@
 # python http.server INPUT probe; otherwise the port is arbitrary —
 # the FORWARD rule scopes by --ctstate DNAT, not by dport. Run busybox
 # httpd on 32400 inside the container to serve a tiny known-content
-# page the probe can grep for.
+# page the probe can grep for. --cap-add=NET_RAW restores the
+# capability podman 5.x dropped from default_capabilities — the
+# container-egress probe below uses busybox ping (SOCK_RAW), which
+# fails with "permission denied" without it.
 - name: _verify | Run busybox httpd test container with --publish on 32400
   command: >
     podman run -d --replace --name firewall_verify_httpd
       --publish 0.0.0.0:32400:32400
+      --cap-add=NET_RAW
       docker.io/library/busybox
       sh -c 'mkdir -p /www && echo firewall-verify-ok > /www/index.html && exec httpd -f -p 32400 -h /www'
   changed_when: true
@@ -377,9 +381,14 @@
 
 - name: _verify | INPUT — VRRP rule renders with iifname + protocol scope
   vars:
+    # `selectattr('comment', 'defined')` is load-bearing on ansible-core 2.19+:
+    # Jinja's `selectattr('comment', 'eq', X)` errors on items lacking the
+    # attribute entirely, and the unannotated rules in this table (e.g.
+    # established/related accept) don't carry a comment.
     nft_rules: "{{ (nft_ruleset_vrrp.stdout | from_json).nftables
                    | selectattr('rule', 'defined')
-                   | map(attribute='rule') | list }}"
+                   | map(attribute='rule')
+                   | selectattr('comment', 'defined') | list }}"
     vrrp_matches: "{{ (nft_rules | selectattr('comment', 'eq', 'keepalived (VRRP, LAN unicast)') | first).expr
                       | selectattr('match', 'defined')
                       | map(attribute='match') | list }}"
@@ -577,9 +586,12 @@
 # match was sensitive to spacing / attribute order).
 - name: _verify | Counter-checked drop rules each fired ≥ 1 time
   vars:
+    # See VRRP probe above for why `selectattr('comment', 'defined')` is
+    # required on ansible-core 2.19+.
     nft_rules: "{{ (counters_after_crafted.stdout | from_json).nftables
                    | selectattr('rule', 'defined')
-                   | map(attribute='rule') | list }}"
+                   | map(attribute='rule')
+                   | selectattr('comment', 'defined') | list }}"
     input_nonsyn_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'input non-syn drop') | first).expr
                            | selectattr('counter', 'defined') | first).counter.packets }}"
     forward_nonsyn_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'forward non-syn drop') | first).expr
