@@ -44,9 +44,16 @@
   changed_when: false
   become: true
 
-- name: _verify | OTLP-end-to-end | POST marked CSP report at fluent-bit
+# Probe through the production nginx path (csplogger subdomain) rather
+# than the direct fluent-bit loopback HTTP input: catches integration
+# regressions in roles/csplogger's proxy_pass that neither role's own
+# _verify would otherwise see (csplogger's _verify stubs fluent-bit, and
+# the loopback POST here would bypass nginx). Host header drives the
+# nginx server-name match, Origin/Content-Type satisfy csplogger's
+# allowlists in conf.d/.
+- name: _verify | OTLP-end-to-end | POST marked CSP report through nginx
   uri:
-    url: http://127.0.0.1:{{ service_ports.csp_ingest }}/
+    url: "https://localhost/log"
     method: POST
     body_format: json
     body:
@@ -56,6 +63,11 @@
         violated-directive: "script-src"
         effective-directive: "script-src-elem"
         original-policy: "default-src 'self'"
+    headers:
+      Host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
+      Origin: "https://verify.{{ domain }}"
+      Content-Type: application/csp-report
+    validate_certs: false
     status_code: 204
 
 # fluent-bit's install-time dry-run validates lua *load* (syntax / module
@@ -155,3 +167,136 @@
       - "row.resource_host_name == inventory_hostname"
       - "fluentbit_otlp_csp_marker in row.csp_blocked_uri"
     fail_msg: "CSP record landed in ClickHouse but with wrong shape: {{ row }}"
+
+# Coverage for the non-CSP filter paths: the CSP probe above exercises
+# flatten_csp.lua and the csp.* branch of otlp_shape.lua, but
+# level_from_message.lua's body-keyword scan and otlp_shape's svc.* /
+# nginx.* branches see no record. A regression that crashes the lua
+# only on systemd or tail records would otherwise land green here.
+
+- name: _verify | journald path | build per-run marker
+  set_fact:
+    fluentbit_otlp_journald_marker: "verify_journald_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+
+# systemd-run sets _SYSTEMD_UNIT on the resulting journal record, so
+# fluent-bit's systemd input expands Tag=svc.fluentbit_verify_journald
+# .service and otlp_shape strips .service to produce a predictable
+# service.name. The "ERROR <marker>" body fires level_from_message's
+# error-keyword arm (severity 17).
+- name: _verify | journald path | emit marked log via transient unit
+  command: >-
+    systemd-run --unit=fluentbit_verify_journald --no-block --quiet
+    /usr/bin/logger -t fluentbit_verify_journald
+    "ERROR {{ fluentbit_otlp_journald_marker }}"
+  changed_when: false
+  become: true
+
+# Filter on ServiceName so ansible's own task-output journal record
+# (SYSLOG_IDENTIFIER=ansible-ansible.legacy.command, scoped to the ssh
+# session unit) carrying the marker in its logged command line doesn't
+# satisfy the count.
+- name: _verify | journald path | wait for ClickHouse row matching marker
+  command:
+    cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
+    stdin: >-
+      SELECT count() FROM default.otel_logs
+      WHERE Body LIKE '%{{ fluentbit_otlp_journald_marker }}%'
+        AND ServiceName = 'fluentbit_verify_journald'
+  register: fluentbit_otlp_journald_count
+  changed_when: false
+  failed_when: false
+  retries: 30
+  delay: 2
+  until: fluentbit_otlp_journald_count.rc == 0 and (fluentbit_otlp_journald_count.stdout | trim | int) > 0
+  become: true
+
+- name: _verify | journald path | fetch row as JSON
+  command:
+    cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
+    stdin: >-
+      SELECT
+        Body,
+        SeverityText,
+        toUInt32(SeverityNumber) AS SeverityNumber,
+        ServiceName
+      FROM default.otel_logs
+      WHERE Body LIKE '%{{ fluentbit_otlp_journald_marker }}%'
+        AND ServiceName = 'fluentbit_verify_journald'
+      ORDER BY Timestamp DESC
+      LIMIT 1
+      FORMAT JSONEachRow
+  register: fluentbit_otlp_journald_row
+  changed_when: false
+  become: true
+
+- name: _verify | journald path | assert lua filter output
+  vars:
+    row: "{{ fluentbit_otlp_journald_row.stdout | from_json }}"
+  assert:
+    that:
+      - "row.SeverityText == 'error'"
+      - "row.SeverityNumber | int == 17"
+      - "row.ServiceName == 'fluentbit_verify_journald'"
+      - "fluentbit_otlp_journald_marker in row.Body"
+    fail_msg: "journald record landed with wrong shape: {{ row }}"
+
+# Nginx access tail: exercises the conf.j2 modify pre-stamp
+# (severity_text=info on nginx.access), level_from_message's
+# tag-gated lift of that field into metadata, AND otlp_shape's nginx.*
+# branch. Appended via tee -a so fluent-bit's tail input sees a fresh
+# line on the existing inode without rotation confusion.
+- name: _verify | nginx tail | build per-run marker
+  set_fact:
+    fluentbit_otlp_nginx_marker: "verify_nginx_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+
+- name: _verify | nginx tail | append marked line to access.log
+  command: tee -a /var/log/nginx/access.log
+  args:
+    stdin: "{{ fluentbit_otlp_nginx_marker }}\n"
+  changed_when: false
+  become: true
+
+- name: _verify | nginx tail | wait for ClickHouse row matching marker
+  command:
+    cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
+    stdin: >-
+      SELECT count() FROM default.otel_logs
+      WHERE Body LIKE '%{{ fluentbit_otlp_nginx_marker }}%'
+        AND ServiceName = 'nginx_access'
+  register: fluentbit_otlp_nginx_count
+  changed_when: false
+  failed_when: false
+  retries: 30
+  delay: 2
+  until: fluentbit_otlp_nginx_count.rc == 0 and (fluentbit_otlp_nginx_count.stdout | trim | int) > 0
+  become: true
+
+- name: _verify | nginx tail | fetch row as JSON
+  command:
+    cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
+    stdin: >-
+      SELECT
+        Body,
+        SeverityText,
+        toUInt32(SeverityNumber) AS SeverityNumber,
+        ServiceName
+      FROM default.otel_logs
+      WHERE Body LIKE '%{{ fluentbit_otlp_nginx_marker }}%'
+        AND ServiceName = 'nginx_access'
+      ORDER BY Timestamp DESC
+      LIMIT 1
+      FORMAT JSONEachRow
+  register: fluentbit_otlp_nginx_row
+  changed_when: false
+  become: true
+
+- name: _verify | nginx tail | assert lua filter output
+  vars:
+    row: "{{ fluentbit_otlp_nginx_row.stdout | from_json }}"
+  assert:
+    that:
+      - "row.SeverityText == 'info'"
+      - "row.SeverityNumber | int == 9"
+      - "row.ServiceName == 'nginx_access'"
+      - "fluentbit_otlp_nginx_marker in row.Body"
+    fail_msg: "nginx access record landed with wrong shape: {{ row }}"

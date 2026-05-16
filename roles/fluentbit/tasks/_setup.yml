@@ -19,3 +19,12 @@
 - name: _setup | Install hyperdx
   import_role:
     name: hyperdx
+
+# Install csplogger so the _verify CSP probe goes through the production
+# nginx path (Host header + Origin allowlist + Content-Type allowlist +
+# proxy_pass to fluent-bit's loopback HTTP input) rather than bypassing
+# nginx with a direct loopback POST. csplogger only depends on nginx
+# (already installed above) so the import is cheap.
+- name: _setup | Install csplogger
+  import_role:
+    name: csplogger
