@@ -71,6 +71,18 @@ ARG ACTIONS_RUNNER_SHA256_ARM64=f44255bd3e80160eb25f71bc83d06ea025f6908748807a58
 # install dir name actions/runner's own docs use). No bind-mount over
 # this path at runtime -- ephemeral runners get binaries from the
 # image, never the host.
+#
+# --no-same-owner / --no-same-permissions on the tar extract: the
+# actions/runner tarball includes files whose recorded uid/perms
+# can't be restored when extracting under a userns'd in-container
+# root (rootless podman build maps in-container 0 to the host
+# github_runner uid, and the kernel rejects the chown/chmod for
+# files outside that single-uid window). Without the flags, tar
+# bails with "./externals/node24: Cannot change mode to rwxr-xr-x:
+# Operation not permitted" -- a known actions/runner issue
+# (github.com/actions/runner/issues/2331). With them, tar
+# uses the umask defaults instead, which the runtime container
+# treats identically because in-container root owns everything.
 RUN arch=$(dpkg --print-architecture); \
     case "$arch" in \
       amd64) tar_arch=x64; sha=$ACTIONS_RUNNER_SHA256_X64;; \
@@ -81,7 +93,7 @@ RUN arch=$(dpkg --print-architecture); \
     curl -fsSL -o /tmp/runner.tar.gz \
       "https://github.com/actions/runner/releases/download/v${ACTIONS_RUNNER_VERSION}/actions-runner-linux-${tar_arch}-${ACTIONS_RUNNER_VERSION}.tar.gz"; \
     echo "${sha}  /tmp/runner.tar.gz" | sha256sum -c -; \
-    tar xzf /tmp/runner.tar.gz -C /actions-runner; \
+    tar xzf /tmp/runner.tar.gz -C /actions-runner --no-same-owner --no-same-permissions; \
     rm /tmp/runner.tar.gz
 
 ENV ACTIONS_RUNNER_VERSION=${ACTIONS_RUNNER_VERSION}
