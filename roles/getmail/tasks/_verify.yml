@@ -4,6 +4,9 @@
 # permissions regression on the maildir surface here. We can't safely
 # exercise the live IMAP fetch path from the harness (no Gmail creds in
 # test/, no outbound), so this is the state-only fallback per CLAUDE.md.
+# no_log: true because --dump echoes the parsed config to stdout
+# including `password = <gmail_app_password>`; the captured register is
+# still usable by downstream asserts in-memory.
 - name: _verify | Getmailrc parses and arg shape is valid
   command: >-
     getmail --dump
@@ -11,6 +14,7 @@
     --getmaildir /mnt/services/getmail
   register: _getmail_verify
   changed_when: false
+  no_log: true
 
 - name: _verify | Dump output mentions the configured IMAP server
   assert:
