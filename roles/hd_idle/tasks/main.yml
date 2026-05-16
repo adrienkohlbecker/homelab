@@ -39,6 +39,6 @@
     systemd_unit_args:
       src: hd-idle
       condition: "{{ not (ansible_check_mode and apt_install_hdidle.changed) }}"
-      restart: "{{ hd_idle_conf.changed }}"
+      restart: "{{ apt_install_hdidle.changed or hd_idle_conf.changed }}"
   tags:
     - hd_idle
