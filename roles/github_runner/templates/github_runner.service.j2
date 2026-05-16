@@ -137,10 +137,24 @@ SyslogIdentifier=%N
 #   Cheap when up-to-date (just a HEAD on the manifest, ~100ms);
 #   first-after-bump start eats the layer download once, then the
 #   layer cache satisfies subsequent starts until the next bump.
+# --security-opt seccomp=unconfined: podman 4.9.3 (ubuntu jammy host)
+#   ships a default seccomp profile that predates the kernel 6.6
+#   fchmodat2 syscall (number 452). Unknown syscalls return EPERM by
+#   default, which breaks GNU tar 1.35+ inside the container: tar uses
+#   fchmodat2 with AT_SYMLINK_NOFOLLOW for safe directory mode
+#   restoration during extract, and every actions/checkout download
+#   trips it -- "Cannot change mode to rwxrwxr-x: Operation not
+#   permitted" on every dir, non-zero exit, every job fails. Unconfining
+#   seccomp restores the chmod path; the threat model is unchanged
+#   because the +0 uidmap demotion already caps in-container compromise
+#   at unprivileged host github_runner. A narrower fix would be a
+#   custom seccomp.json that just adds fchmodat2 to the allowlist;
+#   acceptable for homelab CI to skip that and unconfine wholesale.
 ExecStartPre=/bin/rm -f %t/%N/%n.ctr-id
 ExecStart=/usr/bin/podman run \
   --cidfile=%t/%N/%n.ctr-id \
   --cgroups=split \
+  --security-opt seccomp=unconfined \
   --sdnotify=healthy \
   --detach \
   --replace \
