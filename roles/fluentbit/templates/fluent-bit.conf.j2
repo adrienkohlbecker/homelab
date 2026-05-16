@@ -144,6 +144,7 @@
 [FILTER]
     Name              modify
     Match             nginx.access
+    Condition         Key_does_not_exist severity_text
     Set               severity_text info
     Set               severity_number 9
 
