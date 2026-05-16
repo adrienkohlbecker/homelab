@@ -35,14 +35,14 @@
   tags:
     - gitea
 
-- name: Create configuration directory
+- name: Create gitea data directories
   when: not (ansible_check_mode and gitea_user.changed)
   file:
     dest: "{{ item }}"
     state: directory
     owner: git
     group: git
-    mode: "0755"
+    mode: "0750"
   become: true
   loop:
     - /mnt/services/gitea
@@ -53,14 +53,17 @@
   tags:
     - gitea
 
-- name: Create configuration directory
+# root-owned so non-git uids can't list, group git so daemon can read
+# app.ini. Stricter dir mode contains app.ini backup files left by
+# `template: backup:` (they may not inherit 0600).
+- name: Create /etc/gitea
   when: not (ansible_check_mode and gitea_user.changed)
   file:
     dest: /etc/gitea
     state: directory
-    owner: git
+    owner: root
     group: git
-    mode: "0755"
+    mode: "0750"
   become: true
   tags:
     - gitea
