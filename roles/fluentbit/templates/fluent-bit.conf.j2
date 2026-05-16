@@ -227,7 +227,7 @@
 [OUTPUT]
     Name              opentelemetry
     Match             *
-{% if inventory_hostname in ['box', 'lab'] %}
+{% if fluentbit_otlp_local %}
     Host              127.0.0.1
     Port              {{ service_ports.hyperdx_otlp_http }}
 {% else %}
