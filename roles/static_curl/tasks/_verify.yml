@@ -15,8 +15,8 @@
 # executable" (older glibc); a dynamically-linked binary always lists
 # each library with a `=>` arrow. The negative check on `=>` covers
 # both glibc variants and catches a glibc-named upstream release that
-# would silently pass --version but break the moment openobserve
-# invoked it inside gcr.io/distroless/cc-debian13. ldd ships in
+# would silently pass --version but break the moment any consumer
+# invoked it inside a distroless image. ldd ships in
 # libc-bin (always present on Ubuntu); `file` is not in the base
 # image. failed_when: false because ldd of a static binary on some
 # glibc versions exits non-zero.
