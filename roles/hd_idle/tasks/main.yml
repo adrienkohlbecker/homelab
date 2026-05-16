@@ -1,6 +1,7 @@
 - name: Install hd-idle
   apt:
     pkg: hd-idle
+    policy_rc_d: 101
     cache_valid_time: 3600
   register: apt_install_hdidle
   become: true
