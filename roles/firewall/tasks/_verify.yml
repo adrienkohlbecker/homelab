@@ -84,6 +84,8 @@
     - 443    # unscoped INPUT-allow (HTTPS port; serves plain HTTP for the probe)
     - 445    # Samba probe target (-s site_subnets.home / wireguard_subnet)
     - 3493   # nut probe target (-s site_subnets.home / wireguard_subnet)
+    - "{{ service_ports.dnscrypt_proxy }}"  # dnscrypt-proxy TCP fallback (-s podman_default_network)
+    - 51413  # transmission BT peer port (-i WAN; negative probe only — no WAN hostfwd)
   changed_when: true
   become: true
 
@@ -101,6 +103,7 @@
     - 5353   # mDNS           (-s site_subnets.home)
     - 51820  # wireguard      (-i WAN — only used to verify negative case from wg0)
     - 60000  # mosh           (-s site_subnets.home / wireguard_subnet, port within 60000:61000)
+    - 137    # NetBIOS nmbd   (-s site_subnets.home / wireguard_subnet)
   changed_when: true
   become: true
 
@@ -140,7 +143,7 @@
 
 - name: _verify | Wait for TCP listeners
   wait_for: { host: 127.0.0.1, port: "{{ item }}", timeout: 10 }
-  loop: [80, 443, 445, 3493]
+  loop: [80, 443, 445, 3493, "{{ service_ports.dnscrypt_proxy }}", 51413]
   become: true
 
 - name: _verify | Wait for httpd container
@@ -185,6 +188,18 @@
   register: probe_wg_oos
   changed_when: false
   failed_when: probe_wg_oos.rc == 0
+  become: true
+
+# Transmission BT peer port is WAN-only (iif=$WAN_IFACE). Positive
+# WAN ingress would need a slirp hostfwd extension to forward another
+# pair of test ports — out of scope here. Probe the iif scope by
+# confirming wg0 ingress is rejected, which catches a regression that
+# drops the iif scope and exposes 51413 to wg peers.
+- name: _verify | INPUT — transmission (51413/tcp) rejected on wg0 ingress (iif scope)
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:51413/
+  register: probe_transmission_iif
+  changed_when: false
+  failed_when: probe_transmission_iif.rc == 0
   become: true
 
 # Mosh is scoped to home LAN + wireguard. Probe positive from each.
@@ -253,6 +268,27 @@
   failed_when: probe_nut_oos.rc == 0
   become: true
 
+# Separate rule: containers on any podman bridge can reach nut (HA's
+# NUT integration connects from its bridge). Sourced from
+# probe_podman_pool which sits in podman_bridge_pool — matches the
+# `ip saddr $PODMAN_POOL tcp dport 3493 accept` rule.
+- name: _verify | INPUT — nut (3493/tcp) reachable from podman_bridge_pool source
+  command: >
+    ip netns exec extns curl --interface {{ probe_podman_pool }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:3493/
+  changed_when: false
+  become: true
+
+# NetBIOS is scoped to lan_admin_ifaces + lan_admin_sources (same shape
+# as Samba). Probe positive from a home-LAN source — wg-source case
+# is structurally identical and covered by the Samba/nut/mosh probes.
+- name: _verify | INPUT — NetBIOS (137/udp) reachable from home LAN source
+  shell: |
+    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_home }} 10.99.0.1 137 | grep -q pong
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
 # Source-scoped UDP: container DNS (5053/5333) and home-LAN mDNS (5353).
 # `nc -u -w 2 -s SRC` source-binds; piping through `grep -q pong`
 # turns the round-trip into a clean exit code.
@@ -269,6 +305,18 @@
   register: probe_dns_oos
   changed_when: false
   failed_when: probe_dns_oos.rc == 0
+  become: true
+
+# Same rule accepts TCP alongside UDP on the dnscrypt port — pihole
+# falls back to TCP opportunistically when a UDP response would be
+# truncated. Probe the TCP path to lock in the `meta l4proto { tcp,
+# udp }` scope; a regression to UDP-only would silently bring back
+# the ~2 TCP drops/day the rule was added to fix.
+- name: _verify | INPUT — dnscrypt (5053/tcp) reachable from container source
+  command: >
+    ip netns exec extns curl --interface {{ probe_podman }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.dnscrypt_proxy }}/
+  changed_when: false
   become: true
 
 - name: _verify | INPUT — aardvark-dns (5333/udp) reachable from default-bridge source
