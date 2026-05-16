@@ -130,7 +130,7 @@
 - name: _verify | Bind socat UDP echo listeners
   command: >
     systemd-run --unit firewall_verify_udp_{{ item }} --remain-after-exit
-      socat UDP-RECVFROM:{{ item }},fork SYSTEM:'echo pong'
+      socat UDP-RECVFROM:{{ item }},fork EXEC:'echo pong'
   loop:
     - "{{ service_ports.dnscrypt_proxy }}"  # dnscrypt-proxy (-s podman_default_network)
     - 5333   # aardvark-dns   (-s podman_default_network)
