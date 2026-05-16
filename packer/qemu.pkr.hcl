@@ -80,8 +80,12 @@ locals {
       qemu_binary        = "qemu-system-x86_64"
       machine_type       = "q35"
       accelerator        = "kvm"
-      efi_firmware_code  = "/usr/share/OVMF/OVMF_CODE.fd"
-      efi_firmware_vars  = "/usr/share/OVMF/OVMF_VARS.fd"
+      # 4M variants because Ubuntu 24.04 dropped the legacy non-4M
+      # OVMF_{CODE,VARS}.fd from the `ovmf` package; jammy ships both,
+      # noble only the 4M ones. test/arch.py:uefi_code_candidates carries
+      # the same fallback list.
+      efi_firmware_code  = "/usr/share/OVMF/OVMF_CODE_4M.fd"
+      efi_firmware_vars  = "/usr/share/OVMF/OVMF_VARS_4M.fd"
       image_format       = "raw"
       qemuargs           = []
       cloud_image_suffix = "amd64"
