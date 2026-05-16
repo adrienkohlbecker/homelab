@@ -1,13 +1,12 @@
 - name: install | Check if gitea is installed
-  command: /usr/local/bin/gitea -version
+  command: /usr/local/bin/gitea --version
   register: gitea_check
   failed_when: false
   changed_when: false
   check_mode: false
-  become: true
 
 - name: install | Install gitea if needed
-  when: gitea_version not in gitea_check.stderr
+  when: gitea_check.rc != 0 or gitea_version not in (gitea_check.stdout | default(''))
   get_url:
     url: "{{ gitea_release[ansible_architecture].url }}"
     checksum: "sha256:{{ gitea_release[ansible_architecture].sha256 }}"
