@@ -38,6 +38,11 @@
     that:
       - _verify_normal.images == ["docker.io/library/alpine:3.19"]
       - _verify_normal.unresolved == []
+      # No User= declared → systemd's bus reports the empty string. The
+      # service.yml pre-pull task treats "" and "root" identically (root-
+      # scoped pull into /var/lib/containers/storage), so the empty-string
+      # case must round-trip cleanly.
+      - _verify_normal.user == ""
 
 - name: _verify | replace with a non-podman unit
   copy:
@@ -112,6 +117,48 @@
       - _verify_unresolvable.failed
       - "'no resolvable image' in _verify_unresolvable.msg"
       - _verify_unresolvable.argvs | length == 1
+
+# User= round-trip: a unit that declares User=<x> must surface that name
+# via the module's `user` return so service.yml can route the pre-pull
+# into the right podman store. nobody exists on every Ubuntu so the
+# fixture installs cleanly without inventing a system user.
+- name: _verify | replace with a unit that declares User=nobody
+  copy:
+    dest: /etc/systemd/system/extract_podman_image_test.service
+    content: |
+      [Unit]
+      Description=extract_podman_image_test
+      [Service]
+      Type=oneshot
+      User=nobody
+      ExecStart=/usr/bin/podman run --rm docker.io/library/alpine:3.19 true
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _verify | reload systemd
+  systemd:
+    daemon_reload: true
+  become: true
+
+- name: _verify | force load
+  command: systemctl show extract_podman_image_test.service
+  changed_when: false
+  become: true
+
+- name: _verify | extract from User=nobody unit
+  extract_podman_image:
+    name: extract_podman_image_test
+  register: _verify_user
+  become: true
+
+- name: _verify | User= populated unit surfaces the username
+  assert:
+    that:
+      - _verify_user.images == ["docker.io/library/alpine:3.19"]
+      - _verify_user.user == "nobody"
+      - _verify_user.unresolved == []
 
 - name: _verify | cleanup test unit file
   file:

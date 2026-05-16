@@ -8,11 +8,21 @@ from `podman run --help`) and returns the first positional, which is the
 image. Each .service file remains the single source of truth for its image;
 playbooks call this module by unit name and never restate the image.
 
+Also returns the unit's `User=` property so the caller can pre-pull into
+the right podman store: system units that run as root pull into
+/var/lib/containers/storage/, system units with a User= override pull
+into /var/lib/containers/rootless/<user>/ — and the wrong store at
+pre-pull time is invisible until systemctl start busts TimeoutStartSec
+on a cold image fetch from inside the unit's User= shell.
+
 Args:
     name: Unit name (with or without the `.service` suffix).
 
 Returns:
     images: Sorted list of distinct image refs.
+    user:   The unit's User= directive; empty string when unset (systemd
+            default of root). Callers should treat "" and "root" as the
+            same case.
 """
 
 import json
@@ -47,6 +57,9 @@ images:
   description: Distinct podman image refs, one per `podman run` invocation.
   type: list
   elements: str
+user:
+  description: The unit's User= directive; empty string when unset (root).
+  type: str
 """
 
 _EXEC_PROPS = ("ExecStart", "ExecStartPre", "ExecStartPost")
@@ -152,8 +165,17 @@ def _get_property(unit_path, prop):
         return None
 
 
+def _get_user(unit_path):
+    """Return the unit's User= as a string; "" if unset (systemd default of root)."""
+    obj = _get_property(unit_path, "User")
+    if not obj:
+        return ""
+    data = obj.get("data")
+    return data if isinstance(data, str) else ""
+
+
 def extract_images(name):
-    """Return (images, unresolved). `unresolved` lists podman-run argvs we
+    """Return (images, user, unresolved). `unresolved` lists podman-run argvs we
     saw but couldn't extract an image from — typically a parser drift."""
     if not name.endswith(".service"):
         name = name + ".service"
@@ -177,7 +199,7 @@ def extract_images(name):
                 images.add(image)
             else:
                 unresolved.append(" ".join(str(a) for a in argv))
-    return sorted(images), unresolved
+    return sorted(images), _get_user(unit_path), unresolved
 
 
 def main():
@@ -185,7 +207,7 @@ def main():
         argument_spec=dict(name=dict(type="str", required=True)),
         supports_check_mode=True,
     )
-    images, unresolved = extract_images(module.params["name"])
+    images, user, unresolved = extract_images(module.params["name"])
     # If we saw `podman run` argvs but couldn't pull an image out of any of
     # them, the schema-aware walker has drifted from podman's flag set.
     # Fail the play rather than silently skipping pre-pull and falling back
@@ -201,7 +223,7 @@ def main():
             ),
             argvs=unresolved,
         )
-    module.exit_json(changed=False, images=images, unresolved=unresolved)
+    module.exit_json(changed=False, images=images, user=user, unresolved=unresolved)
 
 
 if __name__ == "__main__":
