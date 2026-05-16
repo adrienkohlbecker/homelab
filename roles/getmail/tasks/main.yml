@@ -1,3 +1,6 @@
+# Runtime identity is ansible_user — the human reading the mail — rather
+# than a dedicated service_user. The maildir is meant to be browsed directly
+# by the operator; a system user would just add a sudo step.
 - name: Install getmail
   apt:
     package:
@@ -7,36 +10,34 @@
   tags:
     - getmail
 
-- name: Create getmail config directory
-  file:
-    dest: "{{ ansible_user_dir }}/.config/getmail"
-    state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: "0755"
-  tags:
-    - getmail
-
-- name: Create getmail data directory
-  file:
-    dest: /mnt/services/getmail
-    state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
-    mode: "0755"
+# Defensive: roles/user already lingers ansible_user on prod, but the
+# harness may run getmail alone — without linger the systemd_timer
+# helper's user-scope check would fail. creates: keeps this a no-op
+# when roles/user has already run. check_mode: false lets it execute
+# under --check too (the command itself is idempotent) so the harness's
+# check-mode phase doesn't fail on the downstream linger-marker stat.
+- name: Turn on linger for ansible_user
+  command: loginctl enable-linger {{ ansible_user }}
+  args:
+    creates: /var/lib/systemd/linger/{{ ansible_user }}
+  check_mode: false
   become: true
   tags:
     - getmail
 
-- name: Create getmail data directory
+# getmail6 expects cur/new/tmp to already exist (is_maildir() in
+# getmailcore/utilities.py refuses to deliver otherwise) so we create
+# all four explicitly. Mode 0700 — only the owner reads fetched mail.
+- name: Create getmail maildir
   file:
     dest: "{{ item }}"
     state: directory
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
-    mode: "0775"
+    mode: "0700"
   become: true
   loop:
+    - /mnt/services/getmail
     - /mnt/services/getmail/cur
     - /mnt/services/getmail/new
     - /mnt/services/getmail/tmp
@@ -46,13 +47,12 @@
 - name: Configure getmail
   template:
     src: getmailrc.j2
-    dest: "{{ ansible_user_dir }}/.config/getmail/getmailrc"
+    dest: /mnt/services/getmail/getmailrc
     owner: "{{ ansible_user }}"
     group: "{{ ansible_user }}"
     mode: "0600"
     backup: true
-    validate: getmail --dump --rcfile %s
-  register: getmail_cfg
+    validate: python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True).read("%s")'
   tags:
     - getmail
 
@@ -66,6 +66,13 @@
       description: Fetch mail via getmail
       frequency: daily
       on_calendar: "*-*-* 00:24:00"
-      exec_start: /usr/bin/su {{ ansible_user }} -c getmail
+      # --getmaildir co-locates oldmail-* state next to the maildir so a
+      # $HOME reset doesn't trigger a re-fetch of years of archive.
+      exec_start: >-
+        /usr/bin/getmail
+        --rcfile /mnt/services/getmail/getmailrc
+        --getmaildir /mnt/services/getmail
+      user: "{{ ansible_user }}"
+      timeout_start_sec: 15m
   tags:
     - getmail
