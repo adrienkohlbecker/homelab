@@ -30,9 +30,12 @@ aspirational — cells would serialize at 1 anyway.
 Replace the per-repo host-process model with a templated podman-based
 unit. Each container runs `actions/runner/run.sh` indefinitely.
 
-- One templated unit `github_runner@.service` (per repo: e.g.
-  `github_runner_homelab@.service`). Instance name = label suffix
-  (e.g. `vm1`, `vm2`, `gen1`).
+- One templated unit `github_runner@.service`. Instance name encodes
+  both repo and suffix: `github_runner@homelab_vm1.service`,
+  `github_runner@compta_gen1.service`. The unit doesn't try to parse
+  `%i` (ambiguous under the underscore convention); instead each
+  instance has a tiny `EnvironmentFile=/etc/default/github_runner@%i`
+  that declares `REPO_URL` / `RUNNER_NAME` / `RUNNER_LABELS`.
 - Per-host instance map drives which instances run with which labels.
   Example for lab:
 
@@ -50,30 +53,34 @@ unit. Each container runs `actions/runner/run.sh` indefinitely.
   ```
 
 - Each instance gets its own state volume + workdir bind-mount:
-  - `/mnt/services/github_runner/<repo>/<instance>/` — runner state
+  - `/mnt/services/github_runner/<repo>_<suffix>/` — runner state
     (`.runner`, `.credentials`, `_diag/`), persisted across container
     restarts so registration survives reboots / image bumps.
-  - `/mnt/scratch/github_runner/workdir-<repo>-<instance>/` —
+  - `/mnt/scratch/github_runner/workdir_<repo>_<suffix>/` —
     actions/runner work dir (job checkouts).
 - Runner image: thin custom image at
   `nexus.lab.fahm.fr/homelab/runner:<actions-runner-version>`. Built by
   a new `runner-image.yml` workflow (or extension of `ci-image.yml`),
   contains: actions/runner binary, `podman` CLI (for DooD ci-image
   builds), `bash`, `curl`, `git`, ca-certs.
-- Container args (skeleton):
+- Container args (skeleton — generated from the template + env file):
 
   ```
-  podman run -d --name github_runner_<repo>_<instance> \
+  podman run --rm --name github_runner_%i \
     --userns keep-id \
     --network host \
     --volume /run/user/<uid>/podman/podman.sock:/var/run/docker.sock \
-    --volume /mnt/services/github_runner/<repo>/<instance>:/runner:rw \
-    --volume /mnt/scratch/github_runner/workdir-<repo>-<instance>:/work:rw \
-    --env RUNNER_NAME=<host>_<repo>_<instance> \
-    --env RUNNER_LABELS=<labels> \
-    --env REPO_URL=https://github.com/<owner>/<repo> \
-    nexus.lab.fahm.fr/homelab/runner:<ver>
+    --volume /mnt/services/github_runner/%i:/runner:rw \
+    --volume /mnt/scratch/github_runner/workdir_%i:/work:rw \
+    --env-file /etc/default/github_runner@%i \
+    --env RUNNER_TOKEN=$(cat /run/secrets/github_runner_token_%i) \
+    nexus.lab.fahm.fr/homelab/runner:latest
   ```
+
+  `RUNNER_TOKEN` comes via a podman secret rotated per ansible run
+  (1h-valid registration token; only consumed on first start when
+  `.runner` is absent). Static env (`REPO_URL`, `RUNNER_NAME`,
+  `RUNNER_LABELS`) lives in the EnvironmentFile.
 
 - Entrypoint script (in the image): if `/runner/.runner` missing, call
   `config.sh --token <reg-token>` (token passed via env at first start,
@@ -83,7 +90,7 @@ unit. Each container runs `actions/runner/run.sh` indefinitely.
 
 Unchanged from today's host-process model in spirit:
 
-- Role checks `/mnt/services/github_runner/<repo>/<instance>/.runner`.
+- Role checks `/mnt/services/github_runner/<repo>_<suffix>/.runner`.
   If missing, runs `gh api -X POST
   /repos/<owner>/<repo>/actions/runners/registration-token --jq .token`
   via `delegate_to: localhost` (operator's gh CLI auth — same source
@@ -97,7 +104,7 @@ Unchanged from today's host-process model in spirit:
 
 - Per-repo tarball extract + version sentinel (now in the runner image).
 - `_register.yml`'s `unarchive` step + the 150 MB×N actions/runner
-  trees on `/mnt/services/github_runner/<repo>/`.
+  trees on `/mnt/services/github_runner/<repo>_<suffix>/`.
 - `--group-add 1` + `/var/run/docker.sock` symlink dance at the host
   level — replaced by bind-mounting github_runner's rootless podman
   socket directly into each runner container.
@@ -208,7 +215,7 @@ Each step is independently testable; merge sequentially.
   bound socket. Need to verify nexus push + sha tagging still works
   through DooD (likely fine).
 - **State persistence across image bumps**: runner state in
-  `/mnt/services/github_runner/<repo>/<instance>/` persists across
+  `/mnt/services/github_runner/<repo>_<suffix>/` persists across
   container restarts. An actions/runner version bump (image bump)
   *might* require re-running `config.sh` if the on-disk format changes
   between versions. Mitigation: image entrypoint reconciles —
