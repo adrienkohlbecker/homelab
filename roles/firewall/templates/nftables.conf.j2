@@ -33,6 +33,18 @@ table ip homelab {
         elements = { $HOME_LAN, $WG_SUBNET }
     }
 
+    # Ingress ifaces for admin INPUT services + FORWARD reach into
+    # published containers. Pinning iif keeps an attacker on a future
+    # LAN bridge / guest VLAN / mgmt net from speculatively probing
+    # these services even if they can spoof a saddr in lan_admin_sources;
+    # rp_filter=1 covers most of this today, but the iif scope is
+    # defence-in-depth (see the rp_filter Someday in CLAUDE.md).
+    set lan_admin_ifaces {
+        type ifname
+        flags constant
+        elements = { $WAN_IFACE, "wg0" }
+    }
+
     ##################################################
     #                   INPUT CHAIN                  #
     ##################################################
@@ -68,7 +80,7 @@ table ip homelab {
         # UDP-only originally and saw ~2 TCP drops/day from pihole.
         ip saddr $PODMAN_DEFAULT meta l4proto { tcp, udp } th dport {{ service_ports.dnscrypt_proxy }} accept comment "dnscrypt-proxy (default bridge only, TCP+UDP)"
         ip saddr { $PODMAN_DEFAULT, $PODMAN_POOL } udp dport 5333 accept comment "aardvark-dns (post-DNAT from gateway:53, all podman bridges)"
-        ip saddr $HOME_LAN udp dport 5353 accept comment "mDNS (home LAN)"
+        iifname $WAN_IFACE ip saddr $HOME_LAN udp dport 5353 accept comment "mDNS (home LAN)"
 
         # Wireguard ingress only on the WAN iface. Pinning iif means
         # an attacker on a future LAN bridge can't speculatively send
@@ -86,12 +98,12 @@ table ip homelab {
 
         # Mosh sessions originate from admin clients on the home LAN
         # or via wireguard, never from raw WAN.
-        ip saddr @lan_admin_sources udp dport 60000-61000 accept comment "Mosh"
+        iifname @lan_admin_ifaces ip saddr @lan_admin_sources udp dport 60000-61000 accept comment "Mosh"
 
         # TCP allows. SSH/HTTP/HTTPS are wide-open (admin + public);
         # Samba and nut are admin services scoped via the set.
         tcp dport { 22, 80, 443 } accept comment "SSH/HTTP/HTTPS"
-        ip saddr @lan_admin_sources tcp dport { 445, 3493 } accept comment "Samba/nut (admin)"
+        iifname @lan_admin_ifaces ip saddr @lan_admin_sources tcp dport { 445, 3493 } accept comment "Samba/nut (admin)"
 
         # NetBIOS for nmbd (137 = name service, 138 = datagram). Same
         # admin scope as Samba — these are the legacy SMB browsing
@@ -100,7 +112,7 @@ table ip homelab {
         # back through INPUT via broadcast loopback on both eth0
         # (10.123.0.2) and wg0 (10.123.64.2); the rest is real SMB
         # clients (MBP, pug) doing name resolution.
-        ip saddr @lan_admin_sources udp dport { 137, 138 } accept comment "NetBIOS (nmbd, admin)"
+        iifname @lan_admin_ifaces ip saddr @lan_admin_sources udp dport { 137, 138 } accept comment "NetBIOS (nmbd, admin)"
 
         # Container access to NUT: homeassistant's NUT integration
         # connects from its podman bridge IP (currently the mosquitto
@@ -221,7 +233,7 @@ table ip homelab {
         # Tightening would need an oifname allowlist of bridges that
         # should be cross-reachable, or a dport blacklist for sensitive
         # services; not implemented (home-environment trade).
-        iifname { $WAN_IFACE, "wg0" } oifname "podman*" \
+        iifname @lan_admin_ifaces oifname "podman*" \
             ct status dnat accept comment "Reach containers (LAN + wireguard ingress)"
         iifname "podman*" oifname "podman*" ct status dnat \
             accept comment "container → VIP → container (cross- or same-bridge DNAT)"
