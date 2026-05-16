@@ -1,3 +1,26 @@
+# default_interface (group_vars/all.yml) is sourced from
+# ansible_default_ipv4.interface. If gather-facts picks a bridge or
+# tunnel (a libvirt/podman bridge briefly owning the default route, or
+# wg0 with policy routing), every `iifname $WAN_IFACE` rule attaches
+# to the wrong iface — wg/transmission iif scope misfires AND traffic
+# arriving on the real WAN no longer matches the rules, falling back
+# to admin services scoped only by saddr. rp_filter=1 is the actual
+# mitigation in that scenario; assert here so the failure mode is
+# loud rather than silent.
+- name: Assert default_interface is plausible (not a bridge/tunnel)
+  assert:
+    that:
+      - ansible_default_ipv4.interface is defined
+      - ansible_default_ipv4.interface is not match("^(wg|podman|virbr|docker|br-|veth)")
+    fail_msg: >-
+      ansible_default_ipv4.interface resolved to
+      '{{ ansible_default_ipv4.interface }}', which looks like a
+      bridge/tunnel — the firewall's iifname-scoped rules would
+      attach to the wrong iface. Pin wan_interface in host_vars if
+      gather-facts is picking the wrong default-route owner.
+  tags:
+    - firewall
+
 - name: Install nftables
   apt:
     pkg:
