@@ -442,9 +442,12 @@
   failed_when: firewall_verify_container_to_vip.rc != 0 or 'firewall-verify-ok' not in firewall_verify_container_to_vip.stdout
   become: true
 
-# Host-egress MASQUERADE — exercises -s site_subnets.home (or home_subnet
-# on prod) -j MASQUERADE for the host's own outbound traffic.
-- name: _verify | OUTPUT + MASQUERADE — outbound HTTPS from VM works
+# Host egress smoke check — nftables has no `output` chain registered
+# (default policy=accept) and no host-source MASQUERADE rule, so this
+# just confirms egress isn't disrupted by the sysctls or by something
+# else in our table. The container-source and wg-source MASQUERADE
+# rules are exercised by the two POSTROUTING probes below.
+- name: _verify | Egress — outbound HTTPS from host works
   uri:
     url: https://example.com/
     timeout: 10
