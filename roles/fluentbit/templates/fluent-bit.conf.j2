@@ -29,7 +29,7 @@
 # the legacy vector role had to tail individually).
 [INPUT]
     Name              systemd
-    Tag               journal.*
+    Tag               svc.*
     Path              /var/log/journal
     DB                /var/lib/fluent-bit/journal.db
     Read_From_Tail    on
@@ -66,21 +66,11 @@
     Refresh_Interval  5
     Skip_Long_Lines   on
 
-# Partition journal records by service before the multiline filter
-# runs. The multiline filter buffers per-tag, so without retagging, a
-# paperless INFO line arriving mid-flush inside a homeassistant python
-# traceback would get appended to it. Records without SYSLOG_IDENTIFIER
-# (rare) keep the original journal.* tag and pass through unchanged.
-[FILTER]
-    Name              rewrite_tag
-    Match             journal.*
-    Rule              $SYSLOG_IDENTIFIER ^(.+)$ svc.$1 false
-    Emitter_Name      re_emit_svc
-
 # Join python / go / java / ruby tracebacks into a single record per
-# stack so OpenObserve doesn't scatter the frames across 10+ rows.
-# Per-service tag partitioning above is what keeps the buffer from
-# cross-contaminating between concurrent log streams. flush_ms is the
+# stack so HyperDX doesn't scatter the frames across 10+ rows. Records
+# arrive pre-partitioned by systemd unit (the input's Tag svc.* wildcard
+# expands _SYSTEMD_UNIT per record), so the multiline buffer can't
+# cross-contaminate between concurrent log streams. flush_ms is the
 # worst-case added latency for non-continuation lines (default 4s ->
 # 1s; tracebacks are emitted contiguously, no need to wait long).
 #
