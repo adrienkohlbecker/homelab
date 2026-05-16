@@ -16,6 +16,16 @@ define PODMAN_POOL = {{ podman_bridge_pool }}
 # untouched. This is the killer simplification over iptables-restore,
 # which flushed every chain in every table the file referenced.
 #
+# Family is `inet` (dual-stack) even though IPv6 is currently
+# disabled at the stack layer (files/sysctl-hardening.conf). The
+# `ip saddr` / `ip protocol` / `icmp type` matches below are
+# IPv4-only by construction; an `inet` family hook means that if a
+# future operator re-enables IPv6 (ISP transition, dual-stack
+# service, etc.) the v6 packets enter THIS table and fall through to
+# the policy-drop catch-all rather than silently bypassing our
+# filter. v6 first-class rules would land here via `ip6 saddr` /
+# `icmpv6 type` once they're wanted.
+#
 # Idempotent idiom: `add table` is a no-op if the table exists,
 # `delete table` then removes the whole table (sets, chains, maps), and
 # `table { ... }` adds it fresh. A previous form used `flush table`
@@ -26,9 +36,9 @@ define PODMAN_POOL = {{ podman_bridge_pool }}
 # role-apply time `wg0` doesn't exist, at re-apply time the netns
 # veth has created it). All three commands batch through netlink
 # atomically under `nft -f`.
-add table ip homelab
-delete table ip homelab
-table ip homelab {
+add table inet homelab
+delete table inet homelab
+table inet homelab {
 
     # Named counters declared at table scope. Rules below reference
     # them via `counter name "X"` instead of inlining anonymous
