@@ -1,15 +1,3 @@
-# Runner container image, built by .github/workflows/runner-image.yml
-# and published to nexus. The actions/runner binary + version pin lives
-# inside the image (runner/Dockerfile's ACTIONS_RUNNER_VERSION arg);
-# bumping it means re-running the runner-image workflow and then this
-# role to restart the containers.
-github_runner_image: "nexus.lab.fahm.fr/homelab/runner:latest"
-
-# GitHub owner under which the repos listed in github_runner_instances
-# live. Personal-account constraint -- no org, so all repos share one
-# owner.
-github_runner_owner: "adrienkohlbecker"
-
 # Per-host instance list lives in host_vars/<host>.yml. Each entry:
 #   - { repo: <repo-name>, suffix: <unique-suffix>, labels: "..." }
 # Instance identity = <repo>_<suffix>; that's the systemd template

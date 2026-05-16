@@ -32,14 +32,18 @@ PartOf=zfs_autosnapshot.target
 {% endif %}
 
 [Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 RestartSec=5
+Delegate=yes
 # Cold-start has to fit: image pull (first time), container create, the
 # entrypoint's rsync from /runner-base to /runner, and on first start
 # also the actions/runner config.sh registration call. 300s covers the
 # slowest of these (network-bound pull) with headroom.
 TimeoutStartSec=300
 TimeoutStopSec=60
+Type=notify
+NotifyAccess=all
 SyslogIdentifier=%N
 
 User=github_runner
@@ -51,24 +55,8 @@ Group=github_runner
 # than a generic start-timeout.
 ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S /run/user/{{ github_runner_user.uid }}/podman/podman.sock ] && exit 0; sleep 1; done; echo "podman.sock not present after 60s" >&2; exit 1'
 
-# Pre-pull the runner image into github_runner's rootless store so the
-# container start that follows doesn't race against an image fetch under
-# TimeoutStartSec pressure. systemd_unit/service.yml's helper also
-# pre-pulls (into root's store) before invoking us; this second pull is
-# the one that matters for the rootless container.
-ExecStartPre=/usr/bin/podman pull --quiet {{ github_runner_image }}
-
-# Best-effort cleanup of any prior container with the same name from
-# the last unit lifecycle. --ignore swallows the no-such-container case
-# on cold start; --time=10 gives a graceful stop window before the kill.
-ExecStartPre=-/usr/bin/podman stop --time=10 --ignore github_runner_%i
-ExecStartPre=-/usr/bin/podman rm --force --ignore github_runner_%i
-
-# --rm: reap on exit so the next start has no stale container.
 # --userns keep-id: in-container uid 0 maps to host github_runner, so
 #   the bind-mounted /runner state dir is writable under the namespace.
-# --network host: actions/runner reaches GitHub directly + inherits the
-#   host's DNS; no per-container CNI to maintain.
 # --volume podman.sock: DooD -- actions/runner's docker-CLI shell-outs
 #   (for workflows with `container:` blocks) hit the host's rootless
 #   podman, NOT a daemon inside the runner container.
@@ -82,19 +70,45 @@ ExecStartPre=-/usr/bin/podman rm --force --ignore github_runner_%i
 # --secret RUNNER_TOKEN: short-lived registration token (1h TTL). Only
 #   consumed on first start when /runner/.runner is absent; subsequent
 #   starts ignore it and use the persisted .credentials.
+# --health-cmd / startup-cmd: actions/runner exposes no HTTP probe, so
+#   we go with CLAUDE.md "Container Healthchecks" option 3 (service-
+#   native CLI): pgrep the Runner.Listener process. procps ships in
+#   ubuntu:24.04's base so the runner image inherits it without an
+#   explicit apt install. When the listener loses its GitHub
+#   connection it tries to reconnect; if reconnection fails it exits
+#   non-zero, the container exits, and systemd's Restart=always
+#   respawns -- so the healthcheck is the "is it alive" signal
+#   surfaced in `systemctl status`/downstream monitoring, while the
+#   exit+respawn loop drives the actual recovery.
+# --health-start-period 30s: first-start runs config.sh (network call
+#   to GitHub for registration) before run.sh. 30s leaves headroom for
+#   a slow API response without flapping the unit unhealthy on boot.
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
+  --cidfile=%t/%n.ctr-id \
+  --cgroups=split \
+  --sdnotify=conmon \
+  --detach \
+  --replace \
   --rm \
   --name github_runner_%i \
+  --log-driver journald \
+  --log-opt tag="github_runner_%i" \
   --userns keep-id \
-  --network host \
   --volume /run/user/{{ github_runner_user.uid }}/podman/podman.sock:/var/run/docker.sock \
   --volume /mnt/services/github_runner/%i:/runner:rw \
   --volume /mnt/scratch/github_runner/workdir_%i:/work:rw \
   --env-file /etc/default/github_runner@%i \
   --secret github_runner_token_%i,type=env,target=RUNNER_TOKEN \
-  {{ github_runner_image }}
-
-ExecStop=/usr/bin/podman stop --time=10 --ignore github_runner_%i
+  --health-cmd         "pgrep -f Runner.Listener >/dev/null" \
+  --health-startup-cmd "pgrep -f Runner.Listener >/dev/null" \
+  --health-startup-interval "1s" \
+  --health-startup-timeout "5s" \
+  --health-start-period "30s" \
+  --stop-timeout 30 \
+  nexus.lab.fahm.fr/homelab/runner:latest
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
 [Install]
 WantedBy=default.target
