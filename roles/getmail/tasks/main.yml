@@ -44,6 +44,24 @@
   tags:
     - getmail
 
+# getmail creates messages.log on first run under whatever umask the
+# user manager has (typically 0644). Pre-create it 0600 so even if
+# the parent dir's 0700 ever drifts, the per-message metadata
+# (msgid / sender / recipient / size) is still owner-only. The
+# preserve flags keep the task idempotent on re-runs.
+- name: Pre-create messages.log
+  file:
+    path: /mnt/services/getmail/messages.log
+    state: touch
+    owner: "{{ ansible_user }}"
+    group: "{{ ansible_user }}"
+    mode: "0600"
+    modification_time: preserve
+    access_time: preserve
+  become: true
+  tags:
+    - getmail
+
 # no_log: true keeps the rendered diff (which includes the Gmail app
 # password line) out of stdout/journald when ansible.cfg's [diff]
 # always = True fires on rotation.
