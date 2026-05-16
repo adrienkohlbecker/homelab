@@ -3,7 +3,7 @@
     pkg: gpg
     cache_valid_time: 3600
   become: true
-  register: fluentbit_apt_install_gpg
+  register: apt_install_gpg
   tags:
     - fluentbit
 
@@ -13,7 +13,7 @@
 - name: Add fluent-bit repository key
   when:
     - ansible_distribution_major_version | int < 26
-    - not (ansible_check_mode and fluentbit_apt_install_gpg.changed)
+    - not (ansible_check_mode and apt_install_gpg.changed)
   apt_key:
     url: https://packages.fluentbit.io/fluentbit.key
     keyring: /etc/apt/trusted.gpg.d/fluentbit.gpg
@@ -26,7 +26,7 @@
   apt_repository:
     repo: deb [signed-by=/etc/apt/trusted.gpg.d/fluentbit.gpg] {{ mirror_apt_fluentbit }}/{{ ansible_distribution_release }} {{ ansible_distribution_release }} main
     filename: fluent-bit
-  register: fluentbit_repository_legacy
+  register: apt_repository_fluentbit_legacy
   become: true
   tags:
     - fluentbit
@@ -37,7 +37,7 @@
 # roles/apt/tasks/install.yml for the full rationale.
 - name: Pre-warm apt cache (real fetch even in --check)  # noqa: command-instead-of-module
   when: ansible_distribution_major_version | int >= 26
-  ansible.builtin.command: apt-get update
+  command: apt-get update
   changed_when: false
   check_mode: false
   become: true
@@ -50,35 +50,35 @@
     pkg: python3-debian
     cache_valid_time: 3600
   become: true
-  register: fluentbit_apt_install_python3_debian
+  register: apt_install_python3_debian
   tags:
     - fluentbit
 
 - name: Add fluent-bit repository (deb822)
   when:
     - ansible_distribution_major_version | int >= 26
-    - not (ansible_check_mode and fluentbit_apt_install_python3_debian.changed)
-  ansible.builtin.deb822_repository:
+    - not (ansible_check_mode and apt_install_python3_debian.changed)
+  deb822_repository:
     name: fluent-bit
     types: deb
     uris: "{{ mirror_apt_fluentbit }}/{{ ansible_distribution_release }}"
     suites: "{{ ansible_distribution_release }}"
     components: main
     signed_by: https://packages.fluentbit.io/fluentbit.key
-  register: fluentbit_repository_deb822
+  register: apt_repository_fluentbit_deb822
   become: true
   tags:
     - fluentbit
 
 - name: Track repository changes
   set_fact:
-    fluentbit_repository:
-      changed: "{{ fluentbit_repository_legacy is changed or fluentbit_repository_deb822 is changed or fluentbit_apt_install_python3_debian is changed }}"
+    apt_repository_fluentbit:
+      changed: "{{ apt_repository_fluentbit_legacy is changed or apt_repository_fluentbit_deb822 is changed or apt_install_python3_debian is changed }}"
   tags:
     - fluentbit
 
 - name: Refresh apt cache after fluent-bit repo change
-  when: fluentbit_repository.changed and not ansible_check_mode
+  when: apt_repository_fluentbit.changed and not ansible_check_mode
   apt:
     update_cache: true
   become: true
@@ -89,7 +89,7 @@
 # config logs to stdout and would harmlessly start, but skipping that
 # saves a noisy systemd restart cycle.
 - name: Install fluent-bit
-  when: not (ansible_check_mode and fluentbit_repository.changed)
+  when: not (ansible_check_mode and apt_repository_fluentbit.changed)
   apt:
     pkg: fluent-bit
     policy_rc_d: 101
@@ -127,7 +127,7 @@
     backup: true
     validate: /opt/fluent-bit/bin/fluent-bit --config %s --dry-run
   become: true
-  register: fluentbit_cfg
+  register: fluentbit_conf
   when: not (ansible_check_mode and (fluentbit_apt.changed or fluentbit_lua.changed))
   tags:
     - fluentbit
@@ -139,8 +139,8 @@
   vars:
     systemd_unit_args:
       src: fluent-bit
-      condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or fluentbit_repository.changed)) }}"
-      restart: "{{ fluentbit_cfg.changed or fluentbit_lua.changed or fluentbit_apt.changed }}"
+      condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or apt_repository_fluentbit.changed)) }}"
+      restart: "{{ fluentbit_conf.changed or fluentbit_lua.changed or fluentbit_apt.changed }}"
   tags:
     - fluentbit
 
