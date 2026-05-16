@@ -194,6 +194,15 @@ class Machine:
     # check, which was PID-ns-scoped and so couldn't see sibling Gitea Actions
     # test cells running in separate containers on the same host bind-mount.
     _live_lock_fd: int = dataclasses.field(default=-1, init=False)
+    # Shared flock on <imagedir>/.publish-lock held across prepare→boot so
+    # packer-build's brief exclusive lock around its install post-processor's
+    # rm+mv (packer/qemu.pkr.hcl) can't tear our backing-file reads. Applies
+    # on both Linux (lab) and macOS (a local `mise run packer:build` can race
+    # parallel testall.py cells reading the same artifacts/ tree). Released
+    # at the end of boot() once qemu has exec'd and pinned its -drive inodes
+    # via open fds. -1 = not held (also the steady state when the lockfile
+    # is absent -- a fresh imagedir with no packer history).
+    _publish_lock_fd: int = dataclasses.field(default=-1, init=False)
     peak_rss_kb: int = dataclasses.field(default=0, init=False)
     # Auxiliary slirp hostfwds. Pre-picked free 127.0.0.1 ports map
     # the controller side to specific VM ports so `delegate_to:
@@ -507,6 +516,14 @@ class Machine:
         # from competing with the parent terminal for keystrokes, especially
         # under parallel testall.py runs.
 
+        # Drop the publish-lock now that qemu has exec'd: the kernel-scheduled
+        # exec → -drive open path runs in microseconds, after which Unix
+        # unlink-after-open semantics keep our backing files alive even if
+        # packer renames their on-disk inodes out from under us. Holding the
+        # lock longer would needlessly block packer's publish (which is rare
+        # but bounded -- our acquire is shared, packer's is exclusive).
+        self._release_publish_lock()
+
     async def ensure_booted(self) -> None:
         """Block until the hypervisor writes the PID/CID file or the launch fails."""
 
@@ -685,6 +702,11 @@ class Machine:
                         self.proc.kill()
                     await self.proc.wait()
         finally:
+            # Defensive release: boot() drops the publish-lock on its happy
+            # path, but if it raised between acquire and release we'd leak
+            # the fd into the process beyond. Re-call is idempotent (no-op
+            # when fd<0).
+            self._release_publish_lock()
             # Release the liveness lock before rmtree -- the kernel would
             # release it on close()/exit anyway, but doing it explicitly
             # keeps the ordering obvious.
@@ -693,6 +715,18 @@ class Machine:
                     os.close(self._live_lock_fd)
                 self._live_lock_fd = -1
             self.workdir.cleanup()
+
+    def _release_publish_lock(self) -> None:
+        """Drop the shared publish-lock fd if held; no-op otherwise.
+
+        Idempotent so callers (boot's happy path + stop's finally) can both
+        invoke it without coordinating. The kernel would release the flock
+        on close() anyway; explicit close keeps the ordering legible.
+        """
+        if self._publish_lock_fd >= 0:
+            with contextlib.suppress(OSError):
+                os.close(self._publish_lock_fd)
+            self._publish_lock_fd = -1
 
 
 def imagedir_for_host() -> Path:
@@ -974,6 +1008,17 @@ class QemuMachine(Machine):
         """Create overlay images and seed data required for the selected QEMU template."""
 
         await super().prepare()
+
+        # Acquire the publish-lock before any read of the imagedir starts.
+        # _create_overlay's qemu-img embeds the backing file's absolute path
+        # by value, so a packer install post-processor that rm+mv's the
+        # parent dir between overlay-create and qemu-launch would silently
+        # corrupt the boot. The shared lock composes with packer's exclusive
+        # lock on the same path -- packer waits for all in-flight test
+        # launches to drop, then publishes, then we re-acquire. Released at
+        # the end of boot() once qemu has pinned the inodes via open fds.
+        self._acquire_publish_lock_shared()
+
         self._direct_boot = None
 
         # Pre-pick a free TCP port on 127.0.0.1 and pin qemu's hostfwd to it.
@@ -1082,6 +1127,23 @@ class QemuMachine(Machine):
         if size:
             args.append(size)
         await run_command(args)
+
+    def _acquire_publish_lock_shared(self) -> None:
+        """Hold a shared flock on <imagedir>/.publish-lock until boot returns.
+
+        Applies on macOS too (parallel `test/testall.py` cells can race
+        against a local `mise run packer:build` rebuild on the same
+        artifacts/ tree). Skipped only when the lockfile is absent --
+        packer's install post-processor touches it before flocking, so
+        any imagedir that has had at least one packer-build will have
+        the file. On a fresh imagedir with no packer history we fall
+        through to the unlocked path rather than failing the boot.
+        """
+        lockfile = self.imagedir / ".publish-lock"
+        if not lockfile.exists():
+            return
+        self._publish_lock_fd = os.open(str(lockfile), os.O_RDONLY)
+        fcntl.flock(self._publish_lock_fd, fcntl.LOCK_SH)
 
     async def _ensure_minimal_cloudimg(self) -> Path:
         """Download (once) the Ubuntu minimal cloud image used by the `minimal` variant.
