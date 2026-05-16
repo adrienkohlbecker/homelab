@@ -59,7 +59,11 @@ Delegate=yes
 # ready signal). 300s covers the slowest of these (network-bound pull)
 # with headroom.
 TimeoutStartSec=300
-TimeoutStopSec=60
+# TimeoutStopSec has to exceed --stop-timeout below by enough margin
+# for podman to SIGKILL the container, clean up the rootless storage
+# graph entry, and exit. 30s headroom over the 60s --stop-timeout
+# (chosen below) covers the slowest observed cleanup.
+TimeoutStopSec=90
 Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N
@@ -116,6 +120,15 @@ SyslogIdentifier=%N
 # --health-start-period 30s: first-start runs the entrypoint's curl
 #   POST to GitHub before run.sh. 30s leaves headroom for a slow API
 #   response without flapping the unit unhealthy on boot.
+# --stop-timeout 60: actions/runner's main loop is a long-poll against
+#   GitHub's GET /runners/messages (~50s server hold). SIGTERM only
+#   takes effect once the in-flight long-poll completes, so a smaller
+#   timeout fires SIGKILL prematurely and noisy "StopSignal SIGTERM
+#   failed to stop container" warnings flood the journal on every
+#   restart cascade (template edit -> all instances bounce). 60s
+#   covers the long-poll plus a little graceful-exit wiggle. Kept
+#   strictly less than TimeoutStopSec above so podman wins the race
+#   and systemd doesn't SIGKILL podman mid-cleanup.
 # --pull=newer: do a manifest check against nexus on every container
 #   start and pull only if the registry's image is newer than the one
 #   in the local store. Lets a fresh runner-image.yml build propagate
@@ -149,7 +162,7 @@ ExecStart=/usr/bin/podman run \
   --health-startup-interval "1s" \
   --health-startup-timeout "5s" \
   --health-start-period "30s" \
-  --stop-timeout 30 \
+  --stop-timeout 60 \
   nexus.lab.fahm.fr/homelab/runner:latest
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
