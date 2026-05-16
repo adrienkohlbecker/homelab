@@ -38,14 +38,3 @@
       restart: "{{ hd_idle_conf.changed }}"
   tags:
     - hd_idle
-
-- name: Configure logrotate
-  import_role:
-    name: logrotate
-    tasks_from: template
-  vars:
-    logrotate_args:
-      src: logrotate.j2
-      dest: /etc/logrotate.d/hd-idle
-  tags:
-    - hd_idle
