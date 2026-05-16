@@ -6,11 +6,15 @@
 # (wiped netavark's chains), so the verify forced a re-flush + podman
 # network reload to validate the reload-cascade. nft -f is per-table
 # atomic — our apply only touches `ip homelab`, leaving netavark's
-# `ip filter`/`ip nat` chains alone. The smoke check is just: re-apply
-# our ruleset and confirm the published-container path still works.
-- name: _verify_lifecycle | Re-apply nftables ruleset (must not disturb netavark)
-  command: nft -f /etc/nftables.conf
-  changed_when: true
+# `ip filter`/`ip nat` chains alone. Drive the reload through systemd
+# rather than calling `nft -f` directly so the ExecReload= line in
+# override_nftables.conf is on the exercised path; a regression
+# (typo, removal, wrong target) surfaces here instead of silently
+# leaving operator `systemctl reload` no-op'd.
+- name: _verify_lifecycle | Re-apply nftables ruleset via systemctl reload (must not disturb netavark)
+  systemd:
+    name: nftables.service
+    state: reloaded
   become: true
 
 - name: _verify_lifecycle | FORWARD/DNAT after re-apply — published 32400 still reachable
