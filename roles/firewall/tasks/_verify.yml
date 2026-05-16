@@ -703,34 +703,27 @@
       can't take effect until reboot — the role should have signaled
       this run.
 
-# Look up each counter-bearing rule by comment and confirm packets
-# >= 1 (the rule actually saw traffic, not just present). JSON access
-# is stable across nft text-formatting changes (the previous regex
-# match was sensitive to spacing / attribute order).
-- name: _verify | Counter-checked drop rules each fired ≥ 1 time
+# Look up each counter by name and confirm packets fired as expected.
+# Counters are declared at table scope (see nftables.conf.j2) and
+# referenced from rules via `counter name "X"`; the table-scope
+# declaration is what carries packets/bytes. selectattr by `family`
+# winnows the JSON to those declarations (rule references inside
+# `rule.expr` also have a `counter` key but no `family`).
+- name: _verify | Counter-checked rules each fired the expected number of times
   vars:
-    # See VRRP probe above for why `selectattr('comment', 'defined')` is
-    # required on ansible-core 2.19+.
-    nft_rules: "{{ (counters_after_crafted.stdout | from_json).nftables
-                   | selectattr('rule', 'defined')
-                   | map(attribute='rule')
-                   | selectattr('comment', 'defined') | list }}"
-    input_nonsyn_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'input non-syn drop') | first).expr
-                           | selectattr('counter', 'defined') | first).counter.packets }}"
-    forward_nonsyn_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'forward non-syn drop') | first).expr
-                             | selectattr('counter', 'defined') | first).counter.packets }}"
-    forward_catchall_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'forward catch-all') | first).expr
-                               | selectattr('counter', 'defined') | first).counter.packets }}"
-    icmp_overflow_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'icmp echo overflow drop') | first).expr
-                            | selectattr('counter', 'defined') | first).counter.packets }}"
-    input_silenced_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'input silenced LAN noise') | first).expr
-                             | selectattr('counter', 'defined') | first).counter.packets }}"
-    input_catchall_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'input catch-all drop') | first).expr
-                             | selectattr('counter', 'defined') | first).counter.packets }}"
+    nft_counters: "{{ (counters_after_crafted.stdout | from_json).nftables
+                      | selectattr('counter', 'defined')
+                      | map(attribute='counter')
+                      | selectattr('family', 'defined') | list }}"
+    input_nonsyn_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_nonsyn') | first).packets }}"
+    forward_nonsyn_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'forward_nonsyn') | first).packets }}"
+    forward_catchall_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'forward_catchall') | first).packets }}"
+    icmp_overflow_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'icmp_overflow') | first).packets }}"
+    input_silenced_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_silenced') | first).packets }}"
+    input_catchall_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_catchall') | first).packets }}"
     # VRRP rule's counter is asserted at 0 — the negative probe sends
     # proto-112 from wg0 (extns ingress) and the iif scope must reject.
-    vrrp_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'keepalived (VRRP, LAN unicast)') | first).expr
-                   | selectattr('counter', 'defined') | first).counter.packets }}"
+    vrrp_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'vrrp_accept') | first).packets }}"
   assert:
     that:
       - input_nonsyn_pkts | int >= 1

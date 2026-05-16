@@ -30,6 +30,20 @@ add table ip homelab
 delete table ip homelab
 table ip homelab {
 
+    # Named counters declared at table scope. Rules below reference
+    # them via `counter name "X"` instead of inlining anonymous
+    # counters. _verify.yml's JSON walk filters
+    # `nftables.counter[].name` rather than rule comments — more
+    # robust than the previous comment-based filter (which broke on
+    # em-dashes and was sensitive to rule reorders).
+    counter input_nonsyn {}
+    counter input_silenced {}
+    counter input_catchall {}
+    counter icmp_overflow {}
+    counter vrrp_accept {}
+    counter forward_nonsyn {}
+    counter forward_catchall {}
+
     # Admin services (samba/nut/mosh) scoped to home LAN + wireguard.
     # Adding a future site (brumath, bonniers) is one set-element edit,
     # not a fan-out of duplicate rules.
@@ -72,7 +86,7 @@ table ip homelab {
         # INVALID, so without this an attacker could probe TCP
         # services with crafted ACKs. `counter` so _verify.yml can
         # assert the rule actually fired (matched by comment).
-        tcp flags & (fin|syn|rst|ack) != syn counter drop comment "input non-syn drop"
+        tcp flags & (fin|syn|rst|ack) != syn counter name "input_nonsyn" drop comment "input non-syn drop"
 
         # DNS allows. Source-scope what doesn't need WAN reach: 5053/
         # 5333 are container DNS (consumers live on podman bridges); 5353
@@ -147,14 +161,14 @@ table ip homelab {
         # regression that raises the rate to 1000/sec or drops the
         # trailing drop would not be caught.
         icmp type echo-request limit rate 10/second burst 20 packets accept
-        icmp type echo-request counter drop comment "icmp echo overflow drop"
+        icmp type echo-request counter name "icmp_overflow" drop comment "icmp echo overflow drop"
 
         # keepalived runs in unicast mode (not multicast 224.0.0.18)
         # with peers on the home LAN (see roles/pihole/templates/
         # keepalived.conf.j2). Scope VRRP to LAN ingress + LAN saddr
         # so nothing on WAN / wg0 / podman bridges can inject proto
         # 112 packets to churn election state.
-        iifname $WAN_IFACE ip saddr $HOME_LAN ip protocol vrrp counter accept comment "keepalived (VRRP, LAN unicast)"
+        iifname $WAN_IFACE ip saddr $HOME_LAN ip protocol vrrp counter name "vrrp_accept" accept comment "keepalived (VRRP, LAN unicast)"
 
         # LAN broadcast/discovery noise. Every entry here was identified
         # from a 24h journal sweep of the catch-all log+drop below; each
@@ -172,7 +186,7 @@ table ip homelab {
         #           has an interface in. ~6k/day. We don't run a UBNT
         #           agent on this host
         #   57621 — Spotify Connect LAN discovery (Adrien's MBP)
-        udp dport { 67, 1900, 5351, 10001, 57621 } counter drop comment "input silenced LAN noise"
+        udp dport { 67, 1900, 5351, 10001, 57621 } counter name "input_silenced" drop comment "input silenced LAN noise"
 
         # Catch-all: log+drop UDP and non-TCP/UDP protocols silently
         # to avoid ICMP amplification (every spoofed UDP probe would
@@ -182,7 +196,7 @@ table ip homelab {
         # ports don't confirm host existence to internet scanners.
         limit rate 5/minute burst 10 packets log prefix "[nftables] INPUT:DROP: "
         iifname @lan_admin_ifaces meta l4proto tcp reject with tcp reset
-        counter drop comment "input catch-all drop"
+        counter name "input_catchall" drop comment "input catch-all drop"
     }
 
     ##################################################
@@ -203,7 +217,7 @@ table ip homelab {
 
         # Mirror of input ! --syn drop — see input rule for the
         # conntrack tcp_loose rationale. Counter for _verify.yml.
-        tcp flags & (fin|syn|rst|ack) != syn counter drop comment "forward non-syn drop"
+        tcp flags & (fin|syn|rst|ack) != syn counter name "forward_nonsyn" drop comment "forward non-syn drop"
 
         # Egress paths from internal interfaces. SNAT for the reply
         # path comes from POSTROUTING below for the default bridge,
@@ -253,7 +267,7 @@ table ip homelab {
 
         # Catch-all log+drop. Counter for _verify.yml.
         limit rate 5/minute burst 10 packets log prefix "[nftables] FORWARD:REJECT: "
-        counter drop comment "forward catch-all"
+        counter name "forward_catchall" drop comment "forward catch-all"
     }
 
     ##################################################
