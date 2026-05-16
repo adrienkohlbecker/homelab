@@ -1,0 +1,18 @@
+# Best-effort functional check: --dump parses the rcfile AND exercises the
+# same --getmaildir / --rcfile arg shape the timer uses, so a typo in the
+# unit's ExecStart, a vault-substitution bug in the template, or a
+# permissions regression on the maildir surface here. We can't safely
+# exercise the live IMAP fetch path from the harness (no Gmail creds in
+# test/, no outbound), so this is the state-only fallback per CLAUDE.md.
+- name: _verify | Getmailrc parses and arg shape is valid
+  command: >-
+    getmail --dump
+    --rcfile /mnt/services/getmail/getmailrc
+    --getmaildir /mnt/services/getmail
+  register: _getmail_verify
+  changed_when: false
+
+- name: _verify | Dump output mentions the configured IMAP server
+  assert:
+    that:
+      - "'imap.gmail.com' in _getmail_verify.stdout"
