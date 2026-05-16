@@ -1,7 +1,0 @@
-# Per-host instance list lives in host_vars/<host>.yml. Each entry:
-#   - { repo: <repo-name>, suffix: <unique-suffix>, labels: "..." }
-# Instance identity = <repo>_<suffix>; that's the systemd template
-# instance name (github_runner@<repo>_<suffix>.service), the on-disk
-# state-dir name, and the podman container name suffix. Default to
-# empty so a host that doesn't run runners stays a no-op.
-github_runner_instances: []
