@@ -7,7 +7,11 @@
 # Does:
 #   1. loginctl enable-linger <name>, gated on the linger sentinel so
 #      a re-run is a no-op.
-#   2. Ensures user@<uid>.service is started — linger triggers the user
+#   2. Captures the linger result under `<name>_linger` so consumers
+#      can chain check-mode gates on downstream user-scope tasks
+#      (e.g. `<name>_linger.changed` paired with `<name>_user.changed`).
+#      Mirrors service_user's `<name>_user` capture.
+#   3. Ensures user@<uid>.service is started — linger triggers the user
 #      manager asynchronously, so a consumer driving `systemctl --user`
 #      immediately after needs it fully up. The check-mode gate guards
 #      against a fresh-user / fresh-linger run under --check where the
@@ -22,6 +26,10 @@
     creates: /var/lib/systemd/linger/{{ linger_args.name }}
   become: true
   register: _linger_result
+
+- name: linger | Record linger result for {{ linger_args.name }}
+  set_fact:
+    "{{ linger_args.name }}_linger": "{{ _linger_result }}"
 
 - name: linger | Ensure user manager is running for {{ linger_args.name }}
   when: not (ansible_check_mode and _linger_result.changed)
