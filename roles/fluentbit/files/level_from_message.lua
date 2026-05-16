@@ -34,11 +34,15 @@ function set_priority(tag, ts, group, metadata, record)
         return 0, ts, metadata, record
     end
 
-    -- An upstream modify filter scoped to a specific tag (e.g.
-    -- nginx.access, where no body inspection is wanted) may have
-    -- pre-stamped record["severity_text"]. Lift it into the OTLP
-    -- metadata stream and skip the body-keyword scan.
-    if record["severity_text"] ~= nil then
+    -- An upstream modify filter scoped to nginx.access pre-stamps
+    -- record["severity_text"] = "info" so this filter doesn't scan URL
+    -- noise for level keywords. Tag-gated to nginx.access only: other
+    -- inputs (notably the http CSP input) carry attacker-controlled
+    -- records, so honouring record["severity_text"] from any tag would
+    -- be a severity-forgery channel. Today it's unreachable because
+    -- flatten_csp.lua pins severity in metadata first; the gate is
+    -- defence-in-depth for any future unauthenticated input.
+    if tag == "nginx.access" and record["severity_text"] ~= nil then
         metadata.otlp.severity_text = record["severity_text"]
         if record["severity_number"] ~= nil then
             metadata.otlp.severity_number = tonumber(record["severity_number"]) or 0
