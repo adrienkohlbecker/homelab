@@ -5,7 +5,7 @@
 # musl variant (not glibc): the musl build is fully static — no libc
 # dependency at all — so the same binary works inside any container
 # image, including distroless/static, scratch, alpine, and the
-# distroless/cc-debian13 that openobserve uses today. The glibc-named
+# distroless/cc-debian13. The glibc-named
 # build is only partially static and still needs a matching libc.so.6
 # inside the container, which would lock us to distroless/cc-glibc
 # images. For a localhost healthcheck the musl quirks (subset

@@ -155,9 +155,9 @@
 # podman's journald log driver labels every stderr line as PRIORITY=3
 # (err) regardless of content, so postgres / celery / linuxserver INFO
 # chatter swamps `journalctl -p warning`. Parse the message text for
-# a level keyword and overwrite PRIORITY/level (for OpenObserve) plus
-# severity_text/severity_number (for OTLP -> HyperDX). See the script
-# for the matching rules and the default-info fallback that prevents
+# a level keyword and write severity_text/severity_number into the
+# OTLP metadata stream that HyperDX reads. See the script for the
+# matching rules and the default-info fallback that prevents
 # HyperDX's body-regex inference from firing on records with no real
 # level marker.
 [FILTER]
