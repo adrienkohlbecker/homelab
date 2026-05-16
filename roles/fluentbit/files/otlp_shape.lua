@@ -5,14 +5,14 @@
 -- from metadata.otlp.resource via the logs_metadata_key=otlp namespace.
 --
 -- LogAttributes and SeverityText/Number are handled separately, in
--- flatten-csp.lua and level-from-message.lua: they write to the same
+-- flatten_csp.lua and level_from_message.lua: they write to the same
 -- metadata.otlp.{attributes,severity_text,severity_number} stream.
 --
 -- Match *, runs last in the filter chain so it sees the final tag and
 -- the upstream "host" field that the global Set-host modify filter set.
 --
 -- service.name derivation, keyed on the fluent-bit tag:
---   csp.<host>     -> "csplogger"    (matches what flatten-csp emits)
+--   csp.<host>     -> "csplogger"    (matches what flatten_csp emits)
 --   svc.<unit>     -> "<unit>"       (systemd input's Tag svc.* wildcard
 --                                     expands _SYSTEMD_UNIT, e.g.
 --                                     nginx.service -> "nginx"; .service
