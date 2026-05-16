@@ -188,18 +188,13 @@
 # is the raw token -- NOT "Bearer <token>". Sending the Bearer prefix
 # gets a 401 "provided authorization does not match expected scheme".
 #
-# Record shape: fluent-bit's opentelemetry output only promotes specific
-# "metadata" record keys to LogRecord fields (log -> Body, plus the
-# configured logs_metadata_key sub-map for attributes / severity /
-# trace / span and logs_resource_metadata_key sub-map for Resource).
-# Top-level keys outside the recognised set are silently dropped on
-# serialization -- which is why earlier records reached HyperDX with
-# empty LogAttributes and a blank ServiceName column. The shape-otlp
-# lua filter (Match *, runs last) restructures the flat record into
-# record["otlp"]["attributes"] (-> LogAttributes) and
-# record["resource"]["attributes"] (-> ResourceAttributes including
-# service.name, which populates the ServiceName column ClickHouse
-# exporter pulls from Resource).
+# Record shape: the three lua filters write the event-metadata stream
+# (5-arg callback) under metadata.otlp.{severity_text, severity_number,
+# attributes, resource}; fluent-bit's opentelemetry output reads that
+# namespace via logs_metadata_key=otlp and maps each sub-key onto the
+# corresponding LogRecord field (Resource includes service.name, which
+# populates the ClickHouse ServiceName column the ClickHouse exporter
+# pulls from). record["log"] still feeds LogRecord.Body by convention.
 [OUTPUT]
     Name              opentelemetry
     Match             *
@@ -215,27 +210,6 @@
     logs_uri          /v1/logs
     header            Authorization {{ hyperdx_ingestion_api_key }}
     log_response_payload  false
-    # Direct body-key sources for the OTLP fields we can pin from lua:
-    #   resource          -> Resource attrs (service.name + host.name,
-    #                        what populates the ClickHouse ServiceName
-    #                        column). otlp-shape.lua writes it.
-    #   severity_text     -> LogRecord.SeverityText
-    #   severity_number   -> LogRecord.SeverityNumber
-    # The severity message-key options read from the record body
-    # (their _metadata_key siblings read fluent-bit's event-metadata
-    # stream, which lua filters can't populate from the standard
-    # callback signature). flatten-csp.lua sets both severity_text /
-    # severity_number top-level on every CSP record.
-    #
-    # LogRecord.Attributes has no _message_key variant -- the only
-    # source is the event-metadata stream. We encode the per-record
-    # attribute set as a JSON suffix inside Body instead, and rely on
-    # the HyperDX otelcontribcol transform processor's ExtractPatterns
-    # + ParseJSON + merge_maps statement (already wired into
-    # logs/out-default) to lift the JSON into log.attributes on
-    # receive. Same path that surfaces z2m's MQTT-payload fields.
-    logs_resource_metadata_key         resource
-    logs_severity_text_message_key     severity_text
-    logs_severity_number_message_key   severity_number
+    logs_metadata_key  otlp
     Retry_Limit       False
     storage.total_limit_size  50M
