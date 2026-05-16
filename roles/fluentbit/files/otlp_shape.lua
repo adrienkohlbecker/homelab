@@ -15,13 +15,21 @@
 --   csp.<host>     -> "csplogger"    (matches what flatten_csp emits)
 --   svc.<unit>     -> "<unit>"       (systemd input's Tag svc.* wildcard
 --                                     expands _SYSTEMD_UNIT, e.g.
---                                     nginx.service -> "nginx"; .service
---                                     suffix stripped, other unit types
---                                     keep theirs)
+--                                     nginx.service -> "nginx"; only
+--                                     .service is stripped — .timer,
+--                                     .socket, .scope etc. stay so the
+--                                     Services facet doesn't merge a
+--                                     daemon's runtime logs with its
+--                                     timer-trigger events)
 --   nginx.access   -> "nginx_access" (tail input tag)
 --   nginx.error    -> "nginx_error"
---   <other>        -> tag verbatim   (fallback, incl. "svc.unknown" for
---                                     records with no _SYSTEMD_UNIT)
+--   empty suffix   -> "unknown"      (svc. with no _SYSTEMD_UNIT, bare
+--                                     nginx. with no subtag — without
+--                                     this the result would be "" /
+--                                     "nginx_" and HyperDX would group
+--                                     every such record under a single
+--                                     nameless facet)
+--   <other>        -> tag verbatim
 --
 -- Lowercased on the way out. Unit names are mixed-case (Keepalived_vrrp,
 -- NetworkManager, etc.) which is awkward both to type in HyperDX's UI
@@ -36,10 +44,12 @@ local function service_from_tag(tag)
     elseif string.sub(tag, 1, 4) == "svc." then
         svc = string.sub(tag, 5):gsub("%.service$", "")
     elseif string.sub(tag, 1, 6) == "nginx." then
-        svc = "nginx_" .. string.sub(tag, 7)
+        local sub = string.sub(tag, 7)
+        if sub ~= "" then svc = "nginx_" .. sub end
     else
         svc = tag
     end
+    if svc == nil or svc == "" then svc = "unknown" end
     return string.lower(svc)
 end
 
