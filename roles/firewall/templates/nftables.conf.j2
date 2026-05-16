@@ -53,7 +53,10 @@ table ip homelab {
         # runtime); auto-merge: dedupe overlapping intervals at load.
         flags interval, constant
         auto-merge
-        elements = { $HOME_LAN, $WG_SUBNET }
+        elements = {
+            $HOME_LAN comment "home LAN",
+            $WG_SUBNET comment "wireguard",
+        }
     }
 
     # Ingress ifaces for admin INPUT services + FORWARD reach into
@@ -65,7 +68,10 @@ table ip homelab {
     set lan_admin_ifaces {
         type ifname
         flags constant
-        elements = { $WAN_IFACE, "wg0" }
+        elements = {
+            $WAN_IFACE comment "WAN-facing iface (LAN saddrs arrive via UDM)",
+            "wg0" comment "wireguard tunnel",
+        }
     }
 
     ##################################################
