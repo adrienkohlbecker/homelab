@@ -201,10 +201,16 @@ table ip homelab {
 
         # keepalived runs in unicast mode (not multicast 224.0.0.18)
         # with peers on the home LAN (see roles/pihole/templates/
-        # keepalived.conf.j2). Scope VRRP to LAN ingress + LAN saddr
-        # so nothing on WAN / wg0 / podman bridges can inject proto
-        # 112 packets to churn election state.
-        iifname $WAN_IFACE ip saddr $HOME_LAN ip protocol vrrp counter name "vrrp_accept" accept comment "keepalived (VRRP, LAN unicast)"
+        # keepalived.conf.j2). Scope VRRP to WAN-iif + the literal
+        # set of named peer IPs (not the whole HOME_LAN) — a
+        # compromised LAN device could otherwise forge a high-priority
+        # VRRP packet and demote keepalived's MASTER role, stealing
+        # the pihole VIP. Rule is suppressed on hosts that aren't
+        # keepalived peers (e.g. bunk).
+{% set vrrp_peer_ips = pihole_keepalived_peers | default([]) | reject('eq', inventory_hostname) | map('extract', external_ips) | list %}
+{% if vrrp_peer_ips %}
+        iifname $WAN_IFACE ip saddr { {{ vrrp_peer_ips | join(', ') }} } ip protocol vrrp counter name "vrrp_accept" accept comment "keepalived (VRRP, named peers only)"
+{% endif %}
 
         # LAN broadcast/discovery noise. Every entry here was identified
         # from a 24h journal sweep of the catch-all log+drop below; each
