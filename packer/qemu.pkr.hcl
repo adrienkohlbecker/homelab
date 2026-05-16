@@ -390,17 +390,29 @@ build {
     }
 
     # Install: atomic-rename the per-source output out of the staging
-    # tmpdir into its final home. Drops the previous good artifact
-    # right before the move so the window where neither exists is one
-    # rename. mise-tasks/packer/build rmdirs the (now empty) tmpdir
-    # after the build returns.
+    # tmpdir into its final home. publish.py wraps the rm + mv in an
+    # exclusive fcntl.flock on <output_directory>/.publish-lock so a
+    # test cell that's mid-launch (creating a qcow2 overlay over a
+    # backing file in <output_directory>/<source>/) can't read the
+    # directory while it's torn between the rm and the mv. The harness
+    # takes a shared flock on the same lockfile in test/machine.py's
+    # _acquire_publish_lock_shared, held across prepare→boot; shared +
+    # exclusive compose so multiple test cells parallel-run and only
+    # block packer's brief publish. See notes/concurrency_rework.md.
+    #
+    # publish.py is pure-Python (no util-linux flock(1)) so the same
+    # post-processor works on Linux (lab) and macOS (dev) -- macOS
+    # doesn't ship flock(1) and `mise run packer:build` is supported
+    # there too.
     post-processor "shell-local" {
       name           = "install"
       inline_shebang = "/bin/bash"
       inline = [<<-EOT
         set -euxo pipefail
-        rm -rf ${var.output_directory}/${source.name}
-        mv ${var.build_directory}/${source.name} ${var.output_directory}/${source.name}
+        python3 ${path.root}/publish.py \
+          "${var.output_directory}/.publish-lock" \
+          "${var.build_directory}/${source.name}" \
+          "${var.output_directory}/${source.name}"
       EOT
       ]
     }
