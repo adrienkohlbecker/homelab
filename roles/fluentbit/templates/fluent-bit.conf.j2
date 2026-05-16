@@ -70,7 +70,12 @@
     Listen            127.0.0.1
     Port              {{ service_ports.csp_ingest }}
     Successful_response_code  204
-    Buffer_Max_Size   256k
+    # csplogger's nginx caps client_max_body_size at 32k, so anything
+    # larger never reaches us. Matching here is defence-in-depth: if the
+    # nginx cap is ever raised, the http input still rejects bodies
+    # past this size (returns 413). The two tail inputs below still
+    # use 256k because they read whole logrotated files at startup.
+    Buffer_Max_Size   32k
     storage.type      filesystem
     storage.pause_on_chunks_overlimit  on
 
