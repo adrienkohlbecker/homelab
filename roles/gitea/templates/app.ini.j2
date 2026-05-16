@@ -5,12 +5,7 @@ RUN_MODE = prod
 
 [database]
 DB_TYPE = sqlite3
-HOST = 127.0.0.1:3306
 NAME = gitea
-USER = gitea
-PASSWD =
-SCHEMA =
-SSL_MODE = disable
 PATH = /mnt/services/sqlite/gitea/gitea.db
 SQLITE_JOURNAL_MODE = WAL
 LOG_SQL = false
@@ -21,11 +16,15 @@ ROOT = /mnt/services/gitea/data/gitea-repositories
 [server]
 SSH_DOMAIN = gitea.{{ inventory_hostname }}.{{ domain }}
 DOMAIN = gitea.{{ inventory_hostname }}.{{ domain }}
+HTTP_ADDR = 127.0.0.1
 HTTP_PORT = 3000
 ROOT_URL = https://gitea.{{ inventory_hostname }}.{{ domain }}/
 APP_DATA_PATH = /mnt/services/gitea/data
 DISABLE_SSH = false
 SSH_PORT = 22
+# Host sshd serves git@; gitea rewrites ~git/.ssh/authorized_keys with
+# command="..." prefixes. SSH clones break (and a bash shell may be
+# exposed) if sshd moves off :22 or any key loses the prefix.
 LFS_START_SERVER = true
 LFS_JWT_SECRET = {{ gitea_lfs_jwt_secret }}
 OFFLINE_MODE = true
@@ -44,7 +43,7 @@ PASSWD = {{ gitea_smtp_password }}
 [service]
 REGISTER_EMAIL_CONFIRM = true
 ENABLE_NOTIFY_MAIL = true
-DISABLE_REGISTRATION = false
+DISABLE_REGISTRATION = true
 ALLOW_ONLY_EXTERNAL_REGISTRATION = false
 ENABLE_CAPTCHA = true
 REQUIRE_SIGNIN_VIEW = false
@@ -72,15 +71,19 @@ ROOT_PATH = /var/log/gitea
 DEFAULT_MERGE_STYLE = merge
 
 [repository.signing]
-DEFAULT_TRUST_MODEL = committer
+DEFAULT_TRUST_MODEL = collaborator
 
 [security]
 INSTALL_LOCK = true
 INTERNAL_TOKEN = {{ gitea_internal_token }}
-PASSWORD_HASH_ALGO = pbkdf2
+PASSWORD_HASH_ALGO = pbkdf2_hi
 
 [oauth2]
 JWT_SECRET = {{ gitea_jwt_secret }}
 
 [actions]
 ENABLED = true
+
+[cron.cleanup_actions]
+ENABLED = true
+OLDER_THAN = 8760h
