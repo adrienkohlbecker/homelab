@@ -55,8 +55,15 @@ Group=github_runner
 # than a generic start-timeout.
 ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S /run/user/{{ github_runner_user.uid }}/podman/podman.sock ] && exit 0; sleep 1; done; echo "podman.sock not present after 60s" >&2; exit 1'
 
-# --userns keep-id: in-container uid 0 maps to host github_runner, so
-#   the bind-mounted /runner state dir is writable under the namespace.
+# --user / --uidmap / --gidmap: fake-root pattern (see CLAUDE.md
+#   "Container User Namespacing"). In-container uid 0 maps to host
+#   github_runner via the +0 override; everything else falls through
+#   1:1 from the base 65536-range mapping. Writes to the bind-mounted
+#   /runner state dir and the bound podman.sock land owned by host
+#   github_runner. NOT `--userns keep-id`: that would map the *current
+#   rootless user* to the same in-container uid, leaving in-container
+#   root pointing at an unmapped subuid and failing every write to
+#   /runner.
 # --volume podman.sock: DooD -- actions/runner's docker-CLI shell-outs
 #   (for workflows with `container:` blocks) hit the host's rootless
 #   podman, NOT a daemon inside the runner container.
@@ -94,7 +101,11 @@ ExecStart=/usr/bin/podman run \
   --name github_runner_%i \
   --log-driver journald \
   --log-opt tag="github_runner_%i" \
-  --userns keep-id \
+  --user 0:0 \
+  --uidmap=0:0:65536 \
+  --uidmap=+0:{{ github_runner_user.uid }}:1 \
+  --gidmap=0:0:65536 \
+  --gidmap=+0:{{ github_runner_user.group }}:1 \
   --volume /run/user/{{ github_runner_user.uid }}/podman/podman.sock:/var/run/docker.sock \
   --volume /mnt/services/github_runner/%i:/runner:rw \
   --volume /mnt/scratch/github_runner/workdir_%i:/work:rw \
