@@ -288,14 +288,22 @@
   changed_when: false
   become: true
 
-- name: _verify | INPUT — mDNS (5353/udp) reachable from home LAN source
+# mDNS positive case isn't probable in the rig — the rule requires
+# iif=$WAN_IFACE + saddr=$HOME_LAN simultaneously, but slirp doesn't
+# preserve saddr on $WAN_IFACE ingress and extns ingresses on wg0.
+# Instead probe both negative dimensions: (a) home-LAN saddr arriving
+# on wg0 is rejected by the iif scope, (b) wg-saddr is rejected by the
+# saddr scope. Together they pin down both halves of the rule.
+- name: _verify | INPUT — mDNS (5353/udp) rejected on wg0 ingress (iif scope)
   shell: |
     echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_home }} 10.99.0.1 5353 | grep -q pong
   args: { executable: /bin/bash }
+  register: probe_mdns_iif
   changed_when: false
+  failed_when: probe_mdns_iif.rc == 0
   become: true
 
-- name: _verify | INPUT — mDNS (5353/udp) rejected from wireguard source (LAN-only rule)
+- name: _verify | INPUT — mDNS (5353/udp) rejected from wireguard source (saddr scope)
   shell: |
     echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_wg }} 10.99.0.1 5353 | grep -q pong
   register: probe_mdns_wg
