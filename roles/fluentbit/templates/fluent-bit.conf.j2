@@ -204,6 +204,7 @@
     Port              443
     tls               on
     tls.verify        on
+    compress          gzip
 {% endif %}
     logs_uri          /v1/logs
     header            Authorization {{ hyperdx_ingestion_api_key }}
