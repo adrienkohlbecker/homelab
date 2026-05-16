@@ -12,10 +12,10 @@
 #       -i 1200' entry appears in argv. Catches regressions in the
 #       template's selectattr filter chain.
 #
-# On box/minimal the per-disk list is empty (all virtio disks report
-# rotational=0), so (2) loops zero times -- still useful as a parse-
-# success canary. On lab/pug the per-disk list is non-empty and (2)
-# actually exercises the filter.
+# On every variant (box / minimal / lab / pug) the per-disk list is
+# non-empty: _setup.yml loads a scsi_debug ghost disk that satisfies
+# the template filter, so (2) always exercises the filter chain end-
+# to-end. On lab/pug the ghost is joined by real spinning disks.
 
 - name: _verify | confirm hd-idle is active
   command: systemctl is-active hd-idle
@@ -39,13 +39,16 @@
       pgrep output: {{ hd_idle_proc.stdout }}
 
 - name: _verify | assert each expected per-disk -a entry appears in argv
+  # Mirror of the template filter chain at templates/hd-idle.j2:61 --
+  # keep these two in sync. See the template's comment block for why
+  # we discriminate pseudo-devices by name prefix and not via `virtual`.
   vars:
     hd_idle_expected_disk_ids: >-
-      {{ ansible_devices.values()
-         | rejectattr('virtual', 'equalto', 1)
-         | selectattr('rotational', 'equalto', '1')
-         | selectattr('removable', 'equalto', '0')
-         | map(attribute='links.ids')
+      {{ ansible_devices | dict2items
+         | rejectattr('key', 'match', '^(md|dm-|loop|sr|ram|zd)')
+         | selectattr('value.rotational', 'equalto', '1')
+         | selectattr('value.removable', 'equalto', '0')
+         | map(attribute='value.links.ids')
          | select
          | map('sort')
          | map('first')
