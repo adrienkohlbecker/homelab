@@ -57,6 +57,7 @@
     group: git
     mode: "0600"
     backup: true
+    validate: python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True).read("%s")'
   register: gitea_conf
   become: true
   tags:
