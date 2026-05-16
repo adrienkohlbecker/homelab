@@ -39,6 +39,20 @@
     mode: "0644"
   become: true
 
+# Run the podman role's install.yml so the test VM gets the same
+# storage layout prod does: rpool/podman zvol mounted at
+# /var/lib/containers, /var/lib/containers/rootless created with
+# sticky-bit perms, /etc/containers/storage.conf written with the right
+# graphroot. Mirroring just the rootless mkdir isn't enough -- under
+# the new design the role calls podman_secret which exercises the full
+# rootless storage stack, and any drift between prod's perms/mount
+# layout and the test's flat-rootfs is what produced the previous
+# "mkdir /var/lib/containers/rootless: permission denied" failure.
+- name: _setup | Install podman with prod-shape storage layout
+  import_role:
+    name: podman
+    tasks_from: install
+
 # Under qemu_test the runner doesn't register against GitHub (no
 # fixture exists for github.com's runner-registration API). The role's
 # main.yml gates the registration + service-start tasks on `qemu_test`,

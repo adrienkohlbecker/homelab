@@ -45,10 +45,37 @@
   tags:
     - github_runner
 
-# Registration token (1h TTL, can't be vaulted). Fetched from the
-# controller workstation via `gh api`. Skipped if already registered;
-# skipped under qemu_test (no GitHub fixture to register against).
-- name: _register | Fetch registration token for {{ runner_iid }}
+# Registration token (1h TTL, can't be vaulted). Two branches:
+#   - prod: fetch via `gh api` on the controller workstation, using the
+#     operator's gh CLI auth (same source terraform uses).
+#   - qemu_test: stub a deterministic fake value so the downstream
+#     secret-create + envfile-write + unit-install chain still runs.
+#     The fake token is harmless because the systemd_unit/service step
+#     (the only consumer that would actually exchange it with GitHub)
+#     stays gated on `not qemu_test` below -- the container never runs
+#     in test, so the bad token never reaches the GitHub API.
+# Either way, skipped once `.runner` exists -- the persisted
+# .credentials carry the runner forward and the consumed-once token
+# isn't needed again.
+#
+# Both branches set the same scalar fact `runner_token` so the
+# downstream podman_secret import has a single source of truth.
+# Going through a single fact (vs reading `runner_token_result.stdout`
+# directly) sidesteps the dict-vs-AnsibleMapping templating quirk:
+# `register:` produces an AnsibleMapping (`.stdout` works); a
+# set_fact'd plain dict (`{stdout: ...}`) doesn't expose `.stdout`
+# the same way and fails with "object of type 'dict' has no attribute
+# 'stdout'" when consumed by another set_fact in podman_secret.
+- name: _register | Stub registration token for {{ runner_iid }} (qemu_test)
+  when:
+    - qemu_test
+    - not runner_registered.stat.exists
+  set_fact:
+    runner_token: "qemu-test-fake-token-{{ runner_iid }}"
+  tags:
+    - github_runner
+
+- name: _register | Fetch registration token for {{ runner_iid }} (prod)
   when:
     - not qemu_test
     - not runner_registered.stat.exists
@@ -62,22 +89,38 @@
   tags:
     - github_runner
 
+- name: _register | Stash prod token in runner_token for {{ runner_iid }}
+  when:
+    - not qemu_test
+    - not runner_registered.stat.exists
+  set_fact:
+    runner_token: "{{ runner_token_result.stdout }}"
+  no_log: true
+  tags:
+    - github_runner
+
 # Per-instance podman secret. The container's entrypoint consumes
 # RUNNER_TOKEN on first start (when /runner/.runner is absent) and
 # ignores it on every subsequent start. Stored as a github_runner-owned
 # rootless secret so the runner container under --userns keep-id can
 # read it.
+#
+# The check-mode-and-user-just-reported-created gate keeps the
+# podman_secret import from running before the user actually exists:
+# in --check the service_user task reports the user as `changed` but
+# doesn't really create it, so a downstream `become_user: github_runner`
+# fails the lookup. On a real run the user exists and this skips.
 - name: _register | Store registration token in podman secret for {{ runner_iid }}
   when:
-    - not qemu_test
     - not runner_registered.stat.exists
+    - not (ansible_check_mode and github_runner_user.changed)
   import_role:
     name: podman_secret
     tasks_from: secret
   vars:
     podman_secret_args:
       name: github_runner_token_{{ runner_iid }}
-      data: "{{ runner_token_result.stdout }}"
+      data: "{{ runner_token }}"
       user: github_runner
   tags:
     - github_runner

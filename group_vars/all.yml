@@ -20,6 +20,11 @@ smtp_host: smtp.eu.mailgun.org
 smtp_port: 587
 email_domain: noreply.{{ domain }}
 
+# GitHub owner under which the repos listed in github_runner_instances
+# live. Personal-account constraint -- no org, so all repos share one
+# owner.
+github_runner_owner: "adrienkohlbecker"
+
 # Ports each host-level service publishes. Single source of truth for unit
 # templates (--publish for loopback-bound podman services, ListenStream= for
 # native daemons), nginx proxy_pass, firewall rules, and cross-role consumers

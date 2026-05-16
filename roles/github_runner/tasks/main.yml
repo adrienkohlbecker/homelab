@@ -30,7 +30,6 @@
   become: true
   loop:
     - /mnt/services/github_runner
-    - /mnt/scratch/github_runner/cache
     # Bind-mounted into sibling workflow containers via the workflow's
     # container.options for the harness's --workdir-parent. Lives on
     # /mnt/scratch (terabytes) instead of the container's writable

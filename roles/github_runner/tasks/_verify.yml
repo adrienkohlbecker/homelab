@@ -34,11 +34,12 @@
   failed_when: not _verify_template.stat.exists
   become: true
 
-# Per-instance assertions. Under qemu_test the env file lands and the
-# instance is enabled at the systemd level (template+drop-in syntax
-# check), but no GitHub-backed registration happens so the container
-# isn't started -- a started container would loop on "Must configure
-# first" because the token-fetch task was skipped.
+# Per-instance assertions. Under qemu_test the env file lands, the
+# podman secret is created (consuming a stub token), the per-instance
+# state dir exists, and the unit loads (template + instance syntax
+# check). The container itself isn't started -- a started container
+# would try to register with the stub token, fail the GitHub API call,
+# and loop on the restart-limit.
 - name: _verify | env file present for each instance
   stat:
     path: /etc/default/github_runner@{{ item.repo }}_{{ item.suffix }}
@@ -60,6 +61,21 @@
   loop_control:
     label: "{{ item.repo }}_{{ item.suffix }}"
   become: true
+
+# Per-instance podman secret -- exercises that _register.yml's
+# token-fetch + podman_secret import chain actually landed a secret in
+# github_runner's rootless store. `podman secret inspect` exits non-zero
+# if the secret is absent, which fails the task without no_log hiding
+# anything useful (the inspect output prints metadata only -- the secret
+# value itself is never read by inspect).
+- name: _verify | podman secret exists for each instance
+  command: podman secret inspect github_runner_token_{{ item.repo }}_{{ item.suffix }}
+  changed_when: false
+  loop: "{{ github_runner_instances }}"
+  loop_control:
+    label: "{{ item.repo }}_{{ item.suffix }}"
+  become: true
+  become_user: github_runner
 
 # Under qemu_test verify the instance loads (catches template syntax
 # errors that pass systemd-analyze but break on instantiation); under
