@@ -7,15 +7,18 @@
 # Probe topology:
 #   extns netns ─ veth_ext ── wg0* (10.99.0.1) ─ root netns (the VM)
 #
-# extns is set up with multiple source aliases so we can probe each
-# scoped INPUT rule from a representative source. Specific /32 host
-# routes back to those aliases go via wg0; we avoid broader subnet
-# routes that would collide with podman0's real container network.
-# Aliases derived from group_vars via ipmath(250) — picking offset
-# 250 keeps the address comfortably outside netavark's bottom-up
-# auto-allocation range while staying within the subnet.
+# extns starts with only the non-scope primary (10.99.0.2/24) on
+# veth_ext. The four representative-subnet sources are bound per
+# probe-group below via `ip -n extns addr replace probe_X/32 …` tasks
+# so each group's source is visible at its call site rather than
+# preconfigured. /32 host routes back via wg0 are declared once at
+# netns setup (idempotent, and replies still need to land on wg0
+# regardless of which source is active). Aliases derived from
+# group_vars via ipmath(250) — offset 250 keeps each address outside
+# netavark's bottom-up auto-allocation range while staying inside the
+# subnet (assumes /24-or-bigger; smaller prefixes overflow silently).
 #
-#   10.99.0.2                          non-scope source (catch-all reject)
+#   10.99.0.2                          non-scope source (primary)
 #   site_subnets.home  + .250 offset   physical home LAN source
 #   wireguard_subnet   + .250 offset   wireguard client source
 #   podman_default_network + .250      container source (DNS rule probes)
@@ -38,28 +41,6 @@
     # podman_default_network; not a real container, just a destination
     # the FORWARD chain's iif=wg0/oif=podman0 path resolves to.
     probe_container_dest: "{{ podman_default_network | ansible.utils.ipmath(2) }}"
-
-# Guard the harness against a future site-subnet shrink: ipmath(250)
-# silently overflows the subnet if the prefix is too narrow, and the
-# /32 host routes would then alias another subnet — every probe would
-# fail with confusing rejects rather than a clean "test rig outgrew
-# its addressing" error.
-- name: _verify | Assert probe addresses are in-prefix and pairwise distinct
-  assert:
-    # network_in_network(value, test) — `value` is the outer network,
-    # `test` is the address being tested. Pipe the subnet so the IP
-    # is the argument; otherwise the semantics invert.
-    that:
-      - site_subnets.home | ansible.utils.network_in_network(probe_home)
-      - wireguard_subnet | ansible.utils.network_in_network(probe_wg)
-      - podman_default_network | ansible.utils.network_in_network(probe_podman)
-      - podman_bridge_pool | ansible.utils.network_in_network(probe_podman_pool)
-      - ([probe_home, probe_wg, probe_podman, probe_podman_pool] | unique | length) == 4
-    fail_msg: >-
-      Probe address ipmath(250) overflowed its subnet OR collided with
-      another subnet. The harness assumes /24-or-bigger subnets and no
-      overlap between site_subnets.home / wireguard_subnet /
-      podman_default_network / podman_bridge_pool.
 
 - name: _verify | Install probe-only deps
   apt:
@@ -108,11 +89,12 @@
 # the DNAT body-grep probe asserts the response payload, which a
 # counter alone cannot prove.
 
-# Multi-aliased extns netns + matching host /32 routes. The aliases
-# let curl/nc source-bind from each representative subnet without
-# spinning up four separate netns. /32 host routes ensure replies
-# return via wg0 without colliding with podman0's 10.88.0.0/16 route.
-- name: _verify | Create probe netns with multi-source aliases
+# Bring up the extns netns + wg0 veth with only the non-scope primary
+# on veth_ext. Probe-group secondary aliases are added below via
+# `Bind probe_X` tasks at the head of each group. Host /32 routes
+# back via wg0 are declared once here (idempotent), regardless of
+# which source is active in the netns.
+- name: _verify | Create probe netns
   shell: |
     set -euo pipefail
     # Add-or-verify: succeeds if the netns is freshly added OR
@@ -126,10 +108,6 @@
     ip addr replace 10.99.0.1/24 dev wg0
     ip link set wg0 up
     ip -n extns addr replace {{ probe_nonscope }}/24 dev veth_ext
-    ip -n extns addr replace {{ probe_home }}/32 dev veth_ext
-    ip -n extns addr replace {{ probe_wg }}/32 dev veth_ext
-    ip -n extns addr replace {{ probe_podman }}/32 dev veth_ext
-    ip -n extns addr replace {{ probe_podman_pool }}/32 dev veth_ext
     ip -n extns link set veth_ext up
     ip -n extns link set lo up
     ip -n extns route replace default via 10.99.0.1
@@ -233,36 +211,24 @@
   failed_when: false
   become: true
 
+# --- probe_wg group (wireguard-source positives) ---------------------
 # Admin services (mosh/samba/nut/NetBIOS) use the concatenated set
 # lan_admin_pairs to require an (iif, saddr) *intersection* — wg0 only
 # accepts $WG_SUBNET saddrs, $WAN_IFACE only accepts $HOME_LAN. The
-# rig ingresses everything on wg0, so:
-#   - probe_wg (in $WG_SUBNET) is the positive case.
-#   - probe_home (in $HOME_LAN) is now a NEGATIVE case here — wrong
-#     iif for its saddr. The wg0+HOME_LAN path was accepted under the
-#     prior union semantics; a regression back to union would let
-#     this probe through.
-#   - probe_nonscope (in neither subnet) — still negative.
-# The $WAN_IFACE+$HOME_LAN positive half can't be probed in this rig
-# (slirp doesn't preserve source IP), so half of each rule's contract
-# is asserted via JSON shape only (see notes/ for the rig limits).
+# rig ingresses everything on wg0, so probe_wg (in $WG_SUBNET) is the
+# positive case for all four services. mDNS rides the same group as a
+# saddr-scope negative (wg saddr fails the iif=WAN + saddr=$HOME_LAN
+# requirement on the saddr half). The $WAN_IFACE+$HOME_LAN positive
+# half can't be probed (slirp doesn't preserve source IP), so half of
+# each rule's contract is asserted via JSON shape only.
+- name: _verify | Bind probe_wg on extns veth (wireguard-source probes)
+  command: ip -n extns addr replace {{ probe_wg }}/32 dev veth_ext
+  changed_when: true
+  become: true
+
 - name: _verify | INPUT — mosh (60000/udp) reachable from wireguard source
   shell: |
     echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:60000,bind={{ probe_wg }}
-  args: { executable: /bin/bash }
-  changed_when: false
-  become: true
-
-- name: _verify | INPUT — mosh (60000/udp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
-  shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:60000,bind={{ probe_home }}
-  args: { executable: /bin/bash }
-  changed_when: false
-  become: true
-
-- name: _verify | INPUT — mosh (60000/udp) rejected from non-scope source
-  shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:60000,bind={{ probe_nonscope }}
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -275,54 +241,10 @@
   failed_when: false
   become: true
 
-- name: _verify | INPUT — Samba (445/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
-  command: >
-    ip netns exec extns curl --interface {{ probe_home }}
-      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
-  changed_when: false
-  failed_when: false
-  become: true
-
-- name: _verify | INPUT — Samba (445/tcp) rejected from non-scope source
-  command: >
-    ip netns exec extns curl --interface {{ probe_nonscope }}
-      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
-  changed_when: false
-  failed_when: false
-  become: true
-
 - name: _verify | INPUT — nut (3493/tcp) reachable from wireguard source
   command: >
     ip netns exec extns curl --interface {{ probe_wg }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
-  changed_when: false
-  failed_when: false
-  become: true
-
-- name: _verify | INPUT — nut (3493/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
-  command: >
-    ip netns exec extns curl --interface {{ probe_home }}
-      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
-  changed_when: false
-  failed_when: false
-  become: true
-
-- name: _verify | INPUT — nut (3493/tcp) rejected from non-scope source
-  command: >
-    ip netns exec extns curl --interface {{ probe_nonscope }}
-      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
-  changed_when: false
-  failed_when: false
-  become: true
-
-# Separate rule: containers on any podman bridge can reach nut (HA's
-# NUT integration connects from its bridge). Sourced from
-# probe_podman_pool which sits in podman_bridge_pool — matches the
-# `ip saddr $PODMAN_POOL tcp dport 3493 accept` rule.
-- name: _verify | INPUT — nut (3493/tcp) reachable from podman_bridge_pool source
-  command: >
-    ip netns exec extns curl --interface {{ probe_podman_pool }}
-      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:3493/
   changed_when: false
   failed_when: false
   become: true
@@ -337,14 +259,82 @@
   changed_when: false
   become: true
 
-# Source-scoped UDP: container DNS (5053/5333) and home-LAN mDNS (5353).
-# socat sends a single UDP packet source-bound to the requested
-# alias; assertion is via the rule's named counter in the block below.
-- name: _verify | INPUT — dnscrypt (5053/udp) reachable from container source
+# mDNS rule requires iif=$WAN_IFACE + saddr=$HOME_LAN simultaneously.
+# wg saddr fails the saddr half — counter must not increment.
+- name: _verify | INPUT — mDNS (5353/udp) sent from wg saddr (saddr scope rejects)
   shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:{{ service_ports.dnscrypt_proxy }},bind={{ probe_podman }}
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:5353,bind={{ probe_wg }}
   args: { executable: /bin/bash }
   changed_when: false
+  become: true
+
+# --- probe_home group (home_LAN-source iif/saddr-mismatch negatives) -
+# probe_home (in $HOME_LAN) on wg0 ingress is a NEGATIVE case across
+# the admin set: wrong iif for its saddr. The wg0+HOME_LAN path was
+# accepted under prior union semantics; regression back to union
+# would let these through. mDNS rides the same group as the iif-half
+# negative (home saddr on wg0 fails the iif=$WAN_IFACE requirement).
+- name: _verify | Bind probe_home on extns veth (home_LAN-source probes)
+  command: ip -n extns addr replace {{ probe_home }}/32 dev veth_ext
+  changed_when: true
+  become: true
+
+- name: _verify | INPUT — mosh (60000/udp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
+  shell: |
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:60000,bind={{ probe_home }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+- name: _verify | INPUT — Samba (445/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
+  command: >
+    ip netns exec extns curl --interface {{ probe_home }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | INPUT — nut (3493/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
+  command: >
+    ip netns exec extns curl --interface {{ probe_home }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | INPUT — mDNS (5353/udp) sent from home_LAN saddr via wg0 (iif scope rejects)
+  shell: |
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:5353,bind={{ probe_home }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+# --- probe_nonscope group (out-of-scope negatives) -------------------
+# probe_nonscope (10.99.0.2 primary on veth_ext) is in neither
+# $HOME_LAN nor $WG_SUBNET nor $PODMAN_DEFAULT — every saddr-scoped
+# rule must reject it. No bind task: the primary alias is in place
+# from the netns setup above.
+- name: _verify | INPUT — mosh (60000/udp) rejected from non-scope source
+  shell: |
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:60000,bind={{ probe_nonscope }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+- name: _verify | INPUT — Samba (445/tcp) rejected from non-scope source
+  command: >
+    ip netns exec extns curl --interface {{ probe_nonscope }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | INPUT — nut (3493/tcp) rejected from non-scope source
+  command: >
+    ip netns exec extns curl --interface {{ probe_nonscope }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
+  changed_when: false
+  failed_when: false
   become: true
 
 - name: _verify | INPUT — dnscrypt (5053/udp) rejected from non-scope source
@@ -354,11 +344,27 @@
   changed_when: false
   become: true
 
-# Same rule accepts TCP alongside UDP on the dnscrypt port — pihole
-# falls back to TCP opportunistically when a UDP response would be
-# truncated. Probe the TCP path to lock in the `meta l4proto { tcp,
-# udp }` scope; a regression to UDP-only would silently bring back
-# the ~2 TCP drops/day the rule was added to fix.
+# --- probe_podman group (default-bridge-source positives) ------------
+# Container DNS (5053 dnscrypt, 5333 aardvark) — consumers live on the
+# default podman bridge, so positive probes source-bind from
+# probe_podman (in $PODMAN_DEFAULT). socat sends a single UDP packet
+# source-bound to the alias; the named counter is the assertion.
+# Dnscrypt also has a TCP probe to lock in the `meta l4proto { tcp,
+# udp }` scope — a regression to UDP-only would silently bring back
+# the ~2 TCP drops/day pihole used to see when falling back to TCP on
+# UDP-truncated responses.
+- name: _verify | Bind probe_podman on extns veth (default-bridge-source probes)
+  command: ip -n extns addr replace {{ probe_podman }}/32 dev veth_ext
+  changed_when: true
+  become: true
+
+- name: _verify | INPUT — dnscrypt (5053/udp) reachable from container source
+  shell: |
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:{{ service_ports.dnscrypt_proxy }},bind={{ probe_podman }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
 - name: _verify | INPUT — dnscrypt (5053/tcp) reachable from container source
   command: >
     ip netns exec extns curl --interface {{ probe_podman }}
@@ -374,35 +380,31 @@
   changed_when: false
   become: true
 
-# Regression probe for the cross-bridge case: aardvark-dns binds the
-# gateway IP of every dns-enabled named bridge (mosquitto, redis, …),
-# all carved out of netavark's 10.89.0.0/16 default_subnet_pools[0]
-# base. A previous saddr-scoped rule covered only podman_default_network
-# and the catch-all UDP reject killed every cross-bridge container-name
-# lookup (paperless → redis, z2m → mosquitto) before aardvark saw it.
+# --- probe_podman_pool group (non-default-bridge-source positives) ---
+# Cross-bridge regression: aardvark-dns binds the gateway IP of every
+# dns-enabled named bridge (mosquitto, redis, …), all carved out of
+# netavark's 10.89.0.0/16 default_subnet_pools[0] base. A previous
+# saddr-scoped rule covered only podman_default_network and the
+# catch-all UDP reject killed every cross-bridge container-name lookup
+# (paperless → redis, z2m → mosquitto) before aardvark saw it. HA's
+# NUT integration is the other consumer from this subnet, matching
+# the separate `ip saddr $PODMAN_POOL tcp dport 3493 accept` rule.
+- name: _verify | Bind probe_podman_pool on extns veth (non-default-bridge-source probes)
+  command: ip -n extns addr replace {{ probe_podman_pool }}/32 dev veth_ext
+  changed_when: true
+  become: true
+
+- name: _verify | INPUT — nut (3493/tcp) reachable from podman_bridge_pool source
+  command: >
+    ip netns exec extns curl --interface {{ probe_podman_pool }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:3493/
+  changed_when: false
+  failed_when: false
+  become: true
+
 - name: _verify | INPUT — aardvark-dns (5333/udp) reachable from non-default-bridge source
   shell: |
     echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:5333,bind={{ probe_podman_pool }}
-  args: { executable: /bin/bash }
-  changed_when: false
-  become: true
-
-# mDNS positive case isn't probable in the rig — the rule requires
-# iif=$WAN_IFACE + saddr=$HOME_LAN simultaneously, but slirp doesn't
-# preserve saddr on $WAN_IFACE ingress and extns ingresses on wg0.
-# Instead probe both negative dimensions: (a) home-LAN saddr arriving
-# on wg0 is rejected by the iif scope, (b) wg-saddr is rejected by the
-# saddr scope. Together they pin down both halves of the rule.
-- name: _verify | INPUT — mDNS (5353/udp) sent from home_LAN saddr via wg0 (iif scope rejects)
-  shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:5353,bind={{ probe_home }}
-  args: { executable: /bin/bash }
-  changed_when: false
-  become: true
-
-- name: _verify | INPUT — mDNS (5353/udp) sent from wg saddr (saddr scope rejects)
-  shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:5353,bind={{ probe_wg }}
   args: { executable: /bin/bash }
   changed_when: false
   become: true
