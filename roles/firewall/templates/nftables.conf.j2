@@ -11,14 +11,23 @@ define WG_SUBNET = {{ wireguard_subnet }}
 define PODMAN_DEFAULT = {{ podman_default_network }}
 define PODMAN_POOL = {{ podman_bridge_pool }}
 
-# Atomic replace of just our table — netavark / libvirt / fail2ban
+# Atomic full-replace of just our table — netavark / libvirt / fail2ban
 # tables in the same kernel ruleset (under iptables-nft compat) are
 # untouched. This is the killer simplification over iptables-restore,
-# which flushed every chain in every table the file referenced. The
-# `add table` then `flush` dance is the canonical idempotent idiom:
-# first run creates the (empty) table; subsequent runs reset it.
+# which flushed every chain in every table the file referenced.
+#
+# Idempotent idiom: `add table` is a no-op if the table exists,
+# `delete table` then removes the whole table (sets, chains, maps), and
+# `table { ... }` adds it fresh. A previous form used `flush table`
+# instead of `delete`, which only flushes rules — set DEFINITIONS
+# persist across the flush, so re-declaring a `flags constant` set
+# whose ifname elements now resolve to a different ifindex than the
+# kernel's stored value fails with EBUSY (the test caught this: at
+# role-apply time `wg0` doesn't exist, at re-apply time the netns
+# veth has created it). All three commands batch through netlink
+# atomically under `nft -f`.
 add table ip homelab
-flush table ip homelab
+delete table ip homelab
 table ip homelab {
 
     # Admin services (samba/nut/mosh) scoped to home LAN + wireguard.
