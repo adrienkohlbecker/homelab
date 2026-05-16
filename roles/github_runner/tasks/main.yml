@@ -117,36 +117,14 @@
   tags:
     - github_runner
 
-# Cross-scope zfs deps for the user-scope github_runner@.service.
-# Because user units can't directly express After=/Requires= on
-# system units (systemd silently ignores cross-scope edges), the
-# ordering has to live on the SYSTEM unit that births the user
-# manager (user@<uid>.service). This drop-in makes the user manager
-# wait for /mnt/scratch's zfs mount before starting and stops it
-# before zfs autosnapshot fires -- every user unit running under it,
-# including every github_runner@<inst>.service, inherits that
-# ordering transitively. Skipped when zfs_root is false (no zfs
-# mounts to depend on).
-- name: Install zfs deps drop-in on user@<uid>.service for github_runner
-  when:
-    - zfs_root
-    - not (ansible_check_mode and github_runner_user.changed)
-  import_role:
-    name: systemd_unit
-    tasks_from: dropin
-  vars:
-    systemd_unit_args:
-      src: user_at_zfs.conf.j2
-      for: user@{{ github_runner_user.uid }}.service
-  tags:
-    - github_runner
-
-# Same xino=off + rootless_storage_path override as before; see the
-# previous host-process version's long comment for the dpkg ESTALE +
-# printk-suppression rationale -- unchanged under the new container
-# model because rootless podman still hits the same overlay-on-ZFS
-# path when github_runner's containers (the runner image + sibling
-# workflow containers) start.
+# storage.conf for github_runner's rootless podman, which serves the
+# DooD socket the runner container bind-mounts. Sibling workflow
+# containers (spawned by `container:` blocks via that socket) run
+# under this storage tree, NOT the runner container itself -- the
+# runner runs under root/system podman per the unit template's
+# rationale block. So these knobs only matter for sibling containers
+# now; the runner image is pulled and stored under /var/lib/
+# containers/storage by root podman, untouched by this file.
 - name: Create rootless containers config directory
   when: not (ansible_check_mode and github_runner_user.changed)
   file:
@@ -160,7 +138,8 @@
     - github_runner
 
 # Four overlay-storage knobs, all load-bearing for the rootless +
-# uidmapped container model on this jammy podman (3.4 / crun 0.17):
+# uidmapped sibling-container model on this jammy podman (3.4 /
+# crun 0.17):
 #
 # * rootless_storage_path -- restate the system-config value because
 #   podman 4.9 treats this user file as a full REPLACEMENT, not a
@@ -193,16 +172,16 @@
 #   upstream default; userxattr is force-added by podman internally
 #   for rootless, so we don't restate it.
 #
-# * ignore_chown_errors = "true" -- needed for the uidmapped runner
-#   container's ID-mapped layer copy. This podman lacks kernel
+# * ignore_chown_errors = "true" -- needed for uidmapped sibling
+#   containers' ID-mapped layer copy. This podman lacks kernel
 #   idmapped-overlay support (needs 5.19+; jammy is 5.15) and falls
-#   back to a physical chown'd copy of each layer. Files in the
-#   runner image with file capabilities (newuidmap, newgidmap from
-#   the podman apt deps) can't have their security.capability xattr
-#   restored in the rootless namespace, and without this knob the
-#   copy aborts with EPERM. With it, the offending files keep their
-#   image-side ownership (harmless at runtime; the container's
-#   in-namespace root owns everything via the +0 uidmap override).
+#   back to a physical chown'd copy of each layer. Files in any
+#   sibling image with file capabilities can't have their
+#   security.capability xattr restored in the rootless namespace,
+#   and without this knob the copy aborts with EPERM. With it, the
+#   offending files keep their image-side ownership (harmless at
+#   runtime; the sibling container's in-namespace root owns
+#   everything via its own +0 uidmap override).
 - name: Configure rootless overlay storage opts
   when: not (ansible_check_mode and github_runner_user.changed)
   copy:
@@ -273,21 +252,15 @@
     podman_secret_args:
       name: github_runner_pat
       data: "{{ github_runner_pat }}"
-      user: github_runner
   tags:
     - github_runner
 
-# Install the templated unit once into user scope (/etc/systemd/user/),
-# not system scope. Rationale lives in the unit template's [Unit]
-# comment block: rootless podman + custom uidmaps need cgroup writes
-# inside a user-owned tree for podman exec / podman healthcheck to
-# work, and a system-scope unit running as User=github_runner
-# (Delegate=yes) doesn't quite get there. User scope puts the whole
-# cgroup tree under user.slice/user-<uid>.slice/, fully owned.
-#
-# Per-instance enablement happens in _register.yml via systemctl
-# --user on the instantiated name (github_runner@<repo>_<suffix>
-# .service) under github_runner's user manager.
+# Install the templated unit into system scope (/etc/systemd/system/),
+# running as root and demoting to github_runner inside the container
+# via the --uidmap=+0:<uid>:1 override. Standard CLAUDE.md pattern,
+# same shape as every other system-scope podman role on this host.
+# Per-instance enablement happens in _register.yml via systemctl on
+# the instantiated name (github_runner@<repo>_<suffix>.service).
 - name: Install github_runner@.service template
   import_role:
     name: systemd_unit
@@ -296,7 +269,6 @@
     systemd_unit_args:
       src: github_runner.service.j2
       dest: github_runner@.service
-      user: github_runner
       condition: "{{ not (ansible_check_mode and github_runner_user.changed) }}"
   tags:
     - github_runner
