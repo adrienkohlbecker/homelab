@@ -36,12 +36,25 @@ set -euo pipefail
 
 cd /actions-runner
 
+# Append a per-start random suffix to the runner name so a crash
+# AFTER the `exec ./run.sh` below (i.e. past where the trap fires
+# but before run.sh self-deregisters) doesn't block subsequent
+# starts with HTTP 409 ("runner with this name already exists").
+# Each container start gets a fresh unique registration; the trap
+# still catches the exit-before-exec case for cleanly-deregistered
+# names. Old offline records from genuine crashes accumulate on
+# GitHub's runner list but don't gate future starts -- periodic
+# manual cleanup via `gh api -X DELETE` if the list grows
+# inconveniently.
+random_suffix=$(tr -d '-' < /proc/sys/kernel/random/uuid | head -c 8)
+runner_name="${RUNNER_NAME}_${random_suffix}"
+
 # Build the request body. jq -Rcn 'input | split(",")' converts the
 # comma-separated label env into a JSON array; --arg / --argjson on
 # the outer jq stitch it into the final object without manual quoting.
 labels_json=$(echo "$RUNNER_LABELS" | jq -Rcn 'input | split(",")')
 body=$(jq -cn \
-  --arg name "$RUNNER_NAME" \
+  --arg name "$runner_name" \
   --argjson labels "$labels_json" \
   '{name:$name, runner_group_id:1, labels:$labels, work_folder:"/work"}')
 
