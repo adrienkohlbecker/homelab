@@ -132,6 +132,22 @@
   tags:
     - fluentbit
 
+- name: Install fluent-bit reload override
+  import_role:
+    name: systemd_unit
+    tasks_from: dropin
+  vars:
+    systemd_unit_args:
+      src: override.conf.j2
+      for: fluent-bit.service
+      condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or apt_repository_fluentbit.changed)) }}"
+  tags:
+    - fluentbit
+
+# Split restart vs reload: apt package upgrade swaps the binary so a
+# restart is mandatory; conf/lua changes hit Hot_Reload via SIGHUP and
+# preserve the in-memory backlog. Mutually exclusive (`and not apt`)
+# matches the avahi pattern.
 - name: Enable fluent-bit service
   import_role:
     name: systemd_unit
@@ -140,7 +156,8 @@
     systemd_unit_args:
       src: fluent-bit
       condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or apt_repository_fluentbit.changed)) }}"
-      restart: "{{ fluentbit_conf.changed or fluentbit_lua.changed or fluentbit_apt.changed }}"
+      restart: "{{ fluentbit_apt.changed }}"
+      reload: "{{ (fluentbit_conf.changed or fluentbit_lua.changed) and not fluentbit_apt.changed }}"
   tags:
     - fluentbit
 

@@ -1,0 +1,7 @@
+# {{ ansible_managed }}
+# Adds ExecReload to the upstream fluent-bit.service. Paired with
+# Hot_Reload On in fluent-bit.conf, conf and lua filter changes apply
+# without dropping in-flight records (a restart would empty the
+# in-memory backlog despite storage.backlog.flush_on_shutdown=on).
+[Service]
+ExecReload=/bin/kill -s HUP $MAINPID
