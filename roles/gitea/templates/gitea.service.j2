@@ -34,10 +34,6 @@ ExecStart=/usr/local/bin/gitea web --config /etc/gitea/app.ini
 # may or may not call sd_notify depending on build).
 ExecStartPost=/usr/bin/curl --fail --silent --max-time 30 --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:{{ service_ports.gitea }}/api/healthz
 Environment=USER={{ git_user.name }} HOME={{ git_user.home }} GITEA_WORK_DIR=/mnt/services/gitea
-Environment=GITEA__server__LFS_JWT_SECRET__FILE=/etc/gitea/secrets/lfs_jwt_secret
-Environment=GITEA__mailer__PASSWD__FILE=/etc/gitea/secrets/smtp_password
-Environment=GITEA__security__INTERNAL_TOKEN__FILE=/etc/gitea/secrets/internal_token
-Environment=GITEA__oauth2__JWT_SECRET__FILE=/etc/gitea/secrets/jwt_secret
 
 [Install]
 WantedBy=default.target

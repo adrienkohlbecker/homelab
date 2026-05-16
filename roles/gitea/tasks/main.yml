@@ -64,43 +64,6 @@
   tags:
     - gitea
 
-- name: Create /etc/gitea/secrets
-  when: not (ansible_check_mode and git_user.changed)
-  file:
-    dest: /etc/gitea/secrets
-    state: directory
-    owner: root
-    group: git
-    mode: "0750"
-  become: true
-  tags:
-    - gitea
-
-# Secrets land in per-file 0400 files referenced from the unit via
-# GITEA__<section>__<key>__FILE env vars (gitea env-var substitution).
-# Keeps the secrets out of /etc/gitea/app.ini and out of its backup
-# files, and shrinks the RCE blast radius vs. one-file-rules-them-all.
-- name: Render gitea secret files
-  when: not (ansible_check_mode and git_user.changed)
-  no_log: true
-  copy:
-    content: "{{ item.value }}"
-    dest: "/etc/gitea/secrets/{{ item.name }}"
-    owner: git
-    group: git
-    mode: "0400"
-  become: true
-  loop:
-    - { name: lfs_jwt_secret, value: "{{ gitea_lfs_jwt_secret }}" }
-    - { name: smtp_password, value: "{{ gitea_smtp_password }}" }
-    - { name: internal_token, value: "{{ gitea_internal_token }}" }
-    - { name: jwt_secret, value: "{{ gitea_jwt_secret }}" }
-  loop_control:
-    label: "{{ item.name }}"
-  register: gitea_secrets
-  tags:
-    - gitea
-
 - name: Configure gitea
   template:
     src: app.ini.j2
@@ -142,7 +105,7 @@
     systemd_unit_args:
       src: gitea
       condition: "{{ not (ansible_check_mode and (gitea_service_result.changed or git_user.changed)) }}"
-      restart: "{{ gitea_service_result.changed or gitea_conf.changed or gitea_installed.changed or gitea_secrets.changed }}"
+      restart: "{{ gitea_service_result.changed or gitea_conf.changed or gitea_installed.changed }}"
   tags:
     - gitea
 
