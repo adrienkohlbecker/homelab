@@ -113,10 +113,20 @@ ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S /run/user/{{ github_runne
 #   Cheap when up-to-date (just a HEAD on the manifest, ~100ms);
 #   first-after-bump start eats the layer download once, then the
 #   layer cache satisfies subsequent starts until the next bump.
+# No --cgroups=split (intentionally, vs healthchecks/openobserve
+# which do set it): with User=github_runner the systemd-delegated
+# cgroup tree under system.slice doesn't give the rootless user
+# enough write access to the split sub-cgroups for podman exec /
+# healthcheck to add new processes. Empty default (--cgroups=enabled)
+# puts conmon + container in a single cgroup that conmon manages
+# directly, which exec joins fine. Healthchecks/openobserve don't
+# trip this because they run their unit as root at the systemd
+# layer; we keep User=github_runner per the cidfile-comment rationale
+# above and pay the small cost of not having conmon's resource
+# accounting separated.
 ExecStartPre=/bin/rm -f %t/%N/ctr-id
 ExecStart=/usr/bin/podman run \
   --cidfile=%t/%N/ctr-id \
-  --cgroups=split \
   --sdnotify=healthy \
   --detach \
   --replace \
