@@ -48,14 +48,19 @@ START_HD_IDLE=true
 #                          stdout/stderr
 #  -h                      Print usage information.
 #
-# Filter chain (jinja `selectattr` chain):
-#   virtual=0    real hardware backing exists (/sys/block/<x>/device/
-#                present); excludes md/dm/loop/sr/ram/zd pseudo-devices,
-#                which can report rotational=1 but have nothing to spin
-#                (observed on box's mdadm-EFI/swap).
-#   rotational=1 skip SSDs / NVMe (spindown is harmful + nonsensical).
-#   removable=0  skip USB-attached HDDs — they tend to be backup targets
-#                where mid-write spindown is harmful.
-#   links.ids    skip drives udev didn't surface a /dev/disk/by-id/ link
-#                for (no stable identifier to bind hd-idle to).
-HD_IDLE_OPTS="-i 0{% if ansible_distribution_release not in ['jammy', 'noble'] %} -s 1{% endif %}{% for dev in ansible_devices.values() | rejectattr('virtual', 'equalto', 1) | selectattr('rotational', 'equalto', '1') | selectattr('removable', 'equalto', '0') if dev.links.ids %} -a /dev/disk/by-id/{{ dev.links.ids | sort | first }} -i 1200{% endfor %}"
+# Filter chain:
+#   name prefix    excludes md/dm/loop/sr/ram/zd kernel pseudo block
+#                  devices, which can report rotational=1 but have
+#                  nothing to spin (observed on box's mdadm-EFI/swap).
+#                  ansible_devices' `virtual` field looks like it
+#                  should discriminate this, but on modern kernels
+#                  /sys/block/<x> is always a symlink and ansible's
+#                  detection logic (linux.py:733-748) sets virtual=1
+#                  for every disk — unusable as a real-vs-pseudo
+#                  filter, so we fall back to the name prefix.
+#   rotational=1   skip SSDs / NVMe (spindown is harmful + nonsensical).
+#   removable=0    skip USB-attached HDDs — they tend to be backup
+#                  targets where mid-write spindown is harmful.
+#   links.ids      skip drives udev didn't surface a /dev/disk/by-id/
+#                  link for (no stable identifier to bind hd-idle to).
+HD_IDLE_OPTS="-i 0{% if ansible_distribution_release not in ['jammy', 'noble'] %} -s 1{% endif %}{% for name, dev in ansible_devices.items() if not name.startswith(('md', 'dm-', 'loop', 'sr', 'ram', 'zd')) and dev.rotational == '1' and dev.removable == '0' and dev.links.ids %} -a /dev/disk/by-id/{{ dev.links.ids | sort | first }} -i 1200{% endfor %}"
