@@ -28,7 +28,7 @@
 # host's resolv.conf (one-shot containers without --dns) ended up
 # querying a VIP that PREROUTING DNATs back into the bridge — iif and
 # oif both podman0. netavark's NETAVARK_FORWARD chain accepted, but
-# our `ip homelab` forward chain had no matching rule and fell
+# our `inet homelab` forward chain had no matching rule and fell
 # through to default DROP; multi-base-chain semantics drops the
 # packet regardless. Re-fired the canonical case here by running a
 # transient busybox on the same `podman` network and curling the
