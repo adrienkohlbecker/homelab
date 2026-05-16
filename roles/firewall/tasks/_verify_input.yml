@@ -75,8 +75,7 @@
   changed_when: false
 
 - name: _verify_input | INPUT — wireguard (51820/udp) rejected when ingressing on wg0
-  shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:51820,bind={{ probe_nonscope }}
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_nonscope }} 10.99.0.1 51820
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -108,8 +107,7 @@
   become: true
 
 - name: _verify_input | INPUT — mosh (60000/udp) reachable from wireguard source
-  shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:60000,bind={{ probe_wg }}
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_wg }} 10.99.0.1 60000
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -134,8 +132,7 @@
 # Positive case from wg-source via wg0; the home_LAN-via-wg0 mismatch
 # is structurally identical and already covered by the Samba probes.
 - name: _verify_input | INPUT — NetBIOS (137/udp) reachable from wireguard source
-  shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:137,bind={{ probe_wg }}
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_wg }} 10.99.0.1 137
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -143,8 +140,7 @@
 # mDNS rule requires iif=$WAN_IFACE + saddr=$HOME_LAN simultaneously.
 # wg saddr fails the saddr half — counter must not increment.
 - name: _verify_input | INPUT — mDNS (5353/udp) sent from wg saddr (saddr scope rejects)
-  shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:5353,bind={{ probe_wg }}
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_wg }} 10.99.0.1 5353
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -161,8 +157,7 @@
   become: true
 
 - name: _verify_input | INPUT — mosh (60000/udp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
-  shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:60000,bind={{ probe_home }}
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_home }} 10.99.0.1 60000
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -184,8 +179,7 @@
   become: true
 
 - name: _verify_input | INPUT — mDNS (5353/udp) sent from home_LAN saddr via wg0 (iif scope rejects)
-  shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:5353,bind={{ probe_home }}
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_home }} 10.99.0.1 5353
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -196,8 +190,7 @@
 # rule must reject it. No bind task: the primary alias is in place
 # from the netns setup above.
 - name: _verify_input | INPUT — mosh (60000/udp) rejected from non-scope source
-  shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:60000,bind={{ probe_nonscope }}
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_nonscope }} 10.99.0.1 60000
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -219,8 +212,7 @@
   become: true
 
 - name: _verify_input | INPUT — dnscrypt (5053/udp) rejected from non-scope source
-  shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:{{ service_ports.dnscrypt_proxy }},bind={{ probe_nonscope }}
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_nonscope }} 10.99.0.1 {{ service_ports.dnscrypt_proxy }}
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -228,7 +220,7 @@
 # --- probe_podman group (default-bridge-source positives) ------------
 # Container DNS (5053 dnscrypt, 5333 aardvark) — consumers live on the
 # default podman bridge, so positive probes source-bind from
-# probe_podman (in $PODMAN_DEFAULT). socat sends a single UDP packet
+# probe_podman (in $PODMAN_DEFAULT). nc -u sends a single UDP packet
 # source-bound to the alias; the named counter is the assertion.
 # Dnscrypt also has a TCP probe to lock in the `meta l4proto { tcp,
 # udp }` scope — a regression to UDP-only would silently bring back
@@ -240,8 +232,7 @@
   become: true
 
 - name: _verify_input | INPUT — dnscrypt (5053/udp) reachable from container source
-  shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:{{ service_ports.dnscrypt_proxy }},bind={{ probe_podman }}
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_podman }} 10.99.0.1 {{ service_ports.dnscrypt_proxy }}
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -255,8 +246,7 @@
   become: true
 
 - name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from default-bridge source
-  shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:5333,bind={{ probe_podman }}
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_podman }} 10.99.0.1 5333
   args: { executable: /bin/bash }
   changed_when: false
   become: true
@@ -284,8 +274,7 @@
   become: true
 
 - name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from non-default-bridge source
-  shell: |
-    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:5333,bind={{ probe_podman_pool }}
+  shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_podman_pool }} 10.99.0.1 5333
   args: { executable: /bin/bash }
   changed_when: false
   become: true

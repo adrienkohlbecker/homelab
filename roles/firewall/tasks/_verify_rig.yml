@@ -9,7 +9,6 @@
       - iproute2
       - curl
       - iputils-ping
-      - socat        # UDP echo listeners (5053 / 5333 / 5353)
       - hping3       # crafted TCP-ACK probes for `! --syn` rules
     cache_valid_time: 3600
   become: true
