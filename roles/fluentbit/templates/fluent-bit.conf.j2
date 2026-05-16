@@ -34,6 +34,7 @@
     DB                /var/lib/fluent-bit/journal.db
     Read_From_Tail    on
     Strip_Underscores on
+    storage.type      filesystem
 
 # Browser-emitted CSP violation reports. nginx on csplogger.<host>.<domain>
 # proxies POST /log here; the public endpoint stays public-by-design (CSP
@@ -46,6 +47,7 @@
     Listen            127.0.0.1
     Port              {{ service_ports.csp_ingest }}
     Successful_response_code  204
+    storage.type      filesystem
 
 # nginx access/error logs don't go through journald by default.
 [INPUT]
@@ -56,6 +58,7 @@
     Path_Key          filepath
     Refresh_Interval  5
     Skip_Long_Lines   on
+    storage.type      filesystem
 
 [INPUT]
     Name              tail
@@ -65,6 +68,7 @@
     Path_Key          filepath
     Refresh_Interval  5
     Skip_Long_Lines   on
+    storage.type      filesystem
 
 # Join python / go / java / ruby tracebacks into a single record per
 # stack so HyperDX doesn't scatter the frames across 10+ rows. Records
