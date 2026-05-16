@@ -629,6 +629,21 @@
   failed_when: false
   become: true
 
+# VRRP iif-scope negative probe. The rule is `iifname $WAN_IFACE ip
+# saddr $HOME_LAN ip protocol vrrp accept` — wg0 ingress (which is how
+# every extns packet arrives) must not match. Positive probe isn't
+# possible in this rig because slirp doesn't pass arbitrary L4
+# protocols on WAN, and adding a second veth named like $WAN_IFACE
+# would conflict with the netns topology. Confirm the rule's counter
+# stays at 0 after a proto-112 packet from extns — a regression that
+# drops the iif scope (`ip saddr ... ip protocol vrrp accept`) would
+# accept this packet and increment the counter.
+- name: _verify | input — VRRP (proto 112) on wg0 ingress doesn't match the WAN-iif rule
+  command: ip netns exec extns hping3 --rawip -H 112 -c 1 -d 0 --quiet 10.99.0.1
+  changed_when: false
+  failed_when: false
+  become: true
+
 - name: _verify | Capture nftables counters after crafted-packet probes
   command: nft -j list table ip homelab
   register: counters_after_crafted
@@ -712,6 +727,10 @@
                              | selectattr('counter', 'defined') | first).counter.packets }}"
     input_catchall_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'input catch-all drop') | first).expr
                              | selectattr('counter', 'defined') | first).counter.packets }}"
+    # VRRP rule's counter is asserted at 0 — the negative probe sends
+    # proto-112 from wg0 (extns ingress) and the iif scope must reject.
+    vrrp_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'keepalived (VRRP, LAN unicast)') | first).expr
+                   | selectattr('counter', 'defined') | first).counter.packets }}"
   assert:
     that:
       - input_nonsyn_pkts | int >= 1
@@ -720,11 +739,14 @@
       - icmp_overflow_pkts | int >= 1
       - input_silenced_pkts | int >= 1
       - input_catchall_pkts | int >= 1
+      - vrrp_pkts | int == 0
     fail_msg: >-
       Counter-based probes didn't fire all expected drop rules:
       non-SYN (input/forward), forward catch-all, icmp overflow,
-      input silenced-noise, or input catch-all. Either a rule
-      is missing, the probe didn't reach the chain, or another rule
+      input silenced-noise, or input catch-all; OR the VRRP rule's
+      iif scope accepted a wg0-ingress packet (vrrp_pkts > 0).
+      Either a rule is missing, the probe didn't reach the chain,
+      or another rule
       swallowed the packet first.
 
 # Re-apply coverage. With iptables-restore the apply was destructive

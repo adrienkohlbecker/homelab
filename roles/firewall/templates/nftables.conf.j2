@@ -154,7 +154,7 @@ table ip homelab {
         # keepalived.conf.j2). Scope VRRP to LAN ingress + LAN saddr
         # so nothing on WAN / wg0 / podman bridges can inject proto
         # 112 packets to churn election state.
-        iifname $WAN_IFACE ip saddr $HOME_LAN ip protocol vrrp accept comment "keepalived (VRRP, LAN unicast)"
+        iifname $WAN_IFACE ip saddr $HOME_LAN ip protocol vrrp counter accept comment "keepalived (VRRP, LAN unicast)"
 
         # LAN broadcast/discovery noise. Every entry here was identified
         # from a 24h journal sweep of the catch-all log+drop below; each
