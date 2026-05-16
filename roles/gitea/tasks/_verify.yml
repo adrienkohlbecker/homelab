@@ -1,0 +1,44 @@
+# Loopback probe -- confirms gitea is serving. The systemd unit's
+# ExecStartPost already gates "active" on this endpoint, so the
+# retries here are mostly belt-and-suspenders.
+- name: _verify | gitea answers /api/healthz on loopback
+  uri:
+    url: http://127.0.0.1:{{ service_ports.gitea }}/api/healthz
+    status_code: 200
+  register: _verify_healthz
+  retries: 30
+  delay: 2
+  until: _verify_healthz.status == 200
+
+# Asserts the running gitea matches the version pinned in vars/main.yml
+# -- catches "binary updated, unit not restarted" and bad-download cases.
+- name: _verify | gitea /api/v1/version matches pinned gitea_version
+  uri:
+    url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/version
+    status_code: 200
+  register: _verify_version
+  failed_when: >-
+    _verify_version.json.version is not defined
+    or gitea_version not in _verify_version.json.version
+
+# Reverse-proxy chain probe -- a typo'd subdomain or broken
+# nginx_site_args would pass the loopback probe above silently.
+- name: _verify | gitea reachable via nginx vhost
+  uri:
+    url: https://localhost/api/healthz
+    headers:
+      Host: "gitea.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    status_code: 200
+
+# Confirms gitea actually opened the sqlite db at the path we configured
+# -- a permissions/mount regression on /mnt/services/sqlite/gitea/
+# would land here as "no such file" with a unit still active.
+- name: _verify | gitea sqlite database exists and is owned by git
+  stat:
+    path: /mnt/services/sqlite/gitea/gitea.db
+  register: _verify_sqlite
+  failed_when: >-
+    not _verify_sqlite.stat.exists
+    or _verify_sqlite.stat.pw_name != 'git'
+  become: true
