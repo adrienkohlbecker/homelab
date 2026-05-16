@@ -33,17 +33,23 @@ fi
 
 read -r -a _disks <<<"${EXTRA_DISKS:-}"
 
+# pop_disks N: take N disks off the front of _disks and put them in
+# the global POPPED array. Side-effects via a global because a
+# subshell (e.g. `result=$(pop_disks N)`) loses the _disks mutation
+# when the subshell exits -- which makes the next pool grab the same
+# disks and trip on "device busy" since the previous pool is still
+# holding them.
 pop_disks() {
-  local n=$1 i out=""
+  local n=$1 i
+  POPPED=()
   for ((i = 0; i < n; i++)); do
     if [ "${#_disks[@]}" -eq 0 ]; then
       echo >&2 "pools.sh: ran out of EXTRA_DISKS while allocating $n for $POOL"
       exit 1
     fi
-    out+="${_disks[0]} "
+    POPPED+=("${_disks[0]}")
     _disks=("${_disks[@]:1}")
   done
-  echo "${out% }"
 }
 
 wipe_disk() {
@@ -79,35 +85,27 @@ ZPOOL_OPTS=(
 )
 
 create_apoc() {
-  local disks
-  disks=$(pop_disks 2)
+  pop_disks 2
+  local disks=("${POPPED[@]}")
   if zpool list -H apoc >/dev/null 2>&1; then return; fi
-  for d in $disks; do wipe_disk "$d"; done
+  for d in "${disks[@]}"; do wipe_disk "$d"; done
   udevadm settle
-  # shellcheck disable=SC2086
-  zpool create -f -o autotrim=off "${ZPOOL_OPTS[@]}" apoc mirror $disks
+  zpool create -f -o autotrim=off "${ZPOOL_OPTS[@]}" apoc mirror "${disks[@]}"
 }
 
 create_dozer() {
-  local disks
-  disks=$(pop_disks 2)
+  pop_disks 2
+  local disks=("${POPPED[@]}")
   if zpool list -H dozer >/dev/null 2>&1; then return; fi
-  for d in $disks; do wipe_disk "$d"; done
+  for d in "${disks[@]}"; do wipe_disk "$d"; done
   udevadm settle
-  # shellcheck disable=SC2086
-  zpool create -f -o autotrim=on "${ZPOOL_OPTS[@]}" dozer mirror $disks
+  zpool create -f -o autotrim=on "${ZPOOL_OPTS[@]}" dozer mirror "${disks[@]}"
 }
 
 create_tank_mouse() {
-  local disks tm1 tm2 tank3 tank4
-  disks=$(pop_disks 4)
-  # shellcheck disable=SC2086
-  set -- $disks
-  tm1=$1
-  tm2=$2
-  tank3=$3
-  tank4=$4
-  for d in $disks; do wipe_disk "$d"; done
+  pop_disks 4
+  local disks=("${POPPED[@]}") tm1=${POPPED[0]} tm2=${POPPED[1]} tank3=${POPPED[2]} tank4=${POPPED[3]}
+  for d in "${disks[@]}"; do wipe_disk "$d"; done
   # Partition the shared (tank+mouse) disks: p1 = tank slice (1014M),
   # p2 = mouse slice (fill minus 8M), p3 = future-use extra (last 8M).
   for tm in "$tm1" "$tm2"; do
