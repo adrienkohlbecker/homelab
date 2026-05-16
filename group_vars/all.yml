@@ -41,7 +41,10 @@ service_ports:
   homepage_alerts: 8765
   hyperdx: 5085
   hyperdx_otlp_http: 4318
+  nut: 3493
   openobserve: 5080
+  transmission_bt: 51413
+  wireguard: 51820
 
 # mDNS device-info model -- drives the Finder sidebar icon for the host.
 # Maps to an .icns under /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/
