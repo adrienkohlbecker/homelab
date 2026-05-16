@@ -343,6 +343,47 @@
   tags:
     - netdata
 
+# Same staging+replace pattern as disks.conf above, for timex.conf's
+# system_clock_sync_state alarm. The kernel's ntp_adjtime() exposes a
+# clock-synchronized bit; that bit going to 0 means the local clock has
+# drifted out of sync with whatever ntp daemon is configured (chrony on
+# lab/pug). Upstream defaults `to: silent` because clock-sync is "boring"
+# on most cloud hosts -- but on lab/pug an out-of-sync clock breaks
+# TLS-cert validation, signed-package apt-get, and zfs replication
+# bookmarks. Cheap to alert on; not noisy in steady state.
+- name: Stage upstream timex.conf into /etc/netdata/health.d
+  command: cp /usr/lib/netdata/conf.d/health.d/timex.conf /etc/netdata/health.d/timex.conf
+  args:
+    creates: /etc/netdata/health.d/timex.conf
+  register: netdata_timex_staged
+  become: true
+  tags:
+    - netdata
+
+- name: Un-silence system_clock_sync_state
+  when: not (ansible_check_mode and netdata_timex_staged.changed)
+  replace:
+    path: /etc/netdata/health.d/timex.conf
+    # `alarm:` (not `template:`) since this binds to a single named chart
+    # rather than fanning out across a context. Same (?s)/.*? shape as
+    # disks.conf so the regex stops at the first `to: silent` after the
+    # alarm header.
+    regexp: '(?s)(alarm:\s*system_clock_sync_state\b.*?\bto:\s*)silent'
+    replace: '\1sysadmin'
+    backup: true
+  register: netdata_timex_unsilenced
+  become: true
+  tags:
+    - netdata
+
+- name: Reload netdata health after timex.conf edits
+  when: netdata_timex_staged.changed or netdata_timex_unsilenced.changed
+  command: netdatacli reload-health
+  changed_when: true
+  become: true
+  tags:
+    - netdata
+
 - name: Configure systemdunits metrics
   import_role:
     name: netdata
