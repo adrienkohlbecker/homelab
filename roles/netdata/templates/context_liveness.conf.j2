@@ -30,26 +30,12 @@ template: liveness_{{ name }}
       to: sysadmin
 
 {% endfor %}
-{# Per-collector staleness + iteration-failure alerts. Fans out to every
-   netdata.go_d_<plugin>_<job>_data_collection_status chart without
-   per-collector enumeration; netdata_presence_alerts.conf covers the
-   configured-but-never-instantiated gap separately. #}
-template: collector_stale
-      on: netdata.plugin_data_collection_status
-    calc: $now - $last_collected_t
-   every: 60s
-    crit: $this > (60)
-   delay: up 5m
- summary: Collector ${chart} has stopped reporting
-    info: A go.d collector has not run a data collection iteration in over 60s
-      to: sysadmin
-
-template: collector_failing
-      on: netdata.plugin_data_collection_status
-  lookup: max -5m of failed
-   every: 60s
-    crit: $this > (0)
-   delay: down 5m
- summary: Collector ${chart} reported a failed iteration
-    info: A go.d collector reported a failed data-collection iteration in the last 5m
-      to: sysadmin
+{# Previously this file also defined collector_stale + collector_failing
+   templates binding to `netdata.plugin_data_collection_status` -- a
+   per-collector liveness chart that netdata 2.x ships but 1.46 does
+   not. Those templates silently failed to instantiate on this version
+   (no matching chart context), so they were dead code. netdata is
+   pinned at 1.46.* in roles/netdata/files/apt_preferences; once that
+   pin lifts (and we move to 2.x) re-add the two templates here. The
+   netdata_presence machinery covers the configured-but-never-
+   instantiated case in the meantime. #}
