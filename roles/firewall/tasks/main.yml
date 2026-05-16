@@ -152,6 +152,30 @@
   tags:
     - firewall
 
+# Pre-emptively stop ufw.service before nftables.service starts.
+# Vanilla Ubuntu cloud images / server ISOs ship ufw enabled and
+# both services register INPUT-hook chains in the kernel netfilter
+# table — they can briefly coexist until the apt-purge below, but
+# that window has two firewalls fighting over the same packets with
+# different priorities. Stopping ufw first closes the window.
+# Gated on the unit existing (stat the package install path), so
+# re-converge after the purge silently skips.
+- name: Stat ufw.service unit file
+  stat:
+    path: /lib/systemd/system/ufw.service
+  register: firewall_ufw_unit
+  tags:
+    - firewall
+
+- name: Stop ufw.service before nftables takes over the INPUT hook
+  when: firewall_ufw_unit.stat.exists
+  systemd:
+    name: ufw.service
+    state: stopped
+  become: true
+  tags:
+    - firewall
+
 # Apply ruleset + service lifecycle via the systemd_unit helper. The
 # ExecReload drop-in installed above maps `state: reloaded` to atomic
 # `nft -f` (per-table flush+rebuild inside the file replaces only our
