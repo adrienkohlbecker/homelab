@@ -34,6 +34,18 @@ function set_priority(tag, ts, group, metadata, record)
         return 0, ts, metadata, record
     end
 
+    -- An upstream modify filter scoped to a specific tag (e.g.
+    -- nginx.access, where no body inspection is wanted) may have
+    -- pre-stamped record["severity_text"]. Lift it into the OTLP
+    -- metadata stream and skip the body-keyword scan.
+    if record["severity_text"] ~= nil then
+        metadata.otlp.severity_text = record["severity_text"]
+        if record["severity_number"] ~= nil then
+            metadata.otlp.severity_number = tonumber(record["severity_number"]) or 0
+        end
+        return 1, ts, metadata, record
+    end
+
     local msg = record["log"]
     if type(msg) ~= "string" then
         return 0, ts, metadata, record

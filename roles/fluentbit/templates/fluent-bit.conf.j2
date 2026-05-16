@@ -141,9 +141,11 @@
 # "alert"/"warning"/"error" substrings are random URL path segments,
 # which HyperDX's collector transform processor's body-regex would
 # happily upgrade to FATAL/WARN/ERROR (it uses \b not non-word borders
-# on both sides). Stamp info up-front to keep both that body-regex
-# inference and the level-from-message lua below from firing on URL
-# noise. The lua filter respects an already-set severity and bails out.
+# on both sides). Stamp info up-front to keep that body-regex
+# inference from firing on URL noise, and to skip the 120-char
+# keyword scan in level-from-message.lua for high-volume access logs.
+# The lua filter sees record["severity_text"] and lifts it into the
+# OTLP metadata stream (which is what the OTLP output reads).
 [FILTER]
     Name              modify
     Match             nginx.access
