@@ -13,28 +13,30 @@
 --
 -- service.name derivation, keyed on the fluent-bit tag:
 --   csp.<host>     -> "csplogger"    (matches what flatten-csp emits)
---   svc.<name>     -> "<name>"       (rewrite_tag derives from journald)
---   nginx.access   -> "nginx_access" (tail input tag, no rewrite)
+--   svc.<unit>     -> "<unit>"       (systemd input's Tag svc.* wildcard
+--                                     expands _SYSTEMD_UNIT, e.g.
+--                                     nginx.service -> "nginx"; .service
+--                                     suffix stripped, other unit types
+--                                     keep theirs)
+--   nginx.access   -> "nginx_access" (tail input tag)
 --   nginx.error    -> "nginx_error"
---   journal.<...>  -> "journal"      (rewrite_tag rule didn't match)
---   <other>        -> tag verbatim   (fallback)
+--   <other>        -> tag verbatim   (fallback, incl. "svc.unknown" for
+--                                     records with no _SYSTEMD_UNIT)
 --
--- Lowercased on the way out. Journal SYSLOG_IDENTIFIERs are mixed-case
--- (Keepalived_vrrp, NetworkManager, etc.) which is awkward both to type
--- in HyperDX's UI filter and to group on when one service identifies
--- itself inconsistently across releases. Normalising to lowercase here
--- keeps the Services facet tidy and case-insensitive at the source.
+-- Lowercased on the way out. Unit names are mixed-case (Keepalived_vrrp,
+-- NetworkManager, etc.) which is awkward both to type in HyperDX's UI
+-- filter and to group on when one service identifies itself
+-- inconsistently across releases. Normalising to lowercase here keeps
+-- the Services facet tidy and case-insensitive at the source.
 
 local function service_from_tag(tag)
     local svc
     if string.sub(tag, 1, 4) == "csp." then
         svc = "csplogger"
     elseif string.sub(tag, 1, 4) == "svc." then
-        svc = string.sub(tag, 5)
+        svc = string.sub(tag, 5):gsub("%.service$", "")
     elseif string.sub(tag, 1, 6) == "nginx." then
         svc = "nginx_" .. string.sub(tag, 7)
-    elseif string.sub(tag, 1, 8) == "journal." then
-        svc = "journal"
     else
         svc = tag
     end
