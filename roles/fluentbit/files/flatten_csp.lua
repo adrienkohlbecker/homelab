@@ -20,12 +20,27 @@
 -- Reporting API body      : [{"type":"csp-violation","body":{"blockedURL":"..."}, ...}]
 -- fluent-bit's http input splits the array, so this filter only sees
 -- the per-violation shape regardless of which protocol the browser used.
+--
+-- Trust model: the HTTP input is public-by-design (browsers can't carry
+-- auth on a fire-and-forget CSP POST), so `record` arrives entirely
+-- attacker-controlled. We discard it at return time and substitute a
+-- clean { log = ... } dict — only the synthesised body survives into
+-- the downstream record. Without this strip, an attacker could land
+-- arbitrary top-level keys (forged `log` body, severity overrides,
+-- LogAttribute bloat) that survive through to ClickHouse otel_logs.
 
 local function pick(t, ...)
     if type(t) ~= "table" then return nil end
     for _, k in ipairs({ ... }) do
         local v = t[k]
-        if v ~= nil and v ~= "" then return v end
+        local vtype = type(v)
+        -- Scalar-only: a malformed POST with a nested object at a known
+        -- key (e.g. `{"blocked-uri": {"x":1}}`) would otherwise pass the
+        -- table through to scrub(tostring(table)), leaking a Lua heap
+        -- pointer ("table: 0x7f...") into LogAttributes.
+        if (vtype == "string" or vtype == "number") and v ~= "" then
+            return v
+        end
     end
     return nil
 end
@@ -84,9 +99,8 @@ function flatten_csp(tag, ts, group, metadata, record)
         -- Unrecognised shape; emit a tagged body so the record is still
         -- discoverable under ServiceName=csplogger with severity=warn,
         -- but with no csp_* attributes beyond csp_format.
-        record["log"] = "csplogger received malformed POST"
         metadata.otlp.attributes = { csp_format = "unknown" }
-        return 1, ts, metadata, record
+        return 1, ts, metadata, { log = "csplogger received malformed POST" }
     end
 
     local blocked     = scrub(strip_url_meta(pick(r, "blocked-uri", "blockedURL")))
@@ -125,11 +139,12 @@ function flatten_csp(tag, ts, group, metadata, record)
     add("csp_status_code",         status_code)
     metadata.otlp.attributes = attrs
 
-    record["log"] = string.format(
-        "CSP %s blocked %s on %s",
-        effective or "?",
-        blocked or "?",
-        document or "?"
-    )
-    return 1, ts, metadata, record
+    return 1, ts, metadata, {
+        log = string.format(
+            "CSP %s blocked %s on %s",
+            effective or "?",
+            blocked or "?",
+            document or "?"
+        ),
+    }
 end
