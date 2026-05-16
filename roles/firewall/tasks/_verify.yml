@@ -213,6 +213,19 @@
   changed_when: false
   become: true
 
+# SSH (22/tcp) is in the unscoped `tcp dport { 22, 80, 443 } accept`
+# set. The harness's own ansible connection is over WAN-side slirp
+# hostfwd, so a regression that scopes 22 to @lan_admin_ifaces would
+# still pass via the test rig's enp0s2 — probe from extns to lock in
+# the unscoped contract on top of that. bash /dev/tcp opens a raw TCP
+# connection; rc=0 means the SYN-ACK landed, rc!=0 means the catch-all
+# fired.
+- name: _verify | INPUT allow — SSH (22/tcp) reachable from extns (unscoped)
+  shell: ip netns exec extns timeout 3 bash -c "exec 3<>/dev/tcp/10.99.0.1/22"
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
 # Wireguard 51820 is scoped to -i WAN. Two probes — positive via
 # the controller-side UDP hostfwd (slirp ingresses on enp0s2, which
 # is the WAN iface in the test VM) and negative from the netns where
