@@ -110,6 +110,13 @@ table ip homelab {
         # shouldn't reach Samba) for any podman bridge in the pool.
         # Without this, HA's NUT integration silently fails — observed
         # as ~300 SYN-retry drops/day at INPUT.
+        #
+        # Known gap: this trusts every container on every podman bridge,
+        # not just HA's. upsd exposes INSTCMD (UPS shutdown) — a
+        # compromised container could power-off the rack. Tightening
+        # needs either pinning HA's bridge subnet here or restricting
+        # NUT clients via upsd.users; not implemented (home-environment
+        # trade).
         ip saddr $PODMAN_POOL tcp dport 3493 accept comment "nut (podman bridges, e.g. HA NUT integration)"
 
         # ICMP — only echo-request, rate-limited. Other ICMP types
@@ -205,6 +212,15 @@ table ip homelab {
         #     semantics, even if another chain returned accept).
         # WAN/wg0 scoping still prevents reachability from any future
         # interface (guest VLAN, mgmt net) we haven't trusted.
+        #
+        # Known gap on the second rule: trusts any container to reach
+        # any DNAT-marked tuple — including 0.0.0.0-published services
+        # on the host's LAN IP and other bridges via their gateway IPs.
+        # A compromised container (e.g. transmission running untrusted
+        # BT peer code) could pivot to internal services this way.
+        # Tightening would need an oifname allowlist of bridges that
+        # should be cross-reachable, or a dport blacklist for sensitive
+        # services; not implemented (home-environment trade).
         iifname { $WAN_IFACE, "wg0" } oifname "podman*" \
             ct status dnat accept comment "Reach containers (LAN + wireguard ingress)"
         iifname "podman*" oifname "podman*" ct status dnat \
