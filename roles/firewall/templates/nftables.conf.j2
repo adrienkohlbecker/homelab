@@ -172,7 +172,7 @@ table ip homelab {
         #           has an interface in. ~6k/day. We don't run a UBNT
         #           agent on this host
         #   57621 — Spotify Connect LAN discovery (Adrien's MBP)
-        udp dport { 67, 1900, 5351, 10001, 57621 } drop comment "LAN broadcast/discovery noise — silenced"
+        udp dport { 67, 1900, 5351, 10001, 57621 } counter drop comment "input silenced LAN noise"
 
         # Catch-all: log+drop UDP and non-TCP/UDP protocols silently
         # to avoid ICMP amplification (every spoofed UDP probe would
@@ -182,7 +182,7 @@ table ip homelab {
         # ports don't confirm host existence to internet scanners.
         limit rate 5/minute burst 10 packets log prefix "[nftables] INPUT:DROP: "
         iifname @lan_admin_ifaces meta l4proto tcp reject with tcp reset
-        drop
+        counter drop comment "input catch-all drop"
     }
 
     ##################################################
