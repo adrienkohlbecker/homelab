@@ -36,12 +36,14 @@ function set_priority(tag, ts, group, metadata, record)
 
     -- An upstream modify filter scoped to nginx.access pre-stamps
     -- record["severity_text"] = "info" so this filter doesn't scan URL
-    -- noise for level keywords. Tag-gated to nginx.access only: other
-    -- inputs (notably the http CSP input) carry attacker-controlled
-    -- records, so honouring record["severity_text"] from any tag would
-    -- be a severity-forgery channel. Today it's unreachable because
-    -- flatten_csp.lua pins severity in metadata first; the gate is
-    -- defence-in-depth for any future unauthenticated input.
+    -- noise for level keywords. Tag-gated to nginx.access: today's
+    -- only writer of record["severity_text"] is that modify filter
+    -- (CSP records are replaced wholesale by flatten_csp before this
+    -- filter runs; systemd journal fields arrive uppercased, so
+    -- SEVERITY_TEXT != severity_text). The gate is defence-in-depth:
+    -- a future tag-nginx.* input that parses attacker-influenced JSON
+    -- (e.g. structured-log nginx tail) would become a forgery channel
+    -- without it.
     if tag == "nginx.access" and record["severity_text"] ~= nil then
         metadata.otlp.severity_text = record["severity_text"]
         if record["severity_number"] ~= nil then
