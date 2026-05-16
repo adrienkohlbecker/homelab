@@ -1,0 +1,7 @@
+# Per-instance environment for github_runner@{{ runner_instance.repo }}_{{ runner_instance.suffix }}.service.
+# Consumed by the runner container via podman's --env-file. Static for
+# the instance's lifetime; changes (relabel, repo rename) propagate via
+# the systemd_unit helper's restart trigger in _register.yml.
+REPO_URL=https://github.com/{{ github_runner_owner }}/{{ runner_instance.repo }}
+RUNNER_NAME={{ inventory_hostname }}_{{ runner_instance.repo }}_{{ runner_instance.suffix }}
+RUNNER_LABELS={{ runner_instance.labels }}

@@ -1,12 +1,19 @@
 # jinja2: lstrip_blocks: "True"
-# github_runner_{{ runner_repo }}.service ##################################################
+# github_runner@.service ###############################################
+# Templated unit; one instance per entry in github_runner_instances on
+# this host. Instance name = <repo>_<suffix> (e.g. homelab_vm1). Per-
+# instance config (REPO_URL, RUNNER_NAME, RUNNER_LABELS) ships via
+# /etc/default/github_runner@%i; first-start registration token ships
+# via the github_runner_token_%i podman secret. State persists on the
+# /mnt/services/github_runner/%i bind-mount so container restarts and
+# image bumps don't re-register.
 [Unit]
-Description=github-actions runner ({{ runner_repo }})
+Description=github-actions runner (%i)
 After=network-online.target
 Wants=network-online.target
-# actions/runner spawns container jobs via the rootless podman.socket
-# inside the github_runner user manager; wait for that user manager to be
-# up before starting.
+# actions/runner inside the container spawns sibling workflow containers
+# via the bind-mounted rootless podman socket; wait for github_runner's
+# user manager (which owns that socket) to be up before starting.
 After=user@{{ github_runner_user.uid }}.service
 Requires=user@{{ github_runner_user.uid }}.service
 StartLimitInterval=600
@@ -26,26 +33,68 @@ PartOf=zfs_autosnapshot.target
 
 [Service]
 Restart=always
-TimeoutStartSec=120
-TimeoutStopSec=30
 RestartSec=5
+# Cold-start has to fit: image pull (first time), container create, the
+# entrypoint's rsync from /runner-base to /runner, and on first start
+# also the actions/runner config.sh registration call. 300s covers the
+# slowest of these (network-bound pull) with headroom.
+TimeoutStartSec=300
+TimeoutStopSec=60
 SyslogIdentifier=%N
 
-Type=simple
 User=github_runner
 Group=github_runner
-WorkingDirectory=/mnt/services/github_runner/{{ runner_repo }}/
-# Point actions/runner's docker-CLI shell-outs at the rootless podman
-# socket. The runner uses the Docker API to spawn container jobs; podman
-# ships a docker-compat socket under /run/user/<uid>/podman/podman.sock.
-Environment=DOCKER_HOST=unix:///run/user/{{ github_runner_user.uid }}/podman/podman.sock
-# Wait for the github_runner user manager to bring podman.socket up.
-# Bounded: 60 x 1s, well inside TimeoutStartSec=120. If the socket
-# never appears, the journal records the explicit cause rather than a
-# generic start-timeout.
+
+# Wait for the github_runner user manager to bring its rootless
+# podman.socket up. Bounded 60 x 1s, well inside TimeoutStartSec. If the
+# socket never appears, the journal records the explicit cause rather
+# than a generic start-timeout.
 ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S /run/user/{{ github_runner_user.uid }}/podman/podman.sock ] && exit 0; sleep 1; done; echo "podman.sock not present after 60s" >&2; exit 1'
-ExecStart=/mnt/services/github_runner/{{ runner_repo }}/run.sh
-ExecReload=/bin/kill -s HUP $MAINPID
+
+# Pre-pull the runner image into github_runner's rootless store so the
+# container start that follows doesn't race against an image fetch under
+# TimeoutStartSec pressure. systemd_unit/service.yml's helper also
+# pre-pulls (into root's store) before invoking us; this second pull is
+# the one that matters for the rootless container.
+ExecStartPre=/usr/bin/podman pull --quiet {{ github_runner_image }}
+
+# Best-effort cleanup of any prior container with the same name from
+# the last unit lifecycle. --ignore swallows the no-such-container case
+# on cold start; --time=10 gives a graceful stop window before the kill.
+ExecStartPre=-/usr/bin/podman stop --time=10 --ignore github_runner_%i
+ExecStartPre=-/usr/bin/podman rm --force --ignore github_runner_%i
+
+# --rm: reap on exit so the next start has no stale container.
+# --userns keep-id: in-container uid 0 maps to host github_runner, so
+#   the bind-mounted /runner state dir is writable under the namespace.
+# --network host: actions/runner reaches GitHub directly + inherits the
+#   host's DNS; no per-container CNI to maintain.
+# --volume podman.sock: DooD -- actions/runner's docker-CLI shell-outs
+#   (for workflows with `container:` blocks) hit the host's rootless
+#   podman, NOT a daemon inside the runner container.
+# --volume /runner: persisted runner state (binaries, .runner,
+#   .credentials, _diag). Survives container restarts and image bumps.
+# --volume /work: actions/runner's checkout root (_work tree). Lives on
+#   /mnt/scratch (terabytes) so per-job checkouts don't pressure the
+#   container's writable layer.
+# --env-file: per-instance REPO_URL / RUNNER_NAME / RUNNER_LABELS,
+#   written by the role to /etc/default/github_runner@%i.
+# --secret RUNNER_TOKEN: short-lived registration token (1h TTL). Only
+#   consumed on first start when /runner/.runner is absent; subsequent
+#   starts ignore it and use the persisted .credentials.
+ExecStart=/usr/bin/podman run \
+  --rm \
+  --name github_runner_%i \
+  --userns keep-id \
+  --network host \
+  --volume /run/user/{{ github_runner_user.uid }}/podman/podman.sock:/var/run/docker.sock \
+  --volume /mnt/services/github_runner/%i:/runner:rw \
+  --volume /mnt/scratch/github_runner/workdir_%i:/work:rw \
+  --env-file /etc/default/github_runner@%i \
+  --secret github_runner_token_%i,type=env,target=RUNNER_TOKEN \
+  {{ github_runner_image }}
+
+ExecStop=/usr/bin/podman stop --time=10 --ignore github_runner_%i
 
 [Install]
 WantedBy=default.target

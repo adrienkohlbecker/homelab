@@ -1,15 +1,19 @@
-# Per-repo registration + unit install. Looped from main.yml over
-# github_runner_repos with loop_var: runner_repo. Each per-repo dir
-# gets its own full actions/runner extract -- the shared-binary
-# experiment didn't survive contact with Runner.Listener's
-# Assembly.Location-based state-file paths (symlinks resolve through
-# to the binary location, so state files like .runner_migrated, .env,
-# _diag/ all landed in the shared dir and collided across runners).
-# 150 MB per extra runner is cheap on lab's storage.
+# Per-instance registration + container deploy. Called from main.yml
+# with loop_var: runner_instance (keys: repo, suffix, labels).
+#
+# runner_iid == <repo>_<suffix> is the universal handle: systemd
+# template instance name, podman container name suffix, on-disk state
+# dir name, podman secret name suffix.
 
-- name: _register | Create install dir for {{ runner_repo }}
+- name: _register | Resolve instance id for {{ runner_instance.repo }}/{{ runner_instance.suffix }}
+  set_fact:
+    runner_iid: "{{ runner_instance.repo }}_{{ runner_instance.suffix }}"
+  tags:
+    - github_runner
+
+- name: _register | Create state dir for {{ runner_iid }}
   file:
-    path: /mnt/services/github_runner/{{ runner_repo }}
+    path: /mnt/services/github_runner/{{ runner_iid }}
     state: directory
     owner: github_runner
     group: github_runner
@@ -18,9 +22,9 @@
   tags:
     - github_runner
 
-- name: _register | Create workdir for {{ runner_repo }}
+- name: _register | Create workdir for {{ runner_iid }}
   file:
-    path: /mnt/scratch/github_runner/workdir-{{ runner_repo }}
+    path: /mnt/scratch/github_runner/workdir_{{ runner_iid }}
     state: directory
     owner: github_runner
     group: github_runner
@@ -29,64 +33,27 @@
   tags:
     - github_runner
 
-# Install / upgrade actions/runner from the shared tarball cache. The
-# version sentinel (.version-<ver>) lives in the per-repo dir so a
-# version bump triggers re-extraction for each repo independently.
-- name: _register | Check current actions/runner version for {{ runner_repo }}
+# Check if this instance has already registered. The .runner file is
+# written by config.sh on first successful registration; if it's there,
+# we skip the token fetch + secret rotation entirely and the container
+# uses the persisted .credentials.
+- name: _register | Check if {{ runner_iid }} is already registered
   stat:
-    path: /mnt/services/github_runner/{{ runner_repo }}/.version-{{ github_runner_version }}
-  register: github_runner_version_sentinel
-  become: true
-  tags:
-    - github_runner
-
-- name: _register | Extract actions/runner tarball into {{ runner_repo }}
-  when: not github_runner_version_sentinel.stat.exists
-  unarchive:
-    src: /mnt/services/github_runner/.tarballs/actions-runner-{{ github_runner_version }}.tar.gz
-    dest: /mnt/services/github_runner/{{ runner_repo }}/
-    remote_src: true
-    owner: github_runner
-    group: github_runner
-    # Don't blow away .runner / .credentials / _work; the tarball
-    # doesn't include them, but --no-overwrite-dir keeps `tar` from
-    # messing with files it never created.
-    extra_opts:
-      - "--no-overwrite-dir"
-  become: true
-  register: github_runner_extracted
-  tags:
-    - github_runner
-
-- name: _register | Mark current actions/runner version for {{ runner_repo }}
-  when: not github_runner_version_sentinel.stat.exists
-  copy:
-    dest: /mnt/services/github_runner/{{ runner_repo }}/.version-{{ github_runner_version }}
-    content: "{{ github_runner_version }}\n"
-    owner: github_runner
-    group: github_runner
-    mode: "0644"
-  become: true
-  tags:
-    - github_runner
-
-- name: _register | Check if {{ runner_repo }} is already registered
-  stat:
-    path: /mnt/services/github_runner/{{ runner_repo }}/.runner
-  register: github_runner_registered
+    path: /mnt/services/github_runner/{{ runner_iid }}/.runner
+  register: runner_registered
   become: true
   tags:
     - github_runner
 
 # Registration token (1h TTL, can't be vaulted). Fetched from the
-# controller via `gh api` against the per-repo URL. Skipped under
-# qemu_test -- there's no GitHub fixture to register against.
-- name: _register | Fetch registration token for {{ runner_repo }}
+# controller workstation via `gh api`. Skipped if already registered;
+# skipped under qemu_test (no GitHub fixture to register against).
+- name: _register | Fetch registration token for {{ runner_iid }}
   when:
     - not qemu_test
-    - not github_runner_registered.stat.exists
-  command: gh api -X POST /repos/{{ github_runner_owner }}/{{ runner_repo }}/actions/runners/registration-token --jq .token
-  register: github_runner_token_result
+    - not runner_registered.stat.exists
+  command: gh api -X POST /repos/{{ github_runner_owner }}/{{ runner_instance.repo }}/actions/runners/registration-token --jq .token
+  register: runner_token_result
   delegate_to: localhost
   become: false
   changed_when: false
@@ -95,55 +62,64 @@
   tags:
     - github_runner
 
-- name: _register | Register {{ runner_repo }} runner with GitHub
+# Per-instance podman secret. The container's entrypoint consumes
+# RUNNER_TOKEN on first start (when /runner/.runner is absent) and
+# ignores it on every subsequent start. Stored as a github_runner-owned
+# rootless secret so the runner container under --userns keep-id can
+# read it.
+- name: _register | Store registration token in podman secret for {{ runner_iid }}
   when:
     - not qemu_test
-    - not github_runner_registered.stat.exists
-  command: >-
-    ./config.sh
-    --url https://github.com/{{ github_runner_owner }}/{{ runner_repo }}
-    --token {{ github_runner_token_result.stdout }}
-    --name {{ inventory_hostname }}
-    --labels {{ github_runner_labels }}
-    --work /mnt/scratch/github_runner/workdir-{{ runner_repo }}
-    --unattended
-    --replace
-  args:
-    chdir: /mnt/services/github_runner/{{ runner_repo }}
-    creates: /mnt/services/github_runner/{{ runner_repo }}/.runner
-  become: true
-  become_user: github_runner
-  no_log: true
-  tags:
-    - github_runner
-
-- name: _register | Install github_runner_{{ runner_repo }} service
+    - not runner_registered.stat.exists
   import_role:
-    name: systemd_unit
-    tasks_from: install
+    name: podman_secret
+    tasks_from: secret
   vars:
-    systemd_unit_args:
-      src: github_runner.service.j2
-      dest: github_runner_{{ runner_repo }}.service
-      condition: "{{ not (ansible_check_mode and github_runner_user.changed) }}"
+    podman_secret_args:
+      name: github_runner_token_{{ runner_iid }}
+      data: "{{ runner_token_result.stdout }}"
+      user: github_runner
   tags:
     - github_runner
 
-- name: _register | Enable github_runner_{{ runner_repo }} service
+# Per-instance env file consumed by podman's --env-file in the template.
+# Static for the instance's lifetime; changes (relabel, repo rename)
+# propagate to the unit's restart via the register below.
+- name: _register | Install env file for {{ runner_iid }}
+  template:
+    src: github_runner_envfile.j2
+    dest: /etc/default/github_runner@{{ runner_iid }}
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: runner_envfile
+  tags:
+    - github_runner
+
+# Enable + start github_runner@<repo>_<suffix>.service. Skipped under
+# qemu_test (no GitHub-backed registration; run.sh would fail with
+# "Must configure first" and loop on the restart-limit).
+- name: _register | Enable github_runner@{{ runner_iid }}
   when: not qemu_test
   import_role:
     name: systemd_unit
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: github_runner_{{ runner_repo }}
-      condition: "{{ not (ansible_check_mode and (github_runner_user.changed or github_runner_extracted.changed)) }}"
+      src: github_runner@{{ runner_iid }}
+      condition: "{{ not (ansible_check_mode and github_runner_user.changed) }}"
+      # Restart on env-file edits (label or repo URL change). Token
+      # rotations are also wired in, but they only matter for instances
+      # not-yet-registered -- a token rotation on an already-registered
+      # instance is harmless leftover, the container ignores it.
       restart: >-
         {{
-          lookup('vars',
-                 'github_runner_' ~ runner_repo ~ '_service_result',
-                 default={'changed': false}).changed
-          or github_runner_extracted.changed
+          runner_envfile.changed
+          or lookup('vars',
+                    'github_runner_token_' ~ runner_iid ~ '_rotated',
+                    default=false)
         }}
   tags:
     - github_runner

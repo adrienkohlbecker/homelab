@@ -3,25 +3,6 @@
   changed_when: false
   become: true
 
-# actions/runner has no `--version` flag; the version sentinel written
-# by main.yml is the source of truth. Stat the sentinel to confirm the
-# role's "extract on version bump" path landed.
-- name: _verify | github_runner version sentinel present
-  stat:
-    path: /mnt/services/github_runner/.version-{{ github_runner_version }}
-  register: _verify_version_sentinel
-  failed_when: not _verify_version_sentinel.stat.exists
-  become: true
-
-- name: _verify | github_runner run.sh present and executable
-  stat:
-    path: /mnt/services/github_runner/run.sh
-  register: _verify_runsh
-  failed_when: >-
-    not _verify_runsh.stat.exists
-    or not _verify_runsh.stat.executable
-  become: true
-
 - name: _verify | subuid/subgid entries exist for github_runner
   command: grep -q '^github_runner:' /etc/{{ item }}
   changed_when: false
@@ -46,23 +27,81 @@
   become: true
   become_user: github_runner
 
-# Under qemu_test the unit is installed but not started (no .runner
-# means run.sh would loop on "configure first"). Verify it's at least
-# loaded so a syntax error in the template surfaces here.
-- name: _verify | github_runner.service is loaded (qemu_test skips start)
-  when: qemu_test
-  systemd:
-    name: github_runner
-  register: _verify_unit_test
-  failed_when: _verify_unit_test.status.LoadState != "loaded"
+- name: _verify | github_runner@.service template is installed
+  stat:
+    path: /etc/systemd/system/github_runner@.service
+  register: _verify_template
+  failed_when: not _verify_template.stat.exists
   become: true
 
-- name: _verify | github_runner.service is loaded and active
+# Per-instance assertions. Under qemu_test the env file lands and the
+# instance is enabled at the systemd level (template+drop-in syntax
+# check), but no GitHub-backed registration happens so the container
+# isn't started -- a started container would loop on "Must configure
+# first" because the token-fetch task was skipped.
+- name: _verify | env file present for each instance
+  stat:
+    path: /etc/default/github_runner@{{ item.repo }}_{{ item.suffix }}
+  register: _verify_envfiles
+  failed_when: not _verify_envfiles.stat.exists
+  loop: "{{ github_runner_instances }}"
+  loop_control:
+    label: "{{ item.repo }}_{{ item.suffix }}"
+  become: true
+
+- name: _verify | per-instance state dir exists
+  stat:
+    path: /mnt/services/github_runner/{{ item.repo }}_{{ item.suffix }}
+  register: _verify_state_dirs
+  failed_when: >-
+    not _verify_state_dirs.stat.exists
+    or not _verify_state_dirs.stat.isdir
+  loop: "{{ github_runner_instances }}"
+  loop_control:
+    label: "{{ item.repo }}_{{ item.suffix }}"
+  become: true
+
+# Under qemu_test verify the instance loads (catches template syntax
+# errors that pass systemd-analyze but break on instantiation); under
+# prod also verify the unit is active (container running, listener
+# attached).
+- name: _verify | github_runner@<instance>.service loads (qemu_test)
+  when: qemu_test
+  systemd:
+    name: github_runner@{{ item.repo }}_{{ item.suffix }}.service
+  register: _verify_unit_test
+  failed_when: _verify_unit_test.status.LoadState != "loaded"
+  loop: "{{ github_runner_instances }}"
+  loop_control:
+    label: "{{ item.repo }}_{{ item.suffix }}"
+  become: true
+
+- name: _verify | github_runner@<instance>.service is active (prod)
   when: not qemu_test
   systemd:
-    name: github_runner
+    name: github_runner@{{ item.repo }}_{{ item.suffix }}.service
   register: _verify_unit_prod
   failed_when: >-
     _verify_unit_prod.status.LoadState != "loaded"
     or _verify_unit_prod.status.ActiveState != "active"
+  loop: "{{ github_runner_instances }}"
+  loop_control:
+    label: "{{ item.repo }}_{{ item.suffix }}"
+  become: true
+
+# Real functional check (prod only): each runner container should have
+# completed registration, which means a /runner/.runner exists in the
+# state dir AND the GitHub API lists a runner by the expected name.
+# The .runner check catches "container started but config.sh failed";
+# the API check catches "runner registered then went offline" (network
+# split, manual deregister, etc.).
+- name: _verify | .runner sentinel exists for each registered instance
+  when: not qemu_test
+  stat:
+    path: /mnt/services/github_runner/{{ item.repo }}_{{ item.suffix }}/.runner
+  register: _verify_dotrunner
+  failed_when: not _verify_dotrunner.stat.exists
+  loop: "{{ github_runner_instances }}"
+  loop_control:
+    label: "{{ item.repo }}_{{ item.suffix }}"
   become: true

@@ -8,24 +8,5 @@
 # is comfortably beyond the harness's 1500s timeout, so a live cell
 # can't be reaped mid-run.
 #
-# The /mnt/scratch/qemu/_sentinels d+e rules are intentionally absent
-# during the act_runner -> github_runner transition: both runners would
-# otherwise declare them, and systemd-tmpfiles' validate refuses the
-# canonicalization of /mnt/scratch/qemu/_sentinels (owned by root)
-# starting from /mnt/scratch/qemu (owned by act_runner). act_runner's
-# tmpfiles.conf owns those rules until the cutover commit, which moves
-# them here as act_runner.conf is deleted.
-#
 # Type Path                                       Mode UID GID Age  Argument
 e      /mnt/scratch/github_runner/scratch         -    -   -   1d
-
-# actions/runner hardcodes `-v /var/run/docker.sock:/var/run/docker.sock`
-# on every `docker create` so workflow steps can talk to a Docker daemon
-# from inside their job container (GitHub-hosted-runner parity). Lab has
-# no dockerd; point /var/run/docker.sock at github_runner's rootless
-# podman socket, whose docker-compat API handles every verb a workflow
-# is likely to call. Symlink because /var/run is tmpfs -- systemd-
-# tmpfiles-setup.service re-runs the L rule at boot. The target uid
-# comes from the github_runner user record so the path tracks whatever
-# uid useradd allocated.
-L      /var/run/docker.sock                                -    -   -   -    /run/user/{{ github_runner_user.uid }}/podman/podman.sock

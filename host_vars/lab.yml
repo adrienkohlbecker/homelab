@@ -262,3 +262,18 @@ subid_extra_subgid_groups:
 
 has_transcoding_acceleration: true
 z2m_start_service: true
+
+# Pool partitioning for the CI concurrency rework: lab-vm runners take
+# packer-build + test-role jobs (capped at 4 concurrent VMs by pool
+# size); lab runners take everything else (lint, ci-image, detect,
+# notify, wait-for-*). Pools are disjoint -- a `runs-on: [self-hosted,
+# lab]` job won't land on a lab-vm runner and vice versa, so VM jobs
+# can never starve non-VM jobs of slots. See notes/concurrency_rework.md.
+github_runner_instances:
+  - { repo: homelab, suffix: vm1,  labels: "self-hosted,lab-vm" }
+  - { repo: homelab, suffix: vm2,  labels: "self-hosted,lab-vm" }
+  - { repo: homelab, suffix: vm3,  labels: "self-hosted,lab-vm" }
+  - { repo: homelab, suffix: vm4,  labels: "self-hosted,lab-vm" }
+  - { repo: homelab, suffix: gen1, labels: "self-hosted,lab" }
+  - { repo: homelab, suffix: gen2, labels: "self-hosted,lab" }
+  - { repo: compta,  suffix: gen1, labels: "self-hosted,lab" }
