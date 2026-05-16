@@ -1,31 +1,20 @@
 -- Flatten browser CSP violation reports (legacy report-uri + modern
--- Reporting API) into one LogRecord per violation with all the
--- structured fields landed as LogAttributes on the HyperDX side.
+-- Reporting API) into one LogRecord per violation. csp_* attributes
+-- land directly in LogAttributes via the OTLP metadata stream
+-- (metadata.otlp.attributes); severity is pinned to warn/13 via
+-- metadata.otlp.severity_{text,number}.
 --
 -- Wire path: fluent-bit OTLP HTTP output -> hyperdx otelcontribcol's
--- otlp/hyperdx receiver -> transform processor -> ClickHouse otel_logs.
--- Severity is shipped directly: we set record["severity_text"] /
--- record["severity_number"] at the body top level, and the [OUTPUT]
--- opentelemetry block's logs_severity_*_message_key options point
--- fluent-bit at those body keys (the default $SeverityText reads from
--- fluent-bit's separate event-metadata stream, which lua filters have
--- no API to populate).
---
--- LogAttributes don't have a body-side message_key option, so we lean
--- on HyperDX's transform processor: it runs
--- ExtractPatterns("(?P<0>(\\{.*\\}))") on log.body + ParseJSON +
--- merge_maps into log.attributes unconditionally, so any JSON object
--- substring in Body becomes flat LogAttributes (this is the same path
--- that already populates z2m's MQTT-payload bodies as
--- LogAttributes['linkquality'] etc.).
+-- otlp/hyperdx receiver -> ClickHouse otel_logs. fluent-bit's lua filter
+-- 5-arg callback writes the event-metadata stream that the opentelemetry
+-- output consumes via logs_metadata_key=otlp; LogRecord.Attributes,
+-- SeverityText, and SeverityNumber all come from there.
 --
 -- Body has shape:
---   CSP <effective-directive> blocked <blocked-uri> on <document-uri> {<csp_json>}
+--   CSP <effective-directive> blocked <blocked-uri> on <document-uri>
 --
--- where <csp_json> contains csp_format, host, and the populated csp_*
--- fields. Service identity is carried in ResourceAttributes (set by
--- otlp-shape.lua); no need to duplicate it as a LogAttribute via the
--- old journald-style SYSLOG_IDENTIFIER trick.
+-- Service identity (csplogger) is carried in ResourceAttributes by
+-- otlp-shape.lua; no need to duplicate it as a LogAttribute.
 --
 -- Legacy report-uri body  : {"csp-report": {"blocked-uri": "...", ...}}
 -- Reporting API body      : [{"type":"csp-violation","body":{"blockedURL":"..."}, ...}]
@@ -41,39 +30,22 @@ local function pick(t, ...)
     return nil
 end
 
--- Per-field truncation bound for the JSON suffix that lands as
--- LogAttributes downstream. CSP report fields are tiny in real
--- traffic (URIs, directive names, short policy strings); the bound
--- exists to cap attacker-controlled fields (script-sample,
--- blocked-uri) that could otherwise bloat Body up to nginx's 64KB
--- request limit.
+-- Per-field length cap. CSP report fields are tiny in real traffic
+-- (URIs, directive names, short policy strings); the cap exists to
+-- bound attacker-controlled fields (script-sample, blocked-uri) that
+-- could otherwise bloat the record up to nginx's client_max_body_size.
 local MAX_FIELD_BYTES = 1024
 
--- JSON string escaper for the LogAttributes-as-suffix encoding.
--- Defends three classes of input:
---   1. Control bytes (\x00-\x1F + DEL) -- browsers occasionally
---      include tab/newline in script-sample for multi-line inline
---      scripts; downstream readers handle them inconsistently and
---      they can smuggle log-format separators (CRLF, ANSI escapes).
---   2. Non-ASCII bytes (\x80-\xFF) -- dropped wholesale to neutralise
---      Unicode bidi-override attacks (U+202A-U+202E and U+2066-U+2069
---      in UTF-8) that can make a row's apparent text read backwards
---      in any consumer that renders Body as Unicode. Legitimate non-
---      ASCII content in CSP report fields is vanishingly rare (URIs
---      are already percent-encoded, directive names are ASCII).
---   3. HTML breakouts via forward slash -- escaping "/" as "\/" is
---      legal JSON and defeats "</script>" sequences in attacker-
---      supplied URIs if anything downstream renders Body in an HTML
---      context (HyperDX log detail pane, future dashboards). JSON
---      doesn't require this; it's a defence-in-depth measure.
--- After the strip + escape we cap the result at MAX_FIELD_BYTES so
--- a hostile poster can't bloat Body by stuffing one field with 64KB
--- of escaped-but-legal content.
-local function jsonesc(s)
-    if s == nil then return "" end
+-- Strip just the unicode bidi-override codepoints (U+202A-U+202E and
+-- U+2066-U+2069 in UTF-8) so an attacker-supplied URL can't reorder a
+-- log line visually in any UI that renders text as Unicode. Other
+-- non-ASCII bytes pass through -- legitimate IDN hostnames and unicode
+-- path segments stay readable in HyperDX. Then cap at MAX_FIELD_BYTES.
+local function scrub(s)
+    if s == nil then return nil end
     s = tostring(s)
-    s = s:gsub("[%c\127-\255]", "")
-    s = s:gsub("\\", "\\\\"):gsub('"', '\\"'):gsub("/", "\\/")
+    s = s:gsub("\xE2\x80[\xAA-\xAE]", "")
+    s = s:gsub("\xE2\x81[\xA6-\xA9]", "")
     if #s > MAX_FIELD_BYTES then s = s:sub(1, MAX_FIELD_BYTES) end
     return s
 end
@@ -94,22 +66,12 @@ local function strip_url_meta(url)
     return url
 end
 
--- host.<hostname> comes from the fluent-bit tag; the upstream input
--- block sets Tag csp.{{ inventory_hostname }}, so the second segment
--- of the tag is what should land in LogAttributes['host'].
-local function host_from_tag(tag)
-    local dot = string.find(tag, ".", 1, true)
-    if dot then return string.sub(tag, dot + 1) end
-    return ""
-end
-
-function flatten_csp(tag, ts, record)
+function flatten_csp(tag, ts, group, metadata, record)
     -- Every CSP report is a policy violation worth surfacing at warn.
-    -- These top-level body keys are mapped to LogRecord.severity_* by
-    -- fluent-bit's [OUTPUT] opentelemetry logs_severity_*_message_key
-    -- options. 13 is OTLP SEVERITY_NUMBER_WARN.
-    record["severity_text"] = "warn"
-    record["severity_number"] = 13
+    -- 13 is OTLP SEVERITY_NUMBER_WARN.
+    metadata.otlp = metadata.otlp or {}
+    metadata.otlp.severity_text = "warn"
+    metadata.otlp.severity_number = 13
 
     local r, format
     if type(record["csp-report"]) == "table" then
@@ -121,59 +83,53 @@ function flatten_csp(tag, ts, record)
     else
         -- Unrecognised shape; emit a tagged body so the record is still
         -- discoverable under ServiceName=csplogger with severity=warn,
-        -- but with no csp_* attributes.
-        record["log"] = 'csplogger received malformed POST '
-            .. '{"csp_format":"unknown",'
-            .. '"host":"' .. jsonesc(host_from_tag(tag)) .. '"}'
-        return 1, ts, record
+        -- but with no csp_* attributes beyond csp_format.
+        record["log"] = "csplogger received malformed POST"
+        metadata.otlp.attributes = { csp_format = "unknown" }
+        return 1, ts, metadata, record
     end
 
-    local blocked   = strip_url_meta(pick(r, "blocked-uri", "blockedURL"))
-    local document  = strip_url_meta(pick(r, "document-uri", "documentURL"))
-    local violated  = pick(r, "violated-directive", "violatedDirective",
-                              "effective-directive", "effectiveDirective")
-    local effective = pick(r, "effective-directive", "effectiveDirective",
-                              "violated-directive", "violatedDirective")
-    local policy    = pick(r, "original-policy", "originalPolicy")
-    local disposition = pick(r, "disposition")
-    local referrer    = strip_url_meta(pick(r, "referrer"))
-    local source_file = strip_url_meta(pick(r, "source-file", "sourceFile"))
-    local sample      = pick(r, "script-sample", "sample")
+    local blocked     = scrub(strip_url_meta(pick(r, "blocked-uri", "blockedURL")))
+    local document    = scrub(strip_url_meta(pick(r, "document-uri", "documentURL")))
+    local violated    = scrub(pick(r, "violated-directive", "violatedDirective",
+                                       "effective-directive", "effectiveDirective"))
+    local effective   = scrub(pick(r, "effective-directive", "effectiveDirective",
+                                       "violated-directive", "violatedDirective"))
+    local policy      = scrub(pick(r, "original-policy", "originalPolicy"))
+    local disposition = scrub(pick(r, "disposition"))
+    local referrer    = scrub(strip_url_meta(pick(r, "referrer")))
+    local source_file = scrub(strip_url_meta(pick(r, "source-file", "sourceFile")))
+    local sample      = scrub(pick(r, "script-sample", "sample"))
     local line_no     = pick(r, "line-number", "lineNumber")
     local col_no      = pick(r, "column-number", "columnNumber")
     local status_code = pick(r, "status-code", "statusCode")
 
-    -- Build the JSON suffix. Only emit keys that have values so the
-    -- LogAttributes set stays sparse and queries don't trip over
-    -- empty strings.
-    local parts = {
-        '"csp_format":"' .. jsonesc(format) .. '"',
-        '"host":"' .. jsonesc(host_from_tag(tag)) .. '"',
-    }
+    -- Build LogAttributes as a structured key-value map. Goes through
+    -- fluent-bit's OTLP output as metadata.otlp.attributes, landing as
+    -- LogRecord.Attributes in ClickHouse otel_logs.
+    local attrs = { csp_format = format }
     local function add(key, val)
-        if val ~= nil and val ~= "" then
-            parts[#parts + 1] = '"' .. key .. '":"' .. jsonesc(val) .. '"'
-        end
+        if val ~= nil and val ~= "" then attrs[key] = tostring(val) end
     end
-    add("csp_blocked_uri", blocked)
-    add("csp_document_uri", document)
-    add("csp_violated_directive", violated)
+    add("csp_blocked_uri",         blocked)
+    add("csp_document_uri",        document)
+    add("csp_violated_directive",  violated)
     add("csp_effective_directive", effective)
-    add("csp_original_policy", policy)
-    add("csp_disposition", disposition)
-    add("csp_referrer", referrer)
-    add("csp_source_file", source_file)
-    add("csp_sample", sample)
-    if line_no   ~= nil then parts[#parts + 1] = '"csp_line_number":"'   .. tostring(line_no)   .. '"' end
-    if col_no    ~= nil then parts[#parts + 1] = '"csp_column_number":"' .. tostring(col_no)    .. '"' end
-    if status_code ~= nil then parts[#parts + 1] = '"csp_status_code":"' .. tostring(status_code) .. '"' end
+    add("csp_original_policy",     policy)
+    add("csp_disposition",         disposition)
+    add("csp_referrer",            referrer)
+    add("csp_source_file",         source_file)
+    add("csp_sample",              sample)
+    add("csp_line_number",         line_no)
+    add("csp_column_number",       col_no)
+    add("csp_status_code",         status_code)
+    metadata.otlp.attributes = attrs
 
     record["log"] = string.format(
-        "CSP %s blocked %s on %s {%s}",
+        "CSP %s blocked %s on %s",
         effective or "?",
         blocked or "?",
-        document or "?",
-        table.concat(parts, ",")
+        document or "?"
     )
-    return 2, ts, record
+    return 1, ts, metadata, record
 end
