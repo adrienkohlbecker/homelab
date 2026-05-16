@@ -1,0 +1,12 @@
+# Per-host instance list lives in host_vars/<host>.yml. Each entry:
+#   - { repo: <repo-name>, suffix: <unique-suffix>, labels: "..." }
+# Instance identity = <repo>_<suffix>; that's the systemd template
+# instance name (github_runner@<repo>_<suffix>.service), the podman
+# container name suffix, and the on-disk workdir name. Default to
+# empty so a host that doesn't run runners stays a no-op.
+#
+# Defaults/, not vars/: role vars sit above host_vars in ansible's
+# precedence ladder and would silently mask any host-level override,
+# making it impossible to define instances per host. role defaults
+# sit at the bottom, so host_vars/<host>.yml wins as intended.
+github_runner_instances: []
