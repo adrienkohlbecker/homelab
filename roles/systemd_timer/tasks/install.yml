@@ -106,6 +106,22 @@
 # doesn't immediately alarm overdue. period_secs is computed from the
 # validated frequency above.
 #
+# The metadata file below is owned by netdata:netdata so the collector
+# can read it without elevated privileges. On prod the netdata role
+# installs that user before any timer consumer runs; in the test
+# harness a role's standalone run may not have netdata installed yet,
+# and the chown below would fail. Idempotent precondition that's a
+# no-op when the user already exists, removing the need for each
+# consumer's _setup.yml to redundantly create it.
+- name: install | Ensure netdata user exists for metadata file ownership
+  when: _systemd_timer_monitor
+  user:
+    name: netdata
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+  become: true
+
 # Ensure the parent dir exists -- this task can fire before netdata is
 # installed (site.yml runs many timer-consuming roles before the netdata
 # block), so the .d directory may not yet exist. Owned by root because
