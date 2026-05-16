@@ -146,25 +146,27 @@
 
 # The systemd input plugin doesn't expose db.journal_mode (only the
 # tail plugin does -- which is why the nginx-{access,error}.db files
-# end up WAL by default but journal.db doesn't). Flip the mode once
-# in the header here; the plugin doesn't override on open, so it
-# persists across fluent-bit restarts.
-- name: Read fluent-bit journal.db journal mode
-  command: sqlite3 -readonly /var/lib/fluent-bit/journal.db 'PRAGMA journal_mode;'
-  register: fluentbit_journal_pragma
-  changed_when: false
-  failed_when: false
+# end up WAL by default but journal.db doesn't). Flip the mode once;
+# the plugin doesn't override on open, so it persists across
+# fluent-bit restarts. The -wal sidecar SQLite creates at first
+# WAL-mode write persists for the life of the db, so we gate the
+# convert on its existence rather than re-reading the pragma every
+# play. wait_for absorbs the race where fluent-bit hasn't yet written
+# the db on first apply; in --check the unit isn't actually started so
+# we skip the wait and let the creates-gated convert no-op-report.
+- name: Wait for fluent-bit journal.db
+  wait_for:
+    path: /var/lib/fluent-bit/journal.db
+    timeout: 30
+  when: not ansible_check_mode
   become: true
   tags:
     - fluentbit
 
 - name: Convert fluent-bit journal.db to WAL
   command: sqlite3 /var/lib/fluent-bit/journal.db 'PRAGMA journal_mode=WAL;'
-  register: fluentbit_journal_wal
-  changed_when: fluentbit_journal_wal.stdout | trim == 'wal'
-  when:
-    - fluentbit_journal_pragma.rc == 0
-    - fluentbit_journal_pragma.stdout | trim != 'wal'
+  args:
+    creates: /var/lib/fluent-bit/journal.db-wal
   become: true
   tags:
     - fluentbit
