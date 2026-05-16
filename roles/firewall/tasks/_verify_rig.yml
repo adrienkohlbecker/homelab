@@ -1,0 +1,85 @@
+# Fixture bringup: probe-only apt deps, busybox httpd test container,
+# extns netns + wg0 veth. Podman itself is installed by _setup.yml
+# (CLAUDE.md reserves _setup.yml for genuine fixture deps).
+
+- name: _verify_rig | Install probe-only deps
+  apt:
+    name:
+      - python3
+      - iproute2
+      - curl
+      - iputils-ping
+      - socat        # UDP echo listeners (5053 / 5333 / 5353)
+      - hping3       # crafted TCP-ACK probes for `! --syn` rules
+    cache_valid_time: 3600
+  become: true
+
+- name: _verify_rig | Pull tiny test image
+  command: podman pull docker.io/library/busybox
+  register: firewall_verify_pull
+  changed_when: "'Storing signatures' in firewall_verify_pull.stdout or 'Writing manifest' in firewall_verify_pull.stdout"
+  become: true
+
+# Publish 32400:32400 — port is arbitrary; the FORWARD rule scopes by
+# --ctstate DNAT, not by dport. Run busybox httpd on 32400 inside the
+# container to serve a tiny known-content page the probe can grep for.
+# --cap-add=NET_RAW restores the capability podman 5.x dropped from
+# default_capabilities — the container-egress probe below uses busybox
+# ping (SOCK_RAW), which fails with "permission denied" without it.
+- name: _verify_rig | Run busybox httpd test container with --publish on 32400
+  command: >
+    podman run -d --replace --name firewall_verify_httpd
+      --publish 0.0.0.0:32400:32400
+      --cap-add=NET_RAW
+      docker.io/library/busybox
+      sh -c 'mkdir -p /www && echo firewall-verify-ok > /www/index.html && exec httpd -f -p 32400 -h /www'
+  changed_when: true
+  become: true
+
+# TCP listeners aren't bound for INPUT probes any more — every TCP
+# accept rule carries a named counter and the assertion block in
+# _verify_counters.yml checks each counter incremented (positive
+# cases) or stayed at 0 (negative cases). Without a listener, a
+# positive probe gets RST from the kernel and curl exits non-zero;
+# we drive that via `failed_when: false` because the load-bearing
+# signal is the counter, not the rc. Trade-off: per-probe granularity
+# is lost (multiple positives merge into a single >= 1 assertion),
+# and a regression that breaks just one of N positive paths won't
+# surface as long as another still fires the same counter. The
+# busybox httpd above stays because the DNAT body-grep probe asserts
+# the response payload, which a counter alone cannot prove.
+
+# Bring up the extns netns + wg0 veth with only the non-scope primary
+# on veth_ext. Probe-group secondary aliases are added in
+# _verify_input.yml via `Bind probe_X` tasks at the head of each
+# group. Host /32 routes back via wg0 are declared once here
+# (idempotent), regardless of which source is active in the netns.
+- name: _verify_rig | Create probe netns
+  shell: |
+    set -euo pipefail
+    # Add-or-verify: succeeds if the netns is freshly added OR
+    # already present. A real failure (e.g. kernel netns support
+    # missing) bubbles up instead of being swallowed by `|| true`.
+    ip netns add extns 2>/dev/null || [ -d /var/run/netns/extns ]
+    if ! ip link show wg0 >/dev/null 2>&1; then
+      ip link add wg0 type veth peer name veth_ext
+      ip link set veth_ext netns extns
+    fi
+    ip addr replace 10.99.0.1/24 dev wg0
+    ip link set wg0 up
+    ip -n extns addr replace {{ probe_nonscope }}/24 dev veth_ext
+    ip -n extns link set veth_ext up
+    ip -n extns link set lo up
+    ip -n extns route replace default via 10.99.0.1
+    ip route replace {{ probe_home }}/32 dev wg0
+    ip route replace {{ probe_wg }}/32 dev wg0
+    ip route replace {{ probe_podman }}/32 dev wg0
+    ip route replace {{ probe_podman_pool }}/32 dev wg0
+  args:
+    executable: /bin/bash
+  changed_when: true
+  become: true
+
+- name: _verify_rig | Wait for httpd container
+  wait_for: { host: 127.0.0.1, port: 32400, timeout: 30 }
+  become: true

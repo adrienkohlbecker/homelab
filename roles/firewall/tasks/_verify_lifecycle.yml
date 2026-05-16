@@ -1,0 +1,68 @@
+# Re-apply coverage + ExecStop drop-in test. Runs last because the
+# ExecStop / restart cycle resets per-rule counters, so this must
+# come after _verify_counters.yml's assertion block.
+
+# Re-apply coverage. With iptables-restore the apply was destructive
+# (wiped netavark's chains), so the verify forced a re-flush + podman
+# network reload to validate the reload-cascade. nft -f is per-table
+# atomic — our apply only touches `ip homelab`, leaving netavark's
+# `ip filter`/`ip nat` chains alone. The smoke check is just: re-apply
+# our ruleset and confirm the published-container path still works.
+- name: _verify_lifecycle | Re-apply nftables ruleset (must not disturb netavark)
+  command: nft -f /etc/nftables.conf
+  changed_when: true
+  become: true
+
+- name: _verify_lifecycle | FORWARD/DNAT after re-apply — published 32400 still reachable
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://10.99.0.1:32400/
+  register: firewall_verify_after_reapply
+  changed_when: false
+  failed_when: firewall_verify_after_reapply.rc != 0 or 'firewall-verify-ok' not in firewall_verify_after_reapply.stdout
+  become: true
+
+# Stock nftables.service ExecStop is `nft flush ruleset` — would nuke
+# netavark/fail2ban tables on any systemctl stop. Confirm the drop-in
+# scopes the stop to ip homelab only. Sentinel table simulates a
+# co-tenant; if ExecStop still flushed everything, it'd disappear.
+# Runs last because the stop/start cycle resets per-rule counters.
+- name: _verify_lifecycle | ExecStop drop-in — install sentinel table
+  command: nft add table ip firewall_verify_sentinel
+  changed_when: false
+  become: true
+
+- name: _verify_lifecycle | ExecStop drop-in — stop nftables.service
+  systemd: { name: nftables.service, state: stopped }
+  become: true
+
+- name: _verify_lifecycle | ExecStop drop-in — list tables after stop
+  command: nft list tables
+  register: tables_after_stop
+  changed_when: false
+  become: true
+
+- name: _verify_lifecycle | ExecStop drop-in — sentinel survived, homelab deleted
+  assert:
+    that:
+      - "'table ip firewall_verify_sentinel' in tables_after_stop.stdout"
+      - "'table ip homelab' not in tables_after_stop.stdout"
+    fail_msg: >-
+      ExecStop drop-in didn't scope correctly: sentinel table should
+      survive a stop (it didn't) and ip homelab should be gone (it
+      wasn't). Stock `nft flush ruleset` likely still in effect.
+
+- name: _verify_lifecycle | ExecStop drop-in — cleanup sentinel
+  command: nft delete table ip firewall_verify_sentinel
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify_lifecycle | ExecStop drop-in — restart nftables.service
+  systemd: { name: nftables.service, state: started }
+  become: true
+
+- name: _verify_lifecycle | ExecStop drop-in — homelab table restored after start
+  command: nft list tables
+  register: tables_after_start
+  changed_when: false
+  failed_when: "'table ip homelab' not in tables_after_start.stdout"
+  become: true

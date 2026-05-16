@@ -1,0 +1,138 @@
+# Capture nft counters at end-of-probe state, assert each one fired
+# (or stayed at 0 for negative-only rules). Also confirms sysctl
+# persistence (the conntrack tcp_loose=0 fact is bootloader-only)
+# and the reboot signal the role writes when nf_conntrack wasn't
+# loaded at sysctl-write time.
+
+- name: _verify_counters | Capture nftables counters after crafted-packet probes
+  command: nft -j list table ip homelab
+  register: counters_after_crafted
+  changed_when: false
+  become: true
+
+# nf_conntrack_tcp_loose=0 makes the kernel itself classify mid-stream
+# non-SYN TCP as INVALID rather than NEW. Can't apply mid-flight (would
+# break live SSH), so the value persists in /etc/sysctl.d/ and the
+# module is pinned via /etc/modules-load.d/ to load at next boot. The
+# nftables non-SYN drop rules above remain the runtime protection
+# until then.
+- name: _verify_counters | sysctl — nf_conntrack_tcp_loose=0 persisted in sysctl.d
+  slurp:
+    src: /etc/sysctl.d/30-firewall-hardening.conf
+  register: sysctl_persist
+  become: true
+
+- name: _verify_counters | sysctl — nf_conntrack module pinned in modules-load.d
+  slurp:
+    src: /etc/modules-load.d/30-firewall-hardening.conf
+  register: modload_persist
+  become: true
+
+- name: _verify_counters | sysctl — assert persistence
+  assert:
+    that:
+      - "'net.netfilter.nf_conntrack_tcp_loose = 0' in (sysctl_persist.content | b64decode)"
+      - "'nf_conntrack' in (modload_persist.content | b64decode)"
+    fail_msg: >-
+      Either sysctl-hardening.conf doesn't pin
+      nf_conntrack_tcp_loose=0, or modules-load.d doesn't pin
+      nf_conntrack. Without both, loose=0 won't take effect at
+      next boot.
+
+# First-apply path: nf_conntrack wasn't loaded at sysctl-write time,
+# so the role should have created /var/run/reboot-required to let
+# site.yml's tail block schedule a reboot.
+- name: _verify_counters | reboot signal — /var/run/reboot-required exists
+  stat:
+    path: /var/run/reboot-required
+  register: reboot_required_stat
+  become: true
+
+# Require recent mtime so a stale file from a prior --keep'd run
+# doesn't false-pass. The role's apply is well within an hour of
+# verify on a normal harness cycle (~10 min total); cross-session
+# --keep'd re-runs (file from yesterday) correctly fail.
+- name: _verify_counters | reboot signal — assert reboot was signaled this run
+  assert:
+    that:
+      - reboot_required_stat.stat.exists
+      - reboot_required_stat.stat.mtime > (ansible_date_time.epoch | int) - 3600
+    fail_msg: >-
+      /var/run/reboot-required is missing or stale (mtime older than
+      1 hour). With nf_conntrack not pre-loaded, the conntrack sysctl
+      can't take effect until reboot — the role should have signaled
+      this run.
+
+# Look up each counter by name and confirm packets fired as expected.
+# Counters are declared at table scope (see nftables.conf.j2) and
+# referenced from rules via `counter name "X"`; the table-scope
+# declaration is what carries packets/bytes. selectattr by `family`
+# winnows the JSON to those declarations (rule references inside
+# `rule.expr` also have a `counter` key but no `family`).
+- name: _verify_counters | Counter-checked rules each fired the expected number of times
+  vars:
+    nft_counters: "{{ (counters_after_crafted.stdout | from_json).nftables
+                      | selectattr('counter', 'defined')
+                      | map(attribute='counter')
+                      | selectattr('family', 'defined') | list }}"
+    input_nonsyn_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_nonsyn') | first).packets }}"
+    forward_nonsyn_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'forward_nonsyn') | first).packets }}"
+    forward_catchall_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'forward_catchall') | first).packets }}"
+    icmp_overflow_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'icmp_overflow') | first).packets }}"
+    input_silenced_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_silenced') | first).packets }}"
+    input_catchall_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_catchall') | first).packets }}"
+    # VRRP rule's counter is asserted at 0 — the negative probe sends
+    # proto-112 from wg0 (extns ingress) and the iif scope must reject.
+    vrrp_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'vrrp_accept') | first).packets }}"
+    # UDP accept rule counters (A6) — each rule has at least one
+    # positive probe except mdns, which the rig can't simulate
+    # positively (slirp doesn't carry the right saddr on WAN ingress);
+    # both mdns probes are negative.
+    mosh_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'mosh_accept') | first).packets }}"
+    netbios_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'netbios_accept') | first).packets }}"
+    dnscrypt_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'dnscrypt_accept') | first).packets }}"
+    aardvark_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'aardvark_accept') | first).packets }}"
+    wireguard_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'wireguard_accept') | first).packets }}"
+    mdns_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'mdns_accept') | first).packets }}"
+    # TCP accept rule counters — listeners were dropped (see header
+    # comment in _verify_rig.yml); each TCP rule carries a named
+    # counter and the rc-vs-listener signal is gone. Positives assert
+    # >= 1; transmission is negative-only here because positive WAN
+    # ingress would need a slirp hostfwd extension.
+    input_unscoped_tcp_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_unscoped_tcp') | first).packets }}"
+    input_admin_tcp_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_admin_tcp') | first).packets }}"
+    input_transmission_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_transmission') | first).packets }}"
+    input_nut_podman_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_nut_podman') | first).packets }}"
+    input_loopback_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_loopback') | first).packets }}"
+    input_icmp_accept_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_icmp_accept') | first).packets }}"
+  assert:
+    that:
+      - input_nonsyn_pkts | int >= 1
+      - forward_nonsyn_pkts | int >= 1
+      - forward_catchall_pkts | int >= 1
+      - icmp_overflow_pkts | int >= 1
+      - input_silenced_pkts | int >= 1
+      - input_catchall_pkts | int >= 1
+      - vrrp_pkts | int == 0
+      - mosh_pkts | int >= 1
+      - netbios_pkts | int >= 1
+      - dnscrypt_pkts | int >= 1
+      - aardvark_pkts | int >= 2  # two probes: default-bridge + non-default-bridge
+      - wireguard_pkts | int >= 1
+      - mdns_pkts | int == 0  # both probes negative (iif + saddr scope rejections)
+      - input_unscoped_tcp_pkts | int >= 1   # extns→:80, :443, :22 via bash /dev/tcp
+      - input_admin_tcp_pkts | int >= 1      # samba/nut positives from wg saddr
+      - input_transmission_pkts | int == 0   # negative-only: wg0 ingress must miss WAN iif scope
+      - input_nut_podman_pkts | int >= 1     # nut positive from podman_bridge_pool source
+      - input_loopback_pkts | int >= 1       # host curl 127.0.0.1:80
+      - input_icmp_accept_pkts | int >= 1    # ping probe + first 20 of the flood
+    fail_msg: >-
+      Counter-based probes didn't fire all expected rules: non-SYN
+      (input/forward), forward catch-all, icmp overflow, input
+      silenced-noise, or input catch-all; OR the VRRP rule's iif scope
+      accepted a wg0-ingress packet (vrrp_pkts > 0); OR a TCP accept
+      rule failed to fire (unscoped 22/80/443, admin samba/nut,
+      podman-pool nut, loopback, icmp accept); OR the transmission
+      iif scope accepted a wg0-ingress packet (input_transmission > 0).
+      Either a rule is missing, the probe didn't reach the chain, or
+      another rule swallowed the packet first.
