@@ -27,7 +27,7 @@ Ansible-driven configuration for my home infrastructure: a handful of bare-metal
 | `bunk.yml` | One-shot config for the off-site `bunk` peer |
 | `roles/` | ~100 roles — see "Roles" below |
 | `group_vars/`, `host_vars/` | Inventory variables (vault values inline as `!vault`) |
-| `packer/` | `qemu.pkr.hcl` builds `zfs` (single rpool) and `zfs-lab` (3-disk mirror) virtual machines |
+| `packer/` | `qemu.pkr.hcl` builds the `box` / `pug` / `lab` QEMU images; all pools (apoc/dozer/tank/mouse) are baked in by `pools.sh` |
 | `terraform/` | Cloudflare DNS + Nexus repos; OpenTofu state encrypted in MinIO |
 | `test/` | asyncio harness — `testrole.py` (one role on one VM), `testall.py` (matrix) |
 | `mise-tasks/`, `mise.toml` | Tool pinning, env (1Password refs), `lint` / `fmt` / `tf` / `packer:build` tasks |
@@ -70,13 +70,13 @@ mise run tf plan
 mise run tf apply
 
 # Image rebuilds (when the base OS or chroot.sh changes)
-mise run packer:build               # both sources in parallel
-mise run packer:build zfs-lab       # one source
+mise run packer:build               # all three sources in parallel
+mise run packer:build box           # one source (push CI's target)
 mise run packer:build --ubuntu noble
 
 # Test a single role end-to-end in QEMU
-test/testrole.py healthchecks
-test/testrole.py zfs --machine lab --keep
+test/testrole.py healthchecks                # defaults to --machine box
+test/testrole.py zfs --machine lab --keep    # on-demand prod-shape regression
 test/testall.py --jobs 5            # full role × machine matrix
 
 # Lint / format

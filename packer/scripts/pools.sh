@@ -19,8 +19,8 @@
 #                                    over the p1's of those two plus the
 #                                    whole disks 3-4. mouse is a mirror
 #                                    over the p2's of disks 1-2. Matches
-#                                    test/disks/lab.sh's tank+mouse
-#                                    layout that the lab prod host runs.
+#                                    the lab prod host's tank+mouse
+#                                    layout.
 #
 # Idempotence: each `zpool create` is gated on a list check so bare-
 # metal copy-paste reruns skip existing pools. The build VM hits the
@@ -56,8 +56,9 @@ wipe_disk() {
 # Defaults applied to every pool. -O exec= intentionally omitted
 # (default exec=on) because rootless-container bind-mounts inherit
 # the source mount's noexec flag, which surfaces as EACCES on execve
-# from the checkout (see test/disks/lab.sh's github_runner-on-dozer
-# precedent). setuid=off + devices=off stay for hardening.
+# from the checkout -- precedent is github_runner's actions/runner
+# --work folder living on dozer/scratch/github_runner/. setuid=off +
+# devices=off stay for hardening.
 ZPOOL_OPTS=(
   -o ashift=12
   -o compatibility=openzfs-2.1-linux
@@ -107,9 +108,8 @@ create_tank_mouse() {
   tank3=$3
   tank4=$4
   for d in $disks; do wipe_disk "$d"; done
-  # Partition the shared (tank+mouse) disks. Matches test/disks/lab.sh:
-  # p1 = tank slice (1014M), p2 = mouse slice (fill minus 8M),
-  # p3 = future-use extra (last 8M).
+  # Partition the shared (tank+mouse) disks: p1 = tank slice (1014M),
+  # p2 = mouse slice (fill minus 8M), p3 = future-use extra (last 8M).
   for tm in "$tm1" "$tm2"; do
     sgdisk -n1:0:+1014M -t1:BF01 "$tm"
     sgdisk -n2:0:-8M -t2:BF01 "$tm"
