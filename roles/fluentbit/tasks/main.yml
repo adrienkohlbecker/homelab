@@ -108,9 +108,9 @@
     mode: "0644"
     backup: true
   loop:
-    - level-from-message.lua
-    - flatten-csp.lua
-    - otlp-shape.lua
+    - level_from_message.lua
+    - flatten_csp.lua
+    - otlp_shape.lua
   become: true
   register: fluentbit_lua
   when: not (ansible_check_mode and fluentbit_apt.changed)
