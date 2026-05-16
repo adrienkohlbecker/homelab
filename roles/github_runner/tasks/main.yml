@@ -133,15 +133,61 @@
   tags:
     - github_runner
 
+# Four overlay-storage knobs, all load-bearing for the rootless +
+# uidmapped container model on this jammy podman (3.4 / crun 0.17):
+#
+# * rootless_storage_path -- restate the system-config value because
+#   podman 4.9 treats this user file as a full REPLACEMENT, not a
+#   merge. Without it the user file's xino=off addition silently
+#   strips the system-set rootless_storage_path and graphroot falls
+#   back to XDG_DATA_HOME on ZFS -- where native kernel overlay
+#   produces ESTALE during dpkg unpacks (the linux-libc-dev
+#   netfilter-headers case is the canonical victim).
+#
+# * driver = "overlay" -- silences the cosmetic "auto-picked a
+#   driver" warning, AND fixes a load-bearing diagnostic regression
+#   in this podman version: the same warning re-emits during
+#   storage's ID-mapped-copy step, hijacks the error chain, and the
+#   real cause of any copy failure ends up replaced with the warning
+#   text. With the driver pinned, the warning never fires and the
+#   actual error surfaces. On a brand-new host this initialises
+#   cleanly. On an existing host whose DB was first populated with
+#   the driver implicit, podman trips a "database graph driver \"\"
+#   does not match \"overlay\"" mismatch -- the one-time fix is to
+#   sudo -u github_runner podman system reset --force (drop the pin
+#   first if reset can't read the DB), then re-apply with the pin.
+#
+# * mountopt = "nodev,xino=off" -- silence the kernel's "overlayfs:
+#   fs ... does not support file handles, falling back to xino=off"
+#   printk that fires ~160x/day during rootless CI churn. The
+#   fallback is unavoidable rootless (CAP_DAC_READ_SEARCH isn't
+#   held in init userns, so the kernel disables file-handle support
+#   regardless of fs); pre-declaring xino=off makes it skip the
+#   probe -- same end state, no printk. nodev preserves the
+#   upstream default; userxattr is force-added by podman internally
+#   for rootless, so we don't restate it.
+#
+# * ignore_chown_errors = "true" -- needed for the uidmapped runner
+#   container's ID-mapped layer copy. This podman lacks kernel
+#   idmapped-overlay support (needs 5.19+; jammy is 5.15) and falls
+#   back to a physical chown'd copy of each layer. Files in the
+#   runner image with file capabilities (newuidmap, newgidmap from
+#   the podman apt deps) can't have their security.capability xattr
+#   restored in the rootless namespace, and without this knob the
+#   copy aborts with EPERM. With it, the offending files keep their
+#   image-side ownership (harmless at runtime; the container's
+#   in-namespace root owns everything via the +0 uidmap override).
 - name: Configure rootless overlay storage opts
   when: not (ansible_check_mode and github_runner_user.changed)
   copy:
     dest: /mnt/scratch/github_runner/.config/containers/storage.conf
     content: |
       [storage]
+      driver = "overlay"
       rootless_storage_path = "/var/lib/containers/rootless/$USER"
       [storage.options.overlay]
       mountopt = "nodev,xino=off"
+      ignore_chown_errors = "true"
     owner: github_runner
     group: github_runner
     mode: "0644"
