@@ -9,7 +9,7 @@ on:
       ubuntu:
         description: 'Ubuntu codename'
         required: false
-        default: noble
+        default: jammy
   push:
     paths:
       - 'packer/**'
