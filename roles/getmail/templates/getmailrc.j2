@@ -1,8 +1,23 @@
 [retriever]
 type = SimpleIMAPSSLRetriever
 server = imap.gmail.com
+port = 993
 username = {{ root_email }}
 password = {{ gmail_app_password }}
+# Verify the server cert against the system CA bundle and require its
+# subject CN/SAN to match imap.gmail.com. Without these, getmail6 will
+# happily complete an IMAPS handshake against any cert the system
+# trusts, so any MITM with a valid-for-anything cert (or no cert
+# validation at all on older versions) would silently capture the app
+# password. ssl_version is intentionally unset so Python's
+# PROTOCOL_TLS_CLIENT negotiates the highest supported TLS (incl. 1.3).
+ca_certs = /etc/ssl/certs/ca-certificates.crt
+ssl_cert_hostname = imap.gmail.com
+# Explicit: don't set the \Seen flag on Gmail's side when fetching.
+# Matches the SimpleIMAPSSLRetriever default; pinning here defends
+# against a future upstream default flip silently changing the Gmail
+# UI's read/unread state for fetched mail.
+use_peek = true
 record_mailbox = false
 # Folder name is locale-dependent — Gmail localises it to UI language
 # (e.g. "[Gmail]/Tous les messages" for fr-locale). If a fetch returns
