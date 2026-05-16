@@ -5,6 +5,16 @@
 #                     service writes into $HOME (gitea_runner, github_runner)
 #   shell             optional, default '/usr/sbin/nologin'
 #   home              optional, default '/nonexistent'
+#   home_mode         optional, default null (= don't touch). When set,
+#                     chmods the home dir to this octal mode. Useful when
+#                     /etc/login.defs HOME_MODE (0750 on Ubuntu) is too
+#                     restrictive -- e.g. a podman bind-mount source under
+#                     $HOME is stat'd from a transient userns where the
+#                     process appears as "nobody" and can't traverse a
+#                     group-only dir, surfacing as EACCES at container
+#                     start. Pass "0755" to make the path world-traversable
+#                     (files inside keep their own modes, so this doesn't
+#                     widen actual read access).
 #   config_dir        optional bool, default true; false opts out of the
 #                     /mnt/services/<name> dir for stateless services
 #
@@ -19,6 +29,7 @@
     _service_user_createhome: "{{ service_user_args.createhome | default(false) }}"
     _service_user_shell: "{{ service_user_args.shell | default('/usr/sbin/nologin') }}"
     _service_user_home: "{{ service_user_args.home | default('/nonexistent') }}"
+    _service_user_home_mode: "{{ service_user_args.home_mode | default(None) }}"
     _service_user_config_dir: "{{ service_user_args.config_dir | default(true) }}"
 
 - name: Add {{ _service_user_name }} group
@@ -46,6 +57,23 @@
 - name: Record user record for {{ _service_user_name }}
   set_fact:
     "{{ _service_user_name }}_user": "{{ service_user_result }}"
+
+# Override useradd's HOME_MODE (Ubuntu defaults to 0750) when the caller
+# asked for a specific mode. Idempotent: ansible's file module reports
+# changed only when the mode actually differs. Gated on createhome so
+# we don't try to chmod the placeholder /nonexistent.
+- name: Set home directory mode to {{ _service_user_home_mode }} for {{ _service_user_name }}
+  when:
+    - _service_user_createhome
+    - _service_user_home_mode is not none
+    - not (ansible_check_mode and service_user_result.changed)
+  file:
+    path: "{{ _service_user_home }}"
+    state: directory
+    owner: "{{ _service_user_name }}"
+    group: "{{ _service_user_name }}"
+    mode: "{{ _service_user_home_mode }}"
+  become: true
 
 # Stateless services (no config / no on-host state) opt out via
 # config_dir: false. The helper still owns user/group/uid capture; callers

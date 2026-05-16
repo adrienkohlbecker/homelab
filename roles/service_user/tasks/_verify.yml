@@ -63,3 +63,54 @@
     name: service_user_test
     state: absent
   become: true
+
+# Second scenario: createhome + home_mode override. Confirms the helper
+# chmods the home dir to the caller-requested mode instead of relying
+# on /etc/login.defs HOME_MODE. Exercised by github_runner today to
+# work around a crun-bind-mount-stat EACCES under 0750.
+- name: _verify | provision a test user with createhome + home_mode override
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: service_user_test_home
+      home: /tmp/service_user_test_home
+      createhome: true
+      home_mode: "0755"
+      config_dir: false
+
+- name: _verify | home dir landed at the requested mode
+  stat:
+    path: /tmp/service_user_test_home
+  register: _verify_home
+  become: true
+
+- name: _verify | home dir attributes
+  assert:
+    that:
+      - _verify_home.stat.exists
+      - _verify_home.stat.isdir
+      - _verify_home.stat.pw_name == 'service_user_test_home'
+      - _verify_home.stat.gr_name == 'service_user_test_home'
+      - _verify_home.stat.mode == '0755'
+
+- name: _verify | cleanup home_mode test home dir
+  file:
+    path: /tmp/service_user_test_home
+    state: absent
+  become: true
+
+- name: _verify | cleanup home_mode test user
+  user:
+    name: service_user_test_home
+    state: absent
+    remove: true
+    force: true
+  become: true
+
+- name: _verify | cleanup home_mode test group
+  group:
+    name: service_user_test_home
+    state: absent
+  become: true
