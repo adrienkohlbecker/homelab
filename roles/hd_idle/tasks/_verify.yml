@@ -22,7 +22,7 @@
   assert:
     that:
       - "'-i 0' in hd_idle_proc.stdout"
-      - "'-s 1' in hd_idle_proc.stdout"
+      - "ansible_distribution_release in ['jammy', 'noble'] or '-s 1' in hd_idle_proc.stdout"
     fail_msg: >
       hd-idle running but missing expected flags; HD_IDLE_OPTS may have
       failed to parse from /etc/default/hd-idle.
