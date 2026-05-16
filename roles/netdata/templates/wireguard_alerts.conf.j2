@@ -1,0 +1,38 @@
+# WireGuard peer handshake-age alarm, scoped to the bunk offsite-backup
+# peer. The wireguard go.d collector emits one chart per (device, peer)
+# under context `wireguard.peer_latest_handshake_ago` -- if we template
+# on the context with no filter, it fans out across every peer including
+# mobile ones (laptop, phone) whose idle handshake age is naturally
+# hours/days. Scoping via `chart labels:` to the bunk peer's public_key
+# limits the alarm to the always-on offsite link.
+#
+# The peer.keepalive_from=[lab, pug] field in group_vars/all.yml's bunk
+# entry causes lab+pug to send a 25s PersistentKeepalive to bunk, keeping
+# their view of bunk's handshake_ago < ~30s steady-state. Without that
+# keepalive, this alarm would have no useful threshold -- bunk only
+# handshakes during nightly zfs sends so handshake_ago would naturally
+# climb to ~24h between backups.
+#
+# Threshold 300s warn / 600s crit gives ~10 keepalive intervals of grace
+# before a flap fires. `delay: up 10m` rides out the brief stale period
+# during a wg-quick restart or transient network blip.
+#
+# netdata normalizes chart-label values: `=` is replaced with `:` so the
+# trailing padding character on the public key shows as `:`. Apply the
+# same replacement when injecting from group_vars/prod.yml.
+
+template: wireguard_bunk_peer_handshake_stale
+      on: wireguard.peer_latest_handshake_ago
+chart labels: public_key={{ wireguard_keys.bunk.public_key | replace('=', ':') }}
+   class: Errors
+    type: System
+component: Network
+    calc: $time
+   units: seconds
+   every: 30s
+    warn: $this > 300
+    crit: $this > 600
+   delay: up 10m down 30m multiplier 1.5 max 1h
+ summary: WireGuard bunk peer (${label:device}) handshake stale
+    info: lab/pug sends a 25s keepalive to bunk; handshake_ago > 300s means the offsite backup link is unreachable. Catches the failure before the next nightly zfs send (which would also fail via systemd_service_unit_failed_state).
+      to: sysadmin
