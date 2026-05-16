@@ -1,0 +1,123 @@
+name: runner-image
+on:
+  workflow_dispatch:
+  push:
+    # Branch gate: only master pushes trigger automatic builds. Same
+    # reasoning as ci-image.yml -- feature-branch pushes shouldn't
+    # republish :latest under everyone else; workflow_dispatch can
+    # still build from any ref and produces a :<sha> tag without
+    # touching :latest.
+    branches: [ master ]
+    paths:
+      - 'runner/Dockerfile'
+      - 'runner/entrypoint.sh'
+
+# Workflow only reads the repo; Nexus push uses out-of-band creds. Drop
+# the default GITHUB_TOKEN scope so a future shell injection can't
+# pivot into a repo write.
+permissions:
+  contents: read
+
+# Serialize concurrent builds (rapid follow-up pushes would otherwise
+# race on podman's image store + the floating :latest push). No
+# matrix here, so this group only ever has one running + one pending
+# from the same workflow -- no cancellation churn.
+#
+# Unlike ci-image, there's no downstream sentinel-wait: the runner image
+# is consumed by roles/github_runner via ansible, not by any other
+# CI workflow's `container:` block. An image bump rolls out when the
+# operator next applies the role, which restarts the containers with
+# a fresh pull.
+concurrency:
+  group: runner-image
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    # Runs on the lab github_runner directly (no `container:` block) --
+    # the whole point of this workflow is to build the runner image, so
+    # it can't run inside that image. Same constraint as ci-image.yml.
+    # Pre-pool-rollout this resolves to the single homelab runner;
+    # post-rollout it resolves to the gen pool (lab label).
+    runs-on: [ self-hosted, lab ]
+    timeout-minutes: 30
+    env:
+      REGISTRY: nexus.lab.fahm.fr
+      REPO: homelab/runner
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # Build context = repo root because the Dockerfile's COPY references
+      # runner/entrypoint.sh by repo-relative path. -f points at the
+      # Dockerfile inside runner/ so we don't need a staging dir.
+      #
+      # See ci-image.yml's Build step for the full rationale on
+      # --pull=newer / --layers / --cache-from / --cgroup-manager /
+      # --iidfile / master-only :latest tag -- this workflow follows
+      # the same pattern for the same reasons.
+      - name: Build image
+        run: |
+          set -euo pipefail
+          iidfile=$(mktemp)
+          trap 'rm -f "$iidfile"' EXIT
+          tags=( --tag "${REGISTRY}/${REPO}:${GITHUB_SHA}" )
+          if [ "$GITHUB_REF" = "refs/heads/master" ]; then
+            tags+=( --tag "${REGISTRY}/${REPO}:latest" )
+          fi
+          podman build \
+            --pull=newer \
+            --layers \
+            --cache-from "${REGISTRY}/${REPO}" \
+            --cgroup-manager=cgroupfs \
+            --iidfile "$iidfile" \
+            -f runner/Dockerfile \
+            "${tags[@]}" \
+            .
+          echo "IMAGE_ID=$(cat "$iidfile")" >>"$GITHUB_ENV"
+
+      # See ci-image.yml's Push step for the full rationale on per-run
+      # REGISTRY_AUTH_FILE / --password-stdin / push-by-IMAGE_ID /
+      # retry loop. Identical security/reliability concerns apply.
+      - name: Push to nexus
+        env:
+          NEXUS_USERNAME: ${{ secrets.NEXUS_USERNAME }}
+          NEXUS_PASSWORD: ${{ secrets.NEXUS_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [[ -n "${NEXUS_USERNAME:-}" && -n "${NEXUS_PASSWORD:-}" ]] || {
+            echo >&2 "NEXUS_USERNAME/NEXUS_PASSWORD secrets missing; rotate via terraform/nexus.tf"
+            exit 1
+          }
+          REGISTRY_AUTH_FILE=$(mktemp -p "${RUNNER_TEMP:-/tmp}" auth.XXXXXX.json)
+          rm -f "$REGISTRY_AUTH_FILE"
+          export REGISTRY_AUTH_FILE
+          trap 'rm -f "$REGISTRY_AUTH_FILE"' EXIT
+          printf '%s' "${NEXUS_PASSWORD}" | podman login "${REGISTRY}" \
+            --username "${NEXUS_USERNAME}" \
+            --password-stdin
+          unset NEXUS_PASSWORD
+          push_with_retry() {
+            local attempts=5 delay=10 i
+            for i in $(seq 1 "$attempts"); do
+              if podman push "$@"; then
+                return 0
+              fi
+              if [ "$i" -lt "$attempts" ]; then
+                echo >&2 "podman push attempt $i/$attempts failed; retrying in ${delay}s..."
+                sleep "$delay"
+              fi
+            done
+            return 1
+          }
+          push_with_retry "${IMAGE_ID}" "${REGISTRY}/${REPO}:${GITHUB_SHA}"
+          if [ "$GITHUB_REF" = "refs/heads/master" ]; then
+            push_with_retry "${IMAGE_ID}" "${REGISTRY}/${REPO}:latest"
+          fi
+          podman rmi "${REGISTRY}/${REPO}:${GITHUB_SHA}" 2>/dev/null || true
