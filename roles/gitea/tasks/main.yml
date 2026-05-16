@@ -115,8 +115,8 @@
     nginx_site_args:
       subdomain: gitea
       proxy_pass: http://localhost:{{ service_ports.gitea }}/
-      location_conf: |
-        # Otherwise podman uploads return HTTP 413
-        client_max_body_size     0;
+      # Container-registry layers and LFS objects can be large; 10G fits
+      # realistic uploads without leaving unbounded disk-fill DoS open.
+      client_max_body_size: 10G
   tags:
     - gitea
