@@ -58,6 +58,17 @@ For every privilege-drop the image **actually performs** (not might-someday-perf
 
 Don't conflate "the container runs as root" with "the daemons inside the container run as root" — many images intentionally split the two. Skipping the per-daemon mapping only matters cosmetically until you start replicating data across hosts or grepping `ls -la` during an incident, at which point it becomes a real diagnostic hazard.
 
+### Prefer system-scope systemd units
+
+Default for new timers / services is **system-scope** (`/etc/systemd/system/`, running under `systemd[1]`). Reach for user-scope (`systemctl --user`, `user@<uid>.service`, linger) only when the work fundamentally requires it — today that's just rootless podman, which needs a per-user `podman.socket` on the user bus ([roles/gitea_runner/](roles/gitea_runner/), [roles/github_runner/](roles/github_runner/)).
+
+Reasons:
+- **One operational vocabulary.** `systemctl status foo`, `systemctl restart foo`, `journalctl -u foo` work without `--user --machine=<u>@.host` gymnastics.
+- **Monitoring works out of the box.** netdata's `systemdunits` go.d collector attaches to the system bus only; user-scope failures don't fire `systemd_service_unit_failed_state`. The `systemd_timers` chart.sh's `systemctl show LastTriggerUSec` also queries the system bus, so a user-scope timer is "overdue" forever in the chart. Going system-scope closes both gaps.
+- **Single mental model for permissions.** The system unit's `User=` / `Group=` directives are the only privilege-drop axis. No second model for the user manager's lifecycle (linger, `user@<uid>.service`, per-user subuid maps for the manager process itself).
+
+When the work needs to run as a non-root identity but stay system-scope, use `systemd_timer`'s `run_as:` arg (emits `User=<name>` / `Group=<name>` in the unit). [roles/getmail/tasks/main.yml](roles/getmail/tasks/main.yml) is the canonical example — runs as the operator so the maildir is directly browsable, but the unit itself is system-scope.
+
 ### Helper Roles
 Several helper roles factor out duplicated patterns. Prefer them over re-implementing the boilerplate; a hand-rolled implementation in a service role is a migration candidate.
 
