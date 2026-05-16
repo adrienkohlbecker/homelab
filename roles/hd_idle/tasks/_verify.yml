@@ -1,11 +1,13 @@
-# QEMU virtio disks report rotational=0, so the per-disk loop in
+# QEMU virtio disks report rotational=0 and box's md pseudo-devices
+# are filtered by name prefix, so the per-disk loop in
 # templates/hd-idle.j2 emits zero -a entries on box/lab/pug VMs; only
-# the global "-i 0 -s 1" survives. We can't drive a real spindown in
-# CI (would need to wait the full idle window against a real spinning
-# disk), so the functional check is: the daemon is alive, and its argv
-# matches what the template rendered. This catches the env-file
-# parse-failure mode where HD_IDLE_OPTS silently empties at runtime
-# and hd-idle starts with compiled-in defaults.
+# the global "-i 0" (plus "-s 1" on releases newer than jammy/noble)
+# survives. We can't drive a real spindown in CI (would need to wait
+# the full idle window against a real spinning disk), so the functional
+# check is: the daemon is alive, and its argv matches what the template
+# rendered. This catches the env-file parse-failure mode where
+# HD_IDLE_OPTS silently empties at runtime and hd-idle starts with
+# compiled-in defaults.
 
 - name: _verify | confirm hd-idle is active
   command: systemctl is-active hd-idle

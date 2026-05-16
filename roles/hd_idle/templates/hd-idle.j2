@@ -46,8 +46,10 @@ START_HD_IDLE=true
 #                          stdout/stderr
 #  -h                      Print usage information.
 #
-# Filter chain: rotational + removable=0. removable=0 keeps USB-attached
-# HDDs out of the list — they tend to be backup targets where mid-write
-# spindown is harmful, and the kernel's removable flag is the cheapest
-# discriminator.
-HD_IDLE_OPTS="-i 0{% if ansible_distribution_release not in ["jammy", "noble"] %} -s 1{% endif %}{% for dev in ansible_devices.values() | selectattr('rotational', 'equalto', '1') | selectattr('removable', 'equalto', '0') | map(attribute='links') | map(attribute='ids') | select | map('first') | sort %} -a /dev/disk/by-id/{{ dev }} -i 1200{% endfor %}"
+# Filter chain: rotational + removable=0 + physical-only (skip md/dm/
+# loop/sr/ram/zd pseudo-devices, which can report rotational=1 but
+# have nothing to spin — observed on box's mdadm-EFI/swap). removable=0
+# keeps USB-attached HDDs out of the list — they tend to be backup
+# targets where mid-write spindown is harmful, and the kernel's
+# removable flag is the cheapest discriminator.
+HD_IDLE_OPTS="-i 0{% if ansible_distribution_release not in ["jammy", "noble"] %} -s 1{% endif %}{% for name, dev in ansible_devices.items() if dev.rotational == '1' and dev.removable == '0' and not name.startswith(('md', 'dm-', 'loop', 'sr', 'ram', 'zd')) and dev.links.ids %} -a /dev/disk/by-id/{{ dev.links.ids | sort | first }} -i 1200{% endfor %}"
