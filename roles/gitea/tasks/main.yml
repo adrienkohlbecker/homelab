@@ -85,8 +85,8 @@
   vars:
     systemd_unit_args:
       src: gitea
-      condition: "{{ not (ansible_check_mode and (systemd_unit.changed or gitea_user.changed)) }}"
-      restart: "{{ systemd_unit.changed or gitea_conf.changed or gitea_installed.changed }}"
+      condition: "{{ not (ansible_check_mode and (gitea_service_result.changed or gitea_user.changed)) }}"
+      restart: "{{ gitea_service_result.changed or gitea_conf.changed or gitea_installed.changed }}"
   tags:
     - gitea
 
