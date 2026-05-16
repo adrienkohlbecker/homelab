@@ -294,15 +294,21 @@
 
 - name: _verify_input | INPUT — VRRP rule renders with iifname + protocol scope
   vars:
-    # `selectattr('comment', 'defined')` is load-bearing on ansible-core 2.19+:
-    # Jinja's `selectattr('comment', 'eq', X)` errors on items lacking the
-    # attribute entirely, and the unannotated rules in this table (e.g.
-    # established/related accept) don't carry a comment.
+    # Anchor on the rule's counter reference rather than its comment
+    # text. Counter names are part of each rule's functional identity;
+    # comments are documentation and may be rephrased without breaking
+    # the rule. nft -j renders a rule-side counter ref as the dict
+    # {"counter": {"name": "<name>"}} inside `expr`, so `contains` on
+    # that exact dict finds the matching rule.
     nft_rules: "{{ (nft_ruleset_vrrp.stdout | from_json).nftables
                    | selectattr('rule', 'defined')
                    | map(attribute='rule')
-                   | selectattr('comment', 'defined') | list }}"
-    vrrp_matches: "{{ (nft_rules | selectattr('comment', 'eq', 'keepalived (VRRP, LAN unicast)') | first).expr
+                   | list }}"
+    vrrp_rule: "{{ nft_rules
+                   | selectattr('expr', 'defined')
+                   | selectattr('expr', 'contains', {'counter': {'name': 'vrrp_accept'}})
+                   | first }}"
+    vrrp_matches: "{{ vrrp_rule.expr
                       | selectattr('match', 'defined')
                       | map(attribute='match') | list }}"
   assert:
@@ -310,5 +316,5 @@
       - (vrrp_matches | selectattr('left.meta', 'defined') | selectattr('left.meta.key', 'eq', 'iifname') | map(attribute='right') | first) == default_interface
       - (vrrp_matches | selectattr('left.payload', 'defined') | selectattr('left.payload.field', 'eq', 'protocol') | map(attribute='right') | first) in ['vrrp', 112]
     fail_msg: >-
-      VRRP rule by comment 'keepalived (VRRP, LAN unicast)' missing
+      VRRP rule referencing counter `vrrp_accept` is missing
       iifname={{ default_interface }} or protocol=vrrp scope.
