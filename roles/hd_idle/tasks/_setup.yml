@@ -1,0 +1,65 @@
+# Materialise a synthetic rotational SCSI disk so the test variants
+# (box, minimal -- all virtio + rotational=0) actually exercise the
+# template's per-disk selectattr filter. Without this, ansible_devices
+# offers no rotational+non-removable+non-virtual disk and the per-disk
+# branch of templates/hd-idle.j2 emits zero -a entries -- and the
+# loop in _verify.yml asserts nothing.
+#
+# scsi_debug ships in linux-modules-extra-<release>, which the lab
+# chroot.sh deliberately skips via --no-install-recommends on
+# linux-generic. Install it here on demand. modprobe gives us a real
+# /dev/sdN with a /sys/block/sdN/device/ chain (so ansible reports
+# virtual=0) and udev-created /dev/disk/by-id/scsi-* symlinks.
+#
+# scsi_debug devices default to queue/rotational=0 (treated as an
+# in-memory SSD). The module's `rotational=` param only exists on
+# newer kernels (jammy 5.15 doesn't have it), so we flip the flag
+# via sysfs after load -- works on every kernel, and is idempotent
+# with future kernels that do honour the param. Without the override
+# the template filter drops the device and we're back to zero -a
+# entries on box.
+#
+# Refreshing ansible_devices after the sysfs poke updates the fact
+# cache (jsonfile, 2h TTL per the harness env) so the subsequent
+# main apply + _verify both see the ghost. No cleanup -- the harness
+# destroys the VM at end of test.
+
+- name: _setup | install linux-modules-extra to make scsi_debug available
+  apt:
+    pkg: "linux-modules-extra-{{ ansible_kernel }}"
+    cache_valid_time: 3600
+  become: true
+
+- name: _setup | load scsi_debug to provide a fake rotational disk
+  modprobe:
+    name: scsi_debug
+    params: "dev_size_mb=8 num_tgts=1"
+  become: true
+
+- name: _setup | wait for udev to populate /dev/disk/by-id/scsi-*
+  command: udevadm settle
+  changed_when: false
+  become: true
+
+- name: _setup | locate the scsi_debug block device
+  # SCSI INQUIRY pads MODEL to 16 bytes with spaces, so exact-match
+  # against "scsi_debug" misses; case-glob handles the padding.
+  shell: |
+    for blk in /sys/block/sd*; do
+      case "$(cat "$blk/device/model" 2>/dev/null)" in
+        scsi_debug*) basename "$blk" ;;
+      esac
+    done
+    exit 0
+  register: scsi_debug_block
+  changed_when: false
+  become: true
+  failed_when: scsi_debug_block.stdout_lines | length != 1
+
+- name: _setup | flag scsi_debug device as rotational (jammy 5.15 lacks the module param)
+  shell: "echo 1 > /sys/block/{{ scsi_debug_block.stdout }}/queue/rotational"
+  become: true
+  changed_when: true
+
+- name: _setup | refresh facts cache so main + _verify see the ghost
+  setup:
