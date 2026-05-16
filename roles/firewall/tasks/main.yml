@@ -172,6 +172,25 @@
   tags:
     - firewall
 
+# Enforce the "host is never without a firewall" invariant: refuse to
+# purge ufw or remove iptables-nft unless nftables.service is actually
+# active. Without this gate, a future tag-limited or check-mode run
+# that skips the service-start step would still purge ufw, leaving a
+# window with no host firewall. `systemctl is-active` returns rc=0
+# when active (running or, for oneshot, exited after success);
+# service_facts can't be used here because it maps Type=oneshot
+# +RemainAfterExit=yes units (which nftables.service is) to
+# state: stopped regardless of actual liveness.
+- name: Confirm nftables.service is active before removing ufw/iptables
+  command: systemctl is-active nftables.service
+  register: firewall_nftables_active
+  changed_when: false
+  failed_when: >-
+    not ansible_check_mode and firewall_nftables_active.rc != 0
+  become: true
+  tags:
+    - firewall
+
 # Vanilla Ubuntu cloud images / server ISOs ship ufw enabled with
 # its own iptables ruleset; we replace it with the nftables config
 # above. Purge here (after nftables is up) rather than in roles/
