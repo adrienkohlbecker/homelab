@@ -62,13 +62,15 @@
     label: "{{ item.repo }}_{{ item.suffix }}"
   become: true
 
-# Per-instance podman secret -- exercises that _register.yml's
-# token-fetch + podman_secret import chain actually landed a secret in
-# github_runner's rootless store. `podman secret inspect` exits non-zero
-# if the secret is absent, which fails the task without no_log hiding
-# anything useful (the inspect output prints metadata only -- the secret
-# value itself is never read by inspect).
-- name: _verify | podman secret exists for each instance
+# Per-instance podman secret -- under qemu_test only. The qemu_test
+# branch creates the secret (with a stub token) but never starts the
+# container, so the secret stays as evidence that _register.yml's
+# token-fetch + podman_secret import chain actually wired up. In prod
+# the secret is dropped as soon as first-start registration writes
+# .runner (the .runner sentinel check below covers the prod success
+# path), so asserting "exists" there would fail steady-state.
+- name: _verify | podman secret exists for each instance (qemu_test)
+  when: qemu_test
   command: podman secret inspect github_runner_token_{{ item.repo }}_{{ item.suffix }}
   changed_when: false
   loop: "{{ github_runner_instances }}"
