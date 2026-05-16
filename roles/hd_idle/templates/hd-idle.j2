@@ -12,9 +12,11 @@
 
 #HD_IDLE_OPTS="-h"
 
-# Newer releases (>= resolute / 26.04) gate the daemon on
-# START_HD_IDLE=true; older releases don't read this variable so it's a
-# harmless no-op there.
+# Newer hd-idle (>= resolute / 26.04, Go rewrite) exits immediately
+# only if START_HD_IDLE=false; older releases (jammy/noble, C 1.05)
+# ignore the variable entirely. Setting it =true is a no-op on both,
+# kept as a defensive sentinel that matches the upstream env-file
+# Debian ships starting with the Go rewrite.
 START_HD_IDLE=true
 
 # hd-idle command line options
