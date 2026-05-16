@@ -2,3 +2,4 @@
 roles/hwe_kernel/tasks/main.yml  package-latest
 roles/eaton_ipp/tasks/main.yml  command-instead-of-module
 roles/user/tasks/main.yml  command-instead-of-module
+roles/linger/tasks/_verify.yml  var-naming[no-role-prefix]

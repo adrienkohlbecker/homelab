@@ -1,0 +1,31 @@
+# Inputs: caller passes a single dict `linger_args` with keys
+#   name  required; user account to linger
+#   uid   required; the user's uid (caller resolves; for ansible_user
+#         pass `ansible_user_uid`, for service_user-created accounts
+#         pass `<svc>_user.uid`)
+#
+# Does:
+#   1. loginctl enable-linger <name>, gated on the linger sentinel so
+#      a re-run is a no-op.
+#   2. Ensures user@<uid>.service is started — linger triggers the user
+#      manager asynchronously, so a consumer driving `systemctl --user`
+#      immediately after needs it fully up. The check-mode gate guards
+#      against a fresh-user / fresh-linger run under --check where the
+#      sentinel wasn't really written and uid may be unresolved.
+#
+# The dict form mirrors service_user / systemd_timer / podman_secret:
+# each import_role replaces the whole `linger_args` value at play-vars
+# scope so a previous caller's name/uid can't bleed into the next call.
+- name: linger | Enable linger for {{ linger_args.name }}
+  command: loginctl enable-linger {{ linger_args.name }}
+  args:
+    creates: /var/lib/systemd/linger/{{ linger_args.name }}
+  become: true
+  register: _linger_result
+
+- name: linger | Ensure user manager is running for {{ linger_args.name }}
+  when: not (ansible_check_mode and _linger_result.changed)
+  systemd:
+    name: user@{{ linger_args.uid }}.service
+    state: started
+  become: true
