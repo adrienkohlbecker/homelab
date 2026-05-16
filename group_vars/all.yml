@@ -36,6 +36,7 @@ service_ports:
   csp_ingest: 9880
   dnscrypt_proxy: 5053
   eaton_ipp: 4680
+  gitea: 3000
   healthchecks: 8000
   homepage: 3003
   homepage_alerts: 8765
