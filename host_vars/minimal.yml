@@ -1,3 +1,11 @@
+# minimal: the vanilla Ubuntu cloud image test fixture. ext4, no
+# ZFS, snapd + cloud-init preinstalled. Push CI fans out to this
+# variant for roles in .github/ci-minimal-roles.txt (currently just
+# `cleanup`, which exercises the snap-removal path only when snapd
+# is actually present).
+qemu_test: true
+qemu_test_minimal: true
+
 zfs_root: false
 home_subnet: 10.0.2.0/24
 macvlan_parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
