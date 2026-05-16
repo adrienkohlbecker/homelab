@@ -1,0 +1,102 @@
+# Drop-rule probes: crafted non-syn (input + forward), forward
+# catch-all, ICMP overflow, silenced-noise UDP, catch-all UDP, and
+# the VRRP iif-scope negative. Each one fires a counter that the
+# assertion block in _verify_counters.yml checks.
+
+# Crafted-packet probes for non-SYN DROP rules on input and forward.
+# hping3 always exits 0 on send (it doesn't fail just because no reply
+# arrived), so we use nft per-rule counters as the actual assertion:
+# send the crafted packet, then confirm the specific rule's counter
+# incremented. Counters were reset earlier (before the UDP probe sweep),
+# so this section adds to the same counter state.
+- name: _verify_drops | input — TCP-ACK (no SYN) from extns to :80 hits the non-SYN drop
+  command: ip netns exec extns hping3 -A -p 80 -c 1 --quiet 10.99.0.1
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify_drops | forward — TCP-ACK (no SYN) from extns to a container hits the non-SYN drop
+  command: ip netns exec extns hping3 -A -p 32400 -c 1 --quiet {{ probe_container_dest }}
+  changed_when: false
+  failed_when: false
+  become: true
+
+# forward catch-all drop — direct curl from extns to a container's
+# bridge IP (no DNAT involved, so the wg0→podman0 ct-status-dnat
+# allow doesn't match either). With established, invalid, non-SYN,
+# and the scoped allows all not matching, the packet falls through
+# to the trailing counter-drop.
+- name: _verify_drops | forward — direct-to-container TCP-SYN with no DNAT hits the catch-all drop
+  command: ip netns exec extns curl --connect-timeout 2 --max-time 3 -sf http://{{ probe_container_dest }}:80/
+  register: probe_forward_drop
+  changed_when: false
+  failed_when: probe_forward_drop.rc == 0
+  become: true
+
+# ICMP echo flood with varying IDs — must vary ICMP-id per packet to
+# exercise the rate-limit rule, because conntrack tracks ICMP echo by
+# (src, dst, type, id): a same-id flood collapses to one flow that
+# short-circuits via `ct state established,related accept` after the
+# first packet. Python's raw-ICMP socket sends 50 packets with IDs
+# 1000-1049 back-to-back from extns; each is a NEW conntrack flow
+# reaching the icmp rule. Burst 20 + ~10/sec refill over <1s → ~30
+# overflow drops.
+- name: _verify_drops | Stage ICMP flood probe script
+  copy:
+    dest: /tmp/firewall_verify_icmp_flood.py
+    mode: "0755"
+    content: |
+      import socket, struct
+      sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+      for i in range(50):
+          icmp_id = 1000 + i
+          # echo-request: type=8 code=0 chksum=0 (placeholder)
+          hdr = struct.pack("!BBHHH", 8, 0, 0, icmp_id, 0)
+          chksum = 0
+          for j in range(0, len(hdr), 2):
+              chksum += (hdr[j] << 8) | hdr[j + 1]
+          while chksum >> 16:
+              chksum = (chksum & 0xFFFF) + (chksum >> 16)
+          chksum = ~chksum & 0xFFFF
+          pkt = struct.pack("!BBHHH", 8, 0, chksum, icmp_id, 0)
+          sock.sendto(pkt, ("10.99.0.1", 0))
+  become: true
+
+- name: _verify_drops | input — ICMP echo flood (varying IDs) overflows the rate-limit
+  command: ip netns exec extns python3 /tmp/firewall_verify_icmp_flood.py
+  changed_when: false
+  failed_when: false
+  become: true
+
+# Silenced-noise (dport 1900/SSDP) — sending UDP to any port in the
+# silenced set should land on that rule, not the catch-all.
+- name: _verify_drops | input — UDP to silenced-noise port hits the silenced-noise drop
+  shell: echo ping | ip netns exec extns nc -u -w 1 10.99.0.1 1900
+  args: { executable: /bin/bash }
+  changed_when: false
+  failed_when: false
+  become: true
+
+# Catch-all (UDP to a port with no rule, no listener, no scope match)
+# — falls through to the trailing counter-drop.
+- name: _verify_drops | input — UDP to unscoped 18181 hits the catch-all drop
+  shell: echo ping | ip netns exec extns nc -u -w 1 -s {{ probe_nonscope }} 10.99.0.1 18181
+  args: { executable: /bin/bash }
+  changed_when: false
+  failed_when: false
+  become: true
+
+# VRRP iif-scope negative probe. The rule is `iifname $WAN_IFACE ip
+# saddr $HOME_LAN ip protocol vrrp accept` — wg0 ingress (which is how
+# every extns packet arrives) must not match. Positive probe isn't
+# possible in this rig because slirp doesn't pass arbitrary L4
+# protocols on WAN, and adding a second veth named like $WAN_IFACE
+# would conflict with the netns topology. Confirm the rule's counter
+# stays at 0 after a proto-112 packet from extns — a regression that
+# drops the iif scope (`ip saddr ... ip protocol vrrp accept`) would
+# accept this packet and increment the counter.
+- name: _verify_drops | input — VRRP (proto 112) on wg0 ingress doesn't match the WAN-iif rule
+  command: ip netns exec extns hping3 --rawip -H 112 -c 1 -d 0 --quiet 10.99.0.1
+  changed_when: false
+  failed_when: false
+  become: true

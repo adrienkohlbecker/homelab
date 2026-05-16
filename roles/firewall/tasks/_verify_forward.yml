@@ -1,0 +1,92 @@
+# FORWARD/DNAT (3 probes), POSTROUTING egress / MASQUERADE (4 probes),
+# and the ICMP accept path (1 probe). Crafted-packet drop probes live
+# in _verify_drops.yml.
+
+# FORWARD/DNAT — published container reachable via wg0 ingress.
+- name: _verify_forward | FORWARD/DNAT — published 32400 reachable via wg0 ingress
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -s http://10.99.0.1:32400/
+  register: firewall_verify_container
+  changed_when: false
+  failed_when: firewall_verify_container.rc != 0 or 'firewall-verify-ok' not in firewall_verify_container.stdout
+  become: true
+
+# FORWARD/DNAT WAN-side counterpart — packet ingresses on enp0s2
+# (the qemu slirp interface) via the controller-side hostfwd that
+# the harness sets up in QemuMachine.prepare(). delegate_to: localhost
+# runs the curl on the test runner, so the packet reaches the VM
+# from "outside" exactly the way real WAN traffic does. Without the
+# hostfwd this rule is unreachable from the netns harness.
+- name: _verify_forward | FORWARD/DNAT — published 32400 reachable from controller via WAN hostfwd
+  delegate_to: localhost
+  command: curl --connect-timeout 5 --max-time 10 -s http://127.0.0.1:{{ wan_tcp_test_port }}/
+  register: firewall_verify_wan_container
+  changed_when: false
+  failed_when: firewall_verify_wan_container.rc != 0 or 'firewall-verify-ok' not in firewall_verify_wan_container.stdout
+
+# FORWARD chain podman0→podman0 ct-status-dnat regression probe.
+# This path broke during the nft migration: containers inheriting the
+# host's resolv.conf (one-shot containers without --dns) ended up
+# querying a VIP that PREROUTING DNATs back into the bridge — iif and
+# oif both podman0. netavark's NETAVARK_FORWARD chain accepted, but
+# our `ip homelab` forward chain had no matching rule and fell
+# through to default DROP; multi-base-chain semantics drops the
+# packet regardless. Re-fired the canonical case here by running a
+# transient busybox on the same `podman` network and curling the
+# bridge gateway IP — netavark's existing --publish 32400 rule
+# DNATs that to the long-running httpd container, exercising exactly
+# the iif=podman0/oif=podman0/ct-status-dnat path.
+- name: _verify_forward | FORWARD/DNAT — container → host bridge IP → DNAT'd to container on same bridge
+  command: >
+    podman run --rm --network podman docker.io/library/busybox
+    wget -q -O - -T 5 http://10.88.0.1:32400/
+  register: firewall_verify_container_to_vip
+  changed_when: false
+  failed_when: firewall_verify_container_to_vip.rc != 0 or 'firewall-verify-ok' not in firewall_verify_container_to_vip.stdout
+  become: true
+
+# Host egress smoke check — nftables has no `output` chain registered
+# (default policy=accept) and no host-source MASQUERADE rule, so this
+# just confirms egress isn't disrupted by the sysctls or by something
+# else in our table. The container-source and wg-source MASQUERADE
+# rules are exercised by the two POSTROUTING probes below.
+- name: _verify_forward | Egress — outbound HTTPS from host works
+  uri:
+    url: https://example.com/
+    timeout: 10
+    status_code: 200
+  become: true
+
+# Container-egress MASQUERADE — exercises -s podman_default_network
+# -j MASQUERADE.
+- name: _verify_forward | POSTROUTING — container egress through MASQUERADE works
+  command: podman exec firewall_verify_httpd wget -q -O- --timeout=10 https://example.com/
+  changed_when: false
+  become: true
+
+# FORWARD "podman → external" rule deliberately covers every non-podman
+# egress iface (WAN, home LAN, wg, libvirt, macvlan) — the container →
+# example.com probe above exercises the WAN case; this one hits a
+# non-WAN destination (extns over wg0) so a future tightening to WAN-
+# only fails loudly. ICMP rather than HTTP because extns has no
+# listener bound to its veth IP.
+- name: _verify_forward | FORWARD — container egress to non-WAN iface (wg0) reachable
+  command: podman exec firewall_verify_httpd ping -c 1 -W 3 {{ probe_nonscope }}
+  changed_when: false
+  become: true
+
+# Wireguard-source-egress MASQUERADE — exercises -s wireguard_subnet
+# -j MASQUERADE. extns alias {{ probe_wg }} sits in wireguard_subnet;
+# egress hits FORWARD wg0→WAN ACCEPT, then the matching POSTROUTING
+# rule MASQUERADEs to the host's egress IP. slirp NATs again on the
+# qemu side, reply round-trips back via wg0. IP literal (1.1.1.1)
+# avoids needing DNS inside the netns (no /etc/resolv.conf there).
+- name: _verify_forward | POSTROUTING — wireguard-source egress through MASQUERADE works
+  command: ip netns exec extns curl --interface {{ probe_wg }} --connect-timeout 5 --max-time 10 -sI http://1.1.1.1/
+  changed_when: false
+  become: true
+
+# ICMP rate-limit ACCEPT path. One ping is well below 10/sec.
+- name: _verify_forward | ICMP — ping from extns is accepted
+  command: ip netns exec extns ping -c 1 -W 2 10.99.0.1
+  changed_when: false
+  become: true

@@ -1,0 +1,325 @@
+# INPUT chain probes. Pre-counter-reset block exercises the unscoped
+# accept set (22/80/443) + the catch-all reject path. Then `nft reset
+# counters` zeroes everything, and the source-grouped batches below
+# each fire a specific rule's counter exactly enough times for the
+# counter assertion in _verify_counters.yml to discriminate
+# accept-vs-reject.
+
+# --- pre-counter-reset INPUT probes ----------------------------------
+
+# Unscoped INPUT allow / catch-all reject — baseline coverage.
+- name: _verify_input | INPUT allow — port 80 reachable from extns (unscoped)
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:80/
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify_input | INPUT deny — port 18080 (no rule, no listener) hits catch-all
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:18080/
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify_input | INPUT allow — port 443 reachable from extns (unscoped)
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:443/
+  changed_when: false
+  failed_when: false
+  become: true
+
+# Loopback accept (`iif lo accept`). No listener on :80 — the rule
+# fires (counter `input_loopback` increments) before the kernel
+# decides there's nowhere to deliver the SYN. A regression that
+# breaks the iif=lo rule diverts the packet to the catch-all chain;
+# the counter assertion at the end of _verify catches that.
+- name: _verify_input | INPUT allow — iif lo (loopback 127.0.0.1:80 from host)
+  command: curl --connect-timeout 3 --max-time 5 -sf http://127.0.0.1:80/
+  changed_when: false
+  failed_when: false
+  become: true
+
+# SSH (22/tcp) is in the unscoped `tcp dport { 22, 80, 443 } accept`
+# set. The harness's own ansible connection is over WAN-side slirp
+# hostfwd, so a regression that scopes 22 to @lan_admin_ifaces would
+# still pass via the test rig's enp0s2 — probe from extns to lock in
+# the unscoped contract on top of that. bash /dev/tcp opens a raw TCP
+# connection; rc=0 means the SYN-ACK landed, rc!=0 means the catch-all
+# fired.
+- name: _verify_input | INPUT allow — SSH (22/tcp) reachable from extns (unscoped)
+  shell: ip netns exec extns timeout 3 bash -c "exec 3<>/dev/tcp/10.99.0.1/22"
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+# Reset counters before the UDP probe sweep below (and the crafted-
+# packet probes further down). Each UDP-accept rule has a named
+# counter; the probes below send single packets and the assertion
+# block at the end of _verify checks each counter incremented (or
+# stayed at 0 for negative cases). This replaces the older
+# `nc -u | grep -q pong` round-trip pattern which was timing-flaky
+# under load (2-second deadlines, per-packet socat shell fork) and
+# could only signal accept-or-reject without seeing which rule fired.
+- name: _verify_input | Reset nftables counters before UDP and crafted-packet probes
+  command: nft reset counters table ip homelab
+  changed_when: false
+  become: true
+
+# Wireguard 51820 is scoped to -i WAN. Two probes — positive via
+# the controller-side UDP hostfwd (slirp ingresses on enp0s2, which
+# is the WAN iface in the test VM) and negative from the netns where
+# traffic always ingresses on wg0.
+- name: _verify_input | INPUT allow — wireguard (51820/udp) reachable on WAN iface from controller
+  delegate_to: localhost
+  shell: |
+    echo . | nc -u -w 1 127.0.0.1 {{ wan_udp_test_port }} >/dev/null 2>&1 || true
+  args: { executable: /bin/bash }
+  changed_when: false
+
+- name: _verify_input | INPUT — wireguard (51820/udp) rejected when ingressing on wg0
+  shell: |
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:51820,bind={{ probe_nonscope }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+# Transmission BT peer port is WAN-only (iif=$WAN_IFACE). Positive
+# WAN ingress would need a slirp hostfwd extension to forward another
+# pair of test ports — out of scope here. Probe the iif scope by
+# confirming wg0 ingress is rejected, which catches a regression that
+# drops the iif scope and exposes 51413 to wg peers.
+- name: _verify_input | INPUT — transmission (51413/tcp) rejected on wg0 ingress (iif scope)
+  command: ip netns exec extns curl --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:51413/
+  changed_when: false
+  failed_when: false
+  become: true
+
+# --- probe_wg group (wireguard-source positives) ---------------------
+# Admin services (mosh/samba/nut/NetBIOS) use the concatenated set
+# lan_admin_pairs to require an (iif, saddr) *intersection* — wg0 only
+# accepts $WG_SUBNET saddrs, $WAN_IFACE only accepts $HOME_LAN. The
+# rig ingresses everything on wg0, so probe_wg (in $WG_SUBNET) is the
+# positive case for all four services. mDNS rides the same group as a
+# saddr-scope negative (wg saddr fails the iif=WAN + saddr=$HOME_LAN
+# requirement on the saddr half). The $WAN_IFACE+$HOME_LAN positive
+# half can't be probed (slirp doesn't preserve source IP), so half of
+# each rule's contract is asserted via JSON shape only.
+- name: _verify_input | Bind probe_wg on extns veth (wireguard-source probes)
+  command: ip -n extns addr replace {{ probe_wg }}/32 dev veth_ext
+  changed_when: true
+  become: true
+
+- name: _verify_input | INPUT — mosh (60000/udp) reachable from wireguard source
+  shell: |
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:60000,bind={{ probe_wg }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+- name: _verify_input | INPUT — Samba (445/tcp) reachable from wireguard source
+  command: >
+    ip netns exec extns curl --interface {{ probe_wg }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify_input | INPUT — nut (3493/tcp) reachable from wireguard source
+  command: >
+    ip netns exec extns curl --interface {{ probe_wg }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
+  changed_when: false
+  failed_when: false
+  become: true
+
+# NetBIOS uses the same lan_admin_pairs (iif, saddr) intersection.
+# Positive case from wg-source via wg0; the home_LAN-via-wg0 mismatch
+# is structurally identical and already covered by the Samba probes.
+- name: _verify_input | INPUT — NetBIOS (137/udp) reachable from wireguard source
+  shell: |
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:137,bind={{ probe_wg }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+# mDNS rule requires iif=$WAN_IFACE + saddr=$HOME_LAN simultaneously.
+# wg saddr fails the saddr half — counter must not increment.
+- name: _verify_input | INPUT — mDNS (5353/udp) sent from wg saddr (saddr scope rejects)
+  shell: |
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:5353,bind={{ probe_wg }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+# --- probe_home group (home_LAN-source iif/saddr-mismatch negatives) -
+# probe_home (in $HOME_LAN) on wg0 ingress is a NEGATIVE case across
+# the admin set: wrong iif for its saddr. The wg0+HOME_LAN path was
+# accepted under prior union semantics; regression back to union
+# would let these through. mDNS rides the same group as the iif-half
+# negative (home saddr on wg0 fails the iif=$WAN_IFACE requirement).
+- name: _verify_input | Bind probe_home on extns veth (home_LAN-source probes)
+  command: ip -n extns addr replace {{ probe_home }}/32 dev veth_ext
+  changed_when: true
+  become: true
+
+- name: _verify_input | INPUT — mosh (60000/udp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
+  shell: |
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:60000,bind={{ probe_home }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+- name: _verify_input | INPUT — Samba (445/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
+  command: >
+    ip netns exec extns curl --interface {{ probe_home }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify_input | INPUT — nut (3493/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
+  command: >
+    ip netns exec extns curl --interface {{ probe_home }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify_input | INPUT — mDNS (5353/udp) sent from home_LAN saddr via wg0 (iif scope rejects)
+  shell: |
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:5353,bind={{ probe_home }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+# --- probe_nonscope group (out-of-scope negatives) -------------------
+# probe_nonscope (10.99.0.2 primary on veth_ext) is in neither
+# $HOME_LAN nor $WG_SUBNET nor $PODMAN_DEFAULT — every saddr-scoped
+# rule must reject it. No bind task: the primary alias is in place
+# from the netns setup above.
+- name: _verify_input | INPUT — mosh (60000/udp) rejected from non-scope source
+  shell: |
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:60000,bind={{ probe_nonscope }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+- name: _verify_input | INPUT — Samba (445/tcp) rejected from non-scope source
+  command: >
+    ip netns exec extns curl --interface {{ probe_nonscope }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify_input | INPUT — nut (3493/tcp) rejected from non-scope source
+  command: >
+    ip netns exec extns curl --interface {{ probe_nonscope }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify_input | INPUT — dnscrypt (5053/udp) rejected from non-scope source
+  shell: |
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:{{ service_ports.dnscrypt_proxy }},bind={{ probe_nonscope }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+# --- probe_podman group (default-bridge-source positives) ------------
+# Container DNS (5053 dnscrypt, 5333 aardvark) — consumers live on the
+# default podman bridge, so positive probes source-bind from
+# probe_podman (in $PODMAN_DEFAULT). socat sends a single UDP packet
+# source-bound to the alias; the named counter is the assertion.
+# Dnscrypt also has a TCP probe to lock in the `meta l4proto { tcp,
+# udp }` scope — a regression to UDP-only would silently bring back
+# the ~2 TCP drops/day pihole used to see when falling back to TCP on
+# UDP-truncated responses.
+- name: _verify_input | Bind probe_podman on extns veth (default-bridge-source probes)
+  command: ip -n extns addr replace {{ probe_podman }}/32 dev veth_ext
+  changed_when: true
+  become: true
+
+- name: _verify_input | INPUT — dnscrypt (5053/udp) reachable from container source
+  shell: |
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:{{ service_ports.dnscrypt_proxy }},bind={{ probe_podman }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+- name: _verify_input | INPUT — dnscrypt (5053/tcp) reachable from container source
+  command: >
+    ip netns exec extns curl --interface {{ probe_podman }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.dnscrypt_proxy }}/
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from default-bridge source
+  shell: |
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:5333,bind={{ probe_podman }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+# --- probe_podman_pool group (non-default-bridge-source positives) ---
+# Cross-bridge regression: aardvark-dns binds the gateway IP of every
+# dns-enabled named bridge (mosquitto, redis, …), all carved out of
+# netavark's 10.89.0.0/16 default_subnet_pools[0] base. A previous
+# saddr-scoped rule covered only podman_default_network and the
+# catch-all UDP reject killed every cross-bridge container-name lookup
+# (paperless → redis, z2m → mosquitto) before aardvark saw it. HA's
+# NUT integration is the other consumer from this subnet, matching
+# the separate `ip saddr $PODMAN_POOL tcp dport 3493 accept` rule.
+- name: _verify_input | Bind probe_podman_pool on extns veth (non-default-bridge-source probes)
+  command: ip -n extns addr replace {{ probe_podman_pool }}/32 dev veth_ext
+  changed_when: true
+  become: true
+
+- name: _verify_input | INPUT — nut (3493/tcp) reachable from podman_bridge_pool source
+  command: >
+    ip netns exec extns curl --interface {{ probe_podman_pool }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:3493/
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from non-default-bridge source
+  shell: |
+    echo . | ip netns exec extns socat -u STDIN UDP-SENDTO:10.99.0.1:5333,bind={{ probe_podman_pool }}
+  args: { executable: /bin/bash }
+  changed_when: false
+  become: true
+
+# VRRP (proto 112) scoping is asserted statically because slirp
+# doesn't pass arbitrary L4 protocols, so a functional probe across
+# the netns harness isn't feasible. Confirm the rendered rule still
+# carries the iifname + protocol scope — guards against someone
+# unscoping it back to `ip protocol vrrp accept`. JSON output is
+# more stable than text against nft's canonicalization quirks
+# (e.g. `ip protocol 112` ↔ `ip protocol vrrp`).
+- name: _verify_input | INPUT — get nft ruleset (JSON, for VRRP scope check)
+  command: nft -j list table ip homelab
+  register: nft_ruleset_vrrp
+  changed_when: false
+  become: true
+
+- name: _verify_input | INPUT — VRRP rule renders with iifname + protocol scope
+  vars:
+    # `selectattr('comment', 'defined')` is load-bearing on ansible-core 2.19+:
+    # Jinja's `selectattr('comment', 'eq', X)` errors on items lacking the
+    # attribute entirely, and the unannotated rules in this table (e.g.
+    # established/related accept) don't carry a comment.
+    nft_rules: "{{ (nft_ruleset_vrrp.stdout | from_json).nftables
+                   | selectattr('rule', 'defined')
+                   | map(attribute='rule')
+                   | selectattr('comment', 'defined') | list }}"
+    vrrp_matches: "{{ (nft_rules | selectattr('comment', 'eq', 'keepalived (VRRP, LAN unicast)') | first).expr
+                      | selectattr('match', 'defined')
+                      | map(attribute='match') | list }}"
+  assert:
+    that:
+      - (vrrp_matches | selectattr('left.meta', 'defined') | selectattr('left.meta.key', 'eq', 'iifname') | map(attribute='right') | first) == default_interface
+      - (vrrp_matches | selectattr('left.payload', 'defined') | selectattr('left.payload.field', 'eq', 'protocol') | map(attribute='right') | first) in ['vrrp', 112]
+    fail_msg: >-
+      VRRP rule by comment 'keepalived (VRRP, LAN unicast)' missing
+      iifname={{ default_interface }} or protocol=vrrp scope.
