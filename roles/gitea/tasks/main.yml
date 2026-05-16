@@ -14,29 +14,26 @@
   tags:
     - gitea
 
-- name: Add git group
-  group:
-    name: git
-    system: true
-  become: true
-  tags:
-    - gitea
-
-- name: Add git user
-  user:
-    name: git
-    group: git
-    createhome: true
-    system: true
-    shell: /bin/bash
-    home: /home/git
-  become: true
-  register: gitea_user
+# name: git (not gitea) because upstream gitea expects clone URLs of the
+# form `git@<host>:<owner>/<repo>.git`. config_dir: false because the
+# config tree lives at /mnt/services/gitea, not /mnt/services/git -- the
+# service name and the unix user name diverge here uniquely.
+- name: Create git system user
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: git
+      shell: /bin/bash
+      home: /home/git
+      createhome: true
+      config_dir: false
   tags:
     - gitea
 
 - name: Create gitea data directories
-  when: not (ansible_check_mode and gitea_user.changed)
+  when: not (ansible_check_mode and git_user.changed)
   file:
     dest: "{{ item }}"
     state: directory
@@ -57,7 +54,7 @@
 # app.ini. Stricter dir mode contains app.ini backup files left by
 # `template: backup:` (they may not inherit 0600).
 - name: Create /etc/gitea
-  when: not (ansible_check_mode and gitea_user.changed)
+  when: not (ansible_check_mode and git_user.changed)
   file:
     dest: /etc/gitea
     state: directory
@@ -94,7 +91,7 @@
   vars:
     systemd_unit_args:
       src: gitea.service.j2
-      condition: "{{ not (ansible_check_mode and gitea_user.changed) }}"
+      condition: "{{ not (ansible_check_mode and git_user.changed) }}"
   tags:
     - gitea
 
@@ -105,7 +102,7 @@
   vars:
     systemd_unit_args:
       src: gitea
-      condition: "{{ not (ansible_check_mode and (gitea_service_result.changed or gitea_user.changed)) }}"
+      condition: "{{ not (ansible_check_mode and (gitea_service_result.changed or git_user.changed)) }}"
       restart: "{{ gitea_service_result.changed or gitea_conf.changed or gitea_installed.changed }}"
   tags:
     - gitea
