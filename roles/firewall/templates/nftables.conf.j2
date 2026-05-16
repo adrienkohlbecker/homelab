@@ -26,7 +26,10 @@ table ip homelab {
     # not a fan-out of duplicate rules.
     set lan_admin_sources {
         type ipv4_addr
-        flags interval
+        # constant: kernel optimizes as read-only (we never mutate at
+        # runtime); auto-merge: dedupe overlapping intervals at load.
+        flags interval, constant
+        auto-merge
         elements = { $HOME_LAN, $WG_SUBNET }
     }
 
