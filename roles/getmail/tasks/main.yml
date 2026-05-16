@@ -96,6 +96,12 @@
       on_calendar: "*-*-* 00:24:00"
       # --getmaildir co-locates oldmail-* state next to the maildir so a
       # $HOME reset doesn't trigger a re-fetch of years of archive.
+      # OPERATOR NOTE: when invoking getmail manually from a shell for
+      # debugging, always pass --getmaildir /mnt/services/getmail too.
+      # `getmail --rcfile /mnt/services/getmail/getmailrc` alone writes
+      # oldmail-* to ~/.getmail/ (the default), splitting dedup state
+      # across two paths and triggering a partial re-fetch of the
+      # archive on first such run.
       exec_start: >-
         /usr/bin/getmail
         --rcfile /mnt/services/getmail/getmailrc
