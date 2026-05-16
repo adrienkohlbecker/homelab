@@ -86,10 +86,13 @@
 # `systemd --user` process and any backgrounded ssh/tmux processes survive
 # logout instead of being reaped by KillUserProcesses.
 - name: Turn on linger
-  command: loginctl enable-linger {{ ansible_user }}
-  args:
-    creates: /var/lib/systemd/linger/{{ ansible_user }}
-  become: true
+  import_role:
+    name: linger
+    tasks_from: linger
+  vars:
+    linger_args:
+      name: "{{ ansible_user }}"
+      uid: "{{ ansible_user_uid }}"
   tags:
     - user
 

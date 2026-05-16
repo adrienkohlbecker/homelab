@@ -26,30 +26,19 @@
     - gitea_runner
 
 # Linger has to be on before the rootless podman socket can come up:
-# gitea_runner.service connects to /run/user/<uid>/podman/podman.sock, which
-# is owned by the user manager and only present while user@<uid>.service
-# is alive. `loginctl enable-linger` keeps that manager running across
-# logout/reboot.
+# gitea_runner.service connects to /run/user/<uid>/podman/podman.sock,
+# which is owned by the user manager and only present while
+# user@<uid>.service is alive. The helper enables linger and waits for
+# the user manager (linger triggers it asynchronously) so downstream
+# rootless podman.socket tasks find a live bus.
 - name: Turn on linger
-  command: loginctl enable-linger gitea_runner
-  args:
-    creates: /var/lib/systemd/linger/gitea_runner
-  become: true
-  register: gitea_runner_linger
-  tags:
-    - gitea_runner
-
-# linger triggers user@<uid>.service asynchronously; downstream tasks
-# (rootless podman.socket enable/start) need it fully up. systemd module
-# with state=started blocks until active. Skip under check mode when the
-# user wasn't really created — uid isn't populated on the service_user
-# result, and templating user@{{ uid }}.service would fail.
-- name: Ensure gitea_runner user systemd manager is running
-  when: not (ansible_check_mode and gitea_runner_user.changed)
-  systemd:
-    name: user@{{ gitea_runner_user.uid }}.service
-    state: started
-  become: true
+  import_role:
+    name: linger
+    tasks_from: linger
+  vars:
+    linger_args:
+      name: gitea_runner
+      uid: "{{ gitea_runner_user.uid }}"
   tags:
     - gitea_runner
 
