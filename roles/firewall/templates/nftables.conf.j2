@@ -91,6 +91,19 @@ table ip homelab {
         }
     }
 
+    # Kernel-offloaded conntrack fastpath. Established TCP/UDP flows
+    # that ingress on a listed device skip the forward chain entirely
+    # via the ingress hook, which materially cuts CPU on bulk traffic
+    # (BT, plex). Listed devices are limited to $WAN_IFACE and wg0
+    # because nft's `devices` clause needs literal names — podman
+    # bridges (host-specific count and naming) can't be wildcarded
+    # here, so container-egress packets still walk the chain on their
+    # outbound side; the WAN-ingress reply path is offloaded.
+    flowtable bulk {
+        hook ingress priority filter;
+        devices = { $WAN_IFACE, "wg0" };
+    }
+
     ##################################################
     #                   INPUT CHAIN                  #
     ##################################################
@@ -234,6 +247,12 @@ table ip homelab {
     # group_vars `default_interface` because it does vary per host.
     chain forward {
         type filter hook forward priority filter; policy drop;
+
+        # Offload established TCP/UDP flows to the `bulk` flowtable.
+        # Non-terminating verdict — falls through to the established
+        # accept below for the first packet; subsequent packets in
+        # the same flow hit the ingress hook and skip this chain.
+        ip protocol { tcp, udp } ct state established flow add @bulk
 
         ct state established,related accept
         ct state invalid drop
