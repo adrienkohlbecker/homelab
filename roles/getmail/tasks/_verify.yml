@@ -16,7 +16,30 @@
   changed_when: false
   no_log: true
 
-- name: _verify | Dump output mentions the configured IMAP server
+# Convert the no_log'd dump output into boolean facts so the
+# assertion task can reference safe values; on assertion failure
+# only the expression and the booleans are displayed, never the
+# raw dump (which contains the password line). The substring checks
+# are intentionally not pinned to getmail's --dump format style
+# (could be `key=val` or `key="val"` depending on version).
+- name: _verify | Extract assertion booleans from dump
+  set_fact:
+    _getmail_dump_has_username: "{{ root_email in _getmail_verify.stdout }}"
+    _getmail_dump_has_destination: "{{ '/mnt/services/getmail' in _getmail_verify.stdout }}"
+    _getmail_dump_has_mailbox: "{{ '[Gmail]/All Mail' in _getmail_verify.stdout }}"
+    _getmail_password_var_nonempty: "{{ gmail_app_password | length > 0 }}"
+  no_log: true
+
+# Replaces a prior tautological `'imap.gmail.com' in stdout` check
+# (imap.gmail.com is a literal in the template; that check passes
+# even with empty vault values). The four assertions exercise
+# vault substitution for root_email, the Maildir destination, the
+# folder-name selection, and a non-empty gmail_app_password
+# (getmail --dump returns 0 even for an empty password line).
+- name: _verify | Dump output reflects template-derived values
   assert:
     that:
-      - "'imap.gmail.com' in _getmail_verify.stdout"
+      - _getmail_dump_has_username
+      - _getmail_dump_has_destination
+      - _getmail_dump_has_mailbox
+      - _getmail_password_var_nonempty
