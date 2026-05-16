@@ -1,5 +1,16 @@
 #!/usr/sbin/nft -f
 
+# nftables `define` directives centralize values referenced more than
+# once below — nft's parser checks the name is resolvable at load time,
+# so a typo (`$WAN_IFCAE`) fails loudly rather than rendering as an
+# empty string. `nft list ruleset` still emits the expanded form, so
+# external scrapers (and _verify.yml's VRRP assertion) are unaffected.
+define WAN_IFACE = "{{ default_interface }}"
+define HOME_LAN = {{ site_subnets.home }}
+define WG_SUBNET = {{ wireguard_subnet }}
+define PODMAN_DEFAULT = {{ podman_default_network }}
+define PODMAN_POOL = {{ podman_bridge_pool }}
+
 # Atomic replace of just our table — netavark / libvirt / fail2ban
 # tables in the same kernel ruleset (under iptables-nft compat) are
 # untouched. This is the killer simplification over iptables-restore,
@@ -16,7 +27,7 @@ table ip homelab {
     set lan_admin_sources {
         type ipv4_addr
         flags interval
-        elements = { {{ site_subnets.home }}, {{ wireguard_subnet }} }
+        elements = { $HOME_LAN, $WG_SUBNET }
     }
 
     ##################################################
@@ -52,14 +63,14 @@ table ip homelab {
         # clients can fall back to TCP when a response would be
         # UDP-truncated (pihole does this opportunistically); we kept it
         # UDP-only originally and saw ~2 TCP drops/day from pihole.
-        ip saddr {{ podman_default_network }} meta l4proto { tcp, udp } th dport {{ service_ports.dnscrypt_proxy }} accept comment "dnscrypt-proxy (default bridge only, TCP+UDP)"
-        ip saddr { {{ podman_default_network }}, {{ podman_bridge_pool }} } udp dport 5333 accept comment "aardvark-dns (post-DNAT from gateway:53, all podman bridges)"
-        ip saddr {{ site_subnets.home }} udp dport 5353 accept comment "mDNS (home LAN)"
+        ip saddr $PODMAN_DEFAULT meta l4proto { tcp, udp } th dport {{ service_ports.dnscrypt_proxy }} accept comment "dnscrypt-proxy (default bridge only, TCP+UDP)"
+        ip saddr { $PODMAN_DEFAULT, $PODMAN_POOL } udp dport 5333 accept comment "aardvark-dns (post-DNAT from gateway:53, all podman bridges)"
+        ip saddr $HOME_LAN udp dport 5353 accept comment "mDNS (home LAN)"
 
         # Wireguard ingress only on the WAN iface. Pinning iif means
         # an attacker on a future LAN bridge can't speculatively send
         # to udp/51820 from inside.
-        iifname "{{ default_interface }}" udp dport 51820 accept comment "wireguard (WAN ingress only)"
+        iifname $WAN_IFACE udp dport 51820 accept comment "wireguard (WAN ingress only)"
 
         # Transmission BitTorrent peer port — WAN-only, both TCP (peer
         # wire protocol) and UDP (µTP + DHT). The UDM port-forwards
@@ -68,7 +79,7 @@ table ip homelab {
         # both protocols. Without these rules, peers can find us via
         # tracker announces but can't actually connect — visible as
         # external SRC=… DPT=51413 drops in INPUT.
-        iifname "{{ default_interface }}" meta l4proto { tcp, udp } th dport 51413 accept comment "transmission BT peers (WAN ingress)"
+        iifname $WAN_IFACE meta l4proto { tcp, udp } th dport 51413 accept comment "transmission BT peers (WAN ingress)"
 
         # Mosh sessions originate from admin clients on the home LAN
         # or via wireguard, never from raw WAN.
@@ -96,7 +107,7 @@ table ip homelab {
         # shouldn't reach Samba) for any podman bridge in the pool.
         # Without this, HA's NUT integration silently fails — observed
         # as ~300 SYN-retry drops/day at INPUT.
-        ip saddr {{ podman_bridge_pool }} tcp dport 3493 accept comment "nut (podman bridges, e.g. HA NUT integration)"
+        ip saddr $PODMAN_POOL tcp dport 3493 accept comment "nut (podman bridges, e.g. HA NUT integration)"
 
         # ICMP — only echo-request, rate-limited. Other ICMP types
         # come back as RELATED. Overflow drops silently rather than
@@ -109,7 +120,7 @@ table ip homelab {
         # keepalived.conf.j2). Scope VRRP to LAN ingress + LAN saddr
         # so nothing on WAN / wg0 / podman bridges can inject proto
         # 112 packets to churn election state.
-        iifname "{{ default_interface }}" ip saddr {{ site_subnets.home }} ip protocol vrrp accept comment "keepalived (VRRP, LAN unicast)"
+        iifname $WAN_IFACE ip saddr $HOME_LAN ip protocol vrrp accept comment "keepalived (VRRP, LAN unicast)"
 
         # LAN broadcast/discovery noise. Every entry here was identified
         # from a 24h journal sweep of the catch-all log+drop below; each
@@ -171,7 +182,7 @@ table ip homelab {
         # hardcoding host-specific iface names. Cross-bridge container
         # traffic still has to go through the DNAT-reach rule below;
         # direct podman → podman is still dropped.
-        iifname "wg0" oifname "{{ default_interface }}" accept comment "wg → WAN"
+        iifname "wg0" oifname $WAN_IFACE accept comment "wg → WAN"
         iifname "podman*" oifname != "podman*" accept comment "podman → external (WAN/LAN/wireguard)"
 
         # Reach containers via netavark's DNAT. Three ingress paths,
@@ -189,7 +200,7 @@ table ip homelab {
         #     semantics, even if another chain returned accept).
         # WAN/wg0 scoping still prevents reachability from any future
         # interface (guest VLAN, mgmt net) we haven't trusted.
-        iifname { "{{ default_interface }}", "wg0" } oifname "podman*" \
+        iifname { $WAN_IFACE, "wg0" } oifname "podman*" \
             ct status dnat accept comment "Reach containers (LAN + wireguard ingress)"
         iifname "podman*" oifname "podman*" ct status dnat \
             accept comment "container → VIP → container (cross- or same-bridge DNAT)"
@@ -208,7 +219,7 @@ table ip homelab {
     # wireguard clients reaching the internet through us.
     chain postrouting {
         type nat hook postrouting priority srcnat; policy accept;
-        ip saddr {{ podman_default_network }} oifname "{{ default_interface }}" masquerade comment "NAT container egress"
-        ip saddr {{ wireguard_subnet }} oifname "{{ default_interface }}" masquerade comment "NAT wireguard-client egress"
+        ip saddr $PODMAN_DEFAULT oifname $WAN_IFACE masquerade comment "NAT container egress"
+        ip saddr $WG_SUBNET oifname $WAN_IFACE masquerade comment "NAT wireguard-client egress"
     }
 }
