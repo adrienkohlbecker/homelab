@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import dataclasses
+import errno
 import fcntl
 import os
 import platform
@@ -139,6 +140,11 @@ def _qemu_ansible_args(spec: QemuMachineSpec) -> list[str]:
 
 SSH_WAIT_TIMEOUT = 120
 IDFILE_TIMEOUT = 60
+# Bounded shared-acquire window on the publish-lock. A wedged packer
+# publish (holding LOCK_EX) would otherwise stall every concurrent test
+# cell past its own --timeout; surface it as a clear TimeoutError with
+# a debugging hint instead.
+PUBLISH_LOCK_TIMEOUT = 300
 
 # Sentinel printed by testrole.py at end-of-run so testall.py can capture
 # the per-machine peak RSS via stdout. Kept simple on purpose: a single
@@ -194,14 +200,20 @@ class Machine:
     # check, which was PID-ns-scoped and so couldn't see sibling Gitea Actions
     # test cells running in separate containers on the same host bind-mount.
     _live_lock_fd: int = dataclasses.field(default=-1, init=False)
-    # Shared flock on <imagedir>/.publish-lock held across prepare→boot so
-    # packer-build's brief exclusive lock around its install post-processor's
-    # rm+mv (packer/qemu.pkr.hcl) can't tear our backing-file reads. Applies
-    # on both Linux (lab) and macOS (a local `mise run packer:build` can race
-    # parallel testall.py cells reading the same artifacts/ tree). Released
-    # at the end of boot() once qemu has exec'd and pinned its -drive inodes
-    # via open fds. -1 = not held (also the steady state when the lockfile
-    # is absent -- a fresh imagedir with no packer history).
+    # Shared flock on <imagedir>/.publish-lock held across prepare→
+    # ensure_booted so packer-build's brief exclusive lock around its
+    # install post-processor's atomic-rename (packer/publish.py) can't
+    # tear our backing-file reads. Applies on both Linux (lab) and macOS
+    # (a local `mise run packer:build` can race parallel testall.py cells
+    # reading the same artifacts/ tree). Released at the end of
+    # ensure_booted() once qemu's -drive open(2) has completed -- not at
+    # the end of boot(), because create_subprocess_exec returns once the
+    # kernel has fork+exec'd qemu but qemu doesn't open backing files
+    # until after BIOS init (the qcow2-overlay backing path is embedded
+    # by value in the overlay header, so a packer swap of that inode
+    # between exec and open would silently corrupt the boot). -1 = not
+    # held (also the steady state when the lockfile is absent -- a fresh
+    # imagedir with no packer history).
     _publish_lock_fd: int = dataclasses.field(default=-1, init=False)
     peak_rss_kb: int = dataclasses.field(default=0, init=False)
     # Auxiliary slirp hostfwds. Pre-picked free 127.0.0.1 ports map
@@ -516,14 +528,6 @@ class Machine:
         # from competing with the parent terminal for keystrokes, especially
         # under parallel testall.py runs.
 
-        # Drop the publish-lock now that qemu has exec'd: the kernel-scheduled
-        # exec → -drive open path runs in microseconds, after which Unix
-        # unlink-after-open semantics keep our backing files alive even if
-        # packer renames their on-disk inodes out from under us. Holding the
-        # lock longer would needlessly block packer's publish (which is rare
-        # but bounded -- our acquire is shared, packer's is exclusive).
-        self._release_publish_lock()
-
     async def ensure_booted(self) -> None:
         """Block until the hypervisor writes the PID/CID file or the launch fails."""
 
@@ -535,6 +539,17 @@ class Machine:
             if time.monotonic() > deadline:
                 raise TimeoutError(f"PID file {id_path} not created within {IDFILE_TIMEOUT}s")
             await sleep_tick()
+
+        # Drop the publish-lock now that qemu has opened its -drive
+        # backing files. The PID/CID file is written by qemu after
+        # device init (which includes the qcow2-overlay open(2) and
+        # therefore the backing-file open(2)), so by the time we get
+        # here the kernel holds open fds on every inode our overlays
+        # point at -- a packer rename of those paths from this point
+        # on is invisible to us. Holding the lock longer would block
+        # packer's publish (which is rare but bounded; our acquire is
+        # shared, packer's is exclusive).
+        self._release_publish_lock()
 
     async def ensure_ssh(self) -> None:
         """Resolve SSH port then wait for the daemon banner to appear."""
@@ -1129,7 +1144,7 @@ class QemuMachine(Machine):
         await run_command(args)
 
     def _acquire_publish_lock_shared(self) -> None:
-        """Hold a shared flock on <imagedir>/.publish-lock until boot returns.
+        """Hold a shared flock on <imagedir>/.publish-lock until ensure_booted returns.
 
         Applies on macOS too (parallel `test/testall.py` cells can race
         against a local `mise run packer:build` rebuild on the same
@@ -1138,12 +1153,30 @@ class QemuMachine(Machine):
         any imagedir that has had at least one packer-build will have
         the file. On a fresh imagedir with no packer history we fall
         through to the unlocked path rather than failing the boot.
+
+        LOCK_NB+deadline rather than blocking LOCK_SH: a wedged packer
+        publish (holding LOCK_EX) would otherwise block every concurrent
+        test cell indefinitely, past the harness's own --timeout --
+        surface it as a clear error with a debugging hint instead.
         """
         lockfile = self.imagedir / ".publish-lock"
         if not lockfile.exists():
             return
-        self._publish_lock_fd = os.open(str(lockfile), os.O_RDONLY)
-        fcntl.flock(self._publish_lock_fd, fcntl.LOCK_SH)
+        fd = os.open(str(lockfile), os.O_RDONLY)
+        end = time.monotonic() + PUBLISH_LOCK_TIMEOUT
+        while True:
+            try:
+                fcntl.flock(fd, fcntl.LOCK_SH | fcntl.LOCK_NB)
+                self._publish_lock_fd = fd
+                return
+            except OSError as e:
+                if e.errno not in (errno.EWOULDBLOCK, errno.EAGAIN):
+                    os.close(fd)
+                    raise
+                if time.monotonic() >= end:
+                    os.close(fd)
+                    raise TimeoutError(f"publish-lock held >{PUBLISH_LOCK_TIMEOUT:.0f}s; " f"concurrent packer-build wedged? check `lsof {lockfile}`")
+                time.sleep(0.5)
 
     async def _ensure_minimal_cloudimg(self) -> Path:
         """Download (once) the Ubuntu minimal cloud image used by the `minimal` variant.
