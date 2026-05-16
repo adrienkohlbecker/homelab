@@ -68,10 +68,11 @@ class QemuMachineSpec(NamedTuple):
     # is reachable, before any role/_setup playbook. Receives the extra disk
     # devices as positional args. None means no setup needed.
     disk_setup_script: str | None
-    # Number of disks the packer image stages as part of the OS install.
-    # zfs is single-rpool (1), zfs-lab is a 3-disk mirror rpool
-    # (3). prepare() overlays packer-ubuntu-1..N.{raw,qcow2} for the OS, then attaches
-    # the variant's extra_disks starting at vd[a+N]. Unused on minimal
+    # Number of disks the packer image stages as part of the OS install
+    # (includes rpool + every extra pool disk). prepare() overlays
+    # packer-ubuntu-1..N.{raw,qcow2} for those, then attaches the variant's
+    # extra_disks starting at vd[a+N]. extra_disks is empty for variants
+    # whose pools are all baked in by packer. Unused on minimal
     # (packer_image=None), where the cloud-image branch returns early.
     os_disk_count: int = 0
     # True for the cloud-image-only "minimal" variant. Toggles
@@ -103,32 +104,37 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
     "box": QemuMachineSpec(
         ssh_user="vagrant",
         inventory_host="box",
-        packer_image="zfs",
+        # box: 2-disk mirror rpool + apoc mirror + dozer mirror + tank
+        # raidz2 + mouse mirror, all baked in by packer (no post-boot
+        # disk-setup script). Synthetic union fixture used by push CI.
+        packer_image="box",
         extra_disks=[],
         disk_setup_script=None,
-        os_disk_count=1,
+        os_disk_count=10,
     ),
     "lab": QemuMachineSpec(
         ssh_user="vagrant",
         inventory_host="lab",
-        # zfs-lab brings the 3-disk mirror rpool baked in (matches
-        # the lab-class prod host). Extras below add the dozer/tank/mouse
-        # disks layered on top by test/disks/lab.sh.
-        packer_image="zfs-lab",
-        # Six disks: dozer mirror legs (1G ×2), tank/mouse shared hosts
-        # (1.5G ×2 — partitioned at test time), plus two whole-disk tank
-        # raidz2 vdevs (1G ×2). Sizes match the previous packer-baked layout.
-        extra_disks=["1G", "1G", "1.5G", "1.5G", "1G", "1G"],
-        disk_setup_script="test/disks/lab.sh",
-        os_disk_count=3,
+        # lab: matches the lab prod host. mdadm-EFI + mdadm-swap +
+        # 3-disk mirror rpool + dozer + tank + mouse, all baked in.
+        # Push CI no longer fans out to lab; kept for on-demand
+        # --machine lab debug + nightly + packer script regression.
+        packer_image="lab",
+        extra_disks=[],
+        disk_setup_script=None,
+        os_disk_count=9,
     ),
     "pug": QemuMachineSpec(
         ssh_user="vagrant",
         inventory_host="pug",
-        packer_image="zfs",
-        extra_disks=["1G", "1G"],
-        disk_setup_script="test/disks/pug.sh",
-        os_disk_count=1,
+        # pug: matches the pug prod host. Single-disk rpool + apoc
+        # mirror, all baked in. Push CI no longer fans out to pug;
+        # kept for on-demand --machine pug + nightly + packer script
+        # regression.
+        packer_image="pug",
+        extra_disks=[],
+        disk_setup_script=None,
+        os_disk_count=3,
     ),
 }
 
@@ -1054,10 +1060,10 @@ class QemuMachine(Machine):
             if not self.arch.bios_boot_supported:
                 self.drives += await self._uefi_drives()
         else:
-            # ZFS variants pick a packer image (zfs or zfs-lab),
-            # overlay its OS disks, and attach extra empty qcow2s on top for
-            # the per-variant disk-setup script to format. See AGENTS.md
-            # "Test Environment Design".
+            # ZFS variants pick a packer image (box/pug/lab), overlay
+            # every disk packer staged (rpool + extra pools), and attach
+            # any extra empty qcow2s on top. See AGENTS.md "Test
+            # Environment Design".
             packer_image = self._spec.packer_image
             if packer_image is None:
                 # Bare assertion would be elided under `python -O`; raise so the
