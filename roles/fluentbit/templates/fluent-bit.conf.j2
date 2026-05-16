@@ -56,9 +56,11 @@
     Tag               nginx.access
     Path              /var/log/nginx/access.log
     DB                /var/lib/fluent-bit/nginx-access.db
+    db.locking        on
     Path_Key          filepath
     Refresh_Interval  5
     Skip_Long_Lines   on
+    Buffer_Max_Size   256k
     storage.type      filesystem
 
 [INPUT]
@@ -66,9 +68,11 @@
     Tag               nginx.error
     Path              /var/log/nginx/error.log
     DB                /var/lib/fluent-bit/nginx-error.db
+    db.locking        on
     Path_Key          filepath
     Refresh_Interval  5
     Skip_Long_Lines   on
+    Buffer_Max_Size   256k
     storage.type      filesystem
 
 # Join python / go / java / ruby tracebacks into a single record per
