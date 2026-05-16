@@ -611,6 +611,24 @@
   failed_when: false
   become: true
 
+# Silenced-noise (dport 1900/SSDP) — sending UDP to any port in the
+# silenced set should land on that rule, not the catch-all.
+- name: _verify | input — UDP to silenced-noise port hits the silenced-noise drop
+  shell: echo ping | ip netns exec extns nc -u -w 1 10.99.0.1 1900
+  args: { executable: /bin/bash }
+  changed_when: false
+  failed_when: false
+  become: true
+
+# Catch-all (UDP to a port with no rule, no listener, no scope match)
+# — falls through to the trailing counter-drop.
+- name: _verify | input — UDP to unscoped 18181 hits the catch-all drop
+  shell: echo ping | ip netns exec extns nc -u -w 1 -s {{ probe_nonscope }} 10.99.0.1 18181
+  args: { executable: /bin/bash }
+  changed_when: false
+  failed_when: false
+  become: true
+
 - name: _verify | Capture nftables counters after crafted-packet probes
   command: nft -j list table ip homelab
   register: counters_after_crafted
@@ -690,17 +708,23 @@
                                | selectattr('counter', 'defined') | first).counter.packets }}"
     icmp_overflow_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'icmp echo overflow drop') | first).expr
                             | selectattr('counter', 'defined') | first).counter.packets }}"
+    input_silenced_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'input silenced LAN noise') | first).expr
+                             | selectattr('counter', 'defined') | first).counter.packets }}"
+    input_catchall_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'input catch-all drop') | first).expr
+                             | selectattr('counter', 'defined') | first).counter.packets }}"
   assert:
     that:
       - input_nonsyn_pkts | int >= 1
       - forward_nonsyn_pkts | int >= 1
       - forward_catchall_pkts | int >= 1
       - icmp_overflow_pkts | int >= 1
+      - input_silenced_pkts | int >= 1
+      - input_catchall_pkts | int >= 1
     fail_msg: >-
       Counter-based probes didn't fire all expected drop rules:
-      non-SYN (input/forward), forward catch-all, or icmp overflow.
-      Either a rule is missing, the probe didn't reach the chain,
-      or another rule
+      non-SYN (input/forward), forward catch-all, icmp overflow,
+      input silenced-noise, or input catch-all. Either a rule
+      is missing, the probe didn't reach the chain, or another rule
       swallowed the packet first.
 
 # Re-apply coverage. With iptables-restore the apply was destructive
