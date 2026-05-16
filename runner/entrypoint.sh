@@ -93,6 +93,15 @@ cleanup_runner() {
 }
 trap cleanup_runner EXIT
 
+# run-helper.sh.template (invoked by run.sh in a loop) refuses to
+# proceed when `id -u` returns 0 unless RUNNER_ALLOW_RUNASROOT is
+# set ("Must not run interactively with sudo"). The runner image's
+# entrypoint deliberately runs as in-container root -- the uidmap on
+# the systemd unit maps that to host github_runner, so the "root"
+# inside the namespace is functionally a low-privilege user. Opt out
+# of the runtime check explicitly.
+export RUNNER_ALLOW_RUNASROOT=1
+
 # The JIT blob carries `ephemeral: true` server-side, so the runner
 # self-deregisters on clean exit; no explicit --ephemeral flag needed.
 # --disableupdate is intentionally omitted: ephemeral runners exit
