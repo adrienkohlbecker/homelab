@@ -174,10 +174,11 @@ table ip homelab {
         # Catch-all: log+drop UDP and non-TCP/UDP protocols silently
         # to avoid ICMP amplification (every spoofed UDP probe would
         # otherwise echo an ICMP port-unreachable back to the spoofed
-        # victim). TCP still gets a RST so legitimate clients fail
-        # fast without waiting for connect timeout.
+        # victim). TCP from a trusted iface (LAN / wg0) gets a RST so
+        # admin tools fail fast; from WAN we silently drop so closed
+        # ports don't confirm host existence to internet scanners.
         limit rate 5/minute burst 10 packets log prefix "[nftables] INPUT:DROP: "
-        meta l4proto tcp reject with tcp reset
+        iifname @lan_admin_ifaces meta l4proto tcp reject with tcp reset
         drop
     }
 
