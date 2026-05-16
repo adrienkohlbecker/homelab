@@ -44,6 +44,9 @@ local function service_from_tag(tag)
     elseif string.sub(tag, 1, 4) == "svc." then
         svc = string.sub(tag, 5):gsub("%.service$", "")
     elseif string.sub(tag, 1, 6) == "nginx." then
+        -- Only matches the tail-input tags above (nginx.access /
+        -- nginx.error). nginx.service journal records arrive as
+        -- svc.nginx.service and hit the svc. branch (yielding "nginx").
         local sub = string.sub(tag, 7)
         if sub ~= "" then svc = "nginx_" .. sub end
     else

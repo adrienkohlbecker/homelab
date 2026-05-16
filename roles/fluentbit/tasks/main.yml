@@ -164,13 +164,17 @@
 # The systemd input plugin doesn't expose db.journal_mode (only the
 # tail plugin does -- which is why the nginx-{access,error}.db files
 # end up WAL by default but journal.db doesn't). Flip the mode once;
-# the plugin doesn't override on open, so it persists across
-# fluent-bit restarts. The -wal sidecar SQLite creates at first
-# WAL-mode write persists for the life of the db, so we gate the
-# convert on its existence rather than re-reading the pragma every
-# play. wait_for absorbs the race where fluent-bit hasn't yet written
-# the db on first apply; in --check the unit isn't actually started so
-# we skip the wait and let the creates-gated convert no-op-report.
+# the pragma is stored in the db header and persists across opens.
+# Gate the convert on the -wal sidecar: SQLite creates -wal at the
+# first WAL-mode write and keeps it while any writer holds the db
+# open. fluent-bit's systemd input is a continuous writer, so during
+# normal operation -wal exists after first apply and the gate skips
+# thereafter. A clean shutdown removes -wal, so a play run with
+# fluent-bit stopped will re-fire the (idempotent) PRAGMA -- cosmetic
+# noise, not a real re-flip. wait_for absorbs the race where
+# fluent-bit hasn't yet written the db on first apply; in --check the
+# unit isn't actually started so we skip the wait and let the
+# creates-gated convert no-op-report.
 - name: Wait for fluent-bit journal.db
   wait_for:
     path: /var/lib/fluent-bit/journal.db
