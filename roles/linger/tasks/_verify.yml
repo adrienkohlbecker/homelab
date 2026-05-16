@@ -24,10 +24,12 @@
   register: _verify_sentinel
   become: true
 
-- name: _verify | Assert sentinel
+- name: _verify | Assert sentinel + per-user fact were exposed
   assert:
     that:
       - _verify_sentinel.stat.exists
+      - linger_test_linger is defined
+      - linger_test_linger.changed
 
 - name: _verify | Tear down user manager
   systemd:

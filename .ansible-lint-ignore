@@ -3,3 +3,9 @@ roles/hwe_kernel/tasks/main.yml  package-latest
 roles/eaton_ipp/tasks/main.yml  command-instead-of-module
 roles/user/tasks/main.yml  command-instead-of-module
 roles/linger/tasks/_verify.yml  var-naming[no-role-prefix]
+roles/user/tasks/main.yml  no-changed-when
+roles/user/tasks/main.yml  var-naming[no-role-prefix]
+roles/gitea_runner/tasks/main.yml  no-changed-when
+roles/gitea_runner/tasks/main.yml  var-naming[no-role-prefix]
+roles/github_runner/tasks/_register.yml  name[template]
+roles/github_runner/tasks/main.yml  loop-var-prefix[wrong]
