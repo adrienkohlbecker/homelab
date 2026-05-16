@@ -61,14 +61,6 @@
       overlap between site_subnets.home / wireguard_subnet /
       podman_default_network / podman_bridge_pool.
 
-# Use the real prod podman install path (jammy backports pin, netavark
-# backend, zvol setup) — keeps the test rig faithful to what runs on
-# real hosts and avoids re-implementing package selection here.
-- name: _verify | Install podman stack via prod install.yml
-  import_role:
-    name: podman
-    tasks_from: install
-
 - name: _verify | Install probe-only deps
   apt:
     name:

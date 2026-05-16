@@ -1,0 +1,11 @@
+# Functional verification of FORWARD/DNAT and POSTROUTING masquerade
+# rules needs a real podman install — netavark's `ip filter`/`ip nat`
+# chains, container egress via MASQUERADE, published-port DNAT. Run
+# the prod install path so the rig is faithful to what runs on real
+# hosts. CLAUDE.md reserves _setup.yml for genuine fixture deps like
+# this; keeping it in _verify.yml coupled the firewall verify to
+# podman's working state for unrelated reasons.
+- name: _setup | Install podman stack via prod install.yml
+  import_role:
+    name: podman
+    tasks_from: install
