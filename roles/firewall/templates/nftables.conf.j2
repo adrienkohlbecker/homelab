@@ -124,7 +124,7 @@ table inet homelab {
         # dropped. After these, every remaining packet is NEW — no
         # rule below needs an explicit ct-state qualifier.
         ct state established,related accept
-        iif lo counter name "input_loopback" accept
+        iifname "lo" counter name "input_loopback" accept
         ct state invalid drop
 
         # TCP NEW must have SYN. Conntrack's loose mode (default)
