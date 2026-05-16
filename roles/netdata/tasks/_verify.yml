@@ -184,17 +184,12 @@
       silently dropped (foo.does_not_exist isn't in the chart registry).
       Got liveness keys: {{ _keys | select('search', 'liveness_') | list }}
 
-- name: _verify | collector_stale + collector_failing templates instantiated
-  vars:
-    _keys: "{{ (_verify_alarms.content | from_json).alarms.keys() | list }}"
-  assert:
-    that:
-      - _keys | select('search', 'collector_stale') | list | length > 0
-      - _keys | select('search', 'collector_failing') | list | length > 0
-    fail_msg: >-
-      Expected collector_stale / collector_failing to be registered against
-      netdata.plugin_data_collection_status charts. Got keys:
-      {{ _keys | select('search', 'collector_') | list }}
+# Note: previously this _verify asserted that `collector_stale` and
+# `collector_failing` alarms (binding to netdata.plugin_data_collection_status)
+# had instantiated. That chart context is netdata 2.x only; on the pinned
+# 1.46 the templates silently failed to instantiate and the assertion would
+# fail. The templates were dropped from context_liveness.conf.j2 in tandem
+# with this assertion removal -- re-add both when the version pin lifts.
 
 # Restore the production conf (update_every back to 60s) so the role
 # leaves no surprise idempotency drift behind.
