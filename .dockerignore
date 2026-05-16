@@ -1,9 +1,11 @@
-# Allowlist for `podman build .` -- the Dockerfile only COPYs four
-# files, so anything else in the build context is wasted bytes (and
-# `terraform/.terraform` is a symlink pointing outside the repo, which
-# trips podman's symlink check at context-load time). Pattern: exclude
-# everything, then re-include the specific paths each COPY needs. Add
-# new entries here whenever the Dockerfile gets a new COPY.
+# Allowlist for `podman build .` from the repo root, shared by every
+# Dockerfile that takes the repo as its context (root Dockerfile +
+# runner/Dockerfile today). Anything else in the build context is
+# wasted bytes (and `terraform/.terraform` is a symlink pointing
+# outside the repo, which trips podman's symlink check at context-
+# load time). Pattern: exclude everything, then re-include the specific
+# paths each COPY needs. Add new entries here whenever a Dockerfile
+# gains a new COPY.
 *
 !mise.toml
 !pyproject.toml
@@ -11,3 +13,6 @@
 !packer
 packer/*
 !packer/qemu.pkr.hcl
+!runner
+runner/*
+!runner/entrypoint.sh
