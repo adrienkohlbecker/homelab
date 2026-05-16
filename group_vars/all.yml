@@ -147,6 +147,15 @@ wireguard_peers:
     is_server: true
     site_subnet: "{{ site_subnets.bonniers }}"
     allowed_ips: [ "{{ site_subnets.bonniers }}" ]
+    # Lab and pug are the always-on consumers of the bunk offsite link
+    # (nightly zfs autobackup replication). Having them send a 25s
+    # PersistentKeepalive keeps lab/pug's view of bunk's handshake_ago
+    # under ~30s so the netdata wireguard_peer_handshake_stale alarm
+    # has a usable signal -- without keepalive, bunk only handshakes
+    # during nightly sends and the alarm fires all day. Per-pair (not
+    # per-peer) so battery-sensitive mobile peers don't get a forced
+    # heartbeat they don't need.
+    keepalive_from: [lab, pug]
     dns_address: 10.123.57.1
     public_key: "{{ wireguard_keys.bunk.public_key }}"
     private_key: "{{ wireguard_keys.bunk.private_key }}"
