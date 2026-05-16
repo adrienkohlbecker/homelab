@@ -28,7 +28,11 @@ defaults:
 
 jobs:
   build:
-    runs-on: [ self-hosted, lab ]
+    # Packer spawns qemu VMs (one per source, in parallel) -- lands on
+    # the lab-vm pool. See notes/concurrency_rework.md for the pool
+    # model: lab-vm = 4 runners that take VM workloads (packer-build +
+    # test-role); lab = 2 runners that take everything else.
+    runs-on: [ self-hosted, lab-vm ]
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest
       # --group-add 1 maps to host kvm gid via /etc/subgid (see
