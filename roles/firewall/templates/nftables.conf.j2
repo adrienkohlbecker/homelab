@@ -114,7 +114,7 @@ table ip homelab {
         # Wireguard ingress only on the WAN iface. Pinning iif means
         # an attacker on a future LAN bridge can't speculatively send
         # to udp/51820 from inside.
-        iifname $WAN_IFACE udp dport 51820 accept comment "wireguard (WAN ingress only)"
+        iifname $WAN_IFACE udp dport {{ service_ports.wireguard }} accept comment "wireguard (WAN ingress only)"
 
         # Transmission BitTorrent peer port — WAN-only, both TCP (peer
         # wire protocol) and UDP (µTP + DHT). The UDM port-forwards
@@ -123,7 +123,7 @@ table ip homelab {
         # both protocols. Without these rules, peers can find us via
         # tracker announces but can't actually connect — visible as
         # external SRC=… DPT=51413 drops in INPUT.
-        iifname $WAN_IFACE meta l4proto { tcp, udp } th dport 51413 accept comment "transmission BT peers (WAN ingress)"
+        iifname $WAN_IFACE meta l4proto { tcp, udp } th dport {{ service_ports.transmission_bt }} accept comment "transmission BT peers (WAN ingress)"
 
         # Mosh sessions originate from admin clients on the home LAN
         # or via wireguard, never from raw WAN.
@@ -132,7 +132,7 @@ table ip homelab {
         # TCP allows. SSH/HTTP/HTTPS are wide-open (admin + public);
         # Samba and nut are admin services scoped via the set.
         tcp dport { 22, 80, 443 } accept comment "SSH/HTTP/HTTPS"
-        iifname @lan_admin_ifaces ip saddr @lan_admin_sources tcp dport { 445, 3493 } accept comment "Samba/nut (admin)"
+        iifname @lan_admin_ifaces ip saddr @lan_admin_sources tcp dport { 445, {{ service_ports.nut }} } accept comment "Samba/nut (admin)"
 
         # NetBIOS for nmbd (137 = name service, 138 = datagram). Same
         # admin scope as Samba — these are the legacy SMB browsing
@@ -158,7 +158,7 @@ table ip homelab {
         # needs either pinning HA's bridge subnet here or restricting
         # NUT clients via upsd.users; not implemented (home-environment
         # trade).
-        ip saddr $PODMAN_POOL tcp dport 3493 accept comment "nut (podman bridges, e.g. HA NUT integration)"
+        ip saddr $PODMAN_POOL tcp dport {{ service_ports.nut }} accept comment "nut (podman bridges, e.g. HA NUT integration)"
 
         # ICMP — only echo-request, rate-limited. Other ICMP types
         # come back as RELATED. Overflow drops silently rather than
