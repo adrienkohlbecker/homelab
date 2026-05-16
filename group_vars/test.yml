@@ -187,7 +187,7 @@ tautulli_pms_uuid: changeme
 themoviedb_api_key: changeme
 gitea_jwt_secret: changeme
 gitea_internal_token: changeme
-gitea_smtp_user: changeme
+gitea_smtp_user: changeme@example.com
 gitea_smtp_password: changeme
 gitea_lfs_jwt_secret: changeme
 transmission_rpc_password: changeme
