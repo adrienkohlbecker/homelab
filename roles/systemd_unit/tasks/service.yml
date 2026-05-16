@@ -22,10 +22,15 @@
 #
 # `systemd_unit_args.user` (default 'root') selects scope: root acts on
 # the system manager; any other value drives the named user's user
-# manager (linger must already be enabled). The pre-pull step is
-# rootful-only — extract_podman_image queries the system bus, and a
-# rootless service pulls into its own /var/lib/containers/rootless/$USER
-# store anyway.
+# manager (linger must already be enabled). For system-scope units the
+# pre-pull store is decided by the unit file's own `[Service] User=`
+# directive (which extract_podman_image returns): User=root (or unset)
+# pulls to root's /var/lib/containers/storage; any other value pulls to
+# that user's /var/lib/containers/rootless/<user>/ store — where the
+# unit's ExecStart will actually look at runtime. Without that branch,
+# a system-scope unit with User=github_runner would silently pre-pull
+# into root's store and then bust TimeoutStartSec on a cold rootless
+# pull inside systemctl start.
 # Two set_fact tasks because ansible's templating engine resolves all
 # keys in a single set_fact concurrently — a key can't read a sibling
 # defined in the same task. Primitives (caller-var defaulting) first,
@@ -88,6 +93,15 @@
   register: systemd_unit_podman_images
   become: true
 
+# Pull into the right podman store. extract_podman_image returns the
+# unit's User=; treat "" and "root" as system-scope, anything else as
+# that user's rootless store. become_user: root is the default ansible
+# become target so the empty-string / "root" path matches the previous
+# behavior exactly. For a non-root User= the role still needs root to
+# `become` first (system-scope unit lives in /etc/systemd/system), then
+# drops into the user via become_user; the user's linger + podman.sock
+# are the caller's responsibility (see github_runner main.yml for the
+# canonical setup).
 - name: Pre-pull podman images referenced by the unit
   when:
     - _systemd_unit_condition
@@ -98,6 +112,7 @@
     name: "{{ item }}"
   loop: "{{ systemd_unit_podman_images.images | default([]) }}"
   become: true
+  become_user: "{{ systemd_unit_podman_images.user if (systemd_unit_podman_images.user | default('')) not in ['', 'root'] else 'root' }}"
 
 # Clear any rate-limit / failed state before starting. A unit that has
 # crashed StartLimitBurst times within StartLimitInterval gets stuck
