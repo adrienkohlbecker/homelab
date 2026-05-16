@@ -55,7 +55,13 @@
     group: "{{ ansible_user }}"
     mode: "0600"
     backup: true
-    validate: python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True).read("%s")'
+    # Real parser (semantic shape, not just INI well-formedness) and
+    # removes the apostrophe-quoting hazard of the prior inline
+    # python3 -c '…' validator. getmail is installed by the first
+    # task in this file and the maildir is created by the task
+    # immediately above, so both prereqs are present by the time the
+    # template task fires.
+    validate: /usr/bin/getmail --dump --rcfile %s --getmaildir /mnt/services/getmail
   no_log: true
   tags:
     - getmail
