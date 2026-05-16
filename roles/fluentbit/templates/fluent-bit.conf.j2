@@ -1,11 +1,10 @@
 # {{ ansible_managed }}
 #
-# Ships journald + nginx logs to OpenObserve on lab. One stream per
-# host ({{ inventory_hostname }}); the openobserve UI groups streams
-# per-org, so per-host streams keep filtering clean without pre-tagging
-# every record. Auth: HTTP Basic with the root account; rotate by
-# bumping openobserve_root_password in the vault and re-running the
-# play (the new password is templated into this file).
+# Ships journald + nginx logs to HyperDX over OTLP HTTP. On hosts that
+# colocate HyperDX (lab) we hit its OTLP receiver on loopback; everything
+# else ships TLS through the hyperdx.lab.{{ domain }} nginx subdomain.
+# Auth: a static ingestion token templated in below; rotate by bumping
+# hyperdx_ingestion_api_key in the vault and re-running the play.
 
 [SERVICE]
     Flush             5
@@ -114,30 +113,28 @@
     call              flatten_csp
 
 # Tag every record with the inventory hostname so cross-stream queries
-# in OpenObserve can still filter by host without parsing the stream
-# name. systemd input also sets HOSTNAME from the journal, but tails
-# don't — this normalises both. Use `Set` not `Add`: the CSP HTTP
-# input lets an attacker put `{"host":"lab", ...}` at the top of the
-# POST body, which would otherwise land as a record key and `Add`
-# (insert-if-absent semantics) would refuse to overwrite. With `Set`
-# our value always wins, so attacker-spoofed `host` can't pollute
-# per-host facets in HyperDX/OpenObserve.
+# in HyperDX can still filter by host without parsing the tag. systemd
+# input also sets HOSTNAME from the journal, but tails don't — this
+# normalises both. Use `Set` not `Add`: the CSP HTTP input lets an
+# attacker put `{"host":"lab", ...}` at the top of the POST body, which
+# would otherwise land as a record key and `Add` (insert-if-absent
+# semantics) would refuse to overwrite. With `Set` our value always
+# wins, so attacker-spoofed `host` can't pollute per-host facets.
 [FILTER]
     Name              modify
     Match             *
     Set               host {{ inventory_hostname }}
 
-# Mirror journald's MESSAGE into `log` so the parallel HyperDX OTLP
-# output below picks it up as the LogRecord Body (fluent-bit's
-# opentelemetry output uses `log` by convention). Copy not Rename:
-# the OpenObserve HTTP output still references MESSAGE as the canonical
-# body field, so both pipelines need their respective key intact. The
-# modify Copy is a no-op when MESSAGE doesn't exist (nginx tails),
-# leaving their existing `log` field untouched.
+# Mirror journald's MESSAGE into `log` so HyperDX's OTLP output picks
+# it up as the LogRecord Body (fluent-bit's opentelemetry output uses
+# `log` by convention). Rename rather than Copy: HyperDX is the only
+# consumer now, no need to keep MESSAGE around. The Rename is a no-op
+# on tail records (no MESSAGE key) so nginx tails' existing `log` field
+# is untouched.
 [FILTER]
     Name              modify
     Match             *
-    Copy              MESSAGE log
+    Rename            MESSAGE log
 
 # nginx access logs never carry semantically-meaningful level keywords
 # -- every token in the body is an HTTP transaction field. The only
@@ -179,37 +176,9 @@
     script            /etc/fluent-bit/otlp-shape.lua
     call              shape_otlp
 
-[OUTPUT]
-    Name              http
-    Match             *
-{% if inventory_hostname in ['box', 'lab'] %}
-    # openobserve is co-located: skip nginx + public DNS + TLS and hit
-    # its published loopback port directly. Decouples fluent-bit's
-    # bootstrap from pihole/dnscrypt readiness (the upstream's
-    # getaddrinfo race during the 02:20 podman cycle stops being a
-    # thing) and removes the cert/handshake from the per-flush path.
-    Host              127.0.0.1
-    Port              {{ service_ports.openobserve }}
-{% else %}
-    Host              openobserve.lab.{{ domain }}
-    Port              443
-    tls               on
-    tls.verify        on
-{% endif %}
-    URI               /api/default/{{ inventory_hostname }}/_json
-    Format            json
-    Json_date_key     _timestamp
-    Json_date_format  iso8601
-    http_User         {{ root_email }}
-    http_Passwd       {{ openobserve_root_password }}
-    Retry_Limit       False
-    storage.total_limit_size  50M
-
-{% if inventory_hostname in ['box', 'lab'] %}
-# Parallel-ship to HyperDX over OTLP HTTP for the evaluation window (see
-# CLAUDE.md "Someday" -- pick a winner between OO and HyperDX and drop
-# the loser). HyperDX is co-located on the same hosts where it's
-# installed (lab roles in site.yml), so target loopback directly.
+# Co-located on lab → hit the OTel receiver on loopback. Off-host (pug
+# etc.) → TLS through hyperdx.lab.{{ domain }} (nginx subdomain proxies
+# /v1/logs to loopback 4318 on lab; see roles/hyperdx).
 #
 # The bundled OTel collector enforces a per-team auth token on the OTLP
 # receiver (opampController in the api wires bearertokenauth/hyperdx
@@ -234,8 +203,15 @@
 [OUTPUT]
     Name              opentelemetry
     Match             *
+{% if inventory_hostname in ['box', 'lab'] %}
     Host              127.0.0.1
     Port              {{ service_ports.hyperdx_otlp_http }}
+{% else %}
+    Host              hyperdx.lab.{{ domain }}
+    Port              443
+    tls               on
+    tls.verify        on
+{% endif %}
     logs_uri          /v1/logs
     header            Authorization {{ hyperdx_ingestion_api_key }}
     log_response_payload  false
@@ -263,4 +239,3 @@
     logs_severity_number_message_key   severity_number
     Retry_Limit       False
     storage.total_limit_size  50M
-{% endif %}
