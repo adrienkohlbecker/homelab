@@ -7,11 +7,13 @@ on:
     - cron: '0 2 * * *'
   workflow_dispatch:
 
-# Mutex on /mnt/scratch/qemu lives at the test-role job level (matching
-# test.yml), not workflow level. Nightly never collides with an
-# automatic packer-build (the cron fires at 02:00 with no push event),
-# but manual workflow_dispatch of packer-build during a nightly is
-# still gated by the per-cell test-role concurrency below.
+# Concurrency: no workflow- or job-level group on test-role. VM cap =
+# pool size (4 lab-vm runners on lab; see host_vars/lab.yml); packer-
+# vs-test mutex handled by a brief flock in packer's install post-
+# processor + the harness's overlay-create/qemu-launch. See
+# notes/concurrency_rework.md. Previously the static
+# `lab-qemu-artifacts` group here cancelled every matrix cell but one,
+# which is the bug that motivated the rework.
 
 defaults:
   run:
@@ -44,16 +46,11 @@ jobs:
           mise run ci:detect-roles --all
 
   test-role:
-    # Reader half of the lab-qemu-artifacts mutex (packer-build is the
-    # writer). Job-level rather than workflow-level so it matches
-    # test.yml's structure; see that file's test-role concurrency
-    # comment for the full deadlock-avoidance reasoning.
-    concurrency:
-      group: lab-qemu-artifacts
-      cancel-in-progress: false
+    # Lands on the lab-vm pool (4 runners) -- VM cap = pool size; see
+    # test.yml's test-role for the matching concurrency reasoning.
     needs: gate
     if: needs.gate.outputs.matrix != '[]' && needs.gate.outputs.matrix != ''
-    runs-on: [ self-hosted, lab ]
+    runs-on: [ self-hosted, lab-vm ]
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest
       # See test.yml's test-role container.options comment for the
