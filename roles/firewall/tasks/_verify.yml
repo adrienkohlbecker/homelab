@@ -576,6 +576,41 @@
   failed_when: probe_forward_drop.rc == 0
   become: true
 
+# ICMP echo flood with varying IDs — must vary ICMP-id per packet to
+# exercise the rate-limit rule, because conntrack tracks ICMP echo by
+# (src, dst, type, id): a same-id flood collapses to one flow that
+# short-circuits via `ct state established,related accept` after the
+# first packet. Python's raw-ICMP socket sends 50 packets with IDs
+# 1000-1049 back-to-back from extns; each is a NEW conntrack flow
+# reaching the icmp rule. Burst 20 + ~10/sec refill over <1s → ~30
+# overflow drops.
+- name: _verify | Stage ICMP flood probe script
+  copy:
+    dest: /tmp/firewall_verify_icmp_flood.py
+    mode: "0755"
+    content: |
+      import socket, struct
+      sock = socket.socket(socket.AF_INET, socket.SOCK_RAW, socket.IPPROTO_ICMP)
+      for i in range(50):
+          icmp_id = 1000 + i
+          # echo-request: type=8 code=0 chksum=0 (placeholder)
+          hdr = struct.pack("!BBHHH", 8, 0, 0, icmp_id, 0)
+          chksum = 0
+          for j in range(0, len(hdr), 2):
+              chksum += (hdr[j] << 8) | hdr[j + 1]
+          while chksum >> 16:
+              chksum = (chksum & 0xFFFF) + (chksum >> 16)
+          chksum = ~chksum & 0xFFFF
+          pkt = struct.pack("!BBHHH", 8, 0, chksum, icmp_id, 0)
+          sock.sendto(pkt, ("10.99.0.1", 0))
+  become: true
+
+- name: _verify | input — ICMP echo flood (varying IDs) overflows the rate-limit
+  command: ip netns exec extns python3 /tmp/firewall_verify_icmp_flood.py
+  changed_when: false
+  failed_when: false
+  become: true
+
 - name: _verify | Capture nftables counters after crafted-packet probes
   command: nft -j list table ip homelab
   register: counters_after_crafted
@@ -653,15 +688,19 @@
                              | selectattr('counter', 'defined') | first).counter.packets }}"
     forward_catchall_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'forward catch-all') | first).expr
                                | selectattr('counter', 'defined') | first).counter.packets }}"
+    icmp_overflow_pkts: "{{ ((nft_rules | selectattr('comment', 'eq', 'icmp echo overflow drop') | first).expr
+                            | selectattr('counter', 'defined') | first).counter.packets }}"
   assert:
     that:
       - input_nonsyn_pkts | int >= 1
       - forward_nonsyn_pkts | int >= 1
       - forward_catchall_pkts | int >= 1
+      - icmp_overflow_pkts | int >= 1
     fail_msg: >-
       Counter-based probes didn't fire all expected drop rules:
-      non-SYN (input/forward) or the forward catch-all. Either a rule
-      is missing, the probe didn't reach the chain, or another rule
+      non-SYN (input/forward), forward catch-all, or icmp overflow.
+      Either a rule is missing, the probe didn't reach the chain,
+      or another rule
       swallowed the packet first.
 
 # Re-apply coverage. With iptables-restore the apply was destructive
