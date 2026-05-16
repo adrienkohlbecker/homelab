@@ -1,0 +1,29 @@
+# QEMU virtio disks report rotational=0, so the per-disk loop in
+# templates/hd-idle.j2 emits zero -a entries on box/lab/pug VMs; only
+# the global "-i 0 -s 1" survives. We can't drive a real spindown in
+# CI (would need to wait the full idle window against a real spinning
+# disk), so the functional check is: the daemon is alive, and its argv
+# matches what the template rendered. This catches the env-file
+# parse-failure mode where HD_IDLE_OPTS silently empties at runtime
+# and hd-idle starts with compiled-in defaults.
+
+- name: _verify | confirm hd-idle is active
+  command: systemctl is-active hd-idle
+  changed_when: false
+  become: true
+
+- name: _verify | read hd-idle process argv
+  command: pgrep -a hd-idle
+  register: hd_idle_proc
+  changed_when: false
+  become: true
+
+- name: _verify | assert hd-idle argv carries global flags from the env file
+  assert:
+    that:
+      - "'-i 0' in hd_idle_proc.stdout"
+      - "'-s 1' in hd_idle_proc.stdout"
+    fail_msg: >
+      hd-idle running but missing expected flags; HD_IDLE_OPTS may have
+      failed to parse from /etc/default/hd-idle.
+      pgrep output: {{ hd_idle_proc.stdout }}
