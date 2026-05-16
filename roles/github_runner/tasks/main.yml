@@ -1,12 +1,16 @@
 # Operator-managed long-lived PAT. Required for the ephemeral + JIT
 # model -- every container start mints a single-use JIT config via
 # `gh api /repos/.../actions/runners/generate-jitconfig`, which needs
-# a PAT with repo + actions:write scope on the target repos. Mint
-# once via GitHub UI (Settings → Developer settings → fine-grained
-# tokens), vault into host_vars/<host>.yml as `github_runner_pat:
-# !vault | ...`, then re-run the role. Fail loud on missing or empty
-# so the operator sees the actionable cause instead of a confusing
-# downstream "secret data is required" or jinja "undefined" error.
+# a fine-grained PAT with `Administration: Read and write` on each
+# target repo (Metadata: Read is auto-selected). Actions: Read/write
+# is NOT needed for generate-jitconfig and shouldn't be granted --
+# this PAT is single-purpose. Mint once via GitHub UI (Settings →
+# Developer settings → Fine-grained tokens), select every repo listed
+# in any host's github_runner_instances, then vault into
+# host_vars/<host>.yml as `github_runner_pat: !vault | ...`. Fail
+# loud on missing or empty so the operator sees the actionable cause
+# instead of a confusing downstream "secret data is required" or
+# jinja "undefined" error.
 - name: Assert github_runner_pat is vaulted in host_vars
   assert:
     that:
@@ -14,9 +18,9 @@
       - github_runner_pat | length > 0
     fail_msg: >-
       github_runner_pat is unset for {{ inventory_hostname }}. Mint a
-      fine-grained GitHub PAT (scope: repo + actions:write on every
-      repo listed under github_runner_instances), then vault it into
-      host_vars/{{ inventory_hostname }}.yml.
+      fine-grained GitHub PAT (Administration: Read and write on
+      every repo listed under github_runner_instances), then vault
+      it into host_vars/{{ inventory_hostname }}.yml.
   tags:
     - github_runner
 
@@ -29,6 +33,15 @@
       name: github_runner
       home: /mnt/scratch/github_runner
       createhome: true
+      # 0755 (vs Ubuntu's HOME_MODE=0750 default): the runner container
+      # bind-mounts /mnt/scratch/github_runner/workdir_<inst>/ from
+      # under $HOME, and crun stats the bind-mount source from a
+      # transient pre-uidmap userns state where the process is
+      # "nobody" -- a 0750 home dir blocks traversal at that moment
+      # and the container fails with EACCES on stat. 0755 keeps the
+      # path traversable; per-file modes inside still gate actual
+      # read access.
+      home_mode: "0755"
       # kvm so sibling workflow containers (spawned by the in-container
       # runner via the bind-mounted rootless podman socket) can claim
       # /dev/kvm via --device + --group-add 1. The runner container
