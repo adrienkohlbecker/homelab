@@ -258,19 +258,33 @@
   failed_when: probe_transmission_iif.rc == 0
   become: true
 
-# Mosh is scoped to home LAN + wireguard. Probe positive from each.
-- name: _verify | INPUT — mosh (60000/udp) reachable from home LAN source
-  shell: |
-    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_home }} 10.99.0.1 60000 | grep -q pong
-  args: { executable: /bin/bash }
-  changed_when: false
-  become: true
-
+# Admin services (mosh/samba/nut/NetBIOS) use the concatenated set
+# lan_admin_pairs to require an (iif, saddr) *intersection* — wg0 only
+# accepts $WG_SUBNET saddrs, $WAN_IFACE only accepts $HOME_LAN. The
+# rig ingresses everything on wg0, so:
+#   - probe_wg (in $WG_SUBNET) is the positive case.
+#   - probe_home (in $HOME_LAN) is now a NEGATIVE case here — wrong
+#     iif for its saddr. The wg0+HOME_LAN path was accepted under the
+#     prior union semantics; a regression back to union would let
+#     this probe through.
+#   - probe_nonscope (in neither subnet) — still negative.
+# The $WAN_IFACE+$HOME_LAN positive half can't be probed in this rig
+# (slirp doesn't preserve source IP), so half of each rule's contract
+# is asserted via JSON shape only (see notes/ for the rig limits).
 - name: _verify | INPUT — mosh (60000/udp) reachable from wireguard source
   shell: |
     echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_wg }} 10.99.0.1 60000 | grep -q pong
   args: { executable: /bin/bash }
   changed_when: false
+  become: true
+
+- name: _verify | INPUT — mosh (60000/udp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
+  shell: |
+    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_home }} 10.99.0.1 60000 | grep -q pong
+  args: { executable: /bin/bash }
+  register: probe_mosh_iif_mismatch
+  changed_when: false
+  failed_when: probe_mosh_iif_mismatch.rc == 0
   become: true
 
 - name: _verify | INPUT — mosh (60000/udp) rejected from non-scope source
@@ -282,17 +296,20 @@
   failed_when: probe_mosh_oos.rc == 0
   become: true
 
-# Source-scoped admin services: positive cases for each rule, plus
-# one negative case from the non-scope source per service.
-- name: _verify | INPUT — Samba (445/tcp) reachable from each allowed source
+- name: _verify | INPUT — Samba (445/tcp) reachable from wireguard source
   command: >
-    ip netns exec extns curl --interface {{ item.src }}
+    ip netns exec extns curl --interface {{ probe_wg }}
       --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
-  loop:
-    - { src: "{{ probe_home }}", label: home LAN }
-    - { src: "{{ probe_wg }}", label: wireguard }
-  loop_control: { label: "{{ item.label }}" }
   changed_when: false
+  become: true
+
+- name: _verify | INPUT — Samba (445/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
+  command: >
+    ip netns exec extns curl --interface {{ probe_home }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:445/
+  register: probe_samba_iif_mismatch
+  changed_when: false
+  failed_when: probe_samba_iif_mismatch.rc == 0
   become: true
 
 - name: _verify | INPUT — Samba (445/tcp) rejected from non-scope source
@@ -304,21 +321,26 @@
   failed_when: probe_samba_oos.rc == 0
   become: true
 
-- name: _verify | INPUT — nut (3493/tcp) reachable from each allowed source
+- name: _verify | INPUT — nut (3493/tcp) reachable from wireguard source
   command: >
-    ip netns exec extns curl --interface {{ item.src }}
-      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:3493/
-  loop:
-    - { src: "{{ probe_home }}", label: home LAN }
-    - { src: "{{ probe_wg }}", label: wireguard }
-  loop_control: { label: "{{ item.label }}" }
+    ip netns exec extns curl --interface {{ probe_wg }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
   changed_when: false
+  become: true
+
+- name: _verify | INPUT — nut (3493/tcp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
+  command: >
+    ip netns exec extns curl --interface {{ probe_home }}
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
+  register: probe_nut_iif_mismatch
+  changed_when: false
+  failed_when: probe_nut_iif_mismatch.rc == 0
   become: true
 
 - name: _verify | INPUT — nut (3493/tcp) rejected from non-scope source
   command: >
     ip netns exec extns curl --interface {{ probe_nonscope }}
-      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:3493/
+      --connect-timeout 3 --max-time 5 -sf http://10.99.0.1:{{ service_ports.nut }}/
   register: probe_nut_oos
   changed_when: false
   failed_when: probe_nut_oos.rc == 0
@@ -335,12 +357,12 @@
   changed_when: false
   become: true
 
-# NetBIOS is scoped to lan_admin_ifaces + lan_admin_sources (same shape
-# as Samba). Probe positive from a home-LAN source — wg-source case
-# is structurally identical and covered by the Samba/nut/mosh probes.
-- name: _verify | INPUT — NetBIOS (137/udp) reachable from home LAN source
+# NetBIOS uses the same lan_admin_pairs (iif, saddr) intersection.
+# Positive case from wg-source via wg0; the home_LAN-via-wg0 mismatch
+# is structurally identical and already covered by the Samba probes.
+- name: _verify | INPUT — NetBIOS (137/udp) reachable from wireguard source
   shell: |
-    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_home }} 10.99.0.1 137 | grep -q pong
+    echo ping | ip netns exec extns nc -u -w 2 -s {{ probe_wg }} 10.99.0.1 137 | grep -q pong
   args: { executable: /bin/bash }
   changed_when: false
   become: true

@@ -44,27 +44,32 @@ table ip homelab {
     counter forward_nonsyn {}
     counter forward_catchall {}
 
-    # Admin services (samba/nut/mosh) scoped to home LAN + wireguard.
-    # Adding a future site (brumath, bonniers) is one set-element edit,
-    # not a fan-out of duplicate rules.
-    set lan_admin_sources {
-        type ipv4_addr
-        # constant: kernel optimizes as read-only (we never mutate at
-        # runtime); auto-merge: dedupe overlapping intervals at load.
+    # Admin services (samba/nut/mosh/NetBIOS) require an (iif, saddr)
+    # *intersection*, not union: home-LAN saddrs must arrive on the WAN
+    # iface (which is also the LAN iface behind the UDM), and wg-subnet
+    # saddrs must arrive on wg0. A concatenated set expresses the pair
+    # directly so adding a future site (brumath, bonniers) is one
+    # element edit, not a fan-out of duplicate rules.
+    #
+    # The earlier shape used two separate sets keyed independently
+    # (lan_admin_ifaces × lan_admin_sources), which let
+    # iif=$WAN_IFACE + saddr=$WG_SUBNET (and vice-versa) through. The
+    # only mitigation against that was rp_filter=1; if policy routing
+    # ever broke rp_filter, an attacker on the WAN iface forging an
+    # RFC1918 saddr in $WG_SUBNET would have been accepted.
+    set lan_admin_pairs {
+        typeof iifname . ip saddr
         flags interval, constant
-        auto-merge
         elements = {
-            $HOME_LAN comment "home LAN",
-            $WG_SUBNET comment "wireguard",
+            $WAN_IFACE . $HOME_LAN comment "home LAN via WAN iface",
+            "wg0" . $WG_SUBNET comment "wireguard peer via wg0",
         }
     }
 
-    # Ingress ifaces for admin INPUT services + FORWARD reach into
-    # published containers. Pinning iif keeps an attacker on a future
-    # LAN bridge / guest VLAN / mgmt net from speculatively probing
-    # these services even if they can spoof a saddr in lan_admin_sources;
-    # rp_filter=1 covers most of this today, but the iif scope is
-    # defence-in-depth (see the rp_filter Someday in CLAUDE.md).
+    # Ingress ifaces for FORWARD reach into published containers + for
+    # the catch-all TCP reject (LAN-side fast-fail). Pinning iif keeps
+    # an attacker on a future LAN bridge / guest VLAN / mgmt net from
+    # speculatively probing these paths.
     set lan_admin_ifaces {
         type ifname
         flags constant
@@ -127,12 +132,12 @@ table ip homelab {
 
         # Mosh sessions originate from admin clients on the home LAN
         # or via wireguard, never from raw WAN.
-        iifname @lan_admin_ifaces ip saddr @lan_admin_sources udp dport 60000-61000 accept comment "Mosh"
+        iifname . ip saddr @lan_admin_pairs udp dport 60000-61000 accept comment "Mosh"
 
         # TCP allows. SSH/HTTP/HTTPS are wide-open (admin + public);
         # Samba and nut are admin services scoped via the set.
         tcp dport { 22, 80, 443 } accept comment "SSH/HTTP/HTTPS"
-        iifname @lan_admin_ifaces ip saddr @lan_admin_sources tcp dport { 445, {{ service_ports.nut }} } accept comment "Samba/nut (admin)"
+        iifname . ip saddr @lan_admin_pairs tcp dport { 445, {{ service_ports.nut }} } accept comment "Samba/nut (admin)"
 
         # NetBIOS for nmbd (137 = name service, 138 = datagram). Same
         # admin scope as Samba — these are the legacy SMB browsing
@@ -141,7 +146,7 @@ table ip homelab {
         # back through INPUT via broadcast loopback on both eth0
         # (10.123.0.2) and wg0 (10.123.64.2); the rest is real SMB
         # clients (MBP, pug) doing name resolution.
-        iifname @lan_admin_ifaces ip saddr @lan_admin_sources udp dport { 137, 138 } accept comment "NetBIOS (nmbd, admin)"
+        iifname . ip saddr @lan_admin_pairs udp dport { 137, 138 } accept comment "NetBIOS (nmbd, admin)"
 
         # Container access to NUT: homeassistant's NUT integration
         # connects from its podman bridge IP (currently the mosquitto
