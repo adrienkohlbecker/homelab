@@ -1,25 +1,46 @@
 # jinja2: lstrip_blocks: "True"
 # github_runner@.service ###############################################
-# Templated unit; one instance per entry in github_runner_instances on
-# this host. Instance name = <repo>_<suffix> (e.g. homelab_vm1). Per-
-# instance config (REPO_URL, RUNNER_NAME, RUNNER_LABELS) ships via
-# /etc/default/github_runner@%i; first-start registration token ships
-# via the github_runner_token_%i podman secret. State persists on the
-# /mnt/services/github_runner/%i bind-mount so container restarts and
-# image bumps don't re-register.
+# Templated user-scope unit; one instance per entry in
+# github_runner_instances on this host, all running under
+# github_runner's user@<uid>.service. Instance name = <repo>_<suffix>
+# (e.g. homelab_vm1). Per-instance config ships via
+# /etc/default/github_runner@%i; the long-lived GitHub PAT ships via
+# the github_runner_pat podman secret (host-level, shared across
+# instances). Ephemeral + JIT: the entrypoint mints a single-use JIT
+# config on every container start and run.sh self-deregisters when
+# the job completes.
+#
+# User scope (not system scope, vs other podman roles like
+# healthchecks/openobserve): rootless podman + custom uidmaps need
+# cgroup writes within a user-owned tree for `podman exec` and
+# `podman healthcheck` to work. A system-scope unit running as
+# User=github_runner gets a Delegate=yes tree under system.slice/
+# but the split sub-cgroups end up not-quite-writable enough for
+# exec. Under github_runner's user manager the entire tree lives
+# under user.slice/user-<uid>.slice/ -- fully owned by
+# github_runner, no Delegate dance, exec joins cleanly.
 [Unit]
 Description=github-actions runner (%i)
-After=network-online.target
-Wants=network-online.target
-# actions/runner inside the container spawns sibling workflow containers
-# via the bind-mounted rootless podman socket; wait for github_runner's
-# user manager (which owns that socket) to be up before starting.
-After=user@{{ github_runner_user.uid }}.service
-Requires=user@{{ github_runner_user.uid }}.service
+# Order after the github_runner user manager's podman.socket so the
+# bind-mounted DooD socket below resolves at start time. Requires=
+# pulls podman.socket up if it's not already; After= orders us
+# after its readiness. Both are user-scope (no --user qualifier
+# needed inside a user-scope unit -- the manager already is the
+# user's manager).
+After=podman.socket
+Requires=podman.socket
 StartLimitInterval=600
 StartLimitBurst=3
 {% if zfs_root %}
 {% if zfs_has_scratch_mount %}
+# zfs deps are cross-scope: this is a user unit, zfs_mount_*.service
+# / zfs_autosnapshot.target are system units, and systemd silently
+# ignores cross-scope After=/Requires=/PartOf= edges. The lines
+# below are kept as intent-documentation -- the actual ordering
+# (don't start until /mnt/scratch is mounted; stop+restart around
+# zfs autosnapshot) is delegated to a drop-in on user@<uid>.service
+# in main.yml so the whole user manager (and all its child units,
+# including every github_runner@<inst>.service) waits transitively.
 After=zfs_mount_mnt_scratch.service
 Requires=zfs_mount_mnt_scratch.service
 {% endif %}
@@ -43,26 +64,9 @@ Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N
 
-User=github_runner
-Group=github_runner
-
-# %t resolves to /run on a system unit (system runtime dir), regardless
-# of User=. podman's --cidfile would then try to write directly under
-# /run, which github_runner can't. RuntimeDirectory=%N tells systemd
-# to mkdir /run/<unit-name> with mode 0755 owned by User=/Group=
-# (here github_runner:github_runner), and tear it down when the unit
-# stops. The --cidfile / --cidfile-cleanup paths below all reference
-# %t/%N/ctr-id to land inside it. Sibling podman roles (healthchecks,
-# openobserve, ...) skip this dance because they run the unit as root
-# at the systemd layer; we keep User= so a podman crash + escape
-# lands at github_runner, not root.
-RuntimeDirectory=%N
-
-# Wait for the github_runner user manager to bring its rootless
-# podman.socket up. Bounded 60 x 1s, well inside TimeoutStartSec. If the
-# socket never appears, the journal records the explicit cause rather
-# than a generic start-timeout.
-ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S /run/user/{{ github_runner_user.uid }}/podman/podman.sock ] && exit 0; sleep 1; done; echo "podman.sock not present after 60s" >&2; exit 1'
+# %t in a user-scope unit resolves to /run/user/<uid>/, which is
+# already github_runner-owned -- so --cidfile=%t/%n.ctr-id lands
+# in a writable path with no RuntimeDirectory trick needed.
 
 # --user / --uidmap / --gidmap: fake-root pattern (see CLAUDE.md
 #   "Container User Namespacing"). In-container uid 0 maps to host
@@ -72,6 +76,12 @@ ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S /run/user/{{ github_runne
 #   github_runner. NOT `--userns keep-id`: that would map the *current
 #   rootless user* to the same in-container uid, leaving in-container
 #   root pointing at an unmapped subuid and failing every write.
+# --cgroups=split: container + conmon live as sub-cgroups under the
+#   systemd unit's cgroup tree. Resource limits / accounting in the
+#   unit apply to the container; systemctl status shows real
+#   resource usage; systemctl kill reaps the container. Works here
+#   because the unit is user-scope and the cgroup tree lives entirely
+#   under user.slice/user-<uid>.slice/, all github_runner-owned.
 # --volume podman.sock: DooD -- actions/runner's docker-CLI shell-outs
 #   (for workflows with `container:` blocks) hit the host's rootless
 #   podman, NOT a daemon inside the runner container.
@@ -113,20 +123,10 @@ ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S /run/user/{{ github_runne
 #   Cheap when up-to-date (just a HEAD on the manifest, ~100ms);
 #   first-after-bump start eats the layer download once, then the
 #   layer cache satisfies subsequent starts until the next bump.
-# No --cgroups=split (intentionally, vs healthchecks/openobserve
-# which do set it): with User=github_runner the systemd-delegated
-# cgroup tree under system.slice doesn't give the rootless user
-# enough write access to the split sub-cgroups for podman exec /
-# healthcheck to add new processes. Empty default (--cgroups=enabled)
-# puts conmon + container in a single cgroup that conmon manages
-# directly, which exec joins fine. Healthchecks/openobserve don't
-# trip this because they run their unit as root at the systemd
-# layer; we keep User=github_runner per the cidfile-comment rationale
-# above and pay the small cost of not having conmon's resource
-# accounting separated.
-ExecStartPre=/bin/rm -f %t/%N/ctr-id
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
-  --cidfile=%t/%N/ctr-id \
+  --cidfile=%t/%n.ctr-id \
+  --cgroups=split \
   --sdnotify=healthy \
   --detach \
   --replace \
@@ -140,7 +140,7 @@ ExecStart=/usr/bin/podman run \
   --uidmap=+0:{{ github_runner_user.uid }}:1 \
   --gidmap=0:0:65536 \
   --gidmap=+0:{{ github_runner_user.group }}:1 \
-  --volume /run/user/{{ github_runner_user.uid }}/podman/podman.sock:/var/run/docker.sock \
+  --volume %t/podman/podman.sock:/var/run/docker.sock \
   --volume /mnt/scratch/github_runner/workdir_%i:/work:rw \
   --env-file /etc/default/github_runner@%i \
   --secret github_runner_pat,type=mount,target=/run/secrets/github_pat \
@@ -151,11 +151,15 @@ ExecStart=/usr/bin/podman run \
   --health-start-period "30s" \
   --stop-timeout 30 \
   nexus.lab.fahm.fr/homelab/runner:latest
-ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%N/ctr-id
-ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%N/ctr-id
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
 [Install]
 WantedBy=default.target
 {% if zfs_root %}
+# Intent-documentation only (see [Unit] zfs comment above): the actual
+# zfs_autosnapshot.target integration lives in the user@<uid>.service
+# drop-in. Recorded here so the unit's autosnap relationship is
+# legible at first read.
 WantedBy=zfs_autosnapshot.target
 {% endif %}
