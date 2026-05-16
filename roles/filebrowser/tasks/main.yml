@@ -76,10 +76,12 @@
     name: python3-passlib
     state: present
   become: true
+  register: filebrowser_passlib
   tags:
     - filebrowser
 
 - name: Configure filebrowser basic-auth credentials
+  when: not (ansible_check_mode and filebrowser_passlib.changed)
   htpasswd:
     path: /etc/nginx/filebrowser.htpasswd
     name: "{{ filebrowser_basic_auth_user }}"
