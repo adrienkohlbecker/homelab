@@ -49,14 +49,10 @@ RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
 #    (ci-image, runner-image) shell out to `docker build` / `podman
 #    build`; podman-docker symlinks /usr/bin/docker -> podman. Both
 #    forward to the host podman via the bind-mounted socket.
-#  - python3-minimal: only used at build time by the `python3 -m
-#    tarfile` extract below; safe to keep at runtime since `nodejs`
-#    already pulls python3 transitively on noble.
 #  - git / curl / jq / xz-utils: actions framework helpers + the
 #    entrypoint's generate-jitconfig POST + JSON manipulation.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git jq xz-utils \
-      python3-minimal \
       nodejs \
       podman podman-docker \
     && rm -rf /var/lib/apt/lists/*
@@ -76,20 +72,29 @@ ARG ACTIONS_RUNNER_SHA256_ARM64=f44255bd3e80160eb25f71bc83d06ea025f6908748807a58
 # this path at runtime -- ephemeral runners get binaries from the
 # image, never the host.
 #
-# Extract via Python's tarfile module, NOT GNU tar or bsdtar. The
-# runner tarball ships ./externals/node{20,24}/bin/{npx,npm,corepack}
-# as relative symlinks; both GNU tar and bsdtar call chmod on every
-# extracted entry, and chmod on a symlink takes glibc's
-# fchmodat(AT_SYMLINK_NOFOLLOW) shim, which on Linux opens the
-# symlink with O_PATH and chmods /proc/self/fd/<n>. Under a rootless
-# podman build's userns that path returns EPERM and the extract
-# bails with "Cannot change mode to rwxr-xr-x: Operation not
-# permitted". CPython's tarfile._extract_member explicitly skips the
-# chmod for symlinks (`if not tarinfo.issym()`), so the symlink
-# entries land without the offending syscall ever happening.
-# filter='data' on extractall strips setuid/setgid bits, drops the
-# recorded owner, and rejects symlinks pointing outside the
-# extraction dir -- defensive but free.
+# Extract path is GNU tar + tolerate-then-validate. Two alternatives
+# we tried first don't work here:
+#  * bsdtar / GNU tar with default flags: chmod on the relative
+#    symlinks at ./externals/node{20,24}/bin/{npx,npm,corepack}
+#    takes glibc's fchmodat(AT_SYMLINK_NOFOLLOW) shim, which uses
+#    /proc/self/fd under the hood -- EPERM in the rootless podman
+#    build's userns. tar errors out with rc=2.
+#  * python3's tarfile (extractall(filter='data')) -- works fine in
+#    a normal env (verified on macOS python 3.11.7 against this
+#    exact tarball) but in this rootless podman build it silently
+#    extracts nothing while exit=0. Root cause not pinned; not
+#    worth chasing when the obvious workaround works.
+#
+# What works: tar --no-same-owner --no-same-permissions to skip the
+# chown the rootless userns can't satisfy and to use umask-derived
+# perms instead of trying to restore the archived ones. tar still
+# exits rc=2 on the chmod-symlink failures even with those flags
+# (the chmod call still happens for the symlink-mode itself), but
+# every regular file IS extracted before that error -- including
+# run.sh. So: `tar ... || true` to swallow tar's rc, then a `test
+# -x /actions-runner/run.sh` to assert the extract actually got
+# the entry that matters. If run.sh is missing the test fails the
+# build with a clear cause instead of shipping an empty image.
 RUN arch=$(dpkg --print-architecture); \
     case "$arch" in \
       amd64) tar_arch=x64; sha=$ACTIONS_RUNNER_SHA256_X64;; \
@@ -100,7 +105,13 @@ RUN arch=$(dpkg --print-architecture); \
     curl -fsSL -o /tmp/runner.tar.gz \
       "https://github.com/actions/runner/releases/download/v${ACTIONS_RUNNER_VERSION}/actions-runner-linux-${tar_arch}-${ACTIONS_RUNNER_VERSION}.tar.gz"; \
     echo "${sha}  /tmp/runner.tar.gz" | sha256sum -c -; \
-    python3 -c "import tarfile; tarfile.open('/tmp/runner.tar.gz').extractall('/actions-runner', filter='data')"; \
+    tar xzf /tmp/runner.tar.gz -C /actions-runner \
+      --no-same-owner --no-same-permissions \
+      || echo >&2 "tar exited non-zero (expected for symlink chmod EPERM); validating below"; \
+    test -x /actions-runner/run.sh \
+      || { echo >&2 "extract failed: /actions-runner/run.sh missing or not executable"; exit 1; }; \
+    test -x /actions-runner/config.sh \
+      || { echo >&2 "extract failed: /actions-runner/config.sh missing or not executable"; exit 1; }; \
     rm /tmp/runner.tar.gz
 
 ENV ACTIONS_RUNNER_VERSION=${ACTIONS_RUNNER_VERSION}
