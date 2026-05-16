@@ -49,6 +49,12 @@ table ip homelab {
     counter netbios_accept {}
     counter forward_nonsyn {}
     counter forward_catchall {}
+    counter input_unscoped_tcp {}
+    counter input_admin_tcp {}
+    counter input_transmission {}
+    counter input_nut_podman {}
+    counter input_loopback {}
+    counter input_icmp_accept {}
 
     # Admin services (samba/nut/mosh/NetBIOS) require an (iif, saddr)
     # *intersection*, not union: home-LAN saddrs must arrive on the WAN
@@ -95,7 +101,7 @@ table ip homelab {
         # dropped. After these, every remaining packet is NEW — no
         # rule below needs an explicit ct-state qualifier.
         ct state established,related accept
-        iif lo accept
+        iif lo counter name "input_loopback" accept
         ct state invalid drop
 
         # TCP NEW must have SYN. Conntrack's loose mode (default)
@@ -134,7 +140,7 @@ table ip homelab {
         # both protocols. Without these rules, peers can find us via
         # tracker announces but can't actually connect — visible as
         # external SRC=… DPT=51413 drops in INPUT.
-        iifname $WAN_IFACE meta l4proto { tcp, udp } th dport {{ service_ports.transmission_bt }} accept comment "transmission BT peers (WAN ingress)"
+        iifname $WAN_IFACE meta l4proto { tcp, udp } th dport {{ service_ports.transmission_bt }} counter name "input_transmission" accept comment "transmission BT peers (WAN ingress)"
 
         # Mosh sessions originate from admin clients on the home LAN
         # or via wireguard, never from raw WAN.
@@ -142,8 +148,8 @@ table ip homelab {
 
         # TCP allows. SSH/HTTP/HTTPS are wide-open (admin + public);
         # Samba and nut are admin services scoped via the set.
-        tcp dport { 22, 80, 443 } accept comment "SSH/HTTP/HTTPS"
-        iifname . ip saddr @lan_admin_pairs tcp dport { 445, {{ service_ports.nut }} } accept comment "Samba/nut (admin)"
+        tcp dport { 22, 80, 443 } counter name "input_unscoped_tcp" accept comment "SSH/HTTP/HTTPS"
+        iifname . ip saddr @lan_admin_pairs tcp dport { 445, {{ service_ports.nut }} } counter name "input_admin_tcp" accept comment "Samba/nut (admin)"
 
         # NetBIOS for nmbd (137 = name service, 138 = datagram). Same
         # admin scope as Samba — these are the legacy SMB browsing
@@ -169,7 +175,7 @@ table ip homelab {
         # needs either pinning HA's bridge subnet here or restricting
         # NUT clients via upsd.users; not implemented (home-environment
         # trade).
-        ip saddr $PODMAN_POOL tcp dport {{ service_ports.nut }} accept comment "nut (podman bridges, e.g. HA NUT integration)"
+        ip saddr $PODMAN_POOL tcp dport {{ service_ports.nut }} counter name "input_nut_podman" accept comment "nut (podman bridges, e.g. HA NUT integration)"
 
         # ICMP — only echo-request, rate-limited. Other ICMP types
         # come back as RELATED. Overflow drops silently rather than
@@ -177,7 +183,7 @@ table ip homelab {
         # overflow path can be functionally verified — without it, a
         # regression that raises the rate to 1000/sec or drops the
         # trailing drop would not be caught.
-        icmp type echo-request limit rate 10/second burst 20 packets accept
+        icmp type echo-request limit rate 10/second burst 20 packets counter name "input_icmp_accept" accept
         icmp type echo-request counter name "icmp_overflow" drop comment "icmp echo overflow drop"
 
         # keepalived runs in unicast mode (not multicast 224.0.0.18)
