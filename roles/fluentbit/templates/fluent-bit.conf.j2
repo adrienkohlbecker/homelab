@@ -19,6 +19,11 @@
     HTTP_Server       on
     HTTP_Listen       127.0.0.1
     HTTP_Port         {{ service_ports.fluentbit }}
+    # SIGHUP reparses the config without dropping in-flight records;
+    # the systemd unit's ExecReload (installed via the role's
+    # override.conf drop-in) sends SIGHUP, and the role's systemd_unit
+    # reload: trigger fires on conf/lua changes.
+    Hot_Reload        on
     storage.path      /var/lib/fluent-bit/storage/
     storage.sync      normal
     storage.checksum  off
