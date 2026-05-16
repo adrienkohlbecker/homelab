@@ -10,18 +10,18 @@
   tags:
     - getmail
 
-# Defensive: roles/user already lingers ansible_user on prod, but the
-# harness may run getmail alone — without linger the systemd_timer
-# helper's user-scope check would fail. creates: keeps this a no-op
-# when roles/user has already run. check_mode: false lets it execute
-# under --check too (the command itself is idempotent) so the harness's
-# check-mode phase doesn't fail on the downstream linger-marker stat.
-- name: Turn on linger for ansible_user
-  command: loginctl enable-linger {{ ansible_user }}
-  args:
-    creates: /var/lib/systemd/linger/{{ ansible_user }}
-  check_mode: false
-  become: true
+# roles/user already lingers ansible_user on prod, but the harness may
+# run getmail alone — the linger helper is idempotent so the prod
+# double-call is a no-op. The helper also ensures user@<uid>.service is
+# up before the systemd_timer helper drives `systemctl --user enable`.
+- name: Ensure linger + user manager are up for ansible_user
+  import_role:
+    name: linger
+    tasks_from: linger
+  vars:
+    linger_args:
+      name: "{{ ansible_user }}"
+      uid: "{{ ansible_user_uid }}"
   tags:
     - getmail
 

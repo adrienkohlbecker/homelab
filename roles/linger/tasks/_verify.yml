@@ -1,0 +1,50 @@
+# Functional verify: stand up a throwaway system user, drive the helper,
+# assert linger sentinel + user manager are real, then tear down.
+- name: _verify | Create fixture user
+  user:
+    name: linger_test
+    system: true
+    create_home: false
+    shell: /usr/sbin/nologin
+  register: _verify_user
+  become: true
+
+- name: _verify | Drive the helper
+  import_role:
+    name: linger
+    tasks_from: linger
+  vars:
+    linger_args:
+      name: linger_test
+      uid: "{{ _verify_user.uid }}"
+
+- name: _verify | Linger sentinel exists
+  stat:
+    path: /var/lib/systemd/linger/linger_test
+  register: _verify_sentinel
+  become: true
+
+- name: _verify | Assert sentinel
+  assert:
+    that:
+      - _verify_sentinel.stat.exists
+
+- name: _verify | Tear down user manager
+  systemd:
+    name: user@{{ _verify_user.uid }}.service
+    state: stopped
+  become: true
+
+- name: _verify | Disable linger
+  command: loginctl disable-linger linger_test
+  args:
+    removes: /var/lib/systemd/linger/linger_test
+  become: true
+
+- name: _verify | Remove fixture user
+  user:
+    name: linger_test
+    state: absent
+    remove: true
+    force: true
+  become: true
