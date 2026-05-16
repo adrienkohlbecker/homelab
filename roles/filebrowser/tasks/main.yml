@@ -1,5 +1,6 @@
-# Read-only directory autoindex via nginx — no daemon, no auth (LAN/WG-fronted),
-# no upload/delete. Publishes /srv/filebrowser at filebrowser.<host>.<domain>.
+# Read-only directory autoindex via nginx — no daemon, no upload/delete.
+# Publishes /srv/filebrowser at filebrowser.<host>.<domain> behind nginx
+# basic auth (htpasswd at /etc/nginx/filebrowser.htpasswd, bcrypt).
 # Consumes zfs_has_<name>_mount flags to gate which trees are symlinked in;
 # `home` always points at the connecting operator's $HOME (ansible_user_dir).
 # Theme CSS lives at /var/www/filebrowser/.theme.css and is aliased into
@@ -70,6 +71,27 @@
   tags:
     - filebrowser
 
+- name: Install python3-passlib for the htpasswd module
+  apt:
+    name: python3-passlib
+    state: present
+  become: true
+  tags:
+    - filebrowser
+
+- name: Configure filebrowser basic-auth credentials
+  htpasswd:
+    path: /etc/nginx/filebrowser.htpasswd
+    name: "{{ filebrowser_basic_auth_user }}"
+    password: "{{ filebrowser_basic_auth_password }}"
+    crypt_scheme: bcrypt
+    owner: root
+    group: www-data
+    mode: "0640"
+  become: true
+  tags:
+    - filebrowser
+
 - name: Configure nginx
   import_role:
     name: nginx
@@ -101,6 +123,8 @@
         sub_filter_types text/html;
         sub_filter_last_modified on;
       server_conf: |
+        auth_basic "Filebrowser";
+        auth_basic_user_file /etc/nginx/filebrowser.htpasswd;
         location = /.theme.css {
           alias /var/www/filebrowser/.theme.css;
         }
