@@ -185,11 +185,11 @@ tautulli_pms_token: changeme
 tautulli_pms_client_id: changeme
 tautulli_pms_uuid: changeme
 themoviedb_api_key: changeme
-gitea_jwt_secret: changeme
+gitea_jwt_secret: dGVzdF9vYXV0aF9qd3Rfc2VjcmV0XzMyYnl0ZXNfX18
 gitea_internal_token: changeme
 gitea_smtp_user: changeme@example.com
 gitea_smtp_password: changeme
-gitea_lfs_jwt_secret: changeme
+gitea_lfs_jwt_secret: dGVzdF9sZnNfand0X3NlY3JldF8zMmJ5dGVzX19fX18
 transmission_rpc_password: changeme
 samba_password: changeme
 gmail_app_password: changeme
