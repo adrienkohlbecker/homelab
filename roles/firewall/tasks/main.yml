@@ -73,30 +73,69 @@
   tags:
     - firewall
 
-# Network-stack hardening (IPv6-disable + ipv4 hardening) lives in
-# files/sysctl-hardening.conf. One artifact, one reload — the file
-# header documents each setting's rationale.
+# Network-stack hardening sysctls. Ubuntu's defaults are inconsistent
+# (rp_filter=2, log_martians=0, send_redirects=1) — pin the secure
+# values explicitly so /etc/sysctl.d/30-firewall-hardening.conf is
+# the single source of truth for the host's network posture. Module
+# writes the .conf file AND applies each key live; `ignoreerrors`
+# on the conntrack key swallows the EINVAL for "module not loaded"
+# (handled by the reboot-required signal below).
 - name: Install network-stack hardening sysctls
-  copy:
-    src: sysctl-hardening.conf
-    dest: /etc/sysctl.d/30-firewall-hardening.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/30-firewall-hardening.conf
+    ignoreerrors: "{{ item.ignoreerrors | default(false) }}"
+  loop:
+    # Disable IPv6 entirely. Cuts the stack at the kernel layer so
+    # services binding `::` end up on a dead listener, neighbor
+    # discovery churn stops, and we don't maintain a parallel
+    # ip6tables ruleset.
+    - { name: net.ipv6.conf.all.disable_ipv6, value: '1' }
+    - { name: net.ipv6.conf.default.disable_ipv6, value: '1' }
+    # Strict reverse-path: drop packets whose source IP wouldn't
+    # route back via the ingress interface (spoofed-source filter).
+    - { name: net.ipv4.conf.all.rp_filter, value: '1' }
+    - { name: net.ipv4.conf.default.rp_filter, value: '1' }
+    # Refuse source-routed packets (no attacker-dictated path).
+    - { name: net.ipv4.conf.all.accept_source_route, value: '0' }
+    - { name: net.ipv4.conf.default.accept_source_route, value: '0' }
+    # Ignore inbound ICMP redirects (no attacker-controlled reroute).
+    - { name: net.ipv4.conf.all.accept_redirects, value: '0' }
+    - { name: net.ipv4.conf.default.accept_redirects, value: '0' }
+    # Don't emit ICMP redirects either — we're not a transit router.
+    - { name: net.ipv4.conf.all.send_redirects, value: '0' }
+    - { name: net.ipv4.conf.default.send_redirects, value: '0' }
+    # Log packets with bogus source IPs (e.g. RFC1918 on WAN).
+    - { name: net.ipv4.conf.all.log_martians, value: '1' }
+    - { name: net.ipv4.conf.default.log_martians, value: '1' }
+    # SYN-flood mitigation. Default on in modern Ubuntu; pin anyway.
+    - { name: net.ipv4.tcp_syncookies, value: '1' }
+    # Drop RSTs in TIME-WAIT (RFC 1337) — closes a narrow TCP-hijack
+    # window.
+    - { name: net.ipv4.tcp_rfc1337, value: '1' }
+    # Ignore ICMP echo to broadcast/multicast (smurf amplification);
+    # silently drop malformed ICMP error responses (martians noise).
+    - { name: net.ipv4.icmp_echo_ignore_broadcasts, value: '1' }
+    - { name: net.ipv4.icmp_ignore_bogus_error_responses, value: '1' }
+    # Strict ARP for a multi-homed host. arp_ignore=1: reply only if
+    # the target IP is on the receiving interface. arp_announce=2:
+    # source ARPs with the local address best-matched for the dest
+    # instead of leaking another iface's IP. Same as keepalived's
+    # canonical VRRP recommendation.
+    - { name: net.ipv4.conf.all.arp_ignore, value: '1' }
+    - { name: net.ipv4.conf.default.arp_ignore, value: '1' }
+    - { name: net.ipv4.conf.all.arp_announce, value: '2' }
+    - { name: net.ipv4.conf.default.arp_announce, value: '2' }
+    # Strict conntrack: classify mid-stream non-SYN TCP as INVALID
+    # rather than NEW. Module isn't loaded at first-apply time
+    # (autoload pinned via modules-load.d/30-firewall-hardening.conf
+    # fires at next boot); ignoreerrors swallows the EINVAL until
+    # then. The nftables non-SYN drop rules are runtime backstop.
+    - { name: net.netfilter.nf_conntrack_tcp_loose, value: '0', ignoreerrors: true }
+  loop_control:
+    label: "{{ item.name }}"
   register: firewall_sysctl
-  become: true
-  tags:
-    - firewall
-
-# -e (--ignore) skips keys whose /proc path doesn't exist yet — the
-# nf_conntrack_* keys aren't writable until the module loads. On
-# subsequent runs (after a reboot has loaded the module via
-# modules-load.d), the keys are applied normally.
-- name: Apply hardening sysctls
-  when: firewall_sysctl.changed
-  command: sysctl -e -p /etc/sysctl.d/30-firewall-hardening.conf
-  changed_when: true
   become: true
   tags:
     - firewall
@@ -119,14 +158,12 @@
   when:
     - firewall_sysctl.changed
     - not firewall_nf_conntrack_loaded.stat.exists
-  copy:
-    dest: /var/run/reboot-required
-    content: |
-      *** System restart required ***
+  file:
+    path: /var/run/reboot-required
+    state: touch
     owner: root
     group: root
     mode: "0644"
-    force: false
   become: true
   tags:
     - firewall
