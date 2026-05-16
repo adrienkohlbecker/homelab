@@ -201,7 +201,6 @@ healthchecks_password: changeme
 healthchecks_smtp_user: changeme
 healthchecks_smtp_from: changeme
 healthchecks_smtp_password: changeme
-openobserve_root_password: changeme
 gitea_runner_registration_token: changeme
 spouse_samba_password: changeme
 paperless_secret_key: changeme

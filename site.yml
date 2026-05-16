@@ -98,7 +98,6 @@
     - homeassistant
     - kuma
     - healthchecks
-    - openobserve
     - hyperdx
     - spouse
     - redis
