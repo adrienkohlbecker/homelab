@@ -51,13 +51,47 @@ body=$(jq -cn \
 # the long-lived secret operators manage out-of-band (1Password →
 # vaulted host_vars → podman secret), shared across every runner
 # instance on the host (the API call is per-repo, not per-runner).
-jit=$(curl --fail --silent --show-error \
+#
+# Capture the full response (not just .encoded_jit_config) so we can
+# extract .runner.id for the cleanup trap below. generate-jitconfig
+# registers the runner the moment it returns 201 -- if we exit
+# between here and a successful exec of run.sh, the registration
+# leaks and the next start hits HTTP 409 ("runner with this name
+# already exists"). run.sh + ephemeral handles deregistration once
+# it's running; we need to handle the gap.
+jit_response=$(curl --fail --silent --show-error \
   -H "Accept: application/vnd.github+json" \
   -H "Authorization: Bearer $(cat "$GITHUB_PAT_FILE")" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
   -X POST "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/runners/generate-jitconfig" \
-  -d "$body" \
-  | jq -r .encoded_jit_config)
+  -d "$body")
+jit=$(echo "$jit_response" | jq -r .encoded_jit_config)
+runner_id=$(echo "$jit_response" | jq -r .runner.id)
+
+# Cleanup trap: if the shell exits before `exec` replaces it (e.g.
+# run.sh missing from a broken image, a bug in the exec path, any
+# `set -e` trigger after jit_response is set), DELETE the just-
+# registered runner so the next start doesn't 409 forever. After
+# exec succeeds the shell process is gone and this trap is gone with
+# it -- run.sh's ephemeral self-deregistration handles the
+# clean-exit case. Crash-mid-job (run.sh dies between exec and
+# completion) still leaves a stale registration; that's a much
+# rarer mode and outside this trap's scope (would need ExecStopPost
+# or an external reconciler to handle generally).
+cleanup_runner() {
+  rc=$?
+  if [ -n "${runner_id:-}" ] && [ "$runner_id" != "null" ]; then
+    echo >&2 "entrypoint exiting rc=${rc} with active runner registration ${runner_id}; deleting via API"
+    curl --silent --show-error --fail-with-body \
+      -H "Accept: application/vnd.github+json" \
+      -H "Authorization: Bearer $(cat "$GITHUB_PAT_FILE")" \
+      -H "X-GitHub-Api-Version: 2022-11-28" \
+      -X DELETE \
+      "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/runners/${runner_id}" \
+      || echo >&2 "WARN: failed to delete runner ${runner_id}; manual cleanup may be needed"
+  fi
+}
+trap cleanup_runner EXIT
 
 # The JIT blob carries `ephemeral: true` server-side, so the runner
 # self-deregisters on clean exit; no explicit --ephemeral flag needed.
