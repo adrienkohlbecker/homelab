@@ -29,6 +29,10 @@ User={{ git_user.name }}
 Group={{ git_user.name }}
 WorkingDirectory=/mnt/services/gitea/
 ExecStart=/usr/local/bin/gitea web --config /etc/gitea/app.ini
+# Block "active" until gitea is actually answering HTTP. --retry-connrefused
+# bounds at ~30s; ExecStartPost is the safe alternative to Type=notify (gitea
+# may or may not call sd_notify depending on build).
+ExecStartPost=/usr/bin/curl --fail --silent --max-time 30 --retry 30 --retry-delay 1 --retry-connrefused http://127.0.0.1:{{ service_ports.gitea }}/api/healthz
 Environment=USER={{ git_user.name }} HOME={{ git_user.home }} GITEA_WORK_DIR=/mnt/services/gitea
 
 [Install]

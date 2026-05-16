@@ -46,7 +46,6 @@
     - /mnt/services/gitea/custom
     - /mnt/services/gitea/data
     - /mnt/services/sqlite/gitea
-    - /var/log/gitea
   tags:
     - gitea
 
