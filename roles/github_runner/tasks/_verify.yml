@@ -28,26 +28,11 @@
   become: true
   become_user: github_runner
 
-- name: _verify | github_runner@.service template is installed in user scope
+- name: _verify | github_runner@.service template is installed in system scope
   stat:
-    path: /etc/systemd/user/github_runner@.service
+    path: /etc/systemd/system/github_runner@.service
   register: _verify_template
   failed_when: not _verify_template.stat.exists
-  become: true
-
-# The user@<uid>.service drop-in exists when zfs_root is true. Under
-# qemu_test (zfs_root flipped to false), the conditional task is
-# skipped and the drop-in doesn't exist -- so the assertion is gated.
-# uid comes from the getent_passwd fact populated above (testrole.py
-# runs _verify as a separate playbook invocation, so the
-# github_runner_user fact set during the role's run isn't visible
-# here -- can't reference it).
-- name: _verify | zfs deps drop-in on user@<uid>.service exists (zfs_root)
-  when: zfs_root
-  stat:
-    path: /etc/systemd/system/user@{{ ansible_facts.getent_passwd.github_runner[1] }}.service.d/override.conf
-  register: _verify_dropin
-  failed_when: not _verify_dropin.stat.exists
   become: true
 
 # Host-level PAT secret. Created in main.yml from the vaulted
@@ -89,22 +74,19 @@
     label: "{{ item.repo }}_{{ item.suffix }}"
   become: true
 
-# Per-instance unit queries are user-scope under github_runner's
-# manager (not system scope), so become_user: github_runner +
-# scope: user. Without those the ansible systemd module would look
-# in /etc/systemd/system/ and report LoadState=not-found.
+# Per-instance unit queries are system-scope (the template was moved
+# back from /etc/systemd/user/ to /etc/systemd/system/ -- see the
+# unit template's [Unit] comment for why).
 - name: _verify | github_runner@<instance>.service loads (qemu_test)
   when: qemu_test
   systemd:
     name: github_runner@{{ item.repo }}_{{ item.suffix }}.service
-    scope: user
   register: _verify_unit_test
   failed_when: _verify_unit_test.status.LoadState != "loaded"
   loop: "{{ github_runner_instances }}"
   loop_control:
     label: "{{ item.repo }}_{{ item.suffix }}"
   become: true
-  become_user: github_runner
 
 # Under prod assert the unit is active. With --sdnotify=healthy this
 # implies the healthcheck passed (Runner.Listener up); the runner is
@@ -113,7 +95,6 @@
   when: not qemu_test
   systemd:
     name: github_runner@{{ item.repo }}_{{ item.suffix }}.service
-    scope: user
   register: _verify_unit_prod
   failed_when: >-
     _verify_unit_prod.status.LoadState != "loaded"
@@ -122,4 +103,3 @@
   loop_control:
     label: "{{ item.repo }}_{{ item.suffix }}"
   become: true
-  become_user: github_runner
