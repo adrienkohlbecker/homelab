@@ -57,7 +57,15 @@
 # dependency. Callers wire linger up at user-creation time (roles/user,
 # roles/gitea_runner) — this check is the guardrail for the next consumer
 # that forgets.
-- name: Verify user-scope linger marker exists for {{ _systemd_unit_user }}
+# Task name references the caller var (systemd_unit_args.user, set
+# at import time via import_role.vars:) rather than the set_fact'd
+# _systemd_unit_user, because import_tasks chains (e.g. dropin →
+# install) eager-render task names before any of this file's
+# set_fact tasks run -- a set_fact'd reference there fails with
+# "undefined" before we ever get past the import. The caller var
+# is always available because import_role.vars: are part of the
+# import-time scope.
+- name: Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
   when:
     - _systemd_unit_condition
     - _systemd_unit_scope == 'user'
@@ -100,10 +108,17 @@
     # the validate + rescue logic below is a single source of truth. The
     # mapping form of `action:` is deprecated in ansible-core 2.23, so the
     # string form with a separate `args:` block is used.
+    #
+    # _module's expression references systemd_unit_args.src (caller var,
+    # import-time scope) instead of _systemd_unit_src (set_fact'd at
+    # runtime), so an import_tasks chain that eager-renders the task's
+    # vars: block before set_facts run still resolves cleanly. Same
+    # reason as the linger-task name above. Task body itself still uses
+    # _systemd_unit_src because by execution time the set_fact has run.
     - name: Write the unit file ({{ _module }})
       when: _systemd_unit_condition
       vars:
-        _module: "{{ 'template' if _systemd_unit_src.endswith('.j2') else 'copy' }}"
+        _module: "{{ 'template' if systemd_unit_args.src.endswith('.j2') else 'copy' }}"
       action: "{{ _module }}"
       args:
         src: "{{ _systemd_unit_src }}"
@@ -144,7 +159,10 @@
     # same play). New callers should reference <basename>_<type>_result —
     # e.g. healthchecks.service → healthchecks_service_result, and
     # podman.socket / podman.service yield distinct facts.
-    - name: Record install result for {{ _systemd_unit_src }}
+    # Caller var in the name (same parse-time-vs-runtime reason as the
+    # linger and Write tasks above); body still references the
+    # set_fact'd _systemd_unit_name because by execution time it's set.
+    - name: Record install result for {{ systemd_unit_args.src }}
       set_fact:
         "{{ _systemd_unit_name | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ systemd_unit }}"
 

@@ -21,7 +21,11 @@
   set_fact:
     _systemd_unit_dropin_dir: "{{ ('/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user') ~ '/' ~ systemd_unit_args.for ~ '.d' }}"
 
-- name: dropin | Create {{ _systemd_unit_dropin_dir }}
+# Name uses the caller var (systemd_unit_args.for) instead of the
+# set_fact'd _systemd_unit_dropin_dir for the same parse-time-vs-
+# runtime reason documented in install.yml's "Verify user-scope
+# linger marker" task.
+- name: dropin | Create override.conf dir for {{ systemd_unit_args.for }}
   when: systemd_unit_args.condition | default(true)
   file:
     path: "{{ _systemd_unit_dropin_dir }}"
