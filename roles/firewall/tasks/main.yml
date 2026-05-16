@@ -16,8 +16,10 @@
       ansible_default_ipv4.interface resolved to
       '{{ ansible_default_ipv4.interface }}', which looks like a
       bridge/tunnel — the firewall's iifname-scoped rules would
-      attach to the wrong iface. Pin wan_interface in host_vars if
-      gather-facts is picking the wrong default-route owner.
+      attach to the wrong iface. Override `default_interface` in
+      host_vars (group_vars/all.yml defaults it to
+      ansible_default_ipv4.interface) when gather-facts is picking
+      the wrong default-route owner.
   tags:
     - firewall
 
