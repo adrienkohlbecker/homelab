@@ -127,11 +127,12 @@ subid_users:
 has_transcoding_acceleration: false
 z2m_start_service: false
 
-# Stub instance so the github_runner role exercises its per-instance
-# code path under qemu_test (env file write, state dir create,
-# templated unit loads under the instantiated name). The role's
-# qemu_test gate skips the GitHub API token fetch + secret rotation +
-# systemd start, so no real registration is attempted -- this is a
-# static-shape check, not a live runner.
+# Stub PAT + instance so the github_runner role exercises its per-
+# instance code path under qemu_test (host-level PAT secret creation,
+# per-instance env file write + workdir create, templated unit loads
+# under the instantiated name). The role's qemu_test gate skips the
+# systemd start, so the entrypoint's curl POST to GitHub never fires --
+# this is a static-shape check, not a live runner.
+github_runner_pat: "qemu-test-fake-pat"
 github_runner_instances:
   - { repo: homelab, suffix: test1, labels: "self-hosted,test" }

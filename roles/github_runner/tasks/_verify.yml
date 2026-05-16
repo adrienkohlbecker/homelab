@@ -34,12 +34,23 @@
   failed_when: not _verify_template.stat.exists
   become: true
 
-# Per-instance assertions. Under qemu_test the env file lands, the
-# podman secret is created (consuming a stub token), the per-instance
-# state dir exists, and the unit loads (template + instance syntax
-# check). The container itself isn't started -- a started container
-# would try to register with the stub token, fail the GitHub API call,
-# and loop on the restart-limit.
+# Host-level PAT secret. Created in main.yml from the vaulted
+# github_runner_pat var; consumed by every runner container's
+# entrypoint to mint per-start JIT configs. Under qemu_test the value
+# is a stub; under prod it's the real PAT.
+- name: _verify | github_runner_pat podman secret exists
+  command: podman secret inspect github_runner_pat
+  changed_when: false
+  become: true
+  become_user: github_runner
+
+# Per-instance assertions. Under qemu_test the envfile lands and the
+# unit loads (template + instance syntax check); the container isn't
+# started because the entrypoint's curl POST to GitHub's
+# generate-jitconfig with a stub PAT would 401 and loop on the
+# restart-limit. Under prod the container is running with the unit
+# active (which under --sdnotify=healthy implies the healthcheck has
+# passed, i.e. Runner.Listener is up and polling).
 - name: _verify | env file present for each instance
   stat:
     path: /etc/default/github_runner@{{ item.repo }}_{{ item.suffix }}
@@ -50,39 +61,18 @@
     label: "{{ item.repo }}_{{ item.suffix }}"
   become: true
 
-- name: _verify | per-instance state dir exists
+- name: _verify | per-instance workdir exists
   stat:
-    path: /mnt/services/github_runner/{{ item.repo }}_{{ item.suffix }}
-  register: _verify_state_dirs
+    path: /mnt/scratch/github_runner/workdir_{{ item.repo }}_{{ item.suffix }}
+  register: _verify_workdirs
   failed_when: >-
-    not _verify_state_dirs.stat.exists
-    or not _verify_state_dirs.stat.isdir
+    not _verify_workdirs.stat.exists
+    or not _verify_workdirs.stat.isdir
   loop: "{{ github_runner_instances }}"
   loop_control:
     label: "{{ item.repo }}_{{ item.suffix }}"
   become: true
 
-# Per-instance podman secret -- under qemu_test only. The qemu_test
-# branch creates the secret (with a stub token) but never starts the
-# container, so the secret stays as evidence that _register.yml's
-# token-fetch + podman_secret import chain actually wired up. In prod
-# the secret is dropped as soon as first-start registration writes
-# .runner (the .runner sentinel check below covers the prod success
-# path), so asserting "exists" there would fail steady-state.
-- name: _verify | podman secret exists for each instance (qemu_test)
-  when: qemu_test
-  command: podman secret inspect github_runner_token_{{ item.repo }}_{{ item.suffix }}
-  changed_when: false
-  loop: "{{ github_runner_instances }}"
-  loop_control:
-    label: "{{ item.repo }}_{{ item.suffix }}"
-  become: true
-  become_user: github_runner
-
-# Under qemu_test verify the instance loads (catches template syntax
-# errors that pass systemd-analyze but break on instantiation); under
-# prod also verify the unit is active (container running, listener
-# attached).
 - name: _verify | github_runner@<instance>.service loads (qemu_test)
   when: qemu_test
   systemd:
@@ -94,6 +84,9 @@
     label: "{{ item.repo }}_{{ item.suffix }}"
   become: true
 
+# Under prod assert the unit is active. With --sdnotify=healthy this
+# implies the healthcheck passed (Runner.Listener up); the runner is
+# polling GitHub for jobs.
 - name: _verify | github_runner@<instance>.service is active (prod)
   when: not qemu_test
   systemd:
@@ -102,23 +95,6 @@
   failed_when: >-
     _verify_unit_prod.status.LoadState != "loaded"
     or _verify_unit_prod.status.ActiveState != "active"
-  loop: "{{ github_runner_instances }}"
-  loop_control:
-    label: "{{ item.repo }}_{{ item.suffix }}"
-  become: true
-
-# Real functional check (prod only): each runner container should have
-# completed registration, which means a /runner/.runner exists in the
-# state dir AND the GitHub API lists a runner by the expected name.
-# The .runner check catches "container started but config.sh failed";
-# the API check catches "runner registered then went offline" (network
-# split, manual deregister, etc.).
-- name: _verify | .runner sentinel exists for each registered instance
-  when: not qemu_test
-  stat:
-    path: /mnt/services/github_runner/{{ item.repo }}_{{ item.suffix }}/.runner
-  register: _verify_dotrunner
-  failed_when: not _verify_dotrunner.stat.exists
   loop: "{{ github_runner_instances }}"
   loop_control:
     label: "{{ item.repo }}_{{ item.suffix }}"

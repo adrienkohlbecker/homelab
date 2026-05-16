@@ -19,10 +19,6 @@ Requires=user@{{ github_runner_user.uid }}.service
 StartLimitInterval=600
 StartLimitBurst=3
 {% if zfs_root %}
-{% if zfs_has_services_mount %}
-After=zfs_mount_mnt_services.service
-Requires=zfs_mount_mnt_services.service
-{% endif %}
 {% if zfs_has_scratch_mount %}
 After=zfs_mount_mnt_scratch.service
 Requires=zfs_mount_mnt_scratch.service
@@ -37,9 +33,10 @@ Restart=always
 RestartSec=5
 Delegate=yes
 # Cold-start has to fit: image pull (first time), container create, the
-# entrypoint's rsync from /runner-base to /runner, and on first start
-# also the actions/runner config.sh registration call. 300s covers the
-# slowest of these (network-bound pull) with headroom.
+# entrypoint's curl POST to GitHub's generate-jitconfig endpoint, and
+# Runner.Listener's startup to "Listening for jobs" (the healthcheck's
+# ready signal). 300s covers the slowest of these (network-bound pull)
+# with headroom.
 TimeoutStartSec=300
 TimeoutStopSec=60
 Type=notify
@@ -58,25 +55,32 @@ ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S /run/user/{{ github_runne
 # --user / --uidmap / --gidmap: fake-root pattern (see CLAUDE.md
 #   "Container User Namespacing"). In-container uid 0 maps to host
 #   github_runner via the +0 override; everything else falls through
-#   1:1 from the base 65536-range mapping. Writes to the bind-mounted
-#   /runner state dir and the bound podman.sock land owned by host
+#   1:1 from the base 65536-range mapping. Writes to the bound
+#   podman.sock and the /work bind-mount land owned by host
 #   github_runner. NOT `--userns keep-id`: that would map the *current
 #   rootless user* to the same in-container uid, leaving in-container
-#   root pointing at an unmapped subuid and failing every write to
-#   /runner.
+#   root pointing at an unmapped subuid and failing every write.
 # --volume podman.sock: DooD -- actions/runner's docker-CLI shell-outs
 #   (for workflows with `container:` blocks) hit the host's rootless
 #   podman, NOT a daemon inside the runner container.
-# --volume /runner: persisted runner state (binaries, .runner,
-#   .credentials, _diag). Survives container restarts and image bumps.
 # --volume /work: actions/runner's checkout root (_work tree). Lives on
 #   /mnt/scratch (terabytes) so per-job checkouts don't pressure the
-#   container's writable layer.
-# --env-file: per-instance REPO_URL / RUNNER_NAME / RUNNER_LABELS,
-#   written by the role to /etc/default/github_runner@%i.
-# --secret RUNNER_TOKEN: short-lived registration token (1h TTL). Only
-#   consumed on first start when /runner/.runner is absent; subsequent
-#   starts ignore it and use the persisted .credentials.
+#   container's writable layer. The actions-runner binaries themselves
+#   live in /actions-runner inside the image -- ephemeral runners run
+#   straight out of the image with no host-side state volume.
+# --env-file: per-instance REPO_OWNER / REPO_NAME / RUNNER_NAME /
+#   RUNNER_LABELS / GITHUB_PAT_FILE, written by the role to
+#   /etc/default/github_runner@%i.
+# --secret github_runner_pat: long-lived fine-grained PAT consumed by
+#   the entrypoint on every container start (mints a fresh JIT config
+#   via /actions/runners/generate-jitconfig). Mount-type, not env-type,
+#   so the PAT never lands in /proc/<pid>/environ visible to any
+#   sibling workflow container that has the DooD socket. Same PAT
+#   shared across every instance on the host (API call is per-repo).
+# --sdnotify=healthy: unit's `active` state gates on the healthcheck,
+#   not on conmon's exec. The container is ready iff Runner.Listener
+#   is running and polling -- exactly what systemctl status should
+#   reflect, and what removes the need for an ansible-side wait_for.
 # --health-cmd / startup-cmd: actions/runner exposes no HTTP probe, so
 #   we go with CLAUDE.md "Container Healthchecks" option 3 (service-
 #   native CLI): pgrep the Runner.Listener process. procps ships in
@@ -87,14 +91,14 @@ ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S /run/user/{{ github_runne
 #   respawns -- so the healthcheck is the "is it alive" signal
 #   surfaced in `systemctl status`/downstream monitoring, while the
 #   exit+respawn loop drives the actual recovery.
-# --health-start-period 30s: first-start runs config.sh (network call
-#   to GitHub for registration) before run.sh. 30s leaves headroom for
-#   a slow API response without flapping the unit unhealthy on boot.
+# --health-start-period 30s: first-start runs the entrypoint's curl
+#   POST to GitHub before run.sh. 30s leaves headroom for a slow API
+#   response without flapping the unit unhealthy on boot.
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
   --cidfile=%t/%n.ctr-id \
   --cgroups=split \
-  --sdnotify=conmon \
+  --sdnotify=healthy \
   --detach \
   --replace \
   --rm \
@@ -107,10 +111,9 @@ ExecStart=/usr/bin/podman run \
   --gidmap=0:0:65536 \
   --gidmap=+0:{{ github_runner_user.group }}:1 \
   --volume /run/user/{{ github_runner_user.uid }}/podman/podman.sock:/var/run/docker.sock \
-  --volume /mnt/services/github_runner/%i:/runner:rw \
   --volume /mnt/scratch/github_runner/workdir_%i:/work:rw \
   --env-file /etc/default/github_runner@%i \
-  --secret github_runner_token_%i,type=env,target=RUNNER_TOKEN \
+  --secret github_runner_pat,type=mount,target=/run/secrets/github_pat \
   --health-cmd         "pgrep -f Runner.Listener >/dev/null" \
   --health-startup-cmd "pgrep -f Runner.Listener >/dev/null" \
   --health-startup-interval "1s" \
