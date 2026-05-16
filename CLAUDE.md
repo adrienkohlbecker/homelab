@@ -67,6 +67,9 @@ Several helper roles factor out duplicated patterns. Prefer them over re-impleme
 ### healthchecks is not dead code
 Grepping `roles/` for `healthchecks.lab.fahm.fr` / `hc-ping` / similar will turn up zero callers, but the service is live: it receives heartbeats from sources outside this repo (cron jobs on personal machines, etc.). A repo-only grep is not sufficient evidence to retire the role.
 
+### Kuma monitor list is UI-managed
+The kuma sqlite DB ([/mnt/services/sqlite/kuma/](roles/kuma/)) carries monitor definitions that are added/edited via the Kuma UI, not in this repo. Don't migrate to IaC ("dump monitors to vaulted YAML + restore on bootstrap") — the monitor set extends beyond this repo's scope and overwriting on bootstrap would clobber UI-side state. The kuma.service systemd unit going down is covered by `systemd_service_unit_failed_state`; a Kuma-up-but-empty-DB silent failure is a real but rare gap that's not worth specifically alarming on today.
+
 ## Testing Guidelines
 The harness lives in `test/` (Python, asyncio-based; the previous `*.sh` shims are gone).
 
