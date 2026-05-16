@@ -41,6 +41,12 @@ table ip homelab {
     counter input_catchall {}
     counter icmp_overflow {}
     counter vrrp_accept {}
+    counter dnscrypt_accept {}
+    counter aardvark_accept {}
+    counter mdns_accept {}
+    counter wireguard_accept {}
+    counter mosh_accept {}
+    counter netbios_accept {}
     counter forward_nonsyn {}
     counter forward_catchall {}
 
@@ -112,14 +118,14 @@ table ip homelab {
         # clients can fall back to TCP when a response would be
         # UDP-truncated (pihole does this opportunistically); we kept it
         # UDP-only originally and saw ~2 TCP drops/day from pihole.
-        ip saddr $PODMAN_DEFAULT meta l4proto { tcp, udp } th dport {{ service_ports.dnscrypt_proxy }} accept comment "dnscrypt-proxy (default bridge only, TCP+UDP)"
-        ip saddr { $PODMAN_DEFAULT, $PODMAN_POOL } udp dport 5333 accept comment "aardvark-dns (post-DNAT from gateway:53, all podman bridges)"
-        iifname $WAN_IFACE ip saddr $HOME_LAN udp dport 5353 accept comment "mDNS (home LAN)"
+        ip saddr $PODMAN_DEFAULT meta l4proto { tcp, udp } th dport {{ service_ports.dnscrypt_proxy }} counter name "dnscrypt_accept" accept comment "dnscrypt-proxy (default bridge only, TCP+UDP)"
+        ip saddr { $PODMAN_DEFAULT, $PODMAN_POOL } udp dport 5333 counter name "aardvark_accept" accept comment "aardvark-dns (post-DNAT from gateway:53, all podman bridges)"
+        iifname $WAN_IFACE ip saddr $HOME_LAN udp dport 5353 counter name "mdns_accept" accept comment "mDNS (home LAN)"
 
         # Wireguard ingress only on the WAN iface. Pinning iif means
         # an attacker on a future LAN bridge can't speculatively send
         # to udp/51820 from inside.
-        iifname $WAN_IFACE udp dport {{ service_ports.wireguard }} accept comment "wireguard (WAN ingress only)"
+        iifname $WAN_IFACE udp dport {{ service_ports.wireguard }} counter name "wireguard_accept" accept comment "wireguard (WAN ingress only)"
 
         # Transmission BitTorrent peer port — WAN-only, both TCP (peer
         # wire protocol) and UDP (µTP + DHT). The UDM port-forwards
@@ -132,7 +138,7 @@ table ip homelab {
 
         # Mosh sessions originate from admin clients on the home LAN
         # or via wireguard, never from raw WAN.
-        iifname . ip saddr @lan_admin_pairs udp dport 60000-61000 accept comment "Mosh"
+        iifname . ip saddr @lan_admin_pairs udp dport 60000-61000 counter name "mosh_accept" accept comment "Mosh"
 
         # TCP allows. SSH/HTTP/HTTPS are wide-open (admin + public);
         # Samba and nut are admin services scoped via the set.
@@ -146,7 +152,7 @@ table ip homelab {
         # back through INPUT via broadcast loopback on both eth0
         # (10.123.0.2) and wg0 (10.123.64.2); the rest is real SMB
         # clients (MBP, pug) doing name resolution.
-        iifname . ip saddr @lan_admin_pairs udp dport { 137, 138 } accept comment "NetBIOS (nmbd, admin)"
+        iifname . ip saddr @lan_admin_pairs udp dport { 137, 138 } counter name "netbios_accept" accept comment "NetBIOS (nmbd, admin)"
 
         # Container access to NUT: homeassistant's NUT integration
         # connects from its podman bridge IP (currently the mosquitto
