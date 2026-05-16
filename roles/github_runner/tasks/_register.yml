@@ -1,5 +1,6 @@
-# Per-instance registration + container deploy. Called from main.yml
-# with loop_var: runner_instance (keys: repo, suffix, labels).
+# Per-instance enable for the templated github_runner@.service. Called
+# from main.yml with loop_var: runner_instance (keys: repo, suffix,
+# labels).
 #
 # Instance identity is the literal concatenation
 # {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }} -- inlined
@@ -7,34 +8,14 @@
 # concatenation reaches task `name:` fields at parse time
 # (per feedback_ansible_task_name_parse_time -- name: renders before
 # set_fact runs, even under include_tasks where each iteration
-# re-parses). The concatenation is cheap, so the verbosity is worth
-# the safety.
-
-# Reset facts that this file sets conditionally. Without this reset,
-# an iteration whose conditions skip the set_fact branch would still
-# see the previous iteration's value (set_fact-scoped vars persist
-# across include_tasks iterations -- same trap that
-# feedback_include_role_loop_vars warns about). Currently only
-# runner_token consumers (the podman_secret import) are gated on the
-# same condition as the setter, so the stale-leak is latent today,
-# but a future consumer added without the same gate would silently
-# read the wrong token.
-- name: _register | Reset per-iteration facts for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
-  set_fact:
-    runner_token: null
-  tags:
-    - github_runner
-
-- name: _register | Create state dir for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
-  file:
-    path: /mnt/services/github_runner/{{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
-    state: directory
-    owner: github_runner
-    group: github_runner
-    mode: "0755"
-  become: true
-  tags:
-    - github_runner
+# re-parses).
+#
+# Ephemeral + JIT model: no per-instance state dir, no per-instance
+# registration token, no .runner sentinel to wait for. The container's
+# entrypoint mints a single-use JIT config on every start using the
+# host-level github_runner_pat secret (created in main.yml, shared
+# across all instances); the runner registers, runs one job, deregisters,
+# exits, and systemd's Restart=always brings up the next container.
 
 - name: _register | Create workdir for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
   file:
@@ -47,100 +28,11 @@
   tags:
     - github_runner
 
-# Check if this instance has already registered. The .runner file is
-# written by config.sh on first successful registration; if it's there,
-# we skip the token fetch + secret rotation entirely and the container
-# uses the persisted .credentials.
-- name: _register | Check registration sentinel for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
-  stat:
-    path: /mnt/services/github_runner/{{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}/.runner
-  register: runner_registered
-  become: true
-  tags:
-    - github_runner
-
-# Registration token (1h TTL, can't be vaulted). Two branches:
-#   - prod: fetch via `gh api` on the controller workstation, using the
-#     operator's gh CLI auth (same source terraform uses).
-#   - qemu_test: stub a deterministic fake value so the downstream
-#     secret-create + envfile-write + unit-install chain still runs.
-#     The fake token is harmless because the systemd_unit/service step
-#     (the only consumer that would actually exchange it with GitHub)
-#     stays gated on `not qemu_test` below.
-# Either way, skipped once `.runner` exists -- the persisted
-# .credentials carry the runner forward and the consumed-once token
-# isn't needed again.
-#
-# Both branches set the same scalar fact `runner_token` so the
-# downstream podman_secret import has a single source of truth.
-# Going through a single fact (vs reading `runner_token_result.stdout`
-# directly) sidesteps the dict-vs-AnsibleMapping templating quirk:
-# `register:` produces an AnsibleMapping (`.stdout` works); a
-# set_fact'd plain dict (`{stdout: ...}`) doesn't expose `.stdout`
-# the same way and fails with "object of type 'dict' has no attribute
-# 'stdout'" when consumed by another set_fact in podman_secret.
-- name: _register | (qemu_test) Stub registration token for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
-  when:
-    - qemu_test
-    - not runner_registered.stat.exists
-  set_fact:
-    runner_token: "qemu-test-fake-token-{{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}"
-  tags:
-    - github_runner
-
-- name: _register | (prod) Fetch registration token for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
-  when:
-    - not qemu_test
-    - not runner_registered.stat.exists
-  command: gh api -X POST /repos/{{ github_runner_owner }}/{{ runner_instance.repo }}/actions/runners/registration-token --jq .token
-  register: runner_token_result
-  delegate_to: localhost
-  become: false
-  changed_when: false
-  check_mode: false
-  no_log: true
-  tags:
-    - github_runner
-
-- name: _register | Stash prod token in runner_token for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
-  when:
-    - not qemu_test
-    - not runner_registered.stat.exists
-  set_fact:
-    runner_token: "{{ runner_token_result.stdout }}"
-  no_log: true
-  tags:
-    - github_runner
-
-# Per-instance podman secret. The container's entrypoint consumes
-# RUNNER_TOKEN on first start (when /runner/.runner is absent) and
-# ignores it on every subsequent start. Stored as a github_runner-owned
-# rootless secret so the runner container under --userns keep-id can
-# read it.
-#
-# The check-mode-and-user-just-reported-created gate keeps the
-# podman_secret import from running before the user actually exists:
-# in --check the service_user task reports the user as `changed` but
-# doesn't really create it, so a downstream `become_user: github_runner`
-# fails the lookup. On a real run the user exists and this skips.
-- name: _register | Store registration token in podman secret for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
-  when:
-    - not runner_registered.stat.exists
-    - not (ansible_check_mode and github_runner_user.changed)
-  import_role:
-    name: podman_secret
-    tasks_from: secret
-  vars:
-    podman_secret_args:
-      name: github_runner_token_{{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
-      data: "{{ runner_token }}"
-      user: github_runner
-  tags:
-    - github_runner
-
 # Per-instance env file consumed by podman's --env-file in the template.
 # Static for the instance's lifetime; changes (relabel, repo rename)
-# propagate to the unit's restart via the register below.
+# propagate to the unit's restart via the register below. NOTE: a
+# restart in ephemeral mode kills the in-flight job; schedule label
+# edits when the instance is idle, or accept the dropped job.
 - name: _register | Install env file for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
   template:
     src: github_runner_envfile.j2
@@ -155,8 +47,9 @@
     - github_runner
 
 # Enable + start github_runner@<repo>_<suffix>.service. Skipped under
-# qemu_test (no GitHub-backed registration; run.sh would fail with
-# "Must configure first" and loop on the restart-limit).
+# qemu_test (no real GitHub-backed JIT minting; entrypoint's curl POST
+# would fail and loop on the restart-limit). _verify.yml exercises the
+# unit-loads-and-secret-resolves contract under qemu_test instead.
 - name: _register | Enable github_runner@{{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
   when: not qemu_test
   import_role:
@@ -166,53 +59,10 @@
     systemd_unit_args:
       src: github_runner@{{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
       condition: "{{ not (ansible_check_mode and github_runner_user.changed) }}"
-      # Restart on env-file edits (label or repo URL change). Token
-      # rotations don't trigger here because the secret is dropped
-      # after first-start registration completes (below) -- once the
-      # container has persisted .credentials, rotating the consumed-
-      # once token is meaningless.
-      restart: "{{ runner_envfile.changed }}"
-  tags:
-    - github_runner
-
-# After kicking off a first-start (the prod branch where we created the
-# secret in this run), wait for the container's entrypoint to finish
-# config.sh and write .runner. With --sdnotify=conmon the unit reports
-# active as soon as conmon is up -- before config.sh has even started
-# -- so we can't rely on the systemd_unit start above as a "registered"
-# signal. timeout=120 covers a slow network round-trip to GitHub +
-# image-pull on first start; if config.sh genuinely fails (bad token,
-# repo gone) the wait surfaces it as a clear failure instead of leaving
-# a half-installed runner.
-- name: _register | Wait for first-start registration to complete for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
-  when:
-    - not qemu_test
-    - not runner_registered.stat.exists
-    - not (ansible_check_mode and github_runner_user.changed)
-  wait_for:
-    path: /mnt/services/github_runner/{{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}/.runner
-    timeout: 120
-  become: true
-  tags:
-    - github_runner
-
-# Drop the consumed registration token secret. Idempotent (state:absent
-# is a no-op if the secret doesn't exist), so it cleans up:
-#   - first run: secret just created + consumed by container start +
-#     .runner persisted -- drop the now-consumed value.
-#   - subsequent runs: secret was already dropped by a prior run; this
-#     is a cheap no-op.
-# Skipped under qemu_test so _verify.yml can assert the secret was
-# created (the qemu_test path stops here without a container start,
-# so the secret stays as the evidence the chain wired up).
-- name: _register | Drop registration token secret for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
-  when:
-    - not qemu_test
-    - not (ansible_check_mode and github_runner_user.changed)
-  containers.podman.podman_secret:
-    name: github_runner_token_{{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
-    state: absent
-  become: true
-  become_user: github_runner
+      # Restart on env-file edits (label or repo URL change) or PAT
+      # rotation (data sha mismatch surfaces as github_runner_pat_rotated).
+      # The PAT is shared host-wide so a rotation should bounce every
+      # instance to ensure they pick up the new secret value next start.
+      restart: "{{ runner_envfile.changed or github_runner_pat_rotated | default(false) }}"
   tags:
     - github_runner

@@ -1,3 +1,25 @@
+# Operator-managed long-lived PAT. Required for the ephemeral + JIT
+# model -- every container start mints a single-use JIT config via
+# `gh api /repos/.../actions/runners/generate-jitconfig`, which needs
+# a PAT with repo + actions:write scope on the target repos. Mint
+# once via GitHub UI (Settings → Developer settings → fine-grained
+# tokens), vault into host_vars/<host>.yml as `github_runner_pat:
+# !vault | ...`, then re-run the role. Fail loud on missing or empty
+# so the operator sees the actionable cause instead of a confusing
+# downstream "secret data is required" or jinja "undefined" error.
+- name: Assert github_runner_pat is vaulted in host_vars
+  assert:
+    that:
+      - github_runner_pat is defined
+      - github_runner_pat | length > 0
+    fail_msg: >-
+      github_runner_pat is unset for {{ inventory_hostname }}. Mint a
+      fine-grained GitHub PAT (scope: repo + actions:write on every
+      repo listed under github_runner_instances), then vault it into
+      host_vars/{{ inventory_hostname }}.yml.
+  tags:
+    - github_runner
+
 - name: Set up github_runner system user, group, and config dir
   import_role:
     name: service_user
@@ -17,19 +39,13 @@
   tags:
     - github_runner
 
-# Top-level dirs shared by all instances. Per-instance state/work dirs
-# are created inside _register.yml.
-- name: Create top-level runtime directories
+# Top-level scratch dir shared by all instances. Per-instance workdirs
+# are created inside _register.yml. No /mnt/services/github_runner
+# anymore -- ephemeral runners hold no persistent state on disk; the
+# runner binaries live in the image at /actions-runner.
+- name: Create top-level scratch directory
   when: not (ansible_check_mode and github_runner_user.changed)
   file:
-    dest: "{{ item }}"
-    state: directory
-    owner: github_runner
-    group: github_runner
-    mode: "0755"
-  become: true
-  loop:
-    - /mnt/services/github_runner
     # Bind-mounted into sibling workflow containers via the workflow's
     # container.options for the harness's --workdir-parent. Lives on
     # /mnt/scratch (terabytes) instead of the container's writable
@@ -37,7 +53,12 @@
     # ENOSPC the cell. Each cell mounts a unique subdir underneath so
     # two concurrent cells can't see each other; the tmpfiles.d entry
     # below reaps the per-cell subdirs after they idle.
-    - /mnt/scratch/github_runner/scratch
+    dest: /mnt/scratch/github_runner/scratch
+    state: directory
+    owner: github_runner
+    group: github_runner
+    mode: "0755"
+  become: true
   tags:
     - github_runner
 
@@ -161,6 +182,29 @@
   tags:
     - github_runner
 
+# Host-level PAT secret consumed by every runner container's entrypoint
+# to mint per-start JIT configs. One secret, shared by all instances --
+# the generate-jitconfig API call is scoped per-repo, so the same PAT
+# works for every (repo, suffix) instance on the host. Operator mints
+# the PAT manually (GitHub → Settings → Developer settings → fine-
+# grained tokens; scope = repo + actions:write on the target repos)
+# and vaults the value into host_vars/<host>.yml as github_runner_pat.
+# podman_secret rotates when the data sha changes; the helper exposes
+# github_runner_pat_rotated so _register.yml can restart instances to
+# pick up the new value.
+- name: Create host-level github_runner PAT podman secret
+  when: not (ansible_check_mode and github_runner_user.changed)
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: github_runner_pat
+      data: "{{ github_runner_pat }}"
+      user: github_runner
+  tags:
+    - github_runner
+
 # Install the templated unit once. Per-instance enablement happens in
 # _register.yml via systemctl on the instantiated name
 # (github_runner@<repo>_<suffix>.service).
@@ -176,7 +220,7 @@
   tags:
     - github_runner
 
-# Per-instance registration + env file + container deploy.
+# Per-instance envfile + container deploy.
 # include_tasks (not include_role + loop) so vars: re-evaluate per
 # iteration -- see memory feedback_include_role_loop_vars for the trap.
 - name: Register and enable github_runner instances
