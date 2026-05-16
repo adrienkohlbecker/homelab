@@ -1,13 +1,21 @@
-# QEMU virtio disks report rotational=0 and box's md pseudo-devices
-# are filtered by name prefix, so the per-disk loop in
-# templates/hd-idle.j2 emits zero -a entries on box/lab/pug VMs; only
-# the global "-i 0" (plus "-s 1" on releases newer than jammy/noble)
-# survives. We can't drive a real spindown in CI (would need to wait
-# the full idle window against a real spinning disk), so the functional
-# check is: the daemon is alive, and its argv matches what the template
-# rendered. This catches the env-file parse-failure mode where
-# HD_IDLE_OPTS silently empties at runtime and hd-idle starts with
-# compiled-in defaults.
+# Functional check: hd-idle is alive and its argv matches what the
+# template rendered. We can't drive a real spindown in CI (would need
+# to wait the full idle window against a real spinning disk), so this
+# is the closest we get -- two assertions:
+#
+#   (1) global flags  '-i 0' (always) and '-s 1' (on releases newer
+#       than jammy/noble) appear in argv. Catches the env-file
+#       parse-failure mode where HD_IDLE_OPTS silently empties.
+#
+#   (2) per-disk -a    for every rotational + non-removable + non-
+#       virtual disk ansible_devices sees, an '-a /dev/disk/by-id/<id>
+#       -i 1200' entry appears in argv. Catches regressions in the
+#       template's selectattr filter chain.
+#
+# On box/minimal the per-disk list is empty (all virtio disks report
+# rotational=0), so (2) loops zero times -- still useful as a parse-
+# success canary. On lab/pug the per-disk list is non-empty and (2)
+# actually exercises the filter.
 
 - name: _verify | confirm hd-idle is active
   command: systemctl is-active hd-idle
@@ -25,7 +33,29 @@
     that:
       - "'-i 0' in hd_idle_proc.stdout"
       - "ansible_distribution_release in ['jammy', 'noble'] or '-s 1' in hd_idle_proc.stdout"
-    fail_msg: >
+    fail_msg: >-
       hd-idle running but missing expected flags; HD_IDLE_OPTS may have
       failed to parse from /etc/default/hd-idle.
       pgrep output: {{ hd_idle_proc.stdout }}
+
+- name: _verify | assert each expected per-disk -a entry appears in argv
+  vars:
+    hd_idle_expected_disk_ids: >-
+      {{ ansible_devices.values()
+         | rejectattr('virtual', 'equalto', 1)
+         | selectattr('rotational', 'equalto', '1')
+         | selectattr('removable', 'equalto', '0')
+         | map(attribute='links.ids')
+         | select
+         | map('sort')
+         | map('first')
+         | list }}
+  assert:
+    that:
+      - "'-a /dev/disk/by-id/' ~ item ~ ' -i 1200' in hd_idle_proc.stdout"
+    fail_msg: >-
+      hd-idle argv missing expected per-disk entry for
+      /dev/disk/by-id/{{ item }} -i 1200.
+      Filter regression in templates/hd-idle.j2?
+      pgrep output: {{ hd_idle_proc.stdout }}
+  loop: "{{ hd_idle_expected_disk_ids }}"
