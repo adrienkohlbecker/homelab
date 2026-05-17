@@ -253,7 +253,10 @@
           Body,
           SeverityText,
           toUInt32(SeverityNumber) AS SeverityNumber,
-          ServiceName
+          ServiceName,
+          LogAttributes['SYSTEMD_UNIT']      AS systemd_unit,
+          LogAttributes['SYSLOG_IDENTIFIER'] AS syslog_identifier,
+          LogAttributes['host']              AS log_host
         FROM default.otel_logs
         WHERE Body LIKE '%{{ fluentbit_otlp_journald_marker }}%'
           AND ServiceName = 'fluentbit_verify_journald'
@@ -261,6 +264,10 @@
         LIMIT 1
         FORMAT JSONEachRow
 
+# LogAttributes asserts guard otlp_shape.lua's "lift everything left in
+# record into metadata.otlp.attributes" loop. An earlier version only
+# lifted "host" and silently dropped every journald metadata field; the
+# bug stuck around precisely because nothing here checked.
 - name: _verify | journald path | assert lua filter output
   vars:
     row: "{{ _test_clickhouse_result.stdout | from_json }}"
@@ -270,6 +277,9 @@
       - "row.SeverityNumber | int == 17"
       - "row.ServiceName == 'fluentbit_verify_journald'"
       - "fluentbit_otlp_journald_marker in row.Body"
+      - "row.systemd_unit == 'fluentbit_verify_journald.service'"
+      - "row.syslog_identifier == 'fluentbit_verify_journald'"
+      - "row.log_host == inventory_hostname"
     fail_msg: "journald record landed with wrong shape: {{ row }}"
 
 # Nginx access tail: exercises the conf.j2 modify pre-stamp
