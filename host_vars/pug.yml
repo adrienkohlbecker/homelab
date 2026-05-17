@@ -52,26 +52,7 @@ zfs_autobackup_source_host: lab
 zfs_autobackup_dest_dataset: apoc/lab
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINqTc8cI1r7PWtSMam2CXSsq+FSr7DGKXRvuIP2aVEHT root@lab
 
-fancontrol_settings:
-  fans:
-    - name: CHA_FAN_2
-      pwm: nct6798/pwm3
-      temp: nct6798/temp1_input
-      fan: nct6798/fan3_input
-      mintemp: 40
-      maxtemp: 60
-      minstart: 40
-      minstop: 10
-      minpwm: 10
-    - name: CHA_FAN_1 (HDD temp)
-      pwm: nct6798/pwm2
-      temp: drivetemp/temp1_input
-      fan: nct6798/fan2_input
-      mintemp: 40
-      maxtemp: 55
-      minstart: 120
-      minstop: 90
-      minpwm: 90
+fan2go_enabled: true
 
 pihole_keepalived_role: BACKUP
 pihole_keepalived_priority: 10

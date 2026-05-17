@@ -95,44 +95,7 @@ zfs_autobackup_source_host: pug
 zfs_autobackup_dest_dataset: tank/pug
 zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDp277oY86WuDWYdU4Xr8eBUMAZ7L089F5SjBhmZzRS8 root@pug
 
-fancontrol_settings:
-  fans:
-    - name: CPU_FAN
-      pwm: nct6798/pwm2
-      temp: nct6798/temp2_input
-      fan: nct6798/fan2_input
-      mintemp: 30
-      maxtemp: 60
-      minstart: 58
-      minstop: 28
-      minpwm: 28
-    - name: CHA_FAN1 (exhaust)
-      pwm: nct6798/pwm1
-      temp: nct6798/temp2_input
-      fan: nct6798/fan1_input
-      mintemp: 30
-      maxtemp: 60
-      minstart: 46
-      minstop: 16
-      minpwm: 16
-    - name: CHA_FAN3 (intake, HDD temp)
-      pwm: nct6798/pwm4
-      temp: drivetemp/temp1_input
-      fan: nct6798/fan4_input
-      mintemp: 40
-      maxtemp: 55
-      minstart: 46
-      minstop: 16
-      minpwm: 16
-    - name: CHA_FAN2 (intake, HDD temp)
-      pwm: nct6798/pwm3
-      temp: drivetemp/temp1_input
-      fan: nct6798/fan3_input
-      mintemp: 40
-      maxtemp: 55
-      minstart: 46
-      minstop: 16
-      minpwm: 16
+fan2go_enabled: true
 
 pihole_keepalived_role: MASTER
 pihole_keepalived_priority: 100
