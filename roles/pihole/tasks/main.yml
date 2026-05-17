@@ -38,7 +38,10 @@
     state: directory
     owner: "{{ pihole_user.uid }}"
     group: "{{ pihole_user.group }}"
-    mode: "0755"
+    # pihole's container entrypoint chmods /var/lib/pihole (this bind-mount) to
+    # 0775 on every start for FTL/lighttpd group-write access. Match it here so
+    # the task doesn't flap on every converge.
+    mode: "0775"
   become: true
   tags:
     - pihole
