@@ -2,13 +2,3 @@
   import_role:
     name: netdata
     tasks_from: install
-
-# install.yml uses policy_rc_d=101 so apt won't auto-start; prod starts
-# netdata in main.yml after configuration. The test fixture skips netdata's
-# main.yml, so start netdata here so health_copy in netdata.yml can issue
-# `netdatacli reload-health` without ENOENT on /run/netdata/netdata.pipe.
-- name: _setup | Start netdata
-  systemd:
-    name: netdata
-    state: started
-  become: true
