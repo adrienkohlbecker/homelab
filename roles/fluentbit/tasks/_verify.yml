@@ -29,18 +29,20 @@
   loop_control:
     label: "{{ item.stat.path }}"
 
-# fluent-bit's HTTP_Server returns 200 only once the engine has
-# initialised inputs/outputs; pairs with the Type=notify dropin so
-# this should already succeed on first hit (systemd_unit's start
-# waits for sd_notify READY=1).
-- name: _verify | HTTP_Server health
+# fluent-bit's HTTP_Server endpoint returns 200 once the engine has
+# initialised inputs/outputs; /api/v1/uptime is always available when
+# HTTP_Server is on (unlike /api/v1/health, which requires an explicit
+# Health_Check On directive we don't ship). Either confirms the main
+# loop is running, which is the function check the CLAUDE.md _verify
+# rule wants.
+- name: _verify | HTTP_Server uptime
   uri:
-    url: "http://127.0.0.1:{{ service_ports.fluentbit }}/api/v1/health"
+    url: "http://127.0.0.1:{{ service_ports.fluentbit }}/api/v1/uptime"
     status_code: 200
-  register: _verify_health
+  register: _verify_uptime
   retries: 6
   delay: 2
-  until: _verify_health.status == 200
+  until: _verify_uptime.status == 200
   become: true
 
 # End-to-end CSP-through-OTLP shape assertion. POST a marked CSP report
