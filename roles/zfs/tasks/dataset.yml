@@ -15,8 +15,14 @@
 # previous caller's mode/group/etc. can't bleed into the next caller
 # that doesn't explicitly override.
 
+# Inner task `name:` strings are static -- no `{{ _zfs_dataset_resolved }}`
+# or `{{ zfs_dataset_args.* }}` interpolation. Ansible renders `name:` at
+# parse time, but callers that bind `zfs_dataset_args` via `set_fact` (see
+# roles/data/tasks/_dataset.yml) only populate it at runtime, so a parse-
+# time render would fail with "zfs_dataset_args is undefined". Per-iteration
+# context comes from the caller's loop_control.label.
 - block:
-    - name: Reject mountpoint inside extra_properties for {{ _zfs_dataset_resolved }}
+    - name: Reject mountpoint inside extra_properties
       assert:
         that: "'mountpoint' not in (zfs_dataset_args.extra_properties | default({}))"
         fail_msg: >-
@@ -26,7 +32,7 @@
           combine is right-key-wins. Pass mountpoint only as the top-level
           key, not inside extra_properties.
 
-    - name: Create zfs filesystem {{ _zfs_dataset_resolved }}
+    - name: Create zfs filesystem
       when: zfs_root
       zfs:
         name: '{{ _zfs_dataset_resolved }}'
@@ -34,7 +40,7 @@
         extra_zfs_properties: "{{ (zfs_dataset_args.extra_properties | default({})) | combine({'mountpoint': zfs_dataset_args.mountpoint}) }}"
       become: true
 
-    - name: Create mount point {{ zfs_dataset_args.mountpoint }}
+    - name: Create mount point
       file:
         dest: '{{ zfs_dataset_args.mountpoint }}'
         state: directory
@@ -43,7 +49,7 @@
         mode: "{{ zfs_dataset_args.mode | default('0755') }}"
       become: true
 
-    - name: Set up mount service for {{ _zfs_dataset_resolved }}
+    - name: Set up mount service
       when: zfs_root
       import_role:
         name: zfs_mount
