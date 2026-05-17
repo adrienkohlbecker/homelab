@@ -1,0 +1,102 @@
+- name: Add media group
+  import_role:
+    name: media
+    tasks_from: group
+  tags:
+    - lidarr
+
+- name: Set up lidarr system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: lidarr
+      extra_groups: [media]
+  tags:
+    - lidarr
+
+- name: Create sqlite directory
+  when: not (ansible_check_mode and lidarr_user.changed)
+  file:
+    dest: /mnt/services/sqlite/lidarr
+    state: directory
+    owner: lidarr
+    group: media
+    mode: "0755"
+  become: true
+  tags:
+    - lidarr
+
+# Lidarr hardcodes its DBs at /config/<name>.db and writes -wal/-shm next to
+# the resolved path. Symlink at /config so SQLite resolves through to the
+# 4K-recordsize sqlite dataset before computing WAL location. Symlink target
+# matches the host path so it resolves identically inside the container (see
+# matching --volume in lidarr.service.j2).
+- name: Symlink lidarr SQLite DBs onto sqlite dataset
+  when: not (ansible_check_mode and lidarr_user.changed)
+  file:
+    src: "/mnt/services/sqlite/lidarr/{{ item }}"
+    dest: "/mnt/services/lidarr/{{ item }}"
+    state: link
+    force: true
+    owner: lidarr
+    group: media
+    follow: false
+  become: true
+  loop:
+    - lidarr.db
+    - logs.db
+  tags:
+    - lidarr
+
+- name: Configure lidarr
+  # Render via copy:content + regex_replace because lidarr rewrites
+  # config.xml on shutdown without a trailing newline; a plain template:
+  # leaves us drifting forever.
+  copy:
+    content: "{{ lookup('template', 'config.xml.j2') | regex_replace('\\n+$', '') }}"
+    dest: /mnt/services/lidarr/config.xml
+    owner: lidarr
+    group: media
+    mode: "0600"
+    backup: true
+    validate: python3 -c 'import xml.etree.ElementTree as ET, sys; ET.parse(sys.argv[1])' "%s"
+  register: lidarr_conf
+  become: true
+  tags:
+    - lidarr
+
+- name: Install lidarr service
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: lidarr.service.j2
+      condition: "{{ not (ansible_check_mode and lidarr_user.changed) }}"
+  tags:
+    - lidarr
+
+- name: Enable lidarr service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: lidarr
+      condition: "{{ not (ansible_check_mode and (lidarr_service_result.changed or lidarr_user.changed)) }}"
+      restart: "{{ lidarr_service_result.changed or lidarr_conf.changed or lidarr_user.changed or media_group.changed }}"
+  tags:
+    - lidarr
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: lidarr
+      proxy_pass: http://localhost:{{ service_ports.lidarr }}/
+  tags:
+    - lidarr
