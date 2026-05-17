@@ -26,13 +26,15 @@
          | default((systemd_unit_args.for ~ '.d/override.conf') if systemd_unit_args.for is defined
                    else (systemd_unit_args.src | regex_replace('\.j2$', ''))) }}
 
-- name: remove | Derive scope for {{ _systemd_unit_name }}
+- name: remove | Derive scope for {{ systemd_unit_args.dest | default(systemd_unit_args.src | default('?')) }}
   set_fact:
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_dir: "{{ '/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user' }}"
 
 # Check-mode tolerance on the linger-marker stat: see install.yml.
-- name: remove | Verify user-scope linger marker exists for {{ _systemd_unit_user }}
+# Name references caller var, not set_fact'd _systemd_unit_user, for the
+# parse-time-vs-runtime reason documented in install.yml's linger task.
+- name: remove | Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
   when:
     - _systemd_unit_condition
     - _systemd_unit_scope == 'user'
@@ -67,7 +69,7 @@
 # gone" -- stopping a non-existent unit must be a no-op. The systemd
 # module returns module-level failure on "unit not found", which we
 # explicitly tolerate here.
-- name: remove | Stop and disable {{ _systemd_unit_name }}
+- name: remove | Stop and disable {{ systemd_unit_args.dest | default(systemd_unit_args.src | default('?')) }}
   when: _systemd_unit_condition
   systemd:
     name: "{{ _systemd_unit_name }}"
@@ -98,6 +100,6 @@
 
 # Same fact name install.yml uses, so callers can read `.changed` off
 # `<name>_<type>_result` regardless of which operation just ran.
-- name: remove | Record removal result for {{ _systemd_unit_name }}
+- name: remove | Record removal result for {{ systemd_unit_args.dest | default(systemd_unit_args.src | default('?')) }}
   set_fact:
     "{{ _systemd_unit_name | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ systemd_unit }}"
