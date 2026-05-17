@@ -5,7 +5,7 @@
 {%- endmacro -%}
 {% for f in fancontrol_settings.fans %}
 # {{ hp(f.pwm) }} -> {{ f.name }}
-{% endfor %}
+{%- endfor %}
 INTERVAL={{ fancontrol_settings.interval | default(10) }}
 DEVPATH={% for c in fancontrol_referenced_chips %}{{ fancontrol_chip_map[c].hwmon }}={{ fancontrol_chip_map[c].devpath }}{% if not loop.last %} {% endif %}{% endfor %}
 DEVNAME={% for c in fancontrol_referenced_chips %}{{ fancontrol_chip_map[c].hwmon }}={{ c }}{% if not loop.last %} {% endif %}{% endfor %}
