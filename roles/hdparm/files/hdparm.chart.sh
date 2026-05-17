@@ -43,7 +43,7 @@ hdparm_create() {
   for dev in "${hdparm_disks[@]}"; do
     safe=$(_hdparm_safe "$dev")
     cat <<EOF
-CHART hdparm.${safe} '' "Drive power state: ${dev}" "state" hdparm hdparm.power_state line ${hdparm_priority} ${hdparm_update_every}
+CHART hdparm.${safe} '' "Drive power state: ${dev}" "state" hdparm hdparm.power_state stacked ${hdparm_priority} ${hdparm_update_every}
 CLABEL device "${dev}" 1
 CLABEL_COMMIT
 DIMENSION active '' absolute 1 1
