@@ -17,7 +17,9 @@ zfs_backport_packages:
   # libc-bin pinned alongside: jammy's libc-bin Depends: libc6 (<2.36),
   # so libc6 2.39 forces libc-bin to noble too or apt refuses.
   - libc6
+  - libc6-dev
   - libc-bin
+  - libc-dev-bin
   # t64 ABI rename: noble renamed libssl3 -> libssl3t64, libtirpc3 ->
   # libtirpc3t64. Must be in the pin so the renamed packages are
   # installable (Provides: libssl3 / libtirpc3 keeps wget/sshd/systemd
