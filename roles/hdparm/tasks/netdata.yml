@@ -9,6 +9,32 @@
 # brand-new disks before symlinks settle) silently drops from the
 # collector — surface it at apply time so the operator can see N drives
 # in `lsblk` but N-1 in netdata isn't a mystery.
+# hdparm-the-binary has cap_sys_rawio=ep (main.yml), but that grants
+# the ioctl, not the file open. /dev/sdX is mode 660 root:disk on
+# Debian, so opening the device as the netdata user fails with EACCES
+# regardless of capabilities. Add netdata to `disk` so `hdparm -C` can
+# open the block device. systemd reads supplementary groups at service
+# start, so the netdata restart below is load-bearing for a freshly
+# added group to take effect.
+- name: Add netdata user to disk group
+  user:
+    name: netdata
+    groups: disk
+    append: true
+  become: true
+  register: hdparm_netdata_disk_group
+  tags:
+    - hdparm
+
+- name: Restart netdata to pick up disk-group membership
+  when: hdparm_netdata_disk_group.changed
+  systemd:
+    name: netdata
+    state: restarted
+  become: true
+  tags:
+    - hdparm
+
 - name: Detect rotational drives missing /dev/disk/by-id symlinks
   vars:
     # Mirror group_vars/all.yml's rotational_disks_by_id filter chain
