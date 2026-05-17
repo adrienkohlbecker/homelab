@@ -8,24 +8,32 @@
 # and exits cleanly. systemd's Restart=always on github_runner@.service
 # brings up the next container, which mints its own JIT blob.
 #
-# No persistent runner state -- /actions-runner is image-baked and not
-# bind-mounted, and the runner doesn't survive past one job. /work is
-# the only volume (job checkout root, per-instance, kept across jobs
-# for cache locality but reaped by the host's tmpfiles.d rule).
+# /opt/actions-runner is bind-mounted from the host at the same path
+# (the roles/github_runner ansible role installs the runner there).
+# /<RUNNER_WORK_FOLDER> is the workdir, also bind-mounted at the same
+# path so DooD-spawned workflow containers can resolve their bind-
+# mount sources on the host.
 #
-# Required env (injected via the systemd unit's EnvironmentFile and
-# --secret mount):
-#   GITHUB_PAT_FILE   path to a podman-secret-mount file containing
-#                     the host's fine-grained PAT (scope: repo +
-#                     actions:write on REPO_OWNER/REPO_NAME). Mount-
-#                     type, not env, so the value never lands in
-#                     /proc/<pid>/environ visible via DooD `docker exec`.
-#   REPO_OWNER        GitHub owner (e.g. adrienkohlbecker).
-#   REPO_NAME         GitHub repo (e.g. homelab).
-#   RUNNER_NAME       single-instance name as it appears in the GitHub
-#                     UI; deterministic, derived from <repo>_<suffix>.
-#   RUNNER_LABELS     comma-separated label set (e.g.
-#                     "self-hosted,lab-vm").
+# Required env (injected via the systemd unit's EnvironmentFile,
+# --env args, and --secret mount):
+#   GITHUB_PAT_FILE     path to a podman-secret-mount file containing
+#                       the host's fine-grained PAT (scope: repo +
+#                       actions:write on REPO_OWNER/REPO_NAME). Mount-
+#                       type, not env, so the value never lands in
+#                       /proc/<pid>/environ visible via DooD `docker exec`.
+#   REPO_OWNER          GitHub owner (e.g. adrienkohlbecker).
+#   REPO_NAME           GitHub repo (e.g. homelab).
+#   RUNNER_NAME         single-instance name as it appears in the
+#                       GitHub UI; deterministic, derived from
+#                       <repo>_<suffix>.
+#   RUNNER_LABELS       comma-separated label set (e.g.
+#                       "self-hosted,lab-vm").
+#   RUNNER_WORK_FOLDER  absolute host-mirrored path to use as
+#                       actions/runner's _work tree root. Set by the
+#                       unit template to /mnt/scratch/github_runner/
+#                       workdir_%i; must match the bind-mount source
+#                       so DooD-spawned workflow containers' -v args
+#                       resolve to real host paths.
 set -euo pipefail
 
 : "${GITHUB_PAT_FILE:?required (podman-secret-mount path)}"
@@ -33,8 +41,9 @@ set -euo pipefail
 : "${REPO_NAME:?required}"
 : "${RUNNER_NAME:?required}"
 : "${RUNNER_LABELS:?required}"
+: "${RUNNER_WORK_FOLDER:?required (path-mirrored workdir absolute path)}"
 
-cd /actions-runner
+cd /opt/actions-runner
 
 # Append a per-start random suffix to the runner name so a crash at
 # any point past the generate-jitconfig call -- entrypoint bug,
@@ -53,7 +62,8 @@ labels_json=$(echo "$RUNNER_LABELS" | jq -Rcn 'input | split(",")')
 body=$(jq -cn \
   --arg name "$runner_name" \
   --argjson labels "$labels_json" \
-  '{name:$name, runner_group_id:1, labels:$labels, work_folder:"/work"}')
+  --arg work "$RUNNER_WORK_FOLDER" \
+  '{name:$name, runner_group_id:1, labels:$labels, work_folder:$work}')
 
 # Mint the single-use JIT config. runner_group_id 1 is the implicit
 # default group present on every personal-account repo; org/enterprise

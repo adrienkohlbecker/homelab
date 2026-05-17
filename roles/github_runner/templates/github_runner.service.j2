@@ -90,11 +90,23 @@ SyslogIdentifier=%N
 # --volume podman.sock: DooD -- actions/runner's docker-CLI shell-outs
 #   (for workflows with `container:` blocks) hit github_runner's
 #   rootless podman, NOT a daemon inside the runner container.
-# --volume /work: actions/runner's checkout root (_work tree). Lives on
-#   /mnt/scratch (terabytes) so per-job checkouts don't pressure the
-#   container's writable layer. The actions-runner binaries themselves
-#   live in /actions-runner inside the image -- ephemeral runners run
-#   straight out of the image with no host-side state volume.
+# --volume /opt/actions-runner: path-mirrored from the host (where
+#   roles/github_runner downloaded + extracted the actions/runner
+#   tarball). The runner binaries live here on both sides at the same
+#   path, so when actions/runner spawns docker create with
+#   -v /opt/actions-runner/externals:/__e:ro for a workflow container,
+#   docker (resolving the source on the host via the bind-mounted
+#   socket) finds real files instead of EACCES on a missing path.
+#   rw (not ro) because actions/runner writes _diag/ logs into the
+#   install dir at runtime.
+# --volume /mnt/.../workdir_%i: path-mirrored at the same path on
+#   both sides for the same DooD-bind-mount reason. actions/runner's
+#   _work tree lives here, plus _temp/_actions/_tool subdirs that
+#   workflow containers see at /__w/_* via DooD bind mounts that
+#   reference this host path. Lives on /mnt/scratch (terabytes) so
+#   per-job checkouts don't pressure the container's writable layer.
+#   RUNNER_WORK_FOLDER env below tells actions/runner to use this
+#   path as its work root (vs the default _work next to run.sh).
 # --env-file: per-instance REPO_OWNER / REPO_NAME / RUNNER_NAME /
 #   RUNNER_LABELS / GITHUB_PAT_FILE, written by the role to
 #   /etc/default/github_runner@%i.
@@ -182,10 +194,12 @@ ExecStart=/usr/bin/podman run \
   --gidmap=0:0:65536 \
   --gidmap=+0:{{ github_runner_user.group }}:1 \
   --volume %t/user/{{ github_runner_user.uid }}/podman/podman.sock:/var/run/docker.sock \
-  --volume /mnt/scratch/github_runner/workdir_%i:/work:rw \
+  --volume /opt/actions-runner:/opt/actions-runner:rw \
+  --volume /mnt/scratch/github_runner/workdir_%i:/mnt/scratch/github_runner/workdir_%i:rw \
   --env-file /etc/default/github_runner@%i \
   --env CONTAINER_HOST=unix:///var/run/docker.sock \
   --env DOCKER_HOST=unix:///var/run/docker.sock \
+  --env RUNNER_WORK_FOLDER=/mnt/scratch/github_runner/workdir_%i \
   --secret github_runner_pat,type=mount,target=/run/secrets/github_pat \
   --health-cmd         "pgrep -f Runner.Listener >/dev/null" \
   --health-startup-cmd "pgrep -f Runner.Listener >/dev/null" \
