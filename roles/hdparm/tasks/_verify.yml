@@ -15,6 +15,18 @@
 # /usr/local/sbin ahead of /sbin, so the chart.sh's bare `hdparm` call
 # resolves to it under netdata's service environment. Real device paths
 # (none on a QEMU box) would fall through to /sbin/hdparm.
+
+# install.yml uses policy_rc_d=101 so apt won't auto-start; prod starts
+# netdata in main.yml after configuration. The test path skips netdata's
+# main.yml, so start the daemon here -- health_copy below issues
+# `netdatacli reload-health` which talks to netdata's HTTP API
+# (replaced the legacy /run/netdata/netdata.pipe path in 1.46+).
+- name: _verify | start netdata
+  systemd:
+    name: netdata
+    state: started
+  become: true
+
 - name: _verify | install hdparm netdata collector
   import_tasks: netdata.yml
 
