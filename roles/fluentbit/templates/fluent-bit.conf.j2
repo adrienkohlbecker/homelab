@@ -18,10 +18,11 @@
     # 127.0.0.1 only, no exposure beyond the host.
     HTTP_Server       on
     HTTP_Listen       127.0.0.1
-    HTTP_Port         2020
+    HTTP_Port         {{ service_ports.fluentbit }}
     storage.path      /var/lib/fluent-bit/storage/
     storage.sync      normal
     storage.checksum  off
+    storage.metrics   on
     storage.backlog.mem_limit  5M
 
 # Everything that logs via systemd journal (which on modern Ubuntu is
