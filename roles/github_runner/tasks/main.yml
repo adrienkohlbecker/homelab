@@ -75,6 +75,76 @@
   tags:
     - github_runner
 
+# actions/runner install on the host (not baked into the runner image).
+# This is the path-mirror anchor that makes `container:` workflows
+# work over DooD: actions/runner spawns docker create with -v
+# /opt/actions-runner/externals:/__e:ro for the workflow container,
+# and docker (running on the host via the bind-mounted socket) needs
+# that path to resolve on the host's filesystem -- not just inside
+# the runner container. So we install on the host AND bind-mount the
+# same path into the runner container; both views see identical files.
+#
+# Owned by github_runner so the in-container runner (uid 0 inside the
+# userns → github_runner outside via the +0 uidmap override) can write
+# its _diag/ logs into the install dir. Read-only volumes wouldn't
+# work for the same reason.
+- name: Create /opt/actions-runner
+  when: not (ansible_check_mode and github_runner_user.changed)
+  file:
+    path: /opt/actions-runner
+    state: directory
+    owner: github_runner
+    group: github_runner
+    mode: "0755"
+  become: true
+  tags:
+    - github_runner
+
+# checksum: in get_url drives re-download on version bump (sha
+# mismatch with existing tarball forces fetch); also surfaces
+# tampering since the URL is plain https.
+- name: Download actions-runner tarball
+  when: not (ansible_check_mode and github_runner_user.changed)
+  get_url:
+    url: "{{ github_runner_archive[ansible_architecture].url }}"
+    dest: /opt/actions-runner/.runner.tar.gz
+    checksum: "sha256:{{ github_runner_archive[ansible_architecture].sha256 }}"
+    owner: github_runner
+    group: github_runner
+    mode: "0644"
+  become: true
+  register: github_runner_tarball
+  tags:
+    - github_runner
+
+# Extract is gated on tarball-just-downloaded OR run.sh-not-present;
+# the second clause recovers from an interrupted prior apply where
+# the tarball landed but the unarchive failed. Re-extracting on top
+# of an existing install overwrites the binaries in place
+# (actions/runner's tarball flattens into the dest dir with no
+# top-level subdir), so it's safe to re-run.
+- name: Check if actions-runner is already extracted
+  when: not (ansible_check_mode and github_runner_user.changed)
+  stat:
+    path: /opt/actions-runner/run.sh
+  register: github_runner_runsh
+  tags:
+    - github_runner
+
+- name: Extract actions-runner tarball
+  when:
+    - not (ansible_check_mode and github_runner_user.changed)
+    - github_runner_tarball.changed or not github_runner_runsh.stat.exists
+  unarchive:
+    src: /opt/actions-runner/.runner.tar.gz
+    dest: /opt/actions-runner
+    remote_src: true
+    owner: github_runner
+    group: github_runner
+  become: true
+  tags:
+    - github_runner
+
 # systemd-tmpfiles --clean runs daily via systemd-tmpfiles-clean.timer
 # and applies the rule on each tick. The rule walks the test scratch
 # tree, deletes files >1d stale, removes empty old subdirs as a side
