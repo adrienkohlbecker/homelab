@@ -20,6 +20,10 @@
   tags:
     - healthchecks
 
+# linuxserver/healthchecks ships the image without a logo asset; this
+# task drops a stock one in place so the SITE_LOGO_URL env below has
+# something to render. ro bind-mount in the unit overrides the upstream
+# static-collected/img/logo.png with this file.
 - name: Copy healthchecks logo
   when: not (ansible_check_mode and healthchecks_user.changed)
   copy:
