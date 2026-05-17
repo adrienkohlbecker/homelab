@@ -45,14 +45,26 @@
 --                                     Services facet doesn't merge a
 --                                     daemon's runtime logs with its
 --                                     timer-trigger events)
+--   svc.<empty>    -> SYSLOG_IDENTIFIER  (records without _SYSTEMD_UNIT --
+--                                         kernel ring buffer (nftables LOG
+--                                         target, MCE, oom-killer, ...),
+--                                         kernel audit, anything reaching
+--                                         journald via /dev/kmsg. The
+--                                         wildcard expands to "svc." with
+--                                         empty suffix; SYSLOG_IDENTIFIER
+--                                         is "kernel" / "audit" / ... so
+--                                         nftables drops land under a
+--                                         real facet instead of being
+--                                         hidden behind unrelated noise
+--                                         in a single "unknown" bucket.)
 --   nginx.access   -> "nginx_access" (tail input tag)
 --   nginx.error    -> "nginx_error"
---   empty suffix   -> "unknown"      (svc. with no _SYSTEMD_UNIT, bare
---                                     nginx. with no subtag — without
---                                     this the result would be "" /
---                                     "nginx_" and HyperDX would group
---                                     every such record under a single
---                                     nameless facet)
+--   empty suffix   -> "unknown"      (svc. with neither _SYSTEMD_UNIT nor
+--                                     SYSLOG_IDENTIFIER set, bare nginx.
+--                                     with no subtag. Without this the
+--                                     result would be "" / "nginx_" and
+--                                     HyperDX would merge those records
+--                                     under a nameless facet.)
 --   <other>        -> tag verbatim
 --
 -- Lowercased on the way out. Unit names are mixed-case (Keepalived_vrrp,
@@ -61,12 +73,21 @@
 -- inconsistently across releases. Normalising to lowercase here keeps
 -- the Services facet tidy and case-insensitive at the source.
 
-local function service_from_tag(tag)
+local function service_from_tag(tag, record)
     local svc
     if string.sub(tag, 1, 4) == "csp." then
         svc = "csplogger"
     elseif string.sub(tag, 1, 4) == "svc." then
         svc = string.sub(tag, 5):gsub("%.service$", "")
+        if svc == "" then
+            -- No _SYSTEMD_UNIT on the record. fluent-bit's systemd
+            -- input strips the leading underscore, so SYSLOG_IDENTIFIER
+            -- arrives as record["SYSLOG_IDENTIFIER"].
+            local sysid = record["SYSLOG_IDENTIFIER"]
+            if type(sysid) == "string" and sysid ~= "" then
+                svc = sysid
+            end
+        end
     elseif string.sub(tag, 1, 6) == "nginx." then
         -- Only matches the tail-input tags above (nginx.access /
         -- nginx.error). nginx.service journal records arrive as
@@ -89,7 +110,7 @@ function shape_otlp(tag, ts, group, metadata, record)
     metadata.otlp = metadata.otlp or {}
     metadata.otlp.attributes = metadata.otlp.attributes or {}
 
-    local resource_attrs = { ["service.name"] = service_from_tag(tag) }
+    local resource_attrs = { ["service.name"] = service_from_tag(tag, record) }
     local host = record["host"]
     if type(host) == "string" and host ~= "" then
         resource_attrs["host.name"] = host
