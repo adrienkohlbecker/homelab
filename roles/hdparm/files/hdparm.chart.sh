@@ -20,9 +20,17 @@ hdparm_priority=90000
 
 hdparm_disks=()
 
-# Netdata dim/chart ids must be alnum + underscore.
+# Netdata dim/chart ids must be alnum + underscore. Memoize per
+# device to avoid a `tr` fork on every poll -- charts.d contract is
+# "AVOID FORKS in the update loop". First call per device populates
+# the map; subsequent calls are pure-bash lookups.
+declare -A _hdparm_safe_ids=()
 _hdparm_safe() {
-  printf '%s' "$1" | tr -c '[:alnum:]_' '_'
+  local dev="$1"
+  if [ -z "${_hdparm_safe_ids[$dev]:-}" ]; then
+    _hdparm_safe_ids[$dev]=$(printf '%s' "$dev" | tr -c '[:alnum:]_' '_')
+  fi
+  printf '%s' "${_hdparm_safe_ids[$dev]}"
 }
 
 hdparm_check() {
