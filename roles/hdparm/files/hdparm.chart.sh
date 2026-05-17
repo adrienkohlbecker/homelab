@@ -56,22 +56,25 @@ EOF
 }
 
 hdparm_update() {
-  local dev safe out state a s sl u
-  # hdparm continues past per-drive failures and emits valid sections
-  # for the drives that did respond; parse stdout even on non-zero exit
-  # so a single flaky drive doesn't pin the rest at stale dimensions.
-  # Drives missing from the parsed output fall through to unknown=1.
-  out=$(hdparm -C "${hdparm_disks[@]/#//dev/disk/by-id/}" 2>/dev/null) || :
+  local dev safe path state a s sl u
   for dev in "${hdparm_disks[@]}"; do
     safe=$(_hdparm_safe "$dev")
-    state=$(awk -v d="/dev/disk/by-id/${dev}:" 'p{sub(/^ drive state is:  /,""); print; exit} $0==d{p=1}' <<<"$out")
+    path="/dev/disk/by-id/${dev}"
     a=0; s=0; sl=0; u=0
-    case "$state" in
-      "active/idle") a=1 ;;
-      "standby")     s=1 ;;
-      "sleeping")    sl=1 ;;
-      *)             u=1 ;;
-    esac
+    # Per-device call so a single bad drive (missing by-id symlink after
+    # a disk replacement, transient SATA-link drop) only collapses its
+    # own chart to unknown=1 — not every drive in the list. The previous
+    # batch form short-circuited at hdparm's first per-drive failure.
+    if [ -e "$path" ] && state=$(hdparm -C "$path" 2>/dev/null | awk '/^ drive state is:/{sub(/^ drive state is:  /,""); print; exit}'); then
+      case "$state" in
+        "active/idle") a=1 ;;
+        "standby")     s=1 ;;
+        "sleeping")    sl=1 ;;
+        *)             u=1 ;;
+      esac
+    else
+      u=1
+    fi
     cat <<EOF
 BEGIN hdparm.${safe} ${1}
 SET active = $a
