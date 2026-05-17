@@ -105,7 +105,6 @@
   loop:
     - /mnt/scratch/sonarr
     - /mnt/scratch/radarr
-    - /mnt/scratch/headphones
     - /mnt/scratch/lidarr
 
 - name: Configure sabnzbd
