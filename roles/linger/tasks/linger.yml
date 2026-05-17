@@ -1,8 +1,15 @@
 # Inputs: caller passes a single dict `linger_args` with keys
-#   name  required; user account to linger
-#   uid   required; the user's uid (caller resolves; for ansible_user
-#         pass `ansible_user_uid`, for service_user-created accounts
-#         pass `<svc>_user.uid`)
+#   name  required; user account to linger (for the ansible SSH user
+#         pass `ansible_user_id`, for service_user-created accounts
+#         pass the literal name)
+#   uid   required; the user's uid (caller resolves; for the ansible
+#         SSH user pass `ansible_user_uid`, for service_user-created
+#         accounts pass `<svc>_user.uid`)
+#
+# Use the gathered facts (`ansible_user_id` / `ansible_user_uid`), not
+# `ansible_user` — the latter is set by the connection plugin and isn't
+# present in the template context when `vars:` on `import_role` is
+# evaluated, which trips a "'ansible_user' is undefined" warning.
 #
 # Does:
 #   1. loginctl enable-linger <name>, gated on the linger sentinel so
