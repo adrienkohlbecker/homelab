@@ -94,8 +94,8 @@ ExecStart=/usr/bin/podman run \
 {# silent. pi.hole isn't in /etc/hosts so nss falls through to             #}
 {# nameserver 127.0.0.1 — same query target as before. See                 #}
 {# containers/podman#18904 for the upstream seccomp story.                 #}
-    --health-cmd         "getent hosts pi.hole || exit 1" \
-    --health-startup-cmd "getent hosts pi.hole || exit 1" \
+    --health-cmd         '["getent","hosts","pi.hole"]' \
+    --health-startup-cmd '["getent","hosts","pi.hole"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \

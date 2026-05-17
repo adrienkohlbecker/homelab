@@ -211,8 +211,8 @@ ExecStart=/usr/bin/podman run \
   --env DOCKER_HOST=unix:///var/run/docker.sock \
   --env RUNNER_WORK_FOLDER=/mnt/scratch/github_runner/workdir_%i \
   --secret github_runner_pat,type=mount,target=/run/secrets/github_pat \
-  --health-cmd         "pgrep -f Runner.Listener >/dev/null" \
-  --health-startup-cmd "pgrep -f Runner.Listener >/dev/null" \
+  --health-cmd         '["pgrep","--count","--full","Runner.Listener"]' \
+  --health-startup-cmd '["pgrep","--count","--full","Runner.Listener"]' \
   --health-startup-interval "1s" \
   --health-startup-timeout "5s" \
   --health-start-period "30s" \
