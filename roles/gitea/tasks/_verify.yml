@@ -17,9 +17,12 @@
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/version
     status_code: 200
   register: _verify_version
+  # Substring-match would let pin 1.26.1 be satisfied by 1.26.10. Strip
+  # any `+build` metadata (gitea returns `1.26.1+gitea-dev` for non-
+  # release builds) and equate exactly.
   failed_when: >-
     _verify_version.json.version is not defined
-    or gitea_version not in _verify_version.json.version
+    or _verify_version.json.version.split('+')[0] != gitea_version
 
 # Reverse-proxy chain probe -- a typo'd subdomain or broken
 # nginx_site_args would pass the loopback probe above silently.

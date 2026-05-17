@@ -7,7 +7,10 @@
   command: gitea-runner --version
   register: _verify_version
   changed_when: false
-  failed_when: gitea_runner_version not in _verify_version.stdout
+  # Substring-match would let pin 1.0.3 be satisfied by 1.0.30. regex_search
+  # extracts the first semver-shaped token from `gitea-runner version X.Y.Z`
+  # and equates it exactly.
+  failed_when: (_verify_version.stdout | regex_search('\d+\.\d+\.\d+')) != gitea_runner_version
   become: true
 
 - name: _verify | gitea_runner config file exists
