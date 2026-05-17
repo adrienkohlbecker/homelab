@@ -10,11 +10,13 @@
 # `hdparm -C` issues raw ATA pass-through ioctls (HDIO_DRIVE_CMD /
 # SG_IO with ATA_OP_CHECKPOWERMODE1), which the kernel gates on
 # CAP_SYS_RAWIO. The Debian package ships /sbin/hdparm 0755 with no
-# setuid and no file capability, so the netdata user (which runs the
-# charts.d collector) cannot read power state — every drive reports
-# `unknown=1` and hdparm_drive_unknown fires permanently. The
-# capability is reset by an apt upgrade of the hdparm package, so this
-# task re-applies on every play.
+# setuid and no file capability, so non-root users would fail the
+# ioctl with EPERM. The cap is reset by an apt upgrade of the hdparm
+# package, so this task re-applies on every play.
+#
+# Note: CAP_SYS_RAWIO covers the ioctl but NOT the file open. Opening
+# /dev/sdX (mode 660 root:disk) still requires the disk group, which
+# netdata picks up via tasks/netdata.yml's user task.
 - name: Grant hdparm CAP_SYS_RAWIO
   when: not (ansible_check_mode and hdparm_apt.changed)
   community.general.capabilities:
