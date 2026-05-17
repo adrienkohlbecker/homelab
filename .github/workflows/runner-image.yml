@@ -75,7 +75,6 @@ jobs:
             --pull=newer \
             --layers \
             --cache-from "${REGISTRY}/${REPO}" \
-            --cgroup-manager=cgroupfs \
             --iidfile "$iidfile" \
             -f runner/Dockerfile \
             "${tags[@]}" \

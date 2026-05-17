@@ -115,7 +115,6 @@ jobs:
             --pull=newer \
             --layers \
             --cache-from "${REGISTRY}/${REPO}" \
-            --cgroup-manager=cgroupfs \
             --secret id=mise_github_token,env=MISE_GITHUB_TOKEN \
             --iidfile "$iidfile" \
             "${tags[@]}" \
