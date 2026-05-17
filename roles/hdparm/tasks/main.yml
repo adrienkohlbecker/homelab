@@ -43,14 +43,17 @@
   tags:
     - hdparm
 
-- name: Ask to reboot
+# `/etc/hdparm.conf` is re-read on every block-device udev event by
+# /lib/udev/hdparm (and pm-utils' 95hdparm-apm), so triggering a
+# change action on the block subsystem re-applies the config without
+# a reboot. The small subset of directives that aren't re-negotiable
+# on a live device (`-X transfer_mode`, `-c io32_support`) still
+# needs a reboot — operator's call today since hdparm_settings is
+# empty on every host; revisit if anyone starts setting those.
+- name: Re-apply hdparm.conf via udev
   when: hdparm_conf.changed
-  file:
-    path: /var/run/reboot-required
-    state: touch
-    owner: root
-    group: root
-    mode: "0644"
+  command: udevadm trigger --action=change --subsystem-match=block
   become: true
+  changed_when: true
   tags:
     - hdparm
