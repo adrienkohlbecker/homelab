@@ -38,6 +38,5 @@
     netdata_args:
       src: hdparm_alerts.conf
       dest: hdparm.conf
-      mode: "0600"
   tags:
     - hdparm
