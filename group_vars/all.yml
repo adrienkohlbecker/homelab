@@ -63,6 +63,10 @@ service_ports:
   csp_ingest: 9880
   dnscrypt_proxy: 5053
   eaton_ipp: 4680
+  # fan2go's upstream default is 9001 but that collides with the
+  # minio console on the same hosts. fan2go's API + the fan2go-tui
+  # config both pull from this single value.
+  fan2go_api: 9919
   fluentbit: 2020
   gitea: 3000
   healthchecks: 8000
