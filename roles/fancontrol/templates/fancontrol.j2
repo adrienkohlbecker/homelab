@@ -1,3 +1,4 @@
+#jinja2: trim_blocks: False
 # {{ ansible_managed }} -- source: host_vars/<host>.yml:fancontrol_settings
 {% macro hp(spec) -%}
 {{ fancontrol_chip_map[spec.split('/')[0]].hwmon }}/{{ spec.split('/')[1] }}
