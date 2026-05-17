@@ -126,20 +126,30 @@ function flatten_csp(tag, ts, group, metadata, record)
         return 1, ts, metadata, { log = "csplogger received malformed POST" }
     end
 
-    local blocked     = scrub(strip_url_meta(pick(r, "blocked-uri", "blockedURL")))
-    local document    = scrub(strip_url_meta(pick(r, "document-uri", "documentURL")))
-    local violated    = scrub(pick(r, "violated-directive", "violatedDirective",
-                                       "effective-directive", "effectiveDirective"))
-    local effective   = scrub(pick(r, "effective-directive", "effectiveDirective",
-                                       "violated-directive", "violatedDirective"))
-    local policy      = scrub(pick(r, "original-policy", "originalPolicy"))
-    local disposition = scrub(pick(r, "disposition"))
-    local referrer    = scrub(strip_url_meta(pick(r, "referrer")))
-    local source_file = scrub(strip_url_meta(pick(r, "source-file", "sourceFile")))
-    local sample      = scrub(pick(r, "script-sample", "sample"))
-    local line_no     = pick(r, "line-number", "lineNumber")
-    local col_no      = pick(r, "column-number", "columnNumber")
-    local status_code = pick(r, "status-code", "statusCode")
+    -- One-shot key-normalize: collapse camelCase reporting-api keys
+    -- onto the legacy kebab-case form by inserting `-` at every
+    -- lower-upper boundary, then lowercasing. After this pass,
+    -- `violatedDirective`/`violated-directive` both land under
+    -- "violated-directive"; the URL picks below still list two
+    -- variants because legacy uses -uri and reporting-api uses -url,
+    -- which is a real name difference, not just case.
+    local n = {}
+    for k, v in pairs(r) do
+        n[k:gsub("([a-z])([A-Z])", "%1-%2"):lower()] = v
+    end
+
+    local blocked     = scrub(strip_url_meta(pick(n, "blocked-uri", "blocked-url")))
+    local document    = scrub(strip_url_meta(pick(n, "document-uri", "document-url")))
+    local violated    = scrub(pick(n, "violated-directive", "effective-directive"))
+    local effective   = scrub(pick(n, "effective-directive", "violated-directive"))
+    local policy      = scrub(pick(n, "original-policy"))
+    local disposition = scrub(pick(n, "disposition"))
+    local referrer    = scrub(strip_url_meta(pick(n, "referrer")))
+    local source_file = scrub(strip_url_meta(pick(n, "source-file")))
+    local sample      = scrub(pick(n, "script-sample", "sample"))
+    local line_no     = pick(n, "line-number")
+    local col_no      = pick(n, "column-number")
+    local status_code = pick(n, "status-code")
 
     -- Build LogAttributes as a structured key-value map. Goes through
     -- fluent-bit's OTLP output as metadata.otlp.attributes, landing as
