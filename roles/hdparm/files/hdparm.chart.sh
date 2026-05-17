@@ -30,11 +30,10 @@ hdparm_check() {
     error "hdparm: 'hdparm' binary missing"
     return 1
   }
-  [ "${#hdparm_disks[@]}" -gt 0 ] || {
-    # Quietly skip rather than error -- hosts with no rotational disks
-    # legitimately ship an empty list (box, mac dev VMs).
-    return 1
-  }
+  # Hosts with no rotational disks legitimately ship an empty list
+  # (box, cloud VMs). Return 0 so charts.d.plugin doesn't log
+  # "module disabled" at startup; hdparm_update()'s for-loop
+  # naturally no-ops on the empty array.
   return 0
 }
 
