@@ -76,7 +76,7 @@
             fancontrol_chip_map | default({}) | combine({
               (item.1.content | b64decode | trim): {
                 "hwmon": item.0.path | basename,
-                "devpath": item.2.stdout | regex_replace('^/sys/(.*)/hwmon/hwmon[0-9]+$', '\\1'),
+                "devpath": item.2.stdout | regex_replace('^/sys/(.*?)(?:/hwmon)?/hwmon[0-9]+$', '\\1'),
               }
             })
           }}
@@ -84,11 +84,14 @@
       loop_control:
         label: "{{ item.1.content | b64decode | trim }}"
 
-    # The DEVPATH regex assumes /sys/<devpath>/hwmon/hwmonN; on a chip
-    # whose readlink target deviates (virtual hwmons, future kernel
-    # subsystems, etc.) regex_replace returns the input unchanged, and
-    # /etc/fancontrol would silently carry an unstripped DEVPATH=. Fail
-    # loudly here instead of letting the daemon misroute on next start.
+    # Two known DEVPATH layouts: legacy hwmon-classpath chips (nct6798,
+    # drivetemp) live at /sys/.../device/hwmon/hwmonN with an
+    # intermediate /hwmon/ dir; subsystem-native chips (nvme) live at
+    # /sys/.../device/hwmonN directly. The optional (?:/hwmon)? in the
+    # regex strips either. On a chip whose readlink target deviates
+    # from both, regex_replace returns the input unchanged and
+    # /etc/fancontrol would silently carry an unstripped DEVPATH=.
+    # Fail loudly here instead of letting the daemon misroute at start.
     - name: Assert hwmon DEVPATH regex matched on every discovered chip
       assert:
         that: not (item.value.devpath | regex_search('^/sys/'))
