@@ -32,7 +32,7 @@
   file:
     dest: "{{ item }}"
     state: directory
-    owner: "{{ ansible_user }}"
+    owner: "{{ ansible_user_id }}"
     group: media
     mode: "0775"
   become: true

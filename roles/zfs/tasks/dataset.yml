@@ -6,8 +6,8 @@
 #                       import_role vars (e.g. tank/brumath)
 #   mountpoint          mountpoint (e.g. /mnt/brumath)
 #   extra_properties    optional dict of extra zfs properties to set
-#   owner               optional mountpoint dir owner (default: ansible_user)
-#   group               optional mountpoint dir group (default: ansible_user)
+#   owner               optional mountpoint dir owner (default: ansible_user_id)
+#   group               optional mountpoint dir group (default: ansible_user_id)
 #   mode                optional mountpoint dir mode (default: "0755")
 #
 # The dict form prevents inter-call leakage at play-vars scope: each
@@ -38,8 +38,8 @@
       file:
         dest: '{{ zfs_dataset_args.mountpoint }}'
         state: directory
-        owner: "{{ zfs_dataset_args.owner | default(ansible_user) }}"
-        group: "{{ zfs_dataset_args.group | default(ansible_user) }}"
+        owner: "{{ zfs_dataset_args.owner | default(ansible_user_id) }}"
+        group: "{{ zfs_dataset_args.group | default(ansible_user_id) }}"
         mode: "{{ zfs_dataset_args.mode | default('0755') }}"
       become: true
 

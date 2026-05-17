@@ -1,5 +1,5 @@
-# Runtime identity is ansible_user — the human reading the mail.
-# Implemented as a system-scope timer with User=ansible_user in the
+# Runtime identity is ansible_user_id — the human reading the mail.
+# Implemented as a system-scope timer with User=ansible_user_id in the
 # service unit (via systemd_timer's run_as arg) rather than a
 # user-scope timer: every operation works via regular
 # systemctl/journalctl, netdata's systemdunits collector sees the
@@ -22,8 +22,8 @@
   file:
     dest: "{{ item }}"
     state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
     mode: "0700"
   become: true
   loop:
@@ -43,8 +43,8 @@
   file:
     path: /mnt/services/getmail/messages.log
     state: touch
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
     mode: "0600"
     modification_time: preserve
     access_time: preserve
@@ -59,8 +59,8 @@
   template:
     src: getmailrc.j2
     dest: /mnt/services/getmail/getmailrc
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
     mode: "0600"
     backup: true
     # Real parser (semantic shape, not just INI well-formedness) and
@@ -96,7 +96,7 @@
         /usr/bin/getmail
         --rcfile /mnt/services/getmail/getmailrc
         --getmaildir /mnt/services/getmail
-      run_as: "{{ ansible_user }}"
+      run_as: "{{ ansible_user_id }}"
       timeout_start_sec: 15m
   tags:
     - getmail
