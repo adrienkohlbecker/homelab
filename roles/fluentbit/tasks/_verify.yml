@@ -606,6 +606,86 @@
       - "fluentbit_otlp_podman_marker in row.Body"
     fail_msg: "unnamed-container record did not hit libpod-conmon fallback: {{ row }}"
 
+# podman_healthcheck override: podman runs each scheduled healthcheck
+# as `systemd-run --unit=<container-id>` where the unit name is the
+# full 64-char container ID + ".service". PID 1 emits "Started",
+# "Deactivated successfully" and on failure "Failed with result
+# 'exit-code'" — tagged with UNIT=<64hex>.service in the journal but
+# _SYSTEMD_UNIT=init.scope (PID 1's cgroup) and SYSLOG_IDENTIFIER=systemd.
+# otlp_shape.lua keys on the UNIT field and rewrites to
+# ServiceName=podman_healthcheck + stamps CONTAINER_ID_FULL/SHORT so
+# HyperDX can pivot to the container's own application logs (which
+# podman's journald log driver tags with the same CONTAINER_ID_FULL).
+# Spoof a real healthcheck by minting a fake 64-hex unit name and
+# letting a transient unit exit non-zero; PID 1 emits the same shape.
+- name: _verify | podman_healthcheck | build per-run marker
+  set_fact:
+    fluentbit_otlp_healthcheck_marker: "verify_healthcheck_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+
+# SHA-256 of the marker is a unique 64-char lowercase hex string —
+# the exact shape podman uses for container IDs.
+- name: _verify | podman_healthcheck | derive fake 64-hex container id
+  set_fact:
+    fluentbit_otlp_healthcheck_cid: "{{ fluentbit_otlp_healthcheck_marker | hash('sha256') }}"
+
+# Default systemd-run is async-start: returns 0 after the unit launches,
+# the unit then exits 1 and PID 1 logs "Failed with result 'exit-code'."
+- name: _verify | podman_healthcheck | run failing transient unit named like a container id
+  command: >-
+    systemd-run --unit={{ fluentbit_otlp_healthcheck_cid }}.service
+    --quiet
+    /bin/sh -c "exit 1"
+  changed_when: false
+  become: true
+
+- name: _verify | podman_healthcheck | wait for ClickHouse row matching cid
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query_wait
+  vars:
+    _test_args:
+      label: "podman_healthcheck | wait for row"
+      sql: >-
+        SELECT count() FROM default.otel_logs
+        WHERE LogAttributes['CONTAINER_ID_FULL'] = '{{ fluentbit_otlp_healthcheck_cid }}'
+          AND ServiceName = 'podman_healthcheck'
+      retries: 30
+      delay: 2
+      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+
+- name: _verify | podman_healthcheck | fetch row
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query
+  vars:
+    _test_args:
+      label: "podman_healthcheck | fetch"
+      sql: >-
+        SELECT
+          Body,
+          ServiceName,
+          LogAttributes['CONTAINER_ID_FULL'] AS container_id_full,
+          LogAttributes['CONTAINER_ID']      AS container_id_short,
+          LogAttributes['UNIT']              AS unit_field
+        FROM default.otel_logs
+        WHERE LogAttributes['CONTAINER_ID_FULL'] = '{{ fluentbit_otlp_healthcheck_cid }}'
+          AND ServiceName = 'podman_healthcheck'
+        ORDER BY Timestamp DESC
+        LIMIT 1
+        FORMAT JSONEachRow
+
+- name: _verify | podman_healthcheck | assert rewrite shape
+  vars:
+    row: "{{ _test_clickhouse_result.stdout | from_json }}"
+  assert:
+    that:
+      - "row.ServiceName == 'podman_healthcheck'"
+      - "row.container_id_full == fluentbit_otlp_healthcheck_cid"
+      - "row.container_id_short == fluentbit_otlp_healthcheck_cid[:12]"
+      - "row.unit_field == fluentbit_otlp_healthcheck_cid ~ '.service'"
+      - "fluentbit_otlp_healthcheck_cid in row.Body"
+    fail_msg: "podman_healthcheck rewrite did not fire: {{ row }}"
+
 # No probe for the svc.<empty> -> SYSLOG_IDENTIFIER fallback branch:
 # the path covers records that reach journald with _TRANSPORT=kernel
 # and no _SYSTEMD_UNIT (nftables LOG target, MCE, oom-killer, audit),
