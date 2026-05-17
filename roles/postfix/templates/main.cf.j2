@@ -48,10 +48,8 @@ smtp_sasl_auth_enable = yes
 smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
 smtp_sasl_security_options = noanonymous
 smtp_sasl_tls_security_options = noanonymous
-smtp_tls_security_level = encrypt
+smtp_tls_security_level = {{ 'encrypt' if (smtp_use_ssl | bool or smtp_use_tls | bool) else 'none' }}
+smtp_tls_wrappermode = {{ 'yes' if smtp_use_ssl | bool else 'no' }}
 header_size_limit = 4096000
-
-# use STARTTLS for encryption
-smtp_use_tls = yes
 
 notify_classes = resource, software, protocol, policy, bounce, data
