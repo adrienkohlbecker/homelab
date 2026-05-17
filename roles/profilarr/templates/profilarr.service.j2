@@ -40,7 +40,7 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="profilarr" \
     --env PUID={{ profilarr_user.uid }} \
     --env PGID={{ profilarr_user.group }} \
-    --env TZ=Europe/Paris \
+    --env TZ={{ system_timezone }} \
     --volume /mnt/services/profilarr:/config \
     --volume /mnt/services/sqlite/profilarr:/mnt/services/sqlite/profilarr \
     --publish 127.0.0.1:6868:6868/tcp \
