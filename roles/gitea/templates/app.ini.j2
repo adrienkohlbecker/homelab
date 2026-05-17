@@ -56,6 +56,7 @@ PATH = /mnt/services/gitea/data/lfs
 
 [mailer]
 ENABLED = true
+PROTOCOL = {{ 'smtps' if smtp_use_ssl | bool else ('smtp+starttls' if smtp_use_tls | bool else 'smtp') }}
 SMTP_ADDR = {{ smtp_host }}
 SMTP_PORT = {{ smtp_port }}
 FROM = {{ gitea_smtp_from }}
