@@ -83,7 +83,12 @@
     nginx_site_args:
       condition: '{{ ansible_architecture == "x86_64" }}'
       subdomain: ipp
-      proxy_pass: http://localhost:{{ service_ports.eaton_ipp }}/
+      # The HTTP listener on 4679 unconditionally 301-redirects to
+      # https://<host>:4680/, so proxying through it just bounces every
+      # request back at the browser. Front the HTTPS listener directly;
+      # the self-signed loopback cert is fine since we're on lo and the
+      # site-template's proxy_ssl_server_name handles SNI.
+      proxy_pass: https://localhost:{{ service_ports.eaton_ipp }}/
       location_conf: |
         # By default the header name is lowercase, and this app expects it in capitalized form, otherwise we can't login.
         proxy_set_header Content-Type      $content_type;
