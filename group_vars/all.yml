@@ -45,6 +45,11 @@ nginx_csp_default: "data: blob: 'unsafe-inline' 'unsafe-eval' 'self'"
 root_email: adrien.kohlbecker@gmail.com
 smtp_host: smtp.eu.mailgun.org
 smtp_port: 587
+# SMTPS on 465: TLS from connect. STARTTLS on 587-ish: cleartext
+# then upgrade. Plain on 25: no encryption at all. Override the
+# pair per-host if you need a non-standard combination.
+smtp_use_ssl: "{{ smtp_port | int == 465 }}"
+smtp_use_tls: "{{ smtp_port | int not in [25, 465] }}"
 email_domain: noreply.{{ domain }}
 
 # User-facing timezone for podman service containers. Host clock
