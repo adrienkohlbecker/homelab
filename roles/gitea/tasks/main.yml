@@ -15,6 +15,20 @@
   tags:
     - gitea
 
+# Gitea shells out to `git` for repo operations. In prod git is also
+# installed by roles/user (Base installation phase) so this is usually
+# a no-op, but installing here makes the role self-contained and
+# removes a load-bearing-but-implicit dep on the order of roles in
+# site.yml.
+- name: Install git
+  apt:
+    name: git
+    install_recommends: false
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - gitea
+
 # name: git (not gitea) because upstream gitea expects clone URLs of the
 # form `git@<host>:<owner>/<repo>.git`. config_dir: false because the
 # config tree lives at /mnt/services/gitea, not /mnt/services/git -- the
