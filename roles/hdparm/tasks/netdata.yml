@@ -11,7 +11,13 @@
 # in `lsblk` but N-1 in netdata isn't a mystery.
 - name: Detect rotational drives missing /dev/disk/by-id symlinks
   vars:
-    _rot_no_id: "{{ ansible_devices | dict2items | selectattr('value.rotational', 'equalto', '1') | rejectattr('value.links.ids') | map(attribute='key') | list }}"
+    # Mirror group_vars/all.yml's rotational_disks_by_id filter chain
+    # so a drive correctly excluded by the master selector (USB-
+    # removable target, kernel pseudo-block-device) isn't loudly
+    # flagged here as "dropped from hdparm". Diverges only on the
+    # `links.ids` axis (reject vs select) -- that's the whole point
+    # of the diagnostic.
+    _rot_no_id: "{{ ansible_devices | dict2items | rejectattr('key', 'match', '^(md|dm-|loop|sr|ram|zd)') | selectattr('value.rotational', 'equalto', '1') | selectattr('value.removable', 'equalto', '0') | rejectattr('value.links.ids') | map(attribute='key') | list }}"
   debug:
     msg: "Rotational drives dropped from hdparm collector (no /dev/disk/by-id symlink): {{ _rot_no_id }}"
   when: _rot_no_id | length > 0
