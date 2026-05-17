@@ -1,6 +1,6 @@
-# Loopback probe -- confirms gitea is serving. The systemd unit's
-# ExecStartPost already gates "active" on this endpoint, so the
-# retries here are mostly belt-and-suspenders.
+# Loopback probe -- confirms gitea is serving. Type=notify already gates
+# "active" on the HTTP listener being bound, so the retries here are
+# mostly belt-and-suspenders for slow-cold-DB cases.
 - name: _verify | gitea answers /api/healthz on loopback
   uri:
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/healthz
@@ -32,8 +32,8 @@
     status_code: 200
 
 # Confirms gitea actually opened the sqlite db at the path we configured
-# -- a permissions/mount regression on /mnt/services/sqlite/gitea/
-# would land here as "no such file" with a unit still active.
+# -- a permissions/mount regression on /mnt/services/sqlite/gitea/ would
+# land here as "no such file" with a unit still active.
 - name: _verify | gitea sqlite database exists and is owned by git
   stat:
     path: /mnt/services/sqlite/gitea/gitea.db
@@ -42,3 +42,103 @@
     not _verify_sqlite.stat.exists
     or _verify_sqlite.stat.pw_name != 'git'
   become: true
+
+# Functional git roundtrip: confirms the HTTP basic-auth path, git over
+# HTTP, sqlite write path, and on-disk repo creation all work end-to-
+# end. State checks above can pass on a build that is "running but not
+# functional"; this is the smoke test that actually does the job.
+# (gitea doctor would add db/path/storage self-checks but its paths
+# check requires Log.RootPath + Repository.ROOT to pre-exist as
+# writable dirs, which the role intentionally doesn't create -- it
+# stays a manual diagnostic tool.)
+- name: _verify | wipe any prior throwaway clone directory
+  file:
+    path: /tmp/gitea_verify_clone
+    state: absent
+
+- name: _verify | create throwaway admin user
+  command: >-
+    /usr/local/bin/gitea admin user create
+    --username verify --password ChangeMe-Verify-1234
+    --email verify@verify.invalid --admin --must-change-password=false
+    --config /etc/gitea/app.ini
+  environment:
+    GITEA_WORK_DIR: /mnt/services/gitea
+  become: true
+  become_user: git
+  register: _verify_user_create
+  changed_when: _verify_user_create.rc == 0
+  failed_when: >-
+    _verify_user_create.rc != 0
+    and "already exists" not in _verify_user_create.stderr
+  no_log: true
+
+# gitea 1.26+ rejects HTTP basic auth for /api/v1/* with "token is
+# required" -- need a real access token. --raw prints just the token
+# (no preamble) so capture is one filter. Token-name embeds epoch so
+# --keep re-runs don't collide with the "name already used" check.
+- name: _verify | generate an access token for the throwaway user
+  command: >-
+    /usr/local/bin/gitea admin user generate-access-token
+    --username verify
+    --token-name verify_{{ ansible_date_time.epoch }}
+    --scopes all --raw
+    --config /etc/gitea/app.ini
+  environment:
+    GITEA_WORK_DIR: /mnt/services/gitea
+  become: true
+  become_user: git
+  register: _verify_token
+  changed_when: false
+  no_log: true
+
+# Status 201 on first run, 409 on a --keep re-run.
+- name: _verify | create a throwaway repo via API
+  uri:
+    url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/user/repos
+    method: POST
+    headers:
+      Authorization: "token {{ _verify_token.stdout | trim }}"
+    body_format: json
+    body:
+      name: functional_test
+      auto_init: true
+      default_branch: main
+    status_code: [ 201, 409 ]
+  no_log: true
+
+- name: _verify | git clone the throwaway repo over HTTP
+  git:
+    repo: "http://verify:{{ _verify_token.stdout | trim }}@127.0.0.1:{{ service_ports.gitea }}/verify/functional_test.git"
+    dest: /tmp/gitea_verify_clone
+  environment:
+    GIT_TERMINAL_PROMPT: "0"
+  no_log: true
+
+# Commit + push exercises the receive-pack path, which writes through
+# gitea -> on-disk repo + sqlite -- the same path a real developer hits.
+- name: _verify | commit and push a stamp
+  shell: |
+    set -euo pipefail
+    cd /tmp/gitea_verify_clone
+    git config user.email verify@verify.invalid
+    git config user.name verify
+    date +%s > stamp.txt
+    git add stamp.txt
+    git commit -m "verify functional test stamp"
+    git push origin main
+  args:
+    executable: /bin/bash
+  environment:
+    GIT_TERMINAL_PROMPT: "0"
+  register: _verify_push
+  changed_when: true
+  no_log: true
+
+- name: _verify | confirm pushed file is fetchable through the API
+  uri:
+    url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/repos/verify/functional_test/contents/stamp.txt
+    headers:
+      Authorization: "token {{ _verify_token.stdout | trim }}"
+    status_code: 200
+  no_log: true
