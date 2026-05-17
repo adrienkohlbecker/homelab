@@ -198,6 +198,7 @@ samba_password: changeme
 gmail_app_password: changeme
 postgres_password: changeme
 healthchecks_password: changeme
+healthchecks_secret_key: changeme-changeme-changeme-changeme-changeme-chang
 healthchecks_smtp_user: changeme
 healthchecks_smtp_from: changeme
 healthchecks_smtp_password: changeme
