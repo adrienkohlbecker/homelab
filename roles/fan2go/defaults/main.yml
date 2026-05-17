@@ -1,0 +1,5 @@
+# Per-host opt-in. When true, the role expects a hand-written
+# roles/fan2go/files/{{ inventory_hostname }}.yaml and installs it
+# verbatim as /etc/fan2go/fan2go.yaml. When false (default), the role
+# is a complete no-op (no binary install, no service unit, no config).
+fan2go_enabled: false

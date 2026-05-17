@@ -1,0 +1,72 @@
+# fan2go config for pug. Ported from the old fancontrol_settings in
+# host_vars/pug.yml. Two fans: CHA_FAN_2 follows nct6798 temp1; CHA_FAN_1
+# follows the hotter of pug's rotational HDDs (high startPwm=120 because
+# that fan stalls below it).
+#
+# Rotational disks are pulled from group_vars/all.yml:rotational_disks_by_id
+# (computed at apply time from ansible_devices) and aggregated via a
+# max-function curve. Same rationale as lab.yaml.j2 -- "platform: drivetemp"
+# binds to whichever drivetemp libsensors enumerates first.
+
+dbPath: /var/lib/fan2go/fan2go.db
+
+# fan2go-tui (interactive, ssh-in-and-run) talks to the daemon over
+# this loopback HTTP API. Port pinned from
+# group_vars/all.yml:service_ports.fan2go_api; the matching tui side
+# lives in roles/fan2go/templates/fan2go-tui.yaml.j2.
+api:
+  enabled: true
+  host: 127.0.0.1
+  port: {{ service_ports.fan2go_api }}
+
+fans:
+  - id: cha_fan_2
+    hwmon:
+      platform: nct6798
+      rpmChannel: 3
+      pwmChannel: 3
+    curve: nct_curve
+    startPwm: 40
+    minPwm: 10
+
+  - id: cha_fan_1_hdd
+    hwmon:
+      platform: nct6798
+      rpmChannel: 2
+      pwmChannel: 2
+    curve: hdd_curve
+    startPwm: 120
+    minPwm: 90
+
+sensors:
+  - id: nct6798_temp1
+    hwmon:
+      platform: nct6798
+      index: 1
+{% for disk in rotational_disks_by_id %}
+  - id: hdd_{{ loop.index }}_temp
+    disk:
+      device: /dev/disk/by-id/{{ disk }}
+{% endfor %}
+
+curves:
+  - id: nct_curve
+    linear:
+      sensor: nct6798_temp1
+      min: 40
+      max: 60
+{% for disk in rotational_disks_by_id %}
+  - id: hdd_{{ loop.index }}_curve
+    linear:
+      sensor: hdd_{{ loop.index }}_temp
+      min: 40
+      max: 55
+{% endfor %}
+
+  - id: hdd_curve
+    function:
+      type: maximum
+      curves:
+{% for disk in rotational_disks_by_id %}
+        - hdd_{{ loop.index }}_curve
+{% endfor %}
