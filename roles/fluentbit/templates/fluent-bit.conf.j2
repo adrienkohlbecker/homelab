@@ -115,6 +115,18 @@
     storage.type      filesystem
     storage.pause_on_chunks_overlimit  on
 
+# keepalived emits "Printing VRRP as json for process(N) on signal" at
+# LOG_INFO every time keepalived_exporter scrapes it (default ~30s ->
+# ~3k records/day/host of pure exporter chatter). Hardcoded in keepalived
+# with no upstream toggle; drop here so it doesn't reach HyperDX. The
+# line still lands in journald and /var/log/syslog -- `journalctl -u
+# keepalived` is the source of truth if you ever need to confirm the
+# exporter is alive.
+[FILTER]
+    Name              grep
+    Match             svc.*
+    Exclude           MESSAGE ^Printing VRRP as json for process
+
 # Join python / go / java / ruby tracebacks into a single record per
 # stack so HyperDX doesn't scatter the frames across 10+ rows. Records
 # arrive pre-partitioned by systemd unit (the input's Tag svc.* wildcard
