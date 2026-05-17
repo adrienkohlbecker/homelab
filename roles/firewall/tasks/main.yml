@@ -304,6 +304,36 @@
   tags:
     - firewall
 
+# Dynamically attach wg0 to the homelab `bulk` flowtable. Kept out of
+# the static `devices = { ... }` clause in nftables.conf so the firewall
+# can come up at boot before wg-quick@wg0 brings the iface up (nft
+# errors out with ENOENT when a flowtable device doesn't exist yet,
+# which previously left the host without a firewall on every boot until
+# manual restart). The unit's lifecycle is bound to wg-quick@wg0 via
+# WantedBy/PartOf, and nftables.service's ExecReload drop-in re-runs it
+# after a reload wipes the runtime flowtable. See the unit-file header
+# for the BindsTo-vs-WantedBy rationale.
+- name: Install wg0_flowtable.service
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: wg0_flowtable.service
+  tags:
+    - firewall
+
+- name: Apply wg0_flowtable.service lifecycle
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: wg0_flowtable.service
+      restart: "{{ wg0_flowtable_service_result.changed | default(false) }}"
+  tags:
+    - firewall
+
 # Enforce the "host is never without a firewall" invariant: refuse to
 # purge ufw or remove iptables-nft unless nftables.service is actually
 # active. Without this gate, a future tag-limited or check-mode run
