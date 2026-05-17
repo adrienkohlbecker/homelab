@@ -21,7 +21,7 @@ PartOf=zfs_autosnapshot.target
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
-TimeoutSec=120
+TimeoutSec=60
 RestartSec=5
 Type=notify
 # Has to be `all`, not `main`. With --detach below podman exits as soon as
@@ -56,6 +56,10 @@ ExecStart=/usr/bin/podman run \
     --env RP_ID=healthchecks.{{ inventory_hostname }}.{{ domain }} \
     --env SITE_ROOT=https://healthchecks.{{ inventory_hostname }}.{{ domain }} \
     --env ALLOWED_HOSTS=healthchecks.{{ inventory_hostname }}.{{ domain }},localhost \
+    --env REGISTRATION_OPEN=False \
+    --env SECURE_PROXY_SSL_HEADER="X-Forwarded-Proto,https" \
+    --env CSRF_TRUSTED_ORIGINS=https://healthchecks.{{ inventory_hostname }}.{{ domain }} \
+    --env TZ={{ system_timezone }} \
     --env SITE_NAME=Healthchecks \
     --env ADMINS={{ root_email }} \
     --env SUPERUSER_EMAIL={{ root_email }} \
@@ -77,7 +81,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-cmd "curl --head --request GET --location --fail --silent --show-error --connect-timeout 1 --max-time 5 -o /dev/null http://localhost:8000/" \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
-    --health-start-period "30s" \
+    --health-start-period "10s" \
     --stop-timeout 30 \
     docker.io/linuxserver/healthchecks:4.2.20260428
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
