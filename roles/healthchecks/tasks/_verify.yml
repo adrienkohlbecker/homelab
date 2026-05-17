@@ -1,0 +1,77 @@
+- name: _verify | healthchecks user exists
+  command: getent passwd healthchecks
+  changed_when: false
+  become: true
+
+- name: _verify | healthchecks config dir exists with right ownership
+  stat:
+    path: /mnt/services/healthchecks
+  register: _verify_config_dir
+  failed_when: >-
+    not _verify_config_dir.stat.exists
+    or _verify_config_dir.stat.pw_name != 'healthchecks'
+  become: true
+
+- name: _verify | healthchecks sqlite dir exists with right ownership
+  stat:
+    path: /mnt/services/sqlite/healthchecks
+  register: _verify_sqlite_dir
+  failed_when: >-
+    not _verify_sqlite_dir.stat.exists
+    or _verify_sqlite_dir.stat.pw_name != 'healthchecks'
+  become: true
+
+- name: _verify | healthchecks.service is loaded and active
+  systemd:
+    name: healthchecks
+  register: _verify_unit
+  failed_when: >-
+    _verify_unit.status.LoadState != "loaded"
+    or _verify_unit.status.ActiveState != "active"
+  become: true
+
+# Loopback probe -- exercises the container directly via the published
+# port. Retries cover cold-start (--health-start-period is 10s; budget
+# below gives 2 minutes to cover restart-after-deploy too). Uses the
+# canonical Host header since ALLOWED_HOSTS no longer includes localhost.
+- name: _verify | healthchecks answers /api/v3/status/ on its loopback port
+  uri:
+    url: http://localhost:{{ service_ports.healthchecks }}/api/v3/status/
+    headers:
+      Host: healthchecks.{{ inventory_hostname }}.{{ domain }}
+    status_code: 200
+    return_content: true
+  register: _verify_loopback
+  retries: 60
+  delay: 2
+  until:
+    - _verify_loopback.status == 200
+    - "'ok' in _verify_loopback.content"
+  become: true
+
+# nginx Host-header probe -- exercises the full reverse-proxy chain so
+# a typo in nginx_site_args / proxy_pass fails here too. Also confirms
+# SECURE_PROXY_SSL_HEADER wiring: the status JSON renders without
+# 4xx/5xx through the https terminator.
+- name: _verify | healthchecks is reachable through nginx
+  uri:
+    url: https://localhost/api/v3/status/
+    headers:
+      Host: healthchecks.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    return_content: true
+  register: _verify_nginx
+  failed_when: >-
+    _verify_nginx.status != 200
+    or "ok" not in _verify_nginx.content
+  become: true
+
+# Functional WAL assertion -- confirms the WAL conversion actually
+# stuck (the prior "PRAGMA against a held DB" race silently no-op'd
+# and reported ok). Read-only probe, doesn't lock.
+- name: _verify | healthchecks sqlite is in WAL journal mode
+  command: sqlite3 -readonly /mnt/services/sqlite/healthchecks/hc.sqlite 'PRAGMA journal_mode;'
+  register: _verify_wal
+  changed_when: false
+  failed_when: _verify_wal.stdout | trim != 'wal'
+  become: true
