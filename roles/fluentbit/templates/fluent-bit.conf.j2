@@ -228,13 +228,27 @@
 # is the raw token -- NOT "Bearer <token>". Sending the Bearer prefix
 # gets a 401 "provided authorization does not match expected scheme".
 #
-# Record shape: the three lua filters write the event-metadata stream
-# (5-arg callback) under metadata.otlp.{severity_text, severity_number,
-# attributes, resource}; fluent-bit's opentelemetry output reads that
-# namespace via logs_metadata_key=otlp and maps each sub-key onto the
-# corresponding LogRecord field (Resource includes service.name, which
-# populates the ClickHouse ServiceName column the ClickHouse exporter
-# pulls from). record["log"] still feeds LogRecord.Body by convention.
+# Record shape: split between two streams because fluent-bit's OTLP
+# output wires record accessors asymmetrically.
+#
+# (a) LogRecord fields with $otlp[...] accessors (severity_text,
+#     severity_number, attributes, trace/span IDs, timestamps) come
+#     from the event-metadata stream. The three lua filters (5-arg
+#     callback) write metadata.otlp.{severity_text, severity_number,
+#     attributes}; logs_metadata_key=otlp selects the namespace.
+#
+# (b) ResourceLogs.resource has NO $otlp['resource'] accessor. The
+#     output reads Resource via the hardcoded $resource['attributes']
+#     RA applied to each record's BODY in "standalone context" mode
+#     (logs.c's standalone branch jumps to the same set_resource_
+#     attributes call the group-start branch uses). otlp_shape.lua
+#     writes record["resource"]={attributes=...} to the body, and
+#     logs_resource_metadata_key=resource pins it. (commit f59a9e99
+#     tried to route Resource through metadata.otlp.resource alongside
+#     the others and emitted records with empty ServiceName for two
+#     days; this is the revert of just that part.)
+#
+# record["log"] still feeds LogRecord.Body by convention.
 [OUTPUT]
     Name              opentelemetry
     Match             *
@@ -254,6 +268,7 @@
     header            Authorization {{ hyperdx_ingestion_api_key }}
     log_response_payload  false
     logs_metadata_key  otlp
+    logs_resource_metadata_key  resource
     # Retry_Limit false = no per-chunk retry cap. The backlog is bounded
     # by storage.total_limit_size below (50M on disk), not by retry
     # count: a HyperDX outage longer than ~2min would otherwise discard
