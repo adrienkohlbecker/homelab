@@ -48,6 +48,14 @@ Every podman `*.service.j2` unit must declare `--health-cmd` (and `--health-star
 
 Do not drop the healthcheck and lean on external monitoring (kuma, the `_verify.yml` task) instead — without an in-container check, `--sdnotify=healthy` can't gate the unit's `active` state, podman won't auto-restart on HTTP failure, and the unit reports liveness only at the OS-process level. If none of the four mechanisms above is feasible for an image, treat that as a blocker, not a license to skip.
 
+### Container Secrets
+
+Three paths exist for getting a podman secret into a containerized app. Preferred order:
+
+1. **App-native `*_FILE` setting.** Pair `--secret=<name>,type=mount,target=<basename>` with `--env XXX_FILE=/run/secrets/<basename>`. The app reads the file directly; the secret never lands in any env var at runtime. Django supports `EMAIL_HOST_PASSWORD_FILE` natively; paperless-ngx supports `_FILE` on every `PAPERLESS_*` env. Canonical example: `EMAIL_HOST_PASSWORD_FILE` in [roles/healthchecks/templates/healthchecks.service.j2](roles/healthchecks/templates/healthchecks.service.j2).
+2. **linuxserver `FILE__<VARNAME>` prefix.** Pair `--secret=<name>,type=mount,target=<basename>` with `--env FILE__VAR=/run/secrets/<basename>`. Every `linuxserver/*` image's s6-overlay init reads the file at startup and exports the env var to its s6 child, so the secret value isn't visible in the unit file or in `podman inspect`. Use when the app expects an env var and lacks its own `*_FILE` support. Canonical example: `SUPERUSER_PASSWORD` / `SECRET_KEY` in [roles/healthchecks/templates/healthchecks.service.j2](roles/healthchecks/templates/healthchecks.service.j2). linuxserver-specific — won't apply to non-linuxserver images.
+3. **`--secret=<name>,type=env,target=VAR`.** Last-resort: the secret lands in the container's environment, visible to `podman inspect` and `/proc/<pid>/environ`. Acceptable on single-operator hosts where root is the only attacker that matters, but prefer 1 or 2 when the consumer supports it. Currently used by `openobserve` (`ZO_ROOT_USER_PASSWORD`), `openproject` (`SECRET_KEY_BASE`), and `paperless` (`PAPERLESS_SECRET_KEY`) — all non-linuxserver. paperless-ngx supports `_FILE` natively; the other two need upstream-doc verification before migrating.
+
 ### Container User Namespacing
 
 Every podman unit uses the **fake-root** uidmap pattern: `--user 0:0` plus `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1` (and the matching gidmap). In-container root maps to the dedicated host system user created by `service_user`; everything else falls through 1:1 from the base mapping. The `+0:N:1` override is what makes a namespace-escape land at an unprivileged host uid rather than real root.
