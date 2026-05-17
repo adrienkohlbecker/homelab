@@ -173,7 +173,6 @@ radarr_api_key: changeme
 omdb_api_key: changeme
 sonarr_api_key: changeme
 lidarr_api_key: changeme
-headphones_api_key: changeme
 plex_token: changeme
 nzbgeek_api_key: changeme
 overseerr_api_key: changeme
