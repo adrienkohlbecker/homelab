@@ -40,6 +40,16 @@ Description=github-actions runner (%i)
 # is reachable.
 After=user@{{ github_runner_user.uid }}.service
 Requires=user@{{ github_runner_user.uid }}.service
+# Runner image lives at nexus.lab.fahm.fr/homelab/runner:latest and the unit
+# uses --pull=newer below, so every container start does a manifest HEAD
+# against nexus. Nexus is co-located on this host (site.yml: same
+# `hosts: box,lab` block); ordering here makes that dependency explicit and
+# delays runner start at boot until nexus's --sdnotify=healthy fires.
+# Wants= (not Requires=) so a nexus stop doesn't cascade-stop in-flight
+# runner jobs — they keep their cached image and only need nexus on next
+# manifest check.
+After=nexus.service
+Wants=nexus.service
 StartLimitInterval=600
 StartLimitBurst=3
 {% if zfs_root %}
