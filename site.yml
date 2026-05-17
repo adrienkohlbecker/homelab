@@ -29,6 +29,7 @@
     - smart
     - lm_sensors
     - fancontrol
+    - fan2go
     - powertop
     - zfs
     - ssh_root
