@@ -464,3 +464,13 @@
       - "fluentbit_otlp_multiline_marker in row.Body"
       - "row.ServiceName == 'fluentbit_verify_multiline'"
     fail_msg: "Multiline traceback not joined: {{ row }}"
+
+# No probe for the svc.<empty> -> SYSLOG_IDENTIFIER fallback branch:
+# the path covers records that reach journald with _TRANSPORT=kernel
+# and no _SYSTEMD_UNIT (nftables LOG target, MCE, oom-killer, audit),
+# but those can't be synthesised from userspace. /dev/kmsg writes go
+# through the kernel ring buffer but journald still attributes them
+# to the writing process's cgroup (-> _SYSTEMD_UNIT=session-X.scope),
+# so they hit the normal svc.<unit> branch instead. Real kernel
+# printk records bypass that attribution because the kernel isn't in
+# any cgroup. See otlp_shape.lua for the fallback implementation.
