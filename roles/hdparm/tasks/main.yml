@@ -58,13 +58,17 @@
 # `/etc/hdparm.conf` is re-read on every block-device udev event by
 # /lib/udev/hdparm (and pm-utils' 95hdparm-apm), so triggering a
 # change action on the block subsystem re-applies the config without
-# a reboot. The small subset of directives that aren't re-negotiable
-# on a live device (`-X transfer_mode`, `-c io32_support`) still
-# needs a reboot — operator's call today since hdparm_settings is
-# empty on every host; revisit if anyone starts setting those.
+# a reboot. `--property-match=DEVTYPE=disk` narrows the event burst
+# to whole disks -- partitions, loop, dm, md, ram are all block-
+# subsystem devices the helper would early-exit on but the trigger
+# still bash-forks for. The small subset of directives that aren't
+# re-negotiable on a live device (`-X transfer_mode`, `-c
+# io32_support`) still needs a reboot — operator's call today since
+# hdparm_settings is empty on every host; revisit if anyone starts
+# setting those.
 - name: Re-apply hdparm.conf via udev
   when: hdparm_conf.changed
-  command: udevadm trigger --action=change --subsystem-match=block
+  command: udevadm trigger --action=change --subsystem-match=block --property-match=DEVTYPE=disk
   become: true
   changed_when: true
   tags:
