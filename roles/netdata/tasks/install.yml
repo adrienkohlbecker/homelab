@@ -129,7 +129,19 @@
 # Letsencrypt live/ + archive/ are 0750 root:ssl-cert (see
 # roles/certbot/tasks/main.yml); netdata's go.d/x509check reads
 # /etc/letsencrypt/live/<host>/fullchain.pem, so the netdata user
-# needs ssl-cert to traverse those dirs.
+# needs ssl-cert to traverse those dirs. Create the group here
+# rather than relying on certbot having run first — the ssl-cert
+# apt package's postinst is idempotent against the group already
+# existing, so certbot installing the package later is fine.
+- name: install | Ensure ssl-cert group exists
+  group:
+    name: ssl-cert
+    system: true
+    state: present
+  become: true
+  tags:
+    - netdata
+
 - name: install | Add netdata to ssl-cert group
   when: not (ansible_check_mode and netdata_apt.changed)
   user:
