@@ -1,0 +1,34 @@
+# Poll a ClickHouse query until a caller-supplied predicate is true, or
+# fail after retries. Companion to clickhouse_query.yml -- split out so
+# the wait-loop shape (templated until: from caller) stays trusted under
+# Ansible 2.19+ while the one-shot fetch keeps a literal conditional.
+#
+# Inputs (single dict, replaced wholesale per call):
+#   _test_args.sql      SQL string. Stdin'd to curl so quotes / square
+#                       brackets stay human-readable.
+#   _test_args.label    Short tag for the task name (default "query").
+#   _test_args.retries  Poll count (default 30).
+#   _test_args.delay    Seconds between polls (default 2).
+#   _test_args.until    Predicate evaluated against
+#                       _test_clickhouse_result each iteration. Required;
+#                       the helper has no sensible default for what
+#                       "ready" means in caller-specific data.
+#
+# failed_when is hardcoded to false: a transient curl failure should
+# retry rather than abort, since the whole point of polling is to wait
+# for downstream state to settle. The until: predicate is the only exit
+# condition.
+#
+# Output:
+#   _test_clickhouse_result.stdout: response from the final iteration.
+- name: "_test | clickhouse_query_wait | {{ _test_args.label | default('query') }}"
+  command:
+    cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
+    stdin: "{{ _test_args.sql }}"
+  register: _test_clickhouse_result
+  changed_when: false
+  failed_when: false
+  retries: "{{ _test_args.retries | default(30) }}"
+  delay: "{{ _test_args.delay | default(2) }}"
+  until: "{{ _test_args.until }}"
+  become: true
