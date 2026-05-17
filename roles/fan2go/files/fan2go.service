@@ -1,0 +1,20 @@
+[Unit]
+Description=fan2go hardware fan control daemon
+Documentation=https://github.com/markusressel/fan2go
+After=lm-sensors.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+ExecStart=/usr/local/bin/fan2go -c /etc/fan2go/fan2go.yaml --no-style
+Restart=on-failure
+RestartSec=10
+# fan2go ~50s init for fan-curve learning + sanity checks; widen
+# default 90s only if observed too tight.
+TimeoutStartSec=120s
+
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

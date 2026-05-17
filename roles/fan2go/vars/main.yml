@@ -1,0 +1,40 @@
+# Centralise URL + sha next to each other per arch (CLAUDE.md role
+# convention). Upstream fan2go ships only linux-amd64; fan2go-tui ships
+# no binaries at all, so both arches always build it from source. That
+# forces the Go toolchain onto every fan2go_enabled host regardless of
+# arch -- documented in tasks/main.yml's phase comment.
+
+fan2go_version: "0.13.0"
+fan2go_artifacts:
+  # No-nvml flavor: smaller, no NVIDIA dependency (lab/pug have no GPUs).
+  x86_64:
+    url: "https://github.com/markusressel/fan2go/releases/download/{{ fan2go_version }}/fan2go-linux-amd64-no-nvml"
+    sha256: "7cc9ee0c67ccefa0c5c2e693902f41133c075498360258266a24b7d8886ff155"
+  # No upstream prebuilt — only repo + git ref. fan2go's go.mod
+  # requires Go >= 1.25, newer than apt's golang-go, so the build path
+  # uses the pinned Go toolchain below.
+  aarch64:
+    repo: "https://github.com/markusressel/fan2go.git"
+    git_ref: "{{ fan2go_version }}"
+
+# Official TUI for fan2go. Connects to the daemon's HTTP API over
+# loopback (api: enabled: true required in the per-host fan2go.yaml).
+# No upstream binaries on any arch; pin to the tag's commit SHA so the
+# git fetch is reproducible even if the tag is later moved.
+fan2go_tui_version: "0.2.1"
+fan2go_tui_artifacts:
+  repo: "https://github.com/markusressel/fan2go-tui.git"
+  git_ref: "30de59be623559e82900472323d0300dad2fab00"
+
+# Pinned Go toolchain for the source-build paths. Bumping this is
+# decoupled from fan2go_version / fan2go_tui_version: bump Go only when
+# upstream's go.mod raises the floor (fan2go @ 0.13.0 is 1.25;
+# fan2go-tui @ 0.2.1 is 1.24) or to pick up Go security fixes.
+fan2go_go_version: "1.26.3"
+fan2go_go_artifacts:
+  x86_64:
+    url: "https://go.dev/dl/go{{ fan2go_go_version }}.linux-amd64.tar.gz"
+    sha256: "2b2cfc7148493da5e73981bffbf3353af381d5f93e789c82c79aff64962eb556"
+  aarch64:
+    url: "https://go.dev/dl/go{{ fan2go_go_version }}.linux-arm64.tar.gz"
+    sha256: "9d89a3ea57d141c2b22d70083f2c8459ba3890f2d9e818e7e933b75614936565"

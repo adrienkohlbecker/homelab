@@ -1,0 +1,95 @@
+# Two branches gated on fan2go_enabled.
+# Disabled branch: state checks (config absent, service stopped+disabled).
+# Enabled branch: functional checks (binary present, daemon active).
+# No per-fan RPM walk: enabled-branch only runs on real hardware
+# (fan2go refuses to start without the referenced chips), so an active
+# service is strong evidence the fans are being driven correctly.
+
+# ---- disabled branch ----
+
+- name: _verify | Assert /etc/fan2go/fan2go.yaml is absent (disabled)
+  when: not fan2go_enabled
+  stat:
+    path: /etc/fan2go/fan2go.yaml
+  register: fan2go_config_absent
+  failed_when: fan2go_config_absent.stat.exists
+
+- name: _verify | Stat fan2go service unit (disabled)
+  when: not fan2go_enabled
+  stat:
+    path: /etc/systemd/system/fan2go.service
+  register: fan2go_unit_stat_verify
+
+- name: _verify | Assert fan2go service is inactive and disabled (disabled, previously installed)
+  when:
+    - not fan2go_enabled
+    - fan2go_unit_stat_verify.stat.exists
+  systemd:
+    name: fan2go
+  register: fan2go_unit_disabled
+  failed_when: >-
+    fan2go_unit_disabled.status.ActiveState == "active"
+    or fan2go_unit_disabled.status.UnitFileState != "disabled"
+  become: true
+
+# ---- enabled branch ----
+
+- name: _verify | Stat fan2go binary (enabled)
+  when: fan2go_enabled
+  stat:
+    path: /usr/local/bin/fan2go
+  register: fan2go_binary_stat
+  failed_when: >-
+    not fan2go_binary_stat.stat.exists
+    or not fan2go_binary_stat.stat.executable
+
+- name: _verify | Confirm symlink points at the pinned version (enabled)
+  when: fan2go_enabled
+  command:
+    argv:
+      - readlink
+      - /usr/local/bin/fan2go
+  register: fan2go_readlink
+  changed_when: false
+  failed_when: fan2go_readlink.stdout != "/usr/local/bin/fan2go-" + fan2go_version
+
+- name: _verify | Stat fan2go-tui binary (enabled)
+  when: fan2go_enabled
+  stat:
+    path: /usr/local/bin/fan2go-tui
+  register: fan2go_tui_stat
+  failed_when: >-
+    not fan2go_tui_stat.stat.exists
+    or not fan2go_tui_stat.stat.executable
+
+- name: _verify | Confirm fan2go-tui symlink points at the pinned version (enabled)
+  when: fan2go_enabled
+  command:
+    argv:
+      - readlink
+      - /usr/local/bin/fan2go-tui
+  register: fan2go_tui_readlink
+  changed_when: false
+  failed_when: fan2go_tui_readlink.stdout != "/usr/local/bin/fan2go-tui-" + fan2go_tui_version
+
+- name: _verify | Assert /etc/fan2go/fan2go.yaml exists, mode 0644 root:root (enabled)
+  when: fan2go_enabled
+  stat:
+    path: /etc/fan2go/fan2go.yaml
+  register: fan2go_config_present
+  failed_when: >-
+    not fan2go_config_present.stat.exists
+    or fan2go_config_present.stat.mode != "0644"
+    or fan2go_config_present.stat.pw_name != "root"
+    or fan2go_config_present.stat.gr_name != "root"
+
+- name: _verify | Assert fan2go service is loaded, active, enabled (enabled)
+  when: fan2go_enabled
+  systemd:
+    name: fan2go
+  register: fan2go_unit_present
+  failed_when: >-
+    fan2go_unit_present.status.LoadState != "loaded"
+    or fan2go_unit_present.status.ActiveState != "active"
+    or fan2go_unit_present.status.UnitFileState != "enabled"
+  become: true
