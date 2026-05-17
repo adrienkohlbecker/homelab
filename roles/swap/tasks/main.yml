@@ -34,6 +34,34 @@
 #######################################################################
 # Zvol-backed swap
 #######################################################################
+- name: Read current swap zvol size
+  when: swap_zvol is defined and zfs_root
+  command: zfs get -Hp -o value volsize {{ swap_zvol.dataset }}
+  register: swap_zvol_current
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - swap
+
+# zfs accepts any volsize change including a shrink. Pages residing in
+# the discarded sector range vanish on the spot, and the next paging
+# access panics the host. Safe shrink path: swapoff, resize, mkswap,
+# swapon.
+- name: Refuse to shrink swap zvol
+  when:
+    - swap_zvol is defined and zfs_root
+    - swap_zvol_current.rc == 0
+  assert:
+    that: (swap_zvol.size | human_to_bytes) >= (swap_zvol_current.stdout | int)
+    fail_msg: >-
+      Refusing to shrink {{ swap_zvol.dataset }} from {{ swap_zvol_current.stdout }}
+      to {{ swap_zvol.size | human_to_bytes }} bytes -- would corrupt live swap.
+      Safe path: swapoff {{ swap_zvol.dataset }}, shrink, mkswap, swapon.
+  tags:
+    - swap
+
 - name: Create swap zvol
   when: swap_zvol is defined and zfs_root
   community.general.zfs:
