@@ -43,5 +43,7 @@ ntp_backport_packages:
   # roles; apt is fine with multiple pin files declaring the same
   # package at the same priority.
   - libc6
+  - libc6-dev
   - libc-bin
+  - libc-dev-bin
   - locales
