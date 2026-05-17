@@ -79,7 +79,13 @@ hdparm_update() {
     # symptom). `collector_error` is the monitoring stack failing to
     # read the drive at all — missing by-id symlink, hdparm exit ≠ 0,
     # empty output — operationally distinct from a drive misbehaving.
-    if [ -e "$path" ] && state=$(hdparm -C "$path" 2>/dev/null | awk '/^ drive state is:/{sub(/^ drive state is:  /,""); print; exit}'); then
+    #
+    # `timeout -k 2 5` bounds a wedged-drive call: SIGTERM at 5s,
+    # SIGKILL 2s later. exit 124/137 short-circuits the `&&` to the
+    # `else` arm and reports collector_error like any other read
+    # failure -- so one bad drive doesn't block the rest of the
+    # update cycle.
+    if [ -e "$path" ] && state=$(timeout -k 2 5 hdparm -C "$path" 2>/dev/null | awk '/^ drive state is:/{sub(/^ drive state is:  /,""); print; exit}'); then
       case "$state" in
         "active/idle") a=1 ;;
         "standby")     s=1 ;;
