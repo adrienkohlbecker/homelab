@@ -121,50 +121,48 @@
 # fluent-bit's systemd input ships back to ClickHouse with the marker
 # baked into its Body -- Body LIKE matches that decoy instead of the
 # real CSP record. csp_blocked_uri is only populated by flatten_csp.lua.
-#
-# Query body is passed via stdin (-i on podman exec, --data-binary @-
-# on curl) so the SQL stays human-readable in the role rather than as
-# a URL-encoded blob of %5B/%5D/%25.
 - name: _verify | OTLP-end-to-end | wait for ClickHouse row matching marker
-  command:
-    cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
-    stdin: "SELECT count() FROM default.otel_logs WHERE LogAttributes['csp_blocked_uri'] LIKE '%{{ fluentbit_otlp_csp_marker }}%'"
-  register: fluentbit_otlp_count
-  changed_when: false
-  failed_when: false
-  retries: 30
-  delay: 2
-  until: fluentbit_otlp_count.rc == 0 and (fluentbit_otlp_count.stdout | trim | int) > 0
-  become: true
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query
+  vars:
+    _test_args:
+      label: "OTLP-end-to-end | wait for CSP row"
+      sql: "SELECT count() FROM default.otel_logs WHERE LogAttributes['csp_blocked_uri'] LIKE '%{{ fluentbit_otlp_csp_marker }}%'"
+      retries: 30
+      delay: 2
+      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+      failed_when: false
 
 - name: _verify | OTLP-end-to-end | fetch CSP row as JSON
-  command:
-    cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
-    stdin: >-
-      SELECT
-        Body,
-        SeverityText,
-        toUInt32(SeverityNumber) AS SeverityNumber,
-        ServiceName,
-        LogAttributes['csp_blocked_uri']        AS csp_blocked_uri,
-        LogAttributes['csp_format']             AS csp_format,
-        LogAttributes['csp_violated_directive'] AS csp_violated_directive,
-        LogAttributes['csp_effective_directive'] AS csp_effective_directive,
-        LogAttributes['host']                   AS log_host,
-        ResourceAttributes['service.name']      AS resource_service_name,
-        ResourceAttributes['host.name']         AS resource_host_name
-      FROM default.otel_logs
-      WHERE LogAttributes['csp_blocked_uri'] LIKE '%{{ fluentbit_otlp_csp_marker }}%'
-      ORDER BY Timestamp DESC
-      LIMIT 1
-      FORMAT JSONEachRow
-  register: fluentbit_otlp_row
-  changed_when: false
-  become: true
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query
+  vars:
+    _test_args:
+      label: "OTLP-end-to-end | fetch CSP row"
+      sql: >-
+        SELECT
+          Body,
+          SeverityText,
+          toUInt32(SeverityNumber) AS SeverityNumber,
+          ServiceName,
+          LogAttributes['csp_blocked_uri']        AS csp_blocked_uri,
+          LogAttributes['csp_format']             AS csp_format,
+          LogAttributes['csp_violated_directive'] AS csp_violated_directive,
+          LogAttributes['csp_effective_directive'] AS csp_effective_directive,
+          LogAttributes['host']                   AS log_host,
+          ResourceAttributes['service.name']      AS resource_service_name,
+          ResourceAttributes['host.name']         AS resource_host_name
+        FROM default.otel_logs
+        WHERE LogAttributes['csp_blocked_uri'] LIKE '%{{ fluentbit_otlp_csp_marker }}%'
+        ORDER BY Timestamp DESC
+        LIMIT 1
+        FORMAT JSONEachRow
 
 - name: _verify | OTLP-end-to-end | assert landed row shape
   vars:
-    row: "{{ fluentbit_otlp_row.stdout | from_json }}"
+    row: "{{ _test_clickhouse_result.stdout | from_json }}"
   assert:
     that:
       # Body shape: "CSP <effective> blocked <uri> on <doc> {<json>}".
@@ -214,42 +212,44 @@
 # session unit) carrying the marker in its logged command line doesn't
 # satisfy the count.
 - name: _verify | journald path | wait for ClickHouse row matching marker
-  command:
-    cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
-    stdin: >-
-      SELECT count() FROM default.otel_logs
-      WHERE Body LIKE '%{{ fluentbit_otlp_journald_marker }}%'
-        AND ServiceName = 'fluentbit_verify_journald'
-  register: fluentbit_otlp_journald_count
-  changed_when: false
-  failed_when: false
-  retries: 30
-  delay: 2
-  until: fluentbit_otlp_journald_count.rc == 0 and (fluentbit_otlp_journald_count.stdout | trim | int) > 0
-  become: true
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query
+  vars:
+    _test_args:
+      label: "journald path | wait for row"
+      sql: >-
+        SELECT count() FROM default.otel_logs
+        WHERE Body LIKE '%{{ fluentbit_otlp_journald_marker }}%'
+          AND ServiceName = 'fluentbit_verify_journald'
+      retries: 30
+      delay: 2
+      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+      failed_when: false
 
 - name: _verify | journald path | fetch row as JSON
-  command:
-    cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
-    stdin: >-
-      SELECT
-        Body,
-        SeverityText,
-        toUInt32(SeverityNumber) AS SeverityNumber,
-        ServiceName
-      FROM default.otel_logs
-      WHERE Body LIKE '%{{ fluentbit_otlp_journald_marker }}%'
-        AND ServiceName = 'fluentbit_verify_journald'
-      ORDER BY Timestamp DESC
-      LIMIT 1
-      FORMAT JSONEachRow
-  register: fluentbit_otlp_journald_row
-  changed_when: false
-  become: true
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query
+  vars:
+    _test_args:
+      label: "journald path | fetch row"
+      sql: >-
+        SELECT
+          Body,
+          SeverityText,
+          toUInt32(SeverityNumber) AS SeverityNumber,
+          ServiceName
+        FROM default.otel_logs
+        WHERE Body LIKE '%{{ fluentbit_otlp_journald_marker }}%'
+          AND ServiceName = 'fluentbit_verify_journald'
+        ORDER BY Timestamp DESC
+        LIMIT 1
+        FORMAT JSONEachRow
 
 - name: _verify | journald path | assert lua filter output
   vars:
-    row: "{{ fluentbit_otlp_journald_row.stdout | from_json }}"
+    row: "{{ _test_clickhouse_result.stdout | from_json }}"
   assert:
     that:
       - "row.SeverityText == 'error'"
@@ -275,42 +275,44 @@
   become: true
 
 - name: _verify | nginx tail | wait for ClickHouse row matching marker
-  command:
-    cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
-    stdin: >-
-      SELECT count() FROM default.otel_logs
-      WHERE Body LIKE '%{{ fluentbit_otlp_nginx_marker }}%'
-        AND ServiceName = 'nginx_access'
-  register: fluentbit_otlp_nginx_count
-  changed_when: false
-  failed_when: false
-  retries: 30
-  delay: 2
-  until: fluentbit_otlp_nginx_count.rc == 0 and (fluentbit_otlp_nginx_count.stdout | trim | int) > 0
-  become: true
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query
+  vars:
+    _test_args:
+      label: "nginx tail | wait for row"
+      sql: >-
+        SELECT count() FROM default.otel_logs
+        WHERE Body LIKE '%{{ fluentbit_otlp_nginx_marker }}%'
+          AND ServiceName = 'nginx_access'
+      retries: 30
+      delay: 2
+      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+      failed_when: false
 
 - name: _verify | nginx tail | fetch row as JSON
-  command:
-    cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
-    stdin: >-
-      SELECT
-        Body,
-        SeverityText,
-        toUInt32(SeverityNumber) AS SeverityNumber,
-        ServiceName
-      FROM default.otel_logs
-      WHERE Body LIKE '%{{ fluentbit_otlp_nginx_marker }}%'
-        AND ServiceName = 'nginx_access'
-      ORDER BY Timestamp DESC
-      LIMIT 1
-      FORMAT JSONEachRow
-  register: fluentbit_otlp_nginx_row
-  changed_when: false
-  become: true
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query
+  vars:
+    _test_args:
+      label: "nginx tail | fetch row"
+      sql: >-
+        SELECT
+          Body,
+          SeverityText,
+          toUInt32(SeverityNumber) AS SeverityNumber,
+          ServiceName
+        FROM default.otel_logs
+        WHERE Body LIKE '%{{ fluentbit_otlp_nginx_marker }}%'
+          AND ServiceName = 'nginx_access'
+        ORDER BY Timestamp DESC
+        LIMIT 1
+        FORMAT JSONEachRow
 
 - name: _verify | nginx tail | assert lua filter output
   vars:
-    row: "{{ fluentbit_otlp_nginx_row.stdout | from_json }}"
+    row: "{{ _test_clickhouse_result.stdout | from_json }}"
   assert:
     that:
       - "row.SeverityText == 'info'"
