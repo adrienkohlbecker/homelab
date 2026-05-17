@@ -32,6 +32,15 @@
   tags:
     - hdparm
 
+# Grammar (see /lib/udev/hdparm and hdparm.conf preamble): each line
+# is a comment, blank, a directive (`key` / `key = value`), a device
+# path opening a block (`/dev/... {`), or a closing brace -- "ANYTHING
+# ELSE IS PARSED!!" per the file's own warning, with the failure mode
+# being silent misconfig at next udev event. No hdparm-native parser
+# exists, so this best-effort regex catches jinja-rendering accidents
+# (stray quotes, uppercase setting names, etc.) by rejecting lines
+# whose first non-whitespace char isn't # / lowercase / `/` / `{` /
+# `}`.
 - name: Copy hdparm.conf
   template:
     src: hdparm.conf.j2
@@ -40,6 +49,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: 'grep -qvE "^[[:space:]]*[^#a-z_/{}[:space:]]" %s'
   register: hdparm_conf
   become: true
   tags:
