@@ -9,6 +9,24 @@
   tags:
     - fancontrol
 
+# Owns the chip-name -> hwmonN resolution. Reads /etc/fancontrol.template
+# (chip-name keyed) and emits /etc/fancontrol (hwmonN keyed) for the
+# daemon. Runs at every service start (ExecStartPre, see restart.conf)
+# AND as `--check %s` during the template task's validate, so a missing
+# chip is caught at apply time rather than at next boot.
+- name: Install fancontrol_remap script
+  copy:
+    src: fancontrol_remap
+    dest: /usr/local/sbin/fancontrol_remap
+    owner: root
+    group: root
+    mode: "0755"
+    validate: python3 -c 'import sys; compile(open(sys.argv[1]).read(), sys.argv[1], "exec")' %s
+  become: true
+  register: fancontrol_remap_script
+  tags:
+    - fancontrol
+
 # Upstream fancontrol.service sets no Restart=, but the daemon's own
 # failure path is `restorefans 1` (set fans to 100%) then exit. Without
 # auto-restart a transient sysfs error leaves the box loud forever.
@@ -26,118 +44,23 @@
   tags:
     - fancontrol
 
-# hwmonN numbering shifts across kernel upgrades and module load order;
-# DEVPATH for sata-attached chips (drivetemp) shifts when SATA cables
-# move. Resolve both at apply time so host_vars can refer to chips by
-# their stable kernel name (nct6798, drivetemp). fancontrol's own
-# FixupDeviceFiles handles further hwmonN drift between ansible runs.
-- name: Discover hwmon devices
-  when: fancontrol_settings.fans | length > 0
-  tags:
-    - fancontrol
-  block:
-    - name: List hwmon device directories
-      find:
-        paths: /sys/class/hwmon
-        patterns: hwmon*
-        file_type: any
-        follow: false
-      register: fancontrol_hwmon_dirs
-
-    - name: Read hwmon chip names
-      slurp:
-        src: "{{ item.path }}/name"
-      loop: "{{ fancontrol_hwmon_dirs.files }}"
-      loop_control:
-        label: "{{ item.path | basename }}"
-      register: fancontrol_hwmon_names
-
-    - name: Resolve hwmon device sysfs paths
-      command:
-        argv:
-          - readlink
-          - -f
-          - "{{ item.path }}"
-      loop: "{{ fancontrol_hwmon_dirs.files }}"
-      loop_control:
-        label: "{{ item.path | basename }}"
-      register: fancontrol_hwmon_links
-      changed_when: false
-      check_mode: false
-
-    # cacheable: true persists the fact across plays so _verify.yml
-    # (which runs as a separate play) can reuse the discovery instead
-    # of rediscovering.
-    # \g<1>, not \\1: nested inside combine({...}) in a YAML
-    # folded scalar the \\1 backref double-escapes by the
-    # time it reaches re.sub and emits literal "\1".
-    - name: Build fancontrol_chip_map
-      set_fact:
-        cacheable: true
-        fancontrol_chip_map: >-
-          {{
-            fancontrol_chip_map | default({}) | combine({
-              (item.1.content | b64decode | trim): {
-                "hwmon": item.0.path | basename,
-                "devpath": item.2.stdout | regex_replace('^/sys/(.*?)(?:/hwmon)?/hwmon[0-9]+$', '\g<1>'),
-              }
-            })
-          }}
-      loop: "{{ fancontrol_hwmon_dirs.files | zip(fancontrol_hwmon_names.results, fancontrol_hwmon_links.results) | list }}"
-      loop_control:
-        label: "{{ item.1.content | b64decode | trim }}"
-
-    # Two known DEVPATH layouts: legacy hwmon-classpath chips (nct6798,
-    # drivetemp) live at /sys/.../device/hwmon/hwmonN with an
-    # intermediate /hwmon/ dir; subsystem-native chips (nvme) live at
-    # /sys/.../device/hwmonN directly. The optional (?:/hwmon)? in the
-    # regex strips either. On a chip whose readlink target deviates
-    # from both, regex_replace returns the input unchanged and
-    # /etc/fancontrol would silently carry an unstripped DEVPATH=.
-    # Fail loudly here instead of letting the daemon misroute at start.
-    - name: Assert hwmon DEVPATH regex matched on every discovered chip
-      assert:
-        that: not (item.value.devpath | regex_search('^/sys/'))
-        fail_msg: >-
-          chip {{ item.key }} resolved to devpath {{ item.value.devpath }};
-          expected a /sys/-stripped path but the regex did not match.
-      loop: "{{ fancontrol_chip_map | dict2items }}"
-      loop_control:
-        label: "{{ item.key }}"
-
-- name: Assert all chips referenced by fancontrol_settings.fans exist
-  when: fancontrol_settings.fans | length > 0
-  assert:
-    that: fancontrol_chip in fancontrol_chip_map
-    fail_msg: >-
-      fancontrol_settings references chip {{ fancontrol_chip }} -- not
-      present in /sys/class/hwmon. Check the chip name in host_vars or
-      load the right kernel module.
-  loop: "{{ fancontrol_referenced_chips }}"
-  loop_control:
-    loop_var: fancontrol_chip
-  tags:
-    - fancontrol
-
-- name: Template /etc/fancontrol
+# Chip-name-keyed source of truth. The daemon never reads this file;
+# fancontrol_remap consumes it at ExecStartPre and emits the hwmonN-keyed
+# /etc/fancontrol that the daemon parses. validate: invokes the same
+# render path so a missing chip / unstripped DEVPATH fails the play.
+- name: Template /etc/fancontrol.template
   when:
     - fancontrol_settings.fans | length > 0
     - not (ansible_check_mode and fancontrol_apt.changed)
   template:
     src: fancontrol.j2
-    dest: /etc/fancontrol
+    dest: /etc/fancontrol.template
     owner: root
     group: root
     mode: "0644"
     backup: true
-    # Catches malformed configs (missing FCTEMPS, INTERVAL<=0, etc.)
-    # before the daemon sees them. fancontrol exits non-zero on parse
-    # failure, so ansible refuses the write instead of leaving the box
-    # wedged at next service start. `--check` is the only positional
-    # mode the upstream script understands -- it loads $1, validates,
-    # exits 0 without entering the daemon loop.
-    validate: fancontrol --check %s
-  register: fancontrol_conf
+    validate: /usr/local/sbin/fancontrol_remap --check %s
+  register: fancontrol_template
   become: true
   tags:
     - fancontrol
@@ -157,11 +80,14 @@
   tags:
     - fancontrol
 
-- name: Remove /etc/fancontrol (no fan settings)
+- name: Remove fancontrol config files (no fan settings)
   when: fancontrol_settings.fans | length == 0
   file:
-    path: /etc/fancontrol
+    path: "{{ item }}"
     state: absent
+  loop:
+    - /etc/fancontrol
+    - /etc/fancontrol.template
   become: true
   register: fancontrol_removed
   tags:
@@ -178,7 +104,8 @@
       condition: "{{ not (ansible_check_mode and fancontrol_apt.changed) }}"
       restart: >-
         {{ fancontrol_apt.changed
-           or fancontrol_conf.changed | default(false)
-           or fancontrol_service_d_override_conf_result.changed | default(false) }}
+           or fancontrol_template.changed | default(false)
+           or fancontrol_service_d_override_conf_result.changed | default(false)
+           or fancontrol_remap_script.changed | default(false) }}
   tags:
     - fancontrol

@@ -1,21 +1,20 @@
 #jinja2: trim_blocks: False
 # {{ ansible_managed }} -- source: host_vars/<host>.yml:fancontrol_settings
-{% macro hp(spec) -%}
-{{ fancontrol_chip_map[spec.split('/')[0]].hwmon }}/{{ spec.split('/')[1] }}
-{%- endmacro -%}
+# Chip names below (nct6798, drivetemp, etc.) resolve to live
+# /sys/class/hwmon/hwmonN at every service start via
+# /usr/local/sbin/fancontrol_remap (ExecStartPre). The daemon-input
+# file is /etc/fancontrol; this is the template.
 {% for f in fancontrol_settings.fans %}
-# {{ hp(f.pwm) }} -> {{ f.name }}
+# {{ f.pwm }} -> {{ f.name }}
 {%- endfor %}
 INTERVAL={{ fancontrol_settings.interval | default(10) }}
-DEVPATH={% for c in fancontrol_referenced_chips %}{{ fancontrol_chip_map[c].hwmon }}={{ fancontrol_chip_map[c].devpath }}{% if not loop.last %} {% endif %}{% endfor %}
-DEVNAME={% for c in fancontrol_referenced_chips %}{{ fancontrol_chip_map[c].hwmon }}={{ c }}{% if not loop.last %} {% endif %}{% endfor %}
-FCTEMPS={% for f in fancontrol_settings.fans %}{{ hp(f.pwm) }}={{ hp(f.temp) }}{% if not loop.last %} {% endif %}{% endfor %}
-FCFANS={% for f in fancontrol_settings.fans %}{{ hp(f.pwm) }}={{ hp(f.fan) }}{% if not loop.last %} {% endif %}{% endfor %}
-MINTEMP={% for f in fancontrol_settings.fans %}{{ hp(f.pwm) }}={{ f.mintemp }}{% if not loop.last %} {% endif %}{% endfor %}
-MAXTEMP={% for f in fancontrol_settings.fans %}{{ hp(f.pwm) }}={{ f.maxtemp }}{% if not loop.last %} {% endif %}{% endfor %}
-MINSTART={% for f in fancontrol_settings.fans %}{{ hp(f.pwm) }}={{ f.minstart }}{% if not loop.last %} {% endif %}{% endfor %}
-MINSTOP={% for f in fancontrol_settings.fans %}{{ hp(f.pwm) }}={{ f.minstop }}{% if not loop.last %} {% endif %}{% endfor %}
-MINPWM={% for f in fancontrol_settings.fans %}{{ hp(f.pwm) }}={{ f.minpwm }}{% if not loop.last %} {% endif %}{% endfor %}
+FCTEMPS={% for f in fancontrol_settings.fans %}{{ f.pwm }}={{ f.temp }}{% if not loop.last %} {% endif %}{% endfor %}
+FCFANS={% for f in fancontrol_settings.fans %}{{ f.pwm }}={{ f.fan }}{% if not loop.last %} {% endif %}{% endfor %}
+MINTEMP={% for f in fancontrol_settings.fans %}{{ f.pwm }}={{ f.mintemp }}{% if not loop.last %} {% endif %}{% endfor %}
+MAXTEMP={% for f in fancontrol_settings.fans %}{{ f.pwm }}={{ f.maxtemp }}{% if not loop.last %} {% endif %}{% endfor %}
+MINSTART={% for f in fancontrol_settings.fans %}{{ f.pwm }}={{ f.minstart }}{% if not loop.last %} {% endif %}{% endfor %}
+MINSTOP={% for f in fancontrol_settings.fans %}{{ f.pwm }}={{ f.minstop }}{% if not loop.last %} {% endif %}{% endfor %}
+MINPWM={% for f in fancontrol_settings.fans %}{{ f.pwm }}={{ f.minpwm }}{% if not loop.last %} {% endif %}{% endfor %}
 {% if fancontrol_settings.fans | selectattr('average', 'defined') | list | length > 0 %}
-AVERAGE={% for f in fancontrol_settings.fans %}{{ hp(f.pwm) }}={{ f.average | default(1) }}{% if not loop.last %} {% endif %}{% endfor %}
+AVERAGE={% for f in fancontrol_settings.fans %}{{ f.pwm }}={{ f.average | default(1) }}{% if not loop.last %} {% endif %}{% endfor %}
 {% endif %}
