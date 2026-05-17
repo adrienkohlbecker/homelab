@@ -1,6 +1,8 @@
-- name: Install gpg
+- name: Install gpg + sqlite3 CLI
   apt:
-    pkg: gpg
+    pkg:
+      - gpg
+      - sqlite3
     cache_valid_time: 3600
   become: true
   register: apt_install_gpg
@@ -206,11 +208,12 @@
   tags:
     - fluentbit
 
-# PRAGMA busy_timeout precedes journal_mode=WAL so we wait up to 5s
-# for fluent-bit's own SQLite handle to release its lock instead of
-# erroring out -- the race window between wait_for path: returning
-# (inode exists) and fluent-bit's cursor writer settling is tight
-# enough that we routinely lost it.
+# sqlite3 CLI is installed at the top of the role (not pulled in by
+# fluent-bit's apt deps -- only libsqlite3-0 is). PRAGMA busy_timeout
+# precedes journal_mode=WAL as defence against the race between
+# wait_for path: returning (inode exists) and fluent-bit's cursor
+# writer holding the lock; fluent-bit's cursor writes are short, 5s
+# is plenty.
 - name: Convert fluent-bit journal.db to WAL
   command: sqlite3 /var/lib/fluent-bit/journal.db 'PRAGMA busy_timeout=5000; PRAGMA journal_mode=WAL;'
   args:
