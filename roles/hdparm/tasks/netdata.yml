@@ -2,6 +2,22 @@
 # Replaces the path that used to go custom_exporter -> prometheus.custom.*
 # -> netdata; charts.d emits the same per-drive power-state chart into
 # netdata's own chart registry, dropping the prometheus-text round-trip.
+
+# `charts_d_hdparm.conf.j2` populates hdparm_disks from ansible_devices'
+# rotational drives, taking the first `links.ids` entry. A drive with an
+# empty `links.ids` (USB enclosures whose vendor strings udev rejects,
+# brand-new disks before symlinks settle) silently drops from the
+# collector — surface it at apply time so the operator can see N drives
+# in `lsblk` but N-1 in netdata isn't a mystery.
+- name: Detect rotational drives missing /dev/disk/by-id symlinks
+  vars:
+    _rot_no_id: "{{ ansible_devices | dict2items | selectattr('value.rotational', 'equalto', '1') | rejectattr('value.links.ids') | map(attribute='key') | list }}"
+  debug:
+    msg: "Rotational drives dropped from hdparm collector (no /dev/disk/by-id symlink): {{ _rot_no_id }}"
+  when: _rot_no_id | length > 0
+  tags:
+    - hdparm
+
 - name: Install hdparm charts.d collector
   import_role:
     name: netdata
