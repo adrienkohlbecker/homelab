@@ -162,28 +162,24 @@
     script            /etc/fluent-bit/flatten_csp.lua
     call              flatten_csp
 
-# Tag every record with the inventory hostname so cross-stream queries
-# in HyperDX can still filter by host without parsing the tag. systemd
-# input also sets HOSTNAME from the journal, but tails don't — this
-# normalises both. Use `Set` not `Add`: the CSP HTTP input lets an
-# attacker put `{"host":"lab", ...}` at the top of the POST body, which
-# would otherwise land as a record key and `Add` (insert-if-absent
-# semantics) would refuse to overwrite. With `Set` our value always
-# wins, so attacker-spoofed `host` can't pollute per-host facets.
+# Two record-shaping passes that apply to every record:
+# (a) Stamp inventory_hostname as `host` so cross-stream queries in
+#     HyperDX can filter by host without parsing the tag. systemd input
+#     also sets HOSTNAME from the journal, but tails don't -- this
+#     normalises both. Set (not Add): the CSP HTTP input lets an
+#     attacker put `{"host":"lab", ...}` at the top of the POST body,
+#     which would otherwise land as a record key; Add's insert-if-
+#     absent semantics would refuse to overwrite, Set always wins.
+# (b) Rename journald's MESSAGE -> `log` so HyperDX's OTLP output
+#     reads it as LogRecord.Body (the opentelemetry output expects
+#     `log` by convention). Rename not Copy: HyperDX is the only
+#     consumer, no need to keep MESSAGE around. The Rename is a no-op
+#     on tail records (no MESSAGE key) so nginx tails' existing `log`
+#     field is untouched.
 [FILTER]
     Name              modify
     Match             *
     Set               host {{ inventory_hostname }}
-
-# Mirror journald's MESSAGE into `log` so HyperDX's OTLP output picks
-# it up as the LogRecord Body (fluent-bit's opentelemetry output uses
-# `log` by convention). Rename rather than Copy: HyperDX is the only
-# consumer now, no need to keep MESSAGE around. The Rename is a no-op
-# on tail records (no MESSAGE key) so nginx tails' existing `log` field
-# is untouched.
-[FILTER]
-    Name              modify
-    Match             *
     Rename            MESSAGE log
 
 # nginx access logs never carry semantically-meaningful level keywords
