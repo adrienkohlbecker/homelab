@@ -49,7 +49,7 @@ ExecStart=/usr/bin/podman run \
     --env PUID={{ radarr_user.uid }} \
     --env PGID={{ media_group.gid }} \
     --env UMASK=002 \
-    --env TZ=Europe/Paris \
+    --env TZ={{ system_timezone }} \
     --volume /mnt/services/radarr:/config \
     --volume /mnt/services/sqlite/radarr:/mnt/services/sqlite/radarr \
     --volume /mnt/media:/media \

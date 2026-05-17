@@ -52,7 +52,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/pihole/dnsmasq:/etc/dnsmasq.d \
     --volume /mnt/services/sqlite/pihole:/var/lib/pihole \
     --volume /var/log/pihole:/var/log/pihole \
-    --env TZ="Europe/Paris" \
+    --env TZ={{ system_timezone }} \
     --env FTLCONF_dns_listeningMode=SINGLE \
     --env FTLCONF_dns_reply_host_IPv4={{ ansible_facts.default_ipv4.address }} \
     --env FTLCONF_dns_revServers="true,{{ home_subnet }},{{ home_subnet | ansible.utils.ipmath(1) }}" \

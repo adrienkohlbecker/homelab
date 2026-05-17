@@ -47,6 +47,11 @@ smtp_host: smtp.eu.mailgun.org
 smtp_port: 587
 email_domain: noreply.{{ domain }}
 
+# User-facing timezone for podman service containers. Host clock
+# stays UTC (see roles/timezone/) so journald/syslog correlate with
+# external timestamps; containers render user-visible times in local.
+system_timezone: Europe/Paris
+
 # GitHub owner under which the repos listed in github_runner_instances
 # live. Personal-account constraint -- no org, so all repos share one
 # owner.
