@@ -29,6 +29,20 @@
   loop_control:
     label: "{{ item.stat.path }}"
 
+# fluent-bit's HTTP_Server returns 200 only once the engine has
+# initialised inputs/outputs; pairs with the Type=notify dropin so
+# this should already succeed on first hit (systemd_unit's start
+# waits for sd_notify READY=1).
+- name: _verify | HTTP_Server health
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.fluentbit }}/api/v1/health"
+    status_code: 200
+  register: _verify_health
+  retries: 6
+  delay: 2
+  until: _verify_health.status == 200
+  become: true
+
 # End-to-end CSP-through-OTLP shape assertion. POST a marked CSP report
 # at fluent-bit's HTTP input, let it flow through:
 #   fluent-bit HTTP input
