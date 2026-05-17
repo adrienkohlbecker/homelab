@@ -140,7 +140,7 @@
 - name: _verify | OTLP-end-to-end | wait for ClickHouse row matching marker
   import_role:
     name: _test
-    tasks_from: clickhouse_query
+    tasks_from: clickhouse_query_wait
   vars:
     _test_args:
       label: "OTLP-end-to-end | wait for CSP row"
@@ -148,7 +148,6 @@
       retries: 30
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
-      failed_when: false
 
 - name: _verify | OTLP-end-to-end | fetch CSP row as JSON
   import_role:
@@ -230,7 +229,7 @@
 - name: _verify | journald path | wait for ClickHouse row matching marker
   import_role:
     name: _test
-    tasks_from: clickhouse_query
+    tasks_from: clickhouse_query_wait
   vars:
     _test_args:
       label: "journald path | wait for row"
@@ -241,7 +240,6 @@
       retries: 30
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
-      failed_when: false
 
 - name: _verify | journald path | fetch row as JSON
   import_role:
@@ -293,7 +291,7 @@
 - name: _verify | nginx tail | wait for ClickHouse row matching marker
   import_role:
     name: _test
-    tasks_from: clickhouse_query
+    tasks_from: clickhouse_query_wait
   vars:
     _test_args:
       label: "nginx tail | wait for row"
@@ -304,7 +302,6 @@
       retries: 30
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
-      failed_when: false
 
 - name: _verify | nginx tail | fetch row as JSON
   import_role:
@@ -356,7 +353,7 @@
 - name: _verify | journald warn | wait for ClickHouse row matching marker
   import_role:
     name: _test
-    tasks_from: clickhouse_query
+    tasks_from: clickhouse_query_wait
   vars:
     _test_args:
       label: "journald warn | wait"
@@ -367,7 +364,6 @@
       retries: 30
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
-      failed_when: false
 
 - name: _verify | journald warn | fetch row
   import_role:
@@ -418,7 +414,7 @@
 - name: _verify | multiline | wait for joined traceback row
   import_role:
     name: _test
-    tasks_from: clickhouse_query
+    tasks_from: clickhouse_query_wait
   vars:
     _test_args:
       label: "multiline | wait"
@@ -430,7 +426,6 @@
       retries: 30
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
-      failed_when: false
 
 - name: _verify | multiline | fetch row
   import_role:
