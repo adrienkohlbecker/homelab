@@ -132,6 +132,40 @@
   tags:
     - podman
 
+# community.general.filesystem with resizefs: true only grows ext4,
+# never shrinks. The `zfs:` task below happily accepts any volsize as
+# a property change -- including a shrink under a live, larger ext4,
+# which silently leaves the fs writing past end-of-device until the
+# next overlay mkdir trips ENOMEM. (Incident 2026-05-17: pihole list
+# update failed with "cannot allocate memory" after the zvol had been
+# shrunk from a manually-grown 50G back to the role's 30G.) Bail before
+# the shrink lands; the only safe path is offline e2fsck + resize2fs +
+# zfs set volsize, then commit the new size here.
+- name: install | Read current podman zvol size
+  when: zfs_root
+  command: zfs get -Hp -o value volsize rpool/podman
+  register: podman_zvol_current
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - podman
+
+- name: install | Refuse to shrink podman zvol
+  when:
+    - zfs_root
+    - podman_zvol_current.rc == 0
+  assert:
+    that: (podman_zvol_size | int) >= (podman_zvol_current.stdout | int)
+    fail_msg: >-
+      Refusing to shrink rpool/podman from {{ podman_zvol_current.stdout }}
+      to {{ podman_zvol_size }} bytes -- would corrupt the ext4 inside. To
+      shrink: stop podman services, umount /var/lib/containers, grow zvol
+      back, e2fsck -fy, resize2fs to target, then shrink zvol.
+  tags:
+    - podman
+
 - name: install | Create podman zvol
   when: zfs_root
   zfs:

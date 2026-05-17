@@ -126,7 +126,7 @@ wireguard_keys:
 synology_endpoint: akohlbecker.synology.me
 certbot_production_certificates: true
 
-podman_zvol_size: '{{ "30GB" | human_to_bytes | string }}'
+podman_zvol_size: '{{ "50GB" | human_to_bytes | string }}'
 
 postfix_smtp_user: postfix@{{email_domain}}
 postfix_smtp_password: !vault |
