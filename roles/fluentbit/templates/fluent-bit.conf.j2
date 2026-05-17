@@ -92,6 +92,7 @@
     DB                /var/lib/fluent-bit/nginx-access.db
     db.locking        on
     Path_Key          filepath
+    Read_from_Head    off
     Skip_Long_Lines   on
     Skip_Empty_Lines  on
     Rotate_Wait       30
@@ -106,6 +107,7 @@
     DB                /var/lib/fluent-bit/nginx-error.db
     db.locking        on
     Path_Key          filepath
+    Read_from_Head    off
     Skip_Long_Lines   on
     Skip_Empty_Lines  on
     Rotate_Wait       30
