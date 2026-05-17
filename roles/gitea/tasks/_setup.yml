@@ -2,13 +2,3 @@
   import_role:
     name: _test
     tasks_from: nginx
-
-# gitea shells out to `git` for repo operations. In prod, git is installed
-# by roles/user (Base installation phase). The test harness runs only the
-# role-under-test, so pre-install it here for the fixture.
-- name: _setup | Install git
-  apt:
-    name: git
-    install_recommends: false
-    cache_valid_time: 3600
-  become: true
