@@ -71,10 +71,18 @@
   tags:
     - filebrowser
 
-- name: Install python3-passlib for the htpasswd module
-  apt:
-    name: python3-passlib
-    state: present
+# pip libpass (a maintained passlib fork) instead of the apt python3-passlib
+# package. The apt 1.7.4 fails to load its bcrypt backend when /usr/local
+# has bcrypt >= 4.1 (passlib reads `bcrypt.__about__.__version__`, removed
+# in bcrypt 4.1.0; lab carries bcrypt 5.0 pulled in by paramiko via
+# podman-compose). Upstream passlib has no 1.7.5; libpass installs to
+# /usr/local/lib/python3.X/dist-packages/ and imports as `passlib`,
+# shadowing the broken apt copy.
+- name: Install libpass via pip for the htpasswd module
+  pip:
+    name: libpass
+    version: "1.9.3"
+    executable: pip3
   become: true
   register: filebrowser_passlib
   tags:
