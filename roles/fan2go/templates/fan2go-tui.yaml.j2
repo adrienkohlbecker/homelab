@@ -1,0 +1,9 @@
+# {{ ansible_managed }}
+# fan2go-tui config. Same on every fan2go_enabled host -- only the
+# port is variable, sourced from group_vars/all.yml:service_ports so
+# it stays in sync with the daemon's api.port. UI updateInterval left
+# at the upstream default (500ms).
+
+api:
+  host: 127.0.0.1
+  port: {{ service_ports.fan2go_api }}

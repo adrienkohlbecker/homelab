@@ -1,0 +1,313 @@
+# Whole role no-ops unless fan2go_enabled=true on the host. Hosts that
+# opt in must ship a hand-written roles/fan2go/files/<hostname>.yaml
+# alongside the flag; the copy task fails loudly if it's missing.
+
+# ---- Phase 1: build prerequisites ----
+# fan2go-tui ships no binaries (any arch), so source-build always runs
+# on every fan2go_enabled host. amd64 hosts could otherwise skip the Go
+# toolchain (fan2go itself ships an amd64 prebuilt), but tui forces the
+# install regardless. Tarball goes to /opt/go-<version>/ so multiple
+# Go pins can coexist.
+
+- name: Install build deps
+  when: fan2go_enabled
+  apt:
+    pkg:
+      - git
+      - make
+      - gcc
+      - libc6-dev
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - fan2go
+
+- name: Download Go toolchain tarball
+  when: fan2go_enabled
+  get_url:
+    url: "{{ fan2go_go_artifacts[ansible_architecture].url }}"
+    dest: "/var/cache/go-{{ fan2go_go_version }}.{{ ansible_architecture }}.tar.gz"
+    checksum: "sha256:{{ fan2go_go_artifacts[ansible_architecture].sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  tags:
+    - fan2go
+
+# tar with --transform so the extracted dir is /opt/go-<version>/
+# (upstream tarball's top dir is just `go/`); lets multiple Go versions
+# coexist if we ever pin a different one.
+- name: Extract Go toolchain
+  when: fan2go_enabled
+  command:
+    argv:
+      - tar
+      - -C
+      - /opt
+      - --transform
+      - "s,^go,go-{{ fan2go_go_version }},"
+      - -xzf
+      - "/var/cache/go-{{ fan2go_go_version }}.{{ ansible_architecture }}.tar.gz"
+  args:
+    creates: "/opt/go-{{ fan2go_go_version }}/bin/go"
+  become: true
+  tags:
+    - fan2go
+
+# ---- Phase 2: install fan2go daemon binary ----
+# amd64 takes the prebuilt download; aarch64 builds from source via the
+# Go toolchain installed above.
+
+- name: Download fan2go prebuilt binary (x86_64)
+  when:
+    - fan2go_enabled
+    - ansible_architecture == "x86_64"
+  get_url:
+    url: "{{ fan2go_artifacts.x86_64.url }}"
+    dest: "/usr/local/bin/fan2go-{{ fan2go_version }}"
+    checksum: "sha256:{{ fan2go_artifacts.x86_64.sha256 }}"
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  register: fan2go_binary_download
+  tags:
+    - fan2go
+
+- name: Build fan2go from source (aarch64)
+  when:
+    - fan2go_enabled
+    - ansible_architecture == "aarch64"
+  tags:
+    - fan2go
+  block:
+    - name: Clone fan2go source (aarch64)
+      git:
+        repo: "{{ fan2go_artifacts.aarch64.repo }}"
+        version: "{{ fan2go_artifacts.aarch64.git_ref }}"
+        dest: "/var/cache/fan2go-{{ fan2go_version }}-src"
+      become: true
+
+    - name: Build fan2go (aarch64)
+      command:
+        chdir: "/var/cache/fan2go-{{ fan2go_version }}-src"
+        argv:
+          - make
+          - build-no-nvml
+      environment:
+        PATH: "/opt/go-{{ fan2go_go_version }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        GOCACHE: "/var/cache/fan2go-{{ fan2go_version }}-src/.gocache"
+        GOPATH: "/var/cache/fan2go-{{ fan2go_version }}-src/.gopath"
+      args:
+        creates: "/var/cache/fan2go-{{ fan2go_version }}-src/bin/fan2go"
+      become: true
+
+    - name: Install built fan2go binary (aarch64)
+      copy:
+        src: "/var/cache/fan2go-{{ fan2go_version }}-src/bin/fan2go"
+        dest: "/usr/local/bin/fan2go-{{ fan2go_version }}"
+        owner: root
+        group: root
+        mode: "0755"
+        remote_src: true
+      become: true
+      register: fan2go_binary_build
+
+- name: Symlink /usr/local/bin/fan2go to versioned binary
+  when: fan2go_enabled
+  file:
+    src: "/usr/local/bin/fan2go-{{ fan2go_version }}"
+    dest: /usr/local/bin/fan2go
+    state: link
+    owner: root
+    group: root
+  become: true
+  register: fan2go_symlink
+  tags:
+    - fan2go
+
+# ---- Phase 3: install fan2go-tui binary ----
+# No upstream binaries on any arch; build from source on every
+# fan2go_enabled host. TUI is interactive (no service unit, run by
+# operator over ssh); it talks to the daemon's HTTP API on loopback,
+# which means api: enabled: true must be present in the per-host
+# fan2go.yaml.
+
+- name: Build fan2go-tui from source
+  when: fan2go_enabled
+  tags:
+    - fan2go
+  block:
+    - name: Clone fan2go-tui source
+      git:
+        repo: "{{ fan2go_tui_artifacts.repo }}"
+        version: "{{ fan2go_tui_artifacts.git_ref }}"
+        dest: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src"
+      become: true
+
+    - name: Build fan2go-tui
+      command:
+        chdir: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src"
+        argv:
+          - make
+          - build
+      environment:
+        PATH: "/opt/go-{{ fan2go_go_version }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+        GOCACHE: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src/.gocache"
+        GOPATH: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src/.gopath"
+      args:
+        creates: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src/bin/fan2go-tui"
+      become: true
+
+    - name: Install built fan2go-tui binary
+      copy:
+        src: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src/bin/fan2go-tui"
+        dest: "/usr/local/bin/fan2go-tui-{{ fan2go_tui_version }}"
+        owner: root
+        group: root
+        mode: "0755"
+        remote_src: true
+      become: true
+      register: fan2go_tui_binary_build
+
+    - name: Symlink /usr/local/bin/fan2go-tui to versioned binary
+      file:
+        src: "/usr/local/bin/fan2go-tui-{{ fan2go_tui_version }}"
+        dest: /usr/local/bin/fan2go-tui
+        state: link
+        owner: root
+        group: root
+      become: true
+
+# ---- Phase 4: config + service ----
+
+- name: Create /etc/fan2go config dir
+  when: fan2go_enabled
+  file:
+    path: /etc/fan2go
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - fan2go
+
+# Each opt-in host ships its own per-host yaml under role templates/.
+# Templated only for the api.port substitution (sourced from
+# group_vars/all.yml:service_ports.fan2go_api); the rest of the file
+# is literal YAML.
+- name: Install /etc/fan2go/fan2go.yaml (per-host)
+  when: fan2go_enabled
+  template:
+    src: "{{ inventory_hostname }}.yaml.j2"
+    dest: /etc/fan2go/fan2go.yaml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    # Best-effort YAML well-formedness check; fan2go's own schema check
+    # happens at daemon start, no standalone validator in the binary.
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' %s
+  register: fan2go_config
+  become: true
+  tags:
+    - fan2go
+
+# fan2go-tui config -- single template shared by all hosts; api.port
+# matches the daemon's via service_ports. Without this, tui falls back
+# to its built-in 9001 default and diverges silently if the registry
+# port ever changes. Mode 0644: readable by any user (tui is operator-
+# run, no privilege required to query the loopback API).
+- name: Create /etc/fan2go-tui config dir
+  when: fan2go_enabled
+  file:
+    path: /etc/fan2go-tui
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - fan2go
+
+- name: Install /etc/fan2go-tui/fan2go-tui.yaml
+  when: fan2go_enabled
+  template:
+    src: fan2go-tui.yaml.j2
+    dest: /etc/fan2go-tui/fan2go-tui.yaml
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' %s
+  become: true
+  tags:
+    - fan2go
+
+# ---- disabled-host cleanup ----
+# Only acts on hosts that previously had fan2go enabled. Stat-first to
+# avoid systemctl ENOENT noise on hosts where fan2go was never installed.
+
+- name: Stat fan2go service unit (disabled)
+  when: not fan2go_enabled
+  stat:
+    path: /etc/systemd/system/fan2go.service
+  register: fan2go_unit_stat
+  tags:
+    - fan2go
+
+- name: Stop and disable fan2go service (disabled, previously installed)
+  when:
+    - not fan2go_enabled
+    - fan2go_unit_stat.stat.exists
+  systemd:
+    name: fan2go
+    state: stopped
+    enabled: false
+  become: true
+  tags:
+    - fan2go
+
+- name: Remove fan2go config (disabled)
+  when: not fan2go_enabled
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/fan2go/fan2go.yaml
+    - /etc/fan2go-tui/fan2go-tui.yaml
+  become: true
+  tags:
+    - fan2go
+
+# ---- service install + start ----
+
+- name: Install fan2go systemd unit
+  when: fan2go_enabled
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: fan2go.service
+  tags:
+    - fan2go
+
+- name: Enable and start fan2go service
+  when: fan2go_enabled
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: fan2go.service
+      restart: >-
+        {{ fan2go_config.changed | default(false)
+           or fan2go_symlink.changed | default(false)
+           or fan2go_binary_download.changed | default(false)
+           or fan2go_binary_build.changed | default(false)
+           or fan2go_service_result.changed | default(false) }}
+  tags:
+    - fan2go
