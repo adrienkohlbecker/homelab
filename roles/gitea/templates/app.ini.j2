@@ -33,8 +33,16 @@ SSH_PORT = 22
 # (it has historically tracked RUN_USER) doesn't silently rewrite every
 # clone URL we hand out.
 SSH_USER = git
+# Back up ~git/.ssh/authorized_keys before each rewrite. Gitea rebuilds
+# the file from the DB on every key add/remove; a bad rewrite (missing
+# command= prefix) silently exposes a bash shell at git@. The backup
+# gives an on-disk diff target after the fact.
+SSH_AUTHORIZED_KEYS_BACKUP = true
 LFS_START_SERVER = true
 LFS_JWT_SECRET = {{ gitea_lfs_jwt_secret }}
+# Disables external avatar/CDN fetches and the periodic update check.
+# Does NOT block Gitea Actions workflows' `uses:` from cloning external
+# action repos -- that's a per-workflow choice.
 OFFLINE_MODE = true
 # DISABLE_REGISTRATION = true (below) means /explore is the only anon
 # landing page that ever shows public-repo lists; redirecting straight
@@ -93,6 +101,21 @@ PASSWORD_HASH_ALGO = pbkdf2_hi
 # now that ROOT_URL is https.
 COOKIE_SECURE = true
 MIN_PASSWORD_LENGTH = 12
+# Same idempotence trap as [oauth2] JWT_SECRET below: gitea generates
+# SECRET_KEY on first start if unset and writes it back to app.ini.
+# SECRET_KEY also encrypts 2FA secrets and OAuth client secrets, so a
+# regenerated key silently invalidates every stored token. Pin from
+# vault to break the cycle.
+SECRET_KEY = {{ gitea_secret_key }}
+# Reject API tokens passed as ?token=... URL params -- they land in
+# nginx access logs and browser history. Upstream notes this will
+# become the default in a future release.
+DISABLE_QUERY_AUTH_TOKEN = true
+# Server-side git hooks let any repo-admin run arbitrary code as the
+# git user, including reading app.ini secrets and modifying the DB.
+# We don't use them; closing the door reduces blast radius from a
+# compromised account or future role-grant mistake.
+DISABLE_GIT_HOOKS = true
 
 # gitea generates JWT_SECRET on first start if it's missing and writes
 # it back to app.ini, which then makes the role non-idempotent (template
@@ -108,3 +131,17 @@ ENABLED = true
 [cron.cleanup_actions]
 ENABLED = true
 OLDER_THAN = 8760h
+
+# Reject weak keys at registration time -- gitea-side enforcement is
+# independent of host sshd's KexAlgorithms/Ciphers. -1 = disallowed.
+[ssh.minimum_key_sizes]
+ED25519 = 256
+RSA = 3071
+ECDSA = -1
+DSA = -1
+
+# Suppress version disclosure in the page footer (visible on the anon
+# login page, which is the only page anon visitors see given closed
+# registration + LANDING_PAGE = login).
+[other]
+SHOW_FOOTER_VERSION = false
