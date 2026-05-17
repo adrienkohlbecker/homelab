@@ -32,11 +32,6 @@
     # Drain in-memory + on-disk backlog before exit so role-triggered
     # restarts (conf / lua changes) don't drop records mid-flight.
     storage.backlog.flush_on_shutdown  on
-    # Each [INPUT] below caps its own filesystem backlog at 20M via
-    # storage.total_limit_size. Pairs with pause_on_chunks_overlimit so
-    # a single misbehaving stream can't fill /var/lib/fluent-bit/storage/
-    # and starve the others. Disk budget under back-pressure:
-    # 4 inputs * 20M + 50M OTLP output queue = ~130M worst case.
 
 # Everything that logs via systemd journal (which on modern Ubuntu is
 # nearly every service — including apt/dpkg/unattended-upgrades that
@@ -62,7 +57,6 @@
     Read_From_Tail    on
     Strip_Underscores on
     storage.type      filesystem
-    storage.total_limit_size  20M
     storage.pause_on_chunks_overlimit  on
 
 # Browser-emitted CSP violation reports. nginx on csplogger.<host>.<domain>
@@ -83,7 +77,6 @@
     # use 256k because they read whole logrotated files at startup.
     Buffer_Max_Size   32k
     storage.type      filesystem
-    storage.total_limit_size  20M
     storage.pause_on_chunks_overlimit  on
 
 # nginx access/error logs don't go through journald by default.
@@ -105,7 +98,6 @@
     Rotate_Wait       30
     Buffer_Max_Size   256k
     storage.type      filesystem
-    storage.total_limit_size  20M
     storage.pause_on_chunks_overlimit  on
 
 [INPUT]
@@ -121,7 +113,6 @@
     Rotate_Wait       30
     Buffer_Max_Size   256k
     storage.type      filesystem
-    storage.total_limit_size  20M
     storage.pause_on_chunks_overlimit  on
 
 # Join python / go / java / ruby tracebacks into a single record per
