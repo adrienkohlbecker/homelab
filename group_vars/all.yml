@@ -42,6 +42,7 @@ service_ports:
   homepage_alerts: 8765
   hyperdx: 5085
   hyperdx_otlp_http: 4318
+  lidarr: 8686
   nut: 3493
   openobserve: 5080
   transmission_bt: 51413
