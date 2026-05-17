@@ -56,11 +56,14 @@ curves:
       min: 40
       max: 60
 {% for disk in rotational_disks_by_id %}
+  # min=38, max=48: matches lab.yaml.j2's HDD curve. Ramp starts just
+  # before WD10TB steady-state; full PWM at 48°C keeps spinners in
+  # the longevity sweet spot well clear of the 65°C continuous rating.
   - id: hdd_{{ loop.index }}_curve
     linear:
       sensor: hdd_{{ loop.index }}_temp
-      min: 40
-      max: 55
+      min: 38
+      max: 48
 {% endfor %}
 
   - id: hdd_curve
