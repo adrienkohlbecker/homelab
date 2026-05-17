@@ -1,7 +1,12 @@
-# fan2go config for pug. Ported from the old fancontrol_settings in
-# host_vars/pug.yml. Two fans: CHA_FAN_2 follows nct6798 temp1; CHA_FAN_1
-# follows the hotter of pug's rotational HDDs (high startPwm=120 because
-# that fan stalls below it).
+# fan2go config for pug. CHA_FAN_2 follows CPU package temp via
+# coretemp; CHA_FAN_1 follows the hotter of pug's rotational HDDs
+# (high startPwm=120 because that fan stalls below it).
+#
+# CHA_FAN_2 used to follow nct6798/temp1 (SYSTIN) in the fancontrol-era
+# config, but SYSTIN reads ~51°C idle on this box (probably positioned
+# near a heat source, not at the intake) and would have pinned the fan
+# at high PWM nonstop on fan2go. coretemp's Package id 0 is a more
+# honest "is the CPU actually warm?" signal.
 #
 # Rotational disks are pulled from group_vars/all.yml:rotational_disks_by_id
 # (computed at apply time from ansible_devices) and aggregated via a
@@ -25,7 +30,7 @@ fans:
       platform: nct6798
       rpmChannel: 3
       pwmChannel: 3
-    curve: nct_curve
+    curve: cpu_curve
     startPwm: 40
     minPwm: 10
 
@@ -39,9 +44,12 @@ fans:
     minPwm: 90
 
 sensors:
-  - id: nct6798_temp1
+  # coretemp index 1 is "Package id 0" -- the CPU package envelope
+  # temp, derived from per-core DTS readings. Idles ~54°C on pug
+  # and ramps with actual CPU load.
+  - id: cpu_package_temp
     hwmon:
-      platform: nct6798
+      platform: coretemp
       index: 1
 {% for disk in rotational_disks_by_id %}
   - id: hdd_{{ loop.index }}_temp
@@ -50,11 +58,14 @@ sensors:
 {% endfor %}
 
 curves:
-  - id: nct_curve
+  # Idle Package id 0 ~54°C; under sustained load it'll climb toward
+  # 75-80°C. min=50 keeps the fan near minPwm at idle; max=80 gives
+  # full speed before any thermal-throttle territory.
+  - id: cpu_curve
     linear:
-      sensor: nct6798_temp1
-      min: 40
-      max: 60
+      sensor: cpu_package_temp
+      min: 50
+      max: 80
 {% for disk in rotational_disks_by_id %}
   # min=38, max=48: matches lab.yaml.j2's HDD curve. Ramp starts just
   # before WD10TB steady-state; full PWM at 48°C keeps spinners in
