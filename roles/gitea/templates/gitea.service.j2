@@ -19,7 +19,10 @@ PartOf=zfs_autosnapshot.target
 
 [Service]
 Restart=always
-TimeoutStartSec=120
+# gitea cold start is <5s; the ExecStartPost curl probe below has a
+# ~30s budget. 60s leaves headroom without doubling the unavailable
+# window on a wedged binary.
+TimeoutStartSec=60
 TimeoutStopSec=30
 RestartSec=5
 SyslogIdentifier=%N
