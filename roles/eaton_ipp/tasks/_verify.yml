@@ -11,17 +11,18 @@
     # SNMP/shutdown path is exercised in production by the absence of
     # spurious shutdowns, not by this verify file.
 
-    # IPP serves the same UI on plain HTTP (4679) — Eaton's port
-    # table: TCP 4679 = "Eaton Supervision" (HTTP UI), TCP 4680 =
-    # "Eaton SSL Supervision" (HTTPS UI). We probe via HTTP so we
-    # don't have to TLS-handshake to a self-signed loopback cert.
-    # IPP's index typically redirects to a login page on a fresh
-    # install — accept any reasonable 2xx/3xx/4xx so the probe
-    # doesn't pin a specific UI flow. We want to catch 5xx /
-    # connection failures (daemon bound but not actually serving).
-    - name: _verify | IPP serves HTTP on 4679
+    # IPP's HTTP listener on 4679 unconditionally 301s to https://
+    # 4680/, so the real UI only lives on the HTTPS socket. Self-
+    # signed cert on the daemon; we're on loopback so there's no
+    # TLS-trust guarantee to verify. Index typically redirects to a
+    # login page on a fresh install — accept any reasonable
+    # 2xx/3xx/4xx so the probe doesn't pin a specific UI flow. We
+    # want to catch 5xx / connection failures (daemon bound but not
+    # actually serving).
+    - name: _verify | IPP serves HTTPS on 4680
       uri:
-        url: http://localhost:{{ service_ports.eaton_ipp }}/
+        url: https://localhost:{{ service_ports.eaton_ipp }}/
+        validate_certs: false
         status_code: [ 200, 301, 302, 303, 401, 403 ]
       register: _verify_http_direct
       retries: 15
