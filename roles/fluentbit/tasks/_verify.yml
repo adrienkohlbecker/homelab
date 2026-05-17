@@ -320,3 +320,126 @@
       - "row.ServiceName == 'nginx_access'"
       - "fluentbit_otlp_nginx_marker in row.Body"
     fail_msg: "nginx access record landed with wrong shape: {{ row }}"
+
+# Exercises level_from_message's table dispatch on a non-error
+# keyword (WARN), distinct from the existing ERROR probe above:
+# catches mis-ordering of the priority table and SEV-mapping drift
+# after the SMP2 if/elseif -> table rewrite.
+- name: _verify | journald warn | build per-run marker
+  set_fact:
+    fluentbit_otlp_warn_marker: "verify_warn_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+
+- name: _verify | journald warn | emit marked log via transient unit
+  command: >-
+    systemd-run --unit=fluentbit_verify_warn --no-block --quiet
+    /usr/bin/logger -t fluentbit_verify_warn
+    "WARNING {{ fluentbit_otlp_warn_marker }}"
+  changed_when: false
+  become: true
+
+- name: _verify | journald warn | wait for ClickHouse row matching marker
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query
+  vars:
+    _test_args:
+      label: "journald warn | wait"
+      sql: >-
+        SELECT count() FROM default.otel_logs
+        WHERE Body LIKE '%{{ fluentbit_otlp_warn_marker }}%'
+          AND ServiceName = 'fluentbit_verify_warn'
+      retries: 30
+      delay: 2
+      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+      failed_when: false
+
+- name: _verify | journald warn | fetch row
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query
+  vars:
+    _test_args:
+      label: "journald warn | fetch"
+      sql: >-
+        SELECT
+          Body,
+          SeverityText,
+          toUInt32(SeverityNumber) AS SeverityNumber
+        FROM default.otel_logs
+        WHERE Body LIKE '%{{ fluentbit_otlp_warn_marker }}%'
+          AND ServiceName = 'fluentbit_verify_warn'
+        ORDER BY Timestamp DESC
+        LIMIT 1
+        FORMAT JSONEachRow
+
+- name: _verify | journald warn | assert severity classification
+  vars:
+    row: "{{ _test_clickhouse_result.stdout | from_json }}"
+  assert:
+    that:
+      - "row.SeverityText == 'warn'"
+      - "row.SeverityNumber | int == 13"
+      - "fluentbit_otlp_warn_marker in row.Body"
+    fail_msg: "WARN keyword classified wrong: {{ row }}"
+
+# Multiline traceback join: emit a python ValueError so the multiline
+# parser (python,go,java,ruby) joins the 3-line stack into a single
+# record. Filtering Body LIKE '%Traceback%' excludes the known
+# fluent-bit-python-parser dup-record that re-emits the trailing
+# exception line on its own (see fluent-bit.conf.j2's multiline
+# filter block for the quirk's documented context).
+- name: _verify | multiline | build per-run marker
+  set_fact:
+    fluentbit_otlp_multiline_marker: "verify_trace_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+
+- name: _verify | multiline | emit python traceback via transient unit
+  command: >-
+    systemd-run --unit=fluentbit_verify_multiline --no-block --quiet
+    /usr/bin/python3 -c "raise ValueError('trace_{{ fluentbit_otlp_multiline_marker }}')"
+  changed_when: false
+  become: true
+
+- name: _verify | multiline | wait for joined traceback row
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query
+  vars:
+    _test_args:
+      label: "multiline | wait"
+      sql: >-
+        SELECT count() FROM default.otel_logs
+        WHERE Body LIKE '%Traceback%'
+          AND Body LIKE '%{{ fluentbit_otlp_multiline_marker }}%'
+          AND ServiceName = 'fluentbit_verify_multiline'
+      retries: 30
+      delay: 2
+      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+      failed_when: false
+
+- name: _verify | multiline | fetch row
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query
+  vars:
+    _test_args:
+      label: "multiline | fetch"
+      sql: >-
+        SELECT Body, ServiceName
+        FROM default.otel_logs
+        WHERE Body LIKE '%Traceback%'
+          AND Body LIKE '%{{ fluentbit_otlp_multiline_marker }}%'
+          AND ServiceName = 'fluentbit_verify_multiline'
+        ORDER BY Timestamp DESC
+        LIMIT 1
+        FORMAT JSONEachRow
+
+- name: _verify | multiline | assert traceback joined
+  vars:
+    row: "{{ _test_clickhouse_result.stdout | from_json }}"
+  assert:
+    that:
+      - "'Traceback' in row.Body"
+      - "'ValueError' in row.Body"
+      - "fluentbit_otlp_multiline_marker in row.Body"
+      - "row.ServiceName == 'fluentbit_verify_multiline'"
+    fail_msg: "Multiline traceback not joined: {{ row }}"
