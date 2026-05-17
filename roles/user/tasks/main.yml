@@ -91,7 +91,7 @@
     tasks_from: linger
   vars:
     linger_args:
-      name: "{{ ansible_user }}"
+      name: "{{ ansible_user_id }}"
       uid: "{{ ansible_user_uid }}"
   tags:
     - user
