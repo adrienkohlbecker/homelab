@@ -53,7 +53,7 @@
 
 - name: Set shell to zsh
   user:
-    name: "{{ ansible_user }}"
+    name: "{{ ansible_user_id }}"
     shell: /bin/zsh
   become: true
   tags:
@@ -61,8 +61,8 @@
 
 - name: Sudo without password
   copy:
-    dest: /etc/sudoers.d/{{ ansible_user }}
-    content: "{{ ansible_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    dest: /etc/sudoers.d/{{ ansible_user_id }}
+    content: "{{ ansible_user_id }} ALL=(ALL) NOPASSWD:ALL\n"
     validate: visudo -cf %s
     backup: true
     owner: root
@@ -80,7 +80,7 @@
   tags:
     - user
 
-# Linger keeps {{ ansible_user }}'s user manager up across SSH sessions so
+# Linger keeps {{ ansible_user_id }}'s user manager up across SSH sessions so
 # user-scope timers (e.g. podman-prune.timer) fire on schedule instead of
 # only when someone happens to be logged in. Cost: a persistent
 # `systemd --user` process and any backgrounded ssh/tmux processes survive
@@ -98,7 +98,7 @@
 
 - name: Add authorized keys
   authorized_key:
-    user: "{{ ansible_user }}"
+    user: "{{ ansible_user_id }}"
     key: "{{( ssh_public_keys + '\n' + (ssh_public_keys_additional | default(''))) | trim }}"
     exclusive: true
   tags:
@@ -109,8 +109,8 @@
     src: gitconfig.j2
     dest: "{{ ansible_user_dir }}/.gitconfig.local"
     mode: "0644"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
     backup: true
   tags:
     - user
@@ -174,8 +174,8 @@
   file:
     path: "{{ ansible_user_dir }}/.local/share"
     state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
     mode: "0755"
   register: directory_mise
   tags:
@@ -198,8 +198,8 @@
     src: /tmp/mise-{{ mise_version }}.tar.gz
     remote_src: true
     dest: "{{ ansible_user_dir }}/.local/share"
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
   tags:
     - user
 
@@ -207,8 +207,8 @@
   file:
     path: "{{ ansible_user_dir }}/.local/bin"
     state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
     mode: "0755"
   tags:
     - user
@@ -219,8 +219,8 @@
     src: "{{ ansible_user_dir }}/.local/share/mise/bin/mise"
     dest: "{{ ansible_user_dir }}/.local/bin/mise"
     state: link
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
   tags:
     - user
 
@@ -229,8 +229,8 @@
   file:
     path: "{{ ansible_user_dir }}/.local/share/mise/completions"
     state: directory
-    owner: "{{ ansible_user }}"
-    group: "{{ ansible_user }}"
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
     mode: "0755"
   tags:
     - user

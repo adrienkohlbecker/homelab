@@ -103,11 +103,11 @@
   tags:
     - podman
 
-- name: Install podman prune timer for {{ ansible_user }}
+- name: Install podman prune timer for {{ ansible_user_id }}
   import_tasks: prune.yml
   vars:
     podman_prune_args:
-      user: "{{ ansible_user }}"
+      user: "{{ ansible_user_id }}"
   tags:
     - podman
 

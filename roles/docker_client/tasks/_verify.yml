@@ -5,7 +5,7 @@
 #    exports DOCKER_HOST=unix:///run/podman/podman.sock. docker
 #    itself honoring $DOCKER_HOST is upstream's contract; the
 #    podman role's contract owns whether the socket answers.
-# 3) ansible_user resolves to a podman-socket member via nsswitch
+# 3) ansible_user_id resolves to a podman-socket member via nsswitch
 #    (post-reset_connection, i.e. what a fresh login picks up).
 
 # docker version returns rc=1 when it can't reach the daemon, even
@@ -83,16 +83,16 @@
 # rootful podman socket's permission check) actually use, and it
 # witnesses the post-reset_connection state that usergroup_immediate
 # is named for.
-- name: _verify | Read ansible_user supplementary groups
-  command: id -nG {{ ansible_user }}
+- name: _verify | Read ansible_user_id supplementary groups
+  command: id -nG {{ ansible_user_id }}
   changed_when: false
   register: _verify_ansible_user_groups
 
-- name: _verify | ansible_user resolves to podman-socket member
+- name: _verify | ansible_user_id resolves to podman-socket member
   assert:
     that:
       - "'podman-socket' in _verify_ansible_user_groups.stdout.split()"
     fail_msg: >-
-      Expected {{ ansible_user }} to have podman-socket in its
+      Expected {{ ansible_user_id }} to have podman-socket in its
       supplementary group set; got
       {{ _verify_ansible_user_groups.stdout | default('') }}
