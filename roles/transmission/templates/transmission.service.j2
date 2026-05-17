@@ -46,7 +46,7 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="transmission" \
     --env PUID={{ transmission_user.uid }} \
     --env PGID={{ media_group.gid }} \
-    --env TZ=Europe/Paris \
+    --env TZ={{ system_timezone }} \
     --env-file /etc/default/transmission \
     --volume /mnt/services/transmission:/config \
     --volume /mnt/media/Torrents:/downloads/complete \

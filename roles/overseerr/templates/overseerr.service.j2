@@ -44,7 +44,7 @@ ExecStart=/usr/bin/podman run \
     --log-opt tag="overseerr" \
     --env PUID={{ overseerr_user.uid }} \
     --env PGID={{ media_group.gid }} \
-    --env TZ=Europe/Paris \
+    --env TZ={{ system_timezone }} \
     --volume /mnt/services/overseerr:/config \
     --volume /mnt/services/sqlite/overseerr:/config/db \
     --volume /mnt/media:/media \
