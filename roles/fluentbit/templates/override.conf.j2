@@ -1,7 +1,17 @@
 # {{ ansible_managed }}
-# Adds ExecReload to the upstream fluent-bit.service. Paired with
-# Hot_Reload On in fluent-bit.conf, conf and lua filter changes apply
-# without dropping in-flight records (a restart would empty the
-# in-memory backlog despite storage.backlog.flush_on_shutdown=on).
+# Two things on top of the upstream fluent-bit.service:
+# - ExecReload: paired with Hot_Reload On in fluent-bit.conf, conf and
+#   lua filter changes apply via SIGHUP without dropping in-flight
+#   records (a restart would empty the in-memory backlog despite
+#   storage.backlog.flush_on_shutdown=on).
+# - Type=notify + WatchdogSec=30s: gate the unit's `active` state on
+#   fluent-bit's sd_notify READY=1 so systemd reports active only after
+#   the engine has bound inputs and HTTP_Server is ready, and SIGABRT
+#   the process if watchdog pings stop for 30s. fluent-bit 1.9+ auto-
+#   detects NOTIFY_SOCKET and WATCHDOG_USEC -- no extra flag needed.
+#   Hot_Reload pauses the engine briefly but stays well under the 15s
+#   half-period threshold.
 [Service]
+Type=notify
+WatchdogSec=30s
 ExecReload=/bin/kill -s HUP $MAINPID
