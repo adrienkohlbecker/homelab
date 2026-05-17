@@ -17,12 +17,20 @@
 -- $otlp['attributes'] and $otlp['severity_*'] are wired record
 -- accessors in the OTLP output, unlike resource.
 --
--- This filter also lifts the upstream "host" field (set by the global
--- Set-host modify filter) into metadata.otlp.attributes so it lands
--- as a LogAttribute next to the CSP / journald / nginx record stream.
--- For CSP records, flatten_csp.lua replaces the record wholesale, so
--- "host" would otherwise never reach LogAttributes; this is the only
--- place it can be reattached without re-deriving from the tag.
+-- This filter also lifts EVERY remaining record key into
+-- metadata.otlp.attributes so they land as LogAttributes -- the OTLP
+-- output reads attributes via $otlp['attributes'] only, so anything
+-- left in the record body is dropped on the floor. For journald records
+-- this is how SYSTEMD_UNIT / SYSLOG_IDENTIFIER / PID / COMM / PRIORITY
+-- etc. reach HyperDX. The upstream "host" field (set by the global
+-- Set-host modify filter) gets lifted by the same loop. For CSP records,
+-- flatten_csp.lua replaces the record wholesale and pre-populates
+-- metadata.otlp.attributes with csp_*; the loop here only adds "host".
+-- Excluded keys (routed elsewhere or already lifted):
+--   log              -> LogRecord.Body
+--   resource         -> ResourceLogs.resource (set just below)
+--   severity_text    -> metadata.otlp.severity_text (lifted by
+--   severity_number     level_from_message.lua / modify pre-stamp)
 --
 -- Match *, runs last in the filter chain so it sees the final tag and
 -- the upstream "host" field that the global Set-host modify filter set.
@@ -72,6 +80,11 @@ local function service_from_tag(tag)
     return string.lower(svc)
 end
 
+local EXCLUDE_FROM_ATTRS = {
+    log = true, resource = true,
+    severity_text = true, severity_number = true,
+}
+
 function shape_otlp(tag, ts, group, metadata, record)
     metadata.otlp = metadata.otlp or {}
     metadata.otlp.attributes = metadata.otlp.attributes or {}
@@ -80,8 +93,14 @@ function shape_otlp(tag, ts, group, metadata, record)
     local host = record["host"]
     if type(host) == "string" and host ~= "" then
         resource_attrs["host.name"] = host
-        metadata.otlp.attributes["host"] = host
     end
     record["resource"] = { attributes = resource_attrs }
+
+    for k, v in pairs(record) do
+        if not EXCLUDE_FROM_ATTRS[k] then
+            metadata.otlp.attributes[k] = v
+        end
+    end
+
     return 1, ts, metadata, record
 end
