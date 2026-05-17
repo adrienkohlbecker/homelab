@@ -31,15 +31,16 @@ Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N
 
-# Both SUPERUSER_PASSWORD (used once at first-boot by linuxserver's
-# s6 init) and SECRET_KEY (read every request by Django) flow in via
-# --secret=type=env rather than type=mount/_FILE because
-# linuxserver/healthchecks' s6-overlay init reads them straight from
-# the env -- there's no _FILE-suffix handling in that wrapper. The
-# env-var exposure (podman inspect, /proc/<pid>/environ) is
-# 0400 root-only in this single-operator host, so the leak isn't
-# reachable in the threat model. Reconsider if we move to an image
-# whose wrapper does honor _FILE.
+# Secrets land via files under /run/secrets/, picked up by two
+# different mechanisms depending on what the consumer supports:
+#   - linuxserver's FILE__ prefix (init reads the file, exports the
+#     env var to its s6 child) for SUPERUSER_PASSWORD and SECRET_KEY
+#     -- those have no Django-native *_FILE setting, so we can't avoid
+#     the env-var hop, but FILE__ at least keeps the secret out of the
+#     unit file itself and out of `podman inspect`.
+#   - Django's native *_FILE setting (settings.py reads the file
+#     directly) for EMAIL_HOST_PASSWORD -- preferred when supported
+#     because the secret never lands in any env var at runtime.
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
@@ -72,8 +73,10 @@ ExecStart=/usr/bin/podman run \
     --env SITE_NAME=Healthchecks \
     --env ADMINS={{ root_email }} \
     --env SUPERUSER_EMAIL={{ root_email }} \
-    --secret=healthchecks_password,type=env,target=SUPERUSER_PASSWORD \
-    --secret=healthchecks_secret_key,type=env,target=SECRET_KEY \
+    --secret=healthchecks_password,type=mount,target=superuser_password \
+    --env FILE__SUPERUSER_PASSWORD=/run/secrets/superuser_password \
+    --secret=healthchecks_secret_key,type=mount,target=secret_key \
+    --env FILE__SECRET_KEY=/run/secrets/secret_key \
     --env DEBUG=False \
     --env DEFAULT_FROM_EMAIL="{{ healthchecks_smtp_from }}" \
     --env EMAIL_HOST="{{ smtp_host }}" \
