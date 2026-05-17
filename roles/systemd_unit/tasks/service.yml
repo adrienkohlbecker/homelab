@@ -58,7 +58,7 @@
 # the unit dies at logout. /var/lib/systemd/linger/<user> is the marker
 # loginctl enable-linger creates -- see install.yml for the longer
 # rationale. Check-mode tolerance: see install.yml.
-- name: service | Verify user-scope linger marker exists for {{ _systemd_unit_user }}
+- name: service | Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
   when:
     - _systemd_unit_condition
     - _systemd_unit_scope == 'user'
