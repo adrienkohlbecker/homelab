@@ -1,0 +1,42 @@
+# Dynamically attaches wg0 to the inet homelab `bulk` flowtable. Kept
+# out of /etc/nftables.conf's static `devices = { ... }` clause so
+# nftables.service can load at boot without racing wg-quick@wg0 — nft
+# errors out with ENOENT when a flowtable device doesn't exist yet,
+# which would leave the host without a firewall until manual restart.
+#
+# PartOf=wg-quick@wg0.service nftables.service: a restart of either
+# parent propagates a restart to us, so the dynamic attachment is
+# re-applied after wg-quick comes back up or after a full
+# nftables.service restart. PartOf doesn't propagate reload — the
+# reload case is handled by nftables.service's ExecReload drop-in
+# which calls `systemctl try-restart wg0_flowtable.service`.
+#
+# WantedBy=wg-quick@wg0.service: enabling installs the symlink under
+# wg-quick@wg0.service.wants/, so starting wg-quick at boot also
+# starts this unit. After= orders us after wg-quick has finished
+# bringing wg0 up. Deliberately NOT BindsTo=wg-quick@wg0.service: a
+# Requires-style dep would try to auto-start wg-quick whenever we're
+# started, which under the test harness (where the wireguard role
+# wasn't applied, so /etc/wireguard/wg0.conf doesn't exist) would
+# cascade-fail the converge. PartOf + WantedBy gives the same
+# lifecycle binding for prod (where wg-quick starts first) without
+# the Requires-style coupling.
+#
+# ExecCondition exit-255 makes the unit go active (exited) without
+# running ExecStart when wg0 doesn't exist — covers the test-harness
+# case above and a degraded-wg-quick boot (where the iface never came
+# up). PartOf will re-fire ExecStart whenever wg-quick is (re)started
+# and brings wg0 up.
+[Unit]
+Description=Attach wg0 to nftables homelab flowtable
+After=wg-quick@wg0.service nftables.service
+PartOf=wg-quick@wg0.service nftables.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecCondition=/bin/sh -c '[ -e /sys/class/net/wg0 ] || exit 255'
+ExecStart=/usr/sbin/nft add flowtable inet homelab bulk { devices = { wg0 }; }
+
+[Install]
+WantedBy=wg-quick@wg0.service

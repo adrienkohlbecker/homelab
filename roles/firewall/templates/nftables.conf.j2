@@ -104,14 +104,17 @@ table inet homelab {
     # Kernel-offloaded conntrack fastpath. Established TCP/UDP flows
     # that ingress on a listed device skip the forward chain entirely
     # via the ingress hook, which materially cuts CPU on bulk traffic
-    # (BT, plex). Listed devices are limited to $WAN_IFACE and wg0
-    # because nft's `devices` clause needs literal names — podman
-    # bridges (host-specific count and naming) can't be wildcarded
-    # here, so container-egress packets still walk the chain on their
-    # outbound side; the WAN-ingress reply path is offloaded.
+    # (BT, plex). Listed devices are limited to $WAN_IFACE — wg0 is
+    # attached dynamically by wg0_flowtable.service (tied to
+    # wg-quick@wg0's lifecycle) so the firewall can load at boot
+    # before the wg iface exists; nft errors out with ENOENT here if
+    # a device in the static clause isn't up yet. podman bridges
+    # (host-specific count and naming) can't be wildcarded either, so
+    # container-egress packets still walk the chain on their outbound
+    # side; the WAN-ingress reply path is offloaded.
     flowtable bulk {
         hook ingress priority filter;
-        devices = { $WAN_IFACE, "wg0" };
+        devices = { $WAN_IFACE };
     }
 
     ##################################################
