@@ -4,6 +4,6 @@
 # ansible_devices (the same selector the legacy custom_exporter env file used).
 hdparm_disks=(
 {% for dev in ansible_devices.values() | selectattr('rotational', 'equalto', '1') | map(attribute='links') | map(attribute='ids') | select | map('first') | sort %}
-  "{{ dev }}"
+  {{ dev | quote }}
 {% endfor %}
 )
