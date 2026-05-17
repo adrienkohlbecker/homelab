@@ -68,6 +68,9 @@
     # cacheable: true persists the fact across plays so _verify.yml
     # (which runs as a separate play) can reuse the discovery instead
     # of rediscovering.
+    # \g<1>, not \\1: nested inside combine({...}) in a YAML
+    # folded scalar the \\1 backref double-escapes by the
+    # time it reaches re.sub and emits literal "\1".
     - name: Build fancontrol_chip_map
       set_fact:
         cacheable: true
@@ -76,7 +79,7 @@
             fancontrol_chip_map | default({}) | combine({
               (item.1.content | b64decode | trim): {
                 "hwmon": item.0.path | basename,
-                "devpath": item.2.stdout | regex_replace('^/sys/(.*?)(?:/hwmon)?/hwmon[0-9]+$', '\\1'),
+                "devpath": item.2.stdout | regex_replace('^/sys/(.*?)(?:/hwmon)?/hwmon[0-9]+$', '\g<1>'),
               }
             })
           }}
