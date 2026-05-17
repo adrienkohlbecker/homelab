@@ -2,6 +2,7 @@
   apt:
     pkg: hdparm
     cache_valid_time: 3600
+  register: hdparm_apt
   become: true
   tags:
     - hdparm
@@ -15,6 +16,7 @@
 # capability is reset by an apt upgrade of the hdparm package, so this
 # task re-applies on every play.
 - name: Grant hdparm CAP_SYS_RAWIO
+  when: not (ansible_check_mode and hdparm_apt.changed)
   community.general.capabilities:
     path: /sbin/hdparm
     capability: cap_sys_rawio+ep
