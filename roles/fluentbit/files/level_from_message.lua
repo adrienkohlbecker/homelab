@@ -26,6 +26,40 @@ local function has(head, token)
     return string.find(head, "[^%w]" .. token .. "[^%w]") ~= nil
 end
 
+-- Numeric mapping (OTLP SEVERITY_NUMBER_*); rules below pick a
+-- severity text, this table converts to the number.
+local SEV = {
+    fatal = 21, error = 17, warn = 13, info = 9, debug = 5, trace = 1,
+}
+
+-- Priority-ordered: first match wins. Higher-severity keywords come
+-- first so a warning in the body of a fatal record doesn't downgrade.
+-- HyperDX's body-regex maps notice -> warn; we mirror that here so
+-- severity stays consistent if we ever turn this filter off. Postgres
+-- emits "LOG: ..." for informational chatter -- the pattern requires
+-- a trailing colon so the English word "log" anywhere in a real error
+-- doesn't downgrade it, and LOG: ranks after info so a "LOG: ... error"
+-- record still classifies as error.
+local LEVEL_RULES = {
+    { keywords = { "fatal", "panic", "emerg", "crit", "critical" }, text = "fatal" },
+    { keywords = { "err", "error" },                                text = "error" },
+    { keywords = { "warn", "warning", "notice" },                   text = "warn"  },
+    { keywords = { "info" },                                        text = "info"  },
+    { pattern  = "[^%w]log:",                                       text = "info"  },
+    { keywords = { "debug" },                                       text = "debug" },
+    { keywords = { "trace" },                                       text = "trace" },
+}
+
+local function match_rule(head, rule)
+    if rule.keywords then
+        for _, kw in ipairs(rule.keywords) do
+            if has(head, kw) then return true end
+        end
+        return false
+    end
+    return string.find(head, rule.pattern) ~= nil
+end
+
 function set_priority(tag, ts, group, metadata, record)
     metadata.otlp = metadata.otlp or {}
     if metadata.otlp.severity_text ~= nil then
@@ -59,43 +93,24 @@ function set_priority(tag, ts, group, metadata, record)
 
     local head = " " .. string.lower(string.sub(msg, 1, 120)) .. " "
 
-    local sev_text, sev_num
-    if has(head, "fatal") or has(head, "panic") or has(head, "emerg") then
-        sev_text, sev_num = "fatal", 21
-    elseif has(head, "crit") or has(head, "critical") then
-        sev_text, sev_num = "fatal", 21
-    elseif has(head, "err") or has(head, "error") then
-        sev_text, sev_num = "error", 17
-    elseif has(head, "warn") or has(head, "warning") then
-        sev_text, sev_num = "warn", 13
-    elseif has(head, "notice") then
-        -- HyperDX's body-regex maps notice -> warn too; mirror that
-        -- so severity stays consistent if we ever turn this filter off.
-        sev_text, sev_num = "warn", 13
-    elseif has(head, "info") then
-        sev_text, sev_num = "info", 9
-    elseif string.find(head, "[^%w]log:") ~= nil then
-        -- Postgres uses "LOG:" for informational chatter (checkpoints,
-        -- autovacuum, etc.). Tightened to require the trailing colon so
-        -- the English word "log" anywhere in a message doesn't downgrade
-        -- real errors to info.
-        sev_text, sev_num = "info", 9
-    elseif has(head, "debug") then
-        sev_text, sev_num = "debug", 5
-    elseif has(head, "trace") then
-        sev_text, sev_num = "trace", 1
-    else
+    local sev_text
+    for _, rule in ipairs(LEVEL_RULES) do
+        if match_rule(head, rule) then
+            sev_text = rule.text
+            break
+        end
+    end
+
+    if sev_text == nil then
         -- No level keyword found. Stamp severity=info so HyperDX's
         -- transform processor doesn't fall back to its body-regex
         -- inference and mis-classify e.g. nginx access logs that
         -- happen to contain "alert" / "error" / "warn" as URL path
         -- segments.
-        metadata.otlp.severity_text = "info"
-        metadata.otlp.severity_number = 9
-        return 1, ts, metadata, record
+        sev_text = "info"
     end
 
     metadata.otlp.severity_text = sev_text
-    metadata.otlp.severity_number = sev_num
+    metadata.otlp.severity_number = SEV[sev_text]
     return 1, ts, metadata, record
 end
