@@ -414,9 +414,18 @@
   set_fact:
     fluentbit_otlp_multiline_marker: "verify_trace_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
+# --property=SyslogIdentifier= pins SYSLOG_IDENTIFIER on the
+# resulting unit's journal output. Without it the python3 process'
+# comm leaks through as the identifier ("python3"), and otlp_shape's
+# SYSLOG_IDENTIFIER-first rule lands the record under
+# ServiceName=python3 instead of the unit name. Real services we own
+# should set SyslogIdentifier= in their unit file (or pass through a
+# `logger -t` wrapper) for the same reason; this probe doubles as a
+# canonical example.
 - name: _verify | multiline | emit python traceback via transient unit
   command: >-
     systemd-run --unit=fluentbit_verify_multiline --no-block --quiet
+    --property=SyslogIdentifier=fluentbit_verify_multiline
     /usr/bin/python3 -c "raise ValueError('trace_{{ fluentbit_otlp_multiline_marker }}')"
   changed_when: false
   become: true
@@ -464,6 +473,138 @@
       - "fluentbit_otlp_multiline_marker in row.Body"
       - "row.ServiceName == 'fluentbit_verify_multiline'"
     fail_msg: "Multiline traceback not joined: {{ row }}"
+
+# Mitogen collapse: ansible accelerator's workers self-name to
+# "python3(mitogen:user@host:PID)" via prctl(PR_SET_NAME); otlp_shape
+# detects the "(mitogen:" substring and lands all variants under
+# ServiceName=mitogen instead of minting a fresh facet per worker
+# PID. Probe by pinning the identifier through SyslogIdentifier= on a
+# transient unit driving /bin/echo. Why /bin/echo and not logger:
+# SyslogIdentifier= only applies to stdout/stderr captured by
+# journald; logger writes via /dev/log and journald assigns its
+# SYSLOG_IDENTIFIER from the syslog message (defaulting to the
+# process name / "root"), bypassing the unit's directive. prctl from
+# a real python is no good either -- the kernel comm has a 15-byte
+# cap and "python3(mitogen" gets truncated before the ":" that the
+# detection key matches against.
+- name: _verify | mitogen | build per-run marker
+  set_fact:
+    fluentbit_otlp_mitogen_marker: "verify_mitogen_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+
+- name: _verify | mitogen | emit marked log via transient unit with mitogen-shaped identifier
+  command: >-
+    systemd-run --unit=fluentbit_verify_mitogen --no-block --quiet
+    --property=SyslogIdentifier=python3(mitogen:fake@host:9999)
+    /bin/echo fluentbit_verify_mitogen marker {{ fluentbit_otlp_mitogen_marker }}
+  changed_when: false
+  become: true
+
+- name: _verify | mitogen | wait for ClickHouse row matching marker
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query_wait
+  vars:
+    _test_args:
+      label: "mitogen | wait for row"
+      sql: >-
+        SELECT count() FROM default.otel_logs
+        WHERE Body LIKE '%{{ fluentbit_otlp_mitogen_marker }}%'
+          AND ServiceName = 'mitogen'
+      retries: 30
+      delay: 2
+      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+
+- name: _verify | mitogen | fetch row
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query
+  vars:
+    _test_args:
+      label: "mitogen | fetch"
+      sql: >-
+        SELECT Body, ServiceName
+        FROM default.otel_logs
+        WHERE Body LIKE '%{{ fluentbit_otlp_mitogen_marker }}%'
+          AND ServiceName = 'mitogen'
+        ORDER BY Timestamp DESC
+        LIMIT 1
+        FORMAT JSONEachRow
+
+- name: _verify | mitogen | assert collapse fired
+  vars:
+    row: "{{ _test_clickhouse_result.stdout | from_json }}"
+  assert:
+    that:
+      - "row.ServiceName == 'mitogen'"
+      - "fluentbit_otlp_mitogen_marker in row.Body"
+    fail_msg: "mitogen-shaped identifier did not collapse to ServiceName=mitogen: {{ row }}"
+
+# podman_unnamed fallback: when a container runs without --name, podman
+# assigns "<adjective>_<scientist>" auto-names that become SYSLOG_IDENTIFIER
+# fresh per run. Both _SYSTEMD_UNIT (libpod-conmon-<hash>.scope) and
+# SYSLOG_IDENTIFIER are unbounded, so otlp_shape recognises the
+# "libpod-conmon-" tag prefix and labels the records "podman_unnamed"
+# as a class. Probe drives an actual `podman run --rm` (deliberately
+# no --name) so the conmon-scope path lights up end to end.
+- name: _verify | podman_unnamed | build per-run marker
+  set_fact:
+    fluentbit_otlp_podman_marker: "verify_podman_unnamed_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
+
+# Image is already pulled by _setup's hyperdx import (busybox isn't
+# part of that, so pull explicitly here). One-shot, creates: gate not
+# applicable -- podman pull is idempotent on its own.
+- name: _verify | podman_unnamed | ensure busybox image present
+  command: podman pull docker.io/library/busybox
+  changed_when: false
+  become: true
+
+- name: _verify | podman_unnamed | run marked busybox container (no --name on purpose)
+  command: >-
+    podman run --rm --log-driver journald
+    docker.io/library/busybox
+    echo fluentbit_verify_podman_unnamed marker {{ fluentbit_otlp_podman_marker }}
+  changed_when: false
+  become: true
+
+- name: _verify | podman_unnamed | wait for ClickHouse row matching marker
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query_wait
+  vars:
+    _test_args:
+      label: "podman_unnamed | wait for row"
+      sql: >-
+        SELECT count() FROM default.otel_logs
+        WHERE Body LIKE '%{{ fluentbit_otlp_podman_marker }}%'
+          AND ServiceName = 'podman_unnamed'
+      retries: 30
+      delay: 2
+      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
+
+- name: _verify | podman_unnamed | fetch row
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query
+  vars:
+    _test_args:
+      label: "podman_unnamed | fetch"
+      sql: >-
+        SELECT Body, ServiceName
+        FROM default.otel_logs
+        WHERE Body LIKE '%{{ fluentbit_otlp_podman_marker }}%'
+          AND ServiceName = 'podman_unnamed'
+        ORDER BY Timestamp DESC
+        LIMIT 1
+        FORMAT JSONEachRow
+
+- name: _verify | podman_unnamed | assert libpod-conmon fallback fired
+  vars:
+    row: "{{ _test_clickhouse_result.stdout | from_json }}"
+  assert:
+    that:
+      - "row.ServiceName == 'podman_unnamed'"
+      - "fluentbit_otlp_podman_marker in row.Body"
+    fail_msg: "unnamed-container record did not hit libpod-conmon fallback: {{ row }}"
 
 # No probe for the svc.<empty> -> SYSLOG_IDENTIFIER fallback branch:
 # the path covers records that reach journald with _TRANSPORT=kernel

@@ -35,57 +35,85 @@
 -- Match *, runs last in the filter chain so it sees the final tag and
 -- the upstream "host" field that the global Set-host modify filter set.
 --
--- service.name derivation, keyed on the fluent-bit tag:
+-- service.name derivation:
 --   csp.<host>     -> "csplogger"    (matches what flatten_csp emits)
---   svc.<unit>     -> "<unit>"       (systemd input's Tag svc.* wildcard
---                                     expands _SYSTEMD_UNIT, e.g.
---                                     nginx.service -> "nginx"; only
---                                     .service is stripped — .timer,
---                                     .socket, .scope etc. stay so the
---                                     Services facet doesn't merge a
---                                     daemon's runtime logs with its
---                                     timer-trigger events)
---   svc.<empty>    -> SYSLOG_IDENTIFIER  (records without _SYSTEMD_UNIT --
---                                         kernel ring buffer (nftables LOG
---                                         target, MCE, oom-killer, ...),
---                                         kernel audit, anything reaching
---                                         journald via /dev/kmsg. The
---                                         wildcard expands to "svc." with
---                                         empty suffix; SYSLOG_IDENTIFIER
---                                         is "kernel" / "audit" / ... so
---                                         nftables drops land under a
---                                         real facet instead of being
---                                         hidden behind unrelated noise
---                                         in a single "unknown" bucket.)
+--   svc.*          -> SYSLOG_IDENTIFIER (paren-stripped), else
+--                     _SYSTEMD_UNIT (from tag, .service-stripped),
+--                     else "unknown". Sourced from the journal record;
+--                     the systemd input's `svc.*` tag is just a
+--                     routing prefix, the real name picks come from
+--                     fields on the record. Detail below.
 --   nginx.access   -> "nginx_access" (tail input tag)
 --   nginx.error    -> "nginx_error"
---   empty suffix   -> "unknown"      (svc. with neither _SYSTEMD_UNIT nor
---                                     SYSLOG_IDENTIFIER set, bare nginx.
---                                     with no subtag. Without this the
---                                     result would be "" / "nginx_" and
---                                     HyperDX would merge those records
---                                     under a nameless facet.)
+--   empty suffix   -> "unknown"      (bare nginx. with no subtag;
+--                                     without this the result would be
+--                                     "nginx_" and HyperDX would merge
+--                                     those records under a nameless
+--                                     facet.)
 --   <other>        -> tag verbatim
 --
--- Lowercased on the way out. Unit names are mixed-case (Keepalived_vrrp,
--- NetworkManager, etc.) which is awkward both to type in HyperDX's UI
--- filter and to group on when one service identifies itself
--- inconsistently across releases. Normalising to lowercase here keeps
--- the Services facet tidy and case-insensitive at the source.
+-- Why SYSLOG_IDENTIFIER over _SYSTEMD_UNIT for the svc.* branch:
+--   * Kernel records (_TRANSPORT=kernel, no _SYSTEMD_UNIT) carry
+--     SYSLOG_IDENTIFIER=kernel — nftables LOG drops, oom-killer, MCE,
+--     audit etc. land under a real facet instead of "unknown".
+--   * Sub-events inside wrapper units carry their own identifier:
+--     sudo / sshd / vsce-sign inside session-N.scope, systemd inside
+--     init.scope. The wrapper unit name is a routing artefact; the
+--     identifier is what the operator typed or what the writing
+--     binary called itself.
+--   * Podman containers run with `--log-opt tag=<name>` get
+--     SYSLOG_IDENTIFIER=<name>, which equals (or refines) the wrapping
+--     <name>.service. No regression for the common containerised case.
+--
+-- Mitogen special case: the ansible accelerator names its worker
+-- processes "python3(mitogen:user@host:PID)" via prctl(PR_SET_NAME),
+-- so each ansible apply mints a fresh SYSLOG_IDENTIFIER facet per
+-- worker PID. Collapse all such records onto a single "mitogen"
+-- facet (more meaningful than the stripped "python3", which loses
+-- the "this is an ansible run" signal). Substring match on
+-- "(mitogen:" — that segment is mitogen's official self-naming
+-- convention so it's reasonably stable; any other parenthesised
+-- identifier reaches us as-is.
+--
+-- Unnamed-container fallback: podman runs without `--name` get an
+-- auto-generated SYSLOG_IDENTIFIER ("<adjective>_<scientist>", fresh
+-- per container) under a "libpod-conmon-<hash>.scope" _SYSTEMD_UNIT.
+-- Both fields are unbounded, so we can't recover the call-site name
+-- from the record. Detect the conmon-scope prefix on the tag and
+-- label as "podman_unnamed" — flags the records as a class so the
+-- operator knows to track down the launcher and add `--name <fixed>`.
+-- Real fix is at the launcher (in-repo: ansible role / unit
+-- template; out-of-repo: operator shell command); this filter just
+-- keeps the Services facet bounded until then.
+--
+-- Lowercased on the way out. Unit names and identifiers are
+-- mixed-case (Keepalived_vrrp, NetworkManager, CRON, ...), awkward to
+-- type in HyperDX's UI and to group on if a service spells itself
+-- differently across releases.
 
 local function service_from_tag(tag, record)
     local svc
     if string.sub(tag, 1, 4) == "csp." then
         svc = "csplogger"
     elseif string.sub(tag, 1, 4) == "svc." then
-        svc = string.sub(tag, 5):gsub("%.service$", "")
-        if svc == "" then
-            -- No _SYSTEMD_UNIT on the record. fluent-bit's systemd
-            -- input strips the leading underscore, so SYSLOG_IDENTIFIER
-            -- arrives as record["SYSLOG_IDENTIFIER"].
+        if string.sub(tag, 1, 18) == "svc.libpod-conmon-" then
+            -- Unnamed podman container. SYSLOG_IDENTIFIER is podman's
+            -- auto-generated nickname (epic_allen, etc.), unbounded.
+            svc = "podman_unnamed"
+        else
             local sysid = record["SYSLOG_IDENTIFIER"]
             if type(sysid) == "string" and sysid ~= "" then
-                svc = sysid
+                if sysid:find("(mitogen:", 1, true) then
+                    svc = "mitogen"
+                else
+                    svc = sysid
+                end
+            end
+            if svc == nil or svc == "" then
+                -- SYSLOG_IDENTIFIER missing on the record (rare;
+                -- journald sets it from comm by default). Fall back
+                -- to _SYSTEMD_UNIT via the tag.
+                svc = string.sub(tag, 5):gsub("%.service$", "")
             end
         end
     elseif string.sub(tag, 1, 6) == "nginx." then
