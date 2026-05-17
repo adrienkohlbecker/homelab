@@ -190,8 +190,30 @@
   tags:
     - firewall
 
+# Explicit checksum gate around the snapshot copy: copy: remote_src
+# misreports changed=true on every run even when src and dest are
+# byte-identical (reproducible on lab under mitogen; not reproducible
+# locally). The stat-and-when pattern sidesteps the quirk and makes
+# the idempotence intent explicit.
+- name: Stat nftables.conf and prior snapshot for change detection
+  stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - /etc/nftables.conf
+    - /etc/nftables.conf.pre-reload
+  register: firewall_snapshot_stats
+  become: true
+  tags:
+    - firewall
+
 - name: Snapshot current nftables.conf for auto-revert
-  when: firewall_nftables_pre_active.rc == 0
+  when:
+    - firewall_nftables_pre_active.rc == 0
+    - >-
+      not firewall_snapshot_stats.results[1].stat.exists
+      or firewall_snapshot_stats.results[0].stat.checksum
+         != firewall_snapshot_stats.results[1].stat.checksum
   copy:
     src: /etc/nftables.conf
     dest: /etc/nftables.conf.pre-reload
