@@ -4,6 +4,11 @@
 Description=compta
 After=network-online.target
 Wants=network-online.target
+# Image lives at nexus.lab.fahm.fr/compta/compta:latest; nexus is co-located
+# on this host (site.yml: same `hosts: box,lab` block). Wants= (not Requires=)
+# so a nexus stop doesn't cascade-stop compta — the cached image still runs.
+After=nexus.service
+Wants=nexus.service
 StartLimitInterval=600
 StartLimitBurst=3
 
