@@ -1,0 +1,16 @@
+# Charts.d collector that emits a single boolean: 1 if any zpool on
+# the host is currently scrubbing or resilvering. Consumed by the
+# hdparm role's hdparm_drive_active alert to mute during scrubs (drives
+# are expected to spin throughout a multi-hour scrub, which would
+# otherwise pin the alert at crit on every pool member).
+- name: Install zfs_scan charts.d collector
+  import_role:
+    name: netdata
+    tasks_from: charts_d
+  vars:
+    netdata_args:
+      name: zfs_scan
+      script: zfs_scan.chart.sh
+      conf: zfs_scan.conf
+  tags:
+    - zfs
