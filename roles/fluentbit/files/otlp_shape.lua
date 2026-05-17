@@ -36,6 +36,8 @@
 -- the upstream "host" field that the global Set-host modify filter set.
 --
 -- service.name derivation:
+--   record.UNIT =  -> "podman_healthcheck"  (overrides; see below)
+--   <64hex>.service
 --   csp.<host>     -> "csplogger"    (matches what flatten_csp emits)
 --   svc.*          -> SYSLOG_IDENTIFIER (paren-stripped), else
 --                     _SYSTEMD_UNIT (from tag, .service-stripped),
@@ -85,6 +87,24 @@
 -- Real fix is at the launcher (in-repo: ansible role / unit
 -- template; out-of-repo: operator shell command); this filter just
 -- keeps the Services facet bounded until then.
+--
+-- Podman healthcheck transient units: each scheduled check runs as
+-- `systemd-run --unit=<container-id>` where the unit name is the full
+-- 64-char container ID + ".service". The lifecycle records ("Started
+-- <hash>.service", "Failed with result 'exit-code'", "Deactivated
+-- successfully") are emitted by PID 1, so the record's _SYSTEMD_UNIT
+-- is init.scope (not the ephemeral unit) and SYSLOG_IDENTIFIER is
+-- "systemd" — without this override they'd bucket under
+-- service.name=systemd alongside legitimate init noise. The journal-
+-- attribution field UNIT=<64hex>.service is what carries the actual
+-- target; key on that. Stamp CONTAINER_ID_FULL + CONTAINER_ID on the
+-- record so they get lifted into LogAttributes by the loop below,
+-- matching exactly what podman's journald log driver puts on the
+-- container's own application logs — enables a HyperDX pivot from a
+-- failed healthcheck to that container's output without any host-side
+-- container_id→name lookup at log time. Heuristic risk: any unrelated
+-- `systemd-run --unit=<64hex>` would also bucket here; in practice
+-- nothing else uses pure-hex unit names.
 --
 -- Lowercased on the way out. Unit names and identifiers are
 -- mixed-case (Keepalived_vrrp, NetworkManager, CRON, ...), awkward to
@@ -138,7 +158,23 @@ function shape_otlp(tag, ts, group, metadata, record)
     metadata.otlp = metadata.otlp or {}
     metadata.otlp.attributes = metadata.otlp.attributes or {}
 
-    local resource_attrs = { ["service.name"] = service_from_tag(tag, record) }
+    -- Podman healthcheck override: when PID 1 emits a lifecycle message
+    -- about a transient <64hex>.service unit, route it to a dedicated
+    -- service.name and stamp CONTAINER_ID_FULL + CONTAINER_ID (matching
+    -- podman's journald-driver field names on the container's app logs)
+    -- so HyperDX can pivot. See file header for the full rationale.
+    local svc_override
+    local unit = record["UNIT"]
+    if type(unit) == "string" then
+        local cid = unit:match("^([0-9a-f]+)%.service$")
+        if cid and #cid == 64 then
+            svc_override = "podman_healthcheck"
+            record["CONTAINER_ID_FULL"] = cid
+            record["CONTAINER_ID"] = string.sub(cid, 1, 12)
+        end
+    end
+
+    local resource_attrs = { ["service.name"] = svc_override or service_from_tag(tag, record) }
     local host = record["host"]
     if type(host) == "string" and host ~= "" then
         resource_attrs["host.name"] = host
