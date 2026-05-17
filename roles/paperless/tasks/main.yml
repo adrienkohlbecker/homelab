@@ -134,22 +134,66 @@
 # this, db.sqlite3 stays in rollback-journal mode and document ingest
 # (write-heavy) takes a per-commit fsync hit. WAL is persisted in the
 # DB header so the convert is one-shot.
+#
+# Stop the service across the PRAGMA: journal_mode=WAL needs an
+# exclusive lock; if Django is holding the DB the PRAGMA silently
+# returns the current mode without converting, leaving the operator
+# in rollback-journal mode without a failure signal. The
+# symlink+ownership guard prevents in-container-root (which maps to
+# host uid `paperless` via uidmap) from swapping db.sqlite3 for a
+# symlink to a root-owned target before the PRAGMA fires.
+#
+# First-install two-pass: the DB doesn't exist until Django creates
+# it on first start, so the block skips. The next play run sees the
+# DB, stops the service briefly, converts, and restarts.
+- name: Stat paperless sqlite DB
+  stat:
+    path: /mnt/services/sqlite/paperless/db.sqlite3
+    follow: false
+  register: paperless_sqlite_stat
+  become: true
+  tags:
+    - paperless
+
 - name: Read paperless sqlite journal mode
   command: sqlite3 -readonly /mnt/services/sqlite/paperless/db.sqlite3 'PRAGMA journal_mode;'
   register: paperless_sqlite_pragma
   changed_when: false
-  failed_when: false
+  when: paperless_sqlite_stat.stat.exists
   become: true
   tags:
     - paperless
 
 - name: Convert paperless sqlite to WAL
-  command: sqlite3 /mnt/services/sqlite/paperless/db.sqlite3 'PRAGMA journal_mode=WAL;'
-  register: paperless_sqlite_wal
-  changed_when: paperless_sqlite_wal.stdout | trim == 'wal'
   when:
-    - paperless_sqlite_pragma.rc == 0
-    - paperless_sqlite_pragma.stdout | trim != 'wal'
+    - paperless_sqlite_stat.stat.exists
+    - paperless_sqlite_pragma.stdout | default('') | trim != 'wal'
+  block:
+    - name: Assert paperless sqlite DB is a regular file owned by paperless
+      assert:
+        that:
+          - paperless_sqlite_stat.stat.isreg
+          - paperless_sqlite_stat.stat.pw_name == 'paperless'
+        fail_msg: >-
+          /mnt/services/sqlite/paperless/db.sqlite3 is a symlink or
+          owned by another user; refusing to PRAGMA since WAL/SHM
+          sidecars would land at an attacker-controlled path.
+
+    - name: Stop paperless service for WAL conversion
+      systemd:
+        name: paperless
+        state: stopped
+
+    - name: Set paperless sqlite to WAL
+      command: sqlite3 /mnt/services/sqlite/paperless/db.sqlite3 'PRAGMA journal_mode=WAL;'
+      register: paperless_sqlite_wal
+      changed_when: paperless_sqlite_wal.stdout | trim == 'wal'
+      failed_when: paperless_sqlite_wal.stdout | trim != 'wal'
+
+    - name: Start paperless service after WAL conversion
+      systemd:
+        name: paperless
+        state: started
   become: true
   tags:
     - paperless
