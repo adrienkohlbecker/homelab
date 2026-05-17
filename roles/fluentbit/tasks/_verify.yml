@@ -55,14 +55,13 @@
     fluentbit_otlp_csp_marker: "verify_otlp_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
 # Capture the fluent-bit journal cursor *before* the marked POST so the
-# lua-filter error scan below sees only what this run produced. The
-# `-- cursor: ...` line on the last stdout row is the cursor token --
-# parsed out, it's the input to --after-cursor on the scan below. This
-# replaces an older `--since "5 minutes ago"` that could catch a prior
-# run's error or miss a slow current run.
+# lua-filter error scan below sees only what this run produced.
+# --cursor-file=PATH writes the cursor of the latest entry on exit and
+# reads from it on subsequent calls; the scan task downstream reuses
+# the same file. /run is root-owned ephemeral, so a non-root user
+# can't pre-stage a forged cursor between calls.
 - name: _verify | OTLP-end-to-end | capture pre-POST journal cursor
-  command: journalctl -u fluent-bit -n 0 --show-cursor
-  register: fluentbit_journal_cursor
+  command: journalctl -u fluent-bit -n 0 --cursor-file=/run/fluentbit_verify.cursor
   changed_when: false
   become: true
 
@@ -104,10 +103,7 @@
 - name: _verify | OTLP-end-to-end | fluent-bit lua filters logged no runtime errors
   command: >-
     journalctl -u fluent-bit
-    --after-cursor={{ (fluentbit_journal_cursor.stdout_lines
-                       | select('match', '^-- cursor:')
-                       | first
-                       | regex_replace('^-- cursor: ?', '')) | quote }}
+    --cursor-file=/run/fluentbit_verify.cursor
     --no-pager
     --grep '\[(error|warn)\].*filter[_:]lua'
   register: fluentbit_lua_errors
