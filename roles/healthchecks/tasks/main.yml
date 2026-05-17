@@ -59,7 +59,7 @@
       To complete the rotation, run on the target host:
 
         podman exec -it healthchecks \
-          python manage.py changepassword {{ root_email }}
+          python manage.py changepassword '{{ root_email }}'
 
       Then re-run this play.
   when: healthchecks_password_rotated and healthchecks_password_existed_before
