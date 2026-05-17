@@ -50,30 +50,38 @@ DIMENSION active '' absolute 1 1
 DIMENSION standby '' absolute 1 1
 DIMENSION sleeping '' absolute 1 1
 DIMENSION unknown '' absolute 1 1
+DIMENSION collector_error '' absolute 1 1
 EOF
   done
   return 0
 }
 
 hdparm_update() {
-  local dev safe path state a s sl u
+  local dev safe path state a s sl u ce
   for dev in "${hdparm_disks[@]}"; do
     safe=$(_hdparm_safe "$dev")
     path="/dev/disk/by-id/${dev}"
-    a=0; s=0; sl=0; u=0
+    a=0; s=0; sl=0; u=0; ce=0
     # Per-device call so a single bad drive (missing by-id symlink after
     # a disk replacement, transient SATA-link drop) only collapses its
-    # own chart to unknown=1 — not every drive in the list. The previous
-    # batch form short-circuited at hdparm's first per-drive failure.
+    # own chart — not every drive in the list. The previous batch form
+    # short-circuited at hdparm's first per-drive failure.
+    #
+    # `unknown` is hdparm reporting the drive responded with a power-
+    # state code outside the known set (rare; a SATA-link drift
+    # symptom). `collector_error` is the monitoring stack failing to
+    # read the drive at all — missing by-id symlink, hdparm exit ≠ 0,
+    # empty output — operationally distinct from a drive misbehaving.
     if [ -e "$path" ] && state=$(hdparm -C "$path" 2>/dev/null | awk '/^ drive state is:/{sub(/^ drive state is:  /,""); print; exit}'); then
       case "$state" in
         "active/idle") a=1 ;;
         "standby")     s=1 ;;
         "sleeping")    sl=1 ;;
-        *)             u=1 ;;
+        "unknown")     u=1 ;;
+        *)             ce=1 ;;
       esac
     else
-      u=1
+      ce=1
     fi
     cat <<EOF
 BEGIN hdparm.${safe} ${1}
@@ -81,6 +89,7 @@ SET active = $a
 SET standby = $s
 SET sleeping = $sl
 SET unknown = $u
+SET collector_error = $ce
 END
 EOF
   done

@@ -4,9 +4,9 @@
 #
 # QEMU virtio disks all report rotational=0, so ansible_devices fact yields
 # an empty hdparm_disks list and hdparm_check() would short-circuit. We
-# overlay a fake by-id stem (_verify_ghost) so hdparm -C fails with ENOENT
-# for it, exercising the "unknown" parse branch -- the same path a flaky
-# SATA link triggers on prod hosts. That's the alert the migration replaces.
+# overlay a fake by-id stem (_verify_ghost) whose /dev/disk/by-id/ path
+# doesn't exist, exercising the `collector_error` branch -- the same
+# path a missing by-id symlink (replaced drive) triggers on prod hosts.
 - name: _verify | install hdparm netdata collector
   import_tasks: netdata.yml
 
@@ -46,10 +46,10 @@
 # `points=1` with no &after defaults to a 1-second window; with our
 # update_every=5s that misses 4 polls out of 5. `&after=-30` widens to
 # 30s so any healthy collector lands at least a few points in range.
-# Membership test (`'unknown' in labels`) instead of `.index(...)` so a
-# transient response shape (no dimension labels collected yet) returns
-# False cleanly rather than raising and aborting the retry loop.
-- name: _verify | hdparm._verify_ghost reports unknown=1 (active=0)
+# Membership test (`'collector_error' in labels`) instead of `.index(...)`
+# so a transient response shape (no dimension labels collected yet)
+# returns False cleanly rather than raising and aborting the retry loop.
+- name: _verify | hdparm._verify_ghost reports collector_error=1 (active=0)
   uri:
     url: http://localhost:19999/api/v1/data?chart=hdparm._verify_ghost&points=1&after=-30&format=json
     return_content: true
@@ -58,10 +58,10 @@
   delay: 2
   until: >-
     _verify_ghost_data.status == 200
-    and 'unknown' in (_verify_ghost_data.json.labels | default([]))
+    and 'collector_error' in (_verify_ghost_data.json.labels | default([]))
     and 'active' in _verify_ghost_data.json.labels
     and (_verify_ghost_data.json.data | default([])) | length > 0
-    and _verify_ghost_data.json.data[0][_verify_ghost_data.json.labels.index('unknown')] | int == 1
+    and _verify_ghost_data.json.data[0][_verify_ghost_data.json.labels.index('collector_error')] | int == 1
     and _verify_ghost_data.json.data[0][_verify_ghost_data.json.labels.index('active')] | int == 0
 
 # The chart carries the device label from CLABEL; alerts use ${label:device}
