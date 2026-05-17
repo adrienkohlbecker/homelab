@@ -46,24 +46,44 @@
     or _verify_sqlite.stat.pw_name != 'git'
   become: true
 
+# Ask gitea to audit its own state. check-db-version catches a
+# half-finished schema migration after a version bump; check-db-
+# consistency catches dangling rows from interrupted admin ops;
+# authorized-keys catches a corrupted ~git/.ssh/authorized_keys
+# rewrite (which can silently expose a bash shell at git@ if the
+# command= prefix is lost). Skipping the `paths` check -- it requires
+# Log.RootPath + Repository.ROOT to pre-exist as writable dirs, which
+# the role intentionally doesn't create.
+- name: _verify | gitea doctor self-checks (db + authorized_keys)
+  command: >-
+    /usr/local/bin/gitea doctor check
+    --run check-db-version,check-db-consistency,authorized-keys
+    --config /etc/gitea/app.ini
+  environment:
+    GITEA_WORK_DIR: /mnt/services/gitea
+  become: true
+  become_user: git
+  changed_when: false
+
 # Functional git roundtrip: confirms the HTTP basic-auth path, git over
 # HTTP, sqlite write path, and on-disk repo creation all work end-to-
 # end. State checks above can pass on a build that is "running but not
 # functional"; this is the smoke test that actually does the job.
-# (gitea doctor would add db/path/storage self-checks but its paths
-# check requires Log.RootPath + Repository.ROOT to pre-exist as
-# writable dirs, which the role intentionally doesn't create -- it
-# stays a manual diagnostic tool.)
 - name: _verify | wipe any prior throwaway clone directory
   file:
     path: /tmp/gitea_verify_clone
     state: absent
 
+# Auth in the rest of this chain is access-token only, so the password
+# is never used by anything; --random-password keeps a usable literal
+# out of the source tree. The two-step (create user, mint token) shape
+# is retained on purpose -- `--access-token` only prints a token on
+# fresh create, which would break --keep re-runs.
 - name: _verify | create throwaway admin user
   command: >-
     /usr/local/bin/gitea admin user create
-    --username verify --password ChangeMe-Verify-1234
-    --email verify@verify.invalid --admin --must-change-password=false
+    --username verify --random-password
+    --email verify@verify.invalid --admin
     --config /etc/gitea/app.ini
   environment:
     GITEA_WORK_DIR: /mnt/services/gitea
@@ -95,13 +115,17 @@
   changed_when: false
   no_log: true
 
-# Status 201 on first run, 409 on a --keep re-run.
+# Status 201 on first run, 409 on a --keep re-run. gitea accepts the
+# API token as the Basic-auth password (DISABLE_QUERY_AUTH_TOKEN in
+# app.ini blocks the ?token=... URL variant); force_basic_auth keeps
+# the credential out of ansible's failure-display dict.
 - name: _verify | create a throwaway repo via API
   uri:
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/user/repos
     method: POST
-    headers:
-      Authorization: "token {{ _verify_token.stdout | trim }}"
+    url_username: verify
+    url_password: "{{ _verify_token.stdout | trim }}"
+    force_basic_auth: true
     body_format: json
     body:
       name: functional_test
@@ -141,7 +165,49 @@
 - name: _verify | confirm pushed file is fetchable through the API
   uri:
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/repos/verify/functional_test/contents/stamp.txt
-    headers:
-      Authorization: "token {{ _verify_token.stdout | trim }}"
+    url_username: verify
+    url_password: "{{ _verify_token.stdout | trim }}"
+    force_basic_auth: true
     status_code: 200
+  no_log: true
+
+# SSH roundtrip: the HTTP path above exercises gitea's own listener;
+# this exercises a different code path -- host sshd matching the
+# pubkey in ~git/.ssh/authorized_keys (rewritten by gitea on key
+# add), running the forced `gitea serv` command, and handing off to
+# git-upload-pack. ls-remote does the full handshake in ~1s without
+# transferring objects.
+- name: _verify | generate throwaway SSH keypair on the target
+  command: ssh-keygen -t ed25519 -N "" -f /tmp/gitea_verify_ssh_key -C verify@verify.invalid
+  args:
+    creates: /tmp/gitea_verify_ssh_key
+  changed_when: false
+
+- name: _verify | slurp throwaway SSH pubkey
+  slurp:
+    src: /tmp/gitea_verify_ssh_key.pub
+  register: _verify_ssh_pubkey
+
+# 201 on first run, 422 on a --keep re-run (gitea rejects a duplicate
+# key fingerprint regardless of title).
+- name: _verify | upload pubkey to verify user via API
+  uri:
+    url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/user/keys
+    method: POST
+    url_username: verify
+    url_password: "{{ _verify_token.stdout | trim }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      title: "verify_{{ ansible_date_time.epoch }}"
+      key: "{{ _verify_ssh_pubkey.content | b64decode | trim }}"
+    status_code: [ 201, 422 ]
+  no_log: true
+
+- name: _verify | git ls-remote over SSH (exercises gitea-serv + authorized_keys)
+  command: git ls-remote ssh://git@127.0.0.1:22/verify/functional_test.git HEAD
+  environment:
+    GIT_SSH_COMMAND: ssh -i /tmp/gitea_verify_ssh_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes
+    GIT_TERMINAL_PROMPT: "0"
+  changed_when: false
   no_log: true
