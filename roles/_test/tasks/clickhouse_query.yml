@@ -1,0 +1,30 @@
+# Run a ClickHouse query via the hyperdx container's curl, optionally
+# polling until a predicate is satisfied. Used by observability roles'
+# _verify tasks for marker-based assertions against the OTel logs table.
+#
+# Inputs (single dict, replaced wholesale per call):
+#   _test_args.sql         SQL string. Passed via stdin so quotes /
+#                          square brackets stay human-readable rather
+#                          than URL-encoded.
+#   _test_args.label       Short tag for the task name (default "query").
+#   _test_args.retries     Poll count (default 1 -- no wait).
+#   _test_args.delay       Seconds between polls (default 0).
+#   _test_args.until       Predicate against the result; default is
+#                          "_test_clickhouse_result.rc == 0".
+#   _test_args.failed_when Predicate for hard failure; default is
+#                          "_test_clickhouse_result.rc != 0". Pass false
+#                          for wait-loops so retries can run on curl rc.
+#
+# Output:
+#   _test_clickhouse_result.stdout: raw response body (caller parses).
+- name: "_test | clickhouse_query | {{ _test_args.label | default('query') }}"
+  command:
+    cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
+    stdin: "{{ _test_args.sql }}"
+  register: _test_clickhouse_result
+  changed_when: false
+  failed_when: "{{ _test_args.failed_when | default('_test_clickhouse_result.rc != 0') }}"
+  retries: "{{ _test_args.retries | default(1) }}"
+  delay: "{{ _test_args.delay | default(0) }}"
+  until: "{{ _test_args.until | default('_test_clickhouse_result.rc == 0') }}"
+  become: true
