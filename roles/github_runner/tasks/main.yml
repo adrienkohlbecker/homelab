@@ -16,7 +16,10 @@
     fail_msg: >-
       github_runner_instances entry {{ item }} is malformed. Each entry
       needs repo + suffix + owner matching [A-Za-z0-9_-]+ and a non-empty
-      labels string. Optional runner_group_id must be an integer >= 1.
+      labels string. runner_group_id is optional and defaults to 1 in the
+      envfile (the only group on personal-account repos and the org's
+      reserved "Default" group on org repos); when present it must be an
+      integer >= 1. Set explicitly for a custom org runner group.
   loop: "{{ github_runner_instances }}"
   loop_control:
     label: "{{ item.repo | default('?') }}_{{ item.suffix | default('?') }}"
