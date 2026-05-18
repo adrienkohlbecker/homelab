@@ -2,7 +2,8 @@
 endpoint across one or more hosts and renders both:
 
 - GET /          → HTML page (auto-refresh, dark theme, iframe-friendly)
-- GET /api/alerts → JSON: {"hosts": [{"name", "url", "click_url", "alarms": [...], "error"?}]}
+- GET /api/alerts → JSON: {"hosts": [{"name", "url", "click_url", "alarms": [...], "error"?}],
+                            "updated_at", "iso_updated_at", "error"}
 
 Inputs (env):
 - NETDATA_HOSTS: comma-separated list of `<name>=<query-url>[=<click-url>]`
@@ -19,16 +20,17 @@ poking `window.frameElement.style.height`. Stdlib only so it runs as a plain
 third-party deps.
 """
 
+import datetime
+import hashlib
 import html
+import http.client
 import json
 import os
 import ssl
 import sys
 import threading
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -92,24 +94,44 @@ def parse_hosts(spec: str) -> list[tuple[str, str, str]]:
     return out
 
 
-def _http_json(url: str):
-    req = urllib.request.Request(url, headers={"User-Agent": "homepage-alerts/1"})
-    with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT, context=SSL_CTX) as resp:
-        return json.load(resp)
+class _HostClient:
+    """One netdata host's persistent connection for the duration of a single
+    _fetch_one call. Reuses one TLS handshake across the 2-3 requests we make
+    per host per refresh window (alarms + alarm_log + per-chart fallbacks)."""
 
+    def __init__(self, base_url: str) -> None:
+        u = urllib.parse.urlsplit(base_url)
+        cls = http.client.HTTPSConnection if u.scheme == "https" else http.client.HTTPConnection
+        kwargs: dict = {"timeout": FETCH_TIMEOUT}
+        if u.scheme == "https":
+            kwargs["context"] = SSL_CTX
+        self._conn = cls(u.netloc, **kwargs)
 
-def fetch_alarms(url: str) -> dict:
-    return _http_json(f"{url}/api/v1/alarms?active")
+    def close(self) -> None:
+        try:
+            self._conn.close()
+        except Exception:  # noqa: BLE001
+            pass
 
+    def _get_json(self, path: str) -> dict:
+        self._conn.request("GET", path, headers={"User-Agent": "homepage-alerts/1"})
+        resp = self._conn.getresponse()
+        body = resp.read()
+        if resp.status != 200:
+            raise OSError(f"HTTP {resp.status} on {path}")
+        return json.loads(body)
 
-def fetch_alarm_log(url: str, *, chart: str | None = None):
-    # Bulk: count=10000 covers a chatty agent's full retained log on lab; the
-    # earlier count=500 was missing alarms whose last transition was >24h old.
-    # Chart-filtered: per-alarm fallback when the bulk fetch still misses.
-    qs = {"count": "10000"}
-    if chart:
-        qs["chart"] = chart
-    return _http_json(f"{url}/api/v1/alarm_log?{urllib.parse.urlencode(qs)}")
+    def alarms(self) -> dict:
+        return self._get_json("/api/v1/alarms?active")
+
+    def alarm_log(self, *, chart: str | None = None) -> dict:
+        # Bulk: count=10000 covers a chatty agent's full retained log on lab; the
+        # earlier count=500 was missing alarms whose last transition was >24h old.
+        # Chart-filtered: per-alarm fallback when the bulk fetch still misses.
+        qs = {"count": "10000"}
+        if chart:
+            qs["chart"] = chart
+        return self._get_json(f"/api/v1/alarm_log?{urllib.parse.urlencode(qs)}")
 
 
 def latest_transition_by_alarm(log) -> dict[int, str]:
@@ -216,8 +238,10 @@ def normalize(payload: dict) -> list[dict]:
 
 def _fetch_one(name: str, query_url: str, click_url: str) -> dict:
     entry = {"name": name, "url": query_url, "click_url": click_url}
+    client: _HostClient | None = None
     try:
-        alarms = normalize(fetch_alarms(query_url))
+        client = _HostClient(query_url)
+        alarms = normalize(client.alarms())
         # alarm_log gives us per-alarm transition_id needed for the v2
         # deep-link path. Bulk fetch first; for any active alarm not in the
         # window, fall back to a chart-filtered fetch since per-chart logs
@@ -226,7 +250,7 @@ def _fetch_one(name: str, query_url: str, click_url: str) -> dict:
         # alerts list URL.
         log_warn = ""
         try:
-            tid_by_id = latest_transition_by_alarm(fetch_alarm_log(query_url))
+            tid_by_id = latest_transition_by_alarm(client.alarm_log())
         except Exception as e:  # noqa: BLE001
             tid_by_id = {}
             log_warn = f"alarm_log fetch failed: {type(e).__name__}: {e}"
@@ -240,9 +264,7 @@ def _fetch_one(name: str, query_url: str, click_url: str) -> dict:
             tid = tid_by_id.get(a["id"], "")
             if not tid and a["chart"] and time.monotonic() < budget_end:
                 try:
-                    chart_map = latest_transition_by_alarm(
-                        fetch_alarm_log(query_url, chart=a["chart"])
-                    )
+                    chart_map = latest_transition_by_alarm(client.alarm_log(chart=a["chart"]))
                     tid = chart_map.get(a["id"], "")
                 except Exception:  # noqa: BLE001
                     pass
@@ -258,12 +280,15 @@ def _fetch_one(name: str, query_url: str, click_url: str) -> dict:
         # Bare except so one host's transport quirk (TLS, DNS, weird upstream)
         # never disappears the rest of the dashboard. Log the full detail to
         # the journal but surface only the exception class to the rendered
-        # HTML — urllib's URLError messages otherwise leak internal
+        # HTML — http.client / ssl error messages otherwise leak internal
         # hostnames / IPs / TLS subject details into the dashboard, which is
         # reachable to anyone on the homepage vhost.
         print(f"[{name}] fetch failed: {type(e).__name__}: {e}", file=sys.stderr)
         entry["error"] = type(e).__name__
         entry["alarms"] = []
+    finally:
+        if client is not None:
+            client.close()
     return entry
 
 
@@ -372,6 +397,13 @@ PAGE = """<!doctype html>
     white-space: nowrap;
     line-height: 1.4;
   }}
+  footer {{
+    margin-top: 8px;
+    padding: 4px 8px;
+    font-size: 11px;
+    color: var(--muted);
+  }}
+  footer .status-error {{ color: var(--critical); }}
 </style>
 </head>
 <body>
@@ -399,7 +431,7 @@ PAGE = """<!doctype html>
 """
 
 
-def render_html(hosts: list[dict]) -> str:
+def render_html(hosts: list[dict], updated_at: float, error: str) -> str:
     sections = []
     for host in hosts:
         rows = []
@@ -429,7 +461,16 @@ def render_html(hosts: list[dict]) -> str:
                     f"</a>"
                 )
         sections.append(f'<section class="host"><h2>{title}</h2>{"".join(rows)}</section>')
-    return PAGE.format(refresh=REFRESH_SECONDS, body="".join(sections))
+    # Footer reports cache freshness + any cache-level error so the operator
+    # can tell a stale page from a fresh one with all hosts dark.
+    if updated_at:
+        status_line = f"Updated {_humanize_delta(time.time() - updated_at)}"
+    else:
+        status_line = "Initializing…"
+    if error:
+        status_line += f' — <span class="status-error">{html.escape(error)}</span>'
+    footer = f"<footer>{status_line}</footer>"
+    return PAGE.format(refresh=REFRESH_SECONDS, body="".join(sections) + footer)
 
 
 class AlertsCache:
@@ -474,23 +515,50 @@ def _cache_loop(cache: AlertsCache, interval: float) -> None:
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _send(self, status: int, ctype: str, body: bytes) -> None:
+    def _send(self, status: int, ctype: str, body: bytes, *, etag: str | None = None) -> None:
+        # When etag is provided, honour If-None-Match (304) and let the
+        # browser cache + revalidate. Without one, fall back to no-store
+        # for the healthcheck / 404 paths whose body shouldn't be cached.
+        if etag is not None and self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.end_headers()
+            return
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
+        if etag is not None:
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", "no-cache")
+        else:
+            self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
     def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler API)
         cache: AlertsCache = self.server.cache
         if self.path in ("/", "/index.html"):
-            data, _, _ = cache.snapshot()
-            self._send(200, "text/html; charset=utf-8", render_html(data).encode("utf-8"))
+            data, updated_at, err = cache.snapshot()
+            body = render_html(data, updated_at, err).encode("utf-8")
+            etag = '"' + hashlib.md5(body).hexdigest() + '"'
+            self._send(200, "text/html; charset=utf-8", body, etag=etag)
         elif self.path == "/api/alerts":
-            data, updated, err = cache.snapshot()
-            payload = {"hosts": data, "updated_at": updated, "error": err}
-            self._send(200, "application/json", json.dumps(payload).encode("utf-8"))
+            data, updated_at, err = cache.snapshot()
+            iso = (
+                datetime.datetime.fromtimestamp(updated_at, tz=datetime.timezone.utc)
+                .isoformat()
+                if updated_at
+                else ""
+            )
+            payload = {
+                "hosts": data,
+                "updated_at": updated_at,
+                "iso_updated_at": iso,
+                "error": err,
+            }
+            body = json.dumps(payload, sort_keys=True).encode("utf-8")
+            etag = '"' + hashlib.md5(body).hexdigest() + '"'
+            self._send(200, "application/json", body, etag=etag)
         elif self.path == "/api/healthcheck":
             self._send(200, "application/json", b'{"status":"ok"}')
         else:
