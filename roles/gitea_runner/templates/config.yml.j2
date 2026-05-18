@@ -49,9 +49,11 @@ cache:
   # It's not for the address to listen, but the address to connect from job containers.
   # So 0.0.0.0 is a bad choice, leave it empty to detect automatically.
   host: ""
-  # The port of the cache server.
-  # 0 means to use a random available port.
-  port: 0
+  # The port of the cache server. Pinned via service_ports so the
+  # restart-spawned cache server reuses the same port; upstream's
+  # default of 0 (random) strands in-flight jobs that cached against
+  # the previous port.
+  port: {{ service_ports.gitea_runner_cache }}
   # The external cache server URL. Valid only when enable is true.
   # If it's specified, gitea-runner will use this URL as the ACTIONS_CACHE_URL rather than start a server by itself.
   # The URL should generally end with "/".
@@ -93,3 +95,12 @@ host:
   # The parent directory of a job's working directory.
   # If it's empty, $HOME/.cache/act/ will be used.
   workdir_parent: /mnt/scratch/gitea_runner/workdir
+
+metrics:
+  # Prometheus endpoint at http://<addr>/metrics (plus /healthz at the
+  # same addr). Loopback-only -- no auth on the endpoint -- scraped by
+  # netdata's go.d prometheus collector (wire-up in roles/netdata is a
+  # follow-up). 9101 matches the upstream default for googleable
+  # troubleshooting.
+  enabled: true
+  addr: "127.0.0.1:{{ service_ports.gitea_runner_metrics }}"

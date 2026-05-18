@@ -85,6 +85,13 @@ service_ports:
   fan2go_api: 9919
   fluentbit: 2020
   gitea: 3000
+  # gitea-runner's built-in cache server. Pinned (not random) so jobs
+  # mid-flight at restart can still resolve ACTIONS_CACHE_URL after the
+  # daemon comes back. See roles/gitea_runner/templates/config.yml.j2.
+  gitea_runner_cache: 8088
+  # gitea-runner Prometheus endpoint (loopback-only). 9101 matches
+  # upstream's documented default.
+  gitea_runner_metrics: 9101
   healthchecks: 8000
   homepage: 3003
   homepage_alerts: 8765
