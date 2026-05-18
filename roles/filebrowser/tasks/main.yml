@@ -78,7 +78,31 @@
 # podman-compose). Upstream passlib has no 1.7.5; libpass installs to
 # /usr/local/lib/python3.X/dist-packages/ and imports as `passlib`,
 # shadowing the broken apt copy.
+- name: Install python3-pip for libpass install
+  apt:
+    name: python3-pip
+    cache_valid_time: 3600
+  become: true
+  register: filebrowser_pip3_apt
+  tags:
+    - filebrowser
+
+# passlib doesn't bundle a bcrypt backend; without `bcrypt` importable
+# the htpasswd module fails "bcrypt: no backends available". On lab
+# bcrypt 5.0 rides in transitively via paramiko/podman-compose; under
+# testrole.py there's no such backdoor, so install jammy's python3-
+# bcrypt (3.2.0) explicitly. libpass handles every bcrypt API shape.
+- name: Install python3-bcrypt backend for libpass
+  apt:
+    name: python3-bcrypt
+    cache_valid_time: 3600
+  become: true
+  register: filebrowser_bcrypt_apt
+  tags:
+    - filebrowser
+
 - name: Install libpass via pip for the htpasswd module
+  when: not (ansible_check_mode and filebrowser_pip3_apt.changed)
   pip:
     name: libpass
     version: "1.9.3"
@@ -89,7 +113,15 @@
     - filebrowser
 
 - name: Configure filebrowser basic-auth credentials
-  when: not (ansible_check_mode and filebrowser_passlib.changed)
+  # Skip when any upstream changed in check-mode: pip3-apt and
+  # bcrypt-apt would gate the libpass pip task off, and libpass
+  # itself would not have actually installed passlib -- the
+  # htpasswd module then fails its import-passlib precheck or its
+  # bcrypt-backend precheck.
+  when: not (ansible_check_mode
+             and (filebrowser_pip3_apt.changed
+                  or filebrowser_bcrypt_apt.changed
+                  or filebrowser_passlib.changed))
   htpasswd:
     path: /etc/nginx/filebrowser.htpasswd
     name: "{{ filebrowser_basic_auth_user }}"
