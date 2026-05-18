@@ -257,6 +257,10 @@ resource "nexus_security_user" "push" {
   password  = random_password.nexus_push[each.key].result
   roles     = [nexus_security_role.push[each.key].roleid]
   status    = "active"
+
+  lifecycle {
+    replace_triggered_by = [random_password.nexus_push[each.key]]
+  }
 }
 
 # Migrate the pre-for_each resources so the existing homelab-push role/

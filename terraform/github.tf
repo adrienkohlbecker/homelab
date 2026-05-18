@@ -38,6 +38,10 @@ resource "github_actions_secret" "nexus_password" {
   repository  = each.key
   secret_name = "NEXUS_PASSWORD"
   value       = random_password.nexus_push[each.key].result
+
+  lifecycle {
+    replace_triggered_by = [random_password.nexus_push[each.key]]
+  }
 }
 
 moved {
