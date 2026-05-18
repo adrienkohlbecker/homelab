@@ -103,5 +103,6 @@
     nginx_site_args:
       subdomain: profilarr
       proxy_pass: http://localhost:6868/
+      auth: required
   tags:
     - profilarr
