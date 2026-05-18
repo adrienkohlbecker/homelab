@@ -3,34 +3,6 @@
   changed_when: false
   become: true
 
-- name: _verify | homepage config dir exists
-  stat:
-    path: /mnt/services/homepage
-  register: _verify_config_dir
-  failed_when: not _verify_config_dir.stat.exists or _verify_config_dir.stat.pw_name != 'homepage'
-  become: true
-
-- name: _verify | homepage config files are present
-  stat:
-    path: /mnt/services/homepage/{{ item }}
-  loop:
-    - services.yaml
-    - bookmarks.yaml
-    - settings.yaml
-    - widgets.yaml
-  register: _verify_config_files
-  failed_when: not _verify_config_files.stat.exists
-  become: true
-
-- name: _verify | homepage.service is loaded and active
-  systemd:
-    name: homepage
-  register: _verify_unit
-  failed_when: >-
-    _verify_unit.status.LoadState != "loaded"
-    or _verify_unit.status.ActiveState != "active"
-  become: true
-
 - name: _verify | homepage answers on its loopback port
   uri:
     url: http://localhost:{{ service_ports.homepage }}/api/healthcheck
@@ -41,16 +13,16 @@
   until: _verify_http.status == 200
   become: true
 
-- name: _verify | homepage_alerts.service is loaded and active
-  systemd:
-    name: homepage_alerts
-  register: _verify_alerts_unit
-  failed_when: >-
-    _verify_alerts_unit.status.LoadState != "loaded"
-    or _verify_alerts_unit.status.ActiveState != "active"
+- name: _verify | homepage answers through nginx via Host header
+  uri:
+    url: https://localhost/api/healthcheck
+    headers:
+      Host: "homepage.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    status_code: 200
   become: true
 
-- name: _verify | homepage_alerts answers JSON
+- name: _verify | homepage_alerts answers JSON for every configured host
   uri:
     url: http://localhost:{{ service_ports.homepage_alerts }}/api/alerts
     return_content: true
@@ -61,5 +33,26 @@
   until: _verify_alerts_json.status == 200
   failed_when: >-
     _verify_alerts_json.status != 200
-    or (_verify_alerts_json.json.hosts | default([])) | length == 0
+    or (_verify_alerts_json.json.hosts | length) != (homepage_netdata_hosts | length)
+    or (_verify_alerts_json.json.hosts | map(attribute='name') | list | sort) != (homepage_netdata_hosts | sort)
   become: true
+
+- name: _verify | homepage_alerts renders HTML through nginx
+  uri:
+    url: https://localhost/alerts/
+    headers:
+      Host: "homepage.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    return_content: true
+    status_code: 200
+  register: _verify_alerts_html
+  failed_when: >-
+    _verify_alerts_html.status != 200
+    or 'frameElement' not in _verify_alerts_html.content
+  become: true
+
+- name: _verify | homepage_alerts HTML names every configured host
+  assert:
+    that: item in _verify_alerts_html.content
+    fail_msg: "Host {{ item }} missing from rendered HTML"
+  loop: "{{ homepage_netdata_hosts }}"
