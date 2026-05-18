@@ -116,8 +116,19 @@ SyslogIdentifier=%N
 #   -v /opt/actions-runner/externals:/__e:ro for a workflow container,
 #   docker (resolving the source on the host via the bind-mounted
 #   socket) finds real files instead of EACCES on a missing path.
-#   rw (not ro) because actions/runner writes _diag/ logs into the
-#   install dir at runtime.
+#   :O (overlay) -- writes from inside the runner container go to a
+#   transient container-side upper layer; the host's /opt/actions-runner
+#   stays pristine and is discarded on container exit (man podman-run:
+#   "Modifications to the mount point are destroyed when the container
+#   is unmounted"). Each container start gets a clean overlay, so a
+#   malicious workflow that tampers with run.sh / bin/Runner.Listener /
+#   etc. can't persist that tampering to the next container or to
+#   sibling DooD containers (which mount /opt/actions-runner/externals
+#   from the host directly, not via this overlay). The runner's own
+#   runtime writes -- .runner, .credentials, run-helper.sh, _diag/ --
+#   land in the overlay's upper and disappear cleanly when the
+#   ephemeral runner exits; the same content is captured in journald
+#   via --log-driver=journald anyway.
 # --volume /mnt/.../workdir_%i: path-mirrored at the same path on
 #   both sides for the same DooD-bind-mount reason. actions/runner's
 #   _work tree lives here, plus _temp/_actions/_tool subdirs that
@@ -241,7 +252,7 @@ ExecStart=/usr/bin/podman run \
   --gidmap=0:0:65536 \
   --gidmap=+0:{{ github_runner_user.group }}:1 \
   --volume %t/user/{{ github_runner_user.uid }}/podman/podman.sock:/var/run/docker.sock \
-  --volume /opt/actions-runner:/opt/actions-runner:rw \
+  --volume /opt/actions-runner:/opt/actions-runner:O \
   --volume /mnt/scratch/github_runner/workdir_%i:/mnt/scratch/github_runner/workdir_%i:rw \
   --env CONTAINER_HOST=unix:///var/run/docker.sock \
   --env DOCKER_HOST=unix:///var/run/docker.sock \
