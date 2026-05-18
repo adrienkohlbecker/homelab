@@ -134,6 +134,11 @@
   tags:
     - homeassistant
 
+# HA-flavoured YAML uses custom tags (!include, !include_dir_merge_named,
+# !secret, ...). yaml.safe_load chokes on those, so register a stub
+# constructor for any !-prefixed tag before parsing. The validator only
+# proves the file is well-formed YAML before it lands on disk; HA's own
+# schema checks still gate startup.
 - name: Configure homeassistant
   template:
     src: configuration.yaml.j2
@@ -146,6 +151,7 @@
     block_end_string: "%>>"
     variable_start_string: "<<<"
     variable_end_string: ">>>"
+    validate: python3 -c 'import yaml,sys; yaml.add_multi_constructor("!",lambda l,s,n:None,Loader=yaml.SafeLoader); yaml.safe_load(open(sys.argv[1]))' "%s"
   register: homeassistant_conf
   become: true
   tags:
@@ -159,18 +165,24 @@
     group: homeassistant
     mode: "{{ item.mode | default('0600') }}"
     backup: true
+    validate: "{{ item.validate | default(omit) }}"
   register: homeassistant_config_files
   become: true
+  vars:
+    _yaml_validate: python3 -c 'import yaml,sys; yaml.add_multi_constructor("!",lambda l,s,n:None,Loader=yaml.SafeLoader); yaml.safe_load(open(sys.argv[1]))' "%s"
   loop:
     - src: macros.jinja
       dest: /mnt/services/homeassistant/custom_templates/macros.jinja
     - src: sensors.yaml
       dest: /mnt/services/homeassistant/sensors.yaml
+      validate: "{{ _yaml_validate }}"
     - src: templates.yaml
       dest: /mnt/services/homeassistant/templates.yaml
+      validate: "{{ _yaml_validate }}"
     - src: blueprints/automation/hvac_dry_mode.yaml
       dest: /mnt/services/homeassistant/blueprints/automation/hvac_dry_mode.yaml
       mode: "0644"
+      validate: "{{ _yaml_validate }}"
   loop_control:
     label: "{{ item.dest }}"
   tags:
