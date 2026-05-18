@@ -39,10 +39,6 @@ mapfile -t names < <(
   podman ps --filter "ancestor=$image" --format '{{.Names}}'
 )
 
-rotated=0
-busy=0
-fresh=0
-
 for name in "${names[@]}"; do
   [[ -z "$name" ]] && continue
 
@@ -53,7 +49,6 @@ for name in "${names[@]}"; do
   unit="github_runner@${inst}.service"
 
   if [[ "$live" == "$latest" ]]; then
-    fresh=$((fresh + 1))
     continue
   fi
 
@@ -67,18 +62,13 @@ for name in "${names[@]}"; do
   # isn't.
   if ! topout=$(podman top "$name" args 2>/dev/null); then
     echo "$inst: stale (live=${live:7:12} latest=${latest:7:12}) but podman top failed; treating as busy"
-    busy=$((busy + 1))
     continue
   fi
   if echo "$topout" | grep -q '[R]unner\.Worker'; then
     echo "$inst: stale (live=${live:7:12} latest=${latest:7:12}) but mid-job; skipping"
-    busy=$((busy + 1))
     continue
   fi
 
   echo "$inst: rotating (live=${live:7:12} -> latest=${latest:7:12})"
   systemctl restart "$unit"
-  rotated=$((rotated + 1))
 done
-
-echo "rotated=$rotated busy=$busy fresh=$fresh"
