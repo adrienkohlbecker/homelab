@@ -90,8 +90,8 @@ ExecStart=/usr/bin/podman run \
     --env UWSGI_DISABLE_LOGGING=1 \
     --env UWSGI_HOOK_MASTER_START="unix_signal:15 gracefully_kill_them_all" \
     --publish 127.0.0.1:{{ service_ports.healthchecks }}:8000/tcp \
-    --health-cmd         '["curl","--head","--request","GET","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","--header","Host: healthchecks.{{ inventory_hostname }}.{{ domain }}","-o","/dev/null","http://127.0.0.1:8000/api/v3/status/"]' \
-    --health-startup-cmd '["curl","--head","--request","GET","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","--header","Host: healthchecks.{{ inventory_hostname }}.{{ domain }}","-o","/dev/null","http://127.0.0.1:8000/api/v3/status/"]' \
+    --health-cmd         '["curl","--request","GET","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","--header","Host: healthchecks.{{ inventory_hostname }}.{{ domain }}","-o","/dev/null","http://127.0.0.1:8000/api/v3/status/"]' \
+    --health-startup-cmd '["curl","--request","GET","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","--header","Host: healthchecks.{{ inventory_hostname }}.{{ domain }}","-o","/dev/null","http://127.0.0.1:8000/api/v3/status/"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "10s" \
