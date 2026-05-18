@@ -62,6 +62,37 @@
     label: "{{ item.repo }}_{{ item.suffix }}"
   become: true
 
+- name: _verify | github_runner_image_rotate script installed
+  stat:
+    path: /usr/local/bin/github_runner_image_rotate
+  register: _verify_rotate_script
+  failed_when: >-
+    not _verify_rotate_script.stat.exists
+    or not _verify_rotate_script.stat.executable
+  become: true
+
+- name: _verify | github_runner_image_rotate.timer is active
+  systemd:
+    name: github_runner_image_rotate.timer
+  register: _verify_rotate_timer
+  failed_when: >-
+    _verify_rotate_timer.status.LoadState != "loaded"
+    or _verify_rotate_timer.status.ActiveState != "active"
+  become: true
+
+# Functional smoke: run the script once and confirm it exits cleanly.
+# Under qemu_test no runners are active (the stub instance's systemd
+# start is gated off) so the loop body never executes -- we exercise
+# the podman pull / digest extraction / unit enumeration codepaths.
+# The script swallows nexus-unreachable as exit 0 (transient pull
+# failure -> wait for next tick), so we don't fail _verify on test
+# boxes without nexus reach; an uncaught error in the script would
+# still surface as rc != 0 and trip the default failed_when.
+- name: _verify | github_runner_image_rotate runs cleanly
+  command: /usr/local/bin/github_runner_image_rotate
+  changed_when: false
+  become: true
+
 - name: _verify | per-instance workdir exists
   stat:
     path: /mnt/scratch/github_runner/workdir_{{ item.repo }}_{{ item.suffix }}

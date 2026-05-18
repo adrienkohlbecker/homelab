@@ -343,6 +343,47 @@
   tags:
     - github_runner
 
+# Idle-runner image rotation. --pull on the unit (default 'missing')
+# handles bootstrap on first start, but an ephemeral runner only
+# restarts after running a job -- a runner that registered hours ago
+# and has been listening for jobs ever since stays on the stale image
+# until either a job lands on it or this timer rotates it. The script
+# refreshes the local store via `podman pull` and restarts only idle
+# stale instances (Runner.Worker absence in the container process tree
+# is the busy/idle signal); mid-job instances pick up the new image
+# naturally on their next respawn.
+- name: Install github_runner_image_rotate script
+  copy:
+    src: github_runner_image_rotate.sh
+    dest: /usr/local/bin/github_runner_image_rotate
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - github_runner
+
+# 5-minute cadence so a fresh runner-image.yml build propagates to
+# idle runners within a few minutes -- short enough that an operator
+# rebuilding the image and then dispatching another workflow usually
+# lands on the new image. monitor: false: a missed tick just delays
+# rotation by 5 more minutes; no failure mode worth alerting on.
+- name: Schedule github_runner_image_rotate timer
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: github_runner_image_rotate
+      description: Rotate idle github_runner instances onto the latest runner image
+      on_calendar: "*:0/5:00"
+      exec_start: /usr/local/bin/github_runner_image_rotate
+      monitor: false
+  tags:
+    - github_runner
+
 # Per-instance envfile + container deploy.
 # include_tasks (not include_role + loop) so vars: re-evaluate per
 # iteration -- see memory feedback_include_role_loop_vars for the trap.
