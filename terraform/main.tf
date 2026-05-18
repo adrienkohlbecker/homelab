@@ -16,6 +16,10 @@ terraform {
       source  = "integrations/github"
       version = "~> 6"
     }
+    mailgun = {
+      source  = "wgebis/mailgun"
+      version = "~> 0.9"
+    }
     external = {
       source  = "hashicorp/external"
       version = "~> 2"
