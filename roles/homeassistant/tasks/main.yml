@@ -283,6 +283,39 @@
   tags:
     - homeassistant
 
+# HA's recorder writes very heavily (every state change, every poll);
+# ZHA's zigpy DB sees fewer writes but the same fsync amplification.
+# WAL halves the per-commit fsync count and lets readers not block the
+# writer. The mode is persisted in the DB header, so this is one-shot
+# (probe returns 'wal' on subsequent applies). DBs are skipped if
+# absent (first apply before HA has created them); the second apply
+# after HA's first cold start lands the conversion.
+- name: Read sqlite journal mode
+  command: sqlite3 -readonly /mnt/services/sqlite/homeassistant/{{ item }} 'PRAGMA journal_mode;'
+  register: homeassistant_sqlite_pragma
+  changed_when: false
+  failed_when: false
+  become: true
+  loop:
+    - home-assistant_v2.db
+    - zigbee.db
+  loop_control:
+    label: "{{ item }}"
+  tags:
+    - homeassistant
+
+- name: Convert sqlite to WAL
+  command: sqlite3 /mnt/services/sqlite/homeassistant/{{ item.item }} 'PRAGMA journal_mode=WAL;'
+  when:
+    - item.rc == 0
+    - (item.stdout | default('') | trim) not in ['wal', '']
+  become: true
+  loop: "{{ homeassistant_sqlite_pragma.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  tags:
+    - homeassistant
+
 - name: Configure nginx
   import_role:
     name: nginx
