@@ -30,3 +30,30 @@
   become: true
   tags:
     - hostname
+
+- name: Check for cloud-init
+  stat:
+    path: /etc/cloud/cloud.cfg.d
+  register: hostname_cloud_init_dir
+  tags:
+    - hostname
+
+- name: Pin cloud-init to preserve hostname and /etc/hosts
+  # cloud-init's manage_etc_hosts can regenerate /etc/hosts on boot from a
+  # template, wiping the template above; preserve_hostname stops cc_set_hostname
+  # from reverting the hostname on the next boot. Both default-vary per cloud
+  # image vendor; pin explicitly. Skips when cloud-init isn't installed
+  # (roles/cleanup strips it on prod ZFS hosts).
+  when: hostname_cloud_init_dir.stat.exists
+  copy:
+    dest: /etc/cloud/cloud.cfg.d/90-disable-manage-hosts.cfg
+    mode: "0644"
+    owner: root
+    group: root
+    backup: true
+    content: |
+      manage_etc_hosts: false
+      preserve_hostname: true
+  become: true
+  tags:
+    - hostname
