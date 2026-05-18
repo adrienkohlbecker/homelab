@@ -123,15 +123,19 @@
 # so check-mode dry-run output still renders the `gitea-runner register`
 # command; on real runs the registration's `creates: .../.runner`
 # short-circuits when already registered, so the placeholder never
-# reaches the wire. Inline conditional rather than `default([..])[1]`
-# because ansible-core 2.20's templating engine misroutes `[1]` on a
-# default-substituted list as `.1` attribute access and errors out.
+# reaches the wire.
+#
+# `| last` (not `[0]` or `[1]`) because gitea's CLI may prefix the
+# token with log lines on startup -- the old root-running fixture
+# emitted a "running as root" warning that put the token on line 1;
+# the current git-running fixture emits no warning so the token is
+# line 0. Taking the last non-empty line is robust to either shape.
 - name: Compute test registration token
   when: qemu_test
   set_fact:
     gitea_runner_token: >-
-      {{ _test_runner_token.stdout_lines[1]
-         if (_test_runner_token.stdout_lines | default([]) | length > 1)
+      {{ (_test_runner_token.stdout_lines | default([]) | select | list | last)
+         if (_test_runner_token.stdout_lines | default([]) | select | list | length > 0)
          else 'TOKEN' }}
   no_log: true
   tags:
