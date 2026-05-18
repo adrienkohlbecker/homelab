@@ -218,8 +218,8 @@
   include_tasks: _install_addon.yml
   loop: "{{ homeassistant_addons }}"
   loop_control:
-    loop_var: addon
-    label: "{{ addon.name }}"
+    loop_var: homeassistant_addon
+    label: "{{ homeassistant_addon.name }}"
   tags:
     - homeassistant
 
@@ -317,6 +317,7 @@
   when:
     - item.rc == 0
     - (item.stdout | default('') | trim) not in ['wal', '']
+  changed_when: true
   become: true
   loop: "{{ homeassistant_sqlite_pragma.results }}"
   loop_control:

@@ -1,73 +1,73 @@
 # Per-iteration include (NOT include_role with loop -- that binds vars
 # once across iterations; see memory feedback_include_role_loop_vars).
-# Inputs flow via the loop var `addon`. The version sentinel inside
-# addon.dest lets a vars/main.yml bump trigger re-install without
+# Inputs flow via the loop var `homeassistant_addon`. The version sentinel inside
+# homeassistant_addon.dest lets a vars/main.yml bump trigger re-install without
 # computing on-disk-content sha256 vs an expected literal; the prior
 # per-artifact sha1-of-extracted-file approach worked but only one of
 # the three artifacts ever used it (icons), so the asymmetry meant
 # manual edits to HACS or thermal_comfort were never detected anyway.
-- name: Create {{ addon.name }} install dir
+- name: Create {{ homeassistant_addon.name }} install dir
   file:
-    dest: "{{ addon.dest }}"
+    dest: "{{ homeassistant_addon.dest }}"
     state: directory
     owner: homeassistant
     group: homeassistant
     mode: "0755"
   become: true
-  register: _addon_dir
+  register: _homeassistant_addon_dir
 
-- name: Read installed version of {{ addon.name }}
-  command: cat {{ addon.dest }}/.installed-version
-  register: _addon_installed
+- name: Read installed version of {{ homeassistant_addon.name }}
+  command: cat {{ homeassistant_addon.dest }}/.installed-version
+  register: _homeassistant_addon_installed
   changed_when: false
   failed_when: false
   check_mode: false
   become: true
 
-- name: Install/update {{ addon.name }}
-  when: (_addon_installed.stdout | default('') | trim) != addon.version
+- name: Install/update {{ homeassistant_addon.name }}
+  when: (_homeassistant_addon_installed.stdout | default('') | trim) != homeassistant_addon.version
   become: true
   block:
-    - name: Download {{ addon.name }} archive
+    - name: Download {{ homeassistant_addon.name }} archive
       check_mode: false
       get_url:
-        url: "{{ addon.url }}"
-        checksum: "sha256:{{ addon.sha256 }}"
-        dest: "/tmp/{{ addon.name }}.{{ addon.archive }}"
+        url: "{{ homeassistant_addon.url }}"
+        checksum: "sha256:{{ homeassistant_addon.sha256 }}"
+        dest: "/tmp/{{ homeassistant_addon.name }}.{{ homeassistant_addon.archive }}"
         mode: "0644"
         owner: root
         group: root
 
-    - name: Unpack {{ addon.name }}
-      when: not (ansible_check_mode and _addon_dir.changed)
+    - name: Unpack {{ homeassistant_addon.name }}
+      when: not (ansible_check_mode and _homeassistant_addon_dir.changed)
       unarchive:
-        src: "/tmp/{{ addon.name }}.{{ addon.archive }}"
+        src: "/tmp/{{ homeassistant_addon.name }}.{{ homeassistant_addon.archive }}"
         remote_src: true
-        dest: "{{ addon.dest }}"
+        dest: "{{ homeassistant_addon.dest }}"
         mode: "a+rX"
         owner: homeassistant
         group: homeassistant
         list_files: true
-        include: "{{ addon.include | default(omit) }}"
-        extra_opts: "{{ addon.extra_opts | default(omit) }}"
+        include: "{{ homeassistant_addon.include | default(omit) }}"
+        extra_opts: "{{ homeassistant_addon.extra_opts | default(omit) }}"
 
-    - name: Record installed version of {{ addon.name }}
-      when: not (ansible_check_mode and _addon_dir.changed)
+    - name: Record installed version of {{ homeassistant_addon.name }}
+      when: not (ansible_check_mode and _homeassistant_addon_dir.changed)
       copy:
-        content: "{{ addon.version }}\n"
-        dest: "{{ addon.dest }}/.installed-version"
+        content: "{{ homeassistant_addon.version }}\n"
+        dest: "{{ homeassistant_addon.dest }}/.installed-version"
         owner: homeassistant
         group: homeassistant
         mode: "0644"
 
-    - name: Remove {{ addon.name }} archive
+    - name: Remove {{ homeassistant_addon.name }} archive
       file:
-        path: "/tmp/{{ addon.name }}.{{ addon.archive }}"
+        path: "/tmp/{{ homeassistant_addon.name }}.{{ homeassistant_addon.archive }}"
         state: absent
 
-    # Inside the install block so the flag is set only when this addon
+    # Inside the install block so the flag is set only when this homeassistant_addon
     # actually entered the install path. The OR-chain in main.yml's
-    # restart: line consumes it as a single trigger for all addons.
-    - name: Mark restart trigger for {{ addon.name }}
+    # restart: line consumes it as a single trigger for all homeassistant_addons.
+    - name: Mark restart trigger for {{ homeassistant_addon.name }}
       set_fact:
-        homeassistant_addons_changed: true
+        homeassistant_homeassistant_addons_changed: true
