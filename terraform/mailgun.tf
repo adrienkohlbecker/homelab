@@ -78,4 +78,12 @@ resource "mailgun_api_key" "ci_send_noreply" {
   kind        = "domain"
   domain_name = mailgun_domain.noreply_fahm_fr.name
   description = "homelab CI (.github/workflows/test*.yml mail steps)"
+
+  # NB: the wgebis/mailgun provider's Read returns secret=null on every
+  # refresh (Mailgun's API only returns the secret in the Create
+  # response). The consuming github_actions_secret.mailgun_api_key
+  # (github.tf) carries the ignore_changes + replace_triggered_by
+  # workaround so a `tofu apply` after refresh doesn't push null to
+  # the CI secret. Rotation via -replace on this resource is the
+  # supported path.
 }
