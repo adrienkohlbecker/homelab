@@ -446,7 +446,7 @@
   vars:
     nginx_site_args:
       subdomain: homeassistant
-      proxy_pass: http://localhost:8123/
+      proxy_pass: http://localhost:{{ service_ports.homeassistant }}/
       csp_additional: "connect-src *.openstreetmap.org {{ nginx_csp_default }}; img-src *.cartocdn.com *.home-assistant.io {{ nginx_csp_default }}"
       location_conf: |
         add_header Access-Control-Allow-Origin "https://brands.home-assistant.io";

@@ -105,6 +105,12 @@ service_ports:
   # upstream's documented default.
   gitea_runner_metrics: 9101
   healthchecks: 8000
+  homeassistant: 8123
+  # Sonos S2 event-subscription callback + HomeKit pairing. Published on
+  # 0.0.0.0 so iOS/Sonos controllers on the home LAN can reach them; see
+  # the comment in homeassistant.service.j2 for the trust-scope rationale.
+  homeassistant_sonos: 1400
+  homeassistant_homekit: 3722
   homepage: 3003
   homepage_alerts: 8765
   hyperdx: 5085
