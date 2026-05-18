@@ -1,9 +1,17 @@
-# Functional verify. Pairs with _setup.yml: that file forces the test
-# machine into a "running GA kernel, HWE absent" state so the role's
-# converge phase performs a real apt install. Here we assert (1) the
-# role's reboot signal fired, (2) rebooting picks up an HWE-installed
-# kernel different from the _setup baseline, (3) the power group
-# workaround for thermald's dbus policy is in place.
+# Functional verify. Pairs with _setup.yml: that file forces a
+# "no HWE meta-package" starting state so the role's converge phase
+# performs a real apt install. Here we assert (1) the role's
+# reboot-required touch task fired during converge, (2) the HWE
+# meta-package is installed (not a tautology -- _setup actively
+# removed it), (3) the power group workaround for thermald's dbus
+# policy is in place.
+#
+# No reboot-then-assert-uname check: on aarch64 the harness boots qemu
+# with -kernel/-initrd extracted from the on-pool image (see CLAUDE.md
+# "Test Environment Design"), which pins the running kernel for the
+# lifetime of the VM regardless of what's in /boot. A "kernel flipped
+# after reboot" assertion would always pass on x86_64 (ZBM scans /boot)
+# but always fail on aarch64, violating the per-arch testing policy.
 
 - name: _verify | Stat reboot-required sentinel
   stat:
@@ -17,31 +25,15 @@
     fail_msg: >-
       /var/run/reboot-required missing -- the role's apt task reported
       no changes (HWE wasn't actually absent before converge, so
-      _setup.yml's purge didn't take) or the touch task's gate failed.
+      _setup.yml's remove didn't take) or the touch task's gate failed.
 
-- name: _verify | Read GA uname stashed by _setup
-  slurp:
-    path: /var/lib/hwe_kernel_setup_uname
-  register: hwe_kernel_verify_setup_uname
-
-- name: _verify | Reboot to pick up the HWE kernel
-  reboot:
-    reboot_timeout: 300
-  become: true
-
-- name: _verify | Capture running kernel after reboot
-  command: uname -r
+- name: _verify | HWE meta-package reinstalled by converge
+  command: dpkg-query -W -f='${Status}' linux-generic-hwe-{{ ansible_distribution_version }}
+  register: hwe_kernel_verify_dpkg
   changed_when: false
-  register: hwe_kernel_verify_uname
-
-- name: _verify | Boot chain landed on the HWE-installed kernel
-  assert:
-    that:
-      - hwe_kernel_verify_uname.stdout != (hwe_kernel_verify_setup_uname.content | b64decode | trim)
-    fail_msg: >-
-      uname -r is still {{ hwe_kernel_verify_uname.stdout }} after
-      reboot -- same as the pre-HWE _setup baseline, so the boot chain
-      didn't pick the HWE-pulled kernel even though apt installed it.
+  failed_when: hwe_kernel_verify_dpkg.stdout != 'install ok installed'
+  check_mode: false
+  become: true
 
 - name: _verify | Probe power group
   getent:
