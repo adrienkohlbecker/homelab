@@ -1,0 +1,80 @@
+#!/bin/bash
+# Bootstrap the first hyperdx team.
+#
+# HyperDX's all-in-one image leaves the OTLP receiver UNWIRED until at
+# least one team exists in MongoDB (opampController only adds
+# `otlp/hyperdx` to pipelines when apiKeys.length > 0). Without this,
+# port 4318 never binds and fluent-bit's OTLP output sees Connection
+# refused. The `INGESTION_API_KEY` env documented for this purpose is
+# dead code in the all-in-one-noauth image variant -- config.js checks
+# `HYPERDX_IMAGE === 'all-in-one-auth'` but entry.base.sh always sets
+# `all-in-one-noauth` when IS_LOCAL_APP_MODE is not the dangerous-mode
+# sentinel.
+#
+# Idempotence: both ops below are naturally idempotent --
+#   - /api/register/password returns 409 (teamAlreadyExists) on re-apply
+#   - updateOne with $set is a no-op when state already matches
+# Safe to invoke ad-hoc on every apply or for operator-side rotation.
+#
+# Conceptually one-time: team + apiKey + opamp wiring persist in mongo,
+# so out-of-band hyperdx restarts don't need a re-run. The ansible
+# caller fires this only when this script's content has changed (first
+# install, or a vault rotation that re-bakes a secret here). For mongo
+# data loss (snapshot restore, accident), the operator manually re-runs:
+#   sudo /usr/local/bin/hyperdx_bootstrap.sh
+#
+# Lives at /usr/local/bin/hyperdx_bootstrap.sh, mode 0700 root, with the
+# vault secrets baked in via Jinja. The eventual P2 migration to
+# podman_secret will replace the baked-in secrets with in-container
+# /run/secrets/ reads via `podman exec hyperdx cat ...`.
+set -euo pipefail
+
+UI_PORT={{ service_ports.hyperdx }}
+ADMIN_EMAIL='{{ root_email }}'
+ADMIN_PASSWORD='{{ hyperdx_admin_password }}'
+API_KEY='{{ hyperdx_ingestion_api_key }}'
+
+# Wait for the api (up to ~2min). Redundant on first ansible apply (the
+# Enable hyperdx service task already waited for Type=notify healthy)
+# but needed for ad-hoc runs after a container restart.
+for _ in $(seq 60); do
+  if curl --silent --fail --max-time 5 "http://localhost:${UI_PORT}/api/health" >/dev/null; then
+    break
+  fi
+  sleep 2
+done
+curl --silent --fail --max-time 5 "http://localhost:${UI_PORT}/api/health" >/dev/null
+
+# Register first admin. 200 (created) and 409 (team exists) are both
+# the desired terminal state; anything else is a real failure. Body
+# built via jq so embedded quotes / backslashes / dollar signs in the
+# password JSON-escape correctly.
+body=$(jq -n --arg email "$ADMIN_EMAIL" --arg pw "$ADMIN_PASSWORD" \
+  '{email: $email, password: $pw, confirmPassword: $pw}')
+status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+  --max-time 10 \
+  --request POST \
+  --header 'Content-Type: application/json' \
+  --data "$body" \
+  "http://localhost:${UI_PORT}/api/register/password")
+case "$status" in
+  200|409) ;;
+  *) echo "register/password returned unexpected status: $status" >&2; exit 1 ;;
+esac
+
+# Force the team's apiKey to the vault value AND pin
+# collectorAuthenticationEnforced=true (defends against a future upstream
+# default flip that would silently disable auth on prod re-applies).
+# API_KEY JSON-escaped via jq so a future key containing `"`, `\`, `$`
+# doesn't break the JS literal or mutate an unintended field. Piped via
+# stdin so neither secret appears in any process argv (visible to `ps`,
+# journal, etc.).
+escaped_key=$(jq -Rs . <<<"$API_KEY")
+result=$(podman exec -i hyperdx mongo --quiet hyperdx <<EOF
+JSON.stringify(db.teams.updateOne({}, {\$set: {apiKey: ${escaped_key}, collectorAuthenticationEnforced: true}}))
+EOF
+)
+if ! echo "$result" | grep -q '"matchedCount":1'; then
+  echo "team apiKey update did not match a team: $result" >&2
+  exit 1
+fi
