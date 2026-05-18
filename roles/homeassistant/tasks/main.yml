@@ -308,7 +308,6 @@
   become: true
   with_items:
     - automations.yaml
-    - covers.yaml
     - scripts.yaml
     - scenes.yaml
   tags:
