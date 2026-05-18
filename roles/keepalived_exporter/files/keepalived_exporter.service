@@ -16,4 +16,4 @@ SyslogIdentifier=%N
 ExecStart=/usr/local/bin/keepalived_exporter -web.listen-address 127.0.0.1:9650
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
