@@ -1,11 +1,19 @@
 - name: Create internal podman network
-  # 10.123.4.96/30 — usable .97/.98. The earlier choice of .100/30
-  # (.101/.102) collided with lab's host IP 10.123.4.102 on eth0.4
-  # (host_vars/lab.yml: vlans.iot.addresses), and netavark
-  # auto-assigned HA the colliding .102. Two MACs claiming the same
-  # IP made every HA-originated frame on the IoT VLAN log as a martian
-  # on the host. Keep this block clear of any address that lab itself
-  # carries on the .4 VLAN.
+  # macvlan onto lab's IoT VLAN (netplan-named `iot`, vlan id 4 on nic0)
+  # so HA has an L2 presence there for mDNS/SSDP discovery of Sonos /
+  # HomeKit / Zigbee2MQTT-bridge targets.
+  #
+  # Carving a /30 out of lab's `iot` /24 deliberately shrinks netavark's
+  # allocation pool: .96 is network, .99 is broadcast, .97 is the
+  # netavark-assigned gateway, leaving .98 as the single container IP.
+  # HA gets .98 (pinned explicitly in the unit template).
+  #
+  # The earlier choice of .100/30 (.100-.103) overlapped lab's own iot
+  # address 10.123.4.102; netavark picked .102 for HA, two MACs claimed
+  # the same IP and every HA-originated frame on the IoT VLAN logged as
+  # a martian. Lab's address is configured in host_vars/lab.yml under
+  # vlans.iot.addresses; any future lab static IP added inside .96-.99
+  # would re-trigger the collision -- pick a different /30 if so.
   containers.podman.podman_network:
     name: iot_macvlan
     subnet: 10.123.4.96/30
