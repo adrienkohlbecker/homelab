@@ -48,14 +48,14 @@ ExecStart=/usr/bin/podman run \
     --env TZ={{ system_timezone }} \
     --volume /mnt/services/homeassistant:/config \
     --volume /mnt/services/sqlite/homeassistant:/config/db \
-    --publish 127.0.0.1:{{ service_ports.homeassistant }}:{{ service_ports.homeassistant }}/tcp \
+    --publish 127.0.0.1:{{ service_ports.homeassistant }}:8123/tcp \
     {# Sonos S2 event-subscription callback; HomeKit pairing. Bound on every #}
     {# host iface (not just the IoT macvlan side) because the iOS / Sonos #}
     {# controllers that consume these live on the home LAN, not the IoT VLAN. #}
-    --publish 0.0.0.0:{{ service_ports.homeassistant_sonos }}:{{ service_ports.homeassistant_sonos }}/tcp \
-    --publish 0.0.0.0:{{ service_ports.homeassistant_homekit }}:{{ service_ports.homeassistant_homekit }}/udp \
-    --health-cmd         '["curl","--head","--request","GET","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:{{ service_ports.homeassistant }}/manifest.json"]' \
-    --health-startup-cmd '["curl","--head","--request","GET","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:{{ service_ports.homeassistant }}/manifest.json"]' \
+    --publish 0.0.0.0:{{ service_ports.homeassistant_sonos }}:1400/tcp \
+    --publish 0.0.0.0:{{ service_ports.homeassistant_homekit }}:3722/udp \
+    --health-cmd         '["curl","--head","--request","GET","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8123/manifest.json"]' \
+    --health-startup-cmd '["curl","--head","--request","GET","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8123/manifest.json"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
