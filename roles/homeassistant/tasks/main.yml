@@ -427,7 +427,7 @@
       --uidmap=+0:{{ homeassistant_user.uid }}:1 \
       --gidmap=0:0:65536 \
       --gidmap=+0:{{ homeassistant_user.group }}:1 \
-      {{ homeassistant_unit_image.images[0] }} true
+      {{ homeassistant_unit_image.images[0] | quote }} true
     podman rm homeassistant-prestage
   args:
     executable: /bin/bash
