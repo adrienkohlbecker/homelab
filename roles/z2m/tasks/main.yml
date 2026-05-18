@@ -171,5 +171,6 @@
     nginx_site_args:
       subdomain: z2m
       proxy_pass: http://localhost:8081/
+      auth: required
   tags:
     - z2m
