@@ -179,11 +179,37 @@
   when:
     - gitea_runner_registration.rc is defined
     - gitea_runner_registration.rc != 0
+  vars:
+    # Guard against replace('', '<REDACTED>') -- which would inject the
+    # marker between every character of stderr. Empty-token can happen if
+    # qemu_test's `gitea actions generate-runner-token` returned no lines
+    # (fixture mis-bringup) and the ternary fell back to '' instead of
+    # the 'TOKEN' placeholder.
+    _stderr: "{{ gitea_runner_registration.stderr | default('') }}"
+    _token: "{{ gitea_runner_token | default('') }}"
   fail:
     msg: |
       gitea-runner register failed (rc={{ gitea_runner_registration.rc }}).
       Sanitised stderr:
-      {{ gitea_runner_registration.stderr | default('') | replace(gitea_runner_token | default(''), '<REDACTED>') }}
+      {{ _stderr | replace(_token, '<REDACTED>') if _token | length > 0 else _stderr }}
+  tags:
+    - gitea_runner
+
+# gitea-runner register's umask determines .runner's initial mode; v1.0.3
+# happens to land at 0600 but the role shouldn't bet on upstream's umask --
+# .runner holds the long-lived runner credential (UUID + secret) that lets
+# the daemon impersonate this runner against gitea, pull in-flight job
+# payloads, etc. A workflow that gains read access to .runner via the
+# rootless podman socket has full runner-identity takeover.
+- name: Lock down .runner permissions
+  when: not (ansible_check_mode and gitea_runner_user.changed)
+  file:
+    path: /mnt/services/gitea_runner/.runner
+    state: file
+    mode: "0600"
+    owner: gitea_runner
+    group: gitea_runner
+  become: true
   tags:
     - gitea_runner
 
