@@ -20,34 +20,37 @@ image="nexus.lab.fahm.fr/homelab/runner:latest"
 # expensive bit; layer pulls only happen when the digest moved. Soft-
 # fail when nexus is unreachable -- the only consequence is delayed
 # rotation; the next tick retries. set -e would otherwise turn a
-# transient registry blip into a noisy unit failure.
-if ! podman pull --quiet "$image" >/dev/null 2>&1; then
+# transient registry blip into a noisy unit failure. stderr stays
+# wired to the journal so a chronic outage is visible in
+# `journalctl -u github_runner_image_rotate`.
+if ! podman pull --quiet "$image" >/dev/null; then
   echo >&2 "podman pull of $image failed; skipping rotation this tick"
   exit 0
 fi
 
 latest=$(podman image inspect "$image" --format '{{.Digest}}')
 
-mapfile -t units < <(
-  systemctl list-units --type=service --no-legend --plain --state=active \
-    'github_runner@*.service' | awk '{print $1}'
+# Enumerate running runner containers directly from podman -- one query
+# replaces the previous systemctl list-units + per-unit cidfile read
+# chain. The container name encodes the systemd instance suffix
+# (--name github_runner_%i in the unit template) so name -> unit is
+# deterministic.
+mapfile -t names < <(
+  podman ps --filter "ancestor=$image" --format '{{.Names}}'
 )
 
 rotated=0
 busy=0
 fresh=0
 
-for unit in "${units[@]}"; do
-  inst=${unit#github_runner@}
-  inst=${inst%.service}
+for name in "${names[@]}"; do
+  [[ -z "$name" ]] && continue
 
-  cidfile="/run/github_runner@${inst}/${unit}.ctr-id"
-  [[ -r "$cidfile" ]] || continue
-  cid=$(<"$cidfile")
-  [[ -z "$cid" ]] && continue
-
-  live=$(podman inspect "$cid" --format '{{.ImageDigest}}' 2>/dev/null || true)
+  live=$(podman inspect "$name" --format '{{.ImageDigest}}' 2>/dev/null || true)
   [[ -z "$live" ]] && continue
+
+  inst=${name#github_runner_}
+  unit="github_runner@${inst}.service"
 
   if [[ "$live" == "$latest" ]]; then
     fresh=$((fresh + 1))
@@ -57,7 +60,17 @@ for unit in "${units[@]}"; do
   # Stale. Skip if a job is in flight: actions/runner only spawns
   # Runner.Worker for the duration of an active job, so its absence
   # in the container's process tree is the natural busy/idle signal.
-  if podman top "$cid" args 2>/dev/null | grep -q '[R]unner\.Worker'; then
+  # A podman top failure (container in a transient state, racing
+  # restart, etc.) is indistinguishable from "no Runner.Worker" via
+  # grep alone -- treat any failure as busy and let the next tick
+  # retry. Losing one rotation is cheap; killing a mid-job runner
+  # isn't.
+  if ! topout=$(podman top "$name" args 2>/dev/null); then
+    echo "$inst: stale (live=${live:7:12} latest=${latest:7:12}) but podman top failed; treating as busy"
+    busy=$((busy + 1))
+    continue
+  fi
+  if echo "$topout" | grep -q '[R]unner\.Worker'; then
     echo "$inst: stale (live=${live:7:12} latest=${latest:7:12}) but mid-job; skipping"
     busy=$((busy + 1))
     continue
