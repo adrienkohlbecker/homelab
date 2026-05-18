@@ -38,22 +38,3 @@ http:
     # prefix means a future named bridge or a podman re-allocation stays
     # trusted without chasing the exact gateway IP.
     - <<< podman_bridge_pool >>>
-
-# influxdb:
-#   api_version: 2
-#   host: influxdb.<<< inventory_hostname >>>.<<< domain >>>
-#   port: 443
-#   ssl: true
-#   verify_ssl: true
-#   token: <<< homeassistant_influxdb_auth.stdout >>>
-#   organization: <<< homeassistant_influxdb_org.stdout >>>
-#   bucket: homeassistant
-#   max_retries: 3
-#   measurement_attr: domain__device_class
-#   tags_attributes:
-#     - unit_of_measurement
-#     - device_class
-#     - state_class
-#     - friendly_name
-#     - hidden
-#     - area
