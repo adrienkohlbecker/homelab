@@ -1,3 +1,17 @@
+locals {
+  # Route map: local-part-prefix -> destination addresses. The worker
+  # parses recipient as `<prefix>[.<suffix>]@<domain>`, looks up <prefix>
+  # in this map (case-insensitively), and forwards to each address.
+  # Multi-destination aliases (cp.* -> both) live here, not in the JS.
+  # Destination addresses come from the cloudflare_email_routing_address
+  # resources in email.tf so the worker auto-tracks renames there.
+  email_routes = {
+    ak = [cloudflare_email_routing_address.adrien_gmail.email]
+    sp = [cloudflare_email_routing_address.spouse_email.email]
+    cp = [cloudflare_email_routing_address.adrien_gmail.email, cloudflare_email_routing_address.spouse_email.email]
+  }
+}
+
 resource "cloudflare_workers_script" "catchall_email" {
   account_id  = data.cloudflare_account.main.account_id
   script_name = "catchall-email"
@@ -7,4 +21,10 @@ resource "cloudflare_workers_script" "catchall_email" {
   # runtime semantics under the worker.
   compatibility_date = "2000-01-01"
   usage_model        = "standard"
+
+  bindings = [{
+    type = "json"
+    name = "ROUTES"
+    json = jsonencode(local.email_routes)
+  }]
 }
