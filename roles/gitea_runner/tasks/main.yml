@@ -136,21 +136,49 @@
   tags:
     - gitea_runner
 
+# Token passes via env, not --token on the command line, so
+# /proc/<pid>/cmdline doesn't expose the vaulted registration token to
+# any local user during the brief register window. /proc/<pid>/environ
+# stays uid-gated (root + gitea_runner) for the same window. shell:
+# (not command:) is required because we need /bin/sh to expand
+# $REGISTRATION_TOKEN; gitea-runner v1.0.3 has no --token-file or
+# env-var-named-input flag.
+#
+# failed_when: false + the follow-up Surface task is the
+# defence-in-depth pairing with no_log: true: hiding the task output
+# would otherwise hide the real failure cause (gitea unreachable, token
+# rejected, cert untrusted). The follow-up scrubs the token from
+# stderr before failing loudly.
 - name: Register runner
   when: not (ansible_check_mode and gitea_runner_user.changed)
-  command: >-
-    gitea-runner register
-    -c /mnt/services/gitea_runner/config.yml
-    --no-interactive
-    --name {{ inventory_hostname }}
-    --instance {{ 'http://localhost:3000' if qemu_test else 'https://gitea.' ~ inventory_hostname ~ '.' ~ domain }}
-    --token {{ gitea_runner_token }}
+  shell: |
+    gitea-runner register \
+      -c /mnt/services/gitea_runner/config.yml \
+      --no-interactive \
+      --name {{ inventory_hostname | quote }} \
+      --instance {{ ('http://localhost:3000' if qemu_test else 'https://gitea.' ~ inventory_hostname ~ '.' ~ domain) | quote }} \
+      --token "$REGISTRATION_TOKEN"
   args:
     creates: /mnt/services/gitea_runner/.runner
+  environment:
+    REGISTRATION_TOKEN: "{{ gitea_runner_token }}"
   become: true
   become_user: gitea_runner
   register: gitea_runner_registration
+  failed_when: false
   no_log: true
+  tags:
+    - gitea_runner
+
+- name: Surface registration failure (token redacted)
+  when:
+    - gitea_runner_registration.rc is defined
+    - gitea_runner_registration.rc != 0
+  fail:
+    msg: |
+      gitea-runner register failed (rc={{ gitea_runner_registration.rc }}).
+      Sanitised stderr:
+      {{ gitea_runner_registration.stderr | default('') | replace(gitea_runner_token | default(''), '<REDACTED>') }}
   tags:
     - gitea_runner
 
