@@ -15,7 +15,7 @@
     state: directory
     owner: healthchecks
     group: healthchecks
-    mode: "0755"
+    mode: "0700"
   become: true
   tags:
     - healthchecks
