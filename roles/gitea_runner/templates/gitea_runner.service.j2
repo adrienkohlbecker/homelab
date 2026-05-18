@@ -8,6 +8,11 @@ Wants=network-online.target
 # user manager; wait for that user manager to be up before starting.
 After=user@{{ gitea_runner_user.uid }}.service
 Requires=user@{{ gitea_runner_user.uid }}.service
+# Three start attempts spaced RestartSec=30s apart = ~90s of wall-clock
+# before the burst trips. Tighter spacing (the old RestartSec=5s) tripped
+# in ~15s and then blocked auto-restart for the remaining ~585s of the
+# interval -- a transient gitea unreachability at host boot would dead
+# the daemon for ~10min before the operator could intervene.
 StartLimitInterval=600
 StartLimitBurst=3
 {% if zfs_root %}
@@ -37,7 +42,7 @@ TimeoutStartSec=60
 # window. Composes with runner.shutdown_timeout=110s in config.yml.j2
 # (10s headroom for daemon cleanup before SIGKILL).
 TimeoutStopSec=120
-RestartSec=5
+RestartSec=30
 SyslogIdentifier=%N
 
 # The daemon runs natively (not containerised like roles/github_runner)
