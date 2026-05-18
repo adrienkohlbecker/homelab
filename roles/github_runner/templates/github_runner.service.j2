@@ -201,6 +201,15 @@ SyslogIdentifier=%N
 #   at unprivileged host github_runner. A narrower fix would be a
 #   custom seccomp.json that just adds fchmodat2 to the allowlist;
 #   acceptable for homelab CI to skip that and unconfine wholesale.
+# Wait for github_runner's user manager to bring podman.socket up. The
+# unit bind-mounts %t/user/<uid>/podman/podman.sock into the container;
+# if the socket doesn't exist when `podman run` fires, the source path
+# auto-creates as an empty file -- silent DooD failure inside the
+# container. After=/Requires=user@<uid>.service is necessary but not
+# sufficient: the user manager can be `active` before podman.socket is
+# actually listening. Bounded 60 × 1s, well inside TimeoutStartSec=300.
+# Same pattern as roles/gitea_runner.
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S %t/user/{{ github_runner_user.uid }}/podman/podman.sock ] && exit 0; sleep 1; done; echo "podman.sock not present after 60s" >&2; exit 1'
 ExecStartPre=/bin/rm -f %t/%N/%n.ctr-id
 ExecStart=/usr/bin/podman run \
   --cidfile=%t/%N/%n.ctr-id \
