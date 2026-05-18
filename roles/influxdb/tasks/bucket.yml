@@ -1,0 +1,122 @@
+# Provision a per-tenant (org, user, bucket, write-auth) into a
+# running influxdb container. Idempotent via query-then-create
+# pairs. Each task uses `influx ... --json` and parses via
+# `from_json` to avoid the column-shape drift that tab-cut parsing
+# carries across influxdb-cli versions.
+#
+# Inputs flow through `influxdb_bucket_args` (dict) per the
+# helper-role pattern in CLAUDE.md so each call replaces the dict
+# wholesale and inter-call vars-leak can't happen.
+#
+# Required keys:
+#   org    -- influxdb org name (must already exist; not created here)
+#   user   -- user name (created if missing, attached to <org>)
+#   bucket -- bucket name (created under <org> if missing)
+#
+# Exposes (single-caller scope only; a future second caller in the
+# same play will overwrite these):
+#   influxdb_bucket_org_id  -- the org's id (string)
+#   influxdb_bucket_id      -- the bucket's id (string)
+#
+# Operator extracts the resulting write-auth token post-bootstrap via
+#   podman exec influxdb influx auth list --user <user> --json
+# and pastes it into the consumer (e.g. HA's UI integration).
+
+- name: bucket | Assert args
+  assert:
+    that:
+      - influxdb_bucket_args.org    is defined
+      - influxdb_bucket_args.user   is defined
+      - influxdb_bucket_args.bucket is defined
+    fail_msg: >-
+      influxdb_bucket requires influxdb_bucket_args.{org,user,bucket}.
+
+- name: bucket | Query org {{ influxdb_bucket_args.org }}
+  command: podman exec influxdb influx org list --name {{ influxdb_bucket_args.org }} --json
+  register: _influxdb_bucket_org_query
+  changed_when: false
+  check_mode: false
+  failed_when: >-
+    _influxdb_bucket_org_query.rc != 0
+    or (_influxdb_bucket_org_query.stdout | from_json | length) == 0
+  become: true
+
+- name: bucket | Set org_id fact
+  set_fact:
+    influxdb_bucket_org_id: "{{ (_influxdb_bucket_org_query.stdout | from_json)[0].id }}"
+
+- name: bucket | Query user {{ influxdb_bucket_args.user }}
+  command: podman exec influxdb influx user list --name {{ influxdb_bucket_args.user }} --json
+  register: _influxdb_bucket_user_query
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  become: true
+
+- name: bucket | Create user {{ influxdb_bucket_args.user }}  # noqa: no-changed-when -- when: gates execution, like creates: did
+  when: >-
+    _influxdb_bucket_user_query.rc != 0
+    or (_influxdb_bucket_user_query.stdout | from_json | length) == 0
+  command: podman exec influxdb influx user create --org-id {{ influxdb_bucket_org_id }} --name {{ influxdb_bucket_args.user }}
+  become: true
+
+- name: bucket | Query bucket {{ influxdb_bucket_args.bucket }}
+  command: podman exec influxdb influx bucket list --org-id {{ influxdb_bucket_org_id }} --name {{ influxdb_bucket_args.bucket }} --json
+  register: _influxdb_bucket_bucket_query
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  become: true
+
+- name: bucket | Create bucket {{ influxdb_bucket_args.bucket }}  # noqa: no-changed-when -- when: gates execution, like creates: did
+  when: >-
+    _influxdb_bucket_bucket_query.rc != 0
+    or (_influxdb_bucket_bucket_query.stdout | from_json | length) == 0
+  command: podman exec influxdb influx bucket create --org-id {{ influxdb_bucket_org_id }} --name {{ influxdb_bucket_args.bucket }}
+  become: true
+
+# Re-query post-create so the auth task always sees a concrete bucket_id.
+# The conditional create above doesn't emit a usable id (the upstream
+# `influx bucket create` output schema changed across 2.x patch releases).
+- name: bucket | Query bucket id for {{ influxdb_bucket_args.bucket }}
+  command: podman exec influxdb influx bucket list --org-id {{ influxdb_bucket_org_id }} --name {{ influxdb_bucket_args.bucket }} --json
+  register: _influxdb_bucket_bucket_id_query
+  changed_when: false
+  check_mode: false
+  failed_when: >-
+    _influxdb_bucket_bucket_id_query.rc != 0
+    or (_influxdb_bucket_bucket_id_query.stdout | from_json | length) == 0
+  become: true
+
+- name: bucket | Set bucket_id fact
+  set_fact:
+    influxdb_bucket_id: "{{ (_influxdb_bucket_bucket_id_query.stdout | from_json)[0].id }}"
+
+- name: bucket | Query auth for {{ influxdb_bucket_args.user }}
+  command: podman exec influxdb influx auth list --user {{ influxdb_bucket_args.user }} --json
+  register: _influxdb_bucket_auth_query
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  become: true
+
+# Match on the parsed permissions array (resource.type=buckets,
+# resource.id=<bucket>, action=write) rather than grepping a
+# bracketed scope literal -- the latter compared a user-id column
+# (different in `auth list` vs `auth create` output) against the
+# write-scope substring and silently matched whatever lined up.
+- name: bucket | Create write-auth for bucket {{ influxdb_bucket_args.bucket }}  # noqa: no-changed-when -- when: gates execution, like creates: did
+  when: >-
+    (_influxdb_bucket_auth_query.stdout | default('[]') | from_json)
+    | selectattr('permissions', 'defined')
+    | map(attribute='permissions') | flatten
+    | selectattr('action', 'equalto', 'write')
+    | selectattr('resource.type', 'equalto', 'buckets')
+    | selectattr('resource.id', 'equalto', influxdb_bucket_id)
+    | list | length == 0
+  command: >-
+    podman exec influxdb influx auth create
+    --org-id {{ influxdb_bucket_org_id }}
+    --user {{ influxdb_bucket_args.user }}
+    --write-bucket {{ influxdb_bucket_id }}
+  become: true
