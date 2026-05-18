@@ -1,10 +1,3 @@
-# Netdata hosts the alerts sidecar polls (and the unit's NETDATA_HOSTS env).
-# Whichever host the playbook is converging matches inventory_hostname and
-# gets the loopback short-circuit; other hosts use their public FQDN.
-homepage_netdata_hosts:
-  - lab
-  - pug
-
 # Source of truth for homepage bookmark tiles. Consumed by
 # templates/bookmarks.yaml.j2. Each entry needs name + abbr + sub; icon
 # defaults to omitted (selfh.st lookup is `sh-<icon>.png`, so a bare abbr
