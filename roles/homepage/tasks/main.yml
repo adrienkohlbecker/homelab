@@ -74,23 +74,15 @@
       # itself. Same-origin lets the panel resize its own iframe via
       # window.frameElement and folds away the CSP frame-src/frame-ancestors
       # ceremony a sibling subdomain would need. auth_request is repeated here
-      # because the site template only wires it into `location /`; sibling
-      # locations in server_conf need their own copy or a direct hit to
+      # because the site template only wires it into `location /`; a sibling
+      # location in server_conf needs its own copy or a direct hit to
       # /alerts/ would bypass forward-auth.
       #
-      # Static files written by the alerts_generate.py oneshot timer at
-      # /var/www/homepage_alerts/{index.html,api_alerts.json}. Two locations:
-      #   - exact-match /alerts/api/alerts → api_alerts.json (preserves the
-      #     daemon-era URL for any external caller; .json suffix lets nginx
-      #     infer application/json content-type)
-      #   - prefix /alerts/ → index.html (the iframe widget hits this)
-      # Default Last-Modified/ETag handling is wanted: the iframe's 30s
-      # refreshInterval sends conditional GETs that 304 on unchanged content,
-      # which is cheaper than the daemon-era Cache-Control: no-store.
+      # Static index.html written by alerts_generate.py at
+      # /var/www/homepage_alerts/. Default nginx Last-Modified/ETag handling
+      # is wanted: the iframe's 30s refreshInterval sends conditional GETs
+      # that 304 on unchanged content.
       server_conf: |
-        location = /alerts/api/alerts {
-          alias /var/www/homepage_alerts/api_alerts.json;
-        }
         location /alerts/ {
           auth_request /internal/authelia;
           alias /var/www/homepage_alerts/;
