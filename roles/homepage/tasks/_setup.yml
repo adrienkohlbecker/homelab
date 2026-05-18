@@ -8,6 +8,16 @@
     name: _test
     tasks_from: nginx
 
+# homepage uses nginx_site_args.auth=required, so the /alerts/ and root
+# locations issue auth_request subrequests to 127.0.0.1:{{ service_ports.authelia }}.
+# Without a real Authelia listening there, _verify HTTP probes fail with 500.
+# The stub returns 200 to every auth-request, exercising the auth_request
+# wiring in nginx without bringing up the full authelia role.
+- name: _setup | Install authelia stub for auth=required tests
+  import_role:
+    name: _test
+    tasks_from: authelia_stub
+
 - name: _setup | Setup dependencies
   shell: |
     set -euo pipefail
