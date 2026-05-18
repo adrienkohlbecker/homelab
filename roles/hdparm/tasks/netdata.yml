@@ -27,7 +27,9 @@
     - hdparm
 
 - name: Restart netdata to pick up disk-group membership
-  when: hdparm_netdata_disk_group.changed
+  when:
+    - hdparm_netdata_disk_group.changed
+    - not (ansible_check_mode and netdata_apt.changed)
   systemd:
     name: netdata
     state: restarted
