@@ -31,6 +31,12 @@ Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N
 
+# Healthcheck probes only the UI (8080), not the OTLP receiver (4318):
+# opampController only adds `otlp/hyperdx` to the collector pipelines after
+# a team exists in MongoDB, and the team is bootstrapped *after* this unit
+# reports healthy (main.yml's post-readiness register-password + force-
+# apiKey tasks). A startup probe that waited for 4318 would deadlock the
+# first deploy. Steady-state 4318 reachability is asserted in _verify.yml.
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \

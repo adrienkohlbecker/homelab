@@ -35,22 +35,35 @@
   tags:
     - hyperdx
 
-# The all-in-one image bundles three stateful daemons (ClickHouse, MongoDB,
-# OTel collector) writing to three distinct paths. Split into siblings under
-# /mnt/services/hyperdx so each can become its own ZFS child dataset later
-# (ClickHouse benefits from larger recordsize than MongoDB). One-shot mkdir
-# rather than `file:` because the in-container entrypoint chowns the
-# clickhouse bind-mounts to its internal `clickhouse` user (mapped via the
-# +101 override to hyperdx_clickhouse on the host); re-asserting
-# owner=hyperdx with `file:` would flip changed=true on every subsequent
-# apply.
-- name: Create hyperdx data subdirectories
+# The all-in-one image bundles three stateful daemons (ClickHouse,
+# MongoDB, OTel collector) writing to three distinct paths. Split into
+# siblings under /mnt/services/hyperdx so each can become its own ZFS
+# child dataset later (ClickHouse benefits from larger recordsize than
+# MongoDB).
+- name: Create hyperdx mongo data subdirectory
+  when: not (ansible_check_mode and hyperdx_user.changed)
+  file:
+    dest: /mnt/services/hyperdx/db
+    state: directory
+    owner: hyperdx
+    group: hyperdx
+    mode: "0755"
+  become: true
+  tags:
+    - hyperdx
+
+# One-shot mkdir rather than `file:` because the container's
+# clickhouse-server chowns these bind-mounts to its internal `clickhouse`
+# user (mapped via the +101 override to hyperdx_clickhouse on the host)
+# on first start; re-asserting owner=hyperdx with `file:` would flip
+# changed=true on every subsequent apply.
+- name: Create hyperdx clickhouse subdirectories
   when: not (ansible_check_mode and hyperdx_user.changed)
   shell: |
     set -euo pipefail
-    mkdir -p /mnt/services/hyperdx/{db,clickhouse,clickhouse_logs}
-    chown hyperdx:hyperdx /mnt/services/hyperdx/{db,clickhouse,clickhouse_logs}
-    chmod 0755 /mnt/services/hyperdx/{db,clickhouse,clickhouse_logs}
+    mkdir -p /mnt/services/hyperdx/{clickhouse,clickhouse_logs}
+    chown hyperdx:hyperdx /mnt/services/hyperdx/{clickhouse,clickhouse_logs}
+    chmod 0755 /mnt/services/hyperdx/{clickhouse,clickhouse_logs}
   args:
     executable: /bin/bash
     creates: /mnt/services/hyperdx/clickhouse_logs

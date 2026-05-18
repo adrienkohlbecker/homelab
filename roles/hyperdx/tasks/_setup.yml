@@ -10,10 +10,10 @@
     tasks_from: nginx
 
 - name: _setup | Setup services dir
-  shell: |
-    set -euo pipefail
-    mkdir -p /mnt/services
-  args:
-    executable: /bin/bash
-    creates: /mnt/services
+  file:
+    dest: /mnt/services
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
   become: true
