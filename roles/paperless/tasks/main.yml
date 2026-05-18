@@ -1,3 +1,17 @@
+# sqlite3 CLI for the journal_mode probe + WAL conversion below.
+# The container ships its own libsqlite, but the host-side PRAGMA
+# tasks shell out to /usr/bin/sqlite3 which isn't preinstalled on
+# Ubuntu cloud images. In prod healthchecks/fluentbit drag it in
+# transitively earlier in site.yml; under testrole.py the harness
+# only runs this role, so the dep must be local.
+- name: Install sqlite3 CLI
+  apt:
+    pkg: sqlite3
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - paperless
+
 # Join the redis-owned network so paperless can resolve `redis` via
 # aardvark-dns and connect to the redis container on the same bridge.
 # Idempotent: redis role creates this too in prod; ensures the
