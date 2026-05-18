@@ -1,22 +1,36 @@
 - name: Create internal podman network
   # macvlan onto lab's IoT VLAN (netplan-named `iot`, vlan id 4 on nic0)
   # so HA has an L2 presence there for mDNS/SSDP discovery of Sonos /
-  # HomeKit / Zigbee2MQTT-bridge targets.
+  # HomeKit / Zigbee-bridge targets, AND so HA can talk directly to
+  # IoT devices on the /24 (Philips airpurifier CoAP, etc.).
   #
-  # Carving a /30 out of lab's `iot` /24 deliberately shrinks netavark's
-  # allocation pool: .96 is network, .99 is broadcast, .97 is the
-  # netavark-assigned gateway, leaving .98 as the single container IP.
-  # HA gets .98 (pinned explicitly in the unit template).
+  # Subnet is the full iot /24 with the real site router (10.123.4.1)
+  # as gateway, so devices outside .96/30 are on-link via this iface.
+  # `ip_range: .96/30` constrains netavark's allocation pool to .96-.99
+  # so HA's container IP stays in a known small slice and can't
+  # collide with DHCP'd devices elsewhere in the /24. HA gets .98
+  # (pinned explicitly in the unit template; .97 is netavark's synth
+  # gateway slot within the range, .96/.99 are network/broadcast
+  # within the /30 logically -- but at the /24 level the real gateway
+  # is .1).
   #
-  # The earlier choice of .100/30 (.100-.103) overlapped lab's own iot
-  # address 10.123.4.102; netavark picked .102 for HA, two MACs claimed
-  # the same IP and every HA-originated frame on the IoT VLAN logged as
-  # a martian. Lab's address is configured in host_vars/lab.yml under
-  # vlans.iot.addresses; any future lab static IP added inside .96-.99
-  # would re-trigger the collision -- pick a different /30 if so.
+  # Earlier shapes:
+  #   - .100/30 standalone -- overlapped lab's own iot address .102,
+  #     causing duplicate-MAC martians.
+  #   - .96/30 standalone (no gateway, no ip_range) -- HA could only
+  #     reach .96-.99 directly; everything else fell through a
+  #     synthetic .97 gateway with no router behind it, so all
+  #     10.123.4.0/24 traffic silently fell back to the mosquitto
+  #     bridge + NAT, defeating the macvlan's purpose for IoT devices.
+  # Any future lab static IP added inside .96-.99 would re-trigger
+  # the .102-style collision -- shift the ip_range to a different
+  # /30 if so. Lab's iot address is in host_vars/lab.yml under
+  # vlans.iot.addresses.
   containers.podman.podman_network:
     name: iot_macvlan
-    subnet: 10.123.4.96/30
+    subnet: 10.123.4.0/24
+    gateway: 10.123.4.1
+    ip_range: 10.123.4.96/30
     driver: macvlan
     opt:
       parent: iot
