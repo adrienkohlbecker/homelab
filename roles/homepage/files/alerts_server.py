@@ -321,7 +321,6 @@ PAGE = """<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="refresh" content="{refresh}">
 <title>Active alerts</title>
 <style>
   :root {{
@@ -482,7 +481,7 @@ def render_html(hosts: list[dict], updated_at: float, error: str) -> str:
     if error:
         status_line += f' — <span class="status-error">{html.escape(error)}</span>'
     footer = f"<footer>{status_line}</footer>"
-    return PAGE.format(refresh=REFRESH_SECONDS, body="".join(sections) + footer)
+    return PAGE.format(body="".join(sections) + footer)
 
 
 class AlertsCache:
