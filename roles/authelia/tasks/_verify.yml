@@ -1,0 +1,73 @@
+# Loopback probe — confirms the container is up and serving the
+# health endpoint, independent of nginx. Cold-start window covers the
+# wget healthcheck's 30s --health-start-period plus argon2 backend
+# init.
+- name: _verify | Authelia answers on its loopback port
+  uri:
+    url: http://localhost:{{ service_ports.authelia }}/api/health
+    status_code: 200
+    return_content: true
+  register: authelia_verify_loopback
+  retries: 60
+  delay: 2
+  until:
+    - authelia_verify_loopback.status == 200
+  become: true
+
+# nginx Host-header probe — exercises the full reverse-proxy chain.
+# The portal SPA index returns a generic html shell with no
+# Authelia-identifying text (the app boots client-side via React);
+# /api/health is a sibling endpoint on the same Authelia daemon that
+# returns identifiable JSON ({"status":"OK"}), so we probe it
+# through nginx to assert the full proxy chain works end-to-end.
+- name: _verify | Authelia /api/health reachable through nginx
+  uri:
+    url: https://localhost/api/health
+    headers:
+      Host: "auth.{{ authelia_cookie_domain }}"
+    validate_certs: false
+    return_content: true
+  register: authelia_verify_portal
+  failed_when: >-
+    authelia_verify_portal.status != 200
+    or authelia_verify_portal.json.status != 'OK'
+  become: true
+
+# Portal index returns the SPA shell; assert HTTP 200 + HTML
+# content-type so a misconfigured nginx site (or a future Authelia
+# release that breaks the SPA root) fails loudly.
+- name: _verify | Authelia portal index returns the SPA shell
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "auth.{{ authelia_cookie_domain }}"
+    validate_certs: false
+  register: authelia_verify_portal_index
+  failed_when: >-
+    authelia_verify_portal_index.status != 200
+    or 'text/html' not in authelia_verify_portal_index.content_type
+  become: true
+
+# auth-request endpoint reachable through nginx. Unauthenticated
+# callers with the standard nginx auth_request headers get 401
+# (Authelia's "redirect them to the portal" response); that's the
+# success case -- it proves Authelia is processing the request via
+# its auth handler, not 404'ing on the route or 502'ing on a wedged
+# backend. Authelia requires X-Original-Method + X-Original-URL
+# (the headers nginx's auth_request module auto-sets for real
+# subrequests) -- without them it returns 400 Bad Request.
+- name: _verify | Authelia auth-request endpoint returns 401 for unauthenticated callers
+  uri:
+    url: https://localhost/api/authz/auth-request
+    headers:
+      Host: "auth.{{ authelia_cookie_domain }}"
+      X-Original-Method: GET
+      X-Original-URL: "https://homepage.{{ inventory_hostname }}.{{ domain }}/"
+    validate_certs: false
+    status_code: 401
+  become: true
+
+# PR6 will add an OIDC discovery probe once the identity provider
+# block is restored in configuration.yml.j2. For PR1 (standup) the
+# OIDC provider is intentionally off -- forward-auth (PR2-5) doesn't
+# need it.

@@ -1,0 +1,80 @@
+# jinja2: lstrip_blocks: "True"
+# authelia.service ###########################################################
+[Unit]
+Description=authelia
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+{% if zfs_has_services_mount %}
+After=zfs_mount_mnt_services.service
+Requires=zfs_mount_mnt_services.service
+After=zfs_mount_mnt_services_sqlite.service
+Requires=zfs_mount_mnt_services_sqlite.service
+{% endif %}
+After=zfs_autosnapshot.target
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=always
+Delegate=yes
+TimeoutSec=60
+RestartSec=5
+Type=notify
+# Has to be `all`, not `main`. With --detach below podman exits as soon as
+# the container is handed off to conmon, and conmon -- not podman -- is the
+# process that watches the healthcheck and sends READY=1. conmon is never
+# MainPID, so NotifyAccess=main causes the unit to hang in `activating`.
+NotifyAccess=all
+SyslogIdentifier=%N
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --init \
+    --name authelia \
+    --log-driver journald \
+    --log-opt tag="authelia" \
+    --security-opt=no-new-privileges \
+    --uidmap=0:0:65536 \
+    --uidmap=+0:{{ authelia_user.uid }}:1 \
+    --gidmap=0:0:65536 \
+    --gidmap=+0:{{ authelia_user.group }}:1 \
+    --volume /mnt/services/authelia/configuration.yml:/config/configuration.yml \
+    --volume /mnt/services/authelia/users.yml:/config/users.yml \
+    --volume /mnt/services/sqlite/authelia:/db \
+    --env PUID=0 \
+    --env PGID=0 \
+    --env X_AUTHELIA_CONFIG=/config/configuration.yml \
+    --secret=authelia_jwt_secret,type=mount,target=jwt_secret \
+    --env AUTHELIA_IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE=/run/secrets/jwt_secret \
+    --secret=authelia_session_secret,type=mount,target=session_secret \
+    --env AUTHELIA_SESSION_SECRET_FILE=/run/secrets/session_secret \
+    --secret=authelia_storage_encryption_key,type=mount,target=storage_encryption_key \
+    --env AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE=/run/secrets/storage_encryption_key \
+    --secret=authelia_smtp_password,type=mount,target=smtp_password \
+    --env AUTHELIA_NOTIFIER_SMTP_PASSWORD_FILE=/run/secrets/smtp_password \
+    --publish 127.0.0.1:{{ service_ports.authelia }}:9091/tcp \
+    --health-cmd "wget --quiet --tries=1 --spider --timeout=5 http://localhost:9091/api/health || exit 1" \
+    --health-startup-cmd "wget --quiet --tries=1 --spider --timeout=5 http://localhost:9091/api/health || exit 1" \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    --health-start-period "30s" \
+    --stop-timeout 30 \
+    docker.io/authelia/authelia:4.39.19
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=default.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}
