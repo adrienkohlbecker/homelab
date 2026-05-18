@@ -30,6 +30,13 @@
   # the name field matches inventory_hostname (so gitea sees this host's
   # entry under the expected name), and the labels list matches
   # gitea_runner_labels (so a host_vars label override actually lands).
+  #
+  # Label-shape note: .runner.labels carries the FULL registration
+  # strings ("name:scheme://arg") -- daemon.go writes ls.ToStrings() back
+  # to .runner on each start. The Declare RPC sends only the parsed
+  # names (ls.Names()), which is what the admin-API check below compares
+  # against (via regex_replace to strip the ":scheme://arg" suffix).
+  # Different shape, same source -- both correct.
   failed_when: >-
     _runner_data is not mapping
     or (_runner_data.name | default('')) != inventory_hostname
