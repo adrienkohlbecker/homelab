@@ -136,17 +136,23 @@
   tags:
     - gitea_runner
 
-# Token passes via env, not --token on the command line, so
-# /proc/<pid>/cmdline doesn't expose the vaulted registration token to
-# any local user during the brief register window. /proc/<pid>/environ
-# stays uid-gated (root + gitea_runner) for the same window. shell:
-# (not command:) is required because we need /bin/sh to expand
-# $REGISTRATION_TOKEN; gitea-runner v1.0.3 has no --token-file or
-# env-var-named-input flag.
+# The shell `"$REGISTRATION_TOKEN"` expands into argv when bash exec()s
+# gitea-runner, so /proc/<pid>/cmdline of the running register process
+# briefly contains the token -- readable by any local user (default
+# /proc mode, no hidepid). Bounded by the register window (<1s on a
+# healthy gitea). Routing the token via env (rather than pasting it
+# directly into the shell command) is no better here -- both end up
+# expanded into argv. gitea-runner v1.0.3 has no --token-file or stdin
+# input mode that would dodge the cmdline exposure; the only way out
+# would be to run register inside a container so the cmdline visibility
+# is scoped to that container's pid ns -- not worth the moving parts
+# for a homelab where root + gitea_runner are the only principals.
+# shell: (not command:) is required because we need /bin/sh to expand
+# $REGISTRATION_TOKEN.
 #
-# failed_when: false + the follow-up Surface task is the
-# defence-in-depth pairing with no_log: true: hiding the task output
-# would otherwise hide the real failure cause (gitea unreachable, token
+# failed_when: false + the follow-up Surface task is the defence-in-
+# depth pairing with no_log: true: hiding the task output would
+# otherwise hide the real failure cause (gitea unreachable, token
 # rejected, cert untrusted). The follow-up scrubs the token from
 # stderr before failing loudly.
 - name: Register runner
