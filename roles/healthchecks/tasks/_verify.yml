@@ -9,6 +9,7 @@
       Host: healthchecks.{{ inventory_hostname }}.{{ domain }}
     status_code: 200
     return_content: true
+    timeout: 10
   register: _verify_loopback
   retries: 60
   delay: 2
