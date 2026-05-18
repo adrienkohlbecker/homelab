@@ -15,4 +15,8 @@ REPO_NAME={{ runner_instance.repo }}
 RUNNER_NAME={{ inventory_hostname }}_{{ runner_instance.repo }}_{{ runner_instance.suffix }}
 RUNNER_LABELS={{ runner_instance.labels }}
 RUNNER_WORK_FOLDER=/mnt/scratch/github_runner/workdir_{{ runner_instance.repo }}_{{ runner_instance.suffix }}
+# group 1 is the only group on personal-account repos and the org's
+# reserved "Default" group on org repos -- so the default is "lands
+# wherever the implicit GitHub default is", which is right for both
+# our current use cases. Override per-instance for custom org groups.
 RUNNER_GROUP_ID={{ runner_instance.runner_group_id | default(1) }}
