@@ -54,11 +54,16 @@ body=$(jq -cn \
 # --fail-with-body (not --fail): surface GitHub's error body on 4xx/5xx
 # so a scope-revoked PAT / deleted repo / 422 prints actionable detail
 # in the journal instead of curl's silent exit 22.
-# --retry / --retry-connrefused / --max-time: cover the boot-time race
-# against nexus/DNS bringup without letting a stuck TCP socket sit in
-# TimeoutStartSec for the full 300s.
+# --retry / --retry-all-errors / --retry-connrefused / --max-time: cover
+# the boot-time race against nexus/DNS bringup without letting a stuck
+# TCP socket sit in TimeoutStartSec for the full 300s. --retry-all-errors
+# upgrades from curl's default transient set (408/429/5xx) to "retry every
+# failure"; generate-jitconfig is safe to repeat (GitHub treats each call
+# as a fresh mint) so the broader retry just hardens against TLS handshake
+# resets and mid-response disconnects that would otherwise eat one of the
+# unit's StartLimitBurst=3 on a transient blip.
 jit=$(curl --fail-with-body --silent --show-error \
-  --retry 3 --retry-connrefused --max-time 20 \
+  --retry 3 --retry-all-errors --retry-connrefused --max-time 20 \
   -H "Accept: application/vnd.github+json" \
   -H "Authorization: Bearer $pat" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
