@@ -61,11 +61,6 @@ resource "mailgun_domain" "noreply_fahm_fr" {
   use_automatic_sender_security = true
 }
 
-import {
-  to = mailgun_domain.noreply_fahm_fr
-  id = "eu:noreply.fahm.fr"
-}
-
 # Dedicated CI sending key, pushed into the homelab repo's
 # MAILGUN_API_KEY GitHub Actions secret (see github.tf). Scoped to
 # role=sending + this domain so a CI compromise can't manage domains,
