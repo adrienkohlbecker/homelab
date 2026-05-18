@@ -63,8 +63,8 @@ server {
   # preserved, so users land on the login page and bounce back here
   # after a successful auth.
   error_page 401 =302 https://auth.{{ authelia_cookie_domain }}/?rd=$scheme://$http_host$request_uri&rm=$request_method;
-{% endif %}
 
+{% endif %}
   location / {
 {% if _auth_enabled %}
     auth_request /internal/authelia;
