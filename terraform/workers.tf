@@ -16,6 +16,12 @@ resource "cloudflare_workers_script" "catchall_email" {
   account_id  = data.cloudflare_account.main.account_id
   script_name = "catchall-email"
   content     = file("${path.module}/workers/catchall-email.js")
+  # main_module flags the upload as ES-module-syntax (the JS uses
+  # `export default {...}`). Without it the provider sends as a
+  # classic service worker and CF rejects with 10021 / "Unexpected
+  # token 'export'". The value is just a filename label; CF uses it
+  # to identify the entry point within the upload bundle.
+  main_module = "catchall-email.js"
   # Pinned to upload date (2024-08-02). Bump deliberately when changing
   # script behaviour, not casually -- new compat dates can flip JS
   # runtime semantics under the worker.
