@@ -82,6 +82,19 @@ resource "github_actions_secret" "mailgun_api_key" {
   repository  = "homelab"
   secret_name = "MAILGUN_API_KEY"
   value       = mailgun_api_key.ci_send_noreply.secret
+
+  lifecycle {
+    # mailgun_api_key.ci_send_noreply.secret refreshes to null on every
+    # refresh (wgebis/mailgun provider bug -- Read can't recover the
+    # secret post-Create). Without ignore_changes here, every apply
+    # would push null to the GitHub MAILGUN_API_KEY secret and break
+    # CI mail. Rotation still works: `tofu apply -replace=mailgun_
+    # api_key.ci_send_noreply` mints a new secret in the Create
+    # response, replace_triggered_by below forces this resource to be
+    # re-created with the new value, the GitHub secret updates.
+    ignore_changes       = [value]
+    replace_triggered_by = [mailgun_api_key.ci_send_noreply]
+  }
 }
 
 resource "github_actions_secret" "mailgun_domain" {
