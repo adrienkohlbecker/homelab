@@ -17,11 +17,16 @@ SyslogIdentifier=%N
 User=homepage
 Group=homepage
 
-# Polled netdata endpoints, formatted as `<label>=<query-url>[=<click-url>]`.
-# Whichever host this is running on gets queried via loopback to skip nginx
-# + TLS, with the public FQDN as the click-through target; the other host
-# uses the FQDN for both since it has to traverse the network anyway.
-Environment=NETDATA_HOSTS=lab={% if inventory_hostname == 'lab' %}http://localhost:19999={% endif %}https://netdata.lab.{{ domain }},pug={% if inventory_hostname == 'pug' %}http://localhost:19999={% endif %}https://netdata.pug.{{ domain }}
+# Polled netdata endpoints — formatted as `<label>=<query-url>[=<click-url>]`,
+# joined with commas. Whichever host this is running on gets queried via
+# loopback to skip nginx + TLS, with the public FQDN as the click-through
+# target; other hosts use the FQDN for both.
+{% set _entries = [] %}
+{% for h in homepage_netdata_hosts %}
+{% set _q = 'http://localhost:19999=' if h == inventory_hostname else '' %}
+{% set _ = _entries.append(h ~ '=' ~ _q ~ 'https://netdata.' ~ h ~ '.' ~ domain) %}
+{% endfor %}
+Environment=NETDATA_HOSTS={{ _entries | join(',') }}
 Environment=LISTEN_PORT={{ service_ports.homepage_alerts }}
 
 ExecStart=/usr/bin/python3 /opt/homepage_alerts/alerts_server.py
