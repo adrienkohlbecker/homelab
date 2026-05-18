@@ -21,6 +21,14 @@
     src: /etc/hostname
   register: _verify_etc_hostname
 
+- name: _verify | Read static hostname (systemd)
+  # The transient kernel hostname can match by DHCP coincidence even when
+  # the static (persistent) name is wrong — only the static value survives
+  # a reboot, so assert on it directly.
+  command: hostnamectl --static
+  register: _verify_hostnamectl_static
+  changed_when: false
+
 - name: _verify | Hostname state matches inventory
   assert:
     quiet: true
@@ -28,11 +36,13 @@
       - _verify_hostname.stdout == inventory_hostname
       - _verify_hostname_fqdn.stdout == inventory_hostname ~ "." ~ domain
       - (_verify_etc_hostname.content | b64decode).strip() == inventory_hostname
+      - _verify_hostnamectl_static.stdout == inventory_hostname
     fail_msg: |
       Hostname state mismatch:
         running: {{ _verify_hostname.stdout }}
         fqdn:    {{ _verify_hostname_fqdn.stdout }}
         /etc/hostname: {{ (_verify_etc_hostname.content | b64decode).strip() }}
+        static:  {{ _verify_hostnamectl_static.stdout }}
         expected: {{ inventory_hostname }} / {{ inventory_hostname }}.{{ domain }}
 
 - name: _verify | Resolve inventory_hostname short form
