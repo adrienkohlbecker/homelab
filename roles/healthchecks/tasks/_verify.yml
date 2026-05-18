@@ -35,24 +35,15 @@
     or "ok" not in _verify_nginx.content
   become: true
 
-# SECRET_KEY contract probe -- the login form's csrfmiddlewaretoken is
-# HMAC-signed with SECRET_KEY at render time, and Django raises
-# ImproperlyConfigured if SECRET_KEY isn't set. Asserting the token
-# renders proves the vault-backed podman secret reached Django; without
-# this probe a regression that loses SECRET_KEY (e.g. typo in --secret
-# wiring, /config wipe with no pin) only manifests later as session
-# invalidations and CSRF failures.
-- name: _verify | healthchecks login form renders with a CSRF token
-  uri:
-    url: https://localhost/accounts/login/
-    headers:
-      Host: healthchecks.{{ inventory_hostname }}.{{ domain }}
-    validate_certs: false
-    return_content: true
-  register: _verify_login
-  failed_when: >-
-    _verify_login.status != 200
-    or 'csrfmiddlewaretoken' not in _verify_login.content
+# SECRET_KEY contract probe -- Django raises ImproperlyConfigured very
+# early in manage.py check if SECRET_KEY is unset/blank, so a passing
+# check proves the vault-backed podman secret reached Django. Replaces
+# an older login-form probe that depended on Django's CSRF template
+# shape (incidental detail, churned across upstream releases).
+- name: _verify | healthchecks Django config passes manage.py check
+  command: podman exec --workdir /app/healthchecks healthchecks python manage.py check
+  register: _verify_check
+  changed_when: false
   become: true
 
 # Functional WAL assertion -- confirms the WAL conversion actually
