@@ -68,8 +68,11 @@
       # via sanitize-to-underscore -> github_runner@.service becomes
       # github_runner__service_result; install runs once in main.yml
       # so every instance fans out the same .changed signal). The PAT
-      # is shared host-wide so a rotation should bounce every instance
-      # to ensure they pick up the new secret value next start.
+      # is shared host-wide so a rotation should bounce every instance to
+      # ensure they pick up the new secret value next start. The
+      # github_runner_pat_rotated fact is set once in main.yml (before
+      # this loop), so every iteration here reads the same host-level
+      # value -- it's a host-wide trigger, not a per-instance one.
       restart: >-
         {{ runner_envfile.changed
            or github_runner_pat_rotated | default(false)
