@@ -2,15 +2,16 @@ domain: mhaf.fr
 nexus_url: nexus.lab.fahm.fr
 # Static name → IP overrides for the test environment. Two consumers share
 # this map:
-#   1. roles/_test/tasks/mirrors.yml writes them to /etc/hosts on every test
-#      box, so apt / podman / get_url resolve lab-internal hostnames to
-#      reachable LAN IPs instead of the WAN IP that public DNS returns
-#      (the WAN IP isn't routable from inside qemu user-mode networking).
+#   1. roles/hostname/templates/hosts.j2 renders them into /etc/hosts on
+#      every test box, so apt / podman / get_url resolve lab-internal
+#      hostnames to reachable LAN IPs instead of the WAN IP that public
+#      DNS returns (the WAN IP isn't routable from inside qemu user-mode
+#      networking).
 #   2. roles/pihole/templates/pihole.service.j2 plumbs them as podman
 #      --add-host flags, bypassing pihole's own split-horizon wildcard
 #      (which resolves *.lab.fahm.fr to the fake test external_ips.lab).
 # Production leaves this unset — both consumers default to no overrides.
-extra_hosts:
+etc_hosts_entries:
   nexus.lab.fahm.fr: 10.123.0.2
   gitea.lab.fahm.fr: 10.123.0.2
 home_subnet: 10.234.0.0/16
