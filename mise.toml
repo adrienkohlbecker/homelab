@@ -20,6 +20,11 @@ TF_VAR_state_passphrase = "op://Lab/vztgbtb2i3nlgrift46fc7r4f4/password"
 TF_VAR_mise_github_token = "op://Lab/zs75mteaj6dk422zta2zpbuaki/password"
 TF_VAR_google_idp_client_id = "op://Lab/7vvqblbfyep2yb7lxi544dy22a/username"
 TF_VAR_google_idp_client_secret = "op://Lab/7vvqblbfyep2yb7lxi544dy22a/password"
+# Gandi Personal Access Token -- minted in Gandi UI under Account >
+# Personal Access Tokens, scoped to the organization owning fahm.fr /
+# mhaf.fr / adrienkohlbecker.com. The old Gandi API key was retired
+# in 2024 so PAT is the only auth path.
+TF_VAR_gandi_pat = "op://Lab/s5a2q2hlq5vudnvhydhcbmb3da/password"
 # Expose [vars] entries as env so file-based mise-tasks/ scripts can read
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.

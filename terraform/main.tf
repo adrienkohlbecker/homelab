@@ -4,6 +4,10 @@ terraform {
       source  = "cloudflare/cloudflare"
       version = "~> 5"
     }
+    gandi = {
+      source  = "go-gandi/gandi"
+      version = "~> 2"
+    }
     nexus = {
       source  = "datadrivers/nexus"
       version = "~> 2"
