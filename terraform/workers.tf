@@ -19,7 +19,7 @@ resource "cloudflare_workers_script" "catchall_email" {
   # Pinned to upload date (2024-08-02). Bump deliberately when changing
   # script behaviour, not casually -- new compat dates can flip JS
   # runtime semantics under the worker.
-  compatibility_date = "2000-01-01"
+  compatibility_date = "2024-08-02"
   usage_model        = "standard"
 
   bindings = [{
