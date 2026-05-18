@@ -31,6 +31,20 @@
     fail_msg: >-
       influxdb_bucket requires influxdb_bucket_args.{org,user,bucket}.
 
+# Block until the influxdb container is up and answering. `podman exec`
+# would otherwise fail with a low-context "no such container" if the
+# caller runs against a host where influxdb is still booting (e.g.
+# right after a `--tags` run that includes both roles), or with a
+# transient HTTP/timeout if influxd is still starting.
+- name: bucket | Wait for influxdb to answer ping
+  command: podman exec influxdb influx ping
+  register: _influxdb_bucket_ready
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _influxdb_bucket_ready.rc == 0
+  become: true
+
 - name: bucket | Query org {{ influxdb_bucket_args.org }}
   command: podman exec influxdb influx org list --name {{ influxdb_bucket_args.org }} --json
   register: _influxdb_bucket_org_query
