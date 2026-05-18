@@ -93,7 +93,12 @@
 # Converge devices.yaml ownership — z2m writes back to it at runtime and
 # any prior root-owned state (e.g. from the first patch_cover_tilt run
 # before it preserved uid/gid) would break container startup with EACCES.
+# In check mode where the seed copy above didn't actually write the
+# file, the file: state: file probe complains "file is absent" -- skip
+# in that bootstrap window. Real applies hit the file by the time we
+# get here.
 - name: Ensure devices.yaml ownership
+  when: not (ansible_check_mode and z2m_devices.changed)
   file:
     path: /mnt/services/z2m/devices.yaml
     owner: z2m
