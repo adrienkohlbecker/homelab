@@ -241,3 +241,11 @@ github_runner_instances:
   - { repo: homelab, suffix: gen1, labels: "self-hosted,lab" }
   - { repo: homelab, suffix: gen2, labels: "self-hosted,lab" }
   - { repo: compta,  suffix: gen1, labels: "self-hosted,lab" }
+
+# auth.{{ domain }} is an apex-zone CNAME → lab.{{ domain }} (public DNS), with a
+# pihole override resolving the LAN clients to lab's internal IP. The
+# per-host wildcard cert covers `*.lab.{{ domain }}` but NOT apex names, so
+# the Authelia portal needs auth.{{ domain }} on its SAN list. Adding entries
+# here trips the SAN-drift detector in roles/certbot and force-renews.
+certbot_extra_sans:
+  - auth.{{ domain }}
