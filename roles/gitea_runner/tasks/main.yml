@@ -49,8 +49,9 @@
     dest: /mnt/services/gitea_runner/config.yml
     owner: gitea_runner
     group: gitea_runner
-    mode: "0644"
+    mode: "0640"
     backup: true
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
   register: gitea_runner_conf
   become: true
   tags:
@@ -103,17 +104,7 @@
   command: /usr/local/bin/gitea --work-path /var/lib/gitea actions generate-runner-token
   register: _test_runner_token
   become: true
-  tags:
-    - gitea_runner
-
-- name: Compute registration instance URL
-  set_fact:
-    gitea_runner_instance: >-
-      {{
-        'http://localhost:3000'
-        if qemu_test
-        else 'https://gitea.' + inventory_hostname + '.' + domain
-      }}
+  no_log: true
   tags:
     - gitea_runner
 
@@ -121,6 +112,7 @@
   when: not qemu_test
   set_fact:
     gitea_runner_token: "{{ gitea_runner_registration_token }}"
+  no_log: true
   tags:
     - gitea_runner
 
@@ -140,6 +132,7 @@
       {{ _test_runner_token.stdout_lines[1]
          if (_test_runner_token.stdout_lines | default([]) | length > 1)
          else 'TOKEN' }}
+  no_log: true
   tags:
     - gitea_runner
 
@@ -150,7 +143,7 @@
     -c /mnt/services/gitea_runner/config.yml
     --no-interactive
     --name {{ inventory_hostname }}
-    --instance {{ gitea_runner_instance }}
+    --instance {{ 'http://localhost:3000' if qemu_test else 'https://gitea.' ~ inventory_hostname ~ '.' ~ domain }}
     --token {{ gitea_runner_token }}
   args:
     creates: /mnt/services/gitea_runner/.runner
@@ -158,32 +151,6 @@
   become_user: gitea_runner
   register: gitea_runner_registration
   no_log: true
-  tags:
-    - gitea_runner
-
-- name: Load JSON file
-  when: not (ansible_check_mode and (gitea_runner_user.changed or gitea_runner_registration.changed))
-  slurp:
-    src: /mnt/services/gitea_runner/.runner
-  register: gitea_runner_settings_b64
-  become: true
-  tags:
-    - gitea_runner
-
-- name: Update .runner with templated labels and address
-  when: not (ansible_check_mode and (gitea_runner_user.changed or gitea_runner_registration.changed))
-  template:
-    src: runner.json.j2
-    dest: /mnt/services/gitea_runner/.runner
-    owner: gitea_runner
-    group: gitea_runner
-    mode: "0600"
-    backup: true
-    validate: python3 -c "import json,sys; json.load(open(sys.argv[1]))" %s
-  vars:
-    gitea_runner_settings_json: "{{ gitea_runner_settings_b64['content'] | default('e30=') | b64decode | from_json }}"
-  register: gitea_runner_json_conf
-  become: true
   tags:
     - gitea_runner
 
@@ -239,6 +206,6 @@
     systemd_unit_args:
       src: gitea_runner
       condition: "{{ not (ansible_check_mode and (gitea_runner_service_result.changed or gitea_runner_user.changed)) }}"
-      restart: "{{ gitea_runner_service_result.changed or gitea_runner_conf.changed or gitea_runner_registration.changed or gitea_runner_json_conf.changed or gitea_runner_installed.changed }}"
+      restart: "{{ gitea_runner_service_result.changed or gitea_runner_conf.changed or gitea_runner_registration.changed or gitea_runner_installed.changed }}"
   tags:
     - gitea_runner

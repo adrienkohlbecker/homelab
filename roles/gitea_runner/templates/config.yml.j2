@@ -30,9 +30,14 @@ runner:
   # The labels of a runner are used to determine which jobs the runner can run, and how to run them.
   # Like: "macos-arm64:host" or "ubuntu-latest:docker://gitea/runner-images:ubuntu-latest"
   # Find more images provided by Gitea at https://gitea.com/gitea/runner-images .
-  # If it's empty when registering, it will ask for inputting labels.
-  # If it's empty when execute `daemon`, will use labels in `.runner` file.
-  labels: []
+  # Setting labels here (non-empty) overrides whatever is persisted in
+  # .runner at daemon start; the daemon writes them back to .runner and
+  # calls the gitea-side Declare RPC, so editing this list + restarting
+  # the service propagates without re-registration.
+  labels:
+{% for lbl in gitea_runner_labels %}
+    - "{{ lbl }}"
+{% endfor %}
 
 cache:
   # Enable cache server to use actions/cache.

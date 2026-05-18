@@ -1,18 +1,5 @@
 gitea_runner_version: "1.0.3"
 
-# Labels written into .runner on every play, so a host_vars override can add
-# or remove a label without re-registering the runner. The runner reports
-# these to gitea on each connection; the gitea side updates lazily.
-#
-# Default to the gitea-provided runner-images so a plain workflow
-# (`runs-on: ubuntu-latest`) Just Works without baking a custom image.
-# Override per-host via gitea_runner_labels in host_vars if a workflow needs
-# something more specific.
-gitea_runner_labels:
-  - "ubuntu-latest:docker://gitea/runner-images:ubuntu-latest"
-  - "ubuntu-22.04:docker://gitea/runner-images:ubuntu-22.04"
-  - "ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04"
-
 # Upstream renamed the project (and the binary, and the canonical repo path)
 # in v1.0.0 -- `gitea/act_runner` -> `gitea/runner`, `act_runner` -> `gitea-runner`.
 # Old gitea.com URLs still redirect but the canonical asset name is now
