@@ -127,6 +127,64 @@
     Match             svc.*
     Exclude           MESSAGE ^Printing VRRP as json for process
 
+# Drop journal noise from journald-input streams. Each pattern was
+# identified from a 24h HyperDX sweep on pug; the count comments are
+# the daily volume that motivated the exclude. journalctl on the host
+# is still the source of truth for any of these.
+#
+#  - ansible module invocation echoes (~8k/day on pug during apply
+#    windows): every module call logs at LOG_INFO/LOG_ERR with the full
+#    parameter dict; appears under mitogen-shaped SYSLOG_IDENTIFIER for
+#    mitogen-strategy applies, also under sudo/sshd when sudo wraps the
+#    module. Match on the body shape ("ansible-<module> Invoked with")
+#    rather than identifier so the otlp_shape.lua mitogen-collapse
+#    _verify (which uses a body that doesn't start with "ansible-")
+#    keeps passing. `journalctl _COMM=python3` still has them.
+#  - cron's per-invocation PAM open/close (~350/day): sysstat (sa1)
+#    fires every minute, cron.hourly fires once an hour; the actual
+#    CMD line still flows.
+#  - kernel: ephemeral podman bridge churn (~140/day): podman healthchecks
+#    spawn transient containers that add/remove veth pairs.
+#  - kernel: keepalived gratuitous-ARP martians for the pihole VIP
+#    (10.123.1.224, ~120/day). Macvlan bridge mode delivers the broadcast
+#    to both eth0 and mac0; mac0's /27 doesn't cover .224, so the per-iface
+#    rp_filter check logs it. Loosening rp_filter site-wide is the bigger
+#    hammer (CLAUDE.md "Someday"); meanwhile silence the specific pattern.
+#    The "ll header: 00000000:" hex dump is the kernel's follow-up line.
+#  - audit/apparmor: ubuntu_pro_esm_cache's apt method probing
+#    /etc/gnutls/config (which doesn't exist) -- known harmless DENY,
+#    apt method handles ENOENT gracefully.
+#  - networkd-dispatcher / networkctl racing with ephemeral podman veths
+#    (the iface is gone by the time `networkctl status` fires).
+#  - nut 2.7.4 (jammy) double-forks for privilege drop; the child PID
+#    lands in /run/nut/upsmon.pid, so systemd warns "Supervising process
+#    N which is not our child" at every start. Cosmetic; upstream fix
+#    is nut 2.8.x's Type=notify support (not worth backporting).
+[FILTER]
+    Name              grep
+    Match             svc.*
+    Exclude           MESSAGE ^ansible-[A-Za-z0-9._]+ Invoked with
+    Exclude           MESSAGE ^pam_unix\(cron:session\)
+    Exclude           MESSAGE ^podman0: port
+    Exclude           MESSAGE ^veth[0-9]+( |@|: )
+    Exclude           MESSAGE ^IPv4: martian source 10\.123\.1\.224
+    Exclude           MESSAGE ^ll header: 00000000:
+    Exclude           MESSAGE name="/etc/gnutls/config"
+    Exclude           MESSAGE Failed to get interface "(veth|podman)
+    Exclude           MESSAGE Unknown index .* seen, reloading interface list
+    Exclude           MESSAGE which is not our child
+
+# homepage_alerts (roles/homepage/files/alerts_generate.py) polls
+# /api/v1/alarms?active + /api/v1/alarm_log every 30s on each host to
+# render the homepage dashboard. That's ~5k access-log lines/day per
+# host with no diagnostic value (the response codes already show up
+# in netdata's own metrics). UA "homepage-alerts/1" pins the match to
+# our own caller.
+[FILTER]
+    Name              grep
+    Match             nginx.access
+    Exclude           log "homepage-alerts/1"
+
 # Join python / go / java / ruby tracebacks into a single record per
 # stack so HyperDX doesn't scatter the frames across 10+ rows. Records
 # arrive pre-partitioned by systemd unit (the input's Tag svc.* wildcard
