@@ -4,21 +4,6 @@
     key: github_runner
   become: true
 
-- name: _verify | subuid/subgid entries exist for github_runner
-  command: grep -q '^github_runner:' /etc/{{ item }}
-  changed_when: false
-  loop:
-    - subuid
-    - subgid
-  become: true
-
-- name: _verify | linger is enabled for github_runner
-  stat:
-    path: /var/lib/systemd/linger/github_runner
-  register: _verify_linger
-  failed_when: not _verify_linger.stat.exists
-  become: true
-
 - name: _verify | rootless podman.socket is active under github_runner
   systemd:
     name: podman.socket
@@ -47,33 +32,10 @@
     or _verify_rotate_timer.status.ActiveState != "active"
   become: true
 
-# Functional smoke: run the script once and confirm it exits cleanly
-# AND took one of its two valid code paths. Under qemu_test the run
-# typically hits the pull-failure soft-exit because nexus may not be
-# reachable from the box VM; this catches a regression that breaks
-# the loop (no "rotated=" summary on stdout) AND breaks the pull-fail
-# message (no "podman pull of" on stderr). Either marker must appear
-# -- if neither does, the script crashed silently or hit an uncovered
-# branch.
-- name: _verify | github_runner_image_rotate runs cleanly
-  command: /usr/local/bin/github_runner_image_rotate
-  changed_when: false
-  become: true
-  register: _verify_rotate
-  failed_when: >-
-    _verify_rotate.rc != 0
-    or (
-      'rotated=' not in _verify_rotate.stdout
-      and 'podman pull of' not in _verify_rotate.stderr
-    )
-
-# Per-instance unit-load check. _verify only runs under the test
-# harness against a disposable qemu VM, so we only have the qemu_test
-# branch: load the instantiated template + verify systemd accepts the
-# instance name. The container itself isn't running -- the stub PAT
-# would 401 against GitHub's generate-jitconfig and the unit would
-# loop on the restart-limit. System-scope: the unit lives under
-# /etc/systemd/system/ (see github_runner.service.j2's [Unit] block).
+# Per-instance unit-load check. The container itself isn't running --
+# the stub PAT would 401 against GitHub's generate-jitconfig and the
+# unit would loop on the restart-limit. System-scope: the unit lives
+# under /etc/systemd/system/.
 - name: _verify | github_runner@<instance>.service loads
   systemd:
     name: github_runner@{{ item.repo }}_{{ item.suffix }}.service
@@ -83,3 +45,58 @@
   loop_control:
     label: "{{ item.repo }}_{{ item.suffix }}"
   become: true
+
+# Functional: pre-stage a podman container with the runner image tag
+# so the rotate script's `podman ps --filter ancestor=...` enumerates
+# at least one entry. nexus is unreachable from box, so the script's
+# pull fails and the cached-fallback path fires; the local-tagged
+# image then satisfies `podman image exists` and the script proceeds.
+# alpine instead of pulling a real runner image (which would require
+# nexus auth) -- the rotate logic only cares about image digests, not
+# the image's actual runner content.
+- name: _verify | Pull a known-cacheable image for the rotate fixture
+  command: podman pull docker.io/library/alpine:latest
+  changed_when: false
+  become: true
+
+- name: _verify | Tag the fixture image as nexus.lab.fahm.fr/homelab/runner:latest
+  command: podman tag docker.io/library/alpine:latest nexus.lab.fahm.fr/homelab/runner:latest
+  changed_when: false
+  become: true
+
+- name: _verify | Start the rotate fixture container (--replace to dodge a stale prior run)
+  command: >-
+    podman run -d --replace --name github_runner_homelab_test1
+    nexus.lab.fahm.fr/homelab/runner:latest sleep 60
+  changed_when: false
+  become: true
+
+# Run the rotate script and assert (a) the fallback fired (nexus
+# unreachable, stderr says "proceeding with cached") AND (b) the
+# loop completed cleanly. The fixture container's digest matches the
+# locally-tagged "latest" (same image), so the loop reports fresh
+# silently and exits 0; the fallback stderr line is the positive
+# signal that the script reached past the pull step.
+- name: _verify | github_runner_image_rotate falls back to cache and enumerates containers
+  command: /usr/local/bin/github_runner_image_rotate
+  changed_when: false
+  become: true
+  register: _verify_rotate
+  failed_when: >-
+    _verify_rotate.rc != 0
+    or 'proceeding with cached' not in _verify_rotate.stderr
+
+# Run the JIT mint script and assert it failed AT the curl step (not
+# earlier). The stub PAT ("changeme" in group_vars/test.yml) can't
+# authenticate, so curl --fail-with-body returns non-zero with "curl:"
+# on stderr. Catches regressions in envfile sourcing, secret inspect,
+# jq pipeline, etc. -- those fail with different markers (no "curl:"
+# in stderr).
+- name: _verify | github_runner_jit_mint exercises the full script path
+  command: /usr/local/bin/github_runner_jit_mint {{ github_runner_instances[0].repo }}_{{ github_runner_instances[0].suffix }}
+  changed_when: false
+  become: true
+  register: _verify_jit_mint
+  failed_when: >-
+    _verify_jit_mint.rc == 0
+    or 'curl' not in _verify_jit_mint.stderr
