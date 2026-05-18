@@ -49,6 +49,9 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/homeassistant:/config \
     --volume /mnt/services/sqlite/homeassistant:/config/db \
     --publish 127.0.0.1:8123:8123/tcp \
+    {# Sonos S2 event-subscription callback; HomeKit pairing. Bound on every #}
+    {# host iface (not just the IoT macvlan side) because the iOS / Sonos #}
+    {# controllers that consume these live on the home LAN, not the IoT VLAN. #}
     --publish 0.0.0.0:1400:1400/tcp \
     --publish 0.0.0.0:3722:3722/udp \
     --health-cmd         '["curl","--head","--request","GET","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8123/manifest.json"]' \
