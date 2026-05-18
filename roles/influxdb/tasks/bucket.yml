@@ -114,19 +114,21 @@
   failed_when: false
   become: true
 
-# Match on the parsed permissions array (resource.type=buckets,
-# resource.id=<bucket>, action=write) rather than grepping a
-# bracketed scope literal -- the latter compared a user-id column
-# (different in `auth list` vs `auth create` output) against the
-# write-scope substring and silently matched whatever lined up.
+# `influx auth list --json` emits permissions as bare strings shaped
+# `<action>:orgs/<orgid>/buckets/<bucketid>` (or `<action>:/buckets`,
+# `<action>:/orgs`, etc. for non-scoped perms), NOT as the dict-shaped
+# {action, resource: {type, id}} structure the InfluxDB HTTP API
+# returns. selectattr('action', ...) crashes on strings. Regex-match
+# the bucket-scoped write permission directly. The bracketed scope
+# literal a much earlier grep-based version compared against was the
+# user-id column (different across `auth list` vs `auth create`);
+# anchoring to ^write: and the bucket id avoids both pitfalls.
 - name: bucket | Create write-auth for bucket {{ influxdb_bucket_args.bucket }}  # noqa: no-changed-when -- when: gates execution, like creates: did
   when: >-
     (_influxdb_bucket_auth_query.stdout | default('[]') | from_json)
     | selectattr('permissions', 'defined')
     | map(attribute='permissions') | flatten
-    | selectattr('action', 'equalto', 'write')
-    | selectattr('resource.type', 'equalto', 'buckets')
-    | selectattr('resource.id', 'equalto', influxdb_bucket_id)
+    | select('search', '^write:.*buckets/' ~ influxdb_bucket_id ~ '$')
     | list | length == 0
   command: >-
     podman exec influxdb influx auth create

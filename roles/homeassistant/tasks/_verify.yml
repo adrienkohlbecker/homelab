@@ -104,6 +104,14 @@
   failed_when: (_verify_influxdb_bucket.stdout | from_json | length) == 0
   become: true
 
+- name: _verify | Cache influxdb homeassistant bucket id
+  set_fact:
+    _verify_influxdb_bucket_id: "{{ (_verify_influxdb_bucket.stdout | from_json)[0].id }}"
+
+# `influx auth list --json` emits permissions as bare strings (e.g.
+# `write:orgs/<orgid>/buckets/<bucketid>`), not dicts. Match the
+# bucket-scoped write permission with a regex anchored on the bucket
+# id. See bucket.yml's matching comment for the full rationale.
 - name: _verify | influxdb write-auth on homeassistant bucket exists
   command: podman exec influxdb influx auth list --user homeassistant --json
   register: _verify_influxdb_auth
@@ -112,9 +120,7 @@
     (_verify_influxdb_auth.stdout | from_json)
     | selectattr('permissions', 'defined')
     | map(attribute='permissions') | flatten
-    | selectattr('action', 'equalto', 'write')
-    | selectattr('resource.type', 'equalto', 'buckets')
-    | selectattr('resource.id', 'equalto', (_verify_influxdb_bucket.stdout | from_json)[0].id)
+    | select('search', '^write:.*buckets/' ~ _verify_influxdb_bucket_id ~ '$')
     | list | length == 0
   become: true
 
