@@ -1,3 +1,40 @@
+# Validate the per-host instance list before touching anything. repo and
+# suffix flow into systemd unit names, envfile paths, and the workdir
+# tree -- a typo like "../wat" would write files outside the intended
+# location, and duplicate (repo, suffix) pairs would silently race the
+# same files. An empty labels string would render RUNNER_LABELS= and
+# trip the entrypoint's required-env check at container-start time;
+# catching it at apply-time is louder.
+- name: Assert github_runner_instances entries are well-formed
+  assert:
+    that:
+      - "'repo' in item and item.repo is match('^[A-Za-z0-9_-]+$')"
+      - "'suffix' in item and item.suffix is match('^[A-Za-z0-9_-]+$')"
+      - "'labels' in item and item.labels | length > 0"
+    fail_msg: >-
+      github_runner_instances entry {{ item }} is malformed. Each entry
+      needs repo + suffix matching [A-Za-z0-9_-]+ and a non-empty
+      labels string.
+  loop: "{{ github_runner_instances }}"
+  loop_control:
+    label: "{{ item.repo | default('?') }}_{{ item.suffix | default('?') }}"
+  tags:
+    - github_runner
+
+- name: Assert (repo, suffix) pairs are unique across github_runner_instances
+  assert:
+    that:
+      - >-
+        (github_runner_instances | map(attribute='repo')
+         | zip(github_runner_instances | map(attribute='suffix'))
+         | list | unique | length) == (github_runner_instances | length)
+    fail_msg: >-
+      github_runner_instances contains a duplicate (repo, suffix) pair.
+      Each instance maps to a unique systemd unit, envfile, and workdir;
+      collisions silently race the same files. Entries: {{ github_runner_instances }}
+  tags:
+    - github_runner
+
 # Operator-managed long-lived PAT. Required for the ephemeral + JIT
 # model -- every container start mints a single-use JIT config via
 # `gh api /repos/.../actions/runners/generate-jitconfig`, which needs
@@ -10,8 +47,10 @@
 # host_vars/<host>.yml as `github_runner_pat: !vault | ...`. Fail
 # loud on missing or empty so the operator sees the actionable cause
 # instead of a confusing downstream "secret data is required" or
-# jinja "undefined" error.
+# jinja "undefined" error. Skipped on hosts with no instances (the
+# role is a no-op there).
 - name: Assert github_runner_pat is vaulted in host_vars
+  when: github_runner_instances | length > 0
   assert:
     that:
       - github_runner_pat is defined
