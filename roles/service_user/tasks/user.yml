@@ -17,6 +17,11 @@
 #                     widen actual read access).
 #   config_dir        optional bool, default true; false opts out of the
 #                     /mnt/services/<name> dir for stateless services
+#   config_dir_group  optional, default <name>; override the dir's group
+#                     when the running container chowns its bind-mount to
+#                     a shared group (e.g. linuxserver/* images with
+#                     PGID=media recursively chown /config on startup,
+#                     and ansible flaps the gid every run otherwise).
 #
 # The dict form prevents inter-call leakage at play-vars scope: each
 # import_role pass replaces the whole `service_user_args` value, so a
@@ -31,6 +36,7 @@
     _service_user_home: "{{ service_user_args.home | default('/nonexistent') }}"
     _service_user_home_mode: "{{ service_user_args.home_mode | default(None) }}"
     _service_user_config_dir: "{{ service_user_args.config_dir | default(true) }}"
+    _service_user_config_dir_group: "{{ service_user_args.config_dir_group | default(service_user_args.name) }}"
 
 - name: Add {{ _service_user_name }} group
   group:
@@ -87,6 +93,6 @@
     dest: /mnt/services/{{ _service_user_name }}
     state: directory
     owner: "{{ _service_user_name }}"
-    group: "{{ _service_user_name }}"
+    group: "{{ _service_user_config_dir_group }}"
     mode: "0755"
   become: true
