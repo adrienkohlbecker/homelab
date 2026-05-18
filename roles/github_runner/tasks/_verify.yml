@@ -80,18 +80,25 @@
     or _verify_rotate_timer.status.ActiveState != "active"
   become: true
 
-# Functional smoke: run the script once and confirm it exits cleanly.
-# Under qemu_test no runners are active (the stub instance's systemd
-# start is gated off) so the loop body never executes -- we exercise
-# the podman pull / digest extraction / unit enumeration codepaths.
-# The script swallows nexus-unreachable as exit 0 (transient pull
-# failure -> wait for next tick), so we don't fail _verify on test
-# boxes without nexus reach; an uncaught error in the script would
-# still surface as rc != 0 and trip the default failed_when.
+# Functional smoke: run the script once and confirm it exits cleanly
+# AND took one of its two valid code paths. Under qemu_test the run
+# typically hits the pull-failure soft-exit because nexus may not be
+# reachable from the box VM; this catches a regression that breaks
+# the loop (no "rotated=" summary on stdout) AND breaks the pull-fail
+# message (no "podman pull of" on stderr). Either marker must appear
+# -- if neither does, the script crashed silently or hit an uncovered
+# branch.
 - name: _verify | github_runner_image_rotate runs cleanly
   command: /usr/local/bin/github_runner_image_rotate
   changed_when: false
   become: true
+  register: _verify_rotate
+  failed_when: >-
+    _verify_rotate.rc != 0
+    or (
+      'rotated=' not in _verify_rotate.stdout
+      and 'podman pull of' not in _verify_rotate.stderr
+    )
 
 - name: _verify | per-instance workdir exists
   stat:
