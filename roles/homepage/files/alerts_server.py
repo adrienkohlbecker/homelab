@@ -34,6 +34,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REFRESH_SECONDS = 30
 FETCH_TIMEOUT = 5
+MAX_FETCH_WORKERS = 8
 
 # Heroicons-mini filled status glyphs swapped in for the text pill below the
 # narrow-viewport breakpoint. Filled style (fill=currentColor) so the inside
@@ -229,9 +230,15 @@ def _fetch_one(name: str, query_url: str, click_url: str) -> dict:
         except Exception as e:  # noqa: BLE001
             tid_by_id = {}
             log_warn = f"alarm_log fetch failed: {type(e).__name__}: {e}"
+        # Budget for per-chart fallbacks so a single chatty host doesn't push
+        # the refresh past systemd's TimeoutSec. Alarms whose transition_id
+        # we can't recover within the budget fall back to the alerts list URL,
+        # which is a graceful degradation (the row still renders + clicks
+        # through, it just doesn't deep-link to the specific transition).
+        budget_end = time.monotonic() + FETCH_TIMEOUT
         for a in alarms:
             tid = tid_by_id.get(a["id"], "")
-            if not tid and a["chart"]:
+            if not tid and a["chart"] and time.monotonic() < budget_end:
                 try:
                     chart_map = latest_transition_by_alarm(
                         fetch_alarm_log(query_url, chart=a["chart"])
@@ -264,10 +271,11 @@ def collect(hosts: list[tuple[str, str, str]]) -> list[dict]:
     # Parallel fetches so one slow/unreachable host doesn't gate the others —
     # worst-case page render is bounded by FETCH_TIMEOUT, not summed across
     # hosts. Iterating futures in submit order preserves the configured host
-    # order in the response.
+    # order in the response. Cap at MAX_FETCH_WORKERS so a future operator
+    # adding 30 hosts doesn't spawn 30 threads on every refresh.
     if not hosts:
         return []
-    with ThreadPoolExecutor(max_workers=len(hosts)) as pool:
+    with ThreadPoolExecutor(max_workers=min(len(hosts), MAX_FETCH_WORKERS)) as pool:
         futures = [pool.submit(_fetch_one, n, q, c) for n, q, c in hosts]
         return [f.result() for f in futures]
 
