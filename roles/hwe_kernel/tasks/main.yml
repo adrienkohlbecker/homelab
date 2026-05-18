@@ -28,7 +28,7 @@
 # the group empty -- thermald keeps its root-only access (no users in
 # the group) and the warnings stop.
 - name: Create power group (silence thermald dbus policy warning)
-  ansible.builtin.group:
+  group:
     name: power
     system: true
     state: present
