@@ -98,3 +98,24 @@ resource "gandi_dnssec_key" "adrienkohlbecker_com" {
   public_key = cloudflare_zone_dnssec.adrienkohlbecker_com.public_key
   type       = "ksk"
 }
+
+# Gandi NS delegation must match CF's authoritative NS list. Tautology by
+# construction today (gandi_nameservers is built from cloudflare_zone.X.
+# name_servers), but catches the future case where someone manually edits
+# the NS list at Gandi-as-registrar between applies -- without this, the
+# next `tofu plan` would silently reconcile the drift while resolvers were
+# already failing to find the zone.
+check "ns_delegation" {
+  assert {
+    condition     = sort(gandi_nameservers.fahm_fr.nameservers) == sort(cloudflare_zone.fahm_fr.name_servers)
+    error_message = "Gandi NS delegation for fahm.fr doesn't match CF: Gandi=${join(",", sort(gandi_nameservers.fahm_fr.nameservers))} CF=${join(",", sort(cloudflare_zone.fahm_fr.name_servers))}. Lookups against this zone will fail."
+  }
+  assert {
+    condition     = sort(gandi_nameservers.mhaf_fr.nameservers) == sort(cloudflare_zone.mhaf_fr.name_servers)
+    error_message = "Gandi NS delegation for mhaf.fr doesn't match CF: Gandi=${join(",", sort(gandi_nameservers.mhaf_fr.nameservers))} CF=${join(",", sort(cloudflare_zone.mhaf_fr.name_servers))}. Lookups against this zone will fail."
+  }
+  assert {
+    condition     = sort(gandi_nameservers.adrienkohlbecker_com.nameservers) == sort(cloudflare_zone.adrienkohlbecker_com.name_servers)
+    error_message = "Gandi NS delegation for adrienkohlbecker.com doesn't match CF: Gandi=${join(",", sort(gandi_nameservers.adrienkohlbecker_com.nameservers))} CF=${join(",", sort(cloudflare_zone.adrienkohlbecker_com.name_servers))}. Lookups against this zone will fail."
+  }
+}

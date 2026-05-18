@@ -81,3 +81,24 @@ locals {
     "adrienkohlbecker.com" = cloudflare_zone.adrienkohlbecker_com.id
   }
 }
+
+# Both halves of the DNSSEC chain must be active for the zone to validate.
+# Tautology-by-construction today (Gandi DS is built from CF's KSK fields),
+# but catches the future case where someone disables CF DNSSEC or deletes
+# the Gandi DS through the UI between applies -- without this, the next
+# `tofu plan` would silently reconcile the drift, leaving the zone bogus
+# to validating resolvers for the DS TTL window.
+check "dnssec_chain" {
+  assert {
+    condition     = cloudflare_zone_dnssec.fahm_fr.status == "active" && gandi_dnssec_key.fahm_fr.id != null
+    error_message = "DNSSEC chain broken for fahm.fr: CF status=${cloudflare_zone_dnssec.fahm_fr.status}, Gandi DS=${gandi_dnssec_key.fahm_fr.id == null ? "missing" : "present"}. Zone is bogus to validating resolvers."
+  }
+  assert {
+    condition     = cloudflare_zone_dnssec.mhaf_fr.status == "active" && gandi_dnssec_key.mhaf_fr.id != null
+    error_message = "DNSSEC chain broken for mhaf.fr: CF status=${cloudflare_zone_dnssec.mhaf_fr.status}, Gandi DS=${gandi_dnssec_key.mhaf_fr.id == null ? "missing" : "present"}. Zone is bogus to validating resolvers."
+  }
+  assert {
+    condition     = cloudflare_zone_dnssec.adrienkohlbecker_com.status == "active" && gandi_dnssec_key.adrienkohlbecker_com.id != null
+    error_message = "DNSSEC chain broken for adrienkohlbecker.com: CF status=${cloudflare_zone_dnssec.adrienkohlbecker_com.status}, Gandi DS=${gandi_dnssec_key.adrienkohlbecker_com.id == null ? "missing" : "present"}. Zone is bogus to validating resolvers."
+  }
+}
