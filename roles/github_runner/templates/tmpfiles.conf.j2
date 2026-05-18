@@ -20,7 +20,13 @@
 # Globbed paths match every workdir_<inst> automatically; rules are
 # no-ops on hosts that haven't created any workdirs yet.
 #
-# Type Path                                              Mode UID GID Age  Argument
-e      /mnt/scratch/github_runner/scratch                -    -   -   1d
-e      /mnt/scratch/github_runner/workdir_*/_temp        -    -   -   7d
-e      /mnt/scratch/github_runner/workdir_*/_actions     -    -   -   30d
+# Age fields are tilde-prefixed (~1d / ~7d / ~30d) so cleanup is
+# mtime-based per man 5 tmpfiles.d: without the tilde the rule also
+# considers atime, which would silently re-age any file a workflow
+# `cat`s (action cache reads, tool installs reading their own
+# binaries, etc.), keeping it from ever expiring.
+#
+# Type Path                                              Mode UID GID Age   Argument
+e      /mnt/scratch/github_runner/scratch                -    -   -   ~1d
+e      /mnt/scratch/github_runner/workdir_*/_temp        -    -   -   ~7d
+e      /mnt/scratch/github_runner/workdir_*/_actions     -    -   -   ~30d
