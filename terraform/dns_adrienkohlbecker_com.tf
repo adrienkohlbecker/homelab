@@ -23,18 +23,3 @@ resource "cloudflare_dns_record" "adrienkohlbecker_com" {
   ttl      = 1
   comment  = try(each.value.comment, null)
 }
-
-# ---- State migrations ----
-
-moved {
-  from = cloudflare_dns_record.cname["adrienkohlbecker.com"]
-  to   = cloudflare_dns_record.adrienkohlbecker_com["CNAME/adrienkohlbecker.com"]
-}
-moved {
-  from = cloudflare_dns_record.cname["www.adrienkohlbecker.com"]
-  to   = cloudflare_dns_record.adrienkohlbecker_com["CNAME/www.adrienkohlbecker.com"]
-}
-moved {
-  from = cloudflare_dns_record.txt["adrienkohlbecker.com"]
-  to   = cloudflare_dns_record.adrienkohlbecker_com["TXT/adrienkohlbecker.com"]
-}
