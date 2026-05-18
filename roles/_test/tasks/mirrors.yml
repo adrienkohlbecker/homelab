@@ -1,3 +1,7 @@
+- name: mirrors | Set hostname and seed /etc/hosts
+  import_role:
+    name: hostname
+
 - name: mirrors | Configure apt retries and sources
   import_role:
     name: apt
