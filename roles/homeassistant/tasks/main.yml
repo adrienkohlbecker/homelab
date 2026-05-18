@@ -83,6 +83,31 @@
 # SQLite resolves the symlink before computing WAL placement. The symlink
 # target is dangling on the host (no /config/db there) but resolves
 # inside the container — force: true bypasses ansible's host-side check.
+- name: Stat ZHA zigbee.db on host
+  stat:
+    path: /mnt/services/homeassistant/zigbee.db
+    follow: false
+  register: homeassistant_zigbee_db_stat
+  become: true
+  tags:
+    - homeassistant
+
+# Guard against `force: true` silently replacing a real ZHA database with
+# a dangling symlink. If zigbee.db already exists as a regular file
+# (e.g. role applied before this symlink task landed, ZHA created its
+# DB at that path), force the operator to manually move it to
+# /mnt/services/sqlite/homeassistant/zigbee.db first.
+- name: Refuse to clobber a real zigbee.db with a symlink
+  assert:
+    that: not (homeassistant_zigbee_db_stat.stat.exists and not homeassistant_zigbee_db_stat.stat.islnk)
+    fail_msg: >-
+      /mnt/services/homeassistant/zigbee.db exists as a regular file; the
+      symlink task would replace it and lose ZHA's database. Move it to
+      /mnt/services/sqlite/homeassistant/zigbee.db (and remove the
+      original) before re-running.
+  tags:
+    - homeassistant
+
 - name: Symlink ZHA zigbee.db onto sqlite dataset
   file:
     src: /config/db/zigbee.db
