@@ -1,26 +1,14 @@
 ---
-- name: _verify | Hyperdx user exists
-  command: getent passwd hyperdx
-  changed_when: false
-  become: true
-
-- name: _verify | Hyperdx clickhouse system user exists
-  command: getent passwd hyperdx_clickhouse
-  changed_when: false
-  become: true
-
-- name: _verify | Hyperdx config dir exists
+# Ownership-of-uidmap-target checks. These catch a regression in the
+# +101 uidmap (ClickHouse's internal user landing on the wrong host
+# uid, breaking ZFS replication portability).
+- name: _verify | Hyperdx config dir is owned by hyperdx
   stat:
     path: /mnt/services/hyperdx
   register: _verify_config_dir
   failed_when: not _verify_config_dir.stat.exists or _verify_config_dir.stat.pw_name != 'hyperdx'
   become: true
 
-# Functional ownership check: the container's clickhouse-server chowns
-# /var/lib/clickhouse to its in-namespace uid 101 on first start, which
-# the +101 uidmap routes to host uid hyperdx_clickhouse. If this lands
-# anywhere else (root, hyperdx, a random system user), the uidmap is
-# broken and the refactor regressed.
 - name: _verify | Hyperdx clickhouse data dir is owned by hyperdx_clickhouse
   stat:
     path: /mnt/services/hyperdx/clickhouse
@@ -39,25 +27,17 @@
     or _verify_ch_log_dir.stat.pw_name != 'hyperdx_clickhouse'
   become: true
 
-# Mongo's data dir is owned by in-namespace root (= hyperdx on the host)
-# because the entrypoint runs `mongod` without dropping privileges. We
-# just assert the dir is non-empty -- if mongo failed to start there'd
-# be no WiredTiger files.
-- name: _verify | Hyperdx mongo data dir is non-empty
-  find:
-    paths: /mnt/services/hyperdx/db
-    file_type: file
-  register: _verify_db_dir
-  failed_when: _verify_db_dir.matched == 0
-  become: true
-
-- name: _verify | Hyperdx.service is loaded and active
-  systemd:
-    name: hyperdx
-  register: _verify_unit
-  failed_when: >-
-    _verify_unit.status.LoadState != "loaded"
-    or _verify_unit.status.ActiveState != "active"
+# Functional probe instead of "db dir is non-empty" -- the file tree is
+# tautologically non-empty after any prior mongod start, even if mongod
+# is broken now.
+- name: _verify | MongoDB inside the container answers serverStatus
+  command: podman exec hyperdx mongo --quiet hyperdx --eval "db.serverStatus().ok"
+  register: _verify_mongo
+  changed_when: false
+  failed_when: _verify_mongo.rc != 0 or (_verify_mongo.stdout | trim) != '1'
+  retries: 30
+  delay: 2
+  until: _verify_mongo.rc == 0 and (_verify_mongo.stdout | trim) == '1'
   become: true
 
 - name: _verify | Hyperdx UI answers on its loopback port
@@ -70,17 +50,20 @@
   until: _verify_http.status in [ 200, 302, 307 ]
 
 # Stronger signal than "frontend renders": ClickHouse is the data plane
-# the otel collector exports to. Probe it via `podman exec` since the
-# service only publishes port 8080 (the UI) to the host loopback.
+# the otel collector exports to. Probe it via the _test helper (encodes
+# the Ansible 2.19 templated-until: trust-check workaround).
 - name: _verify | ClickHouse inside the container is queryable
-  command: podman exec hyperdx curl --fail --silent --show-error --max-time 5 "http://localhost:8123/?query=SELECT+1"
-  register: _verify_clickhouse
-  changed_when: false
-  failed_when: _verify_clickhouse.rc != 0 or _verify_clickhouse.stdout | trim != '1'
-  retries: 30
-  delay: 2
-  until: _verify_clickhouse.rc == 0
-  become: true
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query
+  vars:
+    _test_args:
+      label: select_1
+      sql: SELECT 1
+
+- name: _verify | ClickHouse SELECT 1 returns 1
+  assert:
+    that: (_test_clickhouse_result.stdout | trim) == '1'
 
 # End-to-end ingest probe: synthesise a minimal OTLP log and POST it at
 # the published OTLP HTTP port using the same Bearer auth fluent-bit
@@ -92,7 +75,7 @@
 # main.yml). The supervisor polls the api every ~30s, then the
 # collector child is restarted with the new config. Allow ~3 minutes
 # end-to-end (90 * 2s).
-- name: _verify | OTLP HTTP endpoint accepts a synthetic log POST
+- name: _verify | OTLP HTTP endpoint accepts a synthetic log POST (loopback)
   uri:
     url: http://localhost:{{ service_ports.hyperdx_otlp_http }}/v1/logs
     method: POST
@@ -119,25 +102,74 @@
                 - timeUnixNano: "{{ ansible_date_time.epoch }}000000000"
                   severityText: INFO
                   body:
-                    stringValue: hyperdx _verify probe
+                    stringValue: hyperdx _verify probe (loopback)
     status_code: 200
-  register: _verify_otlp
+  register: _verify_otlp_loopback
   retries: 90
   delay: 2
-  until: _verify_otlp.status == 200
+  until: _verify_otlp_loopback.status == 200
+  no_log: true
 
-# Confirm the probe actually landed in ClickHouse, not just "the HTTP
-# layer said 200". The otel_logs table is auto-created by the OTel
+# Exercise the nginx /v1/logs site (production ingress for off-host
+# shippers). Uses Host: + validate_certs=false to hit the local nginx
+# without needing DNS; same Bearer as the loopback probe. A jinja typo
+# in proxy_pass, a missing proxy_set_header, or a client_max_body_size
+# regression would silently break this path; the loopback probe above
+# doesn't catch it.
+- name: _verify | OTLP HTTP via nginx site accepts a synthetic log POST
+  uri:
+    url: https://localhost/v1/logs
+    method: POST
+    body_format: json
+    validate_certs: false
+    headers:
+      Host: "hyperdx.{{ inventory_hostname }}.{{ domain }}"
+      Authorization: "{{ hyperdx_ingestion_api_key }}"
+    body:
+      resourceLogs:
+        - resource:
+            attributes:
+              - key: service.name
+                value:
+                  stringValue: hyperdx_verify_probe_nginx
+          scopeLogs:
+            - logRecords:
+                - timeUnixNano: "{{ ansible_date_time.epoch }}000000000"
+                  severityText: INFO
+                  body:
+                    stringValue: hyperdx _verify probe (nginx)
+    status_code: 200
+  no_log: true
+
+# Negative-path: missing Authorization must be rejected. Currently fires
+# at nginx (the `if ($http_authorization = "") return 401` short-circuit
+# in main.yml's server_conf); previously fired at the OTel collector's
+# bearertokenauth extension. Either layer rejecting is fine; both being
+# missing is the regression we want to catch.
+- name: _verify | OTLP HTTP via nginx site rejects missing Authorization
+  uri:
+    url: https://localhost/v1/logs
+    method: POST
+    body_format: json
+    validate_certs: false
+    headers:
+      Host: "hyperdx.{{ inventory_hostname }}.{{ domain }}"
+    body: {}
+    status_code: 401
+
+# Confirm the probe rows actually landed in ClickHouse, not just "the
+# HTTP layer said 200". The otel_logs table is auto-created by the OTel
 # ClickHouse exporter on first record; if it's missing entirely the
-# pipeline silently dropped on the way through.
-- name: _verify | Probe row reached otel_logs in ClickHouse
-  command: >-
-    podman exec hyperdx curl --fail --silent --show-error --max-time 5
-    "http://localhost:8123/?query=SELECT+count()+FROM+default.otel_logs+WHERE+ServiceName='hyperdx_verify_probe'"
-  register: _verify_otel_logs
-  changed_when: false
-  failed_when: _verify_otel_logs.rc != 0 or (_verify_otel_logs.stdout | trim | int) == 0
-  retries: 15
-  delay: 2
-  until: _verify_otel_logs.rc == 0 and (_verify_otel_logs.stdout | trim | int) > 0
-  become: true
+# pipeline silently dropped on the way through. Count >= 2 because both
+# the loopback and nginx-site probes seed distinct ServiceNames.
+- name: _verify | Probe rows reached otel_logs in ClickHouse
+  import_role:
+    name: _test
+    tasks_from: clickhouse_query_wait
+  vars:
+    _test_args:
+      label: count_verify_probes
+      sql: SELECT count() FROM default.otel_logs WHERE ServiceName IN ('hyperdx_verify_probe', 'hyperdx_verify_probe_nginx')
+      retries: 30
+      delay: 2
+      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) >= 2"
