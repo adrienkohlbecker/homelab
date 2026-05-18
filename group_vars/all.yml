@@ -85,6 +85,18 @@ service_ports:
   transmission_bt: 51413
   wireguard: 51820
 
+# URL nginx's auth_request subrequest hits for forward-auth on sites
+# that opt in via `nginx_site_args.auth`. Default targets the
+# loopback-published Authelia on the host's own nginx; non-lab hosts
+# that ever want to gate any of their services with `auth: required`
+# need to override this in host_vars/<host>.yml with the wireguard IP
+# of the host running Authelia (e.g.
+# http://10.123.0.2:9092/api/authz/auth-request). Cookie domain and
+# portal subdomain are per-group (see prod.yml / test.yml) but this
+# loopback URL is identical everywhere Authelia runs, so it lives at
+# group_vars/all.
+authelia_internal_url: "http://127.0.0.1:{{ service_ports.authelia }}/api/authz/auth-request"
+
 # mDNS device-info model -- drives the Finder sidebar icon for the host.
 # Maps to an .icns under /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/
 # on macOS clients. Override per host (e.g. `avahi_device_model: Macmini8,1`).
