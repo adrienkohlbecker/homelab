@@ -46,12 +46,12 @@
   failed_when: _verify_zigbee_link.stdout | trim != '/config/db/zigbee.db'
   become: true
 
-# The unit template pins HA's iot_macvlan IP to .98 (only usable
-# container IP in the /30). Assert the pinning actually took effect so
-# a future netavark/podman behaviour change doesn't drift the IP
-# silently; downstream integrations (HomeKit/Sonos discovery, future
-# firewall rules keyed on the iot-side address) would silently
-# regress.
+# The unit template pins HA's iot_macvlan IP to .98 (the only IP
+# netavark can assign within the .96/30 ip_range carved out of the
+# /24). Assert the pinning actually took effect so a future
+# netavark/podman behaviour change doesn't drift the IP silently;
+# downstream integrations (HomeKit/Sonos discovery, future firewall
+# rules keyed on the iot-side address) would silently regress.
 - name: _verify | homeassistant macvlan IP is pinned to 10.123.4.98
   command: >
     podman inspect homeassistant
