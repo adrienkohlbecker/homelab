@@ -28,5 +28,6 @@
     nginx_site_args:
       subdomain: speedtest
       proxy_pass: http://localhost:2807/
+      auth: required
   tags:
     - speedtest
