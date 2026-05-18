@@ -151,42 +151,28 @@
   tags:
     - homeassistant
 
-- name: Configure homeassistant macros
+- name: Configure homeassistant config files
   copy:
-    src: macros.jinja
-    dest: /mnt/services/homeassistant/custom_templates/macros.jinja
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
     owner: homeassistant
     group: homeassistant
-    mode: "0600"
+    mode: "{{ item.mode | default('0600') }}"
     backup: true
-  register: homeassistant_macros
+  register: homeassistant_config_files
   become: true
-  tags:
-    - homeassistant
-
-- name: Configure homeassistant sensors
-  copy:
-    src: sensors.yaml
-    dest: /mnt/services/homeassistant/sensors.yaml
-    owner: homeassistant
-    group: homeassistant
-    mode: "0600"
-    backup: true
-  register: homeassistant_sensors
-  become: true
-  tags:
-    - homeassistant
-
-- name: Configure homeassistant templates
-  copy:
-    src: templates.yaml
-    dest: /mnt/services/homeassistant/templates.yaml
-    owner: homeassistant
-    group: homeassistant
-    mode: "0600"
-    backup: true
-  register: homeassistant_templates
-  become: true
+  loop:
+    - src: macros.jinja
+      dest: /mnt/services/homeassistant/custom_templates/macros.jinja
+    - src: sensors.yaml
+      dest: /mnt/services/homeassistant/sensors.yaml
+    - src: templates.yaml
+      dest: /mnt/services/homeassistant/templates.yaml
+    - src: blueprints/automation/hvac_dry_mode.yaml
+      dest: /mnt/services/homeassistant/blueprints/automation/hvac_dry_mode.yaml
+      mode: "0644"
+  loop_control:
+    label: "{{ item.dest }}"
   tags:
     - homeassistant
 
@@ -206,19 +192,6 @@
     - covers.yaml
     - scripts.yaml
     - scenes.yaml
-  tags:
-    - homeassistant
-
-- name: Configure homeassistant blueprints
-  copy:
-    src: blueprints/automation/hvac_dry_mode.yaml
-    dest: /mnt/services/homeassistant/blueprints/automation/hvac_dry_mode.yaml
-    owner: homeassistant
-    group: homeassistant
-    mode: "0644"
-    backup: true
-  register: homeassistant_blueprints
-  become: true
   tags:
     - homeassistant
 
@@ -306,7 +279,7 @@
     systemd_unit_args:
       src: homeassistant
       condition: "{{ not (ansible_check_mode and (systemd_unit.changed or homeassistant_user.changed)) }}"
-      restart: "{{ systemd_unit.changed or homeassistant_conf.changed or (homeassistant_addons_changed | default(false)) or homeassistant_macros.changed or homeassistant_sensors.changed or homeassistant_templates.changed or homeassistant_blueprints.changed }}"
+      restart: "{{ systemd_unit.changed or homeassistant_conf.changed or (homeassistant_addons_changed | default(false)) or homeassistant_config_files.changed }}"
   tags:
     - homeassistant
 
