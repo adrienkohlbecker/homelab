@@ -1,3 +1,15 @@
+# sqlite3 CLI is used host-side to pre-create the WAL-mode DB below
+# and (read-only) by the _verify journal_mode probe. libsqlite3-0 is
+# pulled transitively by other packages but the CLI is not -- mirror
+# the fluentbit role's explicit install (4af464f3).
+- name: Install sqlite3 CLI
+  apt:
+    pkg: sqlite3
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - healthchecks
+
 - name: Set up healthchecks system user, group, and config dir
   import_role:
     name: service_user
@@ -17,6 +29,26 @@
     group: healthchecks
     mode: "0700"
   become: true
+  tags:
+    - healthchecks
+
+# Pre-create hc.sqlite in WAL journal mode so Django inherits it on its
+# first connection. journal_mode is persisted in the SQLite header, so
+# once set on an empty DB it survives Django's `migrate` (which
+# CREATE TABLEs into the same file). Running as the healthchecks user
+# means the file lands at the host uid the +0:N:1 uidmap routes
+# in-container root to -- the container can then open it read/write.
+# The alternative -- letting Django create the DB in rollback-journal
+# mode and converting via a stop-the-service PRAGMA pass -- needed a
+# two-pass deploy and a TOCTOU-prone host-side write against a file
+# the container could rename out from under us.
+- name: Pre-create WAL-mode sqlite DB
+  when: not (ansible_check_mode and healthchecks_user.changed)
+  command:
+    cmd: sqlite3 /mnt/services/sqlite/healthchecks/hc.sqlite 'PRAGMA journal_mode=WAL;'
+    creates: /mnt/services/sqlite/healthchecks/hc.sqlite
+  become: true
+  become_user: healthchecks
   tags:
     - healthchecks
 
@@ -116,74 +148,6 @@
       src: healthchecks
       condition: "{{ not (ansible_check_mode and (healthchecks_service_result.changed or healthchecks_user.changed)) }}"
       restart: "{{ healthchecks_service_result.changed or healthchecks_password_rotated or healthchecks_smtp_password_rotated or healthchecks_secret_key_rotated }}"
-  tags:
-    - healthchecks
-
-# linuxserver/healthchecks (Django) doesn't expose a PRAGMA hook and
-# defaults SQLite to rollback-journal mode. WAL halves the per-commit
-# fsync count and lets readers not block the writer. The mode is
-# persisted in the DB header, so the conversion is one-shot.
-#
-# Stop the service across the PRAGMA: journal_mode=WAL needs an
-# exclusive lock; if Django is holding the DB the PRAGMA silently
-# returns the current mode without converting, leaving the operator
-# in rollback-journal mode without a failure signal. The
-# symlink+ownership guard prevents in-container-root (which maps to
-# host uid `healthchecks` via uidmap) from swapping hc.sqlite for a
-# symlink to a root-owned target before the PRAGMA fires.
-#
-# First-install two-pass: the DB doesn't exist until Django creates
-# it on first start, so the block skips. The next play run sees the
-# DB, stops the service briefly, converts, and restarts.
-- name: Stat healthchecks sqlite DB
-  stat:
-    path: /mnt/services/sqlite/healthchecks/hc.sqlite
-    follow: false
-  register: healthchecks_sqlite_stat
-  become: true
-  tags:
-    - healthchecks
-
-- name: Read healthchecks sqlite journal mode
-  command: sqlite3 -readonly /mnt/services/sqlite/healthchecks/hc.sqlite 'PRAGMA journal_mode;'
-  register: healthchecks_sqlite_pragma
-  changed_when: false
-  when: healthchecks_sqlite_stat.stat.exists
-  become: true
-  tags:
-    - healthchecks
-
-- name: Convert healthchecks sqlite to WAL
-  when:
-    - healthchecks_sqlite_stat.stat.exists
-    - healthchecks_sqlite_pragma.stdout | default('') | trim != 'wal'
-  block:
-    - name: Assert healthchecks sqlite DB is a regular file owned by healthchecks
-      assert:
-        that:
-          - healthchecks_sqlite_stat.stat.isreg
-          - healthchecks_sqlite_stat.stat.pw_name == 'healthchecks'
-        fail_msg: >-
-          /mnt/services/sqlite/healthchecks/hc.sqlite is a symlink or
-          owned by another user; refusing to PRAGMA since WAL/SHM
-          sidecars would land at an attacker-controlled path.
-
-    - name: Stop healthchecks service for WAL conversion
-      systemd:
-        name: healthchecks
-        state: stopped
-
-    - name: Set healthchecks sqlite to WAL
-      command: sqlite3 /mnt/services/sqlite/healthchecks/hc.sqlite 'PRAGMA journal_mode=WAL;'
-      register: healthchecks_sqlite_wal
-      changed_when: healthchecks_sqlite_wal.stdout | trim == 'wal'
-      failed_when: healthchecks_sqlite_wal.stdout | trim != 'wal'
-
-    - name: Start healthchecks service after WAL conversion
-      systemd:
-        name: healthchecks
-        state: started
-  become: true
   tags:
     - healthchecks
 
