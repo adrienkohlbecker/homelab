@@ -141,6 +141,7 @@
   vars:
     nginx_site_args:
       subdomain: nut
+      auth: required
       server_conf: |
         location = / {
           return 301 /upsstats.cgi;
