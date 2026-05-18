@@ -98,7 +98,15 @@ def parse_hosts(spec: str) -> list[tuple[str, str, str]]:
 class _HostClient:
     """One netdata host's persistent connection for the duration of a single
     _fetch_one call. Reuses one TLS handshake across the 2-3 requests we make
-    per host per refresh window (alarms + alarm_log + per-chart fallbacks)."""
+    per host per refresh window (alarms + alarm_log + per-chart fallbacks).
+
+    Invariant: each request fully drains the response before the next one.
+    http.client.HTTPConnection raises ResponseNotReady on the next
+    getresponse() if a prior response body wasn't consumed -- _get_json's
+    unconditional resp.read() + resp.close() satisfies that today, but a
+    future switch to streaming reads must preserve it or reuse will break
+    silently (the bare except in _fetch_one swallows it as entry['error']).
+    """
 
     def __init__(self, base_url: str) -> None:
         u = urllib.parse.urlsplit(base_url)
@@ -117,7 +125,10 @@ class _HostClient:
     def _get_json(self, path: str) -> dict:
         self._conn.request("GET", path, headers={"User-Agent": "homepage-alerts/1"})
         resp = self._conn.getresponse()
-        body = resp.read()
+        try:
+            body = resp.read()
+        finally:
+            resp.close()
         if resp.status != 200:
             raise OSError(f"HTTP {resp.status} on {path}")
         return json.loads(body)
