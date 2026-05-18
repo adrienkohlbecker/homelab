@@ -1,14 +1,11 @@
-"""Generate the homepage alerts panel's static HTML + JSON snapshots.
+"""Generate the homepage alerts panel's static HTML snapshot.
 
 Polls each configured host's `/api/v1/alarms?active` netdata endpoint in
-parallel and writes:
-
-- index.html       → dark-themed, iframe-friendly alert list
-- api_alerts.json  → {"hosts": [...], "updated_at", "iso_updated_at"}
+parallel and writes index.html — a dark-themed, iframe-friendly alert list.
 
 Run as a Type=oneshot systemd service fired by homepage_alerts.timer on
 a sub-minute cadence (OnCalendar=*:*:0/30 + AccuracySec=1s on the
-homepage host). nginx serves the files directly from OUTPUT_DIR; no
+homepage host). nginx serves the file directly from OUTPUT_DIR; no
 proxy_pass, no long-running process.
 
 Inputs (env):
@@ -505,9 +502,8 @@ def main() -> None:
     output_dir = pathlib.Path(os.environ.get("OUTPUT_DIR", "/var/www/homepage_alerts"))
 
     data = collect(hosts)
-    now = time.time()
     iso = (
-        datetime.datetime.fromtimestamp(now, tz=datetime.timezone.utc)
+        datetime.datetime.now(tz=datetime.timezone.utc)
         .isoformat(timespec="seconds")
     )
 
@@ -517,10 +513,6 @@ def main() -> None:
     # failed, and nginx keeps serving the previous (atomic-write means there
     # is no half-written intermediate) snapshot. systemd_service_unit_failed_state
     # picks up the failure independently.
-    _atomic_write(
-        output_dir / "api_alerts.json",
-        json.dumps({"hosts": data, "updated_at": now, "iso_updated_at": iso}, sort_keys=True),
-    )
     _atomic_write(output_dir / "index.html", render_html(data, iso))
 
 

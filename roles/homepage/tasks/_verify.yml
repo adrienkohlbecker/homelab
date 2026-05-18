@@ -17,34 +17,11 @@
     status_code: 200
   become: true
 
-# Wait + assert split: the timer fires the .service on OnActiveSec=0 so the
-# files appear shortly after enable, but ansible may race the first run.
-# Combining the retry-until with failed_when=content-check would fail-fast on
-# the first 404 (file not yet written); split into two tasks so retries get
-# their full budget before content assertions fire.
-- name: _verify | homepage_alerts JSON is reachable through nginx
-  uri:
-    url: https://localhost/alerts/api/alerts
-    headers:
-      Host: "homepage.{{ inventory_hostname }}.{{ domain }}"
-    validate_certs: false
-    return_content: true
-    status_code: 200
-  register: _verify_alerts_json
-  retries: 30
-  delay: 2
-  until: _verify_alerts_json.status == 200
-  become: true
-
-- name: _verify | homepage_alerts JSON shape matches configured hosts
-  assert:
-    that:
-      - (_verify_alerts_json.json.hosts | length) == (homepage_netdata_hosts | length)
-      - (_verify_alerts_json.json.hosts | map(attribute='name') | list | sort) == (homepage_netdata_hosts | sort)
-    fail_msg: >-
-      JSON hosts mismatch: expected {{ homepage_netdata_hosts | sort }},
-      got {{ _verify_alerts_json.json.hosts | map(attribute='name') | list }}
-
+# Wait + assert split: the timer fires the .service on OnActiveSec=0 so
+# index.html appears shortly after enable, but ansible may race the first
+# run. Combining retry-until with failed_when=content-check would fail-fast
+# on the first 404; split into two tasks so retries get their full budget
+# before content assertions fire.
 - name: _verify | homepage_alerts renders HTML through nginx
   uri:
     url: https://localhost/alerts/
@@ -83,11 +60,11 @@
   when: inventory_hostname == 'box'
   assert:
     that:
-      - (_verify_alerts_json.json.hosts | selectattr('error', 'defined') | list | length) >= 1
       - '"<div class=\"err\">" in _verify_alerts_html.content'
     fail_msg: >-
-      Expected at least one per-host error rendered on box (no real netdata
-      reachable from the test fixture). JSON: {{ _verify_alerts_json.json.hosts }}
+      Expected a per-host <div class="err"> rendered on box (no real netdata
+      reachable from the test fixture). HTML content was:
+      {{ _verify_alerts_html.content }}
 
 # Hot-reload proof: the role intentionally skips restart on YAML config
 # edits because gethomepage watches /app/config. If a future image bump
