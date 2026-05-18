@@ -103,8 +103,6 @@ pihole_keepalived_priority: 100
 prometheus_enabled: true
 
 minio_enabled: true
-
-gitea_runner_enabled: true
 minio_buckets:
   - arq-adrien
   - arq-marie
