@@ -21,7 +21,6 @@ third-party deps.
 """
 
 import datetime
-import hashlib
 import html
 import http.client
 import json
@@ -33,6 +32,7 @@ import threading
 import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
+from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 REFRESH_SECONDS = 30
@@ -520,23 +520,11 @@ def _cache_loop(cache: AlertsCache, interval: float) -> None:
 
 
 class Handler(BaseHTTPRequestHandler):
-    def _send(self, status: int, ctype: str, body: bytes, *, etag: str | None = None) -> None:
-        # When etag is provided, honour If-None-Match (304) and let the
-        # browser cache + revalidate. Without one, fall back to no-store
-        # for the healthcheck / 404 paths whose body shouldn't be cached.
-        if etag is not None and self.headers.get("If-None-Match") == etag:
-            self.send_response(304)
-            self.send_header("ETag", etag)
-            self.end_headers()
-            return
+    def _send(self, status: HTTPStatus, ctype: str, body: bytes) -> None:
         self.send_response(status)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        if etag is not None:
-            self.send_header("ETag", etag)
-            self.send_header("Cache-Control", "no-cache")
-        else:
-            self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
@@ -545,8 +533,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path in ("/", "/index.html"):
             data, updated_at, err = cache.snapshot()
             body = render_html(data, updated_at, err).encode("utf-8")
-            etag = '"' + hashlib.md5(body).hexdigest() + '"'
-            self._send(200, "text/html; charset=utf-8", body, etag=etag)
+            self._send(HTTPStatus.OK, "text/html; charset=utf-8", body)
         elif self.path == "/api/alerts":
             data, updated_at, err = cache.snapshot()
             iso = (
@@ -562,12 +549,11 @@ class Handler(BaseHTTPRequestHandler):
                 "error": err,
             }
             body = json.dumps(payload, sort_keys=True).encode("utf-8")
-            etag = '"' + hashlib.md5(body).hexdigest() + '"'
-            self._send(200, "application/json", body, etag=etag)
+            self._send(HTTPStatus.OK, "application/json", body)
         elif self.path == "/api/healthcheck":
-            self._send(200, "application/json", b'{"status":"ok"}')
+            self._send(HTTPStatus.OK, "application/json", b'{"status":"ok"}')
         else:
-            self._send(404, "text/plain", b"not found")
+            self._send(HTTPStatus.NOT_FOUND, "text/plain", b"not found")
 
     def log_message(self, fmt: str, *args) -> None:
         # Silence per-request access logs; systemd journal still gets stderr.
