@@ -36,16 +36,20 @@
   register: _verify_cert_info
   become: true
 
-- name: _verify | Certificate SANs cover host + wildcard, valid for at least 7d
+- name: _verify | Certificate SANs cover host + wildcard + extras, valid for at least 7d
+  vars:
+    _verify_extras_expected: "{{ certbot_extra_sans | map('regex_replace', '^', 'DNS:') | list }}"
   assert:
     that:
       - ("DNS:" + inventory_hostname + "." + domain) in _verify_cert_info.subject_alt_name
       - ("DNS:*." + inventory_hostname + "." + domain) in _verify_cert_info.subject_alt_name
+      - _verify_extras_expected | difference(_verify_cert_info.subject_alt_name) | length == 0
       - _verify_cert_info.valid_at.now
       - _verify_cert_info.valid_at.week_out
     fail_msg: >-
-      cert missing host+wildcard SANs or expiring soon
+      cert missing host+wildcard+extras SANs or expiring soon
       (SANs={{ _verify_cert_info.subject_alt_name }},
+      extras_expected={{ _verify_extras_expected }},
       not_after={{ _verify_cert_info.not_after }},
       valid_at={{ _verify_cert_info.valid_at }})
 

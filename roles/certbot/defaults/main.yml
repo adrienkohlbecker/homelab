@@ -1,0 +1,15 @@
+# Extra SANs to include on the per-host cert beyond the standard
+# `inventory_hostname.domain` + `*.inventory_hostname.domain` pair.
+#
+# Use case: apex-zone names not covered by the host wildcard, like
+# `auth.fahm.fr` (Authelia portal) cohabiting on the same host as
+# `lab.fahm.fr`. Set in host_vars/<host>.yml as a list of FQDNs:
+#
+#   certbot_extra_sans:
+#     - auth.fahm.fr
+#
+# A SAN-drift detector in main.yml force-renews the cert if this
+# list changes (or any of the standard SANs changes), so adding /
+# removing entries here triggers reissuance on the next apply
+# rather than waiting for the next 60-day renewal.
+certbot_extra_sans: []
