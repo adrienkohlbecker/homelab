@@ -34,7 +34,11 @@ envfile="/etc/default/github_runner@${inst}"
 pat=$(podman secret inspect --showsecret github_runner_pat -f '{{.SecretData}}')
 [ -n "$pat" ] || { echo >&2 "$0: podman secret github_runner_pat empty"; exit 1; }
 
-random_suffix=$(tr -d '-' < /proc/sys/kernel/random/uuid | head -c 8)
+# openssl avoids a tr|head SIGPIPE race that exits 141 under pipefail
+# (tr writes the full 32-char uuid in one syscall today so head usually
+# doesn't close the pipe in time, but the race is real). openssl is in
+# the host's base install on ubuntu.
+random_suffix=$(openssl rand -hex 4)
 runner_name="${RUNNER_NAME}_${random_suffix}"
 
 # Build the JIT-config request body. jq -Rcn 'input | split(",")' lifts
