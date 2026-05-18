@@ -3,16 +3,18 @@
 #   1. github_runner_jit_mint (the ExecStartPre script on the host)
 #      sources this file via `. /etc/default/github_runner@<inst>` to
 #      get REPO_OWNER / REPO_NAME / RUNNER_NAME / RUNNER_LABELS /
-#      RUNNER_WORK_FOLDER, then POSTs them as the JIT-config request.
+#      RUNNER_WORK_FOLDER / RUNNER_GROUP_ID, then POSTs them as the
+#      JIT-config request.
 #   2. The runner container picks the same file up via podman's
 #      --env-file. The values are informational inside the container
 #      (the JIT blob carries the authoritative copies); kept here so
 #      `ps`/journal/debug output identifies the instance.
-# Static for the instance's lifetime; changes (relabel, repo rename)
-# propagate via the systemd_unit helper's restart trigger in
-# _register.yml.
-REPO_OWNER={{ github_runner_owner }}
+# Static for the instance's lifetime; changes (relabel, repo rename,
+# owner move, group change) propagate via the systemd_unit helper's
+# restart trigger in _register.yml.
+REPO_OWNER={{ runner_instance.owner }}
 REPO_NAME={{ runner_instance.repo }}
 RUNNER_NAME={{ inventory_hostname }}_{{ runner_instance.repo }}_{{ runner_instance.suffix }}
 RUNNER_LABELS={{ runner_instance.labels }}
 RUNNER_WORK_FOLDER=/mnt/scratch/github_runner/workdir_{{ runner_instance.repo }}_{{ runner_instance.suffix }}
+RUNNER_GROUP_ID={{ runner_instance.runner_group_id | default(1) }}

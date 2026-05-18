@@ -152,4 +152,4 @@ z2m_start_service: false
 # systemd start, so the entrypoint's curl POST to GitHub never fires --
 # this is a static-shape check, not a live runner.
 github_runner_instances:
-  - { repo: homelab, suffix: test1, labels: "self-hosted,test" }
+  - { repo: homelab, suffix: test1, owner: adrienkohlbecker, labels: "self-hosted,test" }

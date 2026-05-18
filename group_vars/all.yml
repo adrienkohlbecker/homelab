@@ -57,11 +57,6 @@ email_domain: noreply.{{ domain }}
 # external timestamps; containers render user-visible times in local.
 system_timezone: Europe/Paris
 
-# GitHub owner under which the repos listed in github_runner_instances
-# live. Personal-account constraint -- no org, so all repos share one
-# owner.
-github_runner_owner: "adrienkohlbecker"
-
 # Labels written into roles/gitea_runner's config.yml. The daemon's
 # Declare RPC pushes them to gitea on each start, and SaveRegistration
 # writes them back to .runner -- so editing this list and restarting
@@ -73,6 +68,7 @@ gitea_runner_labels:
   - "ubuntu-latest:docker://gitea/runner-images:ubuntu-latest"
   - "ubuntu-22.04:docker://gitea/runner-images:ubuntu-22.04"
   - "ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04"
+
 
 # Ports each host-level service publishes. Single source of truth for unit
 # templates (--publish for loopback-bound podman services, ListenStream= for

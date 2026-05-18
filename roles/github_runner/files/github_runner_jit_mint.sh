@@ -26,6 +26,7 @@ envfile="/etc/default/github_runner@${inst}"
 : "${RUNNER_NAME:?required in $envfile}"
 : "${RUNNER_LABELS:?required in $envfile}"
 : "${RUNNER_WORK_FOLDER:?required in $envfile}"
+: "${RUNNER_GROUP_ID:?required in $envfile}"
 
 # Host-only access path. The runner container has no --secret mount
 # for the PAT anymore; only this script (running as the unit's user,
@@ -40,15 +41,16 @@ runner_name="${RUNNER_NAME}_${random_suffix}"
 # the comma-separated label string into a JSON array; --arg / --argjson
 # stitch it into the final object without manual quoting.
 labels_json=$(echo "$RUNNER_LABELS" | jq -Rcn 'input | split(",")')
+# runner_group_id flows from the per-instance envfile (default 1 for
+# personal-account repos, override-able for organization runner groups).
+# The PAT scope (Administration: R/W per CLAUDE.md) is what grants the
+# generate-jitconfig call.
 body=$(jq -cn \
   --arg name "$runner_name" \
   --argjson labels "$labels_json" \
   --arg work "$RUNNER_WORK_FOLDER" \
-  '{name:$name, runner_group_id:1, labels:$labels, work_folder:$work}')
-
-# runner_group_id 1 is the implicit default group on personal-account
-# repos. The PAT scope (Administration: R/W per CLAUDE.md) is what
-# grants the generate-jitconfig call.
+  --argjson group_id "$RUNNER_GROUP_ID" \
+  '{name:$name, runner_group_id:$group_id, labels:$labels, work_folder:$work}')
 jit=$(curl --fail --silent --show-error \
   -H "Accept: application/vnd.github+json" \
   -H "Authorization: Bearer $pat" \
