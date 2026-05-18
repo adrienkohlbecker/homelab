@@ -28,21 +28,48 @@ resource "cloudflare_zone" "adrienkohlbecker_com" {
 # v5 provider creates the resource but leaves DNSSEC disabled at CF
 # -- a silent half-config. terraform/gandi.tf reads these computed
 # fields to register the matching DS at Gandi-as-registrar, closing
-# the chain from the root. Removing here without first removing the
-# Gandi-side DS breaks resolution for the zone.
+# the chain from the root.
+#
+# prevent_destroy is on each of these because `tofu destroy` has no
+# wait-for-TTL primitive: with both halves of the chain in one plan,
+# the implicit dependency order (gandi_dnssec_key.X depends on
+# cloudflare_zone_dnssec.X) means destroy removes Gandi DS first, then
+# immediately flips CF to inactive -- but the parent's DS TTL is still
+# being served (registry-dependent, typically 5min-7days), so during
+# that window the zone is `bogus` to validating resolvers (DS pointing
+# at a KSK that no longer signs). lab.fahm.fr / mail.fahm.fr / SMTP
+# delivery all silently break at 1.1.1.1 / 8.8.8.8 / any validating
+# ISP resolver.
+#
+# To actually retire DNSSEC on a zone:
+#   1. `tofu destroy -target=gandi_dnssec_key.<zone>` (Gandi side first).
+#   2. Wait for the parent's DS TTL to expire (use `dig +trace +dnssec
+#      <zone>` against the parent NS; the SOA's minimum TTL is the
+#      upper bound for the DS TTL).
+#   3. Remove the `lifecycle { prevent_destroy = true }` line from the
+#      cloudflare_zone_dnssec.<zone> resource below.
+#   4. `tofu apply` (or `tofu destroy -target=cloudflare_zone_dnssec.<zone>`)
+#      to flip CF to inactive.
+#   5. Delete the resource block + the matching gandi_dnssec_key block.
 resource "cloudflare_zone_dnssec" "adrienkohlbecker_com" {
   zone_id = cloudflare_zone.adrienkohlbecker_com.id
   status  = "active"
+
+  lifecycle { prevent_destroy = true }
 }
 
 resource "cloudflare_zone_dnssec" "fahm_fr" {
   zone_id = cloudflare_zone.fahm_fr.id
   status  = "active"
+
+  lifecycle { prevent_destroy = true }
 }
 
 resource "cloudflare_zone_dnssec" "mhaf_fr" {
   zone_id = cloudflare_zone.mhaf_fr.id
   status  = "active"
+
+  lifecycle { prevent_destroy = true }
 }
 
 # Canonical zone-name → id map for use across surfaces that fan out

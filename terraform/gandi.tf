@@ -67,10 +67,8 @@ resource "gandi_nameservers" "adrienkohlbecker_com" {
 # active: CF signs records (cloudflare_zone_dnssec.X.status="active"
 # in zones.tf), and Gandi advertises a DS pointing at the matching
 # KSK (here). Breaking either half alone leaves the zone bogus to
-# validating resolvers, so removal order matters:
-#   1. tofu destroy these gandi_dnssec_key resources first
-#   2. wait for the DS TTL to expire at the parent
-#   3. only then drop status="active" at CF
+# validating resolvers -- see the retirement procedure in zones.tf,
+# above the cloudflare_zone_dnssec resources.
 #
 # CF returns algorithm as a stringified number ("13" for
 # ECDSAP256SHA256); gandi wants a Number, hence tonumber().
