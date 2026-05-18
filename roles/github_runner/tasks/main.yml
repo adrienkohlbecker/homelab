@@ -444,8 +444,13 @@
 # 5-minute cadence so a fresh runner-image.yml build propagates to
 # idle runners within a few minutes -- short enough that an operator
 # rebuilding the image and then dispatching another workflow usually
-# lands on the new image. monitor: false: a missed tick just delays
-# rotation by 5 more minutes; no failure mode worth alerting on.
+# lands on the new image. monitor: true with frequency: hourly: a
+# missed tick is cheap (rotation just lags by 5 more minutes), but a
+# chronic failure mode (nexus auth drift, podman API change) is
+# invisible without netdata's systemd_timers collector; the overdue
+# threshold (2 * 3600s = 2h) is loose enough that occasional misses
+# don't page, tight enough that a wedged script alerts before the
+# next ansible apply would.
 - name: Schedule github_runner_image_rotate timer
   import_role:
     name: systemd_timer
@@ -456,7 +461,8 @@
       description: Rotate idle github_runner instances onto the latest runner image
       on_calendar: "*:0/5:00"
       exec_start: /usr/local/bin/github_runner_image_rotate
-      monitor: false
+      monitor: true
+      frequency: hourly
   tags:
     - github_runner
 
