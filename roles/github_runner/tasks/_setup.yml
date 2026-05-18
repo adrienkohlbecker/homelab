@@ -16,15 +16,30 @@
 # harness reuses the same role with a minimal input so subuid/subgid
 # layout matches prod's shape -- without an allocation, rootless podman
 # refuses to start with "no subuid ranges found for user github_runner".
-# subid_extra_subgid_groups (the kvm passthrough on prod) is
-# intentionally omitted: the box VM has no kvm group, and the test
-# doesn't exercise sibling KVM workflows.
+#
+# Synthesize a kvm group on the test VM (the box image has no /dev/kvm
+# so there's no upstream-managed kvm group either) so we can mirror
+# prod's subid_extra_subgid_groups passthrough. CLAUDE.md "Why the
+# literal `1`" calls out that rootless podman builds the container
+# gidmap shortest-range-first from /etc/subgid, and the literal `1` on
+# the unit's --group-add depends on that ordering staying stable when
+# a second single-id range gets added later. _verify.yml asserts the
+# expected /etc/subgid shape so a regression on that chain is loud.
+- name: _setup | Synthesize a kvm group for the subid passthrough test
+  group:
+    name: kvm
+    state: present
+    system: true
+  become: true
+
 - name: _setup | Apply subid role for github_runner
   import_role:
     name: subid
   vars:
     subid_users:
       - github_runner
+    subid_extra_subgid_groups:
+      - { user: github_runner, group: kvm }
 
 # Run the podman role's install.yml so the test VM gets the same
 # storage layout prod does: rpool/podman zvol mounted at
