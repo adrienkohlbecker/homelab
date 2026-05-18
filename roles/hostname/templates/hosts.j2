@@ -7,14 +7,14 @@ fe00::0 ip6-localnet
 ff00::0 ip6-mcastprefix
 ff02::1 ip6-allnodes
 ff02::2 ip6-allrouters
-{% if extra_hosts | default({}) %}
+{% if etc_hosts_entries | default({}) %}
 
-# Static name → IP overrides from group_vars `extra_hosts`. Empty in
+# Static name → IP overrides from group_vars `etc_hosts_entries`. Empty in
 # production (regular DNS handles lab-internal names); set in
 # group_vars/test.yml so test boxes resolve lab-internal hostnames to
 # LAN IPs reachable from inside qemu user-mode networking. The same map
 # drives roles/pihole's container --add-host flags.
-{% for host, ip in extra_hosts.items() %}
+{% for host, ip in etc_hosts_entries.items() %}
 {{ ip }} {{ host }}
 {% endfor %}
 {% endif %}

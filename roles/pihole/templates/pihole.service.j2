@@ -68,11 +68,12 @@ ExecStart=/usr/bin/podman run \
     --dns=127.0.0.1 \
     --dns=1.1.1.1 \
 {# Static /etc/hosts overrides inside the container, sharing the same #}
-{# `extra_hosts` map roles/_test/tasks/mirrors.yml uses on the test box. #}
-{# Bypasses pihole's own split-horizon wildcard (`address=/lab.fahm.fr/...`) #}
-{# which would resolve nexus.lab.fahm.fr to the fake test external_ips.lab. #}
-{# Production leaves the map unset → loop emits no flags. #}
-{% for host, ip in (extra_hosts | default({})).items() %}
+{# `etc_hosts_entries` map roles/hostname renders into /etc/hosts on the #}
+{# test box. Bypasses pihole's own split-horizon wildcard #}
+{# (`address=/lab.fahm.fr/...`) which would resolve nexus.lab.fahm.fr to #}
+{# the fake test external_ips.lab. Production leaves the map unset → #}
+{# loop emits no flags. #}
+{% for host, ip in (etc_hosts_entries | default({})).items() %}
     --add-host={{ host }}:{{ ip }} \
 {% endfor %}
 {# Bind only on the host's LAN IP and (in prod) the keepalived VIP -- #}

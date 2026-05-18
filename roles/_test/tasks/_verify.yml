@@ -4,7 +4,7 @@
 #
 # Two branches:
 #   - nexus_url set → check apt/podman/pip/uv all point at Nexus, and that
-#     extra_hosts resolves to the configured IPs.
+#     etc_hosts_entries resolves to the configured IPs.
 #   - nexus_url empty (--upstream-mirrors) → check apt points at upstream
 #     and Nexus-only files (registries mirror, pip/uv config) are absent.
 
@@ -112,12 +112,12 @@
       - mirror_pypi in (_verify_uv_content.content | b64decode)
     fail_msg: "/etc/pip.conf or /etc/uv/uv.toml missing or doesn't reference {{ mirror_pypi }}"
 
-- name: _verify | Resolve extra_hosts entries to configured IPs
+- name: _verify | Resolve etc_hosts_entries to configured IPs
   when:
     - nexus_url | length > 0
-    - extra_hosts | default({}) | length > 0
+    - etc_hosts_entries | default({}) | length > 0
   ansible.builtin.command: getent hosts {{ item.key }}
-  loop: "{{ extra_hosts | default({}) | dict2items }}"
+  loop: "{{ etc_hosts_entries | default({}) | dict2items }}"
   register: _verify_getent
   changed_when: false
   failed_when:
