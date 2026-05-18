@@ -63,6 +63,7 @@
     nginx_conf_d_args:
       name: status.conf
       src: status.conf
+      reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
   tags:
     - nginx
 

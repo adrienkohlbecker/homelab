@@ -94,7 +94,6 @@
       when:
         - _nginx_conf_d_reload
         - nginx_conf_d.changed
-        - not ansible_check_mode
       systemd:
         name: nginx
         state: reloaded
