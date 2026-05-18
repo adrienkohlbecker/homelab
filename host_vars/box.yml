@@ -126,6 +126,14 @@ smb_shares: []
 subid_users:
   - gitea_runner
 
+# Override gitea_runner_labels (group_vars/all.yml defaults to the
+# docker-based runner-images) to a `:host` runner so the _verify
+# smoke can execute a workflow directly on the VM host -- no ~1GB
+# image pull on first run. The DooD path is still covered by the
+# daemon's own require_docker + /healthz checks.
+gitea_runner_labels:
+  - "test-host:host"
+
 has_transcoding_acceleration: false
 z2m_start_service: false
 
