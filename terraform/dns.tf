@@ -481,6 +481,32 @@ resource "cloudflare_dns_record" "fahm_fr_txt_cf2024_1__domainkey" {
   }
 }
 
+# DMARC posture is currently p=none across all three zones (observation
+# only -- failing mail is delivered but flagged). Staged enforcement plan
+# (applies to _dmarc.fahm.fr below, _dmarc.noreply.fahm.fr, and
+# _dmarc.mhaf.fr further down):
+#
+#   Stage 1 (now): p=none with rua=...; collect 2 weeks of aggregate
+#     reports per zone. Targets are operator inboxes
+#     (dmarc-reports.cloudflare.net for fahm.fr; mailgun + ondmarc for
+#     noreply). Stay at this stage until the report stream shows only
+#     legitimate senders -- Fastmail (in*-smtp.messagingengine.com) +
+#     Mailgun (eu.mailgun.org) for fahm.fr + noreply.fahm.fr; Fastmail
+#     only for mhaf.fr.
+#
+#   Stage 2 (after clean reports): p=quarantine; pct=25 for one week,
+#     then pct=100. Tighten SPF to -all (hardfail) at the same time.
+#     Verify no legitimate mail lands in spam from monitored receivers.
+#
+#   Stage 3 (production): p=reject. Forgeries with From: <user>@<zone>
+#     get rejected by the receiver, eliminating the phishing-by-spoof
+#     vector that p=none allows today.
+#
+# Homelab framing: spear-phishing the operator's contacts via spoofed
+# fahm.fr / mhaf.fr From: headers is the abuse case; for the noreply
+# Mailgun-sending zone the rollout is more clearly justified since
+# every legitimate sender there is already DKIM-signing through pdk1/
+# pdk2 selectors.
 resource "cloudflare_dns_record" "fahm_fr_txt_dmarc" {
   content = "\"v=DMARC1; p=none; pct=100; fo=1; ri=3600; rua=mailto:25d3ddf65216493ba512fa8d7568c3d7@dmarc-reports.cloudflare.net\""
   name    = "_dmarc.fahm.fr"
