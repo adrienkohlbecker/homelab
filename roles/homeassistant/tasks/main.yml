@@ -250,6 +250,7 @@
     owner: root
     group: root
     mode: "0700"
+  register: homeassistant_hacs_dir
   become: true
   tags:
     - homeassistant
@@ -267,6 +268,10 @@
     - homeassistant
 
 - name: Download HACS archive
+  # In check mode the cache dir creation above is would-only, so
+  # get_url's destination dir doesn't exist and it errors with
+  # "Destination /var/cache/homeassistant does not exist".
+  when: not (ansible_check_mode and homeassistant_hacs_dir.changed)
   get_url:
     url: "{{ mirror_github }}/hacs/integration/releases/download/2.0.5/hacs.zip"
     checksum: sha256:97be6b824a4f38e683728cc6dd72367f6b8bad0a43428b1b3b987a3087adf413
@@ -346,6 +351,20 @@
       src: homeassistant
       condition: "{{ not (ansible_check_mode and (homeassistant_service_result.changed or homeassistant_user.changed)) }}"
       restart: "{{ homeassistant_service_result.changed or homeassistant_conf.changed or homeassistant_hacs_unpack.changed or homeassistant_config_files.changed }}"
+  tags:
+    - homeassistant
+
+# sqlite3 CLI for the journal_mode probe + WAL conversion below.
+# Each container ships its own libsqlite but the host-side PRAGMA
+# tasks shell out to /usr/bin/sqlite3 which isn't preinstalled on
+# Ubuntu cloud images. Prod gets it via healthchecks/fluentbit
+# transitively; testrole.py runs only this role, so the dep is
+# local.
+- name: Install sqlite3 CLI
+  apt:
+    pkg: sqlite3
+    cache_valid_time: 3600
+  become: true
   tags:
     - homeassistant
 
