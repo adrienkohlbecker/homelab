@@ -1,0 +1,67 @@
+# Mailgun powers transactional / notification email for the homelab:
+# the CI workflows (mise run ci:mail-cross-cut / ci:mail-failures) post
+# through Mailgun's HTTP API, and five service SMTP credentials
+# (postfix/sabnzbd/gitea/healthchecks/overseerr@noreply.fahm.fr) relay
+# through smtp.eu.mailgun.org. The DNS surface (MX, DKIM, SPF, DMARC,
+# click tracking CNAME) is in dns.tf; this file owns the Mailgun-side
+# domain configuration that those DNS records point at.
+#
+# Auth uses an account-scoped Mailgun Private API key (settings ->
+# "API security" in the Mailgun UI). Stored in 1Password and surfaced
+# via TF_VAR_mailgun_api_key in mise.toml [env].
+#
+# Surfaces intentionally NOT under tofu:
+#
+# - mailgun_domain_credential (the 5 SMTP creds). Passwords live in
+#   group_vars/prod.yml as ansible-vault entries and are consumed
+#   directly by service roles. Bringing them under tofu would require
+#   a terraform-output -> ansible-vault sync mechanism (vault is
+#   already the canonical store on the ansible side). Revisit if
+#   we ever centralize secret storage; until then, vault is fine.
+#
+# - mailgun_route. Inbound mail uses Cloudflare Email Routing (see
+#   email.tf), not Mailgun. No routes configured.
+#
+# - mailgun_webhook. No event consumers wired up today.
+
+variable "mailgun_api_key" {
+  type      = string
+  sensitive = true
+}
+
+provider "mailgun" {
+  api_key = var.mailgun_api_key
+}
+
+# Region selector and the pdk1/pdk2 DKIM CNAMEs in dns.tf both point at
+# eu.mailgun.org -- this domain was created in the EU region. The
+# pdk1/pdk2 selectors (rather than fixed mailo / smtp-style ones) plus
+# the .dkim2.eu.mgsend.org. target are Mailgun's automatic sender
+# security pattern; flip use_automatic_sender_security on so tofu
+# doesn't fight the UI-selected mode.
+#
+# Settings match the current UI-side state so import + apply is a
+# no-op. To change behaviour (enable open/click tracking, switch
+# tracking links to https), edit here and apply -- the goal of this
+# file is *config under tofu*, not *config tightening*.
+#
+# smtp_password is the postmaster credential issued at domain creation;
+# Mailgun doesn't return it on subsequent reads, so leaving it unset in
+# HCL is the right shape on import. Per-service SMTP creds are separate
+# mailgun_domain_credential objects (see header comment for why those
+# are not managed here).
+resource "mailgun_domain" "noreply_fahm_fr" {
+  name                          = "noreply.fahm.fr"
+  region                        = "eu"
+  spam_action                   = "disabled"
+  wildcard                      = false
+  open_tracking                 = false
+  click_tracking                = false
+  web_scheme                    = "http"
+  use_automatic_sender_security = true
+}
+
+import {
+  to = mailgun_domain.noreply_fahm_fr
+  id = "eu:noreply.fahm.fr"
+}

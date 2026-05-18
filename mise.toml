@@ -25,6 +25,13 @@ TF_VAR_google_idp_client_secret = "op://Lab/7vvqblbfyep2yb7lxi544dy22a/password"
 # mhaf.fr / adrienkohlbecker.com. The old Gandi API key was retired
 # in 2024 so PAT is the only auth path.
 TF_VAR_gandi_pat = "op://Lab/s5a2q2hlq5vudnvhydhcbmb3da/password"
+# Mailgun Private API key -- minted in the Mailgun UI under Send >
+# Sending > Domain settings > API Keys (account-scoped, not per-domain).
+# Used by the mailgun provider for domain + per-key management; never
+# exposed to CI (the CI sending key is minted as a separate mailgun_api_key
+# resource, see terraform/mailgun.tf). Create the 1P item once
+# (item: "Mailgun API", field "password") then update the item-id below.
+TF_VAR_mailgun_api_key = "op://Lab/j6iayri7rcsq27nym5z7u37jgu/password"
 # Expose [vars] entries as env so file-based mise-tasks/ scripts can read
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
