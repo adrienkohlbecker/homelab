@@ -56,6 +56,7 @@
     nginx_site_args:
       subdomain: keepalived-exporter
       proxy_pass: http://localhost:9650/
+      auth: required
       server_conf: |
         location = / {
           return 301 /metrics;
