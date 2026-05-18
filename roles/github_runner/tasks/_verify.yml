@@ -136,15 +136,24 @@
 # (both alpine). The rotate script's pull fails (nexus pinned to
 # 127.0.0.1), the cache-fallback fires, the digest comparison finds
 # fresh, the loop exits 0 with no "rotating" line.
-- name: _verify | rotate Phase A -- fresh container, cache-fallback fires, no rotation
+- name: _verify | rotate Phase A -- run script against the fresh fixture
   command: /usr/local/bin/github_runner_image_rotate
   changed_when: false
   become: true
   register: _verify_rotate_fresh
-  failed_when: >-
-    _verify_rotate_fresh.rc != 0
-    or 'proceeding with cached' not in _verify_rotate_fresh.stderr
-    or 'rotating' in _verify_rotate_fresh.stdout
+  failed_when: false
+
+- name: _verify | rotate Phase A -- cache-fallback fires, no rotation triggered
+  assert:
+    that:
+      - _verify_rotate_fresh.rc == 0
+      - "'proceeding with cached' in _verify_rotate_fresh.stderr"
+      - "'rotating' not in _verify_rotate_fresh.stdout"
+    fail_msg: >-
+      Phase A expected the rotate script to exit 0 with the cache-fallback
+      stderr line and no "rotating" decision. Got rc={{ _verify_rotate_fresh.rc }},
+      stdout={{ _verify_rotate_fresh.stdout | default('') | trim }},
+      stderr={{ _verify_rotate_fresh.stderr | default('') | trim }}.
 
 # Phase B: retag the runner:latest reference to busybox (different
 # digest from the running container's alpine). The rotate script's
@@ -183,17 +192,26 @@
   changed_when: false
   become: true
 
-- name: _verify | rotate Phase B -- stale container, stub systemctl records restart
+- name: _verify | rotate Phase B -- run script against the stale fixture
   command: /usr/local/bin/github_runner_image_rotate
   changed_when: false
   become: true
   environment:
     PATH: "/tmp/github_runner_stub:/usr/sbin:/usr/bin:/sbin:/bin"
   register: _verify_rotate_stale
-  failed_when: >-
-    _verify_rotate_stale.rc != 0
-    or 'proceeding with cached' not in _verify_rotate_stale.stderr
-    or 'rotating' not in _verify_rotate_stale.stdout
+  failed_when: false
+
+- name: _verify | rotate Phase B -- stale decision fires and script exits cleanly
+  assert:
+    that:
+      - _verify_rotate_stale.rc == 0
+      - "'proceeding with cached' in _verify_rotate_stale.stderr"
+      - "'rotating' in _verify_rotate_stale.stdout"
+    fail_msg: >-
+      Phase B expected the rotate script to exit 0 with the cache-fallback
+      stderr line and "rotating" in stdout. Got rc={{ _verify_rotate_stale.rc }},
+      stdout={{ _verify_rotate_stale.stdout | default('') | trim }},
+      stderr={{ _verify_rotate_stale.stderr | default('') | trim }}.
 
 - name: _verify | Read stub systemctl call log
   slurp:
@@ -201,7 +219,7 @@
   register: _verify_stub_log
   become: true
 
-- name: _verify | Stub recorded the expected restart call
+- name: _verify | rotate Phase B -- stub recorded the expected restart call
   assert:
     that:
       - "'restart github_runner@homelab_test1.service' in (_verify_stub_log.content | b64decode)"
@@ -216,11 +234,21 @@
 # on stderr. Catches regressions in envfile sourcing, secret inspect,
 # jq pipeline, etc. -- those fail with different markers (no "curl:"
 # in stderr).
-- name: _verify | github_runner_jit_mint exercises the full script path
+- name: _verify | github_runner_jit_mint -- run the full script path
   command: /usr/local/bin/github_runner_jit_mint {{ github_runner_instances[0].repo }}_{{ github_runner_instances[0].suffix }}
   changed_when: false
   become: true
   register: _verify_jit_mint
-  failed_when: >-
-    _verify_jit_mint.rc == 0
-    or 'curl' not in _verify_jit_mint.stderr
+  failed_when: false
+
+- name: _verify | github_runner_jit_mint failed at the curl step (stub PAT 401s)
+  assert:
+    that:
+      - _verify_jit_mint.rc != 0
+      - "'curl' in _verify_jit_mint.stderr"
+    fail_msg: >-
+      jit_mint should have failed at the curl step with a 401 from
+      GitHub (stub PAT in test vault). A different failure marker
+      points at an earlier regression (envfile sourcing, secret
+      inspect, jq pipeline, etc.). Got rc={{ _verify_jit_mint.rc }},
+      stderr={{ _verify_jit_mint.stderr | default('') | trim }}.
