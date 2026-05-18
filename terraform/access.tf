@@ -5,17 +5,26 @@
 # mhaf.fr in 2026-05 because kohlby.fr was no longer in this account
 # and CF's app-PUT validation rejected any update.
 
+# Cookie / session hardening: http_only blocks JS access to the
+# CF_Authorization cookie (XSS-via-echo can't exfil the token);
+# enable_binding_cookie pins the session to the originating IP so a
+# leaked token isn't portable; allowed_idps bind the app to Google
+# explicitly rather than implicitly accepting "any verified IdP"; 24h
+# session caps blast radius on a test fixture. Override per-policy
+# below if longer windows are needed for a specific test path.
 resource "cloudflare_zero_trust_access_application" "echo" {
   account_id                 = data.cloudflare_account.main.account_id
   name                       = "echo"
   type                       = "self_hosted"
   domain                     = "echo.mhaf.fr"
-  session_duration           = "730h"
+  session_duration           = "24h"
   app_launcher_visible       = true
-  enable_binding_cookie      = false
-  http_only_cookie_attribute = false
+  enable_binding_cookie      = true
+  http_only_cookie_attribute = true
   auto_redirect_to_identity  = false
   options_preflight_bypass   = false
+
+  allowed_idps = [cloudflare_zero_trust_access_identity_provider.google.id]
 
   destinations = [{
     type = "public"
@@ -36,7 +45,7 @@ resource "cloudflare_zero_trust_access_policy" "echo_me" {
   account_id       = data.cloudflare_account.main.account_id
   name             = "me"
   decision         = "allow"
-  session_duration = "730h"
+  session_duration = "24h"
 
   include = [{
     email = { email = "adrien.kohlbecker@gmail.com" }
@@ -47,7 +56,7 @@ resource "cloudflare_zero_trust_access_policy" "echo_token" {
   account_id       = data.cloudflare_account.main.account_id
   name             = "token"
   decision         = "non_identity"
-  session_duration = "730h"
+  session_duration = "24h"
 
   include = [{
     any_valid_service_token = {}
