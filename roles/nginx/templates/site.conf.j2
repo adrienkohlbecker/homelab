@@ -34,7 +34,41 @@ server {
   gzip_comp_level 6;
   gzip_types      text/plain text/css text/xml application/json application/javascript application/rss+xml application/atom+xml image/svg+xml;
 
+{% set _auth_enabled = nginx_site_args.auth | default('none') in ['required', 'required_bypass_api'] %}
+{% if _auth_enabled %}
+  # Authelia forward-auth: every browser hit to this site is subrequested
+  # against Authelia's /api/authz/auth-request endpoint. 200 -> allow; 401
+  # -> error_page 401 below redirects to the portal with returnUrl. The
+  # /internal/authelia location is marked `internal` so external requests
+  # can't bypass the auth by hitting it directly. Authelia upstream URL
+  # is host-parameterized so non-lab hosts (pug, bunk) can point at lab's
+  # Authelia over wireguard when they need forward-auth.
+  location /internal/authelia {
+    internal;
+    proxy_pass {{ authelia_internal_url }};
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length          "";
+    proxy_set_header X-Original-Method       $request_method;
+    proxy_set_header X-Original-URL          $scheme://$http_host$request_uri;
+    proxy_set_header X-Forwarded-For         $remote_addr;
+    proxy_set_header X-Forwarded-Method      $request_method;
+    proxy_set_header X-Forwarded-Proto       $scheme;
+    proxy_set_header X-Forwarded-Host        $http_host;
+    proxy_set_header X-Forwarded-Uri         $request_uri;
+  }
+
+  # Authelia returns 401 with a redirect target in the body; nginx's
+  # auth_request maps that to a plain 401 to the client. error_page
+  # rewrites the 401 into a 302 to the portal with returnUrl + method
+  # preserved, so users land on the login page and bounce back here
+  # after a successful auth.
+  error_page 401 =302 https://auth.{{ authelia_cookie_domain }}/?rd=$scheme://$http_host$request_uri&rm=$request_method;
+{% endif %}
+
   location / {
+{% if _auth_enabled %}
+    auth_request /internal/authelia;
+{% endif %}
 {% if nginx_site_args.proxy_pass is defined %}
     proxy_pass         {{ nginx_site_args.proxy_pass }};
 
@@ -74,6 +108,36 @@ server {
     {{ nginx_site_args.location_conf | trim | indent(4) }}
 {% endif %}
   }
+{% if nginx_site_args.auth | default('none') == 'required_bypass_api' %}
+
+  # Forward-auth bypass for /api/*: API-key-bearing clients (Sonarr ->
+  # Sabnzbd, mobile apps, programmatic scripts) skip the auth_request
+  # subrequest. Their own API key is the wall. Same proxy target as
+  # location /, just no auth_request directive.
+  location /api/ {
+{% if nginx_site_args.proxy_pass is defined %}
+    proxy_pass         {{ nginx_site_args.proxy_pass }};
+    proxy_http_version 1.1;
+    proxy_cache_bypass $http_upgrade;
+    proxy_ssl_server_name on;
+    proxy_set_header Host              $host;
+    proxy_set_header Upgrade           $http_upgrade;
+    proxy_set_header Connection        $connection_upgrade;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header Forwarded         $proxy_add_forwarded;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-Host  $host;
+    proxy_set_header X-Forwarded-Port  $server_port;
+    proxy_connect_timeout {{ nginx_site_args.proxy_connect_timeout | default('60s') }};
+    proxy_send_timeout    {{ nginx_site_args.proxy_send_timeout | default('60s') }};
+    proxy_read_timeout    {{ nginx_site_args.proxy_read_timeout | default('60s') }};
+{% if nginx_site_args.client_max_body_size is defined %}
+    client_max_body_size {{ nginx_site_args.client_max_body_size }};
+{% endif %}
+{% endif %}
+  }
+{% endif %}
 {% if nginx_site_args.server_conf is defined %}
 
   {{ nginx_site_args.server_conf | trim | indent(2) }}
