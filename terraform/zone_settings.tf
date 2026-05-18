@@ -43,3 +43,32 @@ resource "cloudflare_zone_setting" "security_header" {
     }
   }
 }
+
+# Scalar settings pinned on the one proxied zone. Most already at these
+# values today; pinning makes a future CF account-default rollout (which
+# happens periodically) visible as a plan diff instead of silent drift.
+# min_tls_version is the one actual behavior change: 1.0 -> 1.2.
+# fahm.fr / mhaf.fr aren't pinned because they don't proxy traffic --
+# revisit per-zone when those zones start proxying (ssl=strict in
+# particular would conflict with an un-TLS'd RFC1918 origin).
+locals {
+  proxied_scalars = {
+    always_use_https         = "on"
+    automatic_https_rewrites = "on"
+    min_tls_version          = "1.2"
+    tls_1_3                  = "on"
+    http3                    = "on"
+    brotli                   = "on"
+    opportunistic_encryption = "on"
+    ssl                      = "strict" # CF<->origin; github.io serves valid certs
+    "0rtt"                   = "off"    # TLS 1.3 0-RTT off by default; pin explicit
+  }
+}
+
+resource "cloudflare_zone_setting" "proxied_scalars" {
+  for_each = local.proxied_scalars
+
+  zone_id    = local.zones["adrienkohlbecker.com"]
+  setting_id = each.key
+  value      = each.value
+}
