@@ -174,7 +174,26 @@ apt-get upgrade --yes
 # Other useful recommends (thermald, etc.) come in normally.
 
 apt-mark hold 'grub*'
-apt-get install --yes linux-generic
+
+# jammy's GA kernel is 5.15 (2022). The 5.15 + ext4 + fuse-overlayfs
+# combination makes podman report `Native Overlay Diff: false`, so it
+# falls back to fuse-overlayfs for layered-image mounts -- which then
+# fails to copy-up character devices (dev/console, dev/null) when an
+# ID-mapped layer copy is needed for the +0:N:1 fake-root uidmap
+# pattern, with `lchown ... input/output error`. The HWE kernel
+# (6.8 on jammy) detects ext4 as native-overlay-capable and avoids
+# the fallback entirely. Lab/pug prod hosts already track the HWE
+# kernel via Ubuntu's HWE rollover; this gets the packer-built
+# images on the same path. Noble+ ship a 6.x GA kernel so linux-
+# generic is already current there -- no HWE meta-package needed.
+case "$UBUNTU_NAME" in
+jammy)
+  apt-get install --yes linux-generic-hwe-22.04
+  ;;
+*)
+  apt-get install --yes linux-generic
+  ;;
+esac
 
 # Install required packages
 
