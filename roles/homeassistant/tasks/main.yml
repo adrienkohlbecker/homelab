@@ -50,6 +50,24 @@
   tags:
     - homeassistant
 
+- name: Create homeassistant subdirectories
+  when: not (ansible_check_mode and homeassistant_user.changed)
+  file:
+    dest: "/mnt/services/homeassistant/{{ item }}"
+    state: directory
+    owner: homeassistant
+    group: homeassistant
+    mode: "0755"
+  become: true
+  loop:
+    - custom_templates
+    - blueprints
+    - blueprints/automation
+    - www
+    - custom_components
+  tags:
+    - homeassistant
+
 # ZHA stores its zigbee.db under /config alongside YAML/automations. The
 # recorder DB already lives on the sqlite dataset via /config/db; pull
 # zigbee.db onto the same dataset by symlinking through /config/db so
@@ -82,17 +100,6 @@
     variable_start_string: "<<<"
     variable_end_string: ">>>"
   register: homeassistant_conf
-  become: true
-  tags:
-    - homeassistant
-
-- name: Create custom_templates directory
-  file:
-    dest: /mnt/services/homeassistant/custom_templates
-    state: directory
-    owner: homeassistant
-    group: homeassistant
-    mode: "0755"
   become: true
   tags:
     - homeassistant
@@ -155,28 +162,6 @@
   tags:
     - homeassistant
 
-- name: Create blueprints directory
-  file:
-    dest: /mnt/services/homeassistant/blueprints
-    state: directory
-    owner: homeassistant
-    group: homeassistant
-    mode: "0755"
-  become: true
-  tags:
-    - homeassistant
-
-- name: Create automation directory
-  file:
-    dest: /mnt/services/homeassistant/blueprints/automation
-    state: directory
-    owner: homeassistant
-    group: homeassistant
-    mode: "0755"
-  become: true
-  tags:
-    - homeassistant
-
 - name: Configure homeassistant blueprints
   copy:
     src: blueprints/automation/hvac_dry_mode.yaml
@@ -186,28 +171,6 @@
     mode: "0644"
     backup: true
   register: homeassistant_blueprints
-  become: true
-  tags:
-    - homeassistant
-
-- name: Create www directory
-  file:
-    dest: /mnt/services/homeassistant/www
-    state: directory
-    owner: homeassistant
-    group: homeassistant
-    mode: "0755"
-  become: true
-  tags:
-    - homeassistant
-
-- name: Create custom_components directory
-  file:
-    dest: /mnt/services/homeassistant/custom_components
-    state: directory
-    owner: homeassistant
-    group: homeassistant
-    mode: "0755"
   become: true
   tags:
     - homeassistant
