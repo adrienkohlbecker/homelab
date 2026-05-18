@@ -17,6 +17,7 @@
   vars:
     nginx_conf_d_args:
       name: csp_ratelimit.conf
+      reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
       content: |
         # Managed by roles/csplogger.
 
