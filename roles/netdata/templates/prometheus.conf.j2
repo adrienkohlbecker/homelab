@@ -27,3 +27,9 @@ jobs:
     url: http://127.0.0.1:9199/minio/v2/metrics/cluster
     autodetection_retry: 60
 {% endif %}
+{% if gitea_runner_enabled|default(false) %}
+
+  - name: gitea_runner
+    url: http://127.0.0.1:{{ service_ports.gitea_runner_metrics }}/metrics
+    autodetection_retry: 60
+{% endif %}
