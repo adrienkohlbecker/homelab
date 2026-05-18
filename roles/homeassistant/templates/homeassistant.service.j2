@@ -46,6 +46,7 @@ ExecStart=/usr/bin/podman run \
     --network=mosquitto \
     --network=iot_macvlan \
     --env TZ={{ system_timezone }} \
+    --tz={{ system_timezone }} \
     --volume /mnt/services/homeassistant:/config \
     --volume /mnt/services/sqlite/homeassistant:/config/db \
     --publish 127.0.0.1:{{ service_ports.homeassistant }}:8123/tcp \
