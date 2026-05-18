@@ -68,19 +68,22 @@
   become: true
 
 # Functional end-to-end check via gitea's documented admin API rather
-# than reaching into action_runner via sqlite. Asserts: the runner row
-# exists under inventory_hostname, the gitea-side label-name set equals
-# what's in gitea_runner_labels (the daemon's Declare RPC pushed
-# config.yml labels successfully on startup), and the runner is in a
-# healthy state (not disabled). Skipped outside qemu_test: prod gitea
-# isn't local and we don't have admin auth to its API from the
-# playbook.
+# than reaching into action_runner via sqlite. Skipped outside
+# qemu_test: prod gitea isn't local and we don't have admin auth to
+# its API from the playbook.
+#
+# Split into fetch (no_log; the response body carries no secrets but
+# we ran with no_log for years and won't change that contract here)
+# and assert (per-predicate so a CI failure prints which check tripped
+# instead of an opaque "failed in retries"). The retry sits on the
+# fetch -- the daemon's Declare RPC may take a couple of seconds to
+# land after start -- and the assert just consumes the latest snapshot.
 #
 # Label comparison detail: gitea-runner parses "name:scheme://arg" via
 # labels.Parse and Declares only label.Name (see internal/pkg/labels/
 # labels.go in v1.0.3). The API echoes that .name. So we compare
 # against the part-before-colon, not the full registration string.
-- name: _verify | gitea_runner is registered with expected labels (test only)
+- name: _verify | Fetch gitea_runner registration via admin API (test only)
   when: qemu_test
   uri:
     url: http://localhost:3000/api/v1/admin/actions/runners
@@ -90,16 +93,29 @@
     status_code: 200
   register: _verify_runners_api
   vars:
-    _expected_label_names: "{{ gitea_runner_labels | map('regex_replace', ':.*$', '') | list | sort }}"
     _matched_runner: "{{ (_verify_runners_api.json.runners | default([]) | selectattr('name', 'equalto', inventory_hostname) | list | first) | default({}) }}"
   retries: 15
   delay: 2
-  # status_code: 200 above already gates retries on a 200 response, so
-  # `_verify_runners_api.status == 200` would be redundant here -- only
-  # the row-level assertions need to appear in the until: list.
-  until:
-    - _matched_runner.name | default('') == inventory_hostname
-    - (_matched_runner.labels | default([]) | map(attribute='name') | list | sort) == _expected_label_names
-    - not (_matched_runner.disabled | default(true))
+  # status_code: 200 already gates retries on the response code; only
+  # the row-level predicate needs to appear here so the Declare RPC has
+  # time to land after daemon start.
+  until: _matched_runner.name | default('') == inventory_hostname
   become: true
   no_log: true
+
+- name: _verify | Assert gitea-side runner row matches expected shape (test only)
+  when: qemu_test
+  vars:
+    _expected_label_names: "{{ gitea_runner_labels | map('regex_replace', ':.*$', '') | list | sort }}"
+    _matched_runner: "{{ (_verify_runners_api.json.runners | default([]) | selectattr('name', 'equalto', inventory_hostname) | list | first) | default({}) }}"
+    _actual_label_names: "{{ _matched_runner.labels | default([]) | map(attribute='name') | list | sort }}"
+  assert:
+    that:
+      - _matched_runner.name | default('') == inventory_hostname
+      - _actual_label_names == _expected_label_names
+      - not (_matched_runner.disabled | default(true))
+    fail_msg: |
+      gitea-side runner row mismatch:
+        name: expected={{ inventory_hostname }} actual={{ _matched_runner.name | default('<missing>') }}
+        labels: expected={{ _expected_label_names }} actual={{ _actual_label_names }}
+        disabled: {{ _matched_runner.disabled | default('<missing>') }}
