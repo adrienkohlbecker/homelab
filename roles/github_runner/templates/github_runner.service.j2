@@ -124,11 +124,13 @@ SyslogIdentifier=%N
 #   workflow containers see at /__w/_* via DooD bind mounts that
 #   reference this host path. Lives on /mnt/scratch (terabytes) so
 #   per-job checkouts don't pressure the container's writable layer.
-#   RUNNER_WORK_FOLDER env below tells actions/runner to use this
-#   path as its work root (vs the default _work next to run.sh).
-# --env-file: per-instance REPO_OWNER / REPO_NAME / RUNNER_NAME /
-#   RUNNER_LABELS / GITHUB_PAT_FILE, written by the role to
-#   /etc/default/github_runner@%i.
+#   The JIT blob (built by the host-side mint script from this same
+#   instance's /etc/default/github_runner@%i envfile) carries the
+#   authoritative work_folder, so actions/runner picks up this path
+#   from the registration -- no in-container --env-file needed. The
+#   envfile is intentionally NOT bind-mounted into the container, so
+#   REPO_OWNER / REPO_NAME / RUNNER_NAME / RUNNER_LABELS aren't
+#   visible to sibling DooD containers via `docker inspect`.
 # --env CONTAINER_HOST / DOCKER_HOST: point in-container podman /
 #   docker CLIs at the bind-mounted DooD socket. Without these, a
 #   workflow step that runs `podman build` (or `docker build`) tries
@@ -241,7 +243,6 @@ ExecStart=/usr/bin/podman run \
   --volume %t/user/{{ github_runner_user.uid }}/podman/podman.sock:/var/run/docker.sock \
   --volume /opt/actions-runner:/opt/actions-runner:rw \
   --volume /mnt/scratch/github_runner/workdir_%i:/mnt/scratch/github_runner/workdir_%i:rw \
-  --env-file /etc/default/github_runner@%i \
   --env CONTAINER_HOST=unix:///var/run/docker.sock \
   --env DOCKER_HOST=unix:///var/run/docker.sock \
   --volume %t/%N/jit:/run/jit:ro \
