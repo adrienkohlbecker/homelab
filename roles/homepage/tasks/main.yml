@@ -77,15 +77,24 @@
       # because the site template only wires it into `location /`; sibling
       # locations in server_conf need their own copy or a direct hit to
       # /alerts/ would bypass forward-auth.
+      #
+      # Static files written by the alerts_generate.py oneshot timer at
+      # /var/www/homepage_alerts/{index.html,api_alerts.json}. Two locations:
+      #   - exact-match /alerts/api/alerts → api_alerts.json (preserves the
+      #     daemon-era URL for any external caller; .json suffix lets nginx
+      #     infer application/json content-type)
+      #   - prefix /alerts/ → index.html (the iframe widget hits this)
+      # Default Last-Modified/ETag handling is wanted: the iframe's 30s
+      # refreshInterval sends conditional GETs that 304 on unchanged content,
+      # which is cheaper than the daemon-era Cache-Control: no-store.
       server_conf: |
+        location = /alerts/api/alerts {
+          alias /var/www/homepage_alerts/api_alerts.json;
+        }
         location /alerts/ {
           auth_request /internal/authelia;
-          proxy_pass http://localhost:{{ service_ports.homepage_alerts }}/;
-          proxy_http_version 1.1;
-          proxy_set_header Host $host;
-          proxy_set_header X-Real-IP $remote_addr;
-          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-          proxy_set_header X-Forwarded-Proto $scheme;
+          alias /var/www/homepage_alerts/;
+          index index.html;
         }
       # Bookmark icons resolve via the selfh.st icon set served from jsdelivr,
       # so img-src has to allow that CDN — default-src 'self' wouldn't.
@@ -93,11 +102,13 @@
   tags:
     - homepage
 
-# Sidecar service: a tiny stdlib-only Python http.server that polls each host's
-# netdata `/api/v1/alarms?active`, renders an HTML page, and exposes the same
-# data as JSON. Embedded in the homepage dashboard via an iframe widget so the
-# alarm names show up next to the count tiles.
-- name: Create alerts panel source directory
+# Sidecar: a stdlib-only Python oneshot that polls each configured host's
+# netdata `/api/v1/alarms?active`, renders HTML + JSON, and atomically writes
+# both to /var/www/homepage_alerts/. nginx serves them under /alerts/ on the
+# homepage vhost (same origin, so the iframe widget can resize itself via
+# window.frameElement). Fires every 30s via systemd timer; no long-running
+# process.
+- name: Create alerts sidecar source directory
   file:
     dest: /opt/homepage_alerts
     state: directory
@@ -108,10 +119,22 @@
   tags:
     - homepage
 
-- name: Copy alerts panel server
+- name: Create alerts sidecar output directory
+  file:
+    dest: /var/www/homepage_alerts
+    state: directory
+    owner: homepage
+    group: homepage
+    mode: "0755"
+  when: not (ansible_check_mode and homepage_user.changed)
+  become: true
+  tags:
+    - homepage
+
+- name: Copy alerts sidecar generator
   copy:
-    src: alerts_server.py
-    dest: /opt/homepage_alerts/alerts_server.py
+    src: alerts_generate.py
+    dest: /opt/homepage_alerts/alerts_generate.py
     owner: root
     group: root
     mode: "0644"
@@ -122,25 +145,71 @@
   tags:
     - homepage
 
-- name: Install alerts panel service
+# Install both homepage_alerts.service (Type=oneshot) and homepage_alerts.timer
+# via the systemd_timer helper. monitor: false because sub-minute cadences
+# don't map to netdata's overdue-detector hourly/daily/weekly/monthly buckets;
+# systemd_service_unit_failed_state catches a wedged timer independently.
+- name: Install and enable homepage_alerts timer
   import_role:
-    name: systemd_unit
+    name: systemd_timer
     tasks_from: install
   vars:
-    systemd_unit_args:
-      src: homepage_alerts.service.j2
-      condition: "{{ not (ansible_check_mode and homepage_user.changed) }}"
+    # NETDATA_HOSTS env value: a `<name>=<query-url>[=<click-url>]` triple per
+    # host, comma-joined. Whichever host this is running on is queried via
+    # loopback (skips nginx + TLS), with the public FQDN as the click-through
+    # target; other hosts use the FQDN for both.
+    homepage_alerts_netdata_hosts_env: >-
+      {%- set ents = [] -%}
+      {%- for h in homepage_netdata_hosts -%}
+      {%- set q = 'http://localhost:19999=' if h == inventory_hostname else '' -%}
+      {%- set _ = ents.append(h ~ '=' ~ q ~ 'https://netdata.' ~ h ~ '.' ~ domain) -%}
+      {%- endfor -%}
+      {{ ents | join(',') }}
+    systemd_timer_args:
+      name: homepage_alerts
+      description: Generate homepage alerts panel static files
+      # Every 30s (at :00 and :30 of every minute). AccuracySec=1s is
+      # required — systemd's 1min default would let fires drift well past
+      # the iframe widget's 30s refreshInterval.
+      on_calendar: "*:*:0/30"
+      accuracy_sec: 1s
+      # Fire immediately on enable so a fresh install doesn't leave nginx
+      # 404'ing /alerts/ until the next OnCalendar tick.
+      on_active_sec: "0"
+      exec_start: /usr/bin/python3 /opt/homepage_alerts/alerts_generate.py
+      run_as: homepage
+      monitor: false
+      # Bound a wedged run well within the 30s cadence. Each fire fans out to
+      # N netdata hosts in parallel with FETCH_TIMEOUT=5s, so 25s is plenty
+      # even on a chatty agent with the bulk alarm_log fetch.
+      timeout_start_sec: 25s
+      environment:
+        NETDATA_HOSTS: "{{ homepage_alerts_netdata_hosts_env }}"
+        OUTPUT_DIR: /var/www/homepage_alerts
+      additional_service_directives:
+        - "PrivateTmp=yes"
+        - "ProtectSystem=strict"
+        - "ProtectHome=yes"
+        - "NoNewPrivileges=yes"
+        - "ReadWritePaths=/var/www/homepage_alerts"
   tags:
     - homepage
 
-- name: Enable alerts panel service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: homepage_alerts
-      condition: "{{ not (ansible_check_mode and (homepage_alerts_service_result.changed or homepage_user.changed)) }}"
-      restart: "{{ homepage_alerts_service_result.changed or homepage_alerts_source.changed }}"
+# Trigger one immediate run when the script or units change. On fresh enable
+# OnActiveSec=0 already fires the first run; this handles subsequent applies
+# (e.g. NETDATA_HOSTS changed) where the timer is already running and would
+# otherwise wait up to 30s for its next OnCalendar tick. state: started is a
+# no-op if the oneshot is currently mid-run, and starts a fresh run if it's
+# inactive — never SIGTERMs a run in progress.
+- name: Force an immediate alerts_generate run on changes
+  systemd:
+    name: homepage_alerts.service
+    state: started
+  when:
+    - not ansible_check_mode
+    - homepage_alerts_source.changed
+      or homepage_alerts_service_result.changed
+      or homepage_alerts_timer_result.changed
+  become: true
   tags:
     - homepage

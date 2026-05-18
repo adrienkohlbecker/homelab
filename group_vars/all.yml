@@ -112,7 +112,6 @@ service_ports:
   homeassistant_sonos: 1400
   homeassistant_homekit: 3722
   homepage: 3003
-  homepage_alerts: 8765
   hyperdx: 5085
   hyperdx_otlp_http: 4318
   lidarr: 8686
