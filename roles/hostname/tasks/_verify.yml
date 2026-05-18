@@ -36,17 +36,17 @@
         expected: {{ inventory_hostname }} / {{ inventory_hostname }}.{{ domain }}
 
 - name: _verify | Resolve inventory_hostname short form
-  command: getent ahosts {{ inventory_hostname }}
+  command: getent -s files ahosts {{ inventory_hostname }}
   register: _verify_getent_short
   changed_when: false
 
 - name: _verify | Resolve inventory_hostname FQDN form
-  command: getent ahosts {{ inventory_hostname }}.{{ domain }}
+  command: getent -s files ahosts {{ inventory_hostname }}.{{ domain }}
   register: _verify_getent_fqdn
   changed_when: false
 
 - name: _verify | Resolve localhost over IPv6
-  command: getent ahostsv6 localhost
+  command: getent -s files ahostsv6 localhost
   register: _verify_getent_localhost
   changed_when: false
 
@@ -65,7 +65,7 @@
 
 - name: _verify | Resolve etc_hosts_entries to configured IPs
   when: etc_hosts_entries | default({}) | length > 0
-  command: getent ahosts {{ item.key }}
+  command: getent -s files ahosts {{ item.key }}
   loop: "{{ etc_hosts_entries | default({}) | dict2items }}"
   register: _verify_etc_hosts_entries
   changed_when: false
