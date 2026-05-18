@@ -188,6 +188,13 @@ netdata_diskspace_blocklist:
   - /mnt/services
   - /var/lib/libvirt/images
 
+# Netdata hosts the homepage_alerts sidecar polls. The current converge
+# host short-circuits via loopback; other hosts get queried via their
+# public FQDN. Consumed by roles/homepage.
+homepage_netdata_hosts:
+  - lab
+  - pug
+
 smb_shares:
   - name: media
     path: /mnt/media
