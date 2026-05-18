@@ -487,3 +487,66 @@
     label: "{{ runner_instance.repo }}_{{ runner_instance.suffix }}"
   tags:
     - github_runner
+
+# Reconcile orphan instances: an operator who removes an entry from
+# github_runner_instances expects the role to stop+disable the
+# corresponding unit and remove its envfile -- otherwise the orphan
+# runner keeps polling GitHub on a now-unintended label until manual
+# intervention, and `journalctl -u github_runner@<orphan>.service`
+# accumulates noise. Workdirs are intentionally left in place so a
+# repurposed (repo, suffix) pair benefits from the cached
+# _work/_actions; remove manually if disk pressure matters.
+#
+# Dangling registrations remain on GitHub's runner list as offline
+# after we SIGKILL a mid-job runner (the ephemeral self-deregister
+# only fires on clean exit). They harmlessly age out; periodic
+# `gh api -X DELETE` cleanup if they get noisy.
+- name: Compute desired github_runner instance ids
+  set_fact:
+    github_runner_desired_iids: >-
+      {{ github_runner_instances | map(attribute='repo')
+         | zip(github_runner_instances | map(attribute='suffix'))
+         | map('join', '_') | list }}
+  tags:
+    - github_runner
+
+- name: Find installed github_runner envfiles
+  find:
+    paths: /etc/default
+    patterns: 'github_runner@*'
+    file_type: file
+  register: github_runner_envfiles_installed
+  become: true
+  tags:
+    - github_runner
+
+- name: Compute orphan github_runner instance ids
+  set_fact:
+    github_runner_orphan_iids: >-
+      {{ github_runner_envfiles_installed.files
+         | map(attribute='path') | map('basename')
+         | map('regex_replace', '^github_runner@', '')
+         | reject('in', github_runner_desired_iids)
+         | list }}
+  tags:
+    - github_runner
+
+- name: Stop and disable orphan github_runner@<id>.service units
+  when: not qemu_test
+  systemd:
+    name: "github_runner@{{ item }}.service"
+    state: stopped
+    enabled: false
+  loop: "{{ github_runner_orphan_iids }}"
+  become: true
+  tags:
+    - github_runner
+
+- name: Remove orphan github_runner envfiles
+  file:
+    path: "/etc/default/github_runner@{{ item }}"
+    state: absent
+  loop: "{{ github_runner_orphan_iids }}"
+  become: true
+  tags:
+    - github_runner
