@@ -36,6 +36,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name mosquitto \
+    --init \
     --log-driver journald \
     --log-opt tag="mosquitto" \
     --volume /mnt/services/mosquitto/config:/mosquitto/config \

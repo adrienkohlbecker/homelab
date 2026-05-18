@@ -196,6 +196,7 @@ ExecStart=/usr/bin/podman run \
   --rm \
   --pull=newer \
   --name github_runner_%i \
+  --init \
   --log-driver journald \
   --log-opt tag="github_runner_%i" \
   --user 0:0 \

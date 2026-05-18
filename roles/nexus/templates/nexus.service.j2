@@ -38,6 +38,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name nexus \
+    --init \
     --log-driver journald \
     --log-opt tag="nexus" \
     --env INSTALL4J_ADD_VM_PARAMS="{{ nexus_jvm_params | default('-Xms2G -Xmx2G -XX:MaxDirectMemorySize=1g') }} -Djava.util.prefs.userRoot=/user-root" \

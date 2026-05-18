@@ -36,6 +36,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name profilarr \
+    --init \
     --log-driver journald \
     --log-opt tag="profilarr" \
     --env PUID={{ profilarr_user.uid }} \

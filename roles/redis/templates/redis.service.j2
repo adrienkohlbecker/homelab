@@ -34,6 +34,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name redis \
+    --init \
     --log-driver journald \
     --log-opt tag="redis" \
     --volume /mnt/services/redis:/data \

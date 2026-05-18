@@ -48,6 +48,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name jellyfin \
+    --init \
     --user {{ jellyfin_user.uid }}:{{ media_group.gid }} \
     --log-driver journald \
     --log-opt tag="jellyfin" \
