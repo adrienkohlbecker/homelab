@@ -62,6 +62,18 @@ system_timezone: Europe/Paris
 # owner.
 github_runner_owner: "adrienkohlbecker"
 
+# Labels written into roles/gitea_runner's config.yml. The daemon's
+# Declare RPC pushes them to gitea on each start, and SaveRegistration
+# writes them back to .runner -- so editing this list and restarting
+# the service updates the gitea-side runner row without re-registration.
+# See internal/app/cmd/daemon.go in gitea/runner v1.0.3. Override
+# per-host via gitea_runner_labels in host_vars if a workflow needs
+# something more specific.
+gitea_runner_labels:
+  - "ubuntu-latest:docker://gitea/runner-images:ubuntu-latest"
+  - "ubuntu-22.04:docker://gitea/runner-images:ubuntu-22.04"
+  - "ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04"
+
 # Ports each host-level service publishes. Single source of truth for unit
 # templates (--publish for loopback-bound podman services, ListenStream= for
 # native daemons), nginx proxy_pass, firewall rules, and cross-role consumers

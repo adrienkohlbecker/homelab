@@ -1,3 +1,19 @@
+# Fail-loud on missing inputs rather than silently substituting an
+# empty registration token or rendering an empty labels list -- both
+# would surface as opaque "gitea rejected the runner" errors deep in
+# the register / Declare RPC instead of at parse time.
+- name: Assert required inputs are defined
+  assert:
+    that:
+      - gitea_runner_labels is defined
+      - gitea_runner_labels | length > 0
+      - qemu_test or (gitea_runner_registration_token is defined and gitea_runner_registration_token | length > 0)
+    fail_msg: >-
+      gitea_runner needs gitea_runner_labels (group_vars/all.yml) and,
+      in prod, gitea_runner_registration_token (vaulted in host_vars).
+  tags:
+    - gitea_runner
+
 - name: Set up gitea_runner system user, group, and config dir
   import_role:
     name: service_user
