@@ -176,6 +176,77 @@
       name: _verify_timer_stderr
 
 # ============================================================
+# Contract 5: new knobs — environment, accuracy_sec, on_active_sec,
+# additional_service_directives
+# ============================================================
+- name: "_verify | Install knobs fixture (monitor: false)"
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_knobs
+      description: timer helper extension knobs
+      on_calendar: "*-*-* 23:59:00"
+      exec_start: /bin/sh -c 'echo "ENV_KEY=$ENV_KEY|ENV_OTHER=$ENV_OTHER" > /tmp/_verify_timer_knobs.out'
+      monitor: false
+      environment:
+        ENV_KEY: knob_value
+        ENV_OTHER: "value with spaces, and a comma"
+      accuracy_sec: 1s
+      on_active_sec: "0"
+      additional_service_directives:
+        - "ProtectSystem=strict"
+        - "ProtectHome=yes"
+
+- name: _verify | Trigger the knobs fixture manually
+  command: systemctl start --wait _verify_timer_knobs.service
+  changed_when: false
+  become: true
+
+- name: _verify | Read knobs fixture output
+  slurp:
+    src: /tmp/_verify_timer_knobs.out
+  register: _verify_knobs_out
+  become: true
+
+- name: _verify | Read systemctl show properties for knobs fixture
+  command: >-
+    systemctl show -p AccuracyUSec,ProtectSystem,ProtectHome
+    _verify_timer_knobs.timer _verify_timer_knobs.service
+  register: _verify_knobs_show
+  changed_when: false
+  become: true
+
+- name: _verify | Functional + property assertions for new knobs
+  vars:
+    _stdout: "{{ (_verify_knobs_out.content | b64decode).rstrip() }}"
+  assert:
+    that:
+      - _stdout == "ENV_KEY=knob_value|ENV_OTHER=value with spaces, and a comma"
+      - "'AccuracyUSec=1s' in _verify_knobs_show.stdout"
+      - "'ProtectSystem=strict' in _verify_knobs_show.stdout"
+      - "'ProtectHome=yes' in _verify_knobs_show.stdout"
+    fail_msg: |
+      Knobs fixture failed.
+      stdout: {{ _stdout }}
+      systemctl show: {{ _verify_knobs_show.stdout }}
+
+- name: _verify | Remove the knobs fixture timer
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_knobs
+
+- name: _verify | Cleanup knobs fixture output
+  file:
+    path: /tmp/_verify_timer_knobs.out
+    state: absent
+  become: true
+
+# ============================================================
 # Contract 3+4: monitored timer + overdue detection via netdata
 # ============================================================
 # _verify_timer_recent fires immediately (OnCalendar matches every

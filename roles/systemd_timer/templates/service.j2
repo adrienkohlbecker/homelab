@@ -28,3 +28,19 @@ TimeoutStopSec={{ systemd_timer_args.timeout_stop_sec | default('30s') }}
 User={{ systemd_timer_args.run_as }}
 Group={{ systemd_timer_args.run_as_group | default(systemd_timer_args.run_as) }}
 {% endif %}
+{% if systemd_timer_args.environment is defined %}
+# Caller-supplied env vars, one Environment= line each so values with
+# spaces/commas don't need shell-escaping. dictsort keeps unit-file
+# diffs stable across applies.
+{% for k, v in (systemd_timer_args.environment | dictsort) %}
+Environment={{ k }}={{ v }}
+{% endfor %}
+{% endif %}
+{% if systemd_timer_args.additional_service_directives is defined %}
+# Caller-supplied [Service] directives emitted verbatim. Escape hatch
+# for hardening (PrivateTmp=yes, ProtectSystem=strict, ReadWritePaths=,
+# NoNewPrivileges=yes, etc.) until a structured hardening API exists.
+{% for line in systemd_timer_args.additional_service_directives %}
+{{ line }}
+{% endfor %}
+{% endif %}

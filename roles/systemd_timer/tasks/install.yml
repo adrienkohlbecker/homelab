@@ -43,6 +43,33 @@
 #                     should still be visible to system-bus tooling
 #                     (netdata systemdunits, system journal, etc.).
 #   run_as_group      optional; defaults to run_as.
+#   accuracy_sec      optional; emits AccuracySec=<v> in [Timer]. systemd's
+#                     default is 1min, fine for daily/weekly cadences; for
+#                     sub-minute fires (e.g. every 30s via OnCalendar=
+#                     *:*:0/30) set this to a tighter value like "1s" or
+#                     the timer drifts past the interval. Pair with
+#                     monitor: false — sub-minute cadences don't map to
+#                     the netdata overdue-detector's hourly/daily/weekly/
+#                     monthly buckets.
+#   on_active_sec     optional; emits OnActiveSec=<v> in [Timer]. Fires
+#                     this many seconds after the timer activates, in
+#                     addition to the OnCalendar schedule. "0" → fire
+#                     immediately on enable, useful for sub-minute timers
+#                     where waiting for the next OnCalendar tick leaves a
+#                     visible gap (e.g. nginx serving a static file that
+#                     should be populated before the first browser hit).
+#   environment       optional dict {KEY: value}; emits one Environment=
+#                     line per entry in [Service]. Each value lands as a
+#                     separate Environment= directive so embedded
+#                     spaces/commas don't need shell-escaping.
+#   additional_service_directives
+#                     optional list of literal strings; emitted verbatim
+#                     into [Service]. Escape hatch for hardening
+#                     (PrivateTmp=yes, ProtectSystem=strict,
+#                     ReadWritePaths=<path>, NoNewPrivileges=yes, etc.)
+#                     until a structured hardening API exists. See the
+#                     SOMEDAY entry in CLAUDE.md re: cheap-systemd-
+#                     hardening sweep.
 #
 # The dict form mirrors systemd_unit / podman_secret / service_user: each
 # import_role replaces the whole `systemd_timer_args` value at play-vars
