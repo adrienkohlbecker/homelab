@@ -44,11 +44,11 @@ ExecStart=/usr/bin/podman run \
     --gidmap=0:0:65536 \
     --gidmap=+0:{{ homeassistant_user.group }}:1 \
     --network=mosquitto \
-    {# Pin to .98 explicitly. The /30 only has one usable container IP #}
-    {# (.97 is netavark's gateway, .96/.99 are network/broadcast) so #}
-    {# netavark currently assigns .98 by elimination, but a future #}
-    {# allocation-logic change shouldn't be allowed to drift this IP #}
-    {# silently -- _verify.yml asserts it. #}
+    {# Pin to .98 explicitly. The network's ip_range is .96/30 so #}
+    {# netavark currently assigns .98 by elimination (.97 is the #}
+    {# synth gateway slot, .96/.99 are network/broadcast within the #}
+    {# /30), but a future allocation-logic change shouldn't be #}
+    {# allowed to drift this IP silently -- _verify.yml asserts it. #}
     --network=iot_macvlan:ip=10.123.4.98 \
     --env TZ={{ system_timezone }} \
     --tz={{ system_timezone }} \
