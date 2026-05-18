@@ -70,18 +70,22 @@
       condition: "{{ not (ansible_check_mode and github_runner_user.changed) }}"
       # Restart on env-file edits (label or repo URL change), PAT
       # rotation (data sha mismatch surfaces as github_runner_pat_rotated),
-      # or template re-render (systemd_unit install records the dest
-      # via sanitize-to-underscore -> github_runner@.service becomes
-      # github_runner__service_result; install runs once in main.yml
-      # so every instance fans out the same .changed signal). The PAT
-      # is shared host-wide so a rotation should bounce every instance to
-      # ensure they pick up the new secret value next start. The
-      # github_runner_pat_rotated fact is set once in main.yml (before
-      # this loop), so every iteration here reads the same host-level
-      # value -- it's a host-wide trigger, not a per-instance one.
+      # actions-runner tarball bump (the running container :O-overlays
+      # /opt/actions-runner at start so re-extract on its own doesn't
+      # propagate to live containers), or template re-render (systemd_unit
+      # install records the dest via sanitize-to-underscore ->
+      # github_runner@.service becomes github_runner__service_result;
+      # install runs once in main.yml so every instance fans out the same
+      # .changed signal). The PAT and tarball are both shared host-wide
+      # so each rotation/bump bounces every instance to pick up the new
+      # value/binary next start. The github_runner_pat_rotated and
+      # github_runner_extract facts are set once in main.yml (before this
+      # loop), so every iteration here reads the same host-level value --
+      # they're host-wide triggers, not per-instance ones.
       restart: >-
         {{ runner_envfile.changed
            or github_runner_pat_rotated | default(false)
+           or (github_runner_extract.changed | default(false))
            or (github_runner__service_result.changed | default(false)) }}
 
 # After the unit is running, confirm GitHub agrees the runner is

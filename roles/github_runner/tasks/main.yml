@@ -203,6 +203,11 @@
     owner: github_runner
     group: github_runner
   become: true
+  # Each running container :O-overlays /opt/actions-runner at start, so
+  # it holds open-fd snapshots of the OLD tree; the new binaries don't
+  # propagate until the container restarts. _register.yml's restart
+  # trigger consumes this fact to bounce every instance on a version bump.
+  register: github_runner_extract
   tags:
     - github_runner
 
