@@ -90,6 +90,15 @@ SyslogIdentifier=%N
 #   unit apply to the container; systemctl status shows real resource
 #   usage; systemctl kill reaps the container. Standard system-scope
 #   + Delegate=yes idiom, same as every other podman service role.
+# --init: PID 1 inside the container would otherwise be the entrypoint
+#   shell, which doesn't reap orphaned children. actions/runner spawns
+#   Runner.Listener -> Runner.Worker -> per-step processes (node, git,
+#   ...); a workflow step that double-forks and exits leaves zombies
+#   the shell-as-PID-1 won't collect, slowly burning kernel PID slots
+#   over the container's lifetime. --init wires podman's catatonit at
+#   PID 1 to handle signal forwarding and zombie reaping. Compatible
+#   with --sdnotify=healthy (podman owns the NOTIFY_SOCKET path, not
+#   PID 1).
 # --user / --uidmap / --gidmap: fake-root pattern from CLAUDE.md
 #   "Container User Namespacing". podman runs as real root (no
 #   User= in the unit), so the base 0:0:65536 would map in-container
@@ -201,6 +210,7 @@ ExecStart=/usr/bin/podman run \
   --detach \
   --replace \
   --rm \
+  --init \
   --name github_runner_%i \
   --init \
   --log-driver journald \
