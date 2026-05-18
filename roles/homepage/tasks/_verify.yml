@@ -17,20 +17,33 @@
     status_code: 200
   become: true
 
-- name: _verify | homepage_alerts answers JSON for every configured host
+# Wait + assert split: the timer fires the .service on OnActiveSec=0 so the
+# files appear shortly after enable, but ansible may race the first run.
+# Combining the retry-until with failed_when=content-check would fail-fast on
+# the first 404 (file not yet written); split into two tasks so retries get
+# their full budget before content assertions fire.
+- name: _verify | homepage_alerts JSON is reachable through nginx
   uri:
-    url: http://localhost:{{ service_ports.homepage_alerts }}/api/alerts
+    url: https://localhost/alerts/api/alerts
+    headers:
+      Host: "homepage.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
     return_content: true
     status_code: 200
   register: _verify_alerts_json
-  retries: 15
+  retries: 30
   delay: 2
   until: _verify_alerts_json.status == 200
-  failed_when: >-
-    _verify_alerts_json.status != 200
-    or (_verify_alerts_json.json.hosts | length) != (homepage_netdata_hosts | length)
-    or (_verify_alerts_json.json.hosts | map(attribute='name') | list | sort) != (homepage_netdata_hosts | sort)
   become: true
+
+- name: _verify | homepage_alerts JSON shape matches configured hosts
+  assert:
+    that:
+      - (_verify_alerts_json.json.hosts | length) == (homepage_netdata_hosts | length)
+      - (_verify_alerts_json.json.hosts | map(attribute='name') | list | sort) == (homepage_netdata_hosts | sort)
+    fail_msg: >-
+      JSON hosts mismatch: expected {{ homepage_netdata_hosts | sort }},
+      got {{ _verify_alerts_json.json.hosts | map(attribute='name') | list }}
 
 - name: _verify | homepage_alerts renders HTML through nginx
   uri:
@@ -41,16 +54,40 @@
     return_content: true
     status_code: 200
   register: _verify_alerts_html
-  failed_when: >-
-    _verify_alerts_html.status != 200
-    or 'frameElement' not in _verify_alerts_html.content
+  retries: 30
+  delay: 2
+  until: _verify_alerts_html.status == 200
   become: true
+
+- name: _verify | homepage_alerts HTML carries the iframe-resize script
+  assert:
+    that:
+      - "'frameElement' in _verify_alerts_html.content"
+    fail_msg: "Expected the same-origin iframe-resize script (frameElement) in the rendered HTML"
 
 - name: _verify | homepage_alerts HTML names every configured host
   assert:
     that: item in _verify_alerts_html.content
     fail_msg: "Host {{ item }} missing from rendered HTML"
   loop: "{{ homepage_netdata_hosts }}"
+
+# Functional check on the per-host error path (A3-lite). The box fixture sets
+# homepage_netdata_hosts = [box] and the test VM has no real netdata on
+# :19999, so _fetch_one's bare-except is guaranteed to fire and render_html
+# should emit `<div class="err">`. A regression that silently drops the
+# error rendering (e.g. _fetch_one swallowing the entry, or render_html
+# stripping the err branch) would pass the "host name in content" check
+# above (because the <h2> still renders) but fail this one. Box-only — on
+# lab-qemu/pug-qemu the netdata targets may be reachable from the test VM.
+- name: _verify | per-host error path renders on test box
+  when: inventory_hostname == 'box'
+  assert:
+    that:
+      - (_verify_alerts_json.json.hosts | selectattr('error', 'defined') | list | length) >= 1
+      - '"<div class=\"err\">" in _verify_alerts_html.content'
+    fail_msg: >-
+      Expected at least one per-host error rendered on box (no real netdata
+      reachable from the test fixture). JSON: {{ _verify_alerts_json.json.hosts }}
 
 # Hot-reload proof: the role intentionally skips restart on YAML config
 # edits because gethomepage watches /app/config. If a future image bump

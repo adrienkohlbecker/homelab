@@ -1,23 +1,28 @@
-"""Tiny stdlib-only HTTP server that aggregates netdata's `/api/v1/alarms?active`
-endpoint across one or more hosts and renders both:
+"""Generate the homepage alerts panel's static HTML + JSON snapshots.
 
-- GET /          → HTML page (auto-refresh, dark theme, iframe-friendly)
-- GET /api/alerts → JSON: {"hosts": [{"name", "url", "click_url", "alarms": [...], "error"?}],
-                            "updated_at", "iso_updated_at", "error"}
+Polls each configured host's `/api/v1/alarms?active` netdata endpoint in
+parallel and writes:
+
+- index.html       → dark-themed, iframe-friendly alert list
+- api_alerts.json  → {"hosts": [...], "updated_at", "iso_updated_at"}
+
+Run as a Type=oneshot systemd service fired by homepage_alerts.timer on
+a sub-minute cadence (OnCalendar=*:*:0/30 + AccuracySec=1s on the
+homepage host). nginx serves the files directly from OUTPUT_DIR; no
+proxy_pass, no long-running process.
 
 Inputs (env):
 - NETDATA_HOSTS: comma-separated list of `<name>=<query-url>[=<click-url>]`
-  triples. The query-url is fetched server-side, the click-url is the public
-  netdata vhost a browser can navigate to. If only one URL is given, both are
-  set to it.
+  triples. The query-url is fetched server-side, the click-url is the
+  public netdata vhost a browser can navigate to. If only one URL is
+  given, both are set to it.
   Example: "lab=http://localhost:19999=https://netdata.lab.fahm.fr,pug=https://netdata.pug.fahm.fr"
-- LISTEN_PORT:  TCP port to bind on 127.0.0.1 (default 8765)
+- OUTPUT_DIR: directory to write the files into (default
+  /var/www/homepage_alerts). Must be writable by the unit's User=.
 
-Embedded in the homepage dashboard via an iframe widget mounted at /alerts/
-on the homepage vhost (same origin) so the page can resize itself by
-poking `window.frameElement.style.height`. Stdlib only so it runs as a plain
-`python3 alerts_server.py` systemd unit on the host — no container, no
-third-party deps.
+Embedded in the homepage dashboard via an iframe widget mounted at
+/alerts/ on the homepage vhost (same origin) so the page can resize
+itself by poking `window.frameElement.style.height`. Stdlib only.
 """
 
 import datetime
@@ -25,17 +30,13 @@ import html
 import http.client
 import json
 import os
-import socket
+import pathlib
 import ssl
 import sys
-import threading
 import time
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
-from http import HTTPStatus
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-REFRESH_SECONDS = 30
 FETCH_TIMEOUT = 5
 MAX_FETCH_WORKERS = 8
 
@@ -74,7 +75,7 @@ def parse_hosts(spec: str) -> list[tuple[str, str, str]]:
     can itself contain `=` (e.g. cloud URLs with query strings); `query`
     cannot — keep query URLs path-only or url-encode any `=` they need.
     Malformed entries are skipped with a stderr warning so a single typo
-    doesn't take the whole sidecar offline.
+    doesn't take the whole render offline.
     """
     out = []
     for chunk in spec.split(","):
@@ -98,7 +99,7 @@ def parse_hosts(spec: str) -> list[tuple[str, str, str]]:
 class _HostClient:
     """One netdata host's persistent connection for the duration of a single
     _fetch_one call. Reuses one TLS handshake across the 2-3 requests we make
-    per host per refresh window (alarms + alarm_log + per-chart fallbacks).
+    per host per run (alarms + alarm_log + per-chart fallbacks).
 
     Invariant: each request fully drains the response before the next one.
     http.client.HTTPConnection raises ResponseNotReady on the next
@@ -267,7 +268,7 @@ def _fetch_one(name: str, query_url: str, click_url: str) -> dict:
             tid_by_id = {}
             log_warn = f"alarm_log fetch failed: {type(e).__name__}: {e}"
         # Budget for per-chart fallbacks so a single chatty host doesn't push
-        # the refresh past systemd's TimeoutSec. Alarms whose transition_id
+        # the run past systemd's TimeoutStartSec. Alarms whose transition_id
         # we can't recover within the budget fall back to the alerts list URL,
         # which is a graceful degradation (the row still renders + clicks
         # through, it just doesn't deep-link to the specific transition).
@@ -306,10 +307,10 @@ def _fetch_one(name: str, query_url: str, click_url: str) -> dict:
 
 def collect(hosts: list[tuple[str, str, str]]) -> list[dict]:
     # Parallel fetches so one slow/unreachable host doesn't gate the others —
-    # worst-case page render is bounded by FETCH_TIMEOUT, not summed across
-    # hosts. Iterating futures in submit order preserves the configured host
-    # order in the response. Cap at MAX_FETCH_WORKERS so a future operator
-    # adding 30 hosts doesn't spawn 30 threads on every refresh.
+    # worst-case render is bounded by FETCH_TIMEOUT, not summed across hosts.
+    # Iterating futures in submit order preserves the configured host order
+    # in the response. Cap at MAX_FETCH_WORKERS so a future operator adding
+    # 30 hosts doesn't spawn 30 threads on a single run.
     if not hosts:
         return []
     with ThreadPoolExecutor(max_workers=min(len(hosts), MAX_FETCH_WORKERS)) as pool:
@@ -414,7 +415,6 @@ PAGE = """<!doctype html>
     font-size: 11px;
     color: var(--muted);
   }}
-  footer .status-error {{ color: var(--critical); }}
 </style>
 </head>
 <body>
@@ -442,7 +442,7 @@ PAGE = """<!doctype html>
 """
 
 
-def render_html(hosts: list[dict], updated_at: float, error: str) -> str:
+def render_html(hosts: list[dict], iso_updated_at: str) -> str:
     sections = []
     for host in hosts:
         rows = []
@@ -455,7 +455,7 @@ def render_html(hosts: list[dict], updated_at: float, error: str) -> str:
         else:
             for a in host["alarms"]:
                 # href was pre-computed in _fetch_one so it's also visible on
-                # /api/alerts (debugging) — render_html just trusts it.
+                # api_alerts.json (debugging) — render_html just trusts it.
                 # target=_blank: this page lives in the /alerts/ iframe on the
                 # homepage vhost; a _self click would replace the iframe
                 # contents, not navigate the parent page. settings.yaml.j2's
@@ -476,142 +476,52 @@ def render_html(hosts: list[dict], updated_at: float, error: str) -> str:
                     f"</a>"
                 )
         sections.append(f'<section class="host"><h2>{title}</h2>{"".join(rows)}</section>')
-    # Footer reports cache freshness + any cache-level error so the operator
-    # can tell a stale page from a fresh one with all hosts dark.
-    if updated_at:
-        status_line = f"Updated {_humanize_delta(time.time() - updated_at)}"
-    else:
-        status_line = "Initializing…"
-    if error:
-        status_line += f' — <span class="status-error">{html.escape(error)}</span>'
-    footer = f"<footer>{status_line}</footer>"
+    # Footer shows the wall-clock ISO timestamp of this run. The iframe widget
+    # refreshes us every 30s so an operator comparing against the dashboard's
+    # datetime widget can spot a wedged generator at a glance. We don't render
+    # "X ago" client-side because the python _humanize_delta isn't worth
+    # replicating in JS for a footer; a wedged generator also fails the
+    # systemd unit, which trips systemdunits monitoring independently.
+    footer = f"<footer>Updated {html.escape(iso_updated_at)}</footer>"
     return PAGE.format(body="".join(sections) + footer)
 
 
-class AlertsCache:
-    """Holds the most recent collect() snapshot. A daemon thread refreshes it
-    every REFRESH_SECONDS so HTTP requests never wait on netdata. The lock is
-    only held across the reference swap; the slow API fetches happen
-    lock-free."""
-
-    def __init__(self, hosts: list[tuple[str, str, str]]) -> None:
-        self._hosts = hosts
-        self._lock = threading.Lock()
-        self._data: list[dict] = []
-        self._updated_at: float = 0.0
-        self._error: str = ""
-
-    def snapshot(self) -> tuple[list[dict], float, str]:
-        with self._lock:
-            return self._data, self._updated_at, self._error
-
-    def refresh(self) -> None:
-        try:
-            data = collect(self._hosts)
-            err = ""
-        except Exception as e:  # noqa: BLE001
-            data = None
-            # Mirror the per-host catch in _fetch_one: surface only the exception
-            # class to the footer (it lands on the public dashboard) and keep
-            # the full repr in stderr for journal-side triage.
-            print(f"cache refresh failed: {type(e).__name__}: {e}", file=sys.stderr)
-            err = type(e).__name__
-        now = time.time()
-        with self._lock:
-            if data is not None:
-                self._data = data
-            self._updated_at = now
-            self._error = err
-
-
-def _cache_loop(cache: AlertsCache, interval: float) -> None:
-    while True:
-        try:
-            cache.refresh()
-        except Exception as e:  # noqa: BLE001
-            print(f"cache refresh crashed: {type(e).__name__}: {e}", file=sys.stderr)
-        time.sleep(interval)
-
-
-class Handler(BaseHTTPRequestHandler):
-    def _send(self, status: HTTPStatus, ctype: str, body: bytes) -> None:
-        self.send_response(status)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
-
-    def do_GET(self) -> None:  # noqa: N802 (BaseHTTPRequestHandler API)
-        cache: AlertsCache = self.server.cache
-        if self.path in ("/", "/index.html"):
-            data, updated_at, err = cache.snapshot()
-            body = render_html(data, updated_at, err).encode("utf-8")
-            self._send(HTTPStatus.OK, "text/html; charset=utf-8", body)
-        elif self.path == "/api/alerts":
-            data, updated_at, err = cache.snapshot()
-            iso = (
-                datetime.datetime.fromtimestamp(updated_at, tz=datetime.timezone.utc)
-                .isoformat()
-                if updated_at
-                else ""
-            )
-            payload = {
-                "hosts": data,
-                "updated_at": updated_at,
-                "iso_updated_at": iso,
-                "error": err,
-            }
-            body = json.dumps(payload, sort_keys=True).encode("utf-8")
-            self._send(HTTPStatus.OK, "application/json", body)
-        elif self.path == "/api/healthcheck":
-            self._send(HTTPStatus.OK, "application/json", b'{"status":"ok"}')
-        else:
-            self._send(HTTPStatus.NOT_FOUND, "text/plain", b"not found")
-
-    def log_message(self, fmt: str, *args) -> None:
-        # Silence per-request access logs; systemd journal still gets stderr.
-        return
-
-
-def _sd_notify(payload: str) -> None:
-    """Stdlib implementation of sd_notify(3). Writes the payload as a
-    datagram to $NOTIFY_SOCKET; no-op if the env var is unset (running
-    outside systemd). Errors are non-fatal — the sidecar still works
-    under Type=exec, this just doesn't gate startup readiness."""
-    sock_path = os.environ.get("NOTIFY_SOCKET")
-    if not sock_path:
-        return
-    # systemd uses abstract sockets when path begins with `@`.
-    if sock_path[0] == "@":
-        sock_path = "\0" + sock_path[1:]
-    try:
-        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as s:
-            s.connect(sock_path)
-            s.sendall(payload.encode("utf-8"))
-    except OSError as e:
-        print(f"sd_notify({payload!r}) failed: {e}", file=sys.stderr)
+def _atomic_write(path: pathlib.Path, content: str) -> None:
+    """Write `content` to `path` via .tmp + os.replace so a concurrent reader
+    (nginx) never observes a half-written file. The .tmp name embeds the PID
+    so a previous killed run's leftover doesn't race against ours on the
+    rename, and so two concurrent runs (shouldn't happen under our timer but
+    cheap insurance) don't clobber each other's intermediate."""
+    tmp = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
+    tmp.write_text(content)
+    os.replace(tmp, path)
 
 
 def main() -> None:
     hosts = parse_hosts(os.environ.get("NETDATA_HOSTS", ""))
     if not hosts:
-        print("NETDATA_HOSTS is empty; refusing to start", file=sys.stderr)
+        print("NETDATA_HOSTS is empty; refusing to run", file=sys.stderr)
         sys.exit(1)
-    port = int(os.environ.get("LISTEN_PORT", "8765"))
-    cache = AlertsCache(hosts)
-    # Synchronous first refresh so the first HTTP request lands on data, not
-    # an empty cache. If it fails, the page renders empty and the background
-    # thread keeps retrying every REFRESH_SECONDS.
-    cache.refresh()
-    threading.Thread(
-        target=_cache_loop, args=(cache, REFRESH_SECONDS), daemon=True, name="alerts-cache"
-    ).start()
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    server.cache = cache
-    print(f"alerts_server listening on 127.0.0.1:{port} for {len(hosts)} host(s)", file=sys.stderr)
-    _sd_notify("READY=1")
-    server.serve_forever()
+    output_dir = pathlib.Path(os.environ.get("OUTPUT_DIR", "/var/www/homepage_alerts"))
+
+    data = collect(hosts)
+    now = time.time()
+    iso = (
+        datetime.datetime.fromtimestamp(now, tz=datetime.timezone.utc)
+        .isoformat(timespec="seconds")
+    )
+
+    # No top-level try/except — an exception here (disk full, permission
+    # denied, etc.) propagates to Python's default print-traceback-and-exit-1.
+    # The traceback lands in the journal via stderr, the unit transitions to
+    # failed, and nginx keeps serving the previous (atomic-write means there
+    # is no half-written intermediate) snapshot. systemd_service_unit_failed_state
+    # picks up the failure independently.
+    _atomic_write(
+        output_dir / "api_alerts.json",
+        json.dumps({"hosts": data, "updated_at": now, "iso_updated_at": iso}, sort_keys=True),
+    )
+    _atomic_write(output_dir / "index.html", render_html(data, iso))
 
 
 if __name__ == "__main__":
