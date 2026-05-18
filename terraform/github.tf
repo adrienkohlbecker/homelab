@@ -65,6 +65,11 @@ moved {
 variable "mise_github_token" {
   type      = string
   sensitive = true
+
+  validation {
+    condition     = length(var.mise_github_token) > 0
+    error_message = "mise_github_token must be non-empty (resolved via TF_VAR_mise_github_token from 1Password through `op run`)."
+  }
 }
 
 resource "github_actions_secret" "mise_github_token" {

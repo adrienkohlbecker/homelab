@@ -35,6 +35,11 @@
 variable "gandi_pat" {
   type      = string
   sensitive = true
+
+  validation {
+    condition     = length(var.gandi_pat) > 0
+    error_message = "gandi_pat must be non-empty (resolved via TF_VAR_gandi_pat from 1Password through `op run`)."
+  }
 }
 
 provider "gandi" {

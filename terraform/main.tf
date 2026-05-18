@@ -79,7 +79,13 @@ terraform {
 # encryption block above read it before any state IO. Rotation procedure
 # documented above the encryption block.
 variable "state_passphrase" {
-  type = string
+  type      = string
+  sensitive = true
+
+  validation {
+    condition     = length(var.state_passphrase) > 0
+    error_message = "state_passphrase must be non-empty (resolved via TF_VAR_state_passphrase from 1Password through `op run`)."
+  }
 }
 
 

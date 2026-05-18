@@ -65,13 +65,23 @@ resource "cloudflare_zero_trust_access_policy" "echo_token" {
 
 variable "google_idp_client_id" {
   type        = string
-  description = "Google OAuth client ID for the Access IdP."
+  description = "Google OAuth client ID for the Access IdP. Sourced via TF_VAR_google_idp_client_id in mise.toml (op:// reference)."
+
+  validation {
+    condition     = length(var.google_idp_client_id) > 0
+    error_message = "google_idp_client_id must be non-empty (resolved via TF_VAR_google_idp_client_id from 1Password through `op run`)."
+  }
 }
 
 variable "google_idp_client_secret" {
   type        = string
   sensitive   = true
   description = "Google OAuth client secret for the Access IdP. Sourced via TF_VAR_google_idp_client_secret in mise.toml (op:// reference)."
+
+  validation {
+    condition     = length(var.google_idp_client_secret) > 0
+    error_message = "google_idp_client_secret must be non-empty (resolved via TF_VAR_google_idp_client_secret from 1Password through `op run`)."
+  }
 }
 
 resource "cloudflare_zero_trust_access_identity_provider" "google" {
