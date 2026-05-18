@@ -182,12 +182,12 @@ resource "nexus_repository_raw_proxy" "this" {
 #   - compta: the adrienkohlbecker/compta repo's build workflow
 #     pushes nexus.lab.fahm.fr/compta/compta:<sha> +
 #     :latest; the compta ansible role pulls from there.
-# Anonymous pulls are on (so unauthenticated `podman pull` from CI /
-# lab hosts works); push requires basic auth against the repo's
-# dedicated <name>-push user (one per repo, defined below; credentials
-# get pushed to each repo's GitHub Actions secrets via terraform/
-# github.tf). Force-basic-auth ON keeps anonymous Bearer-token paths
-# from accidentally accepting pushes.
+# force_basic_auth=false (below) keeps the DockerToken realm active so
+# anonymous bearer-token pulls work (unauthenticated `podman pull` from
+# CI / lab hosts). Pushes still require basic auth because the only role
+# carrying nx-repository-view-docker-<name>-{add,edit} is <name>-push,
+# bound to the dedicated push user below -- the anonymous role has no
+# such privileges, so an anonymous bearer token can pull but not push.
 #
 # write_policy ALLOW (not ALLOW_ONCE) because the workflows re-push
 # :latest on every successful build. ALLOW_ONCE would reject the
