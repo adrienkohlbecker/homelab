@@ -1,0 +1,37 @@
+# Source of truth for homepage bookmark tiles. Consumed by
+# templates/bookmarks.yaml.j2. Each entry needs name + abbr + sub; icon
+# defaults to omitted (selfh.st lookup is `sh-<icon>.png`, so a bare abbr
+# renders when icon: is missing); host: defaults to inventory_hostname
+# (override for cross-host bookmarks like Netdata (pug)); path: defaults to /.
+homepage_bookmarks:
+  Media:
+    - { name: Plex,         abbr: PX, sub: plex,         icon: plex }
+    - { name: Jellyfin,     abbr: JF, sub: jellyfin,     icon: jellyfin }
+    - { name: Overseerr,    abbr: OS, sub: overseerr,    icon: overseerr }
+    - { name: Tautulli,     abbr: TT, sub: tautulli,     icon: tautulli }
+    - { name: Sonarr,       abbr: SN, sub: sonarr,       icon: sonarr }
+    - { name: Radarr,       abbr: RD, sub: radarr,       icon: radarr }
+    - { name: Bazarr,       abbr: BZ, sub: bazarr,       icon: bazarr }
+    - { name: Lidarr,       abbr: LD, sub: lidarr,       icon: lidarr }
+    - { name: Profilarr,    abbr: PF, sub: profilarr,    icon: profilarr }
+    - { name: SABnzbd,      abbr: SB, sub: sabnzbd,      icon: sabnzbd }
+    - { name: Transmission, abbr: TR, sub: transmission, icon: transmission }
+  Infra:
+    - { name: Authelia,      abbr: AU, sub: auth,         icon: authelia, is_root: True }
+    - { name: Gitea,         abbr: GT, sub: gitea,        icon: gitea }
+    - { name: Nexus,         abbr: NX, sub: nexus,        icon: sonatype-nexus-repository }
+    - { name: MinIO,         abbr: MN, sub: minio,        icon: minio }
+    - { name: Healthchecks,  abbr: HC, sub: healthchecks, icon: healthchecks }
+    - { name: HyperDX,       abbr: HX, sub: hyperdx,      icon: hyperdx }
+    - { name: Uptime Kuma,   abbr: UK, sub: kuma,         icon: uptime-kuma }
+    - { name: Pi-hole,       abbr: PH, sub: pihole,       icon: pi-hole, path: /admin/ }
+    - { name: Netdata (lab), abbr: NL, sub: netdata,      icon: netdata }
+    - { name: Netdata (pug), abbr: NP, sub: netdata,      icon: netdata, host: pug }
+    - { name: Eaton IPP,     abbr: EI, sub: ipp }
+  Personal:
+    - { name: Paperless,      abbr: PL, sub: paperless,     icon: paperless-ngx }
+    - { name: OpenProject,    abbr: OP, sub: openproject,   icon: openproject }
+    - { name: Compta,         abbr: CP, sub: compta }
+    - { name: Home Assistant, abbr: HA, sub: homeassistant, icon: home-assistant }
+    - { name: Filebrowser,    abbr: FB, sub: filebrowser,   icon: filebrowser-quantum }
+    - { name: Speedtest,      abbr: ST, sub: speedtest,     icon: speedtest-tracker }
