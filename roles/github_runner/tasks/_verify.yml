@@ -36,14 +36,10 @@
   become: true
 
 # Host-level PAT secret. Created in main.yml from the vaulted
-# github_runner_pat var; consumed by every runner container's
-# entrypoint to mint per-start JIT configs. Under qemu_test the value
-# is a stub; under prod it's the real PAT.
-# The unit is system-scope; podman_secret defaults to user=root and
-# main.yml doesn't override that, so the secret lives in root's
-# podman store, not github_runner's rootless store. Inspect from
-# root accordingly -- a previous `become_user: github_runner` here
-# checked the wrong namespace and always reported missing.
+# github_runner_pat var via podman_secret with the default user=root,
+# so it lives in root's podman -- inspect there, not in github_runner's
+# rootless podman (which only owns the DooD socket). Under qemu_test
+# the value is a stub; under prod it's the real PAT.
 - name: _verify | github_runner_pat podman secret exists
   command: podman secret inspect github_runner_pat
   changed_when: false
