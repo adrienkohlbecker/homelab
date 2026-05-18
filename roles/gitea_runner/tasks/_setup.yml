@@ -38,52 +38,29 @@
     mode: "0644"
   become: true
 
-- name: _test | Install gitea binary
+# Install nginx + snakeoil certs ahead of roles/gitea, which configures
+# an nginx site at gitea.<host>.<domain>. Mirrors how gitea/_setup.yml
+# brings nginx in for the gitea role's own harness.
+- name: _test | Install nginx (snakeoil + base config)
+  import_role:
+    name: _test
+    tasks_from: nginx
+
+# Use the prod gitea role end-to-end. Stubs keep the template
+# idempotent across harness phases without needing vault material in
+# test scope; gitea won't sign anything load-bearing in the fixture's
+# lifetime.
+- name: _test | Install + start gitea via the prod role
   import_role:
     name: gitea
-    tasks_from: install
-
-- name: _test | Create gitea directories
-  file:
-    path: "{{ item }}"
-    state: directory
-    mode: "0755"
-  loop:
-    - /var/lib/gitea/custom/conf
-    - /var/lib/gitea/data/gitea-repositories
-    - /var/lib/gitea/log
-  become: true
-
-- name: _test | Write gitea app.ini
-  copy:
-    dest: /var/lib/gitea/custom/conf/app.ini
-    mode: "0644"
-    backup: true
-    content: |
-      I_AM_BEING_UNSAFE_RUNNING_AS_ROOT=true
-
-      [database]
-      DB_TYPE = sqlite3
-
-      [security]
-      INSTALL_LOCK = true
-
-      [actions]
-      ENABLED = true
-  become: true
-
-# systemd-run --unit=<name> registers a transient unit; if a unit by
-# that name already exists (running, exited, or failed), systemd-run
-# errors. Use the runtime unit file as the idempotence sentinel: file
-# present → already launched, skip; absent → first run or unit was
-# garbage-collected, launch it.
-- name: _test | Start gitea via systemd-run
-  command: >-
-    systemd-run --unit=gitea-test --setenv=HOME=/root
-    /usr/local/bin/gitea web --work-path /var/lib/gitea
-  args:
-    creates: /run/systemd/transient/gitea-test.service
-  become: true
+  vars:
+    gitea_jwt_secret: "test-jwt-secret-stub"
+    gitea_internal_token: "test-internal-token-stub"
+    gitea_lfs_jwt_secret: "test-lfs-jwt-secret-stub"
+    gitea_secret_key: "test-secret-key-stub"
+    gitea_smtp_user: "testadmin@example.com"
+    gitea_smtp_from: "testadmin@example.com"
+    gitea_smtp_password: "test-smtp-password-stub"
 
 - name: _test | Wait for gitea API to be reachable
   uri:
@@ -102,7 +79,7 @@
 # path; everything else fails loudly.
 - name: _test | Create gitea admin user
   command: >-
-    /usr/local/bin/gitea --work-path /var/lib/gitea admin user create
+    /usr/local/bin/gitea --config /etc/gitea/app.ini admin user create
     --username testadmin --password testadminpw --email testadmin@example.com
     --admin --must-change-password=false
   register: _test_admin_create
@@ -111,4 +88,5 @@
     - "'already exists' not in _test_admin_create.stderr"
   changed_when: _test_admin_create.rc == 0
   become: true
+  become_user: git
   no_log: true
