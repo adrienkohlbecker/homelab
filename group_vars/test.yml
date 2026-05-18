@@ -242,3 +242,34 @@ hyperdx_ingestion_api_key: changeme
 # Must satisfy HyperDX registrationSchema: 12+ chars, lower+upper, digit, special.
 hyperdx_admin_password: Changeme123!
 github_runner_pat: changeme
+
+# Authelia portal sits at auth.<inventory_hostname>.<domain> in test
+# (auth.box.mhaf.fr for the box fixture), not the apex auth.<domain>
+# that prod uses. Cloudflare's *.box.mhaf.fr wildcard makes the
+# longer name resolvable; auth.mhaf.fr at apex is not. Session
+# cookie scope follows: .box.mhaf.fr covers every protected service
+# on box (jellyfin.box.mhaf.fr, paperless.box.mhaf.fr, etc.).
+# Templated against inventory_hostname so the same value works for
+# any future test host.
+authelia_cookie_domain: "{{ inventory_hostname }}.{{ domain }}"
+
+# Test-fixture secrets. Stubs are 64+ chars to satisfy Authelia's
+# session/secret minimums; SMTP password is just a placeholder
+# because the test fixture flips disable_startup_check=true.
+authelia_jwt_secret: StubQemuJwtSecret_do_not_use_in_prod_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+authelia_session_secret: StubQemuSessionSecret_do_not_use_in_prod_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+authelia_storage_encryption_key: StubQemuStorageKey_do_not_use_in_prod_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+authelia_smtp_password: changeme
+
+# Test-fixture user. Hash is for the password "authelia" -- the
+# canonical example hash from Authelia's docs. Tracked plaintext
+# here because (1) box is ephemeral, (2) _verify.yml only exercises
+# unauthenticated probes, (3) Authelia's file backend needs at
+# least one entry to start. Prod users live vaulted in prod.yml.
+authelia_users:
+  testuser:
+    displayname: Test User
+    password_hash: "$argon2id$v=19$m=65536,t=3,p=4$BpLnfgDsc2WD8F2q$o/vzA4myCqZZ36WUPneNS5x4MaDXFGYrYqOnjvKK4Cw"
+    email: testuser@{{ inventory_hostname }}.{{ domain }}
+    groups:
+      - admins

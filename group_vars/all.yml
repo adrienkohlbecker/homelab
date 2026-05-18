@@ -58,6 +58,12 @@ github_runner_owner: "adrienkohlbecker"
 # (pihole's dnscrypt upstream, etc.). Migrate roles to consume from here as
 # they get touched; for collisions, this is the place to grep.
 service_ports:
+  # Authelia's upstream default is 9091 but that collides with
+  # Transmission's well-known default on the same host. The
+  # container's internal listener stays on 9091 (see
+  # roles/authelia/templates/configuration.yml.j2 server.address);
+  # only the host-side --publish maps to this port.
+  authelia: 9092
   bazarr: 6767
   compta: 4567
   csp_ingest: 9880
