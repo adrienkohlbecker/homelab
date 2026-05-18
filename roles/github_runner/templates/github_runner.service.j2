@@ -152,7 +152,11 @@ SyslogIdentifier=%N
 #   non-zero, the container exits, and systemd's Restart=always
 #   respawns -- so the healthcheck is the "is it alive" signal
 #   surfaced in `systemctl status`/downstream monitoring, while the
-#   exit+respawn loop drives the actual recovery.
+#   exit+respawn loop drives the actual recovery. Using -x (exact
+#   match against /proc/<pid>/comm) over -f (full cmdline substring)
+#   so a workflow process whose argv happens to mention "Runner.Listener"
+#   can't keep the unit reporting healthy. "Runner.Listener" is 15
+#   chars, within TASK_COMM_LEN (16).
 # --health-start-period 30s: first-start runs the entrypoint's curl
 #   POST to GitHub before run.sh. 30s leaves headroom for a slow API
 #   response without flapping the unit unhealthy on boot.
@@ -214,8 +218,8 @@ ExecStart=/usr/bin/podman run \
   --env DOCKER_HOST=unix:///var/run/docker.sock \
   --env RUNNER_WORK_FOLDER=/mnt/scratch/github_runner/workdir_%i \
   --secret github_runner_pat,type=mount,target=/run/secrets/github_pat \
-  --health-cmd         '["pgrep","--count","--full","Runner.Listener"]' \
-  --health-startup-cmd '["pgrep","--count","--full","Runner.Listener"]' \
+  --health-cmd         '["pgrep","--count","--exact","Runner.Listener"]' \
+  --health-startup-cmd '["pgrep","--count","--exact","Runner.Listener"]' \
   --health-startup-interval "1s" \
   --health-startup-timeout "5s" \
   --health-start-period "30s" \
