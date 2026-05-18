@@ -55,11 +55,13 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/homeassistant:/config \
     --volume /mnt/services/sqlite/homeassistant:/config/db \
     --publish 127.0.0.1:{{ service_ports.homeassistant }}:8123/tcp \
-    {# Sonos S2 event-subscription callback; HomeKit pairing. Bound on every #}
-    {# host iface (not just the IoT macvlan side) because the iOS / Sonos #}
-    {# controllers that consume these live on the home LAN, not the IoT VLAN. #}
-    --publish 0.0.0.0:{{ service_ports.homeassistant_sonos }}:1400/tcp \
-    --publish 0.0.0.0:{{ service_ports.homeassistant_homekit }}:3722/udp \
+    {# Sonos S2 event-subscription callback; HomeKit pairing. Bound on the #}
+    {# host's home-LAN address (not 0.0.0.0) so the iot-VLAN sub-iface #}
+    {# doesn't host these sockets too -- iOS / Sonos controllers live on #}
+    {# the home LAN. HA's macvlan presence on 10.123.4.98 (the IoT VLAN) #}
+    {# remains reachable for mDNS / discovery; that's a separate plane. #}
+    --publish {{ ansible_default_ipv4.address | mandatory }}:{{ service_ports.homeassistant_sonos }}:1400/tcp \
+    --publish {{ ansible_default_ipv4.address | mandatory }}:{{ service_ports.homeassistant_homekit }}:3722/udp \
     --health-cmd         '["curl","--head","--request","GET","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8123/manifest.json"]' \
     --health-startup-cmd '["curl","--head","--request","GET","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8123/manifest.json"]' \
     --health-startup-interval "1s" \
