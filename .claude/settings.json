@@ -19,6 +19,37 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/lint_ansible_on_edit.sh"
+          },
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/tf_validate_on_edit.sh"
+          }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Bash(mise run lint:ansible-changed *)",
+      "Bash(mise run lint*)",
+      "Bash(mise run tf plan*)",
+      "Bash(mise run tf validate*)",
+      "Bash(mise run tf providers*)",
+      "Bash(.venv/bin/python test/testrole.py *)",
+      "Bash(source .venv/bin/activate*)",
+      "Bash(shellcheck *)",
+      "Bash(.venv/bin/ansible-lint *)",
+      "Bash(ansible-lint *)",
+      "Bash(op item get *)",
+      "Bash(op item list*)"
     ]
   }
 }
