@@ -508,7 +508,7 @@ resource "cloudflare_dns_record" "fahm_fr_txt_cf2024_1__domainkey" {
 # every legitimate sender there is already DKIM-signing through pdk1/
 # pdk2 selectors.
 resource "cloudflare_dns_record" "fahm_fr_txt_dmarc" {
-  content = "\"v=DMARC1; p=none; pct=100; fo=1; ri=3600; rua=mailto:25d3ddf65216493ba512fa8d7568c3d7@dmarc-reports.cloudflare.net\""
+  content = "v=DMARC1; p=none; pct=100; fo=1; ri=3600; rua=mailto:25d3ddf65216493ba512fa8d7568c3d7@dmarc-reports.cloudflare.net"
   name    = "_dmarc.fahm.fr"
   proxied = false
   ttl     = 1
@@ -518,7 +518,7 @@ resource "cloudflare_dns_record" "fahm_fr_txt_dmarc" {
 
 resource "cloudflare_dns_record" "fahm_fr_txt_dmarc_noreply" {
   comment = "mailgun"
-  content = "\"v=DMARC1; p=none; pct=100; fo=1; ri=3600; rua=mailto:131310e2@dmarc.mailgun.org,mailto:37b6e2d1@inbox.ondmarc.com; ruf=mailto:131310e2@dmarc.mailgun.org,mailto:37b6e2d1@inbox.ondmarc.com;\""
+  content = "v=DMARC1; p=none; pct=100; fo=1; ri=3600; rua=mailto:131310e2@dmarc.mailgun.org,mailto:37b6e2d1@inbox.ondmarc.com; ruf=mailto:131310e2@dmarc.mailgun.org,mailto:37b6e2d1@inbox.ondmarc.com;"
   name    = "_dmarc.noreply.fahm.fr"
   proxied = false
   ttl     = 1
@@ -528,7 +528,7 @@ resource "cloudflare_dns_record" "fahm_fr_txt_dmarc_noreply" {
 
 resource "cloudflare_dns_record" "fahm_fr_txt_noreply" {
   comment = "mailgun"
-  content = "\"v=spf1 include:mailgun.org ~all\""
+  content = "v=spf1 include:mailgun.org ~all"
   name    = "noreply.fahm.fr"
   proxied = false
   ttl     = 1
@@ -537,7 +537,7 @@ resource "cloudflare_dns_record" "fahm_fr_txt_noreply" {
 }
 
 resource "cloudflare_dns_record" "fahm_fr_txt_root" {
-  content = "\"v=spf1 include:spf.messagingengine.com include:_spf.mx.cloudflare.net ~all\""
+  content = "v=spf1 include:spf.messagingengine.com include:_spf.mx.cloudflare.net ~all"
   name    = "fahm.fr"
   proxied = false
   ttl     = 1
@@ -645,7 +645,7 @@ resource "cloudflare_dns_record" "mhaf_fr_mx_wildcard__in2_smtp_messagingengine"
 
 resource "cloudflare_dns_record" "mhaf_fr_txt_dmarc" {
   comment = "fastmail"
-  content = "\"v=DMARC1; p=none;\""
+  content = "v=DMARC1; p=none;"
   name    = "_dmarc.mhaf.fr"
   proxied = false
   ttl     = 1
@@ -655,7 +655,7 @@ resource "cloudflare_dns_record" "mhaf_fr_txt_dmarc" {
 
 resource "cloudflare_dns_record" "mhaf_fr_txt_root" {
   comment = "fastmail"
-  content = "\"v=spf1 include:spf.messagingengine.com ?all\""
+  content = "v=spf1 include:spf.messagingengine.com ?all"
   name    = "mhaf.fr"
   proxied = false
   ttl     = 1
