@@ -142,12 +142,14 @@ SyslogIdentifier=%N
 #   land in github_runner's host-side storage. Setting both var names
 #   covers podman CLI (uses CONTAINER_HOST) and the podman-docker
 #   alias / any real docker client (uses DOCKER_HOST).
-# --secret github_runner_pat: long-lived fine-grained PAT consumed by
-#   the entrypoint on every container start (mints a fresh JIT config
-#   via /actions/runners/generate-jitconfig). Mount-type, not env-type,
-#   so the PAT never lands in /proc/<pid>/environ visible to any
-#   sibling workflow container that has the DooD socket. Same PAT
-#   shared across every instance on the host (API call is per-repo).
+# --volume %t/%N/jit: the JIT registration blob minted by the
+#   ExecStartPre script on the host. The PAT itself never enters the
+#   container -- the entrypoint just `cat`s /run/jit and passes its
+#   contents to `run.sh --jitconfig`. Workflow code running inside the
+#   container can read the JIT (a single-use, runner-scoped credential
+#   that GitHub auto-invalidates on first use) but not the long-lived
+#   PAT it was minted from. RuntimeDirectory=%N on the unit cleans the
+#   per-start file when the unit stops.
 # --sdnotify=healthy: unit's `active` state gates on the healthcheck,
 #   not on conmon's exec. The container is ready iff Runner.Listener
 #   is running and polling -- exactly what systemctl status should
@@ -210,6 +212,13 @@ SyslogIdentifier=%N
 # actually listening. Bounded 60 × 1s, well inside TimeoutStartSec=300.
 # Same pattern as roles/gitea_runner.
 ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S %t/user/{{ github_runner_user.uid }}/podman/podman.sock ] && exit 0; sleep 1; done; echo "podman.sock not present after 60s" >&2; exit 1'
+# Mint the JIT config on the host (reads the PAT podman secret as root
+# via `podman secret inspect --showsecret`, POSTs to GitHub's
+# generate-jitconfig, writes the blob to /run/%N/jit) so the PAT itself
+# never enters the container -- the runner only ever sees the
+# single-use JIT blob, not the long-lived token it was minted from.
+# See roles/github_runner/files/github_runner_jit_mint.sh.
+ExecStartPre=/usr/local/bin/github_runner_jit_mint %i
 ExecStartPre=/bin/rm -f %t/%N/%n.ctr-id
 ExecStart=/usr/bin/podman run \
   --cidfile=%t/%N/%n.ctr-id \
@@ -235,8 +244,7 @@ ExecStart=/usr/bin/podman run \
   --env-file /etc/default/github_runner@%i \
   --env CONTAINER_HOST=unix:///var/run/docker.sock \
   --env DOCKER_HOST=unix:///var/run/docker.sock \
-  --env RUNNER_WORK_FOLDER=/mnt/scratch/github_runner/workdir_%i \
-  --secret github_runner_pat,type=mount,target=/run/secrets/github_pat \
+  --volume %t/%N/jit:/run/jit:ro \
   --health-cmd         '["pgrep","--count","--exact","Runner.Listener"]' \
   --health-startup-cmd '["pgrep","--count","--exact","Runner.Listener"]' \
   --health-startup-interval "1s" \
