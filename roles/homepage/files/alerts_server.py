@@ -64,19 +64,29 @@ SSL_CTX = ssl.create_default_context()
 
 
 def parse_hosts(spec: str) -> list[tuple[str, str, str]]:
+    """Parse `NETDATA_HOSTS` env into (name, query_url, click_url) tuples.
+
+    Format per entry: `name=query[=click]`, entries comma-separated. `click`
+    can itself contain `=` (e.g. cloud URLs with query strings); `query`
+    cannot — keep query URLs path-only or url-encode any `=` they need.
+    Malformed entries are skipped with a stderr warning so a single typo
+    doesn't take the whole sidecar offline.
+    """
     out = []
     for chunk in spec.split(","):
         chunk = chunk.strip()
         if not chunk:
             continue
-        parts = [p.strip() for p in chunk.split("=")]
+        # split capped at 3 so click can carry its own `=` (URL query strings).
+        parts = [p.strip() for p in chunk.split("=", 2)]
         if len(parts) == 2:
             name, query = parts
             click = query
         elif len(parts) == 3:
             name, query, click = parts
         else:
-            raise ValueError(f"NETDATA_HOSTS entry malformed: {chunk!r}")
+            print(f"NETDATA_HOSTS skipping malformed entry: {chunk!r}", file=sys.stderr)
+            continue
         out.append((name, query.rstrip("/"), click.rstrip("/")))
     return out
 
@@ -114,9 +124,10 @@ def latest_transition_by_alarm(log) -> dict[int, str]:
         log = log.get("data") or []
     out: dict[int, str] = {}
     for entry in sorted(log, key=lambda e: e.get("unique_id") or 0, reverse=True):
-        aid = entry.get("alarm_id") or entry.get("id")
+        # Use dict-default lookup not `or` so an alarm_id of 0 isn't falsy-dropped.
+        aid = entry.get("alarm_id", entry.get("id"))
         tid = entry.get("transition_id") or entry.get("transition_uuid")
-        if aid and tid and aid not in out:
+        if aid is not None and tid and aid not in out:
             out[aid] = tid
     return out
 
@@ -238,9 +249,13 @@ def _fetch_one(name: str, query_url: str, click_url: str) -> dict:
         entry["alarms"] = alarms
     except Exception as e:  # noqa: BLE001
         # Bare except so one host's transport quirk (TLS, DNS, weird upstream)
-        # never disappears the rest of the dashboard. The error string lands
-        # in the rendered HTML so the operator can see what's up.
-        entry["error"] = f"{type(e).__name__}: {e}"
+        # never disappears the rest of the dashboard. Log the full detail to
+        # the journal but surface only the exception class to the rendered
+        # HTML — urllib's URLError messages otherwise leak internal
+        # hostnames / IPs / TLS subject details into the dashboard, which is
+        # reachable to anyone on the homepage vhost.
+        print(f"[{name}] fetch failed: {type(e).__name__}: {e}", file=sys.stderr)
+        entry["error"] = type(e).__name__
         entry["alarms"] = []
     return entry
 
