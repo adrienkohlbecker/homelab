@@ -46,20 +46,46 @@
     label: "{{ item.repo }}_{{ item.suffix }}"
   become: true
 
-# Functional: pre-stage a podman container with the runner image tag
-# so the rotate script's `podman ps --filter ancestor=...` enumerates
-# at least one entry. nexus is unreachable from box, so the script's
-# pull fails and the cached-fallback path fires; the local-tagged
-# image then satisfies `podman image exists` and the script proceeds.
-# alpine instead of pulling a real runner image (which would require
-# nexus auth) -- the rotate logic only cares about image digests, not
-# the image's actual runner content.
-- name: _verify | Pull a known-cacheable image for the rotate fixture
+# Functional: exercise both branches of the rotate script's decision
+# logic -- the cache-fallback "fresh, skip" path AND the "stale, restart"
+# path -- without depending on nexus reachability or a real systemd
+# instance start succeeding.
+#
+# /etc/hosts pin nexus.lab.fahm.fr -> 127.0.0.1 so `podman pull` of
+# the runner image deterministically fails (TCP RST on 127.0.0.1:443),
+# triggering the script's cache-fallback branch. The test infra at
+# roles/_test/tasks/mirrors.yml writes `10.123.0.2 nexus.lab.fahm.fr`
+# already, so this lineinfile uses regexp= to REPLACE that entry --
+# otherwise getaddrinfo returns both addresses and the first (working)
+# one wins. Without this the test is environment-sensitive: a box VM
+# with nexus reachable pulls the real runner image, latest != alpine,
+# "rotating" fires, systemctl tries to restart the real unit,
+# ExecStartPre (jit_mint with stub PAT) 401s, the unit fails, the
+# test fails.
+- name: _verify | Pin nexus.lab.fahm.fr to 127.0.0.1 so rotate's pull deterministically fails
+  lineinfile:
+    path: /etc/hosts
+    regexp: '\bnexus\.lab\.fahm\.fr\b'
+    line: "127.0.0.1 nexus.lab.fahm.fr"
+    state: present
+  become: true
+
+# Two cacheable images so we can synthesize divergent digests. alpine
+# is the "running" container's image; busybox is what we'll point
+# `nexus.lab.fahm.fr/homelab/runner:latest` at later to force the
+# stale branch. Both come from docker.io (still reachable -- /etc/hosts
+# only pinned the nexus name).
+- name: _verify | Pull alpine for the fixture container
   command: podman pull docker.io/library/alpine:latest
   changed_when: false
   become: true
 
-- name: _verify | Tag the fixture image as nexus.lab.fahm.fr/homelab/runner:latest
+- name: _verify | Pull busybox so the stale branch has a digest to swap to
+  command: podman pull docker.io/library/busybox:latest
+  changed_when: false
+  become: true
+
+- name: _verify | Tag alpine as nexus.lab.fahm.fr/homelab/runner:latest (the fresh-skip fixture)
   command: podman tag docker.io/library/alpine:latest nexus.lab.fahm.fr/homelab/runner:latest
   changed_when: false
   become: true
@@ -71,20 +97,83 @@
   changed_when: false
   become: true
 
-# Run the rotate script and assert (a) the fallback fired (nexus
-# unreachable, stderr says "proceeding with cached") AND (b) the
-# loop completed cleanly. The fixture container's digest matches the
-# locally-tagged "latest" (same image), so the loop reports fresh
-# silently and exits 0; the fallback stderr line is the positive
-# signal that the script reached past the pull step.
-- name: _verify | github_runner_image_rotate falls back to cache and enumerates containers
+# Phase A: live container's image digest == latest tag's digest
+# (both alpine). The rotate script's pull fails (nexus pinned to
+# 127.0.0.1), the cache-fallback fires, the digest comparison finds
+# fresh, the loop exits 0 with no "rotating" line.
+- name: _verify | rotate Phase A -- fresh container, cache-fallback fires, no rotation
   command: /usr/local/bin/github_runner_image_rotate
   changed_when: false
   become: true
-  register: _verify_rotate
+  register: _verify_rotate_fresh
   failed_when: >-
-    _verify_rotate.rc != 0
-    or 'proceeding with cached' not in _verify_rotate.stderr
+    _verify_rotate_fresh.rc != 0
+    or 'proceeding with cached' not in _verify_rotate_fresh.stderr
+    or 'rotating' in _verify_rotate_fresh.stdout
+
+# Phase B: retag the runner:latest reference to busybox (different
+# digest from the running container's alpine). The rotate script's
+# pull still fails (nexus pinned), cache-fallback uses the now-busybox
+# tag, digest comparison finds stale, the script calls
+# `systemctl restart github_runner@homelab_test1.service`. A stub
+# systemctl ahead of /usr/bin in PATH records the call and exits 0
+# so the rotate script exits cleanly even though no real systemd
+# unit could start under qemu_test (the stub PAT would 401 jit_mint).
+- name: _verify | Stub-systemctl scratch dir
+  file:
+    path: /tmp/github_runner_stub
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: _verify | Install stub systemctl that logs invocations and exits 0
+  copy:
+    dest: /tmp/github_runner_stub/systemctl
+    content: |
+      #!/bin/bash
+      printf '%s\n' "$*" >> /tmp/github_runner_stub/calls.log
+      exit 0
+    mode: "0755"
+  become: true
+
+- name: _verify | Clear the stub call log before Phase B
+  copy:
+    dest: /tmp/github_runner_stub/calls.log
+    content: ""
+    mode: "0644"
+  become: true
+
+- name: _verify | Retag busybox as nexus.lab.fahm.fr/homelab/runner:latest to diverge digests
+  command: podman tag docker.io/library/busybox:latest nexus.lab.fahm.fr/homelab/runner:latest
+  changed_when: false
+  become: true
+
+- name: _verify | rotate Phase B -- stale container, stub systemctl records restart
+  command: /usr/local/bin/github_runner_image_rotate
+  changed_when: false
+  become: true
+  environment:
+    PATH: "/tmp/github_runner_stub:/usr/sbin:/usr/bin:/sbin:/bin"
+  register: _verify_rotate_stale
+  failed_when: >-
+    _verify_rotate_stale.rc != 0
+    or 'proceeding with cached' not in _verify_rotate_stale.stderr
+    or 'rotating' not in _verify_rotate_stale.stdout
+
+- name: _verify | Read stub systemctl call log
+  slurp:
+    src: /tmp/github_runner_stub/calls.log
+  register: _verify_stub_log
+  become: true
+
+- name: _verify | Stub recorded the expected restart call
+  assert:
+    that:
+      - "'restart github_runner@homelab_test1.service' in (_verify_stub_log.content | b64decode)"
+    fail_msg: >-
+      Phase B should have invoked `systemctl restart
+      github_runner@homelab_test1.service` via the stub. Stub log:
+      {{ _verify_stub_log.content | b64decode | trim }}
 
 # Run the JIT mint script and assert it failed AT the curl step (not
 # earlier). The stub PAT ("changeme" in group_vars/test.yml) can't
