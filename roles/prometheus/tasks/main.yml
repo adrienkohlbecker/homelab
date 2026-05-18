@@ -43,5 +43,6 @@
     nginx_site_args:
       subdomain: prometheus
       proxy_pass: http://127.0.0.1:9090/
+      auth: required
   tags:
     - prometheus
