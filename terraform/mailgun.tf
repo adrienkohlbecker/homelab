@@ -27,6 +27,11 @@
 variable "mailgun_api_key" {
   type      = string
   sensitive = true
+
+  validation {
+    condition     = length(var.mailgun_api_key) > 0
+    error_message = "mailgun_api_key must be non-empty (resolved via TF_VAR_mailgun_api_key from 1Password through `op run`)."
+  }
 }
 
 provider "mailgun" {
