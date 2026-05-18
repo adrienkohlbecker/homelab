@@ -48,4 +48,4 @@ ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
