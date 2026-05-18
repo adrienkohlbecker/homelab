@@ -23,6 +23,7 @@
 
 - name: _verify | Hostname state matches inventory
   assert:
+    quiet: true
     that:
       - _verify_hostname.stdout == inventory_hostname
       - _verify_hostname_fqdn.stdout == inventory_hostname ~ "." ~ domain
@@ -51,6 +52,7 @@
 
 - name: _verify | /etc/hosts resolution matches expectation
   assert:
+    quiet: true
     that:
       - "'127.0.1.1' in _verify_getent_short.stdout"
       - "'127.0.1.1' in _verify_getent_fqdn.stdout"
