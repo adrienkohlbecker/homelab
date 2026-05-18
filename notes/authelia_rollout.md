@@ -102,9 +102,22 @@ Each PR is independently revertable. Number = commit/PR boundary.
 ### PR 3 — first protection wave (forward-auth only, no app changes)
 
 Targets: `homepage`, `wolweb`, `z2m`, `profilarr`, `prometheus`,
-`netdata`, `nut_server`, `keepalived_exporter`, `speedtest`. Each: one
-line added to `nginx_site_args` dict. Zero risk of breaking app
-internals.
+`nut_server`, `keepalived_exporter`, `speedtest`. Each: one line
+added to `nginx_site_args` dict. Zero risk of breaking app internals.
+
+Deferred from this wave: **`netdata`**. Lab's homepage_alerts sidecar
+runs server-side on lab and polls pug's netdata via the public
+`https://netdata.pug.fahm.fr` (because pug's netdata binds 127.0.0.1
+and isn't reachable on pug's wireguard interface). Flipping the
+netdata role to `auth: required` would also gate `netdata.pug.fahm.fr`
+and break the cross-host alerts panel. Fix path: either give Authelia
+a `networks:` bypass rule for the WG mesh subnet (`10.123.64.0/24`)
+so server-side probes coming from another homelab host pass auth
+without a session cookie, OR rebind pug's netdata to listen on the
+wireguard interface and rewrite homepage_alerts' NETDATA_HOSTS to hit
+WG-direct. The first is Authelia-native and works for any future
+cross-host probe; the second is more invasive. Land as a follow-up
+PR after the rest of PR3.
 
 ### PR 4 — *arr wave (forward-auth + AuthenticationMethod=External)
 
