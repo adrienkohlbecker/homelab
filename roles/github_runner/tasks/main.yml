@@ -92,6 +92,11 @@
       name: github_runner
       home: /mnt/scratch/github_runner
       createhome: true
+      # Ephemeral runners hold no persistent state under /mnt/services;
+      # see the "Create top-level scratch directory" task comment below.
+      # Suppress the helper's default config-dir creation so an empty
+      # /mnt/services/github_runner doesn't get stamped + zfs-replicated.
+      config_dir: false
       # 0755 (vs Ubuntu's HOME_MODE=0750 default): the runner container
       # bind-mounts /mnt/scratch/github_runner/workdir_<inst>/ from
       # under $HOME, and crun stats the bind-mount source from a
