@@ -11,7 +11,8 @@ StartLimitBurst=3
 Restart=always
 TimeoutSec=30
 RestartSec=5
-Type=exec
+Type=notify
+NotifyAccess=main
 SyslogIdentifier=%N
 
 User=homepage

@@ -26,6 +26,7 @@ import html
 import http.client
 import json
 import os
+import socket
 import ssl
 import sys
 import threading
@@ -569,6 +570,25 @@ class Handler(BaseHTTPRequestHandler):
         return
 
 
+def _sd_notify(payload: str) -> None:
+    """Stdlib implementation of sd_notify(3). Writes the payload as a
+    datagram to $NOTIFY_SOCKET; no-op if the env var is unset (running
+    outside systemd). Errors are non-fatal — the sidecar still works
+    under Type=exec, this just doesn't gate startup readiness."""
+    sock_path = os.environ.get("NOTIFY_SOCKET")
+    if not sock_path:
+        return
+    # systemd uses abstract sockets when path begins with `@`.
+    if sock_path[0] == "@":
+        sock_path = "\0" + sock_path[1:]
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as s:
+            s.connect(sock_path)
+            s.sendall(payload.encode("utf-8"))
+    except OSError as e:
+        print(f"sd_notify({payload!r}) failed: {e}", file=sys.stderr)
+
+
 def main() -> None:
     hosts = parse_hosts(os.environ.get("NETDATA_HOSTS", ""))
     if not hosts:
@@ -586,6 +606,7 @@ def main() -> None:
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     server.cache = cache
     print(f"alerts_server listening on 127.0.0.1:{port} for {len(hosts)} host(s)", file=sys.stderr)
+    _sd_notify("READY=1")
     server.serve_forever()
 
 
