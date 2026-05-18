@@ -26,7 +26,12 @@ PartOf=zfs_autosnapshot.target
 [Service]
 Restart=always
 TimeoutStartSec=120
-TimeoutStopSec=30
+# gitea-runner holds each in-flight job's container until the workflow
+# exits; a tight TimeoutStopSec SIGKILLs mid-job on restart, leaves a
+# "runner died" entry on the gitea side, and bricks any queue entry
+# waiting on that job. 120s gives capacity=4 jobs a reasonable drain
+# window; matches the rationale for github_runner.service.j2's 60s.
+TimeoutStopSec=120
 RestartSec=5
 SyslogIdentifier=%N
 
@@ -41,7 +46,11 @@ WorkingDirectory=/mnt/services/gitea_runner/
 ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S /run/user/{{ gitea_runner_user.uid }}/podman/podman.sock ] && exit 0; sleep 1; done; echo "podman.sock not present after 60s" >&2; exit 1'
 # Upstream renamed the binary act_runner -> gitea-runner in v1.0.0.
 ExecStart=/usr/local/bin/gitea-runner daemon --config /mnt/services/gitea_runner/config.yml
-ExecReload=/bin/kill -s HUP $MAINPID
+# No ExecReload: gitea-runner v1.0.3's signal handler treats SIGHUP as
+# a termination signal, so `systemctl reload` would kill the daemon
+# instead of re-reading config. Config changes propagate through a
+# full restart, fired by the systemd_unit service helper's restart:
+# trigger chain in tasks/main.yml.
 
 [Install]
 WantedBy=default.target
