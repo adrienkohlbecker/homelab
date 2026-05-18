@@ -94,6 +94,24 @@
   tags:
     - hyperdx
 
+# Per-IP rate-limit zone for /v1/logs. limit_req_zone is http{}-scope and
+# can't live inside server{}, so it goes in /etc/nginx/conf.d/ instead of
+# the per-site server_conf snippet. Sized at 10MB (~160k tracked IPs) at
+# 10r/s -- fluent-bit's default flush cadence is 1-5s, generous for
+# legitimate shippers while capping the cost of an unauthenticated flood.
+- name: Install hyperdx OTLP rate-limit zone
+  import_role:
+    name: nginx
+    tasks_from: conf_d
+  vars:
+    nginx_conf_d_args:
+      name: hyperdx_otlp.conf
+      content: |
+        # Managed by roles/hyperdx.
+        limit_req_zone $binary_remote_addr zone=hyperdx_otlp:10m rate=10r/s;
+  tags:
+    - hyperdx
+
 - name: Configure nginx
   import_role:
     name: nginx
@@ -102,6 +120,12 @@
     nginx_site_args:
       subdomain: hyperdx
       proxy_pass: http://localhost:{{ service_ports.hyperdx }}/
+      # The UI on / is gated by Authelia forward-auth. The custom
+      # location /v1/logs below is a sibling block with no auth_request
+      # directive, so off-host OTLP shippers authenticate via the Bearer
+      # token in the Authorization header (validated by the OTel
+      # collector's bearertokenauth extension) and never hit Authelia.
+      auth: required
       server_conf: |
         # OTLP HTTP ingestion endpoint -- off-host log shippers (pug
         # etc., where fluent-bit can't hit loopback) POST here over
@@ -109,6 +133,13 @@
         # Authorization header, validated by the OTel collector's
         # bearertokenauth extension; nginx just forwards it.
         location /v1/logs {
+          # Reject unauthenticated POSTs at the edge so we never buffer
+          # up to client_max_body_size before the OTel collector rejects
+          # them. `if` + `return` is one of the documented-safe shapes
+          # despite "if is evil" in other contexts.
+          if ($http_authorization = "") { return 401; }
+          # Per-IP rate-limit (zone declared in conf.d/hyperdx_otlp.conf).
+          limit_req zone=hyperdx_otlp burst=20 nodelay;
           proxy_pass http://localhost:{{ service_ports.hyperdx_otlp_http }}/v1/logs;
           proxy_http_version 1.1;
           proxy_set_header Host              $host;
