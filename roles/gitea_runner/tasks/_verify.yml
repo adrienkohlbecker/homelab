@@ -45,6 +45,21 @@
     or _verify_unit.status.ActiveState != "active"
   become: true
 
+# The metrics endpoint exposes /healthz on the same listener as /metrics
+# (see config.yml.j2). Returns 200 only once the daemon's main loop is
+# up -- a stronger signal than systemd ActiveState, which flips active
+# the moment ExecStart's process exec's, before the daemon has connected
+# to gitea. Runs in both prod and qemu_test (loopback, no auth).
+- name: _verify | gitea_runner daemon is serving /healthz
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.gitea_runner_metrics }}/healthz"
+    status_code: 200
+  register: _verify_healthz
+  retries: 30
+  delay: 2
+  until: _verify_healthz.status | default(0) == 200
+  become: true
+
 # Functional end-to-end check via gitea's documented admin API rather
 # than reaching into action_runner via sqlite. Asserts: the runner row
 # exists under inventory_hostname, the gitea-side label-name set equals
@@ -72,8 +87,10 @@
     _matched_runner: "{{ (_verify_runners_api.json.runners | default([]) | selectattr('name', 'equalto', inventory_hostname) | list | first) | default({}) }}"
   retries: 15
   delay: 2
+  # status_code: 200 above already gates retries on a 200 response, so
+  # `_verify_runners_api.status == 200` would be redundant here -- only
+  # the row-level assertions need to appear in the until: list.
   until:
-    - _verify_runners_api.status | default(0) == 200
     - _matched_runner.name | default('') == inventory_hostname
     - (_matched_runner.labels | default([]) | map(attribute='name') | list | sort) == _expected_label_names
     - not (_matched_runner.disabled | default(true))
