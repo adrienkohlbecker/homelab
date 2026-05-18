@@ -93,12 +93,17 @@
     nginx_site_args:
       subdomain: homepage
       proxy_pass: http://localhost:{{ service_ports.homepage }}/
+      auth: required
       # Mount the alerts sidecar under /alerts/ on the same origin as homepage
       # itself. Same-origin lets the panel resize its own iframe via
       # window.frameElement and folds away the CSP frame-src/frame-ancestors
-      # ceremony a sibling subdomain would need.
+      # ceremony a sibling subdomain would need. auth_request is repeated here
+      # because the site template only wires it into `location /`; sibling
+      # locations in server_conf need their own copy or a direct hit to
+      # /alerts/ would bypass forward-auth.
       server_conf: |
         location /alerts/ {
+          auth_request /internal/authelia;
           proxy_pass http://localhost:{{ service_ports.homepage_alerts }}/;
           proxy_http_version 1.1;
           proxy_set_header Host $host;
