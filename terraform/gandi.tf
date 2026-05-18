@@ -35,6 +35,7 @@
 variable "gandi_pat" {
   type      = string
   sensitive = true
+  ephemeral = true
 
   validation {
     condition     = length(var.gandi_pat) > 0

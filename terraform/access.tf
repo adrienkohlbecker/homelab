@@ -63,6 +63,9 @@ resource "cloudflare_zero_trust_access_policy" "echo_token" {
   }]
 }
 
+# Not ephemeral: flows into cloudflare_zero_trust_access_identity_provider.
+# google.config.client_id, which the cloudflare v5 provider doesn't expose
+# as a write-only attribute -- so the value has to land in state.
 variable "google_idp_client_id" {
   type        = string
   description = "Google OAuth client ID for the Access IdP. Sourced via TF_VAR_google_idp_client_id in mise.toml (op:// reference)."
@@ -73,6 +76,7 @@ variable "google_idp_client_id" {
   }
 }
 
+# Not ephemeral: same reason as google_idp_client_id above.
 variable "google_idp_client_secret" {
   type        = string
   sensitive   = true

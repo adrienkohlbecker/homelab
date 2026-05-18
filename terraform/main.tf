@@ -81,6 +81,7 @@ terraform {
 variable "state_passphrase" {
   type      = string
   sensitive = true
+  ephemeral = true
 
   validation {
     condition     = length(var.state_passphrase) > 0
