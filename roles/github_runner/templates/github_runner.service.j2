@@ -165,13 +165,16 @@ SyslogIdentifier=%N
 #   covers the long-poll plus a little graceful-exit wiggle. Kept
 #   strictly less than TimeoutStopSec above so podman wins the race
 #   and systemd doesn't SIGKILL podman mid-cleanup.
-# --pull=newer: do a manifest check against nexus on every container
-#   start and pull only if the registry's image is newer than the one
-#   in the local store. Lets a fresh runner-image.yml build propagate
-#   to every instance on its next restart -- no ansible run needed.
-#   Cheap when up-to-date (just a HEAD on the manifest, ~100ms);
-#   first-after-bump start eats the layer download once, then the
-#   layer cache satisfies subsequent starts until the next bump.
+# --pull defaults to 'missing': only pull when the image isn't in the
+#   local store (i.e. first start on a fresh host). Subsequent rotation
+#   onto a newer runner-image build is driven by
+#   github_runner_image_rotate.timer, which polls nexus every 5 minutes,
+#   refreshes the local store via `podman pull`, and restarts idle stale
+#   instances. Putting --pull=newer back here would just duplicate the
+#   manifest check on every container start (i.e. after every job
+#   completion) for no benefit -- the watcher has already cached the
+#   newest image locally, so the cached layer satisfies the next start
+#   either way.
 # --security-opt seccomp=unconfined: podman 4.9.3 (ubuntu jammy host)
 #   ships a default seccomp profile that predates the kernel 6.6
 #   fchmodat2 syscall (number 452). Unknown syscalls return EPERM by
@@ -194,7 +197,6 @@ ExecStart=/usr/bin/podman run \
   --detach \
   --replace \
   --rm \
-  --pull=newer \
   --name github_runner_%i \
   --init \
   --log-driver journald \
