@@ -12,32 +12,20 @@
     cache_valid_time: 3600
   become: true
 
-# In production, host-wide subuid/subgid allocation happens in the `subid` role
-# (driven by host_vars `subid_users`). The role-only test harness doesn't apply
-# that role, so we pre-seed an entry for github_runner here -- without it,
-# rootless podman refuses to start with "no subuid ranges found for user
-# github_runner".
-- name: _setup | Pre-allocate subuid for github_runner
-  lineinfile:
-    path: /etc/subuid
-    line: "github_runner:100000:65536"
-    regexp: "^github_runner:"
-    create: true
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-
-- name: _setup | Pre-allocate subgid for github_runner
-  lineinfile:
-    path: /etc/subgid
-    line: "github_runner:100000:65536"
-    regexp: "^github_runner:"
-    create: true
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
+# In production, host-wide subuid/subgid allocation happens in the
+# `subid` role (driven by host_vars `subid_users`). The role-only test
+# harness reuses the same role with a minimal input so subuid/subgid
+# layout matches prod's shape -- without an allocation, rootless podman
+# refuses to start with "no subuid ranges found for user github_runner".
+# subid_extra_subgid_groups (the kvm passthrough on prod) is
+# intentionally omitted: the box VM has no kvm group, and the test
+# doesn't exercise sibling KVM workflows.
+- name: _setup | Apply subid role for github_runner
+  import_role:
+    name: subid
+  vars:
+    subid_users:
+      - github_runner
 
 # Run the podman role's install.yml so the test VM gets the same
 # storage layout prod does: rpool/podman zvol mounted at
