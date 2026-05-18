@@ -61,18 +61,13 @@
 # Keep the on-disk path matching upstream's spelling (hyphen) so logs,
 # ps output, and shell PATH usage all match what an operator would
 # google. The role/user/unit follow the repo's underscore convention.
-- name: Check if gitea-runner is installed
-  command: gitea-runner --version
-  register: gitea_runner_check
-  failed_when: false
-  changed_when: false
-  check_mode: false
-  become: true
-  tags:
-    - gitea_runner
-
-- name: Install gitea-runner if needed
-  when: gitea_runner_version not in gitea_runner_check.stdout
+#
+# No pre-check via `gitea-runner --version`: get_url with `checksum:`
+# already short-circuits when the on-disk file matches, and re-downloads
+# on a version bump (sha mismatch). A substring check on stdout would
+# also miss the 1.0.3-vs-1.0.30 trap that _verify.yml's regex_search
+# explicitly guards.
+- name: Install gitea-runner
   get_url:
     url: "{{ gitea_runner_release[ansible_architecture].url }}"
     checksum: "sha256:{{ gitea_runner_release[ansible_architecture].sha256 }}"
@@ -213,25 +208,16 @@
   tags:
     - gitea_runner
 
-- name: Enable rootless podman socket
+- name: Enable and start rootless podman socket
   when: not (ansible_check_mode and (gitea_runner_user.changed or gitea_runner_linger.changed))
   systemd:
     name: podman.socket
     enabled: true
-    scope: user
-  become: true
-  become_user: gitea_runner
-  tags:
-    - gitea_runner
-
-- name: Start rootless podman socket
-  when: not (ansible_check_mode and (gitea_runner_user.changed or gitea_runner_linger.changed))
-  systemd:
-    name: podman.socket
     state: started
     scope: user
   become: true
   become_user: gitea_runner
+  register: gitea_runner_podman_socket
   tags:
     - gitea_runner
 
@@ -265,6 +251,6 @@
     systemd_unit_args:
       src: gitea_runner
       condition: "{{ not (ansible_check_mode and (gitea_runner_service_result.changed or gitea_runner_user.changed)) }}"
-      restart: "{{ gitea_runner_service_result.changed or gitea_runner_conf.changed or gitea_runner_registration.changed or gitea_runner_installed.changed }}"
+      restart: "{{ gitea_runner_service_result.changed or gitea_runner_conf.changed or gitea_runner_registration.changed or gitea_runner_installed.changed or gitea_runner_podman_socket.changed }}"
   tags:
     - gitea_runner
