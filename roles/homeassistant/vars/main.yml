@@ -4,9 +4,15 @@
 # an on-disk `.installed-version` sentinel and refreshes the tree on
 # mismatch.
 #
-# Adding a new addon: append an entry here. Existing-pattern fields
-# (`include`, `extra_opts`) are optional and unset for entries that
-# don't need archive filtering.
+# Anything HACS-installable is intentionally managed via the HACS UI
+# inside HA rather than this list -- adding it twice double-loads its
+# frontend resources. Bootstrap HACS here, install the rest from the
+# UI. Examples currently managed via HACS: thermal_comfort,
+# thermal_comfort_icons.
+#
+# Adding a new ansible-managed addon: append an entry here. Existing-
+# pattern fields (`include`, `extra_opts`) are optional and unset for
+# entries that don't need archive filtering.
 homeassistant_addons:
   - name: hacs
     url: "{{ mirror_github }}/hacs/integration/releases/download/2.0.5/hacs.zip"
@@ -14,19 +20,3 @@ homeassistant_addons:
     version: "2.0.5"
     dest: /mnt/services/homeassistant/custom_components/hacs
     archive: zip
-
-  - name: thermal_comfort
-    url: "{{ mirror_github }}/dolezsa/thermal_comfort/releases/download/2.2.5/thermal_comfort.zip"
-    sha256: c4ea4903f8f3ce787ddc4d0aef34397a1872431fa8e046589dc341bb8cbbcec9
-    version: "2.2.5"
-    dest: /mnt/services/homeassistant/custom_components/thermal_comfort
-    archive: zip
-
-  - name: thermal_comfort_icons
-    url: "{{ mirror_github }}/rautesamtr/thermal_comfort_icons/archive/refs/tags/1.3.0.tar.gz"
-    sha256: fc790c528f223c15eef0920bb66b0f1cb0986d41e8a447cf21ee4dae0750aa53
-    version: "1.3.0"
-    dest: /mnt/services/homeassistant/www
-    archive: tar.gz
-    include: [ thermal_comfort_icons-1.3.0/dist/thermal_comfort_icons.js ]
-    extra_opts: [ --strip-components=2 ]
