@@ -48,6 +48,7 @@
     backup: true
     lstrip_blocks: true
     trim_blocks: true
+    validate: python3 -c 'import sys, ipaddress; [ipaddress.ip_address(l.split()[0]) for l in open(sys.argv[1]) if l.strip() and not l.startswith("#")]' %s
   become: true
   tags:
     - hostname
