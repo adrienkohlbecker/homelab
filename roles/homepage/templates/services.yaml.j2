@@ -2,6 +2,11 @@
 # Active alarm titles pulled by the homepage_alerts sidecar across each host.
 # Same origin (mounted at /alerts/ on the homepage vhost) so the page can
 # resize its own iframe to fit content.
+#
+# Gethomepage-native alternative if the iframe approach ever becomes a
+# problem: replace `type: iframe` with `type: customapi` pointing at
+# /alerts/api/alerts and use `mappings:` to render per-host counts inline.
+# See https://gethomepage.dev/widgets/services/customapi/.
 - Active alerts:
     - Active alerts:
         widget:
