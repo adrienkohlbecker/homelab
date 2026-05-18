@@ -46,6 +46,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name pihole \
+    --init \
     --log-driver journald \
     --log-opt tag="pihole" \
     --volume /mnt/services/pihole/etc:/etc/pihole \

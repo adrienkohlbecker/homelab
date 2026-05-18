@@ -34,6 +34,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name homepage \
+    --init \
     --log-driver journald \
     --log-opt tag="homepage" \
     --security-opt=no-new-privileges \
