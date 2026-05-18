@@ -107,8 +107,9 @@ variable "state_passphrase" {
 }
 
 
-data "cloudflare_account" "main" {
-  filter = {
-    name = "Home"
-  }
+# Single human-owned account; pinning the literal avoids re-resolving by
+# name on every plan (one fewer API call, no collision footgun if the
+# account is ever renamed or duplicated under a billing migration).
+locals {
+  cloudflare_account_id = "43f1339d1841088669b616cecc6562de"
 }

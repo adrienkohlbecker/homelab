@@ -8,12 +8,12 @@
 # --- destination addresses (account-scoped) ---
 
 resource "cloudflare_email_routing_address" "adrien_gmail" {
-  account_id = data.cloudflare_account.main.account_id
+  account_id = local.cloudflare_account_id
   email      = "adrien.kohlbecker@gmail.com"
 }
 
 resource "cloudflare_email_routing_address" "spouse_email" {
-  account_id = data.cloudflare_account.main.account_id
+  account_id = local.cloudflare_account_id
   email      = "spouse@example.com"
 }
 

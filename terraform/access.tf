@@ -13,7 +13,7 @@
 # session caps blast radius on a test fixture. Override per-policy
 # below if longer windows are needed for a specific test path.
 resource "cloudflare_zero_trust_access_application" "echo" {
-  account_id                 = data.cloudflare_account.main.account_id
+  account_id                 = local.cloudflare_account_id
   name                       = "echo"
   type                       = "self_hosted"
   domain                     = "echo.mhaf.fr"
@@ -42,7 +42,7 @@ resource "cloudflare_zero_trust_access_application" "echo" {
 # app re-points to these, the original inline policies become
 # orphaned -- delete them via direct API call after apply.
 resource "cloudflare_zero_trust_access_policy" "echo_me" {
-  account_id       = data.cloudflare_account.main.account_id
+  account_id       = local.cloudflare_account_id
   name             = "me"
   decision         = "allow"
   session_duration = "24h"
@@ -53,7 +53,7 @@ resource "cloudflare_zero_trust_access_policy" "echo_me" {
 }
 
 resource "cloudflare_zero_trust_access_policy" "echo_token" {
-  account_id       = data.cloudflare_account.main.account_id
+  account_id       = local.cloudflare_account_id
   name             = "token"
   decision         = "non_identity"
   session_duration = "24h"
@@ -75,7 +75,7 @@ variable "google_idp_client_secret" {
 }
 
 resource "cloudflare_zero_trust_access_identity_provider" "google" {
-  account_id = data.cloudflare_account.main.account_id
+  account_id = local.cloudflare_account_id
   name       = "Google"
   type       = "google"
 
