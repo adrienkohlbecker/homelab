@@ -5,12 +5,6 @@ default_config:
 # Load frontend themes from the themes folder
 frontend:
   themes: !include_dir_merge_named themes
-  # HACS auto-registers its frontend cards as lovelace resources at
-  # /hacsfiles/...?hacstag=<rev>; listing them here too made the browser
-  # load each card twice and customElements.define() throw on the second
-  # registration. Only the non-HACS thermal_comfort icons file belongs here.
-  extra_module_url:
-    - /local/thermal_comfort_icons.js
 
 automation: !include automations.yaml
 script: !include scripts.yaml
