@@ -10,7 +10,7 @@ AssertPathIsDirectory=/etc/journald-exporter/keys
 
 # So it'll run on startup.
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
 
 [Service]
 Type=notify

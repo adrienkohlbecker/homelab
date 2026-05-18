@@ -77,7 +77,7 @@ ExecStart=/usr/local/bin/gitea-runner daemon --config /mnt/services/gitea_runner
 # trigger chain in tasks/main.yml.
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
 {% if zfs_root %}
 WantedBy=zfs_autosnapshot.target
 {% endif %}

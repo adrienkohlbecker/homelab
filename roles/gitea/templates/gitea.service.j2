@@ -39,7 +39,7 @@ ExecStart=/usr/local/bin/gitea web --config /etc/gitea/app.ini
 Environment=USER={{ git_user.name }} HOME={{ git_user.home }} GITEA_WORK_DIR=/mnt/services/gitea
 
 [Install]
-WantedBy=default.target
+WantedBy=multi-user.target
 {% if zfs_root %}
 WantedBy=zfs_autosnapshot.target
 {% endif %}
