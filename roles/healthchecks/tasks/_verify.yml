@@ -64,3 +64,17 @@
   changed_when: false
   failed_when: _verify_wal.stdout | trim != 'wal'
   become: true
+
+# Uidmap regression detector. Django writes hc.sqlite as in-container
+# root, which the +0:N:1 override routes to host uid healthchecks. A
+# mapping drift (wrong uid in the override, mismatch between
+# service_user and the unit) would land the file at a different host
+# uid silently; assert ownership so the regression is loud.
+- name: _verify | healthchecks sqlite DB is owned by healthchecks
+  stat:
+    path: /mnt/services/sqlite/healthchecks/hc.sqlite
+  register: _verify_db_owner
+  failed_when: >-
+    not _verify_db_owner.stat.exists
+    or _verify_db_owner.stat.pw_name != 'healthchecks'
+  become: true
