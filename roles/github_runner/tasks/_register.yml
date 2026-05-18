@@ -3,12 +3,12 @@
 # labels).
 #
 # Instance identity is the literal concatenation
-# {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }} -- inlined
-# everywhere instead of captured in a `runner_iid` set_fact so the
-# concatenation reaches task `name:` fields at parse time
+# {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}. The literal
+# stays inlined in task `name:` fields because they render at parse time
 # (per feedback_ansible_task_name_parse_time -- name: renders before
-# set_fact runs, even under include_tasks where each iteration
-# re-parses).
+# set_fact runs); task BODIES read the same value via the runner_iid
+# set_fact below, which is safe because it's re-set at the top of this
+# file on every loop iteration (per feedback_set_fact_leaks_across_iterations).
 #
 # Ephemeral + JIT model: no per-instance state dir, no per-instance
 # registration token, no .runner sentinel to wait for. The container's
@@ -17,16 +17,24 @@
 # across all instances); the runner registers, runs one job, deregisters,
 # exits, and systemd's Restart=always brings up the next container.
 
+# Reset at the top of every iteration so a previous instance's values
+# can't bleed into the next via set_fact persistence. runner_name_re
+# uses regex_escape so an inventory_hostname containing '.' or '-'
+# (today bare 'lab'/'pug'/'bunk', but future-proofed) doesn't silently
+# broaden the match.
+- name: _register | Set instance facts for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
+  set_fact:
+    runner_iid: "{{ runner_instance.repo }}_{{ runner_instance.suffix }}"
+    runner_name_re: "^{{ (inventory_hostname ~ '_' ~ runner_instance.repo ~ '_' ~ runner_instance.suffix) | regex_escape }}_[a-f0-9]+$"
+
 - name: _register | Create workdir for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
   file:
-    path: /mnt/scratch/github_runner/workdir_{{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
+    path: /mnt/scratch/github_runner/workdir_{{ runner_iid }}
     state: directory
     owner: github_runner
     group: github_runner
     mode: "0755"
   become: true
-  tags:
-    - github_runner
 
 # Per-instance env file consumed by podman's --env-file in the template.
 # Static for the instance's lifetime; changes (relabel, repo rename)
@@ -36,15 +44,13 @@
 - name: _register | Install env file for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
   template:
     src: github_runner_envfile.j2
-    dest: /etc/default/github_runner@{{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
+    dest: /etc/default/github_runner@{{ runner_iid }}
     owner: root
     group: root
     mode: "0644"
     backup: true
   become: true
   register: runner_envfile
-  tags:
-    - github_runner
 
 # Enable + start github_runner@<repo>_<suffix>.service in system
 # scope (the unit runs as root and demotes to host github_runner
@@ -60,7 +66,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: github_runner@{{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
+      src: github_runner@{{ runner_iid }}
       condition: "{{ not (ansible_check_mode and github_runner_user.changed) }}"
       # Restart on env-file edits (label or repo URL change), PAT
       # rotation (data sha mismatch surfaces as github_runner_pat_rotated),
@@ -77,8 +83,6 @@
         {{ runner_envfile.changed
            or github_runner_pat_rotated | default(false)
            or (github_runner__service_result.changed | default(false)) }}
-  tags:
-    - github_runner
 
 # After the unit is running, confirm GitHub agrees the runner is
 # registered + online. Catches PAT scope/revocation, repo-deleted,
@@ -103,10 +107,8 @@
   until: >-
     _verify_runner_online.json.runners
     | selectattr('status', 'equalto', 'online')
-    | selectattr('name', 'match', '^' ~ inventory_hostname ~ '_' ~ runner_instance.repo ~ '_' ~ runner_instance.suffix ~ '_[a-f0-9]+$')
+    | selectattr('name', 'match', runner_name_re)
     | list | length > 0
   retries: 12
   delay: 5
   no_log: true
-  tags:
-    - github_runner
