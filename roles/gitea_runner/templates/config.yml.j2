@@ -34,6 +34,11 @@ runner:
   fetch_timeout: 5s
   # The interval for fetching the job from the Gitea instance.
   fetch_interval: 2s
+  # The maximum backoff interval while idle. Upstream defaults to 5s
+  # (only 2.5x our fetch_interval); 60s cuts idle-poll DB pressure on
+  # gitea substantially while keeping the moment-a-job-lands latency
+  # at fetch_interval (2s) -- backoff resets on activity.
+  fetch_interval_max: 60s
   # The labels of a runner are used to determine which jobs the runner can run, and how to run them.
   # Like: "macos-arm64:host" or "ubuntu-latest:docker://gitea/runner-images:ubuntu-latest"
   # Find more images provided by Gitea at https://gitea.com/gitea/runner-images .
