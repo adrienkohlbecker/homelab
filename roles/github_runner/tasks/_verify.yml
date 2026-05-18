@@ -4,6 +4,41 @@
     key: github_runner
   become: true
 
+# CLAUDE.md "Why the literal `1`" -- rootless podman builds the
+# container gidmap from /etc/subgid shortest-range-first, so the
+# unit's --device /dev/kvm --group-add 1 expects the kvm-gid range
+# to land at container gid 1. Today _setup.yml synthesizes a kvm
+# group, asks subid for the passthrough, and the resulting
+# /etc/subgid should carry both ranges for github_runner: one
+# count-65536 + one count-1 (the kvm gid). Slurp the file and
+# assert both shapes so a regression in subid's template or the
+# ordering invariant fails loud.
+- name: _verify | resolve kvm gid for the subid range check
+  getent:
+    database: group
+    key: kvm
+  become: true
+
+- name: _verify | slurp /etc/subgid
+  slurp:
+    src: /etc/subgid
+  register: _verify_subgid
+  become: true
+
+- name: _verify | github_runner has the 65536 base range + kvm single-gid range
+  vars:
+    _subgid_lines: "{{ (_verify_subgid.content | b64decode).splitlines() }}"
+    _kvm_gid: "{{ ansible_facts.getent_group.kvm[1] }}"
+  assert:
+    that:
+      - _subgid_lines | select('match', '^github_runner:[0-9]+:65536$') | list | length == 1
+      - _subgid_lines | select('match', '^github_runner:' ~ _kvm_gid ~ ':1$') | list | length == 1
+    fail_msg: >-
+      /etc/subgid is missing the expected github_runner ranges. Got:
+      {{ _subgid_lines | select('match', '^github_runner:') | list }}.
+      Expected a 65536-count base range and a 1-count range mapping
+      the host kvm gid {{ _kvm_gid }}.
+
 - name: _verify | rootless podman.socket is active under github_runner
   systemd:
     name: podman.socket
