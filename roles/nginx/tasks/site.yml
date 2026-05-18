@@ -18,6 +18,12 @@
 #   csp_default_src           optional CSP directive override
 #   csp_frame_ancestors       optional CSP directive override
 #   csp_additional            optional CSP directive prefix
+#   csp_passthrough           optional bool, default false; if true, skip the
+#                             site's `add_header Content-Security-Policy` entirely
+#                             and let the upstream's own CSP through. Use for apps
+#                             that ship a strict nonce-based CSP (Authelia) where
+#                             nginx's blanket CSP would intersect with the upstream's
+#                             and produce stricter-than-either rules in the browser
 #   server_conf               optional snippet inserted in the server block
 #   location_conf             optional snippet inserted in the / location block
 #
