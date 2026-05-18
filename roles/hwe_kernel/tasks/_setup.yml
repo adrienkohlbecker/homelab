@@ -1,0 +1,70 @@
+# Force a "no HWE installed" starting state so the role's converge phase
+# performs a real apt install (rather than the no-op it would be on a
+# packer-baked image, where linux-generic-hwe-* is preinstalled per
+# packer/scripts/chroot.sh:189-196 and the role's apt task wouldn't
+# fire). Pairs with _verify.yml, which asserts the role's reboot signal
+# fired and that rebooting picks up the HWE-installed kernel.
+
+- name: _setup | Install GA kernel meta-package alongside HWE
+  apt:
+    pkg:
+      - linux-generic
+    update_cache: true
+  become: true
+
+# dpkg refuses to purge the running kernel ("Aborting removal of the
+# running kernel"). Hide HWE's /boot files behind dotfile names so the
+# boot chain's highest-version glob picks the GA kernel after reboot;
+# then we can purge HWE cleanly from a running-GA state. Same trick
+# used by roles/_packer/tasks/_verify.yml:721-727 for resolute's
+# downgrade exercise.
+- name: _setup | Hide running HWE kernel from boot chain
+  shell:
+    cmd: |
+      set -euo pipefail
+      mv -f /boot/vmlinuz-{{ ansible_kernel }} /boot/.vmlinuz-{{ ansible_kernel }}
+      mv -f /boot/initrd.img-{{ ansible_kernel }} /boot/.initrd.img-{{ ansible_kernel }}
+  become: true
+
+- name: _setup | Reboot to GA kernel
+  reboot:
+    reboot_timeout: 300
+  become: true
+
+- name: _setup | Capture GA uname for _verify to compare against
+  command: uname -r
+  changed_when: false
+  register: hwe_kernel_setup_uname
+
+- name: _setup | Stash GA uname on disk for _verify
+  copy:
+    content: "{{ hwe_kernel_setup_uname.stdout }}\n"
+    dest: /var/lib/hwe_kernel_setup_uname
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+- name: _setup | Purge HWE meta-package + its dangling kernel image
+  apt:
+    pkg:
+      - linux-generic-hwe-{{ ansible_distribution_version }}
+    state: absent
+    autoremove: true
+    purge: true
+  become: true
+
+# apt purged the package but the renamed (.dotfile) /boot/ entries are
+# no longer in dpkg's file list, so they stayed behind. Sweep.
+- name: _setup | Remove hidden HWE /boot leftovers
+  shell:
+    cmd: |
+      set -euo pipefail
+      rm -f /boot/.vmlinuz-* /boot/.initrd.img-*
+  become: true
+
+- name: _setup | Clear reboot-required so converge's signal is observable
+  file:
+    path: /var/run/reboot-required
+    state: absent
+  become: true
