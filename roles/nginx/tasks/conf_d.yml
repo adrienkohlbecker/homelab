@@ -81,10 +81,20 @@
     # inside the block so a rescue (rollback) skips this -- the previous
     # config is still what's running. Callers that want to batch
     # multiple drops under one reload pass `reload: false`.
+    #
+    # Skip in check mode: nginx_conf_d.changed reports "would change"
+    # rather than "did change", and the file isn't actually on disk to
+    # be reloaded. The systemd module also fails its dbus lookup with
+    # "Could not find the requested service nginx" when nginx was only
+    # would-installed in the same check-mode pass (e.g. fresh bootstrap
+    # via roles/_test); the rescue path then mislabels the failure as
+    # an nginx -t error. Real applies still reload because the install
+    # task above already started the service by the time we reach here.
     - name: conf_d | Reload nginx for {{ nginx_conf_d_args.name }}
       when:
         - _nginx_conf_d_reload
         - nginx_conf_d.changed
+        - not ansible_check_mode
       systemd:
         name: nginx
         state: reloaded
