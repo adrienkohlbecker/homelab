@@ -117,3 +117,30 @@
     | selectattr('resource.id', 'equalto', (_verify_influxdb_bucket.stdout | from_json)[0].id)
     | list | length == 0
   become: true
+
+# WAL is set in main.yml via `PRAGMA journal_mode=WAL` on the two DBs.
+# Re-read it here so a silent no-op (e.g. a BUSY-lock returning the
+# requested mode without applying, or a sqlite-cli regression) doesn't
+# pass apply but degrade the role's "WAL for write throughput" design.
+# DBs are absent on first apply before HA writes them -- skip then.
+- name: _verify | Stat sqlite DBs
+  stat:
+    path: /mnt/services/sqlite/homeassistant/{{ item }}
+  register: _verify_sqlite_dbs
+  loop:
+    - home-assistant_v2.db
+    - zigbee.db
+  loop_control:
+    label: "{{ item }}"
+  become: true
+
+- name: _verify | sqlite DBs are in WAL mode (when present)
+  command: sqlite3 -readonly /mnt/services/sqlite/homeassistant/{{ item.item }} 'PRAGMA journal_mode;'
+  register: _verify_sqlite_wal
+  changed_when: false
+  failed_when: (_verify_sqlite_wal.stdout | trim) != 'wal'
+  loop: "{{ _verify_sqlite_dbs.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.stat.exists
+  become: true
