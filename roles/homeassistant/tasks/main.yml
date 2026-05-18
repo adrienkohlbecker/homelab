@@ -223,12 +223,59 @@
   tags:
     - homeassistant
 
-- name: Install custom HA addons
-  include_tasks: _install_addon.yml
-  loop: "{{ homeassistant_addons }}"
-  loop_control:
-    loop_var: homeassistant_addon
-    label: "{{ homeassistant_addon.name }}"
+# Bootstrap HACS. Anything else HACS-installable is intentionally managed
+# via the HACS UI inside HA -- adding it twice double-loads its frontend
+# resources. Examples currently managed via HACS: thermal_comfort,
+# thermal_comfort_icons. The version, URL, and sha256 stay together so a
+# bump touches one place; the `creates:` sentinel + checksum-pinned
+# download give content-pinning without an on-disk version file.
+- name: Create HACS download cache dir
+  file:
+    path: /var/cache/homeassistant
+    state: directory
+    owner: root
+    group: root
+    mode: "0700"
+  become: true
+  tags:
+    - homeassistant
+
+- name: Create HACS install dir
+  when: not (ansible_check_mode and homeassistant_user.changed)
+  file:
+    path: /mnt/services/homeassistant/custom_components/hacs
+    state: directory
+    owner: homeassistant
+    group: homeassistant
+    mode: "0755"
+  become: true
+  tags:
+    - homeassistant
+
+- name: Download HACS archive
+  get_url:
+    url: "{{ mirror_github }}/hacs/integration/releases/download/2.0.5/hacs.zip"
+    checksum: sha256:97be6b824a4f38e683728cc6dd72367f6b8bad0a43428b1b3b987a3087adf413
+    dest: /var/cache/homeassistant/hacs.zip
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  tags:
+    - homeassistant
+
+- name: Unpack HACS
+  when: not (ansible_check_mode and homeassistant_user.changed)
+  unarchive:
+    src: /var/cache/homeassistant/hacs.zip
+    remote_src: true
+    dest: /mnt/services/homeassistant/custom_components/hacs
+    creates: /mnt/services/homeassistant/custom_components/hacs/manifest.json
+    mode: "a+rX"
+    owner: homeassistant
+    group: homeassistant
+  register: homeassistant_hacs_unpack
+  become: true
   tags:
     - homeassistant
 
@@ -296,7 +343,7 @@
     systemd_unit_args:
       src: homeassistant
       condition: "{{ not (ansible_check_mode and (systemd_unit.changed or homeassistant_user.changed)) }}"
-      restart: "{{ systemd_unit.changed or homeassistant_conf.changed or (homeassistant_addons_changed | default(false)) or homeassistant_config_files.changed }}"
+      restart: "{{ systemd_unit.changed or homeassistant_conf.changed or homeassistant_hacs_unpack.changed or homeassistant_config_files.changed }}"
   tags:
     - homeassistant
 
