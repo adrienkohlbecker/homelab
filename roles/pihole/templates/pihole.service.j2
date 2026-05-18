@@ -63,6 +63,13 @@ ExecStart=/usr/bin/podman run \
     --env FTLCONF_database_maxDBdays=31 \
     --env FTLCONF_files_database=/var/lib/pihole/pihole-FTL.db \
     --env FTLCONF_files_gravity=/var/lib/pihole/gravity.db \
+    {# pihole-FTL defaults misc.nice=-10 (renice itself) and ntp.sync.active=true #}
+    {# (sync system time from upstream). Neither succeeds without CAP_SYS_NICE / #}
+    {# CAP_SYS_TIME, which the container doesn't carry -- each failure warns on  #}
+    {# every restart. We don't need either: the host's chrony already handles    #}
+    {# time, and pihole runs fine at nice=0.                                     #}
+    --env FTLCONF_misc_nice=0 \
+    --env FTLCONF_ntp_sync_active=false \
     --env PIHOLE_UID={{ pihole_user.uid }} \
     --env PIHOLE_GID={{ pihole_user.group }} \
     --dns=127.0.0.1 \
