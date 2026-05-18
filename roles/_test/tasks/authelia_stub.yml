@@ -1,0 +1,30 @@
+# Test-only fixture: stand in for Authelia's /api/authz/auth-request
+# endpoint so roles using nginx_site_args.auth=required can be tested
+# without bringing up the real authelia role. Listens on
+# 127.0.0.1:{{ service_ports.authelia }} (same port the prod authelia
+# role publishes) and returns 200 OK to every auth-request subrequest,
+# which makes the upstream site template's `auth_request
+# /internal/authelia` always succeed.
+#
+# Localhost-only. Prod Authelia uses the same port; this fixture is
+# only ever installed by tasks/_setup.yml chains under test/testrole.py,
+# never on prod. The conf.d/ filename is prefixed with `_test_` to make
+# the test-only intent visible in operator listings.
+- name: authelia_stub | Install nginx fixture for /api/authz/auth-request
+  import_role:
+    name: nginx
+    tasks_from: conf_d
+  vars:
+    nginx_conf_d_args:
+      name: _test_authelia_stub.conf
+      content: |
+        server {
+          listen 127.0.0.1:{{ service_ports.authelia }};
+          server_name _;
+          location = /api/authz/auth-request {
+            return 200 'test_stub_ok';
+          }
+          location / {
+            return 404;
+          }
+        }
