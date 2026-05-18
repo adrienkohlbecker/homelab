@@ -372,7 +372,6 @@
     remote_src: true
     dest: /mnt/services/homeassistant/custom_components/hacs
     creates: /mnt/services/homeassistant/custom_components/hacs/manifest.json
-    mode: "a+rX"
     owner: homeassistant
     group: homeassistant
   register: homeassistant_hacs_unpack
