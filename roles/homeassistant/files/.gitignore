@@ -1,3 +1,10 @@
+# Operator-private content (automations, sensor/template lists, custom
+# blueprints) is excluded from git so personal automation logic doesn't
+# land in the repo. Placeholder stubs at these paths ARE committed (force-
+# added past these patterns) so the role's `copy:` task converges on a
+# fresh clone and in CI; the operator's local working-tree content shadows
+# them and `git update-index --skip-worktree <path>` in the operator's
+# main worktree keeps the divergence out of `git status`.
 automations.yaml
 macros.jinja
 sensors.yaml
