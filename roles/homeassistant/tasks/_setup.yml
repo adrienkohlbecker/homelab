@@ -35,6 +35,24 @@
   import_role:
     name: influxdb
 
+# Pre-create the homeassistant influxdb tenant so main.yml's
+# `Bootstrap influxdb tenant` call sees the bucket already there
+# during the check-mode pass. Without this, check mode tries the
+# conditional `influx bucket create` (which is a real podman exec
+# the check-mode pass skips), then the subsequent post-create
+# `bucket list ...` query fails with 404. Real applies are
+# idempotent: this _setup pass creates the bucket once for real,
+# main.yml's identical import_role no-ops the create.
+- name: _setup | Pre-create homeassistant influxdb bucket for check-mode pass
+  import_role:
+    name: influxdb
+    tasks_from: bucket
+  vars:
+    influxdb_bucket_args:
+      org: home
+      user: homeassistant
+      bucket: homeassistant
+
 # Provision a real mosquitto broker so _verify exercises HA's MQTT
 # integration path end-to-end instead of joining a nameplate-only
 # `mosquitto` network that no broker is listening on. Test fixture
