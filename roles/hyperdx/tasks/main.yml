@@ -133,6 +133,12 @@
         # Authorization header, validated by the OTel collector's
         # bearertokenauth extension; nginx just forwards it.
         location /v1/logs {
+          # Off-host shippers must see a plain 401 on auth failure, not
+          # the Authelia 302-redirect chain. The server-level
+          # `error_page 401 =302 https://auth.<domain>/?rd=...` set by
+          # `auth: required` would otherwise rewrite the 401 below.
+          # Override with a named location that re-emits 401 verbatim.
+          error_page 401 = @v1_logs_unauthorized;
           # Reject unauthenticated POSTs at the edge so we never buffer
           # up to client_max_body_size before the OTel collector rejects
           # them. `if` + `return` is one of the documented-safe shapes
@@ -149,6 +155,9 @@
           # OTLP batches sit comfortably below nginx's 1MB default but
           # raise it explicitly to give zstd-compressed flushes room.
           client_max_body_size 4M;
+        }
+        location @v1_logs_unauthorized {
+          return 401;
         }
   tags:
     - hyperdx
