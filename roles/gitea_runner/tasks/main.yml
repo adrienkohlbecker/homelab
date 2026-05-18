@@ -80,58 +80,20 @@
   tags:
     - gitea_runner
 
-- name: Check if gitea_runner is registered
-  stat:
-    path: /mnt/services/gitea_runner/.runner
-  register: gitea_runner_registered
-  become: true
-  tags:
-    - gitea_runner
-
-# --work-path matches roles/gitea_runner/tasks/_setup.yml's `gitea web`
-# invocation; without it gitea looks next to the binary, misses app.ini,
-# and refuses with "Gitea is not supposed to be run as root" because
-# I_AM_BEING_UNSAFE_RUNNING_AS_ROOT=true lives in app.ini, not env.
+# Mint a one-shot registration token in qemu_test only; prod's token
+# comes from vault as gitea_runner_registration_token. `creates:`
+# matches the Register task below so the mint is also skipped once
+# .runner exists, keeping idempotence cheap. --config gets app.ini so
+# gitea doesn't refuse with "Gitea is not supposed to be run as root"
+# (I_AM_BEING_UNSAFE_RUNNING_AS_ROOT lives in app.ini, not env).
 - name: Get registration token (test)
-  when:
-    - qemu_test
-    - not gitea_runner_registered.stat.exists
+  when: qemu_test
   command: /usr/local/bin/gitea --config /etc/gitea/app.ini actions generate-runner-token
+  args:
+    creates: /mnt/services/gitea_runner/.runner
   register: _test_runner_token
   become: true
   become_user: git
-  no_log: true
-  tags:
-    - gitea_runner
-
-- name: Compute prod registration token
-  when: not qemu_test
-  set_fact:
-    gitea_runner_token: "{{ gitea_runner_registration_token }}"
-  no_log: true
-  tags:
-    - gitea_runner
-
-# In check-mode (or when .runner already exists) the fixture's
-# `gitea actions generate-runner-token` task is skipped, leaving
-# _test_runner_token unset. The conditional substitutes a placeholder
-# so check-mode dry-run output still renders the `gitea-runner register`
-# command; on real runs the registration's `creates: .../.runner`
-# short-circuits when already registered, so the placeholder never
-# reaches the wire.
-#
-# `| last` (not `[0]` or `[1]`) because gitea's CLI may prefix the
-# token with log lines on startup -- the old root-running fixture
-# emitted a "running as root" warning that put the token on line 1;
-# the current git-running fixture emits no warning so the token is
-# line 0. Taking the last non-empty line is robust to either shape.
-- name: Compute test registration token
-  when: qemu_test
-  set_fact:
-    gitea_runner_token: >-
-      {{ (_test_runner_token.stdout_lines | default([]) | select | list | last)
-         if (_test_runner_token.stdout_lines | default([]) | select | list | length > 0)
-         else 'TOKEN' }}
   no_log: true
   tags:
     - gitea_runner
@@ -155,6 +117,14 @@
 # otherwise hide the real failure cause (gitea unreachable, token
 # rejected, cert untrusted). The follow-up scrubs the token from
 # stderr before failing loudly.
+#
+# REGISTRATION_TOKEN expression: in qemu_test the mint above set
+# _test_runner_token.stdout to a single-line token; in prod the
+# vaulted gitea_runner_registration_token is the source. The 'TOKEN'
+# fall-through covers check-mode + post-registration re-applies where
+# the mint task was skipped (creates: .runner) and stdout is undefined
+# -- the env still renders but `creates:` keeps register itself from
+# executing, so the placeholder never reaches the wire.
 - name: Register runner
   when: not (ansible_check_mode and gitea_runner_user.changed)
   shell: |
@@ -167,7 +137,10 @@
   args:
     creates: /mnt/services/gitea_runner/.runner
   environment:
-    REGISTRATION_TOKEN: "{{ gitea_runner_token }}"
+    REGISTRATION_TOKEN: >-
+      {{ (_test_runner_token.stdout | default('') | trim or 'TOKEN')
+         if qemu_test
+         else gitea_runner_registration_token }}
   become: true
   become_user: gitea_runner
   register: gitea_runner_registration
@@ -182,12 +155,14 @@
     - gitea_runner_registration.rc != 0
   vars:
     # Guard against replace('', '<REDACTED>') -- which would inject the
-    # marker between every character of stderr. Empty-token can happen if
-    # qemu_test's `gitea actions generate-runner-token` returned no lines
-    # (fixture mis-bringup) and the ternary fell back to '' instead of
-    # the 'TOKEN' placeholder.
+    # marker between every character of stderr. Empty-token can happen
+    # if the vault entry is empty (prod) or the fixture mint returned
+    # no output (test).
     _stderr: "{{ gitea_runner_registration.stderr | default('') }}"
-    _token: "{{ gitea_runner_token | default('') }}"
+    _token: >-
+      {{ (_test_runner_token.stdout | default('') | trim)
+         if qemu_test
+         else (gitea_runner_registration_token | default('')) }}
   fail:
     msg: |
       gitea-runner register failed (rc={{ gitea_runner_registration.rc }}).
