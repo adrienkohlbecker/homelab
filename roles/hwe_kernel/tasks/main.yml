@@ -9,13 +9,13 @@
     pkg:
       - linux-generic-hwe-{{ ansible_distribution_version }}
     cache_valid_time: 3600
-  register: kernel_apt
+  register: hwe_kernel_apt
   become: true
   tags:
     - hwe_kernel
 
 - name: Ask to reboot
-  when: kernel_apt.changed
+  when: hwe_kernel_apt.changed
   file:
     path: /var/run/reboot-required
     state: touch
