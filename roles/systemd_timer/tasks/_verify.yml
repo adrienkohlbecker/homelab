@@ -196,8 +196,14 @@
       accuracy_sec: 1s
       on_active_sec: "0"
       additional_service_directives:
+        # ProtectSystem=strict makes the whole filesystem read-only
+        # except /dev /proc /sys, so the exec_start above can't write
+        # to /tmp without ReadWritePaths punching a hole. Including it
+        # exercises the directive emission and lets the assertion
+        # below actually read the script's output.
         - "ProtectSystem=strict"
         - "ProtectHome=yes"
+        - "ReadWritePaths=/tmp"
 
 - name: _verify | Trigger the knobs fixture manually
   command: systemctl start --wait _verify_timer_knobs.service
