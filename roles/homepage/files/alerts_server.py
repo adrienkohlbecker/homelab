@@ -497,7 +497,11 @@ class AlertsCache:
             err = ""
         except Exception as e:  # noqa: BLE001
             data = None
-            err = f"{type(e).__name__}: {e}"
+            # Mirror the per-host catch in _fetch_one: surface only the exception
+            # class to the footer (it lands on the public dashboard) and keep
+            # the full repr in stderr for journal-side triage.
+            print(f"cache refresh failed: {type(e).__name__}: {e}", file=sys.stderr)
+            err = type(e).__name__
         now = time.time()
         with self._lock:
             if data is not None:
