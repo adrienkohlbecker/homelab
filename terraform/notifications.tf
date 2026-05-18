@@ -3,7 +3,7 @@ locals {
 }
 
 resource "cloudflare_notification_policy" "passive_origin_monitoring" {
-  account_id  = data.cloudflare_account.main.account_id
+  account_id  = local.cloudflare_account_id
   alert_type  = "real_origin_monitoring"
   description = "Recieve an email when your origin becomes unreachable"
   enabled     = true

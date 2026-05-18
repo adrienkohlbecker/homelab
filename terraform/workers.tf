@@ -13,7 +13,7 @@ locals {
 }
 
 resource "cloudflare_workers_script" "catchall_email" {
-  account_id  = data.cloudflare_account.main.account_id
+  account_id  = local.cloudflare_account_id
   script_name = "catchall-email"
   content     = file("${path.module}/workers/catchall-email.js")
   # main_module flags the upload as ES-module-syntax (the JS uses
