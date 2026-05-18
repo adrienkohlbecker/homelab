@@ -65,3 +65,22 @@ import {
   to = mailgun_domain.noreply_fahm_fr
   id = "eu:noreply.fahm.fr"
 }
+
+# Dedicated CI sending key, pushed into the homelab repo's
+# MAILGUN_API_KEY GitHub Actions secret (see github.tf). Scoped to
+# role=sending + this domain so a CI compromise can't manage domains,
+# webhooks, or other credentials -- it can only send mail through
+# noreply.fahm.fr. The master account API key in var.mailgun_api_key
+# stays on the operator's workstation (mise.toml + 1P) and is never
+# exposed to CI.
+#
+# Rotate with `tofu apply -replace=mailgun_api_key.ci_send_noreply`,
+# which mints a new key, retires the old one, and pushes the new
+# secret value into GitHub in the same apply.
+resource "mailgun_api_key" "ci_send_noreply" {
+  region      = "eu"
+  role        = "sending"
+  kind        = "domain"
+  domain_name = mailgun_domain.noreply_fahm_fr.name
+  description = "homelab CI (.github/workflows/test*.yml mail steps)"
+}

@@ -1,8 +1,8 @@
 # GitHub Actions repo secrets that this repo's workflows consume. Only
 # the secrets whose canonical source is somewhere terraform can read are
-# managed here -- vault-encrypted secrets (MAILGUN_API_KEY,
-# MAILGUN_DOMAIN, HOMELAB_VAULT_PASSWORD_TEST) stay on the manual
-# `gh secret set` path documented in CLAUDE.md until they're migrated.
+# managed here -- the vault-encrypted HOMELAB_VAULT_PASSWORD_TEST stays
+# on the manual `gh secret set` path documented in CLAUDE.md until it's
+# migrated.
 #
 # Auth: provider reads $GITHUB_TOKEN from the operator's `gh auth
 # token` via an external data source. Same pattern roles/github_runner
@@ -72,4 +72,21 @@ resource "github_actions_secret" "mise_github_token" {
   repository  = "homelab"
   secret_name = "MISE_GITHUB_TOKEN"
   value       = var.mise_github_token
+}
+
+# MAILGUN_API_KEY + MAILGUN_DOMAIN consumed by .github/workflows/test*.yml
+# (cross-cut and failure-notification mail steps via Mailgun's HTTP API,
+# see CLAUDE.md "Continuous Integration"). The pushed key is the
+# domain-scoped, role=sending key minted in mailgun.tf; the master
+# account API key (var.mailgun_api_key) is never exposed to CI.
+resource "github_actions_secret" "mailgun_api_key" {
+  repository  = "homelab"
+  secret_name = "MAILGUN_API_KEY"
+  value       = mailgun_api_key.ci_send_noreply.secret
+}
+
+resource "github_actions_secret" "mailgun_domain" {
+  repository  = "homelab"
+  secret_name = "MAILGUN_DOMAIN"
+  value       = mailgun_domain.noreply_fahm_fr.name
 }
