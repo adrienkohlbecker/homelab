@@ -18,9 +18,10 @@
 #
 # Conceptually one-time: team + apiKey + opamp wiring persist in mongo,
 # so out-of-band hyperdx restarts don't need a re-run. The ansible
-# caller fires this only when this script's content has changed (first
-# install, or a vault rotation that re-bakes a secret here). For mongo
-# data loss (snapshot restore, accident), the operator manually re-runs:
+# caller fires this only on first install (sentinel missing) or when
+# this script's content has changed (the caller wipes the sentinel
+# before the `creates:`-gated run). For mongo data loss (snapshot
+# restore, accident), the operator manually re-runs:
 #   sudo /usr/local/bin/hyperdx_bootstrap.sh
 #
 # Lives at /usr/local/bin/hyperdx_bootstrap.sh, mode 0700 root, with the
@@ -34,42 +35,59 @@ ADMIN_EMAIL='{{ root_email }}'
 ADMIN_PASSWORD='{{ hyperdx_admin_password }}'
 API_KEY='{{ hyperdx_ingestion_api_key }}'
 
-# Wait for the api (up to ~2min). Redundant on first ansible apply (the
+# Wait for the api (~2min budget). Redundant on first ansible apply (the
 # Enable hyperdx service task already waited for Type=notify healthy)
-# but needed for ad-hoc runs after a container restart.
-for _ in $(seq 60); do
-  if curl --silent --fail --max-time 5 "http://localhost:${UI_PORT}/api/health" >/dev/null; then
-    break
-  fi
-  sleep 2
-done
-curl --silent --fail --max-time 5 "http://localhost:${UI_PORT}/api/health" >/dev/null
+# but needed for ad-hoc runs after a container restart. --retry +
+# --retry-connrefused + --retry-all-errors covers ECONNREFUSED, 5xx,
+# and transient curl errors with backoff; --show-error surfaces the
+# final upstream error to stderr if the budget is exhausted.
+curl --silent --show-error --fail --max-time 5 \
+  --retry 60 --retry-delay 2 --retry-connrefused --retry-all-errors \
+  --output /dev/null \
+  "http://localhost:${UI_PORT}/api/health"
 
 # Register first admin. 200 (created) and 409 (team exists) are both
 # the desired terminal state; anything else is a real failure. Body
 # built via jq so embedded quotes / backslashes / dollar signs in the
-# password JSON-escape correctly.
+# password JSON-escape correctly. Body piped via stdin (--data-binary
+# @-) so the password never lands in curl's argv (visible to any host
+# user via /proc/<pid>/cmdline). Response body captured via --write-out
+# so an unexpected status surfaces the API's error message to stderr.
 body=$(jq -n --arg email "$ADMIN_EMAIL" --arg pw "$ADMIN_PASSWORD" \
   '{email: $email, password: $pw, confirmPassword: $pw}')
-status=$(curl --silent --output /dev/null --write-out '%{http_code}' \
+response=$(curl --silent --output - --write-out 'HTTPSTATUS:%{http_code}' \
   --max-time 10 \
   --request POST \
   --header 'Content-Type: application/json' \
-  --data "$body" \
-  "http://localhost:${UI_PORT}/api/register/password")
+  --data-binary @- \
+  "http://localhost:${UI_PORT}/api/register/password" <<<"$body")
+status="${response##*HTTPSTATUS:}"
+body_text="${response%HTTPSTATUS:*}"
 case "$status" in
   200|409) ;;
-  *) echo "register/password returned unexpected status: $status" >&2; exit 1 ;;
+  *) echo "register/password returned status $status: ${body_text:0:200}" >&2; exit 1 ;;
 esac
+
+# Pin the target team for the apiKey/auth-enforced update: refuse if
+# Mongo has more than one team (UI-side creation of a second tenant).
+# The empty-filter updateOne would silently mutate whichever team Mongo
+# orders first; fail loud and surface the ambiguity to the operator.
+team_count=$(podman exec -i hyperdx mongo --quiet hyperdx <<<'db.teams.countDocuments({})')
+if [[ "$team_count" != "1" ]]; then
+  echo "bootstrap expected exactly one team in Mongo, found '$team_count'; refusing to apply apiKey blindly" >&2
+  exit 1
+fi
 
 # Force the team's apiKey to the vault value AND pin
 # collectorAuthenticationEnforced=true (defends against a future upstream
 # default flip that would silently disable auth on prod re-applies).
-# API_KEY JSON-escaped via jq so a future key containing `"`, `\`, `$`
-# doesn't break the JS literal or mutate an unintended field. Piped via
-# stdin so neither secret appears in any process argv (visible to `ps`,
-# journal, etc.).
-escaped_key=$(jq -Rs . <<<"$API_KEY")
+# API_KEY JSON-escaped via `jq -n --arg` so a future key containing `"`,
+# `\`, `$` doesn't break the JS literal or mutate an unintended field.
+# `--arg` over `jq -Rs . <<<"$key"` because the herestring appends a
+# trailing newline that ends up as a literal "\n" inside the stored
+# apiKey, silently breaking bearertokenauth (mongo holds "key\n", header
+# sends "key", receiver returns 401).
+escaped_key=$(jq -n --arg k "$API_KEY" '$k')
 result=$(podman exec -i hyperdx mongo --quiet hyperdx <<EOF
 JSON.stringify(db.teams.updateOne({}, {\$set: {apiKey: ${escaped_key}, collectorAuthenticationEnforced: true}}))
 EOF
@@ -78,3 +96,9 @@ if ! echo "$result" | grep -q '"matchedCount":1'; then
   echo "team apiKey update did not match a team: $result" >&2
   exit 1
 fi
+
+# Sentinel for the ansible `creates:` gate. Touched only after the
+# state-forcing ops above succeed, so a partially-failed bootstrap
+# (e.g. Mongo unreachable mid-script) doesn't claim done.
+mkdir -p /var/lib/hyperdx
+touch /var/lib/hyperdx/.bootstrapped
