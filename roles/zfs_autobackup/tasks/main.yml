@@ -147,6 +147,12 @@
       # nearly the whole day to finish and still leaves a buffer
       # before the next fire.
       timeout_start_sec: 23h
+      # mbuffer reads ~/.mbuffer for defaults; without HOME set it
+      # logs "mbuffer: warning: HOME environment variable not set --
+      # unable to find defaults file" every snapshot. systemd
+      # oneshot units don't inherit any HOME by default.
+      environment:
+        HOME: /root
   tags:
     - zfs_autobackup
 
