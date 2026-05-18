@@ -4,8 +4,10 @@
 # resize its own iframe to fit content.
 #
 # Gethomepage-native alternative if the iframe approach ever becomes a
-# problem: replace `type: iframe` with `type: customapi` pointing at
-# /alerts/api/alerts and use `mappings:` to render per-host counts inline.
+# problem: re-add JSON output to alerts_generate.py (a sibling _atomic_write
+# of api_alerts.json + an exact-match nginx location), replace `type: iframe`
+# with `type: customapi` pointing at /alerts/api/alerts, and use `mappings:`
+# to render per-host counts inline.
 # See https://gethomepage.dev/widgets/services/customapi/.
 - Active alerts:
     - Active alerts:
