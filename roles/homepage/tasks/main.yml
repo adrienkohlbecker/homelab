@@ -107,6 +107,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: python3 -c 'import sys; compile(open(sys.argv[1]).read(), sys.argv[1], "exec")' "%s"
   register: homepage_alerts_source
   become: true
   tags:
