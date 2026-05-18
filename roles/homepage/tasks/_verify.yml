@@ -74,3 +74,34 @@
     that: item in _verify_alerts_html.content
     fail_msg: "Host {{ item }} missing from rendered HTML"
   loop: "{{ homepage_netdata_hosts }}"
+
+# Hot-reload proof: the role intentionally skips restart on YAML config
+# edits because gethomepage watches /app/config. If a future image bump
+# drops the watcher this assertion fires loudly instead of letting the
+# regression hide as "ansible reports changed, dashboard shows old data".
+- name: _verify | inject sentinel bookmark to exercise homepage hot-reload
+  copy:
+    dest: /mnt/services/homepage/bookmarks.yaml
+    content: |
+      - Verify:
+          - HomepageVerifySentinel:
+              - abbr: VS
+                href: https://verify.example/
+    owner: homepage
+    group: homepage
+    mode: "0644"
+  become: true
+
+- name: _verify | homepage hot-reloads bookmarks.yaml and renders the sentinel
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "homepage.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    return_content: true
+    status_code: 200
+  register: _verify_hotreload
+  retries: 15
+  delay: 2
+  until: "'HomepageVerifySentinel' in _verify_hotreload.content"
+  become: true
