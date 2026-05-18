@@ -1,6 +1,18 @@
+- name: Validate inventory_hostname is an RFC 1123 short label
+  assert:
+    that:
+      - inventory_hostname is match('^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$')
+    fail_msg: >-
+      inventory_hostname={{ inventory_hostname }} is not a valid RFC 1123
+      short label (lowercase alnum + hyphen, ≤63 chars, no leading/trailing
+      hyphen). FQDNs and uppercase aren't accepted — fix hosts.ini.
+  tags:
+    - hostname
+
 - name: Set hostname
   hostname:
     name: "{{ inventory_hostname }}"
+    use: systemd
   become: true
   tags:
     - hostname
@@ -13,6 +25,8 @@
     group: root
     mode: "0644"
     backup: true
+    lstrip_blocks: true
+    trim_blocks: true
   become: true
   tags:
     - hostname
