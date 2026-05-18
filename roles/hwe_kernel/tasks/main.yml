@@ -1,3 +1,9 @@
+# Install Ubuntu's Hardware Enablement (HWE) kernel meta-package. On
+# jammy this pulls noble's 6.8 kernel + matching linux-modules-*-generic,
+# which is also the donor for the ZFS 2.2.x kmod paired with the
+# noble-backports zfsutils userspace. See roles/zfs/tasks/main.yml (top
+# docstring) for the HWE/ZFS pairing rationale. Must run before roles/zfs
+# in site.yml.
 - name: Install HWE kernel
   apt:
     pkg:
