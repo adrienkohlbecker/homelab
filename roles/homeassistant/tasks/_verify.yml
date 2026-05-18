@@ -1,0 +1,66 @@
+- name: _verify | homeassistant unit is loaded and active
+  systemd:
+    name: homeassistant
+  register: _verify_unit
+  failed_when: >-
+    _verify_unit.status.LoadState != "loaded"
+    or _verify_unit.status.ActiveState != "active"
+  become: true
+
+# Functional probe of HA itself. /manifest.json is the same endpoint
+# the unit's --health-cmd polls, so a 200 here proves the container
+# is serving on the published port -- not just that systemd called it
+# active. Retry budget matches the unit's 100s start-period plus slack.
+- name: _verify | homeassistant answers /manifest.json on loopback
+  uri:
+    url: http://localhost:{{ service_ports.homeassistant }}/manifest.json
+    status_code: 200
+  register: _verify_http
+  retries: 60
+  delay: 2
+  until: _verify_http.status == 200
+
+# Exercise the nginx-proxied path too. A regression in the nginx_site
+# wiring (typo'd subdomain, broken proxy_pass, CSP rewriting the
+# response away) would pass the loopback probe above silently.
+- name: _verify | homeassistant answers /manifest.json via nginx vhost
+  uri:
+    url: https://localhost/manifest.json
+    headers:
+      Host: "homeassistant.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    status_code: 200
+  register: _verify_http_nginx
+  retries: 30
+  delay: 2
+  until: _verify_http_nginx.status == 200
+
+# /config/zigbee.db must be a symlink to /config/db/zigbee.db inside the
+# container so SQLite's WAL placement lands on the sqlite dataset bind
+# mount, not the main config dataset. The target file itself may not
+# exist (ZHA only writes it once configured); the link should.
+- name: _verify | ZHA zigbee.db symlink resolves inside the container
+  command: podman exec homeassistant readlink /config/zigbee.db
+  register: _verify_zigbee_link
+  changed_when: false
+  failed_when: _verify_zigbee_link.stdout | trim != '/config/db/zigbee.db'
+  become: true
+
+# Asset-install spot checks: prove each downloaded artifact actually
+# landed at the path the role claims, visible from inside the running
+# container via its bind-mounted /config. Catches a re-run where the
+# unarchive failed silently or the bind-mount got renamed.
+- name: _verify | HACS manifest is visible inside the container
+  command: podman exec homeassistant test -f /config/custom_components/hacs/manifest.json
+  changed_when: false
+  become: true
+
+- name: _verify | thermal_comfort manifest is visible inside the container
+  command: podman exec homeassistant test -f /config/custom_components/thermal_comfort/manifest.json
+  changed_when: false
+  become: true
+
+- name: _verify | thermal_comfort_icons frontend asset is visible inside the container
+  command: podman exec homeassistant test -f /config/www/thermal_comfort_icons.js
+  changed_when: false
+  become: true
