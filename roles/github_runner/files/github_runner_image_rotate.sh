@@ -18,14 +18,19 @@ image="nexus.lab.fahm.fr/homelab/runner:latest"
 
 # Sync the local store against the registry. Manifest HEAD is the
 # expensive bit; layer pulls only happen when the digest moved. Soft-
-# fail when nexus is unreachable -- the only consequence is delayed
-# rotation; the next tick retries. set -e would otherwise turn a
-# transient registry blip into a noisy unit failure. stderr stays
-# wired to the journal so a chronic outage is visible in
-# `journalctl -u github_runner_image_rotate`.
-if ! podman pull --quiet "$image" >/dev/null; then
-  echo >&2 "podman pull of $image failed; skipping rotation this tick"
-  exit 0
+# fail when nexus is unreachable -- if a cached image is in the local
+# store from a prior successful pull, treat that as "latest" and
+# proceed (a stale runner running an older digest still gets rotated
+# to the cached image); otherwise there's nothing to compare against
+# and we exit cleanly. stderr is wired to the journal so a chronic
+# outage is visible in `journalctl -u github_runner_image_rotate`.
+if ! podman pull --quiet "$image" >/dev/null 2>&1; then
+  echo >&2 "podman pull of $image failed; checking local store for a cached image"
+  if ! podman image exists "$image"; then
+    echo >&2 "no cached $image either; skipping rotation this tick"
+    exit 0
+  fi
+  echo >&2 "proceeding with cached $image (registry refresh deferred)"
 fi
 
 latest=$(podman image inspect "$image" --format '{{.Digest}}')
