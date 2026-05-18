@@ -67,13 +67,16 @@
 
 # jq + curl are consumed by github_runner_jit_mint (the ExecStartPre
 # helper that mints a single-use JIT registration on the host so the
-# PAT never enters the runner container). apt-idempotent on hosts that
-# already have them via other roles.
-- name: Install host dependencies for JIT mint
+# PAT never enters the runner container). python3-tomli supplies the
+# `tomli` module used by the storage.conf validate below (stdlib's
+# tomllib only landed in Python 3.11; jammy ships 3.10). apt-idempotent
+# on hosts that already have any of these via other roles.
+- name: Install host dependencies for JIT mint and config validation
   apt:
     pkg:
       - curl
       - jq
+      - python3-tomli
     install_recommends: false
     cache_valid_time: 3600
   become: true
@@ -326,6 +329,12 @@
     group: github_runner
     mode: "0644"
     backup: true
+    # podman silently falls back to defaults on parse failure -- exactly
+    # the failure mode CLAUDE.md's "validate: parses the rendered file"
+    # policy is designed to catch, and these four overlay knobs are all
+    # load-bearing. tomli over the stdlib's tomllib because jammy is on
+    # Python 3.10.
+    validate: python3 -c 'import tomli, sys; tomli.load(open(sys.argv[1], "rb"))' %s
   become: true
   tags:
     - github_runner
