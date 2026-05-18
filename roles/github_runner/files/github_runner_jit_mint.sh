@@ -66,13 +66,23 @@ body=$(jq -cn \
 # as a fresh mint) so the broader retry just hardens against TLS handshake
 # resets and mid-response disconnects that would otherwise eat one of the
 # unit's StartLimitBurst=3 on a transient blip.
-jit=$(curl --fail-with-body --silent --show-error \
-  --retry 3 --retry-all-errors --retry-connrefused --max-time 20 \
-  -H "Accept: application/vnd.github+json" \
-  -H "Authorization: Bearer $pat" \
-  -H "X-GitHub-Api-Version: 2022-11-28" \
-  -X POST "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/runners/generate-jitconfig" \
-  -d "$body" \
+#
+# Authorization header is piped via `curl -K -` on stdin, not passed as
+# `-H "Authorization: Bearer $pat"`. The shell expands $pat before
+# exec'ing curl, so the bearer token would otherwise land in argv and be
+# world-readable via /proc/<curl-pid>/cmdline for the lifetime of the
+# call (~ms but observable). The unprivileged github_runner user owns
+# the rootless DooD socket so a malicious workflow with `pid: host` on a
+# sibling container could read it. printf is a bash builtin so no extra
+# process inherits the secret.
+jit=$(printf 'header = "Authorization: Bearer %s"\n' "$pat" \
+  | curl --fail-with-body --silent --show-error \
+    --retry 3 --retry-all-errors --retry-connrefused --max-time 20 \
+    -K - \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    -X POST "https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/runners/generate-jitconfig" \
+    -d "$body" \
   | jq -r .encoded_jit_config)
 
 if [ -z "$jit" ] || [ "$jit" = "null" ]; then
