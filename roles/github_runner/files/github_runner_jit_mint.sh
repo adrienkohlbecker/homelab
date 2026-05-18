@@ -51,7 +51,14 @@ body=$(jq -cn \
   --arg work "$RUNNER_WORK_FOLDER" \
   --argjson group_id "$RUNNER_GROUP_ID" \
   '{name:$name, runner_group_id:$group_id, labels:$labels, work_folder:$work}')
-jit=$(curl --fail --silent --show-error \
+# --fail-with-body (not --fail): surface GitHub's error body on 4xx/5xx
+# so a scope-revoked PAT / deleted repo / 422 prints actionable detail
+# in the journal instead of curl's silent exit 22.
+# --retry / --retry-connrefused / --max-time: cover the boot-time race
+# against nexus/DNS bringup without letting a stuck TCP socket sit in
+# TimeoutStartSec for the full 300s.
+jit=$(curl --fail-with-body --silent --show-error \
+  --retry 3 --retry-connrefused --max-time 20 \
   -H "Accept: application/vnd.github+json" \
   -H "Authorization: Bearer $pat" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -64,12 +71,16 @@ if [ -z "$jit" ] || [ "$jit" = "null" ]; then
   exit 1
 fi
 
-# RuntimeDirectory=%N on the unit creates /run/<unit>/ at start. Mode
-# 0700 on the dir + 0600 on the file so only root reads it; the
-# container's --volume mount maps in-container root (= host
-# github_runner via the +0 uidmap override) to host root for the read,
-# which works because the uidmap collapses both to the same in-userns
-# uid.
+# RuntimeDirectory=%N on the unit creates /run/<unit>/ at start. The
+# dir lands at 0700 root:root via install -d; the file lands at 0600
+# root:root via umask 0077. The container reads /run/jit through the
+# bind-mount, not by re-resolving the file in its userns: podman opens
+# the source path as the unit's process (real root) at container start,
+# and the container reads through that already-opened fd. So in-
+# container uid 0 (= host github_runner via the +0 uidmap) never has
+# to satisfy a mode-0600-root-owned read check -- the host-side open
+# already did. Don't relax the 0600/0700 modes; they're what keep the
+# blob unreadable to anything other than this script + podman's open fd.
 out_dir="/run/github_runner@${inst}.service"
 install -d -m 0700 "$out_dir"
 umask 0077
