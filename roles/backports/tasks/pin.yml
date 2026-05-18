@@ -69,6 +69,15 @@
       and backports_args.packages must be a non-empty list
       (got {{ _backports_packages | to_json }})
 
+# check_mode: false on the pin + sources writes (and the apt-get
+# update that follows) is the same trick roles/apt uses to pre-warm
+# the cache: without it, a check-mode pass against a fresh box never
+# materialises the noble preferences/sources files, so the next apt
+# resolution for noble-only packages (aardvark-dns, netavark, etc.)
+# fails with "No package matching". Writing the pin + sources in
+# check mode is safe because both are config-files that the next
+# real apply would write identically; the apt-get update below is
+# read-only against the network.
 - name: Pin packages to noble (jammy) — {{ _backports_name }}
   when: ansible_distribution_major_version == "22"
   template:
@@ -83,6 +92,7 @@
     # malformed preferences files, so without this the only signal
     # would be silent loss of pinning).
     validate: "grep -qE '^Pin-Priority: 991$' %s"
+  check_mode: false
   become: true
   register: backports_pin
 
@@ -112,6 +122,10 @@
     group: root
     mode: "0644"
     backup: true
+  # See pin task above; check_mode: false pre-warms the apt setup so
+  # the cache-refresh below can actually pull noble metadata for a
+  # check-mode pass.
+  check_mode: false
   become: true
   register: backports_noble_sources
 
@@ -152,15 +166,21 @@
   become: true
   register: backports_legacy_removed
 
-- name: Refresh apt cache after noble setup
+# Force a real apt-get update even in check mode: the apt module's
+# update_cache=true respects check_mode and would no-op, leaving the
+# cache without the noble metadata the pin file is supposed to make
+# resolvable. `command: apt-get update` + check_mode: false matches
+# roles/apt's pre-warm pattern. Network-only, so safe in check mode.
+- name: Refresh apt cache after noble setup  # noqa: command-instead-of-module
   when:
     - ansible_distribution_major_version == "22"
     - backports_pin.changed
       or backports_noble_sources.changed
       or (backports_pin_legacy_removed.changed | default(false))
       or (backports_legacy_removed.changed | default(false))
-  apt:
-    update_cache: true
+  command: apt-get update --error-on=any
+  changed_when: false
+  check_mode: false
   become: true
 
 # state: latest because apt with state: present leaves an installed
