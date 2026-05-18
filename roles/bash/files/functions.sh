@@ -24,7 +24,13 @@ PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 f_err_trap() {
   local rc=$?
   local lineno=$1 cmd=$2
-  local src=${BASH_SOURCE[1]##*/}
+  # When the trap fires from top-level (no function frame above the
+  # trap), BASH_SOURCE[1] is unset, which trips `set -u` before the
+  # ##*/ strip can run. Fall back to the script that defined the trap
+  # so the breadcrumb still names *something*; same shape as the
+  # :-main default below for FUNCNAME[1].
+  local src=${BASH_SOURCE[1]:-${BASH_SOURCE[0]}}
+  src=${src##*/}
   local func=${FUNCNAME[1]:-main}
   printf 'ERR: %s:%s in %s: %s (exit %s)\n' "$src" "$lineno" "$func" "$cmd" "$rc" >&2
 }
