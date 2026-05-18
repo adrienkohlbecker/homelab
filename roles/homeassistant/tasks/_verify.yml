@@ -62,14 +62,27 @@
   failed_when: _verify_macvlan_ip.stdout | trim != '10.123.4.98'
   become: true
 
-# HACS install spot check: prove the bootstrap landed at the path the
-# role claims, visible from inside the running container via the
-# bind-mount. Catches a re-run where the unarchive failed silently or
-# the bind-mount got renamed. Other custom_components are installed
-# via the HACS UI and don't get probed here.
-- name: _verify | HACS manifest is visible inside the container
-  command: podman exec homeassistant test -f /config/custom_components/hacs/manifest.json
+# Functional HACS check: grep HA's journal for the loader's "We found
+# a custom integration hacs" warning. That line fires when HA actually
+# discovers HACS at startup, proving: HACS files visible inside the
+# container, manifest.json parsed, integration registered with HA's
+# loader. Stronger than stat'ing the bind-mount the role just wrote.
+# --grep bounds journalctl's output so a long-running prod host
+# doesn't dump megabytes into stdout.
+- name: _verify | HA loader discovered HACS at startup
+  command:
+    argv:
+      - journalctl
+      - -u
+      - homeassistant
+      - -b
+      - --no-pager
+      - --grep=custom integration hacs
+  register: _verify_hacs_loaded
   changed_when: false
+  retries: 30
+  delay: 4
+  until: _verify_hacs_loaded.stdout | length > 0
   become: true
 
 # Influxdb bootstrap artifacts. The main.yml tasks create user, bucket,
