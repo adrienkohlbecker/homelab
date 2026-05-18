@@ -3,6 +3,24 @@
   changed_when: false
   become: true
 
+- name: _verify | homepage.service is loaded and active
+  systemd:
+    name: homepage
+  register: _verify_homepage_unit
+  failed_when: >-
+    _verify_homepage_unit.status.LoadState != "loaded"
+    or _verify_homepage_unit.status.ActiveState != "active"
+  become: true
+
+- name: _verify | homepage_alerts.service is loaded and active
+  systemd:
+    name: homepage_alerts
+  register: _verify_alerts_unit
+  failed_when: >-
+    _verify_alerts_unit.status.LoadState != "loaded"
+    or _verify_alerts_unit.status.ActiveState != "active"
+  become: true
+
 - name: _verify | homepage answers on its loopback port
   uri:
     url: http://localhost:{{ service_ports.homepage }}/api/healthcheck
