@@ -8,54 +8,21 @@
   tags:
     - homepage
 
-- name: Configure homepage services
+- name: Configure homepage YAML config
   when: not (ansible_check_mode and homepage_user.changed)
   template:
-    src: services.yaml.j2
-    dest: /mnt/services/homepage/services.yaml
+    src: "{{ item }}.yaml.j2"
+    dest: "/mnt/services/homepage/{{ item }}.yaml"
     owner: homepage
     group: homepage
     mode: "0644"
     backup: true
-  become: true
-  tags:
-    - homepage
-
-- name: Configure homepage bookmarks
-  when: not (ansible_check_mode and homepage_user.changed)
-  template:
-    src: bookmarks.yaml.j2
-    dest: /mnt/services/homepage/bookmarks.yaml
-    owner: homepage
-    group: homepage
-    mode: "0644"
-    backup: true
-  become: true
-  tags:
-    - homepage
-
-- name: Configure homepage settings
-  when: not (ansible_check_mode and homepage_user.changed)
-  template:
-    src: settings.yaml.j2
-    dest: /mnt/services/homepage/settings.yaml
-    owner: homepage
-    group: homepage
-    mode: "0644"
-    backup: true
-  become: true
-  tags:
-    - homepage
-
-- name: Configure homepage widgets
-  when: not (ansible_check_mode and homepage_user.changed)
-  template:
-    src: widgets.yaml.j2
-    dest: /mnt/services/homepage/widgets.yaml
-    owner: homepage
-    group: homepage
-    mode: "0644"
-    backup: true
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
+  loop:
+    - services
+    - bookmarks
+    - settings
+    - widgets
   become: true
   tags:
     - homepage
@@ -167,4 +134,3 @@
       restart: "{{ homepage_alerts_service_result.changed or homepage_alerts_source.changed }}"
   tags:
     - homepage
-
