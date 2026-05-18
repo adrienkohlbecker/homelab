@@ -1,5 +1,6 @@
 - name: Validate inventory_hostname is an RFC 1123 short label
   assert:
+    quiet: true
     that:
       - inventory_hostname is match('^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$')
     fail_msg: >-
