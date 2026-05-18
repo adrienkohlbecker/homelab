@@ -62,6 +62,11 @@ moved {
 # 1Password via the TF_VAR below -- create the 1P item once
 # (item: "github-mise-token", field "credential"), then rotate by
 # generating a new PAT, updating the 1P field, and re-applying.
+# Not ephemeral: integrations/github v6.12.1's github_actions_secret.value
+# is not a write-only attribute, so this token has to land in state to be
+# referenced by the resource. Revisit when the provider grows write-only
+# support (see github_actions_secret docs note "this does not hide it from
+# state files").
 variable "mise_github_token" {
   type      = string
   sensitive = true

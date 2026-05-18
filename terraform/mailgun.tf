@@ -27,6 +27,7 @@
 variable "mailgun_api_key" {
   type      = string
   sensitive = true
+  ephemeral = true
 
   validation {
     condition     = length(var.mailgun_api_key) > 0
