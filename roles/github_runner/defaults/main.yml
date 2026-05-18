@@ -1,9 +1,17 @@
 # Per-host instance list lives in host_vars/<host>.yml. Each entry:
-#   - { repo: <repo-name>, suffix: <unique-suffix>, labels: "..." }
+#   - repo: <repo-name>             (required)
+#     suffix: <unique-suffix>       (required)
+#     owner: <github-owner>         (required)
+#     labels: "self-hosted,..."     (required, comma-separated)
+#     runner_group_id: <int>        (optional; defaults to 1, the implicit
+#                                    default group on personal-account repos)
 # Instance identity = <repo>_<suffix>; that's the systemd template
 # instance name (github_runner@<repo>_<suffix>.service), the podman
-# container name suffix, and the on-disk workdir name. Default to
-# empty so a host that doesn't run runners stays a no-op.
+# container name suffix, and the on-disk workdir name. owner is
+# per-instance so a host can mix repos from multiple GitHub owners;
+# (repo, suffix) must still be unique across the whole list.
+# runner_group_id is per-instance for organization runner groups.
+# Default to empty so a host that doesn't run runners stays a no-op.
 #
 # Defaults/, not vars/: role vars sit above host_vars in ansible's
 # precedence ladder and would silently mask any host-level override,

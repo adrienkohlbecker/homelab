@@ -10,11 +10,13 @@
     that:
       - "'repo' in item and item.repo is match('^[A-Za-z0-9_-]+$')"
       - "'suffix' in item and item.suffix is match('^[A-Za-z0-9_-]+$')"
+      - "'owner' in item and item.owner is match('^[A-Za-z0-9_-]+$')"
       - "'labels' in item and item.labels | length > 0"
+      - "'runner_group_id' not in item or (item.runner_group_id is integer and item.runner_group_id >= 1)"
     fail_msg: >-
       github_runner_instances entry {{ item }} is malformed. Each entry
-      needs repo + suffix matching [A-Za-z0-9_-]+ and a non-empty
-      labels string.
+      needs repo + suffix + owner matching [A-Za-z0-9_-]+ and a non-empty
+      labels string. Optional runner_group_id must be an integer >= 1.
   loop: "{{ github_runner_instances }}"
   loop_control:
     label: "{{ item.repo | default('?') }}_{{ item.suffix | default('?') }}"
