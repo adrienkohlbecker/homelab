@@ -374,7 +374,7 @@ resource "cloudflare_dns_record" "fahm_fr_srv_imaps__tcp" {
   data = {
     port     = 993
     priority = 0
-    target   = "_imaps._tcp.fahm.fr"
+    target   = "imap.fastmail.com"
     weight   = 1
   }
   name     = "_imaps._tcp.fahm.fr"
