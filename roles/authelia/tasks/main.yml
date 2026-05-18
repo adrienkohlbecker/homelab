@@ -1,0 +1,163 @@
+- name: Set up authelia system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: authelia
+  tags:
+    - authelia
+
+# Separate SQLite path mirrors healthchecks: /mnt/services/sqlite/<svc>
+# is its own ZFS dataset on prod (recordsize/cache tuned for SQLite)
+# while /mnt/services/<svc> holds the YAML config. The harness's
+# zfs_has_services_mount flag still gates the consumer side; on the
+# test fixture both paths are plain dirs.
+- name: Create authelia sqlite directory
+  when: not (ansible_check_mode and authelia_user.changed)
+  file:
+    dest: /mnt/services/sqlite/authelia
+    state: directory
+    owner: authelia
+    group: authelia
+    mode: "0755"
+  become: true
+  tags:
+    - authelia
+
+- name: Configure authelia
+  template:
+    src: configuration.yml.j2
+    dest: /mnt/services/authelia/configuration.yml
+    owner: authelia
+    group: authelia
+    mode: "0640"
+    backup: true
+    # Best-effort YAML parse. Catches jinja quoting bugs + vault
+    # substitution typos before the file lands; Authelia itself
+    # validates on startup but writes a default-config fallback to
+    # disk if it can't parse the user file, which silently masks the
+    # bug.
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
+  register: authelia_config_result
+  become: true
+  tags:
+    - authelia
+
+- name: Configure authelia user database
+  template:
+    src: users.yml.j2
+    dest: /mnt/services/authelia/users.yml
+    owner: authelia
+    group: authelia
+    mode: "0640"
+    backup: true
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
+  register: authelia_users_result
+  become: true
+  tags:
+    - authelia
+
+- name: Create authelia JWT secret
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: authelia_jwt_secret
+      data: "{{ authelia_jwt_secret }}"
+  tags:
+    - authelia
+
+- name: Create authelia session secret
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: authelia_session_secret
+      data: "{{ authelia_session_secret }}"
+  tags:
+    - authelia
+
+- name: Create authelia storage encryption key
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: authelia_storage_encryption_key
+      data: "{{ authelia_storage_encryption_key }}"
+  tags:
+    - authelia
+
+- name: Create authelia SMTP password secret
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: authelia_smtp_password
+      data: "{{ authelia_smtp_password }}"
+  tags:
+    - authelia
+
+- name: Install authelia service
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: authelia.service.j2
+      condition: "{{ not (ansible_check_mode and authelia_user.changed) }}"
+  tags:
+    - authelia
+
+# Restart triggers cover every config + secret rotation path. The
+# *_rotated flags come from podman_secret; the *_result.changed
+# comes from template / systemd_unit's install task.
+- name: Enable authelia service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: authelia
+      condition: "{{ not (ansible_check_mode and (authelia_service_result.changed or authelia_user.changed)) }}"
+      restart: >-
+        {{ authelia_service_result.changed
+           or authelia_config_result.changed
+           or authelia_users_result.changed
+           or authelia_jwt_secret_rotated
+           or authelia_session_secret_rotated
+           or authelia_storage_encryption_key_rotated
+           or authelia_smtp_password_rotated }}
+  tags:
+    - authelia
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      # The portal is published at auth.{{ domain }} -- apex, not
+      # per-host -- so the session cookie scope (.{{ domain }}) covers
+      # every protected subdomain across lab/pug/bunk. The default
+      # site template publishes three server_names; the apex match
+      # ({{ subdomain }}.{{ domain }}) is the one users hit, the
+      # per-host one is harmless coverage.
+      subdomain: auth
+      proxy_pass: http://127.0.0.1:{{ service_ports.authelia }}/
+      # Authelia ships a strict nonce-based CSP (script-src 'self',
+      # style-src 'self' 'nonce-...'). Without csp_passthrough nginx
+      # also emits its blanket CSP and the browser sees two
+      # Content-Security-Policy headers, which it applies independently
+      # (intersection). The merge breaks nonce matching on style tags
+      # and blocks scripts/styles Authelia would otherwise admit. Let
+      # Authelia own the CSP for this site.
+      csp_passthrough: true
+      # Authelia injects X-Forwarded-* itself; nginx already supplies
+      # them via the default proxy_set_header block in site.conf.j2.
+  tags:
+    - authelia

@@ -49,6 +49,10 @@
           href: https://transmission.{{ inventory_hostname }}.{{ domain }}/
 
 - Infra:
+    - Authelia:
+        - abbr: AU
+          icon: sh-authelia.png
+          href: https://auth.{{ authelia_cookie_domain }}/
     - Gitea:
         - abbr: GT
           icon: sh-gitea.png
