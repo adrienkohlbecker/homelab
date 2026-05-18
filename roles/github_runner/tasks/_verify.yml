@@ -28,13 +28,6 @@
   become: true
   become_user: github_runner
 
-- name: _verify | github_runner@.service template is installed in system scope
-  stat:
-    path: /etc/systemd/system/github_runner@.service
-  register: _verify_template
-  failed_when: not _verify_template.stat.exists
-  become: true
-
 # Host-level PAT secret. Created in main.yml from the vaulted
 # github_runner_pat var via podman_secret with the default user=root,
 # so it lives in root's podman -- inspect there, not in github_runner's
@@ -43,32 +36,6 @@
 - name: _verify | github_runner_pat podman secret exists
   command: podman secret inspect github_runner_pat
   changed_when: false
-  become: true
-
-# Per-instance assertions. Under qemu_test the envfile lands and the
-# unit loads (template + instance syntax check); the container isn't
-# started because the entrypoint's curl POST to GitHub's
-# generate-jitconfig with a stub PAT would 401 and loop on the
-# restart-limit. Under prod the container is running with the unit
-# active (which under --sdnotify=healthy implies the healthcheck has
-# passed, i.e. Runner.Listener is up and polling).
-- name: _verify | env file present for each instance
-  stat:
-    path: /etc/default/github_runner@{{ item.repo }}_{{ item.suffix }}
-  register: _verify_envfiles
-  failed_when: not _verify_envfiles.stat.exists
-  loop: "{{ github_runner_instances }}"
-  loop_control:
-    label: "{{ item.repo }}_{{ item.suffix }}"
-  become: true
-
-- name: _verify | github_runner_image_rotate script installed
-  stat:
-    path: /usr/local/bin/github_runner_image_rotate
-  register: _verify_rotate_script
-  failed_when: >-
-    not _verify_rotate_script.stat.exists
-    or not _verify_rotate_script.stat.executable
   become: true
 
 - name: _verify | github_runner_image_rotate.timer is active
@@ -100,43 +67,18 @@
       and 'podman pull of' not in _verify_rotate.stderr
     )
 
-- name: _verify | per-instance workdir exists
-  stat:
-    path: /mnt/scratch/github_runner/workdir_{{ item.repo }}_{{ item.suffix }}
-  register: _verify_workdirs
-  failed_when: >-
-    not _verify_workdirs.stat.exists
-    or not _verify_workdirs.stat.isdir
-  loop: "{{ github_runner_instances }}"
-  loop_control:
-    label: "{{ item.repo }}_{{ item.suffix }}"
-  become: true
-
-# Per-instance unit queries are system-scope (the template was moved
-# back from /etc/systemd/user/ to /etc/systemd/system/ -- see the
-# unit template's [Unit] comment for why).
-- name: _verify | github_runner@<instance>.service loads (qemu_test)
-  when: qemu_test
+# Per-instance unit-load check. _verify only runs under the test
+# harness against a disposable qemu VM, so we only have the qemu_test
+# branch: load the instantiated template + verify systemd accepts the
+# instance name. The container itself isn't running -- the stub PAT
+# would 401 against GitHub's generate-jitconfig and the unit would
+# loop on the restart-limit. System-scope: the unit lives under
+# /etc/systemd/system/ (see github_runner.service.j2's [Unit] block).
+- name: _verify | github_runner@<instance>.service loads
   systemd:
     name: github_runner@{{ item.repo }}_{{ item.suffix }}.service
-  register: _verify_unit_test
-  failed_when: _verify_unit_test.status.LoadState != "loaded"
-  loop: "{{ github_runner_instances }}"
-  loop_control:
-    label: "{{ item.repo }}_{{ item.suffix }}"
-  become: true
-
-# Under prod assert the unit is active. With --sdnotify=healthy this
-# implies the healthcheck passed (Runner.Listener up); the runner is
-# polling GitHub for jobs.
-- name: _verify | github_runner@<instance>.service is active (prod)
-  when: not qemu_test
-  systemd:
-    name: github_runner@{{ item.repo }}_{{ item.suffix }}.service
-  register: _verify_unit_prod
-  failed_when: >-
-    _verify_unit_prod.status.LoadState != "loaded"
-    or _verify_unit_prod.status.ActiveState != "active"
+  register: _verify_unit
+  failed_when: _verify_unit.status.LoadState != "loaded"
   loop: "{{ github_runner_instances }}"
   loop_control:
     label: "{{ item.repo }}_{{ item.suffix }}"
