@@ -52,7 +52,7 @@ resource "cloudflare_email_routing_catch_all" "fahm_fr" {
   }]
   actions = [{
     type  = "worker"
-    value = ["catchall-email"]
+    value = [cloudflare_workers_script.catchall_email.script_name]
   }]
   enabled = true
   name    = ""
