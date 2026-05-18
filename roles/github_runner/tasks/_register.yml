@@ -79,3 +79,34 @@
            or (github_runner__service_result.changed | default(false)) }}
   tags:
     - github_runner
+
+# After the unit is running, confirm GitHub agrees the runner is
+# registered + online. Catches PAT scope/revocation, repo-deleted,
+# or entrypoint failure modes at apply-time rather than at next-CI-
+# run-time. The entrypoint appends a random 8-char suffix to
+# RUNNER_NAME (runner/entrypoint.sh) so we match by prefix. Retries
+# cover the ~5-10s the runner takes to register on first start.
+# Skipped under qemu_test (no real GitHub). no_log: true keeps the
+# PAT bearer out of task output.
+- name: _register | Verify {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }} is registered with GitHub
+  when: not qemu_test
+  uri:
+    url: "https://api.github.com/repos/{{ github_runner_owner }}/{{ runner_instance.repo }}/actions/runners"
+    method: GET
+    headers:
+      Accept: application/vnd.github+json
+      Authorization: "Bearer {{ github_runner_pat }}"
+      X-GitHub-Api-Version: "2022-11-28"
+    status_code: 200
+    return_content: true
+  register: _verify_runner_online
+  until: >-
+    _verify_runner_online.json.runners
+    | selectattr('status', 'equalto', 'online')
+    | selectattr('name', 'match', '^' ~ inventory_hostname ~ '_' ~ runner_instance.repo ~ '_' ~ runner_instance.suffix ~ '_[a-f0-9]+$')
+    | list | length > 0
+  retries: 12
+  delay: 5
+  no_log: true
+  tags:
+    - github_runner
