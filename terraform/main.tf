@@ -20,10 +20,6 @@ terraform {
       source  = "wgebis/mailgun"
       version = "~> 0.9"
     }
-    external = {
-      source  = "hashicorp/external"
-      version = "~> 2"
-    }
     random = {
       source  = "hashicorp/random"
       version = "~> 3"
