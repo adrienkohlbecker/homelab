@@ -1,0 +1,23 @@
+# State-only verification. The two functional tests we'd want -- "apt
+# actually installed the meta-package on this run" and "no `Unknown
+# group 'power'` warnings in dbus's journal" -- both require a clean
+# starting state the harness can't produce: packer-baked VMs ship
+# linux-generic-hwe-* preinstalled (so the role's apt task is a no-op
+# on first apply), and the thermald-warning grep is only meaningful
+# across a reboot the harness doesn't perform. Assert the preconditions
+# downstream consumers (roles/zfs's dpkg-query gate) rely on instead.
+
+- name: _verify | HWE meta-package installed
+  command: dpkg-query -W -f='${Status}' linux-generic-hwe-{{ ansible_distribution_version }}
+  register: hwe_kernel_verify_dpkg
+  changed_when: false
+  failed_when: hwe_kernel_verify_dpkg.stdout != 'install ok installed'
+  check_mode: false
+  become: true
+
+- name: _verify | power group exists (for thermald dbus policy)
+  getent:
+    database: group
+    key: power
+    fail_key: true
+  become: true
