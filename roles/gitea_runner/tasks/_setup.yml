@@ -1,3 +1,20 @@
+# Pre-create /mnt/services as world-traversable before roles/gitea runs.
+# Otherwise ansible's file: module, when creating /mnt/services/gitea
+# (mode 0750 git:git), propagates the leaf's owner+mode onto any
+# newly-created intermediates -- which makes /mnt/services 0750 git:git
+# and locks gitea_runner out of its own config dir later. In prod
+# /mnt/services is a ZFS mountpoint so this isn't an issue; in the
+# fixture it's a regular dir created lazily by whichever role drills
+# first.
+- name: _test | Ensure /mnt/services is world-traversable
+  file:
+    path: /mnt/services
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
 - name: _test | Install dependencies
   apt:
     pkg:
