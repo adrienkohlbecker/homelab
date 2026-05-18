@@ -75,6 +75,7 @@
     content: |
       manage_etc_hosts: false
       preserve_hostname: true
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' %s
   become: true
   tags:
     - hostname
