@@ -241,9 +241,15 @@
 
 # HA-flavoured YAML uses custom tags (!include, !include_dir_merge_named,
 # !secret, ...). yaml.safe_load chokes on those, so register a stub
-# constructor for any !-prefixed tag before parsing. The validator only
-# proves the file is well-formed YAML before it lands on disk; HA's own
-# schema checks still gate startup.
+# constructor that returns None for any !-prefixed tag before parsing.
+#
+# Scope of this check: well-formedness only -- catches jinja quoting
+# bugs, vault-substitution typos that break YAML structure, indentation
+# regressions. It does NOT check HA-tag semantics: a typo'd
+# `!include automatons.yaml` (target missing) or `!secret no_such_key`
+# (key missing) both parse fine here -- the stub returns None and YAML
+# is structurally valid. HA's own schema + integration loaders catch
+# those at startup, where they're loud but post-deploy.
 - name: Configure homeassistant
   template:
     src: configuration.yaml.j2
