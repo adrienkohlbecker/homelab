@@ -4,21 +4,16 @@
 # on the manual `gh secret set` path documented in CLAUDE.md until it's
 # migrated.
 #
-# Auth: provider reads $GITHUB_TOKEN from the operator's `gh auth
-# token` via an external data source. Same pattern roles/github_runner
-# uses to fetch the runner registration token (gh on the operator's
-# machine, authenticated via keyring) -- nothing new to provision. If
-# `gh auth login` hasn't run, plan fails loudly at the data source.
+# Auth: integrations/github v6 falls back to `gh auth token` when neither
+# `token =` nor $GITHUB_TOKEN is set. Same pattern roles/github_runner uses
+# to fetch the runner registration token (gh on the operator's machine,
+# authenticated via keyring) -- nothing new to provision. If `gh auth login`
+# hasn't run, plan fails at provider configure time.
 # This token is *only* for terraform's repo-management calls (managing
 # secrets); CI secrets that need an authenticated GitHub identity are
 # dedicated PATs, see MISE_GITHUB_TOKEN below.
 
-data "external" "gh_token" {
-  program = ["sh", "-c", "printf '{\"token\":\"%s\"}\\n' \"$(gh auth token)\""]
-}
-
 provider "github" {
-  token = data.external.gh_token.result.token
   owner = "adrienkohlbecker"
 }
 
