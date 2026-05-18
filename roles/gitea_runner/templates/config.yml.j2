@@ -21,6 +21,13 @@ runner:
   # Please note that the Gitea instance also has a timeout (3h by default) for the job.
   # So the job could be stopped by the Gitea instance if it's timeout is shorter than this.
   timeout: 1h
+  # How long to wait for in-flight jobs to finish on SIGTERM before
+  # cancelling them. Composes with gitea_runner.service.j2's
+  # TimeoutStopSec=120: systemd gives the daemon 120s total, the daemon
+  # waits 110s for jobs, 10s headroom for cleanup. Without this set
+  # (upstream default 0s), SIGTERM cancels jobs immediately and the
+  # 120s on the systemd side is pure padding.
+  shutdown_timeout: 110s
   # Whether skip verifying the TLS certificate of the Gitea instance.
   insecure: false
   # The timeout for fetching the job from the Gitea instance.
@@ -86,10 +93,22 @@ container:
   # If it's "-", gitea-runner will find an available docker host automatically, but the docker host won't be mounted to the job containers and service containers.
   # If it's not empty or "-", the specified docker host will be used. An error will be returned if it doesn't work.
   docker_host: unix:///run/user/{{ gitea_runner_user.uid }}/podman/podman.sock
-  # Pull docker image(s) even if already present.
-  force_pull: false
+  # Pull docker image(s) even if already present. Pairs with the moving
+  # `:latest` tag in the default gitea_runner_labels (defaults/main.yml):
+  # without force_pull, a fresh upstream image bump (e.g. CVE patch in
+  # gitea/runner-images:ubuntu-latest) doesn't propagate to jobs until
+  # podman's prune timer evicts the cached copy.
+  force_pull: true
   # Rebuild docker image(s) even if already present
   force_rebuild: false
+  # Fail the daemon start loud if the rootless podman socket isn't
+  # serving within docker_timeout. Catches "socket file exists but
+  # podman isn't yet accepting connections" -- a real edge case during
+  # user-manager startup that the unit's ExecStartPre wait loop
+  # (gitea_runner.service.j2) doesn't cover because it checks file
+  # presence, not connection readiness.
+  require_docker: true
+  docker_timeout: 30s
 
 host:
   # The parent directory of a job's working directory.
