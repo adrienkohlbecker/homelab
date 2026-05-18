@@ -1,5 +1,5 @@
 # Reap idle per-cell test workdirs created by the CI workflows. Each
-# cell bind-mounts a unique subdir under here (host path embeds
+# cell bind-mounts a unique subdir under /scratch (host path embeds
 # github.run_id + strategy.job-index; see .github/workflows/test.yml).
 # Cleanup mechanics: `e` cleans files older than the Age field, then
 # recursively removes empty subdirs that are also old enough -- so a
@@ -8,5 +8,19 @@
 # is comfortably beyond the harness's 1500s timeout, so a live cell
 # can't be reaped mid-run.
 #
-# Type Path                                       Mode UID GID Age  Argument
-e      /mnt/scratch/github_runner/scratch         -    -   -   1d
+# Production runner workdirs (workdir_<inst>) hold per-job artifacts
+# split across:
+#  - _work/    : actions/checkout's clone cache; reuse across jobs is a
+#                real speedup, so we don't reap.
+#  - _temp/    : per-job scratch (downloads, decompressed actions).
+#                actions/runner stages each job's tool installs and
+#                checkouts under here; safe to reap after a week.
+#  - _actions/ : downloaded action repos shared across jobs. Reusable
+#                but heavy; 30d covers any reasonable cache window.
+# Globbed paths match every workdir_<inst> automatically; rules are
+# no-ops on hosts that haven't created any workdirs yet.
+#
+# Type Path                                              Mode UID GID Age  Argument
+e      /mnt/scratch/github_runner/scratch                -    -   -   1d
+e      /mnt/scratch/github_runner/workdir_*/_temp        -    -   -   7d
+e      /mnt/scratch/github_runner/workdir_*/_actions     -    -   -   30d
