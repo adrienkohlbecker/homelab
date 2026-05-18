@@ -39,50 +39,6 @@
       location = "{{ nexus_url }}/repository/ghcr.io"
   become: true
 
-- name: mirrors | Check for cloud-init
-  ansible.builtin.stat:
-    path: /etc/cloud/cloud.cfg.d
-  register: _test_cloud_init_dir
-
-- name: mirrors | Disable cloud-init manage_etc_hosts
-  # cloud-init's manage_etc_hosts can regenerate /etc/hosts on boot from a
-  # template, wiping the blockinfile entries below. noble's default is
-  # `false` today, but pin it explicitly so a future default flip doesn't
-  # silently break test boxes. Skips when cloud-init isn't installed
-  # (ZFS variants).
-  when:
-    - _test_cloud_init_dir.stat.exists
-    - extra_hosts | default({}) | length > 0
-  ansible.builtin.copy:
-    dest: /etc/cloud/cloud.cfg.d/90-disable-manage-hosts.cfg
-    mode: "0644"
-    owner: root
-    group: root
-    backup: true
-    content: |
-      manage_etc_hosts: false
-  become: true
-
-- name: mirrors | Pin lab.fahm.fr DNS to LAN IP
-  # Test boxes inherit DNS via qemu user-mode → host's resolver, which works
-  # only as long as the dev host's resolver knows about lab.fahm.fr split DNS.
-  # Public DNS returns the WAN IP 10.123.128.2, which isn't reachable from
-  # inside qemu user-mode networking. Pin lab-internal names to the LAN IP
-  # so apt / podman / get_url all reach Nexus regardless of dev-host DNS.
-  # Source of truth is `extra_hosts` in group_vars/test.yml; pihole's
-  # container uses the same map for its --add-host flags.
-  when:
-    - nexus_url | length > 0
-    - extra_hosts | default({}) | length > 0
-  ansible.builtin.blockinfile:
-    path: /etc/hosts
-    marker: "# {mark} ANSIBLE MANAGED BLOCK (homelab test extra_hosts)"
-    block: |
-      {% for host, ip in extra_hosts.items() %}
-      {{ ip }} {{ host }}
-      {% endfor %}
-  become: true
-
 - name: mirrors | Configure pip
   when: nexus_url | length > 0
   ansible.builtin.copy:
