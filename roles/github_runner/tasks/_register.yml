@@ -21,11 +21,16 @@
 # can't bleed into the next via set_fact persistence. runner_name_re
 # uses regex_escape so an inventory_hostname containing '.' or '-'
 # (today bare 'lab'/'pug'/'bunk', but future-proofed) doesn't silently
-# broaden the match.
+# broaden the match. runner_envfile is reset to {changed: false} so
+# that if the template task downstream is ever skipped (currently it
+# always runs, but a future `when:` would change that), the restart
+# trigger reads a sane "no change" rather than the previous iteration's
+# .changed value.
 - name: _register | Set instance facts for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
   set_fact:
     runner_iid: "{{ runner_instance.repo }}_{{ runner_instance.suffix }}"
     runner_name_re: "^{{ (inventory_hostname ~ '_' ~ runner_instance.repo ~ '_' ~ runner_instance.suffix) | regex_escape }}_[a-f0-9]+$"
+    runner_envfile: {changed: false}
 
 - name: _register | Create workdir for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
   file:
