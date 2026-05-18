@@ -95,7 +95,7 @@
 - name: _register | Verify {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }} is registered with GitHub
   when: not qemu_test
   uri:
-    url: "https://api.github.com/repos/{{ github_runner_owner }}/{{ runner_instance.repo }}/actions/runners"
+    url: "https://api.github.com/repos/{{ runner_instance.owner }}/{{ runner_instance.repo }}/actions/runners"
     method: GET
     headers:
       Accept: application/vnd.github+json
