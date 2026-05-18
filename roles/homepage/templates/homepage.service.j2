@@ -25,6 +25,15 @@ Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N
 
+# HOMEPAGE_ALLOWED_HOSTS — gethomepage's Host-header allowlist. Three entries:
+#   - homepage.<host>.<domain>: nginx vhost (browser path)
+#   - localhost:<service_ports.homepage>: host-side _verify probe (ansible uri
+#     sends Host: localhost:<port> from the URL netloc; podman forwards TCP
+#     transparently so the container sees that literal Host)
+#   - localhost:3000: in-container --health-cmd wget probe
+# Direct-IP / raw inventory_hostname Host headers are intentionally rejected:
+# no legitimate path uses them, and a narrow allowlist hardens against
+# Host-header smuggling if a future nginx misconfig forwards a client Host:.
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \

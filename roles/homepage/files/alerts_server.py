@@ -456,6 +456,10 @@ def render_html(hosts: list[dict], updated_at: float, error: str) -> str:
             for a in host["alarms"]:
                 # href was pre-computed in _fetch_one so it's also visible on
                 # /api/alerts (debugging) — render_html just trusts it.
+                # target=_blank: this page lives in the /alerts/ iframe on the
+                # homepage vhost; a _self click would replace the iframe
+                # contents, not navigate the parent page. settings.yaml.j2's
+                # global `target: _self` is the corresponding half.
                 href = a.get("href") or click_root
                 rows.append(
                     f'<a class="alarm {html.escape(a["status"])}" '
