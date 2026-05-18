@@ -1,3 +1,12 @@
+- name: Assert required role inputs
+  assert:
+    that:
+      - homepage_netdata_hosts is defined
+      - homepage_netdata_hosts | length > 0
+    fail_msg: homepage_netdata_hosts must be defined and non-empty in host_vars
+  tags:
+    - homepage
+
 - name: Set up homepage system user, group, and config dir
   import_role:
     name: service_user
