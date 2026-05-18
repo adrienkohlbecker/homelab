@@ -15,7 +15,7 @@
   delay: 2
   until:
     - _verify_loopback.status == 200
-    - "'ok' in _verify_loopback.content"
+    - "'OK' in _verify_loopback.content"
   become: true
 
 # nginx Host-header probe -- exercises the full reverse-proxy chain so
@@ -32,7 +32,7 @@
   register: _verify_nginx
   failed_when: >-
     _verify_nginx.status != 200
-    or "ok" not in _verify_nginx.content
+    or "OK" not in _verify_nginx.content
   become: true
 
 # SECRET_KEY contract probe -- Django raises ImproperlyConfigured very
