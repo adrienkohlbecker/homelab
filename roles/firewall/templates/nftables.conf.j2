@@ -79,12 +79,22 @@ table inet homelab {
     # only mitigation against that was rp_filter=1; if policy routing
     # ever broke rp_filter, an attacker on the WAN iface forging an
     # RFC1918 saddr in $WG_SUBNET would have been accepted.
+    #
+    # mac0 (macvlan child of $WAN_IFACE in mode bridge) is included on
+    # hosts that run the macvlan role: L2 broadcasts to $WAN_IFACE --
+    # nmbd's NetBIOS announcements to .255, keepalived gratuitous ARPs --
+    # also get delivered to mac0, and without this pair would hit the
+    # catch-all log+drop (~400 lines/day on pug). Trust scope is the same
+    # as eth0+HOME_LAN: mac0 sits on the same physical L2.
     set lan_admin_pairs {
         typeof iifname . ip saddr
         flags interval, constant
         elements = {
             $WAN_IFACE . $HOME_LAN comment "home LAN via WAN iface",
             "wg0" . $WG_SUBNET comment "wireguard peer via wg0",
+{% if macvlan_subnet is defined %}
+            "mac0" . $HOME_LAN comment "home LAN via macvlan child",
+{% endif %}
         }
     }
 
