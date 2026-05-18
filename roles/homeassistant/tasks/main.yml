@@ -147,10 +147,6 @@
     group: homeassistant
     mode: "0600"
     backup: true
-    block_start_string: "<<%"
-    block_end_string: "%>>"
-    variable_start_string: "<<<"
-    variable_end_string: ">>>"
     validate: python3 -c 'import yaml,sys; yaml.add_multi_constructor("!",lambda l,s,n:None,Loader=yaml.SafeLoader); yaml.safe_load(open(sys.argv[1]))' "%s"
   register: homeassistant_conf
   become: true
