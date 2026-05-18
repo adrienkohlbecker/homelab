@@ -12,7 +12,6 @@
 - name: Set hostname
   hostname:
     name: "{{ inventory_hostname }}"
-    use: systemd
   become: true
   tags:
     - hostname
