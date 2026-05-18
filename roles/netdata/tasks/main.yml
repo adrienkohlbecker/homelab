@@ -479,9 +479,11 @@
       proxy_pass: http://127.0.0.1:19999/
       # alarm_log?count=10000 (polled by homepage_alerts every 30s) returns
       # ~hundreds of KB to a few MB; default 8x4k buffers spill to disk.
+      # Measured 1.7MB on pug -- 16x64k=1MB still spills (~2k warn/day);
+      # 32x128k=4MB gives 2x headroom for future alarm growth.
       location_conf: |
         proxy_buffer_size 16k;
-        proxy_buffers 16 64k;
+        proxy_buffers 32 128k;
   tags:
     - netdata
 
