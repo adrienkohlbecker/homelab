@@ -645,27 +645,16 @@
       register: _packer_verify_efi_linux_before
       become: true
 
-    - name: _verify | HWE-kernel install (jammy/noble)
-      when: ansible_distribution_release in ["jammy", "noble"]
-      block:
-        - name: _verify | Install HWE kernel (newer than what packer shipped)
-          ansible.builtin.apt:
-            name: linux-generic-hwe-{{ '22.04' if ansible_distribution_release == 'jammy' else '24.04' }}
-            state: present
-            update_cache: true
-          become: true
-          register: _packer_verify_hwe_install
-
-        - name: _verify | HWE install was a real install, not a no-op
-          ansible.builtin.assert:
-            that: _packer_verify_hwe_install.changed
-            fail_msg: >-
-              apt reported no changes from `linux-generic-hwe-*` —
-              HWE was already current, so the test premise is broken
-              (no different kernel to reboot into)
-
-    - name: _verify | Older-kernel install + hide running kernel (resolute)
-      when: ansible_distribution_release == "resolute"
+    # Pre-2026-05 this branch had a separate HWE-meta-install path
+    # for jammy/noble (linux-generic-hwe-22.04 etc.), which fell over
+    # once the packer image started shipping HWE itself -- apt
+    # reported the install as a no-op and the rest of the test had
+    # nothing to verify. Use the older-kernel-install + hide-running
+    # path for every release; works the same way whether the running
+    # kernel is HWE or GA, because apt-cache madison lists both
+    # linux-image-generic branches and picks the second-newest
+    # version as the downgrade target.
+    - name: _verify | Older-kernel install + hide running kernel
       block:
         - name: _verify | Refresh apt cache so madison sees the current archive
           ansible.builtin.apt:
@@ -690,8 +679,21 @@
                 echo >&2 "archive has only $count linux-image-generic version(s); need 2+ for a downgrade target (test premise broken)"
                 exit 1
               fi
+              # apt-cache madison emits two version shapes depending
+              # on release:
+              #   noble / resolute: X.Y.Z-N.M (dash before the ABI
+              #     revision, dot before the package revision) --
+              #     `5.15.0-179.163`. ABI is X.Y.Z-N.
+              #   jammy: X.Y.Z.N.M (dots all the way) --
+              #     `5.15.0.179.163`. ABI is also X.Y.Z-N but the
+              #     meta-package version uses dots.
+              # Two-pass sed: first strip the trailing .M (package
+              # revision), then convert any remaining .N to -N so
+              # the result is the canonical X.Y.Z-N ABI that
+              # linux-image-<ABI>-generic uses.
               ver=$(echo "$versions" | tail -2 | head -1)
-              echo "$ver" | sed -E 's/^([0-9]+\.[0-9]+\.[0-9]+-[0-9]+).*$/\1/'
+              echo "$ver" | sed -E -e 's/\.[0-9]+$//' -e 's/\.([0-9]+)$/-\1/'
+            executable: /bin/bash
           register: _packer_verify_older_abi
           changed_when: false
 
@@ -724,6 +726,7 @@
               set -euo pipefail
               mv -f /boot/vmlinuz-{{ ansible_kernel }} /boot/.vmlinuz-{{ ansible_kernel }}
               mv -f /boot/initrd.img-{{ ansible_kernel }} /boot/.initrd.img-{{ ansible_kernel }}
+            executable: /bin/bash
           become: true
 
         - name: _verify | Re-run the hook to stage the older kernel onto /EFI/Linux/ (aarch64)
