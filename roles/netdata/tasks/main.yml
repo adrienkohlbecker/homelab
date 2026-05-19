@@ -477,6 +477,14 @@
     nginx_site_args:
       subdomain: netdata
       proxy_pass: http://127.0.0.1:19999/
+      # Forward-auth on lab only. pug's netdata is polled cross-host by
+      # lab's homepage_alerts timer over `https://netdata.pug.fahm.fr`
+      # with no cookie/Basic auth, so flipping pug to `required` would
+      # break the alerts panel. Drop the per-host gate once pug's
+      # forward-auth is wired (PR2 cross-host) + Authelia gets a
+      # `networks:` bypass for the WG mesh (or alerts_generate.py grows
+      # Basic-auth credentials). See notes/authelia_rollout.md PR 3.
+      auth: "{{ 'required' if inventory_hostname == 'lab' else 'none' }}"
       # alarm_log?count=10000 (polled by homepage_alerts every 30s) returns
       # ~hundreds of KB to a few MB; default 8x4k buffers spill to disk.
       # Measured 1.7MB on pug -- 16x64k=1MB still spills (~2k warn/day);
