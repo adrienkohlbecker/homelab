@@ -211,28 +211,30 @@ wireguard_peers:
     site_subnet: "{{ site_subnets.home }}"
     public_key: "{{ wireguard_keys.box.public_key }}"
     private_key: "{{ wireguard_keys.box.private_key }}"
+  # Roaming clients live in the wg mirror of the home VLAN's DHCP block
+  # (10.123.2.64/26 → +64.0.0 → 10.123.66.64/26). See notes/network_topology.yml.
   - name: laptop
-    address: 10.123.66.128
+    address: 10.123.66.64
     is_server: false
     public_key: "{{ wireguard_keys.laptop.public_key }}"
     private_key: "{{ wireguard_keys.laptop.private_key }}"
   - name: phone
-    address: 10.123.66.129
+    address: 10.123.66.65
     is_server: false
     public_key: "{{ wireguard_keys.phone.public_key }}"
     private_key: "{{ wireguard_keys.phone.private_key }}"
   - name: ipad
-    address: 10.123.66.130
+    address: 10.123.66.66
     is_server: false
     public_key: "{{ wireguard_keys.ipad.public_key }}"
     private_key: "{{ wireguard_keys.ipad.private_key }}"
   - name: spouse_laptop
-    address: 10.123.66.131
+    address: 10.123.66.67
     is_server: false
     public_key: "{{ wireguard_keys.spouse_laptop.public_key }}"
     private_key: "{{ wireguard_keys.spouse_laptop.private_key }}"
   - name: spouse_phone
-    address: 10.123.66.132
+    address: 10.123.66.68
     is_server: false
     public_key: "{{ wireguard_keys.spouse_phone.public_key }}"
     private_key: "{{ wireguard_keys.spouse_phone.private_key }}"
