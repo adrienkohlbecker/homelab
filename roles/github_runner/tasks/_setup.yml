@@ -1,15 +1,9 @@
-- name: _setup | Install dependencies
-  apt:
-    pkg:
-      - podman
-      # podman's rootless mode shells out to newuidmap/newgidmap (in uidmap)
-      # to read the subuid/subgid ranges. uidmap is only a Recommends of
-      # podman, so install_recommends:false leaves it out -- pull it in
-      # explicitly so podman can start under github_runner.
-      - uidmap
-    install_recommends: false
-    cache_valid_time: 3600
-  become: true
+# podman comes in via the podman/install import at the bottom of this
+# file (noble-backported version, prod-shape storage layout). uidmap
+# is a Depends of noble's podman 4.9 (it was only a Recommends of
+# jammy's 3.4, which is why an earlier version of this file installed
+# it explicitly), so it lands automatically alongside the apt install
+# in podman/install.
 
 # In production, host-wide subuid/subgid allocation happens in the
 # `subid` role (driven by host_vars `subid_users`). The role-only test
