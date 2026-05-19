@@ -5,15 +5,12 @@ macvlan_args is the loop var from main.yml.
 
 Defaults:
   host_ip:     macvlan_args.block | ipmath(0) — slot 0 of the block.
-  mac_address: stable random_mac seeded by inventory_hostname for
-               the legacy `mac0` block (so existing prod deployments
-               keep their MACs across the refactor), or
-               inventory_hostname_<name> for any other block (so
-               sibling blocks don't collide).
+  mac_address: stable random_mac seeded by inventory_hostname_<name>
+               so sibling blocks on the same host pick distinct MACs
+               (same seed = same MAC = L2 collision).
 #}
-{% set _mac_seed = inventory_hostname if macvlan_args.name == 'mac0' else (inventory_hostname ~ '_' ~ macvlan_args.name) %}
 {% set _host_ip = macvlan_args.host_ip | default(macvlan_args.block | ansible.utils.ipmath(0)) %}
-{% set _mac = macvlan_args.mac_address | default('82:48:10' | random_mac(seed=_mac_seed)) %}
+{% set _mac = macvlan_args.mac_address | default('82:48:10' | random_mac(seed=(inventory_hostname ~ '_' ~ macvlan_args.name))) %}
 [Unit]
 Description={{ macvlan_args.name }} interface setup
 After=network.target
