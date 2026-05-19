@@ -48,6 +48,24 @@
 #                             /api/authz/auth-request endpoint (defaults to lab's
 #                             local Authelia; pug/bunk need a per-host override if
 #                             they ever enable forward-auth).
+#   bypass_query_param        optional dict { name: <str>, value: <str> }.
+#                             When set together with `auth: required`, the
+#                             auth_request subrequest short-circuits with a
+#                             204 if the parent request's `?<name>=<value>`
+#                             query param matches. Lets URL-param-only API
+#                             clients (apps that can't send Authorization
+#                             headers) bypass Authelia using a vaulted
+#                             pre-shared token. Browser hits without the
+#                             param fall through to Authelia normally.
+#                             The param is also stripped from `$args`
+#                             before proxy_pass so the upstream app never
+#                             sees the token (no leakage into the app's
+#                             own logs / error echoes). On the log side,
+#                             the http-scope `$request_safe` map in
+#                             nginx.conf.j2 redacts `auth_token=...` from
+#                             access-log lines; reuse the param name
+#                             `auth_token` unless you also extend that
+#                             map.
 #   server_conf               optional snippet inserted in the server block
 #   location_conf             optional snippet inserted in the / location block
 #

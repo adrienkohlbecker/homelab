@@ -1,6 +1,19 @@
 # compta is stateless: no config files, no on-host data. Skip the
 # /mnt/services/compta dir the helper creates by default; the unit
 # runs the image as compta:compta and bind-mounts nothing.
+- name: Require compta_api_token to be defined
+  assert:
+    that:
+      - compta_api_token is defined
+      - compta_api_token | length >= 16
+    fail_msg: >-
+      compta_api_token must be set in group_vars/prod.yml (vaulted with
+      --encrypt-vault-id prod) or group_vars/test.yml. Fronts the
+      URL-param bypass for compta's Mac API client; see
+      notes/authelia_rollout.md.
+  tags:
+    - compta
+
 - name: Set up compta system user and group
   import_role:
     name: service_user
@@ -74,5 +87,14 @@
     nginx_site_args:
       subdomain: compta
       proxy_pass: http://localhost:{{ service_ports.compta }}/
+      # Browser path goes through Authelia; the Mac API client appends
+      # ?auth_token=<vaulted-secret> on every URL to bypass the
+      # auth_request subrequest (it can't send Authorization headers).
+      # The token is redacted from access logs via the http-scope
+      # $request_safe map. See roles/nginx/tasks/site.yml docstring.
+      auth: required
+      bypass_query_param:
+        name: auth_token
+        value: "{{ compta_api_token }}"
   tags:
     - compta

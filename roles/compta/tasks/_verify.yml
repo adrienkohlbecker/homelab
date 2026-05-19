@@ -19,13 +19,15 @@
     - "'OK!' in compta_verify_loopback.content"
   become: true
 
-# nginx Host-header probe — exercises the full reverse-proxy chain
-# so a typo in nginx_site_args / proxy_pass fails here even though
-# the loopback probe above passes. Same arch gate.
-- name: _verify | Compta is reachable through nginx
+# nginx Host-header probe with the auth_token bypass — exercises the
+# full reverse-proxy chain AND the URL-param Authelia bypass. A typo
+# in proxy_pass or a broken bypass `if` inside /internal/authelia
+# fails here even though the loopback probe above passes. Same arch
+# gate.
+- name: _verify | Compta is reachable through nginx with auth_token bypass
   when: ansible_architecture == "x86_64"
   uri:
-    url: https://localhost/
+    url: https://localhost/?auth_token={{ compta_api_token }}
     headers:
       Host: compta.{{ inventory_hostname }}.{{ domain }}
     validate_certs: false
@@ -35,3 +37,83 @@
     compta_verify_nginx.status != 200
     or "OK!" not in compta_verify_nginx.content
   become: true
+
+# --- Authelia forward-auth gate (browser path) ---
+# A request with no auth_token must redirect to the Authelia portal.
+# follow_redirects: none keeps the 302 visible to the assert.
+- name: _verify | Browser hit without auth redirects to Authelia
+  when: ansible_architecture == "x86_64"
+  uri:
+    url: https://localhost/
+    headers:
+      Host: compta.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: compta_verify_no_auth
+  failed_when: >-
+    compta_verify_no_auth.status != 302
+    or ("auth." not in (compta_verify_no_auth.location | default("")))
+  become: true
+
+- name: _verify | Browser hit with wrong auth_token redirects to Authelia
+  when: ansible_architecture == "x86_64"
+  uri:
+    url: https://localhost/?auth_token=wrong_value_must_not_match
+    headers:
+      Host: compta.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: compta_verify_wrong_token
+  failed_when: >-
+    compta_verify_wrong_token.status != 302
+    or ("auth." not in (compta_verify_wrong_token.location | default("")))
+  become: true
+
+# --- Upstream isolation: nginx must strip auth_token from $args before
+# proxy_pass, so compta itself never sees the token. The container's
+# Rack::CommonLogger emits the request URI to stdout (--log-driver
+# journald), so journalctl is the functional witness. Send a uniquely-
+# named probe param alongside the token; the probe must reach compta
+# (proves the request was forwarded), the token must NOT (proves the
+# strip ran).
+- name: _verify | Fire bypass request with probe marker
+  when: ansible_architecture == "x86_64"
+  uri:
+    url: https://localhost/?auth_token={{ compta_api_token }}&probe=__compta_probe_marker_xyz__
+    headers:
+      Host: compta.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    status_code: 200
+  become: true
+
+- name: _verify | Nginx strips auth_token from $args before proxy_pass
+  when: ansible_architecture == "x86_64"
+  command: journalctl -u compta.service --since "30 seconds ago" --no-pager
+  register: compta_journal_after_probe
+  changed_when: false
+  become: true
+  failed_when: >-
+    "__compta_probe_marker_xyz__" not in compta_journal_after_probe.stdout
+    or "auth_token=" in compta_journal_after_probe.stdout
+    or compta_api_token in compta_journal_after_probe.stdout
+
+# --- Log redaction: nginx logs $request_safe which rewrites
+# auth_token=<value> to auth_token=REDACTED. Verify the real token
+# never lands on disk in /var/log/nginx/access.log. Wait past the
+# 5s access_log flush so the line for the bypass request is visible.
+- name: _verify | Wait for nginx access_log flush
+  when: ansible_architecture == "x86_64"
+  pause:
+    seconds: 6
+
+- name: _verify | Nginx access log redacts auth_token to REDACTED
+  when: ansible_architecture == "x86_64"
+  command: tail -n 200 /var/log/nginx/access.log
+  register: compta_access_log
+  changed_when: false
+  become: true
+  failed_when: >-
+    "auth_token=REDACTED" not in compta_access_log.stdout
+    or compta_api_token in compta_access_log.stdout

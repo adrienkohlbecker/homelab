@@ -45,6 +45,17 @@ server {
   # Authelia over wireguard when they need forward-auth.
   location /internal/authelia {
     internal;
+{% if nginx_site_args.bypass_query_param is defined %}
+    # URL-param bypass for clients that can't send Authorization headers
+    # (compta's Mac app). The auth_request subrequest sees the parent
+    # request's query args via $arg_<name>; if the token matches the
+    # vaulted secret, return 204 (a 2xx -> auth_request allows the
+    # parent through) without consulting Authelia. The token itself is
+    # redacted from the access log via $request_safe in nginx.conf.j2.
+    if ($arg_{{ nginx_site_args.bypass_query_param.name }} = "{{ nginx_site_args.bypass_query_param.value }}") {
+      return 204;
+    }
+{% endif %}
     proxy_pass {{ authelia_internal_url }};
     proxy_pass_request_body off;
     proxy_set_header Content-Length          "";
@@ -68,6 +79,20 @@ server {
   location / {
 {% if _auth_enabled %}
     auth_request /internal/authelia;
+{% endif %}
+{% if nginx_site_args.bypass_query_param is defined %}
+    # Strip the bypass token from $args before proxy_pass so the
+    # upstream app never sees it (token must not land in compta's own
+    # logs or echo back in error messages). nginx's proxy_pass forwards
+    # $is_args$args when the upstream URL has no own query string, so
+    # rewriting $args here removes the param from the forwarded URL.
+    # Two rewrites cover (1) param-first and (2) param-not-first:
+    if ($args ~ "^{{ nginx_site_args.bypass_query_param.name }}=[^&]*&?(.*)$") {
+      set $args $1;
+    }
+    if ($args ~ "^(.*)&{{ nginx_site_args.bypass_query_param.name }}=[^&]*(.*)$") {
+      set $args "$1$2";
+    }
 {% endif %}
 {% if nginx_site_args.proxy_pass is defined %}
     proxy_pass         {{ nginx_site_args.proxy_pass }};
