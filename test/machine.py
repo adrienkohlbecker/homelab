@@ -466,6 +466,12 @@ class Machine:
         Path("group_vars").copy_into(self.workdir.name)
         Path("host_vars").copy_into(self.workdir.name)
         Path("roles").copy_into(self.workdir.name)
+        # group_vars/{prod,test}.yml derive `network.*` via
+        # `lookup('file', playbook_dir ~ '/notes/network_topology.yml')`;
+        # the file has to be present alongside the staged playbooks for
+        # the lookup to resolve. Cheap to copy (one YAML file plus
+        # adjacent design notes nothing else reads).
+        Path("notes").copy_into(self.workdir.name)
         # wireguard/ is gitignored (vaulted keys, never committed) so it's
         # absent on a CI checkout. Skip silently when missing -- roles that
         # actually need its contents will fail later with a clearer error.
