@@ -62,21 +62,26 @@ zfs_has_minio_mount: false
 
 sensor_modules: []
 
-qemu_subnet: 10.0.2.0/24
 # Two blocks on the same en* parent: exercises the multi-block iteration
 # in main.yml's loop, distinct MAC seeds across sibling blocks, and two
 # podman macvlan networks coexisting on one parent NIC. Prod-shape uses
 # distinct parents (eth0 for mgmt, VLAN subifs for others); box collapses
 # them onto en* because the QEMU NIC isn't trunked. Lab/pug exercise the
-# distinct-parent path via host_vars/{lab,pug}.yml in the nightly run.
+# distinct-parent path via host_vars/{lab,pug}-qemu.yml.
+#
+# Block addresses come from data/network_topology.yml — same formula as
+# host_vars/lab.yml. Works under qemu because test/machine.py pins
+# slirp's user-net to the test-view supernet (10.234.0.0/18) via
+# `qemu_user_net_args`, so the parent en* iface lands on a subnet that
+# contains every per-host /28 the topology emits.
 macvlan_blocks:
   - name: mac_mgmt
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
-    block: "{{ qemu_subnet | ansible.utils.ipsubnet(28, 14) }}"   # /28 (16 IPs); host_ip defaults to block + 0
+    block: "{{ network.sites.home.vlans.management.cidr | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}"
     podman_network: true   # test fixture exercises the podman macvlan path
   - name: mac_iot
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
-    block: "{{ qemu_subnet | ansible.utils.ipsubnet(28, 13) }}"   # /28 adjacent to mac_mgmt's
+    block: "{{ network.sites.home.vlans.iot.cidr | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}"
     podman_network: true
 
 # macos_vm test fixture: matches the symlink _setup.yml fabricates over

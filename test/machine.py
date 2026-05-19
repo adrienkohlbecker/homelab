@@ -5,6 +5,7 @@ import contextlib
 import dataclasses
 import errno
 import fcntl
+import ipaddress
 import os
 import platform
 import shlex
@@ -15,6 +16,8 @@ import tempfile
 import time
 from pathlib import Path
 from typing import ClassVar, NamedTuple, Self
+
+import yaml
 
 from arch import ArchProfile, detect_host_arch, uefi_code_path_for
 from setup_mitogen import ensure_mitogen_symlink
@@ -43,6 +46,44 @@ UBUNTU_RELEASES: dict[str, str] = {
 DEFAULT_UBUNTU = "jammy"
 SSH_KEY = "packer/vagrant.key"
 SSH_HOST = "127.0.0.1"
+
+TOPOLOGY_PATH = Path(__file__).parent.parent / "data" / "network_topology.yml"
+
+
+def _load_test_topology() -> dict:
+    """Load data/network_topology.yml with the 10.123 → 10.234 gsub
+    applied. The test harness always uses the test view regardless of
+    which machine is selected — `test/inventory.ini` puts every
+    machine (lab/pug/box/minimal) in the [test] group, so ansible
+    consistently resolves `network.*` through group_vars/test.yml's
+    gsub'd view. Mirror that here so the qemu user-net subnet matches.
+    """
+    text = TOPOLOGY_PATH.read_text().replace("10.123", "10.234")
+    return yaml.safe_load(text)
+
+
+def qemu_user_net_args(machine: str) -> str:
+    """Comma-prefixed extras for `-netdev user,...` that pin the VM's
+    primary NIC to its topology IP via slirp's `dhcpstart=`.
+
+    Returns "" for machines absent from the topology (e.g. `minimal`),
+    leaving qemu on its default 10.0.2.0/24 user-net. Concurrent qemu
+    processes each run their own slirp, so identical net/dhcpstart
+    across cells is fine — slirps don't share state.
+    """
+    topo = _load_test_topology()
+    host = topo["hosts"].get(machine)
+    if not host:
+        return ""
+    physical = host["physical"]
+    supernet = topo["partitions"]["physical"]["cidr"]
+    net = ipaddress.ip_network(supernet)
+    # Router + DNS at the top of the supernet, well above every host
+    # slot (.0.2–.0.9) and every per-VLAN macvlan block (.X.128–.255),
+    # so the qemu router never collides with a topology-claimed address.
+    host_ip = str(net.broadcast_address - 1)
+    dns_ip = str(net.broadcast_address - 2)
+    return f",net={supernet},host={host_ip},dns={dns_ip},dhcpstart={physical}"
 
 # git only tracks the executable bit; a fresh checkout (notably CI's
 # `actions/checkout@v4`) lands the vagrant key at 0644 and ssh refuses
@@ -1365,11 +1406,21 @@ class QemuMachine(Machine):
             # `delegate_to: localhost` probes that need to ingress on the
             # VM's WAN iface (iptables _verify is the only consumer today;
             # emitted unconditionally for simplicity).
+            #
+            # `qemu_user_net_args(inventory_host)` adds `net=`/`host=`/
+            # `dns=`/`dhcpstart=` (from data/network_topology.yml,
+            # gsub'd 10.123 → 10.234) so the VM's eth0 comes up at
+            # exactly `network.hosts[inventory_host].physical`. Keyed
+            # on inventory_host (e.g. "box"), not on machine (e.g.
+            # "box_deps"), because the topology indexes inventory
+            # names. Empty for machines absent from the topology
+            # (e.g. `minimal`), which keep slirp's default 10.0.2.0/24.
             (
                 f"user,id=user.0,"
                 f"hostfwd=tcp:{SSH_HOST}:{self.ssh_port}-:22,"
                 f"hostfwd=tcp:{SSH_HOST}:{self.wan_tcp_test_port}-:32400,"
                 f"hostfwd=udp:{SSH_HOST}:{self.wan_udp_test_port}-:51820"
+                f"{qemu_user_net_args(self.inventory_host)}"
             ),
             "-object",
             "rng-random,id=rng0,filename=/dev/urandom",
