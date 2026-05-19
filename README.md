@@ -27,7 +27,7 @@ Ansible-driven configuration for my home infrastructure: a handful of bare-metal
 | `bunk.yml` | One-shot config for the off-site `bunk` peer |
 | `roles/` | ~100 roles — see "Roles" below |
 | `group_vars/`, `host_vars/` | Inventory variables (vault values inline as `!vault`) |
-| `packer/` | `qemu.pkr.hcl` builds the `box` / `pug` / `lab` QEMU images; all pools (apoc/dozer/tank/mouse) are baked in by `pools.sh` |
+| `packer/` | `qemu.pkr.hcl` builds the `box` / `pug` / `lab` QEMU images; pug/lab pools (apoc/dozer/tank/mouse) are baked in by `pools.sh` (box is single-disk rpool) |
 | `terraform/` | Cloudflare DNS + Nexus repos; OpenTofu state encrypted in MinIO |
 | `test/` | asyncio harness — `testrole.py` (one role on one VM), `testall.py` (matrix) |
 | `mise-tasks/`, `mise.toml` | Tool pinning, env (1Password refs), `lint` / `fmt` / `tf` / `packer:build` tasks |

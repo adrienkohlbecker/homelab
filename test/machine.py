@@ -86,12 +86,11 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
     "box": QemuMachineSpec(
         ssh_user="vagrant",
         inventory_host="box",
-        # box: 3-disk mirror rpool + apoc mirror + dozer mirror + tank
-        # raidz2 + mouse mirror, all baked in by packer. Synthetic
-        # union fixture used by push CI; rpool matches lab's 3-way
-        # mirror so every prod-shape rpool topology gets exercised.
+        # box: single-disk rpool, no extra pools. Minimal ZFS-on-root
+        # fixture used by push CI; producer-role coverage that needs
+        # apoc/dozer/tank/mouse moves to lab/pug nightly.
         packer_image="box",
-        os_disk_count=11,
+        os_disk_count=1,
     ),
     "box_deps": QemuMachineSpec(
         ssh_user="vagrant",
@@ -102,7 +101,7 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         # via roles/<role>/meta/test.yml's `machine: box_deps`. Reuses
         # host_vars/box.yml because inventory_host stays box.
         packer_image="box_deps",
-        os_disk_count=11,
+        os_disk_count=1,
     ),
     "lab": QemuMachineSpec(
         ssh_user="vagrant",
@@ -467,11 +466,10 @@ class Machine:
         Path("host_vars").copy_into(self.workdir.name)
         Path("roles").copy_into(self.workdir.name)
         # group_vars/{prod,test}.yml derive `network.*` via
-        # `lookup('file', playbook_dir ~ '/notes/network_topology.yml')`;
+        # `lookup('file', playbook_dir ~ '/data/network_topology.yml')`;
         # the file has to be present alongside the staged playbooks for
-        # the lookup to resolve. Cheap to copy (one YAML file plus
-        # adjacent design notes nothing else reads).
-        Path("notes").copy_into(self.workdir.name)
+        # the lookup to resolve.
+        Path("data").copy_into(self.workdir.name)
         # wireguard/ is gitignored (vaulted keys, never committed) so it's
         # absent on a CI checkout. Skip silently when missing -- roles that
         # actually need its contents will fail later with a clearer error.
