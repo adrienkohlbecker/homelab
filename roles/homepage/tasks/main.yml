@@ -224,6 +224,12 @@
       environment:
         NETDATA_HOSTS: "{{ homepage_alerts_netdata_hosts_env }}"
         OUTPUT_DIR: /var/www/homepage_alerts
+        # Forwards the URL-param bypass token to cross-host netdata
+        # queries; loopback queries (the homepage host's own netdata)
+        # skip nginx entirely and are unaffected. Token is the same
+        # vaulted secret consumed by the netdata role's
+        # nginx_site_args.bypass_query_param.
+        NETDATA_ALERTS_TOKEN: "{{ netdata_alerts_token }}"
       additional_service_directives:
         - "PrivateTmp=yes"
         - "ProtectSystem=strict"
