@@ -25,8 +25,11 @@ Restart=always
 Delegate=yes
 # Cold-start has to bring up ClickHouse, MongoDB, the otel-collector and the
 # Node app; ClickHouse alone takes ~15-20s on the lab. 120s leaves headroom
-# without going extreme.
-TimeoutSec=120
+# without going extreme. TimeoutStopSec is 90s (headroom over --stop-timeout
+# 60 below, so systemd waits for podman's graceful-stop budget plus slack
+# before SIGKILLing).
+TimeoutStartSec=120
+TimeoutStopSec=90
 RestartSec=5
 Type=notify
 # `all`, not `main`: with --detach podman exits as soon as conmon takes over;
@@ -53,6 +56,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="hyperdx" \
     --security-opt=no-new-privileges \
+    --init \
     --user 0:0 \
     --uidmap=0:0:65536 \
     --uidmap=+0:{{ hyperdx_user.uid }}:1 \
@@ -66,8 +70,8 @@ ExecStart=/usr/bin/podman run \
     --env FRONTEND_URL=https://hyperdx.{{ inventory_hostname }}.{{ domain }} \
     --publish 127.0.0.1:{{ service_ports.hyperdx }}:8080/tcp \
     --publish 127.0.0.1:{{ service_ports.hyperdx_otlp_http }}:4318/tcp \
-    --health-cmd         '["curl","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8080/api/health"]' \
-    --health-startup-cmd '["curl","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8080/api/health"]' \
+    --health-cmd         '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8080/api/health"]' \
+    --health-startup-cmd '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8080/api/health"]' \
     --health-startup-interval "2s" \
     --health-startup-timeout "5s" \
     --health-start-period "90s" \
