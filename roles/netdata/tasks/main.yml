@@ -1,3 +1,16 @@
+- name: Require netdata_alerts_token to be defined
+  assert:
+    that:
+      - netdata_alerts_token is defined
+      - netdata_alerts_token | length >= 16
+    fail_msg: >-
+      netdata_alerts_token must be set in group_vars/prod.yml (vaulted
+      with --encrypt-vault-id prod) or group_vars/test.yml. Fronts the
+      URL-param bypass that lab's homepage_alerts poller uses to fetch
+      cross-host netdata over nginx; see notes/authelia_rollout.md.
+  tags:
+    - netdata
+
 - name: Install netdata package
   import_role:
     name: netdata
@@ -477,14 +490,18 @@
     nginx_site_args:
       subdomain: netdata
       proxy_pass: http://127.0.0.1:19999/
-      # Forward-auth on lab only. pug's netdata is polled cross-host by
-      # lab's homepage_alerts timer over `https://netdata.pug.fahm.fr`
-      # with no cookie/Basic auth, so flipping pug to `required` would
-      # break the alerts panel. Drop the per-host gate once pug's
-      # forward-auth is wired (PR2 cross-host) + Authelia gets a
-      # `networks:` bypass for the WG mesh (or alerts_generate.py grows
-      # Basic-auth credentials). See notes/authelia_rollout.md PR 3.
-      auth: "{{ 'required' if inventory_hostname == 'lab' else 'none' }}"
+      # Browser path goes through Authelia; lab's homepage_alerts timer
+      # polls cross-host (e.g. https://netdata.pug.fahm.fr/api/v1/alarms)
+      # with no cookie/Basic auth, so it appends ?auth_token=<secret> on
+      # every URL to bypass the auth_request subrequest. The token is
+      # the same vaulted secret across all netdata hosts so a single
+      # poller can hit any of them. Loopback fetches on the host running
+      # homepage_alerts skip nginx entirely and don't need the token.
+      # See notes/authelia_rollout.md and alerts_generate.py.
+      auth: required
+      bypass_query_param:
+        name: auth_token
+        value: "{{ netdata_alerts_token }}"
       # alarm_log?count=10000 (polled by homepage_alerts every 30s) returns
       # ~hundreds of KB to a few MB; default 8x4k buffers spill to disk.
       # Measured 1.7MB on pug -- 16x64k=1MB still spills (~2k warn/day);

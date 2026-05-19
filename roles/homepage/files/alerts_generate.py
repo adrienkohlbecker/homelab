@@ -16,6 +16,13 @@ Inputs (env):
   Example: "lab=http://localhost:19999=https://netdata.lab.fahm.fr,pug=https://netdata.pug.fahm.fr"
 - OUTPUT_DIR: directory to write the files into (default
   /var/www/homepage_alerts). Must be writable by the unit's User=.
+- NETDATA_ALERTS_TOKEN: optional. When set, every request to a
+  non-loopback query-url gets `?auth_token=<token>` (or `&auth_token=`
+  if the path already carries a query string) so it bypasses the
+  netdata vhost's Authelia forward-auth gate (see
+  roles/nginx/tasks/site.yml's bypass_query_param). Loopback URLs
+  (localhost / 127.0.0.1 / ::1) skip the token — they bypass nginx
+  entirely.
 
 Embedded in the homepage dashboard via an iframe widget mounted at
 /alerts/ on the homepage vhost (same origin) so the page can resize
@@ -106,13 +113,18 @@ class _HostClient:
     silently (the bare except in _fetch_one swallows it as entry['error']).
     """
 
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, base_url: str, auth_token: str = "") -> None:
         u = urllib.parse.urlsplit(base_url)
         cls = http.client.HTTPSConnection if u.scheme == "https" else http.client.HTTPConnection
         kwargs: dict = {"timeout": FETCH_TIMEOUT}
         if u.scheme == "https":
             kwargs["context"] = SSL_CTX
         self._conn = cls(u.netloc, **kwargs)
+        # Token threaded into every request as ?auth_token=<value> (or
+        # &auth_token= if the path already carries a query). nginx's
+        # bypass_query_param helper short-circuits Authelia and strips
+        # the param before proxy_pass so netdata itself never sees it.
+        self._auth_token = auth_token
 
     def close(self) -> None:
         try:
@@ -121,6 +133,9 @@ class _HostClient:
             pass
 
     def _get_json(self, path: str) -> dict:
+        if self._auth_token:
+            sep = "&" if "?" in path else "?"
+            path = f"{path}{sep}auth_token={urllib.parse.quote(self._auth_token, safe='')}"
         self._conn.request("GET", path, headers={"User-Agent": "homepage-alerts/1"})
         resp = self._conn.getresponse()
         try:
@@ -246,11 +261,18 @@ def normalize(payload: dict) -> list[dict]:
     return items
 
 
-def _fetch_one(name: str, query_url: str, click_url: str) -> dict:
+_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
+
+
+def _fetch_one(name: str, query_url: str, click_url: str, auth_token: str = "") -> dict:
     entry = {"name": name, "url": query_url, "click_url": click_url}
     client: _HostClient | None = None
     try:
-        client = _HostClient(query_url)
+        # Loopback URLs skip nginx entirely (and thus skip the Authelia
+        # gate), so the auth_token is only applied to off-host targets.
+        host = urllib.parse.urlsplit(query_url).hostname or ""
+        token_for_client = auth_token if host.lower() not in _LOOPBACK_HOSTS else ""
+        client = _HostClient(query_url, auth_token=token_for_client)
         alarms = normalize(client.alarms())
         # alarm_log gives us per-alarm transition_id needed for the v2
         # deep-link path. Bulk fetch first; for any active alarm not in the
@@ -302,7 +324,7 @@ def _fetch_one(name: str, query_url: str, click_url: str) -> dict:
     return entry
 
 
-def collect(hosts: list[tuple[str, str, str]]) -> list[dict]:
+def collect(hosts: list[tuple[str, str, str]], auth_token: str = "") -> list[dict]:
     # Parallel fetches so one slow/unreachable host doesn't gate the others —
     # worst-case render is bounded by FETCH_TIMEOUT, not summed across hosts.
     # Iterating futures in submit order preserves the configured host order
@@ -311,7 +333,7 @@ def collect(hosts: list[tuple[str, str, str]]) -> list[dict]:
     if not hosts:
         return []
     with ThreadPoolExecutor(max_workers=min(len(hosts), MAX_FETCH_WORKERS)) as pool:
-        futures = [pool.submit(_fetch_one, n, q, c) for n, q, c in hosts]
+        futures = [pool.submit(_fetch_one, n, q, c, auth_token) for n, q, c in hosts]
         return [f.result() for f in futures]
 
 
@@ -500,12 +522,10 @@ def main() -> None:
         print("NETDATA_HOSTS is empty; refusing to run", file=sys.stderr)
         sys.exit(1)
     output_dir = pathlib.Path(os.environ.get("OUTPUT_DIR", "/var/www/homepage_alerts"))
+    auth_token = os.environ.get("NETDATA_ALERTS_TOKEN", "")
 
-    data = collect(hosts)
-    iso = (
-        datetime.datetime.now(tz=datetime.timezone.utc)
-        .isoformat(timespec="seconds")
-    )
+    data = collect(hosts, auth_token=auth_token)
+    iso = datetime.datetime.now(tz=datetime.timezone.utc).isoformat(timespec="seconds")
 
     # No top-level try/except — an exception here (disk full, permission
     # denied, etc.) propagates to Python's default print-traceback-and-exit-1.

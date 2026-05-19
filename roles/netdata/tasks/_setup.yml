@@ -3,6 +3,17 @@
     name: _test
     tasks_from: nginx
 
+# netdata uses nginx_site_args.auth=required + bypass_query_param.
+# Same rationale as compta/_setup.yml: gate-mode Authelia stub so
+# _verify can distinguish bypass-token (200) from no-token /
+# wrong-token (302) paths.
+- name: _setup | Install authelia stub in gate mode
+  import_role:
+    name: _test
+    tasks_from: authelia_stub
+  vars:
+    authelia_stub_mode: gate
+
 - name: Add podman-socket group
   group:
     name: podman-socket

@@ -209,6 +209,73 @@
     state: restarted
   become: true
 
+# --- nginx Authelia gate + URL-token bypass for cross-host polling ---
+# Browser path through `https://netdata.<host>.<domain>` is now gated
+# by Authelia forward-auth; lab's homepage_alerts timer (and any
+# future cross-host poller) appends `?auth_token=<netdata_alerts_token>`
+# to bypass. Functional witnesses:
+#   1. With token  -> 200 from netdata (gate bypassed)
+#   2. No token    -> 302 to auth portal (gate engaged)
+#   3. Wrong token -> 302 (gate not accidentally permissive)
+#   4. Nginx access log shows `auth_token=REDACTED`, not the literal
+#      token (http-scope $request_safe map working).
+# The upstream-strip (`set $args ...`) is functionally exercised by
+# compta's _verify via journalctl; it's a property of the shared
+# nginx helper, not service-specific, so we don't duplicate it here.
+- name: _verify | Netdata reachable through nginx with auth_token bypass
+  uri:
+    url: https://localhost/api/v1/info?auth_token={{ netdata_alerts_token }}
+    headers:
+      Host: netdata.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    status_code: 200
+  register: _verify_netdata_bypass
+  failed_when: >-
+    _verify_netdata_bypass.status != 200
+    or "version" not in (_verify_netdata_bypass.json | default({}))
+  become: true
+
+- name: _verify | Browser hit without auth redirects to Authelia
+  uri:
+    url: https://localhost/
+    headers:
+      Host: netdata.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: _verify_netdata_no_auth
+  failed_when: >-
+    _verify_netdata_no_auth.status != 302
+    or ("auth." not in (_verify_netdata_no_auth.location | default("")))
+  become: true
+
+- name: _verify | Browser hit with wrong auth_token redirects to Authelia
+  uri:
+    url: https://localhost/?auth_token=wrong_value_must_not_match
+    headers:
+      Host: netdata.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: _verify_netdata_wrong_token
+  failed_when: >-
+    _verify_netdata_wrong_token.status != 302
+    or ("auth." not in (_verify_netdata_wrong_token.location | default("")))
+  become: true
+
+- name: _verify | Wait for nginx access_log flush
+  pause:
+    seconds: 6
+
+- name: _verify | Nginx access log redacts auth_token to REDACTED
+  command: tail -n 200 /var/log/nginx/access.log
+  register: _verify_netdata_nginx_log
+  changed_when: false
+  become: true
+  failed_when: >-
+    "auth_token=REDACTED" not in _verify_netdata_nginx_log.stdout
+    or netdata_alerts_token in _verify_netdata_nginx_log.stdout
+
 # Cover the cross-role coupling: netdata's main.yml imports certbot's
 # tasks_from: netdata to render x509check.conf. A break in the
 # certbot-side template (x509check.conf.j2) or the netdata template
