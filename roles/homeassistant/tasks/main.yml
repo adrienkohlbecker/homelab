@@ -88,6 +88,37 @@
     - blueprints/automation
     - www
     - custom_components
+    - .storage
+  tags:
+    - homeassistant
+
+# Restrict HA's zeroconf/mDNS announcements to the iot_macvlan adapter
+# (eth1 inside the container; the unit file's --network ordering puts
+# mosquitto-bridge at eth0 and iot_macvlan at eth1). Without this, HA
+# advertises *all* its adapters -- including the internal mosquitto
+# bridge IP 10.89.0.29 -- to every adapter it can reach. LAN clients
+# pick up the bridge IP from mDNS, try to connect to it from outside,
+# and the packets land on lab's eth0 destined to a podman-only IP,
+# triggering kernel "martian source" logs (~120k/day on lab).
+#
+# force: false so an operator's UI edit (Settings -> System -> Network)
+# stays authoritative. First apply lands our default; subsequent UI
+# changes win. Deleting the file on disk reverts HA to "use all
+# adapters" (the unconfigured default), so a recovery path exists.
+#
+# If the --network ordering in homeassistant.service.j2 ever changes,
+# the eth1 here must move in lockstep -- `podman exec homeassistant
+# ip -4 addr show` confirms current assignment.
+- name: Restrict homeassistant network adapters
+  copy:
+    src: core.network
+    dest: /mnt/services/homeassistant/.storage/core.network
+    owner: homeassistant
+    group: homeassistant
+    mode: "0600"
+    force: false
+  register: homeassistant_network_storage
+  become: true
   tags:
     - homeassistant
 
@@ -350,7 +381,7 @@
     systemd_unit_args:
       src: homeassistant
       condition: "{{ not (ansible_check_mode and (homeassistant_service_result.changed or homeassistant_user.changed)) }}"
-      restart: "{{ homeassistant_service_result.changed or homeassistant_conf.changed or homeassistant_hacs_unpack.changed or homeassistant_config_files.changed }}"
+      restart: "{{ homeassistant_service_result.changed or homeassistant_conf.changed or homeassistant_hacs_unpack.changed or homeassistant_config_files.changed or homeassistant_network_storage.changed }}"
   tags:
     - homeassistant
 
