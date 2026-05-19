@@ -525,3 +525,14 @@ chmod 400 "/etc/sudoers.d/$USERNAME"
 # again on first run, but the at-rest image must point at canonical
 # Ubuntu mirrors.
 write_sources_list "$UBUNTU_MIRROR_UPSTREAM" "$UBUNTU_MIRROR_SECURITY_UPSTREAM"
+
+# Refresh /var/lib/apt/lists/ against the just-rewritten upstream URLs.
+# The earlier apt-get update at line 163 keyed the on-disk lists to the
+# Nexus URLs; after the rewrite above those entries are orphaned (apt
+# only consults lists whose URL matches sources.list) so the shipped
+# image effectively has an empty package cache for the configured
+# sources. Any role that does `apt: pkg: <name>` with cache_valid_time
+# set (e.g. hwe_kernel applied in packer/seed_deps.yml) sees "no package
+# matching" because ansible skips its own update. One more refresh here
+# leaves the image with a coherent cache.
+apt-get update
