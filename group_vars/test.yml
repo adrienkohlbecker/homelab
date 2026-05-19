@@ -11,37 +11,30 @@ nexus_url: nexus.lab.fahm.fr
 #      --add-host flags, bypassing pihole's own split-horizon wildcard
 #      (which resolves *.lab.fahm.fr to the fake test external_ips.lab).
 # Production leaves this unset — both consumers default to no overrides.
+# Values reference `prod_network` (not `network`) because these hostnames
+# MUST point at the live LAN, not the gsub'd test subnet.
 etc_hosts_entries:
-  nexus.lab.fahm.fr: 10.123.0.2
-  gitea.lab.fahm.fr: 10.123.0.2
-home_subnet: 10.234.0.0/16
-site_subnets:
-  home: 10.234.0.0/21
-  brumath: 10.234.56.0/24
-  bonniers: 10.234.57.0/24
-external_ips:
-  pug: 10.234.0.3
-  box: 10.234.0.5
-  eaton: 10.234.0.10
-  lab: 10.234.0.2
-  udm: 10.234.0.1
-  marantz: 10.234.2.10
-  printer: 10.234.2.11
-  siglent: 10.234.2.12
-  tubeszb: 10.234.4.16
-  bunk: 10.234.57.3
-  pihole: "{{ pihole_keepalived_ip }}"
+  nexus.lab.fahm.fr: "{{ prod_network.hosts.lab.physical }}"
+  gitea.lab.fahm.fr: "{{ prod_network.hosts.lab.physical }}"
+
+# Test overrides `network` (from group_vars/all/network.yml's
+# `prod_network` default) with a gsub'd 10.234.x view: same shape as
+# prod, disjoint subnet. Consumer vars (home_subnet, site_subnets,
+# external_ips, wireguard_subnet, pihole_keepalived_ip) derive from
+# `network` so they automatically pick up the gsub.
+network: "{{ prod_network | to_yaml | replace('10.123', '10.234') | from_yaml }}"
+
 mac_addresses:
   pug: 65:42:08:08:89:a5
   lab_i210: 20:08:e9:30:e7:e9
   lab_i225p1: 4c:4b:b9:1b:60:0c
   lab_i225p2: d2:7d:10:e0:9c:68
 
-wireguard_subnet: 10.234.64.0/18
-
+# 3-peer test fixture (lab/pug/box only) — intentionally narrower than
+# prod's 9-peer list. Overrides group_vars/all/main.yml's derived list.
 wireguard_peers:
   - name: lab
-    address: 10.234.64.2
+    address: "{{ network.hosts.lab.wireguard }}"
     endpoint:
       local: "{{ external_ips.lab }}:51820"
       remote: home.{{ domain }}:51823
@@ -51,7 +44,7 @@ wireguard_peers:
     public_key: "{{ wireguard_keys.lab.public_key }}"
     private_key: "{{ wireguard_keys.lab.private_key }}"
   - name: pug
-    address: 10.234.64.3
+    address: "{{ network.hosts.pug.wireguard }}"
     endpoint:
       local: "{{ external_ips.pug }}:51820"
       remote: home.{{ domain }}:51823
@@ -61,7 +54,7 @@ wireguard_peers:
     public_key: "{{ wireguard_keys.pug.public_key }}"
     private_key: "{{ wireguard_keys.pug.private_key }}"
   - name: box
-    address: 10.234.64.5
+    address: "{{ network.hosts.box.wireguard }}"
     endpoint:
       local: "{{ external_ips.box }}:51820"
       remote: home.{{ domain }}:51823
@@ -142,7 +135,6 @@ minio_root_password: changeme
 influxdb_root_user: ak
 influxdb_root_password: changeme
 pihole_password: changeme
-pihole_keepalived_ip: changeme
 filebrowser_basic_auth_user: changeme
 filebrowser_basic_auth_password: changeme
 compta_api_token: changeme_compta_api_token_16chars_min
