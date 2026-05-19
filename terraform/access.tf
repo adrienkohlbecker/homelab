@@ -38,9 +38,7 @@ resource "cloudflare_zero_trust_access_application" "echo" {
 }
 
 # Reusable policies (replacing the original inline ones, which the v5
-# provider can't manage in-place). Once the apply lands and the echo
-# app re-points to these, the original inline policies become
-# orphaned -- delete them via direct API call after apply.
+# provider can't manage in-place).
 resource "cloudflare_zero_trust_access_policy" "echo_me" {
   account_id       = local.cloudflare_account_id
   name             = "me"
