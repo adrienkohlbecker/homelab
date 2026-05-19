@@ -47,6 +47,10 @@ availability:
 
 # Advanced settings
 advanced:
+  # Default is info; that level emits a line per MQTT publish (~30k
+  # records/day to HyperDX). The broker / bulb states are observable
+  # via MQTT itself, so the per-publish stdout is pure noise.
+  log_level: warning
   # channel: 11
   network_key: '!secret.yaml network_key'
   pan_id: 40336
