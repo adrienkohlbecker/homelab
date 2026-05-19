@@ -29,9 +29,20 @@
 
 # Functional probe instead of "db dir is non-empty" -- the file tree is
 # tautologically non-empty after any prior mongod start, even if mongod
-# is broken now.
+# is broken now. argv: list form so the --eval argument isn't subject
+# to ansible's shlex-on-cmd parsing (forward defense if the eval body
+# ever gains a metachar).
 - name: _verify | MongoDB inside the container answers serverStatus
-  command: podman exec hyperdx mongo --quiet hyperdx --eval "db.serverStatus().ok"
+  command:
+    argv:
+      - podman
+      - exec
+      - hyperdx
+      - mongo
+      - --quiet
+      - hyperdx
+      - --eval
+      - db.serverStatus().ok
   register: _verify_mongo
   changed_when: false
   failed_when: _verify_mongo.rc != 0 or (_verify_mongo.stdout | trim) != '1'
@@ -49,25 +60,49 @@
   delay: 2
   until: _verify_http.status in [ 200, 302, 307 ]
 
-# End-to-end ingest probe: synthesise a minimal OTLP log and POST it at
-# the published OTLP HTTP port using the same Bearer auth fluent-bit
-# does. Any auth / shape / endpoint regression here surfaces as a
-# failed _verify rather than silently-dropped production logs.
+# Confirm UI '/' is gated by an auth layer. In prod (Authelia deployed)
+# the `auth: required` directive in main.yml wires Authelia's
+# auth_request and rewrites the resulting 401 into a 302 to
+# auth.<domain>. In test (no Authelia upstream available on box) the
+# auth_request itself fails with 5xx. Either way the gate is engaged.
+# The regression we catch is a config drift that drops `auth: required`
+# entirely, which would proxy `/` straight to the hyperdx UI and return
+# 200 to anyone -- we accept any non-200 auth-flavored response code.
+- name: _verify | UI '/' refuses unauthenticated requests
+  uri:
+    url: https://localhost/
+    validate_certs: false
+    follow_redirects: none
+    headers:
+      Host: "hyperdx.{{ inventory_hostname }}.{{ domain }}"
+    status_code: [ 302, 401, 403, 500, 502, 503 ]
+
+# End-to-end ingest probe via the nginx site (production ingress for
+# off-host shippers). Uses Host: + validate_certs=false to hit the local
+# nginx without needing DNS. A jinja typo in proxy_pass, a missing
+# proxy_set_header, an auth regression, or a client_max_body_size cap
+# regression would all surface here as a failed _verify rather than
+# silently-dropped production logs. Runs first among the OTLP probes so
+# its retry budget serves as the "wait for receiver bound" barrier for
+# the loopback probe below.
 #
 # Retry budget reasoning: opampController only adds `otlp/hyperdx` to
 # the active pipelines after a team exists (we bootstrap it in
 # main.yml). The supervisor polls the api every ~30s, then the
-# collector child is restarted with the new config. Allow ~3 minutes
-# end-to-end (90 * 2s).
-- name: _verify | OTLP HTTP endpoint accepts a synthetic log POST (loopback)
+# collector child is restarted with the new config. Allow ~5 minutes
+# end-to-end (150 * 2s) to absorb a worst-case opamp-poll + child
+# restart on cold first-apply.
+- name: _verify | OTLP HTTP via nginx site accepts a synthetic log POST
   uri:
-    url: http://localhost:{{ service_ports.hyperdx_otlp_http }}/v1/logs
+    url: https://localhost/v1/logs
     method: POST
     body_format: json
-    # bearertokenauth extension on the receiver is configured with
-    # `scheme: ''` (see opampController.js); the header value is the
-    # raw token with no "Bearer " prefix.
+    validate_certs: false
     headers:
+      Host: "hyperdx.{{ inventory_hostname }}.{{ domain }}"
+      # bearertokenauth extension on the receiver is configured with
+      # `scheme: ''` (see opampController.js); the header value is the
+      # raw token with no "Bearer " prefix.
       Authorization: "{{ hyperdx_ingestion_api_key }}"
     body:
       resourceLogs:
@@ -75,7 +110,7 @@
             attributes:
               - key: service.name
                 value:
-                  stringValue: hyperdx_verify_probe
+                  stringValue: hyperdx_verify_probe_nginx
           scopeLogs:
             # timeUnixNano must be recent: otel_logs has
             # `TTL TimestampTime + INTERVAL 30 DAY` and ClickHouse drops
@@ -86,67 +121,36 @@
                 - timeUnixNano: "{{ ansible_date_time.epoch }}000000000"
                   severityText: INFO
                   body:
-                    stringValue: hyperdx _verify probe (loopback)
+                    stringValue: hyperdx _verify probe (nginx)
     status_code: 200
-  register: _verify_otlp_loopback
-  retries: 90
+  register: _verify_otlp_nginx
+  retries: 150
   delay: 2
-  until: _verify_otlp_loopback.status == 200
+  until: _verify_otlp_nginx.status == 200
   no_log: true
 
 # Negative-path: a syntactically-valid but wrong Bearer must be rejected
 # by the collector's bearertokenauth extension (hitting 4318 directly so
-# nginx's edge regex isn't involved). The only other auth-rejection
-# probe fires at nginx (missing-Authorization), so a future image
-# regression that silently disabled bearertokenauth would let any
-# garbage Bearer through and only surface as a prod-side incident.
+# the request bypasses any nginx-side validation). Derived from the real
+# key so a collision is impossible by construction. no_log because the
+# derived value still embeds the real key as a prefix. Runs after the
+# nginx-positive probe above so the OTLP receiver is guaranteed bound.
 - name: _verify | OTLP loopback rejects a syntactically-valid wrong key
   uri:
     url: http://localhost:{{ service_ports.hyperdx_otlp_http }}/v1/logs
     method: POST
     body_format: json
     headers:
-      Authorization: deliberately_wrong_key_for_negative_probe
+      Authorization: "{{ hyperdx_ingestion_api_key }}_negative_probe"
     body:
       resourceLogs: []
     status_code: 401
-
-# Exercise the nginx /v1/logs site (production ingress for off-host
-# shippers). Uses Host: + validate_certs=false to hit the local nginx
-# without needing DNS; same Bearer as the loopback probe. A jinja typo
-# in proxy_pass, a missing proxy_set_header, or a client_max_body_size
-# regression would silently break this path; the loopback probe above
-# doesn't catch it.
-- name: _verify | OTLP HTTP via nginx site accepts a synthetic log POST
-  uri:
-    url: https://localhost/v1/logs
-    method: POST
-    body_format: json
-    validate_certs: false
-    headers:
-      Host: "hyperdx.{{ inventory_hostname }}.{{ domain }}"
-      Authorization: "{{ hyperdx_ingestion_api_key }}"
-    body:
-      resourceLogs:
-        - resource:
-            attributes:
-              - key: service.name
-                value:
-                  stringValue: hyperdx_verify_probe_nginx
-          scopeLogs:
-            - logRecords:
-                - timeUnixNano: "{{ ansible_date_time.epoch }}000000000"
-                  severityText: INFO
-                  body:
-                    stringValue: hyperdx _verify probe (nginx)
-    status_code: 200
   no_log: true
 
-# Negative-path: missing Authorization must be rejected. Currently fires
-# at nginx (the `if ($http_authorization = "") return 401` short-circuit
-# in main.yml's server_conf); previously fired at the OTel collector's
-# bearertokenauth extension. Either layer rejecting is fine; both being
-# missing is the regression we want to catch.
+# Negative-path: missing Authorization must be rejected. Fires at the
+# OTel collector's bearertokenauth extension (nginx forwards through;
+# proxy_request_buffering off means it doesn't buffer the body before
+# the collector returns 401).
 - name: _verify | OTLP HTTP via nginx site rejects missing Authorization
   uri:
     url: https://localhost/v1/logs
@@ -158,19 +162,43 @@
     body: {}
     status_code: 401
 
-# Confirm the probe rows actually landed in ClickHouse, not just "the
+# Confirm the probe row actually landed in ClickHouse, not just "the
 # HTTP layer said 200". The otel_logs table is auto-created by the OTel
 # ClickHouse exporter on first record; if it's missing entirely the
-# pipeline silently dropped on the way through. Count >= 2 because both
-# the loopback and nginx-site probes seed distinct ServiceNames.
-- name: _verify | Probe rows reached otel_logs in ClickHouse
+# pipeline silently dropped on the way through.
+- name: _verify | Probe row reached otel_logs in ClickHouse
   import_role:
     name: _test
     tasks_from: clickhouse_query_wait
   vars:
     _test_args:
       label: count_verify_probes
-      sql: SELECT count() FROM default.otel_logs WHERE ServiceName IN ('hyperdx_verify_probe', 'hyperdx_verify_probe_nginx')
+      sql: SELECT count() FROM default.otel_logs WHERE ServiceName = 'hyperdx_verify_probe_nginx'
       retries: 30
       delay: 2
-      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) >= 2"
+      until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) >= 1"
+
+# Confirm the per-IP rate-limit on /v1/logs actually engages. Fires 30
+# parallel POSTs at /v1/logs (zone hyperdx_otlp = 10r/s burst 20
+# nodelay) and asserts at least one 429 in the response codes. No
+# Authorization is sent because limit_req runs in nginx's access phase
+# before proxy_pass -- the response codes show whether rate-limit shed
+# the excess (429) or let them through to the collector for a 401.
+# A zone-name typo or eviction would surface here. Runs last so the
+# burst doesn't drain the per-IP bucket and flake the single-request
+# probes above.
+- name: _verify | Nginx rate-limit on /v1/logs engages under burst
+  shell: |
+    set -euo pipefail
+    codes=$(for i in $(seq 1 30); do
+      curl --silent --insecure -o /dev/null \
+        -w "%{http_code}\n" \
+        -H "Host: hyperdx.{{ inventory_hostname }}.{{ domain }}" \
+        -X POST https://localhost/v1/logs &
+    done; wait)
+    echo "$codes"
+    test "$(echo "$codes" | grep -c 429)" -ge 1
+  args:
+    executable: /bin/bash
+  register: _verify_rate_limit
+  changed_when: false
