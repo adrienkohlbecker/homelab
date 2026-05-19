@@ -57,8 +57,6 @@ zfs_has_brumath_mount: false
 zfs_has_eckwersheim_mount: false
 zfs_has_minio_mount: false
 
-libvirt_default_network: 10.123.50.0/24
-
 sensor_modules: []
 
 home_subnet: 10.0.2.0/24
