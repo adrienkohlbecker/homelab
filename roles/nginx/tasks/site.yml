@@ -63,9 +63,14 @@
 #                             own logs / error echoes). On the log side,
 #                             the http-scope `$request_safe` map in
 #                             nginx.conf.j2 redacts `auth_token=...` from
-#                             access-log lines; reuse the param name
-#                             `auth_token` unless you also extend that
-#                             map.
+#                             access-log lines.
+#                             The `name` field is documentary today --
+#                             the http-scope `$req_auth_token` map (used
+#                             by the bypass `if` because $arg_X is empty
+#                             in auth_request subrequests) and the
+#                             `$request_safe` redaction map both hardcode
+#                             `auth_token`. To use a different param name
+#                             you must update both maps in nginx.conf.j2.
 #   server_conf               optional snippet inserted in the server block
 #   location_conf             optional snippet inserted in the / location block
 #
