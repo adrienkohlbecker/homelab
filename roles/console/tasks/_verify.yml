@@ -15,7 +15,19 @@
 # in exchange every downstream check tests post-reboot reality rather
 # than next-boot intent.
 
+# Aarch64 boxes (packer-built on arm Macs) bypass ZBM entirely:
+# chroot.sh registers a direct EFI-stub Boot#### entry whose
+# kernel cmdline is set once at image-build time. So the ZBM
+# commandline property write the role just made wouldn't affect
+# a post-reboot kernel here, and on top of that EDK2 aarch64 has
+# a known reboot bug on this image (refind UEFI firmware crashes
+# trying to load an X64 image after the kernel triggers reset).
+# Skip the reboot + the post-reboot sysfs check on aarch64; the
+# ZBM property / GRUB cfg + config + initrd + service assertions
+# below still prove the role wrote the next-boot config correctly,
+# which is the load-bearing contract on x86_64 prod hosts.
 - name: _verify | Reboot to apply role changes
+  when: ansible_architecture != 'aarch64'
   reboot:
     reboot_timeout: 600
   become: true
@@ -110,8 +122,12 @@
 # running kernel parsed from the cmdline at boot. Post-reboot this is
 # the strongest functional check: it proves the cmdline source above
 # actually propagated through to the kernel, not just that the file/
-# property is set correctly.
+# property is set correctly. Skipped on aarch64 — the reboot above is
+# also skipped, so the running kernel reflects the pre-role cmdline
+# (which the EFI-stub entry baked in at image build) and this would
+# fail unconditionally.
 - name: _verify | Running kernel applied consoleblank=0
+  when: ansible_architecture != 'aarch64'
   slurp:
     src: /sys/module/kernel/parameters/consoleblank
   register: _verify_consoleblank
