@@ -1,16 +1,14 @@
 # DNS records for fahm.fr.
 #
-# Records (A/CNAME/TXT/MX) live in a single typed map; one
+# Records (A/CNAME/TXT/MX) live in a single typed variable; one
 # cloudflare_dns_record resource iterates it. SRV records sit in their
 # own map + resource because they carry a nested data {} block rather
 # than a flat content string.
 #
-# Map key shape:
-#   "<TYPE>/<name>"            for A/CNAME/TXT (one record per name+type)
-#   "<TYPE>/<name>/<content>"  for MX (multiple records can share a name)
-# Type + name are derived from the key by the resource block, so the
-# map entries only carry the differing fields (content, priority,
-# proxied, comment).
+# Map entries are keyed by an opaque slug (e.g. a_box, mx_fahm_fr_in1)
+# and carry type/name/content explicitly in the value, so the resource
+# body is a thin pass-through with no key parsing. Adding a record:
+# pick a slug that doesn't collide and fill in type/name/content.
 #
 # The CF Email Routing outbound DKIM TXT (cf2024-1._domainkey.fahm.fr)
 # needs lifecycle { ignore_changes = [content] } because CF auto-rotates
@@ -42,60 +40,75 @@
 # legitimate sender there is already DKIM-signing through pdk1/pdk2
 # selectors.
 
-locals {
-  fahm_fr_records = {
+variable "fahm_fr_records" {
+  description = "DNS records (A/CNAME/TXT/MX) for fahm.fr. SRV records live in local.fahm_fr_srv_records."
+  type = map(object({
+    type     = string
+    name     = string
+    content  = string
+    priority = optional(number)
+    proxied  = optional(bool, false)
+    comment  = optional(string)
+  }))
+
+  validation {
+    condition     = alltrue([for r in var.fahm_fr_records : contains(["A", "CNAME", "TXT", "MX"], r.type)])
+    error_message = "type must be one of A, CNAME, TXT, MX (SRV records belong in fahm_fr_srv_records)."
+  }
+
+  default = {
     # A
-    "A/box.fahm.fr"  = { content = "10.123.128.5" }
-    "A/bunk.fahm.fr" = { content = "10.123.185.3" }
-    "A/home.fahm.fr" = { content = "203.0.113.10" }
-    "A/lab.fahm.fr"  = { content = "10.123.128.2" }
-    "A/mail.fahm.fr" = { content = "103.168.172.65", comment = "fastmail" }
-    "A/pug.fahm.fr"  = { content = "10.123.128.3" }
+    a_box  = { type = "A", name = "box.fahm.fr", content = "10.123.128.5" }
+    a_bunk = { type = "A", name = "bunk.fahm.fr", content = "10.123.185.3" }
+    a_home = { type = "A", name = "home.fahm.fr", content = "203.0.113.10" }
+    a_lab  = { type = "A", name = "lab.fahm.fr", content = "10.123.128.2" }
+    a_mail = { type = "A", name = "mail.fahm.fr", content = "103.168.172.65", comment = "fastmail" }
+    a_pug  = { type = "A", name = "pug.fahm.fr", content = "10.123.128.3" }
 
     # CNAME
-    "CNAME/auth.fahm.fr"                    = { content = "lab.fahm.fr" }
-    "CNAME/click.noreply.fahm.fr"           = { content = "eu.mailgun.org", comment = "mailgun" }
-    "CNAME/fm1._domainkey.fahm.fr"          = { content = "fm1.fahm.fr.dkim.fmhosted.com", comment = "fastmail" }
-    "CNAME/fm2._domainkey.fahm.fr"          = { content = "fm2.fahm.fr.dkim.fmhosted.com", comment = "fastmail" }
-    "CNAME/fm3._domainkey.fahm.fr"          = { content = "fm3.fahm.fr.dkim.fmhosted.com", comment = "fastmail" }
-    "CNAME/pdk1._domainkey.noreply.fahm.fr" = { content = "pdk1._domainkey.50bf8.dkim2.eu.mgsend.org", comment = "mailgun" }
-    "CNAME/pdk2._domainkey.noreply.fahm.fr" = { content = "pdk2._domainkey.50bf8.dkim2.eu.mgsend.org", comment = "mailgun" }
-    "CNAME/*.box.fahm.fr"                   = { content = "box.fahm.fr" }
-    "CNAME/*.bunk.fahm.fr"                  = { content = "bunk.fahm.fr" }
-    "CNAME/*.lab.fahm.fr"                   = { content = "lab.fahm.fr" }
-    "CNAME/*.pug.fahm.fr"                   = { content = "pug.fahm.fr" }
+    cname_auth                   = { type = "CNAME", name = "auth.fahm.fr", content = "lab.fahm.fr" }
+    cname_click_noreply          = { type = "CNAME", name = "click.noreply.fahm.fr", content = "eu.mailgun.org", comment = "mailgun" }
+    cname_fm1_domainkey          = { type = "CNAME", name = "fm1._domainkey.fahm.fr", content = "fm1.fahm.fr.dkim.fmhosted.com", comment = "fastmail" }
+    cname_fm2_domainkey          = { type = "CNAME", name = "fm2._domainkey.fahm.fr", content = "fm2.fahm.fr.dkim.fmhosted.com", comment = "fastmail" }
+    cname_fm3_domainkey          = { type = "CNAME", name = "fm3._domainkey.fahm.fr", content = "fm3.fahm.fr.dkim.fmhosted.com", comment = "fastmail" }
+    cname_pdk1_domainkey_noreply = { type = "CNAME", name = "pdk1._domainkey.noreply.fahm.fr", content = "pdk1._domainkey.50bf8.dkim2.eu.mgsend.org", comment = "mailgun" }
+    cname_pdk2_domainkey_noreply = { type = "CNAME", name = "pdk2._domainkey.noreply.fahm.fr", content = "pdk2._domainkey.50bf8.dkim2.eu.mgsend.org", comment = "mailgun" }
+    cname_wildcard_box           = { type = "CNAME", name = "*.box.fahm.fr", content = "box.fahm.fr" }
+    cname_wildcard_bunk          = { type = "CNAME", name = "*.bunk.fahm.fr", content = "bunk.fahm.fr" }
+    cname_wildcard_lab           = { type = "CNAME", name = "*.lab.fahm.fr", content = "lab.fahm.fr" }
+    cname_wildcard_pug           = { type = "CNAME", name = "*.pug.fahm.fr", content = "pug.fahm.fr" }
 
     # TXT
-    "TXT/_dmarc.fahm.fr"         = { content = "v=DMARC1; p=none; pct=100; fo=1; ri=3600; rua=mailto:25d3ddf65216493ba512fa8d7568c3d7@dmarc-reports.cloudflare.net" }
-    "TXT/_dmarc.noreply.fahm.fr" = { content = "v=DMARC1; p=none; pct=100; fo=1; ri=3600; rua=mailto:131310e2@dmarc.mailgun.org,mailto:37b6e2d1@inbox.ondmarc.com; ruf=mailto:131310e2@dmarc.mailgun.org,mailto:37b6e2d1@inbox.ondmarc.com;", comment = "mailgun" }
-    "TXT/noreply.fahm.fr"        = { content = "v=spf1 include:mailgun.org ~all", comment = "mailgun" }
-    "TXT/fahm.fr"                = { content = "v=spf1 include:spf.messagingengine.com include:_spf.mx.cloudflare.net ~all" }
+    txt_dmarc         = { type = "TXT", name = "_dmarc.fahm.fr", content = "v=DMARC1; p=none; pct=100; fo=1; ri=3600; rua=mailto:25d3ddf65216493ba512fa8d7568c3d7@dmarc-reports.cloudflare.net" }
+    txt_dmarc_noreply = { type = "TXT", name = "_dmarc.noreply.fahm.fr", content = "v=DMARC1; p=none; pct=100; fo=1; ri=3600; rua=mailto:131310e2@dmarc.mailgun.org,mailto:37b6e2d1@inbox.ondmarc.com; ruf=mailto:131310e2@dmarc.mailgun.org,mailto:37b6e2d1@inbox.ondmarc.com;", comment = "mailgun" }
+    txt_spf_noreply   = { type = "TXT", name = "noreply.fahm.fr", content = "v=spf1 include:mailgun.org ~all", comment = "mailgun" }
+    txt_spf           = { type = "TXT", name = "fahm.fr", content = "v=spf1 include:spf.messagingengine.com include:_spf.mx.cloudflare.net ~all" }
 
-    # MX (key = "MX/<name>/<content>" because multiple records share name)
-    "MX/fahm.fr/in1-smtp.messagingengine.com"   = { content = "in1-smtp.messagingengine.com", priority = 10 }
-    "MX/fahm.fr/in2-smtp.messagingengine.com"   = { content = "in2-smtp.messagingengine.com", priority = 20 }
-    "MX/*.fahm.fr/in1-smtp.messagingengine.com" = { content = "in1-smtp.messagingengine.com", priority = 10, comment = "fastmail" }
-    "MX/*.fahm.fr/in2-smtp.messagingengine.com" = { content = "in2-smtp.messagingengine.com", priority = 20, comment = "fastmail" }
-    "MX/noreply.fahm.fr/mxa.eu.mailgun.org"     = { content = "mxa.eu.mailgun.org", priority = 10, comment = "mailgun" }
-    "MX/noreply.fahm.fr/mxb.eu.mailgun.org"     = { content = "mxb.eu.mailgun.org", priority = 10, comment = "mailgun" }
+    # MX
+    mx_fahm_fr_in1  = { type = "MX", name = "fahm.fr", content = "in1-smtp.messagingengine.com", priority = 10 }
+    mx_fahm_fr_in2  = { type = "MX", name = "fahm.fr", content = "in2-smtp.messagingengine.com", priority = 20 }
+    mx_wildcard_in1 = { type = "MX", name = "*.fahm.fr", content = "in1-smtp.messagingengine.com", priority = 10, comment = "fastmail" }
+    mx_wildcard_in2 = { type = "MX", name = "*.fahm.fr", content = "in2-smtp.messagingengine.com", priority = 20, comment = "fastmail" }
+    mx_noreply_mxa  = { type = "MX", name = "noreply.fahm.fr", content = "mxa.eu.mailgun.org", priority = 10, comment = "mailgun" }
+    mx_noreply_mxb  = { type = "MX", name = "noreply.fahm.fr", content = "mxb.eu.mailgun.org", priority = 10, comment = "mailgun" }
   }
 }
 
 resource "cloudflare_dns_record" "fahm_fr" {
-  for_each = local.fahm_fr_records
+  for_each = var.fahm_fr_records
 
   zone_id  = local.zones["fahm.fr"]
-  type     = split("/", each.key)[0]
-  name     = split("/", each.key)[1]
+  type     = each.value.type
+  name     = each.value.name
   content  = each.value.content
-  priority = try(each.value.priority, null)
-  proxied  = try(each.value.proxied, false)
+  priority = each.value.priority
+  proxied  = each.value.proxied
   ttl      = 1
-  comment  = try(each.value.comment, null)
+  comment  = each.value.comment
 }
 
 # ---- SRV records (Fastmail service discovery) ----
-# Separate from local.fahm_fr_records because SRV carries a nested
+# Separate from var.fahm_fr_records because SRV carries a nested
 # data {} block rather than a flat content string. All SRV records in
 # this zone are Fastmail; comment is hardcoded resource-wide.
 
@@ -150,4 +163,116 @@ resource "cloudflare_dns_record" "fahm_fr_txt_cf2024_1__domainkey" {
   lifecycle {
     ignore_changes = [content]
   }
+}
+
+# State migration from the previous "<TYPE>/<name>[/<content>]" key shape.
+# Safe to prune once `tofu apply` confirms a no-op plan -- same pattern as
+# commit 662463ca which pruned the dns.tf-era moves.
+moved {
+  from = cloudflare_dns_record.fahm_fr["A/box.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["a_box"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["A/bunk.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["a_bunk"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["A/home.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["a_home"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["A/lab.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["a_lab"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["A/mail.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["a_mail"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["A/pug.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["a_pug"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["CNAME/auth.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["cname_auth"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["CNAME/click.noreply.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["cname_click_noreply"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["CNAME/fm1._domainkey.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["cname_fm1_domainkey"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["CNAME/fm2._domainkey.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["cname_fm2_domainkey"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["CNAME/fm3._domainkey.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["cname_fm3_domainkey"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["CNAME/pdk1._domainkey.noreply.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["cname_pdk1_domainkey_noreply"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["CNAME/pdk2._domainkey.noreply.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["cname_pdk2_domainkey_noreply"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["CNAME/*.box.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["cname_wildcard_box"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["CNAME/*.bunk.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["cname_wildcard_bunk"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["CNAME/*.lab.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["cname_wildcard_lab"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["CNAME/*.pug.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["cname_wildcard_pug"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["TXT/_dmarc.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["txt_dmarc"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["TXT/_dmarc.noreply.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["txt_dmarc_noreply"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["TXT/noreply.fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["txt_spf_noreply"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["TXT/fahm.fr"]
+  to   = cloudflare_dns_record.fahm_fr["txt_spf"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["MX/fahm.fr/in1-smtp.messagingengine.com"]
+  to   = cloudflare_dns_record.fahm_fr["mx_fahm_fr_in1"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["MX/fahm.fr/in2-smtp.messagingengine.com"]
+  to   = cloudflare_dns_record.fahm_fr["mx_fahm_fr_in2"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["MX/*.fahm.fr/in1-smtp.messagingengine.com"]
+  to   = cloudflare_dns_record.fahm_fr["mx_wildcard_in1"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["MX/*.fahm.fr/in2-smtp.messagingengine.com"]
+  to   = cloudflare_dns_record.fahm_fr["mx_wildcard_in2"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["MX/noreply.fahm.fr/mxa.eu.mailgun.org"]
+  to   = cloudflare_dns_record.fahm_fr["mx_noreply_mxa"]
+}
+moved {
+  from = cloudflare_dns_record.fahm_fr["MX/noreply.fahm.fr/mxb.eu.mailgun.org"]
+  to   = cloudflare_dns_record.fahm_fr["mx_noreply_mxb"]
 }
