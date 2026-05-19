@@ -92,7 +92,7 @@ default_machine_for() {
 # host_vars/box.yml and host_vars/minimal.yml are the test fixtures that
 # every push cell consumes; lab-qemu.yml / pug-qemu.yml only matter for
 # on-demand --machine lab/pug runs and aren't cross-cut for push CI.
-CROSS_CUT_RE='^(group_vars/all\.yml|group_vars/test\.yml|host_vars/(box|minimal)\.yml|test/(testrole|testall|machine)\.py|mise\.toml)$'
+CROSS_CUT_RE='^(group_vars/all/[^/]+\.(yml|yaml)|group_vars/test\.yml|host_vars/(box|minimal)\.yml|test/(testrole|testall|machine)\.py|mise\.toml|data/network_topology\.(yml|schema\.json))$'
 
 emit() {
   local matrix=$1 cross_cut=$2 packer_changed=${3:-false} ci_image_changed=${4:-false}

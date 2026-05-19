@@ -1,0 +1,178 @@
+# yaml-language-server: $schema=network_topology.schema.json
+# Canonical IP topology for 10.123.0.0/16 (`fahm.fr` lab estate).
+#
+# **Status: live.** Wired into `group_vars/all/network.yml`, which
+# loads this file via `lookup('file', ...) | from_yaml` and derives
+# the consumer-facing vars (`site_subnets`, `external_ips`,
+# `wireguard_subnet`, `pihole_keepalived_ip`, plus the `address:`
+# fields of every entry in `wireguard_peers`). Edits here flow into
+# the prod inventory automatically; design rationale in
+# `notes/network_review.md`. Test hosts use a separate 10.234.0.0/16
+# inventory (see `group_vars/test.yml`).
+#
+# ────────────────────────────────────────────────────────────────
+# Schema (no overlap between siblings at the same level)
+#
+#   supernet            /16   the whole estate
+#     partitions        /18   physical vs wireguard, by forwarding domain
+#       sites           /21   physical locations
+#         vlans         /24   per-site L2 broadcast domains (mgmt is /23)
+#
+# Each home-site host carries a `slot` index (0..7); per-VLAN
+# allocations are derived from the slot rather than enumerated:
+#
+#   host_subnet        = vlan_cidr | ipsubnet(24, 0)         # mgmt /23 → lower /24
+#   primary IP         = host_subnet | ansible.utils.ipmath(2 + slot)
+#                      = cidrhost(host_subnet, 2 + slot)
+#   per-host /28 block = vlan_cidr | ansible.utils.ipsubnet(28, 8 + slot)
+#                      = cidrsubnet(vlan_cidr, 4, 8 + slot)
+#     → host's `mac_<vlan>` peer at block's first IP
+#     → libvirt macvtap VMs at block + .1 … .7
+#     → podman containers at block + .8 … .15
+#
+#
+# Each /24 VLAN's static / DHCP layout (also derived):
+#
+#   static_fixed = host_subnet | ipsubnet(26, 0)            # .0–.63
+#     .0=network, .1=gateway, .2–.9 host primaries, .10–.63 static
+#     device leases (see `static_leases:` registry below)
+#   dhcp_pool    = host_subnet | ipsubnet(26, 1)            # .64–.127
+#
+# Wireguard convention: hosts.<n>.wireguard = hosts.<n>.physical
+# byte-shifted by +64.0.0. Roaming-only clients have no physical
+# mirror; see `wireguard.roaming` below.
+#
+# Reservations carry `status: reserved` (or `planned`, or `drift`
+# when the deployed assignment is locked by an external system and
+# diverges from this file's intent); active entries omit the field.
+# Consumers iterating `hosts:` / `vlans:` / `sites:` filter with
+# `selectattr('value.status', 'undefined') or
+# selectattr('value.status', 'eq', 'active')`.
+# ────────────────────────────────────────────────────────────────
+
+supernet: 10.123.0.0/16
+
+partitions:
+  physical:  { cidr: 10.123.0.0/18 }
+  wireguard: { cidr: 10.123.64.0/18 }
+  c:         { cidr: 10.123.128.0/18, status: reserved }
+  d:         { cidr: 10.123.192.0/18, status: reserved }
+
+sites:
+  home:
+    cidr: 10.123.0.0/21
+    gateway: 10.123.0.1
+    vlans:
+      management:
+        id: 1   # VLAN 1 antipattern; UDM won't expose this for edit. See `notes/network_review.md §B.9`.
+        cidr: 10.123.0.0/23
+        gateway: 10.123.0.1
+        # Upper /24 (.1.x) carved into `extra_blocks` below: the
+        # active `.1.224/27` holds keepalived VIPs (kept inside the
+        # /23 so VIPs share L2 with host primaries), and the
+        # remaining 224 IPs are reserved for future expansion.
+        extra_blocks:
+          # `vips:` is the active block; the three siblings are reserved.
+          block_a: { cidr: 10.123.1.0/25,   status: reserved }
+          block_b: { cidr: 10.123.1.128/26, status: reserved }
+          block_c: { cidr: 10.123.1.192/27, status: reserved }
+          vips:    { cidr: 10.123.1.224/27 }
+      home: { id: 2, cidr: 10.123.2.0/24, gateway: 10.123.2.1 }
+      work: { id: 3, cidr: 10.123.3.0/24, gateway: 10.123.3.1 }
+      iot:  { id: 4, cidr: 10.123.4.0/24, gateway: 10.123.4.1 }
+      vlan_5: { id: 5, cidr: 10.123.5.0/24, status: reserved }
+      vlan_6: { id: 6, cidr: 10.123.6.0/24, status: reserved }
+      vlan_7: { id: 7, cidr: 10.123.7.0/24, status: reserved }
+  site_8:  { cidr: 10.123.8.0/21,  status: reserved }
+  site_16: { cidr: 10.123.16.0/20, status: reserved }
+  site_32: { cidr: 10.123.32.0/20, status: reserved }
+  site_48: { cidr: 10.123.48.0/21, status: reserved }
+  brumath:
+    cidr: 10.123.56.0/24
+    gateway: 10.123.56.1
+    status: drift # Freebox router picks the /24 (only 192.168.X.0/24 user-settable — currently 192.168.0.0/24).
+  bonniers:
+    cidr: 10.123.57.0/24
+    gateway: 10.123.57.1
+    devices:
+      gateway: 10.123.57.1
+      ap:      10.123.57.2
+      bunk:    10.123.57.3
+  family_58: { cidr: 10.123.58.0/24, status: reserved }
+  family_59: { cidr: 10.123.59.0/24, status: reserved }
+  family_60: { cidr: 10.123.60.0/24, status: reserved }
+  family_61: { cidr: 10.123.61.0/24, status: reserved }
+  family_62: { cidr: 10.123.62.0/24, status: reserved }
+  family_63: { cidr: 10.123.63.0/24, status: reserved }
+
+# Host registry. `physical` / `wireguard` are explicit (not derived);
+# they're the canonical values that consumers read. `slot` drives the
+# per-VLAN /28 block derivation (see schema block above) and must
+# satisfy `primary = host_subnet | ipmath(2 + slot)`.
+hosts:
+  lab:  { site: home,     slot: 0, physical: 10.123.0.2,  wireguard: 10.123.64.2 }
+  pug:  { site: home,     slot: 1, physical: 10.123.0.3,  wireguard: 10.123.64.3 }
+  pom:  { site: home,     slot: 2, physical: 10.123.0.4,  wireguard: 10.123.64.4, status: planned }
+  box:  { site: home,     slot: 3, physical: 10.123.0.5,  wireguard: 10.123.64.5 }
+  bunk: { site: bonniers,          physical: 10.123.57.3, wireguard: 10.123.121.3 }
+
+# Wireguard overlay. Server peer addresses are `hosts.<n>.wireguard`;
+# the set of servers is simply the hosts with wireguard configured
+# and `status != planned`. Roaming-only clients have no physical
+# mirror — they live in the wg mirror of the home VLAN's DHCP block:
+# `home.cidr | ipsubnet(26, 1) | ipmath('64.0.0')` = 10.123.66.64/26
+# (range .64–.127). Sits cleanly between server peers (10.123.64.x,
+# wg mirror of mgmt's static_fixed) and the home-VLAN macvlan blocks
+# under the +64 mirror (10.123.66.128–.255), so no collision.
+wireguard:
+  listen_port: 51820   # uniform across all server peers
+  roaming:
+    laptop:       10.123.66.64
+    phone:        10.123.66.65
+    ipad:         10.123.66.66
+    spouse_laptop: 10.123.66.67
+    spouse_phone:  10.123.66.68
+
+virtual_ips:
+  pihole: 10.123.1.224
+
+# Static device leases. Authoritative source is the UniFi Network UI
+# (UDM-Pro); this list is documentation and may drift. Each entry
+# lives in `<site>.<vlan>`'s `static_fixed` range (`.10–.63`). Adding
+# an entry here does not provision the lease.
+static_leases:
+  eaton_ups:             { ip: 10.123.0.10, site: home, vlan: management }
+  unifi_uap_iw_hd:       { ip: 10.123.0.11, site: home, vlan: management }
+  unifi_usw_8p:          { ip: 10.123.0.12, site: home, vlan: management }
+  unifi_usw_24_poe_gen2: { ip: 10.123.0.13, site: home, vlan: management }
+  unifi_ap_nano_hd:      { ip: 10.123.0.14, site: home, vlan: management }
+
+  marantz_receiver: { ip: 10.123.2.10, site: home, vlan: home }
+  printer:          { ip: 10.123.2.11, site: home, vlan: home }
+  siglent:          { ip: 10.123.2.12, site: home, vlan: home }
+  game:             { ip: 10.123.2.13, site: home, vlan: home }
+  lg_tv:            { ip: 10.123.2.14, site: home, vlan: home }
+  shield:           { ip: 10.123.2.15, site: home, vlan: home }
+  apple_tv:         { ip: 10.123.2.16, site: home, vlan: home }
+
+  airgradient_indoor:      { ip: 10.123.4.10, site: home, vlan: iot }
+  airgradient_outdoor:     { ip: 10.123.4.11, site: home, vlan: iot }
+  velux_klf200:            { ip: 10.123.4.12, site: home, vlan: iot }
+  somfy_remote_esphome:    { ip: 10.123.4.13, site: home, vlan: iot }
+  venta_ah510_kid1:       { ip: 10.123.4.14, site: home, vlan: iot }
+  venta_ah510_kid2:        { ip: 10.123.4.15, site: home, vlan: iot }
+  tubeszb:                 { ip: 10.123.4.16, site: home, vlan: iot }
+  philips_ac0850_kid1:    { ip: 10.123.4.17, site: home, vlan: iot }
+  philips_ac0850_kid2:     { ip: 10.123.4.18, site: home, vlan: iot }
+  philips_ac0850_master:   { ip: 10.123.4.19, site: home, vlan: iot }
+  philips_ac0850_spouse:    { ip: 10.123.4.20, site: home, vlan: iot }
+  philips_ac0850_adrien:   { ip: 10.123.4.21, site: home, vlan: iot }
+  philips_ac0850_living:   { ip: 10.123.4.22, site: home, vlan: iot }
+  venta_lw74:              { ip: 10.123.4.23, site: home, vlan: iot }
+  daikin_kid1:            { ip: 10.123.4.24, site: home, vlan: iot }
+  daikin_kid2:             { ip: 10.123.4.25, site: home, vlan: iot }
+  daikin_master:           { ip: 10.123.4.26, site: home, vlan: iot }
+  daikin_spouse:            { ip: 10.123.4.27, site: home, vlan: iot }
+  daikin_adrien:           { ip: 10.123.4.28, site: home, vlan: iot }
+  daikin_kitchen:          { ip: 10.123.4.29, site: home, vlan: iot }
+  daikin_tv:               { ip: 10.123.4.30, site: home, vlan: iot }

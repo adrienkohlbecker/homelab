@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fahm.fr/schemas/network_topology.json",
+  "title": "Homelab IP topology",
+  "description": "Schema for data/network_topology.yml. Validates the structural shape consumed by group_vars/all/network.yml and the implied invariants the file's docstring documents.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["supernet", "partitions", "sites", "hosts", "wireguard", "virtual_ips", "static_leases"],
+
+  "$defs": {
+    "cidr": {
+      "type": "string",
+      "pattern": "^10\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}/[0-9]{1,2}$",
+      "description": "RFC1918 10.x CIDR block."
+    },
+    "ip": {
+      "type": "string",
+      "pattern": "^10\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}$",
+      "description": "RFC1918 10.x host address (no mask)."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["active", "reserved", "planned", "drift"],
+      "description": "Lifecycle marker. Omit for active entries; reserved/planned/drift document deferred-allocation / future-host / external-override-divergence respectively."
+    },
+    "vlan_id": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 4094
+    },
+    "slot": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 7,
+      "description": "Per-host slot 0..7. Drives per-VLAN /28 derivation: block = vlan_cidr | ipsubnet(28, 8 + slot); primary = host_subnet | ipmath(2 + slot)."
+    },
+
+    "block_reservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cidr"],
+      "properties": {
+        "cidr": { "$ref": "#/$defs/cidr" },
+        "status": { "$ref": "#/$defs/status" }
+      }
+    },
+
+    "vlan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "cidr"],
+      "properties": {
+        "id": { "$ref": "#/$defs/vlan_id" },
+        "cidr": { "$ref": "#/$defs/cidr" },
+        "gateway": { "$ref": "#/$defs/ip" },
+        "status": { "$ref": "#/$defs/status" },
+        "extra_blocks": {
+          "type": "object",
+          "description": "Sub-carves of the VLAN's CIDR (e.g. VIP blocks, reserved expansion).",
+          "additionalProperties": { "$ref": "#/$defs/block_reservation" }
+        }
+      }
+    },
+
+    "site": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cidr"],
+      "properties": {
+        "cidr": { "$ref": "#/$defs/cidr" },
+        "gateway": { "$ref": "#/$defs/ip" },
+        "status": { "$ref": "#/$defs/status" },
+        "vlans": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/vlan" }
+        },
+        "devices": {
+          "type": "object",
+          "description": "Named flat-site devices (sites with no VLAN segmentation).",
+          "additionalProperties": { "$ref": "#/$defs/ip" }
+        }
+      }
+    },
+
+    "host": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["site", "physical", "wireguard"],
+      "properties": {
+        "site": { "type": "string", "minLength": 1 },
+        "slot": { "$ref": "#/$defs/slot" },
+        "physical": { "$ref": "#/$defs/ip" },
+        "wireguard": { "$ref": "#/$defs/ip" },
+        "status": { "$ref": "#/$defs/status" }
+      }
+    },
+
+    "static_lease": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ip", "site", "vlan"],
+      "properties": {
+        "ip": { "$ref": "#/$defs/ip" },
+        "site": { "type": "string", "minLength": 1 },
+        "vlan": { "type": "string", "minLength": 1 }
+      }
+    }
+  },
+
+  "properties": {
+    "supernet": { "$ref": "#/$defs/cidr" },
+
+    "partitions": {
+      "type": "object",
+      "description": "Top-level /18 partitions: physical, wireguard, and reserved siblings.",
+      "additionalProperties": { "$ref": "#/$defs/block_reservation" }
+    },
+
+    "sites": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/site" }
+    },
+
+    "hosts": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/host" }
+    },
+
+    "wireguard": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["listen_port", "roaming"],
+      "properties": {
+        "listen_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "roaming": {
+          "type": "object",
+          "description": "Roaming clients keyed by device name → wg IP.",
+          "additionalProperties": { "$ref": "#/$defs/ip" }
+        }
+      }
+    },
+
+    "virtual_ips": {
+      "type": "object",
+      "description": "Named VIPs (keepalived-managed floating addresses).",
+      "additionalProperties": { "$ref": "#/$defs/ip" }
+    },
+
+    "static_leases": {
+      "type": "object",
+      "description": "Documentation registry of static device leases (UniFi Network UI is authoritative).",
+      "additionalProperties": { "$ref": "#/$defs/static_lease" }
+    }
+  }
+}

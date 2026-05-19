@@ -16,7 +16,7 @@ homeassistant_networks:
   # mac_iot: HA's L2 presence on the IoT VLAN (10.123.4.0/24). No IP
   # pin — HA is the only container on this network, netavark allocates
   # deterministically from ip_range .136/29 (upper /29 of lab's IoT
-  # macvlan_block; see notes/network_topology.yml). Nothing downstream
+  # macvlan_block; see data/network_topology.yml). Nothing downstream
   # keys on a specific address: HomeKit/Sonos discovery uses mDNS/UPnP
   # identity, no DNS A-record points at this IP, no firewall rule keys
   # on it. Re-introduce a pin (add `ip: <addr>`) if either of those
