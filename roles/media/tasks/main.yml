@@ -1,3 +1,6 @@
+- name: Create media podman network
+  import_tasks: network.yml
+
 - name: Add media group
   import_tasks: group.yml
 
