@@ -1,4 +1,16 @@
 ---
+# jq is used by the bootstrap script to JSON-escape the admin password
+# (POST body) and the apiKey (mongo JS literal) so a future vault value
+# containing `"`, `\`, or `$` doesn't break the literal or mutate an
+# unintended field. Standard ubuntu package.
+- name: Install jq
+  apt:
+    pkg: jq
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - hyperdx
+
 - name: Set up hyperdx system user, group, and config dir
   import_role:
     name: service_user
@@ -9,21 +21,11 @@
   tags:
     - hyperdx
 
-# The image's clickhouse-server drops privileges to in-namespace uid 101
-# at startup. With the bare 1:1 uidmap fall-through that uid would land
-# on whatever the host has at 101 (commonly systemd-journal on Ubuntu) --
-# semantic noise, and breaks ZFS replication portability across hosts
-# whose system-package layout differs. Allocate a dedicated host system
-# user so the +101 uidmap override in the unit routes container 101 to
-# a meaningful host owner. `config_dir: false` because this user only
-# exists as a host-side name for the userns mapping; it doesn't get a
-# /mnt/services/<name> dir of its own.
-#
-# MongoDB's user (uid 100) is also present in the image but the
-# entrypoint runs `mongod` without dropping privileges, so its files
-# land as in-namespace root (=hyperdx on the host) -- no override
-# needed. If a future image starts dropping to uid 100, add a
-# hyperdx_mongodb user and a +100 mapping then.
+# +101 host uid for ClickHouse's in-container privilege drop -- see
+# CLAUDE.md "Container User Namespacing" for the rationale (uid 101
+# inside the image -> hyperdx_clickhouse on the host via the uidmap).
+# MongoDB's uid 100 is unused because its entrypoint doesn't drop
+# privileges; add a +100 mapping the day that changes.
 - name: Set up hyperdx_clickhouse system user
   import_role:
     name: service_user
@@ -52,21 +54,21 @@
   tags:
     - hyperdx
 
-# One-shot mkdir rather than `file:` because the container's
-# clickhouse-server chowns these bind-mounts to its internal `clickhouse`
-# user (mapped via the +101 override to hyperdx_clickhouse on the host)
-# on first start; re-asserting owner=hyperdx with `file:` would flip
-# changed=true on every subsequent apply.
+# Pre-create both bind-mount targets owned by hyperdx_clickhouse so
+# they match what the container's clickhouse-server chowns to on first
+# start (uid 101 in-namespace -> hyperdx_clickhouse on host via the
+# +101 uidmap). file: with the matching owner sees no flap on re-apply.
 - name: Create hyperdx clickhouse subdirectories
-  when: not (ansible_check_mode and hyperdx_user.changed)
-  shell: |
-    set -euo pipefail
-    mkdir -p /mnt/services/hyperdx/{clickhouse,clickhouse_logs}
-    chown hyperdx:hyperdx /mnt/services/hyperdx/{clickhouse,clickhouse_logs}
-    chmod 0755 /mnt/services/hyperdx/{clickhouse,clickhouse_logs}
-  args:
-    executable: /bin/bash
-    creates: /mnt/services/hyperdx/clickhouse_logs
+  when: not (ansible_check_mode and hyperdx_clickhouse_user.changed)
+  file:
+    dest: "/mnt/services/hyperdx/{{ item }}"
+    state: directory
+    owner: hyperdx_clickhouse
+    group: hyperdx_clickhouse
+    mode: "0755"
+  loop:
+    - clickhouse
+    - clickhouse_logs
   become: true
   tags:
     - hyperdx
@@ -172,18 +174,6 @@
         location @v1_logs_unauthorized {
           return 401;
         }
-  tags:
-    - hyperdx
-
-# jq is used by the bootstrap script below to safely JSON-escape the
-# admin password (POST body) and the apiKey (mongo JS literal) so a
-# future vault value containing `"`, `\`, or `$` doesn't break the
-# literal or mutate an unintended field. Standard ubuntu package.
-- name: Install jq
-  apt:
-    pkg: jq
-    cache_valid_time: 3600
-  become: true
   tags:
     - hyperdx
 
