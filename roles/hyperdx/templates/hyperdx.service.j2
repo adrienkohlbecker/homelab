@@ -16,6 +16,10 @@ PartOf=zfs_autosnapshot.target
 {% endif %}
 
 [Service]
+# RuntimeDirectory= creates /run/%N (= /run/hyperdx/) on start and
+# removes it on stop -- cidfile lands there. %t is /run for system
+# units so the cidfile path is %t/%N/%n.ctr-id.
+RuntimeDirectory=%N
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
@@ -37,9 +41,9 @@ SyslogIdentifier=%N
 # reports healthy (main.yml's post-readiness register-password + force-
 # apiKey tasks). A startup probe that waited for 4318 would deadlock the
 # first deploy. Steady-state 4318 reachability is asserted in _verify.yml.
-ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStartPre=/bin/rm -f %t/%N/%n.ctr-id
 ExecStart=/usr/bin/podman run \
-    --cidfile=%t/%n.ctr-id \
+    --cidfile=%t/%N/%n.ctr-id \
     --cgroups=split \
     --sdnotify=healthy \
     --detach \
@@ -62,15 +66,15 @@ ExecStart=/usr/bin/podman run \
     --env FRONTEND_URL=https://hyperdx.{{ inventory_hostname }}.{{ domain }} \
     --publish 127.0.0.1:{{ service_ports.hyperdx }}:8080/tcp \
     --publish 127.0.0.1:{{ service_ports.hyperdx_otlp_http }}:4318/tcp \
-    --health-cmd         '["curl","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8080/"]' \
-    --health-startup-cmd '["curl","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8080/"]' \
+    --health-cmd         '["curl","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8080/api/health"]' \
+    --health-startup-cmd '["curl","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8080/api/health"]' \
     --health-startup-interval "2s" \
     --health-startup-timeout "5s" \
     --health-start-period "90s" \
     --stop-timeout 60 \
     docker.io/hyperdx/hyperdx-all-in-one:2.24.1
-ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
-ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%N/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%N/%n.ctr-id
 
 [Install]
 WantedBy=multi-user.target
