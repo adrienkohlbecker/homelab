@@ -39,23 +39,16 @@ provider "mailgun" {
   api_key = var.mailgun_api_key
 }
 
-# Region selector and the pdk1/pdk2 DKIM CNAMEs in dns.tf both point at
-# eu.mailgun.org -- this domain was created in the EU region. The
-# pdk1/pdk2 selectors (rather than fixed mailo / smtp-style ones) plus
-# the .dkim2.eu.mgsend.org. target are Mailgun's automatic sender
-# security pattern; flip use_automatic_sender_security on so tofu
-# doesn't fight the UI-selected mode.
-#
-# Settings match the current UI-side state so import + apply is a
-# no-op. To change behaviour (enable open/click tracking, switch
-# tracking links to https), edit here and apply -- the goal of this
-# file is *config under tofu*, not *config tightening*.
+# EU region: domain hosted on eu.mailgun.org (matched by the pdk1/pdk2
+# DKIM CNAMEs in dns_fahm_fr.tf and the .dkim2.eu.mgsend.org. targets,
+# which are Mailgun's automatic-sender-security pattern --
+# use_automatic_sender_security stays on so tofu doesn't fight the UI).
 #
 # smtp_password is the postmaster credential issued at domain creation;
 # Mailgun doesn't return it on subsequent reads, so leaving it unset in
-# HCL is the right shape on import. Per-service SMTP creds are separate
-# mailgun_domain_credential objects (see header comment for why those
-# are not managed here).
+# HCL is the right shape. Per-service SMTP creds are separate
+# mailgun_domain_credential objects (see header for why those aren't
+# managed here).
 resource "mailgun_domain" "noreply_fahm_fr" {
   name                          = "noreply.fahm.fr"
   region                        = "eu"

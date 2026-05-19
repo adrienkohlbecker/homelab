@@ -17,34 +17,10 @@
 
 # ---- A/CNAME/TXT/MX records ----
 #
-# DMARC staged enforcement on fahm.fr + noreply.fahm.fr. Current step:
-# Stage 2 step 1 (p=quarantine; pct=25). mhaf.fr is on a separate
-# (slower) track and stays at p=none.
-#
-#   Stage 1 (done): p=none with rua=...; collect 2 weeks of aggregate
-#     reports per zone. Targets are operator inboxes
-#     (dmarc-reports.cloudflare.net for fahm.fr; mailgun + ondmarc for
-#     noreply). Held at this stage until the report stream showed only
-#     legitimate senders -- Fastmail (in*-smtp.messagingengine.com) +
-#     Mailgun (eu.mailgun.org) for fahm.fr + noreply.fahm.fr.
-#
-#   Stage 2 step 1 (current): p=quarantine; pct=25. Hold one week to
-#     surface any legitimate senders the rua stream missed (small
-#     sample = more visibility per failure).
-#
-#   Stage 2 step 2 (next): p=quarantine; pct=100. Tighten SPF to -all
-#     (hardfail) at the same time so receivers stop accepting forged
-#     mail with broken SPF.
-#
-#   Stage 3 (production): p=reject. Forgeries with From: <user>@<zone>
-#     get rejected by the receiver, eliminating the phishing-by-spoof
-#     vector that p=none allowed.
-#
-# Homelab framing: spear-phishing the operator's contacts via spoofed
-# fahm.fr From: headers is the abuse case; for the noreply Mailgun-
-# sending zone the rollout is more clearly justified since every
-# legitimate sender there is already DKIM-signing through pdk1/pdk2
-# selectors.
+# DMARC posture: fahm.fr + noreply.fahm.fr at p=quarantine; pct=25.
+# mhaf.fr is on a separate (slower) track and stays at p=none.
+# Aggregate reports flow to dmarc-reports.cloudflare.net (fahm.fr)
+# and mailgun+ondmarc (noreply.fahm.fr).
 
 variable "fahm_fr_records" {
   description = "DNS records (A/CNAME/TXT/MX) for fahm.fr. SRV records live in local.fahm_fr_srv_records."
