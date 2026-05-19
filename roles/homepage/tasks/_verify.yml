@@ -84,15 +84,22 @@
   become: true
 
 - name: _verify | homepage hot-reloads bookmarks.yaml and renders the sentinel
+  # Cache-bust the s-maxage=31536000 Next.js attaches to the SSR'd
+  # page -- without a unique query string + Cache-Control: no-cache
+  # the upstream can keep serving a year-old static response that
+  # predates the sentinel injection. Even with cache-bust, the
+  # gethomepage file-watch revalidation can take ~30s of polling
+  # before the new YAML is reflected; raise retries accordingly.
   uri:
-    url: https://localhost/
+    url: "https://localhost/?_t={{ 999999 | random }}"
     headers:
       Host: "homepage.{{ inventory_hostname }}.{{ domain }}"
+      Cache-Control: no-cache
     validate_certs: false
     return_content: true
     status_code: 200
   register: _verify_hotreload
-  retries: 15
+  retries: 60
   delay: 2
   until: "'HomepageVerifySentinel' in _verify_hotreload.content"
   become: true
