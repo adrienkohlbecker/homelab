@@ -77,15 +77,18 @@
 # (rp_filter=2, log_martians=0, send_redirects=1) — pin the secure
 # values explicitly so /etc/sysctl.d/30-firewall-hardening.conf is
 # the single source of truth for the host's network posture. Module
-# writes the .conf file AND applies each key live; `ignoreerrors`
-# on the conntrack key swallows the EINVAL for "module not loaded"
-# (handled by the reboot-required signal below).
+# writes the .conf file AND applies each key live.
+#
+# nf_conntrack_tcp_loose handled separately below: the module isn't
+# loaded at first-apply time so its live write would fail; if we
+# inline it here with `ignoreerrors: true` the sysctl module reports
+# changed=true every run (couldn't apply live → marks as changed)
+# and the rerun never converges.
 - name: Install network-stack hardening sysctls
   ansible.posix.sysctl:
     name: "{{ item.name }}"
     value: "{{ item.value }}"
     sysctl_file: /etc/sysctl.d/30-firewall-hardening.conf
-    ignoreerrors: "{{ item.ignoreerrors | default(false) }}"
   loop:
     # Disable IPv6 entirely. Cuts the stack at the kernel layer so
     # services binding `::` end up on a dead listener, neighbor
@@ -127,12 +130,6 @@
     - { name: net.ipv4.conf.default.arp_ignore, value: '1' }
     - { name: net.ipv4.conf.all.arp_announce, value: '2' }
     - { name: net.ipv4.conf.default.arp_announce, value: '2' }
-    # Strict conntrack: classify mid-stream non-SYN TCP as INVALID
-    # rather than NEW. Module isn't loaded at first-apply time
-    # (autoload pinned via modules-load.d/30-firewall-hardening.conf
-    # fires at next boot); ignoreerrors swallows the EINVAL until
-    # then. The nftables non-SYN drop rules are runtime backstop.
-    - { name: net.netfilter.nf_conntrack_tcp_loose, value: '0', ignoreerrors: true }
   loop_control:
     label: "{{ item.name }}"
   register: firewall_sysctl
@@ -140,23 +137,61 @@
   tags:
     - firewall
 
-# Signal site.yml's tail reboot block when the sysctl file changed
-# but nf_conntrack isn't loaded yet — that's the only case where a
-# key in the file (nf_conntrack_tcp_loose) can't take effect live.
-# After the resulting reboot, modules-load.d loads conntrack and
-# systemd-sysctl writes the desired value at boot. Subsequent runs
-# (module persistent) reapply via `sysctl -e -p` without needing
-# another reboot.
-- name: Check whether nf_conntrack is loaded (gates reboot signal)
+# Strict conntrack: classify mid-stream non-SYN TCP as INVALID rather
+# than NEW. Pinned at boot via modules-load.d (already in this role)
+# so subsequent reboots have nf_conntrack loaded, with the value
+# written from /etc/sysctl.d/ by systemd-sysctl at startup.
+#
+# Split from the main loop because we need different handling for
+# "module not loaded" (first-apply on a fresh host): the conf line
+# always goes in the file via lineinfile (kernel reads it at next
+# boot once modules-load.d fires), but the live sysctl is gated on
+# the module being present so we don't trigger the EINVAL that
+# inline `ignoreerrors: true` would silently turn into perpetual
+# changed=true.
+- name: Check whether nf_conntrack is loaded (gates live sysctl + reboot signal)
   stat:
     path: /sys/module/nf_conntrack
   register: firewall_nf_conntrack_loaded
   tags:
     - firewall
 
-- name: Signal reboot required (conntrack sysctls deferred to boot)
+- name: Pin nf_conntrack_tcp_loose in sysctl.d (idempotent file write)
+  when: not (ansible_check_mode and firewall_sysctl.changed)
+  lineinfile:
+    path: /etc/sysctl.d/30-firewall-hardening.conf
+    regexp: '^net\.netfilter\.nf_conntrack_tcp_loose\s*='
+    # No spaces around `=` to match ansible.posix.sysctl's on-disk
+    # shape -- _verify_counters' grep asserts the no-space form.
+    line: 'net.netfilter.nf_conntrack_tcp_loose=0'
+    create: false
+  register: firewall_conntrack_pinned
+  become: true
+  tags:
+    - firewall
+
+- name: Apply nf_conntrack_tcp_loose live (only when module is loaded)
   when:
-    - firewall_sysctl.changed
+    - firewall_nf_conntrack_loaded.stat.exists
+    - not (ansible_check_mode and firewall_sysctl.changed)
+  ansible.posix.sysctl:
+    name: net.netfilter.nf_conntrack_tcp_loose
+    value: '0'
+    sysctl_file: /etc/sysctl.d/30-firewall-hardening.conf
+    reload: false
+  become: true
+  tags:
+    - firewall
+
+# Signal site.yml's tail reboot block when any sysctl changed and
+# nf_conntrack isn't loaded yet -- that's the only case where a key
+# in the file (conntrack_tcp_loose) can't take effect live. After
+# the resulting reboot, modules-load.d loads conntrack and
+# systemd-sysctl writes the desired value at boot. Subsequent runs
+# (module persistent) reapply without needing another reboot.
+- name: Signal reboot required (conntrack sysctl deferred to boot)
+  when:
+    - firewall_sysctl.changed or firewall_conntrack_pinned.changed
     - not firewall_nf_conntrack_loaded.stat.exists
   file:
     path: /var/run/reboot-required
@@ -171,22 +206,21 @@
 # Auto-revert safety net. `nft -c -f` validates SYNTAX (good — see
 # next task) but can't detect "the new ruleset drops the operator's
 # own SSH path", which silently locks them out at reload time.
-# Mitigation: snapshot the currently-loaded ruleset, schedule a
-# systemd-run timer to re-apply that snapshot 60s from now, run the
-# reload, and cancel the timer once ansible can still reach the host
-# after the reload. If anything between scheduling and cancellation
-# loses the SSH connection (the new rules killed it, the host
-# panicked, the network blipped), the timer fires and restores the
-# previous-good ruleset.
-# Gated on nftables.service already being active — first install has
-# no working ruleset to revert TO, and the systemd_unit helper below
-# will start the service fresh anyway.
+# Mitigation: schedule a systemd-run timer to re-apply the previous
+# pre-reload snapshot 60s from now, run the reload, and cancel the
+# timer once ansible can still reach the host after the reload. If
+# anything between scheduling and cancellation loses the SSH
+# connection (the new rules killed it, the host panicked, the
+# network blipped), the timer fires and restores the
+# previous-known-good ruleset.
+# Gated on nftables.service already being active AND a pre-reload
+# snapshot already existing — first install has no working ruleset
+# to revert TO, so the safety net is degraded by design until the
+# post-reload snapshot below seeds it for the next run.
 #
 # check_mode: false forces a real probe even in --check; otherwise
-# command{} reports "would have run" with rc=0 in the register, so
-# the auto-revert snapshot below believes nftables is active and
-# tries to copy a non-existent /etc/nftables.conf on a fresh
-# check-mode bootstrap where apt also didn't install nftables.
+# command{} reports "would have run" with rc=0 in the register and
+# the gates below trust a fabricated state.
 - name: Check if nftables.service is currently active (gates auto-revert)
   command: systemctl is-active nftables.service
   register: firewall_nftables_pre_active
@@ -197,35 +231,10 @@
   tags:
     - firewall
 
-# Explicit checksum gate around the snapshot copy: copy: remote_src
-# misreports changed=true on every run even when src and dest are
-# byte-identical (reproducible on lab under mitogen; not reproducible
-# locally). The stat-and-when pattern sidesteps the quirk and makes
-# the idempotence intent explicit.
-- name: Stat nftables.conf and prior snapshot for change detection
+- name: Stat prior pre-reload snapshot (gates auto-revert scheduling)
   stat:
-    path: "{{ item }}"
-    checksum_algorithm: sha256
-  loop:
-    - /etc/nftables.conf
-    - /etc/nftables.conf.pre-reload
-  register: firewall_snapshot_stats
-  become: true
-  tags:
-    - firewall
-
-- name: Snapshot current nftables.conf for auto-revert
-  when:
-    - firewall_nftables_pre_active.rc == 0
-    - >-
-      not firewall_snapshot_stats.results[1].stat.exists
-      or firewall_snapshot_stats.results[0].stat.checksum
-         != firewall_snapshot_stats.results[1].stat.checksum
-  copy:
-    src: /etc/nftables.conf
-    dest: /etc/nftables.conf.pre-reload
-    remote_src: true
-    mode: "0644"
+    path: /etc/nftables.conf.pre-reload
+  register: firewall_pre_reload_snapshot
   become: true
   tags:
     - firewall
@@ -283,6 +292,7 @@
   when:
     - firewall_nftables_pre_active.rc == 0
     - firewall_ruleset.changed
+    - firewall_pre_reload_snapshot.stat.exists
   shell: |
     set -e
     systemctl stop firewall_emergency_revert.timer 2>/dev/null || true
@@ -324,11 +334,53 @@
   when:
     - firewall_nftables_pre_active.rc == 0
     - firewall_ruleset.changed
+    - firewall_pre_reload_snapshot.stat.exists
   shell: |
     systemctl stop firewall_emergency_revert.timer 2>/dev/null || true
     systemctl reset-failed firewall_emergency_revert.timer firewall_emergency_revert.service 2>/dev/null || true
   args: { executable: /bin/bash }
   changed_when: true
+  become: true
+  tags:
+    - firewall
+
+# Promote the now-confirmed-good live ruleset into the pre-reload
+# snapshot so the NEXT apply has a rollback target. Snapshotting
+# *before* the reload (the previous shape) drifts every rerun: after
+# apply N writes live=X', pre-reload still holds the X from before
+# apply N -- the idempotence stat sees them differ and copies again,
+# reporting changed=true on a clean rerun. Post-reload snapshotting
+# converges in one step: after a successful reload, live == pre-reload.
+# remote_src copy is gated by an explicit stat-checksum compare
+# because remote_src misreports changed=true on byte-identical
+# src/dest under mitogen (lab-only, reproducible).
+- name: Stat live + pre-reload for post-reload snapshot
+  stat:
+    path: "{{ item }}"
+    checksum_algorithm: sha256
+  loop:
+    - /etc/nftables.conf
+    - /etc/nftables.conf.pre-reload
+  register: firewall_post_reload_stats
+  become: true
+  tags:
+    - firewall
+
+# Source-exists gate covers the same-run-as-install check-mode branch
+# (apt reported changed but didn't install, so /etc/nftables.conf
+# isn't on disk yet to snapshot).
+- name: Snapshot post-reload ruleset for next run's auto-revert
+  when:
+    - firewall_post_reload_stats.results[0].stat.exists
+    - >-
+      not firewall_post_reload_stats.results[1].stat.exists
+      or firewall_post_reload_stats.results[0].stat.checksum
+         != firewall_post_reload_stats.results[1].stat.checksum
+  copy:
+    src: /etc/nftables.conf
+    dest: /etc/nftables.conf.pre-reload
+    remote_src: true
+    mode: "0644"
   become: true
   tags:
     - firewall
