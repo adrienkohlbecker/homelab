@@ -44,16 +44,6 @@ resource "github_actions_secret" "nexus_password" {
   }
 }
 
-moved {
-  from = github_actions_secret.nexus_username
-  to   = github_actions_secret.nexus_username["homelab"]
-}
-
-moved {
-  from = github_actions_secret.nexus_password
-  to   = github_actions_secret.nexus_password["homelab"]
-}
-
 # MISE_GITHUB_TOKEN raises mise's anonymous 60/hr GitHub API rate limit
 # during `mise install` in the ci-image workflow. mise just
 # needs an authenticated token; the value here is a dedicated

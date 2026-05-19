@@ -263,24 +263,6 @@ resource "nexus_security_user" "push" {
   }
 }
 
-# Migrate the pre-for_each resources so the existing homelab-push role/
-# user/password keep their state (no destroy-and-recreate, no password
-# rotation, no GitHub-secret churn).
-moved {
-  from = nexus_security_role.homelab_push
-  to   = nexus_security_role.push["homelab"]
-}
-
-moved {
-  from = random_password.nexus_homelab_push
-  to   = random_password.nexus_push["homelab"]
-}
-
-moved {
-  from = nexus_security_user.homelab_push
-  to   = nexus_security_user.push["homelab"]
-}
-
 resource "nexus_repository_docker_proxy" "this" {
   for_each = local.docker_proxies
 
