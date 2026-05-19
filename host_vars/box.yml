@@ -64,7 +64,7 @@ macvlan_blocks:
   - name: mac_mgmt
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
     block: "{{ home_subnet | ansible.utils.ipsubnet(28, 14) }}"   # /28 (16 IPs); host_ip defaults to block + 0
-macvlan_enable_podman: true
+    podman_network: true   # test fixture exercises the podman macvlan path
 
 # macos_vm test fixture: matches the symlink _setup.yml fabricates over
 # a loopback file. install_mode=false skips the 700 MB BaseSystem.dmg

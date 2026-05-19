@@ -129,24 +129,7 @@
   tags:
     - podman
 
-- name: Configure macvlan network (mgmt VLAN)
-  when: macvlan_enable_podman | default(false)
-  import_role:
-    name: macvlan
-    tasks_from: podman
-  vars:
-    # Find the mgmt block in host_vars.macvlan_blocks by name. Precondition:
-    # any host with macvlan_enable_podman=true must have a `mac_mgmt` entry
-    # in macvlan_blocks (the mgmt VLAN's iface). parent_subnet/gateway are
-    # derived inline from ansible_facts so they aren't part of host_vars.
-    _mgmt_block: "{{ (macvlan_blocks | default([])) | selectattr('name', 'equalto', 'mac_mgmt') | first }}"
-    macvlan_args:
-      name: mac_mgmt
-      parent: "{{ _mgmt_block.parent }}"
-      parent_subnet: "{{ ansible_facts[_mgmt_block.parent].ipv4.network }}/{{ ansible_facts[_mgmt_block.parent].ipv4.prefix }}"
-      parent_gateway: "{{ ansible_facts[_mgmt_block.parent].ipv4.network | ansible.utils.ipmath(1) }}"
-      # Upper /29 of the host's /28 mgmt block — split lower /29 (host
-      # iface + libvirt VMs) from upper /29 (podman containers).
-      ip_range: "{{ _mgmt_block.block | ansible.utils.ipsubnet(_mgmt_block.block | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
-  tags:
-    - podman
+# Podman macvlan networks are owned by the macvlan role now — each
+# entry in host_vars.macvlan_blocks with `podman_network: true` gets
+# its podman network created alongside its host-side iface. See
+# roles/macvlan/tasks/install.yml.

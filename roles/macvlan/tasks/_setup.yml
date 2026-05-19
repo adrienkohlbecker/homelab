@@ -1,0 +1,9 @@
+# Test-only setup. Production satisfies this via site.yml's role
+# order (`podman` runs before `macvlan`); testrole.py invokes the
+# role in isolation, so the `podman_network: true` path in
+# install.yml would fail with "podman not installed" without this
+# pre-step.
+- name: _setup | Install podman
+  import_role:
+    name: podman
+    tasks_from: install

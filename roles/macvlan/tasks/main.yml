@@ -22,13 +22,18 @@
 #   mac_address optional; MAC for the iface. Defaults to a stable
 #               random MAC seeded by `inventory_hostname_<name>` so
 #               sibling blocks on the same host pick distinct MACs.
+#   podman_network
+#               optional bool, default false. When true the role
+#               also creates a podman macvlan network named after
+#               the block (same `name`), attached to the same parent,
+#               with ip_range = upper /29 of the block. Consumers
+#               just attach via `--network={{ name }}` and don't
+#               need to know the parent / subnet / ip_range — see
+#               roles/homeassistant for an example (it consumes
+#               `mac_iot`).
 #
 # Hosts that don't trunk any macvlan-bearing VLANs leave
 # macvlan_blocks undefined or empty; the role no-ops cleanly.
-#
-# Podman macvlan networks attached to the same parents are created
-# separately via tasks/podman.yml (one import_role per network);
-# this file only handles the host-side iface.
 
 - name: Install iproute2
   apt:

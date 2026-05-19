@@ -63,3 +63,33 @@
       restart: "{{ systemd_unit.changed }}"
   tags:
     - macvlan
+
+# Optionally create a podman macvlan network on the same parent, named
+# after the block. Consumers (homeassistant, future per-VLAN services)
+# attach to the network by name via `--network={{ macvlan_args.name }}`
+# without needing to know the parent / subnet / ip_range plumbing.
+#
+# ip_range = upper /29 of the block (lower /29 = host iface + libvirt
+# macvtap VMs; upper /29 = podman containers). parent_subnet /
+# parent_gateway derived from ansible_facts on the parent iface so
+# host_vars carries only the block CIDR.
+#
+# This task runs inline (not via tasks_from: podman) to avoid the
+# macvlan_args dict-shadowing issue when re-importing the same role
+# inside a loop. podman.yml as a standalone entry point was retired
+# in the same change.
+- name: install | Create podman macvlan network {{ macvlan_args.name }}
+  when:
+    - macvlan_args.podman_network | default(false)
+    - not ansible_check_mode
+  containers.podman.podman_network:
+    name: "{{ macvlan_args.name }}"
+    driver: macvlan
+    subnet: "{{ ansible_facts[macvlan_args.parent].ipv4.network }}/{{ ansible_facts[macvlan_args.parent].ipv4.prefix }}"
+    gateway: "{{ ansible_facts[macvlan_args.parent].ipv4.network | ansible.utils.ipmath(1) }}"
+    ip_range: "{{ macvlan_args.block | ansible.utils.ipsubnet(macvlan_args.block | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
+    opt:
+      parent: "{{ macvlan_args.parent }}"
+  become: true
+  tags:
+    - macvlan
