@@ -2,24 +2,24 @@
 # the unit template (homeassistant.service.j2) and the core.network
 # template (core.network.j2) read this list -- the unit emits one
 # `--network=...` flag per entry, the core.network template uses the
-# index of "iot_macvlan" to compute the corresponding ethN container
+# index of "mac_iot" to compute the corresponding ethN container
 # interface name (podman names attached interfaces eth0, eth1, ... in
 # the order they appear on `podman run --network=` flags). Re-ordering
 # this list regenerates both templates consistently, and the network
 # restriction stays pinned to whichever interface ends up holding the
-# iot_macvlan IP -- no separate runtime probe needed.
+# mac_iot IP -- no separate runtime probe needed.
 homeassistant_networks:
   # mosquitto bridge: HA needs aardvark-dns resolution of "mosquitto"
   # to reach the broker. Discovery/zeroconf is intentionally NOT
   # enabled on this adapter (see core.network.j2 + main.yml).
   - name: mosquitto
-  # iot_macvlan: HA's L2 presence on the IoT VLAN (10.123.4.0/24).
-  # No IP pin — HA is the only container on this network, netavark
-  # allocates deterministically from ip_range .136/29 (upper /29 of
-  # lab's IoT macvlan_block; see notes/network_topology.yml). Nothing
-  # downstream keys on a specific .138/etc. address: HomeKit/Sonos
-  # discovery uses mDNS/UPnP identity, no DNS A-record points at
-  # this IP, no firewall rule keys on it. Re-introduce a pin (add
-  # `ip: <addr>`) if either of those changes, or if a second container
-  # joins this network and starts contending for slot assignments.
-  - name: iot_macvlan
+  # mac_iot: HA's L2 presence on the IoT VLAN (10.123.4.0/24). No IP
+  # pin — HA is the only container on this network, netavark allocates
+  # deterministically from ip_range .136/29 (upper /29 of lab's IoT
+  # macvlan_block; see notes/network_topology.yml). Nothing downstream
+  # keys on a specific address: HomeKit/Sonos discovery uses mDNS/UPnP
+  # identity, no DNS A-record points at this IP, no firewall rule keys
+  # on it. Re-introduce a pin (add `ip: <addr>`) if either of those
+  # changes, or if a second container joins this network and starts
+  # contending for slot assignments.
+  - name: mac_iot

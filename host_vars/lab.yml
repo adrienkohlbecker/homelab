@@ -31,11 +31,11 @@ sensor_modules:
   - nct6775
 
 macvlan_blocks:
-  - name: mac0
+  - name: mac_mgmt
     parent: eth0
     block: 10.123.0.128/28   # mgmt VLAN's macvlan_block (slot 0). host_ip
                              # defaults to block + 0 = 10.123.0.128.
-  - name: mac0_iot
+  - name: mac_iot
     parent: iot              # netplan-named eth0.4 subif (see vlans.iot below)
     block: 10.123.4.128/28   # IoT VLAN's macvlan_block (slot 0). host_ip
                              # defaults to block + 0 = 10.123.4.128. Sits

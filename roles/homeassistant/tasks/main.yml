@@ -1,16 +1,17 @@
-# macvlan onto lab's IoT VLAN (netplan-named `iot`, vlan id 4 on
-# nic0) so HA has an L2 presence there for mDNS/SSDP discovery of
-# Sonos / HomeKit / Zigbee-bridge targets, AND so HA can talk
-# directly to IoT devices on the /24 (Philips airpurifier CoAP,
-# etc.).
+# Podman macvlan network on lab's IoT VLAN (netplan-named `iot`,
+# vlan id 4 on nic0) so HA has an L2 presence there for mDNS/SSDP
+# discovery of Sonos / HomeKit / Zigbee-bridge targets, AND so HA
+# can talk directly to IoT devices on the /24 (Philips airpurifier
+# CoAP, etc.).
 #
-# ip_range .136/29 is the upper /29 of lab's IoT macvlan_block
-# (10.123.4.128/28, see notes/network_topology.yml). All 8 IPs in
-# .136-.143 are usable container slots; the /29 is a flat
-# allocation pool, not a routed subnet. HA is the only container
-# on this network today and gets whatever netavark allocates first
-# (no pin in vars/main.yml); future macvlan'd containers on the
-# IoT VLAN can claim other slots in the same range.
+# Everything except the network name is derived from the host's
+# `mac_iot` entry in `macvlan_blocks` (host_vars). Precondition: any
+# host running homeassistant must have a `mac_iot` block defined.
+# The podman network attaches to the same parent as the host's
+# mac_iot child iface, and its ip_range is the upper /29 of the
+# block (lower /29 = mac_iot iface + libvirt VMs; upper /29 =
+# podman containers). HA picks whatever IP netavark allocates first
+# from the /29 (no pin in vars/main.yml).
 #
 # Earlier ip_range shapes:
 #   - .100/30 standalone — overlapped lab's own iot address .102,
@@ -27,17 +28,19 @@
 #   - .136/30 — interim move into lab's IoT macvlan_block; widened
 #     to /29 once we stopped treating ip_range as a subnet with
 #     network/broadcast semantics.
-- name: Create iot_macvlan network
+- name: Create mac_iot podman network
   import_role:
     name: macvlan
     tasks_from: podman
   vars:
+    _iot_block: "{{ macvlan_blocks | selectattr('name', 'equalto', 'mac_iot') | first }}"
     macvlan_args:
-      name: iot_macvlan
-      parent: iot
-      parent_subnet: 10.123.4.0/24
-      parent_gateway: 10.123.4.1
-      ip_range: 10.123.4.136/29
+      name: mac_iot
+      parent: "{{ _iot_block.parent }}"
+      parent_subnet: "{{ ansible_facts[_iot_block.parent].ipv4.network }}/{{ ansible_facts[_iot_block.parent].ipv4.prefix }}"
+      parent_gateway: "{{ ansible_facts[_iot_block.parent].ipv4.network | ansible.utils.ipmath(1) }}"
+      # Upper /29 of the host's IoT /28 block
+      ip_range: "{{ _iot_block.block | ansible.utils.ipsubnet(_iot_block.block | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
   tags:
     - homeassistant
 
@@ -94,7 +97,7 @@
   tags:
     - homeassistant
 
-# Restrict HA's zeroconf/mDNS announcements to the iot_macvlan adapter.
+# Restrict HA's zeroconf/mDNS announcements to the mac_iot adapter.
 # Without this, HA advertises *all* its adapters -- including the
 # internal mosquitto-bridge IP 10.89.0.29 -- to every adapter it can
 # reach. LAN clients pick up the bridge IP from mDNS, try to connect
