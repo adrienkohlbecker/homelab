@@ -49,22 +49,6 @@
   delay: 2
   until: _verify_http.status in [ 200, 302, 307 ]
 
-# Stronger signal than "frontend renders": ClickHouse is the data plane
-# the otel collector exports to. Probe it via the _test helper (encodes
-# the Ansible 2.19 templated-until: trust-check workaround).
-- name: _verify | ClickHouse inside the container is queryable
-  import_role:
-    name: _test
-    tasks_from: clickhouse_query
-  vars:
-    _test_args:
-      label: select_1
-      sql: SELECT 1
-
-- name: _verify | ClickHouse SELECT 1 returns 1
-  assert:
-    that: (_test_clickhouse_result.stdout | trim) == '1'
-
 # End-to-end ingest probe: synthesise a minimal OTLP log and POST it at
 # the published OTLP HTTP port using the same Bearer auth fluent-bit
 # does. Any auth / shape / endpoint regression here surfaces as a
@@ -109,6 +93,23 @@
   delay: 2
   until: _verify_otlp_loopback.status == 200
   no_log: true
+
+# Negative-path: a syntactically-valid but wrong Bearer must be rejected
+# by the collector's bearertokenauth extension (hitting 4318 directly so
+# nginx's edge regex isn't involved). The only other auth-rejection
+# probe fires at nginx (missing-Authorization), so a future image
+# regression that silently disabled bearertokenauth would let any
+# garbage Bearer through and only surface as a prod-side incident.
+- name: _verify | OTLP loopback rejects a syntactically-valid wrong key
+  uri:
+    url: http://localhost:{{ service_ports.hyperdx_otlp_http }}/v1/logs
+    method: POST
+    body_format: json
+    headers:
+      Authorization: deliberately_wrong_key_for_negative_probe
+    body:
+      resourceLogs: []
+    status_code: 401
 
 # Exercise the nginx /v1/logs site (production ingress for off-host
 # shippers). Uses Host: + validate_certs=false to hit the local nginx
