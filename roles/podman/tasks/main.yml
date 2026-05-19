@@ -110,7 +110,7 @@
 # testrole.py podman (and under any role that imports podman as a
 # dep), the user role hasn't run yet, so enable linger here so
 # podman is self-sufficient.
-- name: Enable linger for {{ ansible_user_id }} (required by user-scope prune timer)
+- name: Enable linger for the operator user (required by user-scope prune timer)
   import_role:
     name: linger
     tasks_from: linger
@@ -121,7 +121,7 @@
   tags:
     - podman
 
-- name: Install podman prune timer for {{ ansible_user_id }}
+- name: Install user-scope podman prune timer for the operator user
   import_tasks: prune.yml
   vars:
     podman_prune_args:
