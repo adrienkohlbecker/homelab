@@ -64,6 +64,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/bazarr:/config \
     --volume /mnt/services/sqlite/bazarr:/config/db \
     --volume /mnt/media:/media \
+    --network media \
     --publish 127.0.0.1:{{ service_ports.bazarr }}:{{ service_ports.bazarr }}/tcp \
     --health-cmd         '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:{{ service_ports.bazarr }}/api/"]' \
     --health-startup-cmd '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:{{ service_ports.bazarr }}/api/"]' \

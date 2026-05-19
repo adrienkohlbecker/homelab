@@ -44,6 +44,7 @@ ExecStart=/usr/bin/podman run \
     --env TZ={{ system_timezone }} \
     --volume /mnt/services/profilarr:/config \
     --volume /mnt/services/sqlite/profilarr:/mnt/services/sqlite/profilarr \
+    --network media \
     --publish 127.0.0.1:6868:6868/tcp \
     --health-cmd         '["python","-c","import urllib.request as u, sys; u.urlopen(sys.argv[1], timeout=1)","http://localhost:6868/"]' \
     --health-startup-cmd '["python","-c","import urllib.request as u, sys; u.urlopen(sys.argv[1], timeout=1)","http://localhost:6868/"]' \

@@ -13,6 +13,11 @@
     name: podman
     tasks_from: install
 
+- name: _setup | Create media podman network
+  import_role:
+    name: media
+    tasks_from: network
+
 - name: _setup | Ensure /mnt/services and /mnt/media exist
   file:
     path: "{{ item }}"
