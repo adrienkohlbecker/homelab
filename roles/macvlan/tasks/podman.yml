@@ -34,9 +34,9 @@
     that:
       - macvlan_args.name is string and macvlan_args.name | length > 0
       - macvlan_args.parent is string and macvlan_args.parent | length > 0
-      - (macvlan_args.parent_subnet | ansible.utils.ipaddr) | bool
-      - (macvlan_args.parent_gateway | ansible.utils.ipaddr) | bool
-      - (macvlan_args.ip_range | ansible.utils.ipaddr) | bool
+      - macvlan_args.parent_subnet | ansible.utils.ipaddr != false
+      - macvlan_args.parent_gateway | ansible.utils.ipaddr != false
+      - macvlan_args.ip_range | ansible.utils.ipaddr != false
       - macvlan_args.ip_range == (macvlan_args.ip_range | ansible.utils.ipaddr(macvlan_args.parent_subnet))
     fail_msg: >-
       macvlan_args invalid or ip_range '{{ macvlan_args.ip_range }}'

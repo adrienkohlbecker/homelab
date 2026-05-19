@@ -8,7 +8,7 @@
       - macvlan_args.name is string and macvlan_args.name | length > 0
       - macvlan_args.parent is string and macvlan_args.parent | length > 0
       - macvlan_args.block is string
-      - (macvlan_args.block | ansible.utils.ipaddr) | bool
+      - macvlan_args.block | ansible.utils.ipaddr != false
       - macvlan_args.block == (macvlan_args.block | ansible.utils.ipaddr('net'))
     fail_msg: >-
       macvlan_args invalid for '{{ macvlan_args.name | default('<no name>') }}':
