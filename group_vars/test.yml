@@ -19,9 +19,9 @@ etc_hosts_entries:
 
 # Test overrides `network` (from group_vars/all/network.yml's
 # `prod_network` default) with a gsub'd 10.234.x view: same shape as
-# prod, disjoint subnet. Consumer vars (home_subnet, site_subnets,
-# external_ips, wireguard_subnet, pihole_keepalived_ip) derive from
-# `network` so they automatically pick up the gsub.
+# prod, disjoint subnet. Consumer vars (site_subnets, external_ips,
+# wireguard_subnet, pihole_keepalived_ip) derive from `network` so
+# they automatically pick up the gsub.
 network: "{{ prod_network | to_yaml | replace('10.123', '10.234') | from_yaml }}"
 
 mac_addresses:
