@@ -180,9 +180,12 @@ ubuntu_mirror_security: '{{ (ansible_architecture == "aarch64") | ternary(mirror
 default_interface: "{{ ansible_default_ipv4.interface | mandatory }}"
 
 # wireguard-vanity-keygen -c $NAME/
+# Peer addresses derive from `network.*` (see group_vars/all/network.yml
+# and notes/network_topology.yml); endpoints, keys, and post_up hooks
+# stay literal since they live outside the topology's scope.
 wireguard_peers:
   - name: lab
-    address: 10.123.64.2
+    address: "{{ network.hosts.lab.wireguard }}"
     endpoint:
       local: "{{ external_ips.lab }}:51820"
       remote: "home.{{ domain }}:51821"
@@ -192,7 +195,7 @@ wireguard_peers:
     public_key: "{{ wireguard_keys.lab.public_key }}"
     private_key: "{{ wireguard_keys.lab.private_key }}"
   - name: pug
-    address: 10.123.64.3
+    address: "{{ network.hosts.pug.wireguard }}"
     endpoint:
       local: "{{ external_ips.pug }}:51820"
       remote: "home.{{ domain }}:51822"
@@ -202,7 +205,7 @@ wireguard_peers:
     public_key: "{{ wireguard_keys.pug.public_key }}"
     private_key: "{{ wireguard_keys.pug.private_key }}"
   - name: box
-    address: 10.123.64.5
+    address: "{{ network.hosts.box.wireguard }}"
     endpoint:
       local: "{{ external_ips.box }}:51820"
       remote: home.{{ domain }}:51823
@@ -211,35 +214,33 @@ wireguard_peers:
     site_subnet: "{{ site_subnets.home }}"
     public_key: "{{ wireguard_keys.box.public_key }}"
     private_key: "{{ wireguard_keys.box.private_key }}"
-  # Roaming clients live in the wg mirror of the home VLAN's DHCP block
-  # (10.123.2.64/26 → +64.0.0 → 10.123.66.64/26). See notes/network_topology.yml.
   - name: laptop
-    address: 10.123.66.64
+    address: "{{ network.wireguard.roaming.laptop }}"
     is_server: false
     public_key: "{{ wireguard_keys.laptop.public_key }}"
     private_key: "{{ wireguard_keys.laptop.private_key }}"
   - name: phone
-    address: 10.123.66.65
+    address: "{{ network.wireguard.roaming.phone }}"
     is_server: false
     public_key: "{{ wireguard_keys.phone.public_key }}"
     private_key: "{{ wireguard_keys.phone.private_key }}"
   - name: ipad
-    address: 10.123.66.66
+    address: "{{ network.wireguard.roaming.ipad }}"
     is_server: false
     public_key: "{{ wireguard_keys.ipad.public_key }}"
     private_key: "{{ wireguard_keys.ipad.private_key }}"
   - name: spouse_laptop
-    address: 10.123.66.67
+    address: "{{ network.wireguard.roaming.spouse_laptop }}"
     is_server: false
     public_key: "{{ wireguard_keys.spouse_laptop.public_key }}"
     private_key: "{{ wireguard_keys.spouse_laptop.private_key }}"
   - name: spouse_phone
-    address: 10.123.66.68
+    address: "{{ network.wireguard.roaming.spouse_phone }}"
     is_server: false
     public_key: "{{ wireguard_keys.spouse_phone.public_key }}"
     private_key: "{{ wireguard_keys.spouse_phone.private_key }}"
   - name: bunk
-    address: 10.123.121.3
+    address: "{{ network.hosts.bunk.wireguard }}"
     endpoint:
       local: "{{ external_ips.bunk }}:51820"
       remote: "{{ synology_endpoint }}:51820"
@@ -257,7 +258,7 @@ wireguard_peers:
     # per-peer) so battery-sensitive mobile peers don't get a forced
     # heartbeat they don't need.
     keepalive_from: [lab, pug]
-    dns_address: 10.123.57.1
+    dns_address: "{{ network.sites.bonniers.gateway }}"
     public_key: "{{ wireguard_keys.bunk.public_key }}"
     private_key: "{{ wireguard_keys.bunk.private_key }}"
 

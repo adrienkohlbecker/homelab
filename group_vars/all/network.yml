@@ -1,0 +1,43 @@
+# Derived network vars sourced from the topology.
+#
+# `prod_network` is the canonical truth: always 10.123.x, loaded
+# verbatim from notes/network_topology.yml. It's the right name to
+# reference when a value must point at live prod services (e.g.
+# `etc_hosts_entries` in group_vars/test.yml).
+#
+# `network` is the local view: equals `prod_network` for prod hosts,
+# and is the gsub'd 10.234.x version for test hosts (overridden in
+# group_vars/test.yml). All derivations below consume `network`, so
+# they automatically take the right shape per group.
+
+prod_network: "{{ lookup('file', playbook_dir ~ '/notes/network_topology.yml') | from_yaml }}"
+
+network: "{{ prod_network }}"
+
+home_subnet: "{{ network.supernet }}"
+
+site_subnets:
+  home:     "{{ network.sites.home.cidr }}"
+  brumath:  "{{ network.sites.brumath.cidr }}"
+  bonniers: "{{ network.sites.bonniers.cidr }}"
+
+wireguard_subnet: "{{ network.partitions.wireguard.cidr }}"
+
+pihole_keepalived_ip: "{{ network.virtual_ips.pihole }}"
+
+# Named-IP registry consumed by nginx vhosts, fail2ban allowlists,
+# samba binds, tautulli proxy auth, etc. Combines host primaries,
+# the site gateway (udm), static device leases that consumers
+# reference by name, and the pihole VIP.
+external_ips:
+  lab:     "{{ network.hosts.lab.physical }}"
+  pug:     "{{ network.hosts.pug.physical }}"
+  box:     "{{ network.hosts.box.physical }}"
+  bunk:    "{{ network.hosts.bunk.physical }}"
+  udm:     "{{ network.sites.home.gateway }}"
+  eaton:   "{{ network.static_leases.eaton_ups.ip }}"
+  marantz: "{{ network.static_leases.marantz_receiver.ip }}"
+  printer: "{{ network.static_leases.printer.ip }}"
+  siglent: "{{ network.static_leases.siglent.ip }}"
+  tubeszb: "{{ network.static_leases.tubeszb.ip }}"
+  pihole:  "{{ pihole_keepalived_ip }}"

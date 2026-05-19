@@ -1,34 +1,14 @@
 domain: fahm.fr
-home_subnet: 10.123.0.0/16
-site_subnets:
-  home: 10.123.0.0/21
-  brumath: 10.123.56.0/24
-  bonniers: 10.123.57.0/24
-external_ips:
-  pug: 10.123.0.3
-  box: 10.123.0.5
-  eaton: 10.123.0.10
-  lab: 10.123.0.2
-  udm: 10.123.0.1
-  marantz: 10.123.2.10
-  printer: 10.123.2.11
-  siglent: 10.123.2.12
-  tubeszb: 10.123.4.16
-  bunk: 10.123.57.3
-  pihole: "{{ pihole_keepalived_ip }}"
+
+# `network` and `prod_network` both come from group_vars/all/network.yml
+# (`network` defaults to `prod_network`, the canonical 10.123.x topology).
+# Test overrides `network` with a gsub'd 10.234.x view.
+
 mac_addresses:
   pug: 9c:6b:00:26:ef:5d
   lab_i210: e8:ea:6a:09:97:67
   lab_i225p1: c8:7f:54:5c:57:5b
   lab_i225p2: c8:7f:54:5c:57:5c
-
-# Aggregate of all wireguard-allocated addresses across servers
-# (10.123.64.x), client roaming pool (10.123.66.x), and the bunk
-# off-site peer (10.123.121.x). /18 covers 10.123.64.0–10.123.127.255
-# without including the physical-LAN ranges (10.123.0.x, 10.123.2.x,
-# etc.). Used by the firewall role to scope admin services (Samba, nut, mDNS)
-# to traffic arriving via wireguard.
-wireguard_subnet: 10.123.64.0/18
 
 wireguard_keys:
   lab:
@@ -180,7 +160,6 @@ pihole_password: !vault |
           34386339633130643535343362316661343931636633663835633935383666383837653136616434
           6538653035323163360a333362323430316166323533326638363864633933623962316161656233
           6136
-pihole_keepalived_ip: 10.123.1.224
 
 compta_api_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
