@@ -22,13 +22,13 @@ site_subnets:
 external_ips:
   pug: 10.234.0.3
   box: 10.234.0.5
-  eaton: 10.234.0.4
+  eaton: 10.234.0.10
   lab: 10.234.0.2
   udm: 10.234.0.1
-  marantz: 10.234.2.2
-  printer: 10.234.2.3
-  siglent: 10.234.2.4
-  tubeszb: 10.234.4.2
+  marantz: 10.234.2.10
+  printer: 10.234.2.11
+  siglent: 10.234.2.12
+  tubeszb: 10.234.4.16
   bunk: 10.234.57.3
   pihole: "{{ pihole_keepalived_ip }}"
 mac_addresses:

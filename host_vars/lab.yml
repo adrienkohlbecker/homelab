@@ -83,7 +83,7 @@ netplan:
     iot:
       id: 4
       link: nic0
-      addresses: [ "10.123.4.102/24" ]
+      addresses: [ "10.123.4.2/24" ]
 
 hdparm_settings: {}
 
