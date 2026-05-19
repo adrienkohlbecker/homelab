@@ -74,6 +74,25 @@ jobs:
             args+=(--ubuntu "$PACKER_UBUNTU")
           fi
           mise run packer:build "${args[@]}"
+      - name: Seed box_deps on top of box
+        # box_deps is a derivation: mise-tasks/packer/seed-deps stages a
+        # reflink-copy of box's artifacts, boots them via launch.py
+        # --commit, applies packer/seed_deps.yml (podman + nginx +
+        # backports), then atomically publishes the result. ~5 min on
+        # top of the 15-30 min box build. Gated on box having actually
+        # been built in this run: empty inputs.sources => full build
+        # (every push lands here); a dispatch limited to pug/lab/etc
+        # skips this step since box's existing artifact is untouched.
+        if: inputs.sources == '' || contains(inputs.sources, 'box')
+        env:
+          PACKER_UBUNTU: ${{ inputs.ubuntu }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ -n "$PACKER_UBUNTU" ]; then
+            args+=(--ubuntu "$PACKER_UBUNTU")
+          fi
+          mise run packer:seed-deps "${args[@]}"
       - name: Mark build complete for waiters
         # test.yml's wait-for-packer-build job polls this sentinel before
         # letting the _packer test cell read the qcow2s. Sentinels live

@@ -58,6 +58,34 @@ is_minimal_role() {
   grep -qx -- "$1" <<<"$MINIMAL_ROLES"
 }
 
+# Per-role default machine, from roles/<role>/meta/test.yml's `machine:`
+# key. Falls back to "box" when the file is absent or doesn't declare
+# the field. Built once via a single python3 invocation rather than
+# per-role to avoid ~50ms python startup * N roles. The mise lint
+# task `lint:test-meta` validates the machine value against
+# MACHINE_CHOICES at PR time, so detect-roles doesn't re-check.
+ROLE_MACHINE=$(python3 <<'EOF'
+import sys
+import yaml
+from pathlib import Path
+for meta in sorted(Path("roles").glob("*/meta/test.yml")):
+    role = meta.parent.parent.name
+    try:
+        data = yaml.safe_load(meta.read_text()) or {}
+    except yaml.YAMLError as e:
+        sys.exit(f"error: parsing {meta}: {e}")
+    machine = data.get("machine")
+    if machine is not None:
+        print(f"{role}={machine}")
+EOF
+)
+
+default_machine_for() {
+  local role=$1 m
+  m=$(grep -E "^${role}=" <<<"$ROLE_MACHINE" | head -1 | cut -d= -f2-)
+  echo "${m:-box}"
+}
+
 # Cross-cut regex: changes to these paths invalidate every role's matrix
 # entry, so we don't try to be clever -- emit empty matrix + cross_cut=true
 # and let the operator pick a targeted subset via workflow_dispatch.
@@ -84,10 +112,11 @@ emit() {
 }
 
 # Build a JSON array of "role:variant" strings from a newline-separated
-# role list. Each role gets a "role:box" entry; roles in MINIMAL_ROLES
-# additionally get a "role:minimal" entry. lab/pug variants stay
-# available via the harness for on-demand debug + nightly, but they
-# don't fan out from push CI.
+# role list. Each role gets a "role:<default>" entry (default from the
+# role's meta/test.yml `machine:` key, falling back to "box"); roles in
+# MINIMAL_ROLES additionally get a "role:minimal" entry. lab/pug
+# variants stay available via the harness for on-demand debug +
+# nightly, but they don't fan out from push CI.
 #
 # Flat strings (not {role, variant} objects) keep workflow parsing
 # simple: a single ${SPEC%%:*} / ${SPEC##*:} pair in bash gets both
@@ -99,7 +128,7 @@ build_matrix() {
   local entries=()
   while IFS= read -r role; do
     [ -z "$role" ] && continue
-    entries+=("\"$role:box\"")
+    entries+=("\"$role:$(default_machine_for "$role")\"")
     if is_minimal_role "$role"; then
       entries+=("\"$role:minimal\"")
     fi
@@ -149,7 +178,7 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}
         echo "error: role '$role' is not in the testable universe (no roles/$role/tasks/main.yml)" >&2
         exit 1
       fi
-      entries+=("\"$role:box\"")
+      entries+=("\"$role:$(default_machine_for "$role")\"")
       if is_minimal_role "$role"; then
         entries+=("\"$role:minimal\"")
       fi
