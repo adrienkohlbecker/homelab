@@ -1,0 +1,30 @@
+# Test stub for roles/github_runner's _verify smoke. Same shape as the
+# real runner image (entrypoint at /entrypoint.sh, expects /run/jit and
+# /opt/actions-runner bind-mounts) but skips the GitHub registration
+# so _verify can drive a full unit start without a real PAT.
+#
+# alpine instead of ubuntu so the build context doesn't need 200MB of
+# package fetches just to wrap sleep. The rotate _verify already
+# pre-pulls docker.io/library/alpine:latest, so this build reuses that
+# cached layer and doesn't hit the network.
+# debian-slim (not alpine) because alpine's /bin/sleep is busybox
+# multi-call and alpine's coreutils package is ALSO multi-call -- both
+# dispatch by argv[0] basename, so renaming sleep to Runner.Listener
+# (so the unit's `pgrep --exact Runner.Listener` healthcheck finds it)
+# triggers "applet not found". debian's sleep is a standalone GNU
+# coreutils binary that doesn't care about its argv[0]. debian also
+# ships procps's pgrep with the --count / --exact long-options the
+# unit's healthcheck uses; alpine's busybox pgrep doesn't.
+FROM docker.io/library/debian:bookworm-slim
+
+# procps for pgrep (the unit's healthcheck calls
+# `pgrep --count --exact Runner.Listener`; the slim image strips it).
+# sleep ships via coreutils which is in the slim base.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends procps \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

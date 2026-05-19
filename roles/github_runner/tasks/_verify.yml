@@ -252,3 +252,65 @@
       points at an earlier regression (envfile sourcing, secret
       inspect, jq pipeline, etc.). Got rc={{ _verify_jit_mint.rc }},
       stderr={{ _verify_jit_mint.stderr | default('') | trim }}.
+
+# Unit-start smoke. The standalone jit_mint / rotate tests above
+# don't exercise the unit's actual ExecStart -- the bind-mount /
+# uidmap / healthcheck wiring stays uncovered under qemu_test because
+# main.yml's "Enable github_runner@..." task is gated off (real
+# jit_mint would 401 against GitHub with the stub PAT).
+#
+# Drive the full chain with two stubs:
+#   1) /usr/local/bin/github_runner_jit_mint replaced with a
+#      synthetic-blob writer (no GitHub call, just write a fixed
+#      string + chown to github_runner so the in-container open
+#      check passes).
+#   2) nexus.lab.fahm.fr/homelab/runner:latest re-tagged to the
+#      runner_test_stub image built in _setup. Its entrypoint
+#      validates the bind-mounts then exec's a sleep renamed
+#      Runner.Listener so the unit's `pgrep --exact` healthcheck
+#      passes and the unit settles into active.
+#
+# Runs LAST in _verify so the rotate test's tag mutations (Phase B
+# leaves runner:latest = busybox) and the jit_mint script-exercise
+# (needs the real script) happen first. Catches regressions in:
+#   - JIT bind-mount path / RuntimeDirectory=%N alignment
+#   - JIT file ownership for the +0 uidmap demotion
+#   - any --volume or --uidmap shape that prevents podman run
+- name: _verify | Install synthetic-blob stub jit_mint for unit smoke
+  copy:
+    dest: /usr/local/bin/github_runner_jit_mint
+    content: |
+      #!/bin/bash
+      # Test-only stub: write a placeholder JIT blob (no GitHub call)
+      # owned by github_runner so the +0 uidmap'd in-container reader
+      # can open it.
+      set -euo pipefail
+      inst="${1:?usage: $0 <instance>}"
+      out_dir="/run/github_runner@${inst}"
+      install -d -m 0700 "$out_dir"
+      umask 0077
+      printf '%s' "stub-jit-blob" > "${out_dir}/jit"
+      chown github_runner:github_runner "${out_dir}/jit"
+    mode: "0755"
+  become: true
+
+- name: _verify | Re-tag runner_test_stub as nexus.lab.fahm.fr/homelab/runner:latest
+  command: podman tag localhost/runner_test_stub:latest nexus.lab.fahm.fr/homelab/runner:latest
+  changed_when: false
+  become: true
+
+- name: _verify | Start the test instance to drive the unit's full ExecStart
+  systemd:
+    name: github_runner@{{ github_runner_instances[0].repo }}_{{ github_runner_instances[0].suffix }}.service
+    state: restarted
+  become: true
+
+- name: _verify | Wait for the unit to reach active (healthcheck passes)
+  systemd:
+    name: github_runner@{{ github_runner_instances[0].repo }}_{{ github_runner_instances[0].suffix }}.service
+  register: _verify_unit_smoke
+  until: _verify_unit_smoke.status.ActiveState == "active"
+  retries: 12
+  delay: 5
+  failed_when: _verify_unit_smoke.status.ActiveState != "active"
+  become: true
