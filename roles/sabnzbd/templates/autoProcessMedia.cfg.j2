@@ -90,7 +90,7 @@
     [[movie]]
         enabled = 1
         apikey = {{ radarr_api_key }}
-        host = radarr.{{ inventory_hostname}}.{{ domain }}
+        host = radarr.dns.podman
         port = 443
         ###### ADVANCED USE - ONLY EDIT IF YOU KNOW WHAT YOU'RE DOING ######
         web_root = ""
@@ -236,7 +236,7 @@
     [[tv]]
         enabled = 1
         apikey = {{ sonarr_api_key }}
-        host = sonarr.{{ inventory_hostname}}.{{ domain }}
+        host = sonarr.dns.podman
         port = 443
         username = ""
         password = ""
@@ -293,7 +293,7 @@
     [[music]]
         enabled = 1
         apikey = {{ lidarr_api_key }}
-        host = lidarr.{{ inventory_hostname }}.{{ domain }}
+        host = lidarr.dns.podman
         port = 443
         ###### ADVANCED USE - ONLY EDIT IF YOU KNOW WHAT YOU'RE DOING ######
         web_root = ""
