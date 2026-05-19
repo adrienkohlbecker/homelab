@@ -90,17 +90,21 @@ if [ -z "$jit" ] || [ "$jit" = "null" ]; then
   exit 1
 fi
 
-# RuntimeDirectory=%N on the unit creates /run/<unit>/ at start. The
-# dir lands at 0700 root:root via install -d; the file lands at 0600
-# root:root via umask 0077. The container reads /run/jit through the
-# bind-mount, not by re-resolving the file in its userns: podman opens
-# the source path as the unit's process (real root) at container start,
-# and the container reads through that already-opened fd. So in-
-# container uid 0 (= host github_runner via the +0 uidmap) never has
-# to satisfy a mode-0600-root-owned read check -- the host-side open
-# already did. Don't relax the 0600/0700 modes; they're what keep the
-# blob unreadable to anything other than this script + podman's open fd.
-out_dir="/run/github_runner@${inst}.service"
+# RuntimeDirectory=%N on the unit creates /run/<%N>/ at start, where
+# systemd's %N specifier strips the .service suffix -- so the
+# bind-mount source on the unit (%t/%N/jit) and this script must agree
+# on the no-suffix path. install -d is idempotent against the
+# RuntimeDirectory-created dir and re-asserts 0700; the file lands at
+# 0600 root:root via umask 0077. The container reads /run/jit through
+# the bind-mount, not by re-resolving the file in its userns: podman
+# opens the source path as the unit's process (real root) at container
+# start, and the container reads through that already-opened fd. So
+# in-container uid 0 (= host github_runner via the +0 uidmap) never
+# has to satisfy a mode-0600-root-owned read check -- the host-side
+# open already did. Don't relax the 0600/0700 modes; they're what keep
+# the blob unreadable to anything other than this script + podman's
+# open fd.
+out_dir="/run/github_runner@${inst}"
 install -d -m 0700 "$out_dir"
 umask 0077
 printf '%s' "$jit" > "${out_dir}/jit"

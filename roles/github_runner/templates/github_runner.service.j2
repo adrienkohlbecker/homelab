@@ -62,9 +62,12 @@ PartOf=zfs_autosnapshot.target
 {% endif %}
 
 [Service]
-# RuntimeDirectory= creates /run/%N (= /run/github_runner@<inst>.service/)
-# on start and removes it on stop -- cidfile lands there. %t is /run
-# for system units so the cidfile path is %t/%N/%n.ctr-id.
+# RuntimeDirectory= creates /run/%N (= /run/github_runner@<inst>/ --
+# systemd's %N specifier strips the .service suffix) on start and
+# removes it on stop. The cidfile and the host-side JIT blob both
+# land there; github_runner_jit_mint must write to the same no-suffix
+# path so the unit's `--volume %t/%N/jit:/run/jit:ro` finds it.
+# %t is /run for system units so the cidfile path is %t/%N/%n.ctr-id.
 RuntimeDirectory=%N
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
