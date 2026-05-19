@@ -2,9 +2,20 @@
 # endpoint so roles using nginx_site_args.auth=required can be tested
 # without bringing up the real authelia role. Listens on
 # 127.0.0.1:{{ service_ports.authelia }} (same port the prod authelia
-# role publishes) and returns 200 OK to every auth-request subrequest,
-# which makes the upstream site template's `auth_request
-# /internal/authelia` always succeed.
+# role publishes); response code depends on the `authelia_stub_mode`
+# var the caller sets:
+#   always_200 (default): every auth-request subrequest returns 200,
+#       so the site template's `auth_request /internal/authelia` always
+#       admits the parent. Use when the _verify only cares that the
+#       wiring is intact and not the gate semantics (homepage today).
+#   gate: returns 401 unauthenticated, so the parent's error_page 401
+#       -> 302 redirect mapping fires for negative-path probes (no
+#       token / wrong token in nginx_site_args.bypass_query_param
+#       tests). The bypass `if` short-circuits BEFORE reaching the
+#       stub, so positive-path tests still see 200 from upstream.
+#       Real Authelia in gate mode would also set a Location header
+#       pointing at the portal; nginx auth_request only consumes the
+#       status code, so we don't bother.
 #
 # Localhost-only. Prod Authelia uses the same port; this fixture is
 # only ever installed by tasks/_setup.yml chains under test/testrole.py,
@@ -23,7 +34,7 @@
           listen 127.0.0.1:{{ service_ports.authelia }};
           server_name _;
           location = /api/authz/auth-request {
-            return 200 'test_stub_ok';
+            return {% if (authelia_stub_mode | default('always_200')) == 'gate' %}401{% else %}200 'test_stub_ok'{% endif %};
           }
           location / {
             return 404;

@@ -47,12 +47,15 @@ server {
     internal;
 {% if nginx_site_args.bypass_query_param is defined %}
     # URL-param bypass for clients that can't send Authorization headers
-    # (compta's Mac app). The auth_request subrequest sees the parent
-    # request's query args via $arg_<name>; if the token matches the
-    # vaulted secret, return 204 (a 2xx -> auth_request allows the
-    # parent through) without consulting Authelia. The token itself is
-    # redacted from the access log via $request_safe in nginx.conf.j2.
-    if ($arg_{{ nginx_site_args.bypass_query_param.name }} = "{{ nginx_site_args.bypass_query_param.value }}") {
+    # (compta's Mac app, homepage_alerts cross-host poller). Compare the
+    # extracted token (from the parent's $request_uri via the $req_auth_token
+    # map in nginx.conf.j2) against the vaulted value; on match return 204
+    # (a 2xx -> auth_request lets the parent through) without consulting
+    # Authelia. Why not `if ($arg_auth_token = ...)`: $arg_X inside an
+    # auth_request subrequest refers to the subrequest's own (empty) query,
+    # not the parent's -- so that comparison never matches. The token
+    # itself is redacted from the access log via $request_safe.
+    if ($req_auth_token = "{{ nginx_site_args.bypass_query_param.value }}") {
       return 204;
     }
 {% endif %}
