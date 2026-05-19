@@ -1,16 +1,4 @@
 ---
-# jq is used by the bootstrap script to JSON-escape the admin password
-# (POST body) and the apiKey (mongo JS literal) so a future vault value
-# containing `"`, `\`, or `$` doesn't break the literal or mutate an
-# unintended field. Standard ubuntu package.
-- name: Install jq
-  apt:
-    pkg: jq
-    cache_valid_time: 3600
-  become: true
-  tags:
-    - hyperdx
-
 - name: Set up hyperdx system user, group, and config dir
   import_role:
     name: service_user
@@ -177,42 +165,114 @@
   tags:
     - hyperdx
 
-# Bootstrap is conceptually one-time: the team + apiKey + opamp wiring
-# persist in MongoDB (bind-mounted ZFS dataset), so out-of-band hyperdx
-# restarts don't need a re-run. The `creates:` sentinel handles first
-# install; on a vault rotation the script content changes, the wipe
-# task below removes the sentinel, and `creates:` re-fires the run.
-# For mongo data loss (snapshot restore, accident), the operator
-# manually re-runs `sudo /usr/local/bin/hyperdx_bootstrap.sh`.
-- name: Install hyperdx bootstrap script
-  template:
-    src: hyperdx_bootstrap.sh.j2
-    dest: /usr/local/bin/hyperdx_bootstrap.sh
-    owner: root
-    group: root
-    mode: "0700"
-    validate: bash -n %s
-  no_log: true
-  become: true
-  register: hyperdx_bootstrap_script
-  tags:
-    - hyperdx
-
-- name: Reset hyperdx bootstrap sentinel on script change
-  when: hyperdx_bootstrap_script.changed
-  file:
-    path: /var/lib/hyperdx/.bootstrapped
-    state: absent
-  become: true
-  tags:
-    - hyperdx
-
-- name: Run hyperdx bootstrap
-  command: /usr/local/bin/hyperdx_bootstrap.sh
-  args:
-    creates: /var/lib/hyperdx/.bootstrapped
+# Bootstrap: register the admin team, then pin the team's apiKey +
+# collectorAuthenticationEnforced=true. The all-in-one image's OTLP
+# receiver stays UNWIRED until at least one team exists in MongoDB
+# (opampController only adds `otlp/hyperdx` to pipelines when
+# apiKeys.length > 0). After the team exists, we force its apiKey to
+# the vault value (otherwise HyperDX would generate a random one) and
+# pin auth-enforcement (defends against a future upstream default flip
+# that would silently disable auth on prod re-applies).
+#
+# Both ops are natively idempotent: /api/register/password returns 409
+# on re-apply (admin already registered), mongo updateOne with $set is
+# a no-op when state matches. A vault rotation of
+# hyperdx_ingestion_api_key naturally re-fires the mongo update
+# (modifiedCount=1 because the stored value differs from the new
+# vault value), no sentinel-wipe dance needed.
+- name: Register hyperdx admin team
+  uri:
+    url: "http://localhost:{{ service_ports.hyperdx }}/api/register/password"
+    method: POST
+    body_format: json
+    body:
+      email: "{{ root_email }}"
+      password: "{{ hyperdx_admin_password }}"
+      confirmPassword: "{{ hyperdx_admin_password }}"
+    status_code: [ 200, 409 ]
+  register: hyperdx_register
+  changed_when: hyperdx_register.status == 200
+  retries: 12
+  delay: 5
+  until: hyperdx_register.status in [200, 409]
   when: not ansible_check_mode
   no_log: true
+  become: true
+  tags:
+    - hyperdx
+
+# /api/register/password is the only public endpoint that sets the
+# admin password; on 409 it returns silently without updating. A vault
+# rotation of hyperdx_admin_password is therefore a SILENT NO-OP
+# against the live admin user. Print loud guidance so an operator who
+# just rotated the password doesn't believe the rotation took.
+- name: Warn that hyperdx admin password is not auto-rotated on re-apply
+  debug:
+    msg: >-
+      hyperdx admin team already exists (HTTP 409). If hyperdx_admin_password
+      was rotated in vault, the LIVE admin user still has the OLD password.
+      Change it manually in the HyperDX UI (Account -> Change Password) or
+      via `podman exec -i hyperdx mongo hyperdx` with db.users.updateOne(...).
+  when:
+    - not ansible_check_mode
+    - hyperdx_register.status | default(200) == 409
+  tags:
+    - hyperdx
+
+# Force the team's apiKey + collectorAuthenticationEnforced=true.
+# stdin (not --eval) so the apiKey never appears in /proc/<pid>/cmdline.
+# JSON-encoding via ansible's to_json handles all the `"`, `\`, `$`
+# quoting concerns the previous jq-based script did. Team-count guard
+# refuses to proceed if more than one team exists in mongo (UI-side
+# tenants created post-bootstrap, snapshot restore with stale state)
+# and prints the team listing so the operator can pick which to delete.
+- name: Force hyperdx team apiKey and auth-enforcement
+  command:
+    cmd: podman exec -i hyperdx mongo --quiet hyperdx
+    stdin: |
+      var apiKey = {{ hyperdx_ingestion_api_key | to_json }};
+      var teams = db.teams.find({}, {name: 1, _id: 1}).toArray();
+      if (teams.length !== 1) {
+        print("ERROR: expected exactly one team, found " + teams.length + ": " + JSON.stringify(teams));
+        print("Refusing to apply apiKey blindly. To proceed, remove extra teams via:");
+        print("  podman exec -i hyperdx mongo hyperdx --eval 'db.teams.deleteOne({_id: ObjectId(\"<id>\")})'");
+        quit(1);
+      }
+      var result = db.teams.updateOne({}, {$set: {apiKey: apiKey, collectorAuthenticationEnforced: true}});
+      print(JSON.stringify(result));
+  register: hyperdx_mongo_bootstrap
+  changed_when: >-
+    '"modifiedCount" : 1' in hyperdx_mongo_bootstrap.stdout
+    or '"modifiedCount":1' in hyperdx_mongo_bootstrap.stdout
+  failed_when: >-
+    hyperdx_mongo_bootstrap.rc != 0
+    or "ERROR:" in hyperdx_mongo_bootstrap.stdout
+    or not (
+      '"matchedCount" : 1' in hyperdx_mongo_bootstrap.stdout
+      or '"matchedCount":1' in hyperdx_mongo_bootstrap.stdout
+    )
+  when: not ansible_check_mode
+  no_log: true
+  become: true
+  tags:
+    - hyperdx
+
+# When apiKey rotated on a re-apply, restart the unit so the OTel
+# collector re-reads the team's apiKey from mongo immediately rather
+# than waiting for the supervisor's ~30s opamp poll + child restart
+# cycle. Off-host shippers see <15s of restart instead of a 30-90s
+# 401 window. Gated on `409 register` so a fresh first-apply (where
+# modifiedCount=1 fires from the initial apiKey-set right after the
+# brand-new team was created seconds ago) doesn't redundantly restart.
+- name: Restart hyperdx so the collector picks up the rotated apiKey
+  systemd:
+    name: hyperdx.service
+    state: restarted
+  when:
+    - not ansible_check_mode
+    - hyperdx_mongo_bootstrap is defined
+    - hyperdx_mongo_bootstrap.changed
+    - hyperdx_register.status | default(200) == 409
   become: true
   tags:
     - hyperdx
