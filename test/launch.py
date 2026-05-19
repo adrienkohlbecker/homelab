@@ -19,6 +19,7 @@ Replaces the ad-hoc test.sh for ZBM iteration. Pass --kernel/--initrd/
 import argparse
 import asyncio
 import contextlib
+import shutil
 import signal
 import subprocess
 import sys
@@ -160,12 +161,30 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Exit cleanly after the SSH ready-check succeeds instead of " "blocking until Ctrl-C. Smoke-test mode: prove the image boots, " "then shut down. Mutually exclusive with --foreground and " "--no-ssh-wait (nothing to wait on for either).",
     )
+    parser.add_argument(
+        "--seed",
+        type=Path,
+        default=None,
+        metavar="PLAYBOOK",
+        help="After SSH + system-running ready, run ansible-playbook " "PLAYBOOK against the booted VM, then cleanly shut down. Used by " "mise-tasks/packer/seed-deps to bake deps into a derived variant " "image. Implies --exit-after-ready semantics.",
+    )
+    parser.add_argument(
+        "--commit",
+        action="store_true",
+        help="Skip the qcow2 overlay step for the OS disks and mount the " "--image-dir's packer-ubuntu-N.<format> files directly into qemu. " "Writes during the run mutate those files in place. Requires " "--image-dir to be explicit so it can't accidentally corrupt a " "published artifact directory.",
+    )
 
     args = parser.parse_args()
     if (args.kernel is None) != (args.initrd is None):
         parser.error("--kernel and --initrd must be provided together")
     if args.exit_after_ready and (args.foreground or args.no_ssh_wait):
         parser.error("--exit-after-ready requires waiting for SSH; cannot combine with --foreground or --no-ssh-wait")
+    if args.seed is not None and (args.foreground or args.no_ssh_wait):
+        parser.error("--seed requires waiting for SSH; cannot combine with --foreground or --no-ssh-wait")
+    if args.seed is not None and not args.seed.exists():
+        parser.error(f"--seed playbook not found: {args.seed}")
+    if args.commit and args.image_dir is None:
+        parser.error("--commit requires --image-dir to be set explicitly (refusing to mutate the published artifact directory)")
     try:
         args.virtfs = _parse_virtfs(args.virtfs)
     except argparse.ArgumentTypeError as exc:
@@ -173,13 +192,17 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-async def _run_async(m: QemuMachine, *, wait_for_ssh: bool, exit_after_ready: bool) -> None:
+async def _run_async(m: QemuMachine, *, wait_for_ssh: bool, exit_after_ready: bool, seed: Path | None) -> None:
     """Default flow: prepare + boot + ensure_ssh + wait, all under asyncio.
 
     With exit_after_ready, skip the m.wait() block — the async with unwinds
     after ensure_ssh succeeds and `systemctl is-system-running --wait` returns
     a clean state. Boot, SSH, or systemd-state failure surfaces as an
     exception (non-zero exit).
+
+    With seed, after system-running passes, run ansible-playbook SEED
+    against the booted VM and then trigger a clean poweroff over SSH.
+    The async-with unwinds when qemu exits.
     """
     task = asyncio.current_task()
     assert task is not None
@@ -194,9 +217,9 @@ async def _run_async(m: QemuMachine, *, wait_for_ssh: bool, exit_after_ready: bo
                     m.print_ssh_instructions()
                 except TimeoutError as exc:
                     print_line(f"SSH did not come up in time: {exc}")
-                    if exit_after_ready:
+                    if exit_after_ready or seed is not None:
                         raise
-            if exit_after_ready:
+            if exit_after_ready or seed is not None:
                 # SSH up != systemd "boot complete" — sshd can answer before
                 # all units settle. Block on the system reaching a final
                 # state; "running" is success, anything else (degraded,
@@ -210,7 +233,30 @@ async def _run_async(m: QemuMachine, *, wait_for_ssh: bool, exit_after_ready: bo
                     failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
                     print_line(f"System reached state {state!r} (rc={result.exitcode}); failed units:\n" f"{failed_units}")
                     raise RuntimeError(f"systemd is-system-running returned {state!r}")
-            else:
+            if seed is not None:
+                # Run the seed playbook against the booted VM, then ask
+                # systemd to poweroff. The qemu process exits on guest
+                # shutdown, which lets the async-with unwind normally —
+                # same path as a Ctrl-C-driven shutdown.
+                #
+                # Stage the playbook into the workdir alongside the
+                # roles/group_vars/host_vars that prepare() already
+                # copied there. Ansible's group_vars/host_vars lookup
+                # is relative to the playbook's dir; the original
+                # packer/seed_deps.yml location has no group_vars
+                # sibling, so `ubuntu_mirror` (and friends from
+                # group_vars/all.yml) would otherwise be undefined.
+                staged_seed = Path(m.workdir.name) / seed.name
+                shutil.copy(seed, staged_seed)
+                print_line(f"Seeding image via {seed}")
+                await m.ansible_command(str(staged_seed))
+                print_line("Seed playbook complete; powering off")
+                # `&` so sshd doesn't hang on the connection while the
+                # system tears down; check=False because the SSH channel
+                # may close before ssh returns 0.
+                await m.ssh_command("sudo", "systemctl", "poweroff", check=False)
+                await m.wait()
+            elif not exit_after_ready:
                 await m.wait()
 
 
@@ -271,6 +317,7 @@ def main() -> int:
         virtfs=args.virtfs,
         foreground=args.foreground,
         qmp_socket=args.qmp,
+        commit_in_place=args.commit,
     )
 
     if args.foreground:
@@ -284,6 +331,7 @@ def main() -> int:
                     m,
                     wait_for_ssh=not args.no_ssh_wait,
                     exit_after_ready=args.exit_after_ready,
+                    seed=args.seed,
                 )
             )
     except asyncio.CancelledError:

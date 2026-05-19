@@ -163,6 +163,11 @@ locals {
     # Synthetic superset that exercises every consumer-side pool layout.
     # Only variant consumed by push CI (lab/pug images stay for the
     # packer script regression and on-demand --machine lab/pug debug).
+    # Note: box_deps is derived from box via `mise run packer:seed-deps`
+    # (which copies box's artifacts, boots them with launch.py --commit,
+    # applies packer/seed_deps.yml, and publishes the result). It is NOT
+    # a packer source — there's no point re-running provision.sh + chroot
+    # for a derivation that just adds podman+nginx on top.
     box = {
       machine     = "box"
       disks       = "/dev/vdb /dev/vdc /dev/vdd"
