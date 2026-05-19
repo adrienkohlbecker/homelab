@@ -1,7 +1,12 @@
 # Loopback probe — exercises the container directly. Provides the
 # cold-start retry window (--health-start-period is 15s; retries
 # below give 2 minutes total to cover restart-after-deploy too).
+#
+# Skipped on non-x86_64: the compta image is x86_64-only (see
+# main.yml's Pull task), and main.yml's enable gate already skips
+# the unit start on arm64, so there's no listener to probe.
 - name: _verify | Compta answers on its loopback port
+  when: ansible_architecture == "x86_64"
   uri:
     url: http://localhost:{{ service_ports.compta }}/
     status_code: 200
@@ -16,8 +21,9 @@
 
 # nginx Host-header probe — exercises the full reverse-proxy chain
 # so a typo in nginx_site_args / proxy_pass fails here even though
-# the loopback probe above passes.
+# the loopback probe above passes. Same arch gate.
 - name: _verify | Compta is reachable through nginx
+  when: ansible_architecture == "x86_64"
   uri:
     url: https://localhost/
     headers:
