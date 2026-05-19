@@ -61,16 +61,23 @@ partdev() {
 
 # Per-disk partition paths, computed once and exported as space-delimited
 # strings so chroot.sh consumes them directly without re-running partdev.
-# Partition layout (sgdisk below): 1 = EFI, 2 = swap, 3 = rpool. The
-# future-use metadata-vdev slot (partition 5) is reserved on the
-# mirror-rpool variants only; nothing consumes it yet (see
+# Partition layout (sgdisk below): 1 = EFI, 2 = swap (single-disk only),
+# 3 = rpool. Mirror variants drop the swap partition entirely and put
+# swap on an rpool zvol below — mirror rpool already gives the
+# redundancy that the per-disk swap + mdadm raid0 stripe used to fake,
+# without the failure mode where a single dead disk takes the whole
+# stripe (and any swapped-out pages) with it. The future-use
+# metadata-vdev slot (partition 5) is reserved on the mirror-rpool
+# variants only; nothing consumes it yet (see
 # notes/special-vdev-sizing.md for the planned wiring).
 PARTITIONS_EFI=""
 PARTITIONS_SWAP=""
 PARTITIONS_RPOOL=""
 for d in $DISKS; do
   PARTITIONS_EFI+="${PARTITIONS_EFI:+ }$(partdev "$d" 1)"
-  PARTITIONS_SWAP+="${PARTITIONS_SWAP:+ }$(partdev "$d" 2)"
+  if [ "$LAYOUT" = "" ]; then
+    PARTITIONS_SWAP+="${PARTITIONS_SWAP:+ }$(partdev "$d" 2)"
+  fi
   PARTITIONS_RPOOL+="${PARTITIONS_RPOOL:+ }$(partdev "$d" 3)"
 done
 export PARTITIONS_EFI PARTITIONS_SWAP PARTITIONS_RPOOL
@@ -116,10 +123,11 @@ for disk in $DISKS; do
   sgdisk -n1:1M:+512M -t1:EF00 "$disk"       # EFI (EF00 = EFI system partition)
   sgdisk -a1 -n4:24K:+1000K -t4:EF02 "$disk" # MBR booting (EF02 = BIOS boot partition)
 
+  # Mirror variants put swap on an rpool zvol (created below), so the
+  # dedicated per-disk swap partition only exists for single-disk
+  # installs. The post-rpool zvol create is where mirror swap lives.
   if [ "$LAYOUT" = "" ]; then
     sgdisk -n2:0:+4G -t2:8200 "$disk" # Swap (8200 = Linux Swap)
-  else
-    sgdisk -n2:0:+4G -t2:FD00 "$disk" # Swap (FD00 = Linux RAID)
   fi
 
   if [ "$LAYOUT" = "mirror" ]; then
@@ -163,6 +171,32 @@ zpool create -f \
 zfs create -o canmount=off -o mountpoint=none rpool/ROOT
 zfs create -o canmount=noauto -o mountpoint=/ "rpool/ROOT/$UBUNTU_NAME"
 
+# Mirror variants put swap on this zvol instead of a per-disk swap
+# partition + mdadm raid0; mirror rpool already provides redundancy.
+# Options follow OpenZFS swap-zvol guidance:
+#   -b $(getconf PAGESIZE): volblocksize = kernel page size so one
+#     page-out is one ZFS block (4K on x86_64 / arm64 4K-pages kernel).
+#   compression=zle: cheap zero-page squash; pages are already-compressed
+#     memory, so general compression would just burn CPU.
+#   logbias=throughput + sync=always: every write hits stable storage
+#     (otherwise an OOM panic could lose anonymous pages).
+#   primarycache=metadata + secondarycache=none: don't let ARC/L2ARC
+#     re-cache pages the kernel is explicitly evicting.
+#   com.sun:auto-snapshot=false: snapshotting swap pins the working set
+#     forever for no benefit.
+if [ "$LAYOUT" = "mirror" ]; then
+  zfs create \
+    -V 8G \
+    -b "$(getconf PAGESIZE)" \
+    -o compression=zle \
+    -o logbias=throughput \
+    -o sync=always \
+    -o primarycache=metadata \
+    -o secondarycache=none \
+    -o com.sun:auto-snapshot=false \
+    rpool/swap
+fi
+
 zpool set "bootfs=rpool/ROOT/$UBUNTU_NAME" rpool
 
 # Export, then re-import with a temporary mountpoint of /mnt
@@ -170,6 +204,12 @@ zpool set "bootfs=rpool/ROOT/$UBUNTU_NAME" rpool
 zpool export rpool
 zpool import -N -R /mnt rpool
 zfs mount "rpool/ROOT/$UBUNTU_NAME"
+
+# Wait for zvol udev symlinks (notably /dev/zvol/rpool/swap on mirror
+# variants) before arch-chroot runs — `zfs create -V` returns before
+# udev finishes wiring the device, and chroot.sh's mkswap would race
+# the udev create.
+udevadm settle
 
 # Verify that everything is mounted correctly
 
