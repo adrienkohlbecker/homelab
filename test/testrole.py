@@ -196,12 +196,23 @@ def _resolve_default_machine(role: str) -> str:
     return machine
 
 
+# Strip CSI escape sequences before matching. Ansible's colorized PLAY
+# RECAP wraps each `changed=N` in `\x1b[0;33m...\x1b[0m`; the trailing
+# `m` of the prefix is a word char, so `\b` doesn't fire between `m`
+# and `c` of `changed`, and the unstripped regex silently matched zero
+# every time -- masking every idempotence false positive across the
+# fleet until 2026-05.
+_ANSI_CSI_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 _RECAP_CHANGED_RE = re.compile(r"\bchanged=(\d+)")
 
 
 def _count_changed_tasks(stdout: list[str]) -> int:
     """Sum `changed=N` across every PLAY RECAP host line in the output."""
-    return sum(int(m.group(1)) for line in stdout if (m := _RECAP_CHANGED_RE.search(line)))
+    return sum(
+        int(m.group(1))
+        for line in stdout
+        if (m := _RECAP_CHANGED_RE.search(_ANSI_CSI_RE.sub("", line)))
+    )
 
 
 async def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -> None:
