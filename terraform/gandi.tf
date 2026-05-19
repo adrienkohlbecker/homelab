@@ -83,6 +83,13 @@ resource "gandi_dnssec_key" "fahm_fr" {
   algorithm  = tonumber(cloudflare_zone_dnssec.fahm_fr.algorithm)
   public_key = cloudflare_zone_dnssec.fahm_fr.public_key
   type       = "ksk"
+
+  lifecycle {
+    precondition {
+      condition     = cloudflare_zone_dnssec.fahm_fr.status == "active"
+      error_message = "DNSSEC chain broken for fahm.fr: CF status=${cloudflare_zone_dnssec.fahm_fr.status}. Zone is bogus to validating resolvers."
+    }
+  }
 }
 
 resource "gandi_dnssec_key" "mhaf_fr" {
@@ -90,6 +97,13 @@ resource "gandi_dnssec_key" "mhaf_fr" {
   algorithm  = tonumber(cloudflare_zone_dnssec.mhaf_fr.algorithm)
   public_key = cloudflare_zone_dnssec.mhaf_fr.public_key
   type       = "ksk"
+
+  lifecycle {
+    precondition {
+      condition     = cloudflare_zone_dnssec.mhaf_fr.status == "active"
+      error_message = "DNSSEC chain broken for mhaf.fr: CF status=${cloudflare_zone_dnssec.mhaf_fr.status}. Zone is bogus to validating resolvers."
+    }
+  }
 }
 
 resource "gandi_dnssec_key" "adrienkohlbecker_com" {
@@ -97,6 +111,13 @@ resource "gandi_dnssec_key" "adrienkohlbecker_com" {
   algorithm  = tonumber(cloudflare_zone_dnssec.adrienkohlbecker_com.algorithm)
   public_key = cloudflare_zone_dnssec.adrienkohlbecker_com.public_key
   type       = "ksk"
+
+  lifecycle {
+    precondition {
+      condition     = cloudflare_zone_dnssec.adrienkohlbecker_com.status == "active"
+      error_message = "DNSSEC chain broken for adrienkohlbecker.com: CF status=${cloudflare_zone_dnssec.adrienkohlbecker_com.status}. Zone is bogus to validating resolvers."
+    }
+  }
 }
 
 # Gandi NS delegation must match CF's authoritative NS list. Tautology by
@@ -105,6 +126,14 @@ resource "gandi_dnssec_key" "adrienkohlbecker_com" {
 # the NS list at Gandi-as-registrar between applies -- without this, the
 # next `tofu plan` would silently reconcile the drift while resolvers were
 # already failing to find the zone.
+#
+# This stays a `check` rather than a `lifecycle.precondition` (unlike the
+# DNSSEC chain one in this file): a precondition can only read `self`'s
+# configured (HCL-declared) value, not its post-refresh state, so a
+# precondition on gandi_nameservers comparing self.nameservers to
+# cloudflare_zone.X.name_servers would always pass by construction.
+# Catching post-refresh Gandi-side drift requires the `check` block's
+# refreshed-state visibility (or an out-of-band DNS data-source probe).
 check "ns_delegation" {
   assert {
     condition     = sort(gandi_nameservers.fahm_fr.nameservers) == sort(cloudflare_zone.fahm_fr.name_servers)
