@@ -92,26 +92,23 @@
   tags:
     - homeassistant
 
-# Restrict HA's zeroconf/mDNS announcements to the iot_macvlan adapter
-# (eth1 inside the container; the unit file's --network ordering puts
-# mosquitto-bridge at eth0 and iot_macvlan at eth1). Without this, HA
-# advertises *all* its adapters -- including the internal mosquitto
-# bridge IP 10.89.0.29 -- to every adapter it can reach. LAN clients
-# pick up the bridge IP from mDNS, try to connect to it from outside,
-# and the packets land on lab's eth0 destined to a podman-only IP,
-# triggering kernel "martian source" logs (~120k/day on lab).
+# Restrict HA's zeroconf/mDNS announcements to the iot_macvlan adapter.
+# Without this, HA advertises *all* its adapters -- including the
+# internal mosquitto-bridge IP 10.89.0.29 -- to every adapter it can
+# reach. LAN clients pick up the bridge IP from mDNS, try to connect
+# to it from outside, and the packets land on lab's eth0 destined to
+# a podman-only IP, triggering kernel "martian source" logs (~120k/day
+# on lab). The ethN name baked into core.network.j2 is computed from
+# the homeassistant_networks list in vars/main.yml -- single source of
+# truth shared with the unit template's --network= ordering.
 #
 # force: false so an operator's UI edit (Settings -> System -> Network)
 # stays authoritative. First apply lands our default; subsequent UI
 # changes win. Deleting the file on disk reverts HA to "use all
 # adapters" (the unconfigured default), so a recovery path exists.
-#
-# If the --network ordering in homeassistant.service.j2 ever changes,
-# the eth1 here must move in lockstep -- `podman exec homeassistant
-# ip -4 addr show` confirms current assignment.
 - name: Restrict homeassistant network adapters
-  copy:
-    src: core.network
+  template:
+    src: core.network.j2
     dest: /mnt/services/homeassistant/.storage/core.network
     owner: homeassistant
     group: homeassistant
