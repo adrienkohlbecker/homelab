@@ -146,19 +146,20 @@ sites:
         dhcp_start:   10.123.4.64
         dhcp_end:     10.123.4.127
         macvlan_blocks:
-          # Migration steps (IoT is the only VLAN with deployed
-          # consumers today):
+          # Migration status (IoT — only VLAN with deployed consumers):
           #
-          #   - lab.iot eth0.4 primary: .4.102 → .4.2 (host slot 0 of
-          #     static_fixed).
-          #   - lab.iot mac0 (new — every host gets mac0 on every
-          #     macvlan_block): .4.128 (first IP of lab's /28).
-          #   - homeassistant ip_range: .4.96/30 → .4.136/30 (upper
-          #     /29 of lab's /28; netavark lands the container at
-          #     .138 — was .98 in the .96/30 pool).
-          #   - 14 IoT static device leases shift up by 8 (.2–.15 →
-          #     .10–.23) to clear .2–.9 for host primaries; update
-          #     the dnsmasq reservation file accordingly.
+          #   - [done]    lab.iot eth0.4 primary moved .4.102 → .4.2.
+          #   - [done]    external_ips.tubeszb moved .4.2 → .4.16.
+          #   - [pending] lab.iot mac0 (.4.128) — new, awaits the
+          #               role-level decision to provision mac0
+          #               unconditionally.
+          #   - [pending] homeassistant ip_range .4.96/30 → .4.136/30
+          #               (upper /29 of lab's /28; netavark lands the
+          #               container at .138 — was .98). Role change
+          #               in roles/homeassistant.
+          #   - [pending] 14 IoT device DHCP reservations shift up by
+          #               8 (.2–.15 → .10–.23) on the UDM/dnsmasq
+          #               side — not ansible-driven.
           lab: 10.123.4.128/28
           pug: 10.123.4.144/28
           box: 10.123.4.160/28
@@ -208,10 +209,10 @@ hosts:
     physical: 10.123.0.2
     wireguard: 10.123.64.2
     vlans:
-      # eth0.4 primary IP on the IoT VLAN. Today at .4.102; migration
-      # target is .4.2 (host slot 0 in static_fixed). lab also gets a
-      # mac0 macvlan child of eth0.4 at .4.128 — see sites.home.vlans.iot.
-      iot: 10.123.4.102
+      # eth0.4 primary IP on the IoT VLAN (host slot 0 in static_fixed).
+      # lab also gets a mac0 macvlan child of eth0.4 at .4.128 once the
+      # role grows it — see sites.home.vlans.iot.
+      iot: 10.123.4.2
     mac_addresses:
       i210:   e8:ea:6a:09:97:67
       i225p1: c8:7f:54:5c:57:5b
