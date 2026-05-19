@@ -60,6 +60,7 @@ depends = [
   "lint:shell",
   "lint:shfmt",
   "lint:typos",
+  "lint:test-meta",
 ]
 
 [tasks."lint:ansible"]
