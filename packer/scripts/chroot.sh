@@ -8,6 +8,8 @@ set -euxo pipefail
 #   SSH_KEY_PUB.
 # - Inherited from provision.sh: DISKS, DISKS_COUNT, LAYOUT,
 #   PARTITIONS_EFI, PARTITIONS_SWAP, HOSTNAME, USERNAME.
+#   PARTITIONS_SWAP is only set for single-disk (LAYOUT=""); mirror
+#   variants take swap off rpool/swap (the zvol provision.sh creates).
 # All list-shaped vars are space-delimited strings (bash arrays don't
 # survive `export`); use them unquoted to word-split.
 
@@ -237,10 +239,11 @@ else
   mdadm --detail --brief /dev/md/efi >>/etc/mdadm/mdadm.conf
   EFI_DEVICE=/dev/md/efi
 
-  # shellcheck disable=SC2086  # word-splitting on PARTITIONS_SWAP is the point
-  mdadm --create /dev/md/swap --name=swap --metadata=1.2 --level="raid0" --raid-devices="$DISKS_COUNT" $PARTITIONS_SWAP
-  mdadm --detail --brief /dev/md/swap >>/etc/mdadm/mdadm.conf
-  SWAP_DEVICE=/dev/md/swap
+  # Swap on the rpool zvol provision.sh created. /dev/zvol/rpool/swap
+  # is a stable udev symlink — no by-uuid translation below, and no
+  # mdadm raid0 stripe (mirror rpool already gives redundancy without
+  # the lose-one-disk-lose-all-swap failure mode of the raid0 layout).
+  SWAP_DEVICE=/dev/zvol/rpool/swap
 fi
 
 # Create filesystems
