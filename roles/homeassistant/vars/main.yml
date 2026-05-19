@@ -1,0 +1,23 @@
+# Podman networks the HA container joins, in declaration order. Both
+# the unit template (homeassistant.service.j2) and the core.network
+# template (core.network.j2) read this list -- the unit emits one
+# `--network=...` flag per entry, the core.network template uses the
+# index of "iot_macvlan" to compute the corresponding ethN container
+# interface name (podman names attached interfaces eth0, eth1, ... in
+# the order they appear on `podman run --network=` flags). Re-ordering
+# this list regenerates both templates consistently, and the network
+# restriction stays pinned to whichever interface ends up holding the
+# iot_macvlan IP -- no separate runtime probe needed.
+homeassistant_networks:
+  # mosquitto bridge: HA needs aardvark-dns resolution of "mosquitto"
+  # to reach the broker. Discovery/zeroconf is intentionally NOT
+  # enabled on this adapter (see core.network.j2 + main.yml).
+  - name: mosquitto
+  # iot_macvlan: HA's L2 presence on the IoT VLAN (10.123.4.0/24).
+  # Pin to .98 explicitly. The network's ip_range is .96/30 so
+  # netavark currently assigns .98 by elimination (.97 is the synth
+  # gateway slot, .96/.99 are network/broadcast within the /30), but
+  # a future allocation-logic change shouldn't be allowed to drift
+  # this IP silently -- _verify.yml asserts it.
+  - name: iot_macvlan
+    ip: 10.123.4.98
