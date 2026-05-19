@@ -17,6 +17,52 @@
   tags:
     - homepage
 
+# The homepage container's entrypoint mkdir's /app/config/logs at
+# every start; with /app/config bind-mounted :ro the mkdir errors
+# ENOENT/EROFS and the Next.js process subsequently 500s every
+# request. Pre-create the dir on the host side so the entrypoint
+# notices it ("Skipping ownership changes for /app/config/logs")
+# and the read-only mount stays read-only. On prod the dir already
+# exists from before the :ro switch -- this task is a no-op there.
+- name: Create homepage logs dir (mkdir'd by entrypoint, ro-mount can't)
+  when: not (ansible_check_mode and homepage_user.changed)
+  file:
+    path: /mnt/services/homepage/logs
+    state: directory
+    owner: homepage
+    group: homepage
+    mode: "0755"
+  become: true
+  tags:
+    - homepage
+
+# The homepage container's Node entrypoint also `copyfile`'s the
+# integration configs (docker.yaml, kubernetes.yaml, proxmox.yaml,
+# custom.css, custom.js) from /app/src/skeleton/ into /app/config/
+# at startup whenever the target is missing. With /app/config :ro
+# the copyfile errors EROFS and the unit fails to start. Touch
+# each file so the entrypoint's "copy if absent" path no-ops.
+# force: false leaves any operator-edited content alone on prod
+# (those files preexist from before the :ro switch).
+- name: Touch homepage skeleton-seeded config files (entrypoint copyfile no-op)
+  when: not (ansible_check_mode and homepage_user.changed)
+  copy:
+    content: ""
+    dest: "/mnt/services/homepage/{{ item }}"
+    force: false
+    owner: homepage
+    group: homepage
+    mode: "0644"
+  loop:
+    - docker.yaml
+    - kubernetes.yaml
+    - proxmox.yaml
+    - custom.css
+    - custom.js
+  become: true
+  tags:
+    - homepage
+
 - name: Configure homepage YAML config
   when: not (ansible_check_mode and homepage_user.changed)
   template:
