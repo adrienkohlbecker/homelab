@@ -17,22 +17,28 @@
 
 # ---- A/CNAME/TXT/MX records ----
 #
-# DMARC posture is currently p=none across all three zones (observation
-# only -- failing mail is delivered but flagged). Staged enforcement:
+# DMARC staged enforcement on fahm.fr + noreply.fahm.fr. Current step:
+# Stage 2 step 1 (p=quarantine; pct=25). mhaf.fr is on a separate
+# (slower) track and stays at p=none.
 #
-#   Stage 1 (now): p=none with rua=...; collect 2 weeks of aggregate
+#   Stage 1 (done): p=none with rua=...; collect 2 weeks of aggregate
 #     reports per zone. Targets are operator inboxes
 #     (dmarc-reports.cloudflare.net for fahm.fr; mailgun + ondmarc for
-#     noreply). Stay at this stage until the report stream shows only
+#     noreply). Held at this stage until the report stream showed only
 #     legitimate senders -- Fastmail (in*-smtp.messagingengine.com) +
 #     Mailgun (eu.mailgun.org) for fahm.fr + noreply.fahm.fr.
 #
-#   Stage 2 (after clean reports): p=quarantine; pct=25 for one week,
-#     then pct=100. Tighten SPF to -all (hardfail) at the same time.
+#   Stage 2 step 1 (current): p=quarantine; pct=25. Hold one week to
+#     surface any legitimate senders the rua stream missed (small
+#     sample = more visibility per failure).
+#
+#   Stage 2 step 2 (next): p=quarantine; pct=100. Tighten SPF to -all
+#     (hardfail) at the same time so receivers stop accepting forged
+#     mail with broken SPF.
 #
 #   Stage 3 (production): p=reject. Forgeries with From: <user>@<zone>
 #     get rejected by the receiver, eliminating the phishing-by-spoof
-#     vector that p=none allows today.
+#     vector that p=none allowed.
 #
 # Homelab framing: spear-phishing the operator's contacts via spoofed
 # fahm.fr From: headers is the abuse case; for the noreply Mailgun-
@@ -80,8 +86,8 @@ variable "fahm_fr_records" {
     cname_wildcard_pug           = { type = "CNAME", name = "*.pug.fahm.fr", content = "pug.fahm.fr" }
 
     # TXT
-    txt_dmarc         = { type = "TXT", name = "_dmarc.fahm.fr", content = "v=DMARC1; p=none; pct=100; fo=1; ri=3600; rua=mailto:25d3ddf65216493ba512fa8d7568c3d7@dmarc-reports.cloudflare.net" }
-    txt_dmarc_noreply = { type = "TXT", name = "_dmarc.noreply.fahm.fr", content = "v=DMARC1; p=none; pct=100; fo=1; ri=3600; rua=mailto:131310e2@dmarc.mailgun.org,mailto:37b6e2d1@inbox.ondmarc.com; ruf=mailto:131310e2@dmarc.mailgun.org,mailto:37b6e2d1@inbox.ondmarc.com;", comment = "mailgun" }
+    txt_dmarc         = { type = "TXT", name = "_dmarc.fahm.fr", content = "v=DMARC1; p=quarantine; pct=25; fo=1; ri=3600; rua=mailto:25d3ddf65216493ba512fa8d7568c3d7@dmarc-reports.cloudflare.net" }
+    txt_dmarc_noreply = { type = "TXT", name = "_dmarc.noreply.fahm.fr", content = "v=DMARC1; p=quarantine; pct=25; fo=1; ri=3600; rua=mailto:131310e2@dmarc.mailgun.org,mailto:37b6e2d1@inbox.ondmarc.com; ruf=mailto:131310e2@dmarc.mailgun.org,mailto:37b6e2d1@inbox.ondmarc.com;", comment = "mailgun" }
     txt_spf_noreply   = { type = "TXT", name = "noreply.fahm.fr", content = "v=spf1 include:mailgun.org ~all", comment = "mailgun" }
     txt_spf           = { type = "TXT", name = "fahm.fr", content = "v=spf1 include:spf.messagingengine.com include:_spf.mx.cloudflare.net ~all" }
 
