@@ -1,0 +1,4 @@
+# _setup.yml imports podman/install (which carries the noble backports);
+# nginx isn't used but pre-baked variants are additive, so route here to
+# skip ~140s of backports + podman install on every test run.
+machine: box_deps
