@@ -1,5 +1,13 @@
 127.0.0.1 localhost
-127.0.1.1 {{ inventory_hostname }}.{{ domain }} {{ inventory_hostname }}
+{# Short name only — the FQDN intentionally lives in DNS (pihole), not #}
+{# /etc/hosts. Reason: podman's base_hosts_file copies the host's #}
+{# /etc/hosts into containers, so a `127.0.1.1 lab.fahm.fr` entry inside #}
+{# pihole's container would make dnsmasq answer 127.0.1.1 for lab.fahm.fr #}
+{# (hosts-file lookup wins over `address=/lab.fahm.fr/...`). Public DNS #}
+{# CNAMEs every *.lab.fahm.fr subdomain to lab.fahm.fr, so the override #}
+{# silently breaks every LAN-side lookup for subdomains as well. #}
+{# `hostname --fqdn` falls through to DNS via NSS `files dns`. #}
+127.0.1.1 {{ inventory_hostname }}
 
 # The following line is desirable for IPv6 capable hosts
 ::1 localhost ip6-localhost ip6-loopback
