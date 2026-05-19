@@ -159,10 +159,10 @@ locals {
       layout      = "mirror"
       extra_pools = "dozer tank_mouse"
     }
-    # box: 3-disk mirror rpool (matches lab) + apoc + dozer + tank_mouse.
-    # Synthetic superset that exercises every consumer-side pool layout.
-    # Only variant consumed by push CI (lab/pug images stay for the
-    # packer script regression and on-demand --machine lab/pug debug).
+    # box: single-disk rpool, no extra pools. Minimal ZFS-on-root fixture
+    # for push CI -- exercises every consumer-side role that doesn't need
+    # apoc/dozer/tank/mouse. Producer-role coverage (data/media/scratch/
+    # minio/services) moves to lab/pug nightly.
     # Note: box_deps is derived from box via `mise run packer:seed-deps`
     # (which copies box's artifacts, boots them with launch.py --commit,
     # applies packer/seed_deps.yml, and publishes the result). It is NOT
@@ -170,11 +170,11 @@ locals {
     # for a derivation that just adds podman+nginx on top.
     box = {
       machine     = "box"
-      disks       = "/dev/vdb /dev/vdc /dev/vdd"
-      extra_disks = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj /dev/vdk /dev/vdl"
-      disk_sizes  = ["40G", "40G", "40G", "1G", "1G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
-      layout      = "mirror"
-      extra_pools = "apoc dozer tank_mouse"
+      disks       = "/dev/vdb"
+      extra_disks = ""
+      disk_sizes  = ["40G"]
+      layout      = ""
+      extra_pools = ""
     }
   }
 

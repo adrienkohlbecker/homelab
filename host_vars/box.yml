@@ -1,12 +1,13 @@
 # box: the canonical homelab test fixture. Box is purely a test-only
 # inventory host (see hosts.ini -- it lives in [test], never in [prod])
 # so this file IS the fixture; there's no prod-box to keep in sync
-# with. The shape matches lab-prod's separate-pool layout (rpool +
-# dozer + tank + mouse + apoc) so producer roles target the same
-# pools they target in prod, exercising the more interesting consumer
-# code path. host_vars/box-qemu.yml used to overlay this file via the
-# harness's -e injection -- that pattern retired when [test] became
-# a real inventory group; everything qemu-only lives here directly.
+# with. Single-disk rpool only (no apoc/dozer/tank/mouse) -- producer
+# roles still run but their datasets land flat under rpool/ via the
+# pool-var remap below. Lab-prod's multi-pool shape is exercised by
+# --machine lab/pug nightly. host_vars/box-qemu.yml used to overlay
+# this file via the harness's -e injection -- that pattern retired
+# when [test] became a real inventory group; everything qemu-only
+# lives here directly.
 qemu_test: true
 
 zfs_root: true
@@ -32,12 +33,14 @@ zfs_arc_max: 1073741824
 zfs_trim_pools: []
 zfs_mount_cache_datasets: [] # must list one dataset per pool. canmount must be set to "on" on this dataset
 zfs_has_bpool: false
-# Lab-prod-shape: data datasets live on dozer/tank, not under rpool.
-# pools.sh creates these pools at packer build time so producer roles
-# (data/media/scratch/minio/services) can create their datasets here
-# on every run.
-zfs_dozer_filesystem: dozer
-zfs_tank_filesystem: tank
+# Box ships single-disk rpool only (no apoc/dozer/tank/mouse). Repoint
+# the producer-role pool vars at rpool so dozer/tank-keyed dataset paths
+# (roles/scratch, roles/minio, roles/media, roles/data, plus the
+# `^tank/` rewrite in roles/zfs/tasks/dataset.yml) all land flat under
+# rpool/<name>. Producer-role coverage against the real prod pool shape
+# moves to lab/pug nightly.
+zfs_dozer_filesystem: rpool
+zfs_tank_filesystem: rpool
 
 swap_zvol:
   dataset: rpool/swap
