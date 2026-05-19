@@ -59,7 +59,7 @@ zfs_has_minio_mount: false
 
 sensor_modules: []
 
-home_subnet: 10.0.2.0/24
+qemu_subnet: 10.0.2.0/24
 # Two blocks on the same en* parent: exercises the multi-block iteration
 # in main.yml's loop, distinct MAC seeds across sibling blocks, and two
 # podman macvlan networks coexisting on one parent NIC. Prod-shape uses
@@ -69,11 +69,11 @@ home_subnet: 10.0.2.0/24
 macvlan_blocks:
   - name: mac_mgmt
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
-    block: "{{ home_subnet | ansible.utils.ipsubnet(28, 14) }}"   # /28 (16 IPs); host_ip defaults to block + 0
+    block: "{{ qemu_subnet | ansible.utils.ipsubnet(28, 14) }}"   # /28 (16 IPs); host_ip defaults to block + 0
     podman_network: true   # test fixture exercises the podman macvlan path
   - name: mac_iot
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
-    block: "{{ home_subnet | ansible.utils.ipsubnet(28, 13) }}"   # /28 adjacent to mac_mgmt's
+    block: "{{ qemu_subnet | ansible.utils.ipsubnet(28, 13) }}"   # /28 adjacent to mac_mgmt's
     podman_network: true
 
 # macos_vm test fixture: matches the symlink _setup.yml fabricates over

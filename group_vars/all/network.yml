@@ -14,8 +14,6 @@ prod_network: "{{ lookup('file', playbook_dir ~ '/notes/network_topology.yml') |
 
 network: "{{ prod_network }}"
 
-home_subnet: "{{ network.supernet }}"
-
 site_subnets:
   home:     "{{ network.sites.home.cidr }}"
   brumath:  "{{ network.sites.brumath.cidr }}"

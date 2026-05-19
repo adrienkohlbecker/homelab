@@ -7,7 +7,6 @@ qemu_test: true
 qemu_test_minimal: true
 
 zfs_root: false
-home_subnet: 10.0.2.0/24
 # No macvlan_blocks: minimal doesn't trunk any VLANs and doesn't need
 # an L2-on-LAN presence for containers. The macvlan role no-ops on
 # missing macvlan_blocks.
