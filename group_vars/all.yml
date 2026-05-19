@@ -164,11 +164,6 @@ ubuntu_mirror_security: '{{ (ansible_architecture == "aarch64") | ternary(mirror
 # nft/avahi/smb configs.
 default_interface: "{{ ansible_default_ipv4.interface | mandatory }}"
 
-macvlan_parent_gateway: "{{ ansible_facts[macvlan_parent].ipv4.network | ansible.utils.ipmath(1) }}"
-macvlan_parent_subnet: "{{ ansible_facts[macvlan_parent].ipv4.network }}/{{ ansible_facts[macvlan_parent].ipv4.prefix }}"
-macvlan_host_ip: "{{ macvlan_subnet | ansible.utils.ipmath(1) }}"
-macvlan_host_mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname) }}"
-
 # wireguard-vanity-keygen -c $NAME/
 wireguard_peers:
   - name: lab

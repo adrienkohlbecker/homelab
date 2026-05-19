@@ -1,0 +1,39 @@
+{#
+Per-block macvlan iface unit. Rendered once per entry in
+host_vars.macvlan_blocks via roles/macvlan/tasks/install.yml.
+macvlan_args is the loop var from main.yml.
+
+Defaults:
+  host_ip:     macvlan_args.block | ipmath(0) — slot 0 of the block.
+  mac_address: stable random_mac seeded by inventory_hostname for
+               the legacy `mac0` block (so existing prod deployments
+               keep their MACs across the refactor), or
+               inventory_hostname_<name> for any other block (so
+               sibling blocks don't collide).
+#}
+{% set _mac_seed = inventory_hostname if macvlan_args.name == 'mac0' else (inventory_hostname ~ '_' ~ macvlan_args.name) %}
+{% set _host_ip = macvlan_args.host_ip | default(macvlan_args.block | ansible.utils.ipmath(0)) %}
+{% set _mac = macvlan_args.mac_address | default('82:48:10' | random_mac(seed=_mac_seed)) %}
+[Unit]
+Description={{ macvlan_args.name }} interface setup
+After=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+SyslogIdentifier=%N
+
+ExecStart=/bin/ip link add {{ macvlan_args.name }} link {{ macvlan_args.parent }} type macvlan mode bridge
+ExecStart=/bin/ip addr add {{ _host_ip }}/32 dev {{ macvlan_args.name }}
+ExecStart=/bin/ip link set {{ macvlan_args.name }} address {{ _mac }}
+# Match the parent NIC's ARP-flux mitigation (see roles/macvlan/tasks/install.yml).
+# Set after `ip link add` because /proc/sys/net/ipv4/conf/{{ macvlan_args.name }}/
+# doesn't exist until then, so a sysctl.d drop-in would silently no-op at boot.
+ExecStart=/sbin/sysctl -q -w net.ipv4.conf.{{ macvlan_args.name }}.arp_ignore=1
+ExecStart=/sbin/sysctl -q -w net.ipv4.conf.{{ macvlan_args.name }}.arp_announce=2
+ExecStart=/bin/ip link set {{ macvlan_args.name }} up
+ExecStart=/bin/ip route add {{ macvlan_args.block }} dev {{ macvlan_args.name }}
+ExecStop=/bin/ip link delete {{ macvlan_args.name }}
+
+[Install]
+WantedBy=multi-user.target

@@ -15,8 +15,11 @@ zfs_has_minio_mount: false
 z2m_start_service: false
 
 home_subnet: 10.0.2.0/24
-macvlan_subnet: '{{ home_subnet | ansible.utils.ipsubnet(27, 7) }}'
-macvlan_parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
+macvlan_blocks:
+  - name: mac0
+    parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
+    block: "{{ home_subnet | ansible.utils.ipsubnet(27, 7) }}"
+    host_ip: "{{ home_subnet | ansible.utils.ipsubnet(27, 7) | ansible.utils.ipmath(1) }}"   # legacy +1
 
 # macos_vm test fixture: matches the symlink _setup.yml fabricates over
 # a loopback file. install_mode=false skips the 700 MB BaseSystem.dmg

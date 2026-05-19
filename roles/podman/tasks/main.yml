@@ -135,15 +135,20 @@
     name: macvlan
     tasks_from: podman
   vars:
+    # Find the mgmt block in host_vars.macvlan_blocks by name. Precondition:
+    # any host with macvlan_enable_podman=true must have a `mac0` entry in
+    # macvlan_blocks (the mgmt VLAN's iface). parent_subnet/gateway are
+    # derived inline from ansible_facts so they aren't part of host_vars.
+    _mgmt_block: "{{ (macvlan_blocks | default([])) | selectattr('name', 'equalto', 'mac0') | first }}"
     macvlan_args:
       name: macvlan_net
-      parent: "{{ macvlan_parent }}"
-      parent_subnet: "{{ macvlan_parent_subnet }}"
-      parent_gateway: "{{ macvlan_parent_gateway }}"
+      parent: "{{ _mgmt_block.parent }}"
+      parent_subnet: "{{ ansible_facts[_mgmt_block.parent].ipv4.network }}/{{ ansible_facts[_mgmt_block.parent].ipv4.prefix }}"
+      parent_gateway: "{{ ansible_facts[_mgmt_block.parent].ipv4.network | ansible.utils.ipmath(1) }}"
       # Upper /28 of the host's /27 mgmt block — historical convention,
       # split lower /28 (host + libvirt VMs) from upper /28 (podman
       # containers). Will collapse to upper /29 once the mgmt block
       # itself migrates from /27 to /28.
-      ip_range: "{{ macvlan_subnet | ansible.utils.ipsubnet(macvlan_subnet | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
+      ip_range: "{{ _mgmt_block.block | ansible.utils.ipsubnet(_mgmt_block.block | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
   tags:
     - podman
