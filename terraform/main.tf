@@ -51,15 +51,10 @@ terraform {
     skip_s3_checksum = true
   }
 
-  # State + plan encryption: PBKDF2 (sha512, 600k iter default) derives a
-  # key from var.state_passphrase, AES-GCM encrypts state and plan files
-  # before they leave the process. The MinIO backend stores ciphertext
-  # only. Every secret tofu manages (mailgun keys, nexus push passwords,
-  # gandi PAT, google idp client_secret, etc.) lives in the encrypted
-  # state -- compromise of the passphrase + access to the encrypted state
-  # recovers all of them.
-  #
-  # Rotation procedure: see notes/terraform-state-encryption-rotation.md
+  # PBKDF2-derived key from var.state_passphrase, AES-GCM encrypting
+  # state and plan before they leave the process. The MinIO backend
+  # stores ciphertext only.
+  # Rotation procedure: notes/terraform-state-encryption-rotation.md
   encryption {
     key_provider "pbkdf2" "main" {
       passphrase = var.state_passphrase
@@ -78,10 +73,9 @@ terraform {
   }
 }
 
-# Sourced from $TF_VAR_state_passphrase in mise.toml [env] (op:// reference
-# to 1Password, resolved by op run). Tofu's static evaluation lets the
-# encryption block above read it before any state IO. Rotation procedure
-# documented above the encryption block.
+# Resolved from TF_VAR_state_passphrase in mise.toml [env] (1Password
+# via op run). Statically evaluated -- read by the encryption block
+# above before any state IO.
 variable "state_passphrase" {
   type      = string
   sensitive = true
@@ -94,9 +88,8 @@ variable "state_passphrase" {
 }
 
 
-# Single human-owned account; pinning the literal avoids re-resolving by
-# name on every plan (one fewer API call, no collision footgun if the
-# account is ever renamed or duplicated under a billing migration).
+# Single human-owned account; pinning the literal avoids one
+# resolve-by-name API call per plan.
 locals {
   cloudflare_account_id = "43f1339d1841088669b616cecc6562de"
 }

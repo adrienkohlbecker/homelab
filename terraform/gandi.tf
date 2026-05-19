@@ -22,12 +22,8 @@
 #   to. UI-managed is the only sane option until the provider
 #   matures.
 #
-# - fahm.dev: lapsed 2026-04-17, in clientHold at the registry,
-#   autorenew off. Will release back to the pool in due course; not
-#   worth bringing under tofu.
-#
 # - mailboxes / email forwardings / glue records / livedns records:
-#   all empty across all 4 domains (email goes through CF Email
+#   all empty across the 3 domains (email goes through CF Email
 #   Routing + Fastmail/Gmail; DNS at CF). If any of these grow,
 #   gandi_mailbox / gandi_email_forwarding / gandi_glue_record /
 #   gandi_livedns_record are the resources to reach for.

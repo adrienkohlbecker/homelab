@@ -1,9 +1,7 @@
 # Zero Trust Access surface. Kept around as a fixture for testing the
 # traefik-auth-cloudflare repo against a real CF Access endpoint
 # (echo.mhaf.fr), not as production auth -- nothing in this repo
-# depends on it. Originally hosted at echo.mhaf.fr; migrated to
-# mhaf.fr in 2026-05 because kohlby.fr was no longer in this account
-# and CF's app-PUT validation rejected any update.
+# depends on it.
 
 # Cookie / session hardening: http_only blocks JS access to the
 # CF_Authorization cookie (XSS-via-echo can't exfil the token);
@@ -37,8 +35,7 @@ resource "cloudflare_zero_trust_access_application" "echo" {
   ]
 }
 
-# Reusable policies (replacing the original inline ones, which the v5
-# provider can't manage in-place).
+# Reusable policies bound to the echo app above.
 resource "cloudflare_zero_trust_access_policy" "echo_me" {
   account_id       = local.cloudflare_account_id
   name             = "me"
