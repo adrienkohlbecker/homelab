@@ -1,5 +1,11 @@
 # Inputs: caller passes a single dict `nginx_site_args` with keys
 #   subdomain                 required; serves at <subdomain>.<host>.<domain>
+#   state                     optional, default 'present'. Set to 'absent' to
+#                             remove a retired site: deletes the symlink under
+#                             sites-enabled/ and the config under sites-available/,
+#                             then reloads. Keep the call in main.yml as a
+#                             tombstone so retired sites stay decommissioned on
+#                             fresh installs.
 #   condition                 optional bool, default true; gates the whole call
 #   permissions               optional, default '0644'
 #   reload                    optional bool, default true; reload nginx after a
@@ -50,7 +56,7 @@
 # previous caller's proxy_pass / csp / etc. can't bleed into the next
 # caller that doesn't explicitly override.
 - name: site | Ensure directories exists
-  when: nginx_site_args.condition | default(true)
+  when: (nginx_site_args.condition | default(true)) and (nginx_site_args.state | default('present')) == 'present'
   file:
     state: directory
     path: "{{ item }}"
@@ -65,7 +71,7 @@
     - nginx_site
 
 - name: site | Configure nginx site
-  when: nginx_site_args.condition | default(true)
+  when: (nginx_site_args.condition | default(true)) and (nginx_site_args.state | default('present')) == 'present'
   template:
     src: site.conf.j2
     dest: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
@@ -79,7 +85,10 @@
     - nginx_site
 
 - name: site | Enable nginx site
-  when: (nginx_site_args.condition | default(true)) and not (ansible_check_mode and nginx_static_conf.changed)
+  when:
+    - nginx_site_args.condition | default(true)
+    - (nginx_site_args.state | default('present')) == 'present'
+    - not (ansible_check_mode and nginx_static_conf.changed)
   file:
     src: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
     dest: /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
@@ -89,11 +98,26 @@
   tags:
     - nginx_site
 
+- name: site | Remove retired nginx site
+  when: (nginx_site_args.condition | default(true)) and (nginx_site_args.state | default('present')) == 'absent'
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
+    - /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
+  become: true
+  register: nginx_static_conf_absent
+  tags:
+    - nginx_site
+
 - name: site | Reload nginx config
   when: >-
     (nginx_site_args.condition | default(true))
     and (nginx_site_args.reload | default(true))
-    and (nginx_static_conf.changed or nginx_static_conf_enable.changed)
+    and ((nginx_static_conf.changed | default(false))
+      or (nginx_static_conf_enable.changed | default(false))
+      or (nginx_static_conf_absent.changed | default(false)))
   systemd:
     name: nginx
     state: reloaded
