@@ -20,6 +20,10 @@ terraform {
       source  = "wgebis/mailgun"
       version = "~> 0.9"
     }
+    google = {
+      source  = "hashicorp/google"
+      version = "~> 6"
+    }
     random = {
       source  = "hashicorp/random"
       version = "~> 3"
