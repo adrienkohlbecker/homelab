@@ -46,20 +46,19 @@
   failed_when: _verify_zigbee_link.stdout | trim != '/config/db/zigbee.db'
   become: true
 
-# The unit template pins HA's iot_macvlan IP to .98 (the only IP
-# netavark can assign within the .96/30 ip_range carved out of the
-# /24). Assert the pinning actually took effect so a future
-# netavark/podman behaviour change doesn't drift the IP silently;
-# downstream integrations (HomeKit/Sonos discovery, future firewall
-# rules keyed on the iot-side address) would silently regress.
-- name: _verify | homeassistant macvlan IP is pinned to 10.123.4.98
+# HA's iot_macvlan IP is no longer pinned (vars/main.yml) — assert
+# it falls inside the network's ip_range (.136/29, upper /29 of lab's
+# IoT macvlan_block 10.123.4.128/28). Catches a regression where the
+# role's ip_range and netavark's allocation diverge, or where the
+# macvlan attach fails and the inspect returns empty.
+- name: _verify | homeassistant iot_macvlan IP is in lab's IoT block
   command: >
     podman inspect homeassistant
     --format
     {% raw %}'{{ .NetworkSettings.Networks.iot_macvlan.IPAddress }}'{% endraw %}
   register: _verify_macvlan_ip
   changed_when: false
-  failed_when: _verify_macvlan_ip.stdout | trim != '10.123.4.98'
+  failed_when: not (_verify_macvlan_ip.stdout | trim | ansible.utils.ipaddr('10.123.4.136/29'))
   become: true
 
 # Functional HACS check: grep HA's journal for the loader's "We found

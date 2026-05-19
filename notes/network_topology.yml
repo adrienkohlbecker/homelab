@@ -150,13 +150,12 @@ sites:
           #
           #   - [done]    lab.iot eth0.4 primary moved .4.102 → .4.2.
           #   - [done]    external_ips.tubeszb moved .4.2 → .4.16.
+          #   - [done]    homeassistant ip_range .4.96/30 → .4.136/29
+          #               (upper /29 of lab's /28; netavark picks
+          #               from the 8-slot pool, no pin needed).
           #   - [pending] lab.iot mac0 (.4.128) — new, awaits the
-          #               role-level decision to provision mac0
-          #               unconditionally.
-          #   - [pending] homeassistant ip_range .4.96/30 → .4.136/30
-          #               (upper /29 of lab's /28; netavark lands the
-          #               container at .138 — was .98). Role change
-          #               in roles/homeassistant.
+          #               macvlan-role refactor to support per-VLAN
+          #               invocations.
           #   - [pending] 14 IoT device DHCP reservations shift up by
           #               8 (.2–.15 → .10–.23) on the UDM/dnsmasq
           #               side — not ansible-driven.

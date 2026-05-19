@@ -54,7 +54,7 @@ ExecStart=/usr/bin/podman run \
     {# Sonos S2 event-subscription callback; HomeKit pairing. Bound on the #}
     {# host's home-LAN address (not 0.0.0.0) so the iot-VLAN sub-iface #}
     {# doesn't host these sockets too -- iOS / Sonos controllers live on #}
-    {# the home LAN. HA's macvlan presence on 10.123.4.98 (the IoT VLAN) #}
+    {# the home LAN. HA's macvlan presence on the IoT VLAN (10.123.4.0/24) #}
     {# remains reachable for mDNS / discovery; that's a separate plane. #}
     --publish {{ ansible_default_ipv4.address | mandatory }}:{{ service_ports.homeassistant_sonos }}:1400/tcp \
     --publish {{ ansible_default_ipv4.address | mandatory }}:{{ service_ports.homeassistant_homekit }}:3722/udp \

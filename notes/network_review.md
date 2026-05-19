@@ -188,9 +188,8 @@ operator. Summary kept for the audit trail:
     - lab's `eth0.4` primary: `10.123.4.102` → `10.123.4.2` (host
       slot 0 in `static_fixed`).
     - lab's `mac0` on IoT: **new** at `10.123.4.128`.
-    - homeassistant `ip_range`: `10.123.4.96/30` →
-      `10.123.4.136/30` (upper /29 of lab's IoT /28; netavark lands
-      the container at `.138` — was `.98`).
+    - homeassistant `ip_range`: `10.123.4.96/30` → `10.123.4.136/29`
+      (upper /29 of lab's IoT /28; 8-slot pool, no pin).
     - 14 IoT static device leases shift up by 8 (`.2–.15` → `.10–.23`)
       to clear `.2–.9` for host primaries; update dnsmasq
       reservations and pihole config accordingly.
