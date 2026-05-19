@@ -175,25 +175,18 @@ apt-get upgrade --yes
 
 apt-mark hold 'grub*'
 
-# jammy's GA kernel is 5.15 (2022). The 5.15 + ext4 + fuse-overlayfs
-# combination makes podman report `Native Overlay Diff: false`, so it
-# falls back to fuse-overlayfs for layered-image mounts -- which then
-# fails to copy-up character devices (dev/console, dev/null) when an
-# ID-mapped layer copy is needed for the +0:N:1 fake-root uidmap
-# pattern, with `lchown ... input/output error`. The HWE kernel
-# (6.8 on jammy) detects ext4 as native-overlay-capable and avoids
-# the fallback entirely. Lab/pug prod hosts already track the HWE
-# kernel via Ubuntu's HWE rollover; this gets the packer-built
-# images on the same path. Noble+ ship a 6.x GA kernel so linux-
-# generic is already current there -- no HWE meta-package needed.
-case "$UBUNTU_NAME" in
-jammy)
-  apt-get install --yes linux-generic-hwe-22.04
-  ;;
-*)
-  apt-get install --yes linux-generic
-  ;;
-esac
+# Bootstrap kernel: just linux-generic. On jammy this lands the 5.15 GA
+# kernel, on noble+ a 6.x. Noble+ is fine as-is for the +0:N:1 fake-root
+# uidmap pattern; jammy's 5.15 + ext4 + fuse-overlayfs reports
+# `Native Overlay Diff: false` and falls back to fuse-overlayfs for
+# layered-image copy-up, which fails to chown character devices like
+# /dev/console with `lchown ... input/output error`. The HWE kernel
+# (6.8 on jammy, matches lab/pug's tracked-via-Ubuntu-HWE prod rev) is
+# applied in packer/seed_deps.yml via the `hwe_kernel` role -- baked
+# into box_deps, not box, so the lightweight box variant stays on the
+# GA kernel for roles whose _verify exercises kernel-management
+# machinery (roles/_packer) or simply doesn't need HWE.
+apt-get install --yes linux-generic
 
 # Install required packages
 
