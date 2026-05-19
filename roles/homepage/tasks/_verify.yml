@@ -84,18 +84,15 @@
   become: true
 
 - name: _verify | homepage hot-reloads bookmarks.yaml and renders the sentinel
-  # Cache-bust the s-maxage=31536000 Next.js attaches to the SSR'd
-  # page -- without a unique query string + Cache-Control: no-cache
-  # the upstream can keep serving a year-old static response that
-  # predates the sentinel injection. Even with cache-bust, the
-  # gethomepage file-watch revalidation can take ~30s of polling
-  # before the new YAML is reflected; raise retries accordingly.
+  # Probe /api/bookmarks rather than the SSR'd `/` page: getStaticProps
+  # caches the rendered HTML by path (query string doesn't differentiate
+  # SSG output), so polling `/?_t=N` returns the same year-old HIT
+  # response no matter how many random query strings you throw at it.
+  # The /api/bookmarks JSON endpoint reads from the live in-memory
+  # config that gethomepage's chokidar file-watch refreshes, so the
+  # sentinel appears here as soon as the watcher fires.
   uri:
-    url: "https://localhost/?_t={{ 999999 | random }}"
-    headers:
-      Host: "homepage.{{ inventory_hostname }}.{{ domain }}"
-      Cache-Control: no-cache
-    validate_certs: false
+    url: "http://localhost:{{ service_ports.homepage }}/api/bookmarks"
     return_content: true
     status_code: 200
   register: _verify_hotreload
