@@ -1,19 +1,14 @@
 # Functional checks for the hostname role. The converge proves the
 # hostname/template tasks exited cleanly; these checks verify that
 # (a) the kernel transient + /etc/hostname match inventory_hostname,
-# (b) /etc/hosts resolves both the short and FQDN forms to 127.0.1.1
-# locally without a DNS round-trip, (c) the IPv6 ::1 alias for
-# `localhost` is in place, and (d) etc_hosts_entries (when set)
-# actually resolves to its configured IP.
+# (b) /etc/hosts resolves the short form to 127.0.1.1 locally without a
+# DNS round-trip (FQDN is deliberately not in /etc/hosts — see hosts.j2),
+# (c) the IPv6 ::1 alias for `localhost` is in place, and
+# (d) etc_hosts_entries (when set) actually resolves to its configured IP.
 
 - name: _verify | Read running hostname
   command: hostname
   register: _verify_hostname
-  changed_when: false
-
-- name: _verify | Read FQDN
-  command: hostname --fqdn
-  register: _verify_hostname_fqdn
   changed_when: false
 
 - name: _verify | Read /etc/hostname
@@ -34,25 +29,18 @@
     quiet: true
     that:
       - _verify_hostname.stdout == inventory_hostname
-      - _verify_hostname_fqdn.stdout == inventory_hostname ~ "." ~ domain
       - (_verify_etc_hostname.content | b64decode).strip() == inventory_hostname
       - _verify_hostnamectl_static.stdout == inventory_hostname
     fail_msg: |
       Hostname state mismatch:
         running: {{ _verify_hostname.stdout }}
-        fqdn:    {{ _verify_hostname_fqdn.stdout }}
         /etc/hostname: {{ (_verify_etc_hostname.content | b64decode).strip() }}
         static:  {{ _verify_hostnamectl_static.stdout }}
-        expected: {{ inventory_hostname }} / {{ inventory_hostname }}.{{ domain }}
+        expected: {{ inventory_hostname }}
 
 - name: _verify | Resolve inventory_hostname short form
   command: getent -s files ahosts {{ inventory_hostname }}
   register: _verify_getent_short
-  changed_when: false
-
-- name: _verify | Resolve inventory_hostname FQDN form
-  command: getent -s files ahosts {{ inventory_hostname }}.{{ domain }}
-  register: _verify_getent_fqdn
   changed_when: false
 
 - name: _verify | Resolve localhost over IPv6
@@ -65,12 +53,10 @@
     quiet: true
     that:
       - "'127.0.1.1' in _verify_getent_short.stdout"
-      - "'127.0.1.1' in _verify_getent_fqdn.stdout"
       - "'::1' in _verify_getent_localhost.stdout"
     fail_msg: |
       /etc/hosts resolution mismatch:
         short → {{ _verify_getent_short.stdout | replace('\n', ' / ') }}
-        fqdn  → {{ _verify_getent_fqdn.stdout | replace('\n', ' / ') }}
         v6    → {{ _verify_getent_localhost.stdout | replace('\n', ' / ') }}
 
 - name: _verify | Resolve etc_hosts_entries to configured IPs
