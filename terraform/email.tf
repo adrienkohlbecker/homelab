@@ -27,18 +27,27 @@ resource "cloudflare_email_routing_settings" "this" {
 # --- catch-all rules (one per zone; CF auto-creates these) ---
 
 locals {
+  # action_type + action_value as flat fields (not a nested object)
+  # because terraform's type inference across the map collapses any
+  # heterogeneity (worker carries a value list; drop doesn't) and the
+  # provider's required-check on actions[0].type then sees a dynamic
+  # type instead of "worker" / "drop". Flat fields with uniform types
+  # (string + list(string)) keep inference clean.
   email_routing_catchalls = {
     "fahm.fr" = {
-      enabled = true
-      action  = { type = "worker", value = [cloudflare_workers_script.catchall_email.script_name] }
+      enabled      = true
+      action_type  = "worker"
+      action_value = [cloudflare_workers_script.catchall_email.script_name]
     }
     "mhaf.fr" = {
-      enabled = false
-      action  = { type = "drop", value = null }
+      enabled      = false
+      action_type  = "drop"
+      action_value = []
     }
     "adrienkohlbecker.com" = {
-      enabled = false
-      action  = { type = "drop", value = null }
+      enabled      = false
+      action_type  = "drop"
+      action_value = []
     }
   }
 }
@@ -50,7 +59,7 @@ resource "cloudflare_email_routing_catch_all" "this" {
   matchers = [{ type = "all" }]
   enabled  = each.value.enabled
   name     = ""
-  actions  = [each.value.action]
+  actions  = [{ type = each.value.action_type, value = each.value.action_value }]
 }
 
 # State migration from the previous per-zone-named resources. Safe to
