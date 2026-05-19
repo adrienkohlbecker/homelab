@@ -40,13 +40,12 @@ variable "fahm_fr_records" {
   }
 
   default = {
-    # A
-    a_box  = { type = "A", name = "box.fahm.fr", content = "10.123.128.5" }
-    a_bunk = { type = "A", name = "bunk.fahm.fr", content = "10.123.185.3" }
+    # A — host records (box/bunk/lab/pug) derive from
+    # data/network_topology.yml in `local.fahm_fr_host_records`
+    # below; this default holds only the records that don't
+    # reference the topology (public WAN + Fastmail relay).
     a_home = { type = "A", name = "home.fahm.fr", content = "203.0.113.10" }
-    a_lab  = { type = "A", name = "lab.fahm.fr", content = "10.123.128.2" }
     a_mail = { type = "A", name = "mail.fahm.fr", content = "103.168.172.65", comment = "fastmail" }
-    a_pug  = { type = "A", name = "pug.fahm.fr", content = "10.123.128.3" }
 
     # CNAME
     cname_auth                   = { type = "CNAME", name = "auth.fahm.fr", content = "lab.fahm.fr" }
@@ -77,18 +76,38 @@ variable "fahm_fr_records" {
   }
 }
 
-resource "cloudflare_dns_record" "fahm_fr" {
-  for_each = var.fahm_fr_records
+locals {
+  # Host A records — derived from data/network_topology.yml. Each
+  # name resolves to the host's wireguard IP; wg clients query
+  # public DNS and reach the host through the tunnel. Non-wg traffic
+  # to *.fahm.fr never resolves on the internet at large (10.x.x.x is
+  # unroutable), which is the intended fail-closed behaviour.
+  fahm_fr_host_records = {
+    a_box  = { type = "A", name = "box.fahm.fr", content = local.network.hosts.box.wireguard }
+    a_bunk = { type = "A", name = "bunk.fahm.fr", content = local.network.hosts.bunk.wireguard }
+    a_lab  = { type = "A", name = "lab.fahm.fr", content = local.network.hosts.lab.wireguard }
+    a_pug  = { type = "A", name = "pug.fahm.fr", content = local.network.hosts.pug.wireguard }
+  }
+  fahm_fr_records = merge(var.fahm_fr_records, local.fahm_fr_host_records)
+}
 
+resource "cloudflare_dns_record" "fahm_fr" {
+  for_each = local.fahm_fr_records
+
+  # `try()` lets each.value be either a fully-typed var entry
+  # (with optional defaults filled in) or a minimal local entry
+  # (just type/name/content). Necessary because the variable's
+  # typed-object schema doesn't apply to records merged in from
+  # local.fahm_fr_host_records.
   zone_id  = local.zones["fahm.fr"]
   type     = each.value.type
   name     = each.value.name
   content  = each.value.content
-  priority = each.value.priority
-  proxied  = each.value.proxied
+  priority = try(each.value.priority, null)
+  proxied  = try(each.value.proxied, false)
   ttl      = 1
-  comment  = each.value.comment
-  tags     = each.value.tags
+  comment  = try(each.value.comment, null)
+  tags     = try(each.value.tags, [])
 }
 
 # ---- SRV records (Fastmail service discovery) ----
