@@ -15,7 +15,10 @@
 # are themselves cache eviction targets; logbias=throughput +
 # sync=always avoids losing in-flight writes if the host crashes while
 # paging out; com.sun:auto-snapshot=false because snapshotting churning
-# swap blocks is pointless and pins free space.
+# swap blocks is pointless and pins free space. compression=zle (not
+# zstd) because anonymous pages reaching swap are already incompressible
+# from the kernel's POV — zle only collapses runs of zeros (cheap, no
+# CPU cost on the hot paging path) which is the only win available.
 #
 # Raw partitions are taken as-is — the role never reformats a device
 # that already carries a swap signature, so pre-existing installer
@@ -70,7 +73,7 @@
     extra_zfs_properties:
       volsize: '{{ swap_zvol.size | human_to_bytes | string }}'
       volblocksize: '4096'
-      compression: zstd
+      compression: zle
       logbias: throughput
       sync: always
       primarycache: metadata
