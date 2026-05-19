@@ -24,7 +24,7 @@
  },
  "plex": {
   "name": "DockerPlex",
-  "ip": "plex.{{ inventory_hostname }}.{{ domain }}",
+  "ip": "plex.dns.podman",
   "port": 443,
   "useSsl": true,
   "libraries": [
@@ -54,7 +54,7 @@
   "machineId": "{{ plex_machine_id }}"
  },
  "tautulli": {
-  "hostname": "tautulli.{{ inventory_hostname }}.{{ domain }}",
+  "hostname": "tautulli.dns.podman",
   "port": 443,
   "useSsl": true,
   "apiKey": "{{ tautulli_api_key }}",
@@ -63,7 +63,7 @@
  "radarr": [
   {
    "name": "radarr",
-   "hostname": "radarr.{{ inventory_hostname }}.{{ domain }}",
+   "hostname": "radarr.dns.podman",
    "port": 443,
    "apiKey": "{{ radarr_api_key }}",
    "useSsl": true,
@@ -84,7 +84,7 @@
  "sonarr": [
   {
    "name": "sonarr",
-   "hostname": "sonarr.{{ inventory_hostname }}.{{ domain }}",
+   "hostname": "sonarr.dns.podman",
    "port": 443,
    "apiKey": "{{ sonarr_api_key }}",
    "useSsl": true,
@@ -231,4 +231,3 @@
   }
  }
 }
-

@@ -212,7 +212,7 @@ radarr:
   full_update_day: 6
   full_update_hour: 2
   http_timeout: 60
-  ip: radarr.{{ inventory_hostname }}.{{ domain }}
+  ip: radarr.dns.podman
   movies_sync: 60
   only_monitored: false
   port: 443
@@ -243,7 +243,7 @@ sonarr:
   full_update_day: 6
   full_update_hour: 2
   http_timeout: 60
-  ip: sonarr.{{ inventory_hostname }}.{{ domain }}
+  ip: sonarr.dns.podman
   only_monitored: false
   port: 443
   series_sync: 60
