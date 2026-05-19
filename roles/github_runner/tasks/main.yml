@@ -362,6 +362,7 @@
   systemd:
     name: podman.socket
     state: started
+    scope: user
   become: true
   become_user: github_runner
   tags:
