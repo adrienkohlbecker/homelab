@@ -16,11 +16,12 @@ sensor_modules:
   - coretemp
   - nct6775
 
+# `block` derives from data/network_topology.yml — see host_vars/lab.yml
+# for the derivation rule. pug is slot 1 → block = .144/28.
 macvlan_blocks:
   - name: mac_mgmt
     parent: eth0
-    block: 10.123.0.144/28   # mgmt VLAN's macvlan_block (slot 1). host_ip
-                             # defaults to block + 0 = 10.123.0.144.
+    block: "{{ network.sites.home.vlans.management.cidr | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}"
 
 swap_partition:
   device: /dev/disk/by-uuid/00b9e215-aaea-459d-a535-40d47007095b

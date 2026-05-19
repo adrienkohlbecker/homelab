@@ -14,11 +14,17 @@ zfs_has_minio_mount: false
 
 z2m_start_service: false
 
-qemu_subnet: 10.0.2.0/24
+# Same block formula as host_vars/lab.yml; only `parent` differs (the
+# QEMU NIC isn't named eth0 and isn't VLAN-trunked, so all macvlan
+# children sit on the single en* user-net iface). The harness pins
+# qemu's user-net to the gsub'd test supernet (10.234.0.0/18 — see
+# test/machine.py's qemu_user_net_args) and test/inventory.ini puts
+# lab in [test] so `network.*` is also gsub'd to 10.234 — the parent
+# NIC's subnet then contains every per-host /28 the topology emits.
 macvlan_blocks:
   - name: mac_mgmt
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
-    block: "{{ qemu_subnet | ansible.utils.ipsubnet(28, 14) }}"   # /28; host_ip defaults to block + 0
+    block: "{{ network.sites.home.vlans.management.cidr | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}"
 
 # macos_vm test fixture: matches the symlink _setup.yml fabricates over
 # a loopback file. install_mode=false skips the 700 MB BaseSystem.dmg

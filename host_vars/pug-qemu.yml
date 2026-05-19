@@ -14,10 +14,13 @@ zfs_has_minio_mount: false
 
 z2m_start_service: false
 
-qemu_subnet: 10.0.2.0/24
+# Same block formula as host_vars/pug.yml; only `parent` differs (the
+# QEMU NIC isn't named eth0). See host_vars/lab-qemu.yml for the
+# rationale around qemu's user-net being pinned to the topology
+# supernet by test/machine.py.
 macvlan_blocks:
   - name: mac_mgmt
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
-    block: "{{ qemu_subnet | ansible.utils.ipsubnet(28, 14) }}"   # /28; host_ip defaults to block + 0
+    block: "{{ network.sites.home.vlans.management.cidr | ansible.utils.ipsubnet(28, 8 + network.hosts[inventory_hostname].slot) }}"
 
 has_transcoding_acceleration: false
