@@ -326,6 +326,22 @@
   tags:
     - homeassistant
 
+# Sentinel encodes (image-tag, uid, gid) so a bump in any of the three
+# invalidates the cache and re-runs the prestage. Lives under podman's
+# storage root so if storage is wiped the sentinel goes with it (the
+# chown'd layers cached there would also be gone, so re-prestaging is
+# correct).
+- name: Compute homeassistant prestage sentinel path
+  when: not ansible_check_mode
+  set_fact:
+    homeassistant_prestage_sentinel: >-
+      /var/lib/containers/storage/.prestage_homeassistant_{{
+        (homeassistant_unit_image.images[0] ~ '|' ~ homeassistant_user.uid ~ '|' ~ homeassistant_user.group)
+        | hash('sha1')
+      }}
+  tags:
+    - homeassistant
+
 - name: Pre-stage homeassistant chown'd layers
   when: not ansible_check_mode
   shell: |
@@ -337,8 +353,10 @@
       --gidmap=+0:{{ homeassistant_user.group }}:1 \
       {{ homeassistant_unit_image.images[0] | quote }} true
     podman rm homeassistant-prestage
+    touch {{ homeassistant_prestage_sentinel | quote }}
   args:
     executable: /bin/bash
+    creates: "{{ homeassistant_prestage_sentinel }}"
   become: true
   tags:
     - homeassistant
