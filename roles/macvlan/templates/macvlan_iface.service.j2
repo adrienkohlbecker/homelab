@@ -20,6 +20,12 @@ Type=oneshot
 RemainAfterExit=yes
 SyslogIdentifier=%N
 
+# Clean up any leftover iface before re-creating it. Tolerates "not
+# there" via the `-` prefix. Without this, a previous ExecStart that
+# failed mid-sequence (oneshot semantics put the unit in `failed`
+# without always running ExecStop) leaves the iface around, and the
+# next start hits `RTNETLINK answers: File exists` on `ip link add`.
+ExecStartPre=-/bin/ip link delete {{ macvlan_args.name }}
 ExecStart=/bin/ip link add {{ macvlan_args.name }} link {{ macvlan_args.parent }} type macvlan mode bridge
 ExecStart=/bin/ip addr add {{ _host_ip }}/32 dev {{ macvlan_args.name }}
 ExecStart=/bin/ip link set {{ macvlan_args.name }} address {{ _mac }}
@@ -30,7 +36,7 @@ ExecStart=/sbin/sysctl -q -w net.ipv4.conf.{{ macvlan_args.name }}.arp_ignore=1
 ExecStart=/sbin/sysctl -q -w net.ipv4.conf.{{ macvlan_args.name }}.arp_announce=2
 ExecStart=/bin/ip link set {{ macvlan_args.name }} up
 ExecStart=/bin/ip route add {{ macvlan_args.block }} dev {{ macvlan_args.name }}
-ExecStop=/bin/ip link delete {{ macvlan_args.name }}
+ExecStop=-/bin/ip link delete {{ macvlan_args.name }}
 
 [Install]
 WantedBy=multi-user.target
