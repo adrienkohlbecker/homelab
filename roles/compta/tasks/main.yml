@@ -17,9 +17,17 @@
 # pulls images but doesn't expose a single .changed signal across its
 # loop; pulling explicitly here gives us compta_image_pull.changed.
 # Image is built + pushed by the workflow in adrienkohlbecker/compta
-# against nexus.lab.fahm.fr/compta (see terraform/nexus.tf).
+# against nexus.lab.fahm.fr/compta (see terraform/nexus.tf). x86_64-
+# only -- the image has no arm64 variant, so the arm64 multi-arch
+# manifest falls back to the x86 layer and starting the unit fails
+# with "ERROR (catatonit:2): failed to exec pid1: Exec format error".
+# Skip the pull on arm so the harness on Mac doesn't waste a minute
+# downloading an unrunnable image; the service-enable gate below
+# also skips the start.
 - name: Pull compta image
-  when: not ansible_check_mode
+  when:
+    - not ansible_check_mode
+    - ansible_architecture == "x86_64"
   containers.podman.podman_image:
     name: nexus.lab.fahm.fr/compta/compta:latest
   register: compta_image_pull
@@ -45,8 +53,16 @@
   vars:
     systemd_unit_args:
       src: compta
-      condition: "{{ not (ansible_check_mode and (compta_user.changed or compta_service_result.changed)) }}"
-      restart: "{{ compta_service_result.changed or compta_image_pull.changed }}"
+      # arm64 hosts can install + validate the unit file (Install
+      # compta service above runs on all arches so systemd-analyze
+      # verifies the template), but the actual start would hammer
+      # the restart-limit on a broken-architecture image. See the
+      # Pull task above for the image-arch background.
+      condition: >-
+        {{ ansible_architecture == 'x86_64'
+           and not (ansible_check_mode
+                    and (compta_user.changed or compta_service_result.changed)) }}
+      restart: "{{ compta_service_result.changed or (compta_image_pull.changed | default(false)) }}"
   tags:
     - compta
 
