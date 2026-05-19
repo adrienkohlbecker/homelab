@@ -1,7 +1,7 @@
 # Derived network vars sourced from the topology.
 #
 # `prod_network` is the canonical truth: always 10.123.x, loaded
-# verbatim from notes/network_topology.yml. It's the right name to
+# verbatim from data/network_topology.yml. It's the right name to
 # reference when a value must point at live prod services (e.g.
 # `etc_hosts_entries` in group_vars/test.yml).
 #
@@ -10,7 +10,7 @@
 # group_vars/test.yml). All derivations below consume `network`, so
 # they automatically take the right shape per group.
 
-prod_network: "{{ lookup('file', playbook_dir ~ '/notes/network_topology.yml') | from_yaml }}"
+prod_network: "{{ lookup('file', playbook_dir ~ '/data/network_topology.yml') | from_yaml }}"
 
 network: "{{ prod_network }}"
 

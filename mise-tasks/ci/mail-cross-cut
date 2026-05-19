@@ -29,7 +29,7 @@ subject_line=$(git show -s --format='%s' "$sha" 2>/dev/null || echo '<no subject
 # through the detect job's outputs and we want a self-contained script.
 base=$(git rev-parse HEAD~1 2>/dev/null || echo '')
 if [ -n "$base" ]; then
-  affected=$(git diff --name-only "$base" HEAD | grep -E '^(group_vars/all\.yml|group_vars/test\.yml|host_vars/.*-qemu.*\.yml|test/(testrole|testall|machine)\.py|mise\.toml)$' || true)
+  affected=$(git diff --name-only "$base" HEAD | grep -E '^(group_vars/all/[^/]+\.(yml|yaml)|group_vars/test\.yml|host_vars/.*-qemu.*\.yml|test/(testrole|testall|machine)\.py|mise\.toml|data/network_topology\.(yml|schema\.json))$' || true)
 else
   affected="<no parent commit>"
 fi

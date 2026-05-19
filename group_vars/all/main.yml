@@ -181,7 +181,7 @@ default_interface: "{{ ansible_default_ipv4.interface | mandatory }}"
 
 # wireguard-vanity-keygen -c $NAME/
 # Peer addresses derive from `network.*` (see group_vars/all/network.yml
-# and notes/network_topology.yml); endpoints, keys, and post_up hooks
+# and data/network_topology.yml); endpoints, keys, and post_up hooks
 # stay literal since they live outside the topology's scope.
 wireguard_peers:
   - name: lab

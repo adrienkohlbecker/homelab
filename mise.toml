@@ -75,6 +75,7 @@ depends = [
   "lint:shfmt",
   "lint:typos",
   "lint:test-meta",
+  "lint:topology",
 ]
 
 [tasks."lint:ansible"]
@@ -122,6 +123,10 @@ run = "git ls-files -z '*.sh' 'mise-tasks/**' | xargs -0 shfmt -i 2 -d"
 [tasks."lint:typos"]
 description = "Run typos checker"
 run = "typos"
+
+[tasks."lint:topology"]
+description = "Validate data/network_topology.yml against its JSON Schema"
+run = "uvx check-jsonschema --schemafile data/network_topology.schema.json data/network_topology.yml"
 
 [tasks.test]
 description = "Run Python unit tests (pytest)"
