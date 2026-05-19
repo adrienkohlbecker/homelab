@@ -129,16 +129,6 @@
           # `auth: required` would otherwise rewrite the 401 below.
           # Override with a named location that re-emits 401 verbatim.
           error_page 401 = @v1_logs_unauthorized;
-          # Reject obviously-empty Authorization at the edge so we never
-          # buffer up to client_max_body_size before the OTel collector
-          # rejects them. The regex matches empty / whitespace-only /
-          # `Bearer ` with no token; anything else (real key, junk key,
-          # whatever) passes through to bearertokenauth for the actual
-          # validation -- a length-based edge check would be arbitrary
-          # and the downstream extension is the source of truth. `if` +
-          # `return` is one of the documented-safe shapes despite "if
-          # is evil" elsewhere.
-          if ($http_authorization ~ "^\s*(Bearer\s*)?$") { return 401; }
           # Per-IP rate-limit (zone declared in conf.d/hyperdx_otlp.conf).
           # Return 429 on rate-shed so shippers treat it as backpressure
           # rather than an upstream-outage 5xx and back off cleanly.
