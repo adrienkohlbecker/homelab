@@ -116,16 +116,31 @@ service_ports:
   wireguard: 51820
 
 # URL nginx's auth_request subrequest hits for forward-auth on sites
-# that opt in via `nginx_site_args.auth`. Default targets the
-# loopback-published Authelia on the host's own nginx; non-lab hosts
-# that ever want to gate any of their services with `auth: required`
-# need to override this in host_vars/<host>.yml with the wireguard IP
-# of the host running Authelia (e.g.
-# http://10.123.0.2:9092/api/authz/auth-request). Cookie domain and
-# portal subdomain are per-group (see prod.yml / test.yml) but this
-# loopback URL is identical everywhere Authelia runs, so it lives at
-# group_vars/all.
-authelia_internal_url: "http://127.0.0.1:{{ service_ports.authelia }}/api/authz/auth-request"
+# that opt in via `nginx_site_args.auth`. Cookie domain and portal
+# subdomain are per-group (see prod.yml / test.yml).
+#
+# `authelia_host`: which inventory host runs the Authelia daemon. Other
+# hosts route their nginx forward-auth subrequests to that host's
+# wireguard IP (the auth.<domain> public URL would work too but the
+# NAT-loopback + TLS overhead per subrequest is wasteful when peers
+# already share a WG mesh). Set per-group in prod.yml / test.yml.
+#
+# `authelia_internal_url` resolves to the loopback URL on the authelia_host
+# itself (caught by nginx's `iifname "lo"` accept rule, so no firewall hop)
+# and to the WG IP on every other host. Authelia's `--publish` binds to
+# 0.0.0.0:{{ service_ports.authelia }} so any interface on the host can
+# reach it; access is gated by the firewall rule that accepts tcp
+# {{ service_ports.authelia }} only from wg0 + WG_SUBNET on the
+# authelia_host (see roles/firewall/templates/nftables.conf.j2). The
+# lookup pulls authelia_host's wireguard_peers entry; if you add a new
+# authelia_host, make sure it has a wireguard_peers entry first.
+authelia_internal_url: >-
+  http://{% if inventory_hostname == authelia_host -%}
+  127.0.0.1
+  {%- else -%}
+  {{ (wireguard_peers | selectattr('name', 'eq', authelia_host) | first).address }}
+  {%- endif -%}
+  :{{ service_ports.authelia }}/api/authz/auth-request
 
 # mDNS device-info model -- drives the Finder sidebar icon for the host.
 # Maps to an .icns under /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/
