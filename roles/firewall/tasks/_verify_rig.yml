@@ -59,7 +59,12 @@
     # Add-or-verify: succeeds if the netns is freshly added OR
     # already present. A real failure (e.g. kernel netns support
     # missing) bubbles up instead of being swallowed by `|| true`.
-    ip netns add extns 2>/dev/null || [ -d /var/run/netns/extns ]
+    # `-e` not `-d`: ip netns mount points are FILES (bind-mounted
+    # from /proc/<pid>/ns/net), not directories. `[ -d ]` always
+    # returns false post-add, so the `||` branch never recovered --
+    # latent until _setup.yml started pre-creating extns for the
+    # wg0 veth pair.
+    ip netns add extns 2>/dev/null || [ -e /var/run/netns/extns ]
     if ! ip link show wg0 >/dev/null 2>&1; then
       ip link add wg0 type veth peer name veth_ext
       ip link set veth_ext netns extns
