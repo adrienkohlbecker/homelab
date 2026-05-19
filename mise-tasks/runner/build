@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+#MISE description="Build the github_runner image on lab and push to nexus (local-loop alternative to the master-push runner-image.yml workflow)"
+# Use when iterating on runner/Dockerfile or runner/entrypoint.sh
+# outside the runner-image.yml workflow's master-push trigger. Resolves
+# nexus push creds via mise's [env] op:// refs + op run.
+#
+# Tags both :<git-sha> and :latest to match the CI workflow's tagging.
+# Build runs on lab (over ssh) rather than the local Mac so we don't
+# need cross-arch emulation and so the resulting image is pre-warmed in
+# lab's root podman storage -- the rotate timer's pull becomes a no-op
+# instead of dragging the image across the WAN again.
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+if ! git diff-index --quiet HEAD -- runner/; then
+  echo >&2 "WARNING: runner/ has uncommitted changes; pushed image won't match HEAD's runner/ tree."
+fi
+
+sha=$(git rev-parse HEAD)
+image="nexus.lab.fahm.fr/homelab/runner"
+
+echo ">>> Staging runner/ to lab:/tmp/runner-build/"
+ssh lab 'rm -rf /tmp/runner-build && mkdir /tmp/runner-build'
+tar -cf - runner/ | ssh lab 'cd /tmp/runner-build && tar -xf -'
+
+echo ">>> Building ${image}:${sha} on lab"
+ssh lab "cd /tmp/runner-build && sudo podman build --pull=newer -f runner/Dockerfile --build-arg USE_NEXUS_MIRRORS=1 -t '${image}:${sha}' ."
+
+echo ">>> Tagging ${image}:latest on lab"
+ssh lab "sudo podman tag '${image}:${sha}' '${image}:latest'"
+
+echo ">>> Logging in to nexus on lab (password via op run from mise [env])"
+op run -- bash -c '
+  echo "$NEXUS_PASSWORD" | ssh -o BatchMode=yes lab \
+    "sudo podman login nexus.lab.fahm.fr --username \"$NEXUS_USERNAME\" --password-stdin"
+'
+
+echo ">>> Pushing ${image}:${sha} to nexus"
+ssh lab "sudo podman push '${image}:${sha}'"
+
+echo ">>> Pushing ${image}:latest to nexus"
+ssh lab "sudo podman push '${image}:latest'"
+
+echo ">>> Done."
+echo "    Lab will pick up :latest via the rotate timer within 5 min,"
+echo "    or force-restart instances now with:"
+echo "      ssh lab 'sudo systemctl restart github_runner@\*.service'"
