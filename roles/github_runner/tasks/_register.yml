@@ -18,18 +18,14 @@
 # exits, and systemd's Restart=always brings up the next container.
 
 # Reset at the top of every iteration so a previous instance's values
-# can't bleed into the next via set_fact persistence. runner_name_re
-# uses regex_escape so an inventory_hostname containing '.' or '-'
-# (today bare 'lab'/'pug'/'bunk', but future-proofed) doesn't silently
-# broaden the match. runner_envfile is reset to {changed: false} so
-# that if the template task downstream is ever skipped (currently it
-# always runs, but a future `when:` would change that), the restart
-# trigger reads a sane "no change" rather than the previous iteration's
-# .changed value.
+# can't bleed into the next via set_fact persistence. runner_envfile is
+# reset to {changed: false} so that if the template task downstream is
+# ever skipped (currently it always runs, but a future `when:` would
+# change that), the restart trigger reads a sane "no change" rather
+# than the previous iteration's .changed value.
 - name: _register | Set instance facts for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
   set_fact:
     runner_iid: "{{ runner_instance.repo }}_{{ runner_instance.suffix }}"
-    runner_name_re: "^{{ (inventory_hostname ~ '_' ~ runner_instance.repo ~ '_' ~ runner_instance.suffix) | regex_escape }}_[a-f0-9]+$"
     runner_envfile: {changed: false}
 
 - name: _register | Create workdir for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
@@ -93,31 +89,18 @@
            or (github_runner_extract.changed | default(false))
            or (github_runner__service_result.changed | default(false)) }}
 
-# After the unit is running, confirm GitHub agrees the runner is
-# registered + online. Catches PAT scope/revocation, repo-deleted,
-# or entrypoint failure modes at apply-time rather than at next-CI-
-# run-time. The entrypoint appends a random 8-char suffix to
-# RUNNER_NAME (runner/entrypoint.sh) so we match by prefix. Retries
-# cover the ~5-10s the runner takes to register on first start.
-# Skipped under qemu_test (no real GitHub). no_log: true keeps the
-# PAT bearer out of task output.
-- name: _register | Verify {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }} is registered with GitHub
-  when: not qemu_test
-  uri:
-    url: "https://api.github.com/repos/{{ runner_instance.owner }}/{{ runner_instance.repo }}/actions/runners"
-    method: GET
-    headers:
-      Accept: application/vnd.github+json
-      Authorization: "Bearer {{ github_runner_pat }}"
-      X-GitHub-Api-Version: "2022-11-28"
-    status_code: 200
-    return_content: true
-  register: _verify_runner_online
-  until: >-
-    _verify_runner_online.json.runners
-    | selectattr('status', 'equalto', 'online')
-    | selectattr('name', 'match', runner_name_re)
-    | list | length > 0
-  retries: 12
-  delay: 5
-  no_log: true
+# Intentionally no apply-time GitHub-side "is the runner registered +
+# online?" check. The failure modes that check claimed to cover are
+# already caught earlier in the apply chain:
+#   - PAT scope/revocation, repo-deleted: jit_mint's curl 401s/404s,
+#     ExecStartPre fails, systemd unit-start fails, the systemd_unit
+#     helper's service task fails ansible apply.
+#   - Entrypoint / Runner.Listener boot failure: container exits,
+#     Restart=always loops, StartLimitBurst trips, unit fails,
+#     systemd: module fails ansible apply.
+# A "Runner.Listener thinks it's online but GitHub disagrees" state
+# is rare enough that bouncing an unnecessary API call (with PAT
+# bearer) into every apply -- gated under no_log: true and so painful
+# to debug when it does trip -- wasn't worth the steady-state cost.
+# The runner-image-rotate timer + netdata systemd_units monitor are
+# the continuous "is the runner alive" signal.
