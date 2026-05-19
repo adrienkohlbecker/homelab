@@ -95,16 +95,21 @@ fi
 # bind-mount source on the unit (%t/%N/jit) and this script must agree
 # on the no-suffix path. install -d is idempotent against the
 # RuntimeDirectory-created dir and re-asserts 0700; the file lands at
-# 0600 root:root via umask 0077. The container reads /run/jit through
-# the bind-mount, not by re-resolving the file in its userns: podman
-# opens the source path as the unit's process (real root) at container
-# start, and the container reads through that already-opened fd. So
-# in-container uid 0 (= host github_runner via the +0 uidmap) never
-# has to satisfy a mode-0600-root-owned read check -- the host-side
-# open already did. Don't relax the 0600/0700 modes; they're what keep
-# the blob unreadable to anything other than this script + podman's
-# open fd.
+# 0600 via umask 0077 then chown'd to github_runner.
+#
+# Ownership matters: the container's --uidmap=+0:<github_runner.uid>:1
+# override maps in-container uid 0 to host github_runner, so the
+# in-container entrypoint's `cat /run/jit` opens the bind-mount source
+# as host github_runner. A root-owned 0600 file is unreadable from
+# that effective uid (EACCES at open). chown'ing the file to
+# github_runner makes it appear as in-container-uid-0-owned through
+# the uidmap, satisfying the 0600 read check. The dir stays 0700
+# root:root: the mount syscall walks the source path host-side under
+# crun's still-CAP_SYS_ADMIN context BEFORE the userns finishes
+# locking permissions, so dir traversal happens with root privileges;
+# only the file-open inside the container is uid-mapped.
 out_dir="/run/github_runner@${inst}"
 install -d -m 0700 "$out_dir"
 umask 0077
 printf '%s' "$jit" > "${out_dir}/jit"
+chown github_runner:github_runner "${out_dir}/jit"
