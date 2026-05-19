@@ -1,0 +1,313 @@
+# Canonical IP-addressing topology for the 10.123.0.0/16 estate.
+#
+# This file is the *intended* single source of truth, replacing
+# `Network documentation.xlsx`. It is machine-consumable so the same
+# plan drives ansible (via `vars_files:` or `lookup('file', ...) | from_yaml`)
+# and terraform (via `yamldecode(file("../notes/network_topology.yml"))`).
+#
+# Hierarchy (no overlap between siblings at the same level):
+#   supernet            /16   the whole estate
+#     partitions        /18   forwarding-domain axis: physical vs wireguard
+#       sites           /21   physical locations
+#         vlans         /24   per-site L2 broadcast domains
+#           static      /25   DHCP-reserved range, fixed IPs from inventory
+#           dhcp        /25   DHCP-server pool
+#       per_host_blocks /27   macvlan/libvirt allocations under a host
+#
+# `# FIXME:` markers flag issues called out in notes/network_review.md.
+# `# DRIFT:` markers flag where reality (repo) diverges from the spreadsheet
+# and the spreadsheet was wrong.
+
+supernet: 10.123.0.0/16
+
+# /18 partitions split the supernet along forwarding-domain lines.
+# Physical traffic and wireguard overlay are routable to each other but
+# live in disjoint /18 blocks so firewall rules can scope by source.
+partitions:
+  physical:
+    cidr: 10.123.0.0/18
+    description: All physically-attached interfaces across all sites.
+  wireguard:
+    cidr: 10.123.64.0/18
+    description: All wireguard tunnel addresses (servers, roaming clients, off-site peers).
+  reserved_c:
+    cidr: 10.123.128.0/18
+    description: Unallocated.
+  reserved_d:
+    cidr: 10.123.192.0/18
+    description: Unallocated.
+
+# ----------------------------------------------------------------------
+# Physical sites — one /21 each under partitions.physical.
+# ----------------------------------------------------------------------
+sites:
+  home:
+    cidr: 10.123.0.0/21
+    gateway: 10.123.0.1
+    description: Zimmer — primary lab, VLAN-segmented.
+    vlans:
+      # ----------------------------------------------------------------
+      # All four home-site VLANs share a uniform /24 layout. Every slot
+      # is symmetric across all VLANs and indexed 0-7 by host.
+      #
+      #   .0           network
+      #   .1           gateway
+      #   .2  – .9     host primaries — eth0.<vlan> static IP per host
+      #                                   .2 → lab    (slot 0)
+      #                                   .3 → pug    (slot 1)
+      #                                   .4 → box    (slot 2)
+      #                                   .5 → pom    (slot 3)
+      #                                   .6 → slot 4 reserved
+      #                                   .7 → slot 5 reserved
+      #                                   .8 → slot 6 reserved
+      #                                   .9 → slot 7 reserved
+      #   .10 – .63    static fixed devices  (54 slots)
+      #   .64 – .127   DHCP pool             (two /27s, 64 IPs)
+      #   .128 – .255  macvlan_blocks /25    (8 × /28, one per host slot)
+      #
+      # Each /28 macvlan_block (e.g. lab's .128/28) carves as:
+      #   .128         mac0 — host's macvlan peer IP on this VLAN.
+      #                       Mandatory across all blocks so the host
+      #                       can always reach its own VMs/containers
+      #                       (Linux kernel forbids parent↔own-child
+      #                       direct comm; mac0 is a peer-child of
+      #                       eth0.<vlan> and bypasses the quirk).
+      #                       The block is a logical partition of the
+      #                       parent /24, not a routed subnet — there
+      #                       is no network/broadcast slot to reserve,
+      #                       so mac0 sits at the first IP. Note: the
+      #                       existing macvlan role uses subnet+1 for
+      #                       the host IP; switching to subnet+0 to
+      #                       reclaim this slot is a small role tweak.
+      #   .129 – .135  lower /29 minus mac0 — libvirt macvtap VMs
+      #                                       (7 slots)
+      #   .136 – .143  upper /29 — podman macvlan containers (8 slots,
+      #                            the role's ip_range)
+      #
+      # Management is the only VLAN with a /23 (an extra /24 above the
+      # standard /24 layout) and a `virtual_ips` field — floating
+      # addresses managed by keepalived. The other VLANs are bare /24s;
+      # if they ever need VIPs they can add a `virtual_ips` carve-out
+      # (e.g. slot 7 of macvlan_blocks → .X.240/28).
+      # ----------------------------------------------------------------
+      management:
+        id: 1   # FIXME: VLAN 1 is the switch native default; consider migrating to a non-default id (e.g. 10).
+        cidr: 10.123.0.0/23
+        gateway: 10.123.0.1
+        static_fixed: 10.123.0.0/26          # .2–.9 hosts, .10–.63 devices
+        dhcp_start:   10.123.0.64
+        dhcp_end:     10.123.0.127
+        macvlan_blocks:
+          # Migration: mgmt blocks renumber from the old /27 carve-up
+          # in 10.123.1.0/24 to /28 blocks in 10.123.0.128/25. Real
+          # renumber of live macvlan parent interfaces — do it one
+          # host at a time. VIPs stay at .1.224/27 (no DNS downtime).
+          #   - lab mac0: 10.123.1.1  → 10.123.0.128
+          #   - pug mac0: 10.123.1.33 → 10.123.0.144
+          #   - box mac0: 10.123.1.65 → 10.123.0.160
+          #   - pom mac0: new at        10.123.0.176
+          lab: 10.123.0.128/28
+          pug: 10.123.0.144/28
+          box: 10.123.0.160/28
+          pom: 10.123.0.176/28
+        virtual_ips:
+          block: 10.123.1.224/27
+          vips:
+            pihole: 10.123.1.224
+      home:
+        id: 2
+        cidr: 10.123.2.0/24
+        gateway: 10.123.2.1
+        static_fixed: 10.123.2.0/26          # .2–.9 hosts, .10–.63 devices
+        dhcp_start:   10.123.2.64
+        dhcp_end:     10.123.2.127
+        macvlan_blocks:
+          lab: 10.123.2.128/28
+          pug: 10.123.2.144/28
+          box: 10.123.2.160/28
+          pom: 10.123.2.176/28
+      work:
+        id: 3
+        cidr: 10.123.3.0/24
+        gateway: 10.123.3.1
+        static_fixed: 10.123.3.0/26
+        dhcp_start:   10.123.3.64
+        dhcp_end:     10.123.3.127
+        macvlan_blocks:
+          lab: 10.123.3.128/28
+          pug: 10.123.3.144/28
+          box: 10.123.3.160/28
+          pom: 10.123.3.176/28
+      iot:
+        id: 4
+        cidr: 10.123.4.0/24
+        gateway: 10.123.4.1
+        static_fixed: 10.123.4.0/26          # .2–.9 hosts, .10–.63 devices
+        dhcp_start:   10.123.4.64
+        dhcp_end:     10.123.4.127
+        macvlan_blocks:
+          # Migration steps (IoT is the only VLAN with deployed
+          # consumers today):
+          #
+          #   - lab.iot eth0.4 primary: .4.102 → .4.2 (host slot 0 of
+          #     static_fixed).
+          #   - lab.iot mac0 (new — every host gets mac0 on every
+          #     macvlan_block): .4.128 (first IP of lab's /28).
+          #   - homeassistant ip_range: .4.96/30 → .4.136/30 (upper
+          #     /29 of lab's /28; netavark lands the container at
+          #     .138 — was .98 in the .96/30 pool).
+          #   - 14 IoT static device leases shift up by 8 (.2–.15 →
+          #     .10–.23) to clear .2–.9 for host primaries; update
+          #     the dnsmasq reservation file accordingly.
+          lab: 10.123.4.128/28
+          pug: 10.123.4.144/28
+          box: 10.123.4.160/28
+          pom: 10.123.4.176/28
+    # VLAN ids 5/6/7 within the home site are unallocated
+    reserved_vlan_subnets:
+      - id: 5
+        cidr: 10.123.5.0/24
+      - id: 6
+        cidr: 10.123.6.0/24
+      - id: 7
+        cidr: 10.123.7.0/24
+
+  brumath: # TODO : Freebox router only allows 192.168.X.0/24 picks?
+    cidr: 10.123.56.0/24
+    gateway: 10.123.56.1
+    description: Family — Brumath. Single flat L2, no VLAN segmentation.
+    devices: {}
+
+  bonniers:
+    cidr: 10.123.57.0/24
+    gateway: 10.123.57.1
+    description: Family — Bonniers. Single flat L2.
+    devices:
+      tp_link_router: 10.123.57.1
+      tp_link_ap:     10.123.57.2
+      bunk:           10.123.57.3
+
+  reserved_family_sites:
+    - cidr: 10.123.58.0/24
+    - cidr: 10.123.59.0/24
+    - cidr: 10.123.60.0/24
+    - cidr: 10.123.61.0/24
+    - cidr: 10.123.62.0/24
+    - cidr: 10.123.63.0/24
+
+# ----------------------------------------------------------------------
+# Host registry — one record per host, all addresses in one place.
+# ----------------------------------------------------------------------
+hosts:
+  # Per-host macvlan blocks and per-VLAN primaries are sourced from
+  # sites.home.vlans.<vlan>.macvlan_blocks[<hostname>] and the
+  # static_fixed host-slot table (.2/lab .3/pug .4/box .5/pom) — not
+  # duplicated here, to avoid drift.
+  lab:
+    site: home
+    physical: 10.123.0.2
+    wireguard: 10.123.64.2
+    vlans:
+      # eth0.4 primary IP on the IoT VLAN. Today at .4.102; migration
+      # target is .4.2 (host slot 0 in static_fixed). lab also gets a
+      # mac0 macvlan child of eth0.4 at .4.128 — see sites.home.vlans.iot.
+      iot: 10.123.4.102
+    mac_addresses:
+      i210:   e8:ea:6a:09:97:67
+      i225p1: c8:7f:54:5c:57:5b
+      i225p2: c8:7f:54:5c:57:5c
+
+  pug:
+    site: home
+    physical: 10.123.0.3
+    wireguard: 10.123.64.3
+    mac_addresses:
+      eth0: 9c:6b:00:26:ef:5d
+
+  box:
+    site: home
+    physical: 10.123.0.5
+    wireguard: 10.123.64.5
+
+  pom:
+    site: home
+    physical: 10.123.0.6
+    wireguard: 10.123.64.6
+    status: planned   # confirmed will materialize; no host_vars/pom.yml yet
+
+  bunk:
+    site: bonniers
+    physical: 10.123.57.3
+    wireguard: 10.123.121.3
+
+# ----------------------------------------------------------------------
+# Wireguard overlay topology under partitions.wireguard (10.123.64.0/18).
+#
+# Convention: every peer's wg IP = its physical IP + 64.0.0.
+# That maps physical /18 (10.123.0.0/18) → wireguard /18 (10.123.64.0/18)
+# byte-for-byte, so any physical address has exactly one wg counterpart
+# and vice versa. Roaming clients with no physical IP get assigned a
+# free slot in the conceptual "+64" mirror of their nominal home VLAN
+# (clients here mirror 10.123.2.128–132 from Home VLAN onto .66.128–132).
+# ----------------------------------------------------------------------
+wireguard:
+  cidr: 10.123.64.0/18
+
+  # Servers (peers with an endpoint). Address = host's wg IP.
+  servers:
+    lab:  { address: 10.123.64.2, listen_port: 51820 }
+    pug:  { address: 10.123.64.3, listen_port: 51820 }
+    box:  { address: 10.123.64.5, listen_port: 51820 }
+    bunk: { address: 10.123.121.3, listen_port: 51820 }
+
+  # Roaming clients (no listening endpoint).
+  clients:
+    laptop:       10.123.66.128
+    phone:        10.123.66.129
+    ipad:         10.123.66.130
+    marie_laptop: 10.123.66.131
+    marie_phone:  10.123.66.132
+
+# ----------------------------------------------------------------------
+# Static device reservations within VLANs. Informational today; can wire
+# into unifi static leases later.
+# ----------------------------------------------------------------------
+static_leases:
+  home:
+    management:
+      eaton_ups: 10.123.0.10
+      unifi_uap_iw_hd: 10.123.0.11
+      unifi_usw_8p: 10.123.0.12
+      unifi_usw_24_poe_gen2: 10.123.0.13
+      unifi_ap_nano_hd: 10.123.0.14
+    home:
+      marantz_receiver: 10.123.2.10
+      printer:          10.123.2.11
+      siglent:          10.123.2.12
+      game:             10.123.2.13
+      lg_tv:            10.123.2.14
+      shield:           10.123.2.15
+      apple_tv:         10.123.2.16
+    work: {}
+    iot:
+      airgradient_indoor:      10.123.4.10
+      airgradient_outdoor:     10.123.4.11
+      velux_klf200:            10.123.4.12
+      somfy_remote_esphome:    10.123.4.13
+      venta_ah510_felix:       10.123.4.14
+      venta_ah510_hugo:        10.123.4.15
+      tubeszb:                 10.123.4.16
+      philips_ac0850_felix:    10.123.4.17
+      philips_ac0850_hugo:     10.123.4.18
+      philips_ac0850_master:   10.123.4.19
+      philips_ac0850_marie:    10.123.4.20
+      philips_ac0850_adrien:   10.123.4.21
+      philips_ac0850_living:   10.123.4.22
+      venta_lw74:              10.123.4.23
+      daikin_felix:            10.123.4.24
+      daikin_hugo:             10.123.4.25
+      daikin_master:           10.123.4.26
+      daikin_marie:            10.123.4.27
+      daikin_adrien:           10.123.4.28
+      daikin_kitchen:          10.123.4.29
+      daikin_tv:               10.123.4.30
