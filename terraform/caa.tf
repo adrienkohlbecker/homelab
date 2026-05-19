@@ -12,7 +12,7 @@
 # issue against policy.
 
 locals {
-  caa_issuers = ["letsencrypt.org", "pki.goog", "ssl.com"]
+  caa_issuers = ["letsencrypt.org", "pki.goog"]
 
   caa_issue_pairs = {
     for pair in setproduct(keys(local.zones), local.caa_issuers) :
