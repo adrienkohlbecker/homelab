@@ -1,16 +1,15 @@
-# macvlan role: per-host macvlan iface (mac0-style) setup.
+# macvlan role: per-host macvlan iface setup.
 #
 # Driven by host_vars `macvlan_blocks` — a list of macvlan_args dicts,
 # one per VLAN-tagged parent the host needs an L2 presence on. Each
-# entry brings up a macvlan child interface (mac0, mac0_iot, …) at a
-# specified IP, on a specified parent NIC.
+# entry brings up a macvlan child interface (mac_mgmt, mac_iot, …) at
+# a specified IP, on a specified parent NIC.
 #
 # Entry schema (see tasks/install.yml for validation):
 #   name        required; iface name. Also drives the systemd unit
-#               filename ({{name}}.service) and the default MAC seed.
-#               Use `mac0` for the host's mgmt-VLAN presence (legacy
-#               name preserved for backward compat); use
-#               `mac0_<vlan>` for additional VLANs.
+#               filename ({{name}}.service) and the MAC seed. Use
+#               `mac_<vlan>` (e.g. `mac_mgmt` for the mgmt VLAN,
+#               `mac_iot` for VLAN-tagged subifs).
 #   parent      required; parent iface (e.g. `eth0` for mgmt VLAN,
 #               `iot` for a VLAN-tagged subif).
 #   block       required; this host's allocation block (CIDR) within
@@ -19,13 +18,10 @@
 #               block via the iface.
 #   host_ip     optional; IP for the iface. Defaults to
 #               `block | ansible.utils.ipmath(0)` (slot 0 of the
-#               block). Override for legacy +1 placements or any
-#               other custom slot.
+#               block).
 #   mac_address optional; MAC for the iface. Defaults to a stable
-#               random MAC seeded by `inventory_hostname` for the
-#               `mac0` block (backward compat with the legacy
-#               single-block role) or `inventory_hostname_<name>`
-#               for any other block.
+#               random MAC seeded by `inventory_hostname_<name>` so
+#               sibling blocks on the same host pick distinct MACs.
 #
 # Hosts that don't trunk any macvlan-bearing VLANs leave
 # macvlan_blocks undefined or empty; the role no-ops cleanly.
@@ -40,6 +36,39 @@
       - iproute2
     cache_valid_time: 3600
   become: true
+  tags:
+    - macvlan
+
+# One-time cleanup of the legacy `mac0.service` left over from the
+# pre-rename role. The new role names mgmt's iface `mac_mgmt`, so
+# without this the old mac0 unit + iface would linger after rollout
+# (and on prod its IP collides with mac_mgmt's IP since both target
+# the same slot of the host's mgmt block). Idempotent: stat-gated on
+# the legacy file, no-op once the rollout is done.
+- name: Check for legacy mac0.service
+  stat:
+    path: /etc/systemd/system/mac0.service
+  register: _macvlan_legacy_mac0
+  become: true
+  tags:
+    - macvlan
+
+- name: Remove legacy mac0.service (renamed to mac_mgmt)
+  when: _macvlan_legacy_mac0.stat.exists
+  become: true
+  block:
+    - name: Stop legacy mac0.service
+      systemd:
+        name: mac0
+        state: stopped
+        enabled: no
+    - name: Delete legacy mac0.service unit file
+      file:
+        path: /etc/systemd/system/mac0.service
+        state: absent
+    - name: Daemon-reload after legacy mac0 removal
+      systemd:
+        daemon_reload: yes
   tags:
     - macvlan
 

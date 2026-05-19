@@ -46,16 +46,16 @@
   failed_when: _verify_zigbee_link.stdout | trim != '/config/db/zigbee.db'
   become: true
 
-# HA's iot_macvlan IP is no longer pinned (vars/main.yml) — assert
-# it falls inside the network's ip_range (.136/29, upper /29 of lab's
+# HA's mac_iot IP is no longer pinned (vars/main.yml) — assert it
+# falls inside the network's ip_range (.136/29, upper /29 of lab's
 # IoT macvlan_block 10.123.4.128/28). Catches a regression where the
 # role's ip_range and netavark's allocation diverge, or where the
 # macvlan attach fails and the inspect returns empty.
-- name: _verify | homeassistant iot_macvlan IP is in lab's IoT block
+- name: _verify | homeassistant mac_iot IP is in lab's IoT block
   command: >
     podman inspect homeassistant
     --format
-    {% raw %}'{{ .NetworkSettings.Networks.iot_macvlan.IPAddress }}'{% endraw %}
+    {% raw %}'{{ .NetworkSettings.Networks.mac_iot.IPAddress }}'{% endraw %}
   register: _verify_macvlan_ip
   changed_when: false
   failed_when: not (_verify_macvlan_ip.stdout | trim | ansible.utils.ipaddr('10.123.4.136/29'))
