@@ -47,7 +47,7 @@ ExecStart=/usr/bin/podman run \
     --publish 127.0.0.1:8001:8000/tcp \
     --env USERMAP_UID={{ paperless_user.uid }} \
     --env USERMAP_GID={{ paperless_user.group }} \
-    --env PAPERLESS_REDIS="redis://redis:6379/1" \
+    --env PAPERLESS_REDIS="redis://redis.dns.podman:6379/1" \
     --env PAPERLESS_OCR_LANGUAGES="eng fra nld" \
     --env PAPERLESS_OCR_LANGUAGE=fra \
     --env PAPERLESS_URL=https://paperless.{{ inventory_hostname }}.{{ domain }} \
