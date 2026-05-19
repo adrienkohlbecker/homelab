@@ -34,17 +34,20 @@ local SEV = {
 
 -- Priority-ordered: first match wins. Higher-severity keywords come
 -- first so a warning in the body of a fatal record doesn't downgrade.
--- HyperDX's body-regex maps notice -> warn; we mirror that here so
--- severity stays consistent if we ever turn this filter off. Postgres
--- emits "LOG: ..." for informational chatter -- the pattern requires
--- a trailing colon so the English word "log" anywhere in a real error
--- doesn't downgrade it, and LOG: ranks after info so a "LOG: ... error"
--- record still classifies as error.
+-- "notice" maps to info, not warn: dnscrypt-proxy emits routine latency
+-- probe + server-selection output at [NOTICE] (~hundreds of lines/day),
+-- which is operationally info -- not a warning. This deviates from
+-- HyperDX's body-regex (which maps notice -> warn); the lua filter
+-- stamps severity before the body-regex runs, so the stamp wins.
+-- Postgres emits "LOG: ..." for informational chatter -- the pattern
+-- requires a trailing colon so the English word "log" anywhere in a
+-- real error doesn't downgrade it, and LOG: ranks after info so a
+-- "LOG: ... error" record still classifies as error.
 local LEVEL_RULES = {
     { keywords = { "fatal", "panic", "emerg", "crit", "critical" }, text = "fatal" },
     { keywords = { "err", "error" },                                text = "error" },
-    { keywords = { "warn", "warning", "notice" },                   text = "warn"  },
-    { keywords = { "info" },                                        text = "info"  },
+    { keywords = { "warn", "warning" },                             text = "warn"  },
+    { keywords = { "info", "notice" },                              text = "info"  },
     { pattern  = "[^%w]log:",                                       text = "info"  },
     { keywords = { "debug" },                                       text = "debug" },
     { keywords = { "trace" },                                       text = "trace" },
