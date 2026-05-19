@@ -98,13 +98,14 @@ sites:
         dhcp_start:   10.123.0.64
         dhcp_end:     10.123.0.127
         macvlan_blocks:
-          # Migration: mgmt blocks renumber from the old /27 carve-up
-          # in 10.123.1.0/24 to /28 blocks in 10.123.0.128/25. Real
-          # renumber of live macvlan parent interfaces — do it one
-          # host at a time. VIPs stay at .1.224/27 (no DNS downtime).
+          # Migration done in ansible (host_vars/lab.yml, pug.yml,
+          # box.yml, lab-qemu.yml, pug-qemu.yml); apply on prod
+          # one host at a time. VIPs stay at .1.224/27 (no DNS
+          # downtime). Per-host mac0 renumber:
           #   - lab mac0: 10.123.1.1  → 10.123.0.128
           #   - pug mac0: 10.123.1.33 → 10.123.0.144
-          #   - box mac0: 10.123.1.65 → 10.123.0.160
+          #   - box mac0: 10.123.1.65 → 10.123.0.160 (test fixture
+          #     box uses 10.0.2.224/28 in its own home_subnet)
           #   - pom mac0: new at        10.123.0.176
           lab: 10.123.0.128/28
           pug: 10.123.0.144/28

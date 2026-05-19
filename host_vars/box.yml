@@ -63,8 +63,7 @@ home_subnet: 10.0.2.0/24
 macvlan_blocks:
   - name: mac0
     parent: "{{ ansible_facts.interfaces | select('match', '^en') | sort | first }}"
-    block: "{{ home_subnet | ansible.utils.ipsubnet(27, 7) }}"
-    host_ip: "{{ home_subnet | ansible.utils.ipsubnet(27, 7) | ansible.utils.ipmath(1) }}"   # legacy +1 convention
+    block: "{{ home_subnet | ansible.utils.ipsubnet(28, 14) }}"   # /28 (16 IPs); host_ip defaults to block + 0
 macvlan_enable_podman: true
 
 # macos_vm test fixture: matches the symlink _setup.yml fabricates over
