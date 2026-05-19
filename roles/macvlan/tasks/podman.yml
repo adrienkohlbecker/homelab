@@ -1,31 +1,59 @@
-# Optional: create a podman macvlan network so containers can also be
-# peers on the LAN.
+# Create a podman macvlan network attached to a VLAN-tagged parent
+# interface, so containers can be peers on the LAN.
 #
-# Subnet carving:
-#   macvlan_subnet                       (e.g. 10.123.1.0/27, .0-.31)
-#     ├── lower /28 (.0-.15)             host (mac0 at .1) + libvirt VMs
-#     └── upper /28 (.16-.31)            podman containers (this ip_range)
-#
-# podman_network has no aux_addresses equivalent and ip_range must be a
-# single aligned CIDR, so we hand podman the upper half and keep the
-# host + VMs in the lower half. Costs 50% of macvlan_subnet's IP space;
-# size macvlan_subnet to 2x the desired container count.
-#
-# Imported on demand:
+# Called via:
 #   - import_role:
 #       name: macvlan
 #       tasks_from: podman
+#     vars:
+#       macvlan_args:
+#         name: <network-name>       # required, podman network name (and
+#                                    #  also macvlan id, must be unique
+#                                    #  across consumers on this host)
+#         parent: <iface>            # required, parent interface
+#                                    #  (e.g. eth0 for mgmt VLAN, or a
+#                                    #  netplan-named vlan subif like
+#                                    #  `iot` for VLAN 4)
+#         parent_subnet: <cidr>      # required, the parent VLAN's routed
+#                                    #  subnet (announces gateway scope)
+#         parent_gateway: <ip>       # required, the gateway on that VLAN
+#         ip_range: <cidr>           # required, netavark's allocation
+#                                    #  pool — must be inside parent_subnet
+#                                    #  and disjoint from any other ip_range
+#                                    #  on the same parent. Treat as a flat
+#                                    #  allocation range, not a routed
+#                                    #  subnet — every IP in the cidr is a
+#                                    #  usable container slot.
+#
+# The dict form prevents inter-call vars-leak at play-vars scope: each
+# import_role pass replaces the whole `macvlan_args` value, so a previous
+# caller's parent/ip_range can't bleed into the next caller.
 
-- name: podman | Create the macvlan podman network
-  when: not ansible_check_mode and macvlan_enable_podman
+- name: podman | Validate macvlan_args
+  assert:
+    that:
+      - macvlan_args.name is string and macvlan_args.name | length > 0
+      - macvlan_args.parent is string and macvlan_args.parent | length > 0
+      - (macvlan_args.parent_subnet | ansible.utils.ipaddr) | bool
+      - (macvlan_args.parent_gateway | ansible.utils.ipaddr) | bool
+      - (macvlan_args.ip_range | ansible.utils.ipaddr) | bool
+      - macvlan_args.ip_range == (macvlan_args.ip_range | ansible.utils.ipaddr(macvlan_args.parent_subnet))
+    fail_msg: >-
+      macvlan_args invalid or ip_range '{{ macvlan_args.ip_range }}'
+      is outside parent_subnet '{{ macvlan_args.parent_subnet }}'
+  tags:
+    - macvlan
+
+- name: podman | Create the {{ macvlan_args.name }} podman network
+  when: not ansible_check_mode
   containers.podman.podman_network:
-    name: macvlan_net
+    name: "{{ macvlan_args.name }}"
     driver: macvlan
-    subnet: "{{ macvlan_parent_subnet }}"
-    gateway: "{{ macvlan_parent_gateway }}"
-    ip_range: "{{ macvlan_subnet | ansible.utils.ipsubnet(macvlan_subnet | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
+    subnet: "{{ macvlan_args.parent_subnet }}"
+    gateway: "{{ macvlan_args.parent_gateway }}"
+    ip_range: "{{ macvlan_args.ip_range }}"
     opt:
-      parent: "{{ macvlan_parent }}"
+      parent: "{{ macvlan_args.parent }}"
   become: true
   tags:
     - macvlan

@@ -1,46 +1,43 @@
-- name: Create internal podman network
-  # macvlan onto lab's IoT VLAN (netplan-named `iot`, vlan id 4 on nic0)
-  # so HA has an L2 presence there for mDNS/SSDP discovery of Sonos /
-  # HomeKit / Zigbee-bridge targets, AND so HA can talk directly to
-  # IoT devices on the /24 (Philips airpurifier CoAP, etc.).
-  #
-  # Subnet is the full iot /24 with the real site router (10.123.4.1)
-  # as gateway. `ip_range: .136/29` is netavark's allocation pool —
-  # the upper /29 of lab's IoT macvlan_block 10.123.4.128/28 (see
-  # notes/network_topology.yml). All 8 IPs in .136-.143 are usable
-  # container slots; the /29 is a flat allocation range, not a
-  # routed subnet, so there is no network/broadcast/gateway slot to
-  # reserve inside it. The real gateway is 10.123.4.1 at the /24
-  # level. HA is the only container on this network today and gets
-  # whatever netavark allocates first (no pin in vars/main.yml);
-  # future macvlan'd containers on the IoT VLAN can claim other slots
-  # in the same range.
-  #
-  # Earlier shapes:
-  #   - .100/30 standalone -- overlapped lab's own iot address .102,
-  #     causing duplicate-MAC martians.
-  #   - .96/30 standalone (no gateway, no ip_range) -- HA could only
-  #     reach .96-.99 directly; everything else fell through a
-  #     synthetic .97 gateway with no router behind it, so all
-  #     10.123.4.0/24 traffic silently fell back to the mosquitto
-  #     bridge + NAT, defeating the macvlan's purpose for IoT devices.
-  #   - .96/30 with gateway -- worked, but landed in the static_fixed
-  #     /27 before that range was re-purposed for host primaries;
-  #     moved up into lab's macvlan_block when the per-VLAN /28 layout
-  #     adoption renumbered fixed devices upward.
-  #   - .136/30 — interim move into lab's IoT macvlan_block; widened
-  #     to /29 once we stopped treating ip_range as a subnet with
-  #     network/broadcast semantics.
-  containers.podman.podman_network:
-    name: iot_macvlan
-    subnet: 10.123.4.0/24
-    gateway: 10.123.4.1
-    ip_range: 10.123.4.136/29
-    driver: macvlan
-    opt:
+# macvlan onto lab's IoT VLAN (netplan-named `iot`, vlan id 4 on
+# nic0) so HA has an L2 presence there for mDNS/SSDP discovery of
+# Sonos / HomeKit / Zigbee-bridge targets, AND so HA can talk
+# directly to IoT devices on the /24 (Philips airpurifier CoAP,
+# etc.).
+#
+# ip_range .136/29 is the upper /29 of lab's IoT macvlan_block
+# (10.123.4.128/28, see notes/network_topology.yml). All 8 IPs in
+# .136-.143 are usable container slots; the /29 is a flat
+# allocation pool, not a routed subnet. HA is the only container
+# on this network today and gets whatever netavark allocates first
+# (no pin in vars/main.yml); future macvlan'd containers on the
+# IoT VLAN can claim other slots in the same range.
+#
+# Earlier ip_range shapes:
+#   - .100/30 standalone — overlapped lab's own iot address .102,
+#     causing duplicate-MAC martians.
+#   - .96/30 standalone (no gateway, no ip_range) — HA could only
+#     reach .96-.99 directly; everything else fell through a
+#     synthetic .97 gateway with no router behind it, so all
+#     10.123.4.0/24 traffic silently fell back to the mosquitto
+#     bridge + NAT, defeating the macvlan's purpose for IoT devices.
+#   - .96/30 with gateway — worked, but landed in the static_fixed
+#     /27 before that range was re-purposed for host primaries;
+#     moved up into lab's macvlan_block when the per-VLAN /28 layout
+#     adoption renumbered fixed devices upward.
+#   - .136/30 — interim move into lab's IoT macvlan_block; widened
+#     to /29 once we stopped treating ip_range as a subnet with
+#     network/broadcast semantics.
+- name: Create iot_macvlan network
+  import_role:
+    name: macvlan
+    tasks_from: podman
+  vars:
+    macvlan_args:
+      name: iot_macvlan
       parent: iot
-  become: true
-  when: not ansible_check_mode
+      parent_subnet: 10.123.4.0/24
+      parent_gateway: 10.123.4.1
+      ip_range: 10.123.4.136/29
   tags:
     - homeassistant
 
