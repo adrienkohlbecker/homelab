@@ -9,3 +9,31 @@
   import_role:
     name: podman
     tasks_from: install
+
+# wg0_flowtable.service has `ConditionPathExists=/sys/class/net/wg0`
+# so the unit silently no-ops when wg0 is absent (typical on a fresh
+# install where wireguard hasn't run). The ansible service module
+# can't tell condition-skipped apart from inactive and tries to
+# (re)start the unit on every run -- idempotence drift. Stand up
+# wg0 in the same shape _verify_rig later expects: a veth pair
+# where the peer (veth_ext) lives in the extns netns. _verify_rig's
+# bring-up task is "if not exist, create veth pair, move peer to
+# extns" -- finding wg0 already in the expected shape lets it
+# skip creation and just idempotently re-apply addresses/routes.
+- name: _setup | Create wg0 veth + extns netns (shape _verify_rig expects)
+  shell: |
+    set -euo pipefail
+    ip netns add extns 2>/dev/null || [ -e /var/run/netns/extns ]
+    if ip link show wg0 >/dev/null 2>&1; then
+      echo "exists"
+    else
+      ip link add wg0 type veth peer name veth_ext
+      ip link set veth_ext netns extns
+      ip link set wg0 up
+      echo "created"
+    fi
+  args:
+    executable: /bin/bash
+  register: wg0_setup
+  changed_when: '"created" in wg0_setup.stdout'
+  become: true
