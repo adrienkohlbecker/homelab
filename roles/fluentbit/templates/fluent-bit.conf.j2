@@ -173,6 +173,37 @@
     Exclude           MESSAGE Failed to get interface "(veth|podman)
     Exclude           MESSAGE Unknown index .* seen, reloading interface list
     Exclude           MESSAGE which is not our child
+    # auditd SERVICE_START / SERVICE_STOP for podman healthcheck transient
+    # .service units (sha256 unit names cycling continuously). ~110k/day
+    # on lab. `journalctl _COMM=audit` remains the source of truth.
+    Exclude           MESSAGE ^SERVICE_(START|STOP) pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=[a-f0-9]{64}
+
+# Per-service scoped excludes. Logical_Op=and means the record is dropped
+# only when *all* Exclude rules match -- i.e. the message pattern AND the
+# originating systemd unit. Without the SYSTEMD_UNIT gate, the message
+# pattern could match unrelated services that happen to log a similar
+# line.
+#
+# speedtest container's apache HEAD / healthcheck (~3k/day on lab):
+# internal podman healthcheck hits `/` every 30s, apache logs the access
+# at stdout=PRIORITY=6.
+[FILTER]
+    Name              grep
+    Match             svc.*
+    Logical_Op        and
+    Exclude           SYSTEMD_UNIT ^speedtest\.service$
+    Exclude           MESSAGE "HEAD / HTTP/1\.1" 200 [0-9]+ "-" "curl/
+
+# profilarr task-system + git-status info chatter (~2k/day on lab): the
+# image has no log-level env, the lines fire every ~60s as the task
+# scheduler sweeps. The three patterns cover Repository Sync,
+# remote-status updates, and "0 incoming changes" no-op runs.
+[FILTER]
+    Name              grep
+    Match             svc.*
+    Logical_Op        and
+    Exclude           SYSTEMD_UNIT ^profilarr\.service$
+    Exclude           MESSAGE (Task Repository Sync \(ID: 1\) status changed to:|Updating remote status for branch:|Processing 0 incoming changes)
 
 # homepage_alerts (roles/homepage/files/alerts_generate.py) polls
 # /api/v1/alarms?active + /api/v1/alarm_log every 30s on each host to
