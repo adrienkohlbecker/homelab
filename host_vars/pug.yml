@@ -21,7 +21,6 @@ macvlan_blocks:
     parent: eth0
     block: 10.123.0.144/28   # mgmt VLAN's macvlan_block (slot 1). host_ip
                              # defaults to block + 0 = 10.123.0.144.
-macvlan_enable_podman: false
 
 swap_partition:
   device: /dev/disk/by-uuid/00b9e215-aaea-459d-a535-40d47007095b

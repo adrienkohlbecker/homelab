@@ -36,8 +36,8 @@
     - zfs_autobackup
     - zfs_mount
     - swap
-    - macvlan
     - podman
+    - macvlan
     - avahi
     - samba
     - certbot

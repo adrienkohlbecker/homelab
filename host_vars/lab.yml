@@ -35,13 +35,16 @@ macvlan_blocks:
     parent: eth0
     block: 10.123.0.128/28   # mgmt VLAN's macvlan_block (slot 0). host_ip
                              # defaults to block + 0 = 10.123.0.128.
+                             # No podman_network: nothing on lab attaches
+                             # containers via mgmt-VLAN macvlan today.
   - name: mac_iot
     parent: iot              # netplan-named eth0.4 subif (see vlans.iot below)
     block: 10.123.4.128/28   # IoT VLAN's macvlan_block (slot 0). host_ip
-                             # defaults to block + 0 = 10.123.4.128. Sits
-                             # peer-to-peer with homeassistant's macvlan
-                             # container at 10.123.4.136/29.
-macvlan_enable_podman: false
+                             # defaults to block + 0 = 10.123.4.128. The
+                             # podman network (also named mac_iot) takes
+                             # the upper /29 (.136/29 = 8 container slots);
+                             # homeassistant attaches via --network=mac_iot.
+    podman_network: true
 
 netplan:
   ethernets:

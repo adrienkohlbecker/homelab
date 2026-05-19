@@ -1,48 +1,16 @@
-# Podman macvlan network on lab's IoT VLAN (netplan-named `iot`,
-# vlan id 4 on nic0) so HA has an L2 presence there for mDNS/SSDP
-# discovery of Sonos / HomeKit / Zigbee-bridge targets, AND so HA
-# can talk directly to IoT devices on the /24 (Philips airpurifier
-# CoAP, etc.).
+# Precondition: the host must have a `mac_iot` macvlan_block in
+# host_vars with `podman_network: true` (lab has both). The macvlan
+# role provisions the iface + the podman network named `mac_iot` on
+# the IoT VLAN; HA attaches via --network=mac_iot (see
+# homeassistant_networks in vars/main.yml).
 #
-# Everything except the network name is derived from the host's
-# `mac_iot` entry in `macvlan_blocks` (host_vars). Precondition: any
-# host running homeassistant must have a `mac_iot` block defined.
-# The podman network attaches to the same parent as the host's
-# mac_iot child iface, and its ip_range is the upper /29 of the
-# block (lower /29 = mac_iot iface + libvirt VMs; upper /29 =
-# podman containers). HA picks whatever IP netavark allocates first
-# from the /29 (no pin in vars/main.yml).
-#
-# Earlier ip_range shapes:
-#   - .100/30 standalone — overlapped lab's own iot address .102,
-#     causing duplicate-MAC martians.
-#   - .96/30 standalone (no gateway, no ip_range) — HA could only
-#     reach .96-.99 directly; everything else fell through a
-#     synthetic .97 gateway with no router behind it, so all
-#     10.123.4.0/24 traffic silently fell back to the mosquitto
-#     bridge + NAT, defeating the macvlan's purpose for IoT devices.
-#   - .96/30 with gateway — worked, but landed in the static_fixed
-#     /27 before that range was re-purposed for host primaries;
-#     moved up into lab's macvlan_block when the per-VLAN /28 layout
-#     adoption renumbered fixed devices upward.
-#   - .136/30 — interim move into lab's IoT macvlan_block; widened
-#     to /29 once we stopped treating ip_range as a subnet with
-#     network/broadcast semantics.
-- name: Create mac_iot podman network
-  import_role:
-    name: macvlan
-    tasks_from: podman
-  vars:
-    _iot_block: "{{ macvlan_blocks | selectattr('name', 'equalto', 'mac_iot') | first }}"
-    macvlan_args:
-      name: mac_iot
-      parent: "{{ _iot_block.parent }}"
-      parent_subnet: "{{ ansible_facts[_iot_block.parent].ipv4.network }}/{{ ansible_facts[_iot_block.parent].ipv4.prefix }}"
-      parent_gateway: "{{ ansible_facts[_iot_block.parent].ipv4.network | ansible.utils.ipmath(1) }}"
-      # Upper /29 of the host's IoT /28 block
-      ip_range: "{{ _iot_block.block | ansible.utils.ipsubnet(_iot_block.block | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
-  tags:
-    - homeassistant
+# The podman network gives HA an L2 presence on the IoT VLAN
+# (netplan-named `iot`, vlan id 4 on nic0) so it can do mDNS/SSDP
+# discovery of Sonos / HomeKit / Zigbee-bridge targets and talk
+# directly to IoT devices on the /24 (Philips airpurifier CoAP,
+# etc.). ip_range is the upper /29 of lab's IoT block (.136/29 — 8
+# container slots, lower /29 = mac_iot iface + libvirt VMs); HA gets
+# whatever netavark allocates first.
 
 # Join the mosquitto-owned network so home-assistant can resolve `mosquitto`
 # via aardvark-dns. See paperless/tasks/main.yml for the rationale.
