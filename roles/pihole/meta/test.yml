@@ -1,0 +1,5 @@
+# Route pihole's test cell to box_deps (box with podman, nginx, and the
+# noble backports pre-applied). pihole's _setup.yml imports podman/install
+# + _test/nginx, both of which were short-circuiting at ~140s of apt work
+# on every run; with box_deps they idempotent-skip in ~2s.
+machine: box_deps
