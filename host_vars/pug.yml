@@ -19,8 +19,8 @@ sensor_modules:
 macvlan_blocks:
   - name: mac0
     parent: eth0
-    block: 10.123.1.32/27
-    host_ip: 10.123.1.33   # legacy +1 convention; will migrate to slot 0
+    block: 10.123.0.144/28   # mgmt VLAN's macvlan_block (slot 1). host_ip
+                             # defaults to block + 0 = 10.123.0.144.
 macvlan_enable_podman: false
 
 swap_partition:
