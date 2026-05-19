@@ -1,3 +1,39 @@
+# macvlan role: per-host macvlan iface (mac0-style) setup.
+#
+# Driven by host_vars `macvlan_blocks` — a list of macvlan_args dicts,
+# one per VLAN-tagged parent the host needs an L2 presence on. Each
+# entry brings up a macvlan child interface (mac0, mac0_iot, …) at a
+# specified IP, on a specified parent NIC.
+#
+# Entry schema (see tasks/install.yml for validation):
+#   name        required; iface name. Also drives the systemd unit
+#               filename ({{name}}.service) and the default MAC seed.
+#               Use `mac0` for the host's mgmt-VLAN presence (legacy
+#               name preserved for backward compat); use
+#               `mac0_<vlan>` for additional VLANs.
+#   parent      required; parent iface (e.g. `eth0` for mgmt VLAN,
+#               `iot` for a VLAN-tagged subif).
+#   block       required; this host's allocation block (CIDR) within
+#               the parent VLAN's routed subnet. The iface gets a
+#               /32 IP within the block, plus a route to the whole
+#               block via the iface.
+#   host_ip     optional; IP for the iface. Defaults to
+#               `block | ansible.utils.ipmath(0)` (slot 0 of the
+#               block). Override for legacy +1 placements or any
+#               other custom slot.
+#   mac_address optional; MAC for the iface. Defaults to a stable
+#               random MAC seeded by `inventory_hostname` for the
+#               `mac0` block (backward compat with the legacy
+#               single-block role) or `inventory_hostname_<name>`
+#               for any other block.
+#
+# Hosts that don't trunk any macvlan-bearing VLANs leave
+# macvlan_blocks undefined or empty; the role no-ops cleanly.
+#
+# Podman macvlan networks attached to the same parents are created
+# separately via tasks/podman.yml (one import_role per network);
+# this file only handles the host-side iface.
+
 - name: Install iproute2
   apt:
     pkg:
@@ -7,81 +43,11 @@
   tags:
     - macvlan
 
-# Tighten ARP rules on the parent NIC to avoid the macvlan ARP-flux
-# flap: with the defaults (arp_ignore=0, arp_announce=0) both eth0
-# and mac0 can reply to ARP requests for any IP in the shared
-# broadcast domain (mac0's /32 lives inside eth0's /23), so the LAN
-# router sees the host's IP bouncing between the two MACs and flags
-# a duplicate. arp_ignore=1 makes each interface reply only for IPs
-# configured on it; arp_announce=2 keeps source-IP selection sane.
-# The matching mac0 sysctls live in mac0.service since the interface
-# only exists after `ip link add`.
-- name: Set ARP rules on macvlan parent
-  ansible.posix.sysctl:
-    name: "net.ipv4.conf.{{ macvlan_parent }}.{{ item.key }}"
-    value: "{{ item.value }}"
-  loop:
-    - { key: arp_ignore, value: '1' }
-    - { key: arp_announce, value: '2' }
+- name: Set up macvlan blocks
+  include_tasks: install.yml
+  loop: "{{ macvlan_blocks | default([]) }}"
   loop_control:
-    label: "{{ item.key }}"
-  become: true
-  tags:
-    - macvlan
-
-- name: Check macvlan_subnet is valid
-  assert:
-    that: macvlan_subnet == macvlan_subnet | ansible.utils.ipaddr('net')
-    fail_msg: "macvlan_subnet '{{ macvlan_subnet }}' is not in a valid range or has the wrong format (network/prefixlength)"
-    success_msg: "macvlan_subnet is valid"
-  tags:
-    - macvlan
-
-- name: Check macvlan_subnet is in parent subnet
-  assert:
-    that: macvlan_subnet == macvlan_subnet | ansible.utils.ipaddr(macvlan_parent_subnet)
-    fail_msg: "macvlan_subnet '{{ macvlan_subnet }}' is not within parent subnet '{{ macvlan_parent_subnet }}'"
-    success_msg: "macvlan_subnet is within parent_subnet"
-  tags:
-    - macvlan
-
-- name: Check macvlan_host_ip is in parent subnet
-  assert:
-    that: macvlan_host_ip == macvlan_host_ip | ansible.utils.ipaddr(macvlan_parent_subnet)
-    fail_msg: "macvlan_host_ip '{{ macvlan_host_ip }}' is not within parent subnet '{{ macvlan_parent_subnet }}'"
-    success_msg: "macvlan_host_ip is within parent_subnet"
-  tags:
-    - macvlan
-
-- name: Check macvlan_host_ip is the first IP of macvlan_subnet
-  # Convention enforced by group_vars/all.yml:
-  #   macvlan_host_ip: "{{ macvlan_subnet | ansible.utils.ipmath(1) }}"
-  # tasks/podman.yml relies on this to ensure the IP is not in it's subnet range
-  assert:
-    that: macvlan_host_ip == (macvlan_subnet | ansible.utils.ipmath(1))
-    fail_msg: "macvlan_host_ip '{{ macvlan_host_ip }}' must be the first IP of macvlan_subnet '{{ macvlan_subnet }}' (expected '{{ macvlan_subnet | ansible.utils.ipmath(1) }}')"
-    success_msg: "macvlan_host_ip is the first IP of macvlan_subnet"
-  tags:
-    - macvlan
-
-- name: Install mac0 service
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: mac0.service.j2
-  tags:
-    - macvlan
-
-- name: Enable mac0 service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: mac0
-      condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
-      restart: "{{ systemd_unit.changed }}"
+    loop_var: macvlan_args
+    label: "{{ macvlan_args.name }}"
   tags:
     - macvlan

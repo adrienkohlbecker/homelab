@@ -92,7 +92,7 @@ table inet homelab {
         elements = {
             $WAN_IFACE . $HOME_LAN comment "home LAN via WAN iface",
             "wg0" . $WG_SUBNET comment "wireguard peer via wg0",
-{% if macvlan_subnet is defined %}
+{% if (macvlan_blocks | default([])) | selectattr('name', 'equalto', 'mac0') | list %}
             "mac0" . $HOME_LAN comment "home LAN via macvlan child",
 {% endif %}
         }

@@ -16,9 +16,12 @@ sensor_modules:
   - coretemp
   - nct6775
 
+macvlan_blocks:
+  - name: mac0
+    parent: eth0
+    block: 10.123.1.32/27
+    host_ip: 10.123.1.33   # legacy +1 convention; will migrate to slot 0
 macvlan_enable_podman: false
-macvlan_parent: eth0
-macvlan_subnet: 10.123.1.32/27
 
 swap_partition:
   device: /dev/disk/by-uuid/00b9e215-aaea-459d-a535-40d47007095b
