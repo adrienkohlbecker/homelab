@@ -8,7 +8,7 @@ to `test/out/<machine>.<ubuntu>.<role>.output.ansi` and, when invoked with
 --no-keep-logs (as testall does), drops its output/boot/journal logs on a
 clean pass; failed runs leave them in place under that predictable path. A
 concise job log is written to `test/out.tsv`. Partial reruns (--retry-failed,
---include-role, --exclude-role) merge with the prior log so untouched triples
+--only-role, --except-role) merge with the prior log so untouched triples
 survive; an unfiltered run replaces the log outright.
 """
 
@@ -137,7 +137,7 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--include-role",
+        "--only-role",
         type=str,
         default="",
         metavar="X",
@@ -145,11 +145,11 @@ def parse_args() -> argparse.Namespace:
     )
 
     parser.add_argument(
-        "--exclude-role",
+        "--except-role",
         type=str,
         default="",
         metavar="X",
-        help="Comma-separated list of roles to skip; merges into out.tsv. Composes with --include-role (subset, then exclude).",
+        help="Comma-separated list of roles to skip; merges into out.tsv. Composes with --only-role (subset, then exclude).",
     )
 
     parser.add_argument(
@@ -173,7 +173,7 @@ def setup_output_dir(machine_roles: list[MachineRole]) -> None:
 
     Only wipes files for triples about to be rerun -- prior failure logs for
     triples outside the plan stay on disk so a partial rerun (--retry-failed,
-    --include-role, --exclude-role) doesn't destroy logs the operator may still
+    --only-role, --except-role) doesn't destroy logs the operator may still
     want to inspect.
     """
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -520,18 +520,18 @@ def main() -> int:
             return 1
         machine_roles = [MachineRole(machine, ubuntu_name, role) for role in roles for ubuntu_name in ubuntus for machine in machines]
 
-    if args.include_role:
-        wanted = {r.strip() for r in args.include_role.split(",") if r.strip()}
+    if args.only_role:
+        wanted = {r.strip() for r in args.only_role.split(",") if r.strip()}
         machine_roles = [mr for mr in machine_roles if mr.role in wanted]
         if not machine_roles:
-            print("No roles match --include-role", file=sys.stderr)
+            print("No roles match --only-role", file=sys.stderr)
             return 0
 
-    if args.exclude_role:
-        unwanted = {r.strip() for r in args.exclude_role.split(",") if r.strip()}
+    if args.except_role:
+        unwanted = {r.strip() for r in args.except_role.split(",") if r.strip()}
         machine_roles = [mr for mr in machine_roles if mr.role not in unwanted]
         if not machine_roles:
-            print("All roles excluded by --exclude-role", file=sys.stderr)
+            print("All roles excluded by --except-role", file=sys.stderr)
             return 0
 
     if args.list:
@@ -549,7 +549,7 @@ def main() -> int:
     # Only partial reruns merge with the prior log; an unfiltered run replaces
     # out.tsv outright so stale triples (deleted roles, old machine/ubuntu
     # scopes) don't linger forever.
-    is_partial_rerun = bool(args.retry_failed or args.include_role or args.exclude_role)
+    is_partial_rerun = bool(args.retry_failed or args.only_role or args.except_role)
     prior_results = _read_prior_results() if is_partial_rerun else {}
 
     test_start = time.time()
