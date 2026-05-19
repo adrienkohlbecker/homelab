@@ -119,19 +119,20 @@ SyslogIdentifier=%N
 #   -v /opt/actions-runner/externals:/__e:ro for a workflow container,
 #   docker (resolving the source on the host via the bind-mounted
 #   socket) finds real files instead of EACCES on a missing path.
-#   :O (overlay) -- writes from inside the runner container go to a
-#   transient container-side upper layer; the host's /opt/actions-runner
-#   stays pristine and is discarded on container exit (man podman-run:
-#   "Modifications to the mount point are destroyed when the container
-#   is unmounted"). Each container start gets a clean overlay, so a
-#   malicious workflow that tampers with run.sh / bin/Runner.Listener /
-#   etc. can't persist that tampering to the next container or to
-#   sibling DooD containers (which mount /opt/actions-runner/externals
-#   from the host directly, not via this overlay). The runner's own
-#   runtime writes -- .runner, .credentials, run-helper.sh, _diag/ --
-#   land in the overlay's upper and disappear cleanly when the
-#   ephemeral runner exits; the same content is captured in journald
-#   via --log-driver=journald anyway.
+#   :rw (not :O) -- the in-container runner writes .runner /
+#   .credentials / _diag/ / run-helper.sh to /opt/actions-runner at
+#   runtime, and a malicious workflow could in principle persist
+#   tampering to the next container by editing run.sh / bin/Runner.*.
+#   The cleaner :O (overlay) flag would discard in-container writes on
+#   exit -- and we tried it -- but it's fundamentally incompatible with
+#   the +0 uidmap demotion: :O's bind-mount source lives under
+#   /var/lib/containers/storage/overlay-containers/<cid>/userdata/
+#   which podman creates at 0700 root-only, and crun's source-path
+#   lookup runs as the in-userns root (= host github_runner via the
+#   +0 override), hitting EACCES on traversal. Accepted in homelab CI;
+#   the actions/runner tarball sha256 in vars/main.yml + a tamper-
+#   detection follow-up in CLAUDE.md "Someday" is the path to better
+#   coverage without the userns-vs-overlay clash.
 # --volume /mnt/.../workdir_%i: path-mirrored at the same path on
 #   both sides for the same DooD-bind-mount reason. actions/runner's
 #   _work tree lives here, plus _temp/_actions/_tool subdirs that
@@ -255,7 +256,7 @@ ExecStart=/usr/bin/podman run \
   --gidmap=0:0:65536 \
   --gidmap=+0:{{ github_runner_user.group }}:1 \
   --volume %t/user/{{ github_runner_user.uid }}/podman/podman.sock:/var/run/docker.sock \
-  --volume /opt/actions-runner:/opt/actions-runner:O \
+  --volume /opt/actions-runner:/opt/actions-runner:rw \
   --volume /mnt/scratch/github_runner/workdir_%i:/mnt/scratch/github_runner/workdir_%i:rw \
   --env CONTAINER_HOST=unix:///var/run/docker.sock \
   --env DOCKER_HOST=unix:///var/run/docker.sock \
