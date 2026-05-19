@@ -255,6 +255,12 @@ github_runner_pat: changeme
 # any future test host.
 authelia_cookie_domain: "{{ inventory_hostname }}.{{ domain }}"
 
+# Each test host runs its own Authelia (real role on `authelia` testrole,
+# the stub on every other testrole that needs the listener), so the
+# authelia_host is the host itself. Net effect: authelia_internal_url
+# resolves to 127.0.0.1 on the test fixture, no cross-host hop.
+authelia_host: "{{ inventory_hostname }}"
+
 # Test-fixture secrets. Stubs are 64+ chars to satisfy Authelia's
 # session/secret minimums; SMTP password is just a placeholder
 # because the test fixture flips disable_startup_check=true.

@@ -800,6 +800,11 @@ github_runner_pat: !vault |
 # box.yml overrides authelia_cookie_domain to box.mhaf.fr.
 authelia_cookie_domain: "{{ domain }}"
 
+# Hosts other than authelia_host route forward-auth subrequests to
+# this host's wireguard IP (see authelia_internal_url in
+# group_vars/all.yml). One Authelia per prod cluster -- lab today.
+authelia_host: lab
+
 # Secrets are 64+ charts. Generate one with:
 #
 #   podman run --rm -it authelia/authelia:4.39.19 \

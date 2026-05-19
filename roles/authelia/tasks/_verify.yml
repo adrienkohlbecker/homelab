@@ -67,6 +67,13 @@
     status_code: 401
   become: true
 
+# Cross-host network plumbing (pug/bunk -> authelia_host's WG IP) is
+# exercised in multi-host nightlies, not testrole.py: on a single VM
+# the wg0 IP routes via loopback anyway, so the request never hits
+# the wg0 ingress firewall rule that gates cross-host access. The
+# loopback probe + auth-request probe above already cover the
+# Authelia-specific bits (listener up, gate semantics correct).
+#
 # PR6 will add an OIDC discovery probe once the identity provider
 # block is restored in configuration.yml.j2. For PR1 (standup) the
 # OIDC provider is intentionally off -- forward-auth (PR2-5) doesn't

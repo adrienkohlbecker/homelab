@@ -65,6 +65,9 @@ table inet homelab {
     counter input_nut_podman {}
     counter input_loopback {}
     counter input_icmp_accept {}
+{% if inventory_hostname == authelia_host %}
+    counter input_authelia_wg {}
+{% endif %}
 
     # Admin services (samba/nut/mosh/NetBIOS) require an (iif, saddr)
     # *intersection*, not union: home-LAN saddrs must arrive on the WAN
@@ -186,6 +189,20 @@ table inet homelab {
         # Samba and nut are admin services scoped via the set.
         tcp dport { 22, 80, 443 } counter name "input_unscoped_tcp" accept comment "SSH/HTTP/HTTPS"
         iifname . ip saddr @lan_admin_pairs tcp dport { 445, {{ service_ports.nut }} } counter name "input_admin_tcp" accept comment "Samba/nut (admin)"
+
+{% if inventory_hostname == authelia_host %}
+        # Authelia forward-auth ingress from wireguard peers. Lab's own
+        # nginx hits Authelia via loopback (covered by `iifname "lo"`
+        # earlier); WG peers (pug, bunk if it ever gets protected sites)
+        # route forward-auth subrequests to authelia_host's WG IP -- see
+        # authelia_internal_url in group_vars/all.yml. The container is
+        # published on 0.0.0.0 (single publish on
+        # roles/authelia/templates/authelia.service.j2), so this rule
+        # is the access-control boundary: tight scope (wg0 + WG_SUBNET)
+        # keeps LAN devices out of an endpoint they have no business
+        # hitting.
+        iifname "wg0" ip saddr $WG_SUBNET tcp dport {{ service_ports.authelia }} counter name "input_authelia_wg" accept comment "Authelia forward-auth (wireguard peers)"
+{% endif %}
 
         # NetBIOS for nmbd (137 = name service, 138 = datagram). Same
         # admin scope as Samba — these are the legacy SMB browsing
