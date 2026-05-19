@@ -9,6 +9,18 @@
   hosts: all
   become: true
   tasks:
+    # On jammy the HWE meta pulls noble's 6.8 kernel + matching modules,
+    # which fixes the ext4 + fuse-overlayfs native-overlay-diff fallback
+    # that breaks the +0:N:1 fake-root uidmap pattern (lchown EIO on
+    # /dev/console copy-up). Noble+ ships a 6.x GA already, so the
+    # linux-generic-hwe-24.04 etc. metas don't exist and `when:` keeps
+    # apt from failing on them. The role also creates an empty `power`
+    # group to silence thermald's dbus policy warnings.
+    - name: Install HWE kernel (jammy only)
+      import_role:
+        name: hwe_kernel
+      when: ansible_distribution_release == "jammy"
+
     - name: Install podman + noble-backported runtime
       import_role:
         name: podman
