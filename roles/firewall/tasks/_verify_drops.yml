@@ -3,6 +3,21 @@
 # the VRRP iif-scope negative. Each one fires a counter that the
 # assertion block in _verify_counters.yml checks.
 
+# Re-enable conntrack loose mode for the duration of the non-SYN
+# probes. nf_conntrack_tcp_loose=0 (which the role pins via sysctl)
+# makes the kernel classify mid-stream non-SYN as INVALID *before*
+# nftables sees it -- which means the packets hit `ct state invalid
+# drop` and never reach the input_nonsyn / forward_nonsyn counter
+# rules. The nftables rules are intentionally a backstop for the
+# tcp_loose=1 path (and for hosts where the sysctl hasn't applied
+# yet -- first-apply before reboot); flipping loose=1 here exercises
+# exactly that backstop. Test fixture only — no restore needed since
+# the box is torn down after _verify.
+- name: _verify_drops | Re-enable tcp_loose so non-SYN probes reach the nftables rules
+  command: sysctl -w net.netfilter.nf_conntrack_tcp_loose=1
+  changed_when: false
+  become: true
+
 # Crafted-packet probes for non-SYN DROP rules on input and forward.
 # hping3 always exits 0 on send (it doesn't fail just because no reply
 # arrived), so we use nft per-rule counters as the actual assertion:
