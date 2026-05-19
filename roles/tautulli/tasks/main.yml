@@ -106,6 +106,7 @@
       subdomain: tautulli
       proxy_pass: http://localhost:8182/
       csp_default_src: "plex.tv *.plex.tv"
+      auth: required
   tags:
     - tautulli
 
