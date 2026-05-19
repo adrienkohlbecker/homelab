@@ -147,7 +147,7 @@
 #    spawn transient containers that add/remove veth pairs.
 #  - kernel: keepalived gratuitous-ARP martians for the pihole VIP
 #    (10.123.1.224, ~120/day). Macvlan bridge mode delivers the broadcast
-#    to both eth0 and mac0; mac0's /27 doesn't cover .224, so the per-iface
+#    to both eth0 and mac_mgmt; mac_mgmt's /28 doesn't cover .224, so the per-iface
 #    rp_filter check logs it. Loosening rp_filter site-wide is the bigger
 #    hammer (CLAUDE.md "Someday"); meanwhile silence the specific pattern.
 #    The "ll header: 00000000:" hex dump is the kernel's follow-up line.

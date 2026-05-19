@@ -30,7 +30,7 @@ macos_vm_macvtap_parent: eth0           # parent NIC for macvtap "direct" mode
 macos_vm_mac_address: ""                # auto-generated from inventory_hostname+name if empty
 
 # Display & input.
-macos_vm_vnc_listen: "127.0.0.1"        # tunnel via SSH; or set to a macvlan child IP (e.g. mac0's host_ip) to expose on mac0
+macos_vm_vnc_listen: "127.0.0.1"        # tunnel via SSH; or set to a macvlan child IP (e.g. mac_mgmt's host_ip) to expose on mac_mgmt
 macos_vm_vnc_password: ""               # vault, optional
 
 # First-install flow. Set to true while the recovery DMG should be attached;
