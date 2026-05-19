@@ -1,0 +1,5 @@
+# _setup.yml imports hyperdx (which pulls in podman/install) + _test/nginx
+# directly. Both prerequisites are pre-baked in box_deps via
+# packer/seed_deps.yml, saving the same ~140s of backports + podman +
+# nginx install seen on every other consumer.
+machine: box_deps
