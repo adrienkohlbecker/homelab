@@ -29,7 +29,6 @@ external_ips:
   printer: 10.234.2.3
   siglent: 10.234.2.4
   tubeszb: 10.234.4.2
-  otgw: 10.234.4.3
   bunk: 10.234.57.3
   pihole: "{{ pihole_keepalived_ip }}"
 mac_addresses:
@@ -158,7 +157,6 @@ telegram_personal_chat_id: changeme
 telegram_home_chat_id: changeme
 nut_upsmon_password: changeme
 nut_homeassistant_password: changeme
-otgw_admin_password: changeme
 sabnzbd_api_key: changeme
 sabnzbd_smtp_from: changeme@example.com
 sabnzbd_smtp_username: apikey
