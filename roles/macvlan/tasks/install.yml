@@ -1,0 +1,65 @@
+# install.yml — per-block setup of one macvlan iface. Called from
+# main.yml via include_tasks in a loop with loop_var=macvlan_args.
+# See tasks/main.yml for the macvlan_args schema.
+
+- name: install | Validate {{ macvlan_args.name }}
+  assert:
+    that:
+      - macvlan_args.name is string and macvlan_args.name | length > 0
+      - macvlan_args.parent is string and macvlan_args.parent | length > 0
+      - macvlan_args.block is string
+      - (macvlan_args.block | ansible.utils.ipaddr) | bool
+      - macvlan_args.block == (macvlan_args.block | ansible.utils.ipaddr('net'))
+    fail_msg: >-
+      macvlan_args invalid for '{{ macvlan_args.name | default('<no name>') }}':
+      block={{ macvlan_args.block | default('<unset>') }} must be a CIDR (network/prefixlength)
+  tags:
+    - macvlan
+
+# Tighten ARP rules on the parent NIC to avoid the macvlan ARP-flux
+# flap: with the defaults (arp_ignore=0, arp_announce=0) both the
+# parent and the macvlan child can reply to ARP requests for any IP
+# in the shared broadcast domain, so the LAN router sees the host's
+# IP bouncing between MACs and flags a duplicate. arp_ignore=1 makes
+# each interface reply only for IPs configured on it; arp_announce=2
+# keeps source-IP selection sane. The matching child-iface sysctls
+# live in the systemd unit since /proc/sys/net/ipv4/conf/<iface>/
+# doesn't exist until after `ip link add`.
+#
+# Idempotent per-parent: multiple macvlan_blocks sharing a parent
+# (rare in practice) re-set the same sysctl values.
+- name: install | ARP sysctls on {{ macvlan_args.parent }}
+  ansible.posix.sysctl:
+    name: "net.ipv4.conf.{{ macvlan_args.parent }}.{{ item.key }}"
+    value: "{{ item.value }}"
+  loop:
+    - { key: arp_ignore, value: '1' }
+    - { key: arp_announce, value: '2' }
+  loop_control:
+    label: "{{ item.key }}"
+  become: true
+  tags:
+    - macvlan
+
+- name: install | Install {{ macvlan_args.name }} systemd unit
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: macvlan_iface.service.j2
+      dest: "{{ macvlan_args.name }}.service"
+  tags:
+    - macvlan
+
+- name: install | Enable+start {{ macvlan_args.name }}
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: "{{ macvlan_args.name }}"
+      condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
+      restart: "{{ systemd_unit.changed }}"
+  tags:
+    - macvlan
