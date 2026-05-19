@@ -40,18 +40,3 @@ resource "cloudflare_dns_record" "adrienkohlbecker_com" {
   comment  = each.value.comment
   tags     = each.value.tags
 }
-
-# State migration from the previous "<TYPE>/<name>[/<content>]" key shape.
-# Safe to prune once `tofu apply` confirms a no-op plan.
-moved {
-  from = cloudflare_dns_record.adrienkohlbecker_com["CNAME/adrienkohlbecker.com"]
-  to   = cloudflare_dns_record.adrienkohlbecker_com["cname_apex"]
-}
-moved {
-  from = cloudflare_dns_record.adrienkohlbecker_com["CNAME/www.adrienkohlbecker.com"]
-  to   = cloudflare_dns_record.adrienkohlbecker_com["cname_www"]
-}
-moved {
-  from = cloudflare_dns_record.adrienkohlbecker_com["TXT/adrienkohlbecker.com"]
-  to   = cloudflare_dns_record.adrienkohlbecker_com["txt_keybase"]
-}
