@@ -92,4 +92,14 @@ variable "state_passphrase" {
 # resolve-by-name API call per plan.
 locals {
   cloudflare_account_id = "43f1339d1841088669b616cecc6562de"
+
+  # data/network_topology.yml is the canonical IP topology, also
+  # consumed by ansible (group_vars/all/network.yml — same source of
+  # truth, parallel consumer). `network` loads it verbatim;
+  # `test_network` applies the same 10.123 → 10.234 gsub that
+  # group_vars/test.yml uses, so mhaf.fr (test) DNS records can
+  # reference network.* under the test subnet without a parallel
+  # data file. path.module = terraform/, so ../data/ is repo-root.
+  network      = yamldecode(file("${path.module}/../data/network_topology.yml"))
+  test_network = yamldecode(replace(file("${path.module}/../data/network_topology.yml"), "10.123", "10.234"))
 }
