@@ -11,8 +11,6 @@ zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set
   - rpool/ROOT/jammy
 zfs_has_bpool: false
 
-libvirt_default_network: 10.123.49.0/24
-
 sensor_modules:
   - drivetemp
   - coretemp
