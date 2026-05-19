@@ -129,9 +129,21 @@
   tags:
     - podman
 
-- name: Configure macvlan network
+- name: Configure macvlan network (mgmt VLAN)
+  when: macvlan_enable_podman | default(false)
   import_role:
     name: macvlan
     tasks_from: podman
+  vars:
+    macvlan_args:
+      name: macvlan_net
+      parent: "{{ macvlan_parent }}"
+      parent_subnet: "{{ macvlan_parent_subnet }}"
+      parent_gateway: "{{ macvlan_parent_gateway }}"
+      # Upper /28 of the host's /27 mgmt block — historical convention,
+      # split lower /28 (host + libvirt VMs) from upper /28 (podman
+      # containers). Will collapse to upper /29 once the mgmt block
+      # itself migrates from /27 to /28.
+      ip_range: "{{ macvlan_subnet | ansible.utils.ipsubnet(macvlan_subnet | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
   tags:
     - podman
