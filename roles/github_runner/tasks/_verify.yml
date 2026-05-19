@@ -39,11 +39,15 @@
 # github_runner_pat var; consumed by every runner container's
 # entrypoint to mint per-start JIT configs. Under qemu_test the value
 # is a stub; under prod it's the real PAT.
+# The unit is system-scope; podman_secret defaults to user=root and
+# main.yml doesn't override that, so the secret lives in root's
+# podman store, not github_runner's rootless store. Inspect from
+# root accordingly -- a previous `become_user: github_runner` here
+# checked the wrong namespace and always reported missing.
 - name: _verify | github_runner_pat podman secret exists
   command: podman secret inspect github_runner_pat
   changed_when: false
   become: true
-  become_user: github_runner
 
 # Per-instance assertions. Under qemu_test the envfile lands and the
 # unit loads (template + instance syntax check); the container isn't
