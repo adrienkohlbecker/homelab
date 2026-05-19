@@ -5,14 +5,16 @@
   # IoT devices on the /24 (Philips airpurifier CoAP, etc.).
   #
   # Subnet is the full iot /24 with the real site router (10.123.4.1)
-  # as gateway, so devices outside .96/30 are on-link via this iface.
-  # `ip_range: .96/30` constrains netavark's allocation pool to .96-.99
-  # so HA's container IP stays in a known small slice and can't
-  # collide with DHCP'd devices elsewhere in the /24. HA gets .98
-  # (pinned explicitly in the unit template; .97 is netavark's synth
-  # gateway slot within the range, .96/.99 are network/broadcast
-  # within the /30 logically -- but at the /24 level the real gateway
-  # is .1).
+  # as gateway. `ip_range: .136/29` is netavark's allocation pool —
+  # the upper /29 of lab's IoT macvlan_block 10.123.4.128/28 (see
+  # notes/network_topology.yml). All 8 IPs in .136-.143 are usable
+  # container slots; the /29 is a flat allocation range, not a
+  # routed subnet, so there is no network/broadcast/gateway slot to
+  # reserve inside it. The real gateway is 10.123.4.1 at the /24
+  # level. HA is the only container on this network today and gets
+  # whatever netavark allocates first (no pin in vars/main.yml);
+  # future macvlan'd containers on the IoT VLAN can claim other slots
+  # in the same range.
   #
   # Earlier shapes:
   #   - .100/30 standalone -- overlapped lab's own iot address .102,
@@ -22,15 +24,18 @@
   #     synthetic .97 gateway with no router behind it, so all
   #     10.123.4.0/24 traffic silently fell back to the mosquitto
   #     bridge + NAT, defeating the macvlan's purpose for IoT devices.
-  # Any future lab static IP added inside .96-.99 would re-trigger
-  # the .102-style collision -- shift the ip_range to a different
-  # /30 if so. Lab's iot address is in host_vars/lab.yml under
-  # vlans.iot.addresses.
+  #   - .96/30 with gateway -- worked, but landed in the static_fixed
+  #     /27 before that range was re-purposed for host primaries;
+  #     moved up into lab's macvlan_block when the per-VLAN /28 layout
+  #     adoption renumbered fixed devices upward.
+  #   - .136/30 — interim move into lab's IoT macvlan_block; widened
+  #     to /29 once we stopped treating ip_range as a subnet with
+  #     network/broadcast semantics.
   containers.podman.podman_network:
     name: iot_macvlan
     subnet: 10.123.4.0/24
     gateway: 10.123.4.1
-    ip_range: 10.123.4.96/30
+    ip_range: 10.123.4.136/29
     driver: macvlan
     opt:
       parent: iot

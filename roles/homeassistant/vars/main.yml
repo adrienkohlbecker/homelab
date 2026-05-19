@@ -14,10 +14,12 @@ homeassistant_networks:
   # enabled on this adapter (see core.network.j2 + main.yml).
   - name: mosquitto
   # iot_macvlan: HA's L2 presence on the IoT VLAN (10.123.4.0/24).
-  # Pin to .98 explicitly. The network's ip_range is .96/30 so
-  # netavark currently assigns .98 by elimination (.97 is the synth
-  # gateway slot, .96/.99 are network/broadcast within the /30), but
-  # a future allocation-logic change shouldn't be allowed to drift
-  # this IP silently -- _verify.yml asserts it.
+  # No IP pin — HA is the only container on this network, netavark
+  # allocates deterministically from ip_range .136/29 (upper /29 of
+  # lab's IoT macvlan_block; see notes/network_topology.yml). Nothing
+  # downstream keys on a specific .138/etc. address: HomeKit/Sonos
+  # discovery uses mDNS/UPnP identity, no DNS A-record points at
+  # this IP, no firewall rule keys on it. Re-introduce a pin (add
+  # `ip: <addr>`) if either of those changes, or if a second container
+  # joins this network and starts contending for slot assignments.
   - name: iot_macvlan
-    ip: 10.123.4.98
