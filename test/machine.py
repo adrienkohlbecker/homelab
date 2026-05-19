@@ -93,6 +93,17 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         packer_image="box",
         os_disk_count=11,
     ),
+    "box_deps": QemuMachineSpec(
+        ssh_user="vagrant",
+        inventory_host="box",
+        # box_deps: same disks/inventory as box, but the packer build
+        # pre-bakes podman (with the noble backports applied) and
+        # nginx + snakeoil cert via packer/seed_deps.yml. Roles opt in
+        # via roles/<role>/meta/test.yml's `machine: box_deps`. Reuses
+        # host_vars/box.yml because inventory_host stays box.
+        packer_image="box_deps",
+        os_disk_count=11,
+    ),
     "lab": QemuMachineSpec(
         ssh_user="vagrant",
         inventory_host="lab",
@@ -905,6 +916,7 @@ class QemuMachine(Machine):
         virtfs: list[tuple[Path, str]] | None = None,
         foreground: bool = False,
         qmp_socket: Path | None = None,
+        commit_in_place: bool = False,
     ):
         """QEMU-backed machine wrapper used by integration tests.
 
@@ -951,6 +963,18 @@ class QemuMachine(Machine):
         self._efi_vars = efi_vars.resolve() if efi_vars is not None else None
         self._virtfs: list[tuple[Path, str]] = list(virtfs or [])
         self._foreground = foreground
+        # commit_in_place: skip the qcow2-overlay step for the OS disks and
+        # mount the image_dir's packer-ubuntu-N.<format> files as the qemu
+        # drives directly. Writes during the run mutate those files in
+        # place — that's the whole point, since mise-tasks/packer/seed-deps
+        # stages a fresh copy of box's artifacts into a tmpdir, runs
+        # launch.py --commit --seed against it, and then publishes the
+        # mutated tmpdir as box_deps. Refuses unless image_dir is also
+        # set, so a stray `launch.py --commit` against the published
+        # variant directory can't corrupt the source artifacts.
+        if commit_in_place and image_dir is None:
+            raise ValueError("commit_in_place=True requires image_dir to be set explicitly")
+        self._commit_in_place = commit_in_place
         self._qmp_socket = qmp_socket
         # Captured once at construction so prepare()/_boot_command() don't
         # have to re-run platform.machine() on every access.
@@ -1107,12 +1131,20 @@ class QemuMachine(Machine):
             # matches arch (raw on Linux, qcow2 on Mac).
             os_src_paths = [f"{image_dir}/packer-ubuntu-{idx}.{self._packer_disk_format}" for idx in range(1, os_disk_count + 1)]
             os_disk_paths: list[str] = []
-            for idx, src in enumerate(os_src_paths, start=1):
-                dest = f"{self.workdir.name}/packer-ubuntu-{idx}"
-                await self._create_overlay(src, dest)
-                os_disk_paths.append(dest)
+            if self._commit_in_place:
+                # No overlay: pass the source files straight to qemu in
+                # their on-disk format. Writes persist in image_dir so
+                # mise-tasks/packer/seed-deps can publish it afterwards.
+                os_disk_paths = list(os_src_paths)
+                drive_format = self._packer_disk_format
+            else:
+                for idx, src in enumerate(os_src_paths, start=1):
+                    dest = f"{self.workdir.name}/packer-ubuntu-{idx}"
+                    await self._create_overlay(src, dest)
+                    os_disk_paths.append(dest)
+                drive_format = "qcow2"
 
-            self.drives = [self._virtio_drive(path) for path in os_disk_paths]
+            self.drives = [self._virtio_drive(path, drive_format) for path in os_disk_paths]
             await self._copy_efivars_from(image_dir)
             self.drives += await self._uefi_drives()
 
@@ -1210,10 +1242,10 @@ class QemuMachine(Machine):
             ["cp", f"{image_dir}/efivars.fd", f"{self.workdir.name}/efivars.fd"],
         )
 
-    def _virtio_drive(self, path: str) -> str:
+    def _virtio_drive(self, path: str, format: str = "qcow2") -> str:
         """Return a virtio drive string with sensible cache/discard flags."""
 
-        return f"file={path},if=virtio,cache=unsafe,discard=unmap,format=qcow2,detect-zeroes=unmap"
+        return f"file={path},if=virtio,cache=unsafe,discard=unmap,format={format},detect-zeroes=unmap"
 
     async def _uefi_drives(self) -> list[str]:
         """UEFI pflash code+vars pair, honouring efi_code/efi_vars overrides.

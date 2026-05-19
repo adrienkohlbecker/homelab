@@ -1,0 +1,20 @@
+# Bake the heavy cross-cutting test deps (podman + noble backports,
+# nginx + snakeoil certs) into the box_deps variant image so role
+# tests that opt in via roles/<role>/meta/test.yml skip the ~140s of
+# backports-upgrade + ~50s of podman+nginx install every _setup.yml
+# hook pays today. Invoked by qemu.pkr.hcl's seed-deps post-processor,
+# which boots the freshly-built image, runs this playbook against it,
+# and shuts it down cleanly so the shipped artifacts carry the deps.
+- name: Bake homelab test deps into the box_deps variant image
+  hosts: all
+  become: true
+  tasks:
+    - name: Install podman + noble-backported runtime
+      import_role:
+        name: podman
+        tasks_from: install
+
+    - name: Install nginx + snakeoil cert at letsencrypt paths
+      import_role:
+        name: _test
+        tasks_from: nginx
