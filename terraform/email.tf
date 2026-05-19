@@ -61,30 +61,3 @@ resource "cloudflare_email_routing_catch_all" "this" {
   name     = ""
   actions  = [{ type = each.value.action_type, value = each.value.action_value }]
 }
-
-# State migration from the previous per-zone-named resources. Safe to
-# prune once `tofu apply` confirms a no-op plan.
-moved {
-  from = cloudflare_email_routing_settings.fahm_fr
-  to   = cloudflare_email_routing_settings.this["fahm.fr"]
-}
-moved {
-  from = cloudflare_email_routing_settings.mhaf_fr
-  to   = cloudflare_email_routing_settings.this["mhaf.fr"]
-}
-moved {
-  from = cloudflare_email_routing_settings.adrienkohlbecker_com
-  to   = cloudflare_email_routing_settings.this["adrienkohlbecker.com"]
-}
-moved {
-  from = cloudflare_email_routing_catch_all.fahm_fr
-  to   = cloudflare_email_routing_catch_all.this["fahm.fr"]
-}
-moved {
-  from = cloudflare_email_routing_catch_all.mhaf_fr
-  to   = cloudflare_email_routing_catch_all.this["mhaf.fr"]
-}
-moved {
-  from = cloudflare_email_routing_catch_all.adrienkohlbecker_com
-  to   = cloudflare_email_routing_catch_all.this["adrienkohlbecker.com"]
-}
