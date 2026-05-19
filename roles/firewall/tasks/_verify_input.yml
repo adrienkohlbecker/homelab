@@ -297,16 +297,19 @@
     # Anchor on the rule's counter reference rather than its comment
     # text. Counter names are part of each rule's functional identity;
     # comments are documentation and may be rephrased without breaking
-    # the rule. nft -j renders a rule-side counter ref as the dict
-    # {"counter": {"name": "<name>"}} inside `expr`, so `contains` on
-    # that exact dict finds the matching rule.
+    # the rule. nft -j renders a per-rule `counter name "<name>"`
+    # reference as `{"counter": "<name>"}` (bare string value), not
+    # `{"counter": {"name": "<name>"}}` -- the latter shape is what
+    # nft uses for the standalone counter *declaration* at the head
+    # of the table, not for references inside rule expressions.
+    # `contains` on the exact reference dict finds the matching rule.
     nft_rules: "{{ (nft_ruleset_vrrp.stdout | from_json).nftables
                    | selectattr('rule', 'defined')
                    | map(attribute='rule')
                    | list }}"
     vrrp_rule: "{{ nft_rules
                    | selectattr('expr', 'defined')
-                   | selectattr('expr', 'contains', {'counter': {'name': 'vrrp_accept'}})
+                   | selectattr('expr', 'contains', {'counter': 'vrrp_accept'})
                    | first }}"
     vrrp_matches: "{{ vrrp_rule.expr
                       | selectattr('match', 'defined')

@@ -181,11 +181,18 @@
 # Gated on nftables.service already being active — first install has
 # no working ruleset to revert TO, and the systemd_unit helper below
 # will start the service fresh anyway.
+#
+# check_mode: false forces a real probe even in --check; otherwise
+# command{} reports "would have run" with rc=0 in the register, so
+# the auto-revert snapshot below believes nftables is active and
+# tries to copy a non-existent /etc/nftables.conf on a fresh
+# check-mode bootstrap where apt also didn't install nftables.
 - name: Check if nftables.service is currently active (gates auto-revert)
   command: systemctl is-active nftables.service
   register: firewall_nftables_pre_active
   changed_when: false
   failed_when: false
+  check_mode: false
   become: true
   tags:
     - firewall
@@ -352,6 +359,10 @@
   vars:
     systemd_unit_args:
       src: wg0_flowtable.service
+      # Skip the systemctl enable/start when the install above only
+      # would-changed in check mode -- otherwise the enable errors
+      # with "Could not find the requested service wg0_flowtable".
+      condition: "{{ not (ansible_check_mode and (wg0_flowtable_service_result.changed | default(false))) }}"
       restart: "{{ wg0_flowtable_service_result.changed | default(false) }}"
   tags:
     - firewall

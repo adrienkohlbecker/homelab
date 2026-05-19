@@ -22,20 +22,29 @@
 # lifecycle binding for prod (where wg-quick starts first) without
 # the Requires-style coupling.
 #
-# ExecCondition exit-255 makes the unit go active (exited) without
-# running ExecStart when wg0 doesn't exist — covers the test-harness
-# case above and a degraded-wg-quick boot (where the iface never came
-# up). PartOf will re-fire ExecStart whenever wg-quick is (re)started
-# and brings wg0 up.
+# ConditionPathExists silently skips the unit (no failed state, no
+# emitted error in the journal) when wg0 doesn't exist. Covers the
+# test-harness case where the wireguard role hasn't been applied and
+# /sys/class/net/wg0 isn't present, plus a degraded-wg-quick boot
+# where the iface never came up. PartOf will re-fire ExecStart
+# whenever wg-quick is (re)started and brings wg0 up; ConditionPath
+# is re-evaluated on each start.
+#
+# Previously this used `ExecCondition=/bin/sh -c '... || exit 255'`,
+# which by systemd docs *should* skip the unit silently on exit-255
+# but in practice on jammy's systemd 249 the unit ends up in 'failed'
+# state and `systemctl start --wait` returns non-zero -- the static
+# Condition* directives are the documented "silent skip" mechanism
+# and behave consistently across systemd versions.
 [Unit]
 Description=Attach wg0 to nftables homelab flowtable
 After=wg-quick@wg0.service nftables.service
 PartOf=wg-quick@wg0.service nftables.service
+ConditionPathExists=/sys/class/net/wg0
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecCondition=/bin/sh -c '[ -e /sys/class/net/wg0 ] || exit 255'
 ExecStart=/usr/sbin/nft add flowtable inet homelab bulk { devices = { wg0 }; }
 
 [Install]
