@@ -27,6 +27,15 @@
   changed_when: '"created" in iot_setup.stdout'
   become: true
 
+# Provision the mac_iot iface + podman network from host_vars'
+# macvlan_blocks. In site.yml the macvlan role runs early in the
+# play order so homeassistant's `--network=mac_iot` finds it
+# already created; under testrole.py only the role-under-test runs,
+# so we replay the dep here.
+- name: _setup | Install macvlan
+  import_role:
+    name: macvlan
+
 # Run the real influxdb role so the bootstrap exercises the same image
 # tag + the same `home` org / default bucket the prod host runs against.
 # Replaces a hand-rolled `podman run docker.io/influxdb:2.7.6` that
