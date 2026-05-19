@@ -32,8 +32,18 @@ http {
     include                mime.types;
     default_type           application/octet-stream;
 
-    # Logging
-    log_format custom      '$remote_addr - $remote_user [$time_local] $host "$request" $server_name $status $body_bytes_sent $request_length $request_time $upstream_response_time "$http_referer" "$http_user_agent"';
+    # Logging. $request includes the full request line ("GET /path?q=1
+    # HTTP/1.1"), which would leak any URL-param secret a site uses (see
+    # nginx_site_args.bypass_query_param in roles/nginx/tasks/site.yml).
+    # Redact `auth_token=...` from the request line before logging so
+    # the token doesn't land on disk. Generic enough to cover any future
+    # site using the same param name. If another site picks a different
+    # param name, extend this map.
+    map $request $request_safe {
+        "~*^(.*?[?&])auth_token=[^& ]*(.*)$"  "$1auth_token=REDACTED$2";
+        default                                $request;
+    }
+    log_format custom      '$remote_addr - $remote_user [$time_local] $host "$request_safe" $server_name $status $body_bytes_sent $request_length $request_time $upstream_response_time "$http_referer" "$http_user_agent"';
     access_log             /var/log/nginx/access.log custom buffer=512k flush=5s;
     error_log              stderr warn;
 
