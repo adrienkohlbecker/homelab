@@ -16,6 +16,7 @@ variable "mhaf_fr_records" {
     priority = optional(number)
     proxied  = optional(bool, false)
     comment  = optional(string)
+    tags     = optional(list(string), [])
   }))
 
   validation {
@@ -58,6 +59,7 @@ resource "cloudflare_dns_record" "mhaf_fr" {
   proxied  = each.value.proxied
   ttl      = 1
   comment  = each.value.comment
+  tags     = each.value.tags
 }
 
 # State migration from the previous "<TYPE>/<name>[/<content>]" key shape.

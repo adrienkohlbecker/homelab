@@ -49,6 +49,7 @@ variable "fahm_fr_records" {
     priority = optional(number)
     proxied  = optional(bool, false)
     comment  = optional(string)
+    tags     = optional(list(string), [])
   }))
 
   validation {
@@ -105,6 +106,7 @@ resource "cloudflare_dns_record" "fahm_fr" {
   proxied  = each.value.proxied
   ttl      = 1
   comment  = each.value.comment
+  tags     = each.value.tags
 }
 
 # ---- SRV records (Fastmail service discovery) ----
@@ -139,6 +141,7 @@ resource "cloudflare_dns_record" "fahm_fr_srv" {
   proxied  = false
   ttl      = 1
   comment  = "fastmail"
+  tags     = []
 
   data = {
     port     = each.value.port
@@ -159,6 +162,7 @@ resource "cloudflare_dns_record" "fahm_fr_txt_cf2024_1__domainkey" {
   ttl     = 1
   type    = "TXT"
   zone_id = local.zones["fahm.fr"]
+  tags    = []
 
   lifecycle {
     ignore_changes = [content]
