@@ -5,14 +5,23 @@
 # so prefixing every stderr line with <3> turns
 # `journalctl -u <unit> -p err` into a clean failure-only view.
 # No second journal stream (unlike systemd-cat), so no duplicates.
-# `wait` covers the race between the wrapped command exiting and
-# sed flushing its last line.
+#
+# Implementation notes: bare `2> >(sed ...)` + `wait` looks correct
+# but loses lines under Type=oneshot — bash's `wait` (no args)
+# doesn't reliably track process-substitution PIDs as jobs, so the
+# wrapper exits before sed flushes, systemd closes the stderr pipe,
+# and SIGPIPE drops the in-flight line. Using `exec 2> >(...)` lets
+# us capture the PID via `$!` and `wait "$pid"` explicitly; closing
+# fd 2 first feeds sed EOF so it returns instead of hanging.
 set -u
 [ "$#" -ge 1 ] || {
   echo "Usage: ${0##*/} CMD [ARGS...]" >&2
   exit 64
 }
-"$@" 2> >(sed -u 's/^/<3>/' >&2)
+exec 2> >(sed -u 's/^/<3>/' >&2)
+sed_pid=$!
+"$@"
 rc=$?
-wait
+exec 2>&-
+wait "$sed_pid" 2>/dev/null || true
 exit "$rc"
