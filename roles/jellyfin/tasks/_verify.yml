@@ -1,0 +1,80 @@
+# Loopback probe through the host-side published port -- confirms
+# /System/Info/Public returns valid JSON, not just that the container's
+# own healthcheck passes (which the unit's --sdnotify=healthy already
+# gates the "active" state on).
+- name: _verify | jellyfin /System/Info/Public over loopback
+  uri:
+    url: http://localhost:{{ service_ports.jellyfin }}/System/Info/Public
+    status_code: 200
+    return_content: true
+  register: _verify_http
+  retries: 30
+  delay: 2
+  until: _verify_http.status == 200
+  failed_when: (_verify_http.json.ProductName | default('')) != 'Jellyfin'
+
+# Exercise the nginx-proxied path -- catches typo'd subdomain or
+# proxy_pass regressions that the loopback probe would miss.
+- name: _verify | jellyfin /System/Info/Public via nginx vhost
+  uri:
+    url: https://localhost/System/Info/Public
+    headers:
+      Host: "jellyfin.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    status_code: 200
+    return_content: true
+  register: _verify_http_nginx
+  retries: 30
+  delay: 2
+  until: _verify_http_nginx.status == 200
+  failed_when: (_verify_http_nginx.json.ProductName | default('')) != 'Jellyfin'
+
+# SQLite wiring: the symlinks at /config/data/<name>.db MUST resolve
+# through to the dedicated /mnt/services/sqlite/ dataset (the role's
+# whole reason to exist). Without this assert a regression in the
+# symlink task or the self-pathed bind-mount lands DB writes back on
+# the services dataset silently.
+- name: _verify | Stat jellyfin SQLite symlinks
+  stat:
+    path: "/mnt/services/jellyfin/data/{{ item }}"
+    follow: false
+  register: _verify_symlinks
+  become: true
+  loop:
+    - library.db
+    - jellyfin.db
+
+- name: _verify | Assert symlink targets land on sqlite dataset
+  assert:
+    that:
+      - item.stat.islnk
+      - item.stat.lnk_target == '/mnt/services/sqlite/jellyfin/' ~ item.item
+    fail_msg: >-
+      /mnt/services/jellyfin/data/{{ item.item }} should be a symlink
+      pointing into /mnt/services/sqlite/jellyfin/, but is
+      {{ 'a regular file' if not item.stat.islnk else 'pointing at ' ~ item.stat.lnk_target }}.
+  loop: "{{ _verify_symlinks.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+# HW transcoding gid alignment: the container's --group-add must match
+# the actual gid of /dev/dri/renderD128. A drift (e.g. mesa sysusers.d
+# installs render:103 after the role first ran) means the container
+# can open /dev/dri but not transcode.
+- name: _verify | Stat /dev/dri/renderD128
+  when: has_transcoding_acceleration
+  stat:
+    path: /dev/dri/renderD128
+  register: _verify_render_dev
+  become: true
+
+- name: _verify | Assert render gid alignment with /dev/dri
+  when: has_transcoding_acceleration
+  assert:
+    that:
+      - _verify_render_dev.stat.exists
+      - _verify_render_dev.stat.gid == (render_group.gid | int)
+    fail_msg: >-
+      /dev/dri/renderD128 gid={{ _verify_render_dev.stat.gid }} but the
+      container's --group-add gid={{ render_group.gid }}. HW acceleration
+      will not work. Re-run the play to re-template the unit.
