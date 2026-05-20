@@ -21,18 +21,17 @@
 # a tarball bump is just rm + re-link; both the canonical extract and
 # this sync are cheap.
 #
-# Why hard links over symlinks: actions/runner's Runner.Listener uses
-# typeof(IOUtil).Assembly.Location to determine its install root,
-# which resolves to the .dll's real path. A symlinked bin/ in the
-# per-instance dir would point .dll resolution back at the canonical
-# /opt/actions-runner/bin/, and Assembly.Location would land there --
-# the runner would conclude RUNNER_ROOT = /opt/actions-runner and
-# write state files at the shared location, defeating the isolation.
-# Hard links present multiple names for the same inode without any
-# symlink resolution, so Assembly.Location reports
-# /opt/actions-runner/<inst>/bin/Runner.Listener.dll. run.sh's own
-# `cd -P $(dirname $0)` survives the same way: hard links aren't
-# resolved by realpath / readlink, only symlinks are.
+# Why hard links over symlinks: the unit shadow-binds this per-instance
+# dir at /opt/actions-runner inside the container. A symlink at
+# /opt/actions-runner/<inst>/bin pointing to "/opt/actions-runner/bin"
+# (absolute) would self-reference inside the container -- the target
+# path resolves through the bind-mount back into this per-instance dir,
+# hitting the same symlink and producing ELOOP. Relative symlinks
+# (../bin) would land outside the bind mount entirely, which podman
+# doesn't expose to the container. Hard links sidestep both by being
+# directory entries on the same inode; no path resolution involved at
+# read time. The disk-efficiency story (inode sharing keeps the 500MB
+# tree at 1x across N instances vs N copies) holds independently.
 #
 # Invoked from the unit template as ExecStartPre, so it runs as root
 # before every container start. Idempotent: on an unchanged tarball,

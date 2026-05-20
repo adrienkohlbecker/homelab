@@ -9,16 +9,18 @@
 # on github_runner@.service brings up the next container, whose
 # ExecStartPre mints a fresh blob first.
 #
-# Path-mirror story: /opt/actions-runner/<instance> is bind-mounted
-# from the host at the same path so DooD-spawned workflow containers
-# can resolve their bind-mount sources. The unit sets --workdir to
-# that per-instance dir, so $PWD is the actions-runner root without
-# the entrypoint needing to know its own instance name. The
-# /opt/actions-runner/<instance> dir is itself populated on the host
-# by the github_runner_sync_root ExecStartPre (hard links from the
-# canonical /opt/actions-runner/) -- see the script's docstring for
-# why each instance gets its own RUNNER_ROOT instead of sharing the
-# canonical. /<RUNNER_WORK_FOLDER> is similarly path-mirrored.
+# Path-mirror story: /opt/actions-runner inside this container is
+# bind-mounted from the host's per-instance /opt/actions-runner/<inst>
+# dir (populated by github_runner_sync_root ExecStartPre with hard
+# links from the canonical /opt/actions-runner/). The runner sees the
+# in-container path as the canonical one, but its writes (.runner /
+# .credentials* / _diag / run-helper.sh) land at /opt/actions-runner/
+# <inst>/ on the host so concurrent instances don't race the same
+# state files. DooD bind-mount sources from sibling workflow containers
+# (e.g. /opt/actions-runner/externals) still resolve on the host: the
+# canonical /opt/actions-runner/externals lives at the same inodes as
+# the per-instance hard-linked copy. /<RUNNER_WORK_FOLDER> is
+# path-mirrored at the same per-instance path on both sides.
 #
 # Security shape: the host's long-lived PAT NEVER enters this
 # container. Only the single-use JIT blob does (which GitHub auto-
@@ -29,15 +31,7 @@
 # by the mint script running as the unit's user.
 set -euo pipefail
 
-# The unit's --workdir sets $PWD to /opt/actions-runner/<instance>, the
-# per-instance hard-link tree populated by ExecStartPre. Bail loud if
-# run.sh isn't visible -- catches a regression in the bind-mount target
-# or sync_root before run.sh's own error path tries to find Runner.Listener
-# under a wrong RUNNER_ROOT.
-if [ ! -x ./run.sh ]; then
-  echo >&2 "run.sh not present in $PWD; bind-mount or sync_root regression?"
-  exit 1
-fi
+cd /opt/actions-runner
 
 jit=$(cat /run/jit)
 if [ -z "$jit" ]; then
