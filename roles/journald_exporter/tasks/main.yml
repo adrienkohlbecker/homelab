@@ -93,6 +93,11 @@
   vars:
     nginx_site_args:
       subdomain: journald-exporter
+      # auth: required gates browser access through Authelia. The
+      # netdata scrape doesn't traverse nginx -- it hits the loopback
+      # port directly with basic auth -- so the gate has no effect on
+      # the machine path.
+      auth: required
       proxy_pass: http://localhost:{{ service_ports.journald_exporter }}/
       server_conf: |
         location = / {
