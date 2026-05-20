@@ -57,24 +57,52 @@
   loop_control:
     label: "{{ item.item }}"
 
-# HW transcoding gid alignment: the container's --group-add must match
-# the actual gid of /dev/dri/renderD128. A drift (e.g. mesa sysusers.d
-# installs render:103 after the role first ran) means the container
-# can open /dev/dri but not transcode.
-- name: _verify | Stat /dev/dri/renderD128
+# HW transcoding wiring smoke. On box the device is a phantom set up by
+# _test/tasks/fake_render_device.yml (open() returns ENXIO), so anything
+# that actually probes VAAPI would fall back to software. The checks
+# below verify the ansible-side templating reached the container:
+# (1) the device is visible inside the container, (2) the container has
+# the render gid in its supplementary groups. Catches a regression in
+# the unit template's --device or --group-add lines that the previous
+# host-side stat-equality check would have missed (it just compared
+# getent against itself).
+- name: _verify | Confirm /dev/dri/renderD128 inside container
   when: has_transcoding_acceleration
-  stat:
-    path: /dev/dri/renderD128
-  register: _verify_render_dev
+  command: podman exec jellyfin stat -c %n /dev/dri/renderD128
+  register: _verify_dri_in_container
+  changed_when: false
+  failed_when: _verify_dri_in_container.stdout != '/dev/dri/renderD128'
   become: true
 
-- name: _verify | Assert render gid alignment with /dev/dri
+- name: _verify | Confirm render gid in container supplementary groups
   when: has_transcoding_acceleration
-  assert:
-    that:
-      - _verify_render_dev.stat.exists
-      - _verify_render_dev.stat.gid == jellyfin_render_gid
-    fail_msg: >-
-      /dev/dri/renderD128 gid={{ _verify_render_dev.stat.gid }} but the
-      container's --group-add gid={{ jellyfin_render_gid }}. HW acceleration
-      will not work. Re-run the play to re-template the unit.
+  command: podman exec jellyfin id -G
+  register: _verify_container_groups
+  changed_when: false
+  failed_when: jellyfin_render_gid|string not in _verify_container_groups.stdout.split()
+  become: true
+
+# Functional transcode probe: lavfi testsrc → libx264 → HLS segments on
+# the /config/transcodes tmpfs. Exercises jellyfin-ffmpeg presence,
+# tmpfs writability, and the codec chain in a way stat-only checks
+# can't. Software encode so the probe runs identically with or without
+# real HW; HW-accelerated transcoding requires real codec silicon and
+# isn't covered in CI.
+- name: _verify | Functional ffmpeg transcode into /config/transcodes
+  command: >-
+    podman exec jellyfin /usr/lib/jellyfin-ffmpeg/ffmpeg
+    -nostdin -hide_banner -loglevel error
+    -f lavfi -i testsrc=duration=2:size=320x180:rate=10
+    -c:v libx264 -preset ultrafast
+    -f hls -hls_time 1
+    -hls_segment_filename /config/transcodes/_verify-%d.ts
+    /config/transcodes/_verify.m3u8 -y
+  changed_when: false
+  become: true
+
+- name: _verify | Confirm transcode produced a non-empty playlist
+  command: podman exec jellyfin stat -c %s /config/transcodes/_verify.m3u8
+  register: _verify_ffmpeg_output
+  changed_when: false
+  failed_when: (_verify_ffmpeg_output.stdout | int) == 0
+  become: true

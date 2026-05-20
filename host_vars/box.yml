@@ -162,7 +162,13 @@ subid_users:
 gitea_runner_labels:
   - "test-host:host"
 
-has_transcoding_acceleration: false
+# Flipped to true so jellyfin + plex tests exercise the HW-transcoding
+# code path (device passthrough, --group-add wiring, getent lookup) via
+# the fake render group + phantom /dev/dri/renderD128 created by
+# roles/_test/tasks/fake_render_device.yml. No real GPU in QEMU — the
+# runtime VAAPI probe inside the container falls back to software, but
+# the ansible-side machinery and container's view of /dev get covered.
+has_transcoding_acceleration: true
 z2m_start_service: false
 
 # Stub instance so the github_runner role exercises its per-

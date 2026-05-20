@@ -1,0 +1,37 @@
+# Fake render group + /dev/dri/renderD128 char device, so role tests can
+# exercise the has_transcoding_acceleration code path (--device passthrough,
+# --group-add wiring, getent lookup) on a QEMU VM with no real GPU. The
+# device is a phantom — open() returns ENXIO because nothing's bound to
+# 226:128 — so anything that actually probes VAAPI (vainfo, ffmpeg
+# -hwaccel vaapi) falls back to software. The point is to exercise the
+# ansible-side templating and the container's view of /dev + supplementary
+# groups, not the runtime codec path.
+- name: _test fake render | Create render group
+  group:
+    name: render
+    system: true
+    gid: 998
+  become: true
+
+- name: _test fake render | Ensure /dev/dri exists
+  file:
+    path: /dev/dri
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _test fake render | Create fake renderD128 char device
+  command: mknod /dev/dri/renderD128 c 226 128
+  args:
+    creates: /dev/dri/renderD128
+  become: true
+
+- name: _test fake render | Set device ownership
+  file:
+    path: /dev/dri/renderD128
+    owner: root
+    group: render
+    mode: "0660"
+  become: true
