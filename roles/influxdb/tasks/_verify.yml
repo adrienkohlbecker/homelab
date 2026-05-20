@@ -151,7 +151,7 @@
     - name: _verify | Confirm the rescue caught assert-org-exists, not some other failure
       assert:
         that:
-          - ansible_failed_task.action == 'ansible.builtin.assert'
+          - ansible_failed_task.action == 'assert'
           - ansible_failed_task.name is search('Assert org')
           - ansible_failed_result.msg is search('influxdb org')
         fail_msg: >-
