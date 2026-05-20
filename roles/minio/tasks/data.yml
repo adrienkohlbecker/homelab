@@ -69,3 +69,47 @@
   loop: "{{ minio_users }}"
   tags:
     - minio
+
+# `admins` is the IAM policy that the OIDC `groups: ["admins"]` claim
+# attaches to a user at login (see MINIO_IDENTITY_OPENID_CLAIM_NAME=groups
+# in minio.cfg.j2). It grants full admin + s3 perms -- equivalent to the
+# built-in consoleAdmin policy, but named to match Authelia's group so
+# the claim→policy lookup just works.
+- name: data | Check if admins policy exists
+  stat:
+    path: /mnt/minio/.minio.sys/config/iam/policies/admins
+  register: minio_admins_policy_dir
+  become: true
+  tags:
+    - minio
+
+- name: data | Upload admins policy
+  when: not minio_admins_policy_dir.stat.exists
+  copy:
+    src: admins.json
+    dest: /tmp/admins.json
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: jq . %s
+  become: true
+  tags:
+    - minio
+
+- name: data | Add admins policy
+  when: not minio_admins_policy_dir.stat.exists
+  command: mcli admin policy add default admins /tmp/admins.json
+  args:
+    creates: /mnt/minio/.minio.sys/config/iam/policies/admins
+  tags:
+    - minio
+
+- name: data | Remove admins tempfile
+  when: not minio_admins_policy_dir.stat.exists
+  file:
+    path: /tmp/admins.json
+    state: absent
+  become: true
+  tags:
+    - minio
