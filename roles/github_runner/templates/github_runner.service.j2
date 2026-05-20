@@ -112,6 +112,17 @@ SyslogIdentifier=%N
 # --volume podman.sock: DooD -- actions/runner's docker-CLI shell-outs
 #   (for workflows with `container:` blocks) hit github_runner's
 #   rootless podman, NOT a daemon inside the runner container.
+#   Note: this bind-mount only handles in-runner-container docker
+#   calls. When a workflow declares a job-level `container:` block,
+#   actions/runner additionally tells the HOST's podman (via this same
+#   socket) to bind-mount /var/run/docker.sock into the sibling job
+#   container -- the host needs the path to exist for that statfs to
+#   succeed. roles/github_runner/tasks/main.yml carries the
+#   tmpfiles.d L rule + immediate-apply file:state=link that
+#   materialises /var/run/docker.sock on the host as a symlink to this
+#   same rootless socket. Removing either leaves `container:`
+#   workflows failing at the "Initialize containers" step with
+#   "statfs /var/run/docker.sock: no such file or directory".
 # --volume /opt/actions-runner: path-mirrored from the host (where
 #   roles/github_runner downloaded + extracted the actions/runner
 #   tarball). The runner binaries live here on both sides at the same
