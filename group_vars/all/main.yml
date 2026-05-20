@@ -70,6 +70,14 @@ gitea_runner_labels:
   - "ubuntu-24.04:docker://gitea/runner-images:ubuntu-24.04"
 
 
+# Org name the influxdb image's DOCKER_INFLUXDB_INIT_* entrypoint creates
+# on first boot. Consumer roles (`homeassistant`, etc.) also provision
+# tenants in this org via `import_role: name: influxdb, tasks_from: bucket`
+# -- bucket.yml refuses any org that doesn't already exist, and this is
+# the only one this role bootstraps.
+influxdb_root_org: home
+
+
 # Ports each host-level service publishes. Single source of truth for unit
 # templates (--publish for loopback-bound podman services, ListenStream= for
 # native daemons), nginx proxy_pass, firewall rules, and cross-role consumers
