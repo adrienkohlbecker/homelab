@@ -35,12 +35,13 @@ ExecStart=/usr/bin/podman run \
     --rm \
     --name influxdb \
     --init \
-    --read-only \
+    --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="influxdb" \
     --user {{ influxdb_user.uid }}:{{ influxdb_user.group }}  \
     --env INFLUXD_REPORTING_DISABLED=true \
     --env INFLUXD_STORAGE_VALIDATE_KEYS=true \
+    --env INFLUXD_PPROF_DISABLED=true \
     --env INFLUXD_LOG_LEVEL=warn \
     --secret=influxdb_root_user,type=mount,target=influxdb_root_user \
     --secret=influxdb_root_password,type=mount,target=influxdb_root_password \
