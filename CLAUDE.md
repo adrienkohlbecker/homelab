@@ -218,6 +218,8 @@ Two passwords, two scopes. Configured in [ansible.cfg](ansible.cfg) as `vault_id
 
 When encrypting a new value with `ansible-vault encrypt_string`, pass `--encrypt-vault-id prod` (or `test`) so the resulting envelope carries the right label — otherwise `vault_id_match = True` will refuse to decrypt it.
 
+To re-label an already-encrypted file between vault ids (promote `test` → `prod` once a value's blast radius grows, or vice versa), run `ansible-vault rekey --new-vault-id <new>@vault-client.sh <path>`. The envelope is rewritten in place, single-file diff.
+
 ## Someday
 
 Open follow-ups deferred from prior reviews live in [notes/SOMEDAY.md](notes/SOMEDAY.md). Items there are backlog notes, not standing instructions — don't enact one without explicit operator confirmation.
