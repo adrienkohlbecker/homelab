@@ -1,0 +1,153 @@
+# Loopback /health probe -- confirms influxd is up and the publish path
+# is wired. Retries cover cold-start (--health-start-period is 30s; the
+# budget below gives ~60s headroom).
+- name: _verify | influxdb /health on loopback port
+  uri:
+    url: http://localhost:{{ service_ports.influxdb }}/health
+    return_content: true
+  register: _verify_loopback
+  retries: 30
+  delay: 2
+  until:
+    - _verify_loopback.status == 200
+    - _verify_loopback.json.status | default('') == 'pass'
+  become: true
+
+# nginx Host-header probe -- exercises the reverse-proxy chain so a typo
+# in nginx_site_args / proxy_pass fails here too. validate_certs: false
+# because the test fixture uses a self-signed cert.
+- name: _verify | influxdb /health reachable through nginx
+  uri:
+    url: https://localhost/health
+    headers:
+      Host: influxdb.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    return_content: true
+  register: _verify_nginx
+  failed_when: >-
+    _verify_nginx.status != 200
+    or _verify_nginx.json.status | default('') != 'pass'
+  become: true
+
+# Service-native CLI liveness -- catches a regression where /health
+# returns 200 but the in-container CLI can't talk to influxd (e.g. a
+# misconfigured /etc/influxdb2/configs after a bind-mount perms change).
+- name: _verify | influx ping succeeds
+  command: podman exec influxdb influx ping
+  changed_when: false
+  become: true
+
+# Exercise bucket.yml end-to-end with a throwaway tenant. Verifies the
+# org→user→bucket→write-auth path and -- via the write/query roundtrip
+# below -- that the produced token actually carries the bucket-scoped
+# write permission.
+- name: _verify | Provision throwaway influxdb tenant via bucket.yml
+  import_role:
+    name: influxdb
+    tasks_from: bucket
+  vars:
+    influxdb_bucket_args:
+      org: home
+      user: verify_user
+      bucket: verify_bucket
+
+- name: _verify | Fetch auth records for verify_user
+  command: podman exec influxdb influx auth list --user verify_user --json
+  register: _verify_auth_query
+  changed_when: false
+  failed_when: >-
+    _verify_auth_query.rc != 0
+    or (_verify_auth_query.stdout | from_json | length) == 0
+  become: true
+
+- name: _verify | Fetch verify_bucket metadata
+  command: podman exec influxdb influx bucket list --name verify_bucket --json
+  register: _verify_bucket_query
+  changed_when: false
+  failed_when: (_verify_bucket_query.stdout | from_json | length) == 0
+  become: true
+
+# Contract assertion: bucket.yml's regex match path produced a
+# bucket-scoped write permission (same shape as bucket.yml's own
+# detection regex, anchored on org id + bucket id).
+- name: _verify | verify_user carries bucket-scoped write-auth on verify_bucket
+  vars:
+    _verify_bucket: "{{ (_verify_bucket_query.stdout | from_json | first) }}"
+  assert:
+    that:
+      - (_verify_auth_query.stdout | from_json)
+        | selectattr('permissions', 'defined')
+        | map(attribute='permissions') | flatten
+        | select('search', '^write:orgs/' ~ _verify_bucket.orgID ~ '/buckets/' ~ _verify_bucket.id ~ '$')
+        | list | length > 0
+    fail_msg: >-
+      bucket.yml left verify_user without a bucket-scoped write
+      permission on verify_bucket. Re-check bucket.yml's auth-create
+      task and the regex that gates it.
+
+# Functional write-then-query roundtrip via the bucket-scoped token --
+# this is what proves the auth is usable, not just present in the
+# permission list. bucket.yml is idempotent and creates exactly one
+# auth per user, so first().token is the one we just verified.
+- name: _verify | Write-then-query roundtrip on the bucket write-auth
+  vars:
+    _verify_token: "{{ (_verify_auth_query.stdout | from_json | first).token }}"
+  block:
+    # argv form keeps the line-protocol point intact -- the embedded
+    # space between `verify` and `value=1` would otherwise shlex-split
+    # into two argv slots.
+    - name: _verify | Write a sentinel point with the bucket write-auth
+      command:
+        argv:
+          - podman
+          - exec
+          - influxdb
+          - influx
+          - write
+          - --bucket
+          - verify_bucket
+          - --org
+          - home
+          - --token
+          - "{{ _verify_token }}"
+          - sentinel,source=ansible_verify value=1
+      changed_when: false
+      become: true
+
+    # argv form again -- the Flux expression contains spaces, double
+    # quotes, and arrow operators that string-form shlex.split would
+    # mangle. The query runs as the in-container admin (CLI reads
+    # /etc/influxdb2/configs) because verify_user only has write-bucket
+    # -- not read-bucket -- which is itself the helper contract.
+    - name: _verify | Query the sentinel back as admin
+      command:
+        argv:
+          - podman
+          - exec
+          - influxdb
+          - influx
+          - query
+          - --org
+          - home
+          - >-
+            from(bucket:"verify_bucket")
+              |> range(start:-1m)
+              |> filter(fn:(r) => r._measurement == "sentinel")
+      register: _verify_query
+      changed_when: false
+      failed_when: >-
+        _verify_query.rc != 0
+        or "sentinel" not in _verify_query.stdout
+      become: true
+
+# Ownership assertion -- catches a regression where data/ ends up owned
+# by a different host uid (e.g. a future uidmap change that doesn't
+# include a +0 override for the influxdb user).
+- name: _verify | influxdb data dir is owned by influxdb
+  stat:
+    path: /mnt/services/influxdb/data
+  register: _verify_data_owner
+  failed_when: >-
+    not _verify_data_owner.stat.exists
+    or _verify_data_owner.stat.pw_name != 'influxdb'
+  become: true
