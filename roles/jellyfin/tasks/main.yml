@@ -155,7 +155,7 @@
     dest: "/mnt/services/jellyfin/data/{{ item }}"
     state: link
     force: true
-    owner: "{{ jellyfin_user.uid }}"
+    owner: jellyfin
     group: media
     follow: false
   become: true
@@ -174,7 +174,7 @@
     dest: /mnt/services/jellyfin/data/introskipper/introskipper.db
     state: link
     force: true
-    owner: "{{ jellyfin_user.uid }}"
+    owner: jellyfin
     group: media
     follow: false
   become: true
