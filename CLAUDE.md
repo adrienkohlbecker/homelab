@@ -6,7 +6,6 @@ Load-bearing negatives, listed up-front so a fresh agent session sees them befor
 
 - **DO NOT use Ansible handlers for service restarts.** Handlers run at end-of-play, which doesn't compose with the `systemd_unit` helper's pre-pull-then-start ordering. Drive restarts via the helper's inline OR chain on `*_result.changed` / `*_rotated`. See *Helper Roles → systemd_unit*.
 - **DO NOT drop a container's `--health-cmd`** in favour of external monitoring (kuma, `_verify.yml`). Without an in-container check, `--sdnotify=healthy` can't gate the unit's `active` state and podman won't auto-restart on quiet HTTP failure. See *Podman Service Conventions → Healthchecks*.
-- **DO NOT migrate Kuma's monitor list to IaC.** The sqlite DB is intentionally UI-managed; the monitor set extends beyond this repo's scope. See *Kuma monitor list is UI-managed* below.
 - **DO NOT use `defaults/main.yml` in roles** — require `host_vars`/`group_vars` to define inputs and fail loud with `assert:` rather than silently fall back.
 - **DO NOT run state-mutating commands on prod hosts (`lab`/`pug`/`bunk`) without explicit ack.** Diagnostic SSH is pre-authorized; mutations are not. See *Testing → Debugging prod hosts directly* for the boundary.
 - **DO NOT use `_test.yml` for new role tests** — historical alias for `_setup.yml`; no roles still ship it.
@@ -88,14 +87,6 @@ Prefer these over re-implementing the boilerplate; a hand-rolled equivalent in a
   | `podman_network` | optional bool, default `false`. When `true`, inlines a `containers.podman.podman_network` call.  |
 
   **IP space layout** within a block: lower /29 = host iface + libvirt VMs, upper /29 = podman containers (via netavark ip_range). Treat the ip_range as a flat allocation pool — every IP in the cidr is a usable container slot; the real gateway is on the parent VLAN, not synthesized inside the range. Consumers attach via `--network={{ name }}` and don't need to know the plumbing — see `roles/homeassistant` for an example.
-
-### healthchecks is not dead code
-
-Grepping `roles/` for `healthchecks.lab.fahm.fr` / `hc-ping` / similar returns zero callers, but the service is live: it receives heartbeats from sources outside this repo (cron jobs on personal machines, etc.). A repo-only grep is not sufficient evidence to retire the role.
-
-### Kuma monitor list is UI-managed
-
-The kuma sqlite DB carries monitor definitions added/edited via the Kuma UI, not in this repo. (See *Hard Rules* — don't migrate to IaC; overwriting on bootstrap would clobber UI-side state.) The `kuma.service` systemd unit going down is covered by `systemd_service_unit_failed_state`; a Kuma-up-but-empty-DB silent failure is a rare gap not worth specifically alarming on today.
 
 ## Podman Service Conventions
 
