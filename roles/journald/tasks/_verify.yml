@@ -8,13 +8,9 @@
 # directory is created lazily on first persistent write but never torn
 # down on a mode flip, so its presence is uncorrelated with the *current*
 # Storage= mode (box's packer image keeps it from an earlier build).
-#
-# Why not `systemctl show systemd-journald --property=Storage`: Storage
-# is a journald.conf property, not a systemd unit property — the unit's
-# show table doesn't expose it.
 
 - name: _verify | Emit sentinel log line
-  command: logger -t _journald_verify {{ _journald_verify_token }}
+  command: logger -t journald_verify -- {{ _journald_verify_token | quote }}
   vars:
     _journald_verify_token: "verify-{{ ansible_date_time.epoch }}-{{ 999999 | random }}"
   register: journald_verify_emit
@@ -23,13 +19,20 @@
   tags:
     - journald
 
+# --sync blocks until journald has flushed buffered records to backing
+# storage; deterministic alternative to polling the read with retries.
+- name: _verify | Force journal sync before sentinel read
+  command: journalctl --sync
+  changed_when: false
+  become: true
+  tags:
+    - journald
+
 - name: _verify | Read sentinel back through journalctl
-  command: journalctl --identifier=_journald_verify --output=cat --since=-30s --no-pager
+  command: journalctl --identifier=journald_verify --output=cat --no-pager
   register: journald_verify_read
   changed_when: false
-  retries: 5
-  delay: 1
-  until: journald_verify_emit.cmd[-1] in journald_verify_read.stdout
+  failed_when: journald_verify_emit.cmd[-1] not in journald_verify_read.stdout
   become: true
   tags:
     - journald
@@ -91,13 +94,18 @@
   tags:
     - journald
 
+- name: _verify | Force journal sync before audit read
+  command: journalctl --sync
+  changed_when: false
+  become: true
+  tags:
+    - journald
+
 - name: _verify | Read synthetic audit record back through journald
-  command: journalctl _TRANSPORT=audit --since=-30s --output=cat --no-pager
+  command: journalctl _TRANSPORT=audit --output=cat --no-pager
   register: journald_verify_audit
   changed_when: false
-  retries: 5
-  delay: 1
-  until: journald_verify_audit_emit.cmd[-1] in journald_verify_audit.stdout
+  failed_when: journald_verify_audit_emit.cmd[-1] not in journald_verify_audit.stdout
   become: true
   tags:
     - journald
