@@ -138,9 +138,11 @@
 
 # The influxdb integration is configured through HA's UI (not via
 # configuration.yaml); the helper below lands the org / user /
-# bucket / write-auth so the operator can paste the auth token from
-# `podman exec influxdb influx auth list --user homeassistant --json`
-# into HA's UI integration.
+# bucket / write-auth and exposes the token via the per-bucket fact
+# `influxdb_bucket_homeassistant_token`. The token-file task below
+# materialises it on disk so the operator can `cat` it during the
+# one-time HA UI integration setup rather than running
+# `podman exec influxdb influx auth list --user homeassistant --json`.
 - name: Bootstrap influxdb tenant for homeassistant
   import_role:
     name: influxdb
@@ -150,6 +152,22 @@
       org: home
       user: homeassistant
       bucket: homeassistant
+  tags:
+    - homeassistant
+
+# 0600 owned by homeassistant so only the operator (via sudo) and the
+# homeassistant uid can read it. Skip in check mode because the token
+# fact isn't populated when bucket.yml's tasks are skipped.
+- name: Materialise the influxdb write-auth token for operator paste
+  when: not ansible_check_mode
+  copy:
+    content: "{{ influxdb_bucket_homeassistant_token }}\n"
+    dest: /mnt/services/homeassistant/influxdb_token
+    owner: homeassistant
+    group: homeassistant
+    mode: "0600"
+  become: true
+  no_log: true
   tags:
     - homeassistant
 
