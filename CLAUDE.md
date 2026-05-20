@@ -107,7 +107,7 @@ Long-form rationale (gotchas, history, why-not-skip) in [notes/podman_convention
 Every `*.service.j2` declares `--health-cmd` (and `--health-startup-cmd`); the check runs *inside* the container. Preference order:
 
 1. `curl` / `wget` already in the image — grep the Dockerfile first.
-2. Python `urllib.request` with the URL in argv (python-based images). Use the **JSON-array form** — the naïve `'u.urlopen("...")'` shape unescapes mid systemd→podman handoff; see notes for the incantation.
+2. Python `urllib.request` with the URL in argv (python-based images). Use the **JSON-array form**, e.g. `--health-cmd '["python","-c","import urllib.request as u, sys; u.urlopen(sys.argv[1], timeout=1)","http://localhost:{{ service_ports.<svc> }}/"]'`. The naïve `'u.urlopen("...")'` shape unescapes mid systemd→podman handoff.
 3. Service-native CLI — `redis-cli ping`, `mosquitto_sub`, `dig +short @127.0.0.1`.
 4. `static_curl` role escape hatch — for distroless images. No current consumers; see [notes/podman_conventions.md](notes/podman_conventions.md) tier 4.
 
