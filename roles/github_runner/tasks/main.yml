@@ -11,14 +11,10 @@
       - "'suffix' in item and item.suffix is match('^[A-Za-z0-9_-]+$')"
       - "'owner' in item and item.owner is match('^[A-Za-z0-9_-]+$')"
       - "'labels' in item and item.labels | length > 0"
-      - "'runner_group_id' not in item or (item.runner_group_id is integer and item.runner_group_id >= 1)"
     fail_msg: >-
       github_runner_instances entry {{ item }} is malformed. Each entry
       needs repo + suffix + owner matching [A-Za-z0-9_-]+ and a non-empty
-      labels string. runner_group_id is optional and defaults to 1 (the
-      only group on personal-account repos and the org's reserved
-      "Default" group on org repos); when present it must be an integer
-      >= 1.
+      labels string.
   loop: "{{ github_runner_instances }}"
   loop_control:
     label: "{{ item.repo | default('?') }}_{{ item.suffix | default('?') }}"
