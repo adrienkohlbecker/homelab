@@ -75,8 +75,53 @@
   tags:
     - jellyfin
 
+# Introskipper is an optional plugin; only manage its DB symlink when its
+# data dir is already present.
+- name: Check for introskipper plugin data
+  stat:
+    path: /mnt/services/jellyfin/data/introskipper
+  register: jellyfin_introskipper_dir
+  become: true
+  tags:
+    - jellyfin
+
+# Pre-flight: refuse to clobber a real DB. `force: true` on the link tasks
+# below would silently unlink() a regular file before planting the symlink,
+# so a restored snapshot or downgraded jellyfin that recreated /config/data/
+# would lose live state on the next play. The dest must be absent or already
+# a symlink.
+- name: Pre-flight SQLite DB paths for symlink safety
+  stat:
+    path: "{{ item }}"
+  register: jellyfin_db_stats
+  become: true
+  loop:
+    - /mnt/services/jellyfin/data/library.db
+    - /mnt/services/jellyfin/data/jellyfin.db
+    - /mnt/services/jellyfin/data/introskipper/introskipper.db
+  tags:
+    - jellyfin
+
+- name: Assert no real DB file exists at the symlink dest
+  assert:
+    that:
+      - not (item.stat.exists | default(false)) or (item.stat.islnk | default(false))
+    fail_msg: >-
+      {{ item.item }} exists as a regular file. Move it onto
+      /mnt/services/sqlite/jellyfin/ (preserving the basename) before
+      re-running; otherwise the symlink task would delete the live DB.
+  loop: "{{ jellyfin_db_stats.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  tags:
+    - jellyfin
+
 # Symlink the SQLite DBs so Jellyfin's hardcoded /config/data/<name>.db paths
 # resolve through to the 4K sqlite dataset before SQLite computes WAL/SHM.
+# The matching --volume in jellyfin.service.j2 is self-pathed
+# (/mnt/services/sqlite/jellyfin:/mnt/services/sqlite/jellyfin) so the
+# symlink targets resolve identically inside the container -- do not change
+# the container-side path without updating the symlink src in lockstep.
 - name: Symlink jellyfin SQLite DBs onto sqlite dataset
   when: not (ansible_check_mode and jellyfin_user.changed)
   file:
@@ -91,16 +136,6 @@
   loop:
     - library.db
     - jellyfin.db
-  tags:
-    - jellyfin
-
-# Introskipper is an optional plugin; only manage its DB symlink when its
-# data dir is already present.
-- name: Check for introskipper plugin data
-  stat:
-    path: /mnt/services/jellyfin/data/introskipper
-  register: jellyfin_introskipper_dir
-  become: true
   tags:
     - jellyfin
 
@@ -136,18 +171,6 @@
   when: not (ansible_check_mode and jellyfin_user.changed)
   file:
     dest: /mnt/scratch/jellyfin/transcodes
-    state: directory
-    owner: "{{ jellyfin_user.uid }}"
-    group: media
-    mode: "0755"
-  become: true
-  tags:
-    - jellyfin
-
-- name: Create scratch directory
-  when: not (ansible_check_mode and jellyfin_user.changed)
-  file:
-    dest: /mnt/scratch/jellyfin
     state: directory
     owner: "{{ jellyfin_user.uid }}"
     group: media
