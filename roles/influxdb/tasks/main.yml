@@ -8,21 +8,30 @@
   tags:
     - influxdb
 
-# config/ holds /etc/influxdb2 (influx-configs token file etc.) and
-# data/ holds the BoltDB + TSM engine state. Both 0700-owned by the
-# influxdb user; the helper creates the parent /mnt/services/influxdb
-# at 0755.
+# data/ -- BoltDB + TSM engine state, 0700 owned by influxdb. The
+# image's entrypoint chmod 700s the bolt_dir / ENGINE_PATH subdirs
+# inside this on every boot; matching the parent's mode here keeps
+# ansible idempotent across container restarts.
+#
+# config/ -- /etc/influxdb2 (influx-configs CLI config with admin
+# token, configd-init-config.json, etc.), 0775 owned by influxdb.
+# The image's entrypoint actively chmod 775s this on every boot
+# (create_directories() in docker-entrypoint.sh runs unconditionally),
+# so any tighter mode here would flap back-and-forth between every
+# ansible re-apply and every container restart. The token file inside
+# is 0600 from `influx setup`; the 0775 parent only widens *traversal*
+# to the host group, which has only the influxdb user as a member.
 - name: Create influxdb config and data directories
   when: not (ansible_check_mode and influxdb_user.changed)
   file:
-    dest: "{{ item }}"
+    dest: "{{ item.path }}"
     state: directory
     owner: influxdb
     group: influxdb
-    mode: "0700"
+    mode: "{{ item.mode }}"
   loop:
-    - /mnt/services/influxdb/config
-    - /mnt/services/influxdb/data
+    - { path: /mnt/services/influxdb/data,   mode: "0700" }
+    - { path: /mnt/services/influxdb/config, mode: "0775" }
   become: true
   tags:
     - influxdb
