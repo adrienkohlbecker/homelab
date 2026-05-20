@@ -89,5 +89,10 @@
     nginx_site_args:
       subdomain: bazarr
       proxy_pass: http://localhost:{{ service_ports.bazarr }}/
+      # Bazarr's own auth.type stays null (config.yaml.j2) -- it trusts the
+      # reverse proxy when no native auth is configured, and intra-stack
+      # peers reach it as bazarr.dns.podman:{{ service_ports.bazarr }} with
+      # apikey. See sonarr's nginx_site_args comment.
+      auth: required
   tags:
     - bazarr
