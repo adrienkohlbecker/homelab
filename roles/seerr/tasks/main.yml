@@ -15,7 +15,7 @@
     state: directory
     owner: seerr
     group: seerr
-    mode: "0755"
+    mode: "0750"
   become: true
   tags:
     - seerr

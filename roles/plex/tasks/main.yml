@@ -61,7 +61,7 @@
     state: directory
     owner: plex
     group: media
-    mode: "0755"
+    mode: "0750"
   become: true
   tags:
     - plex

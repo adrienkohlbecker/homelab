@@ -46,7 +46,7 @@
     state: directory
     owner: radarr
     group: media
-    mode: "0755"
+    mode: "0750"
   become: true
   tags:
     - radarr

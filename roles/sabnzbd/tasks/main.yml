@@ -56,7 +56,7 @@
     state: directory
     owner: sabnzbd
     group: media
-    mode: "0755"
+    mode: "0750"
   become: true
   tags:
     - sabnzbd
