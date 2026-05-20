@@ -145,19 +145,22 @@
 # actions/runner install on the host (not baked into the runner image).
 # This is the path-mirror anchor that makes `container:` workflows
 # work over DooD: actions/runner spawns docker create with -v
-# /opt/actions-runner/externals:/__e:ro for the workflow container,
-# and docker (running on the host via the bind-mounted socket) needs
-# that path to resolve on the host's filesystem -- not just inside
-# the runner container. So we install on the host AND bind-mount the
-# same path into the runner container; both views see identical files.
+# /opt/actions-runner/<inst>/externals:/__e:ro for the workflow
+# container, and docker (running on the host via the bind-mounted
+# socket) needs that path to resolve on the host's filesystem -- not
+# just inside the runner container. So we extract the canonical tree
+# here and let github_runner_sync_root hard-link it into a per-instance
+# subdir at /opt/actions-runner/<inst>/ that gets bind-mounted into the
+# corresponding container at the same path.
 #
 # Owned by github_runner so the runner can read everything via the
-# +0 uidmap override (in-container uid 0 → host github_runner) when
-# the unit's overlay-mount presents the dir read-side. The bind-mount
-# in the unit uses :O (overlay), so any in-container writes (.runner,
-# .credentials, _diag/, etc.) land in a transient upper layer and
-# don't propagate to this host-side dir -- the host copy stays
-# whatever the extract/chown task left here.
+# +0 uidmap override (in-container uid 0 → host github_runner). With
+# the per-instance hard links populated by sync_root, in-container
+# writes to .runner / .credentials / _diag/ land at
+# /opt/actions-runner/<inst>/ -- not the canonical root -- so multiple
+# instances don't race the same state files. See the unit template's
+# --volume comment and files/github_runner_sync_root.sh for the full
+# story.
 - name: Create /opt/actions-runner
   when: not (ansible_check_mode and github_runner_user.changed)
   file:
@@ -437,6 +440,26 @@
       src: github_runner.service.j2
       dest: github_runner@.service
       condition: "{{ not (ansible_check_mode and github_runner_user.changed) }}"
+  tags:
+    - github_runner
+
+# ExecStartPre helper that hard-links the canonical /opt/actions-runner
+# tree into a per-instance subdir so each runner has its own RUNNER_ROOT
+# for state files (.runner / .credentials* / _diag / run-helper.sh). The
+# unit invokes /usr/local/bin/github_runner_sync_root %i before
+# jit_mint; idempotent on an unchanged tarball, refreshes per-instance
+# hard links on a tarball bump. See the script's docstring for the
+# per-instance-vs-shared and hard-link-vs-symlink rationale.
+- name: Install github_runner_sync_root script
+  copy:
+    src: github_runner_sync_root.sh
+    dest: /usr/local/bin/github_runner_sync_root
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  become: true
   tags:
     - github_runner
 
