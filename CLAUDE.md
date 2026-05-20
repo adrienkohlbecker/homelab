@@ -94,38 +94,36 @@ Prefer these over re-implementing the boilerplate; a hand-rolled equivalent in a
 
 ## Podman Service Conventions
 
-Long-form rationale (gotchas, history, why-not-skip) for each subsection in [notes/podman_conventions.md](notes/podman_conventions.md). Decision trees inline; consult notes when an edge case doesn't fit.
+Long-form rationale (gotchas, history, why-not-skip) in [notes/podman_conventions.md](notes/podman_conventions.md). For new roles use `/new_podman_role`. Consult notes when an edge case doesn't fit.
 
 ### Healthchecks
 
-Every podman `*.service.j2` unit must declare `--health-cmd` (and `--health-startup-cmd`). The check runs *inside* the container — invoke something the image actually contains. Preference order:
+Every `*.service.j2` declares `--health-cmd` (and `--health-startup-cmd`); the check runs *inside* the container. Preference order:
 
-1. **`curl` / `wget` already in the image.** Grep the image's Dockerfile first.
-2. **Python `urllib.request` with the URL in argv** (for python-based images). Use the JSON-array form — the naïve `'u.urlopen("...")'` shape fails when systemd unescapes the quotes mid-handoff. See notes for the exact incantation.
-3. **Service-native CLI** — `redis-cli ping`, `mosquitto_sub`, `dig +short @127.0.0.1`. Strongest signal when available.
-4. **`static_curl` role escape hatch** — for distroless images. No current consumers; see [notes/podman_conventions.md](notes/podman_conventions.md) (tier 4) for the bind-mount + JSON-array incantation when the first distroless image lands.
+1. `curl` / `wget` already in the image — grep the Dockerfile first.
+2. Python `urllib.request` with the URL in argv (python-based images). Use the **JSON-array form** — the naïve `'u.urlopen("...")'` shape unescapes mid systemd→podman handoff; see notes for the incantation.
+3. Service-native CLI — `redis-cli ping`, `mosquitto_sub`, `dig +short @127.0.0.1`.
+4. `static_curl` role escape hatch — for distroless images. No current consumers; see [notes/podman_conventions.md](notes/podman_conventions.md) tier 4.
 
 ### Secrets
 
-Three paths to inject a podman secret. Preferred order:
+Three paths to inject a podman secret, preferred order:
 
-1. **App-native `*_FILE` setting.** `--secret=<n>,type=mount,target=<basename>` + `--env XXX_FILE=/run/secrets/<basename>`. Secret never lands in env. Canonical: `EMAIL_HOST_PASSWORD_FILE` in [roles/healthchecks/templates/healthchecks.service.j2](roles/healthchecks/templates/healthchecks.service.j2).
-2. **linuxserver `FILE__<VARNAME>` prefix.** s6-overlay reads the file at startup. Use when the app expects an env var and lacks `*_FILE`. linuxserver-specific.
-3. **`--secret=<n>,type=env,target=VAR`.** Last-resort — secret visible to `podman inspect` and `/proc/<pid>/environ`. Acceptable on single-operator hosts; prefer 1 or 2.
+1. **App-native `*_FILE`.** `--secret=<n>,type=mount,target=<basename>` + `--env XXX_FILE=/run/secrets/<basename>`. Secret never lands in env. Canonical: `EMAIL_HOST_PASSWORD_FILE` in [roles/healthchecks/templates/healthchecks.service.j2](roles/healthchecks/templates/healthchecks.service.j2).
+2. **linuxserver `FILE__<VARNAME>`** prefix — s6-overlay reads the file at startup. linuxserver-specific.
+3. **`type=env,target=VAR`** — last-resort, visible to `podman inspect` and `/proc/<pid>/environ`. Acceptable on single-operator hosts; prefer 1 or 2.
 
 ### User namespacing
 
-Three-tier pick — simplest that works. **Note:** the repo grew up under a "uidmap everywhere" assumption that's since been inverted — most existing units use tier 2 or 3, but tier 1 is the target end-state for new and migrated roles. See [notes/SOMEDAY.md](notes/SOMEDAY.md) *Audit per-service container-user choice* for the sweep.
+Three-tier pick — simplest that works. **Note:** the repo grew up under a "uidmap everywhere" assumption that's since been inverted — most existing units use tier 2 or 3, but tier 1 is the target end-state for new and migrated roles. See [notes/SOMEDAY.md](notes/SOMEDAY.md) *Audit per-service container-user choice*.
 
-1. **`--user {{ <svc>_user.uid }}:{{ <svc>_user.group }}`** (default). Container process runs directly as the host service user; no namespace mapping involved. Files written to bind-mounts land with the right host ownership trivially. Use whenever the app doesn't insist on `id -u == 0` for its own internal checks.
-2. **linuxserver `PUID` / `PGID` env vars.** The image's s6-overlay init runs `usermod`/`chown` at startup to align its baked-in `abc` user with the desired ids. Linuxserver-specific.
-3. **Fake-root uidmap pattern** (last resort, only when the image actually needs `id -u == 0`): `--user 0:0` + `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1` (and gidmap pair). In-container root maps to the host service uid; a namespace escape lands at unprivileged uid. Canonical: [roles/healthchecks/](roles/healthchecks/).
-
-**When tier 3 isn't enough on its own:** if the image's entrypoint then drops to a baked-in non-root uid mid-startup (ClickHouse → 101, MongoDB → 100), the bare 1:1 fall-through lands on whatever host uid happens to share the number — wrong for `ls -la` and breaks ZFS-replication portability. Allocate a dedicated host user via `service_user` (`config_dir: false`) and add a `+N:<uid>:1` override. Add a `_verify.yml` ownership assertion so a regression in the mapping is loud. Canonical: [roles/hyperdx/](roles/hyperdx/) (ClickHouse maps, MongoDB doesn't — image's entrypoint doesn't actually switch).
+1. **`--user {{ <svc>_user.uid }}:{{ <svc>_user.group }}`** (default). No namespace mapping; bind-mount ownership is trivially correct. Use whenever the app doesn't insist on `id -u == 0`.
+2. **linuxserver `PUID` / `PGID`** — image's s6-overlay aligns its baked-in `abc` user to the supplied ids at startup. linuxserver-specific.
+3. **Fake-root uidmap** — last resort when the image insists on `id -u == 0`: `--user 0:0` + `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1` (and gidmap pair). Canonical: [roles/healthchecks/](roles/healthchecks/). When the image's entrypoint then drops to a baked-in non-root uid mid-startup (ClickHouse → 101, MongoDB → 100), allocate a dedicated host user via `service_user` (`config_dir: false`), add a `+N:<uid>:1` override, and assert ownership in `_verify.yml`. Canonical: [roles/hyperdx/](roles/hyperdx/).
 
 ### Prefer system-scope systemd units
 
-Default for new timers / services is **system-scope** (`/etc/systemd/system/`, `systemd[1]`). Reach for user-scope (`systemctl --user`, linger) only when fundamentally required — today that's just rootless podman (see `roles/gitea_runner/`, `roles/github_runner/`). <!-- last verified 2026-05 -->
+Default for new timers/services is **system-scope** (`/etc/systemd/system/`, `systemd[1]`). Reach for user-scope (`systemctl --user`, linger) only when fundamentally required — today that's just rootless podman ([roles/gitea_runner/](roles/gitea_runner/), [roles/github_runner/](roles/github_runner/)). One operational vocabulary (`systemctl status`, `journalctl -u`), single privilege-drop model (`User=` / `Group=`, or `systemd_timer`'s `run_as:`).
 
 
 
