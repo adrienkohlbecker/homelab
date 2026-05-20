@@ -7,7 +7,7 @@ homepage_bookmarks:
   Media:
     - { name: Plex,         abbr: PX, sub: plex,         icon: plex }
     - { name: Jellyfin,     abbr: JF, sub: jellyfin,     icon: jellyfin }
-    - { name: Overseerr,    abbr: OS, sub: overseerr,    icon: overseerr }
+    - { name: Seerr,        abbr: SE, sub: seerr,        icon: seerr }
     - { name: Tautulli,     abbr: TT, sub: tautulli,     icon: tautulli }
     - { name: Sonarr,       abbr: SN, sub: sonarr,       icon: sonarr }
     - { name: Radarr,       abbr: RD, sub: radarr,       icon: radarr }
