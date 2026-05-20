@@ -91,10 +91,10 @@
         enabled = 1
         apikey = {{ radarr_api_key }}
         host = radarr.dns.podman
-        port = 443
+        port = 7878
         ###### ADVANCED USE - ONLY EDIT IF YOU KNOW WHAT YOU'RE DOING ######
         web_root = ""
-        ssl = 1
+        ssl = 0
         # api key for www.omdbapi.com (used as alternative to imdb)
         omdbapikey = {{ omdb_api_key }}
         delete_failed = 0
@@ -237,12 +237,12 @@
         enabled = 1
         apikey = {{ sonarr_api_key }}
         host = sonarr.dns.podman
-        port = 443
+        port = 8989
         username = ""
         password = ""
         ###### ADVANCED USE - ONLY EDIT IF YOU KNOW WHAT YOU'RE DOING ######
         web_root = ""
-        ssl = 1
+        ssl = 0
         delete_failed = 0
         # Enable/Disable linking for Torrents
         Torrent_NoLink = 0
@@ -294,10 +294,10 @@
         enabled = 1
         apikey = {{ lidarr_api_key }}
         host = lidarr.dns.podman
-        port = 443
+        port = {{ service_ports.lidarr }}
         ###### ADVANCED USE - ONLY EDIT IF YOU KNOW WHAT YOU'RE DOING ######
         web_root = ""
-        ssl = 1
+        ssl = 0
         delete_failed = 0
         # Enable/Disable linking for Torrents
         Torrent_NoLink = 0
