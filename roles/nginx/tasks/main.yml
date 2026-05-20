@@ -21,6 +21,9 @@
       subdomain: marantz
       proxy_pass: https://{{ external_ips.marantz }}:10443/
       reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
+      # Device firmware login still in front; Authelia adds
+      # defense-in-depth at the perimeter — accept the second click.
+      auth: required
   tags:
     - nginx
 
@@ -31,6 +34,7 @@
       subdomain: printer
       proxy_pass: http://{{ external_ips.printer }}:80/
       reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
+      auth: required
   tags:
     - nginx
 
@@ -41,6 +45,7 @@
       subdomain: siglent
       proxy_pass: http://{{ external_ips.siglent }}:80/
       reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
+      auth: required
   tags:
     - nginx
 
@@ -63,6 +68,7 @@
       subdomain: ups
       proxy_pass: https://{{ external_ips.eaton }}:443/
       reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
+      auth: required
   tags:
     - nginx
 
@@ -73,6 +79,7 @@
       subdomain: tubeszb
       proxy_pass: http://{{ external_ips.tubeszb }}:80/
       reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
+      auth: required
   tags:
     - nginx
 

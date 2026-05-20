@@ -2,3 +2,8 @@
   import_role:
     name: _test
     tasks_from: nginx
+
+- name: _setup | Install authelia stub for auth=required tests
+  import_role:
+    name: _test
+    tasks_from: authelia_stub
