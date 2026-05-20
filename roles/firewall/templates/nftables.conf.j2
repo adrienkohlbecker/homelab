@@ -105,12 +105,24 @@ table inet homelab {
     # the catch-all TCP reject (LAN-side fast-fail). Pinning iif keeps
     # an attacker on a future LAN bridge / guest VLAN / mgmt net from
     # speculatively probing these paths.
+    #
+    # vrrp.<vrid> is the keepalived use_vmac child of $WAN_IFACE that
+    # carries the pihole VIP (see roles/pihole/templates/keepalived.conf.j2).
+    # Inbound DNS to the VIP arrives here (UDM routes inter-VLAN packets to
+    # the VIP via its vmac MAC), then PREROUTING DNATs to the pihole
+    # container — without vrrp.<vrid> in this set the DNAT'd packet fell
+    # through to the forward catch-all and pihole became unreachable from
+    # every VLAN except mgmt+wg0. Trust scope is the same as $WAN_IFACE:
+    # the vmac is a macvlan child of $WAN_IFACE on the same L2.
     set lan_admin_ifaces {
         type ifname
         flags constant
         elements = {
             $WAN_IFACE comment "WAN-facing iface (LAN saddrs arrive via UDM)",
             "wg0" comment "wireguard tunnel",
+{% if inventory_hostname in (pihole_keepalived_peers | default([])) %}
+            "vrrp.{{ pihole_keepalived_vrid }}" comment "keepalived vmac (pihole VIP carrier; same L2 as $WAN_IFACE)",
+{% endif %}
         }
     }
 
