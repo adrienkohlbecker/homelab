@@ -139,11 +139,7 @@ Three-tier pick — simplest that works. **Note:** the repo grew up under a "uid
 
 ### Prefer system-scope systemd units
 
-Default for new timers/services is **system-scope** (`/etc/systemd/system/`, `systemd[1]`). Reach for user-scope (`systemctl --user`, linger) only when fundamentally required — today that's just rootless podman ([roles/gitea_runner/](roles/gitea_runner/), [roles/github_runner/](roles/github_runner/)). One operational vocabulary (`systemctl status`, `journalctl -u`), single privilege-drop model (`User=` / `Group=`, or `systemd_timer`'s `run_as:`).
-
-
-
-Reasons: one operational vocabulary (`systemctl status foo`, `journalctl -u foo` work without `--user --machine=<u>@.host`); netdata's `systemdunits` collector attaches to the system bus only; single privilege-drop model (`User=` / `Group=` directives). When non-root identity is needed system-scope, use `systemd_timer`'s `run_as:` arg. [roles/getmail/tasks/main.yml](roles/getmail/tasks/main.yml) is the canonical example.
+Default for new timers/services is **system-scope** (`/etc/systemd/system/`, `systemd[1]`). Reach for user-scope (`systemctl --user`, linger) only when fundamentally required — today that's just rootless podman ([roles/gitea_runner/](roles/gitea_runner/), [roles/github_runner/](roles/github_runner/)). One operational vocabulary (`systemctl status`, `journalctl -u` without `--user --machine=<u>@.host`); netdata's `systemdunits` collector attaches to the system bus only; single privilege-drop model (`User=` / `Group=`, or `systemd_timer`'s `run_as:` — [roles/getmail/tasks/main.yml](roles/getmail/tasks/main.yml) is the canonical example).
 
 ## Testing Guidelines
 
