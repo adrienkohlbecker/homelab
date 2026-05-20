@@ -38,13 +38,7 @@ ExecStart=/usr/bin/podman run \
     --read-only \
     --log-driver journald \
     --log-opt tag="influxdb" \
-    --user 0:0 \
-    --uidmap=0:0:65536 \
-    --uidmap=+0:{{ influxdb_user.uid }}:1 \
-    --uidmap=+1000:{{ influxdb_user.uid }}:1 \
-    --gidmap=0:0:65536 \
-    --gidmap=+0:{{ influxdb_user.group }}:1 \
-    --gidmap=+1000:{{ influxdb_user.group }}:1 \
+    --user {{ influxdb_user.uid }}:{{ influxdb_user.group }}  \
     --env INFLUXD_REPORTING_DISABLED=true \
     --env INFLUXD_STORAGE_VALIDATE_KEYS=true \
     --env INFLUXD_LOG_LEVEL=warn \
