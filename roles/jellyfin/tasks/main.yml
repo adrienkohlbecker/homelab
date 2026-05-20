@@ -61,11 +61,26 @@
     mode: "0755"
   become: true
   loop:
-    - /mnt/services/sqlite/jellyfin
     - /mnt/services/jellyfin/data
     - /mnt/scratch/jellyfin
     - /mnt/scratch/jellyfin/cache
     - /var/log/jellyfin
+  tags:
+    - jellyfin
+
+# The sqlite dir is split out because the per-service sqlite subdirs are
+# group-tight (0750) across the media stack — only the owning service +
+# the media group should be able to list jellyfin's DB files; other users
+# on the host have no business there.
+- name: Create jellyfin sqlite dir
+  when: not (ansible_check_mode and jellyfin_user.changed)
+  file:
+    dest: /mnt/services/sqlite/jellyfin
+    state: directory
+    owner: jellyfin
+    group: media
+    mode: "0750"
+  become: true
   tags:
     - jellyfin
 
