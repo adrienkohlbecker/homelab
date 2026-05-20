@@ -77,10 +77,10 @@ sites:
           block_b: { cidr: 10.123.1.128/26, status: reserved }
           block_c: { cidr: 10.123.1.192/27, status: reserved }
           vips:    { cidr: 10.123.1.224/27 }
-      home: { id: 2, cidr: 10.123.2.0/24, gateway: 10.123.2.1 }
-      work: { id: 3, cidr: 10.123.3.0/24, gateway: 10.123.3.1 }
-      iot:  { id: 4, cidr: 10.123.4.0/24, gateway: 10.123.4.1 }
-      vlan_5: { id: 5, cidr: 10.123.5.0/24, status: reserved }
+      home:    { id: 2, cidr: 10.123.2.0/24, gateway: 10.123.2.1 }
+      work:    { id: 3, cidr: 10.123.3.0/24, gateway: 10.123.3.1 }
+      iot:     { id: 4, cidr: 10.123.4.0/24, gateway: 10.123.4.1 }
+      trusted: { id: 5, cidr: 10.123.5.0/24, gateway: 10.123.5.1 }
       vlan_6: { id: 6, cidr: 10.123.6.0/24, status: reserved }
       vlan_7: { id: 7, cidr: 10.123.7.0/24, status: reserved }
   site_8:  { cidr: 10.123.8.0/21,  status: reserved }
