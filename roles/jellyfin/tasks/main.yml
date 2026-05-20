@@ -196,7 +196,9 @@
       # nginx doesn't kill the first request while the backend is alive.
       proxy_read_timeout: 300s
       # Jellyfin's web UI loads cast_sender.js from gstatic for
-      # Chromecast support; allow-list it in our default-strict CSP.
-      csp_default_src: "www.gstatic.com"
+      # Chromecast support. Narrow the allow-list to script-src so
+      # it doesn't fall through to connect-src/frame-src/img-src via
+      # default-src.
+      csp_additional: "script-src www.gstatic.com {{ nginx_csp_default }}"
   tags:
     - jellyfin
