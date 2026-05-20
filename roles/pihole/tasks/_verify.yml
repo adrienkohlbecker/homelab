@@ -1,0 +1,27 @@
+# keepalived isn't actually started under the harness (the role only
+# drops a conf.d fragment and reloads; roles/keepalived's enable step is
+# what brings the unit up, and _setup doesn't invoke it). So we can't
+# assert against a live vrrp.1 iface or against UniFi's client view;
+# the strongest available check is that the rendered conf carries the
+# directives that make UniFi see the VIP under a dedicated VRRP MAC
+# instead of the host's eth0 MAC. A regression in this template (e.g.
+# someone "simplifying" the vrrp_instance block) silently re-poisons the
+# UniFi client entry on the live host — this check fails the harness
+# before that ships.
+- name: _verify | Slurp rendered keepalived conf
+  slurp:
+    src: /etc/keepalived/conf.d/pihole.conf
+  register: pihole_keepalived_rendered
+  become: true
+
+- name: _verify | Keepalived conf opts the VIP onto a dedicated VRRP vmac
+  assert:
+    that:
+      - "'use_vmac' in (pihole_keepalived_rendered.content | b64decode)"
+      - "'vmac_xmit_base' in (pihole_keepalived_rendered.content | b64decode)"
+    fail_msg: >-
+      roles/pihole/templates/keepalived.conf.j2 must keep both `use_vmac`
+      and `vmac_xmit_base` so the pihole VIP rides a dedicated VRRP MAC
+      (00:00:5e:00:01:<vrid>) on a vrrp.<vrid> child of eth0. Without
+      them the VIP shares the host's eth0 MAC and UniFi's per-MAC client
+      tracker flips the host's client record to the pihole IP.

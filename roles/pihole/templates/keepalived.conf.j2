@@ -16,6 +16,21 @@ vrrp_instance pihole {
   state     BACKUP
   interface eth0
 
+  # Create a dedicated macvlan child `vrrp.{{ pihole_keepalived_vrid }}` on
+  # eth0 with the VRRP standard MAC 00:00:5e:00:01:{{ '%02x' % pihole_keepalived_vrid }} and
+  # carry the VIP on it. Without use_vmac the VIP rides eth0's primary MAC
+  # and the periodic GARP below (which announces VIP→hostMAC) trips UniFi's
+  # last-write-wins client tracker — the host's UniFi client entry flips
+  # from its primary IP to the pihole VIP. A dedicated vmac splits that
+  # into two distinct UniFi clients (host + VIP) and keeps both stable.
+  use_vmac
+  # Source outbound traffic on eth0, not the vmac. Two reasons: the firewall
+  # scopes the VRRP-accept rule to iifname $WAN_IFACE (= eth0; see
+  # roles/firewall/templates/nftables.conf.j2), so peer adverts must continue
+  # to ingress on eth0; and pihole's reply traffic for the VIP keeps its
+  # existing L2 path instead of acquiring the vmac as egress iface.
+  vmac_xmit_base
+
   unicast_src_ip {{ external_ips[inventory_hostname] }}
   unicast_peer {
     {% for name in pihole_keepalived_peers | select("ne", inventory_hostname) | sort %}
@@ -32,10 +47,10 @@ vrrp_instance pihole {
   }
 
   # Periodic gratuitous ARP so any LAN cache that picks up a wrong MAC
-  # for the VIP self-heals within ~1 minute. The VIP shares its broadcast
-  # domain with mac_mgmt (macvlan child of eth0); ARP-flux is mitigated by
-  # arp_ignore=1/arp_announce=2 in roles/macvlan, but periodic GARP is a
-  # belt-and-braces against transient poisoning during role rollouts.
+  # for the VIP self-heals within ~1 minute. With use_vmac above, GARPs
+  # advertise VIP→vmac-MAC (00:00:5e:00:01:{{ '%02x' % pihole_keepalived_vrid }}), so a stale cache
+  # pointing at the previous MASTER's vmac (or — pre-vmac-rollout — at
+  # the host's eth0 MAC) gets refreshed within the refresh window.
   garp_master_repeat 3
   garp_master_refresh 60
 
