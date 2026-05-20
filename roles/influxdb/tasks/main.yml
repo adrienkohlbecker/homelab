@@ -27,6 +27,59 @@
   tags:
     - influxdb
 
+# Initial bootstrap (org/user/bucket) is done by the image's entrypoint
+# via DOCKER_INFLUXDB_INIT_* env on first start -- it checks for a
+# populated BoltDB and skips if one is present, so it's naturally
+# idempotent without a sentinel file. Both secrets are mounted via
+# --secret and consumed via *_FILE env so the password never lands on
+# any command line or in `podman inspect` / /proc/<pid>/environ.
+- name: Create influxdb_root_user secret
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: influxdb_root_user
+      data: "{{ influxdb_root_user }}"
+  tags:
+    - influxdb
+
+- name: Create influxdb_root_password secret
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: influxdb_root_password
+      data: "{{ influxdb_root_password }}"
+  tags:
+    - influxdb
+
+# DOCKER_INFLUXDB_INIT_* honors the credentials only on first boot
+# (no BoltDB present). A vault rotation updates the podman secret here
+# but the running app keeps the original credentials silently. Mirror
+# healthchecks's pattern: fail loudly with explicit operator
+# instructions instead of silently lying.
+- name: Fail if root credentials rotated post-bootstrap
+  fail:
+    msg: |
+      influxdb_root_user or influxdb_root_password changed in vault.
+      The podman secret has been updated, but the influxdb image's
+      DOCKER_INFLUXDB_INIT_* setup runs only on first boot (BoltDB
+      empty), so the running instance still has the old credentials.
+
+      To complete the rotation, run on the target host:
+
+        podman exec -it influxdb influx user password \
+          --name '{{ influxdb_root_user }}'
+
+      Then re-run this play.
+  when:
+    - influxdb_root_user_rotated or influxdb_root_password_rotated
+    - influxdb_root_user_existed_before or influxdb_root_password_existed_before
+  tags:
+    - influxdb
+
 - name: Install influxdb service
   import_role:
     name: systemd_unit
@@ -46,16 +99,7 @@
     systemd_unit_args:
       src: influxdb
       condition: "{{ not (ansible_check_mode and (influxdb_service_result.changed or influxdb_user.changed)) }}"
-      restart: "{{ influxdb_service_result.changed }}"
-  tags:
-    - influxdb
-
-- name: Initial setup
-  when: not (ansible_check_mode and (influxdb_service_result.changed or influxdb_user.changed ))
-  command: podman exec influxdb influx setup --username "{{ influxdb_root_user }}" --password "{{ influxdb_root_password }}" --org home --bucket default --force
-  args:
-    creates: /mnt/services/influxdb/config/influx-configs
-  become: true
+      restart: "{{ influxdb_service_result.changed or influxdb_root_user_rotated or influxdb_root_password_rotated }}"
   tags:
     - influxdb
 
