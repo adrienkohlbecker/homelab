@@ -19,7 +19,7 @@ PartOf=zfs_autosnapshot.target
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
-TimeoutSec=120
+TimeoutSec=60
 RestartSec=5
 Type=notify
 NotifyAccess=all
@@ -35,11 +35,13 @@ ExecStart=/usr/bin/podman run \
     --rm \
     --name influxdb \
     --init \
+    --read-only \
     --log-driver journald \
     --log-opt tag="influxdb" \
     --user {{ influxdb_user.uid }}:{{ influxdb_user.group }}  \
     --env INFLUXD_REPORTING_DISABLED=true \
     --env INFLUXD_STORAGE_VALIDATE_KEYS=true \
+    --env INFLUXD_LOG_LEVEL=warn \
     --secret=influxdb_root_user,type=mount,target=influxdb_root_user \
     --secret=influxdb_root_password,type=mount,target=influxdb_root_password \
     --env DOCKER_INFLUXDB_INIT_MODE=setup \
@@ -54,9 +56,9 @@ ExecStart=/usr/bin/podman run \
     --health-startup-cmd '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8086/health"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
-    --health-start-period "100s" \
+    --health-start-period "30s" \
     --stop-signal SIGINT \
-    --stop-timeout 120 \
+    --stop-timeout 30 \
     docker.io/influxdb:2.7.11
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
