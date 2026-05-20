@@ -121,6 +121,36 @@
   tags:
     - paperless
 
+# Django-allauth's SOCIALACCOUNT_PROVIDERS config carries the OIDC
+# client secret inline; render it to a podman secret so it's mounted
+# as a file under /run/secrets/ instead of landing in `podman inspect`
+# (paperless-ngx reads any PAPERLESS_* env via _FILE if pointed at a
+# path -- see CLAUDE.md "Container Secrets" #1).
+- name: Compose paperless OIDC providers config
+  set_fact:
+    paperless_socialaccount_providers:
+      openid_connect:
+        APPS:
+          - provider_id: authelia
+            name: Authelia
+            client_id: paperless
+            secret: "{{ paperless_oidc_client_secret }}"
+            settings:
+              server_url: "https://auth.{{ authelia_cookie_domain }}/.well-known/openid-configuration"
+  tags:
+    - paperless
+
+- name: Create paperless OIDC providers secret
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: paperless_socialaccount_providers
+      data: "{{ paperless_socialaccount_providers | to_json }}"
+  tags:
+    - paperless
+
 - name: Install paperless service
   import_role:
     name: systemd_unit
@@ -140,7 +170,7 @@
     systemd_unit_args:
       src: paperless
       condition: "{{ not (ansible_check_mode and (systemd_unit.changed or paperless_user.changed)) }}"
-      restart: "{{ systemd_unit.changed or paperless_secret_key_rotated }}"
+      restart: "{{ systemd_unit.changed or paperless_secret_key_rotated or paperless_socialaccount_providers_rotated }}"
   tags:
     - paperless
 

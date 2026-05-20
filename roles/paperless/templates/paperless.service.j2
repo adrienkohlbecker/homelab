@@ -51,7 +51,13 @@ ExecStart=/usr/bin/podman run \
     --env PAPERLESS_OCR_LANGUAGES="eng fra nld" \
     --env PAPERLESS_OCR_LANGUAGE=fra \
     --env PAPERLESS_URL=https://paperless.{{ inventory_hostname }}.{{ domain }} \
+    --env PAPERLESS_APPS=allauth.socialaccount.providers.openid_connect \
+    --env PAPERLESS_ACCOUNT_DEFAULT_HTTP_PROTOCOL=https \
+    --env PAPERLESS_ACCOUNT_EMAIL_VERIFICATION=none \
+    --env PAPERLESS_SOCIAL_AUTO_SIGNUP=true \
+    --env PAPERLESS_SOCIALACCOUNT_PROVIDERS_FILE=/run/secrets/socialaccount_providers.json \
     --secret=paperless_secret_key,type=env,target=PAPERLESS_SECRET_KEY \
+    --secret=paperless_socialaccount_providers,type=mount,target=socialaccount_providers.json \
     --health-cmd         '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8000/"]' \
     --health-startup-cmd '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8000/"]' \
     --health-startup-interval "1s" \
