@@ -35,11 +35,39 @@
   tags:
     - journald
 
-- name: Restart systemd-journald
-  when: journald_conf.changed
+# Audit=yes in journald.conf is a silent no-op unless systemd-journald-
+# audit.socket is active — that socket binds the kernel audit netlink
+# and passes the fd to journald via socket activation. Ubuntu's cloud-
+# image variants ship the socket preset-disabled; opt in explicitly so
+# the directive works on every host this role runs against.
+- name: Enable systemd-journald-audit.socket
   systemd:
-    name: systemd-journald
-    state: restarted
+    name: systemd-journald-audit.socket
+    enabled: true
+  become: true
+  register: journald_audit_socket
+  tags:
+    - journald
+
+# systemctl refuses to start the audit socket while journald.service is
+# already active ("Socket service ... already active, refusing"). On the
+# first apply per host (or whenever the rendered conf changed) we stop
+# journald so the socket can claim the netlink fd cleanly; on steady-
+# state re-applies both registers report unchanged and journald is not
+# touched.
+- name: Stop systemd-journald to release sockets
+  when: journald_conf.changed or journald_audit_socket.changed
+  systemd:
+    name: systemd-journald.service
+    state: stopped
+  become: true
+  tags:
+    - journald
+
+- name: Start systemd-journald-audit.socket
+  systemd:
+    name: systemd-journald-audit.socket
+    state: started
   become: true
   tags:
     - journald
@@ -59,14 +87,15 @@
   tags:
     - journald
 
-# Loud failure if the restart left the daemon in a non-active state — without
-# journald running, container --log-driver=journald, every systemd unit, and
-# kuma's systemdunits collector silently degrade until next reboot. systemd:
-# state=started is idempotent: no-op when already active, starts if not, and
-# fails the task (with the unit's own error) if the unit can't start.
-- name: Ensure systemd-journald is active after configuration
+# state=started is idempotent (no-op when active) and fails loudly if the
+# unit can't start. Doubles as the post-conf liveness assertion: without
+# journald running, container --log-driver=journald, every systemd unit,
+# and kuma's systemdunits collector silently degrade until next reboot.
+# Also inherits the audit netlink fd from systemd-journald-audit.socket
+# above when journald is brought back up after a stop.
+- name: Start systemd-journald.service
   systemd:
-    name: systemd-journald
+    name: systemd-journald.service
     state: started
   become: true
   tags:
