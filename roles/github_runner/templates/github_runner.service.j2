@@ -1,55 +1,45 @@
 #jinja2: lstrip_blocks: True
 # github_runner@.service ###############################################
-# Templated system-scope unit running as root, demoting to host
-# github_runner inside the container via the +0 uidmap override.
-# One instance per entry in github_runner_instances on this host.
-# Instance name = <repo>_<suffix> (e.g. homelab_vm1). Per-instance
-# config ships via /etc/default/github_runner@%i; the long-lived
-# GitHub PAT ships via the github_runner_pat podman secret (host-
-# level, shared across instances). Ephemeral + JIT: the entrypoint
-# mints a single-use JIT config on every container start and run.sh
-# self-deregisters when the job completes.
+# Templated system-scope unit running actions/runner directly on the
+# host as the github_runner system user. No containerisation: each
+# instance's run.sh executes in /opt/actions-runner/<inst>/ (a hard-
+# link mirror of the canonical /opt/actions-runner/ binary tree plus
+# the instance's own .runner / .credentials* config). Long-lived
+# registration (config.sh runs once at apply time per instance via
+# _register.yml); the unit just spawns run.sh and lets it long-poll
+# GitHub.
 #
-# Same shape as every other system-scope podman role on this host
-# (healthchecks, openobserve, etc.): no User= directive, podman runs
-# as root, and the in-container processes are demoted to host
-# github_runner via --uidmap=+0:<uid>:1. Two earlier variants in
-# this branch (system-scope-with-User=github_runner, then user-scope)
-# tried to keep podman itself rootless for defense in depth; both
-# hit failures (cgroup permissions for exec, then chmod EPERM from
-# the rootless-on-rootless userns layering against the bind-mounted
-# /work). Going with the standard pattern accepts a slightly wider
-# blast radius for a kernel-vuln-class container escape (lands as
-# host root vs host github_runner) in exchange for a simpler,
-# better-tested code path. Acceptable for homelab CI per CLAUDE.md.
-#
-# Sibling workflow containers (spawned via the DooD socket from
-# inside the runner) STAY rootless under github_runner -- the DooD
-# bind mount points at /run/user/<uid>/podman/podman.sock, which is
-# served by github_runner's user-scope podman.socket. So the
-# defense-in-depth story holds for the second-level containers,
-# which is where untrusted action code actually runs.
+# Previous shape (commit 82a1ac86 .. 286a5809) ran the runner inside a
+# rootless-but-system-scope podman container with a JIT-config minted
+# per container start, +0 uidmap demotion, DooD via bind-mounted
+# rootless podman socket, sync_root hard-linking per-instance binary
+# trees on each restart, etc. The whole edifice existed for security
+# properties (per-job clean state, ephemeral credentials, namespace
+# isolation) that matter at $BigCo and barely matter at single-
+# operator homelab scale. Reverted to "actions/runner on the host"
+# because the operational tax of the containerised shape (JIT mint
+# script, per-start sync_root, image rebuild pipeline, uidmap+subgid
+# acrobatics, /var/run/docker.sock symlink dance, last-write-wins
+# races at /opt/actions-runner/) exceeded the threat-model benefit.
+# A malicious workflow still gets capped at the github_runner uid,
+# which has no privileged access to anything on the host.
 [Unit]
 Description=github-actions runner (%i)
-# DooD socket lives at /run/user/<uid>/podman/podman.sock under
-# github_runner's user manager. A system-scope unit can't directly
-# After= a user-scope socket, but it can After= the user manager
-# itself (user@<uid>.service is a system unit). linger keeps the
-# user manager up at boot and podman.socket is enabled in user
-# scope, so by the time user@<uid>.service is `active`, podman.sock
-# is reachable.
-After=user@{{ github_runner_user.uid }}.service
-Requires=user@{{ github_runner_user.uid }}.service
-# Runner image lives at nexus.lab.fahm.fr/homelab/runner:latest. nexus is
-# contacted on cold-start (--pull=missing fires once on a fresh host) and
-# from github_runner_image_rotate.timer's 5-minute tick; steady-state
-# restarts after a job land on the cached layer and never touch nexus.
-# After= orders cold-start so the first pull doesn't race nexus bringup
-# at boot; Wants= (not Requires=) keeps a nexus stop from cascading into
-# in-flight runner jobs. On hosts without nexus.service the After= is
-# silently a no-op, so the unit stays portable.
+After=network-online.target
+Wants=network-online.target
+# nexus is contacted by `container:` workflow blocks that pull from
+# nexus.lab.fahm.fr/homelab/ci:latest. After= orders cold start so the
+# first job's image pull doesn't race nexus bringup; Wants= (not
+# Requires=) keeps a nexus stop from cascading into in-flight jobs.
 After=nexus.service
 Wants=nexus.service
+# user@<uid>.service brings up github_runner's rootless podman.socket
+# via linger. Workflow `container:` blocks shell out to docker (via
+# DOCKER_HOST below) which is that rootless podman socket -- so the
+# user manager has to be up before run.sh can accept jobs that need
+# it.
+After=user@{{ github_runner_user.uid }}.service
+Requires=user@{{ github_runner_user.uid }}.service
 StartLimitInterval=600
 StartLimitBurst=3
 {% if zfs_root %}
@@ -62,256 +52,46 @@ PartOf=zfs_autosnapshot.target
 {% endif %}
 
 [Service]
-# RuntimeDirectory= creates /run/%N (= /run/github_runner@<inst>/ --
-# systemd's %N specifier strips the .service suffix) on start and
-# removes it on stop. The cidfile and the host-side JIT blob both
-# land there; github_runner_jit_mint must write to the same no-suffix
-# path so the unit's `--volume %t/%N/jit:/run/jit:ro` finds it.
-# %t is /run for system units so the cidfile path is %t/%N/%n.ctr-id.
-RuntimeDirectory=%N
-Environment=PODMAN_SYSTEMD_UNIT=%n
+Type=simple
+User=github_runner
+Group=github_runner
+WorkingDirectory=/opt/actions-runner
+# Wrapper script cd's to the per-instance dir and execs run.sh. The
+# indirection through a stable /usr/local/bin/ path is what makes the
+# unit pass systemd-analyze verify -- a direct
+# ExecStart=/opt/actions-runner/%i/run.sh fails validation because
+# verify substitutes "i" as the instance placeholder and the dir
+# doesn't exist for that literal. The wrapper also handles
+# WorkingDirectory (cd inside the script) so systemd doesn't try to
+# chdir into a possibly-missing dir before forking ExecStart.
+ExecStart=/usr/local/bin/github_runner_run %i
 Restart=always
-RestartSec=5
-Delegate=yes
-# Cold-start has to fit: image pull (first time), container create, the
-# entrypoint's curl POST to GitHub's generate-jitconfig endpoint, and
-# Runner.Listener's startup to "Listening for jobs" (the healthcheck's
-# ready signal). 300s covers the slowest of these (network-bound pull)
-# with headroom.
-TimeoutStartSec=300
-# TimeoutStopSec has to exceed --stop-timeout below by enough margin
-# for podman to SIGKILL the container, clean up the storage graph
-# entry, and exit. 30s headroom over the 60s --stop-timeout (chosen
-# below) covers the slowest observed cleanup.
+RestartSec=10
+# actions/runner's main loop is a long-poll against GitHub's
+# /runners/messages endpoint (~50s server hold). SIGTERM only takes
+# effect once the in-flight long-poll returns, so 90s gives the listener
+# room to acknowledge the signal before systemd escalates to SIGKILL.
 TimeoutStopSec=90
-Type=notify
-NotifyAccess=all
-SyslogIdentifier=%N
-
-# --cgroups=split: container + conmon live as sub-cgroups under the
-#   systemd unit's cgroup tree. Resource limits / accounting in the
-#   unit apply to the container; systemctl status shows real resource
-#   usage; systemctl kill reaps the container. Standard system-scope
-#   + Delegate=yes idiom, same as every other podman service role.
-# --init: PID 1 inside the container would otherwise be the entrypoint
-#   shell, which doesn't reap orphaned children. actions/runner spawns
-#   Runner.Listener -> Runner.Worker -> per-step processes (node, git,
-#   ...); a workflow step that double-forks and exits leaves zombies
-#   the shell-as-PID-1 won't collect, slowly burning kernel PID slots
-#   over the container's lifetime. --init wires podman's catatonit at
-#   PID 1 to handle signal forwarding and zombie reaping. Compatible
-#   with --sdnotify=healthy (podman owns the NOTIFY_SOCKET path, not
-#   PID 1).
-# --user / --uidmap / --gidmap: fake-root pattern from CLAUDE.md
-#   "Container User Namespacing". podman runs as real root (no
-#   User= in the unit), so the base 0:0:65536 would map in-container
-#   uid 0 to host root. The +0:<github_runner.uid>:1 override
-#   demotes in-container uid 0 to host github_runner so writes to
-#   /work and the DooD socket land at the right owner without
-#   granting real-root inside the container.
-# --volume podman.sock: DooD -- actions/runner's docker-CLI shell-outs
-#   (for workflows with `container:` blocks) hit github_runner's
-#   rootless podman, NOT a daemon inside the runner container.
-#   Note: this bind-mount only handles in-runner-container docker
-#   calls. When a workflow declares a job-level `container:` block,
-#   actions/runner additionally tells the HOST's podman (via this same
-#   socket) to bind-mount /var/run/docker.sock into the sibling job
-#   container -- the host needs the path to exist for that statfs to
-#   succeed. roles/github_runner/tasks/main.yml carries the
-#   tmpfiles.d L rule + immediate-apply file:state=link that
-#   materialises /var/run/docker.sock on the host as a symlink to this
-#   same rootless socket. Removing either leaves `container:`
-#   workflows failing at the "Initialize containers" step with
-#   "statfs /var/run/docker.sock: no such file or directory".
-# --volume /opt/actions-runner/%i:/opt/actions-runner:rw: the host's
-#   per-instance actions-runner dir, bind-mounted to shadow what the
-#   container's image sees as the canonical /opt/actions-runner/. The
-#   per-instance dir is populated by github_runner_sync_root
-#   ExecStartPre with hard links from the canonical tree on the host,
-#   so disk stays at 1x while each instance gets its own writable
-#   RUNNER_ROOT for state files (.runner / .credentials* / _diag /
-#   run-helper.sh) the runner writes at startup. Shadow-binding (rather
-#   than per-instance path-mirroring) keeps the image's entrypoint
-#   working unchanged: it does `cd /opt/actions-runner` and execs
-#   `./run.sh`, which now resolves to the per-instance hard-linked
-#   run.sh. Without the per-instance dir, N>1 concurrent instances raced
-#   the same files at /opt/actions-runner/ on the host -- whichever lost
-#   the last-write race signed session messages with another instance's
-#   RSA key, the GitHub broker rejected with "The signature is not
-#   valid", actions/runner's in-process retry-loop classified that as
-#   retryable so the container never exited and systemd never restarted
-#   it, and the pgrep healthcheck stayed green while the runner reported
-#   offline in the GitHub UI for the entire stuck-container lifetime.
-#   See files/github_runner_sync_root.sh for the hard-link-vs-copy-
-#   vs-symlink rationale.
+KillSignal=SIGTERM
+# Workflow `container:` blocks shell out to `docker` (actually
+# podman-docker on the host) which connects to DOCKER_HOST. Point at
+# github_runner's rootless podman socket so sibling job containers
+# run under the same uid as the runner process. The /var/run/docker.sock
+# symlink (see main.yml's tmpfiles + immediate-apply tasks) covers the
+# rare workflow that hardcodes that path.
+Environment=DOCKER_HOST=unix:///run/user/{{ github_runner_user.uid }}/podman/podman.sock
+# actions/runner reads its work folder from .runner (set at config.sh
+# time via --work). _register.yml points --work at
+# /mnt/scratch/github_runner/workdir_<inst> so per-job checkouts +
+# tool installs land on /mnt/scratch (terabytes) instead of /opt
+# (a rpool ZFS dataset).
 #
-#   Path-mirroring still works for DooD: actions/runner spawns docker
-#   create with -v /opt/actions-runner/externals:/__e:ro for the
-#   workflow container, and docker (resolving the source on the host
-#   via the bind-mounted socket) finds the canonical externals -- which
-#   share inodes with the per-instance hard-linked copy, so the sibling
-#   container reads identical content either way.
-#
-#   :rw is necessary because the runner writes state files at startup.
-#   Tampering with the canonical binaries via a malicious workflow is
-#   still possible (a write to /opt/actions-runner/bin/Runner.* inside
-#   the container lands on the per-instance hard link, which shares an
-#   inode with the canonical -- so the canonical file mutates too), at
-#   the same blast radius as before -- the per-instance dir doesn't
-#   reduce it. The tamper-detection follow-up in CLAUDE.md "Someday"
-#   still applies the same way. The cleaner :O (overlay) flag would
-#   discard in-container writes on exit -- and we tried it -- but it's
-#   fundamentally incompatible with the +0 uidmap demotion: :O's
-#   bind-mount source lives under /var/lib/containers/storage/
-#   overlay-containers/<cid>/userdata/ which podman creates at 0700
-#   root-only, and crun's source-path lookup runs as the in-userns
-#   root (= host github_runner via the +0 override), hitting EACCES
-#   on traversal.
-# --volume /mnt/.../workdir_%i: path-mirrored at the same path on
-#   both sides for the same DooD-bind-mount reason. actions/runner's
-#   _work tree lives here, plus _temp/_actions/_tool subdirs that
-#   workflow containers see at /__w/_* via DooD bind mounts that
-#   reference this host path. Lives on /mnt/scratch (terabytes) so
-#   per-job checkouts don't pressure the container's writable layer.
-#   The JIT blob (built by the host-side mint script from this same
-#   instance's /etc/default/github_runner@%i envfile) carries the
-#   authoritative work_folder, so actions/runner picks up this path
-#   from the registration -- no in-container --env-file needed. The
-#   envfile is intentionally NOT bind-mounted into the container, so
-#   REPO_OWNER / REPO_NAME / RUNNER_NAME / RUNNER_LABELS aren't
-#   visible to sibling DooD containers via `docker inspect`.
-# --env CONTAINER_HOST / DOCKER_HOST: point in-container podman /
-#   docker CLIs at the bind-mounted DooD socket. Without these, a
-#   workflow step that runs `podman build` (or `docker build`) tries
-#   to do nested rootless podman inside the runner container -- which
-#   fails because the container doesn't have CAP_SYS_ADMIN to do its
-#   own mount-namespace setup (errors with "remount /, flags: 0x44000:
-#   permission denied" during ApplyLayer). With these set, the CLI
-#   transparently uploads the build context to the host's rootless
-#   podman over the socket, builds happen there (where mount-ns
-#   operations have the privileges they need), and resulting images
-#   land in github_runner's host-side storage. Setting both var names
-#   covers podman CLI (uses CONTAINER_HOST) and the podman-docker
-#   alias / any real docker client (uses DOCKER_HOST).
-# --volume %t/%N/jit: the JIT registration blob minted by the
-#   ExecStartPre script on the host. The PAT itself never enters the
-#   container -- the entrypoint just `cat`s /run/jit and passes its
-#   contents to `run.sh --jitconfig`. Workflow code running inside the
-#   container can read the JIT (a single-use, runner-scoped credential
-#   that GitHub auto-invalidates on first use) but not the long-lived
-#   PAT it was minted from. RuntimeDirectory=%N on the unit cleans the
-#   per-start file when the unit stops.
-# --sdnotify=healthy: unit's `active` state gates on the healthcheck,
-#   not on conmon's exec. The container is ready iff Runner.Listener
-#   is running and polling -- exactly what systemctl status should
-#   reflect, and what removes the need for an ansible-side wait_for.
-# --health-cmd / startup-cmd: actions/runner exposes no HTTP probe, so
-#   we go with CLAUDE.md "Container Healthchecks" option 3 (service-
-#   native CLI): pgrep the Runner.Listener process. procps ships in
-#   ubuntu:24.04's base so the runner image inherits it without an
-#   explicit apt install. When the listener loses its GitHub
-#   connection it tries to reconnect; if reconnection fails it exits
-#   non-zero, the container exits, and systemd's Restart=always
-#   respawns -- so the healthcheck is the "is it alive" signal
-#   surfaced in `systemctl status`/downstream monitoring, while the
-#   exit+respawn loop drives the actual recovery. Using -x (exact
-#   match against /proc/<pid>/comm) over -f (full cmdline substring)
-#   so a workflow process whose argv happens to mention "Runner.Listener"
-#   can't keep the unit reporting healthy. "Runner.Listener" is 15
-#   chars, within TASK_COMM_LEN (16).
-# --health-start-period 30s: first-start runs the entrypoint's curl
-#   POST to GitHub before run.sh. 30s leaves headroom for a slow API
-#   response without flapping the unit unhealthy on boot.
-# --stop-timeout 60: actions/runner's main loop is a long-poll against
-#   GitHub's GET /runners/messages (~50s server hold). SIGTERM only
-#   takes effect once the in-flight long-poll completes, so a smaller
-#   timeout fires SIGKILL prematurely and noisy "StopSignal SIGTERM
-#   failed to stop container" warnings flood the journal on every
-#   restart cascade (template edit -> all instances bounce). 60s
-#   covers the long-poll plus a little graceful-exit wiggle. Kept
-#   strictly less than TimeoutStopSec above so podman wins the race
-#   and systemd doesn't SIGKILL podman mid-cleanup.
-# --pull defaults to 'missing': only pull when the image isn't in the
-#   local store (i.e. first start on a fresh host). Subsequent rotation
-#   onto a newer runner-image build is driven by
-#   github_runner_image_rotate.timer, which polls nexus every 5 minutes,
-#   refreshes the local store via `podman pull`, and restarts idle stale
-#   instances. Putting --pull=newer back here would just duplicate the
-#   manifest check on every container start (i.e. after every job
-#   completion) for no benefit -- the watcher has already cached the
-#   newest image locally, so the cached layer satisfies the next start
-#   either way.
-# --security-opt seccomp=unconfined: podman 4.9.3 (ubuntu jammy host)
-#   ships a default seccomp profile that predates the kernel 6.6
-#   fchmodat2 syscall (number 452). Unknown syscalls return EPERM by
-#   default, which breaks GNU tar 1.35+ inside the container: tar uses
-#   fchmodat2 with AT_SYMLINK_NOFOLLOW for safe directory mode
-#   restoration during extract, and every actions/checkout download
-#   trips it -- "Cannot change mode to rwxrwxr-x: Operation not
-#   permitted" on every dir, non-zero exit, every job fails. Unconfining
-#   seccomp restores the chmod path; the threat model is unchanged
-#   because the +0 uidmap demotion already caps in-container compromise
-#   at unprivileged host github_runner. A narrower fix would be a
-#   custom seccomp.json that just adds fchmodat2 to the allowlist;
-#   acceptable for homelab CI to skip that and unconfine wholesale.
-# Wait for github_runner's user manager to bring podman.socket up. The
-# unit bind-mounts %t/user/<uid>/podman/podman.sock into the container;
-# if the socket doesn't exist when `podman run` fires, the source path
-# auto-creates as an empty file -- silent DooD failure inside the
-# container. After=/Requires=user@<uid>.service is necessary but not
-# sufficient: the user manager can be `active` before podman.socket is
-# actually listening. Bounded 60 × 1s, well inside TimeoutStartSec=300.
-# Same pattern as roles/gitea_runner.
-ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S %t/user/{{ github_runner_user.uid }}/podman/podman.sock ] && exit 0; sleep 1; done; echo "podman.sock not present after 60s" >&2; exit 1'
-# Hard-link the canonical /opt/actions-runner tree into the per-instance
-# subdir so this instance has its own RUNNER_ROOT for state files. Idempotent
-# and ~ms on an unchanged tarball; refreshes the hard links to point at the
-# new inodes after a tarball bump (binaries replace + restart triggered from
-# _register.yml). See roles/github_runner/files/github_runner_sync_root.sh
-# for the per-instance-vs-shared rationale and the inode/Assembly.Location
-# story.
-ExecStartPre=/usr/local/bin/github_runner_sync_root %i
-# Mint the JIT config on the host (reads the PAT podman secret as root
-# via `podman secret inspect --showsecret`, POSTs to GitHub's
-# generate-jitconfig, writes the blob to /run/%N/jit) so the PAT itself
-# never enters the container -- the runner only ever sees the
-# single-use JIT blob, not the long-lived token it was minted from.
-# See roles/github_runner/files/github_runner_jit_mint.sh.
-ExecStartPre=/usr/local/bin/github_runner_jit_mint %i
-ExecStartPre=/bin/rm -f %t/%N/%n.ctr-id
-ExecStart=/usr/bin/podman run \
-  --cidfile=%t/%N/%n.ctr-id \
-  --cgroups=split \
-  --security-opt seccomp=unconfined \
-  --sdnotify=healthy \
-  --detach \
-  --replace \
-  --rm \
-  --init \
-  --name github_runner_%i \
-  --init \
-  --log-driver journald \
-  --log-opt tag="github_runner_%i" \
-  --user 0:0 \
-  --uidmap=0:0:65536 \
-  --uidmap=+0:{{ github_runner_user.uid }}:1 \
-  --gidmap=0:0:65536 \
-  --gidmap=+0:{{ github_runner_user.group }}:1 \
-  --volume %t/user/{{ github_runner_user.uid }}/podman/podman.sock:/var/run/docker.sock \
-  --volume /opt/actions-runner/%i:/opt/actions-runner:rw \
-  --volume /mnt/scratch/github_runner/workdir_%i:/mnt/scratch/github_runner/workdir_%i:rw \
-  --env CONTAINER_HOST=unix:///var/run/docker.sock \
-  --env DOCKER_HOST=unix:///var/run/docker.sock \
-  --volume %t/%N/jit:/run/jit:ro \
-  --health-cmd         '["pgrep","--count","--exact","Runner.Listener"]' \
-  --health-startup-cmd '["pgrep","--count","--exact","Runner.Listener"]' \
-  --health-startup-interval "1s" \
-  --health-startup-timeout "5s" \
-  --health-start-period "30s" \
-  --stop-timeout 60 \
-  nexus.lab.fahm.fr/homelab/runner:latest
-ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%N/%n.ctr-id
-ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%N/%n.ctr-id
+# Workflow-spawned `container:` blocks run under github_runner's
+# rootless podman, so they inherit the same kvm-group access via the
+# subid passthrough configured in subid_extra_subgid_groups (see
+# host_vars/<host>.yml). Job-level options like
+# `--device /dev/kvm --group-add 1` continue to work -- the "1" is
+# the container-side gid that subgid maps to host kvm.
 
 [Install]
 WantedBy=multi-user.target

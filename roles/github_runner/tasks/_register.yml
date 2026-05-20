@@ -1,34 +1,23 @@
-# Per-instance enable for the templated github_runner@.service. Called
+# Per-instance setup for the templated github_runner@.service. Called
 # from main.yml with loop_var: runner_instance (keys: repo, suffix,
-# labels).
+# owner, labels, optional runner_group_id).
 #
-# Instance identity is the literal concatenation
-# {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}. The literal
-# stays inlined in task `name:` fields because they render at parse time
-# (per feedback_ansible_task_name_parse_time -- name: renders before
-# set_fact runs); task BODIES read the same value via the runner_iid
-# set_fact below, which is safe because it's re-set at the top of this
-# file on every loop iteration (per feedback_set_fact_leaks_across_iterations).
-#
-# Ephemeral + JIT model: no per-instance state dir, no per-instance
-# registration token, no .runner sentinel to wait for. The container's
-# entrypoint mints a single-use JIT config on every start using the
-# host-level github_runner_pat secret (created in main.yml, shared
-# across all instances); the runner registers, runs one job, deregisters,
-# exits, and systemd's Restart=always brings up the next container.
+# Long-lived registration: config.sh runs once per instance at first
+# apply (gated on .runner sentinel). The .runner / .credentials /
+# .credentials_rsaparams blob written into /opt/actions-runner/<inst>/
+# is the runner's persistent identity; subsequent unit restarts reuse
+# it without touching the GitHub API. Label / name changes require
+# manual deregister + .runner removal + reapply -- see CLAUDE.md
+# section on github_runner for the operator workflow.
 
-# Reset at the top of every iteration so a previous instance's values
-# can't bleed into the next via set_fact persistence. runner_envfile is
-# reset to {changed: false} so that if the template task downstream is
-# ever skipped (currently it always runs, but a future `when:` would
-# change that), the restart trigger reads a sane "no change" rather
-# than the previous iteration's .changed value.
+# Reset at the top of every iteration so a previous instance's facts
+# can't bleed into the next via set_fact persistence.
 - name: _register | Set instance facts for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
   set_fact:
     runner_iid: "{{ runner_instance.repo }}_{{ runner_instance.suffix }}"
-    runner_envfile: {changed: false}
+    runner_name: "{{ inventory_hostname }}_{{ runner_instance.repo }}_{{ runner_instance.suffix }}"
 
-- name: _register | Create workdir for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
+- name: _register | Create workdir on scratch for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
   file:
     path: /mnt/scratch/github_runner/workdir_{{ runner_iid }}
     state: directory
@@ -37,29 +26,146 @@
     mode: "0755"
   become: true
 
-# Per-instance env file consumed by podman's --env-file in the template.
-# Static for the instance's lifetime; changes (relabel, repo rename)
-# propagate to the unit's restart via the register below. NOTE: a
-# restart in ephemeral mode kills the in-flight job; schedule label
-# edits when the instance is idle, or accept the dropped job.
-- name: _register | Install env file for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
-  template:
-    src: github_runner_envfile.j2
-    dest: /etc/default/github_runner@{{ runner_iid }}
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
+- name: _register | Create per-instance runner dir for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
+  file:
+    path: /opt/actions-runner/{{ runner_iid }}
+    state: directory
+    owner: github_runner
+    group: github_runner
+    mode: "0755"
   become: true
-  register: runner_envfile
 
-# Enable + start github_runner@<repo>_<suffix>.service in system
-# scope (the unit runs as root and demotes to host github_runner
-# inside the container via the uidmap override -- see the template's
-# [Unit] rationale block). Skipped under qemu_test (no real GitHub-
-# backed JIT minting; entrypoint's curl POST would fail and loop on
-# the restart-limit). _verify.yml exercises the unit-loads-and-
-# secret-resolves contract under qemu_test instead.
+# Hard-link the canonical binary tree into the per-instance dir on
+# first apply. cp -al preserves inode identity across hard links --
+# disk usage stays at 1x even with N instances -- and the per-instance
+# dir is a self-contained actions/runner install root (run.sh +
+# bin/ + externals/ etc., with .runner / .credentials* / _diag living
+# alongside post-config). creates: gates on run.sh existence so we
+# don't blow away an already-populated dir; the refresh task below
+# handles tarball bumps.
+- name: _register | Populate per-instance runner dir from canonical
+  when: not (ansible_check_mode and github_runner_user.changed)
+  command:
+    argv:
+      - cp
+      - -al
+      - /opt/actions-runner/bin
+      - /opt/actions-runner/externals
+      - /opt/actions-runner/run.sh
+      - /opt/actions-runner/env.sh
+      - /opt/actions-runner/config.sh
+      - /opt/actions-runner/safe_sleep.sh
+      - /opt/actions-runner/run-helper.sh.template
+      - /opt/actions-runner/run-helper.cmd.template
+      - /opt/actions-runner/{{ runner_iid }}/
+  args:
+    creates: /opt/actions-runner/{{ runner_iid }}/run.sh
+  become: true
+  become_user: github_runner
+
+# Refresh the per-instance binary hard links after a tarball bump. The
+# canonical extract replaces files at new inodes; the per-instance dir
+# still points at the OLD inodes until this task fires. rm + cp -al
+# rebuilds the links. .runner / .credentials* / _diag stay in place
+# (not in the loop), so registration survives the refresh.
+- name: _register | Refresh per-instance runner dir after tarball bump
+  when:
+    - not (ansible_check_mode and github_runner_user.changed)
+    - github_runner_extract.changed | default(false)
+  command:
+    argv:
+      - sh
+      - -c
+      - 'rm -rf "$2" && cp -al "$1" "$2"'
+      - "_"
+      - "/opt/actions-runner/{{ item }}"
+      - "/opt/actions-runner/{{ runner_iid }}/{{ item }}"
+  loop:
+    - bin
+    - externals
+    - run.sh
+    - env.sh
+    - config.sh
+    - safe_sleep.sh
+    - run-helper.sh.template
+    - run-helper.cmd.template
+  become: true
+  become_user: github_runner
+
+# Sentinel for "this instance has been configured against GitHub".
+# config.sh writes .runner last in its setup sequence, so its presence
+# is a robust signal. _register.yml only mints a registration token +
+# runs config.sh when this is absent.
+- name: _register | Check whether {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }} is already configured
+  when: not (ansible_check_mode and github_runner_user.changed)
+  stat:
+    path: /opt/actions-runner/{{ runner_iid }}/.runner
+  register: runner_dotrunner
+  become: true
+
+# Mint a one-time, ~1h-validity registration token via the host PAT.
+# The token is single-use: config.sh consumes it during registration
+# and GitHub invalidates it. Subsequent run.sh launches authenticate
+# via the long-lived .credentials_rsaparams written next to .runner --
+# the PAT itself never crosses into the runner's runtime path.
+- name: _register | Mint registration token for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
+  when:
+    - not (ansible_check_mode and github_runner_user.changed)
+    - not qemu_test
+    - not runner_dotrunner.stat.exists
+  uri:
+    url: https://api.github.com/repos/{{ runner_instance.owner }}/{{ runner_instance.repo }}/actions/runners/registration-token
+    method: POST
+    headers:
+      Authorization: "Bearer {{ github_runner_pat }}"
+      Accept: application/vnd.github+json
+      X-GitHub-Api-Version: "2022-11-28"
+    status_code: 201
+    return_content: true
+  register: registration_token
+  no_log: true
+  become: true
+
+# Configure the runner. --replace handles the "previous registration
+# under this name still exists on GitHub" case (e.g. operator removed
+# the per-instance dir locally but didn't deregister GitHub-side);
+# without it config.sh would fail with HTTP 409. Token passed via argv
+# is fine -- it's single-use and already consumed by the time the
+# command returns. no_log keeps it out of ansible's stdout in case
+# verbose mode is on.
+- name: _register | Configure runner {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
+  when:
+    - not (ansible_check_mode and github_runner_user.changed)
+    - not qemu_test
+    - not runner_dotrunner.stat.exists
+  command:
+    argv:
+      - ./config.sh
+      - --unattended
+      - --replace
+      - --url
+      - https://github.com/{{ runner_instance.owner }}/{{ runner_instance.repo }}
+      - --token
+      - "{{ registration_token.json.token }}"
+      - --name
+      - "{{ runner_name }}"
+      - --labels
+      - "{{ runner_instance.labels }}"
+      - --runnergroup
+      - "{{ runner_instance.runner_group_id | default(1) }}"
+      - --work
+      - /mnt/scratch/github_runner/workdir_{{ runner_iid }}
+  args:
+    chdir: /opt/actions-runner/{{ runner_iid }}
+  no_log: true
+  become: true
+  become_user: github_runner
+
+# Enable + start github_runner@<inst>.service in system scope. The unit
+# Type=simple, so ActiveState=active the moment run.sh's exec succeeds;
+# actual readiness is the runner's "Listening for Jobs" log line which
+# follows ~1s later. Skipped under qemu_test (no GitHub-side
+# registration, so run.sh would exit non-zero on .runner parse).
 - name: _register | Enable github_runner@{{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
   when: not qemu_test
   import_role:
@@ -69,40 +175,11 @@
     systemd_unit_args:
       src: github_runner@{{ runner_iid }}
       condition: "{{ not (ansible_check_mode and github_runner_user.changed) }}"
-      # Restart on env-file edits (label or repo URL change), PAT
-      # rotation (data sha mismatch surfaces as github_runner_pat_rotated),
-      # actions-runner tarball bump (the running container holds open-fd
-      # references to the per-instance hard links via sync_root, which
-      # point at the OLD canonical inodes after re-extract; the bump's
-      # restart re-runs sync_root with the new canonical inodes), or
-      # template re-render (systemd_unit install records the dest via
-      # sanitize-to-underscore -> github_runner@.service becomes
-      # github_runner__service_result; install runs once in main.yml so
-      # every instance fans out the same .changed signal). The PAT and
-      # tarball are both shared host-wide so each rotation/bump bounces
-      # every instance to pick up the new value/binary next start. The
-      # github_runner_pat_rotated and github_runner_extract facts are
-      # set once in main.yml (before this loop), so every iteration here
-      # reads the same host-level value -- they're host-wide triggers,
-      # not per-instance ones.
+      # Restart on tarball bump (binaries refreshed above) or template
+      # re-render (systemd_unit install records the dest via sanitize-
+      # to-underscore -> github_runner@.service becomes
+      # github_runner__service_result; install runs once in main.yml
+      # so every instance fans out the same .changed signal).
       restart: >-
-        {{ runner_envfile.changed
-           or github_runner_pat_rotated | default(false)
-           or (github_runner_extract.changed | default(false))
-           or (github_runner__service_result.changed | default(false)) }}
-
-# Intentionally no apply-time GitHub-side "is the runner registered +
-# online?" check. The failure modes that check claimed to cover are
-# already caught earlier in the apply chain:
-#   - PAT scope/revocation, repo-deleted: jit_mint's curl 401s/404s,
-#     ExecStartPre fails, systemd unit-start fails, the systemd_unit
-#     helper's service task fails ansible apply.
-#   - Entrypoint / Runner.Listener boot failure: container exits,
-#     Restart=always loops, StartLimitBurst trips, unit fails,
-#     systemd: module fails ansible apply.
-# A "Runner.Listener thinks it's online but GitHub disagrees" state
-# is rare enough that bouncing an unnecessary API call (with PAT
-# bearer) into every apply -- gated under no_log: true and so painful
-# to debug when it does trip -- wasn't worth the steady-state cost.
-# The runner-image-rotate timer + netdata systemd_units monitor are
-# the continuous "is the runner alive" signal.
+        {{ github_runner_extract.changed | default(false)
+           or github_runner__service_result.changed | default(false) }}

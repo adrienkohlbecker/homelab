@@ -5,14 +5,12 @@
   become: true
 
 # CLAUDE.md "Why the literal `1`" -- rootless podman builds the
-# container gidmap from /etc/subgid shortest-range-first, so the
-# unit's --device /dev/kvm --group-add 1 expects the kvm-gid range
-# to land at container gid 1. Today _setup.yml synthesizes a kvm
-# group, asks subid for the passthrough, and the resulting
-# /etc/subgid should carry both ranges for github_runner: one
-# count-65536 + one count-1 (the kvm gid). Slurp the file and
-# assert both shapes so a regression in subid's template or the
-# ordering invariant fails loud.
+# container gidmap from /etc/subgid shortest-range-first, so workflow
+# `container:` blocks claiming `--device /dev/kvm --group-add 1` expect
+# the kvm-gid range to land at container gid 1. _setup.yml synthesizes
+# a kvm group and asks subid for the passthrough; slurp /etc/subgid
+# and assert both ranges so a regression in subid's template (or in
+# the ordering invariant) fails loud.
 - name: _verify | resolve kvm gid for the subid range check
   getent:
     database: group
@@ -48,269 +46,142 @@
   become: true
   become_user: github_runner
 
-# Host-level PAT secret. Created in main.yml from the vaulted
-# github_runner_pat var via podman_secret with the default user=root,
-# so it lives in root's podman -- inspect there, not in github_runner's
-# rootless podman (which only owns the DooD socket). Under qemu_test
-# the value is a stub; under prod it's the real PAT.
-- name: _verify | github_runner_pat podman secret exists
-  command: podman secret inspect github_runner_pat
-  changed_when: false
+# Canonical actions/runner install: tarball extracted with run.sh +
+# bin/Runner.Listener present. Hard-link mirror in per-instance dirs
+# checked below.
+- name: _verify | Canonical /opt/actions-runner/run.sh is executable
+  stat:
+    path: /opt/actions-runner/run.sh
+  register: _verify_canonical_runsh
+  failed_when: not _verify_canonical_runsh.stat.exists or not _verify_canonical_runsh.stat.executable
   become: true
 
-- name: _verify | github_runner_image_rotate.timer is active
-  systemd:
-    name: github_runner_image_rotate.timer
-  register: _verify_rotate_timer
-  failed_when: >-
-    _verify_rotate_timer.status.LoadState != "loaded"
-    or _verify_rotate_timer.status.ActiveState != "active"
+- name: _verify | Canonical bin/Runner.Listener is present
+  stat:
+    path: /opt/actions-runner/bin/Runner.Listener
+  register: _verify_canonical_listener
+  failed_when: not _verify_canonical_listener.stat.exists
   become: true
 
-# Per-instance unit-load check. The container itself isn't running --
-# the stub PAT would 401 against GitHub's generate-jitconfig and the
-# unit would loop on the restart-limit. System-scope: the unit lives
-# under /etc/systemd/system/.
+# Per-instance binary hard links: stat both the canonical and per-
+# instance run.sh and compare inode numbers. Same inode means cp -al
+# succeeded; different inodes mean the refresh task drifted or
+# _register.yml's populate didn't fire. This is the load-bearing
+# isolation check -- without per-instance binary trees, multiple
+# instances would race the same .runner / .credentials at config.sh
+# time and at startup.
+- name: _verify | Per-instance run.sh is a hard link to canonical
+  vars:
+    _instance: "{{ github_runner_instances[0].repo }}_{{ github_runner_instances[0].suffix }}"
+  block:
+    - stat:
+        path: /opt/actions-runner/run.sh
+      register: _verify_can_inode
+      become: true
+    - stat:
+        path: /opt/actions-runner/{{ _instance }}/run.sh
+      register: _verify_inst_inode
+      become: true
+    - assert:
+        that:
+          - _verify_inst_inode.stat.exists
+          - _verify_inst_inode.stat.executable
+          - _verify_inst_inode.stat.inode == _verify_can_inode.stat.inode
+        fail_msg: >-
+          /opt/actions-runner/{{ _instance }}/run.sh is missing or its
+          inode differs from canonical. Canonical inode:
+          {{ _verify_can_inode.stat.inode }}, per-instance inode:
+          {{ _verify_inst_inode.stat.inode | default('absent') }}. cp -al
+          in _register.yml should have hard-linked them.
+
+# /var/run/docker.sock symlink. tmpfiles.d sets the L rule for the
+# next reboot; main.yml's immediate-apply file:state=link materialises
+# it now. Workflow `container:` blocks rely on this when actions/runner
+# asks the host podman to bind /var/run/docker.sock into sibling job
+# containers -- the host-side statfs needs the symlink target to
+# resolve.
+- name: _verify | /var/run/docker.sock points at github_runner's podman socket
+  vars:
+    _gr_uid: "{{ ansible_facts.getent_passwd['github_runner'][1] }}"
+  stat:
+    path: /var/run/docker.sock
+    follow: false
+  register: _verify_docker_sock
+  failed_when:
+    - not _verify_docker_sock.stat.islnk
+      or _verify_docker_sock.stat.lnk_target != '/run/user/' ~ _gr_uid ~ '/podman/podman.sock'
+  become: true
+
+# Per-instance unit loads (renders cleanly, parses cleanly). Under
+# qemu_test the unit ISN'T started by _register.yml (no GitHub-side
+# registration), so we drive a full start manually below with a stub
+# run.sh -- this load check just ensures the unit template renders
+# correctly for every declared instance.
 - name: _verify | github_runner@<instance>.service loads
   systemd:
     name: github_runner@{{ item.repo }}_{{ item.suffix }}.service
-  register: _verify_unit
-  failed_when: _verify_unit.status.LoadState != "loaded"
+  register: _verify_unit_load
+  failed_when: _verify_unit_load.status.LoadState != "loaded"
   loop: "{{ github_runner_instances }}"
   loop_control:
     label: "{{ item.repo }}_{{ item.suffix }}"
   become: true
 
-# Functional: exercise both branches of the rotate script's decision
-# logic -- the cache-fallback "fresh, skip" path AND the "stale, restart"
-# path -- without depending on nexus reachability or a real systemd
-# instance start succeeding.
-#
-# /etc/hosts pin nexus.lab.fahm.fr -> 127.0.0.1 so `podman pull` of
-# the runner image deterministically fails (TCP RST on 127.0.0.1:443),
-# triggering the script's cache-fallback branch. The test infra at
-# roles/_test/tasks/mirrors.yml writes `10.123.0.2 nexus.lab.fahm.fr`
-# already, so this lineinfile uses regexp= to REPLACE that entry --
-# otherwise getaddrinfo returns both addresses and the first (working)
-# one wins. Without this the test is environment-sensitive: a box VM
-# with nexus reachable pulls the real runner image, latest != alpine,
-# "rotating" fires, systemctl tries to restart the real unit,
-# ExecStartPre (jit_mint with stub PAT) 401s, the unit fails, the
-# test fails.
-- name: _verify | Pin nexus.lab.fahm.fr to 127.0.0.1 so rotate's pull deterministically fails
-  lineinfile:
-    path: /etc/hosts
-    regexp: '\bnexus\.lab\.fahm\.fr\b'
-    line: "127.0.0.1 nexus.lab.fahm.fr"
-    state: present
-  become: true
-
-# Two cacheable images so we can synthesize divergent digests. alpine
-# is the "running" container's image; busybox is what we'll point
-# `nexus.lab.fahm.fr/homelab/runner:latest` at later to force the
-# stale branch. Both come from docker.io (still reachable -- /etc/hosts
-# only pinned the nexus name).
-- name: _verify | Pull alpine for the fixture container
-  command: podman pull docker.io/library/alpine:latest
-  changed_when: false
-  become: true
-
-- name: _verify | Pull busybox so the stale branch has a digest to swap to
-  command: podman pull docker.io/library/busybox:latest
-  changed_when: false
-  become: true
-
-- name: _verify | Tag alpine as nexus.lab.fahm.fr/homelab/runner:latest (the fresh-skip fixture)
-  command: podman tag docker.io/library/alpine:latest nexus.lab.fahm.fr/homelab/runner:latest
-  changed_when: false
-  become: true
-
-- name: _verify | Start the rotate fixture container (--replace to dodge a stale prior run)
-  command: >-
-    podman run -d --replace --name github_runner_homelab_test1
-    nexus.lab.fahm.fr/homelab/runner:latest sleep 60
-  changed_when: false
-  become: true
-
-# Phase A: live container's image digest == latest tag's digest
-# (both alpine). The rotate script's pull fails (nexus pinned to
-# 127.0.0.1), the cache-fallback fires, the digest comparison finds
-# fresh, the loop exits 0 with no "rotating" line.
-- name: _verify | rotate Phase A -- run script against the fresh fixture
-  command: /usr/local/bin/github_runner_image_rotate
-  changed_when: false
-  become: true
-  register: _verify_rotate_fresh
-  failed_when: false
-
-- name: _verify | rotate Phase A -- cache-fallback fires, no rotation triggered
-  assert:
-    that:
-      - _verify_rotate_fresh.rc == 0
-      - "'proceeding with cached' in _verify_rotate_fresh.stderr"
-      - "'rotating' not in _verify_rotate_fresh.stdout"
-    fail_msg: >-
-      Phase A expected the rotate script to exit 0 with the cache-fallback
-      stderr line and no "rotating" decision. Got rc={{ _verify_rotate_fresh.rc }},
-      stdout={{ _verify_rotate_fresh.stdout | default('') | trim }},
-      stderr={{ _verify_rotate_fresh.stderr | default('') | trim }}.
-
-# Phase B: retag the runner:latest reference to busybox (different
-# digest from the running container's alpine). The rotate script's
-# pull still fails (nexus pinned), cache-fallback uses the now-busybox
-# tag, digest comparison finds stale, the script calls
-# `systemctl restart github_runner@homelab_test1.service`. A stub
-# systemctl ahead of /usr/bin in PATH records the call and exits 0
-# so the rotate script exits cleanly even though no real systemd
-# unit could start under qemu_test (the stub PAT would 401 jit_mint).
-- name: _verify | Stub-systemctl scratch dir
-  file:
-    path: /tmp/github_runner_stub
-    state: directory
-    mode: "0755"
-  become: true
-
-- name: _verify | Install stub systemctl that logs invocations and exits 0
+# Functional unit-start smoke: replace the per-instance run.sh with a
+# stub that just sleeps, then start the unit and wait for it to reach
+# ActiveState=active. Catches regressions in:
+#   - WorkingDirectory (the stub's $PWD assertion checks this)
+#   - User= / Group= (PUID/PGID check below)
+#   - ExecStart binary path resolution
+#   - systemd unit syntax (would fail to start otherwise)
+# Doesn't catch: actual GitHub registration / Runner.Listener boot --
+# those require a real PAT and run in prod only.
+- name: _verify | Replace per-instance run.sh with sleep+pwd stub
+  vars:
+    _instance: "{{ github_runner_instances[0].repo }}_{{ github_runner_instances[0].suffix }}"
   copy:
-    dest: /tmp/github_runner_stub/systemctl
+    dest: /opt/actions-runner/{{ _instance }}/run.sh
     content: |
-      #!/bin/bash
-      printf '%s\n' "$*" >> /tmp/github_runner_stub/calls.log
-      exit 0
+      #!/bin/sh
+      # _verify stub: real config requires GitHub; just prove the unit
+      # spawns us in the right cwd as the right user.
+      set -eu
+      test "$(pwd)" = "/opt/actions-runner/{{ _instance }}" \
+        || { echo >&2 "_verify stub: bad cwd $(pwd)"; exit 1; }
+      test "$(id -un)" = "github_runner" \
+        || { echo >&2 "_verify stub: bad uid $(id -un)"; exit 1; }
+      # Daemonize so systemd reads Type=simple as active. Long enough
+      # that the wait task below succeeds before the stub exits.
+      exec sleep 300
     mode: "0755"
+    owner: github_runner
+    group: github_runner
+    backup: true
   become: true
 
-- name: _verify | Clear the stub call log before Phase B
-  copy:
-    dest: /tmp/github_runner_stub/calls.log
-    content: ""
-    mode: "0644"
-  become: true
-
-- name: _verify | Retag busybox as nexus.lab.fahm.fr/homelab/runner:latest to diverge digests
-  command: podman tag docker.io/library/busybox:latest nexus.lab.fahm.fr/homelab/runner:latest
-  changed_when: false
-  become: true
-
-- name: _verify | rotate Phase B -- run script against the stale fixture
-  command: /usr/local/bin/github_runner_image_rotate
-  changed_when: false
-  become: true
-  environment:
-    PATH: "/tmp/github_runner_stub:/usr/sbin:/usr/bin:/sbin:/bin"
-  register: _verify_rotate_stale
-  failed_when: false
-
-- name: _verify | rotate Phase B -- stale decision fires and script exits cleanly
-  assert:
-    that:
-      - _verify_rotate_stale.rc == 0
-      - "'proceeding with cached' in _verify_rotate_stale.stderr"
-      - "'rotating' in _verify_rotate_stale.stdout"
-    fail_msg: >-
-      Phase B expected the rotate script to exit 0 with the cache-fallback
-      stderr line and "rotating" in stdout. Got rc={{ _verify_rotate_stale.rc }},
-      stdout={{ _verify_rotate_stale.stdout | default('') | trim }},
-      stderr={{ _verify_rotate_stale.stderr | default('') | trim }}.
-
-- name: _verify | Read stub systemctl call log
-  slurp:
-    src: /tmp/github_runner_stub/calls.log
-  register: _verify_stub_log
-  become: true
-
-- name: _verify | rotate Phase B -- stub recorded the expected restart call
-  assert:
-    that:
-      - "'restart github_runner@homelab_test1.service' in (_verify_stub_log.content | b64decode)"
-    fail_msg: >-
-      Phase B should have invoked `systemctl restart
-      github_runner@homelab_test1.service` via the stub. Stub log:
-      {{ _verify_stub_log.content | b64decode | trim }}
-
-# Run the JIT mint script and assert it failed AT the curl step (not
-# earlier). The stub PAT ("changeme" in group_vars/test.yml) can't
-# authenticate, so curl --fail-with-body returns non-zero with "curl:"
-# on stderr. Catches regressions in envfile sourcing, secret inspect,
-# jq pipeline, etc. -- those fail with different markers (no "curl:"
-# in stderr).
-- name: _verify | github_runner_jit_mint -- run the full script path
-  command: /usr/local/bin/github_runner_jit_mint {{ github_runner_instances[0].repo }}_{{ github_runner_instances[0].suffix }}
-  changed_when: false
-  become: true
-  register: _verify_jit_mint
-  failed_when: false
-
-- name: _verify | github_runner_jit_mint failed at the curl step (stub PAT 401s)
-  assert:
-    that:
-      - _verify_jit_mint.rc != 0
-      - "'curl' in _verify_jit_mint.stderr"
-    fail_msg: >-
-      jit_mint should have failed at the curl step with a 401 from
-      GitHub (stub PAT in test vault). A different failure marker
-      points at an earlier regression (envfile sourcing, secret
-      inspect, jq pipeline, etc.). Got rc={{ _verify_jit_mint.rc }},
-      stderr={{ _verify_jit_mint.stderr | default('') | trim }}.
-
-# Unit-start smoke. The standalone jit_mint / rotate tests above
-# don't exercise the unit's actual ExecStart -- the bind-mount /
-# uidmap / healthcheck wiring stays uncovered under qemu_test because
-# main.yml's "Enable github_runner@..." task is gated off (real
-# jit_mint would 401 against GitHub with the stub PAT).
-#
-# Drive the full chain with two stubs:
-#   1) /usr/local/bin/github_runner_jit_mint replaced with a
-#      synthetic-blob writer (no GitHub call, just write a fixed
-#      string + chown to github_runner so the in-container open
-#      check passes).
-#   2) nexus.lab.fahm.fr/homelab/runner:latest re-tagged to the
-#      runner_test_stub image built in _setup. Its entrypoint
-#      validates the bind-mounts then exec's a sleep renamed
-#      Runner.Listener so the unit's `pgrep --exact` healthcheck
-#      passes and the unit settles into active.
-#
-# Runs LAST in _verify so the rotate test's tag mutations (Phase B
-# leaves runner:latest = busybox) and the jit_mint script-exercise
-# (needs the real script) happen first. Catches regressions in:
-#   - JIT bind-mount path / RuntimeDirectory=%N alignment
-#   - JIT file ownership for the +0 uidmap demotion
-#   - any --volume or --uidmap shape that prevents podman run
-- name: _verify | Install synthetic-blob stub jit_mint for unit smoke
-  copy:
-    dest: /usr/local/bin/github_runner_jit_mint
-    content: |
-      #!/bin/bash
-      # Test-only stub: write a placeholder JIT blob (no GitHub call)
-      # owned by github_runner so the +0 uidmap'd in-container reader
-      # can open it.
-      set -euo pipefail
-      inst="${1:?usage: $0 <instance>}"
-      out_dir="/run/github_runner@${inst}"
-      install -d -m 0700 "$out_dir"
-      umask 0077
-      printf '%s' "stub-jit-blob" > "${out_dir}/jit"
-      chown github_runner:github_runner "${out_dir}/jit"
-    mode: "0755"
-  become: true
-
-- name: _verify | Re-tag runner_test_stub as nexus.lab.fahm.fr/homelab/runner:latest
-  command: podman tag localhost/runner_test_stub:latest nexus.lab.fahm.fr/homelab/runner:latest
-  changed_when: false
-  become: true
-
-- name: _verify | Start the test instance to drive the unit's full ExecStart
+- name: _verify | Start the test instance to drive the unit's ExecStart
   systemd:
     name: github_runner@{{ github_runner_instances[0].repo }}_{{ github_runner_instances[0].suffix }}.service
     state: restarted
+    daemon_reload: true
   become: true
 
-- name: _verify | Wait for the unit to reach active (healthcheck passes)
+- name: _verify | Wait for the unit to reach active
   systemd:
     name: github_runner@{{ github_runner_instances[0].repo }}_{{ github_runner_instances[0].suffix }}.service
   register: _verify_unit_smoke
   until: _verify_unit_smoke.status.ActiveState == "active"
-  retries: 12
-  delay: 5
+  retries: 10
+  delay: 2
   failed_when: _verify_unit_smoke.status.ActiveState != "active"
+  become: true
+
+# Tear down the stub: stop the unit so the sleep process exits and the
+# next role apply doesn't leave a dangling test process. The stub's
+# backup at <name>.<ts>~ is left in place -- ansible's backup: true
+# rotates it on the next template/copy.
+- name: _verify | Stop the test instance after smoke
+  systemd:
+    name: github_runner@{{ github_runner_instances[0].repo }}_{{ github_runner_instances[0].suffix }}.service
+    state: stopped
   become: true
