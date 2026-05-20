@@ -133,6 +133,14 @@
   become: true
   become_user: "{{ _systemd_unit_user }}"
 
+# ansible's systemd module reports `changed=true` whenever it issues a
+# state-change command, even if the unit's Condition*=/Assert*= directives
+# cause systemd to skip the actual start (e.g. smartmontools on a VM with
+# no SMART-capable disks: ConditionPathExistsGlob fails, unit stays
+# inactive, but ansible still flags changed). Override `changed` to false
+# in that case so the second converge is idempotent. The result is also
+# the truth — if systemd never executes ExecStart, the unit's runtime
+# state is identical to before.
 - name: Start the service
   when:
     - _systemd_unit_condition
@@ -142,6 +150,10 @@
     state: started
     scope: "{{ _systemd_unit_scope }}"
   register: systemd_started
+  changed_when:
+    - systemd_started.changed
+    - systemd_started.status.ConditionResult | default('yes') != 'no'
+    - systemd_started.status.AssertResult | default('yes') != 'no'
   become: true
   become_user: "{{ _systemd_unit_user }}"
 

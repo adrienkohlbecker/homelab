@@ -70,7 +70,19 @@
 
 # Symlink-to-/dev/null is enough for the chart.sh `[ -e "$path" ]` guard
 # (which dereferences) to pass; the shim then intercepts the hdparm
-# call based on the canonical path string.
+# call based on the canonical path string. /dev/disk/by-id/ is created
+# by udev on prod whenever a real disk (with a stable id) shows up;
+# the qemu box has only virtio drives (no ids), so udev never makes
+# the dir and the symlink task would fail with ENOENT.
+- name: _verify | ensure /dev/disk/by-id exists for ghost symlinks
+  file:
+    path: /dev/disk/by-id
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
 - name: _verify | create symlinks for canned-state ghost devices
   file:
     src: /dev/null

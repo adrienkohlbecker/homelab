@@ -86,12 +86,12 @@ ExecStart=/usr/bin/podman run \
 {# Bind only on the host's LAN IP and (in prod) the keepalived VIP -- #}
 {# not on 0.0.0.0 -- so the podman bridge gateway addresses stay free #}
 {# for aardvark-dns to listen on. keepalived sets ip_nonlocal_bind=1, #}
-{# so the VIP bind succeeds even on the standby host. The test #}
-{# group_vars leave pihole_keepalived_ip as the literal "changeme" #}
-{# placeholder; skip the VIP publish there to keep the test passing. #}
+{# so the VIP bind succeeds even on the standby host. The qemu test #}
+{# fixture has no keepalived, so the VIP isn't on any iface and the #}
+{# bind would fail with EADDRNOTAVAIL -- skip it under qemu_test. #}
     --publish {{ ansible_facts.default_ipv4.address }}:53:53/udp \
     --publish {{ ansible_facts.default_ipv4.address }}:53:53/tcp \
-{% if pihole_keepalived_ip | ansible.utils.ipaddr %}
+{% if not qemu_test and pihole_keepalived_ip | ansible.utils.ipaddr %}
     --publish {{ pihole_keepalived_ip }}:53:53/udp \
     --publish {{ pihole_keepalived_ip }}:53:53/tcp \
 {% endif %}

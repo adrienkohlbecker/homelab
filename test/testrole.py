@@ -17,8 +17,6 @@ import sys
 import time
 from pathlib import Path
 
-import yaml
-
 from machine import (
     DEFAULT_UBUNTU,
     MACHINE_CHOICES,
@@ -27,6 +25,7 @@ from machine import (
     QemuMachine,
     UBUNTU_RELEASES,
     imagedir_for_host,
+    resolve_default_machine,
     sweep_stale_workdirs,
 )
 from utils import CommandFailedException, IdempotenceFailedException, cancel_on_signal, print_line, tee_output
@@ -170,30 +169,9 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
     # benefit from the pre-seeded podman+nginx fixture). An explicit
     # --machine on the CLI wins over the meta file.
     if args.machine is None:
-        args.machine = _resolve_default_machine(args.role)
+        args.machine = resolve_default_machine(args.role)
 
     return args, pass_args
-
-
-def _resolve_default_machine(role: str) -> str:
-    """Read roles/<role>/meta/test.yml and return its `machine:` field.
-
-    Falls back to 'box' when the file is absent or doesn't declare
-    machine. Exits non-zero on a parse error or an unknown machine
-    name -- a typo'd opt-in should fail loudly at startup, not run
-    silently against box.
-    """
-    meta_path = Path(f"roles/{role}/meta/test.yml")
-    if not meta_path.exists():
-        return "box"
-    try:
-        data = yaml.safe_load(meta_path.read_text()) or {}
-    except yaml.YAMLError as e:
-        sys.exit(f"{meta_path}: parse error: {e}")
-    machine = data.get("machine", "box")
-    if machine not in MACHINE_CHOICES:
-        sys.exit(f"{meta_path}: machine={machine!r} not in {sorted(MACHINE_CHOICES)}")
-    return machine
 
 
 # Strip CSI escape sequences before matching. Ansible's colorized PLAY
