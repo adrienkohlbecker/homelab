@@ -11,25 +11,19 @@
   tags:
     - journald_exporter
 
+# The binary insists on a host user literally named `journald-exporter`
+# (hardcoded in upstream's src/parent/start.rs) and internally setuids
+# the HTTP-serving child to it; the daemon itself stays root because it
+# needs to read /var/log/journal/. config_dir: false because upstream
+# mandates /etc/journald-exporter (not /mnt/services/...), created below.
 - name: Add journald-exporter user
-  user:
-    name: journald-exporter
-    createhome: false
-    system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
-  become: true
-  tags:
-    - journald_exporter
-
-- name: Create configuration directory
-  file:
-    dest: /etc/journald-exporter
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: journald-exporter
+      config_dir: false
   tags:
     - journald_exporter
 
