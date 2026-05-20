@@ -6,7 +6,7 @@ Load-bearing negatives, listed up-front so a fresh agent session sees them befor
 
 - **DO NOT use Ansible handlers for service restarts.** Handlers run at end-of-play, which doesn't compose with the `systemd_unit` helper's pre-pull-then-start ordering. Drive restarts via the helper's inline OR chain on `*_result.changed` / `*_rotated`. See *Helper Roles → systemd_unit*.
 - **DO NOT drop a container's `--health-cmd`** in favour of external monitoring (kuma, `_verify.yml`). Without an in-container check, `--sdnotify=healthy` can't gate the unit's `active` state and podman won't auto-restart on quiet HTTP failure. See *Podman Service Conventions → Healthchecks*.
-- **DO NOT use `defaults/main.yml` in roles** — require `host_vars`/`group_vars` to define inputs and fail loud with `assert:` rather than silently fall back.
+- **DO NOT default required service inputs in `vars/main.yml`** — role vars sit *above* host_vars in ansible's precedence ladder and silently mask host-level overrides. Required inputs live in `host_vars`/`group_vars` and the role must `assert:` they're set. `defaults/main.yml` is fine for optional host-overridable values (e.g. `fan2go_enabled: false`, `certbot_extra_sans: []`) since it sits *below* host_vars. See [roles/github_runner/defaults/main.yml](roles/github_runner/defaults/main.yml) for the canonical explanatory comment.
 - **DO NOT run state-mutating commands on prod hosts (`lab`/`pug`/`bunk`) without explicit ack.** Diagnostic SSH is pre-authorized; mutations are not. See *Testing → Debugging prod hosts directly* for the boundary.
 - **DO NOT use `_test.yml` for new role tests** — historical alias for `_setup.yml`; no roles still ship it.
 
