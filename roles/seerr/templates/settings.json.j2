@@ -25,7 +25,7 @@
   "blocklistLanguage": "",
   "blocklistedTags": "",
   "blocklistedTagsLimit": 50,
-  "mediaServerType": 2,
+  "mediaServerType": {{ (seerr_settings_json | json_query('main.mediaServerType') | default(4, true)) }},
   "partialRequestsEnabled": true,
   "enableSpecialEpisodes": false,
   "locale": "en",
@@ -161,8 +161,18 @@
    "id": 0
   }
  ],
+{#
+  public.initialized + main.mediaServerType are written by the setup
+  wizard's POST /api/v1/settings/initialize and the Jellyfin auth bootstrap
+  branch (server/routes/auth.ts). Default both to "unconfigured" on first
+  install so the UI routes the operator to /setup (which sends serverType
+  in the auth POST) instead of /login (which doesn't and would trip the
+  ApiErrorCode.NoAdminUser throw at auth.ts:328). After the wizard
+  completes, seerr writes initialized: true + mediaServerType: 2
+  (JELLYFIN) to disk; slurp preserves both on every subsequent converge.
+#}
  "public": {
-  "initialized": true
+  "initialized": {{ (seerr_settings_json | json_query('public.initialized') | default(false, true)) | string | lower }}
  },
  "notifications": {
   "agents": {
