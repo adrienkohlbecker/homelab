@@ -90,8 +90,8 @@
           | list | length) > 0
     fail_msg: >-
       influxdb org '{{ influxdb_bucket_args.org }}' not found.
-      The influxdb role's main.yml bootstraps only `home` (via
-      DOCKER_INFLUXDB_INIT_ORG); any other org must be pre-created
+      The influxdb role's main.yml bootstraps only `{{ influxdb_root_org }}`
+      (via DOCKER_INFLUXDB_INIT_ORG); any other org must be pre-created
       out-of-band with `podman exec influxdb influx org create
       --name {{ influxdb_bucket_args.org }}`.
 

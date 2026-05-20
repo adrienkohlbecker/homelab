@@ -47,7 +47,7 @@
     tasks_from: bucket
   vars:
     influxdb_bucket_args:
-      org: home
+      org: "{{ influxdb_root_org }}"
       user: verify_user
       bucket: verify_bucket
 
@@ -87,7 +87,7 @@
           - --bucket
           - verify_bucket
           - --org
-          - home
+          - "{{ influxdb_root_org }}"
           - --token
           - "{{ _verify_token }}"
           - sentinel,source=ansible_verify value=1
@@ -109,7 +109,7 @@
           - influx
           - query
           - --org
-          - home
+          - "{{ influxdb_root_org }}"
           - >-
             from(bucket:"verify_bucket")
               |> range(start:-1m)
