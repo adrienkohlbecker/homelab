@@ -1,0 +1,35 @@
+# Sentinel roundtrip: emit a unique log line via logger(1) and read it
+# back via journalctl. Confirms the daemon is alive, accepting writes on
+# /dev/log, indexing them, and serving queries — the full function chain
+# this role exists to enable. Tighter than a state check ("file present,
+# unit active") which passes on broken-but-wired builds.
+#
+# Why not assert against /var/log/journal/<machine-id>/ existence: the
+# directory is created lazily on first persistent write but never torn
+# down on a mode flip, so its presence is uncorrelated with the *current*
+# Storage= mode (box's packer image keeps it from an earlier build).
+#
+# Why not `systemctl show systemd-journald --property=Storage`: Storage
+# is a journald.conf property, not a systemd unit property — the unit's
+# show table doesn't expose it.
+
+- name: _verify | Emit sentinel log line
+  command: logger -t _journald_verify {{ _journald_verify_token }}
+  vars:
+    _journald_verify_token: "verify-{{ ansible_date_time.epoch }}-{{ 999999 | random }}"
+  register: journald_verify_emit
+  changed_when: false
+  become: true
+  tags:
+    - journald
+
+- name: _verify | Read sentinel back through journalctl
+  command: journalctl --identifier=_journald_verify --output=cat --since=-30s --no-pager
+  register: journald_verify_read
+  changed_when: false
+  retries: 5
+  delay: 1
+  until: journald_verify_emit.cmd[-1] in journald_verify_read.stdout
+  become: true
+  tags:
+    - journald
