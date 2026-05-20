@@ -180,17 +180,23 @@
     nginx_site_args:
       subdomain: jellyfin
       proxy_pass: http://localhost:{{ service_ports.jellyfin }}/
-      # Plugin / poster uploads from the admin UI can exceed the default
-      # client_max_body_size (16M); 100M covers stock plugins and custom
-      # poster art without blocking installs at the nginx layer.
-      client_max_body_size: 100m
+      # Jellyfin's reverse-proxy guide recommends 20M for plugin
+      # uploads and custom poster art.
+      client_max_body_size: 20m
       # Buffering breaks HLS seek latency and stalls /Videos/{id}/stream;
       # jellyfin's own nginx guide says off. The upstream still streams
       # to the client; nginx just stops trying to spool full chunks.
       proxy_buffering: "off"
+      # Match proxy_buffering off on the request side — plugin/poster
+      # uploads stream directly upstream instead of spooling to
+      # /var/lib/nginx/body/ first.
+      proxy_request_buffering: "off"
       # 4K HEVC transcode cold-starts routinely exceed the default 60s
       # before the first segment leaves ffmpeg; bump the read timeout so
       # nginx doesn't kill the first request while the backend is alive.
       proxy_read_timeout: 300s
+      # Jellyfin's web UI loads cast_sender.js from gstatic for
+      # Chromecast support; allow-list it in our default-strict CSP.
+      csp_default_src: "www.gstatic.com"
   tags:
     - jellyfin
