@@ -42,11 +42,17 @@
 
 - name: Render settings.json
   copy:
-    content: "{{ lookup('template', 'settings.json.j2') }}"
+    # JSON.stringify(_, null, 1) writes no trailing newline; the template
+    # file does. Strip ours so the bytes match what seerr persists.
+    content: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
     dest: /mnt/services/seerr/settings.json
     owner: seerr
     group: seerr
-    mode: "0600"
+    # Mode matches what seerr writes on every save (container umask 0022).
+    # Enforcing 0600 here would create a mode-flip → restart loop on every
+    # converge. Effective access control is via the parent directory's
+    # ownership (seerr:seerr); single-tenant homelab threat model.
+    mode: "0644"
     backup: true
     validate: python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "%s"
   register: seerr_settings_result
