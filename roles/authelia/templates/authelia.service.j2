@@ -62,6 +62,8 @@ ExecStart=/usr/bin/podman run \
     --env AUTHELIA_STORAGE_ENCRYPTION_KEY_FILE=/run/secrets/storage_encryption_key \
     --secret=authelia_smtp_password,type=mount,target=smtp_password \
     --env AUTHELIA_NOTIFIER_SMTP_PASSWORD_FILE=/run/secrets/smtp_password \
+    --secret=authelia_oidc_hmac_secret,type=mount,target=oidc_hmac_secret \
+    --env AUTHELIA_IDENTITY_PROVIDERS_OIDC_HMAC_SECRET_FILE=/run/secrets/oidc_hmac_secret \
     --publish 0.0.0.0:{{ service_ports.authelia }}:9091/tcp \
     --health-cmd "wget --quiet --tries=1 --spider --timeout=5 http://localhost:9091/api/health || exit 1" \
     --health-startup-cmd "wget --quiet --tries=1 --spider --timeout=5 http://localhost:9091/api/health || exit 1" \

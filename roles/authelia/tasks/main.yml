@@ -102,6 +102,23 @@
   tags:
     - authelia
 
+- name: Create authelia OIDC HMAC secret
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: authelia_oidc_hmac_secret
+      data: "{{ authelia_oidc_hmac_secret }}"
+  tags:
+    - authelia
+
+# The OIDC issuer RSA private key is inlined into configuration.yml
+# rather than mounted as a podman secret: Authelia v4.39 only
+# accepts the PEM via the YAML `jwks[].key` field, not via a path
+# or *_FILE env override. Rotation rides on
+# authelia_config_result.changed.
+
 - name: Install authelia service
   import_role:
     name: systemd_unit
@@ -131,7 +148,8 @@
            or authelia_jwt_secret_rotated
            or authelia_session_secret_rotated
            or authelia_storage_encryption_key_rotated
-           or authelia_smtp_password_rotated }}
+           or authelia_smtp_password_rotated
+           or authelia_oidc_hmac_secret_rotated }}
   tags:
     - authelia
 
