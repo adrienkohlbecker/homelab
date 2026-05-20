@@ -111,9 +111,13 @@ Three paths to inject a podman secret. Preferred order:
 
 ### User namespacing
 
-Default pattern: `--user 0:0` + `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1` (and gidmap pair). In-container root maps to the host service uid; a namespace escape lands at unprivileged uid.
+Three-tier pick — simplest that works:
 
-**When the default is not enough:** if the image's entrypoint drops to a baked-in non-root uid mid-startup (ClickHouse → 101, MongoDB → 100), the bare 1:1 fall-through lands on whatever host uid happens to share the number — wrong for `ls -la` and breaks ZFS-replication portability. Allocate a dedicated host user via `service_user` (`config_dir: false`) and add a `+N:<uid>:1` override. Add a `_verify.yml` ownership assertion so a regression in the mapping is loud. Canonical: [roles/hyperdx/](roles/hyperdx/) (ClickHouse maps, MongoDB doesn't — image's entrypoint doesn't actually switch).
+1. **`--user {{ <svc>_user.uid }}:{{ <svc>_user.group }}`** (default). Container process runs directly as the host service user; no namespace mapping involved. Files written to bind-mounts land with the right host ownership trivially. Use whenever the app doesn't insist on `id -u == 0` for its own internal checks.
+2. **linuxserver `PUID` / `PGID` env vars.** The image's s6-overlay init runs `usermod`/`chown` at startup to align its baked-in `abc` user with the desired ids. Linuxserver-specific.
+3. **Fake-root uidmap pattern** (last resort, only when the image actually needs `id -u == 0`): `--user 0:0` + `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1` (and gidmap pair). In-container root maps to the host service uid; a namespace escape lands at unprivileged uid. Canonical: [roles/healthchecks/](roles/healthchecks/).
+
+**When tier 3 isn't enough on its own:** if the image's entrypoint then drops to a baked-in non-root uid mid-startup (ClickHouse → 101, MongoDB → 100), the bare 1:1 fall-through lands on whatever host uid happens to share the number — wrong for `ls -la` and breaks ZFS-replication portability. Allocate a dedicated host user via `service_user` (`config_dir: false`) and add a `+N:<uid>:1` override. Add a `_verify.yml` ownership assertion so a regression in the mapping is loud. Canonical: [roles/hyperdx/](roles/hyperdx/) (ClickHouse maps, MongoDB doesn't — image's entrypoint doesn't actually switch).
 
 ### Prefer system-scope systemd units
 
