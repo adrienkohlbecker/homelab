@@ -48,9 +48,9 @@ Recurring multi-step workflows live as skills. Reach for them before hand-rollin
 
 ## Coding Style & Naming Conventions
 
-Use two-space YAML indentation and descriptive `name` values. Namespace variables per role (e.g., `samba_share_path`). Shell helpers in `packer/scripts/` should be Bash with `set -euo pipefail`. Before committing, run `mise run lint` (or `mise run fmt` to autofix) to avoid churn.
-
 **Underscores, not hyphens** in identifiers we author: role names, file names under `roles/`, systemd unit names, vars, directory names under `/mnt/services/<svc>/`, etc. — `clickhouse_logs` not `clickhouse-logs`, `service_user.yml` not `service-user.yml`. Editor double-click on `foo_bar` selects the whole token; on `foo-bar` it stops at the hyphen. Exceptions are names dictated by upstream (image tags, package names, K8s-flavored YAML keys) — those keep their hyphens.
+
+Everything else (YAML indentation, descriptive `name:`, `set -euo pipefail` in bash, namespaced role vars) is enforced by `mise run lint`; don't lift those into commentary here.
 
 ## Repo Conventions
 
@@ -212,7 +212,7 @@ This is a home environment, not a company production site: some security is nice
 Two passwords, two scopes. Configured in [ansible.cfg](ansible.cfg) as `vault_identity_list = prod@vault-client.sh, test@vault-client.sh` with `vault_id_match = True`.
 
 - `prod` — encrypts `group_vars/prod.yml` and prod host_vars (lab, pug, bunk). Stays on local workstations only; never lands in CI.
-- `test` — encrypts `group_vars/test.yml` and test host_vars (currently just `host_vars/box.yml` <!-- last verified 2026-05 -->). Available to CI as the **GitHub** repo secret `HOMELAB_VAULT_PASSWORD_TEST` so the test harness can decrypt test vars. Anything encrypted with the `test` vault id is reachable to any CI workflow run — never put a credential there that has prod blast radius.
+- `test` — encrypts `group_vars/test.yml` and test host_vars (currently just `host_vars/box.yml`). Available to CI as the **GitHub** repo secret `HOMELAB_VAULT_PASSWORD_TEST` so the test harness can decrypt test vars. Anything encrypted with the `test` vault id is reachable to any CI workflow run — never put a credential there that has prod blast radius.
 
 [vault-client.sh](vault-client.sh) follows ansible's "client" password-script protocol (filename must end in `-client` for ansible to pass `--vault-id <id>`). Lookup order per id: env var `HOMELAB_VAULT_PASSWORD_<UPPER_ID>` first (CI only), then macOS keychain `homelab-vault-<id>`, then Linux file `~/.config/homelab/vault-pass-<id>` (mode 0400). Bootstrap recipes in [notes/vault_setup.md](notes/vault_setup.md).
 
