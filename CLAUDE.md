@@ -156,6 +156,8 @@ SSH to `lab` / `pug` / `bunk` works out of the box (see [hosts.ini](hosts.ini); 
 
 When in doubt, ask.
 
+**Bridge to ack.** Before requesting ack for a mutating change, run `mise run ansible -- -l <host> --tags <role> --check` first — `--diff` is on by default ([ansible.cfg](ansible.cfg)), so the operator sees the would-be diff alongside the ack request rather than after. Faster turn-around for both sides.
+
 ### Test environment design
 
 Variant table (axis-collapse rationale + ZBM-aarch64 workaround in [notes/test_environment_design.md](notes/test_environment_design.md)):
