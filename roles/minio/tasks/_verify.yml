@@ -38,14 +38,25 @@
     status_code: 200
   become: true
 
-# nginx proxy chain for the console subdomain.
-- name: _verify | MinIO console reachable through nginx
+# nginx proxy chain for the console subdomain. Also asserts the
+# sub_filter injection landed -- the SPA HTML carries our
+# auto-redirect script that fires when no session cookie is set,
+# bypassing the "Login with SSO" button click. A MinIO upgrade
+# that changes the </head> token (different casing, whitespace,
+# minification) would break the injection silently; this catches
+# it as a regression.
+- name: _verify | MinIO console reachable through nginx (+ auto-redirect injection)
   uri:
-    url: https://localhost/api/v1/login
+    url: https://localhost/
     headers:
       Host: minio.{{ inventory_hostname }}.{{ domain }}
     validate_certs: false
+    return_content: true
     status_code: 200
+  register: minio_verify_console_spa
+  failed_when: >-
+    minio_verify_console_spa.status != 200
+    or 'fetch("/api/v1/login")' not in minio_verify_console_spa.content
   become: true
 
 # Admins IAM policy file landed under MinIO's policy dir. This is the
