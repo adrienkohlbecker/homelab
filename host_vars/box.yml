@@ -11,6 +11,8 @@
 qemu_test: true
 
 zfs_root: true
+# Volatile: VM is ephemeral and persistent journals would write to rpool
+# during throwaway test runs for no benefit.
 journald_storage: volatile
 # ZBM + rEFInd, not grub. Same as every prod host.
 grub_bootloader: false
