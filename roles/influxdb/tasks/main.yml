@@ -74,6 +74,6 @@
   vars:
     nginx_site_args:
       subdomain: influxdb
-      proxy_pass: http://localhost:8086/
+      proxy_pass: http://localhost:{{ service_ports.influxdb }}/
   tags:
     - influxdb
