@@ -7,16 +7,28 @@ Documentation=https://github.com/dead-claudia/journald-exporter
 After=network.target
 # Asserting here as it's pretty important to make sure metrics are flowing.
 AssertPathIsDirectory=/etc/journald-exporter/keys
+# Bound the crash loop. Restart=always with no cap would respawn forever
+# at full speed on a parse error / malformed key, drowning the journal
+# the daemon is itself reading.
+StartLimitIntervalSec=600
+StartLimitBurst=3
 
 # So it'll run on startup.
 [Install]
 WantedBy=multi-user.target
 
+# The daemon MUST start as root: src/parent/start.rs:check_parent_uid_gid()
+# panics with "This program is intended to be run as root." otherwise. It
+# then forks an HTTP-serving child and internally setuids it to the
+# journald-exporter system user (hardcoded). DO NOT add User= here, and
+# DO NOT add RestrictSUIDSGID=yes if hardening directives are ever added
+# wholesale -- either would crash the daemon at fork.
 [Service]
 Type=notify
 ExecStart=/usr/local/bin/journald-exporter --key-dir /etc/journald-exporter/keys --port {{ service_ports.journald_exporter }}
 WatchdogSec=5m
 Restart=always
+RestartSec=10
 # And a number of security settings to lock down the program somewhat.
 NoNewPrivileges=true
 ProtectSystem=strict

@@ -1,3 +1,17 @@
+# Upstream rejects non-hex keys outright (installation.md: "must be pure
+# hexadecimal"). Asserting up front turns a confusing "metrics return
+# 401" into a clear "your vault value is malformed" before anything
+# touches disk. 32-byte (64-hex-char) minimum matches `openssl rand -hex
+# 32`, the upstream-recommended generator.
+- name: Require well-formed journald_exporter_key
+  assert:
+    that:
+      - journald_exporter_key is string
+      - journald_exporter_key | trim is match('^[0-9a-fA-F]{64,}$')
+    fail_msg: "journald_exporter_key must be a hex string of at least 64 chars (vaulted in group_vars/<env>.yml)"
+  tags:
+    - journald_exporter
+
 - name: Download journald-exporter
   get_url:
     url: "{{ journald_exporter_artifacts[ansible_architecture].url }}"
@@ -85,7 +99,13 @@
           return 301 /metrics;
         }
       location_conf: |
-        # bypass http auth
+        # Bypass http auth: netdata scrapes 127.0.0.1:<port> directly
+        # with creds, but this subdomain exists so an operator can
+        # browse /metrics; the injection presents the upstream's
+        # expected basic-auth so the browser visit needs no creds.
+        # Username MUST be literally "metrics" (upstream-hardcoded); the
+        # keyfile basename (/etc/journald-exporter/keys/netdata) is a
+        # free-form label and not part of the protocol.
         proxy_set_header Authorization "Basic {{ ("metrics:" + journald_exporter_key) | b64encode }}";
         # override content type so metrics can be viewed in a browser
         proxy_hide_header Content-Type;
