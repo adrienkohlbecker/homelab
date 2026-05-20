@@ -17,7 +17,7 @@
   "hideBlocklisted": false,
   "localLogin": true,
   "mediaServerLogin": true,
-  "newPlexLogin": true,
+  "newPlexLogin": false,
   "discoverRegion": "US",
   "streamingRegion": "US",
   "originalLanguage": "",
@@ -25,7 +25,7 @@
   "blocklistLanguage": "",
   "blocklistedTags": "",
   "blocklistedTagsLimit": 50,
-  "mediaServerType": 1,
+  "mediaServerType": 2,
   "partialRequestsEnabled": true,
   "enableSpecialEpisodes": false,
   "locale": "en",
@@ -62,17 +62,45 @@
   "webAppUrl": "https://plex.{{ inventory_hostname }}.{{ domain }}/web/index.html",
   "machineId": "{{ plex_machine_id }}"
  },
+{#
+  jellyfin is the SSO source. The bootstrap path (server/routes/auth.ts):
+  on first sign-in via the Jellyfin form, when userRepository.count() === 0,
+  seerr mints a Jellyfin API token labelled "Seerr" using the operator's
+  Jellyfin admin session and writes it back to settings.jellyfin.apiKey,
+  along with name/serverId/libraries[]. Slurp+json_query preserves those
+  daemon-written fields across re-templates; ip/port/useSsl/urlBase/
+  externalHostname/jellyfinForgotPasswordUrl are operator-config we own.
+  Empty libraries[] renders single-line per seerr's JSON.stringify(_, 1)
+  shape; once populated, the manual loop below matches the daemon's
+  multi-line shape so ansible diffs stay quiet.
+#}
+{% set _jelly_libs = seerr_settings_json | json_query('jellyfin.libraries') %}
  "jellyfin": {
-  "name": "",
-  "ip": "",
+  "name": "{{ seerr_settings_json | json_query('jellyfin.name') or '' }}",
+  "ip": "jellyfin.dns.podman",
   "port": 8096,
   "useSsl": false,
   "urlBase": "",
-  "externalHostname": "",
+  "externalHostname": "https://jellyfin.{{ inventory_hostname }}.{{ domain }}",
   "jellyfinForgotPasswordUrl": "",
+{% if _jelly_libs %}
+  "libraries": [
+{% for _lib in _jelly_libs %}
+   {
+    "id": "{{ _lib.id }}",
+    "name": "{{ _lib.name }}",
+    "enabled": {{ _lib.enabled | string | lower }},
+    "type": "{{ _lib.type }}",
+    "lastScan": {{ _lib.lastScan | default(0) }}
+   }{% if not loop.last %},{% endif %}
+
+{% endfor %}
+  ],
+{% else %}
   "libraries": [],
-  "serverId": "",
-  "apiKey": ""
+{% endif %}
+  "serverId": "{{ seerr_settings_json | json_query('jellyfin.serverId') or '' }}",
+  "apiKey": "{{ seerr_settings_json | json_query('jellyfin.apiKey') or '' }}"
  },
  "tautulli": {
   "hostname": "tautulli.dns.podman",
