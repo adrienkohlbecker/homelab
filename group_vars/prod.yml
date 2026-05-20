@@ -1077,4 +1077,4 @@ authelia_oidc_clients:
     client_secret: $pbkdf2-sha512$310000$x/9LrPe3Sjv/YcZh9nOGng$Q1qoE/.Pq.WyCaAUmWPADO1nGRugJvzF.fLBQjxwaYDdFhm.r7iTPNqVbynxTBK2FcIAjL8hKuLkIxQnSTsv2Q
     authorization_policy: two_factor
     redirect_uris:
-      - https://paperless.lab.fahm.fr/accounts/oidc/authelia/login/callback/
+      - https://paperless.{{ inventory_hostname }}.{{ domain }}/accounts/oidc/authelia/login/callback/
