@@ -123,27 +123,54 @@ SyslogIdentifier=%N
 #   same rootless socket. Removing either leaves `container:`
 #   workflows failing at the "Initialize containers" step with
 #   "statfs /var/run/docker.sock: no such file or directory".
-# --volume /opt/actions-runner: path-mirrored from the host (where
-#   roles/github_runner downloaded + extracted the actions/runner
-#   tarball). The runner binaries live here on both sides at the same
-#   path, so when actions/runner spawns docker create with
-#   -v /opt/actions-runner/externals:/__e:ro for a workflow container,
-#   docker (resolving the source on the host via the bind-mounted
-#   socket) finds real files instead of EACCES on a missing path.
-#   :rw (not :O) -- the in-container runner writes .runner /
-#   .credentials / _diag/ / run-helper.sh to /opt/actions-runner at
-#   runtime, and a malicious workflow could in principle persist
-#   tampering to the next container by editing run.sh / bin/Runner.*.
-#   The cleaner :O (overlay) flag would discard in-container writes on
-#   exit -- and we tried it -- but it's fundamentally incompatible with
-#   the +0 uidmap demotion: :O's bind-mount source lives under
-#   /var/lib/containers/storage/overlay-containers/<cid>/userdata/
-#   which podman creates at 0700 root-only, and crun's source-path
-#   lookup runs as the in-userns root (= host github_runner via the
-#   +0 override), hitting EACCES on traversal. Accepted in homelab CI;
-#   the actions/runner tarball sha256 in vars/main.yml + a tamper-
-#   detection follow-up in CLAUDE.md "Someday" is the path to better
-#   coverage without the userns-vs-overlay clash.
+# --volume /opt/actions-runner/%i: per-instance actions-runner root,
+#   path-mirrored from the host. The dir is populated by the
+#   github_runner_sync_root ExecStartPre below -- it hard-links the
+#   canonical /opt/actions-runner/{bin,externals,run.sh,...} tree into
+#   /opt/actions-runner/%i/, so total disk usage stays at 1x while each
+#   instance gets its own writable RUNNER_ROOT for the state files
+#   (.runner / .credentials* / _diag / run-helper.sh) actions/runner
+#   writes at startup. Without the per-instance dir, N>1 concurrent
+#   instances race the same files at the shared /opt/actions-runner/ on
+#   container restart -- whichever lost the last-write race signed
+#   session messages with another instance's RSA key, the GitHub broker
+#   rejected with "The signature is not valid", and the listener's
+#   in-process retry-loop classified that as retryable so the container
+#   never exited and systemd never restarted it. The pgrep healthcheck
+#   stayed green while the runner reported offline in the GitHub UI for
+#   the entire stuck-container lifetime. See files/github_runner_sync_root.sh
+#   for the hard-links-vs-copies-vs-symlinks rationale.
+#
+#   Path-mirroring still works for DooD: actions/runner spawns docker
+#   create with -v /opt/actions-runner/%i/externals:/__e:ro for the
+#   workflow container, and docker (resolving the source on the host
+#   via the bind-mounted socket) finds the hard-linked tree at that
+#   path. Runner.Listener derives RUNNER_ROOT from
+#   Path.GetDirectoryName(typeof(IOUtil).Assembly.Location), which lands
+#   at /opt/actions-runner/%i/bin -- hard links aren't resolved by
+#   Assembly.Location (only symlinks are), so the per-instance dir
+#   wins. run.sh's own `cd -P $(dirname $0)` survives the same way.
+#
+#   :rw is necessary because the runner writes state files at startup.
+#   Tampering with the canonical binaries via a malicious workflow is
+#   still possible (it'd write to /opt/actions-runner/%i/bin/Runner.*
+#   which shares an inode with the canonical), at the same blast radius
+#   as before -- the per-instance dir doesn't reduce it. The tamper-
+#   detection follow-up in CLAUDE.md "Someday" still applies the same
+#   way. The cleaner :O (overlay) flag would discard in-container
+#   writes on exit -- and we tried it -- but it's fundamentally
+#   incompatible with the +0 uidmap demotion: :O's bind-mount source
+#   lives under /var/lib/containers/storage/overlay-containers/<cid>/
+#   userdata/ which podman creates at 0700 root-only, and crun's
+#   source-path lookup runs as the in-userns root (= host github_runner
+#   via the +0 override), hitting EACCES on traversal.
+# --workdir /opt/actions-runner/%i: actions/runner's run.sh execs
+#   bin/Runner.Listener relative to its own dir (`cd -P
+#   $(dirname $0)`), so the listener loads its Assembly from
+#   $PWD/bin/Runner.Listener.dll and derives RUNNER_ROOT = $PWD. Setting
+#   --workdir to the per-instance root makes the in-container effective
+#   "actions-runner directory" the per-instance hard-link tree without
+#   needing the entrypoint to cd explicitly.
 # --volume /mnt/.../workdir_%i: path-mirrored at the same path on
 #   both sides for the same DooD-bind-mount reason. actions/runner's
 #   _work tree lives here, plus _temp/_actions/_tool subdirs that
@@ -240,6 +267,14 @@ SyslogIdentifier=%N
 # actually listening. Bounded 60 × 1s, well inside TimeoutStartSec=300.
 # Same pattern as roles/gitea_runner.
 ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -S %t/user/{{ github_runner_user.uid }}/podman/podman.sock ] && exit 0; sleep 1; done; echo "podman.sock not present after 60s" >&2; exit 1'
+# Hard-link the canonical /opt/actions-runner tree into the per-instance
+# subdir so this instance has its own RUNNER_ROOT for state files. Idempotent
+# and ~ms on an unchanged tarball; refreshes the hard links to point at the
+# new inodes after a tarball bump (binaries replace + restart triggered from
+# _register.yml). See roles/github_runner/files/github_runner_sync_root.sh
+# for the per-instance-vs-shared rationale and the inode/Assembly.Location
+# story.
+ExecStartPre=/usr/local/bin/github_runner_sync_root %i
 # Mint the JIT config on the host (reads the PAT podman secret as root
 # via `podman secret inspect --showsecret`, POSTs to GitHub's
 # generate-jitconfig, writes the blob to /run/%N/jit) so the PAT itself
@@ -267,7 +302,8 @@ ExecStart=/usr/bin/podman run \
   --gidmap=0:0:65536 \
   --gidmap=+0:{{ github_runner_user.group }}:1 \
   --volume %t/user/{{ github_runner_user.uid }}/podman/podman.sock:/var/run/docker.sock \
-  --volume /opt/actions-runner:/opt/actions-runner:rw \
+  --volume /opt/actions-runner/%i:/opt/actions-runner/%i:rw \
+  --workdir /opt/actions-runner/%i \
   --volume /mnt/scratch/github_runner/workdir_%i:/mnt/scratch/github_runner/workdir_%i:rw \
   --env CONTAINER_HOST=unix:///var/run/docker.sock \
   --env DOCKER_HOST=unix:///var/run/docker.sock \
