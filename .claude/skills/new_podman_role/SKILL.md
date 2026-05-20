@@ -60,7 +60,10 @@ For service `<svc>`, create:
   ```
   Add `when: not (ansible_check_mode and <svc>_user.changed)` gate on tasks that depend on the freshly-created user/dir (per *Role Conventions*).
 - `roles/<svc>/templates/<svc>.service.j2` — the systemd unit. Required pieces:
-  - `--user 0:0` + `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1` (and gidmap) per *User Namespacing*. Add `+N:<uid>:1` for any image-side privilege drop you've actually observed.
+  - Container user (per *User Namespacing*, three-tier pick — simplest that works):
+    - Default: `--user {{ <svc>_user.uid }}:{{ <svc>_user.group }}`. Works for any app that doesn't insist on `id -u == 0` inside.
+    - linuxserver images: set `PUID` / `PGID` env vars instead.
+    - Last resort: fake-root uidmap (`--user 0:0` + `--uidmap=0:0:65536 --uidmap=+0:{{ <svc>_user.uid }}:1` and gidmap) when the image actually needs in-container root. Add `+N:<uid>:1` for any image-side privilege drop you've observed.
   - `--health-cmd` per the tier you picked. Use JSON-array form for python/distroless.
   - `--publish 127.0.0.1:{{ service_ports.<svc> }}:<container_port>/tcp`.
   - Site bind-mounts gated on `zfs_has_<name>_mount` if any.
