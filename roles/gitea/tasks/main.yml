@@ -241,7 +241,7 @@
   when:
     - not qemu_test
     - gitea_oidc_desired_fp != gitea_oidc_current_fp
-    - not gitea_authelia_source_id
+    - gitea_authelia_source_id | length == 0
   command:
     argv:
       - /usr/local/bin/gitea
@@ -278,7 +278,7 @@
   when:
     - not qemu_test
     - gitea_oidc_desired_fp != gitea_oidc_current_fp
-    - gitea_authelia_source_id
+    - gitea_authelia_source_id | length > 0
   command:
     argv:
       - /usr/local/bin/gitea
