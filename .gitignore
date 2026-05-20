@@ -11,9 +11,10 @@ test/out/
 /packer/artifacts
 /zbm-build
 
-.claude/*
-!.claude/settings.json
-!.claude/commands/
-!.claude/agents/
-!.claude/hooks/
-!.claude/skills/
+# Per Anthropic's Claude Code guidance: track everything in .claude/ that
+# is shared team-level config (settings.json, commands, agents, hooks,
+# skills, rules, output styles, plugins, ...). Only ignore the per-user
+# overrides file. The previous blocklist pattern auto-ignored any new
+# .claude/ subdir until it was explicitly whitelisted; the inverse here
+# means a new feature directory auto-tracks without a gitignore PR.
+.claude/settings.local.json
