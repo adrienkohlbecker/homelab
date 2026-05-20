@@ -66,16 +66,21 @@
 
 # DOCKER_INFLUXDB_INIT_* honors the credentials only on first boot
 # (no BoltDB present). A vault rotation updates the podman secret here
-# but the running app keeps the original credentials silently. Mirror
-# healthchecks's pattern: fail loudly with explicit operator
-# instructions instead of silently lying.
-- name: Fail if root credentials rotated post-bootstrap
+# but the running app keeps the original credentials silently. Split
+# into two fail-loud gates because the recovery procedure differs --
+# password rotation runs `influx user password`, username rotation
+# needs `influx user update --name` (which we can't automate; the OLD
+# username has just been replaced in vault and we don't know it).
+# Each gate correlates rotated AND existed_before for the SAME secret,
+# so a fresh-bootstrap host (both secrets created, neither pre-existed)
+# doesn't trip either.
+- name: Fail if root password rotated post-bootstrap
   fail:
     msg: |
-      influxdb_root_user or influxdb_root_password changed in vault.
-      The podman secret has been updated, but the influxdb image's
-      DOCKER_INFLUXDB_INIT_* setup runs only on first boot (BoltDB
-      empty), so the running instance still has the old credentials.
+      influxdb_root_password changed in vault. The podman secret has
+      been updated, but the influxdb image's DOCKER_INFLUXDB_INIT_*
+      setup runs only on first boot (BoltDB empty), so the running
+      instance still has the old password.
 
       To complete the rotation, run on the target host:
 
@@ -84,8 +89,29 @@
 
       Then re-run this play.
   when:
-    - influxdb_root_user_rotated or influxdb_root_password_rotated
-    - influxdb_root_user_existed_before or influxdb_root_password_existed_before
+    - influxdb_root_password_rotated
+    - influxdb_root_password_existed_before
+  tags:
+    - influxdb
+
+- name: Fail if root username rotated post-bootstrap
+  fail:
+    msg: |
+      influxdb_root_user changed in vault. Renaming the bootstrap user
+      via vault rotation is not supported: the old username (needed
+      for `influx user update --name`) was just overwritten and isn't
+      recoverable from the play. Look it up from the vault git history
+      and rename manually:
+
+        podman exec -it influxdb sh -c 'influx user update \
+          --id $(influx user list --name <OLD_USERNAME> --json \
+                 | jq -r ".[0].id") \
+          --name {{ influxdb_root_user }}'
+
+      Then re-run this play.
+  when:
+    - influxdb_root_user_rotated
+    - influxdb_root_user_existed_before
   tags:
     - influxdb
 
