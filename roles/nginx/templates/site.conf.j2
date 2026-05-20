@@ -82,6 +82,19 @@ server {
   location / {
 {% if _auth_enabled %}
     auth_request /internal/authelia;
+    # Capture Authelia's Remote-* response headers from the auth_request
+    # subrequest as nginx variables, then forward them to the upstream
+    # below. Upstreams that trust the proxy (e.g. *arr v4 with
+    # AuthenticationMethod=External) read X-Forwarded-User and skip their
+    # own local login. Authelia sends Remote-User on every authenticated
+    # 200; the bypass_query_param shortcut returns 204 with no Remote-*,
+    # so $authelia_user is empty there — incompatible with upstreams
+    # that require X-Forwarded-User. Don't combine the two on the same
+    # site.
+    auth_request_set $authelia_user   $upstream_http_remote_user;
+    auth_request_set $authelia_groups $upstream_http_remote_groups;
+    auth_request_set $authelia_name   $upstream_http_remote_name;
+    auth_request_set $authelia_email  $upstream_http_remote_email;
 {% endif %}
 {% if nginx_site_args.bypass_query_param is defined %}
     # Strip the bypass token from $args before proxy_pass so the
@@ -116,6 +129,12 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Forwarded-Host  $host;
     proxy_set_header X-Forwarded-Port  $server_port;
+{% if _auth_enabled %}
+    proxy_set_header X-Forwarded-User   $authelia_user;
+    proxy_set_header X-Forwarded-Groups $authelia_groups;
+    proxy_set_header X-Forwarded-Name   $authelia_name;
+    proxy_set_header X-Forwarded-Email  $authelia_email;
+{% endif %}
 
     # Proxy timeouts
     proxy_connect_timeout {{ nginx_site_args.proxy_connect_timeout | default('60s') }};
