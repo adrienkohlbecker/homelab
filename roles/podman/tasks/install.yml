@@ -314,6 +314,17 @@
 # also get the storage config.
 - name: install | Configure podman storage
   when: zfs_root
+  vars:
+    # Native overlay learned idmapped-mount support in kernel 5.19.
+    # On older kernels (jammy stock = 5.15) a --uidmap container start
+    # falls through to the storage-chown-by-maps copy-up — walk the
+    # layer and lchown every file to the host uid — which EIOs on
+    # device nodes baked into the layer (dev/console/dev/null in the
+    # linuxserver/* base images) and aborts the start. fuse-overlayfs
+    # implements idmap in userspace and skips the kernel chown-by-maps
+    # path entirely, so it works under 5.15. Lab/pug ride HWE 6.x and
+    # don't need the userspace shim.
+    _podman_storage_needs_fuse_overlayfs: "{{ ansible_facts.kernel is version('5.19', '<') }}"
   copy:
     dest: /etc/containers/storage.conf
     content: |
@@ -322,6 +333,11 @@
       runroot = "/run/containers/storage"
       graphroot = "/var/lib/containers/storage"
       rootless_storage_path = "/var/lib/containers/rootless/$USER"
+      {% if _podman_storage_needs_fuse_overlayfs %}
+
+      [storage.options.overlay]
+      mount_program = "/usr/bin/fuse-overlayfs"
+      {% endif %}
     owner: root
     group: root
     mode: "0644"

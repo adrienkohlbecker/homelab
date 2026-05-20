@@ -119,11 +119,16 @@
   become: true
   failed_when: "'Anonymized DNS: routing' not in _verify_journal_startup.stdout"
 
+# +time=5 (not the original +time=2) because the relay round-trip
+# (dct-fr/dnscry.pt-paris-ipv4 → upstream → back) occasionally spikes
+# past 2s under cold network conditions, dropping a query with dig rc=9
+# and aborting the loop. 5s per query × 20 queries caps total runtime
+# under 100s even in the pathological case.
 - name: _verify | Drive 20 queries so the load balancer picks both pinned servers
   shell: |
     set -e
     for _ in $(seq 20); do
-      dig @127.0.0.1 -p {{ service_ports.dnscrypt_proxy }} example.com A +short +time=2 +tries=1 > /dev/null
+      dig @127.0.0.1 -p {{ service_ports.dnscrypt_proxy }} example.com A +short +time=5 +tries=1 > /dev/null
     done
   changed_when: false
 

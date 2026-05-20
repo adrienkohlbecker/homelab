@@ -34,6 +34,7 @@ from machine import (
     PEAK_KB_SENTINEL_PREFIX,
     UBUNTU_RELEASES,
     imagedir_for_host,
+    resolve_default_machine,
     sweep_stale_workdirs,
 )
 from utils import cancel_on_signal, colorize, terminate_subprocess
@@ -518,7 +519,22 @@ def main() -> int:
         if not roles:
             print("No roles with tasks/main.yml found", file=sys.stderr)
             return 1
-        machine_roles = [MachineRole(machine, ubuntu_name, role) for role in roles for ubuntu_name in ubuntus for machine in machines]
+        # A role that declares `machine: <X>` in its roles/<n>/meta/test.yml is
+        # opting into a specific test fixture (typically box_deps for roles
+        # that benefit from pre-baked podman+nginx). Honour that override
+        # instead of the CLI --machines value for those roles -- matches
+        # testrole.py's resolution and prevents (box_deps-roles, box)
+        # combinations from running against the wrong fixture.
+        machine_roles = [
+            MachineRole(resolve_default_machine(role) if Path(f"roles/{role}/meta/test.yml").exists() else machine, ubuntu_name, role)
+            for role in roles
+            for ubuntu_name in ubuntus
+            for machine in machines
+        ]
+        # Dedupe in case the same (machine, ubuntu, role) triple appears twice
+        # — e.g. user passes --machines box,box_deps and a role redirects from
+        # both to box_deps.
+        machine_roles = list({mr: None for mr in machine_roles})
 
     if args.only_role:
         wanted = {r.strip() for r in args.only_role.split(",") if r.strip()}

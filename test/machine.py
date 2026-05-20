@@ -12,6 +12,7 @@ import shlex
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -168,6 +169,27 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
 
 
 MACHINE_CHOICES: tuple[str, ...] = tuple(QEMU_MACHINE_SPECS)
+
+
+def resolve_default_machine(role: str) -> str:
+    """Read roles/<role>/meta/test.yml and return its `machine:` field.
+
+    Falls back to 'box' when the file is absent or doesn't declare
+    machine. Exits non-zero on a parse error or an unknown machine
+    name -- a typo'd opt-in should fail loudly at startup, not run
+    silently against box.
+    """
+    meta_path = Path(f"roles/{role}/meta/test.yml")
+    if not meta_path.exists():
+        return "box"
+    try:
+        data = yaml.safe_load(meta_path.read_text()) or {}
+    except yaml.YAMLError as e:
+        sys.exit(f"{meta_path}: parse error: {e}")
+    machine = data.get("machine", "box")
+    if machine not in MACHINE_CHOICES:
+        sys.exit(f"{meta_path}: machine={machine!r} not in {sorted(MACHINE_CHOICES)}")
+    return machine
 
 
 def _qemu_ansible_args(spec: QemuMachineSpec) -> list[str]:
