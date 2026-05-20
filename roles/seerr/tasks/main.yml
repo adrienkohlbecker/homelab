@@ -81,7 +81,7 @@
     systemd_unit_args:
       src: seerr
       condition: "{{ not (ansible_check_mode and (seerr_service_result.changed or seerr_user.changed)) }}"
-      restart: "{{ seerr_service_result.changed or seerr_settings_result.changed }}"
+      restart: "{{ seerr_service_result.changed or seerr_settings_result.changed or media_group.changed }}"
   tags:
     - seerr
 
