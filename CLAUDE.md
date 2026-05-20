@@ -12,7 +12,18 @@ Load-bearing negatives, listed up-front so a fresh agent session sees them befor
 
 ## Project Structure & Module Organization
 
-`site.yml` orchestrates every host group and its roles. Role logic stays under `roles/<role>/` (`tasks/`, `templates/`, `files/`, `vars/` — no `handlers/`, per Hard Rules), with shared defaults in `group_vars/` (a directory split — `group_vars/all/main.yml` etc., not a single file) and host-specific overrides in `host_vars/`. `ansible.cfg` binds the repo to `hosts.ini` and `vault-client.sh` (which dispatches on vault-id; see *Vault ids* below), so running from the root picks up the correct inventory and vault passwords automatically. Supporting folders: `packer/` builds the QEMU images, `terraform/` keeps DNS (Cloudflare), registrar (Gandi), Cloudflare Access, Mailgun, GitHub-repo, Nexus, and GCP state, `wireguard/` stores VPN peers, `test/` holds the harness, inventories, and logs, and `notes/` carries long-form design notes (plans, migration journals, rationale) referenced from code comments and CLAUDE.md pointers — the canonical landing zone for content that doesn't belong inline.
+`site.yml` orchestrates host groups → roles. `ansible.cfg` binds the repo to `hosts.ini` and `vault-client.sh` (which dispatches on vault-id; see *Vault ids* below), so running from the root picks up the correct inventory and vault passwords automatically.
+
+| Path             | Purpose                                                                                      |
+|------------------|----------------------------------------------------------------------------------------------|
+| `roles/<r>/`     | role logic — `tasks/`, `templates/`, `files/`, `vars/` (no `handlers/`, per Hard Rules)      |
+| `group_vars/`    | shared defaults — directory split (`group_vars/all/main.yml` etc., not a single file)        |
+| `host_vars/`     | host-specific overrides                                                                      |
+| `terraform/`     | DNS (Cloudflare), registrar (Gandi), Cloudflare Access, Mailgun, GitHub-repo, Nexus, GCP     |
+| `packer/`        | QEMU image builds                                                                            |
+| `test/`          | harness, inventories, logs                                                                   |
+| `wireguard/`     | VPN peers (vaulted keys)                                                                     |
+| `notes/`         | long-form design notes — the landing zone for content that doesn't belong inline             |
 
 ## Build, Test, and Development Commands
 
