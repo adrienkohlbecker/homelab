@@ -104,7 +104,7 @@
     # the auth has no read:buckets/<id> permission. Catches a regression
     # in bucket.yml's --write-bucket invocation that accidentally granted
     # broader perms.
-    - name: _verify | Write-bucket-only token cannot read (auth scope enforced)
+    - name: _verify | Write-bucket-only token attempts read
       command:
         argv:
           - podman
@@ -120,9 +120,18 @@
             from(bucket:"verify_bucket") |> range(start:-1m)
       register: _verify_neg_query
       changed_when: false
-      failed_when: _verify_neg_query.rc == 0
+      failed_when: false
       no_log: true
       become: true
+
+    - name: _verify | Write-bucket-only token cannot read (auth scope enforced)
+      assert:
+        that:
+          - _verify_neg_query.rc != 0
+        fail_msg: >-
+          Write-bucket token successfully read from verify_bucket --
+          bucket.yml's --write-bucket invocation appears to grant read
+          perms, which is a scope regression.
 
 # Negative-org test: bucket.yml asserts the requested org exists (only
 # influxdb_root_org is bootstrapped). A typo in a caller's
