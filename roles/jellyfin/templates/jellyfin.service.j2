@@ -4,7 +4,13 @@
 Description=jellyfin
 After=network-online.target
 Wants=network-online.target
-StartLimitInterval=600
+# StartLimitInterval must comfortably exceed StartLimitBurst × TimeoutSec
+# (here 3 × 360s = 1080s) or the burst limit never fires — three slow
+# starts blow past the window and the counter resets. 1800s gives a real
+# ceiling on fast-crash loops while still letting EF Core's first-boot
+# migrations on emulated aarch64 ride out as many TimeoutSec=360
+# attempts as the burst allows.
+StartLimitInterval=1800
 StartLimitBurst=3
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
