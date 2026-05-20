@@ -7,6 +7,9 @@ qemu_test: true
 qemu_test_minimal: true
 
 zfs_root: false
+# Volatile: VM is ephemeral; persistent journals on the ext4 root would
+# stick around across throwaway test runs for no benefit.
+journald_storage: volatile
 # No macvlan_blocks: minimal doesn't trunk any VLANs and doesn't need
 # an L2-on-LAN presence for containers. The macvlan role no-ops on
 # missing macvlan_blocks.
