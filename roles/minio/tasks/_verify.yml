@@ -1,0 +1,76 @@
+# S3 API readiness on the loopback port. /minio/health/live is the
+# unauth-friendly liveness endpoint; once it returns 200 the daemon
+# is parsing requests. Retries cover MINIO_VOLUMES init + IAM
+# sub-system load on cold start.
+- name: _verify | MinIO S3 API answers /minio/health/live
+  uri:
+    url: http://localhost:9199/minio/health/live
+    status_code: 200
+  register: minio_verify_api
+  retries: 30
+  delay: 2
+  until: minio_verify_api.status == 200
+  become: true
+
+# Console subsystem on the loopback console port. /api/v1/login is
+# the unauth endpoint the SPA hits at boot to learn whether to show
+# the form or redirect to an external IdP -- a 200 here proves the
+# console server is up independent of the OIDC config loading.
+- name: _verify | MinIO console answers /api/v1/login
+  uri:
+    url: http://localhost:9001/api/v1/login
+    status_code: 200
+    return_content: true
+  register: minio_verify_console
+  failed_when: >-
+    minio_verify_console.status != 200
+    or minio_verify_console.json.loginStrategy is not defined
+  become: true
+
+# nginx proxy chain for the API subdomain. ARQ / restic / terraform
+# backend all hit this URL via SigV4 against the S3 API.
+- name: _verify | MinIO API reachable through nginx
+  uri:
+    url: https://localhost/minio/health/live
+    headers:
+      Host: minio-api.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    status_code: 200
+  become: true
+
+# nginx proxy chain for the console subdomain.
+- name: _verify | MinIO console reachable through nginx
+  uri:
+    url: https://localhost/api/v1/login
+    headers:
+      Host: minio.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    status_code: 200
+  become: true
+
+# Admins IAM policy file landed under MinIO's policy dir. This is the
+# policy that attaches at OIDC login for any user whose token carries
+# groups: ["admins"]; a missing policy file means OIDC operators
+# would 200-login but immediately get "access denied" on any admin
+# operation. The state-of-the-policy-dir is the cheapest functional
+# check -- mcli admin policy info would be more idiomatic but
+# requires the client alias and adds a couple of seconds.
+- name: _verify | admins IAM policy exists
+  stat:
+    path: /mnt/minio/.minio.sys/config/iam/policies/admins
+  register: minio_verify_admins_policy
+  failed_when: not minio_verify_admins_policy.stat.exists
+  become: true
+
+# OIDC integration end-to-end (console flips loginStrategy=redirect,
+# admins claim mints STS creds) is verified manually on prod -- on
+# box, the MINIO_IDENTITY_OPENID_CONFIG_URL points at
+# https://auth.box.mhaf.fr/.well-known/openid-configuration, which
+# (a) has no /etc/hosts entry mapping it to 127.0.0.1, and
+# (b) wouldn't pass MinIO's TLS validation against the single-CN
+# snakeoil cert even with a hosts entry. Bringing OIDC under _verify
+# would need a multi-SAN snakeoil cert + system-trust insertion +
+# real Authelia in _setup; not worth the extra ~30s per test run for
+# the regression coverage it adds. The OIDC env vars themselves are
+# rendered by main.yml's template task which fails loudly if
+# minio_oidc_client_secret is undefined.
