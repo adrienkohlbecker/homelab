@@ -11,6 +11,8 @@
     cache_valid_time: 3600
   become: true
 
+# Lay snakeoil at the letsencrypt paths nginx.conf.j2 references before
+# the nginx install below validates that config.
 - name: _test | Generate certificates
   shell: |
     set -euo pipefail
@@ -25,3 +27,18 @@
   become: true
   loop:
     - '{{ inventory_hostname }}.{{ domain }}'
+
+# Pre-install nginx so the authelia_stub task below (which writes into
+# /etc/nginx/conf.d/ and validates the config) has both the target
+# directory and a starting nginx config. Main.yml's install will
+# re-run idempotently.
+- name: _setup | Install nginx
+  import_tasks: install.yml
+
+- name: _setup | Install authelia stub for auth=required tests
+  # The device-proxy sites (marantz, printer, siglent, ups, tubeszb)
+  # carry `auth: required`; the auth_request needs something answering
+  # on 127.0.0.1:{{ service_ports.authelia }}.
+  import_role:
+    name: _test
+    tasks_from: authelia_stub

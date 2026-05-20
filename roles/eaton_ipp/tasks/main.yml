@@ -83,6 +83,10 @@
     nginx_site_args:
       condition: '{{ ansible_architecture == "x86_64" }}'
       subdomain: ipp
+      # Vendor binary has a hard-coded `admin/admin` default only
+      # changeable in the IPP UI itself; Authelia gates the perimeter,
+      # vendor login stays as the second wall (accept the double click).
+      auth: required
       # The HTTP listener on 4679 unconditionally 301-redirects to
       # https://<host>:4680/, so proxying through it just bounces every
       # request back at the browser. Front the HTTPS listener directly;
