@@ -37,8 +37,14 @@
 # caller runs against a host where influxdb is still booting (e.g.
 # right after a `--tags` run that includes both roles), or with a
 # transient HTTP/timeout if influxd is still starting.
+# argv form across this file -- each user-controlled value lands in
+# its own argv slot, so a name containing a space or a leading dash
+# can't argv-inject if a future caller feeds untrusted input. Today
+# every caller passes inventory literals, but the shape is the cheap
+# foot-gun fix.
 - name: bucket | Wait for influxdb to answer ping
-  command: podman exec influxdb influx ping
+  command:
+    argv: [podman, exec, influxdb, influx, ping]
   register: _influxdb_bucket_ready
   changed_when: false
   retries: 30
@@ -47,7 +53,17 @@
   become: true
 
 - name: bucket | Query org {{ influxdb_bucket_args.org }}
-  command: podman exec influxdb influx org list --name {{ influxdb_bucket_args.org }} --json
+  command:
+    argv:
+      - podman
+      - exec
+      - influxdb
+      - influx
+      - org
+      - list
+      - --name
+      - "{{ influxdb_bucket_args.org }}"
+      - --json
   register: _influxdb_bucket_org_query
   changed_when: false
   check_mode: false
@@ -93,7 +109,17 @@
           | first).id }}
   block:
     - name: bucket | Query user {{ influxdb_bucket_args.user }}
-      command: podman exec influxdb influx user list --name {{ influxdb_bucket_args.user }} --json
+      command:
+        argv:
+          - podman
+          - exec
+          - influxdb
+          - influx
+          - user
+          - list
+          - --name
+          - "{{ influxdb_bucket_args.user }}"
+          - --json
       register: _influxdb_bucket_user_query
       changed_when: false
       check_mode: false
@@ -104,11 +130,34 @@
       when: >-
         _influxdb_bucket_user_query.rc != 0
         or (_influxdb_bucket_user_query.stdout | from_json | length) == 0
-      command: podman exec influxdb influx user create --org-id {{ _influxdb_org_id }} --name {{ influxdb_bucket_args.user }}
+      command:
+        argv:
+          - podman
+          - exec
+          - influxdb
+          - influx
+          - user
+          - create
+          - --org-id
+          - "{{ _influxdb_org_id }}"
+          - --name
+          - "{{ influxdb_bucket_args.user }}"
       become: true
 
     - name: bucket | Query bucket {{ influxdb_bucket_args.bucket }}
-      command: podman exec influxdb influx bucket list --org-id {{ _influxdb_org_id }} --name {{ influxdb_bucket_args.bucket }} --json
+      command:
+        argv:
+          - podman
+          - exec
+          - influxdb
+          - influx
+          - bucket
+          - list
+          - --org-id
+          - "{{ _influxdb_org_id }}"
+          - --name
+          - "{{ influxdb_bucket_args.bucket }}"
+          - --json
       register: _influxdb_bucket_bucket_query
       changed_when: false
       check_mode: false
@@ -119,7 +168,18 @@
       when: >-
         _influxdb_bucket_bucket_query.rc != 0
         or (_influxdb_bucket_bucket_query.stdout | from_json | length) == 0
-      command: podman exec influxdb influx bucket create --org-id {{ _influxdb_org_id }} --name {{ influxdb_bucket_args.bucket }}
+      command:
+        argv:
+          - podman
+          - exec
+          - influxdb
+          - influx
+          - bucket
+          - create
+          - --org-id
+          - "{{ _influxdb_org_id }}"
+          - --name
+          - "{{ influxdb_bucket_args.bucket }}"
       become: true
 
     # Re-query post-create so the auth task always sees a concrete bucket
@@ -127,7 +187,19 @@
     # upstream `influx bucket create` output schema changed across 2.x
     # patch releases).
     - name: bucket | Query bucket id for {{ influxdb_bucket_args.bucket }}
-      command: podman exec influxdb influx bucket list --org-id {{ _influxdb_org_id }} --name {{ influxdb_bucket_args.bucket }} --json
+      command:
+        argv:
+          - podman
+          - exec
+          - influxdb
+          - influx
+          - bucket
+          - list
+          - --org-id
+          - "{{ _influxdb_org_id }}"
+          - --name
+          - "{{ influxdb_bucket_args.bucket }}"
+          - --json
       register: _influxdb_bucket_bucket_id_query
       changed_when: false
       check_mode: false
@@ -140,7 +212,17 @@
       become: true
 
     - name: bucket | Query auth for {{ influxdb_bucket_args.user }}
-      command: podman exec influxdb influx auth list --user {{ influxdb_bucket_args.user }} --json
+      command:
+        argv:
+          - podman
+          - exec
+          - influxdb
+          - influx
+          - auth
+          - list
+          - --user
+          - "{{ influxdb_bucket_args.user }}"
+          - --json
       register: _influxdb_bucket_auth_query
       changed_when: false
       check_mode: false
@@ -163,9 +245,18 @@
         | map(attribute='permissions') | flatten
         | select('search', '^write:orgs/' ~ _influxdb_org_id ~ '/buckets/' ~ _influxdb_bucket_id ~ '$')
         | list | length == 0
-      command: >-
-        podman exec influxdb influx auth create
-        --org-id {{ _influxdb_org_id }}
-        --user {{ influxdb_bucket_args.user }}
-        --write-bucket {{ _influxdb_bucket_id }}
+      command:
+        argv:
+          - podman
+          - exec
+          - influxdb
+          - influx
+          - auth
+          - create
+          - --org-id
+          - "{{ _influxdb_org_id }}"
+          - --user
+          - "{{ influxdb_bucket_args.user }}"
+          - --write-bucket
+          - "{{ _influxdb_bucket_id }}"
       become: true
