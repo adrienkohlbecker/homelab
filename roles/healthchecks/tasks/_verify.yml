@@ -18,21 +18,42 @@
     - "'OK' in _verify_loopback.content"
   become: true
 
-# nginx Host-header probe -- exercises the full reverse-proxy chain so
-# a typo in nginx_site_args / proxy_pass fails here too. Also confirms
-# SECURE_PROXY_SSL_HEADER wiring: the status JSON renders without
-# 4xx/5xx through the https terminator.
-- name: _verify | healthchecks is reachable through nginx
+# nginx auth-gate probe -- the UI subdomain is `auth: required`, so
+# a cookieless GET / has to land on Authelia's 302 redirect chain.
+# Validates both the auth_request wiring and the SECURE_PROXY_SSL_HEADER
+# pass-through (Django would 400 a wrong scheme before we ever see the
+# 302).
+- name: _verify | healthchecks UI gate redirects unauthenticated to Authelia
   uri:
-    url: https://localhost/api/v3/status/
+    url: https://localhost/
     headers:
       Host: healthchecks.{{ inventory_hostname }}.{{ domain }}
     validate_certs: false
-    return_content: true
-  register: _verify_nginx
+    follow_redirects: none
+    status_code: 302
+  register: _verify_nginx_gate
   failed_when: >-
-    _verify_nginx.status != 200
-    or "OK" not in _verify_nginx.content
+    _verify_nginx_gate.status != 302
+    or 'auth.' not in (_verify_nginx_gate.location | default(''))
+  become: true
+
+# /ping/ bypass -- exercises the sibling location block carved out for
+# heartbeats. A bogus uuid still proves the request reached healthchecks
+# (it returns 400 for malformed UUIDs, never a 302 to Authelia). Any
+# non-302 status here means the auth_request inside `location /` did
+# not fire on this path.
+- name: _verify | /ping/<uuid> bypasses the Authelia gate
+  uri:
+    url: https://localhost/ping/00000000-0000-0000-0000-000000000000
+    headers:
+      Host: healthchecks.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    follow_redirects: none
+    status_code: [ 200, 400, 404 ]
+  register: _verify_ping_bypass
+  failed_when: >-
+    _verify_ping_bypass.status not in [ 200, 400, 404 ]
+    or _verify_ping_bypass.status == 302
   become: true
 
 # SECRET_KEY contract probe -- Django raises ImproperlyConfigured very
