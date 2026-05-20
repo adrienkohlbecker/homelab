@@ -180,42 +180,28 @@ Push CI fans out only to `box` (and `minimal` for roles in [.github/ci-minimal-r
 
 ## Continuous Integration
 
-GitHub Actions on lab. The `github_runner` role drives a templated `github_runner@<repo>_<suffix>.service` — one actions/runner process per entry in [host_vars/lab.yml](host_vars/lab.yml)'s `github_runner_instances`, running directly on the host as the `github_runner` system user. Scale by editing the dict and re-applying. **Runner internals** (per-instance dirs, wrapper-script systemd-verify quirk, registration-token mint, KVM-gidmap brittleness): see [notes/github_runner_design.md](notes/github_runner_design.md).
+GitHub Actions on lab via the `github_runner` role (templated `github_runner@<repo>_<suffix>.service`, one process per entry in [host_vars/lab.yml](host_vars/lab.yml)'s `github_runner_instances`). Internals — per-instance dirs, registration-token mint, KVM-gidmap brittleness — in [notes/github_runner_design.md](notes/github_runner_design.md).
 
-Five workflows under [.github/workflows/](.github/workflows/):
+Five workflows in [.github/workflows/](.github/workflows/):
 
-- `lint` — every push, runs `mise run lint` inside the ci container. Concurrency cancels superseded pushes.
-- `test` — every push, fans out per-role. `detect` job runs `mise run ci:detect-roles`; cross-cut paths (`group_vars/all/main.yml`, `group_vars/test.yml`, `host_vars/{box,minimal}.yml`, `test/(testrole|testall|machine).py`, `mise.toml`) emit `cross_cut=true` + an empty matrix and notify-cross-cut mails manual-trigger instructions. Otherwise each changed role becomes a `test-role / <role>:<variant>` cell. Helper roles (no `tasks/main.yml`) expand to consumers via `mise run ci:role-deps <helper>`.
-- `test-nightly` — cron `0 2 * * *` + `workflow_dispatch`. Activity gate skips when no commits landed in the last 25h. Full-universe matrix at `max-parallel: 4`. Mails on `failure()`.
-- `packer-build` — `workflow_dispatch` + push touching `packer/**` or `mise-tasks/packer/**`. Only writer of `/mnt/scratch/qemu`. Workflow-level `concurrency: lab-qemu-artifacts` prevents two manually-dispatched builds from racing.
-- `ci-image` — `workflow_dispatch` + push touching the [Dockerfile](Dockerfile) build inputs. Pushes `nexus.lab.fahm.fr/homelab/ci:<sha>` + `:latest`. Runs *outside* the ci container since this workflow rebuilds that very image; bootstrap a brand-new runner by triggering this via `workflow_dispatch` once before the other workflows can succeed.
+- `lint` — every push; runs `mise run lint` in the ci container.
+- `test` — every push; `detect` fans out per-role via `mise run ci:detect-roles`. Cross-cut paths (`group_vars/all/main.yml`, `host_vars/{box,minimal}.yml`, `test/(testrole|testall|machine).py`, `mise.toml`, etc.) emit an empty matrix and mail manual-trigger instructions.
+- `test-nightly` — `0 2 * * *` + dispatch; full-universe matrix, mails on failure. Activity gate skips when no commits landed in 25h.
+- `packer-build` — dispatch + push touching `packer/**`; only writer of `/mnt/scratch/qemu`. Shares the `lab-qemu-artifacts` concurrency group with `test`/`test-nightly`; reader/writer flock details in [notes/concurrency_rework.md](notes/concurrency_rework.md).
+- `ci-image` — dispatch + **push to `master`** touching Dockerfile inputs; rebuilds `nexus.lab.fahm.fr/homelab/ci:<sha>` + `:latest`. Runs *outside* the ci container; bootstrap a fresh runner by dispatching this once before other workflows can succeed.
 
-Fan-out shape: `strategy.matrix.spec` is populated dynamically via `fromJSON(needs.detect.outputs.matrix)` — each spec becomes its own UI row with its own log and re-run button.
+**Variant escalation** — [.github/ci-minimal-roles.txt](.github/ci-minimal-roles.txt) gives a role an extra `(role, minimal)` matrix entry. Add only when behaviour depends on upstream-shipped packages (every entry doubles the role's cost).
 
-**Label pools.** VM workloads land on `lab-vm`; everything else on `lab`. Pools are disjoint — a `runs-on: [self-hosted, lab]` job won't match a lab-vm runner and vice versa.
+**Runner pools** — VM workloads on `lab-vm`, everything else on `lab`; pools are disjoint. Per-job `runs-on:` lives in each workflow file.
 
-| Job                                                                | `runs-on`                |
-|--------------------------------------------------------------------|--------------------------|
-| `packer-build` / `build`                                           | `[self-hosted, lab-vm]`  |
-| `test` / `test-role`, `test-nightly` / `test-role`                 | `[self-hosted, lab-vm]`  |
-| `lint`, `ci-image` / `build`                                       | `[self-hosted, lab]`     |
-| `test` / `detect`, `notify-cross-cut`, `wait-for-*`, `notify`      | `[self-hosted, lab]`     |
-| `test-nightly` / `gate`, `notify`                                  | `[self-hosted, lab]`     |
+**CI secrets** are terraform-managed end-to-end; rotation in [notes/ci_secrets_runbook.md](notes/ci_secrets_runbook.md). The terraform GitHub provider authenticates via the operator's `gh auth token` (never exposed to CI).
 
-**Packer-vs-test mutex.** Reader/writer flock on `<imagedir>/.publish-lock`: [packer/publish.py](packer/publish.py) takes an exclusive lock around its install post-processor's rm+mv (sub-second window); [test/machine.py](test/machine.py)'s `_acquire_publish_lock_shared` takes a shared lock from start of `QemuMachine.prepare()` through end of `Machine.boot()` (until qemu has pinned its `-drive` inodes). Pure-Python (fcntl) so the same logic works on Linux + macOS. Test workflows mount `/mnt/scratch/qemu:ro` and bind-mount a per-cell scratch dir under `/mnt/scratch/github_runner/scratch/` (host path embeds `run_id + job-index`) so two concurrent cells never share a workdir parent.
-
-The ci image is built exclusively by the `ci-image` workflow and published to nexus. [Dockerfile](Dockerfile) bakes mise + the resolved tool tree, pre-warms uv's wheel cache, installs nodejs + qemu-system-x86 + qemu-utils + openssh-client + xorriso + cloud-image-utils + python3-yaml. apt/pip/uv routed through `nexus.lab.fahm.fr` by default — pass `--build-arg USE_NEXUS_MIRRORS=0` for builds outside the lab network.
-
-Variant escalation: [.github/ci-minimal-roles.txt](.github/ci-minimal-roles.txt) lists roles that get an extra `(role, minimal)` matrix entry on top of the default `(role, box)`. Add a role here only when behaviour depends on upstream-shipped packages actually being present (e.g. `cleanup` exercises the snap-removal path only when snapd is preinstalled). Every entry doubles the cost.
-
-**CI secrets** (`MAILGUN_API_KEY` / `_DOMAIN`, `NEXUS_USERNAME` / `_PASSWORD`, `MISE_GITHUB_TOKEN`) are managed end-to-end by terraform. Rotation procedures: [notes/ci_secrets_runbook.md](notes/ci_secrets_runbook.md). The terraform github provider authenticates separately via `gh auth token` (operator's gh CLI keyring); that token is never exposed to CI.
-
-The `gitea_runner` role still ships a stripped-down Gitea Actions runner on lab for ad-hoc Gitea repo workflows; this repo's CI does not run through it.
+The `gitea_runner` role still ships a Gitea-side runner on lab for ad-hoc workflows; this repo's CI doesn't use it.
 
 ### Local-debug recipes
 
-- Manual subset trigger: Actions tab → `test` → Run workflow → `roles=foo,bar:lab,baz:minimal`. `roles=ALL` runs everything. `roles=foo` (no `:variant`) emits `foo:box` plus `foo:minimal` if `foo` is in `ci-minimal-roles.txt`. `roles=foo:lab` / `:pug` are honoured as explicit tokens.
-- `CI_BASE_REF=HEAD~5 mise run ci:detect-roles` — preview what a multi-commit push would fan out to.
+- Manual subset: Actions → `test` → Run workflow → `roles=foo,bar:lab,baz:minimal` (`roles=ALL` runs everything; bare `foo` becomes `foo:box` plus `foo:minimal` if listed).
+- `CI_BASE_REF=HEAD~5 mise run ci:detect-roles` — preview the matrix for a multi-commit push.
 - `GITHUB_EVENT_NAME=workflow_dispatch INPUTS_ROLES=foo,bar mise run ci:detect-roles` — preview a manual dispatch.
 - `mise run ci:role-deps <helper>` — list consumers of a helper role.
 
