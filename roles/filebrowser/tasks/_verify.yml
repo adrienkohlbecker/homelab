@@ -12,9 +12,6 @@
     url: https://localhost/
     headers:
       Host: filebrowser.{{ inventory_hostname }}.{{ domain }}
-    url_username: "{{ filebrowser_basic_auth_user }}"
-    url_password: "{{ filebrowser_basic_auth_password }}"
-    force_basic_auth: true
     validate_certs: false
     return_content: true
     status_code: 200
@@ -48,9 +45,6 @@
     url: https://localhost/.theme.css
     headers:
       Host: filebrowser.{{ inventory_hostname }}.{{ domain }}
-    url_username: "{{ filebrowser_basic_auth_user }}"
-    url_password: "{{ filebrowser_basic_auth_password }}"
-    force_basic_auth: true
     validate_certs: false
     status_code: 200
   register: _verify_theme
@@ -62,9 +56,6 @@
     url: https://localhost/{{ item.name }}/
     headers:
       Host: filebrowser.{{ inventory_hostname }}.{{ domain }}
-    url_username: "{{ filebrowser_basic_auth_user }}"
-    url_password: "{{ filebrowser_basic_auth_password }}"
-    force_basic_auth: true
     validate_certs: false
     return_content: true
     status_code: 200
