@@ -25,19 +25,21 @@
     status_code: 200
   become: true
 
-# OIDC config landed: paperless-ngx 2.12 renders the regular login
-# form with a "Sign in via Authelia" link pointing at
-# /accounts/oidc/authelia/login/ -- the link's presence proves
-# (a) PAPERLESS_APPS appended openid_connect to INSTALLED_APPS, and
-# (b) the SOCIALACCOUNT_PROVIDERS _FILE secret parsed and registered
-# the provider with id "authelia". A misconfigured JSON, missing
-# secret mount, or drift in the provider id all suppress the link.
-# Doesn't require a live Authelia -- the URL is paperless-internal.
-#
-# When paperless upgrades past 2.14 we can drop this in favour of
-# PAPERLESS_REDIRECT_LOGIN_TO_SSO=true + a 302 probe (the setting
-# doesn't exist in 2.12).
-- name: _verify | Paperless login page exposes the OIDC entrypoint
+# OIDC config landed. paperless-ngx renders /accounts/login/ as 200 in
+# all cases -- the auto-redirect under PAPERLESS_REDIRECT_LOGIN_TO_SSO
+# is a client-side <script> that submits the social-login form, not a
+# server-side 302 (see src/documents/templates/account/login.html in
+# paperless-ngx 2.20.15). So we probe the HTML body for two markers:
+#   1. The social-login <form action="/accounts/oidc/authelia/login/">
+#      -- proves PAPERLESS_APPS appended openid_connect to
+#      INSTALLED_APPS and the SOCIALACCOUNT_PROVIDERS _FILE secret
+#      parsed with the right provider_id.
+#   2. The id="social-login" + form.submit() snippet that
+#      REDIRECT_LOGIN_TO_SSO emits -- proves the setting reached
+#      Django (a typo'd env name renders the same login form sans
+#      the auto-submit JS).
+# Doesn't require a live Authelia -- the markers are paperless-internal.
+- name: _verify | Paperless login page wires the OIDC entrypoint + auto-redirect
   uri:
     url: https://localhost/accounts/login/
     headers:
@@ -45,15 +47,16 @@
     validate_certs: false
     return_content: true
     status_code: 200
-  register: paperless_verify_sso_link
+  register: paperless_verify_sso_html
   failed_when: >-
-    paperless_verify_sso_link.status != 200
-    or '/accounts/oidc/authelia/login/' not in paperless_verify_sso_link.content
+    paperless_verify_sso_html.status != 200
+    or 'action="/accounts/oidc/authelia/login/' not in paperless_verify_sso_html.content
+    or "getElementById('social-login')" not in paperless_verify_sso_html.content
   become: true
 
 # End-to-end OIDC handshake (paperless → Authelia /authorize → callback
 # → cookie set → /api/documents/ authenticated) is verified manually
 # on prod. Bringing it under _verify would need real Authelia in
 # _setup + a TLS-trusted auth.box.mhaf.fr -- same trade-off the minio
-# role documents. The link-presence probe above is the cheapest
+# role documents. The HTML-marker probe above is the cheapest
 # assertion that the env-var + secret wiring landed.
