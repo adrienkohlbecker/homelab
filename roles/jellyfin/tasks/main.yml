@@ -43,7 +43,6 @@
     - /mnt/services/sqlite/jellyfin
     - /mnt/services/jellyfin/data
     - /mnt/scratch/jellyfin
-    - /mnt/scratch/jellyfin/transcodes
     - /mnt/scratch/jellyfin/cache
     - /var/log/jellyfin
   tags:
@@ -147,8 +146,8 @@
   vars:
     systemd_unit_args:
       src: jellyfin
-      condition: "{{ not (ansible_check_mode and (systemd_unit.changed or jellyfin_user.changed)) }}"
-      restart: "{{ systemd_unit.changed }}"
+      condition: "{{ not (ansible_check_mode and (jellyfin_service_result.changed or jellyfin_user.changed)) }}"
+      restart: "{{ jellyfin_service_result.changed or jellyfin_user.changed or media_group.changed }}"
   tags:
     - jellyfin
 
@@ -159,6 +158,18 @@
   vars:
     nginx_site_args:
       subdomain: jellyfin
-      proxy_pass: http://localhost:8096/
+      proxy_pass: http://localhost:{{ service_ports.jellyfin }}/
+      # Plugin / poster uploads from the admin UI can exceed the default
+      # client_max_body_size (16M); 100M covers stock plugins and custom
+      # poster art without blocking installs at the nginx layer.
+      client_max_body_size: 100m
+      # Buffering breaks HLS seek latency and stalls /Videos/{id}/stream;
+      # jellyfin's own nginx guide says off. The upstream still streams
+      # to the client; nginx just stops trying to spool full chunks.
+      proxy_buffering: "off"
+      # 4K HEVC transcode cold-starts routinely exceed the default 60s
+      # before the first segment leaves ffmpeg; bump the read timeout so
+      # nginx doesn't kill the first request while the backend is alive.
+      proxy_read_timeout: 300s
   tags:
     - jellyfin

@@ -49,18 +49,25 @@ ExecStart=/usr/bin/podman run \
     --rm \
     --name jellyfin \
     --init \
-    --user {{ jellyfin_user.uid }}:{{ media_group.gid }} \
+    --user 0:0 \
+    --uidmap=0:0:65536 \
+    --uidmap=+0:{{ jellyfin_user.uid }}:1 \
+    --gidmap=0:0:65536 \
+    --gidmap=+0:{{ jellyfin_user.group }}:1 \
+    --group-add={{ media_group.gid }} \
     --log-driver journald \
     --log-opt tag="jellyfin" \
     --volume /mnt/services/jellyfin:/config \
     --volume /mnt/services/sqlite/jellyfin:/mnt/services/sqlite/jellyfin \
-    --volume /mnt/scratch/jellyfin/transcodes:/config/transcodes \
+    --mount type=tmpfs,destination=/config/transcodes,tmpfs-size=4G,tmpfs-mode=0755 \
     --volume /var/log/jellyfin:/config/log \
     --volume /mnt/scratch/jellyfin/cache:/cache \
     --volume /mnt/media:/media \
     {{ has_transcoding_acceleration | ternary('--device /dev/dri/:/dev/dri/ --group-add="'~ render_group.gid ~'"', '') }} \
+    --env JELLYFIN_CACHE_DIR=/cache \
+    --env JELLYFIN_PublishedServerUrl=https://jellyfin.{{ inventory_hostname }}.{{ domain }} \
     --network media \
-    --publish 127.0.0.1:8096:8096/tcp \
+    --publish 127.0.0.1:{{ service_ports.jellyfin }}:8096/tcp \
     --health-cmd         '["curl","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8096/health"]' \
     --health-startup-cmd '["curl","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:8096/health"]' \
     --health-startup-interval "1s" \
