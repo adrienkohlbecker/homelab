@@ -159,5 +159,33 @@
     nginx_site_args:
       subdomain: healthchecks
       proxy_pass: http://localhost:{{ service_ports.healthchecks }}/
+      # PR 5: gate the admin UI on Authelia. The /ping/ paths bypass
+      # via a sibling location block below.
+      auth: required
+      # /ping/<uuid> and /ping/<uuid>/{start,fail,log,<exit_status>}
+      # are healthchecks' heartbeat endpoints; /ping-fail/<uuid> is
+      # the deprecated alias. Off-host crons hit them without an
+      # Authelia session -- the UUID itself is the secret. The
+      # sibling `location ~ ^/(ping|ping-fail)/` skips the
+      # auth_request inside `location /`. Proxy headers mirror what
+      # the default location / block forwards. CLAUDE.md notes that
+      # healthchecks receives heartbeats from sources outside this
+      # repo's grep, so the bypass is load-bearing even though no
+      # in-repo caller is visible.
+      server_conf: |
+        location ~ ^/(ping|ping-fail)/ {
+          proxy_pass http://localhost:{{ service_ports.healthchecks }};
+          proxy_http_version 1.1;
+          proxy_set_header Host              $host;
+          proxy_set_header X-Real-IP         $remote_addr;
+          proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto $scheme;
+          proxy_set_header X-Forwarded-Host  $host;
+          # Heartbeats may POST log bodies (curl --data-binary @-);
+          # healthchecks truncates above 100KB but accept up to 1M to
+          # keep error responses meaningful for slightly-too-big
+          # bodies instead of nginx returning 413 first.
+          client_max_body_size 1M;
+        }
   tags:
     - healthchecks
