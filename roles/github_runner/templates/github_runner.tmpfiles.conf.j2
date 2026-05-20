@@ -30,3 +30,20 @@
 e      /mnt/scratch/github_runner/scratch                -    -   -   ~1d
 e      /mnt/scratch/github_runner/workdir_*/_temp        -    -   -   ~7d
 e      /mnt/scratch/github_runner/workdir_*/_actions     -    -   -   ~30d
+
+# actions/runner hardcodes `-v /var/run/docker.sock:/var/run/docker.sock`
+# on every job container it creates for a workflow's job-level
+# `container:` block. The runner asks podman (over the DooD socket
+# bind-mounted into the runner container) to create the sibling job
+# container and bind-mount /var/run/docker.sock into it. podman is on
+# the HOST, so it statfs the path on the host's filesystem -- not
+# inside the runner container -- and the create fails with
+# "statfs /var/run/docker.sock: no such file or directory" when the
+# path is absent on the host. Point /var/run/docker.sock at
+# github_runner's rootless podman socket so the host-side statfs
+# succeeds AND in-sibling docker CLI calls reach podman's docker-compat
+# API. Symlink because /var/run is tmpfs -- systemd-tmpfiles-setup.service
+# re-runs this rule at boot. The L rule replaces any pre-existing
+# /var/run/docker.sock (man 5 tmpfiles.d), so a stale or differently-
+# targeted symlink gets fixed without operator intervention.
+L      /var/run/docker.sock                                -    -   -   -    /run/user/{{ github_runner_user.uid }}/podman/podman.sock

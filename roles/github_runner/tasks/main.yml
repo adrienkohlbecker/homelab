@@ -220,10 +220,13 @@
 # effect -- so a completed or crashed test cell's per-cell tree gets
 # fully reaped once its contents are >1d old. The 1d age is comfortably
 # beyond the harness's 1500s timeout, so a live cell can't be touched.
+# Also carries the L rule that points /var/run/docker.sock at
+# github_runner's rootless podman socket -- see the template's rationale
+# block for why that's load-bearing for `container:` workflows.
 - name: Install tmpfiles.d entry for test scratch
   when: not (ansible_check_mode and github_runner_user.changed)
-  copy:
-    src: github_runner.tmpfiles.conf
+  template:
+    src: github_runner.tmpfiles.conf.j2
     dest: /etc/tmpfiles.d/github_runner.conf
     owner: root
     group: root
@@ -236,6 +239,24 @@
       systemd-tmpfiles
       {{ '--dry-run' if ansible_distribution_release not in ['jammy'] else '' }}
       --create %s
+  become: true
+  tags:
+    - github_runner
+
+# Immediate-apply companion to the L rule above. tmpfiles-setup.service
+# only re-runs the rule at boot (and the rule itself is a no-op for an
+# already-correct symlink under --create semantics), so a freshly-
+# applied role without this task wouldn't materialise the symlink until
+# the next reboot. force: true so a stale or differently-targeted prior
+# symlink gets fixed in place.
+- name: Symlink /var/run/docker.sock to github_runner's rootless podman socket
+  when: not (ansible_check_mode and github_runner_user.changed)
+  file:
+    src: /run/user/{{ github_runner_user.uid }}/podman/podman.sock
+    dest: /var/run/docker.sock
+    state: link
+    force: true
+    follow: false
   become: true
   tags:
     - github_runner
