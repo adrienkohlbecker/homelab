@@ -1,4 +1,4 @@
-#jinja2: lstrip_blocks: True
+#jinja2: lstrip_blocks: True, trim_blocks: True
 # jellyfin.service #######################################################################
 [Unit]
 Description=jellyfin
@@ -63,7 +63,10 @@ ExecStart=/usr/bin/podman run \
     --volume /var/log/jellyfin:/config/log \
     --volume /mnt/scratch/jellyfin/cache:/cache \
     --volume /mnt/media:/media \
-    {{ has_transcoding_acceleration | ternary('--device /dev/dri/:/dev/dri/ --group-add="'~ render_group.gid ~'"', '') }} \
+{% if has_transcoding_acceleration %}
+    --device /dev/dri/:/dev/dri/ \
+    --group-add={{ render_group.gid }} \
+{% endif %}
     --env JELLYFIN_CACHE_DIR=/cache \
     --env JELLYFIN_PublishedServerUrl=https://jellyfin.{{ inventory_hostname }}.{{ domain }} \
     --network media \
