@@ -1,12 +1,12 @@
-- name: Validate journald_storage is one of journald.conf(5)'s accepted values
+- name: Validate journald_storage is volatile or persistent
   assert:
     quiet: true
     that:
-      - journald_storage in ['volatile', 'persistent', 'auto', 'none']
+      - journald_storage in ['volatile', 'persistent']
     fail_msg: >-
       journald_storage={{ journald_storage | default('<undefined>') }}
-      is not one of: volatile, persistent, auto, none. Define it in
-      host_vars/{{ inventory_hostname }}.yml.
+      is not one of: volatile, persistent. Define it in
+      host_vars/{{ inventory_hostname }}.yml or group_vars/.
   tags:
     - journald
 
