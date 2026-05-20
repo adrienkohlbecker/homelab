@@ -162,5 +162,12 @@
     nginx_site_args:
       subdomain: transmission
       proxy_pass: http://localhost:9091/
+      # PR 5 tail: Authelia is the sole UI gate. transmission has
+      # rpc-authentication-required = false in settings.json (a
+      # rpc-password hash is present but unused without that flag),
+      # so no double-click. The *arr leg uses
+      # transmission.dns.podman:9091 over the media podman network
+      # and bypasses nginx entirely.
+      auth: required
   tags:
     - transmission

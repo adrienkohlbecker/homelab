@@ -238,6 +238,13 @@
     nginx_site_args:
       subdomain: sabnzbd
       proxy_pass: http://localhost:8080/
+      # PR 5 tail: Authelia is the sole UI gate. sabnzbd's
+      # misc/username + misc/password are empty (and api_key is
+      # used only by the autoProcessMedia hook), so no double-click.
+      # The *arr leg uses sabnzbd.dns.podman:8080 over the media
+      # podman network and bypasses nginx entirely, so api_key
+      # consumers aren't broken by the cookie gate.
+      auth: required
   tags:
     - sabnzbd
 
