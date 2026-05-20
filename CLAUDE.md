@@ -103,7 +103,7 @@ Every podman `*.service.j2` unit must declare `--health-cmd` (and `--health-star
 1. **`curl` / `wget` already in the image.** Grep the image's Dockerfile first.
 2. **Python `urllib.request` with the URL in argv** (for python-based images). Use the JSON-array form — the naïve `'u.urlopen("...")'` shape fails when systemd unescapes the quotes mid-handoff. See notes for the exact incantation.
 3. **Service-native CLI** — `redis-cli ping`, `mosquitto_sub`, `dig +short @127.0.0.1`. Strongest signal when available.
-4. **`static_curl` role escape hatch** — for distroless images. Bind-mount `/usr/local/bin/curl_static`; use JSON-array form (no `/bin/sh` inside distroless).
+4. **`static_curl` role escape hatch** — for distroless images. No current consumers; see [notes/podman_conventions.md](notes/podman_conventions.md) (tier 4) for the bind-mount + JSON-array incantation when the first distroless image lands.
 
 ### Secrets
 
