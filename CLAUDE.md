@@ -167,14 +167,17 @@ When in doubt, ask.
 
 Variant table (axis-collapse rationale + ZBM-aarch64 workaround in [notes/test_environment_design.md](notes/test_environment_design.md)):
 
-| Variant   | Disks                                                       | Use case                                                      |
-|-----------|-------------------------------------------------------------|---------------------------------------------------------------|
-| `minimal` | Vanilla cloud image, ext4                                   | Stranger-baseline; in `ci-minimal-roles.txt` only             |
-| `box`     | Single-disk rpool, no extra pools                           | Default push-CI fixture; producer roles run flat under rpool/ |
-| `pug`     | 1 rpool + 2 apoc                                            | Matches pug prod host; on-demand + nightly                    |
-| `lab`     | mdadm-EFI + 3-disk mirror rpool + dozer/tank(raidz2)/mouse  | Matches lab prod host; on-demand + nightly                    |
+| Variant     | Disks                                                       | Use case                                                                                       |
+|-------------|-------------------------------------------------------------|------------------------------------------------------------------------------------------------|
+| `minimal`   | Vanilla cloud image, ext4                                   | Stranger-baseline; in `ci-minimal-roles.txt` only                                              |
+| `box`       | Single-disk rpool, no extra pools                           | Default push-CI fixture; producer roles run flat under rpool/                                  |
+| `box_deps`  | Same as `box`, plus pre-baked podman + nginx                | Opt-in fixture for podman-service roles; saves ~140s of backports + podman + nginx per test    |
+| `pug`       | 1 rpool + 2 apoc                                            | Matches pug prod host; on-demand + nightly                                                     |
+| `lab`       | mdadm-EFI + 3-disk mirror rpool + dozer/tank(raidz2)/mouse  | Matches lab prod host; on-demand + nightly                                                     |
 
 Push CI fans out only to `box` (and `minimal` for roles in [.github/ci-minimal-roles.txt](.github/ci-minimal-roles.txt)). Nightly runs the full universe across all variants. Editing pool topology requires a packer rebuild (15-30 min).
+
+`box_deps` is a **derivation** of `box`, not a separate packer source: `mise run packer:seed-deps` clones the box artifacts, boots them, applies [packer/seed_deps.yml](packer/seed_deps.yml) (podman + noble backports + nginx + snakeoil cert), and publishes the result as `box_deps`. Rebuild it after every `packer:build box`. A role opts in by declaring `machine: box_deps` in [roles/&lt;role&gt;/meta/test.yml](roles/bazarr/meta/test.yml); both `testrole.py` and `testall.py` honour the meta file unless `--machine` is passed explicitly. Reuses `host_vars/box.yml` (the inventory host stays `box`).
 
 ## Continuous Integration
 
