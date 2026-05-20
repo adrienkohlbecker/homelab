@@ -66,6 +66,20 @@
 # the unit template's --device or --group-add lines that the previous
 # host-side stat-equality check would have missed (it just compared
 # getent against itself).
+#
+# _verify.yml runs as a separate ansible-playbook invocation, so the
+# jellyfin_render_gid fact set in main.yml's converge phase isn't in
+# scope here — re-lookup before asserting.
+- name: _verify | Re-lookup render gid for assertions
+  when: has_transcoding_acceleration
+  become: true
+  block:
+    - getent:
+        database: group
+        key: render
+    - set_fact:
+        jellyfin_render_gid: "{{ getent_group.render[1] | int }}"
+
 - name: _verify | Confirm /dev/dri/renderD128 inside container
   when: has_transcoding_acceleration
   command: podman exec jellyfin stat -c %n /dev/dri/renderD128
