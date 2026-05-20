@@ -33,3 +33,71 @@
   become: true
   tags:
     - journald
+
+# ReadKMsg=yes opts journald in to the kernel ring buffer; assert the
+# kernel transport has at least one record since boot (every Linux boot
+# emits hundreds within the first second). Without ReadKMsg, _TRANSPORT=
+# kernel returns empty and this fails. Passive — no trigger needed.
+- name: _verify | Confirm kernel transport is populated (ReadKMsg=yes)
+  command: journalctl _TRANSPORT=kernel --since=-5m --output=cat --no-pager --lines=1
+  register: journald_verify_kmsg
+  changed_when: false
+  failed_when: journald_verify_kmsg.stdout == ''
+  become: true
+  tags:
+    - journald
+
+# Audit=yes wires journald to the kernel audit netlink, but stock Ubuntu
+# cloud images boot with audit_enabled=0 so nothing flows even though
+# journald is subscribed. Inject a controlled USER message via auditctl
+# to prove the round-trip end-to-end: enable the subsystem, emit a
+# sentinel, read it back. Requires auditctl(8) from the auditd package;
+# mask the daemon first so it doesn't race journald for the multicast
+# netlink. Test-only — _verify never runs against prod (hosts there
+# already have the subsystem on).
+- name: _verify | Mask auditd before installation (avoid netlink race)
+  systemd:
+    name: auditd.service
+    masked: true
+  become: true
+  tags:
+    - journald
+
+- name: _verify | Install auditctl from auditd package
+  apt:
+    name: auditd
+    state: present
+    install_recommends: false
+    update_cache: true
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - journald
+
+- name: _verify | Enable kernel audit subsystem
+  command: auditctl -e 1
+  changed_when: false
+  become: true
+  tags:
+    - journald
+
+- name: _verify | Emit synthetic audit sentinel
+  command: auditctl -m audit-verify-{{ _journald_audit_token }}
+  vars:
+    _journald_audit_token: "{{ ansible_date_time.epoch }}-{{ 999999 | random }}"
+  register: journald_verify_audit_emit
+  changed_when: false
+  become: true
+  tags:
+    - journald
+
+- name: _verify | Read synthetic audit record back through journald
+  command: journalctl _TRANSPORT=audit --since=-30s --output=cat --no-pager
+  register: journald_verify_audit
+  changed_when: false
+  retries: 5
+  delay: 1
+  until: journald_verify_audit_emit.cmd[-1] in journald_verify_audit.stdout
+  become: true
+  tags:
+    - journald
