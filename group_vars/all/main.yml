@@ -64,6 +64,11 @@ system_timezone: Europe/Paris
 # bootstrap before pihole comes up.
 bootstrap_dns_resolver: 1.1.1.1
 
+# systemd-journald storage backend. persistent → /var/log/journal/<machine-id>/
+# (rides ZFS snapshots/replication on prod). Override to volatile on transient
+# test/CI machines so /run/log/journal/ is the only journal location.
+journald_storage: persistent
+
 # Labels written into roles/gitea_runner's config.yml. The daemon's
 # Declare RPC pushes them to gitea on each start, and SaveRegistration
 # writes them back to .runner -- so editing this list and restarting
