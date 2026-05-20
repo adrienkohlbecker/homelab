@@ -49,6 +49,7 @@ ExecStart=/usr/bin/podman run \
     --rm \
     --name jellyfin \
     --init \
+    --security-opt=no-new-privileges \
     --user 0:0 \
     --uidmap=0:0:65536 \
     --uidmap=+0:{{ jellyfin_user.uid }}:1 \
@@ -62,11 +63,12 @@ ExecStart=/usr/bin/podman run \
     --mount type=tmpfs,destination=/config/transcodes,tmpfs-size=4G,tmpfs-mode=0755 \
     --volume /var/log/jellyfin:/config/log \
     --volume /mnt/scratch/jellyfin/cache:/cache \
-    --volume /mnt/media:/media \
+    --volume /mnt/media:/media:ro \
 {% if has_transcoding_acceleration %}
-    --device /dev/dri/:/dev/dri/ \
+    --device /dev/dri/renderD128:/dev/dri/renderD128 \
     --group-add={{ render_group.gid }} \
 {% endif %}
+    --env TZ={{ system_timezone }} \
     --env JELLYFIN_CACHE_DIR=/cache \
     --env JELLYFIN_PublishedServerUrl=https://jellyfin.{{ inventory_hostname }}.{{ domain }} \
     --network media \
@@ -76,7 +78,8 @@ ExecStart=/usr/bin/podman run \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "300s" \
-    --stop-timeout 120 \
+    --stop-signal=SIGINT \
+    --stop-timeout 60 \
     docker.io/jellyfin/jellyfin:10.10.6
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
