@@ -1,3 +1,15 @@
+- name: Validate journald_storage is one of journald.conf(5)'s accepted values
+  assert:
+    quiet: true
+    that:
+      - journald_storage in ['volatile', 'persistent', 'auto', 'none']
+    fail_msg: >-
+      journald_storage={{ journald_storage | default('<undefined>') }}
+      is not one of: volatile, persistent, auto, none. Define it in
+      host_vars/{{ inventory_hostname }}.yml.
+  tags:
+    - journald
+
 - name: Create /etc/systemd/journald.conf.d directory
   file:
     dest: /etc/systemd/journald.conf.d
@@ -9,7 +21,7 @@
   tags:
     - journald
 
-- name: Configure journald
+- name: Render /etc/systemd/journald.conf.d/10-custom.conf
   template:
     src: 10-custom.conf.j2
     dest: /etc/systemd/journald.conf.d/10-custom.conf
@@ -17,6 +29,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True).read("%s")'
   become: true
   register: journald_conf
   tags:
@@ -31,10 +44,15 @@
   tags:
     - journald
 
-- name: Flush log messages from memory to disk (if storage config changed)
-  when: journald_conf.changed
-  command: journalctl --flush
-  changed_when: false
+# Loud failure if the restart left the daemon in a non-active state — without
+# journald running, container --log-driver=journald, every systemd unit, and
+# kuma's systemdunits collector silently degrade until next reboot. systemd:
+# state=started is idempotent: no-op when already active, starts if not, and
+# fails the task (with the unit's own error) if the unit can't start.
+- name: Ensure systemd-journald is active after configuration
+  systemd:
+    name: systemd-journald
+    state: started
   become: true
   tags:
     - journald

@@ -1,4 +1,9 @@
 [Journal]
 Storage={{ journald_storage }}
-Compress={{ zfs_root | ternary('no', 'yes') }}
+{# Compress=no only when the journal lands on a ZFS dataset that already
+   compresses it; otherwise (tmpfs for Storage=volatile, ext4 for non-ZFS
+   hosts) journald's per-object XZ is the only compression in the stack. #}
+Compress={{ (journald_storage == 'persistent' and zfs_root) | ternary('no', 'yes') }}
 ForwardToSyslog=no
+ReadKMsg=yes
+Audit=yes
