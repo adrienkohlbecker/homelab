@@ -61,7 +61,7 @@
     tasks_from: install
   vars:
     systemd_unit_args:
-      src: journald-exporter.service
+      src: journald-exporter.service.j2
   tags:
     - journald_exporter
 
@@ -85,7 +85,7 @@
   vars:
     nginx_site_args:
       subdomain: journald-exporter
-      proxy_pass: http://localhost:12345/
+      proxy_pass: http://localhost:{{ service_ports.journald_exporter }}/
       server_conf: |
         location = / {
           return 301 /metrics;
