@@ -8,11 +8,13 @@
       - gitea_smtp_user is defined and gitea_smtp_user | length > 0
       - gitea_smtp_from is defined and gitea_smtp_from | length > 0
       - gitea_smtp_password is defined and gitea_smtp_password | length > 0
+      - gitea_oidc_client_secret is defined and gitea_oidc_client_secret | length > 0
     fail_msg: |
       Missing required gitea_* secret(s). Set them in group_vars/<env>.yml
       (vaulted via --encrypt-vault-id prod): gitea_jwt_secret,
       gitea_internal_token, gitea_lfs_jwt_secret, gitea_secret_key,
-      gitea_smtp_user, gitea_smtp_from, gitea_smtp_password.
+      gitea_smtp_user, gitea_smtp_from, gitea_smtp_password,
+      gitea_oidc_client_secret.
   tags:
     - gitea
 
@@ -140,5 +142,182 @@
       # Container-registry layers and LFS objects can be large; 10G fits
       # realistic uploads without leaving unbounded disk-fill DoS open.
       client_max_body_size: 10G
+  tags:
+    - gitea
+
+# Gitea OIDC auth source. Provisioned via `gitea admin auth add-oauth`
+# (no app.ini path -- gitea persists auth sources in the sqlite
+# auth_source table, encrypted with SECRET_KEY). add-oauth fetches the
+# OIDC discovery URL at registration time via Go's stdlib http client,
+# so the URL must be (a) DNS-resolvable from the gitea host, and
+# (b) served by a TLS endpoint with a system-trusted cert. On prod
+# (lab) auth.fahm.fr satisfies both. On box neither holds (the
+# snakeoil cert is single-CN box.mhaf.fr, no /etc/hosts entry for
+# auth.box.mhaf.fr) -- same trade minio explicitly noped out of, see
+# roles/minio/tasks/_verify.yml. qemu_test gates the provisioning;
+# _verify still exercises the CLI shape via `gitea admin auth list`.
+- name: Compose desired OIDC source state
+  when: not qemu_test
+  set_fact:
+    # Fingerprint covers every flag we pass to add-oauth/update-oauth
+    # plus the client secret's sha256, so a rotation triggers
+    # re-provisioning without leaking the secret into the sentinel.
+    gitea_oidc_source_state:
+      name: authelia
+      provider: openidConnect
+      key: gitea
+      secret_sha256: "{{ gitea_oidc_client_secret | hash('sha256') }}"
+      auto_discover_url: "https://auth.{{ authelia_cookie_domain }}/.well-known/openid-configuration"
+      scopes: openid,email,profile,groups
+      group_claim_name: groups
+      admin_group: admins
+      skip_local_2fa: true
+  tags:
+    - gitea
+
+- name: Read existing OIDC provisioning fingerprint
+  when: not qemu_test
+  slurp:
+    src: /mnt/services/gitea/.oidc_authelia.fingerprint
+  register: gitea_oidc_fp_slurp
+  # File is absent on first apply -- slurp returns failed; swallow so
+  # the downstream comparison falls into the "needs provisioning" path.
+  failed_when: false
+  become: true
+  tags:
+    - gitea
+
+- name: Compute desired vs current OIDC fingerprints
+  when: not qemu_test
+  set_fact:
+    gitea_oidc_desired_fp: "{{ gitea_oidc_source_state | to_json(sort_keys=true) | hash('sha256') }}"
+    gitea_oidc_current_fp: "{{ (gitea_oidc_fp_slurp.content | default('') | b64decode | trim) if (gitea_oidc_fp_slurp.content is defined) else '' }}"
+  tags:
+    - gitea
+
+- name: List existing gitea auth sources
+  when:
+    - not qemu_test
+    - gitea_oidc_desired_fp != gitea_oidc_current_fp
+  command:
+    argv:
+      - /usr/local/bin/gitea
+      - admin
+      - auth
+      - list
+      - --config
+      - /etc/gitea/app.ini
+  environment:
+    GITEA_WORK_DIR: /mnt/services/gitea
+  become: true
+  become_user: git
+  register: gitea_auth_list
+  changed_when: false
+  tags:
+    - gitea
+
+- name: Locate existing Authelia auth source ID
+  when:
+    - not qemu_test
+    - gitea_oidc_desired_fp != gitea_oidc_current_fp
+  set_fact:
+    # `gitea admin auth list` columns are `ID  Name  Type  Enabled`,
+    # tab-aligned via tabwriter. The line we want has the literal
+    # token `authelia` between two tab-runs; split() collapses
+    # whitespace and the first field is the numeric ID.
+    gitea_authelia_source_id: >-
+      {{ (gitea_auth_list.stdout_lines
+          | select('search', '\sauthelia\s+OAuth2\s+true\b')
+          | first | default('')
+          ).split() | first | default('') }}
+  tags:
+    - gitea
+
+# add-oauth on first apply (no existing source row). The CLI argv lands
+# in the host's /proc/<pid>/cmdline briefly while gitea runs; only root
+# can read it, and the secret is gone the instant the CLI exits. Gitea
+# stores it encrypted with SECRET_KEY in the auth_source.cfg blob.
+- name: Register Authelia OIDC auth source (first apply)
+  when:
+    - not qemu_test
+    - gitea_oidc_desired_fp != gitea_oidc_current_fp
+    - not gitea_authelia_source_id
+  command:
+    argv:
+      - /usr/local/bin/gitea
+      - admin
+      - auth
+      - add-oauth
+      - --name=authelia
+      - --provider=openidConnect
+      - --key=gitea
+      - --secret={{ gitea_oidc_client_secret }}
+      - --auto-discover-url=https://auth.{{ authelia_cookie_domain }}/.well-known/openid-configuration
+      - --scopes=openid,email,profile,groups
+      - --group-claim-name=groups
+      - --admin-group=admins
+      - --skip-local-2fa
+      - --config=/etc/gitea/app.ini
+  environment:
+    GITEA_WORK_DIR: /mnt/services/gitea
+  become: true
+  become_user: git
+  no_log: true
+  # Reaches this branch only when the fingerprint sentinel drifted and
+  # no row exists for `authelia`: every successful exit writes a new
+  # auth_source row, so changed=true is the honest signal.
+  changed_when: true
+  tags:
+    - gitea
+
+# update-oauth path: source exists but desired state drifted (URL,
+# scopes, admin group, or secret rotated). Updates every flag we pass
+# (urfave/cli's IsSet semantics -- present-on-cmdline overrides the
+# stored value).
+- name: Update Authelia OIDC auth source (config/secret drift)
+  when:
+    - not qemu_test
+    - gitea_oidc_desired_fp != gitea_oidc_current_fp
+    - gitea_authelia_source_id
+  command:
+    argv:
+      - /usr/local/bin/gitea
+      - admin
+      - auth
+      - update-oauth
+      - --id={{ gitea_authelia_source_id }}
+      - --name=authelia
+      - --provider=openidConnect
+      - --key=gitea
+      - --secret={{ gitea_oidc_client_secret }}
+      - --auto-discover-url=https://auth.{{ authelia_cookie_domain }}/.well-known/openid-configuration
+      - --scopes=openid,email,profile,groups
+      - --group-claim-name=groups
+      - --admin-group=admins
+      - --skip-local-2fa
+      - --config=/etc/gitea/app.ini
+  environment:
+    GITEA_WORK_DIR: /mnt/services/gitea
+  become: true
+  become_user: git
+  no_log: true
+  # Same justification as the add-oauth branch -- the fingerprint
+  # sentinel gates us to "state drifted, persist new state".
+  changed_when: true
+  tags:
+    - gitea
+
+- name: Persist OIDC provisioning fingerprint
+  when:
+    - not qemu_test
+    - gitea_oidc_desired_fp != gitea_oidc_current_fp
+  copy:
+    content: "{{ gitea_oidc_desired_fp }}\n"
+    dest: /mnt/services/gitea/.oidc_authelia.fingerprint
+    owner: git
+    group: git
+    mode: "0600"
+    backup: true
+  become: true
   tags:
     - gitea
