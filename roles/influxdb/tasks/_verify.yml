@@ -151,10 +151,13 @@
     - name: _verify | Confirm the rescue caught assert-org-exists, not some other failure
       assert:
         that:
+          - ansible_failed_task.action == 'ansible.builtin.assert'
           - ansible_failed_task.name is search('Assert org')
+          - ansible_failed_result.msg is search('influxdb org')
         fail_msg: >-
           bucket.yml failed under definitely_not_here, but not at the expected
           assert-org-exists task. Failed task: {{ ansible_failed_task.name }}
+          (action={{ ansible_failed_task.action }})
 
 # Ownership assertion -- catches a regression where data/ or config/ ends
 # up owned by a different host uid (e.g. a future uidmap change that
