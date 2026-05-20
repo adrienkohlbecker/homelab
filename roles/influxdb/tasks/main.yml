@@ -138,6 +138,30 @@
   tags:
     - influxdb
 
+# Block until influxdb answers ping. With --sdnotify=healthy + the
+# in-container --health-cmd, systemd's "active" already implies
+# /health returns 200, but `influx ping` exec'd via podman additionally
+# proves the CLI bind (used by `tasks_from: bucket`) works. Runs in
+# main.yml so per-tenant callers further down the play graph can
+# assume the container is reachable without paying their own retry.
+- name: Wait for influxdb container to answer ping
+  command:
+    argv:
+      - podman
+      - exec
+      - influxdb
+      - influx
+      - ping
+  register: _influxdb_ready
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: _influxdb_ready.rc == 0
+  when: not (ansible_check_mode and (influxdb_service_result.changed or influxdb_user.changed))
+  become: true
+  tags:
+    - influxdb
+
 - name: Configure nginx
   import_role:
     name: nginx
