@@ -831,6 +831,23 @@ authelia_smtp_password: !vault |
           62323232613836393833613332346536356630323934316134633439656164343066386163383463
           653365633133323033346439366233306233
 
+# Authelia OIDC provider secrets + clients. Operator-bootstrapped --
+# see "Manual bootstrap on lab" in notes/authelia_rollout.md for the
+# generation commands. The role's apply will fail with "undefined
+# variable" against prod until the four entries below land:
+#
+#   authelia_oidc_hmac_secret             !vault | (64+ alphanumeric)
+#   authelia_oidc_issuer_private_key      !vault | (RSA 4096 PEM)
+#   authelia_oidc_clients                 list of dicts (per below)
+#   <client>_oidc_client_secret           !vault | per consumer role
+#
+# authelia_oidc_clients each entry: client_id, client_name,
+# client_secret (pbkdf2-sha512 hash, NOT plaintext), redirect_uris
+# (list), authorization_policy (default two_factor). The plaintext
+# half of client_secret is vaulted separately as
+# <client>_oidc_client_secret and handed to the consumer's env --
+# rotate both halves together.
+
 # User database for Authelia's file authentication backend. Each key
 # is the username (also the OIDC subject for future OIDC clients);
 # each value is a dict with displayname / password_hash / email /

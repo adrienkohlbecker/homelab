@@ -67,14 +67,47 @@
     status_code: 401
   become: true
 
+# OIDC discovery endpoint. Asserts the identity_providers.oidc block
+# in configuration.yml.j2 parsed, the JWKS loaded the RSA private
+# key, and the HMAC secret env var was wired through. A
+# misconfigured client list, missing key file, or bad PEM all
+# surface here as either a non-200 response or missing expected
+# fields in the discovery JSON.
+- name: _verify | Authelia OIDC discovery endpoint
+  uri:
+    url: https://localhost/.well-known/openid-configuration
+    headers:
+      Host: "auth.{{ authelia_cookie_domain }}"
+    validate_certs: false
+    return_content: true
+  register: authelia_verify_oidc_discovery
+  failed_when: >-
+    authelia_verify_oidc_discovery.status != 200
+    or authelia_verify_oidc_discovery.json.issuer != ('https://auth.' ~ authelia_cookie_domain)
+    or 'RS256' not in authelia_verify_oidc_discovery.json.id_token_signing_alg_values_supported
+  become: true
+
+# JWKS endpoint. Confirms the public key derived from the issuer
+# private key is exposed for clients to verify id_token signatures.
+- name: _verify | Authelia JWKS endpoint serves the issuer public key
+  uri:
+    url: https://localhost/jwks.json
+    headers:
+      Host: "auth.{{ authelia_cookie_domain }}"
+    validate_certs: false
+    return_content: true
+  register: authelia_verify_jwks
+  # .json.keys here would resolve to the dict.keys method, not the
+  # response's "keys" field; subscript via [] to dodge the collision.
+  failed_when: >-
+    authelia_verify_jwks.status != 200
+    or (authelia_verify_jwks.json['keys'] | length) < 1
+    or authelia_verify_jwks.json['keys'][0].kty != 'RSA'
+  become: true
+
 # Cross-host network plumbing (pug/bunk -> authelia_host's WG IP) is
 # exercised in multi-host nightlies, not testrole.py: on a single VM
 # the wg0 IP routes via loopback anyway, so the request never hits
 # the wg0 ingress firewall rule that gates cross-host access. The
 # loopback probe + auth-request probe above already cover the
 # Authelia-specific bits (listener up, gate semantics correct).
-#
-# PR6 will add an OIDC discovery probe once the identity provider
-# block is restored in configuration.yml.j2. For PR1 (standup) the
-# OIDC provider is intentionally off -- forward-auth (PR2-5) doesn't
-# need it.
