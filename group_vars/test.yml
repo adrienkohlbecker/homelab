@@ -146,6 +146,7 @@ netdata_alerts_token: changeme_netdata_alerts_token_16chars_min
 pihole_adlists:
   - "{{ mirror_raw_githubusercontent }}/anudeepND/blacklist/master/adservers.txt"
 telegram_overseerr_bot_token: changeme
+telegram_seerr_bot_token: changeme
 telegram_netdata_bot_token: changeme
 telegram_personal_chat_id: changeme
 telegram_home_chat_id: changeme
@@ -172,6 +173,11 @@ overseerr_api_key: changeme
 overseerr_vapid_private: changeme
 overseerr_vapid_public: changeme
 overseer_client_id: changeme
+seerr_api_key: changeme
+seerr_vapid_private: changeme
+seerr_vapid_public: changeme
+seerr_client_id: changeme
+seerr_session_secret: 0000000000000000000000000000000000000000000000000000000000000000
 plex_machine_id: changeme
 tautulli_api_key: changeme
 tautulli_jwt_secret: changeme
@@ -209,6 +215,9 @@ mosquitto_accounts:
 overseerr_smtp_from: changeme@example.com
 overseerr_smtp_username: changeme
 overseerr_smtp_password: changeme
+seerr_smtp_from: changeme@example.com
+seerr_smtp_username: changeme
+seerr_smtp_password: changeme
 bazarr_api_key: changeme
 bazarr_flask_secret_key: changeme
 bazarr_opensubtitles_com_username: changeme

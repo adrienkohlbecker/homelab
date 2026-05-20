@@ -1,0 +1,50 @@
+# Loopback probe -- exercises the container directly via the published
+# port. Retries cover cold-start (--health-start-period is 100s; budget
+# below gives 3 minutes to cover restart-after-deploy too).
+- name: _verify | seerr answers /api/v1/status on its loopback port
+  uri:
+    url: http://localhost:{{ service_ports.seerr }}/api/v1/status
+    status_code: 200
+    return_content: true
+    timeout: 10
+  register: _verify_loopback
+  retries: 90
+  delay: 2
+  until:
+    - _verify_loopback.status == 200
+    - _verify_loopback.json is defined
+    - _verify_loopback.json.version is defined
+  become: true
+
+# nginx Host-header probe -- exercises the full reverse-proxy chain so
+# a typo in nginx_site_args / proxy_pass fails here too. trustProxy is
+# set in settings.json so the upstream X-Forwarded-* headers from nginx
+# don't get rejected.
+- name: _verify | seerr is reachable through nginx
+  uri:
+    url: https://localhost/api/v1/status
+    headers:
+      Host: seerr.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    return_content: true
+  register: _verify_nginx
+  failed_when: >-
+    _verify_nginx.status != 200
+    or _verify_nginx.json is not defined
+    or _verify_nginx.json.version is not defined
+  become: true
+
+# Uidmap regression detector. seerr's `USER node:node` (in-container uid
+# 1000) is routed to host uid `seerr` via --uidmap=+1000:N:1, so the
+# settings.json the daemon rewrites on shutdown should land owned by the
+# host seerr user. A mapping drift (wrong uid in the override, mismatch
+# between service_user and the unit) would land the file at a different
+# host uid silently; assert ownership so the regression is loud.
+- name: _verify | seerr writes settings.json as host seerr user
+  stat:
+    path: /mnt/services/seerr/settings.json
+  register: _verify_settings_owner
+  failed_when: >-
+    not _verify_settings_owner.stat.exists
+    or _verify_settings_owner.stat.pw_name != 'seerr'
+  become: true
