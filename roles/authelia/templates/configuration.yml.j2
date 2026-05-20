@@ -200,6 +200,21 @@ identity_providers:
     # No explicit cors block: discovery + JWKS are fetched server-to-
     # server by every current client (MinIO, Paperless, OpenProject);
     # there's no browser-origin SPA hitting them cross-domain.
+    #
+    # Authelia v4.39 defaults to putting non-`sub` claims only into
+    # the userinfo response (spec-compliant: id_token stays small).
+    # Some clients (MinIO 2022 in particular) inspect the id_token
+    # directly and never call userinfo, so groups-driven policy
+    # mapping silently breaks ("Groups claim missing from the JWT
+    # token"). The `jwt_groups` policy below promotes groups +
+    # email into the id_token for clients that opt in via
+    # `claims_policy: jwt_groups` on their client entry.
+    claims_policies:
+      jwt_groups:
+        id_token:
+          - groups
+          - email
+          - email_verified
     clients:
 {% for client in authelia_oidc_clients %}
       - client_id: '{{ client.client_id }}'
@@ -210,6 +225,7 @@ identity_providers:
         client_secret: '{{ client.client_secret }}'
         public: false
         authorization_policy: '{{ client.authorization_policy | default("two_factor") }}'
+        claims_policy: '{{ client.claims_policy | default("jwt_groups") }}'
         # Pre-configure consent for a year so first-party clients
         # don't show the Authorize prompt on every login (single-
         # operator homelab; explicit consent is theatre here).
