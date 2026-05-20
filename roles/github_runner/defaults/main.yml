@@ -3,20 +3,13 @@
 #     suffix: <unique-suffix>       (required)
 #     owner: <github-owner>         (required)
 #     labels: "self-hosted,..."     (required, comma-separated)
-#     runner_group_id: <int>        (optional; defaults to 1. Group 1 is the
-#                                    only group on personal-account repos and
-#                                    is the org's reserved "Default" group on
-#                                    org repos -- so omitting this on an org
-#                                    repo silently lands the runner in the
-#                                    Default group rather than failing loud.
-#                                    Set explicitly when you want a custom
-#                                    runner group.)
 # Instance identity = <repo>_<suffix>; that's the systemd template
-# instance name (github_runner@<repo>_<suffix>.service), the podman
-# container name suffix, and the on-disk workdir name. owner is
-# per-instance so a host can mix repos from multiple GitHub owners;
-# (repo, suffix) must still be unique across the whole list.
-# runner_group_id is per-instance for organization runner groups.
+# instance name (github_runner@<repo>_<suffix>.service) and the on-disk
+# per-instance dir name. owner is per-instance so a host can mix repos
+# from multiple GitHub owners; (repo, suffix) must still be unique across
+# the whole list. For an org repo with a non-Default runner group, add
+# `--runnergroup <name>` to the config.sh argv in _register.yml -- there's
+# no schema knob for it today.
 # Default to empty so a host that doesn't run runners stays a no-op.
 #
 # Defaults/, not vars/: role vars sit above host_vars in ansible's

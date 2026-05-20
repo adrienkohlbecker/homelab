@@ -1,6 +1,6 @@
 # Per-instance setup for the templated github_runner@.service. Called
 # from main.yml with loop_var: runner_instance (keys: repo, suffix,
-# owner, labels, optional runner_group_id).
+# owner, labels).
 #
 # Long-lived registration: config.sh runs once per instance at first
 # apply (gated on .runner sentinel). The .runner / .credentials /
@@ -138,6 +138,12 @@
     - not (ansible_check_mode and github_runner_user.changed)
     - not qemu_test
     - not runner_dotrunner.stat.exists
+  # --runnergroup intentionally omitted: config.sh expects a group NAME
+  # (e.g. "Default"), not the integer ID the JIT API used to take.
+  # Personal-account repos have only the implicit Default group and a
+  # missing --runnergroup picks it. For an org repo with custom groups,
+  # set runner_group_name on the instance and add `- --runnergroup` +
+  # `- "{{ runner_instance.runner_group_name }}"` here.
   command:
     argv:
       - ./config.sh
@@ -151,13 +157,11 @@
       - "{{ runner_name }}"
       - --labels
       - "{{ runner_instance.labels }}"
-      - --runnergroup
-      - "{{ runner_instance.runner_group_id | default(1) }}"
       - --work
       - /mnt/scratch/github_runner/workdir_{{ runner_iid }}
   args:
     chdir: /opt/actions-runner/{{ runner_iid }}
-  no_log: true
+  no_log: false
   become: true
   become_user: github_runner
 
