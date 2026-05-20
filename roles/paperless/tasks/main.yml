@@ -1,17 +1,3 @@
-# sqlite3 CLI for the journal_mode probe + WAL conversion below.
-# The container ships its own libsqlite, but the host-side PRAGMA
-# tasks shell out to /usr/bin/sqlite3 which isn't preinstalled on
-# Ubuntu cloud images. In prod healthchecks/fluentbit drag it in
-# transitively earlier in site.yml; under testrole.py the harness
-# only runs this role, so the dep must be local.
-- name: Install sqlite3 CLI
-  apt:
-    pkg: sqlite3
-    cache_valid_time: 3600
-  become: true
-  tags:
-    - paperless
-
 # Join the redis-owned network so paperless can resolve `redis` via
 # aardvark-dns and connect to the redis container on the same bridge.
 # Idempotent: redis role creates this too in prod; ensures the
@@ -179,7 +165,13 @@
 # (write-heavy) takes a per-commit fsync hit. WAL is persisted in the
 # DB header so the convert is one-shot.
 #
-# Stop the service across the PRAGMA: journal_mode=WAL needs an
+# Read + write both go through the paperless container's bundled
+# libsqlite. Host Jammy sqlite3 (3.37) cannot prepare the schema
+# paperless 2.20 / Django 5.x writes -- documents_customfieldinstance
+# uses generated columns with non-deterministic functions, allowed
+# since libsqlite 3.38. The Trixie-based container ships 3.46.
+#
+# Stop the service across the PRAGMA write: journal_mode=WAL needs an
 # exclusive lock; if Django is holding the DB the PRAGMA silently
 # returns the current mode without converting, leaving the operator
 # in rollback-journal mode without a failure signal. The
@@ -190,6 +182,15 @@
 # First-install two-pass: the DB doesn't exist until Django creates
 # it on first start, so the block skips. The next play run sees the
 # DB, stops the service briefly, converts, and restarts.
+- name: Detect paperless unit image
+  when: not ansible_check_mode
+  extract_podman_image:
+    name: paperless
+  register: paperless_unit_image
+  become: true
+  tags:
+    - paperless
+
 - name: Stat paperless sqlite DB
   stat:
     path: /mnt/services/sqlite/paperless/db.sqlite3
@@ -200,16 +201,26 @@
     - paperless
 
 - name: Read paperless sqlite journal mode
-  command: sqlite3 -readonly /mnt/services/sqlite/paperless/db.sqlite3 'PRAGMA journal_mode;'
+  command:
+    argv:
+      - podman
+      - exec
+      - paperless
+      - python3
+      - -c
+      - 'import sqlite3; print(sqlite3.connect("/usr/src/paperless/data/db.sqlite3").execute("PRAGMA journal_mode").fetchone()[0])'
   register: paperless_sqlite_pragma
   changed_when: false
-  when: paperless_sqlite_stat.stat.exists
+  when:
+    - not ansible_check_mode
+    - paperless_sqlite_stat.stat.exists
   become: true
   tags:
     - paperless
 
 - name: Convert paperless sqlite to WAL
   when:
+    - not ansible_check_mode
     - paperless_sqlite_stat.stat.exists
     - paperless_sqlite_pragma.stdout | default('') | trim != 'wal'
   block:
@@ -229,7 +240,20 @@
         state: stopped
 
     - name: Set paperless sqlite to WAL
-      command: sqlite3 /mnt/services/sqlite/paperless/db.sqlite3 'PRAGMA journal_mode=WAL;'
+      command:
+        argv:
+          - podman
+          - run
+          - --rm
+          - --user
+          - "{{ paperless_user.uid }}:{{ paperless_user.group }}"
+          - --volume
+          - /mnt/services/sqlite/paperless:/data
+          - --entrypoint
+          - /usr/local/bin/python3
+          - "{{ paperless_unit_image.images[0] }}"
+          - -c
+          - 'import sqlite3; print(sqlite3.connect("/data/db.sqlite3").execute("PRAGMA journal_mode=WAL").fetchone()[0])'
       register: paperless_sqlite_wal
       changed_when: paperless_sqlite_wal.stdout | trim == 'wal'
       failed_when: paperless_sqlite_wal.stdout | trim != 'wal'
