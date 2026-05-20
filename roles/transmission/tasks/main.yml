@@ -70,10 +70,28 @@
   tags:
     - transmission
 
+# Transmission salts+hashes rpc-password on first read into `{<salt+sha1>}`
+# form and writes it back on every shutdown. Reading any existing hash
+# here and feeding it into the template (via transmission_rpc_password_hash)
+# keeps the second converge idempotent without committing the random salt
+# to the repo. Empty / non-hash content (first converge, or someone
+# manually replacing with plaintext) falls through to the plaintext
+# template var, which transmission then rehashes on next start.
+- name: Read existing transmission rpc-password hash if present
+  command: jq -r '."rpc-password" // ""' /mnt/services/transmission/settings.json
+  register: transmission_existing_pw
+  changed_when: false
+  failed_when: false
+
 - name: Configure transmission
   # Render via copy:content + regex_replace because transmission rewrites
   # settings.json on every shutdown without a trailing newline; a plain
   # template: leaves us drifting forever.
+  vars:
+    transmission_rpc_password_hash: >-
+      {{ transmission_existing_pw.stdout
+         if (transmission_existing_pw.stdout | default('')).startswith('{')
+         else transmission_rpc_password }}
   copy:
     content: "{{ lookup('template', 'settings.json.j2') | regex_replace('\\n+$', '') }}"
     dest: /mnt/services/transmission/settings.json
