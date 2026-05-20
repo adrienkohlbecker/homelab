@@ -383,11 +383,24 @@ authelia_oidc_clients:
     authorization_policy: one_factor
     redirect_uris:
       - 'https://paperless.{{ inventory_hostname }}.{{ domain }}/accounts/oidc/authelia/login/callback/'
+  - client_id: gitea
+    client_name: Gitea
+    # Same "changeme" pbkdf2 hash. Gitea's CLI provisioning is gated
+    # off in qemu_test (gitea admin auth add-oauth validates the
+    # discovery URL at registration time, which would need real
+    # Authelia + multi-SAN snakeoil + DNS host entry on box -- same
+    # trade minio explicitly declined). The client row stays here so
+    # the authelia _verify still parses a stable shape.
+    client_secret: '$pbkdf2-sha512$310000$JURoTanVWouRkvJ.Tyml1A$B4DZyqy25cNbFfwFiPMyAdWcuxiELOBAlH0NfQSxB9jgDTQXiyBIMsFY2Z5I3XO5ItLH1pP5C5ujKja71Bqoww'
+    authorization_policy: one_factor
+    redirect_uris:
+      - 'https://gitea.{{ inventory_hostname }}.{{ domain }}/user/oauth2/authelia/callback'
 
 # Plaintext OIDC client secrets handed to consumer roles.
 # Pairs with the pbkdf2 hash above; rotate both halves together.
 minio_oidc_client_secret: changeme
 paperless_oidc_client_secret: changeme
+gitea_oidc_client_secret: changeme
 
 # Test-fixture user. Hash is for the password "authelia" -- the
 # canonical example hash from Authelia's docs. Tracked plaintext

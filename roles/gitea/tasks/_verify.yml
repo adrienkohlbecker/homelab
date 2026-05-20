@@ -211,3 +211,32 @@
     GIT_TERMINAL_PROMPT: "0"
   changed_when: false
   no_log: true
+
+# Smoke test for the OIDC CLI tooling. main.yml's add-oauth /
+# update-oauth path is gated on `not qemu_test` (the box VM can't
+# reach a real Authelia at auth.box.mhaf.fr -- see comment in
+# main.yml), so this assertion is shape-only on box: that the CLI
+# parses the auth-source DB without erroring. On prod it doubles as
+# proof that the provisioning landed.
+- name: _verify | gitea admin auth list runs cleanly
+  command: /usr/local/bin/gitea admin auth list --config /etc/gitea/app.ini
+  environment:
+    GITEA_WORK_DIR: /mnt/services/gitea
+  become: true
+  become_user: git
+  register: _verify_auth_list
+  changed_when: false
+  failed_when: >-
+    _verify_auth_list.rc != 0
+    or 'ID' not in _verify_auth_list.stdout
+    or 'Name' not in _verify_auth_list.stdout
+
+- name: _verify | Authelia OIDC source registered (prod only)
+  when: not qemu_test
+  assert:
+    that:
+      - _verify_auth_list.stdout_lines | select('search', '\sauthelia\s+OAuth2\s+true\b') | list | length == 1
+    fail_msg: |
+      `gitea admin auth list` does not show an active OAuth2 source
+      named "authelia". Check the add-oauth task in main.yml -- a
+      transient discovery-URL fetch failure leaves no source row.
