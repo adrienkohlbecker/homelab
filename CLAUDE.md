@@ -1,5 +1,14 @@
 # Repository Guidelines
 
+## Spirit & Trade-offs
+
+This is a home environment, not a corporate production site. The values below are tie-breakers when the Hard Rules below don't decide a question:
+
+- **Maintainability beats ambition.** Over-engineering is fun, but the operator is also the on-call — an elegant rewrite they can't debug at 11pm is a regression. Default to simple-and-boring over clever.
+- **Security is pragmatic.** Reasonable hygiene (vault for secrets, firewall rules, file permissions...) is in scope; defense-in-depth against nation-state actors is not. New security
+machinery needs a concrete threat behind it.
+- **Wife-acceptance-factor is a real constraint.** Services the household depends on (home-assistant, z2m, media, dns) have higher cost-of-failure than operator-only infra. Visible breakage outweighs technical elegance.
+
 ## Hard Rules — DO NOT
 
 Load-bearing negatives, listed up-front so a fresh agent session sees them before the wall of detail.
@@ -8,7 +17,6 @@ Load-bearing negatives, listed up-front so a fresh agent session sees them befor
 - **DO NOT drop a container's `--health-cmd`** in favour of external monitoring (kuma, `_verify.yml`). Without an in-container check, `--sdnotify=healthy` can't gate the unit's `active` state and podman won't auto-restart on quiet HTTP failure. See *Podman Service Conventions → Healthchecks*.
 - **DO NOT default required service inputs in `vars/main.yml`** — role vars sit *above* host_vars in ansible's precedence ladder and silently mask host-level overrides. Required inputs live in `host_vars`/`group_vars` and the role must `assert:` they're set. `defaults/main.yml` is fine for optional host-overridable values (e.g. `fan2go_enabled: false`, `certbot_extra_sans: []`) since it sits *below* host_vars. See [roles/github_runner/defaults/main.yml](roles/github_runner/defaults/main.yml) for the canonical explanatory comment.
 - **DO NOT run state-mutating commands on prod hosts (`lab`/`pug`/`bunk`) without explicit ack.** Diagnostic SSH is pre-authorized; mutations are not. See *Testing → Debugging prod hosts directly* for the boundary.
-- **DO NOT use `_test.yml` for new role tests** — historical alias for `_setup.yml`; no roles still ship it.
 
 ## Project Structure & Module Organization
 
@@ -28,22 +36,19 @@ Load-bearing negatives, listed up-front so a fresh agent session sees them befor
 ## Build, Test, and Development Commands
 
 - Bootstrap: install [mise](https://mise.jdx.dev), `mise trust`, then `mise install` from the repo root — pins terraform, packer, python, uv, and shellcheck. `python.uv_venv_auto` auto-creates and sources `.venv`, so `uv sync` populates Python deps (ansible, ansible-lint, black, yamllint) on first directory entry. 1Password CLI must be signed in for the `op://` env vars in `mise.toml` to resolve.
-- Configure everything: `mise run ansible -- --limit prod` (the wrapper handles vault-id, ssh args, and env; `ansible.cfg` already points at `hosts.ini`; set `--tags` to narrow scope).
-- Focus on one service or host: `mise run ansible -- -l lab --tags wireguard`.
+- Configure everything: `mise run ansible --limit prod` (the wrapper handles vault-id, ssh args, and env; `ansible.cfg` already points at `hosts.ini`; set `--tags` to narrow scope).
+- Focus on one service or host: `mise run ansible --limit lab --tags wireguard`.
 - Manage DNS: `mise run tf init`, `mise run tf plan`, then `mise run tf apply` — the `tf` task `cd`s into `terraform/` and forwards everything to `tofu` (use `--` for flags mise might intercept, e.g. `mise run tf plan -- -refresh=false`). State lives in MinIO (`s3://terraform/homelab.tfstate` on `minio-api.lab.fahm.fr`), AES-GCM-encrypted client-side from `TF_VAR_state_passphrase` (1Password via mise `[env]`). Rotation procedure: [notes/terraform-state-encryption-rotation.md](notes/terraform-state-encryption-rotation.md).
 - Refresh the integration image when the base OS changes: `mise run packer:build` builds every source defined in `packer/qemu.pkr.hcl` in parallel. Pass names to narrow: `mise run packer:build box` or `mise run packer:build pug lab`. `--ubuntu noble` targets a different release. Three sources (`box` / `pug` / `lab`) — see [notes/test_environment_design.md](notes/test_environment_design.md).
 - Lint everything: `mise run lint` runs `ansible-lint`, `tofu fmt -check`, `tflint`, `packer fmt -check` + `packer validate`, `black` / `ruff`, `yamllint`, `shellcheck` + `shfmt`, `typos`, and a topology JSON-schema check in parallel; `mise run fmt` applies fixes (notably `mise run fmt:ansible` = `ansible-lint --fix` for autofixable rules like `yaml[truthy]` / `name[casing]` / `no-free-form` — prefer this over hand-editing).
 - Inner-loop ansible-lint: prefer `mise run lint:ansible-changed` (~4s; lints YAML changed vs `origin/master` + uncommitted + untracked) over the full `mise run lint:ansible` (~40s, dominated by per-role `ansible-playbook --syntax-check` subprocesses). Override the base ref with `LINT_BASE=<ref>`. Run full `mise run lint` before pushing.
-- Resume mid-converge: when a role fails partway through under `testrole.py --keep`, re-run with `mise run ansible -- -l <host> --start-at-task '<failing task name>'` instead of re-running the whole role from scratch. `--step` walks task-by-task with y/n prompts when bisecting a regression.
+- Resume mid-converge: when a role fails partway through under `testrole.py --keep`, re-run with `mise run ansible --limit <host> --start-at-task '<failing task name>'` instead of re-running the whole role from scratch. `--step` walks task-by-task with y/n prompts when bisecting a regression.
 
 ## Workflows — use the skill, don't reinvent
 
 Recurring multi-step workflows live as skills. Reach for them before hand-rolling the equivalent:
 
 - `/triage <service>` — investigate a homelab service end-to-end (resolve host(s), gather state, summarize).
-- `/verify` — validate a code change by running the app and observing behavior.
-- `/review` — review a pull request.
-- `/commit-push-pr` — commit, push, open a PR.
 - `/split_worktree_commits` — split a multi-finding worktree into per-finding commits.
 - `/new_podman_role` — scaffold a new podman service role following the conventions in *Podman Service Conventions* below.
 
@@ -62,8 +67,8 @@ Everything else (YAML indentation, descriptive `name:`, `set -euo pipefail` in b
 - Use `qemu_test` to gate test-only branches: set in test-fixture host_vars (`host_vars/box.yml`, `host_vars/minimal.yml`) and in `host_vars/lab-qemu.yml` / `host_vars/pug-qemu.yml` overlays the harness applies on top of inventory-loaded `host_vars/{lab,pug}.yml` when `--machine lab/pug` is used. Use `qemu_test` in `when:` / `ternary` rather than per-machine name comparisons. `minimal` additionally sets `qemu_test_minimal: true`.
 - Per-role test hooks live alongside the role's tasks:
   - `tasks/_setup.yml` — pre-role fixture bringup (e.g. start a local gitea instance for the role to register against). **Never runs against prod** — only invoked from the test harness.
-  - `tasks/_verify.yml` — post-converge assertions exercising the role's real behavior: hit the service over its port, trigger the failure path. **Only ever invoked by `test/testrole.py` / `test/testall.py` against a qemu VM** — `site.yml` and `mise run ansible --tags <role>` against prod never run it. That contract lets `_verify` scaffolding (netns/veth fixtures, sentinel tables, test-only listeners) sit alongside the role's real tasks without an explicit `when: qemu_test` gate; if you ever need `_verify` to run on prod, gate the destructive bits first. Stat-only ("file present", "unit active") checks drift toward tautology — fall back to them only when functional testing is impossible, and say why in a comment.
-- Roles whose own name starts with `_` (currently `roles/_test/`, `roles/_packer/`) are **test-fixture roles**, not service roles — they bundle assertions or scaffolding invoked by the harness (not by `site.yml`). Don't confuse with the `_test.yml` Hard Rule above, which forbids that filename inside a *service* role. New service roles never get a `_` prefix.
+  - `tasks/_verify.yml` — post-converge assertions exercising the role's real behavior: hit the service over its port, trigger the failure path. **Only ever invoked by `test/testrole.py` / `test/testall.py` against a qemu VM** — `site.yml` and `mise run ansible --tags <role>` against prod never run it. That contract lets `_verify` scaffolding (netns/veth fixtures, sentinel tables, test-only listeners) sit alongside the role's real tasks without an explicit `when: qemu_test` gate; `_verify` **never runs against prod**. Stat-only ("file present", "unit active") checks drift toward tautology — fall back to them only when functional testing is impossible, and say why in a comment.
+- Roles whose own name starts with `_` (currently `roles/_test/`, `roles/_packer/`) are **test-fixture roles**, not service roles — they bundle assertions or scaffolding invoked by the harness (not by `site.yml`). New service roles never get a `_` prefix.
 - Tasks whose target depends on a freshly-created user, group, or directory must be gated with `when: not (ansible_check_mode and <svc>_user.changed)`. In check mode the prerequisite task only *reports* it created the user/dir — nothing is actually written — so a downstream `file:` / `copy:` / `template:` will fail with "no such user" or "no such directory". Every service role that creates a system user before writing files relies on it.
 - Prefer `import_role` / `import_tasks` over `include_role` / `include_tasks`. Static forms parse-check at lint time, dedupe identical calls, and don't suffer the `loop:` + `vars:` "vars bind once" bug (a task-level `vars:` block on an `include_role: loop:` is evaluated once at parse time, not per iteration). Fall back to `include_*` only when name or vars are genuinely dynamic, and then wrap the loop body in a per-iteration `include_tasks: <inner>.yml` so each iteration gets a fresh scope.
 - For tasks that mutate state but should run only once (downloads, registrations, token fetches), gate with `args: creates: <sentinel>` rather than `changed_when: false`. Skipped tasks don't count against the harness's idempotence check; `changed_when: false` lies about what the task actually does.
@@ -106,9 +111,9 @@ Long-form rationale (gotchas, history, why-not-skip) in [notes/podman_convention
 
 Every `*.service.j2` declares `--health-cmd` (and `--health-startup-cmd`); the check runs *inside* the container. Preference order:
 
-1. `curl` / `wget` already in the image — grep the Dockerfile first.
-2. Python `urllib.request` with the URL in argv (python-based images). Use the **JSON-array form**, e.g. `--health-cmd '["python","-c","import urllib.request as u, sys; u.urlopen(sys.argv[1], timeout=1)","http://localhost:{{ service_ports.<svc> }}/"]'`. The naïve `'u.urlopen("...")'` shape unescapes mid systemd→podman handoff.
-3. Service-native CLI — `redis-cli ping`, `mosquitto_sub`, `dig +short @127.0.0.1`.
+1. Service-native CLI — `redis-cli ping`, `mosquitto_sub`, `dig +short @127.0.0.1`.
+2. `curl` / `wget` already in the image — grep the Dockerfile first.
+3. Python `urllib.request` with the URL in argv (python-based images). Use the **JSON-array form**, e.g. `--health-cmd '["python","-c","import urllib.request as u, sys; u.urlopen(sys.argv[1], timeout=1)","http://localhost:{{ service_ports.<svc> }}/"]'`. The naïve `'u.urlopen("...")'` shape unescapes mid systemd→podman handoff.
 4. `static_curl` role escape hatch — for distroless images. No current consumers; see [notes/podman_conventions.md](notes/podman_conventions.md) tier 4.
 
 ### Secrets
@@ -143,7 +148,7 @@ The harness lives in `test/` (Python, asyncio-based).
 
 Exit codes: `0` success, `1` converge failure, `124` per-test timeout, `125` idempotence failure, `130` user-cancelled. The joblog records the integer so you can sort/filter by failure mode.
 
-Output: colorized, written to `test/out/<machine>.<role>.ansi`; on failure the systemd journal is collected and the last 50 lines tailed to stdout. Keep artifact trees under `/mnt/scratch/qemu/<codename>/` (Linux) or `packer/artifacts/<codename>/` (Mac). macOS needs `xorriso` for the cloud-init seed iso. Include `mise run ansible -- --check` / `terraform plan` snippets in reviews so idempotence and drift are obvious.
+Output: colorized, written to `test/out/<machine>.<role>.ansi`; on failure the systemd journal is collected and the last 50 lines tailed to stdout. Keep artifact trees under `/mnt/scratch/qemu/<codename>/` (Linux) or `packer/artifacts/<codename>/` (Mac). macOS needs `xorriso` for the cloud-init seed iso. Include `mise run ansible --check` / `terraform plan` snippets in reviews so idempotence and drift are obvious.
 
 ### Debugging prod hosts directly
 
@@ -156,7 +161,7 @@ SSH to `lab` / `pug` / `bunk` works out of the box (see [hosts.ini](hosts.ini); 
 
 When in doubt, ask.
 
-**Bridge to ack.** Before requesting ack for a mutating change, run `mise run ansible -- -l <host> --tags <role> --check` first — `--diff` is on by default ([ansible.cfg](ansible.cfg)), so the operator sees the would-be diff alongside the ack request rather than after. Faster turn-around for both sides.
+**Bridge to ack.** Before requesting ack for a mutating change, run `mise run ansible --limit <host> --tags <role> --check` first — `--diff` is on by default ([ansible.cfg](ansible.cfg)), so the operator sees the would-be diff alongside the ack request rather than after. Faster turn-around for both sides.
 
 ### Test environment design
 
@@ -169,7 +174,7 @@ Variant table (axis-collapse rationale + ZBM-aarch64 workaround in [notes/test_e
 | `pug`     | 1 rpool + 2 apoc                                            | Matches pug prod host; on-demand + nightly                    |
 | `lab`     | mdadm-EFI + 3-disk mirror rpool + dozer/tank(raidz2)/mouse  | Matches lab prod host; on-demand + nightly                    |
 
-Push CI fans out only to `box` (and `minimal` for roles in [.github/ci-minimal-roles.txt](.github/ci-minimal-roles.txt)). Nightly runs the full universe across all variants. Editing pool topology requires a packer rebuild (15-30 min) — the post-boot `test/disks/<variant>.sh` mechanism is gone.
+Push CI fans out only to `box` (and `minimal` for roles in [.github/ci-minimal-roles.txt](.github/ci-minimal-roles.txt)). Nightly runs the full universe across all variants. Editing pool topology requires a packer rebuild (15-30 min).
 
 ## Continuous Integration
 
@@ -200,7 +205,7 @@ The `gitea_runner` role still ships a Gitea-side runner on lab for ad-hoc workfl
 
 ## Commit & Pull Request Guidelines
 
-History favors short, imperative subjects such as "Fix dnscrypt" or "Add profilarr"; prefix with a role when it helps clarity (`wireguard: rotate peers`). Each PR should summarize the motivation, list impacted hosts or roles, and link related issues. Mention which commands were run (`test/testrole.py`, `test/testall.py`, `terraform plan`, screenshots when relevant) and flag inventory, vault, or DNS updates so reviewers can re-run `vault-client.sh`.
+History favors descriptive and imperative subjects; prefix with a role when it helps clarity (`github_runner: drop --runnergroup arg and the runner_group_id schema knob`). Commit body should include a summary of the change, its motivation, and any other context useful to a reviewer, in maximum two paragraphs (lean towards descriptive but concise).
 
 **Splitting a multi-change worktree into per-finding commits.** Use `/split_worktree_commits` for the standard flow. Manual recipe: drive `git add --patch=<file>` non-interactively with `printf 'y\nn\nn\n' | git add -p <file>` (y = stage, n = skip; answer `s` first to split hunks). **Always `git diff --staged` and visually verify before `git commit`.** Do **not** revert the worktree to redo each edit from scratch — wastes effort, loses the just-tested state.
 
@@ -209,8 +214,6 @@ History favors short, imperative subjects such as "Fix dnscrypt" or "Add profila
 ## Security & Configuration Tips
 
 Do not commit decrypted data; access secrets through `ansible-vault edit <path>` (or the equivalent), and keep them in `group_vars/*.yml` / `host_vars/*.yml`. WireGuard keys in `wireguard/` must remain vaulted and rotate with peer changes. When touching networking or DNS, run playbooks with `--limit` and apply Terraform only after review in a dedicated branch.
-
-This is a home environment, not a company production site: some security is nice and worth learning about, but we don't overcomplicate things.
 
 ### Vault ids: `prod` vs `test`
 
