@@ -64,23 +64,32 @@
  },
 {#
   jellyfin is the SSO source. The bootstrap path (server/routes/auth.ts):
-  on first sign-in via the Jellyfin form, when userRepository.count() === 0,
-  seerr mints a Jellyfin API token labelled "Seerr" using the operator's
-  Jellyfin admin session and writes it back to settings.jellyfin.apiKey,
-  along with name/serverId/libraries[]. Slurp+json_query preserves those
-  daemon-written fields across re-templates; ip/port/useSsl/urlBase/
-  externalHostname/jellyfinForgotPasswordUrl are operator-config we own.
-  Empty libraries[] renders single-line per seerr's JSON.stringify(_, 1)
-  shape; once populated, the manual loop below matches the daemon's
-  multi-line shape so ansible diffs stay quiet.
+  the setup wizard's JellyfinSetup form POSTs serverType + username +
+  password + hostname/port/useSsl/urlBase to /api/v1/auth/jellyfin; if
+  userRepository.count() === 0, seerr authenticates against jellyfin,
+  mints an API token labelled "Seerr" off the operator's admin session,
+  and writes name/ip/port/useSsl/urlBase/serverId/apiKey/libraries[] to
+  settings.json. CRITICAL: pre-bootstrap, settings.jellyfin.ip MUST be
+  empty -- auth.ts errors with "Jellyfin hostname already configured"
+  (HTTP 500, unmapped by UI so it surfaces as "Something went wrong")
+  if settings.jellyfin.ip is non-empty AND the form sends hostname,
+  which the setup form always does. So ip/port/useSsl/urlBase all
+  slurp-preserve from disk and start empty; the operator fills them in
+  during /setup. Post-bootstrap, the slurp picks the daemon-written
+  values up and re-renders them, keeping ansible idempotent.
+  externalHostname stays operator-config (used for outbound notification
+  links; not gated by the auth route). Empty libraries[] renders
+  single-line per seerr's JSON.stringify(_, 1) shape; once populated,
+  the manual loop below matches the daemon's multi-line shape so
+  ansible diffs stay quiet.
 #}
 {% set _jelly_libs = seerr_settings_json | json_query('jellyfin.libraries') %}
  "jellyfin": {
   "name": "{{ seerr_settings_json | json_query('jellyfin.name') or '' }}",
-  "ip": "jellyfin.dns.podman",
-  "port": 8096,
-  "useSsl": false,
-  "urlBase": "",
+  "ip": "{{ seerr_settings_json | json_query('jellyfin.ip') or '' }}",
+  "port": {{ seerr_settings_json | json_query('jellyfin.port') | default(8096, true) }},
+  "useSsl": {{ (seerr_settings_json | json_query('jellyfin.useSsl') | default(false, true)) | string | lower }},
+  "urlBase": "{{ seerr_settings_json | json_query('jellyfin.urlBase') or '' }}",
   "externalHostname": "https://jellyfin.{{ inventory_hostname }}.{{ domain }}",
   "jellyfinForgotPasswordUrl": "",
 {% if _jelly_libs %}
