@@ -211,6 +211,13 @@
     nginx_site_args:
       subdomain: pihole
       proxy_pass: http://localhost:8943/
+      # PR 7 (defense-in-depth): forward-auth on the admin subdomain.
+      # Pi-hole keeps its own admin password (FTLCONF_webserver_api_pwhash
+      # of `pihole_password`) as the second wall -- the admin UI also
+      # binds 0.0.0.0:8943 on the host, so emptying the native password
+      # would leave a LAN-reachable unauthenticated panel. Double-click
+      # at login is the accepted trade.
+      auth: required
   tags:
     - pihole
 
