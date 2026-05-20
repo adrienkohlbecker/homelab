@@ -147,18 +147,7 @@ The harness lives in `test/` (Python, asyncio-based).
 
 ### Harness CLI
 
-| Command | What it does |
-|---------|--------------|
-| `test/testrole.py <role>` | Boot `box` (default) and apply the role end-to-end. |
-| `--machine {minimal,box,lab,pug}` | Pick variant (`box` is default; push CI only uses `box` + `minimal`). |
-| `--ubuntu noble` | Target a different release codename. |
-| `--keep` | Leave the machine up for SSH debug. |
-| `--timeout SECONDS` | Bound the run (default 30 min). |
-| `--no-checkmode`, `--no-idempotence` | Skip phases for tight dev loops. |
-| `--benchmark` | Add harness phase timings + ansible `profile_tasks`. |
-| `test/testall.py --jobs N` | Fan out role × machine across N workers (default 5). |
-| `--retry-failed` | Reread `test/out.tsv` and rerun only failing rows. |
-| `--only-role X,Y` / `--except-role X,Y` | Restrict / skip (composes as subset-then-exclude). |
+`test/testrole.py <role>` boots `box` (default) and applies the role end-to-end. `test/testall.py` fans out role × machine in parallel. `--help` on either has the full flag list; the load-bearing ones are `--machine {minimal,box,lab,pug}`, `--keep` (leave the VM up for SSH debug), and `test/testall.py --retry-failed` (rerun rows from `test/out.tsv`).
 
 Exit codes: `0` success, `1` converge failure, `124` per-test timeout, `125` idempotence failure, `130` user-cancelled. The joblog records the integer so you can sort/filter by failure mode.
 
