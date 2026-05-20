@@ -76,7 +76,7 @@ Everything else (YAML indentation, descriptive `name:`, `set -euo pipefail` in b
 
 ### Service ports
 
-Ports each host-level service publishes live in `group_vars/all/main.yml` under `service_ports:` — single source of truth for unit templates, nginx `proxy_pass`, firewall rules, and cross-role consumers (e.g. pihole's dnscrypt upstream). Covers both loopback-published podman services (`--publish 127.0.0.1:{{ service_ports.<svc> }}:<container_port>/tcp` + `nginx_site_args.proxy_pass: http://localhost:{{ service_ports.<svc> }}/`) and native daemons whose port is referenced by the firewall or another role. Migrate roles to consume from there as you touch them. **When allocating a new port, grep `service_ports:` first.**
+Ports each host-level service publishes live in `group_vars/all/main.yml` under `service_ports:` — single source of truth for unit templates, nginx `proxy_pass`, firewall rules, and cross-role consumers (e.g. pihole's dnscrypt upstream). Covers both loopback-published podman services (`--publish 127.0.0.1:{{ service_ports.<svc> }}:<container_port>/tcp` + `nginx_site_args.proxy_pass: http://localhost:{{ service_ports.<svc> }}/`) and native daemons whose port is referenced by the firewall or another role. Migrate roles to consume from there as you touch them — see [notes/SOMEDAY.md](notes/SOMEDAY.md) *Migrate remaining service roles to the `service_ports` registry*. **When allocating a new port, grep both `service_ports:` and `127.0.0.1:` literals in `roles/*/templates/*.j2` first** — un-migrated roles still hard-code their port, so the registry-only check returns false negatives.
 
 ### ZFS site mountpoints
 
