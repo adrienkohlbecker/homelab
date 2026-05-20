@@ -130,6 +130,8 @@ Three-tier pick — simplest that works. **Note:** the repo grew up under a "uid
 
 Default for new timers/services is **system-scope** (`/etc/systemd/system/`, `systemd[1]`). Reach for user-scope (`systemctl --user`, linger) only when fundamentally required — today that's just rootless podman ([roles/gitea_runner/](roles/gitea_runner/), [roles/github_runner/](roles/github_runner/)). One operational vocabulary (`systemctl status`, `journalctl -u` without `--user --machine=<u>@.host`); netdata's `systemdunits` collector attaches to the system bus only; single privilege-drop model (`User=` / `Group=`, or `systemd_timer`'s `run_as:` — [roles/getmail/tasks/main.yml](roles/getmail/tasks/main.yml) is the canonical example).
 
+When hardening a unit, `systemd-analyze security <unit>` scores it against ~50 sandboxing directives (`NoNewPrivileges`, `ProtectSystem`, `PrivateTmp`, `RestrictNamespaces`, …) and lists which would be cheap wins. Run it against any new `.service.j2` you author. (Syntax validation — `systemd-analyze verify` — is already automated by the `systemd_unit` helper's `verify:` arg; you don't have to run it by hand.)
+
 ## Testing Guidelines
 
 The harness lives in `test/` (Python, asyncio-based).
