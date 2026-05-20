@@ -66,9 +66,13 @@
       regex) or the token-extraction selectattr in bucket.yml stopped
       matching the auth shape.
 
-# Functional write-then-query roundtrip via the bucket-scoped token --
-# proves the auth is usable, not just present in the permission list.
-- name: _verify | Write-then-query roundtrip on the bucket write-auth
+# Functional write-and-scope-check on the bucket write-auth -- proves the
+# token is honored at the write endpoint AND that the same token cannot
+# read (write-bucket grants write only; the helper contract is one-way).
+# A previous admin-as-self query step was redundant: the write step's
+# 204 already proves the token is honored, and the read-must-fail step
+# below proves the scope is enforced server-side.
+- name: _verify | Exercise bucket-scoped write-auth (positive write + negative read)
   vars:
     _verify_token: "{{ influxdb_bucket_verify_bucket_token }}"
   block:
@@ -95,12 +99,12 @@
       no_log: true
       become: true
 
-    # argv form again -- the Flux expression contains spaces, double
-    # quotes, and arrow operators that string-form shlex.split would
-    # mangle. The query runs as the in-container admin (CLI reads
-    # /etc/influxdb2/configs) because verify_user only has write-bucket
-    # -- not read-bucket -- which is itself the helper contract.
-    - name: _verify | Query the sentinel back as admin
+    # Negative scope test: verify_user holds only write-bucket on
+    # verify_bucket -- a query with the same token must fail because
+    # the auth has no read:buckets/<id> permission. Catches a regression
+    # in bucket.yml's --write-bucket invocation that accidentally granted
+    # broader perms.
+    - name: _verify | Write-bucket-only token cannot read (auth scope enforced)
       command:
         argv:
           - podman
@@ -110,25 +114,59 @@
           - query
           - --org
           - "{{ influxdb_root_org }}"
+          - --token
+          - "{{ _verify_token }}"
           - >-
-            from(bucket:"verify_bucket")
-              |> range(start:-1m)
-              |> filter(fn:(r) => r._measurement == "sentinel")
-      register: _verify_query
+            from(bucket:"verify_bucket") |> range(start:-1m)
+      register: _verify_neg_query
       changed_when: false
-      failed_when: >-
-        _verify_query.rc != 0
-        or "sentinel" not in _verify_query.stdout
+      failed_when: _verify_neg_query.rc == 0
+      no_log: true
       become: true
 
-# Ownership assertion -- catches a regression where data/ ends up owned
-# by a different host uid (e.g. a future uidmap change that doesn't
-# include a +0 override for the influxdb user).
-- name: _verify | influxdb data dir is owned by influxdb
+# Negative-org test: bucket.yml asserts the requested org exists (only
+# influxdb_root_org is bootstrapped). A typo in a caller's
+# influxdb_bucket_args.org should hit that assert with a concrete
+# next-step message; exercise the path so a regression in the selectattr
+# expression or assert wording is loud here rather than misleading on a
+# real prod apply.
+- name: _verify | bucket.yml against a nonexistent org fails at the assert
+  block:
+    - name: _verify | Call bucket.yml with definitely_not_here org
+      import_role:
+        name: influxdb
+        tasks_from: bucket
+      vars:
+        influxdb_bucket_args:
+          org: definitely_not_here
+          user: verify_user
+          bucket: verify_bucket
+    - name: _verify | Reaching this means assert-org-exists didn't fire
+      fail:
+        msg: bucket.yml accepted org=definitely_not_here -- assert-org-exists is broken.
+  rescue:
+    - name: _verify | Confirm the rescue caught assert-org-exists, not some other failure
+      assert:
+        that:
+          - ansible_failed_task.name is search('Assert org')
+        fail_msg: >-
+          bucket.yml failed under definitely_not_here, but not at the expected
+          assert-org-exists task. Failed task: {{ ansible_failed_task.name }}
+
+# Ownership assertion -- catches a regression where data/ or config/ ends
+# up owned by a different host uid (e.g. a future uidmap change that
+# doesn't include a +0 override for the influxdb user). Both bind-mounts
+# matter: the image's entrypoint actively flaps config/ to 0775 every
+# restart, so a uid drift on it would silently break the CLI's
+# /etc/influxdb2/configs reads inside the container.
+- name: _verify | influxdb data and config dirs are owned by influxdb
   stat:
-    path: /mnt/services/influxdb/data
-  register: _verify_data_owner
+    path: /mnt/services/influxdb/{{ item }}
+  register: _verify_dir_owner
+  loop:
+    - data
+    - config
   failed_when: >-
-    not _verify_data_owner.stat.exists
-    or _verify_data_owner.stat.pw_name != 'influxdb'
+    not _verify_dir_owner.stat.exists
+    or _verify_dir_owner.stat.pw_name != 'influxdb'
   become: true

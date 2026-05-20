@@ -71,19 +71,25 @@
   register: _influxdb_bucket_org_query
   changed_when: false
   check_mode: false
-  failed_when: _influxdb_bucket_org_query.rc != 0
+  # Tolerate "org not found" (influx-cli 2.7 exits non-zero on no-match
+  # for --name) so the assert below fires with its helpful operator
+  # message instead of failing as a bare "command returned non-zero".
+  # Matches the user/bucket/auth queries downstream.
+  failed_when: false
   become: true
 
 # selectattr('name','equalto', ...) is defensive: influx-cli 2.x's
 # `--name` is an exact filter today, but `length > 0` against the
 # bare result would silently accept a future patch that turned the
 # filter into a prefix/substring match. The org is bootstrapped only
-# for `home` (DOCKER_INFLUXDB_INIT_ORG); any other org has to exist
-# already, so the assert above the generic length-0 fail gives the
-# operator a concrete next step.
+# via DOCKER_INFLUXDB_INIT_ORG; any other org has to exist already,
+# so the assert gives the operator a concrete next step. First
+# `that:` clause short-circuits the from_json filter when stdout is
+# non-JSON (rc != 0 case).
 - name: bucket | Assert org {{ influxdb_bucket_args.org }} exists
   assert:
     that:
+      - _influxdb_bucket_org_query.rc == 0
       - (_influxdb_bucket_org_query.stdout
           | from_json
           | selectattr('name', 'equalto', influxdb_bucket_args.org)
