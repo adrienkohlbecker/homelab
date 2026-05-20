@@ -108,7 +108,7 @@
     systemd_unit_args:
       src: sonarr
       condition: "{{ not (ansible_check_mode and (systemd_unit.changed or sonarr_user.changed)) }}"
-      restart: "{{ systemd_unit.changed or sonarr_conf.changed }}"
+      restart: "{{ systemd_unit.changed or sonarr_conf.changed or media_group.changed }}"
   tags:
     - sonarr
 

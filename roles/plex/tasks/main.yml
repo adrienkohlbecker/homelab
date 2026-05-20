@@ -97,7 +97,7 @@
     systemd_unit_args:
       src: plex
       condition: "{{ not (ansible_check_mode and (systemd_unit.changed or plex_user.changed)) }}"
-      restart: "{{ systemd_unit.changed }}"
+      restart: "{{ systemd_unit.changed or media_group.changed }}"
       start: "{{ ansible_architecture == 'x86_64' }}"
   tags:
     - plex
