@@ -25,6 +25,9 @@ Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N
 
+# No --env TZ: InfluxDB stores timestamps in UTC, so leaving the container in UTC
+# keeps log/data correlation trivial (per CLAUDE.md Someday → container timezones).
+
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
