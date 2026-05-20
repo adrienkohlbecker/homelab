@@ -36,14 +36,6 @@
 #                                                        is auth_request'd; 401 →
 #                                                        302 to the portal with
 #                                                        returnUrl
-#                             - 'required_bypass_api'  — same as 'required' but a
-#                                                        sibling `location /api/`
-#                                                        block proxies without
-#                                                        auth_request. Use for
-#                                                        the *arr stack and any
-#                                                        service whose API path
-#                                                        is bearer-token-gated
-#                                                        (Sonarr, Radarr, etc.)
 #                             Requires authelia_internal_url to point at a reachable
 #                             /api/authz/auth-request endpoint (defaults to lab's
 #                             local Authelia; pug/bunk need a per-host override if
