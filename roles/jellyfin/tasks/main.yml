@@ -6,28 +6,32 @@
     - jellyfin
 
 # Read the render gid from /etc/group on transcoding hosts rather than
-# creating it ourselves. udev/mesa ship sysusers.d entries that own the
-# canonical gid; creating dynamically with `group:` can drift if a
+# creating it ourselves with `group:`. udev/mesa ship sysusers.d entries
+# that own the canonical gid; a dynamic group-create can drift if a
 # package later installs a different fixed gid, silently de-aligning
 # the container's --group-add from /dev/dri/renderD128's actual owner.
-# Failing loud is the right call: a transcoding host with no render
-# group means hardware acceleration would fall back to software,
-# which is worse than a noisy ansible failure.
 - name: Lookup render group gid (HW transcoding hosts only)
   when: has_transcoding_acceleration
-  getent:
-    database: group
-    key: render
-    fail_key: true
   become: true
-  tags:
-    - jellyfin
-
-- name: Capture render group fact
-  when: has_transcoding_acceleration
-  set_fact:
-    render_group:
-      gid: "{{ getent_group.render[1] }}"
+  block:
+    - name: getent render group
+      getent:
+        database: group
+        key: render
+        fail_key: false
+    - name: Assert render group present
+      assert:
+        that:
+          - getent_group.render is defined
+        fail_msg: >-
+          /etc/group has no 'render' entry. On a host with
+          has_transcoding_acceleration=true, install one of the
+          transcoding driver packages (mesa-va-drivers,
+          intel-media-va-driver) — they ship a sysusers.d that owns
+          this group — and re-run.
+    - name: Capture render gid
+      set_fact:
+        jellyfin_render_gid: "{{ getent_group.render[1] | int }}"
   tags:
     - jellyfin
 

@@ -73,8 +73,8 @@
   assert:
     that:
       - _verify_render_dev.stat.exists
-      - _verify_render_dev.stat.gid == (render_group.gid | int)
+      - _verify_render_dev.stat.gid == jellyfin_render_gid
     fail_msg: >-
       /dev/dri/renderD128 gid={{ _verify_render_dev.stat.gid }} but the
-      container's --group-add gid={{ render_group.gid }}. HW acceleration
+      container's --group-add gid={{ jellyfin_render_gid }}. HW acceleration
       will not work. Re-run the play to re-template the unit.
