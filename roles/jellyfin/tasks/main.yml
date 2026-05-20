@@ -69,6 +69,23 @@
   tags:
     - jellyfin
 
+- name: Install tmpfiles.d entry for /var/log/jellyfin reaping
+  when: not (ansible_check_mode and jellyfin_user.changed)
+  template:
+    src: jellyfin.tmpfiles.conf.j2
+    dest: /etc/tmpfiles.d/jellyfin.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: >-
+      systemd-tmpfiles
+      {{ '--dry-run' if ansible_distribution_release not in ['jammy'] else '' }}
+      --create %s
+  become: true
+  tags:
+    - jellyfin
+
 # Introskipper is an optional plugin; only manage its DB symlink when its
 # data dir is already present.
 - name: Check for introskipper plugin data
