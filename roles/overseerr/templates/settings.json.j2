@@ -25,8 +25,8 @@
  "plex": {
   "name": "DockerPlex",
   "ip": "plex.dns.podman",
-  "port": 443,
-  "useSsl": true,
+  "port": 32400,
+  "useSsl": false,
   "libraries": [
    {
     "id": "10",
@@ -55,8 +55,8 @@
  },
  "tautulli": {
   "hostname": "tautulli.dns.podman",
-  "port": 443,
-  "useSsl": true,
+  "port": 8181,
+  "useSsl": false,
   "apiKey": "{{ tautulli_api_key }}",
   "externalUrl": "https://tautulli.{{ inventory_hostname }}.{{ domain }}"
  },
@@ -64,9 +64,9 @@
   {
    "name": "radarr",
    "hostname": "radarr.dns.podman",
-   "port": 443,
+   "port": 7878,
    "apiKey": "{{ radarr_api_key }}",
-   "useSsl": true,
+   "useSsl": false,
    "activeProfileId": 12,
    "activeProfileName": "2160p Quality",
    "activeDirectory": "/media/Movies",
@@ -85,9 +85,9 @@
   {
    "name": "sonarr",
    "hostname": "sonarr.dns.podman",
-   "port": 443,
+   "port": 8989,
    "apiKey": "{{ sonarr_api_key }}",
-   "useSsl": true,
+   "useSsl": false,
    "activeProfileId": 12,
    "activeLanguageProfileId": 1,
    "activeProfileName": "2160p Quality",
