@@ -69,20 +69,16 @@
       regex) or the token-extraction selectattr in bucket.yml stopped
       matching the auth shape.
 
-# Functional write-and-scope-check on the bucket write-auth -- proves the
-# token is honored at the write endpoint AND that the same token cannot
-# read (write-bucket grants write only; the helper contract is one-way).
-# A previous admin-as-self query step was redundant: the write step's
-# 204 already proves the token is honored, and the read-must-fail step
-# below proves the scope is enforced server-side.
+# Functional write + negative-read on the bucket write-auth: the write
+# step's 204 proves the token is honored; the read step (which must fail
+# rc != 0) proves write-bucket doesn't accidentally grant read. A previous
+# admin-as-self query step was redundant -- 204 + rc-check span both.
+# argv form keeps the line-protocol point's embedded space in one slot;
+# no_log keeps the token out of ansible's task log.
 - name: _verify | Exercise bucket-scoped write-auth (positive write + negative read)
   vars:
     _verify_token: "{{ influxdb_bucket_verify_bucket_token }}"
   block:
-    # argv form keeps the line-protocol point intact -- the embedded
-    # space between `verify` and `value=1` would otherwise shlex-split
-    # into two argv slots. no_log keeps the token out of ansible's
-    # task log (bucket.yml already redacts where it's set).
     - name: _verify | Write a sentinel point with the bucket write-auth
       command:
         argv:
@@ -102,11 +98,6 @@
       no_log: true
       become: true
 
-    # Negative scope test: verify_user holds only write-bucket on
-    # verify_bucket -- a query with the same token must fail because
-    # the auth has no read:buckets/<id> permission. Catches a regression
-    # in bucket.yml's --write-bucket invocation that accidentally granted
-    # broader perms.
     - name: _verify | Write-bucket-only token attempts read
       command:
         argv:
