@@ -6,7 +6,8 @@
     fail_msg: >-
       journald_storage={{ journald_storage | default('<undefined>') }}
       is not one of: volatile, persistent. Define it in
-      host_vars/{{ inventory_hostname }}.yml or group_vars/.
+      group_vars/all/ (or override per host in
+      host_vars/{{ inventory_hostname }}.yml).
   tags:
     - journald
 

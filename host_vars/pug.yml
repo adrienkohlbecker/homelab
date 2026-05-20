@@ -1,5 +1,4 @@
 zfs_root: true
-journald_storage: persistent
 grub_bootloader: false
 nut_monitor_enabled: false
 
