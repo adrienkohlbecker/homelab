@@ -1,0 +1,62 @@
+# Upstream ships an x86_64-only release artifact, and main.yml only
+# starts the unit on x86_64. On aarch64 (Mac-host HVF runs of the
+# harness) the binary isn't fetched, so the loopback probes below have
+# nothing to talk to. Skip the whole _verify rather than rendering a
+# pile of skipped/failed tasks.
+- name: _verify | Skip on non-x86_64 (upstream ships x86_64-only)
+  meta: end_play
+  when: ansible_architecture != 'x86_64'
+
+# Sanity check that the daemon actually came up before we probe; the
+# wait_for catches the "binary fetched but exec failed silently" case
+# which would otherwise surface as a connection-refused 30s later.
+- name: _verify | Wait for journald-exporter to bind loopback port
+  wait_for:
+    host: 127.0.0.1
+    port: "{{ service_ports.journald_exporter }}"
+    timeout: 15
+
+- name: _verify | /metrics with valid basic auth returns prometheus body
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.journald_exporter }}/metrics"
+    url_username: metrics
+    url_password: "{{ journald_exporter_key }}"
+    force_basic_auth: true
+    return_content: true
+    status_code: 200
+  register: journald_exporter_verify_authed
+  failed_when: >-
+    journald_exporter_verify_authed.status != 200
+    or '# HELP' not in (journald_exporter_verify_authed.content | default(''))
+
+- name: _verify | /metrics with no auth returns 401
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.journald_exporter }}/metrics"
+    status_code: 401
+
+- name: _verify | /metrics with wrong password returns 401
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.journald_exporter }}/metrics"
+    url_username: metrics
+    url_password: deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+    force_basic_auth: true
+    status_code: 401
+
+# Browser-style probe through nginx: no Authelia session, so the
+# auth: required gate must redirect to the portal. 302 here validates
+# that the gate is wired; the metrics-actually-served-after-auth path
+# can only be exercised with a live Authelia session and is out of
+# scope for this verify. validate_certs: false because test/ uses
+# snakeoil certs.
+- name: _verify | Nginx vhost without Authelia session redirects to portal
+  uri:
+    url: "https://localhost/metrics"
+    headers:
+      Host: "journald-exporter.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: journald_exporter_verify_redirect
+  failed_when: >-
+    journald_exporter_verify_redirect.status != 302
+    or 'auth.' not in (journald_exporter_verify_redirect.location | default(''))
