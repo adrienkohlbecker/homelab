@@ -8,11 +8,11 @@
     name: _test
     tasks_from: nginx
 
-- name: _test | Setup dependencies
-  shell: |
-    set -euo pipefail
-    mkdir /mnt/services
-  args:
-    executable: /bin/bash
-    creates: /mnt/services
+- name: _setup | Create /mnt/services
+  file:
+    path: /mnt/services
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
   become: true
