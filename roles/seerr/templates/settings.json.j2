@@ -99,8 +99,9 @@
     "id": "{{ _lib.id }}",
     "name": "{{ _lib.name }}",
     "enabled": {{ _lib.enabled | string | lower }},
-    "type": "{{ _lib.type }}",
-    "lastScan": {{ _lib.lastScan | default(0) }}
+    "type": "{{ _lib.type }}"{% if _lib.lastScan is defined %},
+    "lastScan": {{ _lib.lastScan }}{% endif %}
+
    }{% if not loop.last %},{% endif %}
 
 {% endfor %}
@@ -129,6 +130,7 @@
    "port": 7878,
    "apiKey": "{{ radarr_api_key }}",
    "useSsl": false,
+   "baseUrl": "",
    "activeProfileId": 12,
    "activeProfileName": "2160p Quality",
    "activeDirectory": "/media/Movies",
@@ -150,6 +152,7 @@
    "port": 8989,
    "apiKey": "{{ sonarr_api_key }}",
    "useSsl": false,
+   "baseUrl": "",
    "activeProfileId": 12,
    "activeLanguageProfileId": 1,
    "activeProfileName": "2160p Quality",
@@ -167,6 +170,7 @@
    "syncEnabled": true,
    "preventSearch": false,
    "tagRequests": false,
+   "monitorNewItems": "all",
    "id": 0
   }
  ],
