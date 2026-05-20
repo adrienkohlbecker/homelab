@@ -22,4 +22,12 @@ homeassistant_networks:
   # on it. Re-introduce a pin (add `ip: <addr>`) if either of those
   # changes, or if a second container joins this network and starts
   # contending for slot assignments.
+  #
+  # mac IS pinned: without it podman mints a fresh random MAC every
+  # container recreate (unit restart / image bump), UniFi sees that as
+  # a new IoT-VLAN client each time, and lab's UniFi client list grows
+  # a stale entry per HA recreate. Same prefix + seed shape as the
+  # host-iface MACs in roles/macvlan so all L2 identities under this
+  # repo are derived from one rule.
   - name: mac_iot
+    mac: "{{ '82:48:10' | random_mac(seed=inventory_hostname ~ '_homeassistant') }}"

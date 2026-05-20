@@ -44,7 +44,10 @@ ExecStart=/usr/bin/podman run \
     --gidmap=0:0:65536 \
     --gidmap=+0:{{ homeassistant_user.group }}:1 \
 {% for net in homeassistant_networks %}
-    --network={{ net.name }}{% if net.ip is defined %}:ip={{ net.ip }}{% endif %} \
+{%   set _opts = [] %}
+{%   if net.ip is defined %}{% set _ = _opts.append('ip=' ~ net.ip) %}{% endif %}
+{%   if net.mac is defined %}{% set _ = _opts.append('mac=' ~ net.mac) %}{% endif %}
+    --network={{ net.name }}{{ (':' ~ _opts | join(',')) if _opts else '' }} \
 {% endfor %}
     --env TZ={{ system_timezone }} \
     --tz={{ system_timezone }} \
