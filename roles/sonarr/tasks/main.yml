@@ -121,5 +121,11 @@
       subdomain: sonarr
       proxy_pass: http://localhost:8989/
       csp_additional: "connect-src plex.tv *.plex.tv {{ nginx_csp_default }}"
+      # Browser admin gets forward-auth; sonarr's AuthenticationMethod=External
+      # reads the X-Forwarded-User header the site template now forwards from
+      # Authelia. Intra-stack peers (bazarr, overseerr, etc.) reach sonarr
+      # via sonarr.dns.podman:8989 carrying X-Api-Key, bypassing nginx
+      # entirely.
+      auth: required
   tags:
     - sonarr

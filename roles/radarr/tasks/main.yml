@@ -119,5 +119,7 @@
       subdomain: radarr
       proxy_pass: http://localhost:7878/
       csp_additional: "connect-src plex.tv *.plex.tv {{ nginx_csp_default }}"
+      # See sonarr's nginx_site_args comment.
+      auth: required
   tags:
     - radarr

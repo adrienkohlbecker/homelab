@@ -99,5 +99,7 @@
     nginx_site_args:
       subdomain: lidarr
       proxy_pass: http://localhost:{{ service_ports.lidarr }}/
+      # See sonarr's nginx_site_args comment.
+      auth: required
   tags:
     - lidarr

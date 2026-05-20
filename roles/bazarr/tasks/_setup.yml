@@ -18,6 +18,11 @@
     name: media
     tasks_from: network
 
+- name: _setup | Install authelia stub for auth=required tests
+  import_role:
+    name: _test
+    tasks_from: authelia_stub
+
 - name: _setup | Ensure /mnt/services and /mnt/media exist
   file:
     path: "{{ item }}"
