@@ -215,8 +215,8 @@ radarr:
   ip: radarr.dns.podman
   movies_sync: 60
   only_monitored: false
-  port: 443
-  ssl: true
+  port: 7878
+  ssl: false
   sync_only_monitored_movies: false
   use_ffprobe_cache: true
 series_scores:
@@ -245,9 +245,9 @@ sonarr:
   http_timeout: 60
   ip: sonarr.dns.podman
   only_monitored: false
-  port: 443
+  port: 8989
   series_sync: 60
-  ssl: true
+  ssl: false
   sync_only_monitored_episodes: false
   sync_only_monitored_series: false
   use_ffprobe_cache: true
