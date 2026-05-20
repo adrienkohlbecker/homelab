@@ -112,6 +112,7 @@ service_ports:
   hyperdx_otlp_http: 4318
   lidarr: 8686
   nut: 3493
+  seerr: 5055
   transmission_bt: 51413
   wireguard: 51820
 

@@ -1,0 +1,93 @@
+- name: Set up seerr system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: seerr
+  tags:
+    - seerr
+
+- name: Create sqlite directory
+  when: not (ansible_check_mode and seerr_user.changed)
+  file:
+    dest: /mnt/services/sqlite/seerr
+    state: directory
+    owner: seerr
+    group: seerr
+    mode: "0755"
+  become: true
+  tags:
+    - seerr
+
+# settings.json is rendered as the full canonical post-merge shape seerr
+# writes on disk -- every key seerr's defaults emit, in seerr's canonical
+# top-level order, with our wired values overriding the bare-defaults
+# where we configure them (plex/radarr/sonarr/tautulli/notifications/
+# network). Without this exact-shape match, seerr re-normalizes on every
+# startup (adds ~20 default keys: sessionSecret, hideBlocklisted, jellyfin
+# block, ntfy, metadataSettings, network.dnsCache, embedPoster per agent,
+# migrations[]; splits our region into discoverRegion/streamingRegion)
+# and ansible would diff-churn forever. Slurp + json_query preserves
+# plex.libraries[].lastScan timestamps across deploys (seerr updates them
+# on each scan; first run defaults to 0 via json_query-on-empty).
+- name: Load existing settings.json
+  slurp:
+    src: /mnt/services/seerr/settings.json
+  register: _seerr_settings_b64
+  failed_when: false
+  become: true
+  tags:
+    - seerr
+
+- name: Render settings.json
+  copy:
+    content: "{{ lookup('template', 'settings.json.j2') }}"
+    dest: /mnt/services/seerr/settings.json
+    owner: seerr
+    group: seerr
+    mode: "0600"
+    backup: true
+    validate: python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "%s"
+  register: seerr_settings_result
+  vars:
+    seerr_settings_json: "{{ _seerr_settings_b64['content'] | default('e30=') | b64decode | from_json }}"
+  become: true
+  tags:
+    - seerr
+
+- name: Install seerr service
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: seerr.service.j2
+      condition: "{{ not (ansible_check_mode and seerr_user.changed) }}"
+  tags:
+    - seerr
+
+- name: Enable seerr service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: seerr
+      condition: "{{ not (ansible_check_mode and (seerr_service_result.changed or seerr_user.changed)) }}"
+      restart: "{{ seerr_service_result.changed or seerr_settings_result.changed }}"
+  tags:
+    - seerr
+
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: seerr
+      proxy_pass: http://localhost:{{ service_ports.seerr }}/
+      csp_default_src: plex.tv *.plex.tv
+      csp_additional: img-src plex.tv *.plex.tv *.gravatar.com *.tmdb.org {{ nginx_csp_default }}; font-src plex.tv *.plex.tv fonts.gstatic.com {{ nginx_csp_default }}
+  tags:
+    - seerr
