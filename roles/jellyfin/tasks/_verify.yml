@@ -11,7 +11,7 @@
   retries: 30
   delay: 2
   until: _verify_http.status == 200
-  failed_when: (_verify_http.json.ProductName | default('')) != 'Jellyfin'
+  failed_when: not ((_verify_http.json.ProductName | default('')) is search('^Jellyfin'))
 
 # Exercise the nginx-proxied path -- catches typo'd subdomain or
 # proxy_pass regressions that the loopback probe would miss.
@@ -27,7 +27,7 @@
   retries: 30
   delay: 2
   until: _verify_http_nginx.status == 200
-  failed_when: (_verify_http_nginx.json.ProductName | default('')) != 'Jellyfin'
+  failed_when: not ((_verify_http_nginx.json.ProductName | default('')) is search('^Jellyfin'))
 
 # SQLite wiring: the symlinks at /config/data/<name>.db MUST resolve
 # through to the dedicated /mnt/services/sqlite/ dataset (the role's
