@@ -115,7 +115,7 @@ Three paths to inject a podman secret. Preferred order:
 
 ### User namespacing
 
-Three-tier pick — simplest that works:
+Three-tier pick — simplest that works. **Note:** the repo grew up under a "uidmap everywhere" assumption that's since been inverted — most existing units use tier 2 or 3, but tier 1 is the target end-state for new and migrated roles. See [notes/SOMEDAY.md](notes/SOMEDAY.md) *Audit per-service container-user choice* for the sweep.
 
 1. **`--user {{ <svc>_user.uid }}:{{ <svc>_user.group }}`** (default). Container process runs directly as the host service user; no namespace mapping involved. Files written to bind-mounts land with the right host ownership trivially. Use whenever the app doesn't insist on `id -u == 0` for its own internal checks.
 2. **linuxserver `PUID` / `PGID` env vars.** The image's s6-overlay init runs `usermod`/`chown` at startup to align its baked-in `abc` user with the desired ids. Linuxserver-specific.
