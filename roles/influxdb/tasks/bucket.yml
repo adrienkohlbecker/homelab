@@ -125,6 +125,51 @@
       failed_when: false
       become: true
 
+    # Users in influx 2.x aren't tied to orgs in `influx user list`;
+    # org membership is a separate relationship. Detect a cross-org
+    # collision: a same-name user that exists but isn't a member of
+    # the target org. Failing fast here surfaces the manual fix
+    # (`influx org members add`) instead of letting the rest of the
+    # block silently proceed with a user attached to the wrong org.
+    - name: bucket | Query org members
+      command:
+        argv:
+          - podman
+          - exec
+          - influxdb
+          - influx
+          - org
+          - members
+          - list
+          - --id
+          - "{{ _influxdb_org_id }}"
+          - --json
+      register: _influxdb_bucket_members_query
+      changed_when: false
+      check_mode: false
+      failed_when: false
+      become: true
+
+    - name: bucket | Assert pre-existing user is a member of org {{ influxdb_bucket_args.org }}
+      vars:
+        _user_exists: >-
+          {{ _influxdb_bucket_user_query.rc == 0
+             and (_influxdb_bucket_user_query.stdout | from_json | length) > 0 }}
+        _user_in_org: >-
+          {{ ((_influxdb_bucket_members_query.stdout | default('[]') | from_json)
+              | selectattr('name', 'equalto', influxdb_bucket_args.user)
+              | list | length) > 0 }}
+      assert:
+        that:
+          - not (_user_exists | bool) or (_user_in_org | bool)
+        fail_msg: >-
+          influxdb user '{{ influxdb_bucket_args.user }}' already exists but is
+          not a member of org '{{ influxdb_bucket_args.org }}'. Attach manually:
+            podman exec influxdb sh -c 'influx org members add \
+              --id {{ _influxdb_org_id }} \
+              --member $(influx user list --name {{ influxdb_bucket_args.user }} --json | jq -r ".[0].id")'
+          Then re-run this play.
+
     - name: bucket | Create user {{ influxdb_bucket_args.user }}  # noqa: no-changed-when -- when: gates execution, like creates: did
       when: >-
         _influxdb_bucket_user_query.rc != 0
