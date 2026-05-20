@@ -58,5 +58,9 @@
       subdomain: "{{ vscode_subdomain }}"
       proxy_pass: http://localhost:3002/
       csp_frame_ancestors: "{{ vscode_csp_frame_ancestors | default(omit) }}"
+      # code-server ships with no native auth (no PASSWORD/HASHED_PASSWORD
+      # env), so before this it was relying on the network being internal.
+      # Authelia is now the sole gate.
+      auth: required
   tags:
     - vscode
