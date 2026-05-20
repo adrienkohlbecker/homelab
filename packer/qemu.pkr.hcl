@@ -382,11 +382,15 @@ build {
     post-processor "shell-local" {
       name           = "compress"
       inline_shebang = "/bin/bash"
+      # OS gate via HCL-resolved image_format (raw on Linux, qcow2 on
+      # Mac). HCL2's only template-string escape is for ${...} interpolation,
+      # so an inline "$$(uname -s)" would reach bash as literal $$(uname -s)
+      # and expand $$ to the shell PID, breaking the comparison.
       inline = [<<-EOT
         set -euxo pipefail
-        if [ "$$(uname -s)" = "Linux" ]; then exit 0; fi
+        if [ "${local.arch_cfg.image_format}" = "raw" ]; then exit 0; fi
         for disk in ${var.build_directory}/${source.name}/packer-ubuntu-*.qcow2; do
-          echo "==> compressing $$(basename "$${disk}")"
+          echo "==> compressing $(basename "$${disk}")"
           qemu-img convert -W -c -O qcow2 -o compression_type=zstd "$${disk}" "$${disk}.tmp"
           mv "$${disk}.tmp" "$${disk}"
         done
