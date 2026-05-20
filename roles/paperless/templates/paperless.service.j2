@@ -55,6 +55,7 @@ ExecStart=/usr/bin/podman run \
     --env PAPERLESS_ACCOUNT_DEFAULT_HTTP_PROTOCOL=https \
     --env PAPERLESS_ACCOUNT_EMAIL_VERIFICATION=none \
     --env PAPERLESS_SOCIAL_AUTO_SIGNUP=true \
+    --env PAPERLESS_SOCIAL_ACCOUNT_SYNC_GROUPS=true \
     --env PAPERLESS_REDIRECT_LOGIN_TO_SSO=true \
     --env PAPERLESS_SOCIALACCOUNT_PROVIDERS_FILE=/run/secrets/socialaccount_providers.json \
     --secret=paperless_secret_key,type=env,target=PAPERLESS_SECRET_KEY \
