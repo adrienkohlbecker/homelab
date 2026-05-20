@@ -1,7 +1,7 @@
 # vim:ft=yaml
 jobs:
   - name: journald
-    url: http://127.0.0.1:12345/metrics
+    url: http://127.0.0.1:{{ service_ports.journald_exporter }}/metrics
     username: metrics
     password: {{ journald_exporter_key }}
     max_time_series: 10000 # there is many series per individual systemd service, including temporary ones. Let's see if this is enough
