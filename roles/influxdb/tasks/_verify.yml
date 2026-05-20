@@ -51,51 +51,31 @@
       user: verify_user
       bucket: verify_bucket
 
-- name: _verify | Fetch auth records for verify_user
-  command: podman exec influxdb influx auth list --user verify_user --json
-  register: _verify_auth_query
-  changed_when: false
-  failed_when: >-
-    _verify_auth_query.rc != 0
-    or (_verify_auth_query.stdout | from_json | length) == 0
-  become: true
-
-- name: _verify | Fetch verify_bucket metadata
-  command: podman exec influxdb influx bucket list --name verify_bucket --json
-  register: _verify_bucket_query
-  changed_when: false
-  failed_when: (_verify_bucket_query.stdout | from_json | length) == 0
-  become: true
-
-# Contract assertion: bucket.yml's regex match path produced a
-# bucket-scoped write permission (same shape as bucket.yml's own
-# detection regex, anchored on org id + bucket id).
-- name: _verify | verify_user carries bucket-scoped write-auth on verify_bucket
-  vars:
-    _verify_bucket: "{{ (_verify_bucket_query.stdout | from_json | first) }}"
+# Contract assertion: bucket.yml surfaces the write-auth token via
+# its per-bucket fact. An Undefined fact would mean either the
+# bucket-scoped auth was never created or the regex/selectattr path
+# in bucket.yml's token-extraction stopped matching.
+- name: _verify | bucket.yml surfaced a write-auth token for verify_bucket
   assert:
     that:
-      - (_verify_auth_query.stdout | from_json)
-        | selectattr('permissions', 'defined')
-        | map(attribute='permissions') | flatten
-        | select('search', '^write:orgs/' ~ _verify_bucket.orgID ~ '/buckets/' ~ _verify_bucket.id ~ '$')
-        | list | length > 0
+      - influxdb_bucket_verify_bucket_token is defined
+      - influxdb_bucket_verify_bucket_token | length > 0
     fail_msg: >-
-      bucket.yml left verify_user without a bucket-scoped write
-      permission on verify_bucket. Re-check bucket.yml's auth-create
-      task and the regex that gates it.
+      bucket.yml did not produce influxdb_bucket_verify_bucket_token.
+      Either the conditional auth-create skipped (re-check its `when:`
+      regex) or the token-extraction selectattr in bucket.yml stopped
+      matching the auth shape.
 
 # Functional write-then-query roundtrip via the bucket-scoped token --
-# this is what proves the auth is usable, not just present in the
-# permission list. bucket.yml is idempotent and creates exactly one
-# auth per user, so first().token is the one we just verified.
+# proves the auth is usable, not just present in the permission list.
 - name: _verify | Write-then-query roundtrip on the bucket write-auth
   vars:
-    _verify_token: "{{ (_verify_auth_query.stdout | from_json | first).token }}"
+    _verify_token: "{{ influxdb_bucket_verify_bucket_token }}"
   block:
     # argv form keeps the line-protocol point intact -- the embedded
     # space between `verify` and `value=1` would otherwise shlex-split
-    # into two argv slots.
+    # into two argv slots. no_log keeps the token out of ansible's
+    # task log (bucket.yml already redacts where it's set).
     - name: _verify | Write a sentinel point with the bucket write-auth
       command:
         argv:
@@ -112,6 +92,7 @@
           - "{{ _verify_token }}"
           - sentinel,source=ansible_verify value=1
       changed_when: false
+      no_log: true
       become: true
 
     # argv form again -- the Flux expression contains spaces, double

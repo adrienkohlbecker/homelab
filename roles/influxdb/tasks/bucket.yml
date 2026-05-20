@@ -13,15 +13,19 @@
 #   user   -- user name (created if missing, attached to <org>)
 #   bucket -- bucket name (created under <org> if missing)
 #
-# Outputs: none at play scope. The earlier `influxdb_bucket_org_id` /
-# `influxdb_bucket_id` set_facts were a cross-call leak waiting to fire
-# (a second caller in the same play would overwrite the first's facts);
-# the ids are now block-scoped vars, lazily resolved from the query
-# registers each time they're referenced inside the block.
+# Outputs:
+#   influxdb_bucket_<bucket>_token  -- the bucket-scoped write-auth
+#     token. Per-bucket key so two callers with different buckets in
+#     the same play don't clobber each other (the earlier shared
+#     `influxdb_bucket_id` / `_org_id` facts had exactly that bug; the
+#     ids are now block-scoped vars rather than facts at all). The
+#     bucket name is sanitised through regex_replace for the key.
 #
-# Operator extracts the resulting write-auth token post-bootstrap via
+# An operator who only wants the token (HA UI paste, etc.) can also
+# read it out-of-band at any time via
 #   podman exec influxdb influx auth list --user <user> --json
-# and pastes it into the consumer (e.g. HA's UI integration).
+# and is the only path for a token created by an earlier bootstrap
+# that's no longer in any ansible play's memory.
 
 - name: bucket | Assert args
   assert:
@@ -260,3 +264,56 @@
           - --write-bucket
           - "{{ _influxdb_bucket_id }}"
       become: true
+
+    # Re-query post-create so the token surfacing below sees the
+    # just-created auth too (the `_influxdb_bucket_auth_query` above
+    # was taken before the conditional create). Unconditional rather
+    # than branching on the create's changed status -- one extra exec
+    # per call is cheap, and a conditional set_fact would surface an
+    # `Undefined` token to a caller whose bucket already existed.
+    #
+    # failed_when also asserts at least one auth carries the
+    # bucket-scoped write permission, so the set_fact's `| first.token`
+    # below is guaranteed defined (and a regression in the create or
+    # detection regex fails here loudly rather than producing an
+    # Undefined token silently).
+    - name: bucket | Re-query auth for {{ influxdb_bucket_args.user }} to capture token
+      command:
+        argv:
+          - podman
+          - exec
+          - influxdb
+          - influx
+          - auth
+          - list
+          - --user
+          - "{{ influxdb_bucket_args.user }}"
+          - --json
+      register: _influxdb_bucket_auth_post_query
+      changed_when: false
+      check_mode: false
+      failed_when: >-
+        _influxdb_bucket_auth_post_query.rc != 0
+        or ((_influxdb_bucket_auth_post_query.stdout | from_json)
+            | selectattr('permissions', 'defined')
+            | selectattr('permissions', 'contains',
+                'write:orgs/' ~ _influxdb_org_id ~ '/buckets/' ~ _influxdb_bucket_id)
+            | list | length) == 0
+      no_log: true
+      become: true
+
+    # Per-bucket key so concurrent bucket.yml invocations against
+    # different buckets in the same play don't overwrite each other's
+    # tokens. regex_replace mirrors the systemd_unit helper's "sanitise
+    # for fact name" idiom -- bucket names can carry chars that aren't
+    # valid in ansible identifiers.
+    - name: bucket | Expose write-auth token for bucket {{ influxdb_bucket_args.bucket }}
+      set_fact:
+        "influxdb_bucket_{{ influxdb_bucket_args.bucket | regex_replace('[^A-Za-z0-9_]', '_') }}_token": >-
+          {{ (_influxdb_bucket_auth_post_query.stdout
+              | from_json
+              | selectattr('permissions', 'defined')
+              | selectattr('permissions', 'contains',
+                  'write:orgs/' ~ _influxdb_org_id ~ '/buckets/' ~ _influxdb_bucket_id)
+              | first).token }}
+      no_log: true
