@@ -1,10 +1,9 @@
-# Validate the per-host instance list before touching anything. repo and
-# suffix flow into systemd unit names, envfile paths, and the workdir
-# tree -- a typo like "../wat" would write files outside the intended
-# location, and duplicate (repo, suffix) pairs would silently race the
-# same files. An empty labels string would render RUNNER_LABELS= and
-# trip the entrypoint's required-env check at container-start time;
-# catching it at apply-time is louder.
+# Per-host instance list validation. repo + suffix flow into systemd
+# unit names + the per-instance dir under /opt/actions-runner/. A typo
+# like "../wat" would write files outside the intended location; an
+# empty labels string would render the runner unreachable to every
+# workflow's runs-on filter. Catching at apply-time is louder than
+# debugging an absent runner at job-dispatch time.
 - name: Assert github_runner_instances entries are well-formed
   assert:
     that:
@@ -16,10 +15,10 @@
     fail_msg: >-
       github_runner_instances entry {{ item }} is malformed. Each entry
       needs repo + suffix + owner matching [A-Za-z0-9_-]+ and a non-empty
-      labels string. runner_group_id is optional and defaults to 1 in the
-      envfile (the only group on personal-account repos and the org's
-      reserved "Default" group on org repos); when present it must be an
-      integer >= 1. Set explicitly for a custom org runner group.
+      labels string. runner_group_id is optional and defaults to 1 (the
+      only group on personal-account repos and the org's reserved
+      "Default" group on org repos); when present it must be an integer
+      >= 1.
   loop: "{{ github_runner_instances }}"
   loop_control:
     label: "{{ item.repo | default('?') }}_{{ item.suffix | default('?') }}"
@@ -35,25 +34,24 @@
          | list | unique | length) == (github_runner_instances | length)
     fail_msg: >-
       github_runner_instances contains a duplicate (repo, suffix) pair.
-      Each instance maps to a unique systemd unit, envfile, and workdir;
-      collisions silently race the same files. Entries: {{ github_runner_instances }}
+      Each instance maps to a unique systemd unit, per-instance dir,
+      and runner name; collisions silently race. Entries:
+      {{ github_runner_instances }}
   tags:
     - github_runner
 
-# Operator-managed long-lived PAT. Required for the ephemeral + JIT
-# model -- every container start mints a single-use JIT config via
-# `gh api /repos/.../actions/runners/generate-jitconfig`, which needs
-# a fine-grained PAT with `Administration: Read and write` on each
-# target repo (Metadata: Read is auto-selected). Actions: Read/write
-# is NOT needed for generate-jitconfig and shouldn't be granted --
-# this PAT is single-purpose. Mint once via GitHub UI (Settings →
-# Developer settings → Fine-grained tokens), select every repo listed
-# in any host's github_runner_instances, then vault into
-# host_vars/<host>.yml as `github_runner_pat: !vault | ...`. Fail
-# loud on missing or empty so the operator sees the actionable cause
-# instead of a confusing downstream "secret data is required" or
-# jinja "undefined" error. Skipped on hosts with no instances (the
-# role is a no-op there).
+# Operator-managed long-lived PAT. Used only at apply time by
+# _register.yml to mint a one-time registration token via
+# `POST /repos/<o>/<r>/actions/runners/registration-token`, which
+# config.sh then consumes to register the runner. Long-lived
+# .credentials get written to /opt/actions-runner/<inst>/ and serve
+# every subsequent run.sh launch -- the PAT itself never crosses
+# apply-time. Fine-grained PAT with `Administration: Read and write`
+# on each target repo (Metadata: Read auto-selected). Mint once via
+# GitHub UI, vault into host_vars/<host>.yml as `github_runner_pat:
+# !vault | ...`. Fail loud on missing/empty so the operator sees the
+# actionable cause instead of a 401 buried in `_register.yml`'s
+# config.sh stderr.
 - name: Assert github_runner_pat is vaulted in host_vars
   when: github_runner_instances | length > 0
   assert:
@@ -68,17 +66,12 @@
   tags:
     - github_runner
 
-# jq + curl are consumed by github_runner_jit_mint (the ExecStartPre
-# helper that mints a single-use JIT registration on the host so the
-# PAT never enters the runner container). python3-tomli supplies the
-# `tomli` module used by the storage.conf validate below (stdlib's
-# tomllib only landed in Python 3.11; jammy ships 3.10). apt-idempotent
-# on hosts that already have any of these via other roles.
-- name: Install host dependencies for JIT mint and config validation
+# python3-tomli for the storage.conf TOML validate below (stdlib
+# tomllib only landed in 3.11; jammy ships 3.10). apt-idempotent on
+# hosts that already have it from another role.
+- name: Install host dependencies for github_runner
   apt:
     pkg:
-      - curl
-      - jq
       - python3-tomli
     install_recommends: false
     cache_valid_time: 3600
@@ -86,6 +79,12 @@
   tags:
     - github_runner
 
+# kvm in extra_groups so workflow-spawned `container:` blocks that
+# claim /dev/kvm via `--device /dev/kvm --group-add 1` (the literal
+# 1 is the container-side gid mapped from host kvm via subgid
+# passthrough -- see CLAUDE.md "Why the literal `1`") can actually
+# read the device. The runner process itself doesn't need /dev/kvm,
+# only the qemu-spawning sibling containers do.
 - name: Set up github_runner system user, group, and config dir
   import_role:
     name: service_user
@@ -95,44 +94,23 @@
       name: github_runner
       home: /mnt/scratch/github_runner
       createhome: true
-      # Ephemeral runners hold no persistent state under /mnt/services;
-      # see the "Create top-level scratch directory" task comment below.
-      # Suppress the helper's default config-dir creation so an empty
-      # /mnt/services/github_runner doesn't get stamped + zfs-replicated.
+      # No persistent state under /mnt/services -- the runner's data
+      # (per-instance dirs at /opt/actions-runner/<inst>/, workdirs at
+      # /mnt/scratch/github_runner/workdir_<inst>/) lives elsewhere by
+      # design. Suppress the helper's default config-dir creation.
       config_dir: false
-      # 0755 (vs Ubuntu's HOME_MODE=0750 default): the runner container
-      # bind-mounts /mnt/scratch/github_runner/workdir_<inst>/ from
-      # under $HOME, and crun stats the bind-mount source from a
-      # transient pre-uidmap userns state where the process is
-      # "nobody" -- a 0750 home dir blocks traversal at that moment
-      # and the container fails with EACCES on stat. 0755 keeps the
-      # path traversable; per-file modes inside still gate actual
-      # read access.
       home_mode: "0755"
-      # kvm so sibling workflow containers (spawned by the in-container
-      # runner via the bind-mounted rootless podman socket) can claim
-      # /dev/kvm via --device + --group-add 1. The runner container
-      # itself doesn't need /dev/kvm -- it just orchestrates -- but the
-      # qemu-running siblings do. See CLAUDE.md "The runner uses
-      # --device /dev/kvm --group-add 1" for the userns wiring.
       extra_groups: [ kvm ]
   tags:
     - github_runner
 
-# Top-level scratch dir shared by all instances. Per-instance workdirs
-# are created inside _register.yml. No /mnt/services/github_runner
-# anymore -- ephemeral runners hold no persistent state on disk; the
-# runner binaries live in the image at /actions-runner.
+# Top-level scratch dir consumed by workflow container.options for the
+# CI test harness's --workdir-parent. Each cell mounts a unique subdir
+# embedding github.run_id + strategy.job-index so concurrent test cells
+# don't share workspace parents. tmpfiles.d below reaps idle subdirs.
 - name: Create top-level scratch directory
   when: not (ansible_check_mode and github_runner_user.changed)
   file:
-    # Bind-mounted into sibling workflow containers via the workflow's
-    # container.options for the harness's --workdir-parent. Lives on
-    # /mnt/scratch (terabytes) instead of the container's writable
-    # overlay so concurrent qcow2 overlays + role checkouts can't
-    # ENOSPC the cell. Each cell mounts a unique subdir underneath so
-    # two concurrent cells can't see each other; the tmpfiles.d entry
-    # below reaps the per-cell subdirs after they idle.
     dest: /mnt/scratch/github_runner/scratch
     state: directory
     owner: github_runner
@@ -142,25 +120,11 @@
   tags:
     - github_runner
 
-# actions/runner install on the host (not baked into the runner image).
-# This is the path-mirror anchor that makes `container:` workflows
-# work over DooD: actions/runner spawns docker create with -v
-# /opt/actions-runner/<inst>/externals:/__e:ro for the workflow
-# container, and docker (running on the host via the bind-mounted
-# socket) needs that path to resolve on the host's filesystem -- not
-# just inside the runner container. So we extract the canonical tree
-# here and let github_runner_sync_root hard-link it into a per-instance
-# subdir at /opt/actions-runner/<inst>/ that gets bind-mounted into the
-# corresponding container at the same path.
-#
-# Owned by github_runner so the runner can read everything via the
-# +0 uidmap override (in-container uid 0 → host github_runner). With
-# the per-instance hard links populated by sync_root, in-container
-# writes to .runner / .credentials / _diag/ land at
-# /opt/actions-runner/<inst>/ -- not the canonical root -- so multiple
-# instances don't race the same state files. See the unit template's
-# --volume comment and files/github_runner_sync_root.sh for the full
-# story.
+# Canonical actions/runner install on the host. Per-instance dirs at
+# /opt/actions-runner/<inst>/ are hard-link mirrors (cp -al, see
+# _register.yml) -- inode sharing keeps the 500MB tree at 1x across N
+# instances. Owned by github_runner so the runner process (and the
+# config.sh invocation in _register.yml) can read everything.
 - name: Create /opt/actions-runner
   when: not (ansible_check_mode and github_runner_user.changed)
   file:
@@ -173,9 +137,9 @@
   tags:
     - github_runner
 
-# checksum: in get_url drives re-download on version bump (sha
-# mismatch with existing tarball forces fetch); also surfaces
-# tampering since the URL is plain https.
+# checksum: in get_url drives re-download on version bump (sha mismatch
+# with existing tarball forces fetch); also surfaces tampering since
+# the URL is plain https.
 - name: Download actions-runner tarball
   when: not (ansible_check_mode and github_runner_user.changed)
   get_url:
@@ -190,14 +154,11 @@
   tags:
     - github_runner
 
-# Extract is gated solely on tarball-just-downloaded. A prior
-# interrupted apply (crash between get_url and unarchive) self-heals
-# on the next apply: get_url's `checksum:` re-fires on a sha mismatch,
-# so a partial download is detected and re-fetched, and the extract
-# then fires unconditionally on tarball.changed. Re-extracting on
-# top of an existing install overwrites the binaries in place
-# (actions/runner's tarball flattens into the dest dir with no
-# top-level subdir), so it's safe to re-run.
+# Re-extracting on top of an existing install overwrites binaries in
+# place (the tarball flattens into the dest dir with no top-level
+# subdir). Per-instance hard links to the OLD inodes still point at the
+# OLD binaries until _register.yml's refresh task fires; the same
+# github_runner_extract.changed fact drives that refresh.
 - name: Extract actions-runner tarball
   when:
     - not (ansible_check_mode and github_runner_user.changed)
@@ -209,24 +170,17 @@
     owner: github_runner
     group: github_runner
   become: true
-  # Each running container :O-overlays /opt/actions-runner at start, so
-  # it holds open-fd snapshots of the OLD tree; the new binaries don't
-  # propagate until the container restarts. _register.yml's restart
-  # trigger consumes this fact to bounce every instance on a version bump.
   register: github_runner_extract
   tags:
     - github_runner
 
-# systemd-tmpfiles --clean runs daily via systemd-tmpfiles-clean.timer
-# and applies the rule on each tick. The rule walks the test scratch
-# tree, deletes files >1d stale, removes empty old subdirs as a side
-# effect -- so a completed or crashed test cell's per-cell tree gets
-# fully reaped once its contents are >1d old. The 1d age is comfortably
-# beyond the harness's 1500s timeout, so a live cell can't be touched.
-# Also carries the L rule that points /var/run/docker.sock at
-# github_runner's rootless podman socket -- see the template's rationale
-# block for why that's load-bearing for `container:` workflows.
-- name: Install tmpfiles.d entry for test scratch
+# tmpfiles.d entry: reaps idle test-cell scratch dirs (1d), workflow
+# _temp (7d), _actions cache (30d). Also carries the L rule that points
+# /var/run/docker.sock at github_runner's rootless podman socket --
+# load-bearing for workflow `container:` blocks where actions/runner
+# asks the host podman to bind /var/run/docker.sock into sibling job
+# containers (statfs on the host side needs the path to resolve).
+- name: Install tmpfiles.d entry
   when: not (ansible_check_mode and github_runner_user.changed)
   template:
     src: github_runner.tmpfiles.conf.j2
@@ -235,9 +189,7 @@
     group: root
     mode: "0644"
     backup: true
-    # Catches typos in the rule line; --create exits non-zero on parse
-    # failure. --dry-run was added in systemd 250 -- jammy ships 249
-    # so we drop the flag there.
+    # --dry-run was added in systemd 250; jammy ships 249.
     validate: >-
       systemd-tmpfiles
       {{ '--dry-run' if ansible_distribution_release not in ['jammy'] else '' }}
@@ -247,11 +199,8 @@
     - github_runner
 
 # Immediate-apply companion to the L rule above. tmpfiles-setup.service
-# only re-runs the rule at boot (and the rule itself is a no-op for an
-# already-correct symlink under --create semantics), so a freshly-
-# applied role without this task wouldn't materialise the symlink until
-# the next reboot. force: true so a stale or differently-targeted prior
-# symlink gets fixed in place.
+# only re-applies at boot, so a freshly-applied role without this task
+# wouldn't materialise the symlink until the next reboot.
 - name: Symlink /var/run/docker.sock to github_runner's rootless podman socket
   when: not (ansible_check_mode and github_runner_user.changed)
   file:
@@ -281,13 +230,9 @@
     - github_runner
 
 # storage.conf for github_runner's rootless podman, which serves the
-# DooD socket the runner container bind-mounts. Sibling workflow
-# containers (spawned by `container:` blocks via that socket) run
-# under this storage tree, NOT the runner container itself -- the
-# runner runs under root/system podman per the unit template's
-# rationale block. So these knobs only matter for sibling containers
-# now; the runner image is pulled and stored under /var/lib/
-# containers/storage by root podman, untouched by this file.
+# DooD socket workflow `container:` blocks use. The four knobs are all
+# load-bearing for the rootless + uidmapped sibling-container model on
+# jammy's podman 3.4 / crun 0.17 -- see comments below for each.
 - name: Create rootless containers config directory
   when: not (ansible_check_mode and github_runner_user.changed)
   file:
@@ -300,51 +245,32 @@
   tags:
     - github_runner
 
-# Four overlay-storage knobs, all load-bearing for the rootless +
-# uidmapped sibling-container model on this jammy podman (3.4 /
-# crun 0.17):
-#
 # * rootless_storage_path -- restate the system-config value because
 #   podman 4.9 treats this user file as a full REPLACEMENT, not a
-#   merge. Without it the user file's xino=off addition silently
-#   strips the system-set rootless_storage_path and graphroot falls
-#   back to XDG_DATA_HOME on ZFS -- where native kernel overlay
-#   produces ESTALE during dpkg unpacks (the linux-libc-dev
-#   netfilter-headers case is the canonical victim).
+#   merge. Without it the xino=off addition silently strips the
+#   system-set rootless_storage_path and graphroot falls back to
+#   XDG_DATA_HOME on ZFS, where native kernel overlay produces ESTALE
+#   during dpkg unpacks.
 #
-# * driver = "overlay" -- silences the cosmetic "auto-picked a
-#   driver" warning, AND fixes a load-bearing diagnostic regression
-#   in this podman version: the same warning re-emits during
-#   storage's ID-mapped-copy step, hijacks the error chain, and the
-#   real cause of any copy failure ends up replaced with the warning
-#   text. With the driver pinned, the warning never fires and the
-#   actual error surfaces. On a brand-new host this initialises
-#   cleanly. On an existing host whose DB was first populated with
-#   the driver implicit, podman trips a "database graph driver \"\"
-#   does not match \"overlay\"" mismatch -- the one-time fix is to
-#   sudo -u github_runner podman system reset --force (drop the pin
-#   first if reset can't read the DB), then re-apply with the pin.
+# * driver = "overlay" -- silences the cosmetic "auto-picked a driver"
+#   warning AND fixes a load-bearing diagnostic regression where the
+#   warning re-emits during storage's ID-mapped-copy step and hijacks
+#   the error chain. On a new host this initialises cleanly; on an
+#   existing host whose DB was first populated with the driver
+#   implicit, podman trips a "database graph driver mismatch" -- fix
+#   is `podman system reset --force` then re-apply with the pin.
 #
 # * mountopt = "nodev,xino=off" -- silence the kernel's "overlayfs:
 #   fs ... does not support file handles, falling back to xino=off"
-#   printk that fires ~160x/day during rootless CI churn. The
-#   fallback is unavoidable rootless (CAP_DAC_READ_SEARCH isn't
-#   held in init userns, so the kernel disables file-handle support
-#   regardless of fs); pre-declaring xino=off makes it skip the
-#   probe -- same end state, no printk. nodev preserves the
-#   upstream default; userxattr is force-added by podman internally
-#   for rootless, so we don't restate it.
+#   printk that fires ~160x/day during rootless CI churn. The fallback
+#   is unavoidable rootless; pre-declaring xino=off skips the probe.
 #
 # * ignore_chown_errors = "true" -- needed for uidmapped sibling
 #   containers' ID-mapped layer copy. This podman lacks kernel
 #   idmapped-overlay support (needs 5.19+; jammy is 5.15) and falls
-#   back to a physical chown'd copy of each layer. Files in any
-#   sibling image with file capabilities can't have their
-#   security.capability xattr restored in the rootless namespace,
-#   and without this knob the copy aborts with EPERM. With it, the
-#   offending files keep their image-side ownership (harmless at
-#   runtime; the sibling container's in-namespace root owns
-#   everything via its own +0 uidmap override).
+#   back to a chown'd physical copy. Files with file capabilities
+#   can't have their security.capability xattr restored in the
+#   rootless namespace; without this knob the copy aborts EPERM.
 - name: Configure rootless overlay storage opts
   when: not (ansible_check_mode and github_runner_user.changed)
   copy:
@@ -360,10 +286,8 @@
     group: github_runner
     mode: "0644"
     backup: true
-    # podman silently falls back to defaults on parse failure -- exactly
-    # the failure mode CLAUDE.md's "validate: parses the rendered file"
-    # policy is designed to catch, and these four overlay knobs are all
-    # load-bearing. tomli over the stdlib's tomllib because jammy is on
+    # podman silently falls back to defaults on parse failure; validate
+    # catches typos. tomli over stdlib's tomllib because jammy ships
     # Python 3.10.
     validate: python3 -c 'import tomli, sys; tomli.load(open(sys.argv[1], "rb"))' %s
   become: true
@@ -403,34 +327,27 @@
   tags:
     - github_runner
 
-# Host-level PAT secret consumed by every runner container's entrypoint
-# to mint per-start JIT configs. One secret, shared by all instances --
-# the generate-jitconfig API call is scoped per-repo, so the same PAT
-# works for every (repo, suffix) instance on the host. Operator mints
-# the PAT manually (GitHub → Settings → Developer settings → fine-
-# grained tokens; scope = repo + actions:write on the target repos)
-# and vaults the value into host_vars/<host>.yml as github_runner_pat.
-# podman_secret rotates when the data sha changes; the helper exposes
-# github_runner_pat_rotated so _register.yml can restart instances to
-# pick up the new value.
-- name: Create host-level github_runner PAT podman secret
-  when: not (ansible_check_mode and github_runner_user.changed)
-  import_role:
-    name: podman_secret
-    tasks_from: secret
-  vars:
-    podman_secret_args:
-      name: github_runner_pat
-      data: "{{ github_runner_pat }}"
+# Launcher script the templated unit's ExecStart points at. The unit
+# could in principle inline `cd /opt/actions-runner/%i && exec ./run.sh`,
+# but a stable /usr/local/bin path is what makes systemd-analyze verify
+# pass (it substitutes "i" as the placeholder during template
+# verification; a per-instance ExecStart path would fail because
+# /opt/actions-runner/i/run.sh doesn't exist).
+- name: Install github_runner_run launcher script
+  copy:
+    src: github_runner_run.sh
+    dest: /usr/local/bin/github_runner_run
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: sh -n %s
+  become: true
   tags:
     - github_runner
 
-# Install the templated unit into system scope (/etc/systemd/system/),
-# running as root and demoting to github_runner inside the container
-# via the --uidmap=+0:<uid>:1 override. Standard CLAUDE.md pattern,
-# same shape as every other system-scope podman role on this host.
-# Per-instance enablement happens in _register.yml via systemctl on
-# the instantiated name (github_runner@<repo>_<suffix>.service).
+# Install the templated unit into system scope. Per-instance enable
+# happens in _register.yml against the instantiated name.
 - name: Install github_runner@.service template
   import_role:
     name: systemd_unit
@@ -443,96 +360,9 @@
   tags:
     - github_runner
 
-# ExecStartPre helper that hard-links the canonical /opt/actions-runner
-# tree into a per-instance subdir so each runner has its own RUNNER_ROOT
-# for state files (.runner / .credentials* / _diag / run-helper.sh). The
-# unit invokes /usr/local/bin/github_runner_sync_root %i before
-# jit_mint; idempotent on an unchanged tarball, refreshes per-instance
-# hard links on a tarball bump. See the script's docstring for the
-# per-instance-vs-shared and hard-link-vs-symlink rationale.
-- name: Install github_runner_sync_root script
-  copy:
-    src: github_runner_sync_root.sh
-    dest: /usr/local/bin/github_runner_sync_root
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-    validate: bash -n %s
-  become: true
-  tags:
-    - github_runner
-
-# ExecStartPre helper that mints the JIT registration outside the
-# container so the long-lived PAT never crosses the container boundary.
-# The runner unit invokes /usr/local/bin/github_runner_jit_mint %i
-# before podman run; the script reads the PAT podman secret (root-only
-# accessible), POSTs to GitHub's generate-jitconfig, and writes the
-# resulting blob to /run/<unit>/jit, which the container bind-mounts
-# at /run/jit:ro.
-- name: Install github_runner_jit_mint script
-  copy:
-    src: github_runner_jit_mint.sh
-    dest: /usr/local/bin/github_runner_jit_mint
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-    validate: bash -n %s
-  become: true
-  tags:
-    - github_runner
-
-# Idle-runner image rotation. --pull on the unit (default 'missing')
-# handles bootstrap on first start, but an ephemeral runner only
-# restarts after running a job -- a runner that registered hours ago
-# and has been listening for jobs ever since stays on the stale image
-# until either a job lands on it or this timer rotates it. The script
-# refreshes the local store via `podman pull` and restarts only idle
-# stale instances (Runner.Worker absence in the container process tree
-# is the busy/idle signal); mid-job instances pick up the new image
-# naturally on their next respawn.
-- name: Install github_runner_image_rotate script
-  copy:
-    src: github_runner_image_rotate.sh
-    dest: /usr/local/bin/github_runner_image_rotate
-    owner: root
-    group: root
-    mode: "0755"
-    backup: true
-    validate: bash -n %s
-  become: true
-  tags:
-    - github_runner
-
-# 5-minute cadence so a fresh runner-image.yml build propagates to
-# idle runners within a few minutes -- short enough that an operator
-# rebuilding the image and then dispatching another workflow usually
-# lands on the new image. monitor: true with frequency: hourly: a
-# missed tick is cheap (rotation just lags by 5 more minutes), but a
-# chronic failure mode (nexus auth drift, podman API change) is
-# invisible without netdata's systemd_timers collector; the overdue
-# threshold (2 * 3600s = 2h) is loose enough that occasional misses
-# don't page, tight enough that a wedged script alerts before the
-# next ansible apply would.
-- name: Schedule github_runner_image_rotate timer
-  import_role:
-    name: systemd_timer
-    tasks_from: install
-  vars:
-    systemd_timer_args:
-      name: github_runner_image_rotate
-      description: Rotate idle github_runner instances onto the latest runner image
-      on_calendar: "*:0/5:00"
-      exec_start: /usr/local/bin/github_runner_image_rotate
-      monitor: true
-      frequency: hourly
-  tags:
-    - github_runner
-
-# Per-instance envfile + container deploy.
-# include_tasks (not include_role + loop) so vars: re-evaluate per
-# iteration -- see memory feedback_include_role_loop_vars for the trap.
+# Per-instance configure + enable. include_tasks (not include_role +
+# loop) so vars: re-evaluate per iteration -- see memory
+# feedback_include_role_loop_vars for the trap.
 - name: Register and enable github_runner instances
   include_tasks:
     file: _register.yml
@@ -546,19 +376,16 @@
   tags:
     - github_runner
 
-# Reconcile orphan instances: an operator who removes an entry from
+# Reconcile orphan instances. An operator removing an entry from
 # github_runner_instances expects the role to stop+disable the
-# corresponding unit and remove its envfile -- otherwise the orphan
-# runner keeps polling GitHub on a now-unintended label until manual
-# intervention, and `journalctl -u github_runner@<orphan>.service`
-# accumulates noise. Workdirs are intentionally left in place so a
-# repurposed (repo, suffix) pair benefits from the cached
-# _work/_actions; remove manually if disk pressure matters.
+# corresponding unit and remove the per-instance dir.
 #
-# Dangling registrations remain on GitHub's runner list as offline
-# after we SIGKILL a mid-job runner (the ephemeral self-deregister
-# only fires on clean exit). They harmlessly age out; periodic
-# `gh api -X DELETE` cleanup if they get noisy.
+# Dangling GitHub-side registrations remain as offline on the
+# repository's runner list (config.sh remove would need a removal
+# token; not bothering -- they age out, and `gh api -X DELETE` cleans
+# manually if they get noisy). Workdirs under /mnt/scratch stay so a
+# repurposed (repo, suffix) pair benefits from the cached _work /
+# _actions; manual rm if disk pressure matters.
 - name: Compute desired github_runner instance ids
   set_fact:
     github_runner_desired_iids: >-
@@ -568,12 +395,13 @@
   tags:
     - github_runner
 
-- name: Find installed github_runner envfiles
+- name: Find installed github_runner per-instance dirs
   find:
-    paths: /etc/default
-    patterns: 'github_runner@*'
-    file_type: file
-  register: github_runner_envfiles_installed
+    paths: /opt/actions-runner
+    patterns: '*_*'
+    file_type: directory
+    recurse: false
+  register: github_runner_dirs_installed
   become: true
   tags:
     - github_runner
@@ -581,9 +409,8 @@
 - name: Compute orphan github_runner instance ids
   set_fact:
     github_runner_orphan_iids: >-
-      {{ github_runner_envfiles_installed.files
+      {{ github_runner_dirs_installed.files
          | map(attribute='path') | map('basename')
-         | map('regex_replace', '^github_runner@', '')
          | reject('in', github_runner_desired_iids)
          | list }}
   tags:
@@ -600,9 +427,9 @@
   tags:
     - github_runner
 
-- name: Remove orphan github_runner envfiles
+- name: Remove orphan github_runner per-instance dirs
   file:
-    path: "/etc/default/github_runner@{{ item }}"
+    path: "/opt/actions-runner/{{ item }}"
     state: absent
   loop: "{{ github_runner_orphan_iids }}"
   become: true

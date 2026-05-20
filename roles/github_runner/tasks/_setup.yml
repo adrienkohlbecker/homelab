@@ -1,27 +1,14 @@
-# podman comes in via the podman/install import at the bottom of this
-# file (noble-backported version, prod-shape storage layout). uidmap
-# is a Depends of noble's podman 4.9 (it was only a Recommends of
-# jammy's 3.4, which is why an earlier version of this file installed
-# it explicitly), so it lands automatically alongside the apt install
-# in podman/install. Same goes for catatonit (podman's --init PID-1
-# zombie reaper) -- it's a Recommends of podman, and roles/podman/
-# tasks/install.yml uses the default install_recommends=true so it
-# rides in with podman.
+# Test-harness setup for roles/github_runner. The role no longer ships
+# a runner container image (the runner runs directly as the
+# github_runner system user); this file's job is just to bring up the
+# rootless-podman prerequisites and the kvm/subgid passthrough fixture
+# that prod uses for workflow `container:` blocks.
 
-# In production, host-wide subuid/subgid allocation happens in the
-# `subid` role (driven by host_vars `subid_users`). The role-only test
-# harness reuses the same role with a minimal input so subuid/subgid
-# layout matches prod's shape -- without an allocation, rootless podman
-# refuses to start with "no subuid ranges found for user github_runner".
-#
-# Synthesize a kvm group on the test VM (the box image has no /dev/kvm
-# so there's no upstream-managed kvm group either) so we can mirror
-# prod's subid_extra_subgid_groups passthrough. CLAUDE.md "Why the
-# literal `1`" calls out that rootless podman builds the container
-# gidmap shortest-range-first from /etc/subgid, and the literal `1` on
-# the unit's --group-add depends on that ordering staying stable when
-# a second single-id range gets added later. _verify.yml asserts the
-# expected /etc/subgid shape so a regression on that chain is loud.
+# Synthesize a kvm group on the test VM (box has no /dev/kvm so there
+# is no upstream-managed kvm group). The role's service_user_args adds
+# github_runner to kvm so workflow-spawned sibling containers that
+# claim /dev/kvm (--device + --group-add 1) keep working under the
+# rootless podman serving the DooD socket.
 - name: _setup | Synthesize a kvm group for the subid passthrough test
   group:
     name: kvm
@@ -29,6 +16,13 @@
     system: true
   become: true
 
+# Apply subid with the same shape prod uses: a base 65536 range plus a
+# 1-count range for the kvm gid. CLAUDE.md "Why the literal `1`" calls
+# out that rootless podman builds the container gidmap shortest-range-
+# first from /etc/subgid, so the workflow's --group-add 1 expects the
+# kvm-gid range to land at container gid 1. _verify.yml below asserts
+# the expected /etc/subgid shape so a regression on the ordering
+# invariant fails loud.
 - name: _setup | Apply subid role for github_runner
   import_role:
     name: subid
@@ -40,52 +34,11 @@
 
 # Run the podman role's install.yml so the test VM gets the same
 # storage layout prod does: rpool/podman zvol mounted at
-# /var/lib/containers, /var/lib/containers/rootless created with
-# sticky-bit perms, /etc/containers/storage.conf written with the right
-# graphroot. Mirroring just the rootless mkdir isn't enough -- under
-# the new design the role calls podman_secret which exercises the full
-# rootless storage stack, and any drift between prod's perms/mount
-# layout and the test's flat-rootfs is what produced the previous
-# "mkdir /var/lib/containers/rootless: permission denied" failure.
+# /var/lib/containers, /var/lib/containers/rootless with sticky-bit
+# perms, /etc/containers/storage.conf with the right graphroot. The
+# role's storage.conf for github_runner (under
+# /mnt/scratch/github_runner/.config/) sits on top of this layout.
 - name: _setup | Install podman with prod-shape storage layout
   import_role:
     name: podman
     tasks_from: install
-
-# Under qemu_test the runner doesn't register against GitHub (no
-# fixture exists for github.com's runner-registration API). The role's
-# main.yml gates the registration + service-start tasks on `qemu_test`,
-# so this _setup.yml only needs to bring up the rootless-podman
-# prerequisites. _verify.yml drives a full unit-start smoke against a
-# stub image (built below) + a stub jit_mint, so the unit template's
-# bind-mount / uidmap / healthcheck wiring gets covered without needing
-# a real PAT.
-
-# Build a stub runner image for the _verify smoke. Same entrypoint
-# contract as the prod image (reads /run/jit, expects
-# /opt/actions-runner bind-mount) but no GitHub registration, so we
-# can exercise the full ExecStart chain without a real PAT.
-# debian-slim-based so the renamed-Runner.Listener trick (cp the
-# sleep binary so /proc/comm matches the unit's pgrep healthcheck)
-# works -- see the Containerfile for why alpine doesn't. Tagged
-# localhost/runner_test_stub:latest, then re-tagged as
-# nexus.lab.fahm.fr/homelab/runner:latest in _verify after the rotate
-# test (which mutates that tag).
-- name: _setup | Stage runner_test stub image build context
-  copy:
-    src: runner_test_image/
-    dest: /tmp/runner_test_image/
-    mode: preserve
-  become: true
-
-- name: _setup | Pre-pull debian:bookworm-slim for the stub-image build
-  command: podman pull docker.io/library/debian:bookworm-slim
-  changed_when: false
-  become: true
-
-- name: _setup | Build runner_test_stub image
-  command:
-    cmd: podman build -t localhost/runner_test_stub:latest -f Containerfile .
-    chdir: /tmp/runner_test_image
-  changed_when: false
-  become: true
