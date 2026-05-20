@@ -374,10 +374,20 @@ authelia_oidc_clients:
     authorization_policy: one_factor
     redirect_uris:
       - 'https://minio.{{ inventory_hostname }}.{{ domain }}/oauth_callback'
+  - client_id: paperless
+    client_name: Paperless
+    # Same "changeme" pbkdf2 hash as the minio test client. Sharing
+    # the plaintext across test clients is fine -- the box VM is
+    # ephemeral and _verify never completes a real handshake.
+    client_secret: '$pbkdf2-sha512$310000$JURoTanVWouRkvJ.Tyml1A$B4DZyqy25cNbFfwFiPMyAdWcuxiELOBAlH0NfQSxB9jgDTQXiyBIMsFY2Z5I3XO5ItLH1pP5C5ujKja71Bqoww'
+    authorization_policy: one_factor
+    redirect_uris:
+      - 'https://paperless.{{ inventory_hostname }}.{{ domain }}/accounts/oidc/authelia/login/callback/'
 
-# Plaintext OIDC client secret handed to the MinIO consumer role.
+# Plaintext OIDC client secrets handed to consumer roles.
 # Pairs with the pbkdf2 hash above; rotate both halves together.
 minio_oidc_client_secret: changeme
+paperless_oidc_client_secret: changeme
 
 # Test-fixture user. Hash is for the password "authelia" -- the
 # canonical example hash from Authelia's docs. Tracked plaintext
