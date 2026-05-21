@@ -1,55 +1,63 @@
-# Pre-reboot verification only. The capture kernel doesn't exist
-# until the host boots with crashkernel= reserved, so we can't
-# assert kdump-tools.service is active or /proc/vmcore-readable yet.
-# We assert the configured state instead — sysctls live, package in
-# place, USE_KDUMP=1 set, ZBM cmdline carries crashkernel=, reboot
-# requested.
-
-# arm64 jammy GA has no NMI watchdog so /proc/sys/kernel/hardlockup_panic
-# is absent and main.yml skips it. Mirror that here: only verify the
-# sysctls the running kernel actually exposes.
-- name: _verify | Detect available lockup-panic sysctls
-  stat:
-    path: /proc/sys/kernel/{{ item }}
-  loop:
-    - hardlockup_panic
-    - softlockup_panic
-  register: kdump_verify_lockup_sysctls
-  become: true
-
-- name: _verify | Lockup panic sysctls are set to 1
-  command: sysctl -n kernel.{{ item.item }}
-  register: kdump_verify_lockup
-  changed_when: false
-  failed_when: kdump_verify_lockup.stdout | trim != '1'
-  loop: '{{ kdump_verify_lockup_sysctls.results | selectattr("stat.exists") }}'
-  loop_control:
-    label: 'kernel.{{ item.item }}'
-  become: true
-
-- name: _verify | Kdump-tools package installed
-  command: dpkg -s kdump-tools
-  register: kdump_verify_pkg
-  changed_when: false
-  failed_when: "'Status: install ok installed' not in kdump_verify_pkg.stdout"
-  become: true
-
-- name: _verify | USE_KDUMP enabled in /etc/default/kdump-tools
-  command: grep -E '^USE_KDUMP=1$' /etc/default/kdump-tools
-  changed_when: false
-  become: true
+# _verify is contract-against-other-roles only. The pre-reboot state
+# assertions (USE_KDUMP=1, package installed, sysctls live) would be
+# tautologies — main.yml just wrote them in the same play. What's
+# worth verifying:
+#   (a) the cross-role contract with zfsbootmenu / grub.d — did the
+#       crashkernel= write thread the parameter onto the next-boot
+#       config?
+#   (b) post-reboot end-state — did the bootloader honor the cmdline,
+#       did the capture kernel kexec-load, did kdump-tools.service
+#       come up clean?
+#
+# Reboot pattern mirrors roles/console/tasks/_verify.yml:18-33 — the
+# aarch64 packer image bypasses ZBM via a baked-at-image-build-time
+# EFI-stub cmdline, so the ZBM crashkernel= write wouldn't reach the
+# running kernel after reboot. Skip the post-reboot block there; the
+# cmdline-source checks still prove the role wrote the next-boot
+# config correctly.
 
 - name: _verify | ZBM commandline includes crashkernel
-  when: zfs_root
+  when: zfs_root and not grub_bootloader
   command: zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT
   register: kdump_verify_zbm_cmdline
   changed_when: false
   failed_when: "'crashkernel=' not in kdump_verify_zbm_cmdline.stdout"
   become: true
 
-- name: _verify | Reboot was requested
-  stat:
-    path: /var/run/reboot-required
-  register: kdump_verify_reboot_flag
-  failed_when: not kdump_verify_reboot_flag.stat.exists
+- name: _verify | GRUB cmdline file includes crashkernel
+  when: grub_bootloader
+  slurp:
+    src: /etc/default/grub.d/99-kdump.cfg
+  register: kdump_verify_grub_cfg
+  failed_when: "'crashkernel=' not in (kdump_verify_grub_cfg.content | b64decode)"
+  become: true
+
+- name: _verify | Reboot to exercise crashkernel reservation
+  when: ansible_architecture != 'aarch64'
+  reboot:
+    reboot_timeout: 600
+  become: true
+
+- name: _verify | crashkernel reservation is non-zero post-reboot
+  when: ansible_architecture != 'aarch64'
+  command: cat /sys/kernel/kexec_crash_size
+  register: kdump_verify_kexec_size
+  changed_when: false
+  failed_when: (kdump_verify_kexec_size.stdout | trim | int) == 0
+  become: true
+
+- name: _verify | kdump-tools.service is active post-reboot
+  when: ansible_architecture != 'aarch64'
+  command: systemctl is-active kdump-tools
+  register: kdump_verify_active
+  changed_when: false
+  failed_when: kdump_verify_active.stdout | trim != 'active'
+  become: true
+
+- name: _verify | kdump-config show reports ready to kdump
+  when: ansible_architecture != 'aarch64'
+  command: kdump-config show
+  register: kdump_verify_config
+  changed_when: false
+  failed_when: "'ready to kdump' not in kdump_verify_config.stdout"
   become: true
