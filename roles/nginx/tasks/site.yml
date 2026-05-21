@@ -63,6 +63,34 @@
 #                             `$request_safe` redaction map both hardcode
 #                             `auth_token`. To use a different param name
 #                             you must update both maps in nginx.conf.j2.
+#   upstream_authorization    optional dict {authelia_user: header_value};
+#                             when set (and `auth: required` is on) nginx
+#                             injects a per-user `Authorization` header into
+#                             the upstream proxy_pass, mapped from
+#                             `$authelia_user`. Renders an `if ($authelia_user
+#                             = "<u>") { set $upstream_auth "<header>"; }`
+#                             sequence inside `location /` (the `if + set`
+#                             pattern is one of the safe-by-design "evil if"
+#                             exceptions; an http-scope `map` would error out
+#                             because $authelia_user is location-scoped via
+#                             auth_request_set). Unknown user falls through
+#                             to empty, nginx 1.13+ omits the header, and
+#                             the upstream returns 401 -> operator can sign
+#                             in with the upstream's native creds (break-
+#                             glass). Setting this knob ALSO turns on a
+#                             bypass-on-Authorization shortcut inside
+#                             `/internal/authelia`: requests that already
+#                             carry their own Authorization header skip the
+#                             Authelia subrequest (return 204), and since
+#                             $authelia_user is empty for them the if-chain
+#                             above never matches -- the client's original
+#                             header passes through unmodified. Use this to
+#                             let one vhost serve both browser users
+#                             (forward-auth + injected token) and machine
+#                             clients (native token, no cookie). Implies
+#                             trust in any presented Authorization -- only
+#                             safe when the upstream itself validates the
+#                             credential.
 #   server_conf               optional snippet inserted in the server block
 #   location_conf             optional snippet inserted in the / location block
 #
