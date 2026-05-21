@@ -29,9 +29,6 @@
           transcoding driver packages (mesa-va-drivers,
           intel-media-va-driver) — they ship a sysusers.d that owns
           this group — and re-run.
-    - name: Capture render gid
-      set_fact:
-        jellyfin_render_gid: "{{ getent_group.render[1] | int }}"
   tags:
     - jellyfin
 
