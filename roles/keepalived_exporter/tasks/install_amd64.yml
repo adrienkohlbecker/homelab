@@ -19,7 +19,7 @@
     group: root
     include: [ "keepalived_exporter-{{ keepalived_exporter_version }}-amd64/keepalived_exporter" ]
     list_files: true
-    extra_opts: [ --strip-components=1 ]
+    extra_opts: [ --strip-components=1, --no-same-owner ]
   become: true
   register: keepalived_exporter_binary_download
 
