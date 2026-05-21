@@ -12,12 +12,31 @@
   tags:
     - journald_exporter
 
+# Idempotence shortcut: ask the installed binary its version before
+# falling through to get_url's sha256 verify. get_url is already
+# idempotent when the checksum matches, but the probe also catches
+# the "binary on disk but won't exec" failure mode that get_url's
+# sha-only check wouldn't notice (e.g. an interrupted prior download).
+# --version exits 1 and prints to stderr (src/cli/main.rs:eprintln),
+# hence the failed_when:false / stderr lookup.
+- name: Check installed journald-exporter version
+  command: /usr/local/bin/journald-exporter --version
+  register: _jexp_existing
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  become: true
+  tags:
+    - journald_exporter
+
 # Literal .x86_64 access (not [ansible_architecture]) because ansible-core
 # finalizes task args even when `when:` skips the task -- an aarch64 host
 # would trip "no attribute 'aarch64'" at check-mode rendering before the
 # gate can short-circuit. Same pattern as roles/fan2go.
 - name: Download journald-exporter
-  when: ansible_architecture == 'x86_64'
+  when: >-
+    ansible_architecture == 'x86_64'
+    and journald_exporter_version not in (_jexp_existing.stderr | default(''))
   get_url:
     url: "{{ journald_exporter_artifacts.x86_64.url }}"
     checksum: "sha256:{{ journald_exporter_artifacts.x86_64.sha256 }}"
