@@ -162,7 +162,7 @@
   vars:
     systemd_unit_args:
       src: jellyfin.service.j2
-      condition: "{{ not (ansible_check_mode and jellyfin_user.changed) }}"
+      condition: "{{ not (ansible_check_mode and (jellyfin_user.changed or media_group.changed)) }}"
   tags:
     - jellyfin
 
@@ -173,7 +173,7 @@
   vars:
     systemd_unit_args:
       src: jellyfin
-      condition: "{{ not (ansible_check_mode and (jellyfin_service_result.changed or jellyfin_user.changed)) }}"
+      condition: "{{ not (ansible_check_mode and (jellyfin_service_result.changed or jellyfin_user.changed or media_group.changed)) }}"
       restart: "{{ jellyfin_service_result.changed or jellyfin_user.changed or media_group.changed }}"
   tags:
     - jellyfin
