@@ -66,6 +66,22 @@
   tags:
     - kdump
 
+# vmcore is a copy of all kernel-accessible RAM at panic time —
+# in-memory secrets, vault-decrypted vars, TLS keys. Pin the dump
+# directory to root-only so a package default drift can't silently
+# widen access.
+- name: Lock down /var/crash permissions
+  when: not (ansible_check_mode and apt_kdump_tools.changed)
+  file:
+    path: /var/crash
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  become: true
+  tags:
+    - kdump
+
 # lineinfile-per-key so future Ubuntu vars added to this file aren't
 # shadowed. Regex anchors on optional `#` + whitespace so a commented
 # default (#USE_KDUMP=0) gets rewritten in place rather than appended
