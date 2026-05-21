@@ -84,11 +84,30 @@
 # until TimeoutStartSec (~90s) and then fails — at first start AND at
 # every reboot if it's left enabled. So we gate the whole systemd_unit
 # invocation on conf.d having a tenant, and explicitly tear down when
-# the last tenant leaves so the unit doesn't auto-start broken.
+# the last tenant leaves so the unit doesn't auto-start broken. The
+# override_keepalived.conf drop-in installed below is belt-and-braces
+# for the same gate at start time.
+- name: Install conf.d-gating drop-in for keepalived.service
+  import_role:
+    name: systemd_unit
+    tasks_from: dropin
+  vars:
+    systemd_unit_args:
+      src: override_keepalived.conf
+      for: keepalived.service
+  tags:
+    - keepalived
+
+# excludes / size: '1' so a zero-byte placeholder (which keepalived's
+# include would still load and then wedge on, since wildcard_match only
+# rejects no-file matches) or a stale `.disabled` rollback fragment
+# doesn't trip the gate.
 - name: Count number of configurations
   find:
     paths: /etc/keepalived/conf.d
     patterns: '*.conf'
+    excludes: ['.*', '*.disabled']
+    size: '1'
   register: keepalived_confs
   become: true
   tags:
@@ -123,13 +142,12 @@
     - keepalived
 
 - name: Disable keepalived service when no tenants
-  when:
-    - keepalived_confs.matched == 0
-    - not (ansible_check_mode and keepalived_apt.changed)
-  systemd:
-    name: keepalived
-    state: stopped
-    enabled: false
-  become: true
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: keepalived.service
+      condition: "{{ keepalived_confs.matched == 0 and not (ansible_check_mode and keepalived_apt.changed) }}"
   tags:
     - keepalived
