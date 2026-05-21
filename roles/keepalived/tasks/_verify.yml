@@ -1,0 +1,116 @@
+# _verify is test-only by contract (runs only under test/testrole.py).
+# It exercises the role's load-bearing invariant — the "no tenants →
+# don't wedge" gate documented in tasks/main.yml's head comment — by
+# asserting the empty-conf.d branch, then dropping a self-contained
+# sentinel fragment and asserting the unit reaches active, then
+# removing the sentinel and asserting the unit returns to
+# stopped+disabled. The sentinel uses interface lo and a TEST-NET-1
+# VIP so no VRRP traffic leaves the host.
+
+- name: _verify | Stat conf.d directory
+  stat:
+    path: /etc/keepalived/conf.d
+  register: _keepalived_confd_stat
+  become: true
+
+- name: _verify | Conf.d dir is 0750 root:root
+  assert:
+    that:
+      - _keepalived_confd_stat.stat.exists
+      - _keepalived_confd_stat.stat.isdir
+      - _keepalived_confd_stat.stat.mode == '0750'
+      - _keepalived_confd_stat.stat.pw_name == 'root'
+      - _keepalived_confd_stat.stat.gr_name == 'root'
+
+- name: _verify | Slurp override.conf drop-in
+  slurp:
+    src: /etc/systemd/system/keepalived.service.d/override.conf
+  register: _keepalived_dropin
+  become: true
+
+- name: _verify | Drop-in carries the expected ConditionPathExistsGlob
+  assert:
+    that:
+      - "'ConditionPathExistsGlob=/etc/keepalived/conf.d/*.conf' in (_keepalived_dropin.content | b64decode)"
+
+# Branch 1: empty conf.d → unit stopped + disabled (the role's previous
+# converge left it this way; testrole.py's box fixture has no tenant).
+- name: _verify | Empty-conf.d branch — is-active
+  command: systemctl is-active keepalived
+  register: _keepalived_is_active_empty
+  changed_when: false
+  failed_when: _keepalived_is_active_empty.stdout != 'inactive'
+  become: true
+
+- name: _verify | Empty-conf.d branch — is-enabled
+  command: systemctl is-enabled keepalived
+  register: _keepalived_is_enabled_empty
+  changed_when: false
+  failed_when: _keepalived_is_enabled_empty.stdout not in ['disabled', 'masked']
+  become: true
+
+# Branch 2: drop a self-contained sentinel fragment (loopback interface,
+# TEST-NET-1 VIP — never collides with anything on prod) and re-run the
+# role. The role's enable path should take the unit to active.
+- name: _verify | Drop sentinel conf.d fragment
+  copy:
+    content: |
+      vrrp_instance _verify_sentinel {
+        state BACKUP
+        interface lo
+        virtual_router_id 250
+        priority 1
+        advert_int 1
+        virtual_ipaddress {
+          192.0.2.250/32
+        }
+      }
+    dest: /etc/keepalived/conf.d/_verify_sentinel.conf
+    owner: root
+    group: root
+    mode: "0640"
+  become: true
+
+- name: _verify | Re-run keepalived role to enable+start
+  import_role:
+    name: keepalived
+
+- name: _verify | Populated-conf.d branch — is-active
+  command: systemctl is-active keepalived
+  register: _keepalived_is_active_pop
+  changed_when: false
+  failed_when: _keepalived_is_active_pop.stdout != 'active'
+  become: true
+
+- name: _verify | Populated-conf.d branch — is-enabled
+  command: systemctl is-enabled keepalived
+  register: _keepalived_is_enabled_pop
+  changed_when: false
+  failed_when: _keepalived_is_enabled_pop.stdout != 'enabled'
+  become: true
+
+# Branch 3: remove the sentinel and re-run; the disable branch should
+# return the unit to stopped+disabled.
+- name: _verify | Remove sentinel fragment
+  file:
+    path: /etc/keepalived/conf.d/_verify_sentinel.conf
+    state: absent
+  become: true
+
+- name: _verify | Re-run keepalived role to exercise stop branch
+  import_role:
+    name: keepalived
+
+- name: _verify | Post-removal — is-active
+  command: systemctl is-active keepalived
+  register: _keepalived_is_active_after
+  changed_when: false
+  failed_when: _keepalived_is_active_after.stdout != 'inactive'
+  become: true
+
+- name: _verify | Post-removal — is-enabled
+  command: systemctl is-enabled keepalived
+  register: _keepalived_is_enabled_after
+  changed_when: false
+  failed_when: _keepalived_is_enabled_after.stdout not in ['disabled', 'masked']
+  become: true
