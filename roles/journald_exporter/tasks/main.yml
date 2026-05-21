@@ -64,7 +64,6 @@
     group: root
     mode: "0600"
   become: true
-  register: journald_exporter_key_written
   tags:
     - journald_exporter
 
@@ -84,6 +83,12 @@
   tags:
     - journald_exporter
 
+# Restart trigger does NOT include the key file: upstream's
+# --key-dir is inotify-watched (installation.md "The key directory
+# is watched, so new API keys can be added and removed without
+# having to restart the server"), so a rotation propagates in <1s
+# without dropping the netdata scrape. Only unit-template diffs
+# need a real restart.
 - name: Enable journald_exporter service
   when: ansible_architecture == 'x86_64'
   import_role:
@@ -93,7 +98,7 @@
     systemd_unit_args:
       src: journald-exporter
       condition: "{{ not (ansible_check_mode and journald_exporter_service_result.changed) }}"
-      restart: "{{ journald_exporter_service_result.changed or journald_exporter_key_written.changed }}"
+      restart: "{{ journald_exporter_service_result.changed }}"
   tags:
     - journald_exporter
 
