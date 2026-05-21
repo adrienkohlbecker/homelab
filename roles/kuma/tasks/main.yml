@@ -89,7 +89,7 @@
   vars:
     nginx_site_args:
       subdomain: kuma
-      proxy_pass: http://localhost:3001/
+      proxy_pass: http://localhost:{{ service_ports.kuma }}/
       # Kuma has its own admin login (UI-managed sqlite DB), so this
       # adds a second click. Worth it for defense-in-depth.
       auth: required
