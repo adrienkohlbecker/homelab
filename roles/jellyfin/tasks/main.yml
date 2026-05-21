@@ -59,6 +59,7 @@
   become: true
   loop:
     - /mnt/services/jellyfin/data
+    - /mnt/services/jellyfin/data/introskipper
     - /mnt/scratch/jellyfin
     - /mnt/scratch/jellyfin/cache
     - /var/log/jellyfin
@@ -98,16 +99,6 @@
   tags:
     - jellyfin
 
-# Introskipper is an optional plugin; only manage its DB symlink when its
-# data dir is already present.
-- name: Check for introskipper plugin data
-  stat:
-    path: /mnt/services/jellyfin/data/introskipper
-  register: jellyfin_introskipper_dir
-  become: true
-  tags:
-    - jellyfin
-
 # Symlink the SQLite DBs so Jellyfin's hardcoded /config/data/<name>.db paths
 # resolve through to the 4K sqlite dataset before SQLite computes WAL/SHM.
 # The matching --volume in jellyfin.service.j2 is self-pathed
@@ -138,9 +129,7 @@
     - jellyfin
 
 - name: Symlink introskipper SQLite DB onto sqlite dataset
-  when:
-    - not (ansible_check_mode and jellyfin_user.changed)
-    - jellyfin_introskipper_dir.stat.exists
+  when: not (ansible_check_mode and jellyfin_user.changed)
   file:
     src: /mnt/services/sqlite/jellyfin/introskipper.db
     dest: /mnt/services/jellyfin/data/introskipper/introskipper.db
