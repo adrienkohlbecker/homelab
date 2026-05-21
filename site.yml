@@ -57,7 +57,6 @@
     - csplogger
     - keepalived
     - keepalived_exporter
-    - journald_exporter
     - nut_server
     - nut_monitor
     - dnscrypt_proxy

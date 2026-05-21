@@ -117,18 +117,6 @@ access_control:
     - domain: '*.{{ authelia_cookie_domain }}'
       subject: 'group:admins'
       policy: 'two_factor'
-    # journald-exporter exposes raw systemd-journal records (every
-    # command run, every auth attempt). Force two_factor for everyone
-    # -- not just admins -- so a one-factor session token leaking on
-    # a family member's device doesn't expose host-wide log content.
-    # Two domain patterns to cover both DNS shapes: prod cookie is
-    # the apex (`fahm.fr`) and services live at *.<host>.fahm.fr;
-    # test cookie is per-host (`<host>.<domain>`) and the service
-    # lives at journald-exporter.<host>.<domain>.
-    - domain:
-        - 'journald-exporter.*.{{ authelia_cookie_domain }}'
-        - 'journald-exporter.{{ authelia_cookie_domain }}'
-      policy: 'two_factor'
     # PR1 default: every other authenticated user (family etc.) goes
     # through one_factor. PR3+ will append per-service overrides
     # above this rule (e.g. *.minio.* → two_factor for everyone).

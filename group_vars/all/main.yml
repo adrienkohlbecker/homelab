@@ -132,11 +132,6 @@ service_ports:
   hyperdx_otlp_http: 4318
   influxdb: 8086
   jellyfin: 8096
-  # journald-exporter's upstream installation guide uses :12345 as the
-  # example port; nothing else on the host listens there so we keep it.
-  # Consumers: the unit's --port arg, the role's nginx proxy_pass, and
-  # roles/netdata's prometheus.conf.j2 scrape target.
-  journald_exporter: 12345
   lidarr: 8686
   nut: 3493
   seerr: 5055

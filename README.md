@@ -46,7 +46,7 @@ Roles map 1:1 to a service or a system concern; the order in `site.yml` reflects
 - **Hardware**: `fancontrol`, `hdparm`, `hd_idle`, `smart`, `lm_sensors`, `powertop`
 - **Storage / boot**: `zfs`, `zfs_autobackup`, `zfs_mount`, `swap`, `zfsbootmenu`, `refind`, `kdump`
 - **Container / web stack**: `podman`, `samba`, `certbot`, `nginx`, `services`
-- **Monitoring & infra services**: `eaton_ipp`, `netdata`, `wolweb`, `csplogger`, `keepalived` (+ `keepalived_exporter`), `custom_exporter`, `journald_exporter`, `nut_server` / `nut_monitor`, `dnscrypt_proxy`, `pihole`, `docker_client`
+- **Monitoring & infra services**: `eaton_ipp`, `netdata`, `wolweb`, `csplogger`, `keepalived` (+ `keepalived_exporter`), `custom_exporter`, `nut_server` / `nut_monitor`, `dnscrypt_proxy`, `pihole`, `docker_client`
 - **Lab-only services** (run on `lab`/`box`): `libvirt`, `prometheus`, `minio`, `influxdb`, `scratch`, `data`, `media`, `jellyfin`, `sonarr` / `radarr` / `bazarr` / `headphones` / `overseerr` / `plex` / `tautulli`, `sort_ini`, `sabnzbd`, `transmission`, `gitea` (+ `gitea_runner`, `nodejs`), `getmail`, `compta`, `speedtest`, `filebrowser`, `mosquitto`, `z2m`, `homeassistant`, `kuma`, `healthchecks`, `spouse`, `redis`, `paperless`, `profilarr`, `openproject`, `nexus`
 - **Helpers** (imported by other roles, not used directly): `service_user`, `podman_secret`, `systemd_unit`, `usergroup_immediate`, `_test`
 
