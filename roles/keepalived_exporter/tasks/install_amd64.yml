@@ -1,17 +1,16 @@
 - name: install_amd64 | Download keepalived_exporter
-  check_mode: false
   become: true
   get_url:
     url: "{{ keepalived_exporter_artifacts[ansible_architecture].url }}"
     checksum: "sha256:{{ keepalived_exporter_artifacts[ansible_architecture].sha256 }}"
-    dest: /tmp/keepalived_exporter.tar.gz
+    dest: "/var/cache/keepalived_exporter-{{ keepalived_exporter_version }}.amd64.tar.gz"
     mode: "0644"
     owner: root
     group: root
 
 - name: install_amd64 | Install keepalived_exporter
   unarchive:
-    src: /tmp/keepalived_exporter.tar.gz
+    src: "/var/cache/keepalived_exporter-{{ keepalived_exporter_version }}.amd64.tar.gz"
     remote_src: true
     dest: /usr/local/bin
     mode: "0755"
@@ -22,9 +21,7 @@
     extra_opts: [ --strip-components=1, --no-same-owner ]
   become: true
   register: keepalived_exporter_binary_download
-
-- name: install_amd64 | Delete tar file
-  file:
-    path: /tmp/keepalived_exporter.tar.gz
-    state: absent
-  become: true
+  # An upstream rename of the tarball top-dir would make `include:` match
+  # nothing and unarchive return changed=false with no binary written --
+  # the `-version` gate above would then re-fire on every play. Fail loud.
+  failed_when: keepalived_exporter_binary_download.files | default([]) | length == 0
