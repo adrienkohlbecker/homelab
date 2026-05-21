@@ -78,6 +78,25 @@
     - 'XKBVARIANT=""'
     - 'XKBOPTIONS="terminate:ctrl_alt_bksp"'
 
+# Live-VT probe: the disk-config + initrd checks above only prove
+# next-boot config. dumpkeys reads the kernel VT's current keymap
+# via KDGKBENT on /dev/tty0, so it doesn't depend on a controlling
+# terminal and works fine from ansible's ssh session.
+- name: _verify | Read live VT keymap
+  command: dumpkeys
+  register: _verify_console_dumpkeys
+  changed_when: false
+  become: true
+
+- name: _verify | Live VT keymap is French AZERTY
+  assert:
+    # AZERTY maps keycode 16 to 'a' (QWERTY would map it to 'q').
+    that:
+      - _verify_console_dumpkeys.stdout | regex_search('^\s*keycode\s+16\s*=\s*\+?a\b', multiline=True) is not none
+    fail_msg: >-
+      Live VT keymap doesn't look like French AZERTY:
+      keycode 16 did not map to 'a'.
+
 # The console_setup initramfs hook
 # (/usr/share/initramfs-tools/hooks/console_setup, shipped by the
 # keyboard-configuration package, not console-setup) copies both
