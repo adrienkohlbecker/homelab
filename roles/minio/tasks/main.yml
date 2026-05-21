@@ -125,7 +125,7 @@
     systemd_unit_args:
       src: minio
       condition: "{{ not (ansible_check_mode and minio_installed.changed) }}"
-      restart: "{{ systemd_unit.changed or minio_cfg.changed }}"
+      restart: "{{ minio_service_d_override_conf_result.changed or minio_cfg.changed }}"
   tags:
     - minio
 

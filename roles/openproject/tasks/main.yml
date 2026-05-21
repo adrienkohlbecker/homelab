@@ -155,8 +155,8 @@
   vars:
     systemd_unit_args:
       src: openproject
-      condition: "{{ not (ansible_check_mode and (systemd_unit.changed or openproject_user.changed or openproject_pg_user.changed)) }}"
-      restart: "{{ systemd_unit.changed or openproject_secret_key_rotated }}"
+      condition: "{{ not (ansible_check_mode and (openproject_service_result.changed or openproject_user.changed or openproject_pg_user.changed)) }}"
+      restart: "{{ openproject_service_result.changed or openproject_secret_key_rotated }}"
   tags:
     - openproject
 

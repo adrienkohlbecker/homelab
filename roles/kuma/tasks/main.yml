@@ -77,8 +77,8 @@
   vars:
     systemd_unit_args:
       src: kuma
-      condition: "{{ not (ansible_check_mode and (systemd_unit.changed or kuma_user.changed)) }}"
-      restart: "{{ systemd_unit.changed }}"
+      condition: "{{ not (ansible_check_mode and (kuma_service_result.changed or kuma_user.changed)) }}"
+      restart: "{{ kuma_service_result.changed }}"
   tags:
     - kuma
 

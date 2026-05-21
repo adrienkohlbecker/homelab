@@ -162,8 +162,8 @@
   vars:
     systemd_unit_args:
       src: z2m
-      condition: "{{ not (ansible_check_mode and (systemd_unit.changed or z2m_user.changed)) }}"
-      restart: "{{ systemd_unit.changed or z2m_conf.changed or z2m_secret.changed or z2m_devices.changed or z2m_cover_patch.changed or z2m_devices_perms.changed or z2m_groups.changed }}"
+      condition: "{{ not (ansible_check_mode and (z2m_service_result.changed or z2m_user.changed)) }}"
+      restart: "{{ z2m_service_result.changed or z2m_conf.changed or z2m_secret.changed or z2m_devices.changed or z2m_cover_patch.changed or z2m_devices_perms.changed or z2m_groups.changed }}"
       start: "{{ z2m_start_service }}"
   tags:
     - z2m
