@@ -72,10 +72,11 @@
     - wireguard
 
 # umask on the redirect lands the .psk at 0644 by default; the explicit
-# chmod here is what makes mode: 0600 stick (ansible's file: mode is
-# meaningless on shell-redirected output).
+# umask 077 here is what makes 0600 stick (ansible's file: mode is
+# meaningless on shell-redirected output). tr -d '\n' strips wg genpsk's
+# trailing newline to stay byte-equivalent with existing PSK files.
 - name: Generate preshared key
-  shell: set -euo pipefail; umask 077; openssl rand -base64 32 | tr -d '\n' > {{ playbook_dir }}/wireguard/psk/{{ item[0] }}-{{ item[1] }}.psk
+  shell: set -euo pipefail; umask 077; wg genpsk | tr -d '\n' > {{ playbook_dir }}/wireguard/psk/{{ item[0] }}-{{ item[1] }}.psk
   args:
     executable: /bin/bash
     creates: "{{ playbook_dir }}/wireguard/psk/{{ item[0] }}-{{ item[1] }}.psk"
