@@ -106,7 +106,7 @@
   find:
     paths: /etc/keepalived/conf.d
     patterns: '*.conf'
-    excludes: ['.*', '*.disabled']
+    excludes: [ '.*', '*.disabled' ]
     size: '1'
   register: keepalived_confs
   become: true
