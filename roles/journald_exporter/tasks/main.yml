@@ -86,6 +86,15 @@
   tags:
     - journald_exporter
 
+# journald_exporter_key is consumed by TWO roles: this one (writes
+# /etc/journald-exporter/keys/netdata, hot-reloaded by the daemon)
+# AND roles/netdata (renders it into go.d/prometheus.conf at
+# templates/prometheus.conf.j2:6 -- which netdata re-reads only on
+# restart). Rotating the vault var therefore requires re-applying
+# BOTH roles, or `--tags journald_exporter,netdata`; running with
+# only `--tags journald_exporter` leaves netdata holding the old
+# credential and produces 401s on every scrape until netdata is
+# restarted.
 - name: Create key
   copy:
     content: "{{ (journald_exporter_key | trim) + '\n' }}"
