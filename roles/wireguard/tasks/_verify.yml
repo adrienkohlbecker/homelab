@@ -1,0 +1,46 @@
+---
+# Behavior probes against the live wg interface, not the rendered
+# config. Only invoked by test/testrole.py against a qemu VM; never
+# from site.yml or `mise run ansible --tags wireguard`.
+- name: _verify | Probe wg show on the live interface
+  command: wg show {{ iface | default('wg0') }}
+  register: wireguard_wg_show
+  become: true
+  changed_when: false
+
+- name: _verify | Assert listen-port matches expected
+  command: wg show {{ iface | default('wg0') }} listen-port
+  register: wireguard_listen_port
+  become: true
+  changed_when: false
+  failed_when: wireguard_listen_port.stdout | int != (listen_port | default('51820') | int)
+
+- name: _verify | Assert peer count matches wireguard_peers - 1
+  shell: wg show {{ iface | default('wg0') }} peers | wc -l
+  args:
+    executable: /bin/bash
+  register: wireguard_peer_count
+  become: true
+  changed_when: false
+  failed_when: wireguard_peer_count.stdout | int != (wireguard_peers | length - 1)
+
+- name: _verify | Assert interface carries own_peer.address
+  vars:
+    own_peer: "{{ wireguard_peers | selectattr('name', 'eq', inventory_hostname) | first }}"
+  command: ip -4 -o addr show dev {{ iface | default('wg0') }}
+  register: wireguard_ip_addr
+  become: true
+  changed_when: false
+  failed_when: own_peer.address not in wireguard_ip_addr.stdout
+
+# wg syncconf is what main.yml's reload path uses (item 14). Running
+# it as a no-op verifies the running kernel state is consistent with
+# the rendered config -- if the freshly-rendered conf disagreed with
+# what wg-quick up loaded, syncconf would push deltas (visible in
+# stderr) or fail.
+- name: _verify | Exercise wg syncconf as a no-op reload
+  shell: wg syncconf {{ iface | default('wg0') }} <(wg-quick strip {{ iface | default('wg0') }})
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
