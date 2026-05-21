@@ -7,7 +7,11 @@
     group: root
     mode: "0600"
     backup: true
-    validate: wg-quick strip %s >/dev/null
+    # wg-quick strip rejects any path whose basename doesn't match
+    # [A-Za-z0-9_=+.-]{1,15}\.conf, so the ansible-staged temp file
+    # fails the check. Symlink it under the real interface name in a
+    # per-run tempdir and parse through the link.
+    validate: 'sh -c ''d=$(mktemp -d) && ln -s "%s" "$d/{{ iface }}.conf" && wg-quick strip "$d/{{ iface }}.conf" >/dev/null && rm -rf "$d"'''
   register: wireguard_cfg
   become: true
   tags:
