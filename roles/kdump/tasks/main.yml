@@ -176,16 +176,21 @@
   tags:
     - kdump
 
-# Thread crashkernel= into whichever boot config the host uses. ZBM
-# hosts (lab/box/pug) get the ZFS dataset property; grub-booted hosts
-# (minimal test fixture today, plus any future grub host) get a
-# /etc/default/grub.d/ drop-in. Either way the kdump-tools postinst's
-# own grub hook does nothing useful on ZBM hosts, so the role owns the
-# wiring — pattern mirrors roles/console/tasks/main.yml:94-146.
+# Thread crashkernel= into whichever boot config the host uses.
+# Split ownership:
+#   - ZBM hosts (lab/box/pug): the role writes the ZFS dataset
+#     property because grub doesn't run, so the package's own grub.d
+#     snippet is dead code there.
+#   - grub-booted hosts (minimal test fixture today, plus any future
+#     grub host): we let the kdump-tools package own its shipped
+#     /etc/default/grub.d/kdump-tools.cfg (crashkernel=512M-:192M
+#     on jammy), and its postinst drives update-grub. The role no
+#     longer writes a parallel /etc/default/grub.d/99-kdump.cfg —
+#     would stack a duplicate crashkernel= and the rightmost-wins
+#     ordering was a footgun across package upgrades.
 #
-# 320M for 2-4G hosts, 512M for everything bigger. Smaller and the
-# capture kernel won't have room for its own initramfs + dump tools;
-# bigger and you waste RAM that the host can't otherwise use.
+# 320M for 2-4G hosts, 512M for everything bigger — covers the lab
+# (≥4G) capture kernel's initramfs + dump tools without wasting RAM.
 - name: Reserve crashkernel memory in ZBM commandline
   when: not grub_bootloader
   import_role:
@@ -194,40 +199,6 @@
   vars:
     zfsbootmenu_cmdline_file: crashkernel
     zfsbootmenu_cmdline_contents: 'crashkernel=2G-4G:320M,4G-:512M'
-  tags:
-    - kdump
-
-- name: Set GRUB cmdline (crashkernel)
-  when: grub_bootloader
-  copy:
-    dest: /etc/default/grub.d/99-kdump.cfg
-    content: "GRUB_CMDLINE_LINUX_DEFAULT=\"$GRUB_CMDLINE_LINUX_DEFAULT crashkernel=2G-4G:320M,4G-:512M\"\n"
-    backup: true
-    owner: root
-    group: root
-    mode: "0644"
-  register: kdump_grub_cfg
-  become: true
-  tags:
-    - kdump
-
-- name: Update grub
-  when: grub_bootloader and kdump_grub_cfg.changed
-  command: update-grub
-  changed_when: true
-  become: true
-  tags:
-    - kdump
-
-- name: Ask to reboot (GRUB cmdline)
-  when: grub_bootloader and kdump_grub_cfg.changed
-  file:
-    path: /var/run/reboot-required
-    state: touch
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
   tags:
     - kdump
 
