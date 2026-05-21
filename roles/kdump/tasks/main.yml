@@ -12,30 +12,45 @@
 #    crashkernel= cmdline reserves RAM at boot; can't be added to a
 #    running kernel).
 
-# Stat first because not every kernel exposes both sysctls. arm64
-# jammy GA (5.15) has no NMI watchdog, so /proc/sys/kernel/hardlockup_panic
-# is absent and `sysctl -p` errors out trying to reload it. Skip the
-# missing ones and only act on what the running kernel actually has.
-- name: Detect available lockup-panic sysctls
+# Stat first because not every kernel exposes all of these. arm64
+# jammy GA (5.15) has no NMI watchdog, so hardlockup_panic and
+# unknown_nmi_panic are absent and `sysctl -p` errors out trying to
+# reload them. Skip the missing ones and only act on what the running
+# kernel actually has. The stat-probe + selectattr pattern is unique
+# to this role; peers (e.g. roles/keepalived/tasks/main.yml:19) call
+# ansible.posix.sysctl unconditionally because they target sysctls
+# guaranteed to exist across the kernels we run.
+- name: Detect available panic sysctls
   stat:
-    path: /proc/sys/kernel/{{ item }}
+    path: /proc/sys/kernel/{{ item.name }}
   loop:
-    # NMI watchdog detects a CPU spinning in interrupt context.
-    - hardlockup_panic
-    # Soft watchdog detects a task stuck on-CPU for >2*watchdog_thresh.
-    - softlockup_panic
-  register: kdump_lockup_sysctls
+    # NMI watchdog: a CPU spinning in interrupt context.
+    - { name: hardlockup_panic, value: '1' }
+    # Soft watchdog: a task stuck on-CPU for >2*watchdog_thresh.
+    - { name: softlockup_panic, value: '1' }
+    # Oops that didn't escalate is the silent-corruption shape.
+    - { name: panic_on_oops, value: '1' }
+    # khungtaskd-detected stalls (default 120s).
+    - { name: hung_task_panic, value: '1' }
+    # Unknown NMIs (PCIe AER, firmware-injected) on hardware where
+    # they signal an unrecoverable fault.
+    - { name: unknown_nmi_panic, value: '1' }
+    # Reboot 10s after panic finishes so the host comes back up
+    # automatically after kdump captures vmcore.
+    - { name: panic, value: '10' }
+  register: kdump_panic_sysctls
   become: true
   tags:
     - kdump
 
-- name: Panic on kernel-detected lockups
+- name: Set panic sysctls
   ansible.posix.sysctl:
-    name: kernel.{{ item.item }}
-    value: '1'
-  loop: '{{ kdump_lockup_sysctls.results | selectattr("stat.exists") }}'
+    name: kernel.{{ item.item.name }}
+    value: '{{ item.item.value }}'
+    sysctl_file: /etc/sysctl.d/30-kdump.conf
+  loop: '{{ kdump_panic_sysctls.results | selectattr("stat.exists") }}'
   loop_control:
-    label: 'kernel.{{ item.item }}'
+    label: 'kernel.{{ item.item.name }}'
   become: true
   tags:
     - kdump
