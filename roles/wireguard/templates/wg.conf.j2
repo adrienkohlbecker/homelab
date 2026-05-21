@@ -4,6 +4,16 @@
 # PublicKey = {{ own_peer.public_key }}
 PrivateKey = {{ own_peer.private_key }}
 Address = {{ own_peer.address }}/32
+{# wg-quick auto-discovers MTU from the endpoint route minus 80 bytes
+   (1500 ethernet -> 1420). That breaks for mobile peers on PPPoE
+   uplinks (capped at 1492 -> 1412 effective WG), cellular 4G/5G
+   (often 1300-1400), or VPN-stacked links: tunnel comes up, small
+   packets succeed, large packets stall silently. 1280 is the IPv6
+   minimum MTU -- universally fragmentation-safe. Server-side keeps
+   auto-discovery (stable uplinks). -#}
+{% if not own_peer.is_server %}
+MTU = 1280
+{% endif %}
 ListenPort = {{ listen_port | default('51820') }}
 {% if 'post_up' in own_peer %}
 PostUp = {{ own_peer.post_up }}
