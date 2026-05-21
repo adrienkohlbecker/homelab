@@ -45,11 +45,12 @@
 # requested address". Setting this once globally lets services
 # (e.g. pihole on the keepalived VIP) bind regardless of who owns
 # the VIP at any given moment.
-- name: Allow services to bind on VIPs not currently held
+- name: Install ip_nonlocal_bind sysctl
   ansible.posix.sysctl:
     name: net.ipv4.ip_nonlocal_bind
     value: '1'
     sysctl_file: /etc/sysctl.d/30-keepalived.conf
+    sysctl_set: true
   become: true
   tags:
     - keepalived
