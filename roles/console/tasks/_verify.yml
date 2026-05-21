@@ -1,11 +1,12 @@
 # Functional checks for the console role. The converge proves apt +
 # copy + update-initramfs exit-coded cleanly; these checks verify that
-# (a) the initramfs picked up our config -- i.e. the console-setup
-# initramfs hook fired and bundled /etc/default/console-setup into the
-# initrd, and (b) the running kernel actually applied consoleblank=0
-# from whichever cmdline mechanism (ZBM property / GRUB grub.d) the
-# host uses. Live tty glyph output isn't observable in a headless QEMU
-# run, so the noblank service is checked via exit-code only.
+# (a) the initramfs picked up both /etc/default/console-setup and
+# /etc/default/keyboard -- i.e. the console_setup initramfs hook fired
+# and bundled both configs into the initrd, and (b) the running kernel
+# actually applied consoleblank=0 from whichever cmdline mechanism (ZBM
+# property / GRUB grub.d) the host uses. Live tty glyph output isn't
+# observable in a headless QEMU run, so the noblank service is checked
+# via exit-code only.
 #
 # We reboot at the top of the verify so the running kernel reflects
 # the cmdline we just wrote -- without that, /sys/module/kernel/
@@ -50,11 +51,30 @@
     - 'FONTSIZE="8x16"'
     - 'ACTIVE_CONSOLES="/dev/tty[1-6]"'
 
-# The console-setup initramfs hook
-# (/usr/share/initramfs-tools/hooks/console_setup) copies
-# /etc/default/console-setup into the initrd at the same path. If the
-# hook didn't fire (package change, hook disabled, update-initramfs
-# no-op), the path is absent and this fails.
+- name: _verify | Read keyboard config
+  slurp:
+    src: /etc/default/keyboard
+  register: _verify_console_keyboard_content
+  become: true
+
+- name: _verify | Keyboard config carries expected directives
+  assert:
+    that:
+      - item in (_verify_console_keyboard_content.content | b64decode)
+    fail_msg: "keyboard config missing directive: {{ item }}"
+  loop:
+    - 'XKBMODEL="pc105"'
+    - 'XKBLAYOUT="fr"'
+    - 'XKBVARIANT=""'
+    - 'XKBOPTIONS="terminate:ctrl_alt_bksp"'
+
+# The console_setup initramfs hook
+# (/usr/share/initramfs-tools/hooks/console_setup, shipped by the
+# keyboard-configuration package, not console-setup) copies both
+# /etc/default/console-setup and /etc/default/keyboard into the initrd
+# at the same paths. If the hook didn't fire (package change, hook
+# disabled, update-initramfs no-op), either path is absent and this
+# fails.
 #
 # Skipped on cloud images that don't ship per-kernel initrds in /boot
 # (Ubuntu's "minimal" cloud images boot a pre-baked initrd packed
@@ -69,13 +89,21 @@
   register: _verify_console_initrd_stat
   become: true
 
-- name: _verify | Current kernel's initrd contains console-setup config
+- name: _verify | List current kernel's initrd contents
   when: _verify_console_initrd_stat.stat.exists
   command: lsinitramfs /boot/initrd.img-{{ ansible_kernel }}
   register: _verify_console_initrd
   changed_when: false
-  failed_when: "'etc/default/console-setup' not in _verify_console_initrd.stdout_lines"
   become: true
+
+- name: _verify | Initrd bundles console-setup + keyboard configs
+  when: _verify_console_initrd_stat.stat.exists
+  assert:
+    that: item in _verify_console_initrd.stdout_lines
+    fail_msg: "initrd missing: {{ item }}"
+  loop:
+    - etc/default/console-setup
+    - etc/default/keyboard
 
 # console_noblank.service is Type=oneshot RemainAfterExit=true, so
 # `active` after the start means setterm's ExecStart returned 0 — the
