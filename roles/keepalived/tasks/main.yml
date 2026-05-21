@@ -74,7 +74,7 @@
     owner: root
     group: root
     backup: true
-  register: keepalived_conf
+  register: keepalived_base_conf
   become: true
   tags:
     - keepalived
@@ -89,7 +89,7 @@
   find:
     paths: /etc/keepalived/conf.d
     patterns: '*.conf'
-  register: keepalived_active_confs
+  register: keepalived_confs
   become: true
   tags:
     - keepalived
@@ -101,14 +101,14 @@
   vars:
     systemd_unit_args:
       src: keepalived
-      condition: "{{ not (ansible_check_mode and keepalived_apt.changed) and keepalived_active_confs.matched > 0 }}"
-      reload: "{{ keepalived_conf.changed }}"
+      condition: "{{ not (ansible_check_mode and keepalived_apt.changed) and keepalived_confs.matched > 0 }}"
+      reload: "{{ keepalived_base_conf.changed }}"
   tags:
     - keepalived
 
 - name: Disable keepalived service when no tenants
   when:
-    - keepalived_active_confs.matched == 0
+    - keepalived_confs.matched == 0
     - not (ansible_check_mode and keepalived_apt.changed)
   systemd:
     name: keepalived
