@@ -1,3 +1,26 @@
+# Without this assert, downstream failures (selectattr|first on an
+# empty sequence, undefined .public_key) surface as cryptic jinja
+# errors mid-converge. Catch it once, here, with a useful message.
+- name: Assert wireguard_peers entry exists for this host
+  vars:
+    own_peer: "{{ wireguard_peers | default([]) | selectattr('name', 'eq', inventory_hostname) | list }}"
+  assert:
+    that:
+      - wireguard_peers is defined
+      - wireguard_peers | length > 0
+      - own_peer | length == 1
+      - own_peer[0].is_server | bool
+      - own_peer[0].address is defined
+      - own_peer[0].public_key is defined
+      - own_peer[0].private_key is defined
+      - wireguard_peers | map(attribute='name') | reject('match', '^[a-z][a-z0-9_]*$') | list | length == 0
+    fail_msg: >-
+      wireguard_peers must be defined and contain an is_server entry for
+      {{ inventory_hostname }} with address, public_key, private_key set;
+      every peer name must match ^[a-z][a-z0-9_]*$.
+  tags:
+    - wireguard
+
 - name: Install wireguard
   apt:
     pkg:
