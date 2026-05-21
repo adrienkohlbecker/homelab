@@ -21,7 +21,14 @@ PartOf=zfs_autosnapshot.target
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
-TimeoutSec=120
+# Start budget is 120s -- kuma's first-boot Database.connect() + Express
+# wire-up has been observed in the 30-60s range; 120s leaves headroom.
+# TimeoutStopSec sits above --stop-timeout 120 below, so systemd waits
+# for podman's graceful-stop budget plus 30s slack before SIGKILLing.
+# Without that slack, systemd's SIGKILL races podman's SIGKILL and can
+# truncate the SQLite WAL flush mid-write.
+TimeoutStartSec=120
+TimeoutStopSec=150
 RestartSec=5
 Type=notify
 NotifyAccess=all
