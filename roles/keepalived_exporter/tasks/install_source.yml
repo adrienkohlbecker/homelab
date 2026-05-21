@@ -1,9 +1,6 @@
-# Source-build path for any non-x86_64 arch (upstream ships only an
-# amd64 prebuilt). Apt's golang on jammy ships 1.18 -- below upstream's
-# go.mod floor of 1.21 -- so we pin a Go toolchain under /opt/go-<ver>/
-# instead. The pin mirrors roles/fan2go so the toolchain tree is shared
-# on hosts where both roles apply. With CGO_ENABLED=0 the build is
-# pure-Go; no apt build-deps needed.
+# Source-build path for any non-x86_64 arch. See vars/main.yml for the
+# Go-pin rationale. CGO_ENABLED=0 below keeps the build pure-Go so we
+# need no apt build-deps.
 
 - name: install_source | Download Go toolchain tarball
   get_url:

@@ -1,9 +1,7 @@
-# Centralised artifact metadata. amd64 takes the upstream prebuilt
-# tarball; any other arch (today: aarch64 — upstream ships no binary
-# for it) builds from source with a pinned Go toolchain because jammy's
-# apt golang is 1.18, below upstream's go.mod floor of 1.21. The Go
-# pin mirrors roles/fan2go on purpose so /opt/go-<ver>/ is reused on
-# hosts where both roles apply.
+# amd64 takes the upstream prebuilt tarball; aarch64 builds from source
+# (no upstream aarch64 binary) with a pinned Go toolchain because jammy's
+# apt golang is 1.18, below upstream's go.mod floor of 1.21. The Go pin
+# mirrors roles/fan2go so /opt/go-<ver>/ is shared on hosts that run both.
 
 keepalived_exporter_version: "0.7.0"
 keepalived_exporter_artifacts:
@@ -14,8 +12,6 @@ keepalived_exporter_artifacts:
     url: "{{ mirror_github }}/gen2brain/keepalived_exporter/archive/refs/tags/v{{ keepalived_exporter_version }}.tar.gz"
     sha256: "bb9e3111ca1e47bf03ed0e3780c37414688ec58b384feb721705c704d0d76cd5"
 
-# Source-build path only. Pin mirrors roles/fan2go so the /opt/go-<ver>/
-# toolchain is shared on hosts where both roles apply.
 keepalived_exporter_go_version: "1.26.3"
 keepalived_exporter_go_artifact:
   url: "https://go.dev/dl/go{{ keepalived_exporter_go_version }}.linux-arm64.tar.gz"
