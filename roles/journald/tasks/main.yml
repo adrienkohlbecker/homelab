@@ -11,28 +11,23 @@
   tags:
     - journald
 
-- name: Create /etc/systemd/journald.conf.d directory
-  file:
-    dest: /etc/systemd/journald.conf.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - journald
-
-- name: Render /etc/systemd/journald.conf.d/10-custom.conf
-  template:
-    src: 10-custom.conf.j2
-    dest: /etc/systemd/journald.conf.d/10-custom.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True).read("%s")'
-  become: true
-  register: journald_conf
+# Helper writes /etc/systemd/journald.conf.d/10-custom.conf via the
+# absolute-mode dropin path (sibling of journald.conf, not under
+# systemd-journald.service.d/). Helper does: dir creation, backup,
+# write, systemd-analyze verify systemd-journald.service, daemon-
+# reload. The rendered content has tightly constrained Jinja inputs
+# (journald_storage in [volatile, persistent], zfs_root bool) so a
+# format-level validate is redundant. Restart gate downstream reads
+# the per-unit result fact journald_conf_d_10_custom_conf_result.
+- name: Render journald.conf.d/10-custom.conf
+  import_role:
+    name: systemd_unit
+    tasks_from: dropin
+  vars:
+    systemd_unit_args:
+      for: systemd-journald.service
+      dest_abs: /etc/systemd/journald.conf.d/10-custom.conf
+      src: 10-custom.conf.j2
   tags:
     - journald
 
@@ -57,7 +52,7 @@
 # state re-applies both registers report unchanged and journald is not
 # touched.
 - name: Stop systemd-journald to release sockets
-  when: journald_conf.changed or journald_audit_socket.changed
+  when: journald_conf_d_10_custom_conf_result.changed or journald_audit_socket.changed
   systemd:
     name: systemd-journald.service
     state: stopped
