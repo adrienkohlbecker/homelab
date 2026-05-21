@@ -162,6 +162,23 @@
   tags:
     - influxdb
 
+# auth: required puts Authelia in front of the UI; bypass-on-
+# Authorization (enabled implicitly by upstream_authorization) lets
+# machine clients (HomeAssistant, Telegraf, Grafana) keep using their
+# native `Authorization: Token <t>` headers -- their request short-
+# circuits the auth_request subrequest with a 204 and their original
+# header passes through unmodified. Browser users get an Authorization
+# header injected from `influxdb_user_tokens` (vaulted dict keyed by
+# Authelia username; values are the full header, e.g. "Token <t>"),
+# skipping InfluxDB's own login screen (no double auth). Unknown
+# Authelia users fall through to InfluxDB's native sign-in (operator
+# break-glass). Operator workflow to add a user:
+#   1. podman exec -it influxdb influx user create --name <u> \
+#        --org {{ influxdb_root_org }} --password <throwaway>
+#   2. podman exec -it influxdb influx auth create --user <u> \
+#        --org {{ influxdb_root_org }} --all-access
+#   3. Add `<u>: "Token <token>"` to vaulted `influxdb_user_tokens` in
+#      group_vars/prod.yml and re-apply.
 - name: Configure nginx
   import_role:
     name: nginx
@@ -170,5 +187,7 @@
     nginx_site_args:
       subdomain: influxdb
       proxy_pass: http://localhost:{{ service_ports.influxdb }}/
+      auth: required
+      upstream_authorization: "{{ influxdb_user_tokens | default({}) }}"
   tags:
     - influxdb
