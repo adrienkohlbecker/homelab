@@ -66,22 +66,6 @@
   tags:
     - jellyfin
 
-# The sqlite dir is split out because the per-service sqlite subdirs are
-# group-tight (0750) across the media stack — only the owning service +
-# the media group should be able to list jellyfin's DB files; other users
-# on the host have no business there.
-- name: Create jellyfin sqlite dir
-  when: not (ansible_check_mode and jellyfin_user.changed)
-  file:
-    dest: /mnt/services/sqlite/jellyfin
-    state: directory
-    owner: jellyfin
-    group: media
-    mode: "0750"
-  become: true
-  tags:
-    - jellyfin
-
 - name: Install tmpfiles.d entry for /var/log/jellyfin reaping
   when: not (ansible_check_mode and jellyfin_user.changed)
   template:
@@ -99,45 +83,25 @@
   tags:
     - jellyfin
 
-# Symlink the SQLite DBs so Jellyfin's hardcoded /config/data/<name>.db paths
-# resolve through to the 4K sqlite dataset before SQLite computes WAL/SHM.
-# The matching --volume in jellyfin.service.j2 is self-pathed
-# (/mnt/services/sqlite/jellyfin:/mnt/services/sqlite/jellyfin) so the
-# symlink targets resolve identically inside the container -- do not change
-# the container-side path without updating the symlink src in lockstep.
-#
-# No `force:` on the link tasks: `state: link` defaults to refusing to
-# convert a regular file into a symlink (it raises "refusing to convert
-# between file and link for ..."), which is exactly the safety we want
-# on a snapshot-restore / downgrade where a real DB might already sit
-# at the dest. Resolve by moving the offending file under
-# /mnt/services/sqlite/jellyfin/ before re-running.
-- name: Symlink jellyfin SQLite DBs onto sqlite dataset
-  when: not (ansible_check_mode and jellyfin_user.changed)
-  file:
-    src: "/mnt/services/sqlite/jellyfin/{{ item }}"
-    dest: "/mnt/services/jellyfin/data/{{ item }}"
-    state: link
-    owner: jellyfin
-    group: media
-    follow: false
-  become: true
-  loop:
-    - library.db
-    - jellyfin.db
-  tags:
-    - jellyfin
-
-- name: Symlink introskipper SQLite DB onto sqlite dataset
-  when: not (ansible_check_mode and jellyfin_user.changed)
-  file:
-    src: /mnt/services/sqlite/jellyfin/introskipper.db
-    dest: /mnt/services/jellyfin/data/introskipper/introskipper.db
-    state: link
-    owner: jellyfin
-    group: media
-    follow: false
-  become: true
+# The unit's self-pathed --volume /mnt/services/sqlite/jellyfin:/mnt/services/sqlite/jellyfin
+# resolves the symlink targets identically inside the container — do not
+# change the container-side path without updating sqlite_dataset_args.name
+# (which is the host symlink-target stem) in lockstep.
+- name: Pre-create sqlite dataset and symlink jellyfin DBs onto it
+  import_role:
+    name: sqlite_dataset
+    tasks_from: dataset
+  vars:
+    sqlite_dataset_args:
+      name: jellyfin
+      owner: jellyfin
+      group: media
+      mode: "0750"
+      condition: "{{ not (ansible_check_mode and jellyfin_user.changed) }}"
+      links:
+        - /mnt/services/jellyfin/data/library.db
+        - /mnt/services/jellyfin/data/jellyfin.db
+        - /mnt/services/jellyfin/data/introskipper/introskipper.db
   tags:
     - jellyfin
 
