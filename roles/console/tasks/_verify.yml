@@ -156,6 +156,30 @@
   failed_when: "'consoleblank=0' not in (_verify_console_grub_cfg.content | b64decode)"
   become: true
 
+- name: _verify | Read rendered /boot/grub/grub.cfg
+  when: grub_bootloader
+  slurp:
+    src: /boot/grub/grub.cfg
+  register: _verify_console_grub_rendered
+  become: true
+
+- name: _verify | Every grub.cfg linux entry includes consoleblank=0
+  when: grub_bootloader
+  vars:
+    _grub: "{{ _verify_console_grub_rendered.content | b64decode }}"
+    _all_linux: "{{ _grub | regex_findall('^\\s*linux\\s.*$', multiline=True) }}"
+    _with_blank: "{{ _grub | regex_findall('^\\s*linux\\s.*consoleblank=0.*$', multiline=True) }}"
+  assert:
+    that:
+      # Catches an update-grub no-op or a later grub.d snippet resetting
+      # the var. Recovery entry must also carry it (see GRUB_CMDLINE_LINUX
+      # choice in tasks/main.yml).
+      - _all_linux | length > 0
+      - _all_linux | length == _with_blank | length
+    fail_msg: >-
+      grub.cfg has {{ _all_linux | length }} linux entries but only
+      {{ _with_blank | length }} carry consoleblank=0
+
 # /sys/module/kernel/parameters/consoleblank exposes the value the
 # running kernel parsed from the cmdline at boot. Post-reboot this is
 # the strongest functional check: it proves the cmdline source above
