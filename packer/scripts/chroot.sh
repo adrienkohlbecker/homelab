@@ -152,7 +152,7 @@ cat <<EOF >/etc/default/keyboard
 
 XKBMODEL="pc105"
 XKBLAYOUT="fr"
-XKBVARIANT="mac"
+XKBVARIANT=""
 XKBOPTIONS=""
 
 BACKSPACE="guess"
