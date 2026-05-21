@@ -30,6 +30,25 @@
     or 'auth.' not in (_verify_nginx_gate.location | default(''))
   become: true
 
+# /api/push/ bypass -- exercises the sibling location carved out for
+# push-monitor heartbeats. An unknown token still proves the request
+# reached kuma (it returns 200 with JSON `{ok:false, msg:"Monitor
+# not found or not active."}`). A 302 here means the auth_request
+# inside `location /` is still firing on this path.
+- name: _verify | /api/push/<token> bypasses the Authelia gate
+  uri:
+    url: https://localhost/api/push/00000000
+    headers:
+      Host: kuma.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    follow_redirects: none
+    status_code: 200
+  register: _verify_push_bypass
+  failed_when: >-
+    _verify_push_bypass.status != 200
+    or _verify_push_bypass.status == 302
+  become: true
+
 # Symlink contract -- the role promises /mnt/services/kuma/kuma.db is a
 # symlink onto the dedicated sqlite dataset. A snapshot-restore or a
 # regression in sqlite_dataset could leave a real file at the dest; assert
