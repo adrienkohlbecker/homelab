@@ -221,6 +221,17 @@
       # the sole LAN ingress -- forward-auth via authelia is the gate.
       # Pi-hole's own FTLCONF_webserver_api_pwhash is left unset.
       auth: required
+      # Pi-hole v6 serves the admin UI under /admin/; bare / is the
+      # ad-blocked-page placeholder lighttpd returns when DNS-blocked
+      # domains hit the webserver. Browser visits to the admin
+      # subdomain root should land on the UI directly. Exact-match
+      # location wins over `location /`, so the 302 fires before
+      # auth_request (same pattern as favicon/robots above) -- the
+      # browser then hits /admin/ which IS auth-gated.
+      server_conf: |
+        location = / {
+            return 302 /admin/;
+        }
   tags:
     - pihole
 
