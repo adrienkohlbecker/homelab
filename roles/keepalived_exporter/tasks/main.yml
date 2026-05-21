@@ -46,7 +46,8 @@
       condition: "{{ not (ansible_check_mode and keepalived_exporter_service_result.changed) }}"
       restart: >-
         {{ keepalived_exporter_service_result.changed
-           or keepalived_exporter_installed.changed | default(false) }}
+           or keepalived_exporter_binary_download.changed | default(false)
+           or keepalived_exporter_binary_build.changed | default(false) }}
   tags:
     - keepalived_exporter
 
