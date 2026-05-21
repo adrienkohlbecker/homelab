@@ -97,22 +97,71 @@
   tags:
     - kdump
 
-# Inject crashkernel=<size> into the ZBM commandline for rpool/ROOT.
-# Lab hosts boot via ZFSBootMenu, not GRUB, so the kdump-tools
-# postinst hook into /etc/default/grub.d/ does nothing useful — we
-# have to thread the parameter through the ZFS dataset property.
+# The crashkernel spec below covers 2G-and-up; on a host with less RAM
+# the kernel reserves nothing and the capture kernel never loads, with
+# no operator-visible signal. Fail loudly instead.
+- name: Assert host has enough RAM for crashkernel reservation
+  assert:
+    that: ansible_memtotal_mb >= 2048
+    fail_msg: >-
+      kdump's crashkernel range starts at 2G; host has
+      {{ ansible_memtotal_mb }}MB. Either bump RAM or extend the
+      range in roles/kdump/tasks/main.yml.
+  tags:
+    - kdump
+
+# Thread crashkernel= into whichever boot config the host uses. ZBM
+# hosts (lab/box/pug) get the ZFS dataset property; grub-booted hosts
+# (minimal test fixture today, plus any future grub host) get a
+# /etc/default/grub.d/ drop-in. Either way the kdump-tools postinst's
+# own grub hook does nothing useful on ZBM hosts, so the role owns the
+# wiring — pattern mirrors roles/console/tasks/main.yml:94-146.
+#
+# 320M for 2-4G hosts, 512M for everything bigger. Smaller and the
+# capture kernel won't have room for its own initramfs + dump tools;
+# bigger and you waste RAM that the host can't otherwise use.
 - name: Reserve crashkernel memory in ZBM commandline
+  when: not grub_bootloader
   import_role:
     name: zfsbootmenu
     tasks_from: cmdline
   vars:
     zfsbootmenu_cmdline_file: crashkernel
-    # Memory reserved at boot for the secondary capture kernel that kdump
-    # kexec's into on panic. Mirrors Ubuntu's kdump-tools default range
-    # syntax: 320M for 2-4G hosts, 512M for everything bigger. Smaller and
-    # the capture kernel won't have room for its own initramfs + dump
-    # tools; bigger and you waste RAM that the host can't otherwise use.
     zfsbootmenu_cmdline_contents: 'crashkernel=2G-4G:320M,4G-:512M'
+  tags:
+    - kdump
+
+- name: Set GRUB cmdline (crashkernel)
+  when: grub_bootloader
+  copy:
+    dest: /etc/default/grub.d/99-kdump.cfg
+    content: "GRUB_CMDLINE_LINUX_DEFAULT=\"$GRUB_CMDLINE_LINUX_DEFAULT crashkernel=2G-4G:320M,4G-:512M\"\n"
+    backup: true
+    owner: root
+    group: root
+    mode: "0644"
+  register: kdump_grub_cfg
+  become: true
+  tags:
+    - kdump
+
+- name: Update grub
+  when: grub_bootloader and kdump_grub_cfg.changed
+  command: update-grub
+  changed_when: true
+  become: true
+  tags:
+    - kdump
+
+- name: Ask to reboot (GRUB cmdline)
+  when: grub_bootloader and kdump_grub_cfg.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
   tags:
     - kdump
 
