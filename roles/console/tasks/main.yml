@@ -42,7 +42,7 @@
 # /etc/default/keyboard, so a single invocation covers both changes.
 - name: Apply console-setup + keyboard to live ttys
   when: (console_cfg.changed or console_keyboard_cfg.changed) and not ansible_check_mode
-  command: setupcon --save --force
+  command: setupcon --save
   changed_when: true
   become: true
   tags:
@@ -52,7 +52,7 @@
   when:
     - console_cfg.changed or console_keyboard_cfg.changed
     - not (ansible_check_mode and console_apt.changed)
-  command: update-initramfs -u -k all -v
+  command: update-initramfs -u -k all
   changed_when: true
   become: true
   tags:
