@@ -113,6 +113,18 @@
   tags:
     - console
 
+- name: Create /etc/default/grub.d directory
+  when: grub_bootloader
+  file:
+    dest: /etc/default/grub.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - console
+
 - name: Set GRUB cmdline (consoleblank=0)
   when: grub_bootloader
   copy:
