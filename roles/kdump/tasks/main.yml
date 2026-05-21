@@ -126,7 +126,14 @@
 # no operator-visible signal. Fail loudly instead.
 - name: Assert host has enough RAM for crashkernel reservation
   assert:
-    that: ansible_memtotal_mb >= 2048
+    # ansible_memtotal_mb reports MemTotal *after* firmware + kernel
+    # reservations, so qemu -m 2048 (the `minimal` test fixture)
+    # reads as ~1950 here even though the kernel's crashkernel=
+    # parser sees the full 2G and applies the 2G-4G:320M rule.
+    # Floor sits just below 2G to let minimal pass; anything
+    # smaller would silently no-op the reservation, which is what
+    # this assert exists to make loud.
+    that: ansible_memtotal_mb >= 1900
     fail_msg: >-
       kdump's crashkernel range starts at 2G; host has
       {{ ansible_memtotal_mb }}MB. Either bump RAM or extend the
