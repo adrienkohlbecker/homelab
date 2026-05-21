@@ -142,9 +142,9 @@ influxdb_root_user: root
 # Authelia identity that nginx auto-maps to the InfluxDB root token
 # (via the upstream_authorization knob set in roles/influxdb/tasks/
 # main.yml). Decoupled from influxdb_root_user so the Authelia name
-# (`ak`, matching authelia_users) and the InfluxDB-side root name
-# (`root`) can differ.
-influxdb_authelia_user: ak
+# (`akohlbecker`, matching authelia_users on lab) and the InfluxDB-
+# side root name (`root`) can differ.
+influxdb_authelia_user: akohlbecker
 # PROD RENAME GOTCHA: the role's "Fail if root username rotated
 # post-bootstrap" gate trips when influxdb_root_user changes from
 # `ak` (its pre-rename value) to `root`. The follow-up message
