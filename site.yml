@@ -50,6 +50,7 @@
 - name: Add more services
   hosts: all:!bunk
   roles:
+    - kdump
     - eaton_ipp
     - netdata
     - fluentbit
@@ -66,7 +67,6 @@
 - name: Lab roles
   hosts: box,lab
   roles:
-    - kdump
     - libvirt
     - prometheus # for minio
     - minio
