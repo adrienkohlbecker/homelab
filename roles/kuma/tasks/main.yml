@@ -8,6 +8,17 @@
   tags:
     - kuma
 
+- name: Install sqlite3 CLI
+  # sqlite3 CLI is used (read-only) by the _verify journal_mode probe.
+  # libsqlite3-0 is pulled transitively; the CLI isn't -- mirror
+  # healthchecks/main.yml:5-9.
+  apt:
+    pkg: sqlite3
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - kuma
+
 - name: Create sqlite directory
   when: not (ansible_check_mode and kuma_user.changed)
   file:

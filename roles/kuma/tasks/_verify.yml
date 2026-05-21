@@ -55,3 +55,15 @@
     not _verify_db_owner.stat.exists
     or _verify_db_owner.stat.pw_name != 'kuma'
   become: true
+
+# Functional WAL probe -- the entire point of the dedicated 4K-recordsize
+# sqlite dataset is a WAL workload. A future regression (PRAGMA against
+# a held DB silently no-ops; default journal=delete if WAL isn't forced)
+# would land the file on the right dataset but with the wrong access
+# pattern. Read-only probe, doesn't lock.
+- name: _verify | kuma sqlite is in WAL journal mode
+  command: sqlite3 -readonly /mnt/services/sqlite/kuma/kuma.db 'PRAGMA journal_mode;'
+  register: _verify_wal
+  changed_when: false
+  failed_when: _verify_wal.stdout | trim != 'wal'
+  become: true
