@@ -6,6 +6,4 @@
 XKBMODEL="pc105"
 XKBLAYOUT="fr"
 XKBVARIANT=""
-XKBOPTIONS=""
-
-BACKSPACE="guess"
+XKBOPTIONS="terminate:ctrl_alt_bksp"
