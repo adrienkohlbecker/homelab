@@ -1,0 +1,45 @@
+# Pre-create /mnt/services/sqlite/<name>/ and symlink each links[i] to its
+# /mnt/services/sqlite/<name>/<basename(dest)> sibling. The "no force:" on
+# state=link is load-bearing: state=link refuses to convert a regular file
+# into a symlink, which is the safety we want on snapshot-restore /
+# downgrade where a real DB might already sit at the dest. Resolve by
+# moving the offending file under /mnt/services/sqlite/<name>/ and re-run.
+#
+# Caller passes one dict `sqlite_dataset_args`:
+#   name        directory under /mnt/services/sqlite/
+#   owner       owner of the dir and the symlinks (lchown for the latter)
+#   group       group of the dir and the symlinks
+#   mode        sqlite dir mode (e.g. "0750"); default "0750"
+#   condition   optional bool; gates both tasks (default true)
+#   links       optional list of dest paths; src derived as
+#               /mnt/services/sqlite/<name>/<basename(dest)>. Parent dir
+#               of each dest is the caller's responsibility.
+#
+# The dict form prevents inter-call leakage: each import_role pass
+# replaces the whole sqlite_dataset_args value at play-vars scope.
+
+- name: Pre-create /mnt/services/sqlite/{{ sqlite_dataset_args.name }}
+  when: sqlite_dataset_args.condition | default(true)
+  file:
+    dest: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}"
+    state: directory
+    owner: "{{ sqlite_dataset_args.owner }}"
+    group: "{{ sqlite_dataset_args.group }}"
+    mode: "{{ sqlite_dataset_args.mode | default('0750') }}"
+  become: true
+
+- name: Symlink DBs onto sqlite dataset for {{ sqlite_dataset_args.name }}
+  when:
+    - sqlite_dataset_args.condition | default(true)
+    - sqlite_dataset_args.links is defined
+  file:
+    src: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ item | basename }}"
+    dest: "{{ item }}"
+    state: link
+    owner: "{{ sqlite_dataset_args.owner }}"
+    group: "{{ sqlite_dataset_args.group }}"
+    follow: false
+  become: true
+  loop: "{{ sqlite_dataset_args.links | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
