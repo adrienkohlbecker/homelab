@@ -48,33 +48,16 @@
       - _keepalived_unit_empty.status.UnitFileState in ['disabled', 'masked']
 
 # Branch 2: drop a self-contained sentinel fragment and re-run the role.
-# Keepalived refuses loopback (`lo`) for VRRP — so create a dummy0
-# interface purely for this test. dummy interfaces are pure-virtual
-# (no L2 broadcast surface), so the GARPs keepalived emits as MASTER
-# stay inside the VM. TEST-NET-1 VIP guarantees no collision with prod.
-- name: _verify | Ensure dummy module is loaded
-  community.general.modprobe:
-    name: dummy
-    state: present
-  become: true
-
-- name: _verify | Create dummy0 interface
-  command: ip link add dummy0 type dummy
-  args:
-    creates: /sys/class/net/dummy0
-  become: true
-
-- name: _verify | Bring dummy0 up
-  command: ip link set dummy0 up
-  changed_when: false
-  become: true
-
+# Keepalived refuses loopback (`lo`) and dummy interfaces (no multicast
+# support) for VRRP, so use the box's actual default interface. The
+# GARPs keepalived emits as MASTER go onto the harness's closed VM
+# bridge — harmless. TEST-NET-1 VIP guarantees no collision with prod.
 - name: _verify | Drop sentinel conf.d fragment
   copy:
     content: |
       vrrp_instance _verify_sentinel {
         state BACKUP
-        interface dummy0
+        interface {{ ansible_default_ipv4.interface }}
         virtual_router_id 250
         priority 1
         advert_int 1
