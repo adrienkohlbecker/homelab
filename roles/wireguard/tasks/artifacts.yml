@@ -9,6 +9,22 @@
 # split-tunnel default plus one all-traffic-via-<server> variant per
 # server peer) into a single list of {peer, suffix, vpn} dicts so the
 # template + QR tasks each appear once instead of once-per-shape.
+
+# Peer names flow unquoted into the PSK and QR shell commands below
+# (and into shell-redirected file paths). The regex bounds names to
+# [a-z][a-z0-9_]* so a `$`, backtick, space, or `;` in a future
+# inventory entry can't turn the localhost play into RCE against the
+# operator. Underscores match the repo-wide identifier convention.
+- name: Assert wireguard peer names are shell-safe
+  assert:
+    that: item.name is match('^[a-z][a-z0-9_]*$')
+    fail_msg: "wireguard peer name {{ item.name | to_json }} must match ^[a-z][a-z0-9_]*$"
+  loop: "{{ wireguard_peers }}"
+  loop_control:
+    label: "{{ item.name }}"
+  tags:
+    - wireguard
+
 - name: Seed wireguard render plan with split-tunnel shapes
   set_fact:
     wireguard_render_plan: "{{ wireguard_peers | rejectattr('is_server') | map(attribute='name') | map('community.general.dict_kv', 'peer') | map('combine', {'suffix': '', 'vpn': ''}) | list }}"
