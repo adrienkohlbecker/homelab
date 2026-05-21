@@ -117,7 +117,10 @@
   when: grub_bootloader
   copy:
     dest: /etc/default/grub.d/99-console.cfg
-    content: "GRUB_CMDLINE_LINUX_DEFAULT=\"$GRUB_CMDLINE_LINUX_DEFAULT consoleblank=0\"\n"
+    # GRUB_CMDLINE_LINUX (not _DEFAULT) so the recovery menuentry also
+    # carries consoleblank=0 — recovery boot is exactly the walk-up
+    # debug case where a blanking timer is most unwelcome.
+    content: "GRUB_CMDLINE_LINUX=\"$GRUB_CMDLINE_LINUX consoleblank=0\"\n"
     backup: true
     owner: root
     group: root
