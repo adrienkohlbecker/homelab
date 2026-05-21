@@ -1,0 +1,52 @@
+# keepalived_exporter signals SIGRTMIN+4 to keepalived on each scrape;
+# keepalived dumps /tmp/keepalived.json which the exporter parses.
+# Retries absorb the cold-start handshake (advert_int 1s in fixture
+# conf + one scrape for the JSON to land).
+- name: _verify | Scrape exporter /metrics directly
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.keepalived_exporter }}/metrics"
+    return_content: true
+  register: keepalived_exporter_verify_loopback
+  retries: 10
+  delay: 2
+  until:
+    - keepalived_exporter_verify_loopback.status == 200
+    - "'keepalived_up 1' in keepalived_exporter_verify_loopback.content"
+    - "'vi_test' in keepalived_exporter_verify_loopback.content"
+
+- name: _verify | Assert per-instance VRRP series for vi_test
+  assert:
+    that:
+      - "'keepalived_vrrp_advert_sent' in keepalived_exporter_verify_loopback.content"
+      - '"name=\"vi_test\"" in keepalived_exporter_verify_loopback.content'
+    fail_msg: >-
+      /metrics responded with keepalived_up=1 but did not expose
+      per-instance VRRP series for vi_test -- the exporter likely
+      cannot signal keepalived or read /tmp/keepalived.json.
+
+# Exercise the nginx-proxied path too; a regression in nginx_site
+# wiring or in the / -> /metrics redirect would slip past the loopback
+# probe. authelia_stub in _setup admits every auth_request.
+- name: _verify | Exporter reachable via nginx vhost (with authelia stub)
+  uri:
+    url: https://localhost/metrics
+    headers:
+      Host: "keepalived-exporter.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    status_code: 200
+    return_content: true
+  register: keepalived_exporter_verify_nginx
+  retries: 5
+  delay: 2
+  until:
+    - keepalived_exporter_verify_nginx.status == 200
+    - "'keepalived_up' in keepalived_exporter_verify_nginx.content"
+
+- name: _verify | Nginx root redirects to /metrics
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "keepalived-exporter.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    status_code: 301
+    follow_redirects: none
