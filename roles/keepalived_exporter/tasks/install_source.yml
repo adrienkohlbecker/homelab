@@ -78,7 +78,7 @@
       - go
       - build
       - -trimpath
-      - -ldflags=-s -w
+      - -ldflags=-s -w -X main.version={{ keepalived_exporter_version }}
       - -buildvcs=false
       - -o
       - "/var/cache/keepalived_exporter-{{ keepalived_exporter_version }}-src/bin/keepalived_exporter"
