@@ -60,7 +60,11 @@
   tags:
     - journald
 
+# Symmetric with the stop above: only needs to run on first apply per
+# host or when conf/audit-enable just changed. Idempotent no-op on
+# steady state otherwise, but the gate makes that explicit.
 - name: Start systemd-journald-audit.socket
+  when: journald_conf_d_10_custom_conf_result.changed or journald_audit_socket.changed
   systemd:
     name: systemd-journald-audit.socket
     state: started
