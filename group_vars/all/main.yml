@@ -132,6 +132,7 @@ service_ports:
   hyperdx_otlp_http: 4318
   influxdb: 8086
   jellyfin: 8096
+  keepalived_exporter: 9650
   kuma: 3001
   lidarr: 8686
   nut: 3493

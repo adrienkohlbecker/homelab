@@ -32,7 +32,7 @@
     tasks_from: install
   vars:
     systemd_unit_args:
-      src: keepalived_exporter.service
+      src: keepalived_exporter.service.j2
   tags:
     - keepalived_exporter
 
@@ -55,7 +55,7 @@
   vars:
     nginx_site_args:
       subdomain: keepalived-exporter
-      proxy_pass: http://localhost:9650/
+      proxy_pass: http://localhost:{{ service_ports.keepalived_exporter }}/
       auth: required
       server_conf: |
         location = / {
