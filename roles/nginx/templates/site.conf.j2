@@ -159,13 +159,17 @@ server {
     # `$authelia_user` is created by auth_request_set inside this
     # location and isn't visible to map directives at http scope
     # (nginx -t fails with "unknown variable" at parse time).
-    # Unknown user falls through to "" -> nginx 1.13+ omits the
-    # header -> upstream returns 401 -> user lands on the upstream's
-    # native login (operator break-glass). The bypass-on-Authorization
-    # path in /internal/authelia above leaves $authelia_user empty
-    # too, so the client's original Authorization passes through
-    # unmodified.
-    set $upstream_auth "";
+    #
+    # Initialize from $http_authorization (client's own header) so the
+    # bypass-on-Authorization machine-client path passes through
+    # unmodified -- proxy_set_header with empty value strips the
+    # client's header (it doesn't fall back to nginx's default
+    # forward), so an unconditional `set $upstream_auth ""` would
+    # silently 401 every Telegraf/HA/Grafana write. Mapped Authelia
+    # users still get their assigned token (the if-set below overrides
+    # $http_authorization), and unmapped Authelia users with no
+    # Authorization land at the upstream's native sign-in.
+    set $upstream_auth $http_authorization;
     {% for user, header in nginx_site_args.upstream_authorization.items() %}
     if ($authelia_user = "{{ user }}") { set $upstream_auth "{{ header }}"; }
     {% endfor %}
