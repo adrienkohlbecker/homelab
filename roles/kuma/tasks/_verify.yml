@@ -64,9 +64,10 @@
     or _verify_symlink.stat.lnk_target != '/mnt/services/sqlite/kuma/kuma.db'
   become: true
 
-# Uid regression detector -- kuma's entrypoint chowns /app/data to
-# PUID:PGID before dropping privileges, so kuma.db should land owned by
-# the kuma host user. A mapping drift would land it as root or another
+# Uid regression detector -- kuma runs as the kuma host uid directly
+# (tier-1 --user, no uidmap, entrypoint shell wrapper bypassed). kuma.db
+# should land owned by that user. A regression that drops the --user
+# flag or re-introduces uidmap could land the file as root or another
 # uid silently; assert ownership so the regression is loud.
 - name: _verify | kuma sqlite DB is owned by kuma
   stat:
