@@ -45,6 +45,21 @@ server {
   # Authelia over wireguard when they need forward-auth.
   location /internal/authelia {
     internal;
+{% if nginx_site_args.upstream_authorization is defined %}
+    # Machine clients that arrive with their own Authorization header
+    # (Token / Bearer / Basic) skip the Authelia round-trip: return 204
+    # straight away, so auth_request admits the parent. The `location /`
+    # block then leaves the client's header untouched (the
+    # `proxy_set_header Authorization` below resolves to empty for
+    # them -- no $authelia_user is set -- and nginx 1.13+ omits the
+    # header on empty value). Browsers carry no Authorization on plain
+    # navigation, so this short-circuit is invisible to the UI path.
+    # Implies trust in any presented Authorization header -- only safe
+    # when the upstream itself rejects bad tokens (InfluxDB does).
+    if ($http_authorization) {
+      return 204;
+    }
+{% endif %}
 {% if nginx_site_args.bypass_query_param is defined %}
     # URL-param bypass for clients that can't send Authorization headers
     # (compta's Mac app, homepage_alerts cross-host poller). Compare the
@@ -134,6 +149,27 @@ server {
     proxy_set_header X-Forwarded-Groups $authelia_groups;
     proxy_set_header X-Forwarded-Name   $authelia_name;
     proxy_set_header X-Forwarded-Email  $authelia_email;
+{% endif %}
+{% if nginx_site_args.upstream_authorization is defined %}
+    # Per-user upstream Authorization injection. The caller passes a
+    # dict {authelia_user: header_value}; each entry becomes an
+    # `if ($authelia_user = "...") { set $upstream_auth "..."; }`. We
+    # use the `if + set` pattern (one of the "evil if" exceptions
+    # documented by nginx) rather than an http-scope `map` because
+    # `$authelia_user` is created by auth_request_set inside this
+    # location and isn't visible to map directives at http scope
+    # (nginx -t fails with "unknown variable" at parse time).
+    # Unknown user falls through to "" -> nginx 1.13+ omits the
+    # header -> upstream returns 401 -> user lands on the upstream's
+    # native login (operator break-glass). The bypass-on-Authorization
+    # path in /internal/authelia above leaves $authelia_user empty
+    # too, so the client's original Authorization passes through
+    # unmodified.
+    set $upstream_auth "";
+    {% for user, header in nginx_site_args.upstream_authorization.items() %}
+    if ($authelia_user = "{{ user }}") { set $upstream_auth "{{ header }}"; }
+    {% endfor %}
+    proxy_set_header Authorization      $upstream_auth;
 {% endif %}
 
     # Proxy timeouts
