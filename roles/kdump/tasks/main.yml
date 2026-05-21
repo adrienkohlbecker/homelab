@@ -171,12 +171,18 @@
 # and `kdump-config load` exits non-zero — the unit fails to start.
 # Ship enabled-but-not-started until the next reboot rotates a
 # crashkernel-aware kernel in. The reboot already gets requested by
-# the cmdline import_role above, so the site.yml-level reboot check
+# the cmdline writes above, so the site.yml-level reboot check
 # closes the loop.
+#
+# `cat` rather than `slurp:` so kernels without CONFIG_KEXEC_CORE
+# (where /sys/kernel/kexec_crash_size doesn't exist) degrade to
+# enable-only instead of aborting the play — same skip-on-missing
+# contract the panic sysctl probe above honours.
 - name: Read /sys/kernel/kexec_crash_size
-  slurp:
-    src: /sys/kernel/kexec_crash_size
+  command: cat /sys/kernel/kexec_crash_size
   register: kdump_kexec_crash_size
+  changed_when: false
+  failed_when: false
   become: true
   tags:
     - kdump
@@ -189,7 +195,7 @@
     systemd_unit_args:
       src: kdump-tools
       condition: "{{ not (ansible_check_mode and apt_kdump_tools.changed) }}"
-      start: "{{ (kdump_kexec_crash_size.content | b64decode | trim | int) > 0 }}"
+      start: "{{ (kdump_kexec_crash_size.stdout | default('0') | trim | int) > 0 }}"
       restart: "{{ kdump_tools_cfg.changed }}"
   tags:
     - kdump
