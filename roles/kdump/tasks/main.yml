@@ -38,8 +38,13 @@
     # Unknown NMIs (PCIe AER, firmware-injected) on hardware where
     # they signal an unrecoverable fault.
     - { name: unknown_nmi_panic, value: '1' }
-    # Reboot 10s after panic finishes so the host comes back up
-    # automatically after kdump captures vmcore.
+    # Auto-reboot 10s after a panic that *didn't* kdump-capture (early
+    # boot before the crashkernel reservation takes, capture kernel
+    # itself panicking, or any oops/panic on a host whose service
+    # hasn't loaded). The kdump capture path reboots itself after
+    # writing vmcore (KDUMP_FAIL_CMD / kdump-tools-dump.service), so
+    # this sysctl is the no-capture fallback, not the post-capture
+    # reboot it reads as.
     - { name: panic, value: '10' }
   register: kdump_panic_sysctls
   become: true
