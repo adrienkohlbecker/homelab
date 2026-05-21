@@ -33,11 +33,35 @@
     - { name: softlockup_panic, value: '1' }
     # Oops that didn't escalate is the silent-corruption shape.
     - { name: panic_on_oops, value: '1' }
+    # WARN_ON / WARN traces typically precede the cascade-hang;
+    # converting to panic gets a vmcore at the *first* symptom
+    # instead of waiting for the eventual lockup.
+    - { name: panic_on_warn, value: '1' }
     # khungtaskd-detected stalls (default 120s).
     - { name: hung_task_panic, value: '1' }
+    # RCU read-side stuck-forever — distinct shape from soft/hard
+    # lockup. Triggers on the first stall.
+    - { name: panic_on_rcu_stall, value: '1' }
     # Unknown NMIs (PCIe AER, firmware-injected) on hardware where
     # they signal an unrecoverable fault.
     - { name: unknown_nmi_panic, value: '1' }
+    # IO-channel-check NMI (chipset / PCIe AER signalled). x86 only;
+    # the stat-probe skips it on arm64.
+    - { name: panic_on_io_nmi, value: '1' }
+    # When the lockup detectors fire, NMI-poke the other CPUs so
+    # their backtraces also land in the panic log — the lock-holder
+    # usually lives on another CPU, and `bt -a` is "essential for
+    # SMP hangs" per the operator runbook.
+    - { name: softlockup_all_cpu_backtrace, value: '1' }
+    - { name: hardlockup_all_cpu_backtrace, value: '1' }
+    - { name: hung_task_all_cpu_backtrace, value: '1' }
+    - { name: oops_all_cpu_backtrace, value: '1' }
+    # Bitmask of extra info to dump into dmesg.<n> *before* kexec:
+    # 1=tasks, 2=mem, 4=timers, 8=locks, 16=ftrace = 31. Lands in
+    # the dmesg the runbook tells the operator to read first, and
+    # subsumes most of the `crash` cheatsheet (ps / log / mod -S)
+    # for the 80% case.
+    - { name: panic_print, value: '31' }
     # Auto-reboot 10s after a panic that *didn't* kdump-capture (early
     # boot before the crashkernel reservation takes, capture kernel
     # itself panicking, or any oops/panic on a host whose service
