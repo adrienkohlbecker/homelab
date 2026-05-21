@@ -1,13 +1,15 @@
-# Loopback probe -- kuma's Express server starts after Database.connect()
-# creates kuma.db, so a 200 here also proves the symlink onto the sqlite
-# dataset resolved (and the file landed at the target path).
+# Loopback probe -- the unit's --sdnotify=healthy gates systemd `active`
+# on kuma's in-container healthcheck, which itself probes HTTP, so by the
+# time _verify runs HTTP is already up. The short retry covers the tiny
+# race between active transition and this task firing; a real failure
+# reports in seconds, not minutes.
 - name: _verify | kuma answers on its loopback port
   uri:
     url: http://localhost:{{ service_ports.kuma }}/
     status_code: 200
   register: _verify_loopback
-  retries: 60
-  delay: 2
+  retries: 5
+  delay: 1
   until: _verify_loopback.status == 200
   become: true
 
