@@ -189,8 +189,15 @@
 #     would stack a duplicate crashkernel= and the rightmost-wins
 #     ordering was a footgun across package upgrades.
 #
-# 320M for 2-4G hosts, 512M for everything bigger — covers the lab
-# (≥4G) capture kernel's initramfs + dump tools without wasting RAM.
+# `,high`/`,low` syntax (kernel >=5.9 on arm64, >=4.6 on x86_64) splits
+# the reservation: 512M in the high region (above 4G) holds the
+# capture kernel + initramfs + dump tools, 128M in the low region
+# (under 4G) is left for capture-kernel devices that need DMA32
+# buffers. Keeping the high chunk above 4G means the running kernel
+# isn't stealing from ZONE_DMA32, which on a busy host can otherwise
+# manifest as GFP_DMA32 allocation failures during normal operation.
+# All current ZBM hosts (lab/pug/box) are >=4G so the fixed
+# reservation lands without needing the older tiered shape.
 - name: Reserve crashkernel memory in ZBM commandline
   when: not grub_bootloader
   import_role:
@@ -198,7 +205,7 @@
     tasks_from: cmdline
   vars:
     zfsbootmenu_cmdline_file: crashkernel
-    zfsbootmenu_cmdline_contents: 'crashkernel=2G-4G:320M,4G-:512M'
+    zfsbootmenu_cmdline_contents: 'crashkernel=512M,high crashkernel=128M,low'
   tags:
     - kdump
 
