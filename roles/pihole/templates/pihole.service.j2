@@ -59,7 +59,12 @@ ExecStart=/usr/bin/podman run \
     --env FTLCONF_dns_revServers="true,{{ site_subnets.home }},{{ site_subnets.home | ansible.utils.ipmath(1) }}" \
     --env FTLCONF_dns_upstreams="{{ podman_default_network | ansible.utils.ipmath(1) }}#{{ service_ports.dnscrypt_proxy }}" \
     --env FTLCONF_misc_etc_dnsmasq_d=true \
-    --env FTLCONF_webserver_api_pwhash="{{ pihole_password | hash('sha256') | hash('sha256') }}" \
+    {# Admin UI sits behind authelia forward-auth on nginx (only ingress, #}
+    {# since the container binds 127.0.0.1:8943) -- pihole's own password #}
+    {# is redundant. `webserver.api.password=""` is the supported "no     #}
+    {# auth" toggle (a pseudo-item that clears `pwhash` on disk); setting #}
+    {# `_pwhash` directly to "" doesn't take effect.                      #}
+    --env FTLCONF_webserver_api_password="" \
     --env FTLCONF_database_maxDBdays=31 \
     --env FTLCONF_files_database=/var/lib/pihole/pihole-FTL.db \
     --env FTLCONF_files_gravity=/var/lib/pihole/gravity.db \
@@ -73,7 +78,7 @@ ExecStart=/usr/bin/podman run \
     --env PIHOLE_UID={{ pihole_user.uid }} \
     --env PIHOLE_GID={{ pihole_user.group }} \
     --dns=127.0.0.1 \
-    --dns=1.1.1.1 \
+    --dns={{ bootstrap_dns_resolver }} \
 {# Static /etc/hosts overrides inside the container, sharing the same #}
 {# `etc_hosts_entries` map roles/hostname renders into /etc/hosts on the #}
 {# test box. Bypasses pihole's own split-horizon wildcard #}

@@ -39,7 +39,7 @@
 
     systemctl disable systemd-resolved.service
     systemctl stop systemd-resolved
-    echo "nameserver 1.1.1.1" > /etc/resolv.conf
+    echo "nameserver {{ bootstrap_dns_resolver }}" > /etc/resolv.conf
   args:
     executable: /bin/bash
     removes: '{{ "/etc/systemd/system/sysinit.target.wants/systemd-resolved.service" if ansible_distribution_major_version != "22" else "/etc/systemd/system/multi-user.target.wants/systemd-resolved.service" }}'
