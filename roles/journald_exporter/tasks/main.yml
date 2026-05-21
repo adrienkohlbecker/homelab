@@ -45,6 +45,17 @@
   tags:
     - journald_exporter
 
+- name: Create /etc/journald-exporter
+  file:
+    dest: /etc/journald-exporter
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+  tags:
+    - journald_exporter
+
 - name: Create keys directory
   file:
     dest: /etc/journald-exporter/keys
@@ -58,7 +69,7 @@
 
 - name: Create key
   copy:
-    content: "{{ journald_exporter_key }}"
+    content: "{{ (journald_exporter_key | trim) + '\n' }}"
     dest: /etc/journald-exporter/keys/netdata
     owner: root
     group: root
