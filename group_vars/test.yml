@@ -121,7 +121,6 @@ podman_zvol_size: '{{ "15GB" | human_to_bytes | string }}'
 
 postfix_smtp_user: changeme
 postfix_smtp_password: changeme
-journald_exporter_key: f3a6ad7fde70e51adf85a1aeff18355d493dc8de2d112bc9dffc67b979a32b70
 cloudflare_api_token: !vault |
           $ANSIBLE_VAULT;1.2;AES256;test
           31316661353762373465303462656135396230656565306662316433373432323936323936663030

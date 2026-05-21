@@ -64,11 +64,11 @@
 # The fact name is sanitized via regex_replace because ansible variable
 # names must match [A-Za-z_][A-Za-z0-9_]* -- any non-identifier char
 # (notably a hyphen, which POSIX permits in user/group names and which
-# some upstream daemons hardcode, e.g. dead-claudia/journald-exporter)
-# would otherwise produce "Invalid variable name" at set_fact time. The
-# typical case (name='healthchecks') is unchanged; hyphenated names
-# (name='journald-exporter') resolve to journald_exporter_user. Same
-# pattern as roles/systemd_unit/tasks/install.yml's per-unit fact.
+# some upstream daemons hardcode) would otherwise produce "Invalid
+# variable name" at set_fact time. The typical case (name='healthchecks')
+# is unchanged; hyphenated names (name='foo-bar') resolve to
+# foo_bar_user. Same pattern as roles/systemd_unit/tasks/install.yml's
+# per-unit fact.
 - name: Record user record for {{ _service_user_name }}
   set_fact:
     "{{ _service_user_name | regex_replace('[^A-Za-z0-9_]', '_') }}_user": "{{ service_user_result }}"

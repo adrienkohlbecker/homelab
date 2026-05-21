@@ -157,7 +157,6 @@ netdata_collectors:
   # - go.d:collector:pihole:local
   - go.d:collector:prometheus:fluentbit
   - go.d:collector:prometheus:gitea_runner
-  - go.d:collector:prometheus:journald
   - go.d:collector:prometheus:keepalived_exporter_local
   - go.d:collector:prometheus:minio
   - go.d:collector:prometheus:prometheus
