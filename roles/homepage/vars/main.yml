@@ -29,6 +29,8 @@ homepage_bookmarks:
     - { name: Netdata (lab), abbr: NL, sub: netdata,      icon: netdata }
     - { name: Netdata (pug), abbr: NP, sub: netdata,      icon: netdata, host: pug }
     - { name: Eaton IPP,     abbr: EI, sub: ipp }
+    - { name: Keepalived (lab), abbr: KL, sub: keepalived-exporter }
+    - { name: Keepalived (pug), abbr: KP, sub: keepalived-exporter, host: pug }
   Personal:
     - { name: Paperless,      abbr: PL, sub: paperless,     icon: paperless-ngx }
     - { name: OpenProject,    abbr: OP, sub: openproject,   icon: openproject }
