@@ -44,6 +44,28 @@ http {
         default                                $request;
     }
 
+    # Distinguish machine clients from Authelia-authed browsers for the
+    # bypass-on-Authorization shortcut in /internal/authelia (sites with
+    # `upstream_authorization` set). Machine clients (Telegraf, HA,
+    # Grafana) hit the vhost with `Authorization: Token <t>` and no
+    # Authelia cookie -- we want them to skip the auth_request round-
+    # trip and forward their token straight through. Browsers that hold
+    # an Authelia session cookie must NEVER bypass, because some SPAs
+    # (InfluxDB v2 is one) inject a stale `Authorization` header from
+    # localStorage onto every XHR, which would otherwise trigger the
+    # bypass too -- the browser's auth_request never runs, the if-set
+    # chain doesn't match (no $authelia_user), and the stale token
+    # gets forwarded to the upstream and rejected (401).
+    #
+    # Match: empty session cookie AND non-empty Authorization. We can't
+    # express the conjunction with nginx's `if` directive, so the
+    # decision lives in this http-scope map and the location-scope `if`
+    # just tests the resulting 0/1.
+    map "$cookie_authelia_session:$http_authorization" $authelia_bypass {
+        default       0;
+        "~^:.+"       1;
+    }
+
     # Extract the `auth_token` query param value from the parent request
     # URI for use by /internal/authelia bypass logic. Inside an
     # auth_request subrequest $args/$arg_X refer to the subrequest's

@@ -46,17 +46,18 @@ server {
   location /internal/authelia {
     internal;
 {% if nginx_site_args.upstream_authorization is defined %}
-    # Machine clients that arrive with their own Authorization header
-    # (Token / Bearer / Basic) skip the Authelia round-trip: return 204
+    # Machine clients (no Authelia session cookie, presenting their own
+    # Authorization header) skip the Authelia round-trip: return 204
     # straight away, so auth_request admits the parent. The `location /`
     # block then leaves the client's header untouched (the
-    # `proxy_set_header Authorization` below resolves to empty for
-    # them -- no $authelia_user is set -- and nginx 1.13+ omits the
-    # header on empty value). Browsers carry no Authorization on plain
-    # navigation, so this short-circuit is invisible to the UI path.
-    # Implies trust in any presented Authorization header -- only safe
-    # when the upstream itself rejects bad tokens (InfluxDB does).
-    if ($http_authorization) {
+    # `proxy_set_header Authorization` below initialises from
+    # $http_authorization so the original token passes through). The
+    # match is computed in the $authelia_bypass map in nginx.conf.j2
+    # because nginx's `if` can't compose two conditions. Implies trust
+    # in any presented Authorization header from a cookieless client
+    # -- only safe when the upstream itself rejects bad tokens
+    # (InfluxDB does).
+    if ($authelia_bypass) {
       return 204;
     }
 {% endif %}
