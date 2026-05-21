@@ -10,7 +10,6 @@
     - netplan
     - wireguard
     - locale
-    - keyboard
     - console
     - timezone
     - subid
