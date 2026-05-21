@@ -202,6 +202,38 @@ ubuntu_mirror_security: '{{ (ansible_architecture == "aarch64") | ternary(mirror
 # nft/avahi/smb configs.
 default_interface: "{{ ansible_default_ipv4.interface | mandatory }}"
 
+# Excluded from the all-traffic VPN AllowedIPs (i.e. NOT tunneled) --
+# anything in these ranges keeps reaching its physical-uplink
+# destination instead of going through wireguard. RFC1918 + CGNAT +
+# loopback + link-local + multicast + reserved on both v4 and v6.
+# Consumed via the cidr_exclude filter (filter_plugins/cidr_exclude.py)
+# in roles/wireguard/templates/wg.conf.j2.
+#
+# Notable inclusions vs. the old hand-curated list:
+# - 100.64.0.0/10 (RFC6598 CGNAT) -- cellular ISPs use this for client
+#   addressing; if it were tunneled, the all-traffic VPN would route the
+#   peer's own physical uplink through itself and the tunnel collapses.
+# - 240.0.0.0/4 (IPv4 reserved) and 0.0.0.0/8 ("this network").
+# - fc00::/7 (IPv6 ULA) -- previously only fec0::/10 (RFC3879-deprecated
+#   site-local) was excluded.
+#
+# ::1/128 is intentionally omitted: excluding a single /128 from ::/0
+# fragments the result into ~130 CIDRs, and loopback packets can't
+# egress to a wireguard interface anyway.
+wireguard_all_traffic_excluded_cidrs:
+  - 0.0.0.0/8
+  - 10.0.0.0/8
+  - 100.64.0.0/10
+  - 127.0.0.0/8
+  - 169.254.0.0/16
+  - 172.16.0.0/12
+  - 192.168.0.0/16
+  - 224.0.0.0/4
+  - 240.0.0.0/4
+  - fc00::/7
+  - fe80::/10
+  - ff00::/8
+
 # wireguard-vanity-keygen -c $NAME/
 # Peer addresses derive from `network.*` (see group_vars/all/network.yml
 # and data/network_topology.yml); endpoints, keys, and post_up hooks
