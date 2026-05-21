@@ -2,8 +2,8 @@
   check_mode: false
   become: true
   get_url:
-    url: "{{ mirror_github }}/gen2brain/keepalived_exporter/releases/download/v0.7.0/keepalived_exporter-0.7.0-amd64.tar.gz"
-    checksum: sha256:83098655dc26e58fb0b9a1fd04d5e96301cb687876e6d70a99eddd23533d987b
+    url: "{{ keepalived_exporter_artifacts[ansible_architecture].url }}"
+    checksum: "sha256:{{ keepalived_exporter_artifacts[ansible_architecture].sha256 }}"
     dest: /tmp/keepalived_exporter.tar.gz
     mode: "0644"
     owner: root
@@ -17,7 +17,7 @@
     mode: "0755"
     owner: root
     group: root
-    include: [ keepalived_exporter-0.7.0-amd64/keepalived_exporter ]
+    include: [ "keepalived_exporter-{{ keepalived_exporter_version }}-amd64/keepalived_exporter" ]
     list_files: true
     extra_opts: [ --strip-components=1 ]
   become: true
