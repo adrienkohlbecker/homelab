@@ -62,7 +62,6 @@
     src: "/mnt/services/sqlite/sonarr/{{ item }}"
     dest: "/mnt/services/sonarr/{{ item }}"
     state: link
-    force: true
     owner: sonarr
     group: media
     follow: false
