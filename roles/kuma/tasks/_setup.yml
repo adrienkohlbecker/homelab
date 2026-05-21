@@ -12,6 +12,8 @@
   import_role:
     name: _test
     tasks_from: authelia_stub
+  vars:
+    authelia_stub_mode: gate
 
 - name: _setup | Create /mnt/services
   file:
