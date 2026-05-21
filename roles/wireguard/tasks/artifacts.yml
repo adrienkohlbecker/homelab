@@ -30,7 +30,7 @@
     state: directory
     owner: "{{ ansible_facts.user_uid }}"
     group: "{{ ansible_facts.user_gid }}"
-    mode: "0755"
+    mode: "0700"
   tags:
     - wireguard
 
@@ -40,7 +40,7 @@
     state: directory
     owner: "{{ ansible_facts.user_uid }}"
     group: "{{ ansible_facts.user_gid }}"
-    mode: "0755"
+    mode: "0700"
   loop: "{{ wireguard_peers | rejectattr('is_server') | map(attribute='name') }}"
   tags:
     - wireguard
@@ -51,12 +51,15 @@
     state: directory
     owner: "{{ ansible_facts.user_uid }}"
     group: "{{ ansible_facts.user_gid }}"
-    mode: "0755"
+    mode: "0700"
   tags:
     - wireguard
 
+# umask on the redirect lands the .psk at 0644 by default; the explicit
+# chmod here is what makes mode: 0600 stick (ansible's file: mode is
+# meaningless on shell-redirected output).
 - name: Generate preshared key
-  shell: set -euo pipefail; openssl rand -base64 32 | tr -d '\n' > {{ playbook_dir }}/wireguard/psk/{{ item[0] }}-{{ item[1] }}.psk
+  shell: set -euo pipefail; umask 077; openssl rand -base64 32 | tr -d '\n' > {{ playbook_dir }}/wireguard/psk/{{ item[0] }}-{{ item[1] }}.psk
   args:
     executable: /bin/bash
     creates: "{{ playbook_dir }}/wireguard/psk/{{ item[0] }}-{{ item[1] }}.psk"
@@ -70,7 +73,7 @@
     dest: "{{ playbook_dir }}/wireguard/{{ item.peer }}/home{{ item.suffix }}.conf"
     owner: "{{ ansible_facts.user_uid }}"
     group: "{{ ansible_facts.user_gid }}"
-    mode: "0644"
+    mode: "0600"
   vars:
     own_peer_name: "{{ item.peer }}"
     vpn_peer_name: "{{ item.vpn }}"
@@ -80,8 +83,10 @@
   tags:
     - wireguard
 
+# umask 077 makes qrencode's output land at 0600 (the PNG embeds the
+# same secret as the .conf).
 - name: Render wireguard QR code
-  shell: set -euo pipefail; if [ -f "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" ]; then bfr=`md5sum "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" -r "{{ playbook_dir }}/wireguard/{{ item.peer }}/home{{ item.suffix }}.conf"; aftr=`md5sum "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
+  shell: set -euo pipefail; umask 077; if [ -f "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" ]; then bfr=`md5sum "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" -r "{{ playbook_dir }}/wireguard/{{ item.peer }}/home{{ item.suffix }}.conf"; aftr=`md5sum "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
   args:
     executable: /bin/bash
   register: wireguard_qr_result
@@ -100,7 +105,7 @@
     format: zip
     owner: "{{ ansible_facts.user_uid }}"
     group: "{{ ansible_facts.user_gid }}"
-    mode: "0644"
+    mode: "0600"
   loop: "{{ wireguard_peers | rejectattr('is_server') | map(attribute='name') }}"
   tags:
     - wireguard
