@@ -126,3 +126,53 @@
   loop: "{{ wireguard_peers | rejectattr('is_server') | map(attribute='name') }}"
   tags:
     - wireguard
+
+# Without this prune, renaming `phone` -> `mobile` in wireguard_peers
+# leaves `./wireguard/phone/home.conf` (a private-key-bearing file) on
+# disk forever, and the next zip-export accidentally includes it.
+- name: Find existing wireguard peer dirs
+  find:
+    paths: "{{ playbook_dir }}/wireguard"
+    file_type: directory
+    depth: 1
+    excludes:
+      - psk
+  register: wireguard_peer_dirs_found
+  tags:
+    - wireguard
+
+- name: Prune orphan wireguard peer dirs
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ wireguard_peer_dirs_found.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  when: (item.path | basename) not in (wireguard_peers | rejectattr('is_server') | map(attribute='name') | list)
+  tags:
+    - wireguard
+
+- name: Find existing wireguard PSK files
+  find:
+    paths: "{{ playbook_dir }}/wireguard/psk"
+    file_type: file
+    patterns: "*.psk"
+  register: wireguard_psk_files_found
+  tags:
+    - wireguard
+
+# expected_psks is the canonical set the Generate preshared key task
+# above produces: sorted-pair filenames `<a>-<b>.psk` for every
+# combinations(2) of all peer names.
+- name: Prune orphan wireguard PSK files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  vars:
+    expected_psks: "{{ wireguard_peers | map(attribute='name') | sort | combinations(2) | map('join', '-') | map('regex_replace', '$', '.psk') | list }}"
+  loop: "{{ wireguard_psk_files_found.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  when: (item.path | basename) not in expected_psks
+  tags:
+    - wireguard
