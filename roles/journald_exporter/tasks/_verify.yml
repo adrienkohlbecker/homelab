@@ -48,6 +48,58 @@
     force_basic_auth: true
     status_code: 401
 
+# Upstream installation.md: "The key directory is watched, so new API
+# keys can be added and removed without having to restart the server.
+# It can also have multiple key files, in which all keys in them are
+# accepted." This probe exercises that contract end-to-end: drop a
+# second valid key, prove the daemon accepts it without a restart,
+# delete it, prove the deletion propagates back to 401.
+- name: _verify | Hot-reload | Drop a second key file
+  when: ansible_architecture == 'x86_64'
+  copy:
+    # Distinct from journald_exporter_key, structurally valid (64 hex).
+    content: "1111111111111111111111111111111111111111111111111111111111111111\n"
+    dest: /etc/journald-exporter/keys/_verify_hotreload
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+
+- name: _verify | Hot-reload | inotify settles
+  when: ansible_architecture == 'x86_64'
+  wait_for:
+    timeout: 2
+
+- name: _verify | Hot-reload | new key authenticates without restart
+  when: ansible_architecture == 'x86_64'
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.journald_exporter }}/metrics"
+    url_username: metrics
+    url_password: "1111111111111111111111111111111111111111111111111111111111111111"
+    force_basic_auth: true
+    status_code: 200
+
+- name: _verify | Hot-reload | Remove second key file
+  when: ansible_architecture == 'x86_64'
+  file:
+    path: /etc/journald-exporter/keys/_verify_hotreload
+    state: absent
+  become: true
+
+- name: _verify | Hot-reload | inotify settles
+  when: ansible_architecture == 'x86_64'
+  wait_for:
+    timeout: 2
+
+- name: _verify | Hot-reload | removed key is now rejected
+  when: ansible_architecture == 'x86_64'
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.journald_exporter }}/metrics"
+    url_username: metrics
+    url_password: "1111111111111111111111111111111111111111111111111111111111111111"
+    force_basic_auth: true
+    status_code: 401
+
 # Browser-style probe through nginx: no Authelia session, so the
 # auth: required gate must redirect to the portal. 302 here validates
 # that the gate is wired; the metrics-actually-served-after-auth path
