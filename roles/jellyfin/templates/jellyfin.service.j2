@@ -56,7 +56,6 @@ ExecStart=/usr/bin/podman run \
     --name jellyfin \
     --init \
     --security-opt=no-new-privileges \
-    --user 0:0 \
     --uidmap=0:0:65536 \
     --uidmap=+0:{{ jellyfin_user.uid }}:1 \
     --gidmap=0:0:65536 \
