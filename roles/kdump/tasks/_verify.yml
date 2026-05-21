@@ -38,7 +38,7 @@
     reboot_timeout: 600
   become: true
 
-- name: _verify | crashkernel reservation is non-zero post-reboot
+- name: _verify | Crashkernel reservation is non-zero post-reboot
   when: ansible_architecture != 'aarch64'
   command: cat /sys/kernel/kexec_crash_size
   register: kdump_verify_kexec_size
@@ -46,7 +46,7 @@
   failed_when: (kdump_verify_kexec_size.stdout | trim | int) == 0
   become: true
 
-- name: _verify | kdump-tools.service is active post-reboot
+- name: _verify | Kdump-tools.service is active post-reboot
   when: ansible_architecture != 'aarch64'
   command: systemctl is-active kdump-tools
   register: kdump_verify_active
@@ -54,7 +54,7 @@
   failed_when: kdump_verify_active.stdout | trim != 'active'
   become: true
 
-- name: _verify | kdump-config show reports ready to kdump
+- name: _verify | Kdump-config show reports ready to kdump
   when: ansible_architecture != 'aarch64'
   command: kdump-config show
   register: kdump_verify_config
