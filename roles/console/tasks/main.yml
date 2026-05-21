@@ -58,18 +58,6 @@
   tags:
     - console
 
-- name: Ask to reboot
-  when: console_cfg.changed or console_keyboard_cfg.changed
-  file:
-    path: /var/run/reboot-required
-    state: touch
-    owner: root
-    group: root
-    mode: "0644"
-  become: true
-  tags:
-    - console
-
 # Disabling console blanking has two halves that don't overlap:
 #
 #   1. consoleblank=0 on the kernel cmdline (below) — disables the VT
@@ -170,8 +158,13 @@
   tags:
     - console
 
-- name: Ask to reboot (GRUB cmdline)
-  when: grub_bootloader and console_grub_cfg.changed
+# The ZBM-cmdline path touches /var/run/reboot-required inside
+# roles/zfsbootmenu/tasks/cmdline.yml; this task covers the other
+# three change sources locally.
+- name: Ask to reboot
+  when: >-
+    console_cfg.changed or console_keyboard_cfg.changed
+    or (grub_bootloader and console_grub_cfg.changed)
   file:
     path: /var/run/reboot-required
     state: touch
