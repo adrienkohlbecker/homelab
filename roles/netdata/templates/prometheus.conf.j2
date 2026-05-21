@@ -3,6 +3,12 @@ jobs:
   - name: journald
     url: http://127.0.0.1:{{ service_ports.journald_exporter }}/metrics
     username: metrics
+    # Same vault var (journald_exporter_key) is also written to
+    # /etc/journald-exporter/keys/netdata by roles/journald_exporter.
+    # The daemon side hot-reloads on inotify; this scrape config
+    # does not -- netdata reads it only at start/restart. A vault
+    # rotation requires re-applying BOTH roles (or `--tags
+    # journald_exporter,netdata`) to avoid a 401 window.
     password: {{ journald_exporter_key }}
     max_time_series: 10000 # there is many series per individual systemd service, including temporary ones. Let's see if this is enough
     autodetection_retry: 60
