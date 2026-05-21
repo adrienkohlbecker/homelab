@@ -100,6 +100,28 @@
     force_basic_auth: true
     status_code: 401
 
+# Sibling-vhost / default-server bypass check: probe :443 with a
+# Host header that doesn't match any configured server_name, assert
+# the response is not a 200-with-prometheus-body. If nginx ever grew
+# a vhost that proxy_pass'd to 127.0.0.1:{{ service_ports.journald_exporter }}
+# without `auth: required`, this would catch the leak the next time
+# _verify ran. status_code accepts whatever nginx happens to return
+# (default_server typically 404/444); the failed_when fires only on
+# the "200 + # HELP" combo that proves the metrics body came back.
+- name: _verify | Unknown Host does not leak the /metrics body
+  uri:
+    url: "https://localhost/metrics"
+    headers:
+      Host: "no-such-host.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    follow_redirects: none
+    status_code: [200, 301, 302, 400, 403, 404, 421, 444, 502]
+    return_content: true
+  register: journald_exporter_verify_bogus_host
+  failed_when: >-
+    journald_exporter_verify_bogus_host.status == 200
+    and '# HELP' in (journald_exporter_verify_bogus_host.content | default(''))
+
 # Browser-style probe through nginx: no Authelia session, so the
 # auth: required gate must redirect to the portal. 302 here validates
 # that the gate is wired; the metrics-actually-served-after-auth path
