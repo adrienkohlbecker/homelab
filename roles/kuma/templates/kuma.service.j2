@@ -43,6 +43,7 @@ ExecStart=/usr/bin/podman run \
     --gidmap=+0:{{ kuma_user.group }}:1 \
     --log-driver journald \
     --log-opt tag="kuma" \
+    --security-opt=no-new-privileges \
     --volume /mnt/services/kuma:/app/data \
     --volume /mnt/services/sqlite/kuma:/mnt/services/sqlite/kuma \
     --env PUID=0 \
