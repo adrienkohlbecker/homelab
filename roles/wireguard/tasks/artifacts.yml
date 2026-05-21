@@ -24,7 +24,7 @@
   tags:
     - wireguard
 
-- name: Create directory
+- name: Create wireguard artifact root
   file:
     dest: "{{ playbook_dir }}/wireguard"
     state: directory
@@ -34,7 +34,7 @@
   tags:
     - wireguard
 
-- name: Create directory
+- name: Create wireguard per-peer artifact dir
   file:
     dest: "{{ playbook_dir }}/wireguard/{{ item }}"
     state: directory
@@ -45,7 +45,7 @@
   tags:
     - wireguard
 
-- name: Create directory
+- name: Create wireguard psk dir
   file:
     dest: "{{ playbook_dir }}/wireguard/psk"
     state: directory
@@ -64,7 +64,7 @@
   tags:
     - wireguard
 
-- name: Generate wireguard configuration
+- name: Render wireguard client config
   template:
     src: "{{ playbook_dir }}/roles/wireguard/templates/wg.conf.j2"
     dest: "{{ playbook_dir }}/wireguard/{{ item.peer }}/home{{ item.suffix }}.conf"
@@ -80,19 +80,19 @@
   tags:
     - wireguard
 
-- name: Generate wireguard QR code
+- name: Render wireguard QR code
   shell: set -euo pipefail; if [ -f "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" ]; then bfr=`md5sum "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" -r "{{ playbook_dir }}/wireguard/{{ item.peer }}/home{{ item.suffix }}.conf"; aftr=`md5sum "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
   args:
     executable: /bin/bash
-  register: qr_generate_cmd
-  changed_when: "'file updated' in qr_generate_cmd.stdout"
+  register: wireguard_qr_result
+  changed_when: "'file updated' in wireguard_qr_result.stdout"
   loop: "{{ wireguard_render_plan }}"
   loop_control:
     label: "{{ item.peer }}{{ item.suffix }}"
   tags:
     - wireguard
 
-- name: Create a zip archive
+- name: Bundle wireguard client artifacts into zip
   archive:
     path:
       - "{{ playbook_dir }}/wireguard/{{ item }}/*.conf"
