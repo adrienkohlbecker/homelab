@@ -11,6 +11,9 @@
 #    `crash` post-mortem. Requires reboot to take effect (the
 #    crashkernel= cmdline reserves RAM at boot; can't be added to a
 #    running kernel).
+#
+# Operator runbook (reading dumps, ddebs setup, `crash` cheatsheet) is
+# in notes/kdump_runbook.md.
 
 # Stat first because not every kernel exposes all of these. arm64
 # jammy GA (5.15) has no NMI watchdog, so hardlockup_panic and
