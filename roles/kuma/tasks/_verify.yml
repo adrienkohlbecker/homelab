@@ -1,0 +1,57 @@
+# Loopback probe -- kuma's Express server starts after Database.connect()
+# creates kuma.db, so a 200 here also proves the symlink onto the sqlite
+# dataset resolved (and the file landed at the target path).
+- name: _verify | kuma answers on its loopback port
+  uri:
+    url: http://localhost:{{ service_ports.kuma }}/
+    status_code: 200
+  register: _verify_loopback
+  retries: 60
+  delay: 2
+  until: _verify_loopback.status == 200
+  become: true
+
+# nginx auth-gate probe -- the UI subdomain is `auth: required`, so a
+# cookieless GET / has to land on Authelia's 302 redirect chain. Validates
+# both the auth_request wiring and the proxy_pass port.
+- name: _verify | kuma UI gate redirects unauthenticated to Authelia
+  uri:
+    url: https://localhost/
+    headers:
+      Host: kuma.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: _verify_nginx_gate
+  failed_when: >-
+    _verify_nginx_gate.status != 302
+    or 'auth.' not in (_verify_nginx_gate.location | default(''))
+  become: true
+
+# Symlink contract -- the role promises /mnt/services/kuma/kuma.db is a
+# symlink onto the dedicated sqlite dataset. A snapshot-restore or a
+# regression in sqlite_dataset could leave a real file at the dest; assert
+# the symlink shape so the drift is loud, not silent.
+- name: _verify | kuma.db is a symlink onto the sqlite dataset
+  stat:
+    path: /mnt/services/kuma/kuma.db
+    follow: false
+  register: _verify_symlink
+  failed_when: >-
+    not _verify_symlink.stat.exists
+    or not _verify_symlink.stat.islnk
+    or _verify_symlink.stat.lnk_target != '/mnt/services/sqlite/kuma/kuma.db'
+  become: true
+
+# Uid regression detector -- kuma's entrypoint chowns /app/data to
+# PUID:PGID before dropping privileges, so kuma.db should land owned by
+# the kuma host user. A mapping drift would land it as root or another
+# uid silently; assert ownership so the regression is loud.
+- name: _verify | kuma sqlite DB is owned by kuma
+  stat:
+    path: /mnt/services/sqlite/kuma/kuma.db
+  register: _verify_db_owner
+  failed_when: >-
+    not _verify_db_owner.stat.exists
+    or _verify_db_owner.stat.pw_name != 'kuma'
+  become: true
