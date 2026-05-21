@@ -1,5 +1,6 @@
 - name: Configure bunk
   hosts: bunk
+  strategy: linear
   tasks:
     - name: Copy wireguard configuration
       template:
