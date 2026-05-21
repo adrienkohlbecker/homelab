@@ -86,6 +86,25 @@
   changed_when: false
   become: true
 
+# SSO injection wiring: roles/influxdb/tasks/main.yml captures the
+# bootstrap admin's operator token and feeds it into nginx's
+# upstream_authorization map under the `influxdb_authelia_user` key.
+# The rendered nginx site config should contain an
+# `if ($authelia_user = "<authelia_user>") { set $upstream_auth
+# "Token <t>"; }` line -- catches a regression where the set_fact
+# lookup returns Undefined, the combine() folds it into {}, and the
+# Authorization injection silently no-ops.
+- name: _verify | Bootstrap token wired into nginx upstream_authorization
+  command:
+    argv:
+      - grep
+      - -F
+      - 'if ($authelia_user = "{{ influxdb_authelia_user }}") { set $upstream_auth "Token '
+      - /etc/nginx/sites-available/influxdb
+  changed_when: false
+  no_log: true
+  become: true
+
 # Exercise bucket.yml end-to-end with a throwaway tenant. Verifies the
 # org→user→bucket→write-auth path and -- via the write/query roundtrip
 # below -- that the produced token actually carries the bucket-scoped

@@ -162,23 +162,76 @@
   tags:
     - influxdb
 
+# Surface the bootstrap admin's token so the nginx site below can
+# inject it as `Authorization: Token <t>` for Authelia-authenticated
+# browser users matching `influxdb_authelia_user`.
+# DOCKER_INFLUXDB_INIT_* already minted the operator-level token on
+# first boot; we just need its value at apply time to feed the
+# upstream_authorization map. No separate admin user is created --
+# the daily SSO identity reuses the bootstrap operator credentials
+# (single source of truth, lifecycle already managed by the role).
+- name: Capture bootstrap admin token
+  # ansible_check_mode + a freshly-installed/restarted service means
+  # the container isn't actually running -- `podman exec` would fail.
+  # Match the gate the "Wait for ping" task above uses so the block
+  # is skipped on check-mode bootstrap runs.
+  when: not (ansible_check_mode and (influxdb_service_result.changed or influxdb_user.changed))
+  command:
+    argv:
+      - podman
+      - exec
+      - influxdb
+      - influx
+      - auth
+      - list
+      - --user
+      - "{{ influxdb_root_user }}"
+      - --json
+  register: _influxdb_root_auth_query
+  changed_when: false
+  check_mode: false
+  no_log: true
+  become: true
+  tags:
+    - influxdb
+
+- name: Expose bootstrap admin token for downstream nginx wiring
+  when: _influxdb_root_auth_query.stdout is defined
+  set_fact:
+    influxdb_root_token: >-
+      {{ (_influxdb_root_auth_query.stdout | from_json | first).token }}
+  no_log: true
+  tags:
+    - influxdb
+
 # auth: required puts Authelia in front of the UI; bypass-on-
 # Authorization (enabled implicitly by upstream_authorization) lets
 # machine clients (HomeAssistant, Telegraf, Grafana) keep using their
 # native `Authorization: Token <t>` headers -- their request short-
 # circuits the auth_request subrequest with a 204 and their original
 # header passes through unmodified. Browser users get an Authorization
-# header injected from `influxdb_user_tokens` (vaulted dict keyed by
-# Authelia username; values are the full header, e.g. "Token <t>"),
-# skipping InfluxDB's own login screen (no double auth). Unknown
-# Authelia users fall through to InfluxDB's native sign-in (operator
-# break-glass). Operator workflow to add a user:
+# header injected per the upstream_authorization dict below, skipping
+# InfluxDB's own login (no double auth). Unknown Authelia users fall
+# through to InfluxDB's native sign-in (operator break-glass).
+#
+# Auto-wire: the bootstrap admin's operator token is mapped under
+# the `influxdb_authelia_user` key (the Authelia identity that should
+# resolve to InfluxDB root-level access). Authelia username and the
+# InfluxDB-side root username are intentionally decoupled -- they're
+# named in different systems and may differ (e.g. Authelia `ak`
+# mapping to InfluxDB `root`). Extra household users can be added by
+# minting per-user tokens out of band and vaulting them in
+# `influxdb_user_tokens`; both dicts are merged (vault values win on
+# key collision so an operator override always trumps the auto-
+# derived bootstrap entry).
+#
+# Extra-user workflow:
 #   1. podman exec -it influxdb influx user create --name <u> \
-#        --org {{ influxdb_root_org }} --password <throwaway>
+#        --password <throwaway>
 #   2. podman exec -it influxdb influx auth create --user <u> \
 #        --org {{ influxdb_root_org }} --all-access
-#   3. Add `<u>: "Token <token>"` to vaulted `influxdb_user_tokens` in
-#      group_vars/prod.yml and re-apply.
+#   3. Add `<authelia-user>: "Token <token>"` to vaulted
+#      `influxdb_user_tokens` in group_vars/prod.yml and re-apply.
 - name: Configure nginx
   import_role:
     name: nginx
@@ -188,6 +241,15 @@
       subdomain: influxdb
       proxy_pass: http://localhost:{{ service_ports.influxdb }}/
       auth: required
-      upstream_authorization: "{{ influxdb_user_tokens | default({}) }}"
+      upstream_authorization: >-
+        {{
+          (
+            {influxdb_authelia_user: 'Token ' ~ influxdb_root_token}
+            if (influxdb_authelia_user is defined
+                and influxdb_root_token is defined)
+            else {}
+          )
+          | combine(influxdb_user_tokens | default({}))
+        }}
   tags:
     - influxdb

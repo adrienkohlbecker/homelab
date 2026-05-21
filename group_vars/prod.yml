@@ -138,7 +138,18 @@ minio_root_password: !vault |
           6532386165663363340a363333396333343732663761663434623735353939346661366263656561
           64373561613531626262646338353539343131653538316333623265396261623638
 
-influxdb_root_user: ak
+influxdb_root_user: root
+# Authelia identity that nginx auto-maps to the InfluxDB root token
+# (via the upstream_authorization knob set in roles/influxdb/tasks/
+# main.yml). Decoupled from influxdb_root_user so the Authelia name
+# (`ak`, matching authelia_users) and the InfluxDB-side root name
+# (`root`) can differ.
+influxdb_authelia_user: ak
+# PROD RENAME GOTCHA: the role's "Fail if root username rotated
+# post-bootstrap" gate trips when influxdb_root_user changes from
+# `ak` (its pre-rename value) to `root`. The follow-up message
+# walks the manual `influx user update --name root --id <ak-id>`
+# step that has to run on lab before the next ansible apply.
 influxdb_root_password: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
           64626336663431363264643038366662353063306661646337623439613530336530653266363830
