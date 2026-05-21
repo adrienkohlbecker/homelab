@@ -36,12 +36,17 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name kuma \
+    --user 0:0 \
+    --uidmap=0:0:65536 \
+    --uidmap=+0:{{ kuma_user.uid }}:1 \
+    --gidmap=0:0:65536 \
+    --gidmap=+0:{{ kuma_user.group }}:1 \
     --log-driver journald \
     --log-opt tag="kuma" \
     --volume /mnt/services/kuma:/app/data \
     --volume /mnt/services/sqlite/kuma:/mnt/services/sqlite/kuma \
-    --env PUID={{ kuma_user.uid }} \
-    --env PGID={{ kuma_user.group }}  \
+    --env PUID=0 \
+    --env PGID=0 \
     --publish 127.0.0.1:{{ service_ports.kuma }}:3001/tcp \
     --health-cmd '["extra/healthcheck"]' \
     --health-startup-cmd '["extra/healthcheck"]' \
