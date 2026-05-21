@@ -4,6 +4,9 @@
 # Inputs: caller passes a single dict `systemd_unit_args` with keys
 #   src               file under role files/ (copy) or templates/ (.j2 → template)
 #   dest              optional on-disk filename; defaults to src with .j2 stripped
+#   dest_abs          optional absolute on-disk path; takes precedence over
+#                     dest and the for-derived default. Used by dropin's
+#                     absolute mode for daemon-config drop-ins.
 #   for               drop-in only: parent unit (e.g. podman.socket); derives
 #                     dest=<for>.d/override.conf and verify=<for>
 #   user              default 'root'; non-root drives /etc/systemd/user
@@ -34,10 +37,16 @@
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
     _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
     _systemd_unit_src: "{{ systemd_unit_args.src }}"
+    # For dest_abs mode, the identifier used in the per-unit result fact
+    # is the last two path components — same shape relative-dest dropins
+    # produce (journald.conf.d/10-custom.conf → journald_conf_d_10_custom_conf_result,
+    # parallel to podman.socket.d/override.conf → podman_socket_d_override_conf_result).
     _systemd_unit_name: >-
-      {{ systemd_unit_args.dest
-         | default((systemd_unit_args.for ~ '.d/override.conf') if systemd_unit_args.for is defined
-                   else (systemd_unit_args.src | regex_replace('\.j2$', ''))) }}
+      {{ ((systemd_unit_args.dest_abs | dirname | basename) ~ '/' ~ (systemd_unit_args.dest_abs | basename))
+         if systemd_unit_args.dest_abs is defined
+         else (systemd_unit_args.dest
+               | default((systemd_unit_args.for ~ '.d/override.conf') if systemd_unit_args.for is defined
+                         else (systemd_unit_args.src | regex_replace('\.j2$', '')))) }}
     _systemd_unit_verify: >-
       {{ systemd_unit_args.verify
          | default(systemd_unit_args.for if systemd_unit_args.for is defined
@@ -48,6 +57,12 @@
   set_fact:
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_dir: "{{ '/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user' }}"
+
+# Third layer: needs _systemd_unit_dir + _systemd_unit_name from above,
+# which set_fact evaluates concurrently within a single task.
+- name: Derive install path for {{ systemd_unit_args.src }}
+  set_fact:
+    _systemd_unit_path: "{{ systemd_unit_args.dest_abs | default(_systemd_unit_dir ~ '/' ~ _systemd_unit_name) }}"
 
 # Linger has to be on for user-scope installs: without it the named
 # user's systemd manager isn't running between logins, so daemon-reload
@@ -127,7 +142,7 @@
       action: "{{ _module }}"
       args:
         src: "{{ _systemd_unit_src }}"
-        dest: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
+        dest: "{{ _systemd_unit_path }}"
         owner: root
         group: root
         mode: "0644"
@@ -185,7 +200,7 @@
       when: '"backup_file" in systemd_unit'
       copy:
         remote_src: true
-        dest: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
+        dest: "{{ _systemd_unit_path }}"
         src: "{{ systemd_unit.backup_file }}"
         owner: root
         group: root
@@ -202,7 +217,7 @@
     - name: Delete newly added file
       when: systemd_unit.changed and "backup_file" not in systemd_unit
       file:
-        path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_name }}"
+        path: "{{ _systemd_unit_path }}"
         state: absent
       become: true
 
