@@ -37,6 +37,14 @@ RestartSec=10
 # And a number of security settings to lock down the program somewhat.
 NoNewPrivileges=true
 ProtectSystem=strict
+# CapabilityBoundingSet kept tight: the daemon needs CAP_SETUID/SETGID
+# to demote its HTTP-serving child to the journald-exporter user. Journal
+# reads work via root ownership, not DAC override; loopback :12345 is
+# unprivileged. Anything else would broaden the blast radius of a
+# subverted binary (the upstream is fetched through nexus pull-through,
+# audited sha256 only).
+CapabilityBoundingSet=CAP_SETUID CAP_SETGID
+AmbientCapabilities=
 ProtectClock=true
 ProtectKernelTunables=true
 ProtectKernelModules=true
