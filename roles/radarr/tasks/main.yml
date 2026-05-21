@@ -60,7 +60,6 @@
     src: "/mnt/services/sqlite/radarr/{{ item }}"
     dest: "/mnt/services/radarr/{{ item }}"
     state: link
-    force: true
     owner: radarr
     group: media
     follow: false
