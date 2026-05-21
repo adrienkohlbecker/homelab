@@ -66,18 +66,32 @@
   tags:
     - kdump
 
-# kdump-tools defaults to USE_KDUMP=0 on install (the package gets
-# pulled in transitively as well, so it has to be a no-op until the
-# operator opts in). lineinfile rather than a templated replacement
-# so future Ubuntu kdump-tools releases can introduce new vars in
-# this file without us shadowing them.
-- name: Enable kdump in /etc/default/kdump-tools
+# lineinfile-per-key so future Ubuntu vars added to this file aren't
+# shadowed. Regex anchors on optional `#` + whitespace so a commented
+# default (#USE_KDUMP=0) gets rewritten in place rather than appended
+# below — would otherwise leave a dual-definition file. validate runs
+# `sh -n` against the rendered file to catch quoting bugs before the
+# init script silently fails to source it.
+- name: Set /etc/default/kdump-tools keys
   when: not (ansible_check_mode and apt_kdump_tools.changed)
   lineinfile:
     path: /etc/default/kdump-tools
-    regexp: '^USE_KDUMP='
-    line: 'USE_KDUMP=1'
+    regexp: '^#?\s*{{ item.key }}='
+    line: '{{ item.key }}={{ item.value }}'
     backup: true
+    validate: 'sh -n %s'
+  loop:
+    # Enable kdump capture. Package ships USE_KDUMP=0 (kdump-tools is
+    # pulled in transitively, so it has to be a no-op until opt-in).
+    - { key: USE_KDUMP, value: '1' }
+    # Cap retained vmcore dumps; a crash loop otherwise fills /var/crash
+    # and the dump you most need (the next one) silently fails.
+    - { key: KDUMP_NUM_DUMPS, value: '5' }
+    # lz4 cuts a multi-GB vmcore ~4x at trivial CPU; narrows the
+    # capture-kernel window before any watchdog reboots mid-write.
+    - { key: KDUMP_COMPRESSION, value: lz4 }
+  loop_control:
+    label: '{{ item.key }}'
   become: true
   register: kdump_tools_cfg
   tags:
