@@ -1,22 +1,21 @@
 # Upstream ships an x86_64-only release artifact, and main.yml only
-# starts the unit on x86_64. On aarch64 (Mac-host HVF runs of the
-# harness) the binary isn't fetched, so the loopback probes below have
-# nothing to talk to. Skip the whole _verify rather than rendering a
-# pile of skipped/failed tasks.
-- name: _verify | Skip on non-x86_64 (upstream ships x86_64-only)
-  meta: end_play
-  when: ansible_architecture != 'x86_64'
+# starts the unit on x86_64. The four loopback probes below carry a
+# per-task `when: ansible_architecture == 'x86_64'`; the nginx-redirect
+# probe at the bottom runs ungated because Authelia's forward-auth
+# rejects ahead of proxy_pass, so it doesn't need the daemon present.
 
 # Sanity check that the daemon actually came up before we probe; the
 # wait_for catches the "binary fetched but exec failed silently" case
 # which would otherwise surface as a connection-refused 30s later.
 - name: _verify | Wait for journald-exporter to bind loopback port
+  when: ansible_architecture == 'x86_64'
   wait_for:
     host: 127.0.0.1
     port: "{{ service_ports.journald_exporter }}"
     timeout: 15
 
 - name: _verify | /metrics with valid basic auth returns prometheus body
+  when: ansible_architecture == 'x86_64'
   uri:
     url: "http://127.0.0.1:{{ service_ports.journald_exporter }}/metrics"
     url_username: metrics
@@ -30,15 +29,22 @@
     or '# HELP' not in (journald_exporter_verify_authed.content | default(''))
 
 - name: _verify | /metrics with no auth returns 401
+  when: ansible_architecture == 'x86_64'
   uri:
     url: "http://127.0.0.1:{{ service_ports.journald_exporter }}/metrics"
     status_code: 401
 
 - name: _verify | /metrics with wrong password returns 401
+  when: ansible_architecture == 'x86_64'
   uri:
     url: "http://127.0.0.1:{{ service_ports.journald_exporter }}/metrics"
     url_username: metrics
-    url_password: deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef
+    # 64 ASCII zeros: structurally a valid hex key (matches main.yml's
+    # ^[0-9a-fA-F]{64,}$ assert), trivially recognisable as a test
+    # constant in any log line. Replaces an older deadbeef-... probe
+    # whose all-hex shape was visually indistinguishable from a real
+    # vaulted key.
+    url_password: "0000000000000000000000000000000000000000000000000000000000000000"
     force_basic_auth: true
     status_code: 401
 
