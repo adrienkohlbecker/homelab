@@ -12,4 +12,8 @@ journald_exporter_version: "1.0.0"
 journald_exporter_artifacts:
   x86_64:
     url: "{{ mirror_github }}/dead-claudia/journald-exporter/releases/download/v{{ journald_exporter_version }}/journald-exporter"
+    # sha256 verified out-of-band against github.com (not the
+    # mirror_github nexus pull-through) on 2026-05-21. Re-attest on
+    # every version bump -- nexus is writable by CI and the
+    # mirror_github + sha256 pair alone trusts the same machine.
     sha256: "6a47b863145be1d2a265dfa5cd04986ad6be7c6af16312e685460121ce468815"
