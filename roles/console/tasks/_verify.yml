@@ -40,10 +40,17 @@
   become: true
 
 - name: _verify | Config carries expected directives
+  vars:
+    _content: "{{ _verify_console_content.content | b64decode }}"
   assert:
     that:
-      - item in (_verify_console_content.content | b64decode)
-    fail_msg: "console-setup config missing directive: {{ item }}"
+      # Exactly one un-commented line starts with `KEY=`, and it
+      # matches the expected literal — catches both missing directives
+      # and contradicting duplicates appended below (last-assignment
+      # wins on shell-source).
+      - _content | regex_findall('^' ~ item.split('=')[0] ~ '=.*$', multiline=True) | length == 1
+      - item in (_content | regex_findall('^' ~ item.split('=')[0] ~ '=.*$', multiline=True))
+    fail_msg: "console-setup directive missing or duplicated: {{ item }}"
   loop:
     - 'CHARMAP="UTF-8"'
     - 'CODESET="Lat15"'
@@ -58,10 +65,13 @@
   become: true
 
 - name: _verify | Keyboard config carries expected directives
+  vars:
+    _content: "{{ _verify_console_keyboard_content.content | b64decode }}"
   assert:
     that:
-      - item in (_verify_console_keyboard_content.content | b64decode)
-    fail_msg: "keyboard config missing directive: {{ item }}"
+      - _content | regex_findall('^' ~ item.split('=')[0] ~ '=.*$', multiline=True) | length == 1
+      - item in (_content | regex_findall('^' ~ item.split('=')[0] ~ '=.*$', multiline=True))
+    fail_msg: "keyboard config directive missing or duplicated: {{ item }}"
   loop:
     - 'XKBMODEL="pc105"'
     - 'XKBLAYOUT="fr"'
