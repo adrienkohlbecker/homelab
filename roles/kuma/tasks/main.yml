@@ -8,31 +8,22 @@
   tags:
     - kuma
 
-- name: Create sqlite directory
-  when: not (ansible_check_mode and kuma_user.changed)
-  file:
-    dest: /mnt/services/sqlite/kuma
-    state: directory
-    owner: kuma
-    group: kuma
-    mode: "0755"
-  become: true
-  tags:
-    - kuma
-
 # Uptime-Kuma writes kuma.db at /app/data root alongside upload assets.
-# Symlink so SQLite resolves to the 4K sqlite dataset before placing WAL.
-- name: Symlink kuma SQLite DB onto sqlite dataset
-  when: not (ansible_check_mode and kuma_user.changed)
-  file:
-    src: /mnt/services/sqlite/kuma/kuma.db
-    dest: /mnt/services/kuma/kuma.db
-    state: link
-    force: true
-    owner: kuma
-    group: kuma
-    follow: false
-  become: true
+# Route the DB onto the 4K-recordsize sqlite dataset via symlink so
+# SQLite places WAL files there too.
+- name: Set up kuma sqlite dataset
+  import_role:
+    name: sqlite_dataset
+    tasks_from: dataset
+  vars:
+    sqlite_dataset_args:
+      name: kuma
+      owner: kuma
+      group: kuma
+      mode: "0755"
+      condition: "{{ not (ansible_check_mode and kuma_user.changed) }}"
+      links:
+        - /mnt/services/kuma/kuma.db
   tags:
     - kuma
 
