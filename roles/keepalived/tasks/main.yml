@@ -94,6 +94,22 @@
   tags:
     - keepalived
 
+# Catches base-conf typos and stale tenant fragments before they
+# propagate to the running daemon via SIGHUP-reload. Skipped on
+# first-converge before any tenant has rendered a fragment (when
+# conf.d is empty, keepalived -t refuses on include_check
+# wildcard_match), and skipped in check-mode when apt would have
+# installed the package this run (binary doesn't exist yet).
+- name: Validate assembled keepalived config
+  when:
+    - keepalived_confs.matched > 0
+    - not (ansible_check_mode and keepalived_apt.changed)
+  command: keepalived -t -f /etc/keepalived/keepalived.conf
+  changed_when: false
+  become: true
+  tags:
+    - keepalived
+
 - name: Enable keepalived service
   import_role:
     name: systemd_unit
