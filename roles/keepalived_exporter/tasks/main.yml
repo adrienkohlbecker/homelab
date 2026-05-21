@@ -1,6 +1,4 @@
-# `check_mode: false` so the install `when:` gates evaluate truthfully under
-# --check; `-version` only reads from the binary (no side effects) so the
-# check-mode bypass is safe. Binary is world-executable -- no `become:` needed.
+# `check_mode: false`: read-only probe used by the install gate below.
 - name: Check if keepalived_exporter is installed
   command: keepalived_exporter -version
   register: keepalived_exporter_check
