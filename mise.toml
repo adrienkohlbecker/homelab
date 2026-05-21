@@ -176,6 +176,14 @@ run = 'op run -- tofu "$@"'
 description = "ansible-playbook against site.yml (forwards args)"
 run = 'ansible-playbook site.yml "$@"'
 
+[tasks."ansible:wireguard"]
+description = "ansible-playbook against wireguard.yml (forwards args)"
+run = 'ansible-playbook wireguard.yml "$@"'
+
+[tasks."ansible:bunk"]
+description = "ansible-playbook against bunk.yml (forwards args)"
+run = 'ansible-playbook bunk.yml "$@"'
+
 # worktree:add / worktree:rm / worktree:merge live under mise-tasks/worktree/
 # so shellcheck and shfmt cover them. The populate helper is factored out
 # separately so Claude Code's WorktreeCreate hook can call it directly.
