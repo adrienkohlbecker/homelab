@@ -1,24 +1,18 @@
-- name: Create /etc/systemd/resolved.conf.d directory
-  file:
-    dest: /etc/systemd/resolved.conf.d
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - resolved
-
-- name: Configure resolved
-  copy:
-    src: 10-custom.conf
-    dest: /etc/systemd/resolved.conf.d/10-custom.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
-  register: resolved_conf
+# Helper writes /etc/systemd/resolved.conf.d/10-custom.conf via the
+# absolute-mode dropin path (sibling of resolved.conf, not under
+# systemd-resolved.service.d/). Helper does: dir creation, backup,
+# write (copy — src has no .j2 suffix), systemd-analyze verify against
+# systemd-resolved.service, daemon-reload. Restart gate downstream
+# reads the per-unit result fact resolved_conf_d_10_custom_conf_result.
+- name: Render resolved.conf.d/10-custom.conf
+  import_role:
+    name: systemd_unit
+    tasks_from: dropin
+  vars:
+    systemd_unit_args:
+      for: systemd-resolved.service
+      dest_abs: /etc/systemd/resolved.conf.d/10-custom.conf
+      src: 10-custom.conf
   tags:
     - resolved
 
@@ -33,7 +27,7 @@
     - resolved
 
 - name: Restart systemd-resolved
-  when: (resolved_conf.changed or resolv_conf.changed)
+  when: (resolved_conf_d_10_custom_conf_result.changed or resolv_conf.changed)
   systemd:
     name: systemd-resolved
     state: restarted
