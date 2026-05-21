@@ -1,0 +1,105 @@
+# Source-build path for any non-x86_64 arch (upstream ships only an
+# amd64 prebuilt). Apt's golang on jammy ships 1.18 -- below upstream's
+# go.mod floor of 1.21 -- so we pin a Go toolchain under /opt/go-<ver>/
+# instead. The pin mirrors roles/fan2go so the toolchain tree is shared
+# on hosts where both roles apply. With CGO_ENABLED=0 the build is
+# pure-Go; no apt build-deps needed.
+
+- name: install_source | Download Go toolchain tarball
+  get_url:
+    url: "{{ keepalived_exporter_go_artifact.url }}"
+    checksum: "sha256:{{ keepalived_exporter_go_artifact.sha256 }}"
+    dest: "/var/cache/go-{{ keepalived_exporter_go_version }}.{{ ansible_architecture }}.tar.gz"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+# tar with --transform extracts upstream's bare `go/` dir to
+# /opt/go-<ver>/ so multiple Go pins (e.g. fan2go's) coexist.
+- name: install_source | Extract Go toolchain
+  command:
+    argv:
+      - tar
+      - -C
+      - /opt
+      - --transform
+      - "s,^go,go-{{ keepalived_exporter_go_version }},"
+      - -xzf
+      - "/var/cache/go-{{ keepalived_exporter_go_version }}.{{ ansible_architecture }}.tar.gz"
+  args:
+    creates: "/opt/go-{{ keepalived_exporter_go_version }}/bin/go"
+  become: true
+
+- name: install_source | Download keepalived_exporter source tarball
+  get_url:
+    url: "{{ keepalived_exporter_artifacts[ansible_architecture].url }}"
+    checksum: "sha256:{{ keepalived_exporter_artifacts[ansible_architecture].sha256 }}"
+    dest: "/var/cache/keepalived_exporter-{{ keepalived_exporter_version }}.tar.gz"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
+# tar with --transform avoids the `unarchive:` precondition that dest
+# already exist (which would force a pre-create `file:` task that no-ops
+# under --check and leaves the next task asserting against a missing
+# dir). GitHub's source tarball top-level is `keepalived_exporter-<v>/`;
+# --transform rewrites that to `keepalived_exporter-<v>-src/` so the
+# bare-version path is reserved for the tarball itself.
+- name: install_source | Extract keepalived_exporter source
+  command:
+    argv:
+      - tar
+      - -C
+      - /var/cache
+      - --transform
+      - "s,^keepalived_exporter-{{ keepalived_exporter_version }},keepalived_exporter-{{ keepalived_exporter_version }}-src,"
+      - -xzf
+      - "/var/cache/keepalived_exporter-{{ keepalived_exporter_version }}.tar.gz"
+  args:
+    creates: "/var/cache/keepalived_exporter-{{ keepalived_exporter_version }}-src/main.go"
+  register: keepalived_exporter_src
+  become: true
+
+# Two-step build -> install (fan2go pattern). Build target sits under
+# the version-namespaced cache dir so a version bump invalidates
+# `creates:` cleanly; the install step then copies to /usr/local/bin/
+# and is what callers register on for restart-on-change.
+#
+# Check-mode gate: under --check the extract reports "would have run"
+# but the cache dir is still missing, so this task can't actually
+# compile. Skip cleanly instead of failing the play.
+- name: install_source | Build keepalived_exporter
+  when: not (ansible_check_mode and keepalived_exporter_src.changed)
+  command:
+    chdir: "/var/cache/keepalived_exporter-{{ keepalived_exporter_version }}-src"
+    argv:
+      - go
+      - build
+      - -trimpath
+      - -ldflags=-s -w
+      - -buildvcs=false
+      - -o
+      - "/var/cache/keepalived_exporter-{{ keepalived_exporter_version }}-src/bin/keepalived_exporter"
+      - .
+  args:
+    creates: "/var/cache/keepalived_exporter-{{ keepalived_exporter_version }}-src/bin/keepalived_exporter"
+  environment:
+    PATH: "/opt/go-{{ keepalived_exporter_go_version }}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    GOCACHE: "/var/cache/keepalived_exporter-{{ keepalived_exporter_version }}-src/.gocache"
+    GOPATH: "/var/cache/keepalived_exporter-{{ keepalived_exporter_version }}-src/.gopath"
+    CGO_ENABLED: "0"
+  become: true
+
+- name: install_source | Install built keepalived_exporter binary
+  when: not (ansible_check_mode and keepalived_exporter_src.changed)
+  copy:
+    src: "/var/cache/keepalived_exporter-{{ keepalived_exporter_version }}-src/bin/keepalived_exporter"
+    dest: /usr/local/bin/keepalived_exporter
+    owner: root
+    group: root
+    mode: "0755"
+    remote_src: true
+  become: true
+  register: keepalived_exporter_installed
