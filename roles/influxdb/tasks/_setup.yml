@@ -8,6 +8,19 @@
     name: _test
     tasks_from: nginx
 
+# Stand in for the real Authelia. `gate` mode returns 401 on every
+# auth-request subrequest -- unauthenticated browser probes to /
+# follow the site's error_page 401 -> 302 redirect to the portal.
+# The bypass-on-Authorization shortcut (added by upstream_authorization)
+# short-circuits before the stub is consulted, so the positive-path
+# test (Authorization: Token <admin-token>) still reaches InfluxDB.
+- name: _setup | Install authelia stub in gate mode
+  import_role:
+    name: _test
+    tasks_from: authelia_stub
+  vars:
+    authelia_stub_mode: gate
+
 - name: _setup | Create /mnt/services
   file:
     path: /mnt/services
