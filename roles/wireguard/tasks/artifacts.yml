@@ -4,6 +4,26 @@
 # operator's laptop -- NOT imported from main.yml, so `mise run
 # ansible --tags wireguard` against a server doesn't touch the
 # operator's working tree.
+#
+# wireguard_render_plan flattens client peers x config shapes (the
+# split-tunnel default plus one all-traffic-via-<server> variant per
+# server peer) into a single list of {peer, suffix, vpn} dicts so the
+# template + QR tasks each appear once instead of once-per-shape.
+- name: Seed wireguard render plan with split-tunnel shapes
+  set_fact:
+    wireguard_render_plan: "{{ wireguard_peers | rejectattr('is_server') | map(attribute='name') | map('community.general.dict_kv', 'peer') | map('combine', {'suffix': '', 'vpn': ''}) | list }}"
+  tags:
+    - wireguard
+
+- name: Append all-traffic shapes to wireguard render plan
+  set_fact:
+    wireguard_render_plan: "{{ wireguard_render_plan + [{'peer': item[0], 'suffix': ' (' ~ item[1] ~ ' all-traffic)', 'vpn': item[1]}] }}"
+  loop: "{{ (wireguard_peers | rejectattr('is_server') | map(attribute='name') | list) | product(wireguard_peers | selectattr('is_server') | map(attribute='name') | list) | list }}"
+  loop_control:
+    label: "{{ item[0] }} via {{ item[1] }}"
+  tags:
+    - wireguard
+
 - name: Create directory
   file:
     dest: "{{ playbook_dir }}/wireguard"
@@ -21,7 +41,7 @@
     owner: "{{ ansible_facts.user_uid }}"
     group: "{{ ansible_facts.user_gid }}"
     mode: "0755"
-  loop: "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
+  loop: "{{ wireguard_peers | rejectattr('is_server') | map(attribute='name') }}"
   tags:
     - wireguard
 
@@ -47,51 +67,28 @@
 - name: Generate wireguard configuration
   template:
     src: "{{ playbook_dir }}/roles/wireguard/templates/wg.conf.j2"
-    dest: "{{ playbook_dir }}/wireguard/{{ item }}/home.conf"
+    dest: "{{ playbook_dir }}/wireguard/{{ item.peer }}/home{{ item.suffix }}.conf"
     owner: "{{ ansible_facts.user_uid }}"
     group: "{{ ansible_facts.user_gid }}"
     mode: "0644"
   vars:
-    own_peer_name: "{{ item }}"
-  loop: "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
+    own_peer_name: "{{ item.peer }}"
+    vpn_peer_name: "{{ item.vpn }}"
+  loop: "{{ wireguard_render_plan }}"
+  loop_control:
+    label: "{{ item.peer }}{{ item.suffix }}"
   tags:
     - wireguard
 
 - name: Generate wireguard QR code
-  shell: set -euo pipefail; if [ -f "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" ]; then bfr=`md5sum "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" -r "{{ playbook_dir }}/wireguard/{{ item }}/home.conf"; aftr=`md5sum "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
+  shell: set -euo pipefail; if [ -f "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" ]; then bfr=`md5sum "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" -r "{{ playbook_dir }}/wireguard/{{ item.peer }}/home{{ item.suffix }}.conf"; aftr=`md5sum "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
   args:
     executable: /bin/bash
   register: qr_generate_cmd
   changed_when: "'file updated' in qr_generate_cmd.stdout"
-  loop: "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
-  tags:
-    - wireguard
-
-- name: Generate wireguard configuration
-  template:
-    src: "{{ playbook_dir }}/roles/wireguard/templates/wg.conf.j2"
-    dest: "{{ playbook_dir }}/wireguard/{{ item[1] }}/home ({{ item[0] }} all-traffic).conf"
-    owner: "{{ ansible_facts.user_uid }}"
-    group: "{{ ansible_facts.user_gid }}"
-    mode: "0644"
-  vars:
-    own_peer_name: "{{ item[1] }}"
-    vpn_peer_name: "{{ item[0] }}"
-  with_nested:
-    - "{{ wireguard_peers | selectattr('is_server', 'eq', true) | map(attribute='name') }}"
-    - "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
-  tags:
-    - wireguard
-
-- name: Generate wireguard QR code
-  shell: set -euo pipefail; if [ -f "{{ playbook_dir }}/wireguard/{{ item[1] }}/qr ({{ item[0] }} all-traffic).png" ]; then bfr=`md5sum "{{ playbook_dir }}/wireguard/{{ item[1] }}/qr ({{ item[0] }} all-traffic).png" | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o "{{ playbook_dir }}/wireguard/{{ item[1] }}/qr ({{ item[0] }} all-traffic).png" -r "{{ playbook_dir }}/wireguard/{{ item[1] }}/home ({{ item[0] }} all-traffic).conf"; aftr=`md5sum "{{ playbook_dir }}/wireguard/{{ item[1] }}/qr ({{ item[0] }} all-traffic).png" | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
-  args:
-    executable: /bin/bash
-  register: qr_generate_cmd
-  changed_when: "'file updated' in qr_generate_cmd.stdout"
-  with_nested:
-    - "{{ wireguard_peers | selectattr('is_server', 'eq', true) | map(attribute='name') }}"
-    - "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
+  loop: "{{ wireguard_render_plan }}"
+  loop_control:
+    label: "{{ item.peer }}{{ item.suffix }}"
   tags:
     - wireguard
 
@@ -104,6 +101,6 @@
     owner: "{{ ansible_facts.user_uid }}"
     group: "{{ ansible_facts.user_gid }}"
     mode: "0644"
-  loop: "{{ wireguard_peers | selectattr('is_server', 'eq', false) | map(attribute='name') }}"
+  loop: "{{ wireguard_peers | rejectattr('is_server') | map(attribute='name') }}"
   tags:
     - wireguard
