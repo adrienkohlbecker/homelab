@@ -114,6 +114,24 @@
   tags:
     - kdump
 
+# Above only pins /var/crash itself; any pre-existing dump
+# subdirs/files (written under earlier package defaults, or by a
+# kdump that preceded this role on the host) keep their own perms.
+# Recurse owner/group to root:root for any contents — mode left
+# untouched so kdump-tools' own 0640 dump.<n> / dmesg.<n> stay as
+# the package writes them.
+- name: Lock down /var/crash contents (recursive)
+  when: not (ansible_check_mode and apt_kdump_tools.changed)
+  file:
+    path: /var/crash
+    state: directory
+    owner: root
+    group: root
+    recurse: true
+  become: true
+  tags:
+    - kdump
+
 # lineinfile-per-key so future Ubuntu vars added to this file aren't
 # shadowed. Regex anchors on optional `#` + whitespace so a commented
 # default (#USE_KDUMP=0) gets rewritten in place rather than appended
