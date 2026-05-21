@@ -24,12 +24,6 @@
   tags:
     - podman
 
-- name: Save return value
-  set_fact:
-    socket_systemd_unit: '{{ systemd_unit }}'
-  tags:
-    - podman
-
 - name: Install podman service override
   import_role:
     name: systemd_unit
@@ -84,7 +78,7 @@
     # flipped the binary under us — apt under policy_rc_d=101 leaves
     # the running 3.x daemon on disk, but the new socket on
     # /run/podman would be served by the stale process otherwise.
-      restart: "{{ systemd_unit.changed or socket_systemd_unit.changed or (podman_backports_updated | default(false)) }}"
+      restart: "{{ podman_service_d_override_conf_result.changed or podman_socket_d_override_conf_result.changed or (podman_backports_updated | default(false)) }}"
   tags:
     - podman
 

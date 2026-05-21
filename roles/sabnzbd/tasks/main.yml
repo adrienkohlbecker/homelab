@@ -224,8 +224,8 @@
   vars:
     systemd_unit_args:
       src: sabnzbd
-      condition: "{{ not (ansible_check_mode and (systemd_unit.changed or sabnzbd_user.changed)) }}"
-      restart: "{{ systemd_unit.changed or sabnzbd_conf.changed or sabnzbd_media_conf.changed or sabnzbd_before_start.changed or media_group.changed }}"
+      condition: "{{ not (ansible_check_mode and (sabnzbd_service_result.changed or sabnzbd_user.changed)) }}"
+      restart: "{{ sabnzbd_service_result.changed or sabnzbd_conf.changed or sabnzbd_media_conf.changed or sabnzbd_before_start.changed or media_group.changed }}"
   tags:
     - sabnzbd
 

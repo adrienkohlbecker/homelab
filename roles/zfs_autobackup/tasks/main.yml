@@ -60,8 +60,8 @@
   vars:
     systemd_unit_args:
       src: zfs_autosnapshot.target
-      condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
-      restart: "{{ systemd_unit.changed }}"
+      condition: "{{ not (ansible_check_mode and zfs_autosnapshot_target_result.changed) }}"
+      restart: "{{ zfs_autosnapshot_target_result.changed }}"
   tags:
     - zfs_autobackup
 
