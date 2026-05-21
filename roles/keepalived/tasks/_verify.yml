@@ -47,15 +47,34 @@
       - _keepalived_unit_empty.status.ActiveState == 'inactive'
       - _keepalived_unit_empty.status.UnitFileState in ['disabled', 'masked']
 
-# Branch 2: drop a self-contained sentinel fragment (loopback interface,
-# TEST-NET-1 VIP — never collides with anything on prod) and re-run the
-# role. The role's enable path should take the unit to active.
+# Branch 2: drop a self-contained sentinel fragment and re-run the role.
+# Keepalived refuses loopback (`lo`) for VRRP — so create a dummy0
+# interface purely for this test. dummy interfaces are pure-virtual
+# (no L2 broadcast surface), so the GARPs keepalived emits as MASTER
+# stay inside the VM. TEST-NET-1 VIP guarantees no collision with prod.
+- name: _verify | Ensure dummy module is loaded
+  community.general.modprobe:
+    name: dummy
+    state: present
+  become: true
+
+- name: _verify | Create dummy0 interface
+  command: ip link add dummy0 type dummy
+  args:
+    creates: /sys/class/net/dummy0
+  become: true
+
+- name: _verify | Bring dummy0 up
+  command: ip link set dummy0 up
+  changed_when: false
+  become: true
+
 - name: _verify | Drop sentinel conf.d fragment
   copy:
     content: |
       vrrp_instance _verify_sentinel {
         state BACKUP
-        interface lo
+        interface dummy0
         virtual_router_id 250
         priority 1
         advert_int 1
