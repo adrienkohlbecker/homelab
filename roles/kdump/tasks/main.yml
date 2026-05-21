@@ -229,15 +229,25 @@
 # the cmdline writes above, so the site.yml-level reboot check
 # closes the loop.
 #
-# `cat` rather than `slurp:` so kernels without CONFIG_KEXEC_CORE
-# (where /sys/kernel/kexec_crash_size doesn't exist) degrade to
-# enable-only instead of aborting the play — same skip-on-missing
-# contract the panic sysctl probe above honours.
+# Match the stat-probe pattern used for the panic sysctls above.
+# Kernels without CONFIG_KEXEC_CORE don't expose kexec_crash_size;
+# stat-then-conditional-slurp degrades to enable-only on those
+# rather than aborting the play, and (unlike `command: cat ...
+# failed_when: false`) still surfaces real I/O errors instead of
+# silently treating them as "no reservation".
+- name: Stat /sys/kernel/kexec_crash_size
+  stat:
+    path: /sys/kernel/kexec_crash_size
+  register: kdump_kexec_crash_size_stat
+  become: true
+  tags:
+    - kdump
+
 - name: Read /sys/kernel/kexec_crash_size
-  command: cat /sys/kernel/kexec_crash_size
+  when: kdump_kexec_crash_size_stat.stat.exists
+  slurp:
+    src: /sys/kernel/kexec_crash_size
   register: kdump_kexec_crash_size
-  changed_when: false
-  failed_when: false
   become: true
   tags:
     - kdump
@@ -250,7 +260,7 @@
     systemd_unit_args:
       src: kdump-tools
       condition: "{{ not (ansible_check_mode and apt_kdump_tools.changed) }}"
-      start: "{{ (kdump_kexec_crash_size.stdout | default('0') | trim | int) > 0 }}"
+      start: "{{ (kdump_kexec_crash_size.content | default('') | b64decode | trim | default('0', true) | int) > 0 }}"
       restart: "{{ kdump_tools_cfg.changed }}"
   tags:
     - kdump
