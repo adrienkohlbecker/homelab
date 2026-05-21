@@ -1,25 +1,36 @@
-# Drop-in entrypoint: write <scope-dir>/<unit>.d/override.conf to extend
-# or override a unit (usually one shipped by an OS package; can also
-# layer over a unit installed by this role). Caller passes a single dict
-# `systemd_unit_args` with keys:
+# Drop-in entrypoint: write a drop-in (or sibling daemon-config) file.
+# Two placement modes:
+#   default — caller passes `for: <unit>` only; helper writes
+#             <scope-dir>/<unit>.d/override.conf.
+#   absolute — caller passes `for: <unit>` AND `dest_abs: /etc/…`;
+#             helper writes the absolute path. Used for daemon-config
+#             drop-ins (journald.conf.d/*, resolved.conf.d/*) that sit
+#             as siblings of /etc/systemd/<daemon>.conf rather than
+#             under <unit>.d/. `for` still drives systemd-analyze
+#             verify against the parent unit.
+# Caller passes a single dict `systemd_unit_args` with keys:
 #   for               parent unit  e.g. podman.socket
 #   src               file under role files/ or templates/; suffix .j2
 #                     picks the template path
+#   dest_abs          optional absolute on-disk path; selects absolute mode
 #   user              optional, default root
 #   condition         optional, default true
 # install.yml does the write + systemd-analyze verify; when `for` is set
 # it derives dest=<for>.d/override.conf and verify=<for> automatically,
 # so the drop-in is validated as part of its composed unit. install.yml
 # derives copy vs template from src's .j2 suffix — no dispatch flag here.
-# The drop-in name is fixed at override.conf — every current consumer
-# uses that and a fancier API can wait for the first counterexample.
+# The drop-in name is fixed at override.conf in default mode; absolute
+# mode lets the caller pick any basename (used by journald + resolved).
 - name: dropin | Resolve user for {{ systemd_unit_args.for }}
   set_fact:
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
 
 - name: dropin | Derive drop-in directory for {{ systemd_unit_args.for }}
   set_fact:
-    _systemd_unit_dropin_dir: "{{ ('/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user') ~ '/' ~ systemd_unit_args.for ~ '.d' }}"
+    _systemd_unit_dropin_dir: >-
+      {{ (systemd_unit_args.dest_abs | dirname)
+         if systemd_unit_args.dest_abs is defined
+         else (('/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user') ~ '/' ~ systemd_unit_args.for ~ '.d') }}
 
 # Name uses the caller var (systemd_unit_args.for) instead of the
 # set_fact'd _systemd_unit_dropin_dir for the same parse-time-vs-
