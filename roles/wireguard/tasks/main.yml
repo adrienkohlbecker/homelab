@@ -47,6 +47,7 @@
   ansible.posix.sysctl:
     name: net.ipv4.ip_forward
     value: '1'
+    sysctl_file: /etc/sysctl.d/99-wireguard.conf
   become: true
   tags:
     - wireguard
@@ -55,6 +56,24 @@
   ansible.posix.sysctl:
     name: net.ipv6.conf.all.forwarding
     value: '1'
+    sysctl_file: /etc/sysctl.d/99-wireguard.conf
+  become: true
+  tags:
+    - wireguard
+
+# One-time cleanup: an earlier version of this role wrote the same
+# forwarding sysctls to /etc/sysctl.conf (the module's legacy default).
+# Procps reads /etc/sysctl.d/* after /etc/sysctl.conf so the new file
+# already wins, but leaving the stale entries muddies the audit trail
+# for "where does ip_forward=1 come from". Drop them.
+- name: Remove legacy forwarding sysctls from /etc/sysctl.conf
+  ansible.posix.sysctl:
+    name: "{{ item }}"
+    state: absent
+    sysctl_file: /etc/sysctl.conf
+  loop:
+    - net.ipv4.ip_forward
+    - net.ipv6.conf.all.forwarding
   become: true
   tags:
     - wireguard
