@@ -68,17 +68,14 @@
 # getent against itself).
 #
 # _verify.yml runs as a separate ansible-playbook invocation, so the
-# jellyfin_render_gid fact set in main.yml's converge phase isn't in
-# scope here — re-lookup before asserting.
+# getent_group fact set in main.yml's converge phase isn't in scope
+# here — re-lookup before asserting.
 - name: _verify | Re-lookup render gid for assertions
   when: has_transcoding_acceleration
   become: true
-  block:
-    - getent:
-        database: group
-        key: render
-    - set_fact:
-        jellyfin_render_gid: "{{ getent_group.render[1] | int }}"
+  getent:
+    database: group
+    key: render
 
 - name: _verify | Confirm /dev/dri/renderD128 inside container
   when: has_transcoding_acceleration
@@ -93,7 +90,7 @@
   command: podman exec jellyfin id -G
   register: _verify_container_groups
   changed_when: false
-  failed_when: jellyfin_render_gid|string not in _verify_container_groups.stdout.split()
+  failed_when: getent_group.render[1] not in _verify_container_groups.stdout.split()
   become: true
 
 # Functional transcode probe: lavfi testsrc → libx264 → HLS segments on
