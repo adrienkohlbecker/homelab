@@ -2,3 +2,16 @@
   import_role:
     name: _test
     tasks_from: nginx
+
+# The role's nginx site has `auth: required`, so _verify.yml's
+# "without Authelia session redirects to portal" probe needs an
+# auth-request endpoint to talk to. gate mode returns 401, which
+# triggers nginx's error_page 401 -> 302 mapping. Without this stub
+# nginx returns 500 on the auth_request subreq and the redirect
+# probe fails before reaching its assertion.
+- name: _setup | Install Authelia stub in gate mode
+  import_role:
+    name: _test
+    tasks_from: authelia_stub
+  vars:
+    authelia_stub_mode: gate
