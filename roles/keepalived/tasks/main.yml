@@ -1,3 +1,33 @@
+# Multi-tenant keepalived runtime — tenant contract:
+#
+# 1. Tenants drop a self-contained config fragment at
+#    /etc/keepalived/conf.d/<tenant>.conf and own its lifecycle.
+# 2. Tenants own their own reload: after rendering the fragment,
+#    `systemd: state=reloaded name=keepalived` with `throttle: 1`
+#    across peers (rolling, so the VIP doesn't flap on both nodes
+#    simultaneously). Structural changes (interface, VRID, vmac) need
+#    a manual restart — reload won't pick those up.
+# 3. Retiring a tenant: drop a `file: state=absent` task targeting
+#    its conf.d/<tenant>.conf and KEEP it as a tombstone in the role
+#    until you're sure every host has converged. This role does not
+#    GC stale fragments — without the tombstone, an old tenant config
+#    silently keeps running.
+# 4. This role gates `keepalived.service` on conf.d having ≥1
+#    fragment (Type=notify wedges for ~90s on empty conf), and
+#    explicitly stops the unit when the last tenant leaves.
+# 5. Base-conf edits to `files/keepalived.conf` trigger a `reload`;
+#    edits that affect script execution semantics (global_defs
+#    toggles like `enable_script_security` / `script_user`) may
+#    need a manual `systemctl restart keepalived` — SIGHUP-reload
+#    semantics for global_defs are flaky in 2.2.x.
+# 6. site.yml runs `keepalived` BEFORE its tenants (see site.yml:58),
+#    so on a fresh host the base conf + conf.d dir + sysctl are in
+#    place by the time tenant roles render fragments.
+#
+# Current tenants: roles/pihole. Adding a new tenant (e.g. the
+# wireguard-VIP follow-up): mirror roles/pihole/tasks/main.yml:238
+# and roles/pihole/templates/keepalived.conf.j2 — the conf.d
+# fragment format is unconstrained by this role.
 - name: Install keepalived
   apt:
     pkg:
