@@ -35,19 +35,17 @@
 
 # Branch 1: empty conf.d → unit stopped + disabled (the role's previous
 # converge left it this way; testrole.py's box fixture has no tenant).
-- name: _verify | Empty-conf.d branch — is-active
-  command: systemctl is-active keepalived
-  register: _keepalived_is_active_empty
-  changed_when: false
-  failed_when: _keepalived_is_active_empty.stdout != 'inactive'
+- name: _verify | Empty-conf.d branch — query unit state
+  systemd:
+    name: keepalived
+  register: _keepalived_unit_empty
   become: true
 
-- name: _verify | Empty-conf.d branch — is-enabled
-  command: systemctl is-enabled keepalived
-  register: _keepalived_is_enabled_empty
-  changed_when: false
-  failed_when: _keepalived_is_enabled_empty.stdout not in ['disabled', 'masked']
-  become: true
+- name: _verify | Empty-conf.d branch — assert inactive + disabled
+  assert:
+    that:
+      - _keepalived_unit_empty.status.ActiveState == 'inactive'
+      - _keepalived_unit_empty.status.UnitFileState in ['disabled', 'masked']
 
 # Branch 2: drop a self-contained sentinel fragment (loopback interface,
 # TEST-NET-1 VIP — never collides with anything on prod) and re-run the
@@ -75,19 +73,17 @@
   import_role:
     name: keepalived
 
-- name: _verify | Populated-conf.d branch — is-active
-  command: systemctl is-active keepalived
-  register: _keepalived_is_active_pop
-  changed_when: false
-  failed_when: _keepalived_is_active_pop.stdout != 'active'
+- name: _verify | Populated-conf.d branch — query unit state
+  systemd:
+    name: keepalived
+  register: _keepalived_unit_pop
   become: true
 
-- name: _verify | Populated-conf.d branch — is-enabled
-  command: systemctl is-enabled keepalived
-  register: _keepalived_is_enabled_pop
-  changed_when: false
-  failed_when: _keepalived_is_enabled_pop.stdout != 'enabled'
-  become: true
+- name: _verify | Populated-conf.d branch — assert active + enabled
+  assert:
+    that:
+      - _keepalived_unit_pop.status.ActiveState == 'active'
+      - _keepalived_unit_pop.status.UnitFileState == 'enabled'
 
 # Branch 3: remove the sentinel and re-run; the disable branch should
 # return the unit to stopped+disabled.
@@ -101,16 +97,14 @@
   import_role:
     name: keepalived
 
-- name: _verify | Post-removal — is-active
-  command: systemctl is-active keepalived
-  register: _keepalived_is_active_after
-  changed_when: false
-  failed_when: _keepalived_is_active_after.stdout != 'inactive'
+- name: _verify | Post-removal — query unit state
+  systemd:
+    name: keepalived
+  register: _keepalived_unit_after
   become: true
 
-- name: _verify | Post-removal — is-enabled
-  command: systemctl is-enabled keepalived
-  register: _keepalived_is_enabled_after
-  changed_when: false
-  failed_when: _keepalived_is_enabled_after.stdout not in ['disabled', 'masked']
-  become: true
+- name: _verify | Post-removal — assert inactive + disabled
+  assert:
+    that:
+      - _keepalived_unit_after.status.ActiveState == 'inactive'
+      - _keepalived_unit_after.status.UnitFileState in ['disabled', 'masked']
