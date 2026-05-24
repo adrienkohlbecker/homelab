@@ -101,6 +101,8 @@ Drive both directions with `mise run ha:sync [pull|push|sync]` ([mise-tasks/ha/s
 
 Don't bypass the sync (no direct `scp` to the host, no editing on the live VM) — that strands the repo and the next pull won't reconcile cleanly. The orphan paths (`roles/homeassistant/files/{automations,scripts,scenes,sensors,templates}.yaml`, `macros.jinja`, `blueprints/`) are gitignored at the main repo root so a stale local file can't masquerade as the source of truth.
 
+**Don't bump the parent's submodule pointer.** [.gitmodules](.gitmodules) sets `ignore = all` so the parent never reports the submodule — neither its working-tree churn (ha:sync rewrites it on every pull/push) nor pointer divergence when its HEAD advances. The pinned commit is **not load-bearing**: deployment goes through `mise run ha:sync` reading the submodule's own working tree / `origin`, never through the parent's recorded SHA, and nothing (no role, no CI) checks the submodule out at the pinned commit. So when the submodule advances, leave the parent pointer alone — committing a pointer bump is pure churn, and `git status` / `git add -A` won't surface it anyway. If you ever need to move the pointer deliberately, `git add --force roles/homeassistant/files/ha_gui_config`.
+
 ### Helper roles
 
 Prefer these over re-implementing the boilerplate; a hand-rolled equivalent in a service role is a migration candidate.
