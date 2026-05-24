@@ -10,8 +10,10 @@ matches the live host state; sync directionality is detected by comparing
 host file shas against blobs at that tag.
 
 - pull: scp host -> submodule, commit if changed, advance tag.
-- push: refuse if host has diverged from the tag (GUI edited since last
-        pull); otherwise scp submodule -> host, advance tag, hit
+        Refuses on a dirty working tree (would clobber local edits).
+- push: auto-commit any working-tree edits first, then refuse if host
+        has diverged from the tag (GUI edited since last pull);
+        otherwise scp submodule -> host, advance tag, hit
         /api/services/<domain>/reload for each changed file.
 
 HA reload needs HA_API_TOKEN in the environment -- long-lived bearer
@@ -75,12 +77,26 @@ def blob_sha_at(ref: str, filename: str) -> str:
     return hashlib.sha256(sh_bytes(["git", "show", f"{ref}:{filename}"], cwd=SUBMODULE)).hexdigest()
 
 
-def assert_submodule_ready() -> None:
+def assert_submodule_initialized() -> None:
     if not (SUBMODULE / ".git").exists():
         sys.exit(f"submodule not initialized at {SUBMODULE}; run `git submodule update --init {SUBMODULE.relative_to(REPO_ROOT)}`")
+
+
+def assert_clean_working_tree() -> None:
     r = sh(["git", "status", "--porcelain"], cwd=SUBMODULE)
     if r.stdout.strip():
         sys.exit(f"refusing: submodule working tree has uncommitted changes:\n{r.stdout}\ncommit or stash first.")
+
+
+def commit_local_edits(subject_prefix: str) -> bool:
+    """Stage + commit any working-tree changes, push to origin. Returns True if anything was committed."""
+    if not sh(["git", "status", "--porcelain"], cwd=SUBMODULE).stdout.strip():
+        return False
+    ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    sh(["git", "add", "-A"], cwd=SUBMODULE)
+    sh(["git", "commit", "-m", f"{subject_prefix}: local edits ({ts})"], cwd=SUBMODULE)
+    sh(["git", "push", "origin", "main"], cwd=SUBMODULE)
+    return True
 
 
 def has_tag(name: str) -> bool:
@@ -137,7 +153,8 @@ def trigger_reload(domains: list[str]) -> None:
 
 
 def do_pull() -> None:
-    assert_submodule_ready()
+    assert_submodule_initialized()
+    assert_clean_working_tree()
     sh(["git", "fetch", "--tags", "--force"], cwd=SUBMODULE)
     sh(["git", "pull", "--ff-only", "--quiet"], cwd=SUBMODULE)
     fetch_from_host()
@@ -157,9 +174,13 @@ def do_pull() -> None:
 
 
 def do_push() -> None:
-    assert_submodule_ready()
+    assert_submodule_initialized()
     sh(["git", "fetch", "--tags", "--force"], cwd=SUBMODULE)
     sh(["git", "pull", "--ff-only", "--quiet"], cwd=SUBMODULE)
+    # Auto-commit any working-tree edits so `ha:sync push` works straight
+    # from a direct file edit in the submodule without a manual git commit.
+    if commit_local_edits("push"):
+        print("push: committed local edits")
     if not has_tag(SYNCED_TAG):
         sys.exit(f"refusing: no {SYNCED_TAG} tag. Run `mise run ha:pull` once to establish the baseline.")
     diverged = []
