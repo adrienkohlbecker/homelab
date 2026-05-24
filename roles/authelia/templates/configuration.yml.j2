@@ -96,32 +96,25 @@ authentication_backend:
         key_length: 32
         salt_length: 16
 
-# Access control: catch-all default_policy lets every subdomain that
-# isn't explicitly listed fall back to one_factor (forward-auth users
-# must be authenticated, but no 2FA required). Per-domain rules
-# elevate to two_factor for higher-stakes services as they migrate
-# under Authelia.
+# Access control: default_policy deny, so any subdomain not matched
+# below is refused outright. Every authenticated user -- operator and
+# household alike -- gets two_factor on every protected subdomain. With
+# a two-person user base there's no value in a one_factor tier, and a
+# single subject-less rule keeps auth *strength* decoupled from the
+# admins group: that group now drives only in-app *privilege* via the
+# OIDC groups claim (MinIO IAM policy, Gitea/Jellyfin admin, Paperless
+# Django groups), not whether a 2nd factor is required. The two_factor
+# requirement is also the UX trigger that unlocks the TOTP/WebAuthn
+# enrollment buttons in the portal -- Authelia hides them unless some
+# rule requires a 2nd factor.
 access_control:
   default_policy: 'deny'
   rules:
     # Portal itself must be reachable without prior auth.
     - domain: 'auth.{{ authelia_cookie_domain }}'
       policy: 'bypass'
-    # Admins land on two_factor for everything. This rule is also the
-    # UX trigger that unlocks the TOTP/WebAuthn enrollment buttons in
-    # the portal: Authelia hides them unless at least one rule requires
-    # a 2nd factor, treating zero-2FA-requirement as "no need to
-    # enroll". Match by group keeps family-shared services (Plex,
-    # Jellyfin, Overseerr -- once migrated) at one_factor for the
-    # non-admin users while still forcing 2FA on operator access.
     - domain: '*.{{ authelia_cookie_domain }}'
-      subject: 'group:admins'
       policy: 'two_factor'
-    # PR1 default: every other authenticated user (family etc.) goes
-    # through one_factor. PR3+ will append per-service overrides
-    # above this rule (e.g. *.minio.* → two_factor for everyone).
-    - domain: '*.{{ authelia_cookie_domain }}'
-      policy: 'one_factor'
 
 session:
   name: 'authelia_session'
