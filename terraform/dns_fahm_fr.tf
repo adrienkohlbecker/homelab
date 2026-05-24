@@ -57,6 +57,7 @@ variable "fahm_fr_records" {
     cname_pdk2_domainkey_noreply = { type = "CNAME", name = "pdk2._domainkey.noreply.fahm.fr", content = "pdk2._domainkey.50bf8.dkim2.eu.mgsend.org", comment = "mailgun" }
     cname_wildcard_box           = { type = "CNAME", name = "*.box.fahm.fr", content = "box.fahm.fr" }
     cname_wildcard_bunk          = { type = "CNAME", name = "*.bunk.fahm.fr", content = "bunk.fahm.fr" }
+    cname_wildcard_fox           = { type = "CNAME", name = "*.fox.fahm.fr", content = "fox.fahm.fr" }
     cname_wildcard_lab           = { type = "CNAME", name = "*.lab.fahm.fr", content = "lab.fahm.fr" }
     cname_wildcard_pug           = { type = "CNAME", name = "*.pug.fahm.fr", content = "pug.fahm.fr" }
 
@@ -88,7 +89,15 @@ locals {
     a_lab  = { type = "A", name = "lab.fahm.fr", content = local.network.hosts.lab.wireguard }
     a_pug  = { type = "A", name = "pug.fahm.fr", content = local.network.hosts.pug.wireguard }
   }
-  fahm_fr_records = merge(var.fahm_fr_records, local.fahm_fr_host_records)
+
+  # fox is the off-home Scaleway VPS (Headscale control plane). Unlike the
+  # home hosts above, its A record is a real public IP -- the reserved
+  # Scaleway flexible IP -- so the control plane is reachable from the
+  # internet (the one intentional exception to the fail-closed posture).
+  fahm_fr_fox_records = {
+    a_fox = { type = "A", name = "fox.fahm.fr", content = scaleway_instance_ip.fox.address }
+  }
+  fahm_fr_records = merge(var.fahm_fr_records, local.fahm_fr_host_records, local.fahm_fr_fox_records)
 }
 
 resource "cloudflare_dns_record" "fahm_fr" {

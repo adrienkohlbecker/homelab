@@ -20,6 +20,10 @@ terraform {
       source  = "wgebis/mailgun"
       version = "~> 0.9"
     }
+    scaleway = {
+      source  = "scaleway/scaleway"
+      version = "~> 2"
+    }
     google = {
       source  = "hashicorp/google"
       version = "~> 6"

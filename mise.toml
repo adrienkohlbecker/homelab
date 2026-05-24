@@ -32,6 +32,9 @@ TF_VAR_gandi_pat = "op://Lab/s5a2q2hlq5vudnvhydhcbmb3da/password"
 # resource, see terraform/mailgun.tf). Create the 1P item once
 # (item: "Mailgun API", field "password") then update the item-id below.
 TF_VAR_mailgun_api_key = "op://Lab/j6iayri7rcsq27nym5z7u37jgu/password"
+# (Scaleway needs no entry here: the scaleway provider for the `fox` VPS reads
+# credentials straight from the scw CLI config at ~/.config/scw/config.yaml --
+# run `scw init` once. See terraform/scaleway.tf.)
 # Expose [vars] entries as env so file-based mise-tasks/ scripts can read
 # them (mise vars are tera-expanded into toml `run` strings only). Toml
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
