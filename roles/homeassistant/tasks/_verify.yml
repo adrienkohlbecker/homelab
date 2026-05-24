@@ -66,6 +66,19 @@
   failed_when: not (_verify_macvlan_ip.stdout | trim | ansible.utils.ipaddr(_expected_range))
   become: true
 
+# The unit's ExecStartPost (pin_default_route.sh) down-ranks HA's mac_iot
+# default only when a second default exists, so HA must always retain a
+# usable route off-subnet. Assert egress isn't stranded -- the one failure
+# mode of the route surgery. On box the macvlan is the only default and
+# the script no-ops (single-default host), so this can't validate lab's
+# "bridge wins" preference -- that's checked by hand on lab after deploy.
+- name: _verify | homeassistant retains off-subnet egress (route not stranded)
+  command: podman exec homeassistant ip route get 1.1.1.1
+  register: _verify_ha_egress
+  changed_when: false
+  failed_when: _verify_ha_egress.rc != 0 or 'dev ' not in _verify_ha_egress.stdout
+  become: true
+
 # Functional HACS check: grep HA's journal for the loader's "We found
 # a custom integration hacs" warning. That line fires when HA actually
 # discovers HACS at startup, proving: HACS files visible inside the

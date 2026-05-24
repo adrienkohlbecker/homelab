@@ -68,6 +68,22 @@ ExecStart=/usr/bin/podman run \
     --health-start-period "100s" \
     --stop-timeout 120 \
     ghcr.io/home-assistant/home-assistant:2026.3.0
+{# Pin HA's default route once the netns is up. Where netavark installs a #}
+{# default via BOTH the mosquitto bridge and the mac_iot macvlan at equal #}
+{# metric (an unpinned tie -- the shape lab is in), down-rank the macvlan #}
+{# one so off-IoT egress (home-VLAN media like the Marantz, WAN) takes the #}
+{# bridge's NAT path -- sourced as the host's mgmt IP, which sidesteps the #}
+{# iot->* firewall rules. Where the macvlan is the *only* default (single- #}
+{# default hosts, e.g. the box test fixture) the script leaves it as-is so #}
+{# HA is never stranded; the mac_iot connected /24 route is untouched      #}
+{# either way (in-VLAN IoT + mDNS preserved). We keep the network gateway  #}
+{# (other containers may use mac_iot as sole egress), so this is scoped to #}
+{# HA's netns. HA has no CAP_NET_ADMIN, so the script edits from the host  #}
+{# via nsenter. Targeting is by gateway IP, not ethN -- podman's interface #}
+{# ordering is not stable across hosts. $1 = mac_iot's gateway (its parent #}
+{# subnet's .1, same derivation roles/macvlan uses). See files/pin_default_route.sh. #}
+{% set _mac_iot_parent = (macvlan_blocks | selectattr('name', 'equalto', 'mac_iot') | list | first).parent %}
+ExecStartPost=/opt/homeassistant/pin_default_route.sh {{ ansible_facts[_mac_iot_parent].ipv4.network | ansible.utils.ipmath(1) }}
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
