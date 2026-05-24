@@ -14,6 +14,15 @@
 #   links       optional list of dest paths; src derived as
 #               /mnt/services/sqlite/<name>/<basename(dest)>. Parent dir
 #               of each dest is the caller's responsibility.
+#   pre_create  optional bool (default false); when true, create an empty
+#               src file for each link before symlinking. Needed by
+#               consumers whose app creates its SQLite DB on first boot
+#               (jellyfin): without an existing src, state=link refuses to
+#               plant the dangling symlink and the converge dies before the
+#               app ever starts. force=false on the create keeps the
+#               snapshot-restore safety -- a real DB already at the src is
+#               never clobbered -- and the dest-clobber safety (state=link
+#               without force) is unaffected.
 #
 # The dict form prevents inter-call leakage: each import_role pass
 # replaces the whole sqlite_dataset_args value at play-vars scope.
@@ -27,6 +36,26 @@
     group: "{{ sqlite_dataset_args.group }}"
     mode: "{{ sqlite_dataset_args.mode | default('0750') }}"
   become: true
+
+# force=false: only plants the empty file when the src is absent (cold
+# start). On snapshot-restore the real DB already sits here and is left
+# untouched, so we never zero out live data.
+- name: Pre-create SQLite DB src files for {{ sqlite_dataset_args.name }}
+  when:
+    - sqlite_dataset_args.condition | default(true)
+    - sqlite_dataset_args.pre_create | default(false)
+    - sqlite_dataset_args.links is defined
+  copy:
+    content: ""
+    dest: "/mnt/services/sqlite/{{ sqlite_dataset_args.name }}/{{ item | basename }}"
+    owner: "{{ sqlite_dataset_args.owner }}"
+    group: "{{ sqlite_dataset_args.group }}"
+    mode: "0640"
+    force: false
+  become: true
+  loop: "{{ sqlite_dataset_args.links | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
 
 - name: Symlink DBs onto sqlite dataset for {{ sqlite_dataset_args.name }}
   when:
