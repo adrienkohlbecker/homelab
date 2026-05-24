@@ -34,3 +34,24 @@
       item: "{{ logrotate_compression_path }}"
   tags:
     - logrotate
+
+# Tombstone cleanup for retired services that left log directories
+# behind. Lives in roles/logrotate because there's no surviving role
+# to own these otherwise; this role runs on every host so the cleanup
+# is universal. Each entry is a no-op on hosts that never had the
+# service (state: absent on a missing path is idempotent).
+#
+#  - /var/log/traefik/  -- traefik was the previous reverse proxy
+#    (replaced by nginx). Last write 2024-04-30/05-01 per audit;
+#    package + role removed long ago, /etc/logrotate.d/traefik gone
+#    too, but the rotated access.log files (~115 MB across lab+pug)
+#    kept sitting on disk.
+- name: Remove retired-service log directories
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/log/traefik
+  become: true
+  tags:
+    - logrotate
