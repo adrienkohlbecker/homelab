@@ -11,9 +11,6 @@ script: !include scripts.yaml
 scene: !include scenes.yaml
 sensor: !include sensors.yaml
 template: !include templates.yaml
-# Content + rationale live with the values in the ha_gui_config submodule
-# (input_numbers.yaml). Deployed via `mise run ha:sync push`; HA picks up
-# changes via input_number.reload, no restart needed.
 input_number: !include input_numbers.yaml
 
 recorder:
