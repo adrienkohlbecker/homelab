@@ -44,15 +44,21 @@ ExecStart=/usr/bin/podman run \
     --rm \
     --name kuma \
     --user {{ kuma_user.uid }}:{{ kuma_user.group }} \
-    {# Override the image entrypoint to skip extra/entrypoint.sh (its chown
-       step can't run unprivileged under tier-1 --user). Inline the image
-       CMD (node server/server.js) too: podman drops the image's CMD when
-       --entrypoint is set on the command line, so dumb-init would launch
-       with no args and exit 1. #}
-    --entrypoint '["/usr/bin/dumb-init", "--", "node", "server/server.js"]' \
+    {# No --entrypoint override: the v2 release image runs
+       `dumb-init -- node server/server.js` natively, with no chown-doing
+       extra/entrypoint.sh wrapper (v1 had one that couldn't run unprivileged
+       under tier-1 --user, which is why this override used to exist). #}
     --log-driver journald \
     --log-opt tag="kuma" \
     --security-opt=no-new-privileges \
+    {# v2 added a first-boot "choose your database" step: with neither a
+       db-config.json nor an existing kuma.db present, the server blocks on a
+       setup page and never mounts its real routes (api-router, /metrics) --
+       yet extra/healthcheck still answers 200, so the unit goes `active` on a
+       non-functional instance (silent on fresh hosts / disaster recovery).
+       Pinning the type skips the setup page and writes db-config.json itself.
+       (lab's existing kuma.db would auto-select sqlite, but new hosts wouldn't.) #}
+    --env UPTIME_KUMA_DB_TYPE=sqlite \
     --volume /mnt/services/kuma:/app/data \
     --volume /mnt/services/sqlite/kuma:/mnt/services/sqlite/kuma \
     --publish 127.0.0.1:{{ service_ports.kuma }}:3001/tcp \
@@ -62,7 +68,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
     --stop-timeout 120 \
-    docker.io/louislam/uptime-kuma:1.23.13
+    docker.io/louislam/uptime-kuma:2.3.2
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 
