@@ -8,15 +8,6 @@
     name: _test
     tasks_from: nginx
 
-- name: _setup | Install authelia stub for auth=required tests
-  # vscode_ha (and homeassistant itself eventually) carries
-  # `auth: required` on its nginx site. Without a stub answering on
-  # 127.0.0.1:{{ service_ports.authelia }} the auth_request subrequest
-  # would 502.
-  import_role:
-    name: _test
-    tasks_from: authelia_stub
-
 - name: _setup | Create dummy iot interface
   # The role's macvlan network uses `iot` as its parent. Production hosts
   # have a real iot VLAN; test environments don't, so stand up a dummy
