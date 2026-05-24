@@ -80,6 +80,24 @@
     or _verify_db_owner.stat.pw_name != 'kuma'
   become: true
 
+# disableAuth guard probe -- main.yml must never flip disableAuth on an
+# instance with no user: kuma's auto-login derefs the first user row and
+# crashes the socket handshake. A fresh test VM has an empty user table, so
+# assert the row was left unset. The populated-user (prod) path can't be
+# driven here without scripting kuma's socket.io setup wizard to mint a
+# user, so only the safety-critical guard is exercised in-harness.
+- name: _verify | disableAuth stays unset while the user table is empty
+  command: >-
+    sqlite3 -readonly /mnt/services/sqlite/kuma/kuma.db
+    "SELECT (SELECT count(*) FROM user),
+            coalesce((SELECT value FROM setting WHERE key='disableAuth'), 'unset');"
+  register: _verify_disableauth
+  changed_when: false
+  failed_when: >-
+    (_verify_disableauth.stdout.split('|')[0] | int) == 0
+    and _verify_disableauth.stdout.split('|')[1] | trim == 'true'
+  become: true
+
 # Functional WAL probe -- the entire point of the dedicated 4K-recordsize
 # sqlite dataset is a WAL workload. A future regression (PRAGMA against
 # a held DB silently no-ops; default journal=delete if WAL isn't forced)
