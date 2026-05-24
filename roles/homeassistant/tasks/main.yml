@@ -219,6 +219,7 @@
     - scenes.yaml
     - sensors.yaml
     - templates.yaml
+    - input_numbers.yaml
   tags:
     - homeassistant
 
