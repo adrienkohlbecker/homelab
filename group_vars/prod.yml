@@ -1117,5 +1117,10 @@ authelia_oidc_clients:
     client_name: Jellyfin
     client_secret: '$pbkdf2-sha512$310000$S/F3a7eXNk9bPzWi//Hh8g$sua7c0k0NMfCCP0UhoLKoXMKOlxYXungit01rnxNtm6S6GcOuxdhhw1S0oF64AHWP1kncWaXt2pJDgDG0YyDjQ'
     authorization_policy: two_factor
+    # The SSO plugin's IdentityModel OidcClient authenticates at the token
+    # endpoint with client_secret_post, not Authelia's default
+    # client_secret_basic -- register post or Authelia rejects the code
+    # exchange.
+    token_endpoint_auth_method: client_secret_post
     redirect_uris:
       - 'https://jellyfin.{{ inventory_hostname }}.{{ domain }}/sso/OID/redirect/authelia'

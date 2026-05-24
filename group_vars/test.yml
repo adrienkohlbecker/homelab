@@ -410,6 +410,11 @@ authelia_oidc_clients:
     # one_factor here matches the other test clients (no 2FA on box).
     client_secret: '$pbkdf2-sha512$310000$JURoTanVWouRkvJ.Tyml1A$B4DZyqy25cNbFfwFiPMyAdWcuxiELOBAlH0NfQSxB9jgDTQXiyBIMsFY2Z5I3XO5ItLH1pP5C5ujKja71Bqoww'
     authorization_policy: one_factor
+    # The SSO plugin's IdentityModel OidcClient authenticates at the token
+    # endpoint with client_secret_post (creds in the body), not Authelia's
+    # default client_secret_basic -- so the client must register post or
+    # Authelia rejects the code exchange.
+    token_endpoint_auth_method: client_secret_post
     redirect_uris:
       - 'https://jellyfin.{{ inventory_hostname }}.{{ domain }}/sso/OID/redirect/authelia'
 
