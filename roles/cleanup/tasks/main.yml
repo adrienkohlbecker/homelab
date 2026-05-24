@@ -17,20 +17,37 @@
 # `snap remove --purge --terminate`: --purge skips snapshot saving
 # (no separate snap-forget cleanup needed); --terminate stops the
 # snap's processes and unmounts its squashfs before removing (no
-# separate mount-stop pass needed). One snap per Ansible iteration
-# so snapd's "X is required by Y" check naturally orders apps →
-# bases → snapd; the until-loop converges on the iteration where
-# snap list comes back empty. head -1 + retries=30 caps at 30
-# snaps; vanilla cloud images ship 3, lab-class hosts none, so
-# this is generous headroom.
+# separate mount-stop pass needed). Removal MUST be ordered apps →
+# bases → snapd: snapd refuses to remove a base (core*/bare) while an
+# app still depends on it (e.g. lxd pins core20), and snapd itself
+# goes last. `snap list` is alphabetical, not dependency-ordered, so
+# a naive head -1 picks core20 before lxd and spins until it gives
+# up — we instead tag each snap with a removal priority (app=0,
+# base=1, snapd=2) and remove the lowest-priority one per iteration.
+# The until-loop converges on the iteration where snap list comes
+# back empty; retries=30 caps at 30 snaps (cloud images ship a
+# handful, lab-class hosts none, so this is generous headroom).
 - name: Force-purge all snaps (apps → bases → snapd)
   shell: |
-    set -uo pipefail
-    s=$(snap list --all --unicode=never --color=never 2>/dev/null | awk 'NR>1 && $1!="" {print $1}' | head -1)
+    set -euo pipefail
+    # Two concessions to `set -e -o pipefail`: `snap list` exits 1
+    # when nothing is installed (the done state), so we `|| true` it;
+    # and the priority pick is a single awk over the whole list (no
+    # head/sort early-exit) so nothing raises SIGPIPE mid-pipeline.
+    s=$( { snap list --all --unicode=never --color=never 2>/dev/null || true; } \
+         | awk 'NR>1 && $1!="" {
+                  p = 0
+                  if ($1 ~ /^(bare|core[0-9]*)$/) p = 1
+                  if ($1 == "snapd") p = 2
+                  if (best == "" || p < bestp) { bestp = p; best = $1 }
+                }
+                END { if (best != "") print best }')
     if [ -n "$s" ]; then
       snap remove --purge --terminate "$s"
       echo "removed: $s"
     fi
+  args:
+    executable: /bin/bash
   register: _cleanup_snap_purge
   changed_when: "'removed:' in _cleanup_snap_purge.stdout"
   until: "'removed:' not in _cleanup_snap_purge.stdout"
