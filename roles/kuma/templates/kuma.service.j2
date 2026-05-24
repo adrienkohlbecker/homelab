@@ -44,7 +44,12 @@ ExecStart=/usr/bin/podman run \
     --rm \
     --name kuma \
     --user {{ kuma_user.uid }}:{{ kuma_user.group }} \
-    --entrypoint '["/usr/bin/dumb-init", "--"]' \
+    {# Override the image entrypoint to skip extra/entrypoint.sh (its chown
+       step can't run unprivileged under tier-1 --user). Inline the image
+       CMD (node server/server.js) too: podman drops the image's CMD when
+       --entrypoint is set on the command line, so dumb-init would launch
+       with no args and exit 1. #}
+    --entrypoint '["/usr/bin/dumb-init", "--", "node", "server/server.js"]' \
     --log-driver journald \
     --log-opt tag="kuma" \
     --security-opt=no-new-privileges \
