@@ -4,9 +4,10 @@
 # wg0 with policy routing), every `iifname $WAN_IFACE` rule attaches
 # to the wrong iface — wg/transmission iif scope misfires AND traffic
 # arriving on the real WAN no longer matches the rules, falling back
-# to admin services scoped only by saddr. rp_filter=1 is the actual
-# mitigation in that scenario; assert here so the failure mode is
-# loud rather than silent.
+# to admin services scoped only by saddr. rp_filter is only a partial
+# backstop here (loose mode — see the sysctl block below for why this
+# macvlan host can't run strict), so assert the iface is sane and make
+# the failure mode loud rather than silent.
 - name: Assert default_interface is plausible (not a bridge/tunnel)
   assert:
     that:
@@ -74,21 +75,41 @@
     - firewall
 
 # Network-stack hardening sysctls. Ubuntu's defaults are inconsistent
-# (rp_filter=2, log_martians=0, send_redirects=1) — pin the secure
-# values explicitly so /etc/sysctl.d/30-firewall-hardening.conf is
-# the single source of truth for the host's network posture. Module
-# writes the .conf file AND applies each key live.
+# (log_martians=0, send_redirects=1) — pin the secure values explicitly
+# so /etc/sysctl.d/90-firewall-hardening.conf is the single source of
+# truth for the host's network posture. Module writes the .conf file
+# AND applies each key live.
+#
+# The 90- prefix is load-bearing: systemd-sysctl applies sysctl.d files
+# in basename-lexical order, last-writer-wins. An earlier 30- prefix
+# was silently overridden at every boot by /usr/lib/sysctl.d/50-
+# default.conf (which globs `net.ipv4.conf.*.rp_filter=2` and sets
+# default=2), so the file's values only held until the next reboot.
+# 90- sorts after 50-default so our posture is authoritative.
 #
 # nf_conntrack_tcp_loose handled separately below: the module isn't
 # loaded at first-apply time so its live write would fail; if we
 # inline it here with `ignoreerrors: true` the sysctl module reports
 # changed=true every run (couldn't apply live → marks as changed)
 # and the rerun never converges.
+# Remove the pre-rename file: hosts provisioned before the 30→90
+# rename keep the stale 30-firewall-hardening.conf. It's overridden by
+# the new 90- file at boot so it's not harmful, but a lingering conf
+# with conflicting values is a debugging trap. (The modules-load.d
+# file keeps its 30- prefix — module load order is not last-wins.)
+- name: Remove pre-rename 30-firewall-hardening sysctl file
+  file:
+    path: /etc/sysctl.d/30-firewall-hardening.conf
+    state: absent
+  become: true
+  tags:
+    - firewall
+
 - name: Install network-stack hardening sysctls
   ansible.posix.sysctl:
     name: "{{ item.name }}"
     value: "{{ item.value }}"
-    sysctl_file: /etc/sysctl.d/30-firewall-hardening.conf
+    sysctl_file: /etc/sysctl.d/90-firewall-hardening.conf
   loop:
     # Disable IPv6 entirely. Cuts the stack at the kernel layer so
     # services binding `::` end up on a dead listener, neighbor
@@ -96,10 +117,17 @@
     # ip6tables ruleset.
     - { name: net.ipv6.conf.all.disable_ipv6, value: '1' }
     - { name: net.ipv6.conf.default.disable_ipv6, value: '1' }
-    # Strict reverse-path: drop packets whose source IP wouldn't
-    # route back via the ingress interface (spoofed-source filter).
-    - { name: net.ipv4.conf.all.rp_filter, value: '1' }
-    - { name: net.ipv4.conf.default.rp_filter, value: '1' }
+    # Loose reverse-path (rp_filter=2): drop packets whose source isn't
+    # routable via ANY interface (still catches RFC1918-on-WAN spoofs),
+    # but tolerate the asymmetric paths this host's macvlan topology
+    # creates. lab carries the keepalived pihole VIP on a `vrrp.N`
+    # macvlan that shares eth0's L2 segment, so VRRP-unicast and LAN
+    # broadcast/multicast legitimately ingress on an iface other than
+    # the one their source routes back through. Strict (=1) would drop
+    # that traffic and break keepalived failover. =2 is also what Ubuntu
+    # ships, so this no longer fights /usr/lib/sysctl.d/50-default.conf.
+    - { name: net.ipv4.conf.all.rp_filter, value: '2' }
+    - { name: net.ipv4.conf.default.rp_filter, value: '2' }
     # Refuse source-routed packets (no attacker-dictated path).
     - { name: net.ipv4.conf.all.accept_source_route, value: '0' }
     - { name: net.ipv4.conf.default.accept_source_route, value: '0' }
@@ -159,7 +187,7 @@
 - name: Pin nf_conntrack_tcp_loose in sysctl.d (idempotent file write)
   when: not (ansible_check_mode and firewall_sysctl.changed)
   lineinfile:
-    path: /etc/sysctl.d/30-firewall-hardening.conf
+    path: /etc/sysctl.d/90-firewall-hardening.conf
     regexp: '^net\.netfilter\.nf_conntrack_tcp_loose\s*='
     # No spaces around `=` to match ansible.posix.sysctl's on-disk
     # shape -- _verify_counters' grep asserts the no-space form.
@@ -177,7 +205,7 @@
   ansible.posix.sysctl:
     name: net.netfilter.nf_conntrack_tcp_loose
     value: '0'
-    sysctl_file: /etc/sysctl.d/30-firewall-hardening.conf
+    sysctl_file: /etc/sysctl.d/90-firewall-hardening.conf
     reload: false
   become: true
   tags:

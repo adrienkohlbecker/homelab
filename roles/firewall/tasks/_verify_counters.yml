@@ -18,7 +18,7 @@
 # until then.
 - name: _verify_counters | sysctl — nf_conntrack_tcp_loose=0 persisted in sysctl.d
   slurp:
-    src: /etc/sysctl.d/30-firewall-hardening.conf
+    src: /etc/sysctl.d/90-firewall-hardening.conf
   register: sysctl_persist
   become: true
 
@@ -38,7 +38,7 @@
       - "'net.netfilter.nf_conntrack_tcp_loose=0' in (sysctl_persist.content | b64decode)"
       - "'nf_conntrack' in (modload_persist.content | b64decode)"
     fail_msg: >-
-      Either /etc/sysctl.d/30-firewall-hardening.conf doesn't pin
+      Either /etc/sysctl.d/90-firewall-hardening.conf doesn't pin
       nf_conntrack_tcp_loose=0, or /etc/modules-load.d/30-firewall-
       hardening.conf doesn't pin nf_conntrack. Without both,
       loose=0 won't take effect at next boot.
