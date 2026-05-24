@@ -38,3 +38,14 @@ jobs:
   - name: keepalived_exporter_local
     url: http://127.0.0.1:{{ service_ports.keepalived_exporter }}/metrics
     autodetection_retry: 60
+
+  # kuma runs only on lab (site.yml); try on every host and let
+  # autodetection_retry idle elsewhere. Listed in lab.yml's
+  # netdata_collectors so the presence alert doubles as a kuma liveness
+  # signal -- if kuma dies or /metrics breaks, the collector goes missing.
+  # No auth on /metrics because the role seeds disableAuth (server/auth.js
+  # apiAuth next()s the basic-auth gate when disableAuth is set); this is a
+  # loopback scrape that bypasses the Authelia-fronted nginx vhost.
+  - name: kuma
+    url: http://127.0.0.1:{{ service_ports.kuma }}/metrics
+    autodetection_retry: 60
