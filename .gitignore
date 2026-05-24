@@ -18,3 +18,10 @@ test/out/
 # .claude/ subdir until it was explicitly whitelisted; the inverse here
 # means a new feature directory auto-tracks without a gitignore PR.
 .claude/settings.local.json
+
+# HA GUI-edited YAML lives in the ha_gui_config submodule (synced via
+# `mise run ha:sync`). A file with one of these names at the role's
+# files/ root is an orphan -- nothing deploys it.
+/roles/homeassistant/files/automations.yaml
+/roles/homeassistant/files/scripts.yaml
+/roles/homeassistant/files/scenes.yaml
