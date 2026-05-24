@@ -196,41 +196,12 @@
   tags:
     - homeassistant
 
-- name: Configure homeassistant config files
-  copy:
-    src: "{{ item.src }}"
-    dest: "{{ item.dest }}"
-    owner: homeassistant
-    group: homeassistant
-    mode: "{{ item.mode | default('0600') }}"
-    backup: true
-    validate: "{{ item.validate | default(omit) }}"
-  register: homeassistant_config_files
-  become: true
-  vars:
-    _yaml_validate: python3 -c 'import yaml,sys; yaml.add_multi_constructor("!",lambda l,s,n:None,Loader=yaml.SafeLoader); yaml.safe_load(open(sys.argv[1]))' "%s"
-  loop:
-    - src: macros.jinja
-      dest: /mnt/services/homeassistant/custom_templates/macros.jinja
-    - src: sensors.yaml
-      dest: /mnt/services/homeassistant/sensors.yaml
-      validate: "{{ _yaml_validate }}"
-    - src: templates.yaml
-      dest: /mnt/services/homeassistant/templates.yaml
-      validate: "{{ _yaml_validate }}"
-    - src: blueprints/automation/hvac_dry_mode.yaml
-      dest: /mnt/services/homeassistant/blueprints/automation/hvac_dry_mode.yaml
-      mode: "0644"
-      validate: "{{ _yaml_validate }}"
-    - src: blueprints/automation/sun_driven_shutter.yaml
-      dest: /mnt/services/homeassistant/blueprints/automation/sun_driven_shutter.yaml
-      mode: "0644"
-      validate: "{{ _yaml_validate }}"
-  loop_control:
-    label: "{{ item.dest }}"
-  tags:
-    - homeassistant
-
+# sensors.yaml / templates.yaml / custom_templates/macros.jinja and the
+# blueprint sources used to be `copy:`-deployed from roles/homeassistant/files/
+# here; they're now in the ha_gui_config submodule and deployed by
+# `mise run ha:sync push`. See CLAUDE.md > Home Assistant GUI YAML sync.
+# Touch only the include-targets that HA reads at startup; absence would
+# log "file not found" before the operator runs the first sync.
 - name: Ensure files exist
   file:
     path: /mnt/services/homeassistant/{{ item }}
@@ -246,6 +217,8 @@
     - automations.yaml
     - scripts.yaml
     - scenes.yaml
+    - sensors.yaml
+    - templates.yaml
   tags:
     - homeassistant
 
@@ -391,7 +364,7 @@
     systemd_unit_args:
       src: homeassistant
       condition: "{{ not (ansible_check_mode and (homeassistant_service_result.changed or homeassistant_user.changed)) }}"
-      restart: "{{ homeassistant_service_result.changed or homeassistant_conf.changed or homeassistant_hacs_unpack.changed or homeassistant_config_files.changed or homeassistant_network_storage.changed }}"
+      restart: "{{ homeassistant_service_result.changed or homeassistant_conf.changed or homeassistant_hacs_unpack.changed or homeassistant_network_storage.changed }}"
   tags:
     - homeassistant
 
