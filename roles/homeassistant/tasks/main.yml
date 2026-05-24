@@ -431,21 +431,38 @@
   tags:
     - homeassistant
 
-- name: Install vscode editor
+# vscode_ha (an openvscode-server editor over /mnt/services/homeassistant)
+# was retired: HA's user-authored config now lives in the homelab_ha_config
+# submodule and syncs via `mise run ha:sync`, which forbids editing on the
+# live VM, and the editor couldn't be Authelia-gated inside HA's iframe panel
+# anyway (the unauthenticated 302 to the portal can't be framed). The
+# tombstones below tear down what the role left on already-converged hosts;
+# they can be dropped once lab has re-converged past this commit.
+- name: Retire vscode_ha service
   import_role:
-    name: vscode
-    tasks_from: module
+    name: systemd_unit
+    tasks_from: remove
   vars:
-    vscode_user:
-      uid: "{{ homeassistant_user.uid }}"
-      group: "{{ homeassistant_user.group }}"
-      changed: "{{ homeassistant_user.changed }}"
-    vscode_name: vscode_ha
-    vscode_path: vscode_ha
-    vscode_subdomain: vscode_ha
-    vscode_mount: /mnt/services/homeassistant
-    vscode_workspace: homeassistant
-    vscode_port: 3002
-    vscode_csp_frame_ancestors: https://homeassistant.{{ inventory_hostname }}.{{ domain }}/ 'self'
+    systemd_unit_args:
+      dest: vscode_ha.service
+  tags:
+    - homeassistant
+
+- name: Retire vscode_ha nginx site
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: vscode_ha
+      state: absent
+  tags:
+    - homeassistant
+
+- name: Remove vscode_ha state directory
+  file:
+    path: /mnt/services/vscode_ha
+    state: absent
+  become: true
   tags:
     - homeassistant
