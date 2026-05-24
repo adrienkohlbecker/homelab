@@ -1074,8 +1074,7 @@ authelia_users:
     displayname: Spouse Name
     password_hash: "$argon2id$v=19$m=65536,t=3,p=4$X/SnXKsK5vZuAfx3trw+AA$Uky6UdYO/0G8qInt8Q/tE7Xdh/SVkLTkHSMr/LpaJeU"
     email: spouse@example.com
-    groups:
-      - admins
+    groups: []
 
 authelia_oidc_clients:
   - client_id: minio
