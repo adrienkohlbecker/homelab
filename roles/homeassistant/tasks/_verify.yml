@@ -100,6 +100,52 @@
   failed_when: _verify_ha_egress.rc != 0 or 'dev ' not in _verify_ha_egress.stdout
   become: true
 
+# pin_default_route.sh's down-rank branch only fires when >1 default route
+# exists. The fragility it guards is that netavark gives one network's
+# default a low metric and the other's a high one, but which network lands
+# low is tied to the ethN ordering, which isn't stable across hosts/boots --
+# so the macvlan can end up as the preferred egress, routing off-IoT traffic
+# (Marantz, WAN) out the IoT VLAN where the firewall drops it. Which branch
+# box hits at boot is netavark's coin-flip, so to exercise the down-rank
+# deterministically we synthesize the worst case here: flush HA's defaults,
+# then install the mac_iot default at a *lower* (preferred) metric than the
+# bridge so mac_iot wins egress, confirm that, run the real script, and
+# assert it demoted mac_iot far enough that the bridge now wins. (Two
+# defaults can't share a metric -- the route key is dst+metric -- so we use
+# asymmetric metrics rather than a literal tie.) Gateways are read from
+# podman so the check tracks whatever subnets/ethN netavark handed out. Edits
+# the netns via nsenter from the host because HA has no CAP_NET_ADMIN -- the
+# same reason the script does. Test-only route surgery; _verify never runs
+# against prod and the box VM is torn down right after, so leaving HA on the
+# post-script routes (bridge default still present) is fine.
+- name: _verify | pin_default_route down-ranks a preferred mac_iot default so the bridge wins
+  shell: |
+    set -eu
+    {% raw %}
+    pid="$(podman inspect -f "{{.State.Pid}}" homeassistant)"
+    mac_gw="$(podman inspect homeassistant --format "{{.NetworkSettings.Networks.mac_iot.Gateway}}")"
+    br_gw="$(podman inspect homeassistant --format "{{.NetworkSettings.Networks.mosquitto.Gateway}}")"
+    nsenter -t "$pid" -n ip route flush default
+    nsenter -t "$pid" -n ip route add default via "$br_gw" metric 100
+    nsenter -t "$pid" -n ip route add default via "$mac_gw" metric 50
+    pre="$(nsenter -t "$pid" -n ip -4 route get 1.1.1.1)"
+    echo "before script (mac_iot preferred): $pre"
+    case "$pre" in
+      *"via $mac_gw"*) ;;
+      *) echo "SETUP FAIL: mac_iot should win egress before the script, got: $pre" >&2; exit 1 ;;
+    esac
+    /opt/homeassistant/pin_default_route.sh "$mac_gw"
+    post="$(nsenter -t "$pid" -n ip -4 route get 1.1.1.1)"
+    echo "after script (bridge should win): $post"
+    case "$post" in
+      *"via $br_gw"*) ;;
+      *) echo "FAIL: expected bridge gw $br_gw to win egress after down-rank, got: $post" >&2; exit 1 ;;
+    esac
+    {% endraw %}
+  register: _verify_route_downrank
+  changed_when: false
+  become: true
+
 # Functional HACS check: grep HA's journal for the loader's "We found
 # a custom integration hacs" warning. That line fires when HA actually
 # discovers HACS at startup, proving: HACS files visible inside the
