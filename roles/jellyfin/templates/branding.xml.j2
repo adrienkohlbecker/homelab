@@ -10,10 +10,18 @@
   unescapes + injects it. Jellyfin only rewrites this file on a dashboard
   save, so DO NOT edit branding via the Jellyfin UI -- manage it here.
   See notes/jellyfin_sso_rollout.md.
+
+  CustomCss hides every native web-login affordance (the user-avatar
+  picker, the Manual Login button + its username/password form, and
+  Forgot Password), leaving only the SSO button above -- Jellyfin has no
+  server-side toggle to disable password login. This is web-UI only:
+  native apps + Quick Connect still authenticate via the API, and the
+  local break-glass admin remains reachable by re-applying this role with
+  an empty CustomCss (no Authelia dependency) or via browser devtools.
 #}
 <?xml version="1.0" encoding="utf-8"?>
 <BrandingOptions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
   <LoginDisclaimer>&lt;form action="https://jellyfin.{{ inventory_hostname }}.{{ domain }}/sso/OID/start/authelia"&gt;&lt;button class="raised block emby-button button-submit"&gt;Sign in with SSO&lt;/button&gt;&lt;/form&gt;</LoginDisclaimer>
-  <CustomCss></CustomCss>
+  <CustomCss>.manualLoginForm, .visualLoginForm, .btnManual, .btnForgotPassword { display: none !important; }</CustomCss>
   <SplashscreenEnabled>false</SplashscreenEnabled>
 </BrandingOptions>
