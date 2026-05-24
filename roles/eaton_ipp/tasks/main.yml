@@ -1,18 +1,24 @@
-- name: Gather package facts
-  package_facts:
-    manager: apt
-  no_log: true
+# Query just the ipp-linux package version rather than package_facts, which
+# enumerates every installed apt package (~2s) only to read one version.
+# rc!=0 + empty stdout when not installed -> version mismatch -> install.
+- name: Check installed eaton ipp version  # noqa: command-instead-of-module
+  command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f=${Version}
+      - ipp-linux
+  register: eaton_ipp_pkg
+  changed_when: false
+  failed_when: false
   check_mode: false
   tags:
     - eaton_ipp
 
-# `default([{}])` catches the package-missing case so we don't trip on
-# undefined attribute; `default('')` catches the no-version case so the
-# comparison always has a string. Same idiom as roles/backports/_verify.
 - name: Install eaton ipp if needed
   when:
     - ansible_architecture == "x86_64"
-    - (ansible_facts.packages["ipp-linux"] | default([{}]))[0].version | default('') != eaton_ipp_version
+    - eaton_ipp_pkg.stdout != eaton_ipp_version
   become: true
   tags:
     - eaton_ipp

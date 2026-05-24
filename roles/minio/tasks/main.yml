@@ -1,13 +1,23 @@
-- name: Gather package facts
-  package_facts:
-    manager: apt
-  no_log: true
+# Query just the minio package version rather than package_facts, which
+# enumerates every installed apt package (~2s) only to read one version.
+# argv form keeps ${Version} literal for dpkg-query (no shell, no shlex
+# quoting); rc!=0 + empty stdout when not installed -> install path.
+- name: Check installed minio version  # noqa: command-instead-of-module
+  command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f=${Version}
+      - minio
+  register: minio_pkg
+  changed_when: false
+  failed_when: false
   check_mode: false
   tags:
     - minio
 
 - name: Install minio if needed
-  when: '"minio" not in ansible_facts.packages or ansible_facts.packages["minio"][0].version != "20220526054841.0.0"'
+  when: minio_pkg.stdout != "20220526054841.0.0"
   become: true
   tags:
     - minio
