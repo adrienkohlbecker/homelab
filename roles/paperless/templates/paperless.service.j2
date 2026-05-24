@@ -4,6 +4,15 @@
 Description=paperless
 After=network-online.target
 Wants=network-online.target
+# redis.service is Type=notify --sdnotify=healthy, so it only reaches
+# `active` once its in-container redis-cli ping passes. Ordering after it
+# (Wants, not Requires — paperless tolerates redis bouncing post-start via
+# its own retry loop) means paperless boots against a healthy broker
+# instead of spamming connection retries until redis comes up. Also
+# guarantees the shared `redis` podman network exists before paperless
+# attaches to it.
+After=redis.service
+Wants=redis.service
 StartLimitInterval=600
 StartLimitBurst=3
 {% if zfs_root %}
