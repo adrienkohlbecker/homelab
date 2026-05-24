@@ -135,17 +135,30 @@ def sh(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subproces
     return subprocess.run(cmd, cwd=cwd, check=check, capture_output=True, text=True)
 
 
-def sh_bytes(cmd: list[str], cwd: Path | None = None) -> bytes:
-    return subprocess.run(cmd, cwd=cwd, check=True, capture_output=True).stdout
-
-
-def host_sha(filename: str) -> str:
-    r = sh(["ssh", HOST, f"sudo sha256sum {HOST_DIR}/{filename}"])
+def host_sha(filename: str) -> str | None:
+    """sha256 of file on lab; None if the file doesn't exist on host yet."""
+    r = subprocess.run(
+        ["ssh", HOST, f"sudo sha256sum {HOST_DIR}/{filename} 2>/dev/null"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if r.returncode != 0 or not r.stdout.strip():
+        return None
     return r.stdout.split()[0]
 
 
-def blob_sha_at(ref: str, filename: str) -> str:
-    return hashlib.sha256(sh_bytes(["git", "show", f"{ref}:{filename}"], cwd=SUBMODULE)).hexdigest()
+def blob_sha_at(ref: str, filename: str) -> str | None:
+    """sha256 of file's blob at git ref; None if the file doesn't exist at that ref."""
+    r = subprocess.run(
+        ["git", "show", f"{ref}:{filename}"],
+        cwd=SUBMODULE,
+        capture_output=True,
+        check=False,
+    )
+    if r.returncode != 0:
+        return None
+    return hashlib.sha256(r.stdout).hexdigest()
 
 
 def assert_submodule_initialized() -> None:
@@ -272,16 +285,29 @@ def do_push() -> None:
         print("push: committed local edits")
     if not has_tag(SYNCED_TAG):
         sys.exit(f"refusing: no {SYNCED_TAG} tag. Run `mise run ha:pull` once to establish the baseline.")
-    diverged = []
-    for rel, _, _ in enumerate_files():
-        if host_sha(rel) != blob_sha_at(SYNCED_TAG, rel):
+    # Per-file state model:
+    #   tag_blob  -- sha at last_synced_to_host, or None if file is new to sync
+    #   head_blob -- sha at submodule HEAD (always exists; file is in HEAD by definition)
+    #   host_blob -- sha on lab, or None if file isn't deployed yet
+    # diverged   = host has stale-but-present content edited away from tag
+    #              (would clobber on push without a pull first)
+    # changed    = host content differs from HEAD (missing-on-host counts)
+    diverged: list[str] = []
+    changed: list[tuple[str, str, str | None]] = []
+    for rel, mode, reload in enumerate_files():
+        head_blob = blob_sha_at("HEAD", rel)
+        tag_blob = blob_sha_at(SYNCED_TAG, rel)
+        host_blob = host_sha(rel)
+        if tag_blob is not None and host_blob is not None and host_blob != tag_blob:
             diverged.append(rel)
+            continue
+        if host_blob != head_blob:
+            changed.append((rel, mode, reload))
     if diverged:
         msg = [f"refusing: host diverged from {SYNCED_TAG} (GUI/host edited since last sync):"]
         msg += [f"  {f}" for f in diverged]
         msg.append("\nrun `mise run ha:pull` to capture host-side edits, then retry push.")
         sys.exit("\n".join(msg))
-    changed = [(rel, mode, reload) for rel, mode, reload in enumerate_files() if blob_sha_at("HEAD", rel) != blob_sha_at(SYNCED_TAG, rel)]
     if not changed:
         print("push: HEAD matches host, nothing to do")
         return
