@@ -92,6 +92,15 @@
   failed_when: false
   become: true
 
+# NetBIOS silenced-noise — UDP to dport 137 must land on the NetBIOS
+# silence rule, not the catch-all.
+- name: _verify_drops | input — UDP to NetBIOS port 137 hits the NetBIOS silenced-noise drop
+  shell: echo ping | ip netns exec extns nc -u -w 1 10.99.0.1 137
+  args: { executable: /bin/bash }
+  changed_when: false
+  failed_when: false
+  become: true
+
 # Catch-all (UDP to a port with no rule, no listener, no scope match)
 # — falls through to the trailing counter-drop.
 - name: _verify_drops | input — UDP to unscoped 18181 hits the catch-all drop

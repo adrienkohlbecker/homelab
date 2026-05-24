@@ -48,12 +48,14 @@ table inet homelab {
     # em-dashes and was sensitive to rule reorders).
     counter input_nonsyn {}
     counter input_silenced {}
+    counter input_silenced_netbios {}
     counter input_catchall {}
     counter icmp_overflow {}
     counter vrrp_accept {}
     counter dnscrypt_accept {}
     counter aardvark_accept {}
     counter mdns_accept {}
+    counter igmp_accept {}
     counter wireguard_accept {}
     counter mosh_accept {}
     counter netbios_accept {}
@@ -179,6 +181,19 @@ table inet homelab {
         ip saddr { $PODMAN_DEFAULT, $PODMAN_POOL } udp dport 5333 counter name "aardvark_accept" accept comment "aardvark-dns (post-DNAT from gateway:53, all podman bridges)"
         iifname $WAN_IFACE ip saddr $HOME_LAN udp dport 5353 counter name "mdns_accept" accept comment "mDNS (home LAN)"
 
+        # IGMP — link-local multicast group management (TTL=1, never
+        # routed in from WAN). lab is a real subscriber: avahi joins
+        # 224.0.0.251 (mDNS) and the SSDP stack joins 239.255.255.250 on
+        # eth0, so lab must answer the UniFi snooping querier's General
+        # Queries (from 198.18.0.1 — UniFi's internal querier address —
+        # to 224.0.0.1) with membership reports, or risk being pruned out
+        # of those groups. Accept rather than drop: unscoped is safe given
+        # TTL=1 (no WAN-routable IGMP exists), and accepting on every iface
+        # the querier hits (eth0/iot/vrrp vmac) also keeps these ~17k/day
+        # queries out of the catch-all log. Hosts only report groups they
+        # actually joined, so accepting where lab has no join is a no-op.
+        ip protocol igmp counter name "igmp_accept" accept comment "IGMP (link-local group mgmt)"
+
         # Wireguard ingress only on the WAN iface. Pinning iif means
         # an attacker on a future LAN bridge can't speculatively send
         # to udp/51820 from inside.
@@ -281,6 +296,22 @@ table inet homelab {
         #           agent on this host
         #   57621 — Spotify Connect LAN discovery (Adrien's MBP)
         udp dport { 67, 1900, 5351, 10001, 57621 } counter name "input_silenced" drop comment "input silenced LAN noise"
+
+        # NetBIOS broadcast that misses the netbios_accept (iif . saddr)
+        # scope above was the #2 catch-all log consumer (~400/day). Benign
+        # and already dropped by the catch-all; silencing it here with its
+        # own counter keeps the rate-limited log slot free for genuinely
+        # interesting drops (e.g. WAN scans) while staying visible via
+        # `nft list table inet homelab`. Mostly duplicate copies of trusted
+        # hosts' .255 announcements that the kernel also fans out to the
+        # vrrp.<vrid> vmac macvlan (same L2); nmbd already processed the
+        # eth0/mac_mgmt copy and binds only eth0 (bind interfaces only), so
+        # the vmac dupes are redundant. Accepting them (adding the vmac to
+        # lan_admin_pairs) would only make nmbd double-process — drop is
+        # correct. (IGMP — the #1 log consumer — is handled by an accept
+        # rule above, not here: lab is a multicast subscriber and must
+        # answer the snooping querier.)
+        udp dport { 137, 138 } counter name "input_silenced_netbios" drop comment "NetBIOS broadcast noise (fall-through / vmac dupes)"
 
         # Catch-all: log+drop UDP and non-TCP/UDP protocols silently
         # to avoid ICMP amplification (every spoofed UDP probe would
