@@ -57,7 +57,9 @@ Recurring multi-step workflows live as skills. Reach for them before hand-rollin
 
 **Underscores, not hyphens** in identifiers we author: role names, file names under `roles/`, systemd unit names, vars, directory names under `/mnt/services/<svc>/`, etc. — `clickhouse_logs` not `clickhouse-logs`, `service_user.yml` not `service-user.yml`. Editor double-click on `foo_bar` selects the whole token; on `foo-bar` it stops at the hyphen. Exceptions are names dictated by upstream (image tags, package names, K8s-flavored YAML keys) — those keep their hyphens.
 
-Everything else (YAML indentation, descriptive `name:`, `set -euo pipefail` in bash, namespaced role vars) is enforced by `mise run lint`; don't lift those into commentary here.
+Everything else (YAML indentation, descriptive `name:`, namespaced role vars) is enforced by `mise run lint`; don't lift those into commentary here.
+
+**Every bash script starts `set -euo pipefail`** — proper files *and* inline ansible `shell:` blocks (lint does **not** enforce this; a missing `-e` slips through). `-e` then obliges you to handle commands you *expect* to fail: append `|| true` to a command whose non-zero exit is normal (e.g. `snap list` exiting 1 when empty), and avoid `... | head`/`... | sort | head` pipelines where the early reader raises SIGPIPE upstream — collapse the selection into a single non-early-exiting filter (one `awk` over the whole stream) instead. Canonical: the snap-purge block in [roles/cleanup/tasks/main.yml](roles/cleanup/tasks/main.yml).
 
 ## Repo Conventions
 
