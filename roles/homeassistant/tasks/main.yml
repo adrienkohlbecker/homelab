@@ -220,6 +220,7 @@
     - sensors.yaml
     - templates.yaml
     - input_numbers.yaml
+    - timers.yaml
   tags:
     - homeassistant
 

@@ -7,6 +7,27 @@
     or _verify_unit.status.ActiveState != "active"
   become: true
 
+# HA falls back to "recovery mode" -- ignoring configuration.yaml entirely
+# and reverting every option to its built-in default -- when it can't parse
+# the config, e.g. a `!include` target the role forgot to pre-touch. That
+# silently drops use_x_forwarded_for, so the nginx probe below fails with an
+# opaque 400 (HA rejecting the proxied request); assert the real cause here
+# first. Guards against a new `!include` landing in configuration.yaml
+# without a matching stub in main.yml's "Ensure files exist" list.
+- name: _verify | homeassistant did not fall back to recovery mode
+  command:
+    argv:
+      - journalctl
+      - -u
+      - homeassistant
+      - -b
+      - --no-pager
+      - --grep=Activating recovery mode
+  register: _verify_recovery_mode
+  changed_when: false
+  failed_when: '"Activating recovery mode" in _verify_recovery_mode.stdout'
+  become: true
+
 # Functional probe of HA itself. /manifest.json is the same endpoint
 # the unit's --health-cmd polls, so a 200 here proves the container
 # is serving on the published port -- not just that systemd called it
