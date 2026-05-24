@@ -204,6 +204,7 @@ gitea_runner_registration_token: changeme
 spouse_samba_password: changeme
 paperless_secret_key: changeme
 z2m_network_key: changeme
+jellyfin_api_token: changeme
 mosquitto_accounts:
   z2m:
     password: changeme
@@ -399,6 +400,18 @@ authelia_oidc_clients:
     authorization_policy: one_factor
     redirect_uris:
       - 'https://gitea.{{ inventory_hostname }}.{{ domain }}/user/oauth2/authelia/callback'
+  - client_id: jellyfin
+    client_name: Jellyfin
+    # Same "changeme" pbkdf2 hash. Jellyfin's SSO provider is provisioned
+    # via the plugin API (POST /sso/OID/Add), gated not qemu_test like
+    # gitea -- the box fixture has no Jellyfin admin/token and no Authelia,
+    # so no provider is registered there. This row keeps the authelia
+    # _verify's clients list a stable shape. Prod uses two_factor;
+    # one_factor here matches the other test clients (no 2FA on box).
+    client_secret: '$pbkdf2-sha512$310000$JURoTanVWouRkvJ.Tyml1A$B4DZyqy25cNbFfwFiPMyAdWcuxiELOBAlH0NfQSxB9jgDTQXiyBIMsFY2Z5I3XO5ItLH1pP5C5ujKja71Bqoww'
+    authorization_policy: one_factor
+    redirect_uris:
+      - 'https://jellyfin.{{ inventory_hostname }}.{{ domain }}/sso/OID/redirect/authelia'
 
 # Plaintext OIDC client secrets handed to consumer roles.
 # Pairs with the pbkdf2 hash above; rotate both halves together.

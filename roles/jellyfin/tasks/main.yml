@@ -110,6 +110,110 @@
   tags:
     - jellyfin
 
+# --- SSO/OIDC plugin (Authelia) -----------------------------------------
+# In-app OIDC login for the web client + Quick Connect for native apps.
+# NOT nginx forward-auth: the jellyfin nginx site stays auth:none so
+# native bearer-token clients (TVs/phones/mobile app) keep working. The
+# plugin DLLs + meta.json drop under /config/plugins/sso/; the OID config
+# and login button are seeded as files Jellyfin reads at startup (it only
+# rewrites them on a dashboard save, which the templates' headers forbid).
+# Version is pinned in vars/main.yml against the 10.10.6 ABI ceiling.
+# Full rationale: notes/jellyfin_sso_rollout.md.
+- name: Install unzip for SSO plugin extraction
+  apt:
+    name: unzip
+    state: present
+  become: true
+  tags:
+    - jellyfin
+
+- name: Create SSO plugin directories
+  when: not (ansible_check_mode and jellyfin_user.changed)
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: jellyfin
+    group: media
+    mode: "0755"
+  become: true
+  loop:
+    - /mnt/services/jellyfin/plugins
+    - /mnt/services/jellyfin/plugins/sso
+    - /mnt/services/jellyfin/plugins/configurations
+  tags:
+    - jellyfin
+
+- name: Download SSO plugin
+  get_url:
+    url: "{{ jellyfin_sso_plugin.url }}"
+    dest: /tmp/sso-authentication_{{ jellyfin_sso_plugin_version }}.zip
+    checksum: sha256:{{ jellyfin_sso_plugin.sha256 }}
+    mode: "0644"
+  become: true
+  tags:
+    - jellyfin
+
+# Owner jellyfin is required, not cosmetic: the container runs as uid 0
+# mapped to the host jellyfin uid, so root-owned files on the host would
+# be unreadable inside it. unarchive's own content comparison isn't
+# reliably idempotent here (it re-reports changed on re-run), so gate on a
+# version-stamped sentinel: the marker name carries the version, so a pin
+# bump re-extracts (overwriting the stable-named DLLs) while an unchanged
+# version is a no-op.
+- name: Extract SSO plugin
+  when: not (ansible_check_mode and jellyfin_user.changed)
+  unarchive:
+    src: /tmp/sso-authentication_{{ jellyfin_sso_plugin_version }}.zip
+    dest: /mnt/services/jellyfin/plugins/sso
+    remote_src: true
+    owner: jellyfin
+    group: media
+    creates: /mnt/services/jellyfin/plugins/sso/.installed-{{ jellyfin_sso_plugin_version }}
+  register: jellyfin_sso_extract
+  become: true
+  tags:
+    - jellyfin
+
+- name: Stamp installed SSO plugin version
+  when:
+    - not (ansible_check_mode and jellyfin_user.changed)
+    - jellyfin_sso_extract is changed
+  file:
+    path: /mnt/services/jellyfin/plugins/sso/.installed-{{ jellyfin_sso_plugin_version }}
+    state: touch
+    owner: jellyfin
+    group: media
+    mode: "0644"
+  become: true
+  tags:
+    - jellyfin
+
+# The SSO plugin's OID provider is NOT seeded as a file here: it lives in
+# a custom SerializableDictionary whose XML only round-trips when the
+# plugin's own WriteXml produces it -- a hand-written config deserializes
+# to an empty dict and Jellyfin overwrites it. It's provisioned via the
+# plugin HTTP API after the service is up (see below).
+#
+# Render via copy:content + regex_replace (not template:) because Jellyfin
+# rewrites branding.xml via .NET's XmlSerializer, which emits no trailing
+# newline; a plain template: adds one, so every run after Jellyfin has
+# touched the file would re-diff and trigger a needless restart. Same
+# pattern as roles/sonarr (config.xml).
+- name: Configure Jellyfin branding (SSO login button)
+  when: not (ansible_check_mode and jellyfin_user.changed)
+  copy:
+    content: "{{ lookup('template', 'branding.xml.j2') | regex_replace('\\n+$', '') }}"
+    dest: /mnt/services/jellyfin/config/branding.xml
+    owner: jellyfin
+    group: media
+    mode: "0644"
+    backup: true
+    validate: python3 -c 'import xml.dom.minidom,sys; xml.dom.minidom.parse(sys.argv[1])' "%s"
+  register: jellyfin_branding
+  become: true
+  tags:
+    - jellyfin
+
 # The unit's self-pathed --volume /mnt/services/sqlite/jellyfin:/mnt/services/sqlite/jellyfin
 # resolves the symlink targets identically inside the container — do not
 # change the container-side path without updating sqlite_dataset_args.name
@@ -125,6 +229,10 @@
       group: media
       mode: "0750"
       condition: "{{ not (ansible_check_mode and jellyfin_user.changed) }}"
+      # Jellyfin creates these DBs on first boot, so on a cold host the
+      # symlink targets don't exist yet -- pre_create plants empty files
+      # so state=link doesn't refuse the dangling symlink.
+      pre_create: true
       links:
         - /mnt/services/jellyfin/data/library.db
         - /mnt/services/jellyfin/data/jellyfin.db
@@ -151,7 +259,105 @@
     systemd_unit_args:
       src: jellyfin
       condition: "{{ not (ansible_check_mode and (jellyfin_service_result.changed or jellyfin_user.changed or media_group.changed)) }}"
-      restart: "{{ jellyfin_service_result.changed or jellyfin_user.changed or media_group.changed or jellyfin_logging_json.changed | default(false) }}"
+      restart: >-
+        {{ jellyfin_service_result.changed
+           or jellyfin_user.changed
+           or media_group.changed
+           or jellyfin_logging_json.changed | default(false)
+           or jellyfin_sso_extract.changed | default(false)
+           or jellyfin_branding.changed | default(false) }}
+  tags:
+    - jellyfin
+
+# Provision the SSO OID provider via the plugin's HTTP API now that the
+# service is up. The plugin stores OidConfigs in a custom
+# SerializableDictionary that only round-trips through its own WriteXml,
+# so we let the plugin persist it (POST /sso/OID/Add) rather than seeding
+# the file. Same fingerprint-sentinel + not-qemu_test shape as roles/gitea:
+# the API needs a real Jellyfin admin token (no admin user / token exists
+# on the box fixture), and the JSON body is PascalCase to match Jellyfin's
+# null-naming-policy, case-sensitive model binder. Roles is [] (empty =>
+# every authenticated Authelia user may sign in); AdminRoles=[admins] maps
+# the groups claim to a Jellyfin admin. See notes/jellyfin_sso_rollout.md.
+- name: Compose desired SSO OID provider state
+  when: not qemu_test
+  set_fact:
+    jellyfin_oidc_state:
+      OidEndpoint: "https://auth.{{ authelia_cookie_domain }}"
+      OidClientId: jellyfin
+      OidSecret: "{{ jellyfin_oidc_client_secret }}"
+      Enabled: true
+      EnableAuthorization: true
+      EnableAllFolders: true
+      EnabledFolders: []
+      Roles: []
+      AdminRoles:
+        - admins
+      EnableFolderRoles: false
+      EnableLiveTvRoles: false
+      EnableLiveTv: false
+      EnableLiveTvManagement: false
+      RoleClaim: groups
+      OidScopes:
+        - groups
+  tags:
+    - jellyfin
+
+- name: Read existing SSO OID provisioning fingerprint
+  when: not qemu_test
+  slurp:
+    src: /mnt/services/jellyfin/.oidc_authelia.fingerprint
+  register: jellyfin_oidc_fp_slurp
+  # Absent on first apply -- swallow so the comparison falls into the
+  # "needs provisioning" path.
+  failed_when: false
+  become: true
+  tags:
+    - jellyfin
+
+# Fingerprint covers the whole config (incl. the secret's bytes via the
+# json hash), so a secret rotation or any field change re-POSTs; the
+# sentinel stores only the hash, never the secret.
+- name: Compute desired vs current SSO OID fingerprints
+  when: not qemu_test
+  set_fact:
+    jellyfin_oidc_desired_fp: "{{ jellyfin_oidc_state | to_json(sort_keys=true) | hash('sha256') }}"
+    jellyfin_oidc_current_fp: "{{ (jellyfin_oidc_fp_slurp.content | default('') | b64decode | trim) if (jellyfin_oidc_fp_slurp.content is defined) else '' }}"
+  tags:
+    - jellyfin
+
+- name: Provision SSO OID provider via plugin API
+  when:
+    - not qemu_test
+    - jellyfin_oidc_desired_fp != jellyfin_oidc_current_fp
+  uri:
+    url: http://localhost:{{ service_ports.jellyfin }}/sso/OID/Add/authelia
+    method: POST
+    headers:
+      Authorization: 'MediaBrowser Token="{{ jellyfin_api_token }}"'
+    body_format: json
+    body: "{{ jellyfin_oidc_state }}"
+    status_code: [200, 204]
+  register: jellyfin_oidc_post
+  retries: 30
+  delay: 2
+  until: jellyfin_oidc_post.status | default(0) in [200, 204]
+  no_log: true
+  changed_when: true
+  tags:
+    - jellyfin
+
+- name: Persist SSO OID provisioning fingerprint
+  when:
+    - not qemu_test
+    - jellyfin_oidc_desired_fp != jellyfin_oidc_current_fp
+  copy:
+    content: "{{ jellyfin_oidc_desired_fp }}"
+    dest: /mnt/services/jellyfin/.oidc_authelia.fingerprint
+    owner: jellyfin
+    group: media
+    mode: "0640"
+  become: true
   tags:
     - jellyfin
 
