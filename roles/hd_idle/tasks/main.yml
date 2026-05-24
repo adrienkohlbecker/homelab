@@ -42,3 +42,31 @@
       restart: "{{ apt_install_hdidle.changed or hd_idle_conf.changed }}"
   tags:
     - hd_idle
+
+# Reap legacy /var/log/hd-idle.log[.N] leftovers. Older HD_IDLE_OPTS
+# included -l /var/log/hd-idle.log; the current template omits -l so
+# hd-idle writes to stderr -> systemd-journald. The package-shipped
+# /etc/logrotate.d/hd-idle has `missingok`, so logrotate silently
+# skips the file after this purge.
+- name: Find legacy hd-idle log files
+  find:
+    paths: /var/log
+    patterns:
+      - 'hd-idle.log'
+      - 'hd-idle.log.*'
+    file_type: file
+  register: hd_idle_legacy_logs
+  become: true
+  tags:
+    - hd_idle
+
+- name: Remove legacy hd-idle log files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ hd_idle_legacy_logs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
+  tags:
+    - hd_idle
