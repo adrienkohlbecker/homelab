@@ -77,6 +77,14 @@
 #   `wake_time_weekend_holiday`. (The kids' rooms upstairs will use a
 #   later weekend/holiday time once that batch is migrated, so corridor
 #   light doesn't wake them on lie-in days.)
+# - Optional `bed_sensor` input: when set to a binary_sensor that goes
+#   'on' while a sleeper is in (or adjacent to) the room, `shade`, `open`,
+#   and `reassert` are suppressed so the shutter doesn't move and wake
+#   them. Used today for Spouse's office (guest Murphy bed) and the
+#   adjacent SDB Verte. Unknown / unavailable states fail open — a flat
+#   sensor battery leaves the shutter on its normal schedule rather than
+#   stranding it closed. Default points at a non-existent entity, so
+#   instances that don't need bed-gating just omit the input.
 # - Hysteresis on the shade exit (0.7× threshold) and a 5-min debounce on
 #   both shade triggers keep partly-cloudy days from bouncing the blind.
 # - Night close is deterministic (sun:sunset + 10min). No debounce, no
@@ -184,6 +192,21 @@ blueprint:
         entity:
           filter:
             - domain: input_number
+    bed_sensor:
+      name: Bed-occupancy sensor (optional)
+      description: >
+        Optional binary_sensor that goes 'on' when a bed in (or adjacent to)
+        this room is deployed/occupied — gates open / shade / reassert so
+        the shutter doesn't move and wake the sleeper. Default points at a
+        non-existent entity (states() → 'unknown' → treated as allow), so
+        instances that don't need bed-gating just omit this input. Stale /
+        unavailable states fail open so a flat-battery sensor doesn't strand
+        the shutter closed all day.
+      default: binary_sensor.sun_driven_shutter_no_bed
+      selector:
+        entity:
+          filter:
+            - domain: binary_sensor
     shade_position:
       name: Shade position
       description: Position (0=closed, 100=open) when shading is engaged.
@@ -237,6 +260,7 @@ trigger_variables:
   blueprint_climate_schedule: !input climate_schedule
   blueprint_room_temp_sensor: !input room_temp_sensor
   blueprint_hvac_heat_to_cool_helper: !input hvac_heat_to_cool_helper
+  blueprint_bed_sensor: !input bed_sensor
 
 triggers:
   # Night close: deterministic event, no debounce needed.
@@ -266,9 +290,14 @@ triggers:
       {% set shade_threshold = (states(blueprint_hvac_heat_to_cool_helper) | float(99)) - 0.5 %}
       {% set shade_allowed = is_state(blueprint_climate_schedule, '0')
          or room_t > shade_threshold %}
+      {# bed_allows: only blocks the trigger when the sensor is actively 'on'.
+         Unknown / unavailable / missing entity → states() returns a non-'on'
+         value → trigger allowed, so a flat sensor doesn't strand the blind. #}
+      {% set bed_allows = states(blueprint_bed_sensor) != 'on' %}
       {{ is_state('sun.sun', 'above_horizon')
          and now() >= wake
          and shade_allowed
+         and bed_allows
          and blueprint_azimuth_min <= az <= blueprint_azimuth_max
          and blueprint_elevation_min <= el <= blueprint_elevation_max
          and irr >= blueprint_irradiance_threshold }}
@@ -298,8 +327,10 @@ triggers:
       {% set shade_threshold_exit = (states(blueprint_hvac_heat_to_cool_helper) | float(99)) - 1.0 %}
       {% set shade_allowed_exit = is_state(blueprint_climate_schedule, '0')
          or room_t > shade_threshold_exit %}
+      {% set bed_allows = states(blueprint_bed_sensor) != 'on' %}
       {{ is_state('sun.sun', 'above_horizon')
          and now() >= wake
+         and bed_allows
          and not (shade_allowed_exit
                   and in_facade
                   and irr >= (blueprint_irradiance_threshold * 0.7)) }}
@@ -382,9 +413,11 @@ actions:
               {% set shade_threshold = (states(blueprint_hvac_heat_to_cool_helper) | float(99)) - 0.5 %}
               {% set shade_allowed = is_state(blueprint_climate_schedule, '0')
                  or room_t > shade_threshold %}
+              {% set bed_allows = states(blueprint_bed_sensor) != 'on' %}
               {{ is_state('sun.sun', 'above_horizon')
                  and now() >= wake
                  and shade_allowed
+                 and bed_allows
                  and blueprint_azimuth_min <= az <= blueprint_azimuth_max
                  and blueprint_elevation_min <= el <= blueprint_elevation_max
                  and irr >= blueprint_irradiance_threshold }}
