@@ -47,6 +47,28 @@
   tags:
     - fail2ban
 
+# Daemon-level config (logtarget lives in [Definition] of fail2ban.conf,
+# distinct from jail.local's [DEFAULT]). Route fail2ban-server's own
+# runtime log to journald instead of /var/log/fail2ban.log so the
+# systemd input in fluent-bit picks it up alongside every other service
+# rather than needing a dedicated tail. logtarget changes require a
+# server restart -- SIGHUP reload re-reads jails but doesn't reopen
+# the daemon log handle.
+- name: Write fail2ban daemon overrides
+  copy:
+    dest: /etc/fail2ban/fail2ban.local
+    content: |
+      [Definition]
+      logtarget = SYSTEMD-JOURNAL
+    owner: root
+    group: root
+    mode: "0640"
+    backup: true
+  register: fail2ban_daemon
+  become: true
+  tags:
+    - fail2ban
+
 # [DEFAULT] block: banaction routes f2b-* chains into `inet f2b-table`
 # (nftables-native) instead of the iptables-nft compat `ip filter`.
 # Active bans persist in fail2ban's database and re-apply on restart.
@@ -148,7 +170,7 @@
     systemd_unit_args:
       src: fail2ban
       condition: "{{ not (ansible_check_mode and apt_install_fail2ban.changed) }}"
-      restart: "{{ apt_install_fail2ban.changed or (fail2ban_default.changed and not apt_install_fail2ban.changed) }}"
-      reload: "{{ (fail2ban_sshd_jail.changed or fail2ban_legacy_override.changed) and not apt_install_fail2ban.changed and not fail2ban_default.changed }}"
+      restart: "{{ apt_install_fail2ban.changed or ((fail2ban_default.changed or fail2ban_daemon.changed) and not apt_install_fail2ban.changed) }}"
+      reload: "{{ (fail2ban_sshd_jail.changed or fail2ban_legacy_override.changed) and not apt_install_fail2ban.changed and not fail2ban_default.changed and not fail2ban_daemon.changed }}"
   tags:
     - fail2ban
