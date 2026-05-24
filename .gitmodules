@@ -1,6 +1,12 @@
 [submodule "roles/homeassistant/files/ha_gui_config"]
 	path = roles/homeassistant/files/ha_gui_config
 	url = git@github.com:adrienkohlbecker/homelab_ha_config.git
+	# ha:sync constantly rewrites the working tree (host scp during pull,
+	# local edits before commit). Without this, every push and every
+	# in-progress edit shows up as -dirty in the parent's git status /
+	# git diff. The submodule's own git tracks history; the parent only
+	# needs to know which commit it's pinned to.
+	ignore = dirty
 [submodule "notes"]
 	path = notes
 	url = git@github.com:adrienkohlbecker/homelab_notes.git
