@@ -58,6 +58,7 @@
     mode: "0755"
   become: true
   loop:
+    - /mnt/services/jellyfin/config
     - /mnt/services/jellyfin/data
     - /mnt/services/jellyfin/data/introskipper
     - /mnt/scratch/jellyfin
@@ -79,6 +80,32 @@
       systemd-tmpfiles
       {{ '--dry-run' if ansible_distribution_release not in ['jammy'] else '' }}
       --create %s
+  become: true
+  tags:
+    - jellyfin
+
+# Override jellyfin's default Serilog config to drop the Async-wrapped
+# File sink (which writes /config/log/log_<date>.log -> host
+# /var/log/jellyfin/log_*.log). The Console sink still routes the same
+# records to container stdout, which podman's journald log-driver
+# ships to journald -> fluent-bit's systemd input -> HyperDX. Serilog's
+# user override replaces the WriteTo array wholesale; the rest of the
+# config (MinimumLevel, Enrich) matches the bundled logging.default.json
+# so they stay in sync if jellyfin ever changes a default. Per-transcode
+# FFmpeg.*.log files in /var/log/jellyfin are written by jellyfin core
+# (not Serilog) and are unaffected -- they're per-stream and not tailed
+# by fluent-bit either way.
+- name: Disable jellyfin Serilog File sink
+  when: not (ansible_check_mode and jellyfin_user.changed)
+  copy:
+    src: logging.json
+    dest: /mnt/services/jellyfin/config/logging.json
+    owner: jellyfin
+    group: media
+    mode: "0644"
+    backup: true
+    validate: python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "%s"
+  register: jellyfin_logging_json
   become: true
   tags:
     - jellyfin
@@ -124,7 +151,7 @@
     systemd_unit_args:
       src: jellyfin
       condition: "{{ not (ansible_check_mode and (jellyfin_service_result.changed or jellyfin_user.changed or media_group.changed)) }}"
-      restart: "{{ jellyfin_service_result.changed or jellyfin_user.changed or media_group.changed }}"
+      restart: "{{ jellyfin_service_result.changed or jellyfin_user.changed or media_group.changed or jellyfin_logging_json.changed | default(false) }}"
   tags:
     - jellyfin
 
