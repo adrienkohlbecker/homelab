@@ -352,7 +352,7 @@
     - not qemu_test
     - jellyfin_oidc_desired_fp != jellyfin_oidc_current_fp
   copy:
-    content: "{{ jellyfin_oidc_desired_fp }}"
+    content: "{{ jellyfin_oidc_desired_fp }}\n"
     dest: /mnt/services/jellyfin/.oidc_authelia.fingerprint
     owner: jellyfin
     group: media
