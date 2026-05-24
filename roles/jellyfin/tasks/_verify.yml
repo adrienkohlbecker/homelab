@@ -99,9 +99,13 @@
 # can't. Software encode so the probe runs identically with or without
 # real HW; HW-accelerated transcoding requires real codec silicon and
 # isn't covered in CI.
+# Full path, not bare `ffmpeg`: the jellyfin/jellyfin image ships
+# jellyfin-ffmpeg only at /usr/lib/jellyfin-ffmpeg/ffmpeg and puts nothing
+# on $PATH, so `podman exec jellyfin ffmpeg` is rc 127. Do not "simplify"
+# this back to bare ffmpeg.
 - name: _verify | Functional ffmpeg transcode into /config/transcodes
   command: >-
-    podman exec jellyfin ffmpeg
+    podman exec jellyfin /usr/lib/jellyfin-ffmpeg/ffmpeg
     -nostdin -hide_banner -loglevel error
     -f lavfi -i testsrc=duration=2:size=320x180:rate=10
     -c:v libx264 -preset ultrafast
