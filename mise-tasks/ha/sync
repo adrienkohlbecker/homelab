@@ -2,25 +2,32 @@
 #MISE description="Sync HA GUI YAML files (automations/scripts/scenes) between the ha_gui_config submodule and lab. Default mode: pull then push."
 #USAGE arg "<mode>" help="pull | push | sync (default)" default="sync"
 """
-Bidirectional sync for /mnt/services/homeassistant/{automations,scripts,scenes}.yaml.
+Bidirectional sync for /mnt/services/homeassistant/ user-editable files:
+automations.yaml, scripts.yaml, scenes.yaml, sensors.yaml, templates.yaml,
+custom_templates/macros.jinja, blueprints/automation/*.yaml.
 
 The submodule at roles/homeassistant/files/ha_gui_config/ is the source of
-truth. A movable tag `last_synced_to_host` records the commit whose tree
-matches the live host state; sync directionality is detected by comparing
-host file shas against blobs at that tag.
+truth. The role itself no longer copies these files (the ha:sync push path
+replaces ansible's old copy: loop). A movable tag `last_synced_to_host`
+records the commit whose tree matches the live host state; sync direction
+is detected by comparing host file shas against blobs at that tag.
 
 - pull: scp host -> submodule, commit if changed, advance tag.
         Refuses on a dirty working tree (would clobber local edits).
 - push: auto-commit any working-tree edits first, then refuse if host
-        has diverged from the tag (GUI edited since last pull);
-        otherwise scp submodule -> host, advance tag, hit
-        /api/services/<domain>/reload for each changed file.
+        has diverged from the tag (host edited since last pull);
+        otherwise scp submodule -> host, advance tag, and run the
+        appropriate reload(s). Per-file SYNC_SPEC maps each file to a
+        reload service (`automation.reload`, `template.reload`, ...);
+        files marked `None` need a homeassistant.restart instead, and
+        if any changed file is in that bucket the script restarts HA
+        once and skips per-domain reloads.
 
-HA reload needs HA_API_TOKEN in the environment -- long-lived bearer
-token minted in HA UI -> Profile -> Security. The mise.toml [env]
-block resolves it from 1Password (op://). Without the token the push
-still lands the files on disk and prints a warning; reload manually
-via Developer Tools -> YAML or restart the homeassistant unit.
+HA reload/restart needs HA_API_TOKEN in the environment -- long-lived
+bearer token minted in HA UI -> Profile -> Security. The mise.toml
+[env] block resolves it from 1Password (op://). Without the token the
+push still lands the files on disk and prints a warning; reload or
+restart manually.
 """
 
 from __future__ import annotations
@@ -52,12 +59,37 @@ HOST_DIR = "/mnt/services/homeassistant"
 HA_URL = "https://homeassistant.lab.fahm.fr"
 SYNCED_TAG = "last_synced_to_host"
 
-# filename -> HA reload service domain
-FILES = {
-    "automations.yaml": "automation",
-    "scripts.yaml": "script",
-    "scenes.yaml": "scene",
-}
+# Each entry: (submodule_glob, mode, reload_service-or-None).
+# `None` reload means the file needs a homeassistant.restart -- there is
+# no per-platform reload (e.g. sensors of platform=statistics). Multiple
+# changed files aggregate: if any needs restart, restart covers the
+# others too; else per-domain reload calls.
+SYNC_SPEC = [
+    ("automations.yaml", "0600", "automation.reload"),
+    ("scripts.yaml", "0600", "script.reload"),
+    ("scenes.yaml", "0600", "scene.reload"),
+    ("templates.yaml", "0600", "template.reload"),
+    # YAML sensors -- the `statistics` platform doesn't support a hot
+    # reload; restart is the safe default for this whole file.
+    ("sensors.yaml", "0600", None),
+    # Custom Jinja templates used by macros across automations/scripts.
+    # HA 2024.10+ exposes homeassistant.reload_custom_templates; older
+    # builds 404 and the warning tells the operator to restart.
+    ("custom_templates/*", "0600", "homeassistant.reload_custom_templates"),
+    # Blueprint sources -- changing the blueprint means re-instantiating
+    # every consuming automation, which automation.reload does.
+    ("blueprints/automation/*", "0644", "automation.reload"),
+]
+
+
+def enumerate_files() -> list[tuple[str, str, str | None]]:
+    """Walk the submodule, return [(relpath, mode, reload_service), ...] for files matching a SYNC_SPEC."""
+    out: list[tuple[str, str, str | None]] = []
+    for glob, mode, reload in SYNC_SPEC:
+        for p in sorted(SUBMODULE.glob(glob)):
+            if p.is_file():
+                out.append((p.relative_to(SUBMODULE).as_posix(), mode, reload))
+    return out
 
 
 def sh(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:
@@ -112,44 +144,62 @@ def advance_synced_tag() -> None:
 
 def fetch_from_host() -> None:
     """sudo-cat each host file into the submodule working tree."""
-    for f in FILES:
-        with (SUBMODULE / f).open("wb") as out:
-            subprocess.run(["ssh", HOST, f"sudo cat {HOST_DIR}/{f}"], stdout=out, check=True)
+    for rel, _, _ in enumerate_files():
+        target = SUBMODULE / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with target.open("wb") as out:
+            subprocess.run(["ssh", HOST, f"sudo cat {HOST_DIR}/{rel}"], stdout=out, check=True)
 
 
-def upload_to_host(filenames: list[str]) -> None:
-    """scp via /tmp + sudo install so owner/mode/backup all happen atomically."""
+def upload_to_host(entries: list[tuple[str, str]]) -> None:
+    """scp via /tmp + sudo install so owner/mode/backup all happen atomically. entries: [(relpath, mode), ...]."""
     pid = os.getpid()
-    for f in filenames:
-        tmp_remote = f"/tmp/.ha_sync_{pid}_{f}"
-        sh(["scp", "-q", str(SUBMODULE / f), f"{HOST}:{tmp_remote}"])
-        sh(["ssh", HOST, f"sudo install -o homeassistant -g homeassistant -m 0600 -b {tmp_remote} {HOST_DIR}/{f} " f"&& sudo rm -f {tmp_remote}"])
+    for rel, mode in entries:
+        safe = rel.replace("/", "_")
+        tmp_remote = f"/tmp/.ha_sync_{pid}_{safe}"
+        sh(["scp", "-q", str(SUBMODULE / rel), f"{HOST}:{tmp_remote}"])
+        # Make sure the parent dir exists on the host before installing.
+        host_parent = f"{HOST_DIR}/{rel.rsplit('/', 1)[0]}" if "/" in rel else HOST_DIR
+        sh(["ssh", HOST, f"sudo install -d -o homeassistant -g homeassistant -m 0755 {host_parent} && sudo install -o homeassistant -g homeassistant -m {mode} -b {tmp_remote} {HOST_DIR}/{rel} && sudo rm -f {tmp_remote}"])
 
 
-def trigger_reload(domains: list[str]) -> None:
-    """Curl the HA REST API directly. Needs HA_API_TOKEN in env."""
+def _ha_post(service: str) -> None:
+    """POST /api/services/<domain>/<action> with the bearer. service is `domain.action`."""
     token = os.environ.get("HA_API_TOKEN", "").strip()
     if not token:
-        print(
-            "WARN: HA_API_TOKEN unset; skipping HA reload. Files landed on disk; " "reload manually via Developer Tools -> YAML.",
-            file=sys.stderr,
-        )
+        print(f"WARN: HA_API_TOKEN unset; skipping {service}. Files landed on disk; reload/restart manually.", file=sys.stderr)
         return
-    for d in sorted(set(domains)):
-        url = f"{HA_URL}/api/services/{d}/reload"
-        req = urllib.request.Request(
-            url,
-            method="POST",
-            data=b"{}",
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
-                print(f"reload {d}: HTTP {resp.status}")
-        except urllib.error.HTTPError as e:
-            print(f"WARN: reload {d} failed: HTTP {e.code} {e.reason}", file=sys.stderr)
-        except urllib.error.URLError as e:
-            print(f"WARN: reload {d} failed: {e.reason}", file=sys.stderr)
+    domain, _, action = service.partition(".")
+    url = f"{HA_URL}/api/services/{domain}/{action}"
+    req = urllib.request.Request(
+        url,
+        method="POST",
+        data=b"{}",
+        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            print(f"{service}: HTTP {resp.status}")
+    except urllib.error.HTTPError as e:
+        print(f"WARN: {service} failed: HTTP {e.code} {e.reason}", file=sys.stderr)
+    except urllib.error.URLError as e:
+        print(f"WARN: {service} failed: {e.reason}", file=sys.stderr)
+
+
+def trigger_post_push(reload_services: list[str | None]) -> None:
+    """Decide between per-domain reloads and a full restart based on what changed.
+
+    If any changed file's spec has reload=None, restart covers the union;
+    otherwise call each unique reload service.
+    """
+    if not reload_services:
+        return
+    if None in reload_services:
+        print("at least one changed file requires a restart -- restarting homeassistant")
+        _ha_post("homeassistant.restart")
+        return
+    for svc in sorted({s for s in reload_services if s}):
+        _ha_post(svc)
 
 
 def do_pull() -> None:
@@ -184,23 +234,22 @@ def do_push() -> None:
     if not has_tag(SYNCED_TAG):
         sys.exit(f"refusing: no {SYNCED_TAG} tag. Run `mise run ha:pull` once to establish the baseline.")
     diverged = []
-    for f in FILES:
-        if host_sha(f) != blob_sha_at(SYNCED_TAG, f):
-            diverged.append(f)
+    for rel, _, _ in enumerate_files():
+        if host_sha(rel) != blob_sha_at(SYNCED_TAG, rel):
+            diverged.append(rel)
     if diverged:
-        msg = [f"refusing: host diverged from {SYNCED_TAG} (GUI edited since last sync):"]
+        msg = [f"refusing: host diverged from {SYNCED_TAG} (GUI/host edited since last sync):"]
         msg += [f"  {f}" for f in diverged]
-        msg.append("\nrun `mise run ha:pull` to capture GUI edits, then retry push.")
+        msg.append("\nrun `mise run ha:pull` to capture host-side edits, then retry push.")
         sys.exit("\n".join(msg))
-    changed = [(f, d) for f, d in FILES.items() if blob_sha_at("HEAD", f) != blob_sha_at(SYNCED_TAG, f)]
+    changed = [(rel, mode, reload) for rel, mode, reload in enumerate_files() if blob_sha_at("HEAD", rel) != blob_sha_at(SYNCED_TAG, rel)]
     if not changed:
         print("push: HEAD matches host, nothing to do")
         return
-    files = [f for f, _ in changed]
-    upload_to_host(files)
+    upload_to_host([(rel, mode) for rel, mode, _ in changed])
     advance_synced_tag()
-    print(f"push: uploaded {files}")
-    trigger_reload([d for _, d in changed])
+    print(f"push: uploaded {[rel for rel, _, _ in changed]}")
+    trigger_post_push([reload for _, _, reload in changed])
 
 
 MODES = {"pull": do_pull, "push": do_push}

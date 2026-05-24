@@ -19,9 +19,14 @@ test/out/
 # means a new feature directory auto-tracks without a gitignore PR.
 .claude/settings.local.json
 
-# HA GUI-edited YAML lives in the ha_gui_config submodule (synced via
-# `mise run ha:sync`). A file with one of these names at the role's
-# files/ root is an orphan -- nothing deploys it.
+# All host-side HA config (GUI-edited + operator-authored) lives in the
+# ha_gui_config submodule, synced via `mise run ha:sync`. A file with
+# one of these names at the role's files/ root is an orphan -- nothing
+# deploys it; the sync task is the only writer to lab.
 /roles/homeassistant/files/automations.yaml
 /roles/homeassistant/files/scripts.yaml
 /roles/homeassistant/files/scenes.yaml
+/roles/homeassistant/files/sensors.yaml
+/roles/homeassistant/files/templates.yaml
+/roles/homeassistant/files/macros.jinja
+/roles/homeassistant/files/blueprints/

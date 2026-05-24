@@ -1,3 +1,0 @@
-# Placeholder. Operator-private blueprint lives in the main worktree only;
-# gitignore keeps real content untracked. This stub exists so the role's
-# `copy:` task converges on a fresh clone / in CI.
