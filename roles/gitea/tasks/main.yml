@@ -142,6 +142,18 @@
       # Container-registry layers and LFS objects can be large; 10G fits
       # realistic uploads without leaving unbounded disk-fill DoS open.
       client_max_body_size: 10G
+      # One-click SSO: bounce the login page straight to the Authelia
+      # OAuth2 source (name "authelia", see add-oauth below) instead of
+      # showing the button. Exact-match so it can't catch the
+      # /user/oauth2/authelia/callback return leg (which would loop);
+      # $is_args$args forwards Gitea's ?redirect_to= so post-login lands
+      # on the originally-requested page. 302 (not 301) keeps it
+      # uncached in case login routing changes. Pairs with
+      # ENABLE_PASSWORD_SIGNIN_FORM=false in app.ini.
+      server_conf: |
+        location = /user/login {
+            return 302 /user/oauth2/authelia$is_args$args;
+        }
   tags:
     - gitea
 
