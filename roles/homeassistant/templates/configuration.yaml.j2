@@ -12,6 +12,32 @@ scene: !include scenes.yaml
 sensor: !include sensors.yaml
 template: !include templates.yaml
 
+# Hysteresis thresholds for HVAC mode flip + blind shading. Single source
+# of truth — referenced by the HVAC Cooling/Heating automations
+# (numeric_state triggers) and by the sun_driven_shutter blueprint (which
+# derives its shade engagement threshold from hvac_heat_to_cool minus a
+# 0.5°C margin, so blinds shade just before the AC would flip). Wider
+# dead band than the original 19.5/20.5 to reduce mode bouncing in
+# shoulder seasons (sustained ±1.5°C swings around setpoint no longer
+# flip the AC).
+input_number:
+  hvac_cool_to_heat:
+    name: HVAC flip-to-heat threshold
+    initial: 19.0
+    min: 15.0
+    max: 21.0
+    step: 0.1
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer-low
+  hvac_heat_to_cool:
+    name: HVAC flip-to-cool threshold
+    initial: 22.0
+    min: 20.0
+    max: 25.0
+    step: 0.1
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer-high
+
 recorder:
   db_url: sqlite:////config/db/home-assistant_v2.db
 

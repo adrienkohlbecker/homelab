@@ -1,0 +1,400 @@
+# Sun-Driven Shutter blueprint
+# =============================
+#
+# One instance per blind; the per-blind inputs (facade window, shade position,
+# wake times, irradiance threshold, override duration) parameterise the same
+# logic. Adding a new blind = one `use_blueprint:` entry in automations.yaml.
+#
+# Design constraints (operator-stated, baked into the model):
+#
+# - Shade signal is irradiance, not internal temperature. Internal room temp
+#   is unreliable because the house has AC fighting it. `sensor.irradiance`
+#   (estimated W/m², swappable with the hardware pyrometer once wired) is
+#   the "is the sun hitting this facade hard" proxy.
+# - "Is the sun's heat detrimental?" is layered on top of irradiance and
+#   shares the AC's threshold vocabulary, but measures *per-room*. The AC
+#   flips house-wide based on `sensor.average_house_temperature`; the
+#   blinds gate on each room's own sensor (`room_temp_sensor` input) because
+#   asymmetric solar gain (e.g. living room under the roof) would otherwise
+#   let one room overheat while bedrooms drag the average down.
+#
+#   The HVAC Cooling/Heating automations flip the per-room
+#   `select.<room>_climatecontrol_schedule` ('0' = cooling, '1' = heating;
+#   Daikin schedule slots — confirmed by the `AC Cooling` / `AC Heating`
+#   scenes in scenes.yaml) using two centralised thresholds:
+#       input_number.hvac_heat_to_cool  (default 22.0°C — flip-to-cooling)
+#       input_number.hvac_cool_to_heat  (default 19.0°C — flip-to-heating)
+#   The blinds read the same heat→cool helper and shade just before the
+#   AC would trip:
+#
+#     shade_allowed = is_state(climate_schedule, '0')                       # cooling season — sun is always load
+#                  OR room_temp > (hvac_heat_to_cool − blind_margin)        # heating season approaching the AC flip
+#
+#   In cooling season the schedule clause is always true → shade fires
+#   whenever sun + facade + irradiance align. In heating season the temp
+#   clause kicks in once *that room* is within `blind_margin` (0.5°C) of
+#   the AC's heat→cool flip threshold, so blinds shade pre-emptively
+#   rather than letting the room overheat (and eventually drag the house
+#   average into cooling territory). With defaults: shade engages when
+#   the room reaches 21.5°C, AC would flip the whole house at 22°C avg
+#   — the 0.5°C lead plus the per-room measurement gives the blinds time
+#   to act on the room that's actually heating up.
+#
+#   Hysteresis: shade enters at room_temp > (hvac_heat_to_cool − 0.5),
+#   exits at room_temp < (hvac_heat_to_cool − 1.0). The 0.5°C dead band
+#   on the blind layer plus the 5-min `for:` debounce on the triggers
+#   keeps the system from oscillating just because the blinds opened or
+#   closed.
+#
+#   Single source of truth: change the input_number helpers in HA UI
+#   and both the AC mode-flip thresholds AND the blind shade thresholds
+#   move together. No threshold is hardcoded in this blueprint. Per-room
+#   measurement point is the only knob that varies per instance.
+# - No presence sensors. It's acceptable for shade to close while someone is
+#   in the room — the override is the wall remote, not a presence bypass.
+# - Wall remote must be a reliable override (grandma-proof, no app, no
+#   helper toggles to learn). Enforced two ways:
+#     1. Triggers are edge-only (template false→true). Once a mode has
+#        fired, manual repositions within the same mode don't re-fire it.
+#     2. Each action gates on state.context.parent_id — HA sets this when
+#        an automation triggered the cover change, and leaves it null for
+#        wall-remote / integration / UI changes. We use it to detect "was
+#        this last change ours, or grandma's?".
+# - Privacy-closes must not be re-opened. If grandma closed past
+#   shade_position (e.g. she set 10 in a bedroom for privacy), neither the
+#   `shade` nor `open` action should lift that to shade_position or 100.
+#   The gate `last_auto OR pos >= shade_position` enforces this: a manual
+#   position below shade_position is left alone.
+# - Forgotten opens must self-correct. The `reassert` trigger watches the
+#   cover's `current_position` for `manual_override_duration` (default 30
+#   min). When it fires AND shade conditions still apply AND position is
+#   more open than shade_position, it re-closes to shade. Position-stable
+#   trigger semantics: only fires once per stable value, so it doesn't
+#   loop while position holds.
+# - No re-opening of bedrooms before wake-time. All daytime triggers
+#   (`shade`, `open`, `reassert`) gate on `now() >= wake_today`, computed
+#   from the school calendar — `wake_time_weekday` on school days, else
+#   `wake_time_weekend_holiday`. (The kids' rooms upstairs will use a
+#   later weekend/holiday time once that batch is migrated, so corridor
+#   light doesn't wake them on lie-in days.)
+# - Hysteresis on the shade exit (0.7× threshold) and a 5-min debounce on
+#   both shade triggers keep partly-cloudy days from bouncing the blind.
+# - Night close is deterministic (sun:sunset + 10min). No debounce, no
+#   gate — sunset close is intended to be aggressive.
+#
+# Not in scope here: presence-aware shading, glare-window logic (TV glare
+# is handled by the separate `TV Turned On` automation in automations.yaml),
+# winter passive-solar (sun-on-cold-house → leave open).
+
+blueprint:
+  name: Sun-Driven Shutter
+  description: >
+    Closes a shutter at sunset, opens it past the morning wake-time, and partially
+    closes it for shade when the sun crosses the configured facade window with
+    sufficient irradiance. Edge-triggered on mode transitions only: a manual
+    position set during a given mode is never re-fought, so the physical wall
+    remote remains a reliable override. As a safety net, if shade conditions
+    apply and the shutter has been held more-open than shade-position for
+    `manual_override_duration` (default 30 min), the shutter is re-closed to
+    shade-position so a forgotten manual open doesn't cook the room all day.
+  domain: automation
+  input:
+    shutter:
+      name: Shutter
+      selector:
+        entity:
+          filter:
+            - domain: cover
+    azimuth_min:
+      name: Facade azimuth min
+      description: Sun azimuth at which the sun starts hitting this facade.
+      selector:
+        number:
+          min: 0
+          max: 360
+          unit_of_measurement: "°"
+    azimuth_max:
+      name: Facade azimuth max
+      description: Sun azimuth at which the sun stops hitting this facade.
+      selector:
+        number:
+          min: 0
+          max: 360
+          unit_of_measurement: "°"
+    elevation_min:
+      name: Facade elevation min
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 90
+          unit_of_measurement: "°"
+    elevation_max:
+      name: Facade elevation max
+      default: 80
+      selector:
+        number:
+          min: 0
+          max: 90
+          unit_of_measurement: "°"
+    irradiance_threshold:
+      name: Irradiance threshold
+      description: W/m² above which shading is engaged.
+      default: 300
+      selector:
+        number:
+          min: 0
+          max: 1500
+          unit_of_measurement: W/m²
+    climate_schedule:
+      name: Climate schedule select
+      description: >
+        Per-room Daikin schedule select entity — '0' = cooling, '1' = heating.
+        The same select the existing HVAC Cooling/Heating automations gate on
+        (e.g. select.tv_climatecontrol_schedule for the living room).
+      selector:
+        entity:
+          filter:
+            - domain: select
+    room_temp_sensor:
+      name: Room temperature sensor
+      description: >
+        Per-room temperature used to gate heating-season shading. Should be
+        the sensor in (or closest to) the room this shutter serves —
+        asymmetric solar gain means a house-wide average masks rooms that
+        heat faster (e.g. rooms under the roof). Threshold is still derived
+        from input_number.hvac_heat_to_cool so "one helper to tune"
+        coherence with the AC is preserved; only the measurement is local.
+      default: sensor.average_house_temperature
+      selector:
+        entity:
+          filter:
+            - domain: sensor
+              device_class: temperature
+    hvac_heat_to_cool_helper:
+      name: HVAC flip-to-cool threshold helper
+      description: >
+        input_number helper holding the threshold at which the HVAC
+        Cooling automation flips the AC to cool mode. The blinds shade
+        0.5°C below this (with a further 0.5°C hysteresis on exit), so
+        any change to this helper propagates to both the AC and the
+        blinds. Default matches the helper provisioned by the role.
+      default: input_number.hvac_heat_to_cool
+      selector:
+        entity:
+          filter:
+            - domain: input_number
+    shade_position:
+      name: Shade position
+      description: Position (0=closed, 100=open) when shading is engaged.
+      default: 35
+      selector:
+        number:
+          min: 0
+          max: 100
+          unit_of_measurement: "%"
+    wake_time_weekday:
+      name: Morning wake time (school days)
+      default: "07:15:00"
+      selector:
+        time: {}
+    wake_time_weekend_holiday:
+      name: Morning wake time (weekends and school holidays)
+      default: "08:00:00"
+      selector:
+        time: {}
+    manual_override_duration:
+      name: Manual override duration
+      description: >
+        How long to respect a manual position change before re-asserting shade
+        (only applies during shade conditions; night and default-open are
+        always left as-set by the user until the next mode transition).
+      default:
+        hours: 0
+        minutes: 30
+        seconds: 0
+      selector:
+        duration: {}
+
+alias: Sun-Driven Shutter
+mode: single
+max_exceeded: silent
+
+# trigger_variables materialise the !input values so they can be referenced
+# from inside value_template strings (where bare !input substitution doesn't
+# work). They re-evaluate when triggers are reset, which is fine for these
+# constants.
+trigger_variables:
+  blueprint_shutter: !input shutter
+  blueprint_shade_position: !input shade_position
+  blueprint_azimuth_min: !input azimuth_min
+  blueprint_azimuth_max: !input azimuth_max
+  blueprint_elevation_min: !input elevation_min
+  blueprint_elevation_max: !input elevation_max
+  blueprint_irradiance_threshold: !input irradiance_threshold
+  blueprint_wake_time_weekday: !input wake_time_weekday
+  blueprint_wake_time_weekend_holiday: !input wake_time_weekend_holiday
+  blueprint_climate_schedule: !input climate_schedule
+  blueprint_room_temp_sensor: !input room_temp_sensor
+  blueprint_hvac_heat_to_cool_helper: !input hvac_heat_to_cool_helper
+
+triggers:
+  # Night close: deterministic event, no debounce needed.
+  - trigger: sun
+    event: sunset
+    offset: "00:10:00"
+    id: night
+
+  # Shade: facade hit + irradiance over threshold, sustained for 5 min so a
+  # passing cloud doesn't flicker. Gated on past-wake so it doesn't open the
+  # shutter to shade-position before the household is awake. The
+  # `shade_allowed` clause keeps the sun in during heating season unless
+  # outside is warm enough that passive solar would push the room past
+  # comfort.
+  - trigger: template
+    id: shade
+    for: "00:05:00"
+    value_template: >
+      {% set is_school_day = now().weekday() in [0, 1, 3, 4]
+         and is_state('calendar.calendrier_scolaire', 'off') %}
+      {% set wake = today_at(blueprint_wake_time_weekday) if is_school_day
+                    else today_at(blueprint_wake_time_weekend_holiday) %}
+      {% set az = state_attr('sun.sun', 'azimuth') | float(0) %}
+      {% set el = state_attr('sun.sun', 'elevation') | float(0) %}
+      {% set irr = states('sensor.irradiance') | float(0) %}
+      {% set room_t = states(blueprint_room_temp_sensor) | float(0) %}
+      {% set shade_threshold = (states(blueprint_hvac_heat_to_cool_helper) | float(99)) - 0.5 %}
+      {% set shade_allowed = is_state(blueprint_climate_schedule, '0')
+         or room_t > shade_threshold %}
+      {{ is_state('sun.sun', 'above_horizon')
+         and now() >= wake
+         and shade_allowed
+         and blueprint_azimuth_min <= az <= blueprint_azimuth_max
+         and blueprint_elevation_min <= el <= blueprint_elevation_max
+         and irr >= blueprint_irradiance_threshold }}
+
+  # Open: daytime, past wake, and not in a sustained shade-applicable
+  # condition. Shade-applicable means sun is hitting the facade AND
+  # irradiance is over the hysteresis floor (0.7x threshold, prevents
+  # broken-cloud bouncing) AND shade is permitted by the season schedule
+  # or current outside temp. Also fires as the morning-open transition.
+  - trigger: template
+    id: open
+    for: "00:05:00"
+    value_template: >
+      {% set is_school_day = now().weekday() in [0, 1, 3, 4]
+         and is_state('calendar.calendrier_scolaire', 'off') %}
+      {% set wake = today_at(blueprint_wake_time_weekday) if is_school_day
+                    else today_at(blueprint_wake_time_weekend_holiday) %}
+      {% set az = state_attr('sun.sun', 'azimuth') | float(0) %}
+      {% set el = state_attr('sun.sun', 'elevation') | float(0) %}
+      {% set irr = states('sensor.irradiance') | float(0) %}
+      {% set room_t = states(blueprint_room_temp_sensor) | float(0) %}
+      {% set in_facade = blueprint_azimuth_min <= az <= blueprint_azimuth_max
+         and blueprint_elevation_min <= el <= blueprint_elevation_max %}
+      {# hysteresis: shade-allowed for exit uses threshold − 0.5°C, so we
+         don't re-open the moment room_t dips a hair below the entry
+         threshold (which would re-cook the room and re-close immediately) #}
+      {% set shade_threshold_exit = (states(blueprint_hvac_heat_to_cool_helper) | float(99)) - 1.0 %}
+      {% set shade_allowed_exit = is_state(blueprint_climate_schedule, '0')
+         or room_t > shade_threshold_exit %}
+      {{ is_state('sun.sun', 'above_horizon')
+         and now() >= wake
+         and not (shade_allowed_exit
+                  and in_facade
+                  and irr >= (blueprint_irradiance_threshold * 0.7)) }}
+
+  # Manual-override safety net: when the shutter position has been stable for
+  # `manual_override_duration` (i.e. nobody has touched it for that window),
+  # the action below decides whether to re-assert shade. Fires after auto
+  # commands too (position settles, then triggers `for:` later) but the
+  # action's gates make those no-ops.
+  - trigger: state
+    entity_id: !input shutter
+    attribute: current_position
+    for: !input manual_override_duration
+    id: reassert
+
+actions:
+  - choose:
+      - conditions: "{{ trigger.id == 'night' }}"
+        sequence:
+          - action: cover.set_cover_position
+            target:
+              entity_id: !input shutter
+            data:
+              position: 0
+      # Shade: same gate as `open` — don't lift a privacy-closed blind to
+      # shade_position. Shade is "auto wants the room darker", so a position
+      # already below shade_position is at-least-as-shaded as we'd command.
+      - conditions:
+          - "{{ trigger.id == 'shade' }}"
+          - condition: template
+            value_template: >
+              {% set s = states[blueprint_shutter] %}
+              {% set last_auto = s is not none and s.context.parent_id is not none %}
+              {% set pos = state_attr(blueprint_shutter, 'current_position') | int(100) %}
+              {{ last_auto or pos >= blueprint_shade_position }}
+        sequence:
+          - action: cover.set_cover_position
+            target:
+              entity_id: !input shutter
+            data:
+              position: !input shade_position
+      # Open: don't override a manual close below shade_position. If the
+      # last state change on the cover came from an automation (parent_id
+      # set), this is one of our own settles — safe to lift to 100. If it
+      # came from a wall remote / integration push (parent_id null), only
+      # lift when the user's chosen position is at or above shade_position;
+      # otherwise they intentionally closed further than shade and we leave
+      # them alone.
+      - conditions:
+          - "{{ trigger.id == 'open' }}"
+          - condition: template
+            value_template: >
+              {% set s = states[blueprint_shutter] %}
+              {% set last_auto = s is not none and s.context.parent_id is not none %}
+              {% set pos = state_attr(blueprint_shutter, 'current_position') | int(100) %}
+              {{ last_auto or pos >= blueprint_shade_position }}
+        sequence:
+          - action: cover.set_cover_position
+            target:
+              entity_id: !input shutter
+            data:
+              position: 100
+      # Re-assert shade only when (a) shade conditions currently apply and
+      # (b) the shutter is more open than shade_position. The second gate
+      # means the auto's own shade-position settles produce a no-op fire,
+      # and grandma closing past shade-position (e.g. for privacy) is left
+      # alone.
+      - conditions:
+          - "{{ trigger.id == 'reassert' }}"
+          - condition: template
+            value_template: >
+              {% set is_school_day = now().weekday() in [0, 1, 3, 4]
+                 and is_state('calendar.calendrier_scolaire', 'off') %}
+              {% set wake = today_at(blueprint_wake_time_weekday) if is_school_day
+                            else today_at(blueprint_wake_time_weekend_holiday) %}
+              {% set az = state_attr('sun.sun', 'azimuth') | float(0) %}
+              {% set el = state_attr('sun.sun', 'elevation') | float(0) %}
+              {% set irr = states('sensor.irradiance') | float(0) %}
+              {% set room_t = states(blueprint_room_temp_sensor) | float(0) %}
+              {% set shade_threshold = (states(blueprint_hvac_heat_to_cool_helper) | float(99)) - 0.5 %}
+              {% set shade_allowed = is_state(blueprint_climate_schedule, '0')
+                 or room_t > shade_threshold %}
+              {{ is_state('sun.sun', 'above_horizon')
+                 and now() >= wake
+                 and shade_allowed
+                 and blueprint_azimuth_min <= az <= blueprint_azimuth_max
+                 and blueprint_elevation_min <= el <= blueprint_elevation_max
+                 and irr >= blueprint_irradiance_threshold }}
+          - condition: template
+            value_template: >
+              {{ (state_attr(blueprint_shutter, 'current_position') | int(100))
+                 > blueprint_shade_position }}
+        sequence:
+          - action: cover.set_cover_position
+            target:
+              entity_id: !input shutter
+            data:
+              position: !input shade_position
