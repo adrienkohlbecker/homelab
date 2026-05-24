@@ -1,0 +1,132 @@
+- name: Set up headscale system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: headscale
+  tags:
+    - headscale
+
+# State dir bind-mounted to /var/lib/headscale: the auto-generated noise + DERP
+# private keys and the CLI unix socket land here. The SQLite DB lives on the
+# dedicated sqlite dataset instead (symlinked in below). Owned by the headscale
+# uid (tier-1 --user, no uidmap) so the container writes them directly.
+- name: Create headscale data dir
+  when: not (ansible_check_mode and headscale_user.changed)
+  file:
+    dest: /mnt/services/headscale/data
+    state: directory
+    owner: headscale
+    group: headscale
+    mode: "0750"
+  become: true
+  tags:
+    - headscale
+
+# Park db.sqlite on the dedicated 4K-recordsize sqlite dataset and symlink
+# data/db.sqlite onto it (config.yaml points headscale at /var/lib/headscale/
+# db.sqlite, i.e. the symlink; the unit mounts the dataset at the same path so
+# it resolves in-container). pre_create plants an empty src file first --
+# headscale creates its DB on first boot, and state=link refuses to plant a
+# dangling symlink without it.
+- name: Place headscale SQLite DB on the sqlite dataset
+  import_role:
+    name: sqlite_dataset
+    tasks_from: dataset
+  vars:
+    sqlite_dataset_args:
+      name: headscale
+      owner: headscale
+      group: headscale
+      pre_create: true
+      links:
+        - /mnt/services/headscale/data/db.sqlite
+      condition: "{{ not (ansible_check_mode and headscale_user.changed) }}"
+  tags:
+    - headscale
+
+- name: Render headscale ACL policy
+  when: not (ansible_check_mode and headscale_user.changed)
+  template:
+    src: acl.hujson.j2
+    dest: /mnt/services/headscale/acl.hujson
+    owner: headscale
+    group: headscale
+    mode: "0640"
+    backup: true
+  become: true
+  register: headscale_acl_result
+  tags:
+    - headscale
+
+- name: Create headscale OIDC client secret
+  when: headscale_oidc_enabled | default(false)
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: headscale_oidc_secret
+      data: "{{ headscale_oidc_client_secret }}"
+  tags:
+    - headscale
+
+- name: Render headscale config
+  when: not (ansible_check_mode and headscale_user.changed)
+  template:
+    src: config.yaml.j2
+    dest: /mnt/services/headscale/config.yaml
+    owner: headscale
+    group: headscale
+    mode: "0640"
+    backup: true
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' %s
+  become: true
+  register: headscale_config_result
+  tags:
+    - headscale
+
+- name: Install headscale service
+  import_role:
+    name: systemd_unit
+    tasks_from: install
+  vars:
+    systemd_unit_args:
+      src: headscale.service.j2
+      condition: "{{ not (ansible_check_mode and headscale_user.changed) }}"
+  tags:
+    - headscale
+
+- name: Enable headscale service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: headscale
+      condition: "{{ not (ansible_check_mode and (headscale_service_result.changed or headscale_user.changed)) }}"
+      restart: "{{ headscale_service_result.changed or headscale_config_result.changed or headscale_acl_result.changed or (headscale_oidc_secret_rotated | default(false)) }}"
+  tags:
+    - headscale
+
+# Public vhost (NOT Authelia-gated -- Tailscale clients hit the raw control
+# API + DERP relay here, all over https/443). No enable_http: certbot issues
+# the cert via the DNS-01 Cloudflare challenge (no :80 needed) and clients
+# never use plain HTTP, so the site stays https-only (the template's default
+# :80 block just redirects to :443, and fox's firewall doesn't open 80
+# anyway). Long read timeout + buffering off keep the long-poll control stream
+# and the DERP websocket (handled by the site template's Upgrade/Connection
+# headers) alive.
+- name: Configure nginx
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: headscale
+      proxy_pass: http://localhost:{{ service_ports.headscale }}/
+      proxy_buffering: "off"
+      proxy_read_timeout: "3600s"
+  tags:
+    - headscale

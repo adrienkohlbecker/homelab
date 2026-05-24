@@ -49,3 +49,12 @@ jobs:
   - name: kuma
     url: http://127.0.0.1:{{ service_ports.kuma }}/metrics
     autodetection_retry: 60
+
+  # headscale runs only on fox (site.yml); try on every host and let
+  # autodetection_retry idle elsewhere. Listed in fox.yml's netdata_collectors
+  # so the presence alert doubles as a headscale liveness signal -- if the
+  # control server dies or its metrics endpoint breaks, the collector goes
+  # missing. Loopback scrape of the unauthenticated metrics_listen_addr.
+  - name: headscale
+    url: http://127.0.0.1:{{ service_ports.headscale_metrics }}/metrics
+    autodetection_retry: 60
