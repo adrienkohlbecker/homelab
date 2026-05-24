@@ -73,6 +73,67 @@
   tags:
     - kuma
 
+# Uptime-Kuma has no env/config knob for disabling its built-in login
+# (feature request louislam/uptime-kuma#6459, still open) -- the only
+# control is the `disableAuth` row in its sqlite `setting` table, normally
+# flipped via Settings > Security in the UI. Authelia already gates the
+# nginx vhost below, so kuma's own login is a redundant second prompt;
+# seed disableAuth=true so the Authelia session is the single gate.
+#
+# Hard precondition: with disableAuth set, kuma auto-logs-in as the first
+# user row (server.js: afterLogin(R.findOne("user")) on socket connect).
+# An empty user table dereferences null and crashes the handshake, so only
+# seed once a user exists. That also means a brand-new instance (fresh host
+# or test VM) keeps its own login until the operator runs the setup wizard.
+- name: Read kuma auth state from the sqlite DB
+  when: not (ansible_check_mode and kuma_user.changed)
+  # -readonly is safe against the live WAL DB (mirrors the _verify probe).
+  command: >-
+    sqlite3 -readonly /mnt/services/sqlite/kuma/kuma.db
+    "SELECT (SELECT count(*) FROM user),
+            coalesce((SELECT value FROM setting WHERE key='disableAuth'), 'unset');"
+  register: kuma_auth_state
+  changed_when: false
+  failed_when: false
+  become: true
+  tags:
+    - kuma
+
+# Live UPSERT against the WAL DB -- busy_timeout rides out any heartbeat
+# write kuma is mid-flight. value is JSON `true` because Settings.get
+# JSON.parses it; type='general' mirrors the UI's setSettings("general", ...)
+# so the row also surfaces on the Security settings page. kuma caches
+# settings in-process for 60s and re-reads disableAuth only on a fresh
+# socket connection, so the restart below is what makes it take effect.
+- name: Disable kuma's built-in auth (Authelia fronts it)
+  when:
+    - not ansible_check_mode
+    - "'|' in (kuma_auth_state.stdout | default(''))"
+    - (kuma_auth_state.stdout.split('|')[0] | int) > 0
+    - kuma_auth_state.stdout.split('|')[1] | trim != 'true'
+  command: >-
+    sqlite3 /mnt/services/sqlite/kuma/kuma.db
+    "PRAGMA busy_timeout=5000;
+     INSERT INTO setting (key, value, type) VALUES ('disableAuth', 'true', 'general')
+     ON CONFLICT(key) DO UPDATE SET value='true', type='general';"
+  register: kuma_disableauth_seed
+  changed_when: true
+  become: true
+  tags:
+    - kuma
+
+- name: Restart kuma to load disableAuth
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: kuma
+      condition: "{{ kuma_disableauth_seed.changed | default(false) }}"
+      restart: true
+  tags:
+    - kuma
+
 - name: Configure nginx
   import_role:
     name: nginx
@@ -81,8 +142,9 @@
     nginx_site_args:
       subdomain: kuma
       proxy_pass: http://localhost:{{ service_ports.kuma }}/
-      # Kuma has its own admin login (UI-managed sqlite DB), so this
-      # adds a second click. Worth it for defense-in-depth.
+      # Authelia is the sole gate: kuma's own login is disabled via the
+      # disableAuth seed above (no env knob exists for it), so this vhost
+      # auth is what actually protects the dashboard.
       auth: required
       # /api/push/<token> is kuma's push-monitor heartbeat endpoint;
       # the token in the URL is the secret. Off-host monitored systems
