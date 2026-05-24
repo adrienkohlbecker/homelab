@@ -72,6 +72,12 @@ ENABLE_NOTIFY_MAIL = true
 DISABLE_REGISTRATION = true
 ENABLE_CAPTCHA = true
 DEFAULT_ENABLE_TIMETRACKING = false
+# Hide the local username/password web form -- login is SSO-only via the
+# Authelia OIDC button (admin rights flow through --admin-group=admins).
+# ENABLE_BASIC_AUTHENTICATION stays at its default (true) so git-over-HTTPS
+# and API tokens still work. Break-glass if Authelia is down: `gitea admin`
+# CLI on the host (e.g. `gitea admin user create ... --admin`).
+ENABLE_PASSWORD_SIGNIN_FORM = false
 
 [cron.update_checker]
 ENABLED = false
