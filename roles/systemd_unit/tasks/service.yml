@@ -31,171 +31,175 @@
 # a system-scope unit with User=github_runner would silently pre-pull
 # into root's store and then bust TimeoutStartSec on a cold rootless
 # pull inside systemctl start.
+# Two set_fact tasks because ansible's templating engine resolves all
+# keys in a single set_fact concurrently — a key can't read a sibling
+# defined in the same task. Primitives (caller-var defaulting) first,
+# derived facts (scope, is_service) second.
 #
-# The derived locals below live as block `vars:` instead of `set_fact`
-# tasks: this file runs ~70x per converge, so every task it sheds is
-# multiplied that many times. Block vars carry no per-task dispatch cost
-# and -- unlike a single set_fact whose keys evaluate concurrently --
-# resolve lazily, so is_service may read name, scope may read user. Task
-# name: fields still reference systemd_unit_args.* (the caller var,
-# available at import-parse time), never these locals.
-- name: Manage systemd unit {{ systemd_unit_args.src }}
-  vars:
+# _is_service: only `.service` units carry ExecStart properties; the
+# extract_podman_image module silently returns [] for anything else
+# after blindly appending `.service` to the name. Bare names (no
+# extension) are treated as services by the role's convention.
+- name: service | Resolve caller defaults for {{ systemd_unit_args.src }}
+  set_fact:
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
     _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
     _systemd_unit_start: "{{ systemd_unit_args.start | default(true) }}"
     _systemd_unit_name: "{{ systemd_unit_args.dest | default(systemd_unit_args.src) }}"
+
+- name: service | Derive scope and unit type for {{ systemd_unit_args.src }}
+  set_fact:
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_is_service: "{{ _systemd_unit_name.endswith('.service') or '.' not in _systemd_unit_name }}"
-  block:
-    # Linger has to be on for user-scope lifecycle ops: without it the named
-    # user's systemd manager isn't running between logins, so `systemctl
-    # --user enable/start` may appear to succeed via the current session but
-    # the unit dies at logout. /var/lib/systemd/linger/<user> is the marker
-    # loginctl enable-linger creates -- see install.yml for the longer
-    # rationale. Check-mode tolerance: see install.yml.
-    - name: service | Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
-      when:
-        - _systemd_unit_condition
-        - _systemd_unit_scope == 'user'
-      stat:
-        path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
-      register: _systemd_unit_linger
-      failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
 
-    - name: Enable the service
-      when: _systemd_unit_condition
-      systemd:
-        name: "{{ _systemd_unit_name }}"
-        enabled: true
-        scope: "{{ _systemd_unit_scope }}"
-      register: _systemd_unit_enable
-      become: true
-      become_user: "{{ _systemd_unit_user }}"
+# Linger has to be on for user-scope lifecycle ops: without it the named
+# user's systemd manager isn't running between logins, so `systemctl
+# --user enable/start` may appear to succeed via the current session but
+# the unit dies at logout. /var/lib/systemd/linger/<user> is the marker
+# loginctl enable-linger creates -- see install.yml for the longer
+# rationale. Check-mode tolerance: see install.yml.
+- name: service | Verify user-scope linger marker exists for {{ systemd_unit_args.user | default('root') }}
+  when:
+    - _systemd_unit_condition
+    - _systemd_unit_scope == 'user'
+  stat:
+    path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
+  register: _systemd_unit_linger
+  failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
 
-    # The detect + pre-pull pair below only earns its cost when the unit is
-    # actually about to (re)start: a cold start needs the image present
-    # before `systemctl start`, and a caller-requested restart may swap to a
-    # new image tag. When the unit is already active and no restart is asked,
-    # the running container already has its image and the pull is wasted work
-    # -- yet the detect (a D-Bus ExecStart parse) + pull (a registry digest
-    # check) used to run every converge for every service, ~15-25s across a
-    # full lab run. The Enable result above carries the unit's pre-start
-    # ActiveState (the systemd module returns the full `systemctl show` dict,
-    # same source the Start task reads ConditionResult from), so the gate
-    # reuses it rather than spending another task: ActiveState != 'active'
-    # (inactive, or a freshly-installed unit whose status defaults below) or a
-    # caller-requested restart means "about to start, so pull".
-    #
-    # Each .service file is the single source of truth for its podman image;
-    # the extract_podman_image module asks systemd over D-Bus for the parsed
-    # ExecStart* and pulls the image out of any `podman run` invocation. Pre-
-    # pulling here moves a slow network fetch out of `systemctl start`'s
-    # TimeoutStartSec window and into a normal ansible task with no fixed
-    # deadline.
-    - name: Detect podman images referenced by the unit
-      when:
-        - _systemd_unit_condition
-        - not ansible_check_mode
-        - _systemd_unit_scope == 'system'
-        - _systemd_unit_is_service
-        - (systemd_unit_args.restart | default(false)) or ((_systemd_unit_enable.status.ActiveState | default('inactive')) != 'active')
-      extract_podman_image:
-        name: "{{ _systemd_unit_name }}"
-      register: systemd_unit_podman_images
-      become: true
+- name: Enable the service
+  when: _systemd_unit_condition
+  systemd:
+    name: "{{ _systemd_unit_name }}"
+    enabled: true
+    scope: "{{ _systemd_unit_scope }}"
+  register: _systemd_unit_enable
+  become: true
+  become_user: "{{ _systemd_unit_user }}"
 
-    # Pull into the right podman store. extract_podman_image returns the
-    # unit's User=; treat "" and "root" as system-scope, anything else as
-    # that user's rootless store. become_user: root is the default ansible
-    # become target so the empty-string / "root" path matches the previous
-    # behavior exactly. For a non-root User= the role still needs root to
-    # `become` first (system-scope unit lives in /etc/systemd/system), then
-    # drops into the user via become_user; the user's linger + podman.sock
-    # are the caller's responsibility (see github_runner main.yml for the
-    # canonical setup).
-    - name: Pre-pull podman images referenced by the unit
-      when:
-        - _systemd_unit_condition
-        - not ansible_check_mode
-        - _systemd_unit_scope == 'system'
-        - _systemd_unit_is_service
-        - (systemd_unit_args.restart | default(false)) or ((_systemd_unit_enable.status.ActiveState | default('inactive')) != 'active')
-      containers.podman.podman_image:
-        name: "{{ item }}"
-      loop: "{{ systemd_unit_podman_images.images | default([]) }}"
-      become: true
-      become_user: "{{ systemd_unit_podman_images.user if (systemd_unit_podman_images.user | default('')) not in ['', 'root'] else 'root' }}"
+# The detect + pre-pull pair below only earns its cost when the unit is
+# actually about to (re)start: a cold start needs the image present before
+# `systemctl start`, and a caller-requested restart may swap to a new image
+# tag. When the unit is already active and no restart is asked, the running
+# container already has its image and the pull is wasted work -- yet the
+# detect (a D-Bus ExecStart parse) + pull (a registry digest check) used to
+# run every converge for every service, ~15-25s across a full lab run. The
+# Enable result above carries the unit's pre-start ActiveState (the systemd
+# module returns the full `systemctl show` dict, same source the Start task
+# reads ConditionResult from), so the gate reuses it rather than spending an
+# extra task: ActiveState != 'active' (inactive, or a freshly-installed unit
+# whose status defaults below) or a caller-requested restart means "about to
+# start, so pull".
+#
+# Each .service file is the single source of truth for its podman image;
+# the extract_podman_image module asks systemd over D-Bus for the parsed
+# ExecStart* and pulls the image out of any `podman run` invocation. Pre-
+# pulling here moves a slow network fetch out of `systemctl start`'s
+# TimeoutStartSec window and into a normal ansible task with no fixed
+# deadline.
+- name: Detect podman images referenced by the unit
+  when:
+    - _systemd_unit_condition
+    - not ansible_check_mode
+    - _systemd_unit_scope == 'system'
+    - _systemd_unit_is_service
+    - (systemd_unit_args.restart | default(false)) or ((_systemd_unit_enable.status.ActiveState | default('inactive')) != 'active')
+  extract_podman_image:
+    name: "{{ _systemd_unit_name }}"
+  register: systemd_unit_podman_images
+  become: true
 
-    # Clear any rate-limit / failed state before starting. A unit that has
-    # crashed StartLimitBurst times within StartLimitInterval gets stuck
-    # in "Start request repeated too quickly" -- ansible's systemd module
-    # would surface that as a fatal error on the next play even though
-    # the underlying cause has been fixed. reset-failed is a no-op on
-    # healthy units; failed_when=false tolerates the unit not existing
-    # yet (e.g. a config-only run that touches an as-yet-uninstalled
-    # unit).
-    - name: Reset failed state to clear any rate-limit
-      when:
-        - _systemd_unit_condition
-        - _systemd_unit_start
-        - not ansible_check_mode
-      command: "systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} reset-failed {{ _systemd_unit_name }}"
-      changed_when: false
-      failed_when: false
-      become: true
-      become_user: "{{ _systemd_unit_user }}"
+# Pull into the right podman store. extract_podman_image returns the
+# unit's User=; treat "" and "root" as system-scope, anything else as
+# that user's rootless store. become_user: root is the default ansible
+# become target so the empty-string / "root" path matches the previous
+# behavior exactly. For a non-root User= the role still needs root to
+# `become` first (system-scope unit lives in /etc/systemd/system), then
+# drops into the user via become_user; the user's linger + podman.sock
+# are the caller's responsibility (see github_runner main.yml for the
+# canonical setup).
+- name: Pre-pull podman images referenced by the unit
+  when:
+    - _systemd_unit_condition
+    - not ansible_check_mode
+    - _systemd_unit_scope == 'system'
+    - _systemd_unit_is_service
+    - (systemd_unit_args.restart | default(false)) or ((_systemd_unit_enable.status.ActiveState | default('inactive')) != 'active')
+  containers.podman.podman_image:
+    name: "{{ item }}"
+  loop: "{{ systemd_unit_podman_images.images | default([]) }}"
+  become: true
+  become_user: "{{ systemd_unit_podman_images.user if (systemd_unit_podman_images.user | default('')) not in ['', 'root'] else 'root' }}"
 
-    # ansible's systemd module reports `changed=true` whenever it issues a
-    # state-change command, even if the unit's Condition*=/Assert*= directives
-    # cause systemd to skip the actual start (e.g. smartmontools on a VM with
-    # no SMART-capable disks: ConditionPathExistsGlob fails, unit stays
-    # inactive, but ansible still flags changed). Override `changed` to false
-    # in that case so the second converge is idempotent. The result is also
-    # the truth — if systemd never executes ExecStart, the unit's runtime
-    # state is identical to before.
-    - name: Start the service
-      when:
-        - _systemd_unit_condition
-        - _systemd_unit_start
-      systemd:
-        name: "{{ _systemd_unit_name }}"
-        state: started
-        scope: "{{ _systemd_unit_scope }}"
-      register: systemd_started
-      changed_when:
-        - systemd_started.changed
-        - systemd_started.status.ConditionResult | default('yes') != 'no'
-        - systemd_started.status.AssertResult | default('yes') != 'no'
-      become: true
-      become_user: "{{ _systemd_unit_user }}"
+# Clear any rate-limit / failed state before starting. A unit that has
+# crashed StartLimitBurst times within StartLimitInterval gets stuck
+# in "Start request repeated too quickly" -- ansible's systemd module
+# would surface that as a fatal error on the next play even though
+# the underlying cause has been fixed. reset-failed is a no-op on
+# healthy units; failed_when=false tolerates the unit not existing
+# yet (e.g. a config-only run that touches an as-yet-uninstalled
+# unit).
+- name: Reset failed state to clear any rate-limit
+  when:
+    - _systemd_unit_condition
+    - _systemd_unit_start
+    - not ansible_check_mode
+  command: "systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} reset-failed {{ _systemd_unit_name }}"
+  changed_when: false
+  failed_when: false
+  become: true
+  become_user: "{{ _systemd_unit_user }}"
 
-    - name: Restart the service
-      when:
-        - _systemd_unit_condition
-        - _systemd_unit_start
-        - systemd_unit_args.restart | default(false)
-        - not systemd_started.changed
-      systemd:
-        name: "{{ _systemd_unit_name }}"
-        state: restarted
-        scope: "{{ _systemd_unit_scope }}"
-      become: true
-      become_user: "{{ _systemd_unit_user }}"
+# ansible's systemd module reports `changed=true` whenever it issues a
+# state-change command, even if the unit's Condition*=/Assert*= directives
+# cause systemd to skip the actual start (e.g. smartmontools on a VM with
+# no SMART-capable disks: ConditionPathExistsGlob fails, unit stays
+# inactive, but ansible still flags changed). Override `changed` to false
+# in that case so the second converge is idempotent. The result is also
+# the truth — if systemd never executes ExecStart, the unit's runtime
+# state is identical to before.
+- name: Start the service
+  when:
+    - _systemd_unit_condition
+    - _systemd_unit_start
+  systemd:
+    name: "{{ _systemd_unit_name }}"
+    state: started
+    scope: "{{ _systemd_unit_scope }}"
+  register: systemd_started
+  changed_when:
+    - systemd_started.changed
+    - systemd_started.status.ConditionResult | default('yes') != 'no'
+    - systemd_started.status.AssertResult | default('yes') != 'no'
+  become: true
+  become_user: "{{ _systemd_unit_user }}"
 
-    # Hitless alternative to restart for daemons that pick up config via SIGHUP
-    # (keepalived, nginx, etc.). Mutually exclusive with systemd_unit_args.restart
-    # in practice — set one or the other. Skipped on the play that just started
-    # the unit (the started state already reflects current config).
-    - name: Reload the service
-      when:
-        - _systemd_unit_condition
-        - _systemd_unit_start
-        - systemd_unit_args.reload | default(false)
-        - not systemd_started.changed
-      systemd:
-        name: "{{ _systemd_unit_name }}"
-        state: reloaded
-        scope: "{{ _systemd_unit_scope }}"
-      become: true
-      become_user: "{{ _systemd_unit_user }}"
+- name: Restart the service
+  when:
+    - _systemd_unit_condition
+    - _systemd_unit_start
+    - systemd_unit_args.restart | default(false)
+    - not systemd_started.changed
+  systemd:
+    name: "{{ _systemd_unit_name }}"
+    state: restarted
+    scope: "{{ _systemd_unit_scope }}"
+  become: true
+  become_user: "{{ _systemd_unit_user }}"
+
+# Hitless alternative to restart for daemons that pick up config via SIGHUP
+# (keepalived, nginx, etc.). Mutually exclusive with systemd_unit_args.restart
+# in practice — set one or the other. Skipped on the play that just started
+# the unit (the started state already reflects current config).
+- name: Reload the service
+  when:
+    - _systemd_unit_condition
+    - _systemd_unit_start
+    - systemd_unit_args.reload | default(false)
+    - not systemd_started.changed
+  systemd:
+    name: "{{ _systemd_unit_name }}"
+    state: reloaded
+    scope: "{{ _systemd_unit_scope }}"
+  become: true
+  become_user: "{{ _systemd_unit_user }}"
