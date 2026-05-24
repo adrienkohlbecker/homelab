@@ -138,12 +138,17 @@
 # the underlying cause has been fixed. reset-failed is a no-op on
 # healthy units; failed_when=false tolerates the unit not existing
 # yet (e.g. a config-only run that touches an as-yet-uninstalled
-# unit).
+# unit). Same gate as the pre-pull above: a unit that's already active
+# isn't rate-limited and isn't about to be (re)started, so the
+# reset-failed is pure overhead -- skip it (68 services x a become
+# command every converge). ActiveState != 'active' (failed, inactive,
+# activating) or a requested restart means a start is imminent, so clear.
 - name: Reset failed state to clear any rate-limit
   when:
     - _systemd_unit_condition
     - _systemd_unit_start
     - not ansible_check_mode
+    - (systemd_unit_args.restart | default(false)) or ((_systemd_unit_enable.status.ActiveState | default('inactive')) != 'active')
   command: "systemctl{{ ' --user' if _systemd_unit_scope == 'user' else '' }} reset-failed {{ _systemd_unit_name }}"
   changed_when: false
   failed_when: false
