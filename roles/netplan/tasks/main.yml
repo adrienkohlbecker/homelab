@@ -7,6 +7,24 @@
   tags:
     - netplan
 
+- name: Mask networkd-dispatcher (unused, only emits podman-veth-churn noise)
+  # systemd-networkd emits a D-Bus PropertiesChanged for every link state
+  # change, including podman's ephemeral veth/bridge interfaces. networkd-
+  # dispatcher subscribes to all of them and shells out to `networkctl
+  # status <iface>`, which races and fails ("Interface vethN not found")
+  # once the short-lived veth is gone, and trips a spurious sd_notify
+  # rejection ("reception only permitted for main PID"). We ship zero hooks
+  # in any of its */.d dirs, so the daemon does no useful work on these
+  # hosts — masking removes the noise at the source with nothing lost.
+  # Unmask is the prerequisite if a future role ever drops a dispatcher hook.
+  systemd:
+    name: networkd-dispatcher.service
+    state: stopped
+    masked: true
+  become: true
+  tags:
+    - netplan
+
 - name: Install rollback script
   copy:
     src: netplan_rollback.sh
