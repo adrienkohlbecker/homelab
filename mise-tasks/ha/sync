@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 #MISE description="Sync HA GUI YAML files (automations/scripts/scenes) between the ha_gui_config submodule and lab. Default mode: pull then push."
 #USAGE arg "<mode>" help="pull | push | sync (default)" default="sync"
+#USAGE flag "--dry-run" help="preview a push (diff + syntax validation) without writing to the host, moving the synced tag, or reloading HA"
 """
 Bidirectional sync for /mnt/services/homeassistant/ user-editable files:
 automations.yaml, scripts.yaml, scenes.yaml, sensors.yaml, templates.yaml,
@@ -27,6 +28,14 @@ is detected by comparing host file shas against blobs at that tag.
         homeassistant.restart instead, and if any changed file is in
         that bucket the script restarts HA once and skips per-domain
         reloads.
+
+`push --dry-run` does the read-only half only: it skips the
+fetch/pull/auto-commit, compares the host against the *working tree*
+(so uncommitted edits show up), prints the per-file diff, runs the
+syntax validation, and reports what it *would* upload + which reload it
+*would* trigger -- then stops. Nothing is written to the host, no git
+ref moves, HA is not reloaded. Use it to preview a push before
+committing.
 
 HA reload/restart needs HA_API_TOKEN in the environment -- long-lived
 bearer token minted in HA UI -> Profile -> Security. The mise.toml
@@ -161,6 +170,18 @@ def blob_sha_at(ref: str, filename: str) -> str | None:
     if r.returncode != 0:
         return None
     return hashlib.sha256(r.stdout).hexdigest()
+
+
+def worktree_sha(filename: str) -> str | None:
+    """sha256 of the file as it sits in the submodule working tree; None if absent.
+
+    Used by `push --dry-run`, which doesn't auto-commit, so the comparison point
+    is the working tree (uncommitted edits included) rather than the HEAD blob.
+    """
+    try:
+        return hashlib.sha256((SUBMODULE / filename).read_bytes()).hexdigest()
+    except OSError:
+        return None
 
 
 def assert_submodule_initialized() -> None:
@@ -313,14 +334,15 @@ def do_pull() -> None:
     print(f"pull: committed GUI edits + pushed (tag now at {sh(['git', 'rev-parse', '--short', 'HEAD'], cwd=SUBMODULE).stdout.strip()})")
 
 
-def do_push() -> None:
+def do_push(dry_run: bool = False) -> None:
     assert_submodule_initialized()
-    sh(["git", "fetch", "--tags", "--force"], cwd=SUBMODULE)
-    sh(["git", "pull", "--ff-only", "--quiet"], cwd=SUBMODULE)
-    # Auto-commit any working-tree edits so `ha:sync push` works straight
-    # from a direct file edit in the submodule without a manual git commit.
-    if commit_local_edits("push"):
-        print("push: committed local edits")
+    if not dry_run:
+        sh(["git", "fetch", "--tags", "--force"], cwd=SUBMODULE)
+        sh(["git", "pull", "--ff-only", "--quiet"], cwd=SUBMODULE)
+        # Auto-commit any working-tree edits so `ha:sync push` works straight
+        # from a direct file edit in the submodule without a manual git commit.
+        if commit_local_edits("push"):
+            print("push: committed local edits")
     if not has_tag(SYNCED_TAG):
         sys.exit(f"refusing: no {SYNCED_TAG} tag. Run `mise run ha:pull` once to establish the baseline.")
     # Per-file state model:
@@ -333,7 +355,9 @@ def do_push() -> None:
     diverged: list[str] = []
     changed: list[tuple[str, str, str | None]] = []
     for rel, mode, reload in enumerate_files():
-        head_blob = blob_sha_at("HEAD", rel)
+        # dry-run compares the working tree (uncommitted edits included); a real
+        # push has already folded those into HEAD via commit_local_edits.
+        head_blob = worktree_sha(rel) if dry_run else blob_sha_at("HEAD", rel)
         tag_blob = blob_sha_at(SYNCED_TAG, rel)
         host_blob = host_sha(rel)
         if tag_blob is not None and host_blob is not None and host_blob != tag_blob:
@@ -351,22 +375,43 @@ def do_push() -> None:
         return
     show_push_diff(changed)
     validate_syntax([rel for rel, _, _ in changed])
+    if dry_run:
+        reloads = {reload for _, _, reload in changed}
+        if None in reloads:
+            reload_desc = "homeassistant.restart (a changed file has no hot reload)"
+        else:
+            reload_desc = ", ".join(sorted(s for s in reloads if s)) or "none"
+        print(f"\n\033[1;33mdry-run\033[0m: would upload {[rel for rel, _, _ in changed]}")
+        print(f"\033[1;33mdry-run\033[0m: would advance {SYNCED_TAG} and trigger: {reload_desc}")
+        print("\033[1;33mdry-run\033[0m: nothing written to host, no git refs moved, HA not reloaded.")
+        return
     upload_to_host([(rel, mode) for rel, mode, _ in changed])
     advance_synced_tag()
     print(f"push: uploaded {[rel for rel, _, _ in changed]}")
     trigger_post_push([reload for _, _, reload in changed])
 
 
-MODES = {"pull": do_pull, "push": do_push}
-
-
 def main() -> None:
-    mode = (sys.argv[1] if len(sys.argv) > 1 else "sync").strip()
+    # Parse --dry-run from argv (mise forwards args verbatim); also honour the
+    # usage-spec env var mise sets for the declared flag, so either path works.
+    raw = sys.argv[1:]
+    dry_run = "--dry-run" in raw or os.environ.get("usage_dry_run") == "true"
+    positional = [a for a in raw if a != "--dry-run"]
+    mode = (positional[0] if positional else "sync").strip()
+    if dry_run and mode not in ("push", "sync"):
+        sys.exit("--dry-run only applies to push")
     if mode == "sync":
+        if dry_run:
+            # pull mutates (commits host edits); a dry-run previews the push half only.
+            print("dry-run: skipping pull; previewing push only")
+            do_push(dry_run=True)
+            return
         do_pull()
         do_push()
-    elif mode in MODES:
-        MODES[mode]()
+    elif mode == "push":
+        do_push(dry_run=dry_run)
+    elif mode == "pull":
+        do_pull()
     else:
         sys.exit(f"unknown mode {mode!r}; use pull | push | sync")
 
