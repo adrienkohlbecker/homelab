@@ -163,7 +163,12 @@ DEFAULT -H -f -t -l selftest -C 197+ -U 198+ -n standby -m root -M exec /usr/sha
 {% if dev.startswith('nvme-') %}
 /dev/disk/by-id/{{ dev }} -d nvme,0xffffffff -W 0,60,80
 {% elif dev.startswith('ata-') %}
-/dev/disk/by-id/{{ dev }} -d ata -W 0,50,55 -l error
+{#- Crucial MX500 firmware spuriously flaps Current_Pending_Sector (197)
+    and Offline_Uncorrectable (198) to 1 and back to 0 with no real media
+    defect (Reallocated_Sector_Ct stays 0) — a well-documented firmware
+    bug. -C 0 -U 0 disables those two reports for MX500 drives only;
+    DEFAULT's -H, selftest, and reallocated-count tracking still apply. #}
+/dev/disk/by-id/{{ dev }} -d ata -W 0,50,55 -l error{{ ' -C 0 -U 0' if 'MX500' in dev else '' }}
 {% endif %}
 {% endfor %}
 
