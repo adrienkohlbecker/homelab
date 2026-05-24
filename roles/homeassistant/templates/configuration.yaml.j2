@@ -14,6 +14,17 @@ template: !include templates.yaml
 input_number: !include input_numbers.yaml
 timer: !include timers.yaml
 
+# notify.family fans one message out to both phones. Consumed by household
+# alerts in automations.yaml (water leak, humidifier-empty, dog-walk reminder)
+# so those don't duplicate per-phone notify calls. The mobile_app_* notify
+# services it references are created by default_config; this just bundles them.
+notify:
+  - platform: group
+    name: family
+    services:
+      - service: mobile_app_adriens_iphone
+      - service: mobile_app_iphone_de_spouse
+
 recorder:
   db_url: sqlite:////config/db/home-assistant_v2.db
 
