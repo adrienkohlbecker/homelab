@@ -69,9 +69,24 @@
         name: "{{ _systemd_unit_name }}"
         enabled: true
         scope: "{{ _systemd_unit_scope }}"
+      register: _systemd_unit_enable
       become: true
       become_user: "{{ _systemd_unit_user }}"
 
+    # The detect + pre-pull pair below only earns its cost when the unit is
+    # actually about to (re)start: a cold start needs the image present
+    # before `systemctl start`, and a caller-requested restart may swap to a
+    # new image tag. When the unit is already active and no restart is asked,
+    # the running container already has its image and the pull is wasted work
+    # -- yet the detect (a D-Bus ExecStart parse) + pull (a registry digest
+    # check) used to run every converge for every service, ~15-25s across a
+    # full lab run. The Enable result above carries the unit's pre-start
+    # ActiveState (the systemd module returns the full `systemctl show` dict,
+    # same source the Start task reads ConditionResult from), so the gate
+    # reuses it rather than spending another task: ActiveState != 'active'
+    # (inactive, or a freshly-installed unit whose status defaults below) or a
+    # caller-requested restart means "about to start, so pull".
+    #
     # Each .service file is the single source of truth for its podman image;
     # the extract_podman_image module asks systemd over D-Bus for the parsed
     # ExecStart* and pulls the image out of any `podman run` invocation. Pre-
@@ -84,6 +99,7 @@
         - not ansible_check_mode
         - _systemd_unit_scope == 'system'
         - _systemd_unit_is_service
+        - (systemd_unit_args.restart | default(false)) or ((_systemd_unit_enable.status.ActiveState | default('inactive')) != 'active')
       extract_podman_image:
         name: "{{ _systemd_unit_name }}"
       register: systemd_unit_podman_images
@@ -104,6 +120,7 @@
         - not ansible_check_mode
         - _systemd_unit_scope == 'system'
         - _systemd_unit_is_service
+        - (systemd_unit_args.restart | default(false)) or ((_systemd_unit_enable.status.ActiveState | default('inactive')) != 'active')
       containers.podman.podman_image:
         name: "{{ item }}"
       loop: "{{ systemd_unit_podman_images.images | default([]) }}"
