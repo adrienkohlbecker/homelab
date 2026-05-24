@@ -50,23 +50,28 @@
   tags:
     - journald
 
-# Audit=yes wires journald to the kernel audit netlink, but stock Ubuntu
-# cloud images boot with audit_enabled=0 so nothing flows even though
-# journald is subscribed. Inject a controlled USER message via auditctl
-# to prove the round-trip end-to-end: enable the subsystem, emit a
-# sentinel, read it back. Requires auditctl(8) from the auditd package;
-# mask the daemon first so it doesn't race journald for the multicast
-# netlink. Test-only — _verify never runs against prod (hosts there
-# already have the subsystem on).
-- name: _verify | Mask auditd before installation (avoid netlink race)
+# Audit=no in journald.conf means systemd-journald-audit.socket stays
+# disabled and the kernel audit netlink fd never reaches journald. The
+# auditd file (/var/log/audit/audit.log) is the sole sink; fluent-bit
+# tails it separately. Invert the previous "audit reaches journald"
+# verify into two complementary checks:
+#   1. Socket is disabled.
+#   2. A synthetic audit sentinel lands in audit.log and does NOT
+#      land in journald _TRANSPORT=audit.
+# Test-only — _verify never runs against prod.
+
+- name: _verify | systemd-journald-audit.socket is masked + inactive
   systemd:
-    name: auditd.service
-    masked: true
+    name: systemd-journald-audit.socket
+  register: journald_verify_audit_socket
+  failed_when: >-
+    journald_verify_audit_socket.status.LoadState != "masked"
+    or journald_verify_audit_socket.status.ActiveState == "active"
   become: true
   tags:
     - journald
 
-- name: _verify | Install auditctl from auditd package
+- name: _verify | Install auditd (sole writer of /var/log/audit/audit.log)
   apt:
     name: auditd
     state: present
@@ -94,18 +99,34 @@
   tags:
     - journald
 
-- name: _verify | Force journal sync before audit read
+- name: _verify | Force journal flush before reads
   command: journalctl --sync
   changed_when: false
   become: true
   tags:
     - journald
 
-- name: _verify | Read synthetic audit record back through journald
-  command: journalctl _TRANSPORT=audit --output=cat --no-pager
-  register: journald_verify_audit
+# `auditctl -m` is synchronous to the kernel netlink, but auditd's
+# disk write is async-incremental (default flush mode). Retry the
+# grep a few times to absorb that small window without explicitly
+# rotating the file (which would move the sentinel into audit.log.1
+# before we read it).
+- name: _verify | Sentinel lands in /var/log/audit/audit.log
+  command: grep -F {{ journald_verify_audit_emit.cmd[-1] | quote }} /var/log/audit/audit.log
   changed_when: false
-  failed_when: journald_verify_audit_emit.cmd[-1] not in journald_verify_audit.stdout
+  register: journald_verify_audit_grep
+  retries: 5
+  delay: 1
+  until: journald_verify_audit_grep.rc == 0
+  become: true
+  tags:
+    - journald
+
+- name: _verify | Sentinel does NOT land in journald _TRANSPORT=audit
+  command: journalctl _TRANSPORT=audit --output=cat --no-pager
+  register: journald_verify_audit_absent
+  changed_when: false
+  failed_when: journald_verify_audit_emit.cmd[-1] in journald_verify_audit_absent.stdout
   become: true
   tags:
     - journald
