@@ -1,13 +1,21 @@
-- name: client | Gather package facts
-  package_facts:
-    manager: apt
-  no_log: true
+# Query just the mcli package version rather than package_facts, which
+# enumerates every installed apt package (~2s) only to read one version.
+- name: client | Check installed mcli version  # noqa: command-instead-of-module
+  command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f=${Version}
+      - mcli
+  register: minio_mcli_pkg
+  changed_when: false
+  failed_when: false
   check_mode: false
   tags:
     - minio
 
 - name: client | Install mcli if needed
-  when: '"mcli" not in ansible_facts.packages or ansible_facts.packages["mcli"][0].version != "20220610222912.0.0"'
+  when: minio_mcli_pkg.stdout != "20220610222912.0.0"
   become: true
   tags:
     - minio
