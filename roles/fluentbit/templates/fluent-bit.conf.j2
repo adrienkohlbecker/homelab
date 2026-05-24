@@ -120,9 +120,15 @@
 # call): samba's per-machine `log.%m` only ships above a too-coarse
 # syslog level cap; pihole's FTL.log is parsed by the admin web UI's
 # diagnosis view and can't be redirected without breaking it; pihole's
-# lighttpd access log lives inside the container with no exposed
-# override knob, so we tail what the container writes to the bind-
-# mounted host dir.
+# lighttpd access + gravity-update logs live inside the container
+# with no exposed override knob, so we tail what the container writes
+# to the bind-mounted host dir; clickhouse-server inside hyperdx is
+# tailed from the host so a wedged hyperdx doesn't take its own
+# self-observability down; the host package-management subsystem
+# (apt / dpkg / unattended-upgrades / alternatives / ubuntu-pro-client)
+# has no journald routing knob at all; auditd's audit.log is the sole
+# audit-record channel after roles/journald disabled the parallel
+# kernel-netlink subscription (closes the prior 80/20 dual-write).
 #
 # Companion log paths we *don't* tail but keep on disk for local
 # troubleshooting (operator ssh + grep, never shipped to HyperDX):
@@ -211,6 +217,109 @@
     storage.type      filesystem
     storage.pause_on_chunks_overlimit  on
 
+# pihole's gravity-update cron output. Carries the blocklist refresh
+# trace (sources fetched, entries added/skipped, errors); useful to
+# spot the day a blocklist starts 404'ing and the gravity dataset
+# silently shrinks. Cron writes ANSI escape codes (cursor moves,
+# bracket characters) into the file -- fluent-bit ships them as-is,
+# HyperDX renders them readable enough.
+[INPUT]
+    Name              tail
+    Tag               pihole_gravity
+    Path              /var/log/pihole/pihole_updateGravity.log
+    DB                /var/lib/fluent-bit/pihole_gravity.db
+    db.locking        on
+    Path_Key          filepath
+    Read_from_Head    off
+    Skip_Long_Lines   on
+    Skip_Empty_Lines  on
+    Rotate_Wait       30
+    Buffer_Max_Size   256k
+    storage.type      filesystem
+    storage.pause_on_chunks_overlimit  on
+
+# clickhouse-server inside the hyperdx container, bind-mounted to
+# /mnt/services/hyperdx/clickhouse_logs/. Tailed from the host so a
+# wedged hyperdx doesn't take its own self-observability down with
+# it (the standard channel for clickhouse errors is hyperdx ingesting
+# its own telemetry -- which requires the clickhouse-server it's
+# trying to report on to be alive).
+#
+# Path narrowed to clickhouse-server.err.log -- the panic / fatal
+# stream. clickhouse-server.log carries per-query INFO chatter; with
+# fluent-bit shipping every line to HyperDX and HyperDX writing to
+# clickhouse, that path creates a tight write-amplification feedback
+# loop (every shipped line generates new lines). The .err file
+# logs only at warning+; the on-disk .log keeps the verbose trace
+# for `ssh + less` when the operator needs it.
+[INPUT]
+    Name              tail
+    Tag               clickhouse_server
+    Path              /mnt/services/hyperdx/clickhouse_logs/clickhouse-server.err.log
+    DB                /var/lib/fluent-bit/clickhouse_server.db
+    db.locking        on
+    Path_Key          filepath
+    Read_from_Head    off
+    Skip_Long_Lines   on
+    Skip_Empty_Lines  on
+    Rotate_Wait       30
+    Buffer_Max_Size   256k
+    storage.type      filesystem
+    storage.pause_on_chunks_overlimit  on
+
+# auditd's authoritative file. The systemd-journald-audit.socket is
+# disabled by roles/journald (Audit=no in journald.conf), so this
+# tail is the sole channel for audit records reaching HyperDX --
+# closes the ~20% file-only gap (USER_CMD / CRED_REFR / USER_START
+# from sudo, etc.) the old dual-write left visible.
+[INPUT]
+    Name              tail
+    Tag               audit
+    Path              /var/log/audit/audit.log
+    DB                /var/lib/fluent-bit/audit.db
+    db.locking        on
+    Path_Key          filepath
+    Read_from_Head    off
+    Skip_Long_Lines   on
+    Skip_Empty_Lines  on
+    Rotate_Wait       30
+    Buffer_Max_Size   256k
+    storage.type      filesystem
+    storage.pause_on_chunks_overlimit  on
+
+# Host package-management subsystem -- apt, dpkg, unattended-upgrades,
+# update-alternatives, plus ubuntu-pro-client (which hooks into apt for
+# esm-cache refresh). None of these have a built-in journald routing
+# knob (the systemd-unit-level invocations already land in journald,
+# but the verbose per-package / per-transaction trace lives only in
+# these files). One tail with multiple paths keeps them all in a
+# single `host_packages` bucket; Path_Key filepath stamps the source
+# file on each record so HyperDX can filter by which file the line
+# came from. *.log shape excludes the .log.1 / .log.gz rotated history
+# (Read_from_Head=off would skip replay anyway).
+#
+# certbot's /var/log/letsencrypt/letsencrypt.log is *not* in this
+# bucket: certbot writes about cert renewals (not package
+# transactions), and the certbot.timer systemd unit already lands
+# the operational signal -- renewal success/failure, next-due
+# timestamp -- in journald. The on-disk file adds DEBUG-level Python
+# trace (suppressed on stdout) that's only useful for the rare
+# renewal-debug session and is faster to ssh+less than to query.
+[INPUT]
+    Name              tail
+    Tag               host_packages
+    Path              /var/log/apt/*.log,/var/log/dpkg.log,/var/log/unattended-upgrades/*.log,/var/log/alternatives.log,/var/log/ubuntu-advantage.log,/var/log/ubuntu-advantage-apt-hook.log
+    DB                /var/lib/fluent-bit/host_packages.db
+    db.locking        on
+    Path_Key          filepath
+    Read_from_Head    off
+    Skip_Long_Lines   on
+    Skip_Empty_Lines  on
+    Rotate_Wait       30
+    Buffer_Max_Size   256k
+    storage.type      filesystem
+    storage.pause_on_chunks_overlimit  on
+
 # keepalived emits "Printing VRRP as json for process(N) on signal" at
 # LOG_INFO every time keepalived_exporter scrapes it (default ~30s ->
 # ~3k records/day/host of pure exporter chatter). Hardcoded in keepalived
@@ -269,10 +378,17 @@
     Exclude           MESSAGE Failed to get interface "(veth|podman)
     Exclude           MESSAGE Unknown index .* seen, reloading interface list
     Exclude           MESSAGE which is not our child
-    # auditd SERVICE_START / SERVICE_STOP for podman healthcheck transient
-    # .service units (sha256 unit names cycling continuously). ~110k/day
-    # on lab. `journalctl _COMM=audit` remains the source of truth.
-    Exclude           MESSAGE ^SERVICE_(START|STOP) pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=[a-f0-9]{64}
+
+# audit-tail noise filter. SERVICE_START / SERVICE_STOP for podman
+# healthcheck transient .service units (sha256 unit names cycling
+# continuously, ~110k/day on lab) are dropped here. The full record
+# remains in /var/log/audit/audit.log on the host -- `sudo ausearch
+# -m SERVICE_START` or `grep SERVICE_START /var/log/audit/audit.log`
+# is the source of truth if ever needed.
+[FILTER]
+    Name              grep
+    Match             audit
+    Exclude           log ^type=SERVICE_(START|STOP) msg=audit\([0-9.]+:[0-9]+\): pid=1 uid=0 auid=4294967295 ses=4294967295 subj=unconfined msg='unit=[a-f0-9]{64}
 
 # Per-service scoped excludes. Logical_Op=and means the record is dropped
 # only when *all* Exclude rules match -- i.e. the message pattern AND the
