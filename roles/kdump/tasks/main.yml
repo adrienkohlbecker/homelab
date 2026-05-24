@@ -120,6 +120,32 @@
   tags:
     - kdump
 
+# Reap legacy /var/log/apport.log[.N] leftovers from before the apport
+# purge above. With apport gone there's no writer; the file just sits
+# at whatever logrotate last left it.
+- name: Find legacy apport log files
+  find:
+    paths: /var/log
+    patterns:
+      - 'apport.log'
+      - 'apport.log.*'
+    file_type: file
+  register: kdump_legacy_apport_logs
+  become: true
+  tags:
+    - kdump
+
+- name: Remove legacy apport log files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ kdump_legacy_apport_logs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
+  tags:
+    - kdump
+
 # vmcore is a copy of all kernel-accessible RAM at panic time —
 # in-memory secrets, vault-decrypted vars, TLS keys. Pin the dump
 # directory to root-only so a package default drift can't silently
