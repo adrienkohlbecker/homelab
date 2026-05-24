@@ -31,43 +31,42 @@
   tags:
     - journald
 
-# Audit=yes in journald.conf is a silent no-op unless systemd-journald-
-# audit.socket is active — that socket binds the kernel audit netlink
-# and passes the fd to journald via socket activation. Ubuntu's cloud-
-# image variants ship the socket preset-disabled; opt in explicitly so
-# the directive works on every host this role runs against.
-- name: Enable systemd-journald-audit.socket
+# Mask + stop systemd-journald-audit.socket. The conf above sets
+# Audit=no; this releases the kernel audit netlink fd so auditd has
+# sole ownership of the audit stream. auditd writes
+# /var/log/audit/audit.log (100% coverage), which fluent-bit tails
+# directly -- the previous dual-write through journald put ~80% of
+# records into both streams and surfaced as duplicate facets in
+# HyperDX.
+#
+# Why mask, not just `enabled: false`: the upstream unit ships as
+# `static` (no [Install] section) + `WantedBy=systemd-journald.service`
+# in its [Unit]. `enabled: false` is a no-op on a static unit, and
+# the WantedBy makes every journald restart re-activate the socket.
+# Masking with a /dev/null symlink is the only way to keep it down
+# across journald restarts; the `Audit=no` conf is the belt, this is
+# the suspenders.
+- name: Mask systemd-journald-audit.socket
   systemd:
     name: systemd-journald-audit.socket
-    enabled: true
+    masked: true
+    state: stopped
   become: true
   register: journald_audit_socket
   tags:
     - journald
 
-# systemctl refuses to start the audit socket while journald.service is
-# already active ("Socket service ... already active, refusing"). On the
-# first apply per host (or whenever the rendered conf changed) we stop
-# journald so the socket can claim the netlink fd cleanly; on steady-
-# state re-applies both registers report unchanged and journald is not
-# touched.
-- name: Stop systemd-journald to release sockets
+# Conf change requires journald restart to pick up Audit=no (and to
+# drop the audit fd it currently holds, if any). Pure restart instead
+# of the previous stop/start dance: with the audit.socket stopped
+# above, there's no longer a downstream socket activation that needs
+# coordinated ordering. Steady-state apply (no conf change, socket
+# already disabled) skips the restart.
+- name: Restart systemd-journald.service
   when: journald_conf_d_10_custom_conf_result.changed or journald_audit_socket.changed
   systemd:
     name: systemd-journald.service
-    state: stopped
-  become: true
-  tags:
-    - journald
-
-# Symmetric with the stop above: only needs to run on first apply per
-# host or when conf/audit-enable just changed. Idempotent no-op on
-# steady state otherwise, but the gate makes that explicit.
-- name: Start systemd-journald-audit.socket
-  when: journald_conf_d_10_custom_conf_result.changed or journald_audit_socket.changed
-  systemd:
-    name: systemd-journald-audit.socket
-    state: started
+    state: restarted
   become: true
   tags:
     - journald
@@ -91,8 +90,6 @@
 # unit can't start. Doubles as the post-conf liveness assertion: without
 # journald running, container --log-driver=journald, every systemd unit,
 # and kuma's systemdunits collector silently degrade until next reboot.
-# Also inherits the audit netlink fd from systemd-journald-audit.socket
-# above when journald is brought back up after a stop.
 - name: Start systemd-journald.service
   systemd:
     name: systemd-journald.service

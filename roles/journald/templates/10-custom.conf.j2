@@ -6,4 +6,10 @@ Storage={{ journald_storage }}
 Compress={{ (journald_storage == 'persistent' and zfs_root) | ternary('no', 'yes') }}
 ForwardToSyslog=no
 ReadKMsg=yes
-Audit=yes
+# Audit records flow through fluent-bit's tail of /var/log/audit/audit.log
+# (the auditd authoritative stream, 100% coverage). Letting journald
+# subscribe to the kernel audit netlink in parallel would put ~80% of
+# records into both streams -- the 80/20 split surfaces in HyperDX as
+# duplicate facets. systemd-journald-audit.socket is disabled below
+# so the netlink fd stays unclaimed.
+Audit=no
