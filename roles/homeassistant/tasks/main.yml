@@ -222,6 +222,10 @@
       dest: /mnt/services/homeassistant/blueprints/automation/hvac_dry_mode.yaml
       mode: "0644"
       validate: "{{ _yaml_validate }}"
+    - src: blueprints/automation/sun_driven_shutter.yaml
+      dest: /mnt/services/homeassistant/blueprints/automation/sun_driven_shutter.yaml
+      mode: "0644"
+      validate: "{{ _yaml_validate }}"
   loop_control:
     label: "{{ item.dest }}"
   tags:
