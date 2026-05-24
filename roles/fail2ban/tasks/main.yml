@@ -144,6 +144,29 @@
   tags:
     - fail2ban
 
+# The active mail action (sendmail-whois-lines) inherits actionstart /
+# actionstop from sendmail-common.conf, which email "[Fail2Ban] <jail>:
+# started/stopped on <host>" on every daemon restart -- pure noise, one
+# per host per apply. Empty both via the action's .local so only
+# actionban (the ban event + whois + offending log lines) still mails.
+# sendmail-whois-lines.local (the action named in the jail) overrides the
+# inherited keys with highest precedence.
+- name: Suppress fail2ban start/stop notification emails
+  copy:
+    dest: /etc/fail2ban/action.d/sendmail-whois-lines.local
+    content: |
+      [Definition]
+      actionstart =
+      actionstop =
+    owner: root
+    group: root
+    mode: "0640"
+    backup: true
+  register: fail2ban_mail_action
+  become: true
+  tags:
+    - fail2ban
+
 # Surface jail-config typos at apply time. Runs every apply (not
 # gated on .changed) so a previous failed apply that left a broken
 # file on disk doesn't get silently skipped on idempotent re-runs.
@@ -171,6 +194,6 @@
       src: fail2ban
       condition: "{{ not (ansible_check_mode and apt_install_fail2ban.changed) }}"
       restart: "{{ apt_install_fail2ban.changed or ((fail2ban_default.changed or fail2ban_daemon.changed) and not apt_install_fail2ban.changed) }}"
-      reload: "{{ (fail2ban_sshd_jail.changed or fail2ban_legacy_override.changed) and not apt_install_fail2ban.changed and not fail2ban_default.changed and not fail2ban_daemon.changed }}"
+      reload: "{{ (fail2ban_sshd_jail.changed or fail2ban_legacy_override.changed or fail2ban_mail_action.changed) and not apt_install_fail2ban.changed and not fail2ban_default.changed and not fail2ban_daemon.changed }}"
   tags:
     - fail2ban
