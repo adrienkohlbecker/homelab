@@ -4,7 +4,8 @@
 """
 Bidirectional sync for /mnt/services/homeassistant/ user-editable files:
 automations.yaml, scripts.yaml, scenes.yaml, sensors.yaml, templates.yaml,
-custom_templates/macros.jinja, blueprints/automation/*.yaml.
+input_numbers.yaml, timers.yaml, custom_templates/macros.jinja,
+blueprints/automation/*.yaml.
 
 The submodule at roles/homeassistant/files/ha_gui_config/ is the source of
 truth. The role itself no longer copies these files (the ha:sync push path
@@ -74,6 +75,7 @@ SYNC_SPEC = [
     ("scenes.yaml", "0600", "scene.reload"),
     ("templates.yaml", "0600", "template.reload"),
     ("input_numbers.yaml", "0600", "input_number.reload"),
+    ("timers.yaml", "0600", "timer.reload"),
     # YAML sensors -- the `statistics` platform doesn't support a hot
     # reload; restart is the safe default for this whole file.
     ("sensors.yaml", "0600", None),
@@ -238,6 +240,41 @@ def _ha_post(service: str) -> None:
         print(f"WARN: {service} failed: {e.reason}", file=sys.stderr)
 
 
+def _print_diff_header(label: str) -> None:
+    print(f"\n\033[1;34m=== {label} ===\033[0m", flush=True)
+
+
+def show_push_diff(changed: list[tuple[str, str, str | None]]) -> None:
+    """For each file about to be pushed, print a colored diff host->HEAD."""
+    import tempfile
+
+    for rel, _, _ in changed:
+        r = subprocess.run(
+            ["ssh", HOST, f"sudo cat {HOST_DIR}/{rel} 2>/dev/null || true"],
+            capture_output=True,
+            check=False,
+        )
+        host_bytes = r.stdout
+        with tempfile.NamedTemporaryFile(suffix=f"_{Path(rel).name}", delete=False) as tf:
+            tf.write(host_bytes)
+            host_tmp = tf.name
+        try:
+            _print_diff_header(f"push: {rel} ({'new on host' if not host_bytes else 'modified on host'})")
+            # --no-index exits 1 when files differ; ignore.
+            subprocess.run(
+                ["git", "diff", "--color=always", "--no-index", "--", host_tmp, str(SUBMODULE / rel)],
+                check=False,
+            )
+        finally:
+            os.unlink(host_tmp)
+
+
+def show_pull_diff() -> None:
+    """Print colored diff (HEAD -> working tree) -- what the pull is about to commit."""
+    _print_diff_header("pull: host-side changes about to be committed")
+    subprocess.run(["git", "diff", "--color=always", "HEAD"], cwd=SUBMODULE, check=False)
+
+
 def trigger_post_push(reload_services: list[str | None]) -> None:
     """Decide between per-domain reloads and a full restart based on what changed.
 
@@ -267,6 +304,7 @@ def do_pull() -> None:
         else:
             print("pull: in sync, no-op")
         return
+    show_pull_diff()
     ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     sh(["git", "add", "-A"], cwd=SUBMODULE)
     sh(["git", "commit", "-m", f"pull: capture GUI edits from lab ({ts})"], cwd=SUBMODULE)
@@ -311,6 +349,7 @@ def do_push() -> None:
     if not changed:
         print("push: HEAD matches host, nothing to do")
         return
+    show_push_diff(changed)
     validate_syntax([rel for rel, _, _ in changed])
     upload_to_host([(rel, mode) for rel, mode, _ in changed])
     advance_synced_tag()
