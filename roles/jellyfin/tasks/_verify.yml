@@ -121,3 +121,72 @@
   changed_when: false
   failed_when: (_verify_ffmpeg_output.stdout | int) == 0
   become: true
+
+# --- SSO plugin ---------------------------------------------------------
+# A real OIDC round-trip can't be exercised here: Authelia isn't running
+# in the jellyfin role test and the box snakeoil chain doesn't validate
+# auth.box.mhaf.fr (the same IdP gap minio/gitea hit). So we assert the
+# strongest signals available without a live IdP -- the plugin files are
+# present, the DLL actually LOADED (proving the pinned version is
+# ABI-compatible with this Jellyfin), and the seeded login button reached
+# disk with the host substituted in.
+- name: _verify | Stat SSO plugin files
+  stat:
+    path: "/mnt/services/jellyfin/plugins/sso/{{ item }}"
+  register: _verify_sso_files
+  become: true
+  loop:
+    - SSO-Auth.dll
+    - IdentityModel.dll
+    - IdentityModel.OidcClient.dll
+    - meta.json
+
+- name: _verify | Assert SSO plugin files present
+  assert:
+    that:
+      - item.stat.exists
+    fail_msg: "SSO plugin file missing: {{ item.item }}"
+  loop: "{{ _verify_sso_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+# Jellyfin logs "Loaded plugin: <Name> <Version>" (PluginManager.cs:604)
+# only for plugins whose targetAbi <= the running server version
+# (:702). A plugin pinned too new is skipped, not loaded -- so a matched
+# line is the proof the ABI pin in vars/main.yml is right, which a stat
+# of the DLL on disk can't give. Logs come over the journald log-driver;
+# the container is the same instance from converge, so startup lines are
+# still readable.
+- name: _verify | Read jellyfin container logs
+  command: podman logs jellyfin
+  register: _verify_jf_logs
+  changed_when: false
+  become: true
+
+- name: _verify | Assert SSO plugin loaded (ABI-compatible)
+  assert:
+    that:
+      - >-
+        (_verify_jf_logs.stdout ~ _verify_jf_logs.stderr)
+        is search('Loaded plugin: SSO-Auth ' ~ jellyfin_sso_plugin_version)
+    fail_msg: >-
+      Jellyfin did not log loading SSO-Auth {{ jellyfin_sso_plugin_version }}.
+      The pin's targetAbi most likely exceeds the running Jellyfin -- check
+      jellyfin_sso_plugin_version in vars/main.yml against the server image
+      tag in jellyfin.service.j2.
+
+- name: _verify | Read seeded branding.xml
+  slurp:
+    src: /mnt/services/jellyfin/config/branding.xml
+  register: _verify_branding
+  become: true
+
+- name: _verify | Assert SSO login button seeded with this host
+  assert:
+    that:
+      - >-
+        (_verify_branding.content | b64decode)
+        is search('jellyfin\.' ~ inventory_hostname ~ '\.' ~ domain ~ '/sso/OID/start/authelia')
+    fail_msg: >-
+      branding.xml is missing the SSO login-button form for
+      jellyfin.{{ inventory_hostname }}.{{ domain }}.

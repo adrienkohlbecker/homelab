@@ -1,0 +1,19 @@
+{#
+  Jellyfin core branding config (BrandingOptions -> /config/config/branding.xml).
+  The SSO plugin has no native login button; the documented way to add one
+  is to inject an HTML <form> into the "Login disclaimer", which the web
+  client renders on the sign-in page. The form GETs the plugin's
+  /sso/OID/start/<provider> endpoint to begin the OIDC flow.
+
+  The HTML must be entity-escaped here because LoginDisclaimer is a string
+  field: .NET's XmlSerializer stores it escaped and the web client
+  unescapes + injects it. Jellyfin only rewrites this file on a dashboard
+  save, so DO NOT edit branding via the Jellyfin UI -- manage it here.
+  See notes/jellyfin_sso_rollout.md.
+#}
+<?xml version="1.0" encoding="utf-8"?>
+<BrandingOptions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <LoginDisclaimer>&lt;form action="https://jellyfin.{{ inventory_hostname }}.{{ domain }}/sso/OID/start/authelia"&gt;&lt;button class="raised block emby-button button-submit"&gt;Sign in with SSO&lt;/button&gt;&lt;/form&gt;</LoginDisclaimer>
+  <CustomCss></CustomCss>
+  <SplashscreenEnabled>false</SplashscreenEnabled>
+</BrandingOptions>
