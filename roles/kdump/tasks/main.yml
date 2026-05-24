@@ -98,6 +98,28 @@
   tags:
     - kdump
 
+# Apport is Ubuntu's userspace crash reporter, desktop-oriented and
+# unused on our servers. It would also be load-bearing-broken here:
+# its /etc/init.d/apport does `chmod 1777 /var/crash` at every boot
+# (sysv-generator wraps it as apport.service), reverting the lockdown
+# below until the next ansible run. The window where /var/crash sits
+# world-writable is exactly when a panic-time vmcore would land there
+# readable to any user — the leak the lockdown exists to prevent.
+# Purging also drops a setuid coredump handler we don't need; no
+# Depends cascade (only Suggests from grub-common).
+- name: Purge apport (collides with /var/crash lockdown, unused)
+  apt:
+    pkg:
+      - apport
+      - apport-symptoms
+      - python3-apport
+      - python3-problem-report
+    state: absent
+    purge: true
+  become: true
+  tags:
+    - kdump
+
 # vmcore is a copy of all kernel-accessible RAM at panic time —
 # in-memory secrets, vault-decrypted vars, TLS keys. Pin the dump
 # directory to root-only so a package default drift can't silently

@@ -66,3 +66,18 @@
   changed_when: false
   failed_when: "'ready to kdump' not in kdump_verify_config.stdout"
   become: true
+
+# Cross-package contract: with apport purged, no boot-time service
+# should re-chmod /var/crash to 1777. Stat post-reboot rather than
+# at converge time so we'd catch any future kdump-tools postinst /
+# tmpfiles.d entry that resets perms across a reboot.
+- name: _verify | /var/crash perms survive reboot
+  when: ansible_architecture != 'aarch64'
+  stat:
+    path: /var/crash
+  register: kdump_verify_crash_dir
+  failed_when: >-
+    kdump_verify_crash_dir.stat.mode != '0750'
+    or kdump_verify_crash_dir.stat.pw_name != 'root'
+    or kdump_verify_crash_dir.stat.gr_name != 'root'
+  become: true
