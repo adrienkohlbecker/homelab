@@ -1,0 +1,100 @@
+#jinja2: lstrip_blocks: True
+# Managed by Ansible (roles/headscale). Schema: headscale v0.26.x.
+# server_url follows the repo's <service>.<host>.<domain> convention so the
+# same template renders headscale.box.fahm.fr under the test harness and
+# headscale.fox.fahm.fr in prod. nginx terminates TLS and reverse-proxies to
+# the loopback listener, so headscale itself runs plain HTTP (tls_* empty).
+server_url: https://headscale.{{ inventory_hostname }}.{{ domain }}
+listen_addr: 0.0.0.0:8080
+metrics_listen_addr: 0.0.0.0:9090
+grpc_listen_addr: 127.0.0.1:50443
+grpc_allow_insecure: false
+
+# CLI talks to the running `serve` over this socket (used by _verify and by
+# the tailscale role's preauthkey mint). Kept inside the writable state dir so
+# the tier-1 non-root container user can create it (default /var/run isn't
+# writable without root).
+unix_socket: /var/lib/headscale/headscale.sock
+unix_socket_permission: "0770"
+
+noise:
+  private_key_path: /var/lib/headscale/noise_private.key
+
+prefixes:
+  v4: 100.64.0.0/10
+  v6: fd7a:115c:a1e0::/48
+  allocation: sequential
+
+# Embedded DERP: STUN (udp/3478, published to the internet) does NAT-traversal
+# assistance; the relay itself rides server_url over nginx/443. urls/paths are
+# empty so the tailnet relays only through our own DERP (no third-party relay);
+# relayed traffic is WireGuard-encrypted end-to-end regardless. Direct
+# connections are preferred and are what carry traffic in the common case.
+derp:
+  server:
+    enabled: true
+    region_id: 999
+    region_code: "fox"
+    region_name: "Headscale Embedded DERP (fox)"
+    stun_listen_addr: "0.0.0.0:3478"
+    private_key_path: /var/lib/headscale/derp_server_private.key
+    automatically_add_embedded_derp_region: true
+  urls: []
+  paths: []
+  auto_update_enabled: false
+  update_frequency: 24h
+
+# Don't phone home for update checks.
+disable_check_updates: true
+ephemeral_node_inactivity_timeout: 30m
+
+database:
+  type: sqlite
+  sqlite:
+    path: /var/lib/headscale/db.sqlite
+
+# TLS is terminated by nginx (roles/nginx site). Leave headscale's own TLS off.
+tls_letsencrypt_hostname: ""
+tls_cert_path: ""
+tls_key_path: ""
+
+log:
+  format: text
+  level: info
+
+policy:
+  mode: file
+  path: /etc/headscale/acl.hujson
+
+# MagicDNS resolves tailnet names under base_domain (must differ from the
+# server_url FQDN). All other queries forward to pihole over the mesh (pihole's
+# keepalived VIP is inside 10.123.0.0/21, reachable via the lab/pug subnet
+# routers), so roaming clients keep pihole adblock + split-horizon resolution
+# of *.fahm.fr to internal IPs. roles/pihole is unchanged.
+dns:
+  magic_dns: true
+  base_domain: ts.{{ domain }}
+  nameservers:
+    global:
+      - {{ external_ips.pihole }}
+    split: {}
+  search_domains: []
+  extra_records: []
+
+{% if headscale_oidc_enabled | default(false) %}
+# User-device enrollment via Authelia OIDC. Headless hosts (lab/pug/bunk) use
+# pre-auth keys instead and never hit this. Disabled under the test harness
+# (headscale validates the issuer at boot via OIDC discovery, which the box VM
+# can't reach).
+oidc:
+  issuer: "{{ headscale_oidc_issuer }}"
+  client_id: "{{ headscale_oidc_client_id }}"
+  client_secret_path: "/run/secrets/oidc_client_secret"
+  scope: ["openid", "profile", "email"]
+{% if headscale_oidc_allowed_domains | default([]) | length > 0 %}
+  allowed_domains:
+{% for d in headscale_oidc_allowed_domains %}
+    - {{ d }}
+{% endfor %}
+{% endif %}
+{% endif %}

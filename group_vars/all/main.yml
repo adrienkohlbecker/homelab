@@ -120,6 +120,13 @@ service_ports:
   # gitea-runner Prometheus endpoint (loopback-only). 9101 matches
   # upstream's documented default.
   gitea_runner_metrics: 9101
+  # headscale control-plane HTTP (loopback-published on the fox VPS, nginx
+  # fronts it on 443). The embedded DERP STUN listener is separate (udp/3478,
+  # published to the internet) and isn't a loopback service, so it's not here.
+  headscale: 8080
+  # headscale's prometheus metrics endpoint (container :9090), loopback-published
+  # so fox's netdata scrapes it via the go.d prometheus collector.
+  headscale_metrics: 9095
   healthchecks: 8000
   homeassistant: 8123
   # Sonos S2 event-subscription callback + HomeKit pairing. Published on

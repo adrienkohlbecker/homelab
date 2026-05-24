@@ -18,6 +18,8 @@ roles/dnscrypt_proxy/tasks/_verify.yml  name[casing]
 roles/dnscrypt_proxy/tasks/_verify.yml  var-naming[no-role-prefix]
 roles/hdparm/tasks/_verify.yml  name[casing]
 roles/hdparm/tasks/_verify.yml  var-naming[no-role-prefix]
+roles/headscale/tasks/_verify.yml  name[casing]
+roles/headscale/tasks/_verify.yml  var-naming[no-role-prefix]
 roles/hdparm/tasks/netdata.yml  name[prefix]
 roles/podman/tasks/install.yml  key-order[task]
 roles/podman/tasks/install.yml  no-changed-when

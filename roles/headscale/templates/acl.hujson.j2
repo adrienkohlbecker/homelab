@@ -1,0 +1,18 @@
+// Managed by Ansible (roles/headscale). HuJSON (JSON + comments/trailing commas).
+//
+// Permissive start: every tailnet member can reach every other member. This is
+// a single-operator household tailnet, so we open it up first and tighten later
+// (see notes/headscale_mesh_redesign.md "ACL policy"). Kept deliberately free of
+// tagOwners/group references so the policy is valid on a fresh instance with no
+// users yet -- a policy that names a non-existent owner makes headscale refuse
+// to load it. Subnet routes and exit nodes are approved explicitly via
+// `headscale routes enable` from the tailscale role, not via autoApprovers.
+{
+  "acls": [
+    {
+      "action": "accept",
+      "src": ["*"],
+      "dst": ["*:*"],
+    },
+  ],
+}

@@ -1,0 +1,81 @@
+#jinja2: lstrip_blocks: True
+# headscale.service ##################################################################
+[Unit]
+Description=headscale
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+{% if zfs_has_services_mount %}
+After=zfs_mount_mnt_services.service
+Requires=zfs_mount_mnt_services.service
+After=zfs_mount_mnt_services_sqlite.service
+Requires=zfs_mount_mnt_services_sqlite.service
+{% endif %}
+After=zfs_autosnapshot.target
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=always
+Delegate=yes
+TimeoutStartSec=120
+TimeoutStopSec=70
+RestartSec=5
+Type=notify
+NotifyAccess=all
+SyslogIdentifier=%N
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name headscale \
+    --user {{ headscale_user.uid }}:{{ headscale_user.group }} \
+    --log-driver journald \
+    --log-opt tag="headscale" \
+    --security-opt=no-new-privileges \
+    --volume /mnt/services/headscale/config.yaml:/etc/headscale/config.yaml:ro \
+    --volume /mnt/services/headscale/acl.hujson:/etc/headscale/acl.hujson:ro \
+    --volume /mnt/services/headscale/data:/var/lib/headscale \
+    {# db.sqlite under data/ is a symlink onto the dedicated 4K-recordsize
+       sqlite dataset; mount that dataset at the same path inside the
+       container so the absolute symlink target resolves (WAL/SHM siblings
+       then also land on the dataset). See roles/sqlite_dataset. #}
+    --volume /mnt/services/sqlite/headscale:/mnt/services/sqlite/headscale \
+    --publish 127.0.0.1:{{ service_ports.headscale }}:8080/tcp \
+    {# Prometheus metrics (config metrics_listen_addr 0.0.0.0:9090) on host
+       loopback for fox's netdata go.d prometheus collector. Unauthenticated,
+       so loopback-only -- never the public 3478/443 surface. #}
+    --publish 127.0.0.1:{{ service_ports.headscale_metrics }}:9090/tcp \
+    --publish 0.0.0.0:3478:3478/udp \
+{% if headscale_oidc_enabled | default(false) %}
+    --secret=headscale_oidc_secret,type=mount,target=oidc_client_secret \
+{% endif %}
+    {# Liveness via the service-native CLI: `headscale users list` round-trips
+       through the gRPC API over the unix socket to the running serve process,
+       so it proves the server is actually answering (not just that the
+       process exists). The headscale image is a Go-binary base with no curl,
+       so the HTTP /health probe isn't available in-container. #}
+    --health-cmd         '["headscale","users","list"]' \
+    --health-startup-cmd '["headscale","users","list"]' \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    --health-start-period "60s" \
+    --stop-timeout 30 \
+    docker.io/headscale/headscale:0.26.1 \
+    serve
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=multi-user.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}
