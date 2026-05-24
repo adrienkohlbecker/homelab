@@ -73,3 +73,34 @@
       restart: "{{ dnscrypt_proxy_socket_d_override_conf_result.changed }}"
   tags:
     - dnscrypt_proxy
+
+# Reap legacy /var/log/dnscrypt-proxy/query.log[.gz] leftovers. The
+# role's templated toml doesn't enable query logging, but earlier
+# manually-edited configs did, leaving stale per-query DNS traces on
+# disk (privacy-sensitive: every resolved name + client IP). dnscrypt
+# uses an internal rotator so there's no /etc/logrotate.d entry to
+# worry about.
+- name: Find legacy dnscrypt-proxy query log files
+  find:
+    paths: /var/log/dnscrypt-proxy
+    patterns:
+      - 'query.log'
+      - 'query*.log.gz'
+      - 'query-*.log'
+      - 'query-*.log.gz'
+    file_type: file
+  register: dnscrypt_proxy_legacy_query_logs
+  become: true
+  tags:
+    - dnscrypt_proxy
+
+- name: Remove legacy dnscrypt-proxy query log files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ dnscrypt_proxy_legacy_query_logs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
+  tags:
+    - dnscrypt_proxy
