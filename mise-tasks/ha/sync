@@ -15,13 +15,17 @@ is detected by comparing host file shas against blobs at that tag.
 - pull: scp host -> submodule, commit if changed, advance tag.
         Refuses on a dirty working tree (would clobber local edits).
 - push: auto-commit any working-tree edits first, then refuse if host
-        has diverged from the tag (host edited since last pull);
-        otherwise scp submodule -> host, advance tag, and run the
-        appropriate reload(s). Per-file SYNC_SPEC maps each file to a
-        reload service (`automation.reload`, `template.reload`, ...);
-        files marked `None` need a homeassistant.restart instead, and
-        if any changed file is in that bucket the script restarts HA
-        once and skips per-domain reloads.
+        has diverged from the tag (host edited since last pull). For
+        every changed file, parse-validate it (YAML via PyYAML with HA
+        tag stubs; .jinja via jinja2.Environment().parse) and abort
+        with the full failure list on any error -- so a broken file
+        never lands on lab. Then scp submodule -> host, advance tag,
+        and run the appropriate reload(s). Per-file SYNC_SPEC maps
+        each file to a reload service (`automation.reload`,
+        `template.reload`, ...); files marked `None` need a
+        homeassistant.restart instead, and if any changed file is in
+        that bucket the script restarts HA once and skips per-domain
+        reloads.
 
 HA reload/restart needs HA_API_TOKEN in the environment -- long-lived
 bearer token minted in HA UI -> Profile -> Security. The mise.toml
@@ -69,6 +73,7 @@ SYNC_SPEC = [
     ("scripts.yaml", "0600", "script.reload"),
     ("scenes.yaml", "0600", "scene.reload"),
     ("templates.yaml", "0600", "template.reload"),
+    ("input_numbers.yaml", "0600", "input_number.reload"),
     # YAML sensors -- the `statistics` platform doesn't support a hot
     # reload; restart is the safe default for this whole file.
     ("sensors.yaml", "0600", None),
@@ -90,6 +95,40 @@ def enumerate_files() -> list[tuple[str, str, str | None]]:
             if p.is_file():
                 out.append((p.relative_to(SUBMODULE).as_posix(), mode, reload))
     return out
+
+
+def validate_syntax(relpaths: list[str]) -> None:
+    """Parse each .yaml/.jinja file; abort with the full failure list if any won't load.
+
+    YAML uses a multi-constructor that lets HA's custom tags (!input, !secret,
+    !include) parse to None -- we only care about syntactic validity here, not
+    that every tag resolves. Jinja uses Environment().parse() for syntax only.
+    """
+    import yaml
+    from jinja2 import Environment, TemplateSyntaxError
+
+    class _HALoader(yaml.SafeLoader):
+        pass
+
+    _HALoader.add_multi_constructor("!", lambda loader, suffix, node: None)
+
+    failures: list[str] = []
+    jinja_env = Environment()
+    for rel in relpaths:
+        path = SUBMODULE / rel
+        try:
+            if rel.endswith((".yaml", ".yml")):
+                with path.open() as f:
+                    yaml.load(f, Loader=_HALoader)
+            elif rel.endswith(".jinja"):
+                jinja_env.parse(path.read_text())
+            # other extensions: skip (no parser)
+        except (yaml.YAMLError, TemplateSyntaxError) as e:
+            failures.append(f"  {rel}: {type(e).__name__}: {e}")
+        except OSError as e:
+            failures.append(f"  {rel}: cannot read: {e}")
+    if failures:
+        sys.exit("refusing: syntax errors in submodule files:\n" + "\n".join(failures))
 
 
 def sh(cmd: list[str], cwd: Path | None = None, check: bool = True) -> subprocess.CompletedProcess:
@@ -246,6 +285,7 @@ def do_push() -> None:
     if not changed:
         print("push: HEAD matches host, nothing to do")
         return
+    validate_syntax([rel for rel, _, _ in changed])
     upload_to_host([(rel, mode) for rel, mode, _ in changed])
     advance_synced_tag()
     print(f"push: uploaded {[rel for rel, _, _ in changed]}")
