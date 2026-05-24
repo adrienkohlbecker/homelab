@@ -1081,7 +1081,7 @@ authelia_oidc_clients:
   - client_id: minio
     client_name: MinIO
     client_secret: '$pbkdf2-sha512$310000$1PUIsB3qBu/sdAfTFLA1lQ$TM3m24bpcgVb.0VIXNRUJUFNv46WfXXrvBJxmWnTU5M7cxHHozJogR7hSe/4G7KCEAIGW2kbs5j7Sa3/rNJ1yw'
-    authorization_policy: one_factor
+    authorization_policy: two_factor
     redirect_uris:
       - 'https://minio.{{ inventory_hostname }}.{{ domain }}/oauth_callback'
   - client_id: paperless
@@ -1093,6 +1093,6 @@ authelia_oidc_clients:
   - client_id: gitea
     client_name: Gitea
     client_secret: '$pbkdf2-sha512$310000$6oM0mY6WpwGbDyXYpggnhw$REN6WO6WeeteoQbfD3kN.naEABE..wgdIFEDE.V8cTe7AKy3.1zdcqdW4f4211E3y28uaL6JRjXnB1a5veKy8w'
-    authorization_policy: one_factor
+    authorization_policy: two_factor
     redirect_uris:
       - 'https://gitea.{{ inventory_hostname }}.{{ domain }}/user/oauth2/authelia/callback'
