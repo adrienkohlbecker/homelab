@@ -92,6 +92,14 @@ Per-site dataset gates live in `group_vars/all/main.yml` under `zfs_has_<name>_m
 
 Any new user-facing service (anything with an nginx subdomain) gets a bookmark in [roles/homepage/templates/bookmarks.yaml.j2](roles/homepage/templates/bookmarks.yaml.j2) — pick the right section (Media / Infra / Personal), follow the existing `abbr: XX` + `icon: sh-<name>.png` + `href: https://<subdomain>.{{ inventory_hostname }}.{{ domain }}/` shape. Icons resolve through selfh.st (the `sh-` prefix); if no selfh.st icon exists, omit the `icon:` line and the 2-letter `abbr:` becomes the visible fallback.
 
+### Home Assistant GUI YAML sync
+
+`/mnt/services/homeassistant/{automations,scripts,scenes}.yaml` are written by the HA frontend (Settings → Automations & Scenes). The homeassistant role intentionally only `touch`es them; bidirectional sync with a version-controlled copy lives in a separate GitHub repo ([adrienkohlbecker/homelab_ha_config](https://github.com/adrienkohlbecker/homelab_ha_config), private) registered as a git submodule at [roles/homeassistant/files/ha_gui_config/](roles/homeassistant/files/ha_gui_config). The submodule is the source of truth.
+
+Drive both directions with `mise run ha:sync [pull|push|sync]` ([mise-tasks/ha/sync](mise-tasks/ha/sync)). A movable tag `last_synced_to_host` on the submodule pins "the commit whose tree matches lab as of last sync"; push refuses if the host's blobs don't match that tag (the GUI edited since last pull) and tells the operator to pull first. Each successful push hot-reloads HA via `POST /api/services/<domain>/reload`, authenticated with a long-lived bearer in `HA_API_TOKEN` (1P-backed `[env]` entry in [mise.toml](mise.toml); mint in HA UI → Profile → Security → Long-Lived Access Tokens). Without the env var the push still lands the YAML on disk and prints a warning; reload manually via HA UI → Developer Tools → YAML.
+
+Don't bypass the sync (no direct `scp` to the host, no editing on the live VM) — that strands the repo and the next pull won't reconcile cleanly. The orphan `roles/homeassistant/files/automations.yaml` is gitignored and not deployed; anything edited there needs to be migrated into the submodule to take effect.
+
 ### Helper roles
 
 Prefer these over re-implementing the boilerplate; a hand-rolled equivalent in a service role is a migration candidate.

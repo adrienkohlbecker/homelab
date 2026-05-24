@@ -1,3 +1,6 @@
+[submodule "roles/homeassistant/files/ha_gui_config"]
+	path = roles/homeassistant/files/ha_gui_config
+	url = git@github.com:adrienkohlbecker/homelab_ha_config.git
 [submodule "notes"]
 	path = notes
 	url = git@github.com:adrienkohlbecker/homelab_notes.git

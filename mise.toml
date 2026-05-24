@@ -37,6 +37,13 @@ TF_VAR_mailgun_api_key = "op://Lab/j6iayri7rcsq27nym5z7u37jgu/password"
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
 QEMU_DIR = '{{vars.qemu_dir}}'
 ZBM_VERSION = "3.1.0"
+# Home Assistant long-lived access token -- consumed by mise-tasks/ha/sync
+# to call /api/services/<domain>/reload after pushing the GUI YAML. Minted
+# in HA UI under Profile > Security > Long-Lived Access Tokens. The
+# script re-execs under `op run --` to substitute the op:// reference;
+# without that wrapping mise would export the literal string and HA
+# would reject it as a bad bearer.
+HA_API_TOKEN = "op://Lab/pfcoggyhvncfnr6rt6p5zbnuja/password"
 
 [tools]
 opentofu = "1.11.6"
