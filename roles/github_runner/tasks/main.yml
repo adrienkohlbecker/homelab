@@ -431,3 +431,22 @@
   become: true
   tags:
     - github_runner
+
+# Tombstone for the image-rotate timer dropped in b08e266a when the
+# runners stopped running in containers (host-native install pulls no
+# images, so there is nothing to rotate). That commit deleted the
+# `monitor: true` install task but not its metadata file, so netdata's
+# systemd_timers collector kept polling /etc/netdata/charts.d/
+# systemd_timers.d/github_runner_image_rotate.conf and fired
+# systemd_timer_overdue CRITICAL forever against a timer that no longer
+# exists. remove is idempotent (no-op once the units + metadata are
+# gone), so this stays as a tombstone rather than a one-shot cleanup.
+- name: Remove the retired github_runner_image_rotate timer
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: github_runner_image_rotate
+  tags:
+    - github_runner
