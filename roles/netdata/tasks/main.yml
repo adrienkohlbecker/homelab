@@ -101,6 +101,34 @@
   tags:
     - netdata
 
+# Reap legacy /var/log/netdata/access.log[.N] leftovers. The role's
+# `access log = none` above stops netdata writing the file, but the
+# rotated history (up to 14 daily files at ~10MB each) keeps sitting
+# on disk until manually purged. /etc/logrotate.d/netdata has
+# `missingok`, so logrotate silently skips after the purge.
+- name: Find legacy netdata access log files
+  find:
+    paths: /var/log/netdata
+    patterns:
+      - 'access.log'
+      - 'access.log.*'
+    file_type: file
+  register: netdata_legacy_access_logs
+  become: true
+  tags:
+    - netdata
+
+- name: Remove legacy netdata access log files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ netdata_legacy_access_logs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
+  tags:
+    - netdata
+
 - name: Copy stock go.d.conf
   command: cp /usr/lib/netdata/conf.d/go.d.conf /etc/netdata/go.d.conf
   args:
