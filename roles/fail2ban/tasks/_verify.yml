@@ -89,6 +89,34 @@
       reverted to file-mode (auto-mode without /var/log/auth.log present
       means zero failure detection). Got: {{ _verify_status_sshd.stdout }}
 
+# Proves the sendmail-whois-lines.local override was parsed and the
+# inherited start/stop notification handlers are neutralized -- queried
+# from the loaded daemon, not stat'd off disk, so a precedence regression
+# (e.g. the .local not winning over sendmail-common.conf) would surface.
+# actionban is left intact and not asserted here (it carries the whois
+# expansion that the synthetic-ban path below already exercises).
+- name: _verify | sendmail action start/stop handlers are empty
+  command: fail2ban-client get sshd action sendmail-whois-lines {{ item }}
+  register: _verify_mail_handlers
+  changed_when: false
+  become: true
+  loop:
+    - actionstart
+    - actionstop
+
+- name: _verify | No start/stop notification command remains
+  assert:
+    that:
+      - item.stdout | trim == ""
+    fail_msg: >-
+      sendmail-whois-lines {{ item.item }} is non-empty; the .local
+      override did not take precedence over sendmail-common.conf, so
+      "started/stopped on <host>" emails will still fire. Got:
+      {{ item.stdout }}
+  loop: "{{ _verify_mail_handlers.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
 # Synthetic ban against TEST-NET-1 (RFC 5737); never matches a real client.
 - name: _verify | Issue a synthetic ban
   command: fail2ban-client set sshd banip 192.0.2.1
