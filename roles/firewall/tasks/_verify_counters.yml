@@ -84,6 +84,8 @@
     forward_catchall_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'forward_catchall') | first).packets }}"
     icmp_overflow_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'icmp_overflow') | first).packets }}"
     input_silenced_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_silenced') | first).packets }}"
+    input_silenced_netbios_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_silenced_netbios') | first).packets }}"
+    igmp_accept_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'igmp_accept') | first).packets }}"
     input_catchall_pkts: "{{ (nft_counters | selectattr('name', 'eq', 'input_catchall') | first).packets }}"
     # VRRP rule's counter is asserted at 0 — the negative probe sends
     # proto-112 from wg0 (extns ingress) and the iif scope must reject.
@@ -116,6 +118,8 @@
       - forward_catchall_pkts | int >= 1
       - icmp_overflow_pkts | int >= 1
       - input_silenced_pkts | int >= 1
+      - input_silenced_netbios_pkts | int >= 1  # udp dport 137 probe
+      - igmp_accept_pkts | int >= 1             # raw proto-2 (IGMP) probe
       - input_catchall_pkts | int >= 1
       - vrrp_pkts | int == 0
       - mosh_pkts | int >= 1
@@ -133,7 +137,8 @@
     fail_msg: >-
       Counter-based probes didn't fire all expected rules: non-SYN
       (input/forward), forward catch-all, icmp overflow, input
-      silenced-noise, or input catch-all; OR the VRRP rule's iif scope
+      silenced-noise (udp set / NetBIOS), IGMP accept, or input
+      catch-all; OR the VRRP rule's iif scope
       accepted a wg0-ingress packet (vrrp_pkts > 0); OR a TCP accept
       rule failed to fire (unscoped 22/80/443, admin samba/nut,
       podman-pool nut, loopback, icmp accept); OR the transmission

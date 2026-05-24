@@ -136,6 +136,16 @@
   changed_when: false
   become: true
 
+# IGMP accept is unscoped (link-local TTL=1 — no WAN-routable IGMP), so
+# a raw proto-2 packet from any ingress must hit igmp_accept. hping3
+# --rawip -H 2 sends an IGMP (protocol 2) datagram (same mechanism as
+# the VRRP proto-112 negative probe).
+- name: _verify_input | INPUT — IGMP (proto 2) reaches the igmp_accept rule
+  command: ip netns exec extns hping3 --rawip -H 2 -c 1 -d 0 --quiet 10.99.0.1
+  changed_when: false
+  failed_when: false
+  become: true
+
 # --- probe_home group (home_LAN-source iif/saddr-mismatch negatives) -
 # probe_home (in $HOME_LAN) on wg0 ingress is a NEGATIVE case across
 # the admin set: wrong iif for its saddr. The wg0+HOME_LAN path was
