@@ -11,8 +11,8 @@
 # all-traffic cartesian product is gone -- the render/QR tasks loop
 # straight over the client peers.
 
-# Peer names flow unquoted into the PSK and QR shell commands below
-# (and into shell-redirected file paths). The regex bounds names to
+# Peer names flow unquoted into the QR shell command below (and into
+# shell-redirected file paths). The regex bounds names to
 # [a-z][a-z0-9_]* so a `$`, backtick, space, or `;` in a future
 # inventory entry can't turn the localhost play into RCE against the
 # operator. Underscores match the repo-wide identifier convention.
@@ -44,29 +44,6 @@
     group: "{{ ansible_facts.user_gid }}"
     mode: "0700"
   loop: "{{ wireguard_peers | rejectattr('is_server') | map(attribute='name') }}"
-  tags:
-    - wireguard
-
-- name: Create wireguard psk dir
-  file:
-    dest: "{{ playbook_dir }}/wireguard/psk"
-    state: directory
-    owner: "{{ ansible_facts.user_uid }}"
-    group: "{{ ansible_facts.user_gid }}"
-    mode: "0700"
-  tags:
-    - wireguard
-
-# umask on the redirect lands the .psk at 0644 by default; the explicit
-# umask 077 here is what makes 0600 stick (ansible's file: mode is
-# meaningless on shell-redirected output). tr -d '\n' strips wg genpsk's
-# trailing newline to stay byte-equivalent with existing PSK files.
-- name: Generate preshared key
-  shell: set -euo pipefail; umask 077; wg genpsk | tr -d '\n' > {{ playbook_dir }}/wireguard/psk/{{ item[0] }}-{{ item[1] }}.psk
-  args:
-    executable: /bin/bash
-    creates: "{{ playbook_dir }}/wireguard/psk/{{ item[0] }}-{{ item[1] }}.psk"
-  loop: "{{ wireguard_peers | map(attribute='name') | sort | combinations(2) }}"
   tags:
     - wireguard
 
@@ -110,14 +87,15 @@
 
 # Without this prune, renaming `phone` -> `mobile` in wireguard_peers
 # leaves `./wireguard/phone/home.conf` (a private-key-bearing file) on
-# disk forever, and the next zip-export accidentally includes it.
+# disk forever, and the next zip-export accidentally includes it. No
+# `psk` exclude anymore: PSKs are derived (filter_plugins/wireguard_psk.py),
+# so a leftover `psk/` dir from the old file-based scheme is itself an
+# orphan and gets swept here.
 - name: Find existing wireguard peer dirs
   find:
     paths: "{{ playbook_dir }}/wireguard"
     file_type: directory
     depth: 1
-    excludes:
-      - psk
   register: wireguard_peer_dirs_found
   tags:
     - wireguard
@@ -133,27 +111,6 @@
   tags:
     - wireguard
 
-- name: Find existing wireguard PSK files
-  find:
-    paths: "{{ playbook_dir }}/wireguard/psk"
-    file_type: file
-    patterns: "*.psk"
-  register: wireguard_psk_files_found
-  tags:
-    - wireguard
-
-# expected_psks is the canonical set the Generate preshared key task
-# above produces: sorted-pair filenames `<a>-<b>.psk` for every
-# combinations(2) of all peer names.
-- name: Prune orphan wireguard PSK files
-  file:
-    path: "{{ item.path }}"
-    state: absent
-  vars:
-    expected_psks: "{{ wireguard_peers | map(attribute='name') | sort | combinations(2) | map('join', '-') | map('regex_replace', '$', '.psk') | list }}"
-  loop: "{{ wireguard_psk_files_found.files | default([]) }}"
-  loop_control:
-    label: "{{ item.path | basename }}"
-  when: (item.path | basename) not in expected_psks
-  tags:
-    - wireguard
+# Sweep a leftover `psk/` dir from the old file-based scheme (now an
+# orphan -- not a peer name) so private-key-adjacent PSK files don't
+# linger. Handled by the peer-dir prune above (the `psk` exclude is gone).
