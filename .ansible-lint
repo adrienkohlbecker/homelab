@@ -42,9 +42,11 @@ loop_var_prefix: "^(__|{role}_)"
 var_naming_pattern: "^[a-z_][a-z0-9_]*$"
 
 use_default_rules: true
-# Load custom rules from this specific folder
-# rulesdir:
-#   - ./rule/directory/
+# Load custom rules from this specific folder. shell-strict-mode enforces
+# `set -euo pipefail` + `executable: /bin/bash` on every production shell
+# task (test scaffolding is exempt — see the rule's docstring).
+rulesdir:
+  - ./lint/ansible_rules/
 
 # Ansible-lint is able to recognize and load skip rules stored inside
 # `.ansible-lint-ignore` (or `.config/ansible-lint-ignore.txt`) files.
