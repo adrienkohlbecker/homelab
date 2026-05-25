@@ -1,22 +1,24 @@
-# fox: off-home Scaleway Stardust1-S VPS (x86_64, Ubuntu 22.04/jammy) running
+# fox: off-home Hetzner Cloud CX23 VPS (x86_64, Ubuntu 22.04/jammy) running
 # the Headscale control plane + embedded DERP for the Tailscale mesh. It is
 # the ONLY internet-facing host; the home hosts dial outbound to it.
 #
-# fox is NOT a home host -- no ZFS, no home LAN/VLANs -- so it runs a curated
-# minimal role set (the dedicated `fox` play in site.yml), excluded from the
-# all:!bunk base plays. It DOES join the wg0 backbone (scoped: its wireguard_peers
-# entry has no extra allowed_ips, so it reaches only lab/pug's wg /32s, not the
-# home LAN), which is what lets netdata's Authelia-gated vhost reach lab.
-# Provisioned by terraform/scaleway.tf; reached at fox.fahm.fr (public A -> reserved IP).
+# fox is NOT a home host -- no ZFS, no home LAN/VLANs (it sits on its own
+# Hetzner private net, the `hetzner` topology site, at 10.123.55.2) -- so it
+# runs a curated minimal role set (the dedicated `fox` play in site.yml),
+# excluded from the all:!bunk base plays. It DOES join the wg0 backbone (scoped:
+# its wireguard_peers entry has no extra allowed_ips, so it reaches only
+# lab/pug's wg /32s, not the home LAN), which is what lets netdata's
+# Authelia-gated vhost reach lab. Provisioned by terraform/hetzner.tf; reached
+# at fox.fahm.fr (public A -> reserved primary IP).
 
 # Cloud VM on ext4, not a ZFS-root host: gates the zfs/boot/mount producers
 # and the *_mount consumers off.
 zfs_root: false
 
-# Scaleway boots its cloud images via grub, not ZBM + rEFInd.
+# Hetzner boots its cloud images via grub, not ZBM + rEFInd.
 grub_bootloader: true
 
-# Firewall: fox relies on the Scaleway security group (terraform) rather than
+# Firewall: fox relies on the Hetzner Cloud firewall (terraform) rather than
 # the home `firewall` role (whose nftables template is built around the home
 # WAN/VLANs/wireguard and isn't run here).
 
