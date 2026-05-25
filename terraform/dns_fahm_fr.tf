@@ -90,12 +90,17 @@ locals {
     a_pug  = { type = "A", name = "pug.fahm.fr", content = local.network.hosts.pug.wireguard }
   }
 
-  # fox is the off-home Hetzner Cloud VPS (Headscale control plane). Unlike the
-  # home hosts above, its A record is a real public IP -- the reserved Hetzner
-  # primary IP -- so the control plane is reachable from the internet (the one
-  # intentional exception to the fail-closed posture).
+  # fox is the off-home Hetzner Cloud VPS (Headscale control plane + DERP relay).
+  # Unlike the home hosts above, its records are real public IPs -- the reserved
+  # Hetzner primary IPs -- so the relay is reachable from the internet (the one
+  # intentional exception to the fail-closed posture). It is dual-stack: the
+  # AAAA lets IPv6-only tailnet clients reach the relay without NAT64 (nginx
+  # listens [::]:443 on fox, DERP STUN on [::]:3478). These locals bypass the
+  # var.fahm_fr_records A/CNAME/TXT/MX validation, so the AAAA needs no schema
+  # change there.
   fahm_fr_fox_records = {
-    a_fox = { type = "A", name = "fox.fahm.fr", content = hcloud_primary_ip.fox.ip_address }
+    a_fox    = { type = "A", name = "fox.fahm.fr", content = hcloud_primary_ip.fox.ip_address }
+    aaaa_fox = { type = "AAAA", name = "fox.fahm.fr", content = hcloud_primary_ip.fox_v6.ip_address }
   }
   fahm_fr_records = merge(var.fahm_fr_records, local.fahm_fr_host_records, local.fahm_fr_fox_records)
 }

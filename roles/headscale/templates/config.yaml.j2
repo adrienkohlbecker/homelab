@@ -40,7 +40,10 @@ derp:
     region_id: 999
     region_code: "fox"
     region_name: "Headscale Embedded DERP (fox)"
-    stun_listen_addr: "0.0.0.0:3478"
+    # [::] (not 0.0.0.0) so STUN serves IPv6 clients too -- fox is a dual-stack
+    # relay and the container sits on a dual-stack podman network. The :: socket
+    # is dual-stack (accepts v4-mapped too), so the single listener covers both.
+    stun_listen_addr: "[::]:3478"
     private_key_path: /var/lib/headscale/derp_server_private.key
     automatically_add_embedded_derp_region: true
   urls: []

@@ -37,6 +37,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name headscale \
+    --network headscale \
     --user {{ headscale_user.uid }}:{{ headscale_user.group }} \
     --log-driver journald \
     --log-opt tag="headscale" \
@@ -54,7 +55,11 @@ ExecStart=/usr/bin/podman run \
        loopback for fox's netdata go.d prometheus collector. Unauthenticated,
        so loopback-only -- never the public 3478/443 surface. #}
     --publish 127.0.0.1:{{ service_ports.headscale_metrics }}:9090/tcp \
+    {# DERP STUN published on both families -- fox is a dual-stack relay. The
+       container's STUN binds [::]:3478 (dual-stack) on the headscale podman
+       network's ULA; netavark DNATs host v4 and v6 to it, source preserved. #}
     --publish 0.0.0.0:3478:3478/udp \
+    --publish '[::]:3478:3478/udp' \
 {% if headscale_oidc_enabled | default(false) %}
     --secret=headscale_oidc_secret,type=mount,target=oidc_client_secret \
 {% endif %}

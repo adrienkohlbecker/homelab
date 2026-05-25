@@ -70,3 +70,30 @@
   changed_when: false
   failed_when: "'test-harness' not in _verify_user_list.stdout"
   become: true
+
+# Dual-stack STUN publish -- fox is a dual-stack relay, so the embedded DERP
+# STUN (udp/3478) must be reachable over IPv6, not just v4. This is asserted
+# structurally rather than functionally on purpose: headscale's STUN answers
+# Tailscale's own netcheck flow (confirmed working over IPv4 against prod fox)
+# but NOT a hand-rolled RFC5389 Binding Request, and the box harness has no
+# IPv6-capable Tailscale client to drive a real netcheck (the home/test nets are
+# IPv4-only). So a reflection round-trip can't run here. Instead assert the
+# publish plumbing the role is responsible for: the host must bind [::]:3478 (the
+# v6 --publish landed) and netavark must have wired a v6 DNAT rule forwarding it
+# into the container. A missing [::] listener or a non-dual-stack podman network
+# fails this. End-to-end v6 STUN is verified in the field via `tailscale
+# netcheck` from a v6-capable client after deploy.
+- name: _verify | host publishes DERP STUN on IPv6 ([::]:3478)
+  command: ss -ulnH
+  register: _verify_stun_listen
+  changed_when: false
+  failed_when: "'[::]:3478' not in _verify_stun_listen.stdout"
+  become: true
+
+- name: _verify | netavark forwards inbound v6 STUN into the headscale container
+  shell: ip6tables -t nat -S | grep -- "--dport 3478 -j DNAT"
+  args:
+    executable: /bin/bash
+  register: _verify_stun_dnat
+  changed_when: false
+  become: true

@@ -1,0 +1,11 @@
+# IPv6 listeners. Off by default: the home fleet disables IPv6 at the kernel
+# layer (roles/firewall), so a `listen [::]:...` there would fail to bind and
+# break nginx. Only the dual-stack fox relay sets this true (host_vars/fox.yml)
+# to accept IPv6-only tailnet clients on its public vhost. When on, the default
+# servers and every site gain a matching [::] listener (ipv6only=on is nginx's
+# default, so the v4 and v6 sockets don't collide).
+#
+# Defaults/, not vars/: role vars sit above host_vars in ansible's precedence
+# ladder and would mask the per-host override. defaults sit at the bottom, so
+# host_vars/<host>.yml wins as intended.
+nginx_ipv6: false

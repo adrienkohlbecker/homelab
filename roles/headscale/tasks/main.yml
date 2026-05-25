@@ -87,6 +87,25 @@
   tags:
     - headscale
 
+# Dedicated dual-stack podman network so the embedded DERP STUN answers over
+# IPv6 too (fox is a dual-stack relay -- see host_vars/fox.yml). The default
+# podman bridge is IPv4-only; ipv6:true makes netavark hand the container an
+# extra ULA /64 and set up the same DNAT path for v6 published ports. Inbound
+# STUN to the host's public v6 is DNAT'd to the container's ULA with the client
+# source preserved (netavark masquerades only container-subnet/localhost
+# sources), so STUN reflects the real client address -- exactly as the IPv4 path
+# already does.
+- name: Create headscale dual-stack podman network
+  when: not ansible_check_mode
+  containers.podman.podman_network:
+    name: headscale
+    ipv6: true
+    state: present
+  become: true
+  register: headscale_network
+  tags:
+    - headscale
+
 - name: Install headscale service
   import_role:
     name: systemd_unit
@@ -106,7 +125,7 @@
     systemd_unit_args:
       src: headscale
       condition: "{{ not (ansible_check_mode and (headscale_service_result.changed or headscale_user.changed)) }}"
-      restart: "{{ headscale_service_result.changed or headscale_config_result.changed or headscale_acl_result.changed or (headscale_oidc_secret_rotated | default(false)) }}"
+      restart: "{{ headscale_service_result.changed or headscale_config_result.changed or headscale_acl_result.changed or (headscale_network.changed | default(false)) or (headscale_oidc_secret_rotated | default(false)) }}"
   tags:
     - headscale
 
