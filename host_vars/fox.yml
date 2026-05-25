@@ -15,6 +15,13 @@
 # and the *_mount consumers off.
 zfs_root: false
 
+# The Hetzner private-network NIC (terraform attaches fox to 10.123.55.2 on it).
+# cloud-init never configured this interface -- it was attached after first boot
+# -- so the hetzner_private_net role drops in an additive netplan stanza to bring
+# it up. Setting this here (not in the role's vars/) is what arms the role; left
+# unset everywhere else, the role no-ops.
+hetzner_private_net_iface: enp7s0
+
 # Hetzner boots its cloud images via grub, not ZBM + rEFInd.
 grub_bootloader: true
 
