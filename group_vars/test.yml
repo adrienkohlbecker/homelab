@@ -436,3 +436,11 @@ authelia_users:
     email: testuser@{{ inventory_hostname }}.{{ domain }}
     groups:
       - admins
+
+# roles/tailscale mesh-client test config. The control plane is the local
+# headscale its _setup stands up, addressed over the plain-http loopback (no TLS
+# trust needed); route-approval delegates back to the converging host itself.
+# The pre-auth key is self-minted in main.yml's qemu_test branch (not here),
+# since the harness can't carry a runtime fact across its per-phase processes.
+tailscale_login_server: "http://localhost:{{ service_ports.headscale }}"
+tailscale_headscale_host: "{{ inventory_hostname }}"

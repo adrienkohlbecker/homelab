@@ -112,6 +112,16 @@ wireguard_keys:
           34303666343231326237376561613537663562323136336630333439373836383066373235306437
           3939333965623862663333303466626662633831343565316562
 
+# Tailscale mesh clients (lab/pug) register against the fox headscale control
+# plane and delegate route-approval there. These are environment constants --
+# every prod consumer of roles/tailscale uses the same control plane -- so they
+# live here, not per-host. vault_tailscale_preauth_key is a reusable headscale
+# pre-auth key the operator mints on fox once headscale is up (referenced
+# lazily, so fox/bunk/localhost -- which don't run the role -- never evaluate it).
+tailscale_login_server: "https://headscale.fox.{{ domain }}"
+tailscale_headscale_host: fox
+tailscale_preauth_key: "{{ vault_tailscale_preauth_key }}"
+
 synology_endpoint: akohlbecker.synology.me
 certbot_production_certificates: true
 
