@@ -17,6 +17,16 @@
   tags:
     - wireguard
 
+# Full wg-quick@{{ iface }} restart (down+up) on any config change -- NOT a
+# `wg syncconf` hot-reload. syncconf preserves live sessions but only syncs the
+# crypto config, not kernel routes: a peer added after the first `up` (e.g. fox
+# joining the backbone) would get synced crypto but no AllowedIP route, so
+# traffic to its wg IP falls through the default route and is silently lost --
+# handshakes still work (they're wg-internal via peer endpoints), but no data
+# passes. A restart re-runs wg-quick's route installation. Cost: every peer
+# re-handshakes (a brief blip + reset transfer counters / NAT source-port
+# mappings) on a config change -- acceptable for a home backbone, and far
+# simpler than reconciling routes alongside syncconf.
 - name: wg | Enable wg-quick@{{ iface }} service
   import_role:
     name: systemd_unit
@@ -25,24 +35,6 @@
     systemd_unit_args:
       src: wg-quick@{{ iface }}.service
       condition: "{{ not (ansible_check_mode and apt_install_wireguard.changed) }}"
-      restart: "{{ apt_install_wireguard.changed }}"
-  tags:
-    - wireguard
-
-# Hot-reload via wg syncconf preserves active sessions (handshakes,
-# transfer counters, source-port NAT mappings); a full down/up forces
-# every peer to re-handshake. Only when config-only changed -- a
-# package upgrade gets the full restart above so the new binary takes
-# effect. wg syncconf requires the iface to be up, which is true on
-# every code path that reaches here (systemd_unit started/restarted
-# above).
-- name: wg | Reload wg-quick@{{ iface }} via wg syncconf
-  shell: |
-    set -euo pipefail
-    wg syncconf {{ iface }} <(wg-quick strip {{ iface }})
-  args:
-    executable: /bin/bash
-  become: true
-  when: wireguard_cfg.changed and not apt_install_wireguard.changed
+      restart: "{{ apt_install_wireguard.changed or wireguard_cfg.changed }}"
   tags:
     - wireguard

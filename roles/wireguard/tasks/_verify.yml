@@ -33,13 +33,33 @@
   changed_when: false
   failed_when: own_peer.address not in wireguard_ip_addr.stdout
 
-# wg syncconf is what main.yml's reload path uses (item 14). Running
-# it as a no-op verifies the running kernel state is consistent with
-# the rendered config -- if the freshly-rendered conf disagreed with
-# what wg-quick up loaded, syncconf would push deltas (visible in
-# stderr) or fail.
-- name: _verify | Exercise wg syncconf as a no-op reload
+# Running wg syncconf as a no-op verifies the running kernel crypto state is
+# consistent with the rendered config -- if the freshly-rendered conf disagreed
+# with what wg-quick loaded, syncconf would push deltas (visible in stderr) or
+# fail. (main.yml reloads via a full wg-quick restart, not syncconf, so kernel
+# routes stay in sync with AllowedIPs -- see wg.yml.)
+- name: _verify | Exercise wg syncconf as a no-op consistency check
   shell: wg syncconf {{ iface | default('wg0') }} <(wg-quick strip {{ iface | default('wg0') }})
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+
+# Regression guard for the syncconf-vs-routes bug: every non-default peer
+# AllowedIP must have a kernel route via the wg iface, else traffic to that
+# peer's wg IP falls through the default route and is silently lost (handshakes
+# still work). Excludes 0.0.0.0/0 + ::/0 (wg-quick fwmark/policy routing).
+- name: _verify | Assert kernel routes exist for every peer AllowedIP
+  shell: |
+    set -euo pipefail
+    missing=""
+    cidrs=$(wg show {{ iface | default('wg0') }} allowed-ips | sed 's/\t/ /' | cut -d' ' -f2- \
+            | tr ' ' '\n' | grep -E '/[0-9]+$' | grep -vxE '0\.0\.0\.0/0|::/0' | sort -u || true)
+    for cidr in $cidrs; do
+      ip route show "$cidr" dev {{ iface | default('wg0') }} | grep -q . || missing="$missing $cidr"
+    done
+    echo "missing_routes:$missing"
+    test -z "$missing"
   args:
     executable: /bin/bash
   become: true
