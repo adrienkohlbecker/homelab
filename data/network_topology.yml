@@ -141,9 +141,6 @@ wireguard:
   roaming:
     laptop:       10.123.66.64
     phone:        10.123.66.65
-    ipad:         10.123.66.66
-    spouse_laptop: 10.123.66.67
-    spouse_phone:  10.123.66.68
 
 virtual_ips:
   pihole: 10.123.1.224

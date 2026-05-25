@@ -5,10 +5,11 @@
 # ansible --tags wireguard` against a server doesn't touch the
 # operator's working tree.
 #
-# wireguard_render_plan flattens client peers x config shapes (the
-# split-tunnel default plus one all-traffic-via-<server> variant per
-# server peer) into a single list of {peer, suffix, vpn} dicts so the
-# template + QR tasks each appear once instead of once-per-shape.
+# One split-tunnel config per client peer (`home.conf`): wg0 is a
+# break-glass backbone reaching peer hosts by /32. Full-tunnel/exit and
+# subnet access are the tailscale mesh's job, so the old client x server
+# all-traffic cartesian product is gone -- the render/QR tasks loop
+# straight over the client peers.
 
 # Peer names flow unquoted into the PSK and QR shell commands below
 # (and into shell-redirected file paths). The regex bounds names to
@@ -22,21 +23,6 @@
   loop: "{{ wireguard_peers }}"
   loop_control:
     label: "{{ item.name }}"
-  tags:
-    - wireguard
-
-- name: Seed wireguard render plan with split-tunnel shapes
-  set_fact:
-    wireguard_render_plan: "{{ wireguard_peers | rejectattr('is_server') | map(attribute='name') | map('community.general.dict_kv', 'peer') | map('combine', {'suffix': '', 'vpn': ''}) | list }}"
-  tags:
-    - wireguard
-
-- name: Append all-traffic shapes to wireguard render plan
-  set_fact:
-    wireguard_render_plan: "{{ wireguard_render_plan + [{'peer': item[0], 'suffix': ' (' ~ item[1] ~ ' all-traffic)', 'vpn': item[1]}] }}"
-  loop: "{{ (wireguard_peers | rejectattr('is_server') | map(attribute='name') | list) | product(wireguard_peers | selectattr('is_server') | map(attribute='name') | list) | list }}"
-  loop_control:
-    label: "{{ item[0] }} via {{ item[1] }}"
   tags:
     - wireguard
 
@@ -87,30 +73,25 @@
 - name: Render wireguard client config
   template:
     src: "{{ playbook_dir }}/roles/wireguard/templates/wg.conf.j2"
-    dest: "{{ playbook_dir }}/wireguard/{{ item.peer }}/home{{ item.suffix }}.conf"
+    dest: "{{ playbook_dir }}/wireguard/{{ item }}/home.conf"
     owner: "{{ ansible_facts.user_uid }}"
     group: "{{ ansible_facts.user_gid }}"
     mode: "0600"
   vars:
-    own_peer_name: "{{ item.peer }}"
-    vpn_peer_name: "{{ item.vpn }}"
-  loop: "{{ wireguard_render_plan }}"
-  loop_control:
-    label: "{{ item.peer }}{{ item.suffix }}"
+    own_peer_name: "{{ item }}"
+  loop: "{{ wireguard_peers | rejectattr('is_server') | map(attribute='name') | list }}"
   tags:
     - wireguard
 
 # umask 077 makes qrencode's output land at 0600 (the PNG embeds the
 # same secret as the .conf).
 - name: Render wireguard QR code
-  shell: set -euo pipefail; umask 077; if [ -f "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" ]; then bfr=`md5sum "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" -r "{{ playbook_dir }}/wireguard/{{ item.peer }}/home{{ item.suffix }}.conf"; aftr=`md5sum "{{ playbook_dir }}/wireguard/{{ item.peer }}/qr{{ item.suffix }}.png" | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
+  shell: set -euo pipefail; umask 077; if [ -f "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" ]; then bfr=`md5sum "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" | cut -f 1 -d " "`; else bfr="none"; fi; qrencode -t png -o "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" -r "{{ playbook_dir }}/wireguard/{{ item }}/home.conf"; aftr=`md5sum "{{ playbook_dir }}/wireguard/{{ item }}/qr.png" | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "file updated" || exit 1)
   args:
     executable: /bin/bash
   register: wireguard_qr_result
   changed_when: "'file updated' in wireguard_qr_result.stdout"
-  loop: "{{ wireguard_render_plan }}"
-  loop_control:
-    label: "{{ item.peer }}{{ item.suffix }}"
+  loop: "{{ wireguard_peers | rejectattr('is_server') | map(attribute='name') | list }}"
   tags:
     - wireguard
 

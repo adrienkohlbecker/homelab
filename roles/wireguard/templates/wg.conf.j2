@@ -1,5 +1,4 @@
 {% set own_peer = wireguard_peers|selectattr("name", "eq", own_peer_name)|first -%}
-{% set vpn_peer = (wireguard_peers|selectattr("name", "eq", vpn_peer_name)|first) if vpn_peer_name|default("") else None -%}
 [Interface]
 # PublicKey = {{ own_peer.public_key }}
 PrivateKey = {{ own_peer.private_key }}
@@ -21,22 +20,22 @@ PostUp = {{ own_peer.post_up }}
 {% if 'post_down' in own_peer %}
 PostDown = {{ own_peer.post_down }}
 {% endif %}
-{% if vpn_peer %}
-DNS = {{ vpn_peer.dns_address }}
-{% elif not own_peer.is_server %}
+{% if not own_peer.is_server %}
 DNS = {{ external_ips.pihole }}
 {% endif %}
 
+{# Host /32 only. wg0 is a break-glass backbone reaching peer *hosts*, not a
+   subnet router or exit: cross-site subnet access (home 0/21, bonniers 57/24)
+   and full-tunnel egress are the tailscale mesh's job now. Routing a peer's
+   declared subnet here is what let a public peer (fox) inherit the bonniers
+   /24, so AllowedIPs is deliberately pinned to the peer's own /32 -- no
+   per-peer allowed_ips, no all-traffic variant. #}
 {% for peer in wireguard_peers if (peer.is_server or own_peer.is_server) and (peer.public_key != own_peer.public_key) %}
-{% set allowed_ips = [peer.address+'/32']+peer.get('allowed_ips', []) %}
 {% set tuple = [own_peer.name, peer.name]|sort %}
 [Peer]
 # Name = {{ peer.name }}
 PublicKey = {{ peer.public_key }}
-{% if vpn_peer and vpn_peer.name == peer.name %}
-{% set allowed_ips = allowed_ips + (["0.0.0.0/0", "::/0"] | cidr_exclude(wireguard_all_traffic_excluded_cidrs)) %}
-{% endif %}
-AllowedIPs = {{ allowed_ips | unique | join(', ') }}
+AllowedIPs = {{ peer.address }}/32
 PresharedKey = {{ lookup('file', playbook_dir + '/wireguard/psk/' + tuple[0] + '-' + tuple[1] + '.psk') }}
 {% if 'endpoint' in peer %}
 {% if own_peer.is_server and peer.is_server and peer.site_subnet == own_peer.site_subnet %}
