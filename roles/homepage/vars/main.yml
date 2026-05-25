@@ -28,6 +28,7 @@ homepage_bookmarks:
     - { name: Pi-hole,       abbr: PH, sub: pihole,       icon: pi-hole, path: /admin/ }
     - { name: Netdata (lab), abbr: NL, sub: netdata,      icon: netdata }
     - { name: Netdata (pug), abbr: NP, sub: netdata,      icon: netdata, host: pug }
+    - { name: Netdata (fox), abbr: NF, sub: netdata,      icon: netdata, host: fox }
     - { name: Eaton IPP,     abbr: EI, sub: ipp }
     - { name: Keepalived (lab), abbr: KL, sub: keepalived-exporter }
     - { name: Keepalived (pug), abbr: KP, sub: keepalived-exporter, host: pug }

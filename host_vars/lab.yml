@@ -206,6 +206,7 @@ netdata_diskspace_blocklist:
 homepage_netdata_hosts:
   - lab
   - pug
+  - fox
 
 smb_shares:
   - name: media
