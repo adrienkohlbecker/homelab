@@ -450,8 +450,11 @@ authelia_users:
 
 # roles/tailscale mesh-client test config. The control plane is the local
 # headscale its _setup stands up, addressed over the plain-http loopback (no TLS
-# trust needed); route-approval delegates back to the converging host itself.
-# The pre-auth key is self-minted in main.yml's qemu_test branch (not here),
-# since the harness can't carry a runtime fact across its per-phase processes.
+# trust needed); both key-minting and route-approval delegate back to the
+# converging host itself (tailscale_headscale_host == inventory_hostname == box).
+# The role auto-creates the headscale user below and mints a single-use pre-auth
+# key from it at registration -- same path as prod, just pointed at the local
+# control plane.
 tailscale_login_server: "http://localhost:{{ service_ports.headscale }}"
 tailscale_headscale_host: "{{ inventory_hostname }}"
+tailscale_headscale_user: test-harness

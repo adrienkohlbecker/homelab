@@ -57,8 +57,9 @@
   until: _setup_health.status == 200
   become: true
 
-# The role's remaining test wiring lives in host_vars/box.yml (static knobs:
-# login_server, headscale_host, advertised routes/exit) and in main.yml's
-# qemu_test branch (minting the pre-auth key from this headscale). _setup only
-# stands up the control plane -- the per-phase process boundary means a set_fact
-# here wouldn't reach the role's apply/--check runs.
+# The role's remaining test wiring is plain group_vars/host_vars (login_server,
+# headscale_host, headscale_user, advertised routes/exit); main.yml mints the
+# pre-auth key from this headscale at registration, delegated to
+# tailscale_headscale_host (== box here). _setup only stands up the control
+# plane -- the per-phase process boundary means a set_fact here wouldn't reach
+# the role's apply/--check runs, which is why the mint lives in main.yml.
