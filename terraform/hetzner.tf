@@ -39,10 +39,24 @@ resource "hcloud_ssh_key" "laptop" {
 # fox.fahm.fr points at (see dns_fahm_fr.tf). auto_delete = false so deleting
 # the server doesn't drop the IP (and corrupt the terraform state).
 resource "hcloud_primary_ip" "fox" {
-  name          = "fox"
-  type          = "ipv4"
-  location      = var.hetzner_location
-  auto_delete   = false
+  name        = "fox"
+  type        = "ipv4"
+  location    = var.hetzner_location
+  auto_delete = false
+}
+
+# Reserved public IPv6 -- same rationale as the IPv4 above. fox is a dual-stack
+# DERP relay + control plane (fox.fahm.fr carries both A and AAAA, see
+# dns_fahm_fr.tf), so IPv6-only tailnet clients reach the relay over 443/nginx
+# and the embedded DERP STUN over 3478. ip_address is a single usable address
+# (Hetzner also hands out the surrounding /64 as ip_network); the AAAA points at
+# ip_address. Reserving it (rather than the server's auto-assigned IPv6) keeps
+# the address stable across rebuilds so the AAAA needn't churn.
+resource "hcloud_primary_ip" "fox_v6" {
+  name        = "fox_v6"
+  type        = "ipv6"
+  location    = var.hetzner_location
+  auto_delete = false
 }
 
 # Default-drop inbound (an attached hcloud firewall drops anything not
@@ -123,6 +137,7 @@ resource "hcloud_server" "fox" {
     ipv4_enabled = true
     ipv4         = hcloud_primary_ip.fox.id
     ipv6_enabled = true
+    ipv6         = hcloud_primary_ip.fox_v6.id
   }
 
   labels = {

@@ -136,11 +136,17 @@ http {
     # Default servers for missing Host header, or header not matching configured site
     server {
         listen              80 default_server;
+{% if nginx_ipv6 | default(false) %}
+        listen              [::]:80 default_server;
+{% endif %}
         server_name         _;
         return              404;
     }
     server {
         listen              443 default_server ssl http2;
+{% if nginx_ipv6 | default(false) %}
+        listen              [::]:443 default_server ssl http2;
+{% endif %}
         server_name         _;
         return              404;
     }
