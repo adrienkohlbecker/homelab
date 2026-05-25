@@ -60,6 +60,7 @@
     - user
 
 - name: Sudo without password
+  when: ansible_user_id != "root"
   copy:
     dest: /etc/sudoers.d/{{ ansible_user_id }}
     content: "{{ ansible_user_id }} ALL=(ALL) NOPASSWD:ALL\n"

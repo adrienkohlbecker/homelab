@@ -45,9 +45,11 @@ resource "scaleway_instance_ip" "fox" {
 
 # Default-drop inbound. Only the mesh control plane is reachable from the
 # internet: 443/tcp (Headscale control API + DERP relay, TLS-terminated by
-# nginx) and 3478/udp (embedded DERP STUN for NAT traversal). SSH is open for
-# Ansible -- key-only + fail2ban on the host is the repo's posture; tighten to
-# the home WAN IP (203.0.113.10) if you never administer fox from elsewhere.
+# nginx) and 3478/udp (embedded DERP STUN for NAT traversal). 51820/udp is the
+# wg0 backbone: fox is a public listener and the home hosts dial OUT to it, so
+# the home end opens no inbound. SSH is open for Ansible -- key-only + fail2ban
+# on the host is the repo's posture; tighten to the home WAN IP (203.0.113.10)
+# if you never administer fox from elsewhere.
 resource "scaleway_instance_security_group" "fox" {
   zone                    = var.scaleway_zone
   name                    = "fox"
@@ -71,6 +73,16 @@ resource "scaleway_instance_security_group" "fox" {
     action   = "accept"
     protocol = "TCP"
     port     = 22
+  }
+
+  # NOTE: scaleway_instance_security_group inbound_rule blocks are positional,
+  # so new rules must be APPENDED here. Inserting above an existing rule makes
+  # terraform rewrite that rule in place (e.g. flip the live SSH rule to wg)
+  # and append a replacement -- a transient drop of the rewritten rule.
+  inbound_rule {
+    action   = "accept"
+    protocol = "UDP"
+    port     = 51820
   }
 }
 

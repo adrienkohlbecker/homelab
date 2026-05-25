@@ -1,5 +1,5 @@
 - name: Base installation
-  hosts: all:!bunk
+  hosts: all:!bunk:!fox
   roles:
     - bash
     - user
@@ -47,7 +47,7 @@
     - static_curl
 
 - name: Add more services
-  hosts: all:!bunk
+  hosts: all:!bunk:!fox
   roles:
     - kdump
     - eaton_ipp
@@ -62,6 +62,49 @@
     - dnscrypt_proxy
     - pihole
     - docker_client
+
+# fox: off-home Scaleway VPS hosting the Headscale control plane. Excluded from
+# the all:!bunk base plays above because it isn't a home host -- no ZFS, no home
+# LAN/VLANs -- so it runs only this curated minimal set. fox IS on the wg0
+# backbone, scoped: lab/pug dial OUT to it (keepalive_from in wireguard_peers)
+# so no inbound is reintroduced at home, peers route only fox/32, and fox
+# reaches just lab/pug's wg /32s -- enough for netdata's Authelia forward-auth,
+# not the home LAN. Deliberately omitted vs the base play: netplan (Scaleway
+# cloud-init owns networking -- running it would clobber the VM's net config),
+# firewall (the home nftables template is WAN/VLAN/wg-specific; fox relies on
+# its Scaleway security group), resolved/pihole/dnscrypt (home DNS), the
+# zfs/boot/swap + hardware/UPS/sensor roles (cloud VM), macvlan/avahi/samba
+# (home LAN), keepalived (no VIP), static_curl (not needed). headscale's own
+# vhost is auth: none; netdata's is auth: required and reaches lab's Authelia
+# over wg0.
+- name: External VPS (fox)
+  hosts: fox
+  roles:
+    - bash
+    - user
+    - cleanup
+    - hostname
+    - apt
+    - backports
+    - apt_upgrade
+    - locale
+    - timezone
+    - unattended_upgrades
+    - logrotate
+    - journald
+    - fail2ban
+    - ssh
+    - ntp
+    - postfix
+    - wireguard
+    - hwe_kernel
+    - ssh_root
+    - podman
+    - certbot
+    - nginx
+    - services
+    - headscale
+    - netdata
 
 - name: Lab roles
   hosts: box,lab
