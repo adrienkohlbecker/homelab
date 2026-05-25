@@ -9,10 +9,10 @@
 # default project/organization) before `tofu plan`. op run leaves the file
 # read untouched, so the mise `tf` wrapper still picks it up.
 #
-# The operator's SSH public key must be registered in the Scaleway project
-# (IAM > SSH keys); Scaleway's cloud-init injects every project key into the
-# instance's default user, which is how Ansible first reaches the host. User
-# provisioning (the `ak` account, hardening) is then Ansible's job.
+# The scaleway_iam_ssh_key below registers the operator's laptop key in the
+# project; the server's cloud_init then creates the `ak` login user with that
+# key (and locks root SSH). Ansible reaches fox as `ak` from first boot; the
+# user/ssh roles take over user config + hardening at converge.
 # No region/zone here: setting them in the provider block while the scw
 # profile (config.yaml) also defines them trips the provider's "multiple
 # variable sources" warning. Pin the zone per-resource instead (via
@@ -101,4 +101,38 @@ resource "scaleway_instance_server" "fox" {
   root_volume {
     size_in_gb = 20
   }
+
+  # Boot with the fleet's regular `ak` user (sudo, key-only) instead of logging
+  # in as root: Ansible connects as `ak` from first boot (the `user` role only
+  # *configures* the existing login user, it doesn't create it). The SSH key is
+  # the same laptop key registered above (referenced, not duplicated).
+  #
+  # Root SSH is locked from first boot at the sshd level. Scaleway's
+  # /usr/sbin/scw-fetch-ssh-keys rewrites /root/.ssh/authorized_keys from the
+  # project SSH keys on EVERY boot, so disable_root (which only touches root's
+  # authorized_keys) doesn't hold -- but scw-fetch-ssh-keys never touches
+  # sshd_config, so the PermitRootLogin-no drop-in below does. The `ssh` role's
+  # sshd_config (also PermitRootLogin No) takes over at converge; disable_root
+  # is kept for intent. The `ssh_root` role (root's outbound keypair) is
+  # intentionally not in fox's play.
+  cloud_init = <<-EOT
+    #cloud-config
+    disable_root: true
+    package_update: true
+    package_upgrade: true
+    users:
+      - name: ak
+        groups: [sudo]
+        shell: /bin/bash
+        sudo: "ALL=(ALL) NOPASSWD:ALL"
+        lock_passwd: true
+        ssh_authorized_keys:
+          - ${scaleway_iam_ssh_key.laptop.public_key}
+    write_files:
+      - path: /etc/ssh/sshd_config.d/10-disable-root.conf
+        content: |
+          PermitRootLogin no
+    runcmd:
+      - [systemctl, restart, ssh]
+  EOT
 }
