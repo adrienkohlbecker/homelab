@@ -6,5 +6,4 @@
 # main (vaulted secrets, generated symlinks). For multi-GB shared artifacts
 # like packer/artifacts, the task uses a real symlink instead — edit the
 # task directly.
-wireguard
 .ansible-mitogen-strategy
