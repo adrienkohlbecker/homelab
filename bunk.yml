@@ -157,6 +157,9 @@
 
     # Poll: a just-registered node can lag in `nodes list` over the fox link.
     # check_mode short-circuits the wait (no registration happens in --check).
+    # Match on ansible_hostname | lower: headscale sanitizes given_name to
+    # lowercase (DSM reports the host as "Bunk", headscale records "bunk"), so an
+    # exact-case compare against ansible_hostname never hits.
     - name: List headscale nodes (on the control server)
       command: podman exec headscale headscale nodes list -o json
       delegate_to: "{{ tailscale_headscale_host }}"
@@ -169,7 +172,7 @@
       until: >-
         ansible_check_mode
         or ((bunk_ts_nodes.stdout | default('[]') | from_json)
-            | selectattr('given_name', 'equalto', ansible_hostname) | list | length > 0)
+            | selectattr('given_name', 'equalto', ansible_hostname | lower) | list | length > 0)
       tags:
         - tailscale
 
@@ -177,7 +180,7 @@
       set_fact:
         bunk_ts_node: >-
           {{ (bunk_ts_nodes.stdout | default('[]') | from_json)
-             | selectattr('given_name', 'equalto', ansible_hostname)
+             | selectattr('given_name', 'equalto', ansible_hostname | lower)
              | list | first | default({}) }}
       tags:
         - tailscale
@@ -189,7 +192,7 @@
         that:
           - bunk_ts_node.id is defined
         fail_msg: >-
-          No headscale node with given_name {{ ansible_hostname }} on
+          No headscale node with given_name {{ ansible_hostname | lower }} on
           {{ tailscale_headscale_host }} -- registration did not complete, or DSM
           reports a different hostname than headscale recorded. Check
           headscale nodes list on the control server.
