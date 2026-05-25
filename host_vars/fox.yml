@@ -50,6 +50,14 @@ headscale_oidc_enabled: true
 headscale_oidc_issuer: "https://auth.{{ domain }}"
 headscale_oidc_client_id: headscale
 
+# Trimmed from the pug-derived list to what a Hetzner cloud VM actually
+# exposes. Dropped contexts: powercap (no Intel RAPL in a VM), zfs (no ZFS
+# module), vmstat/mem.swapio (no swap configured). Dropped collectors:
+# intelgpu/nvme/sensors/smartctl/upsd/zfspool (no such hardware) and the
+# keepalived prometheus job (no keepalived here; fluentbit's job IS kept --
+# fox runs the shipper to feed hyperdx, same as lab/pug). These would fire
+# netdata_presence on any netdata version -- they're real absences, not the
+# 1.46-vs-2.x context rename that the extfrag entry hit.
 netdata_contexts:
   conntrack:       netfilter.conntrack_sockets
   containers:      cgroup.cpu_limit
@@ -65,32 +73,22 @@ netdata_contexts:
   netdev:          system.net
   netstat:         system.ip
   postfix:         postfix.qsize
-  powercap:        cpu.powercap_intel_rapl_zone
   pressure:        system.cpu_some_pressure
   procstat:        system.cpu
   softirqs:        system.softirqs
   systemd_service: systemd.service.cpu.utilization
   uptime:          system.uptime
-  vmstat:          mem.swapio
-  zfs:             zfs.arc_size
 netdata_collectors:
   - go.d:collector:chrony:local
   - go.d:collector:docker:local
   - go.d:collector:fail2ban:fail2ban
-  - go.d:collector:intelgpu:intelgpu
   - go.d:collector:logind:logind
   - go.d:collector:nginx:local
-  - go.d:collector:nvme:nvme
   - go.d:collector:prometheus:fluentbit
-  - go.d:collector:prometheus:keepalived_exporter_local
-  - go.d:collector:sensors:sensors
-  - go.d:collector:smartctl:smartctl
   - go.d:collector:systemdunits:service-units
-  - go.d:collector:upsd:local
   # - go.d:collector:web_log:nginx # is down when no http requests have been made recently, let's skip alerting on this
   - go.d:collector:wireguard:wireguard
   - go.d:collector:x509check:host_cert
-  - go.d:collector:zfspool:zfspool
   - go.d:collector:prometheus:headscale
 netdata_zfspool_thresholds: {}
 netdata_diskspace_blocklist: []
