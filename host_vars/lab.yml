@@ -273,9 +273,8 @@ certbot_extra_sans:
 # Tailscale subnet router + home exit node (mesh client registering against the
 # fox headscale control plane -- see notes/headscale_mesh_redesign.md §C).
 # Advertises the whole home /21 so roaming clients reach LAN-only devices, and
-# offers a home exit (pug advertises the same -> HA, no port-picking).
-# tailscale_preauth_key is a reusable headscale pre-auth key minted on fox and
-# vaulted as vault_tailscale_preauth_key in group_vars/prod.yml.
+# offers a home exit (pug advertises the same -> HA, no port-picking). The
+# control-plane pointers + pre-auth key are shared prod config in
+# group_vars/prod.yml; only the advertised routes are per-host here.
 tailscale_advertise_routes: "10.123.0.0/21"
 tailscale_advertise_exit_node: true
-tailscale_preauth_key: "{{ vault_tailscale_preauth_key }}"

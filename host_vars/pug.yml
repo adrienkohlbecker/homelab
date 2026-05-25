@@ -120,8 +120,7 @@ z2m_start_service: false
 
 # Tailscale subnet router + home exit node -- the HA pair to lab (both advertise
 # the home /21 + a home exit so either answers if the other is down). See
-# notes/headscale_mesh_redesign.md §C. tailscale_preauth_key is vaulted as
-# vault_tailscale_preauth_key in group_vars/prod.yml.
+# notes/headscale_mesh_redesign.md §C. Control-plane pointers + pre-auth key are
+# shared prod config in group_vars/prod.yml; only the advertised routes here.
 tailscale_advertise_routes: "10.123.0.0/21"
 tailscale_advertise_exit_node: true
-tailscale_preauth_key: "{{ vault_tailscale_preauth_key }}"

@@ -1,16 +1,12 @@
 ---
 # Optional, host-overridable knobs (defaults/main.yml sits BELOW host_vars in
 # ansible's precedence ladder, so these are safe defaults -- not the masked-
-# input trap that vars/main.yml would be). The harness _setup flips
-# login_server / headscale_host to a local plain-http headscale on box.
-
-# Headscale control plane URL the client registers against. Prod: the fox VPS.
-tailscale_login_server: "https://headscale.fox.{{ domain }}"
-
-# Inventory host running the headscale container. The route-approval task
-# delegates `headscale nodes approve-routes` here (node IDs only exist on the
-# control server, and a node's advertised routes need a second opt-in there).
-tailscale_headscale_host: fox
+# input trap that vars/main.yml would be).
+#
+# tailscale_login_server / tailscale_headscale_host are environment constants
+# (prod -> fox, test -> box), so they live in group_vars/{prod,test}, not here:
+# a role default of "fox" would bake one deployment's control-plane host into
+# the generic role. The role asserts both are set (see tasks/main.yml).
 
 # Advertise a full-tunnel exit node alongside the subnet route. Off by default;
 # lab/pug turn it on in host_vars (home exit), as does bunk (Bonniers exit).

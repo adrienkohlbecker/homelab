@@ -41,18 +41,20 @@
 - name: Assert required tailscale inputs are set
   assert:
     that:
+      - tailscale_login_server is defined
+      - tailscale_headscale_host is defined
       - tailscale_advertise_routes is defined
       - tailscale_advertise_routes | length > 0
       - tailscale_preauth_key is defined
       - tailscale_preauth_key | length > 0
     fail_msg: >-
-      roles/tailscale needs tailscale_advertise_routes (host_vars, e.g.
-      "10.123.0.0/21") and tailscale_preauth_key. The key is a reusable
+      roles/tailscale needs tailscale_login_server + tailscale_headscale_host
+      (group_vars/{prod,test}), tailscale_advertise_routes (host_vars, e.g.
+      "10.123.0.0/21"), and tailscale_preauth_key. The key is a reusable
       headscale pre-auth key: mint it once on fox after headscale is up
       (`podman exec headscale headscale preauthkeys create --user <id>
       --reusable --expiration 720h`), store it vaulted as
-      vault_tailscale_preauth_key in group_vars/prod.yml, and map
-      tailscale_preauth_key to it in the host's host_vars.
+      vault_tailscale_preauth_key in group_vars/prod.yml.
   tags:
     - tailscale
 
