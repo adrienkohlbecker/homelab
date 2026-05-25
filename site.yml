@@ -70,7 +70,9 @@
 # so no inbound is reintroduced at home, peers route only fox/32, and fox
 # reaches just lab/pug's wg /32s -- enough for netdata's Authelia forward-auth,
 # not the home LAN. Deliberately omitted vs the base play: netplan (Hetzner
-# cloud-init owns networking -- running it would clobber the VM's net config),
+# cloud-init owns eth0 -- running the full role would clobber the VM's net
+# config; the private NIC alone is brought up by the additive hetzner_private_net
+# role instead),
 # firewall (the home nftables template is WAN/VLAN/wg-specific; fox relies on
 # its Hetzner Cloud firewall), resolved/pihole/dnscrypt (home DNS), the
 # zfs/boot/swap + hardware/UPS/sensor roles (cloud VM), macvlan/avahi/samba
@@ -87,6 +89,7 @@
     - apt
     - backports
     - apt_upgrade
+    - hetzner_private_net
     - locale
     - timezone
     - unattended_upgrades
