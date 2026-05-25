@@ -1,60 +1,23 @@
-# Test-only key provisioning. Prod gets tailscale_preauth_key from the vault
-# (host_vars), but under the qemu harness there's no vault, and the harness runs
-# each test phase (--check / apply / idempotence) as a SEPARATE ansible process,
-# so _setup can't hand the role a fact. So when qemu_test, self-mint a throwaway
-# reusable key from the local headscale that _setup stood up -- in the same
-# process that consumes it, sidestepping the cross-phase boundary. 0.26 CLI:
-# preauthkeys --user takes the numeric user ID. check_mode:false so the --check
-# phase also gets a key for the assert below (the actual `tailscale up` stays
-# check-skipped). Reusable + short expiry; minted fresh each converge (harmless:
-# `tailscale up` is skipped once the node is already registered).
-- name: Provision a throwaway pre-auth key from the local headscale (test only)
-  when: qemu_test | default(false)
-  check_mode: false
-  become: true
-  tags:
-    - tailscale
-  block:
-    - name: Ensure a headscale user exists for the test node
-      command: podman exec headscale headscale users create test-harness
-      register: tailscale_test_user
-      changed_when: false
-      failed_when: false
-
-    - name: Read the headscale user id
-      command: podman exec headscale headscale users list -o json
-      register: tailscale_test_users
-      changed_when: false
-
-    - name: Mint a reusable test pre-auth key
-      command: >-
-        podman exec headscale headscale preauthkeys create
-        --user {{ (tailscale_test_users.stdout | from_json | selectattr('name', 'equalto', 'test-harness') | list | first).id }}
-        --reusable --expiration 1h -o json
-      register: tailscale_test_preauth
-      changed_when: false
-
-    - name: Set the test pre-auth key fact
-      set_fact:
-        tailscale_preauth_key: "{{ (tailscale_test_preauth.stdout | from_json).key }}"
-
+# Mesh client (subnet router + exit node) registering against a headscale
+# control plane. No long-lived auth key: when the node isn't registered yet the
+# role mints a single-use pre-auth key straight from the control plane and spends
+# it in the same play -- see the mint block after the status check below. The
+# control-plane pointers differ by environment (prod -> fox, test -> the local
+# headscale box's _setup stands up) but flow in identically through group_vars.
 - name: Assert required tailscale inputs are set
   assert:
     that:
       - tailscale_login_server is defined
       - tailscale_headscale_host is defined
+      - tailscale_headscale_user is defined
       - tailscale_advertise_routes is defined
       - tailscale_advertise_routes | length > 0
-      - tailscale_preauth_key is defined
-      - tailscale_preauth_key | length > 0
     fail_msg: >-
-      roles/tailscale needs tailscale_login_server + tailscale_headscale_host
-      (group_vars/{prod,test}), tailscale_advertise_routes (host_vars, e.g.
-      "10.123.0.0/21"), and tailscale_preauth_key. The key is a reusable
-      headscale pre-auth key: mint it once on fox after headscale is up
-      (`podman exec headscale headscale preauthkeys create --user <id>
-      --reusable --expiration 720h`), store it vaulted as
-      vault_tailscale_preauth_key in group_vars/prod.yml.
+      roles/tailscale needs tailscale_login_server, tailscale_headscale_host and
+      tailscale_headscale_user (group_vars/{prod,test}) plus
+      tailscale_advertise_routes (host_vars, e.g. "10.123.0.0/21"). The pre-auth
+      key is minted on-the-fly from the control plane at registration time, so
+      there's no vaulted long-lived key to set.
   tags:
     - tailscale
 
@@ -163,6 +126,55 @@
   tags:
     - tailscale
 
+# No long-lived auth key. When the node isn't registered yet, mint a single-use,
+# short-expiry pre-auth key directly from the control plane and consume it below
+# in the same play -- the key never touches the vault or disk and is spent within
+# seconds. Identical path for prod (delegated to fox) and the harness (delegated
+# to the converging box, whose _setup stood up a local headscale): both delegate
+# to tailscale_headscale_host and drive `podman exec headscale`. Gated on
+# not-already-registered, so steady-state converges mint nothing and the harness
+# idempotence check stays green; skipped in --check since minting is a
+# control-plane mutation. NOT --ephemeral (subnet routers must survive going
+# offline); single-use = omit --reusable. 0.26 CLI: --user takes the numeric ID,
+# so resolve it from `users list` by name. delegate_to sits on the commands, not
+# the set_fact -- the fact must land on this host (the registering node), not the
+# delegate.
+- name: Provision a single-use pre-auth key from the control plane
+  when:
+    - not ansible_check_mode
+    - not (tailscale_running | bool)
+  become: true
+  tags:
+    - tailscale
+  block:
+    - name: Ensure the headscale user for this node exists
+      command: podman exec headscale headscale users create {{ tailscale_headscale_user }}
+      delegate_to: "{{ tailscale_headscale_host }}"
+      register: tailscale_user_create
+      changed_when: false
+      failed_when: false
+
+    - name: List headscale users to resolve the user id
+      command: podman exec headscale headscale users list -o json
+      delegate_to: "{{ tailscale_headscale_host }}"
+      register: tailscale_users
+      changed_when: false
+
+    - name: Mint a single-use pre-auth key
+      command: >-
+        podman exec headscale headscale preauthkeys create
+        --user {{ (tailscale_users.stdout | from_json | selectattr('name', 'equalto', tailscale_headscale_user) | list | first).id }}
+        --expiration 5m -o json
+      delegate_to: "{{ tailscale_headscale_host }}"
+      register: tailscale_preauth
+      changed_when: false
+      no_log: true
+
+    - name: Set the pre-auth key fact
+      set_fact:
+        tailscale_preauth_key: "{{ (tailscale_preauth.stdout | from_json).key }}"
+      no_log: true
+
 # --reset so the advertised set on first registration is exactly what we pass
 # (no stale flags from a prior manual `tailscale up`). no_log: the authkey is a
 # bearer credential. --timeout bounds the call so a control-plane hiccup can't
@@ -179,7 +191,13 @@
     --reset
   register: tailscale_up
   changed_when: tailscale_up.rc == 0
-  when: not (tailscale_running | bool)
+  # not ansible_check_mode: the pre-auth key is minted in the (check-skipped)
+  # block above, so in --check tailscale_preauth_key is undefined -- skip the
+  # whole task rather than let ansible template a `--authkey {{ undefined }}`
+  # arg. Registration is a mutation anyway and never belongs in check mode.
+  when:
+    - not ansible_check_mode
+    - not (tailscale_running | bool)
   no_log: true
   become: true
   tags:

@@ -179,9 +179,9 @@ github_runner_instances:
   - { repo: homelab, suffix: test1, owner: adrienkohlbecker, labels: "self-hosted,test" }
 
 # roles/tailscale test config. The control-plane pointers (login_server,
-# headscale_host) are environment constants in group_vars/test.yml; the dynamic
-# pre-auth key is self-minted in main.yml's qemu_test branch. Only the advertised
-# routes/exit are box-specific -- a throwaway subnet so _verify can assert the
-# advertise + approve round-trip without colliding with the test topology.
+# headscale_host, headscale_user) are environment constants in group_vars/test.yml;
+# the pre-auth key is minted on-the-fly by main.yml at registration. Only the
+# advertised routes/exit are box-specific -- a throwaway subnet so _verify can
+# assert the advertise + approve round-trip without colliding with the test topology.
 tailscale_advertise_routes: "10.99.99.0/24"
 tailscale_advertise_exit_node: true
