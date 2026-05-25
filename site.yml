@@ -63,16 +63,16 @@
     - pihole
     - docker_client
 
-# fox: off-home Scaleway VPS hosting the Headscale control plane. Excluded from
-# the all:!bunk base plays above because it isn't a home host -- no ZFS, no home
-# LAN/VLANs -- so it runs only this curated minimal set. fox IS on the wg0
+# fox: off-home Hetzner Cloud VPS hosting the Headscale control plane. Excluded
+# from the all:!bunk base plays above because it isn't a home host -- no ZFS, no
+# home LAN/VLANs -- so it runs only this curated minimal set. fox IS on the wg0
 # backbone, scoped: lab/pug dial OUT to it (keepalive_from in wireguard_peers)
 # so no inbound is reintroduced at home, peers route only fox/32, and fox
 # reaches just lab/pug's wg /32s -- enough for netdata's Authelia forward-auth,
-# not the home LAN. Deliberately omitted vs the base play: netplan (Scaleway
+# not the home LAN. Deliberately omitted vs the base play: netplan (Hetzner
 # cloud-init owns networking -- running it would clobber the VM's net config),
 # firewall (the home nftables template is WAN/VLAN/wg-specific; fox relies on
-# its Scaleway security group), resolved/pihole/dnscrypt (home DNS), the
+# its Hetzner Cloud firewall), resolved/pihole/dnscrypt (home DNS), the
 # zfs/boot/swap + hardware/UPS/sensor roles (cloud VM), macvlan/avahi/samba
 # (home LAN), keepalived (no VIP), static_curl (not needed). headscale's own
 # vhost is auth: none; netdata's is auth: required and reaches lab's Authelia
