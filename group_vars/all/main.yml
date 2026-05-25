@@ -211,42 +211,10 @@ ubuntu_mirror_security: '{{ (ansible_architecture == "aarch64") | ternary(mirror
 # nft/avahi/smb configs.
 default_interface: "{{ ansible_default_ipv4.interface | mandatory }}"
 
-# Excluded from the all-traffic VPN AllowedIPs (i.e. NOT tunneled) --
-# anything in these ranges keeps reaching its physical-uplink
-# destination instead of going through wireguard. RFC1918 + CGNAT +
-# loopback + link-local + multicast + reserved on both v4 and v6.
-# Consumed via the cidr_exclude filter (filter_plugins/cidr_exclude.py)
-# in roles/wireguard/templates/wg.conf.j2.
-#
-# Notable inclusions vs. the old hand-curated list:
-# - 100.64.0.0/10 (RFC6598 CGNAT) -- cellular ISPs use this for client
-#   addressing; if it were tunneled, the all-traffic VPN would route the
-#   peer's own physical uplink through itself and the tunnel collapses.
-# - 240.0.0.0/4 (IPv4 reserved) and 0.0.0.0/8 ("this network").
-# - fc00::/7 (IPv6 ULA) -- previously only fec0::/10 (RFC3879-deprecated
-#   site-local) was excluded.
-#
-# ::1/128 is intentionally omitted: excluding a single /128 from ::/0
-# fragments the result into ~130 CIDRs, and loopback packets can't
-# egress to a wireguard interface anyway.
-wireguard_all_traffic_excluded_cidrs:
-  - 0.0.0.0/8
-  - 10.0.0.0/8
-  - 100.64.0.0/10
-  - 127.0.0.0/8
-  - 169.254.0.0/16
-  - 172.16.0.0/12
-  - 192.168.0.0/16
-  - 224.0.0.0/4
-  - 240.0.0.0/4
-  - fc00::/7
-  - fe80::/10
-  - ff00::/8
-
 # wireguard-vanity-keygen -c $NAME/
 # Peer addresses derive from `network.*` (see group_vars/all/network.yml
-# and data/network_topology.yml); endpoints, keys, and post_up hooks
-# stay literal since they live outside the topology's scope.
+# and data/network_topology.yml); endpoints and keys stay literal since
+# they live outside the topology's scope.
 wireguard_peers:
   - name: lab
     address: "{{ network.hosts.lab.wireguard }}"
@@ -254,7 +222,6 @@ wireguard_peers:
       local: "{{ external_ips.lab }}:51820"
       remote: "home.{{ domain }}:51821"
     is_server: true
-    dns_address: "{{ external_ips.pihole }}"
     site_subnet: "{{ site_subnets.home }}"
     public_key: "{{ wireguard_keys.lab.public_key }}"
     private_key: "{{ wireguard_keys.lab.private_key }}"
@@ -264,7 +231,6 @@ wireguard_peers:
       local: "{{ external_ips.pug }}:51820"
       remote: "home.{{ domain }}:51822"
     is_server: true
-    dns_address: "{{ external_ips.pihole }}"
     site_subnet: "{{ site_subnets.home }}"
     public_key: "{{ wireguard_keys.pug.public_key }}"
     private_key: "{{ wireguard_keys.pug.private_key }}"
@@ -274,7 +240,6 @@ wireguard_peers:
       local: "{{ external_ips.box }}:51820"
       remote: home.{{ domain }}:51823
     is_server: true
-    dns_address: "{{ external_ips.pihole }}"
     site_subnet: "{{ site_subnets.home }}"
     public_key: "{{ wireguard_keys.box.public_key }}"
     private_key: "{{ wireguard_keys.box.private_key }}"
@@ -288,31 +253,13 @@ wireguard_peers:
     is_server: false
     public_key: "{{ wireguard_keys.phone.public_key }}"
     private_key: "{{ wireguard_keys.phone.private_key }}"
-  - name: ipad
-    address: "{{ network.wireguard.roaming.ipad }}"
-    is_server: false
-    public_key: "{{ wireguard_keys.ipad.public_key }}"
-    private_key: "{{ wireguard_keys.ipad.private_key }}"
-  - name: spouse_laptop
-    address: "{{ network.wireguard.roaming.spouse_laptop }}"
-    is_server: false
-    public_key: "{{ wireguard_keys.spouse_laptop.public_key }}"
-    private_key: "{{ wireguard_keys.spouse_laptop.private_key }}"
-  - name: spouse_phone
-    address: "{{ network.wireguard.roaming.spouse_phone }}"
-    is_server: false
-    public_key: "{{ wireguard_keys.spouse_phone.public_key }}"
-    private_key: "{{ wireguard_keys.spouse_phone.private_key }}"
   - name: bunk
     address: "{{ network.hosts.bunk.wireguard }}"
     endpoint:
       local: "{{ external_ips.bunk }}:51820"
       remote: "{{ synology_endpoint }}:51820"
-    post_up: iptables -A FORWARD -i %i -j ACCEPT; iptables -t nat -A POSTROUTING -o ovs_eth0 -j MASQUERADE
-    post_down: iptables -D FORWARD -i %i -j ACCEPT; iptables -t nat -D POSTROUTING -o ovs_eth0 -j MASQUERADE
     is_server: true
     site_subnet: "{{ site_subnets.bonniers }}"
-    allowed_ips: [ "{{ site_subnets.bonniers }}" ]
     # Lab and pug are the always-on consumers of the bunk offsite link
     # (nightly zfs autobackup replication). Having them send a 25s
     # PersistentKeepalive keeps lab/pug's view of bunk's handshake_ago
@@ -322,7 +269,6 @@ wireguard_peers:
     # per-peer) so battery-sensitive mobile peers don't get a forced
     # heartbeat they don't need.
     keepalive_from: [lab, pug]
-    dns_address: "{{ network.sites.bonniers.gateway }}"
     public_key: "{{ wireguard_keys.bunk.public_key }}"
     private_key: "{{ wireguard_keys.bunk.private_key }}"
   - name: fox
@@ -342,7 +288,6 @@ wireguard_peers:
     is_server: true
     site_subnet: "{{ network.hosts.fox.wireguard }}/32"
     keepalive_from: [lab, pug]
-    dns_address: "{{ external_ips.pihole }}"
     public_key: "{{ wireguard_keys.fox.public_key }}"
     private_key: "{{ wireguard_keys.fox.private_key }}"
 

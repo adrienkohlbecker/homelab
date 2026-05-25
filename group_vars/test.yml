@@ -39,7 +39,6 @@ wireguard_peers:
       local: "{{ external_ips.lab }}:51820"
       remote: home.{{ domain }}:51823
     is_server: true
-    dns_address: "{{ external_ips.pihole }}"
     site_subnet: "{{ site_subnets.home }}"
     public_key: "{{ wireguard_keys.lab.public_key }}"
     private_key: "{{ wireguard_keys.lab.private_key }}"
@@ -49,7 +48,6 @@ wireguard_peers:
       local: "{{ external_ips.pug }}:51820"
       remote: home.{{ domain }}:51823
     is_server: true
-    dns_address: "{{ external_ips.pihole }}"
     site_subnet: "{{ site_subnets.home }}"
     public_key: "{{ wireguard_keys.pug.public_key }}"
     private_key: "{{ wireguard_keys.pug.private_key }}"
@@ -59,7 +57,6 @@ wireguard_peers:
       local: "{{ external_ips.box }}:51820"
       remote: home.{{ domain }}:51823
     is_server: true
-    dns_address: "{{ external_ips.pihole }}"
     site_subnet: "{{ site_subnets.home }}"
     public_key: "{{ wireguard_keys.box.public_key }}"
     private_key: "{{ wireguard_keys.box.private_key }}"
@@ -99,15 +96,6 @@ wireguard_keys:
     public_key: changeme
     private_key: changeme
   phone:
-    public_key: changeme
-    private_key: changeme
-  ipad:
-    public_key: changeme
-    private_key: changeme
-  spouse_laptop:
-    public_key: changeme
-    private_key: changeme
-  spouse_phone:
     public_key: changeme
     private_key: changeme
   bunk:
