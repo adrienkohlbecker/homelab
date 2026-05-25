@@ -59,6 +59,34 @@
   tags:
     - user
 
+# The operator connects from Ghostty (TERM=xterm-ghostty); a host that
+# doesn't ship that terminfo entry leaves zsh's zle without capability
+# lookups, which manifests as doubled keystrokes and runaway line redraw
+# over SSH. Install system-wide so sudo/root shells inherit it too.
+- name: Install Ghostty terminfo source
+  copy:
+    src: xterm-ghostty.terminfo
+    dest: /etc/terminfo/xterm-ghostty.terminfo
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: user_ghostty_terminfo
+  tags:
+    - user
+
+# Gate the compile on the source copy so an updated terminfo recompiles,
+# but skip the check-mode fresh-box case where the copy only reports the
+# change without writing the file tic would read.
+- name: Compile Ghostty terminfo
+  when: user_ghostty_terminfo.changed and not ansible_check_mode
+  command: tic -x -o /etc/terminfo /etc/terminfo/xterm-ghostty.terminfo
+  changed_when: true
+  become: true
+  tags:
+    - user
+
 - name: Sudo without password
   when: ansible_user_id != "root"
   copy:
