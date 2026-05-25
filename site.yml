@@ -87,9 +87,9 @@
     - cleanup
     - hostname
     - apt
-    - backports
     - apt_upgrade
     - hetzner_private_net
+    - wireguard
     - locale
     - timezone
     - unattended_upgrades
@@ -99,7 +99,6 @@
     - ssh
     - ntp
     - postfix
-    - wireguard
     - hwe_kernel
     - podman
     - certbot
