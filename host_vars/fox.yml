@@ -22,28 +22,67 @@ grub_bootloader: true
 # the home `firewall` role (whose nftables template is built around the home
 # WAN/VLANs/wireguard and isn't run here).
 
+# fox is a dual-stack DERP relay: it carries a public AAAA (terraform) and the
+# Hetzner firewall opens 443/3478 to ::/0, so IPv6-only tailnet clients reach
+# the relay without NAT64. Unlike the home fleet (IPv6 killed at the kernel by
+# roles/firewall), fox keeps its IPv6 stack up, so nginx must add [::] listeners
+# to actually answer on v6. The embedded DERP STUN gets the same treatment via a
+# dual-stack podman network (roles/headscale).
+nginx_ipv6: true
+
 # Headscale OIDC (user-device enrollment via Authelia). Wired but OFF: headless
 # hosts (lab/pug) enroll via pre-auth keys regardless, and OIDC needs operator
 # secret-generation first. To turn it on (see notes/headscale_mesh_redesign.md
 # §E): generate the client secret + its pbkdf2 hash, add the prod
 # authelia_oidc_clients[headscale] row (hash + the redirect below), vault the
-# plaintext as vault_headscale_oidc_client_secret, then flip this to true. With
+# plaintext as headscale_oidc_client_secret, then flip this to true. With
 # enabled=false the config's oidc block and the podman_secret task are skipped,
 # so fox converges cleanly without the secret present.
-headscale_oidc_enabled: false
+headscale_oidc_enabled: true
 headscale_oidc_issuer: "https://auth.{{ domain }}"
 headscale_oidc_client_id: headscale
-headscale_oidc_client_secret: "{{ vault_headscale_oidc_client_secret }}"
 
-# netdata runs on fox and reaches lab's Authelia over wg0 for its auth-gated
-# dashboard vhost. These are the collectors fox actually runs; the presence
-# alert fires if one goes missing, and the headscale prometheus scrape doubles
-# as the control-plane liveness signal.
+netdata_contexts:
+  conntrack:       netfilter.conntrack_sockets
+  containers:      cgroup.cpu_limit
+  diskspace:       disk.space
+  diskstatistics:  disk.io
+  entropy:         system.entropy
+  extfrag:         mem.fragmentation_index_dma
+  idlejitter:      system.idlejitter
+  interrupts:      system.interrupts
+  ipc:             system.ipc_semaphores
+  loadavg:         system.load
+  meminfo:         system.ram
+  netdev:          system.net
+  netstat:         system.ip
+  postfix:         postfix.qsize
+  powercap:        cpu.powercap_intel_rapl_zone
+  pressure:        system.cpu_some_pressure
+  procstat:        system.cpu
+  softirqs:        system.softirqs
+  systemd_service: systemd.service.cpu.utilization
+  uptime:          system.uptime
+  vmstat:          mem.swapio
+  zfs:             zfs.arc_size
 netdata_collectors:
-  - go.d:collector:prometheus:headscale
-  - go.d:collector:nginx:local
-  - go.d:collector:systemdunits:service-units
-  - go.d:collector:x509check:host_cert
-  - go.d:collector:wireguard:wireguard
-  - go.d:collector:fail2ban:fail2ban
   - go.d:collector:chrony:local
+  - go.d:collector:docker:local
+  - go.d:collector:fail2ban:fail2ban
+  - go.d:collector:intelgpu:intelgpu
+  - go.d:collector:logind:logind
+  - go.d:collector:nginx:local
+  - go.d:collector:nvme:nvme
+  - go.d:collector:prometheus:fluentbit
+  - go.d:collector:prometheus:keepalived_exporter_local
+  - go.d:collector:sensors:sensors
+  - go.d:collector:smartctl:smartctl
+  - go.d:collector:systemdunits:service-units
+  - go.d:collector:upsd:local
+  # - go.d:collector:web_log:nginx # is down when no http requests have been made recently, let's skip alerting on this
+  - go.d:collector:wireguard:wireguard
+  - go.d:collector:x509check:host_cert
+  - go.d:collector:zfspool:zfspool
+  - go.d:collector:prometheus:headscale
+netdata_zfspool_thresholds: {}
+netdata_diskspace_blocklist: []
