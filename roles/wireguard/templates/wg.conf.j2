@@ -20,9 +20,11 @@ PostUp = {{ own_peer.post_up }}
 {% if 'post_down' in own_peer %}
 PostDown = {{ own_peer.post_down }}
 {% endif %}
-{% if not own_peer.is_server %}
-DNS = {{ external_ips.pihole }}
-{% endif %}
+{# No DNS line: wg0 is a split-tunnel break-glass backbone (peer /32s only),
+   so DNS = pihole would point the device at a resolver outside AllowedIPs
+   (unreachable over the tunnel) and would hijack the device's system DNS the
+   moment the tunnel comes up -- exactly when you might bring wg up to bypass
+   pihole. Break-glass clients keep their own resolver. #}
 
 {# Host /32s only. wg0 is a break-glass backbone reaching peer *hosts*, not a
    subnet router or exit (cross-site subnet access and full-tunnel egress are
