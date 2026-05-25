@@ -82,6 +82,14 @@ server {
     }
 {% endif %}
     proxy_pass {{ authelia_internal_url }};
+    # Bound the auth subrequest so a transient gap on the path to Authelia
+    # (notably fox reaching lab's Authelia over wg0) fails fast instead of
+    # stalling on nginx's 60s default -- a sub-second blip otherwise becomes a
+    # 60s hang and then a 500. Authelia normally answers in ~100ms, so a few
+    # seconds is ample headroom.
+    proxy_connect_timeout 3s;
+    proxy_send_timeout    5s;
+    proxy_read_timeout    5s;
     proxy_pass_request_body off;
     proxy_set_header Content-Length          "";
     proxy_set_header X-Original-Method       $request_method;
