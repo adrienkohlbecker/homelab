@@ -1,5 +1,27 @@
-- name: Generate wireguard configuration files and QR codes
+# Render ONE wireguard client config and emit it as a debug msg, for the
+# `mise run wg:show <device>` task to pull out with jq and pipe to a terminal
+# QR (phone) or stdout (laptop). Nothing is written to disk: the config exists
+# only in this run's JSON output, which the task streams through a pipe.
+#
+# localhost is in [prod] (hosts.ini), so it loads the vaulted wireguard_keys +
+# wireguard_psk_seed -- the same way the old artifacts generator did. The PSK is
+# derived (filter_plugins/wireguard_psk.py), so no .psk files are needed either.
+- name: Render a wireguard client config to stdout
   hosts: localhost
+  gather_facts: false
   tasks:
-    - name: Render wireguard client artifacts
-      import_tasks: roles/wireguard/tasks/artifacts.yml
+    - name: Assert the target device is a known client peer
+      assert:
+        that:
+          - wg_show_peer is defined
+          - wg_show_peer in (wireguard_peers | rejectattr('is_server') | map(attribute='name') | list)
+        fail_msg: >-
+          Pass -e wg_show_peer=<device>. Known client peers:
+          {{ wireguard_peers | rejectattr('is_server') | map(attribute='name') | list | join(', ') }}
+        quiet: true
+
+    - name: Render the client config
+      debug:
+        msg: "{{ lookup('template', playbook_dir + '/roles/wireguard/templates/wg.conf.j2') }}"
+      vars:
+        own_peer_name: "{{ wg_show_peer }}"

@@ -23,7 +23,7 @@ Ansible-driven configuration for my home infrastructure: a handful of bare-metal
 | Path | Contents |
 | --- | --- |
 | `site.yml` | Top-level playbook — base install, services, lab-only roles, reboot check |
-| `wireguard.yml` | Generates per-peer `.conf` + QR codes into `wireguard/` (run on localhost) |
+| `wireguard.yml` | Renders one client config on demand for `mise run wg:show <device>` (localhost; streamed to a QR or stdout, never written to disk) |
 | `bunk.yml` | One-shot config for the off-site `bunk` peer |
 | `roles/` | ~100 roles — see "Roles" below |
 | `group_vars/`, `host_vars/` | Inventory variables (vault values inline as `!vault`) |
@@ -32,7 +32,7 @@ Ansible-driven configuration for my home infrastructure: a handful of bare-metal
 | `test/` | asyncio harness — `testrole.py` (one role on one VM), `testall.py` (matrix) |
 | `mise-tasks/`, `mise.toml` | Tool pinning, env (1Password refs), `lint` / `fmt` / `tf` / `packer:build` tasks |
 | `zbm/`, `zbm-build/` | ZFSBootMenu image config and aarch64 build scaffolding |
-| `wireguard/` | Generated peer configs and PSKs (vaulted) |
+| `wireguard/` | Peer keys live (vaulted) in `group_vars`; client configs are rendered on demand (`wg:show`), not stored here |
 | `notes/` | Long-form design notes referenced from code comments |
 | `vault-client.sh` | Resolves the ansible-vault password per vault-id (`prod`/`test`) from env var, macOS keychain, or `~/.config/homelab/vault-pass-<id>` |
 | `ansible.cfg` | Wires `hosts.ini` + `vault-client.sh`; enables mitogen strategy and persistent SSH |
@@ -63,7 +63,7 @@ op signin                              # 1Password CLI, for op:// refs in mise.t
 # Apply
 mise run ansible --limit lab
 mise run ansible --limit lab --tags nginx --check
-ansible-playbook wireguard.yml -l lab --tags wireguard
+mise run wg:show phone                 # terminal QR to enroll a device (laptop: mise run wg:show laptop --conf | pbcopy)
 
 # DNS / Nexus repos
 mise run tf plan
@@ -95,7 +95,7 @@ ansible-vault encrypt_string
 
 - Ansible vault: per-id passwords come from `vault-client.sh` (macOS keychain `homelab-vault-<id>`, Linux file `~/.config/homelab/vault-pass-<id>`, or `HOMELAB_VAULT_PASSWORD_<UPPER_ID>` env var for CI). Two ids in use: `prod` (workstation-only) and `test` (also pushed to CI as a Gitea repo secret). Vaulted values live inline in `group_vars/*.yml` and `host_vars/*.yml`. See CLAUDE.md "Vault ids" for details.
 - 1Password: `mise.toml [env]` declares `op://Lab/...` refs for Cloudflare, Nexus, MinIO and the OpenTofu state passphrase. `mise run tf` is wrapped in `op run --` so values are only ever in the wrapped process's env.
-- WireGuard: peer private keys are vaulted in `group_vars/{prod,test}.yml`; generated client bundles in `wireguard/<peer>/` (the QR PNGs and zip are kept for convenience).
+- WireGuard: peer private keys are vaulted in `group_vars/{prod,test}.yml` and PSKs derive from a vaulted seed (`filter_plugins/wireguard_psk.py`); client configs are rendered on demand by `mise run wg:show <device>` (terminal QR for iOS, `--conf` to stdout for macOS) and never written to disk.
 
 ## License
 
