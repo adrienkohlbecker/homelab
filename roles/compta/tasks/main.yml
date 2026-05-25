@@ -86,7 +86,7 @@
   vars:
     nginx_site_args:
       subdomain: compta
-      proxy_pass: http://localhost:{{ service_ports.compta }}/
+      proxy_pass: http://127.0.0.1:{{ service_ports.compta }}/
       # Browser path goes through Authelia; the Mac API client appends
       # ?auth_token=<vaulted-secret> on every URL to bypass the
       # auth_request subrequest (it can't send Authorization headers).
