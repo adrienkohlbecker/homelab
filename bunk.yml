@@ -26,6 +26,193 @@
       tags:
         - wireguard
 
+    # --- Tailscale mesh enrollment (Bonniers subnet router + exit node) -------
+    # bunk is DSM, so roles/tailscale's apt + systemd install half doesn't apply
+    # and the Ubuntu box harness can't exercise this path. The Tailscale package
+    # is installed out-of-band via Package Center (operator runbook); these tasks
+    # only do the register -> advertise -> approve orchestration roles/tailscale
+    # does for lab/pug, against the DSM binary path. Pre-auth key is minted on the
+    # control server (fox) and spent here; routes are approved back on fox.
+    # Idempotent: skips `tailscale up` when already Running, approves only on drift.
+    - name: Assert the DSM Tailscale package is installed
+      stat:
+        path: "{{ tailscale_bin }}"
+      register: bunk_ts_bin
+      failed_when: not bunk_ts_bin.stat.exists
+      tags:
+        - tailscale
+
+    # Synology confines packages: tailscaled needs DSM to grant routing +
+    # outbound-connection permissions before it can act as a subnet router / exit
+    # node. `tailscale configure synology` writes conf/resource.own (the marker
+    # gated on here); the grant only takes effect after a package-service restart.
+    # Both are run-once via creates: and re-fire after a package reinstall/update
+    # (which wipes resource.own and resets the perms) -- exactly when they should.
+    - name: Grant the Synology routing permissions for Tailscale (once)
+      command: "{{ tailscale_bin }} configure synology"
+      args:
+        creates: /var/packages/Tailscale/conf/resource.own
+      register: bunk_ts_configure
+      become: true
+      tags:
+        - tailscale
+
+    # synosystemctl isn't on the non-login PATH (unlike the wireguard unit, this
+    # is a DSM *package* controller service, managed via synosystemctl per the
+    # `tailscale configure` hint), so use its absolute path. Only restart when the
+    # configure above actually ran -- bouncing the package drops the tunnel.
+    - name: Restart the Tailscale package to apply the new permissions
+      command: /usr/syno/bin/synosystemctl restart pkgctl-Tailscale.service
+      when: bunk_ts_configure is changed
+      changed_when: true
+      become: true
+      tags:
+        - tailscale
+
+    # check_mode:false so the read-only probe still runs under --check. Before the
+    # first login `status` exits non-zero -> failed_when:false maps that to "not
+    # running" rather than a task failure.
+    - name: Check whether tailscale is already registered and running
+      command: "{{ tailscale_bin }} status --json"
+      register: bunk_ts_status
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      become: true
+      tags:
+        - tailscale
+
+    - name: Determine tailscale backend state
+      set_fact:
+        bunk_ts_running: >-
+          {{ (bunk_ts_status.rc | default(1)) == 0
+             and (bunk_ts_status.stdout | default('') | trim | length > 0)
+             and ((bunk_ts_status.stdout | from_json).BackendState | default('')) == 'Running' }}
+      tags:
+        - tailscale
+
+    # Mint a single-use pre-auth key straight from the control plane (delegated to
+    # fox) and spend it in the same play -- never vaulted, never on disk, 5m TTL.
+    # Gated on not-already-registered so steady-state re-runs mint nothing.
+    # Skipped in --check (minting + registering are mutations). 0.26 CLI: --user
+    # takes the numeric id, resolved from `users list` by name.
+    - name: Register bunk with headscale
+      when:
+        - not ansible_check_mode
+        - not (bunk_ts_running | bool)
+      tags:
+        - tailscale
+      block:
+        - name: Resolve the headscale user id (on the control server)
+          command: podman exec headscale headscale users list -o json
+          delegate_to: "{{ tailscale_headscale_host }}"
+          become: true
+          register: bunk_ts_users
+          changed_when: false
+
+        - name: Mint a single-use pre-auth key (on the control server)
+          command: >-
+            podman exec headscale headscale preauthkeys create
+            --user {{ (bunk_ts_users.stdout | from_json | selectattr('name', 'equalto', tailscale_headscale_user) | list | first).id }}
+            --expiration 5m -o json
+          delegate_to: "{{ tailscale_headscale_host }}"
+          become: true
+          register: bunk_ts_preauth
+          changed_when: false
+          no_log: true
+
+        - name: Set the pre-auth key fact
+          set_fact:
+            bunk_ts_preauth_key: "{{ (bunk_ts_preauth.stdout | from_json).key }}"
+          no_log: true
+
+        # --reset so the advertised set is exactly what we pass (no stale flags
+        # from a prior manual `tailscale up`). --accept-dns=false: bunk is a
+        # server, not a MagicDNS consumer (mirrors lab/pug).
+        - name: Register with headscale and advertise routes + exit node
+          command: >-
+            {{ tailscale_bin }} up
+            --login-server {{ tailscale_login_server }}
+            --authkey {{ bunk_ts_preauth_key }}
+            --advertise-routes={{ tailscale_advertise_routes }}
+            {{ tailscale_advertise_exit_node | ternary('--advertise-exit-node', '') }}
+            --accept-dns=false
+            --timeout=60s
+            --reset
+          register: bunk_ts_up
+          changed_when: bunk_ts_up.rc == 0
+          no_log: true
+          become: true
+
+    # Route approval is a separate opt-in on the control server, keyed by the
+    # node's headscale id. Desired = advertised subnet(s) + the exit-node default
+    # routes (advertising an exit node surfaces 0.0.0.0/0 + ::/0).
+    - name: Compute the desired approved-route set
+      set_fact:
+        bunk_ts_desired_routes: >-
+          {{ (tailscale_advertise_routes.split(','))
+             + (tailscale_advertise_exit_node | ternary(['0.0.0.0/0', '::/0'], [])) }}
+      tags:
+        - tailscale
+
+    # Poll: a just-registered node can lag in `nodes list` over the fox link.
+    # check_mode short-circuits the wait (no registration happens in --check).
+    - name: List headscale nodes (on the control server)
+      command: podman exec headscale headscale nodes list -o json
+      delegate_to: "{{ tailscale_headscale_host }}"
+      become: true
+      register: bunk_ts_nodes
+      changed_when: false
+      check_mode: false
+      retries: 15
+      delay: 2
+      until: >-
+        ansible_check_mode
+        or ((bunk_ts_nodes.stdout | default('[]') | from_json)
+            | selectattr('given_name', 'equalto', ansible_hostname) | list | length > 0)
+      tags:
+        - tailscale
+
+    - name: Resolve bunk's headscale node
+      set_fact:
+        bunk_ts_node: >-
+          {{ (bunk_ts_nodes.stdout | default('[]') | from_json)
+             | selectattr('given_name', 'equalto', ansible_hostname)
+             | list | first | default({}) }}
+      tags:
+        - tailscale
+
+    # Skipped in --check: registration doesn't run there, so the node legitimately
+    # won't exist yet. On a real run a missing node means registration failed.
+    - name: Fail if bunk has no headscale node yet
+      assert:
+        that:
+          - bunk_ts_node.id is defined
+        fail_msg: >-
+          No headscale node with given_name {{ ansible_hostname }} on
+          {{ tailscale_headscale_host }} -- registration did not complete, or DSM
+          reports a different hostname than headscale recorded. Check
+          headscale nodes list on the control server.
+      when: not ansible_check_mode
+      tags:
+        - tailscale
+
+    # approve-routes replaces the whole approved set, so only run on drift to keep
+    # the play idempotent. Skipped in --check (no node yet, and it's a mutation).
+    - name: Approve advertised routes + exit node on headscale
+      command: >-
+        podman exec headscale headscale nodes approve-routes
+        --identifier {{ bunk_ts_node.id }}
+        --routes {{ bunk_ts_desired_routes | join(',') }}
+      delegate_to: "{{ tailscale_headscale_host }}"
+      become: true
+      when:
+        - not ansible_check_mode
+        - (bunk_ts_desired_routes | sort) != ((bunk_ts_node.approved_routes | default([])) | sort)
+      changed_when: true
+      tags:
+        - tailscale
+
     # --- Ghostty terminfo --------------------------------------------------
     # bunk is DSM with no tic/ncurses-bin, so it can't compile xterm-ghostty
     # itself; Ghostty's ssh-terminfo auto-install bails ("Failed to install
