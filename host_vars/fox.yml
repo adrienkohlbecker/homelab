@@ -22,6 +22,19 @@ grub_bootloader: true
 # the home `firewall` role (whose nftables template is built around the home
 # WAN/VLANs/wireguard and isn't run here).
 
+# Headscale OIDC (user-device enrollment via Authelia). Wired but OFF: headless
+# hosts (lab/pug) enroll via pre-auth keys regardless, and OIDC needs operator
+# secret-generation first. To turn it on (see notes/headscale_mesh_redesign.md
+# §E): generate the client secret + its pbkdf2 hash, add the prod
+# authelia_oidc_clients[headscale] row (hash + the redirect below), vault the
+# plaintext as vault_headscale_oidc_client_secret, then flip this to true. With
+# enabled=false the config's oidc block and the podman_secret task are skipped,
+# so fox converges cleanly without the secret present.
+headscale_oidc_enabled: false
+headscale_oidc_issuer: "https://auth.{{ domain }}"
+headscale_oidc_client_id: headscale
+headscale_oidc_client_secret: "{{ vault_headscale_oidc_client_secret }}"
+
 # netdata runs on fox and reaches lab's Authelia over wg0 for its auth-gated
 # dashboard vhost. These are the collectors fox actually runs; the presence
 # alert fires if one goes missing, and the headscale prometheus scrape doubles
