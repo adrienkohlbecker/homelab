@@ -167,7 +167,7 @@
   vars:
     nginx_site_args:
       subdomain: openproject
-      proxy_pass: http://localhost:8070/
+      proxy_pass: http://127.0.0.1:8070/
       csp_additional: "img-src secure.gravatar.com {{ nginx_csp_default }}"
   tags:
     - openproject

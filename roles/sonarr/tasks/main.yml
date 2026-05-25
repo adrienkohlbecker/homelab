@@ -118,7 +118,7 @@
   vars:
     nginx_site_args:
       subdomain: sonarr
-      proxy_pass: http://localhost:8989/
+      proxy_pass: http://127.0.0.1:8989/
       csp_additional: "connect-src plex.tv *.plex.tv {{ nginx_csp_default }}"
       # Browser admin gets forward-auth; sonarr's AuthenticationMethod=External
       # reads the X-Forwarded-User header the site template now forwards from

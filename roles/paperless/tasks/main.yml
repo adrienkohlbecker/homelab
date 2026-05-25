@@ -273,6 +273,6 @@
   vars:
     nginx_site_args:
       subdomain: paperless
-      proxy_pass: http://localhost:8001/
+      proxy_pass: http://127.0.0.1:8001/
   tags:
     - paperless

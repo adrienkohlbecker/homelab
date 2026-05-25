@@ -169,7 +169,7 @@
   vars:
     nginx_site_args:
       subdomain: minio-api
-      proxy_pass: http://localhost:9199/
+      proxy_pass: http://127.0.0.1:9199/
       location_conf: |
         # Otherwise ARQ uploads return HTTP 413
         client_max_body_size     60M;

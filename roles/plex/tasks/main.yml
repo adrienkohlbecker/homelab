@@ -127,7 +127,7 @@
   vars:
     nginx_site_args:
       subdomain: plex
-      proxy_pass: http://localhost:32400/
+      proxy_pass: http://127.0.0.1:32400/
       csp_default_src: "plex.tv *.plex.tv *.plex.direct:32400"
   tags:
     - plex

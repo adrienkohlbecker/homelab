@@ -138,7 +138,7 @@
   vars:
     nginx_site_args:
       subdomain: gitea
-      proxy_pass: http://localhost:{{ service_ports.gitea }}/
+      proxy_pass: http://127.0.0.1:{{ service_ports.gitea }}/
       # Container-registry layers and LFS objects can be large; 10G fits
       # realistic uploads without leaving unbounded disk-fill DoS open.
       client_max_body_size: 10G

@@ -368,7 +368,7 @@
   vars:
     nginx_site_args:
       subdomain: jellyfin
-      proxy_pass: http://localhost:{{ service_ports.jellyfin }}/
+      proxy_pass: http://127.0.0.1:{{ service_ports.jellyfin }}/
       # Jellyfin's reverse-proxy guide recommends 20M for plugin
       # uploads and custom poster art.
       client_max_body_size: 20m

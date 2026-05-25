@@ -104,7 +104,7 @@
   vars:
     nginx_site_args:
       subdomain: tautulli
-      proxy_pass: http://localhost:8182/
+      proxy_pass: http://127.0.0.1:8182/
       csp_default_src: "plex.tv *.plex.tv"
       auth: required
   tags:

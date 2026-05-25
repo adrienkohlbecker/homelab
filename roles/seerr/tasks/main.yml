@@ -92,7 +92,7 @@
   vars:
     nginx_site_args:
       subdomain: seerr
-      proxy_pass: http://localhost:{{ service_ports.seerr }}/
+      proxy_pass: http://127.0.0.1:{{ service_ports.seerr }}/
       csp_default_src: plex.tv *.plex.tv
       csp_additional: img-src plex.tv *.plex.tv *.gravatar.com *.tmdb.org {{ nginx_csp_default }}; font-src plex.tv *.plex.tv fonts.gstatic.com {{ nginx_csp_default }}
   tags:

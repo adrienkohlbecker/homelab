@@ -105,7 +105,7 @@
   vars:
     nginx_site_args:
       subdomain: wolweb
-      proxy_pass: http://localhost:8089/
+      proxy_pass: http://127.0.0.1:8089/
       auth: required
   tags:
     - wolweb
