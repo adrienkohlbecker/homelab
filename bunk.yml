@@ -25,3 +25,33 @@
       become: true
       tags:
         - wireguard
+
+    # --- Ghostty terminfo --------------------------------------------------
+    # bunk is DSM with no tic/ncurses-bin, so it can't compile xterm-ghostty
+    # itself; Ghostty's ssh-terminfo auto-install bails ("Failed to install
+    # terminfo") and the session falls back to TERM=xterm-256color. Ship the
+    # entry *precompiled* (the only option without a remote tic) into the user's
+    # ~/.terminfo. The session only actually uses it once the operator's Ghostty
+    # ssh-cache is primed client-side -- `ghostty +ssh-cache --add=ak@<ssh -G
+    # hostname>` -- which isn't an ansible-on-bunk action. The source lives at
+    # roles/user/files/xterm-ghostty.terminfo (compiled there by the user role on
+    # Ubuntu hosts); regenerate the binary alongside it:
+    #   tic -x -o <dir> roles/user/files/xterm-ghostty.terminfo
+    #   cp <dir>/*/xterm-ghostty roles/user/files/xterm-ghostty.compiled
+    - name: Create the per-user terminfo directory
+      file:
+        path: "{{ ansible_user_dir }}/.terminfo/x"
+        state: directory
+        mode: "0755"
+      tags:
+        - terminfo
+
+    # No validate: a compiled terminfo has no parser, and bunk lacks infocmp.
+    - name: Install the xterm-ghostty terminfo entry
+      copy:
+        src: "{{ playbook_dir }}/roles/user/files/xterm-ghostty.compiled"
+        dest: "{{ ansible_user_dir }}/.terminfo/x/xterm-ghostty"
+        mode: "0644"
+        backup: true
+      tags:
+        - terminfo
