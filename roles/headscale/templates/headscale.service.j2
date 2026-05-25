@@ -4,8 +4,20 @@
 Description=headscale
 After=network-online.target
 Wants=network-online.target
+# OIDC discovery (when headscale_oidc_enabled) hits the Authelia issuer at
+# startup, and on fox that issuer (auth.fahm.fr) resolves to lab's wg /32 --
+# reachable only over the wg0 backbone. Order after wg-quick so the interface +
+# route exist before headscale's first start attempt. fox always runs the
+# wireguard role, and this unit only ever runs on fox, so the dep always holds.
+After=wg-quick@wg0.service
+# fox is a wg *listener*: the tunnel to lab only carries traffic once lab/pug
+# send their next keepalive (~25s after a fox reboot), which lags wg-quick's own
+# activation. A wide start-limit window lets headscale keep retrying OIDC
+# discovery through that warmup rather than exhausting the burst and landing in
+# `failed`. A genuinely-broken server still surfaces (Restart=always loops, and
+# fox's netdata headscale collector goes missing -- see host_vars/fox.yml).
 StartLimitInterval=600
-StartLimitBurst=3
+StartLimitBurst=15
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
