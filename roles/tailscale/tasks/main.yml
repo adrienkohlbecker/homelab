@@ -219,12 +219,25 @@
 # check_mode: false so the read-only node listing runs in the `--check` phase
 # too (read-only `nodes list` is safe). Delegated to the headscale host because
 # node IDs only exist on the control server.
+# retries/until: a just-registered node can take a moment to surface in
+# `nodes list` -- `tailscale up` returns once the client authenticates, but over
+# a real prod link (lab/pug -> fox over wg, then a separate delegated query back
+# to fox) the control-plane record can lag the client by a beat, so a single
+# query races and the assert below fires spuriously. Poll until the node shows
+# up. ansible_check_mode short-circuits the wait: in --check there's no
+# registration, so the node legitimately never appears and we must not block.
 - name: List headscale nodes (on the control server)
   command: podman exec headscale headscale nodes list -o json
   delegate_to: "{{ tailscale_headscale_host }}"
   register: tailscale_nodes
   changed_when: false
   check_mode: false
+  retries: 15
+  delay: 2
+  until: >-
+    ansible_check_mode
+    or ((tailscale_nodes.stdout | default('[]') | from_json)
+        | selectattr('given_name', 'equalto', ansible_hostname) | list | length > 0)
   become: true
   tags:
     - tailscale
