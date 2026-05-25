@@ -24,18 +24,27 @@ PostDown = {{ own_peer.post_down }}
 DNS = {{ external_ips.pihole }}
 {% endif %}
 
-{# Host /32 only. wg0 is a break-glass backbone reaching peer *hosts*, not a
-   subnet router or exit: cross-site subnet access (home 0/21, bonniers 57/24)
-   and full-tunnel egress are the tailscale mesh's job now. Routing a peer's
-   declared subnet here is what let a public peer (fox) inherit the bonniers
-   /24, so AllowedIPs is deliberately pinned to the peer's own /32 -- no
-   per-peer allowed_ips, no all-traffic variant. #}
+{# Host /32s only. wg0 is a break-glass backbone reaching peer *hosts*, not a
+   subnet router or exit (cross-site subnet access and full-tunnel egress are
+   the tailscale mesh's job now). Each peer gets its own wg /32; a peer in a
+   *different site* than this host also gets that peer's physical /32, so an
+   off-site host (fox) can reach a home host's service at the IP its public DNS
+   resolves to (hyperdx.lab -> 10.123.0.2) over the backbone. Still only host
+   /32s -- routing a peer's declared *subnet* is what let fox inherit the
+   bonniers /24, so that stays out. Same-site peers reach each other on the LAN;
+   roaming clients (no site, own_host == {}) keep the pure wg-/32 split tunnel. #}
+{% set own_host = network.hosts.get(own_peer_name, {}) %}
 {% for peer in wireguard_peers if (peer.is_server or own_peer.is_server) and (peer.public_key != own_peer.public_key) %}
 {% set tuple = [own_peer.name, peer.name]|sort %}
+{% set peer_host = network.hosts.get(peer.name, {}) %}
 [Peer]
 # Name = {{ peer.name }}
 PublicKey = {{ peer.public_key }}
+{% if peer_host.physical is defined and own_host.site is defined and peer_host.site != own_host.site %}
+AllowedIPs = {{ peer.address }}/32, {{ peer_host.physical }}/32
+{% else %}
 AllowedIPs = {{ peer.address }}/32
+{% endif %}
 {# PSK derived from the vaulted seed, never stored on disk: both ends sort
    the pair name so they compute the same key. See filter_plugins/wireguard_psk.py. #}
 PresharedKey = {{ tuple | join('-') | wireguard_psk(wireguard_psk_seed) }}
