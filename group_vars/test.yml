@@ -417,6 +417,17 @@ authelia_oidc_clients:
     token_endpoint_auth_method: client_secret_post
     redirect_uris:
       - 'https://jellyfin.{{ inventory_hostname }}.{{ domain }}/sso/OID/redirect/authelia'
+  - client_id: headscale
+    client_name: Headscale
+    # Same "changeme" pbkdf2 hash as the other test clients. headscale's OIDC is
+    # disabled under qemu_test (it validates the issuer via OIDC discovery at
+    # boot, which the box VM can't reach), so this row is shape-only -- it keeps
+    # the authelia test client list mirroring prod. Prod's real hash + the fox
+    # redirect + the vaulted plaintext are an operator step (notes §E).
+    client_secret: '$pbkdf2-sha512$310000$JURoTanVWouRkvJ.Tyml1A$B4DZyqy25cNbFfwFiPMyAdWcuxiELOBAlH0NfQSxB9jgDTQXiyBIMsFY2Z5I3XO5ItLH1pP5C5ujKja71Bqoww'
+    authorization_policy: one_factor
+    redirect_uris:
+      - 'https://headscale.{{ inventory_hostname }}.{{ domain }}/oidc/callback'
 
 # Plaintext OIDC client secrets handed to consumer roles.
 # Pairs with the pbkdf2 hash above; rotate both halves together.
