@@ -27,9 +27,13 @@ if TYPE_CHECKING:
 
 # Each flag may appear in a combined `set -euo pipefail` or split across
 # lines (`set -e` / `set -u`). Match per `set` statement, not across `;`.
-_SET_E_RE = re.compile(r"set\b[^\n;]*-[A-Za-z]*e", re.MULTILINE)
-_SET_U_RE = re.compile(r"set\b[^\n;]*-[A-Za-z]*u", re.MULTILINE)
-_PIPEFAIL_RE = re.compile(r"set\b[^\n]*pipefail", re.MULTILINE)
+# `(?<![\w-])set(?![\w-])` pins `set` as a standalone token so the substring
+# inside another word (`unset`, `reset`, `set-property`) can't satisfy the
+# check on a task that happens to carry a trailing `-...e`/`-...u` flag on the
+# same segment.
+_SET_E_RE = re.compile(r"(?<![\w-])set(?![\w-])[^\n;]*-[A-Za-z]*e", re.MULTILINE)
+_SET_U_RE = re.compile(r"(?<![\w-])set(?![\w-])[^\n;]*-[A-Za-z]*u", re.MULTILINE)
+_PIPEFAIL_RE = re.compile(r"(?<![\w-])set(?![\w-])[^\n]*pipefail", re.MULTILINE)
 
 
 class ShellStrictMode(AnsibleLintRule):
