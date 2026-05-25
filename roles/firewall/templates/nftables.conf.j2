@@ -70,6 +70,10 @@ table inet homelab {
 {% if inventory_hostname == authelia_host %}
     counter input_authelia_wg {}
 {% endif %}
+{% if tailscale_advertise_routes is defined %}
+    counter tailscale_input_accept {}
+    counter tailscale_forward_accept {}
+{% endif %}
 
     # Admin services (samba/nut/mosh/NetBIOS) require an (iif, saddr)
     # *intersection*, not union: home-LAN saddrs must arrive on the WAN
@@ -155,6 +159,25 @@ table inet homelab {
         # rule below needs an explicit ct-state qualifier.
         ct state established,related accept
         iifname "lo" counter name "input_loopback" accept
+{% if tailscale_advertise_routes is defined %}
+
+        # Tailscale (headscale mesh) tunnel ingress, treated like loopback: a
+        # fully trusted interface that carries only authenticated, ACL-gated
+        # tailnet peers. This accepts the *decapsulated* inner packets emerging
+        # on tailscale0 that terminate on this host -- its 100.x service IPs, and
+        # subnet-routed packets whose daddr is this host itself (e.g. a roaming
+        # client hitting homepage.lab.fahm.fr -> 10.123.0.2, lab's own LAN IP).
+        # The wireguard *encapsulation* never needs an INPUT rule: tailscaled
+        # dials out and NAT-punches, so the data plane is conntrack-established
+        # or DERP-relayed (all outbound). tailscaled installs its own ts-input
+        # accept, but this table's policy-drop input chain shares the input hook
+        # and drops the packet regardless (any base chain's drop wins -- the same
+        # multi-base-chain interaction the forward chain documents below), so the
+        # accept must be mirrored here. iifname (not iif) so the rule loads
+        # before tailscaled has created the iface -- same idiom as wg0 below.
+        # Access control for the mesh lives in the headscale ACL policy, not here.
+        iifname "tailscale0" counter name "tailscale_input_accept" accept comment "tailscale mesh (tailnet ingress)"
+{% endif %}
         ct state invalid drop
 
         # TCP NEW must have SYN. Conntrack's loose mode (default)
@@ -366,6 +389,23 @@ table inet homelab {
         # dropped.
         iifname "wg0" oifname $WAN_IFACE accept comment "wg → WAN"
         iifname "podman*" oifname != "podman*" accept comment "podman → external (WAN/LAN/wireguard)"
+{% if tailscale_advertise_routes is defined %}
+
+        # Tailscale subnet router + exit node forwarding. As a subnet router this
+        # host relays tailnet clients to home LAN hosts (daddr in the advertised
+        # 10.123.0.0/21, out $WAN_IFACE); as an exit node it relays them to the
+        # internet (also out $WAN_IFACE). One ingress accept covers both roles:
+        # tailscaled SNATs subnet-route/exit traffic in its own ts-postrouting
+        # (this table's postrouting is policy-accept, so it doesn't interfere),
+        # and return flows match the established,related accept at the top of this
+        # chain. Same policy-drop-wins rationale as the netavark DNAT accepts
+        # below -- ts-forward's accept can't survive this chain's policy drop.
+        # tailscale0 is a trusted overlay (the headscale ACL gates who can send),
+        # so it's left unscoped on oifname rather than pinned to $WAN_IFACE --
+        # this also lets a tailnet client reach a published container port via
+        # the host's DNAT. iifname (not iif) so it loads before the iface exists.
+        iifname "tailscale0" counter name "tailscale_forward_accept" accept comment "tailscale subnet router + exit node"
+{% endif %}
 
         # Reach containers via netavark's DNAT. Three ingress paths,
         # all targeting any podman bridge:
