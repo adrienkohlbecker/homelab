@@ -164,7 +164,7 @@
       server_conf: |
         location ~ ^/v2/repository/([^/]+)/(.*)$ {
           rewrite ^/v2/repository/([^/]+)/(.*)$ /repository/$1/v2/$2 break;
-          proxy_pass http://localhost:8082;
+          proxy_pass http://127.0.0.1:8082;
           proxy_http_version 1.1;
           proxy_set_header Host $http_host;
           proxy_set_header X-Real-IP $remote_addr;
