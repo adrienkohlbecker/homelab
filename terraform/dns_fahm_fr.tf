@@ -78,16 +78,22 @@ variable "fahm_fr_records" {
 }
 
 locals {
-  # Host A records — derived from data/network_topology.yml. Each
-  # name resolves to the host's wireguard IP; wg clients query
-  # public DNS and reach the host through the tunnel. Non-wg traffic
-  # to *.fahm.fr never resolves on the internet at large (10.x.x.x is
-  # unroutable), which is the intended fail-closed behaviour.
+  # Host A records — derived from data/network_topology.yml. Each name
+  # resolves to the host's *physical* IP, which sits inside a route the mesh
+  # subnet routers advertise (home hosts in 10.123.0.0/21 via lab/pug; bunk in
+  # 10.123.57.0/24 via bunk). So a tailnet client reaches the host over the mesh
+  # even with MagicDNS / "Use Tailscale DNS settings" toggled OFF (the OS
+  # resolver returns these public records), as long as "Use Tailscale subnets"
+  # stays on — the two toggles are independent. Non-tunnel traffic to *.fahm.fr
+  # never resolves on the internet at large (10.x.x.x is unroutable), the
+  # intended fail-closed behaviour. (These pointed at the wireguard mirror IPs
+  # while wg roaming was the access path; that range isn't a mesh-advertised
+  # route, so the cutover to Tailscale repoints them to physical.)
   fahm_fr_host_records = {
-    a_box  = { type = "A", name = "box.fahm.fr", content = local.network.hosts.box.wireguard }
-    a_bunk = { type = "A", name = "bunk.fahm.fr", content = local.network.hosts.bunk.wireguard }
-    a_lab  = { type = "A", name = "lab.fahm.fr", content = local.network.hosts.lab.wireguard }
-    a_pug  = { type = "A", name = "pug.fahm.fr", content = local.network.hosts.pug.wireguard }
+    a_box  = { type = "A", name = "box.fahm.fr", content = local.network.hosts.box.physical }
+    a_bunk = { type = "A", name = "bunk.fahm.fr", content = local.network.hosts.bunk.physical }
+    a_lab  = { type = "A", name = "lab.fahm.fr", content = local.network.hosts.lab.physical }
+    a_pug  = { type = "A", name = "pug.fahm.fr", content = local.network.hosts.pug.physical }
   }
 
   # fox is the off-home Hetzner Cloud VPS (Headscale control plane + DERP relay).
