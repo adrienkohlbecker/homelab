@@ -59,6 +59,19 @@
   tags:
     - user
 
+# adm owns most of /var/log (syslog, auth.log, journal via systemd-journal),
+# so membership lets the operator tail logs over SSH without sudo -- the
+# diagnostic reads CLAUDE.md treats as pre-authorized. append is load-bearing:
+# without it `groups:` replaces the supplementary set and would strip sudo.
+- name: Add the operator to the adm group (read /var/log without sudo)
+  user:
+    name: "{{ ansible_user_id }}"
+    groups: adm
+    append: true
+  become: true
+  tags:
+    - user
+
 # The operator connects from Ghostty (TERM=xterm-ghostty); a host that
 # doesn't ship that terminfo entry leaves zsh's zle without capability
 # lookups, which manifests as doubled keystrokes and runaway line redraw
