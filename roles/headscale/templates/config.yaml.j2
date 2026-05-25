@@ -4,7 +4,11 @@
 # same template renders headscale.box.fahm.fr under the test harness and
 # headscale.fox.fahm.fr in prod. nginx terminates TLS and reverse-proxies to
 # the loopback listener, so headscale itself runs plain HTTP (tls_* empty).
-server_url: https://headscale.{{ inventory_hostname }}.{{ domain }}
+# The tailscale role's _setup overrides headscale_server_url to the plain-http
+# loopback listener so a real Tailscale client can register against this box
+# under the harness without trusting the snakeoil TLS cert (whose CN/SAN don't
+# match headscale.box.fahm.fr). Prod leaves the default https vhost URL.
+server_url: {{ headscale_server_url | default('https://headscale.' ~ inventory_hostname ~ '.' ~ domain) }}
 listen_addr: 0.0.0.0:8080
 metrics_listen_addr: 0.0.0.0:9090
 grpc_listen_addr: 127.0.0.1:50443

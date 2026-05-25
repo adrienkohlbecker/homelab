@@ -149,6 +149,17 @@
     - nexus
     - homepage
 
+# Mesh clients (tailscale subnet routers + home exit nodes). Ordered AFTER the
+# "External VPS (fox)" play on purpose: both `tailscale up` (registration) and
+# the delegated `headscale nodes approve-routes` step need the headscale control
+# plane on fox already converged and answering. lab/pug only -- bunk runs
+# Tailscale from DSM Package Center (operator runbook), and fox is the control
+# server, not a client. See notes/headscale_mesh_redesign.md §C.
+- name: Mesh clients
+  hosts: lab,pug
+  roles:
+    - tailscale
+
 - name: Reboot check
   hosts: all:!bunk
   tasks:

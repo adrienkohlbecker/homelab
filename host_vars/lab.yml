@@ -269,3 +269,13 @@ github_runner_instances:
 # here trips the SAN-drift detector in roles/certbot and force-renews.
 certbot_extra_sans:
   - auth.{{ domain }}
+
+# Tailscale subnet router + home exit node (mesh client registering against the
+# fox headscale control plane -- see notes/headscale_mesh_redesign.md §C).
+# Advertises the whole home /21 so roaming clients reach LAN-only devices, and
+# offers a home exit (pug advertises the same -> HA, no port-picking).
+# tailscale_preauth_key is a reusable headscale pre-auth key minted on fox and
+# vaulted as vault_tailscale_preauth_key in group_vars/prod.yml.
+tailscale_advertise_routes: "10.123.0.0/21"
+tailscale_advertise_exit_node: true
+tailscale_preauth_key: "{{ vault_tailscale_preauth_key }}"

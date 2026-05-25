@@ -1,0 +1,57 @@
+# Functional join test -- exercises the real control path: the client must be
+# registered and Running against the local headscale, the node must show up in
+# the control server's gRPC-backed `nodes list`, and the routes the role
+# advertised must be approved. A stat-only "tailscaled is active" check would
+# pass even if registration silently failed, so assert the round-trip instead.
+
+- name: _verify | tailscale backend is Running (registered with headscale)
+  command: tailscale status --json
+  register: _verify_status
+  changed_when: false
+  retries: 5
+  delay: 2
+  until: >-
+    _verify_status.rc == 0
+    and (_verify_status.stdout | from_json).BackendState == 'Running'
+  become: true
+
+- name: _verify | this node appears in headscale's node list
+  command: podman exec headscale headscale nodes list -o json
+  register: _verify_nodes
+  changed_when: false
+  become: true
+
+- name: _verify | resolve the registered node + its approved routes
+  set_fact:
+    _verify_node: >-
+      {{ (_verify_nodes.stdout | from_json)
+         | selectattr('given_name', 'equalto', ansible_hostname)
+         | list | first | default({}) }}
+
+- name: _verify | the node registered and its advertised routes were approved
+  assert:
+    that:
+      - _verify_node.id is defined
+      - "'10.99.99.0/24' in (_verify_node.approved_routes | default([]))"
+      - "'0.0.0.0/0' in (_verify_node.approved_routes | default([]))"
+    fail_msg: >-
+      headscale node for {{ ansible_hostname }} is missing or its advertised
+      subnet/exit routes were not approved:
+      {{ _verify_node | default({}) }}
+
+# The forwarding sysctls are what make the approved subnet route / exit node
+# actually pass traffic -- assert the role set them (live value, not just the
+# file on disk).
+- name: _verify | IPv4 forwarding is enabled
+  command: sysctl -n net.ipv4.ip_forward
+  register: _verify_ipv4_fwd
+  changed_when: false
+  failed_when: _verify_ipv4_fwd.stdout | trim != '1'
+  become: true
+
+- name: _verify | IPv6 forwarding is enabled
+  command: sysctl -n net.ipv6.conf.all.forwarding
+  register: _verify_ipv6_fwd
+  changed_when: false
+  failed_when: _verify_ipv6_fwd.stdout | trim != '1'
+  become: true
