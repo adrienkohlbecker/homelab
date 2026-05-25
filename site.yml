@@ -98,7 +98,6 @@
     - postfix
     - wireguard
     - hwe_kernel
-    - ssh_root
     - podman
     - certbot
     - nginx
