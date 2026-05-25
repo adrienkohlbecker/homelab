@@ -37,7 +37,9 @@
 # every code path that reaches here (systemd_unit started/restarted
 # above).
 - name: wg | Reload wg-quick@{{ iface }} via wg syncconf
-  shell: wg syncconf {{ iface }} <(wg-quick strip {{ iface }})
+  shell: |
+    set -euo pipefail
+    wg syncconf {{ iface }} <(wg-quick strip {{ iface }})
   args:
     executable: /bin/bash
   become: true

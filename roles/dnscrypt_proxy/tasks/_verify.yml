@@ -126,10 +126,12 @@
 # under 100s even in the pathological case.
 - name: _verify | Drive 20 queries so the load balancer picks both pinned servers
   shell: |
-    set -e
+    set -euo pipefail
     for _ in $(seq 20); do
       dig @127.0.0.1 -p {{ service_ports.dnscrypt_proxy }} example.com A +short +time=5 +tries=1 > /dev/null
     done
+  args:
+    executable: /bin/bash
   changed_when: false
 
 - name: _verify | Both pinned servers had a query traverse a relay
