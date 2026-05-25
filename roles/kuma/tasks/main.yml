@@ -152,7 +152,7 @@
       # bypasses auth_request -- mirrors healthchecks' /ping/ carve-out.
       server_conf: |
         location ~ ^/api/push/ {
-          proxy_pass http://localhost:{{ service_ports.kuma }};
+          proxy_pass http://127.0.0.1:{{ service_ports.kuma }};
           proxy_http_version 1.1;
           proxy_set_header Host              $host;
           proxy_set_header X-Real-IP         $remote_addr;
