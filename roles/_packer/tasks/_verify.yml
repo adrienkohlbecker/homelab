@@ -354,7 +354,7 @@
     # no-match signal we want. >/dev/null keeps the matches out of
     # the task output.
     cmd: >-
-      set -o pipefail;
+      set -euo pipefail;
       lsinitramfs /boot/initrd.img-{{ ansible_kernel }}
       | grep -E '/(megaraid_sas|mpt3sas)\.ko' >/dev/null
     executable: /bin/bash

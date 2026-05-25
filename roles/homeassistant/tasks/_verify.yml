@@ -120,7 +120,7 @@
 # post-script routes (bridge default still present) is fine.
 - name: _verify | pin_default_route down-ranks a preferred mac_iot default so the bridge wins
   shell: |
-    set -eu
+    set -euo pipefail
     {% raw %}
     pid="$(podman inspect -f "{{.State.Pid}}" homeassistant)"
     mac_gw="$(podman inspect homeassistant --format "{{.NetworkSettings.Networks.mac_iot.Gateway}}")"
@@ -142,6 +142,8 @@
       *) echo "FAIL: expected bridge gw $br_gw to win egress after down-rank, got: $post" >&2; exit 1 ;;
     esac
     {% endraw %}
+  args:
+    executable: /bin/bash
   register: _verify_route_downrank
   changed_when: false
   become: true

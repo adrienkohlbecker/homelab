@@ -245,7 +245,11 @@
 
 - name: Generate mise zsh completions
   when: mise_version not in mise_check.stdout
-  shell: "{{ ansible_user_dir }}/.local/share/mise/bin/mise completion zsh > {{ ansible_user_dir }}/.local/share/mise/completions/_mise"
+  shell: |
+    set -euo pipefail
+    {{ ansible_user_dir }}/.local/share/mise/bin/mise completion zsh > {{ ansible_user_dir }}/.local/share/mise/completions/_mise
+  args:
+    executable: /bin/bash
   tags:
     - user
 

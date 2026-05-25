@@ -48,7 +48,7 @@
 
 - name: _verify | Level prefixing across the journal's known shapes
   shell: |-
-    set -eu
+    set -euo pipefail
     /usr/local/libexec/level_init -- /bin/sh -c '
       echo "INFO: paperless-style"
       echo "[INFO] [celery.beat] bracketed style"
@@ -64,6 +64,8 @@
       echo "nginx-style 192.168.1.5 - - GET / 200"
       echo "Traceback (most recent call last):" >&2
     '
+  args:
+    executable: /bin/bash
   register: level_init_levels
   changed_when: false
 

@@ -125,8 +125,9 @@
 # would be to run register inside a container so the cmdline visibility
 # is scoped to that container's pid ns -- not worth the moving parts
 # for a homelab where root + gitea_runner are the only principals.
-# shell: (not command:) is required because we need /bin/sh to expand
-# $REGISTRATION_TOKEN.
+# shell: (not command:) is required because we need a shell to expand
+# $REGISTRATION_TOKEN. executable: /bin/bash so `set -o pipefail` (a
+# bashism) is honoured; the env always sets the var, so `set -u` is safe.
 #
 # failed_when: false + the follow-up Surface task is the defence-in-
 # depth pairing with no_log: true: hiding the task output would
@@ -144,6 +145,7 @@
 - name: Register runner
   when: not (ansible_check_mode and gitea_runner_user.changed)
   shell: |
+    set -euo pipefail
     gitea-runner register \
       -c /mnt/services/gitea_runner/config.yml \
       --no-interactive \
@@ -152,6 +154,7 @@
       --token "$REGISTRATION_TOKEN"
   args:
     creates: /mnt/services/gitea_runner/.runner
+    executable: /bin/bash
   environment:
     REGISTRATION_TOKEN: >-
       {{ (_test_runner_token.stdout | default('') | trim or 'TOKEN')

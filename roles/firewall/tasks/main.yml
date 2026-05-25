@@ -322,7 +322,7 @@
     - firewall_ruleset.changed
     - firewall_pre_reload_snapshot.stat.exists
   shell: |
-    set -e
+    set -euo pipefail
     systemctl stop firewall_emergency_revert.timer 2>/dev/null || true
     systemctl reset-failed firewall_emergency_revert.timer firewall_emergency_revert.service 2>/dev/null || true
     systemd-run --unit firewall_emergency_revert --on-active=60 /usr/sbin/nft -f /etc/nftables.conf.pre-reload
@@ -364,6 +364,7 @@
     - firewall_ruleset.changed
     - firewall_pre_reload_snapshot.stat.exists
   shell: |
+    set -euo pipefail
     systemctl stop firewall_emergency_revert.timer 2>/dev/null || true
     systemctl reset-failed firewall_emergency_revert.timer firewall_emergency_revert.service 2>/dev/null || true
   args: { executable: /bin/bash }
