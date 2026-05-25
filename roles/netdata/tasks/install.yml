@@ -7,6 +7,14 @@
   tags:
     - netdata
 
+# Source is netdata's pre-2023 packagecloud repo, not repo.netdata.cloud:
+# the latter prunes old releases and no longer carries the 1.46.* series
+# this role pins, so the pin had gone silently dead (any fresh install
+# jumped to 2.x). packagecloud still serves 1.46.3, so the pin resolves.
+# Full rationale: notes/netdata_packagecloud_migration.md. packagecloud is
+# component-based (`<release> main`), unlike repo.netdata.cloud's flat layout,
+# and signs with its own key (A799AB70…, not Netdatabot's 6E155DC1…).
+#
 # Repository setup forks on Ubuntu major version because apt-key was
 # removed from the default install in resolute (26.04) and the apt_key
 # module errors with "Either apt-key or gpg binary is required". The
@@ -17,8 +25,8 @@
     - ansible_distribution_major_version | int < 26
     - not (ansible_check_mode and apt_install_gpg.changed)
   apt_key:
-    id: 6E155DC153906B73765A74A99DD4A74CECFA8F4F
-    url: https://repo.netdata.cloud/netdatabot.gpg.key
+    id: A799AB702EA6DEE3E21AA716B4188B90F6FB8FD3
+    url: https://packagecloud.io/netdata/netdata/gpgkey
     keyring: /etc/apt/trusted.gpg.d/netdata.gpg
   become: true
   tags:
@@ -27,8 +35,24 @@
 - name: install | Add repository
   when: ansible_distribution_major_version | int < 26
   apt_repository:
-    repo: deb [signed-by=/etc/apt/trusted.gpg.d/netdata.gpg] {{ mirror_apt_netdata }}/ {{ ansible_distribution_release }}/
+    repo: deb [signed-by=/etc/apt/trusted.gpg.d/netdata.gpg] {{ mirror_apt_netdata }} {{ ansible_distribution_release }} main
   register: apt_repository_netdata_legacy
+  become: true
+  tags:
+    - netdata
+
+# repo.netdata.cloud and packagecloud sanitize to different sources.list.d
+# filenames, so the mirror switch leaves the old flat-layout list behind on
+# hosts provisioned before the migration -- it would keep pulling stale 2.x
+# metadata. Drop it. Legacy path only: the deb822 path (>= 26) reuses the same
+# `netdata.sources` name and is overwritten in place. No-op on fresh hosts and
+# on test machines (their Nexus-URL list keeps its filename across the switch).
+- name: install | Drop the pre-migration repo.netdata.cloud source
+  when: ansible_distribution_major_version | int < 26
+  file:
+    path: /etc/apt/sources.list.d/repo_netdata_cloud_repos_stable_ubuntu.list
+    state: absent
+  register: apt_old_netdata_repo_removed
   become: true
   tags:
     - netdata
@@ -60,7 +84,7 @@
   tags:
     - netdata
 
-# Flat repo: trailing `/` on Suites, no Components field.
+# Component-based repo: bare Suites (release name), Components `main`.
 - name: install | Add repository (deb822)
   when:
     - ansible_distribution_major_version | int >= 26
@@ -68,9 +92,10 @@
   ansible.builtin.deb822_repository:
     name: netdata
     types: deb
-    uris: "{{ mirror_apt_netdata }}/"
-    suites: "{{ ansible_distribution_release }}/"
-    signed_by: https://repo.netdata.cloud/netdatabot.gpg.key
+    uris: "{{ mirror_apt_netdata }}"
+    suites: "{{ ansible_distribution_release }}"
+    components: main
+    signed_by: https://packagecloud.io/netdata/netdata/gpgkey
   register: apt_repository_netdata_deb822
   become: true
   tags:
@@ -98,7 +123,7 @@
 - name: install | Track repository changes
   set_fact:
     apt_repository_netdata:
-      changed: "{{ apt_repository_netdata_legacy is changed or apt_repository_netdata_deb822 is changed or apt_install_python3_debian is changed }}"
+      changed: "{{ apt_repository_netdata_legacy is changed or apt_old_netdata_repo_removed is changed or apt_repository_netdata_deb822 is changed or apt_install_python3_debian is changed }}"
   tags:
     - netdata
 
