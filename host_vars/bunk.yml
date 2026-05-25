@@ -6,3 +6,15 @@ ansible_become_pass: !vault |
           31626639373564353665643035333033663161636632336131626239376130383962626565656133
           6536346630343466330a613962646132343064616666353961373064366238306637633265653431
           39373839306164653938393333326531336134333430623131363937306232383132
+
+# Tailscale mesh: bunk is the Bonniers subnet router + exit node, enrolled into
+# headscale by the standalone bunk.yml playbook (`mise run ansible:bunk --tags
+# tailscale`), NOT site.yml -- bunk is DSM (no apt), so the tailscale role's
+# install half doesn't apply; the DSM Tailscale package is installed via Package
+# Center (operator runbook) and bunk.yml only registers/advertises/approves. The
+# control-plane constants (tailscale_login_server / _headscale_host /
+# _headscale_user) live in group_vars/prod.yml; these are bunk-specific.
+tailscale_advertise_routes: "10.123.57.0/24"
+tailscale_advertise_exit_node: true
+# DSM package binary path (vs lab/pug's apt-installed `tailscale` on PATH).
+tailscale_bin: /var/packages/Tailscale/target/bin/tailscale
