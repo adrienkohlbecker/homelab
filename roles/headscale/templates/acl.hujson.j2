@@ -6,7 +6,8 @@
 // tagOwners/group references so the policy is valid on a fresh instance with no
 // users yet -- a policy that names a non-existent owner makes headscale refuse
 // to load it. Subnet routes and exit nodes are approved explicitly via
-// `headscale routes enable` from the tailscale role, not via autoApprovers.
+// `headscale nodes approve-routes` (delegated from the tailscale role), not via
+// autoApprovers (which would need the tagOwners we deliberately omit here).
 {
   "acls": [
     {

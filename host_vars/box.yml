@@ -179,3 +179,18 @@ z2m_start_service: false
 # this is a static-shape check, not a live runner.
 github_runner_instances:
   - { repo: homelab, suffix: test1, owner: adrienkohlbecker, labels: "self-hosted,test" }
+
+# roles/tailscale test config. Its _setup.yml stands up a local headscale (plain
+# http on the loopback control port, no TLS) for the role to register a real
+# node against; the role's qemu_test branch self-mints the pre-auth key from
+# that local control plane and delegates route-approval back to box itself.
+# These knobs live in host_vars (not a _setup set_fact) because the harness runs
+# each phase (--check / apply / idempotence / _verify) as a SEPARATE ansible
+# process -- host_vars load at parse time in every phase, whereas a set_fact
+# (even cacheable) doesn't reliably survive the next phase's fact-gather. The
+# dynamic pre-auth key is handled in main.yml under qemu_test (minted in the same
+# process that uses it). Prod (lab/pug) gets all of these from host_vars + vault.
+tailscale_login_server: "http://localhost:{{ service_ports.headscale }}"
+tailscale_headscale_host: box
+tailscale_advertise_routes: "10.99.99.0/24"
+tailscale_advertise_exit_node: true

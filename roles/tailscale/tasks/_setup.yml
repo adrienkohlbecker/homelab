@@ -1,0 +1,64 @@
+# End-to-end client test: stand up a real headscale control plane on box, then
+# let the role's `tailscale up` register against it and have the approve-routes
+# step (delegated back to box) round-trip through the live gRPC API. This proves
+# the full mesh-join path, not just "the package installed".
+#
+# The control server runs with a plain-http loopback server_url
+# (headscale_server_url below) so the Tailscale client trusts it without the
+# snakeoil TLS dance -- the prod path is https via nginx, exercised by
+# roles/headscale's own _verify.
+
+- name: _setup | Install podman
+  import_role:
+    name: podman
+    tasks_from: install
+
+- name: _setup | Install nginx
+  import_role:
+    name: _test
+    tasks_from: nginx
+
+- name: _setup | Create /mnt/services
+  file:
+    path: /mnt/services
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+# On prod /mnt/services/sqlite is a real recordsize=4K dataset; the box has no
+# such dataset, so stand the parent up as a plain dir for sqlite_dataset.
+- name: _setup | Create /mnt/services/sqlite parent
+  file:
+    path: /mnt/services/sqlite
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+# Bring up the headscale control plane. server_url points at the plain-http
+# loopback listener (not the https vhost) so the client below can register
+# without trusting the box's snakeoil cert.
+- name: _setup | Stand up headscale control plane
+  import_role:
+    name: headscale
+  vars:
+    headscale_server_url: "http://localhost:{{ service_ports.headscale }}"
+
+- name: _setup | Wait for headscale to answer /health
+  uri:
+    url: http://localhost:{{ service_ports.headscale }}/health
+    status_code: 200
+  register: _setup_health
+  retries: 10
+  delay: 2
+  until: _setup_health.status == 200
+  become: true
+
+# The role's remaining test wiring lives in host_vars/box.yml (static knobs:
+# login_server, headscale_host, advertised routes/exit) and in main.yml's
+# qemu_test branch (minting the pre-auth key from this headscale). _setup only
+# stands up the control plane -- the per-phase process boundary means a set_fact
+# here wouldn't reach the role's apply/--check runs.
