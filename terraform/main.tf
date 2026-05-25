@@ -20,6 +20,14 @@ terraform {
       source  = "wgebis/mailgun"
       version = "~> 0.9"
     }
+    hcloud = {
+      source  = "hetznercloud/hcloud"
+      version = "~> 1.63"
+    }
+    # Retained transiently to destroy the old Scaleway `fox` resources on the
+    # migration apply (a provider can't be dropped while resources it manages
+    # still live in state). Remove this + terraform/scaleway.tf once the apply
+    # has destroyed them and `tofu state list | grep scaleway` is empty.
     scaleway = {
       source  = "scaleway/scaleway"
       version = "~> 2"
@@ -96,6 +104,13 @@ variable "state_passphrase" {
 # resolve-by-name API call per plan.
 locals {
   cloudflare_account_id = "43f1339d1841088669b616cecc6562de"
+
+  # Home WAN IP (the Freebox public v4), scoping fox's SSH firewall rule to the
+  # home network. Residential, so it can change -- if it does, update here (and
+  # unblock fox SSH via the Hetzner Cloud console in the meantime). NB: the
+  # home.fahm.fr A record repeats this literal because it lives in a `variable`
+  # default (dns_fahm_fr.tf), where locals aren't allowed -- keep them in sync.
+  home_wan_ip = "203.0.113.10"
 
   # data/network_topology.yml is the canonical IP topology, also
   # consumed by ansible (group_vars/all/network.yml — same source of

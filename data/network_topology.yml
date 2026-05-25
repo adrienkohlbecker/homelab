@@ -86,7 +86,18 @@ sites:
   site_8:  { cidr: 10.123.8.0/21,  status: reserved }
   site_16: { cidr: 10.123.16.0/20, status: reserved }
   site_32: { cidr: 10.123.32.0/20, status: reserved }
-  site_48: { cidr: 10.123.48.0/21, status: reserved }
+  # 48.0/21 was one reserved block; re-tiled to 48.0/22 + 52.0/23 + 54.0/24 so
+  # the `hetzner` site can take 55.0/24 without overlapping a sibling.
+  site_48: { cidr: 10.123.48.0/22, status: reserved }
+  site_52: { cidr: 10.123.52.0/23, status: reserved }
+  site_54: { cidr: 10.123.54.0/24, status: reserved }
+  hetzner:
+    # Off-home Hetzner Cloud private network (terraform/hetzner.tf) -- the only
+    # internet-facing site; the home hosts dial outbound to fox here. fox's
+    # physical 10.123.55.2 is its private-net interface and the +64.0.0 mirror
+    # (10.123.119.2) is its wg0 address. Hetzner reserves .1 as the gateway.
+    cidr: 10.123.55.0/24
+    gateway: 10.123.55.1
   brumath:
     cidr: 10.123.56.0/24
     gateway: 10.123.56.1
@@ -115,6 +126,7 @@ hosts:
   pom:  { site: home,     slot: 2, physical: 10.123.0.4,  wireguard: 10.123.64.4, status: planned }
   box:  { site: home,     slot: 3, physical: 10.123.0.5,  wireguard: 10.123.64.5 }
   bunk: { site: bonniers,          physical: 10.123.57.3, wireguard: 10.123.121.3 }
+  fox:  { site: hetzner,           physical: 10.123.55.2, wireguard: 10.123.119.2 }
 
 # Wireguard overlay. Server peer addresses are `hosts.<n>.wireguard`;
 # the set of servers is simply the hosts with wireguard configured

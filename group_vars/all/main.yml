@@ -326,21 +326,21 @@ wireguard_peers:
     public_key: "{{ wireguard_keys.bunk.public_key }}"
     private_key: "{{ wireguard_keys.bunk.private_key }}"
   - name: fox
-    # External Scaleway VPS (Headscale control plane) joined to the wg0
+    # External Hetzner Cloud VPS (Headscale control plane) joined to the wg0
     # backbone as a listener: lab/pug dial OUT to it (keepalive_from below) so
-    # no inbound is reintroduced at home. Not a topology host -- it has no
-    # private physical IP -- so the wg address + site_subnet are literals
-    # (10.123.64.6 is the next free server-block slot after box's .5). No
+    # no inbound is reintroduced at home. fox is a topology host in the
+    # `hetzner` site (physical 10.123.55.2 on the Hetzner private net), so its
+    # wg address is the +64.0.0 mirror 10.123.119.2 derived in the topology. No
     # allowed_ips beyond the implicit /32, so other peers route only fox/32 and
     # fox reaches just lab/pug/box/bunk's wg /32s -- enough for netdata's
-    # Authelia forward-auth over wg0, never the home LAN. site_subnet is a
-    # unique sentinel /32 so the endpoint-selection never treats fox as
-    # same-site as home/bonniers (always dials the remote FQDN).
-    address: "10.123.64.6"
+    # Authelia forward-auth over wg0, never the home LAN. site_subnet is fox's
+    # own wg /32 (a unique sentinel) so the endpoint-selection never treats fox
+    # as same-site as home/bonniers (always dials the remote FQDN).
+    address: "{{ network.hosts.fox.wireguard }}"
     endpoint:
       remote: "fox.{{ domain }}:51820"
     is_server: true
-    site_subnet: "10.123.64.6/32"
+    site_subnet: "{{ network.hosts.fox.wireguard }}/32"
     keepalive_from: [lab, pug]
     dns_address: "{{ external_ips.pihole }}"
     public_key: "{{ wireguard_keys.fox.public_key }}"
