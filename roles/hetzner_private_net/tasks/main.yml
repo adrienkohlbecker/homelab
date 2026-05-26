@@ -5,6 +5,11 @@
 # adds an additive drop-in to bring it up. Nothing at home routes to 10.123.55.x
 # today (the fleet reaches fox over wg0); this just makes the OS match what
 # terraform provisioned.
+#
+# No _verify.yml: this role only acts on fox, which isn't a test-harness machine,
+# and no qemu fixture has a Hetzner private NIC (the iface default is empty, so
+# the role no-ops on box/pug/lab). The copy's `validate:` is the only automatable
+# check; real behavior is exercised on fox at converge.
 - name: Assert the configured private-network interface exists
   # A typo here, or PCI-slot churn on a Hetzner rebuild, would otherwise write a
   # drop-in for a non-existent NIC -- `netplan apply` then succeeds and the link
