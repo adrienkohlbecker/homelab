@@ -2,7 +2,7 @@
 # (vanilla Ubuntu cloud image: ext4, snapd + cloud-init preinstalled)
 # on top of the default `box` (debootstrap'd ZFS rpool).
 #
-# Read by mise-tasks/ci/detect-roles. One role per line; comments +
+# Read by mise-tasks/ci/detect-roles.sh. One role per line; comments +
 # blank lines OK. Add roles here when behaviour genuinely differs
 # against a host where the upstream-shipped packages it
 # removes/replaces are actually present — e.g. cleanup exercises the

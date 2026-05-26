@@ -13,5 +13,5 @@ set -euo pipefail
 repo=$(git worktree list --porcelain | awk '/^worktree / {print $2; exit}')
 wt="$repo/.worktrees/$usage_name"
 git -C "$repo" worktree add -b "$usage_name" "$wt" "$usage_base"
-"$repo/mise-tasks/worktree/populate" "$wt"
+"$repo/mise-tasks/worktree/populate.sh" "$wt"
 code --new-window "$wt"

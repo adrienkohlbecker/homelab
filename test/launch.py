@@ -166,7 +166,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         metavar="PLAYBOOK",
-        help="After SSH + system-running ready, run ansible-playbook " "PLAYBOOK against the booted VM, then cleanly shut down. Used by " "mise-tasks/packer/seed-deps to bake deps into a derived variant " "image. Implies --exit-after-ready semantics.",
+        help="After SSH + system-running ready, run ansible-playbook " "PLAYBOOK against the booted VM, then cleanly shut down. Used by " "mise-tasks/packer/seed-deps.sh to bake deps into a derived variant " "image. Implies --exit-after-ready semantics.",
     )
     parser.add_argument(
         "--commit",

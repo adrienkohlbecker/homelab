@@ -75,7 +75,7 @@ jobs:
           fi
           mise run packer:build "${args[@]}"
       - name: Seed box_deps on top of box
-        # box_deps is a derivation: mise-tasks/packer/seed-deps stages a
+        # box_deps is a derivation: mise-tasks/packer/seed-deps.sh stages a
         # reflink-copy of box's artifacts, boots them via launch.py
         # --commit, applies packer/seed_deps.yml (podman + nginx +
         # backports), then atomically publishes the result. ~5 min on
