@@ -30,6 +30,7 @@
     mode: "0755"
   loop:
     - /mnt/services
+    - /mnt/services/sqlite
     - /mnt/scratch
     - /mnt/media
   become: true
