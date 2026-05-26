@@ -20,7 +20,7 @@
     pkg:
       - chrony
     cache_valid_time: 3600
-  register: chrony_apt
+  register: ntp_chrony_apt
   become: true
   tags:
     - ntp
@@ -32,7 +32,7 @@
 # `backports_name: ntp`, registering whether the apt upgrade actually
 # moved chrony forward.
 - name: Start chrony
-  when: not (ansible_check_mode and chrony_apt.changed)
+  when: not (ansible_check_mode and ntp_chrony_apt.changed)
   systemd:
     name: chrony
     enabled: true

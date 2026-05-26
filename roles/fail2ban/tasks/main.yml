@@ -10,7 +10,7 @@
     cache_valid_time: 3600
     policy_rc_d: 101
   become: true
-  register: apt_install_fail2ban
+  register: fail2ban_apt
   tags:
     - fail2ban
 
@@ -173,7 +173,7 @@
 # fail2ban-client lacks a single-file validate mode, so this can't
 # move to the copy task's `validate:` parameter.
 - name: Validate fail2ban config
-  when: not (ansible_check_mode and apt_install_fail2ban.changed)
+  when: not (ansible_check_mode and fail2ban_apt.changed)
   command: fail2ban-client -t
   changed_when: false
   become: true
@@ -192,8 +192,8 @@
   vars:
     systemd_unit_args:
       src: fail2ban
-      condition: "{{ not (ansible_check_mode and apt_install_fail2ban.changed) }}"
-      restart: "{{ apt_install_fail2ban.changed or ((fail2ban_default.changed or fail2ban_daemon.changed) and not apt_install_fail2ban.changed) }}"
-      reload: "{{ (fail2ban_sshd_jail.changed or fail2ban_legacy_override.changed or fail2ban_mail_action.changed) and not apt_install_fail2ban.changed and not fail2ban_default.changed and not fail2ban_daemon.changed }}"
+      condition: "{{ not (ansible_check_mode and fail2ban_apt.changed) }}"
+      restart: "{{ fail2ban_apt.changed or ((fail2ban_default.changed or fail2ban_daemon.changed) and not fail2ban_apt.changed) }}"
+      reload: "{{ (fail2ban_sshd_jail.changed or fail2ban_legacy_override.changed or fail2ban_mail_action.changed) and not fail2ban_apt.changed and not fail2ban_default.changed and not fail2ban_daemon.changed }}"
   tags:
     - fail2ban

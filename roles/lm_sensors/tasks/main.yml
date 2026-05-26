@@ -17,7 +17,7 @@
     group: root
     backup: true
   become: true
-  register: kernel_modules_copy
+  register: lm_sensors_modules_copy
   tags:
     - lm_sensors
 
@@ -27,12 +27,12 @@
     path: /etc/modules-load.d/lm_sensors.conf
     state: absent
   become: true
-  register: kernel_modules_rm
+  register: lm_sensors_modules_rm
   tags:
     - lm_sensors
 
 - name: Ask to reboot
-  when: kernel_modules_copy.changed or kernel_modules_rm.changed
+  when: lm_sensors_modules_copy.changed or lm_sensors_modules_rm.changed
   file:
     path: /var/run/reboot-required
     state: touch

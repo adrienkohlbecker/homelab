@@ -17,7 +17,7 @@
     mode: "0644"
     backup: true
   become: true
-  register: apt_unattended_20
+  register: unattended_upgrades_apt_20
   tags:
     - unattended_upgrades
 
@@ -30,12 +30,12 @@
     mode: "0644"
     backup: true
   become: true
-  register: apt_unattended_50
+  register: unattended_upgrades_apt_50
   tags:
     - unattended_upgrades
 
 - name: Dry-run unattended-upgrades
-  when: apt_unattended_20.changed or apt_unattended_50.changed
+  when: unattended_upgrades_apt_20.changed or unattended_upgrades_apt_50.changed
   command: unattended-upgrades --dry-run --verbose
   changed_when: false
   become: true

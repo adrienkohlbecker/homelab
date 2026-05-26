@@ -4,7 +4,7 @@
       - tzdata
     cache_valid_time: 3600
   become: true
-  register: tzdata_apt
+  register: timezone_apt
   tags:
     - timezone
 
@@ -22,7 +22,7 @@
     - timezone
 
 - name: Configure localtime
-  when: not (ansible_check_mode and tzdata_apt.changed)
+  when: not (ansible_check_mode and timezone_apt.changed)
   file:
     src: /usr/share/zoneinfo/Etc/UTC
     dest: /etc/localtime
@@ -30,13 +30,13 @@
     group: root
     mode: "0644"
     state: link
-  register: localtime_cfg
+  register: timezone_localtime_cfg
   become: true
   tags:
     - timezone
 
 - name: Ask to reboot
-  when: timezone_cfg.changed or localtime_cfg.changed
+  when: timezone_cfg.changed or timezone_localtime_cfg.changed
   file:
     path: /var/run/reboot-required
     state: touch
