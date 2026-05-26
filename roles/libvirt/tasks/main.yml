@@ -12,7 +12,7 @@
       - libhugetlbfs-bin
     cache_valid_time: 3600
   become: true
-  register: apt_install_libvirt
+  register: libvirt_apt
   tags:
     - libvirt
 
@@ -23,7 +23,7 @@
       - python3-lxml
     cache_valid_time: 3600
   become: true
-  register: apt_install_python_libvirt
+  register: libvirt_apt_python
   tags:
     - libvirt
 
@@ -65,7 +65,7 @@
   import_role:
     name: usergroup_immediate
     tasks_from: user
-  when: not (ansible_check_mode and apt_install_libvirt.changed)
+  when: not (ansible_check_mode and libvirt_apt.changed)
   vars:
     usergroup_immediate_group:
       - libvirt
@@ -103,13 +103,13 @@
   vars:
     systemd_unit_args:
       src: libvirtd
-      condition: "{{ not (ansible_check_mode and apt_install_libvirt.changed) }}"
+      condition: "{{ not (ansible_check_mode and libvirt_apt.changed) }}"
       restart: "{{ libvirt_firewall_backend.changed | default(false) }}"
   tags:
     - libvirt
 
 - name: Start default network
-  when: not (ansible_check_mode and (apt_install_libvirt.changed or apt_install_python_libvirt.changed or systemd_started.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or systemd_started.changed))
   community.libvirt.virt_net:
     name: default
     state: active
@@ -118,7 +118,7 @@
     - libvirt
 
 - name: Autostart default network
-  when: not (ansible_check_mode and (apt_install_libvirt.changed or apt_install_python_libvirt.changed or systemd_started.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or systemd_started.changed))
   community.libvirt.virt_net:
     name: default
     autostart: true
