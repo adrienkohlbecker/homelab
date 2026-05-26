@@ -15,11 +15,15 @@
 #          become: true
 #          throttle: 1
 #
-#    The throttle is per-task: a base-conf edit (reloaded by THIS role)
-#    and a tenant-fragment edit in the same converge serialize
-#    independently, so the rolling guarantee holds within each task, not
-#    across the pair. Structural changes (interface, VRID, vmac) need a
-#    manual restart — reload won't pick those up.
+#    The tenant reload above is throttled; THIS role's own base-conf
+#    reload is NOT — it routes through the systemd_unit helper, which has
+#    no throttle, so a `files/keepalived.conf` edit SIGHUPs every peer at
+#    once. That is tolerable because base-conf edits are rare (a static
+#    file) and SIGHUP-reload is hitless (see _verify branch C: the VIP
+#    does not flap on reload); if a base-conf change ever risks a VRRP
+#    transition, roll it out with `--limit` one host at a time. Structural
+#    changes (interface, VRID, vmac) need a manual restart — reload won't
+#    pick those up.
 # 3. Retiring a tenant: drop a `file: state=absent` task targeting
 #    its conf.d/<tenant>.conf and KEEP it as a tombstone in the role
 #    until you're sure every host has converged. This role does not
@@ -86,6 +90,12 @@
   tags:
     - keepalived
 
+# No inline `validate:` here (unlike most config-writing tasks): the
+# validator is `keepalived -t`, which needs the package installed (it may
+# not exist yet on a fresh host, esp. in check mode) and parses the whole
+# assembled config including conf.d. Both conditions are handled by the
+# gated "Validate assembled keepalived config" block below, so validation
+# lives there rather than on this task.
 - name: Copy the configuration
   copy:
     src: keepalived.conf
