@@ -83,9 +83,10 @@
     fail_msg: "deployed /etc/netdata/go.d/sensors.conf:\n{{ _verify_godconf.content | b64decode }}"
 
 # Exercise the empty-list removal arm (usage scenario 2): re-running with no
-# modules must drop the modules-load.d file and flag a reboot (dropping a
-# module from modules-load.d doesn't unload the running kernel, so a reboot is
-# needed to actually unload it -- see main.yml's removal comment).
+# modules must drop the modules-load.d file and live-unload the dropped
+# module. 'dummy' isn't in use here, so modprobe -r removes it cleanly and no
+# reboot is flagged; a pinned module would stay loaded and flag a reboot
+# instead (the fallback path -- see main.yml's unload comment).
 - name: _verify | clear any pre-existing reboot-required sentinel
   file:
     path: /var/run/reboot-required
@@ -105,17 +106,26 @@
   register: _verify_modload_after
   become: true
 
+- name: _verify | check whether the dropped module is still loaded
+  command: grep -qw dummy /proc/modules
+  register: _verify_dummy_loaded
+  changed_when: false
+  failed_when: false
+  become: true
+
 - name: _verify | stat the reboot-required sentinel
   stat:
     path: /var/run/reboot-required
   register: _verify_reboot_after
   become: true
 
-- name: _verify | assert removal dropped the file and flagged a reboot
+- name: _verify | assert removal dropped the file and live-unloaded the module
   assert:
     that:
       - not _verify_modload_after.stat.exists
-      - _verify_reboot_after.stat.exists
+      - _verify_dummy_loaded.rc != 0
+      - not _verify_reboot_after.stat.exists
     fail_msg: >-
       empty-list removal arm: modules-load.d exists={{ _verify_modload_after.stat.exists }},
+      dummy still loaded={{ _verify_dummy_loaded.rc == 0 }},
       reboot-required exists={{ _verify_reboot_after.stat.exists }}

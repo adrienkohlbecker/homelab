@@ -19,34 +19,40 @@
   tags:
     - lm_sensors
 
-- name: Load detected sensor modules
-  when: sensor_modules | length > 0
-  copy:
-    dest: /etc/modules-load.d/lm_sensors.conf
-    content: "{{ sensor_modules | join('\n') }}\n"
-    mode: "0644"
-    owner: root
-    group: root
-    backup: true
-  become: true
-  register: lm_sensors_modules_copy
-  tags:
-    - lm_sensors
-
-- name: Remove sensor modules
-  when: sensor_modules | length == 0
-  file:
+# Read the currently-persisted list first so we can spot modules being
+# dropped (a shrink or a full clear) and unload them live below, instead of
+# leaving them resident until the next boot.
+- name: Stat the persisted sensor module list
+  stat:
     path: /etc/modules-load.d/lm_sensors.conf
-    state: absent
+  register: lm_sensors_modload_stat
   become: true
-  register: lm_sensors_modules_rm
   tags:
     - lm_sensors
 
-# Load the modules live so sensors (and their netdata charts) appear
-# immediately instead of waiting for the next boot. modprobe is
-# idempotent, so on a host where the drivers are already loaded this is a
-# no-op after first apply; modules-load.d above keeps them loaded at boot.
+- name: Read the persisted sensor module list
+  when: lm_sensors_modload_stat.stat.exists
+  slurp:
+    path: /etc/modules-load.d/lm_sensors.conf
+  register: lm_sensors_modload_old
+  become: true
+  tags:
+    - lm_sensors
+
+- name: Compute which sensor modules are being dropped
+  set_fact:
+    lm_sensors_dropped: >-
+      {{ ((lm_sensors_modload_old.content | default('') | b64decode).split()
+          if lm_sensors_modload_stat.stat.exists else [])
+         | difference(sensor_modules) }}
+  tags:
+    - lm_sensors
+
+# Load additions live BEFORE persisting the list, so a bad or unavailable
+# module name fails the play here and never lands in modules-load.d (where it
+# would re-fail at every boot). modprobe is idempotent -- a no-op once the
+# driver is loaded -- so this also brings sensors (and their netdata charts)
+# up immediately instead of waiting for the next boot.
 - name: Load sensor modules now
   when: sensor_modules | length > 0
   modprobe:
@@ -57,13 +63,64 @@
   tags:
     - lm_sensors
 
-# Only a removal needs a reboot: dropping a module from modules-load.d
-# doesn't unload it from the running kernel, and rmmod mid-run is risky (a
-# driver may be in use). Adding modules no longer reboots -- they're
-# modprobe'd live above. (Shrinking the list leaves the dropped module
-# loaded until the next boot, which is harmless for sensor drivers.)
-- name: Touch /var/run/reboot-required (sensor modules removed)
-  when: lm_sensors_modules_rm.changed
+- name: Persist the sensor module list for boot
+  when: sensor_modules | length > 0
+  copy:
+    dest: /etc/modules-load.d/lm_sensors.conf
+    content: "{{ sensor_modules | join('\n') }}\n"
+    mode: "0644"
+    owner: root
+    group: root
+    backup: true
+  become: true
+  tags:
+    - lm_sensors
+
+- name: Remove the persisted module list when empty
+  when: sensor_modules | length == 0
+  file:
+    path: /etc/modules-load.d/lm_sensors.conf
+    state: absent
+  become: true
+  tags:
+    - lm_sensors
+
+# Live-unload dropped modules best-effort. `modprobe -r` (state: absent)
+# refuses to remove an in-use module rather than forcing it (never rmmod -f),
+# so this can't wedge a driver fancontrol/fan2go or an open hwmon reader is
+# holding -- those stay loaded and get the reboot flag below. This is also
+# why the role hand-rolls module management instead of community.general
+# modprobe's `persistent:`: that writes per-module files and only *comments
+# out* a dropped module on removal, never unloading it.
+- name: Unload dropped sensor modules (best effort)
+  when: lm_sensors_dropped | length > 0
+  modprobe:
+    name: "{{ item }}"
+    state: absent
+  loop: "{{ lm_sensors_dropped }}"
+  failed_when: false
+  become: true
+  tags:
+    - lm_sensors
+
+# A dropped module still resident after the unload attempt is pinned (in
+# use); flag a reboot so the operator can clear it. Cleanly-unloaded modules
+# need none. modprobe maps hyphens to underscores in /proc/modules.
+- name: Check whether dropped modules are still loaded
+  when: lm_sensors_dropped | length > 0
+  command: grep -qw {{ item | replace('-', '_') }} /proc/modules
+  loop: "{{ lm_sensors_dropped }}"
+  register: lm_sensors_dropped_loaded
+  changed_when: false
+  failed_when: false
+  become: true
+  tags:
+    - lm_sensors
+
+- name: Ask to reboot
+  when: >-
+    lm_sensors_dropped_loaded.results | default([])
+    | selectattr('rc', 'defined') | selectattr('rc', 'eq', 0) | list | length > 0
   file:
     path: /var/run/reboot-required
     state: touch
