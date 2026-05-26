@@ -1,7 +1,9 @@
 # Inputs: caller passes a single dict `linger_args` with keys
 #   name  required; user account to linger (for the ansible SSH user
 #         pass `ansible_user_id`, for service_user-created accounts
-#         pass the literal name)
+#         pass the literal name). The account must already exist —
+#         loginctl enable-linger errors on an unknown user, so place
+#         this import after the task that creates the user.
 #   uid   required; the user's uid (caller resolves; for the ansible
 #         SSH user pass `ansible_user_uid`, for service_user-created
 #         accounts pass `<svc>_user.uid`)
@@ -12,32 +14,58 @@
 # evaluated, which trips a "'ansible_user' is undefined" warning.
 #
 # Does:
-#   1. loginctl enable-linger <name>, gated on the linger sentinel so
-#      a re-run is a no-op.
+#   1. loginctl enable-linger <name>. enable-linger is itself idempotent
+#      (a no-op when linger is already on); the `creates:` sentinel only
+#      suppresses a phantom "changed" on re-runs — it is not a
+#      correctness guard.
 #   2. Captures the linger result under `<name>_linger` so consumers
 #      can chain check-mode gates on downstream user-scope tasks
 #      (e.g. `<name>_linger.changed` paired with `<name>_user.changed`).
-#      Mirrors service_user's `<name>_user` capture.
-#   3. Ensures user@<uid>.service is started — linger triggers the user
-#      manager asynchronously, so a consumer driving `systemctl --user`
-#      immediately after needs it fully up. The check-mode gate guards
-#      against a fresh-user / fresh-linger run under --check where the
-#      sentinel wasn't really written and uid may be unresolved.
+#      Mirrors service_user's `<name>_user` capture. Only meaningful to
+#      callers that drive further user-scope work off a freshly-created
+#      user; the operator-user callers (podman, user) ignore it.
+#   3. Ensures user@<uid>.service is started. loginctl enable-linger only
+#      writes the marker; it never synchronously starts the user manager,
+#      so a consumer driving `systemctl --user` immediately after needs
+#      this explicit start. It is a hard contract every caller depends on
+#      — do not drop it. The check-mode gate guards against a fresh-user /
+#      fresh-linger run under --check where the sentinel wasn't really
+#      written and uid may be unresolved.
 #
 # The dict form mirrors service_user / systemd_timer / podman_secret:
 # each import_role replaces the whole `linger_args` value at play-vars
 # scope so a previous caller's name/uid can't bleed into the next call.
+- name: linger | Validate inputs for {{ linger_args.name | default('<unset>') }}
+  assert:
+    that:
+      - linger_args.name is defined
+      - linger_args.name is string
+      - linger_args.name is match('^[a-z_][a-z0-9_-]*$')
+      - linger_args.uid is defined
+      - linger_args.uid | string is match('^[0-9]+$')
+    quiet: true
+    fail_msg: >-
+      linger_args needs name (a valid username matching [a-z_][a-z0-9_-]*)
+      and a numeric uid; got name={{ linger_args.name | default('<unset>') }}
+      uid={{ linger_args.uid | default('<unset>') }}.
+
 - name: linger | Enable linger for {{ linger_args.name }}
-  command: loginctl enable-linger {{ linger_args.name }}
-  args:
+  command:
+    argv:
+      - loginctl
+      - enable-linger
+      - "{{ linger_args.name }}"
     creates: /var/lib/systemd/linger/{{ linger_args.name }}
   become: true
   register: _linger_result
 
 - name: linger | Record linger result for {{ linger_args.name }}
   set_fact:
-    "{{ linger_args.name }}_linger": "{{ _linger_result }}"
+    "{{ linger_args.name | regex_replace('[^A-Za-z0-9_]', '_') }}_linger": "{{ _linger_result }}"
 
+# The gate below reads the bare `_linger_result` register, so the
+# enable → record → start trio must stay contiguous: a registering task
+# slipped between them would clobber it.
 - name: linger | Ensure user manager is running for {{ linger_args.name }}
   when: not (ansible_check_mode and _linger_result.changed)
   systemd:
