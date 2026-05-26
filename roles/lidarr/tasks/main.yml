@@ -20,37 +20,28 @@
   tags:
     - lidarr
 
-- name: Create sqlite directory
-  when: not (ansible_check_mode and lidarr_user.changed)
-  file:
-    dest: /mnt/services/sqlite/lidarr
-    state: directory
-    owner: lidarr
-    group: media
-    mode: "0750"
-  become: true
-  tags:
-    - lidarr
-
 # Lidarr hardcodes its DBs at /config/<name>.db and writes -wal/-shm next to
 # the resolved path. Symlink at /config so SQLite resolves through to the
-# 4K-recordsize sqlite dataset before computing WAL location. Symlink target
-# matches the host path so it resolves identically inside the container (see
-# matching --volume in lidarr.service.j2).
-- name: Symlink lidarr SQLite DBs onto sqlite dataset
-  when: not (ansible_check_mode and lidarr_user.changed)
-  file:
-    src: "/mnt/services/sqlite/lidarr/{{ item }}"
-    dest: "/mnt/services/lidarr/{{ item }}"
-    state: link
-    force: true
-    owner: lidarr
-    group: media
-    follow: false
-  become: true
-  loop:
-    - lidarr.db
-    - logs.db
+# 4K-recordsize sqlite dataset before computing WAL location. The symlink
+# target matches the host path so it resolves identically inside the
+# container (see matching --volume in lidarr.service.j2). pre_create plants
+# empty files on a cold host so state=link doesn't refuse the dangling
+# symlink before Lidarr creates the DBs on first boot.
+- name: Pre-create sqlite dataset and symlink lidarr DBs onto it
+  import_role:
+    name: sqlite_dataset
+    tasks_from: dataset
+  vars:
+    sqlite_dataset_args:
+      name: lidarr
+      owner: lidarr
+      group: media
+      mode: "0750"
+      condition: "{{ not (ansible_check_mode and lidarr_user.changed) }}"
+      pre_create: true
+      links:
+        - /mnt/services/lidarr/lidarr.db
+        - /mnt/services/lidarr/logs.db
   tags:
     - lidarr
 
