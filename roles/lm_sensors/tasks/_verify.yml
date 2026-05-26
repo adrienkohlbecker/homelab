@@ -81,3 +81,41 @@
       - _parsed.jobs[0].relabel[0].chip == 'lm-sensors-test-0'
       - _parsed.jobs[0].relabel[0].sensors[0].label == 'Verify Probe'
     fail_msg: "deployed /etc/netdata/go.d/sensors.conf:\n{{ _verify_godconf.content | b64decode }}"
+
+# Exercise the empty-list removal arm (usage scenario 2): re-running with no
+# modules must drop the modules-load.d file and flag a reboot (dropping a
+# module from modules-load.d doesn't unload the running kernel, so a reboot is
+# needed to actually unload it -- see main.yml's removal comment).
+- name: _verify | clear any pre-existing reboot-required sentinel
+  file:
+    path: /var/run/reboot-required
+    state: absent
+  become: true
+
+- name: _verify | switch to an empty module list
+  set_fact:
+    sensor_modules: []
+
+- name: _verify | re-run the role's module-management tasks
+  import_tasks: main.yml
+
+- name: _verify | stat the modules-load.d file after removal
+  stat:
+    path: /etc/modules-load.d/lm_sensors.conf
+  register: _verify_modload_after
+  become: true
+
+- name: _verify | stat the reboot-required sentinel
+  stat:
+    path: /var/run/reboot-required
+  register: _verify_reboot_after
+  become: true
+
+- name: _verify | assert removal dropped the file and flagged a reboot
+  assert:
+    that:
+      - not _verify_modload_after.stat.exists
+      - _verify_reboot_after.stat.exists
+    fail_msg: >-
+      empty-list removal arm: modules-load.d exists={{ _verify_modload_after.stat.exists }},
+      reboot-required exists={{ _verify_reboot_after.stat.exists }}
