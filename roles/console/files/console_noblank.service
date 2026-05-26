@@ -31,6 +31,9 @@ Environment=TERM=linux
 # write to tty0 propagates to all VTs.
 StandardOutput=tty
 TTYPath=/dev/tty0
+# --msg on re-enables kernel printk() output to the VT (some boot configs
+# suppress it) -- same walk-up-debug goal as disabling blanking. --blank 0 is
+# belt-and-braces with the consoleblank=0 cmdline; --powerdown 0 with --powersave off.
 ExecStart=/usr/bin/setterm --blank 0 --powersave off --powerdown 0 --msg on
 SyslogIdentifier=%N
 
