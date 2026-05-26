@@ -128,7 +128,25 @@ dns:
       - {{ external_ips.pihole }}
     split: {}
   search_domains: []
+{% if headscale_derp_ipv4 is defined %}
+  # Pin the control-plane FQDN into MagicDNS so a roaming device can still resolve
+  # it when the pihole chain (the global nameserver above) is unreachable. With
+  # override_local_dns on, all queries go to pihole, so without this a pihole
+  # outage leaves a client unable to re-resolve headscale to recover. Points at
+  # fox's public IPs (same addresses fox.fahm.fr resolves to). fox-only: gated on
+  # the DERP IPs, unset under the box harness where server_url is a loopback URL.
+  extra_records:
+    - name: "headscale.{{ inventory_hostname }}.{{ domain }}"
+      type: "A"
+      value: "{{ headscale_derp_ipv4 }}"
+{% if headscale_derp_ipv6 is defined %}
+    - name: "headscale.{{ inventory_hostname }}.{{ domain }}"
+      type: "AAAA"
+      value: "{{ headscale_derp_ipv6 }}"
+{% endif %}
+{% else %}
   extra_records: []
+{% endif %}
 
 {% if headscale_oidc_enabled | default(false) %}
 # User-device enrollment via Authelia OIDC. Headless hosts (lab/pug/bunk) use
