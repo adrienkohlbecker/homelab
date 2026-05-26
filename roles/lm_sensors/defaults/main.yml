@@ -1,0 +1,12 @@
+# Optional, host-overridable. Defaults/, not vars/: role vars sit above
+# host_vars in ansible's precedence ladder and would mask per-host
+# overrides. The empty default keeps the role a clean no-op on hosts with
+# no sensors (localhost, minimal, any host that doesn't opt in) -- an empty
+# sensor_modules drives main.yml's removal arm instead of tripping the assert.
+#
+# sensor_modules: hwmon kernel module names to load at boot + live (derive
+#                 per host with `sudo sensors-detect`).
+# sensor_relabel: optional go.d relabel map; consumed only by netdata.yml.
+#                 See roles/lm_sensors/templates/sensors.conf.j2 for the shape.
+sensor_modules: []
+sensor_relabel: []
