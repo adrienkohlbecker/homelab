@@ -123,8 +123,6 @@ roles/_test role-name
 # ── Backlog: real role/var files — fix and DELETE the line ───────────────────
 # Each is a genuine lint debt in production code. Burn these down over time;
 # removing a line re-arms the rule for that file.
-group_vars/all/main.yml jinja[spacing]
-group_vars/prod.yml jinja[spacing]
 roles/_test/tasks/clickhouse_query_wait.yml var-naming[no-role-prefix]
 roles/_test/tasks/clickhouse_query.yml var-naming[no-role-prefix]
 roles/docker_client/tasks/main.yml var-naming[no-role-prefix]
@@ -147,7 +145,6 @@ roles/kdump/tasks/main.yml var-naming[no-role-prefix]
 roles/libvirt/tasks/main.yml var-naming[no-role-prefix]
 roles/lm_sensors/tasks/main.yml var-naming[no-role-prefix]
 roles/locale/tasks/main.yml var-naming[no-role-prefix]
-roles/logrotate/tasks/main.yml jinja[spacing]
 roles/macvlan/tasks/install.yml name[template]
 roles/macvlan/tasks/main.yml key-order[task]
 roles/spouse/tasks/main.yml var-naming[no-role-prefix]
