@@ -27,13 +27,12 @@
 
 - name: Configure the Hetzner private-network interface (additive netplan drop-in)
   # A SEPARATE 60-* file alongside cloud-init's 50-cloud-init.yaml (which owns
-  # eth0) -- netplan merges every file in the directory. cloud-init is purged by
-  # the `cleanup` role earlier in fox's play, so 50-cloud-init.yaml is a frozen
-  # orphan now; owning a distinct file means we never touch that eth0-owning
-  # file, and since this stanza only adds a NIC (eth0 untouched), `netplan apply`
-  # can't bounce the SSH path (ansible reaches fox over eth0 via fox.fahm.fr,
-  # not this private NIC). Keyed by interface NAME (the PCI slot is stable
-  # across Hetzner server rebuilds) rather than MAC, which churns on
+  # eth0): netplan merges every file in the directory, so a distinct file lets
+  # us add the NIC without touching the eth0-owning one. cloud-init is purged on
+  # fox (the `cleanup` role), so 50-cloud-init.yaml is a frozen orphan that won't
+  # be regenerated. The stanza only adds a NIC (eth0 untouched), so `netplan
+  # apply` can't bounce the SSH path. Keyed by interface NAME (the PCI slot is
+  # stable across Hetzner server rebuilds) rather than MAC, which churns on
   # re-creation and would silently go stale in this static file. Hetzner serves
   # the terraform-assigned address over DHCP on this link (which also hands out
   # the 1450 MTU as DHCP option 26, so we don't pin it here); use-dns:false
