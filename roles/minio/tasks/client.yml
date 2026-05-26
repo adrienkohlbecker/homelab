@@ -34,7 +34,7 @@
     - name: client | Install mcli
       apt:
         deb: /tmp/mcli.deb
-      register: mcli_installed
+      register: minio_mcli_installed
 
     - name: client | Delete deb file
       file:
@@ -42,7 +42,7 @@
         state: absent
 
 - name: client | Configure alias
-  when: not (ansible_check_mode and mcli_installed.changed)
+  when: not (ansible_check_mode and minio_mcli_installed.changed)
   command: mcli alias set default http://localhost:9199 {{ minio_root_user }} {{ minio_root_password }}
   args:
     creates: ~/.mcli/config.json

@@ -23,8 +23,8 @@
   shell: set -euo pipefail; (pdbedit --user=spouse 2>&1 > /dev/null) || (echo '{{ spouse_samba_password }}'; echo '{{ spouse_samba_password }}') | smbpasswd -s -a spouse
   args:
     executable: /bin/bash
-  register: smbpasswd
-  changed_when: "'Added user' in smbpasswd.stdout"
+  register: spouse_smbpasswd
+  changed_when: "'Added user' in spouse_smbpasswd.stdout"
   become: true
   tags:
     - spouse

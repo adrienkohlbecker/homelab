@@ -107,7 +107,7 @@
   command: /usr/local/bin/gitea --config /etc/gitea/app.ini actions generate-runner-token
   args:
     creates: /mnt/services/gitea_runner/.runner
-  register: _test_runner_token
+  register: gitea_runner_test_token
   become: true
   become_user: git
   no_log: true
@@ -136,7 +136,7 @@
 # stderr before failing loudly.
 #
 # REGISTRATION_TOKEN expression: in qemu_test the mint above set
-# _test_runner_token.stdout to a single-line token; in prod the
+# gitea_runner_test_token.stdout to a single-line token; in prod the
 # vaulted gitea_runner_registration_token is the source. The 'TOKEN'
 # fall-through covers check-mode + post-registration re-applies where
 # the mint task was skipped (creates: .runner) and stdout is undefined
@@ -157,7 +157,7 @@
     executable: /bin/bash
   environment:
     REGISTRATION_TOKEN: >-
-      {{ (_test_runner_token.stdout | default('') | trim or 'TOKEN')
+      {{ (gitea_runner_test_token.stdout | default('') | trim or 'TOKEN')
          if qemu_test
          else gitea_runner_registration_token }}
   become: true
@@ -179,7 +179,7 @@
     # no output (test).
     _stderr: "{{ gitea_runner_registration.stderr | default('') }}"
     _token: >-
-      {{ (_test_runner_token.stdout | default('') | trim)
+      {{ (gitea_runner_test_token.stdout | default('') | trim)
          if qemu_test
          else (gitea_runner_registration_token | default('')) }}
   fail:
