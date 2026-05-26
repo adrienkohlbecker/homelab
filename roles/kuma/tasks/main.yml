@@ -9,9 +9,10 @@
     - kuma
 
 - name: Install sqlite3 CLI
-  # sqlite3 CLI is used (read-only) by the _verify journal_mode probe.
-  # libsqlite3-0 is pulled transitively; the CLI isn't -- mirror
-  # healthchecks/main.yml:5-9.
+  # The disableAuth seed below drives the sqlite3 CLI against kuma's live DB
+  # on prod (and the _verify probes use it too). libsqlite3-0 is pulled in
+  # transitively by kuma; the CLI binary isn't -- install it like
+  # healthchecks does.
   apt:
     pkg: sqlite3
     cache_valid_time: 3600
@@ -90,42 +91,35 @@
 #
 # Hard precondition: with disableAuth set, kuma auto-logs-in as the first
 # user row (server.js: afterLogin(R.findOne("user")) on socket connect).
-# An empty user table dereferences null and crashes the handshake, so only
-# seed once a user exists. That also means a brand-new instance (fresh host
-# or test VM) keeps its own login until the operator runs the setup wizard.
-- name: Read kuma auth state from the sqlite DB
-  when: not (ansible_check_mode and kuma_user.changed)
-  # -readonly is safe against the live WAL DB (mirrors the _verify probe).
-  command: >-
-    sqlite3 -readonly /mnt/services/sqlite/kuma/kuma.db
-    "SELECT (SELECT count(*) FROM user),
-            coalesce((SELECT value FROM setting WHERE key='disableAuth'), 'unset');"
-  register: kuma_auth_state
-  changed_when: false
-  failed_when: false
-  become: true
-  tags:
-    - kuma
-
-# Live UPSERT against the WAL DB -- busy_timeout rides out any heartbeat
-# write kuma is mid-flight. value is JSON `true` because Settings.get
-# JSON.parses it; type='general' mirrors the UI's setSettings("general", ...)
-# so the row also surfaces on the Security settings page. kuma caches
-# settings in-process for 60s and re-reads disableAuth only on a fresh
-# socket connection, so the restart below is what makes it take effect.
+# An empty user table dereferences null and crashes the handshake, so the
+# statement self-gates on `WHERE EXISTS (SELECT 1 FROM user)` -- a brand-new
+# instance (fresh host or test VM) keeps its own login until the operator
+# runs the setup wizard and a later converge seeds it.
+#
+# One live statement against the WAL DB: `.timeout 30000` rides out any
+# heartbeat write or WAL checkpoint kuma is mid-flight (the old 5s could
+# expire during a checkpoint and abort the converge). value is the JSON
+# literal `true` (Settings.get JSON.parses it); type='general' mirrors the
+# UI's setSettings("general", ...) so the row also surfaces on the Security
+# page. `changes()` reports whether the row actually moved, so changed_when
+# is honest and the restart below fires only on a real flip -- kuma re-reads
+# disableAuth on a fresh socket connection. A DB whose schema kuma hasn't
+# created yet (no `user` table) is tolerated: the seed no-ops until first
+# start has populated it.
 - name: Disable kuma's built-in auth (Authelia fronts it)
-  when:
-    - not ansible_check_mode
-    - "'|' in (kuma_auth_state.stdout | default(''))"
-    - (kuma_auth_state.stdout.split('|')[0] | int) > 0
-    - kuma_auth_state.stdout.split('|')[1] | trim != 'true'
+  when: not ansible_check_mode
   command: >-
-    sqlite3 /mnt/services/sqlite/kuma/kuma.db
-    "PRAGMA busy_timeout=5000;
-     INSERT INTO setting (key, value, type) VALUES ('disableAuth', 'true', 'general')
-     ON CONFLICT(key) DO UPDATE SET value='true', type='general';"
+    sqlite3 -cmd ".timeout 30000" /mnt/services/sqlite/kuma/kuma.db
+    "INSERT INTO setting (key, value, type)
+       SELECT 'disableAuth', 'true', 'general' WHERE EXISTS (SELECT 1 FROM user)
+     ON CONFLICT(key) DO UPDATE SET value='true', type='general'
+       WHERE setting.value != 'true';
+     SELECT changes();"
   register: kuma_disableauth_seed
-  changed_when: true
+  changed_when: (kuma_disableauth_seed.stdout | trim | int) > 0
+  failed_when:
+    - kuma_disableauth_seed.rc != 0
+    - "'no such table' not in kuma_disableauth_seed.stderr"
   become: true
   tags:
     - kuma
