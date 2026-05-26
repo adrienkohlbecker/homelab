@@ -46,19 +46,34 @@
   tags:
     - getmail
 
-# Roundcube's apache image chowns these to its in-container www-data at
-# startup, so root-owned 0755 host dirs are fine.
-- name: Create roundcube state directories
+# Roundcube's apache image chowns its mounted dirs to in-container www-data at
+# startup, so root-owned 0755 host dirs are fine. config rides the services
+# dataset; the sqlite DB goes on the dedicated 4K-recordsize sqlite dataset
+# below.
+- name: Create roundcube config directory
   file:
-    dest: "/mnt/services/getmail_webmail/roundcube/{{ item }}"
+    dest: /mnt/services/getmail_webmail/roundcube/config
     state: directory
     owner: root
     group: root
     mode: "0755"
   become: true
-  loop:
-    - db
-    - config
+  tags:
+    - getmail
+
+# Roundcube's sqlite DB on the dedicated sqlite dataset (4K recordsize, matches
+# kuma/paperless). The unit mounts this dir as ROUNDCUBEMAIL_DB_DIR directly
+# (no symlink) and the image creates sqlite.db in it on first boot. Intermediate
+# /mnt/services/sqlite is created here too on the test box; on prod it's the
+# sqlite dataset mountpoint.
+- name: Create roundcube sqlite directory
+  file:
+    dest: /mnt/services/sqlite/roundcube
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
   tags:
     - getmail
 

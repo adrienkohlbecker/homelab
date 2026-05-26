@@ -18,6 +18,8 @@ StartLimitBurst=3
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
 Requires=zfs_mount_mnt_services.service
+After=zfs_mount_mnt_services_sqlite.service
+Requires=zfs_mount_mnt_services_sqlite.service
 {% endif %}
 After=zfs_autosnapshot.target
 PartOf=zfs_autosnapshot.target
@@ -46,13 +48,16 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="roundcube" \
     --network getmail_webmail \
-    --volume /mnt/services/getmail_webmail/roundcube/db:/var/roundcube/db \
+    {# SQLite (Roundcube's prefs/contacts/cache) lives on the dedicated
+       4K-recordsize sqlite dataset. ROUNDCUBEMAIL_DB_DIR is a dedicated mount
+       point, so we point it straight at the dataset — no symlink dance (unlike
+       kuma/paperless, whose DB sits inside a larger data dir). The image's
+       entrypoint creates sqlite.db here on first boot. #}
+    --volume /mnt/services/sqlite/roundcube:/var/roundcube/db \
     --volume /mnt/services/getmail_webmail/roundcube/config:/var/roundcube/config \
     --publish 127.0.0.1:{{ service_ports.roundcube }}:80/tcp \
     {# Plain IMAP on 143 to the dovecot container; the hop stays on the internal
-       podman bridge so TLS would be ceremony. SQLite holds only this single
-       operator's prefs/contacts/cache — light enough to skip the sqlite
-       dataset + symlink machinery (see notes/getmail_webmail_design.md). #}
+       podman bridge so TLS would be ceremony. #}
     --env ROUNDCUBEMAIL_DEFAULT_HOST=dovecot \
     --env ROUNDCUBEMAIL_DEFAULT_PORT=143 \
     --env ROUNDCUBEMAIL_DB_TYPE=sqlite \
