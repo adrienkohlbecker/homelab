@@ -296,6 +296,30 @@
   tags:
     - user
 
+# Install whatever the dotfiles' mise config declares — single-sourced there
+# rather than duplicated as a list here. On the fleet that's the cross-platform
+# CLI utilities in ~/.config/mise/config.toml (fd, bat, zoxide, atuin, delta,
+# eza); the language runtimes live in the mac-only config.mac.toml (MISE_ENV=mac,
+# unset here) so a bare `mise install` never tries to compile ruby on a server.
+# zoxide and atuin are eval'd unconditionally in .zshrc, so this also stops fleet
+# shells from erroring on a missing binary. changed_when compares the installed-
+# tool set before/after, so a re-run where everything is present reports ok.
+- name: Install mise-managed tools
+  shell: |
+    set -euo pipefail
+    mise="{{ ansible_user_dir }}/.local/share/mise/bin/mise"
+    before="$("$mise" ls --installed 2>/dev/null || true)"
+    "$mise" install
+    after="$("$mise" ls --installed 2>/dev/null || true)"
+    [ "$before" = "$after" ] || echo CHANGED
+  args:
+    executable: /bin/bash
+    chdir: "{{ ansible_user_dir }}"
+  register: user_mise_tools
+  changed_when: "'CHANGED' in user_mise_tools.stdout"
+  tags:
+    - user
+
 # Repository setup forks on Ubuntu major version because apt-key was
 # removed from the default install in resolute (26.04). See netdata
 # install.yml for the same idiom.
