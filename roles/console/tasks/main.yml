@@ -88,16 +88,6 @@
 #
 # Both matter for walk-up/KVM-IP debugging: (1) handles the kernel
 # timer, (2) keeps the monitor from sleeping on top of that.
-- name: Remove legacy console-noblank.service (renamed to console_noblank)
-  import_role:
-    name: systemd_unit
-    tasks_from: remove
-  vars:
-    systemd_unit_args:
-      dest: console-noblank.service
-  tags:
-    - console
-
 - name: Install console_noblank.service
   import_role:
     name: systemd_unit
@@ -145,15 +135,6 @@
     group: root
     mode: "0644"
   register: console_grub_cfg
-  become: true
-  tags:
-    - console
-
-- name: Remove legacy ZBM cmdline file (renamed to `consoleblank`)
-  when: not grub_bootloader
-  file:
-    path: /etc/zfsbootmenu/console
-    state: absent
   become: true
   tags:
     - console
