@@ -1,5 +1,14 @@
 # Functional verify: stand up a throwaway system user, drive the helper,
-# assert linger sentinel + user manager are real, then tear down.
+# assert the linger sentinel + a live user manager, prove a re-run is a
+# no-op, then tear down.
+#
+# The helper's check-mode gate (`when: not (ansible_check_mode and
+# _linger_result.changed)`) is deliberately not exercised here: it only
+# takes its skip path under a real `ansible-playbook --check` run, and the
+# harness never runs _verify under --check. Forcing check mode via the
+# `check_mode: true` task keyword runs the tasks in check mode but leaves
+# `ansible_check_mode` false, so the gate would not take its --check branch
+# — a test built on it would pass for the wrong reason.
 - name: _verify | Create fixture user
   user:
     name: linger_test
@@ -24,12 +33,37 @@
   register: _verify_sentinel
   become: true
 
-- name: _verify | Assert sentinel + per-user fact were exposed
+- name: _verify | Assert sentinel and per-user fact were exposed
   assert:
     that:
       - _verify_sentinel.stat.exists
       - linger_test_linger is defined
       - linger_test_linger.changed
+
+# The user manager being active is the headline behavior callers depend on
+# (a live bus for rootless podman / user-scope timers); failed_when makes
+# the probe its own assertion.
+- name: _verify | User manager is active
+  command: systemctl is-active user@{{ _verify_user.uid }}.service
+  register: _verify_active
+  changed_when: false
+  failed_when: _verify_active.stdout | trim != 'active'
+  become: true
+
+- name: _verify | Drive the helper again (idempotence)
+  import_role:
+    name: linger
+    tasks_from: linger
+  vars:
+    linger_args:
+      name: linger_test
+      uid: "{{ _verify_user.uid }}"
+
+- name: _verify | Assert the re-run was a no-op
+  assert:
+    that:
+      - linger_test_linger is defined
+      - not linger_test_linger.changed
 
 - name: _verify | Tear down user manager
   systemd:
@@ -43,10 +77,19 @@
     removes: /var/lib/systemd/linger/linger_test
   become: true
 
+- name: _verify | Confirm the linger marker is gone after disable
+  stat:
+    path: /var/lib/systemd/linger/linger_test
+  register: _verify_sentinel_gone
+  become: true
+
+- name: _verify | Assert disable-linger removed the marker
+  assert:
+    that:
+      - not _verify_sentinel_gone.stat.exists
+
 - name: _verify | Remove fixture user
   user:
     name: linger_test
     state: absent
-    remove: true
-    force: true
   become: true
