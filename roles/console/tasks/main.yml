@@ -53,8 +53,12 @@
   tags:
     - console
 
-# setupcon --save --force reads both /etc/default/console-setup and
+# setupcon --save reads both /etc/default/console-setup and
 # /etc/default/keyboard, so a single invocation covers both changes.
+# No --force (intentionally dropped): setupcon then fails loudly on a bad
+# config rather than forcing it onto the live VTs, and --force can trigger
+# a hard reboot when X holds the console. The live VTs pick up the new
+# config at the next boot (reboot-required is touched below).
 - name: Apply console-setup + keyboard to live ttys
   when: (console_cfg.changed or console_keyboard_cfg.changed) and not ansible_check_mode
   command: setupcon --save
