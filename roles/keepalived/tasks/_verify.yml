@@ -41,13 +41,15 @@
   register: _keepalived_dropin
   become: true
 
-- name: _verify | Drop-in carries the conf.d gate and the ExecReload validate
+- name: _verify | Drop-in carries the conf.d gate and the validate hooks
   vars:
     _dropin: "{{ _keepalived_dropin.content | b64decode }}"
   assert:
     that:
       - "'ConditionPathExistsGlob=/etc/keepalived/conf.d/*.conf' in _dropin"
-      # F16: the reload path runs keepalived -t before SIGHUP.
+      # The start path validates before launch; the reload path runs
+      # keepalived -t before the SIGHUP.
+      - "'ExecStartPre=/usr/sbin/keepalived -t -f /etc/keepalived/keepalived.conf' in _dropin"
       - "'ExecReload=/usr/sbin/keepalived -t -f /etc/keepalived/keepalived.conf' in _dropin"
 
 # Branch A: drop a self-contained sentinel fragment and re-run the role.
@@ -94,7 +96,7 @@
   set_fact:
     _keepalived_ts_active: "{{ _keepalived_unit_pop.status.ActiveEnterTimestampMonotonic }}"
 
-# Branch B (F12): re-run the role with conf.d unchanged. The harness
+# Branch B: re-run the role with conf.d unchanged. The harness
 # idempotence pass runs against box's empty conf.d (no tenant), so the
 # populated path — the one most likely to churn (Enable/Start/Reload
 # firing every converge) — is only ever idempotence-checked here.
@@ -115,7 +117,7 @@
       - _keepalived_unit_idem.status.UnitFileState == 'enabled'
       - _keepalived_unit_idem.status.ActiveEnterTimestampMonotonic == _keepalived_ts_active
 
-# Branch C (F11): a base-conf change must reload hitlessly (SIGHUP), not
+# Branch C: a base-conf change must reload hitlessly (SIGHUP), not
 # restart. Perturb the on-disk base conf so the role's `copy` detects
 # drift and rewrites it (changed -> the role's reload trigger fires),
 # then assert the unit was reloaded (a fresh reload line in the journal)
@@ -162,7 +164,7 @@
       # A new reload line appeared => the role actually reloaded (vs a no-op).
       - (_keepalived_journal_post.stdout_lines | select('search', '(?i)reload') | list | length) > (_keepalived_reload_pre | int)
 
-# Branch D (F9 + F16 abort path): a malformed fragment must never reach
+# Branch D: a malformed fragment must never reach
 # the live daemon. First a direct `systemctl reload` must abort on the
 # drop-in ExecReload validate (keepalived -t), then a full role converge
 # must abort on its own validate gate — both leaving keepalived running
@@ -181,27 +183,27 @@
     mode: "0640"
   become: true
 
-- name: _verify | F16 — systemctl reload aborts on the ExecReload validate
+- name: _verify | Direct systemctl reload aborts on the ExecReload validate  # noqa: command-instead-of-module -- must capture the reload's non-zero rc (it is expected to fail on the ExecReload validate); the systemd module would just fail the task
   command: systemctl reload keepalived
   register: _keepalived_bad_reload
   changed_when: false
   failed_when: false
   become: true
 
-- name: _verify | F16 — reload failed and the daemon kept the good config
+- name: _verify | Reload failed and the daemon kept the good config
   systemd:
     name: keepalived
   register: _keepalived_unit_after_bad_reload
   become: true
 
-- name: _verify | F16 — assert reload rejected, unit untouched
+- name: _verify | Assert reload rejected, unit untouched
   assert:
     that:
       - _keepalived_bad_reload.rc != 0
       - _keepalived_unit_after_bad_reload.status.ActiveState == 'active'
       - _keepalived_unit_after_bad_reload.status.ActiveEnterTimestampMonotonic == _keepalived_ts_active
 
-- name: _verify | F9 — a converge with a malformed fragment must fail
+- name: _verify | A converge with a malformed fragment must fail
   block:
     - name: _verify | Re-run keepalived role expecting a validation failure
       import_role:
@@ -216,13 +218,13 @@
       debug:
         msg: keepalived role failed validation as expected — daemon left untouched.
 
-- name: _verify | F9 — query unit state after the failed converge
+- name: _verify | Query unit state after the failed converge
   systemd:
     name: keepalived
   register: _keepalived_unit_after_bad_converge
   become: true
 
-- name: _verify | F9 — daemon still active on the good config, never reloaded
+- name: _verify | Daemon still active on the good config, never reloaded
   assert:
     that:
       - _keepalived_unit_after_bad_converge.status.ActiveState == 'active'
