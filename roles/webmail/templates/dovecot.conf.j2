@@ -39,7 +39,7 @@ mail_uid = {{ ansible_user_uid }}
 mail_gid = {{ ansible_user_gid }}
 
 # Fixed, non-secret credential. The IMAP listener is published only on the
-# internal getmail_webmail podman network (never to the host/LAN) and the
+# internal webmail podman network (never to the host/LAN) and the
 # Roundcube vhost is Authelia-gated, so this password guards nothing extra —
 # it only satisfies the IMAP handshake. Any username authenticates with it and
 # maps to the single mail_uid above. See notes/getmail_webmail_design.md.

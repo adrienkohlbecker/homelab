@@ -1,0 +1,42 @@
+- name: _setup | Install nginx
+  import_role:
+    name: _test
+    tasks_from: nginx
+
+- name: _setup | Install podman
+  import_role:
+    name: podman
+    tasks_from: install
+
+- name: _setup | Install authelia stub for auth=required tests
+  import_role:
+    name: _test
+    tasks_from: authelia_stub
+  vars:
+    authelia_stub_mode: gate
+
+- name: _setup | Ensure /mnt/services exists
+  file:
+    path: /mnt/services
+    state: directory
+    mode: "0755"
+  become: true
+
+# In prod the getmail role creates and populates this Maildir before the
+# webmail role runs (site.yml ordering). The webmail harness test runs this
+# role standalone, so stand the Maildir up here — operator-owned 0700, matching
+# what getmail does — so Dovecot has something to mount read-only and _verify
+# can plant a test message into new/.
+- name: _setup | Create the getmail Maildir (getmail role does this in prod)
+  file:
+    path: "/mnt/services/getmail/{{ item }}"
+    state: directory
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+    mode: "0700"
+  loop:
+    - ""
+    - cur
+    - new
+    - tmp
+  become: true

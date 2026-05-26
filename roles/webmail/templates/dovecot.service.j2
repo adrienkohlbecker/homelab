@@ -1,7 +1,7 @@
 #jinja2: lstrip_blocks: True
 # dovecot.service #######################################################################
 # IMAP server fronting the read-only getmail Maildir archive for Roundcube.
-# Listens only on the internal getmail_webmail podman network (no --publish);
+# Listens only on the internal webmail podman network (no --publish);
 # Roundcube reaches it by container name via aardvark-dns.
 [Unit]
 Description=dovecot
@@ -47,7 +47,7 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="dovecot" \
     --security-opt=no-new-privileges \
-    --network getmail_webmail \
+    --network webmail \
     {# Maildir read-only: the archive bytes are never mutated. Index + control
        (which Dovecot must write) are redirected to the rw volume below via
        mail_index_path / mail_control_path in dovecot.conf. #}
@@ -55,8 +55,8 @@ ExecStart=/usr/bin/podman run \
     {# Mount the rw index/control volume at /state, NOT /dovecot: the image's
        dovecot install prefix is /dovecot (binary at /dovecot/sbin/dovecot), so
        mounting over it shadows the binary (exec: No such file or directory). #}
-    --volume /mnt/services/getmail_webmail/dovecot:/state \
-    --volume /mnt/services/getmail_webmail/dovecot.conf:/etc/dovecot/dovecot.conf:ro \
+    --volume /mnt/services/webmail/dovecot:/state \
+    --volume /mnt/services/webmail/dovecot.conf:/etc/dovecot/dovecot.conf:ro \
     {# doveadm auth test exercises the real passdb→userdb path (returns 0 only
        when auth succeeds AND the userdb resolves), a functional check rather
        than a port-open stat. The fixed creds match dovecot.conf's static

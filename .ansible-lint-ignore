@@ -31,7 +31,6 @@ roles/firewall/tasks/_verify_input.yml var-naming[no-role-prefix]
 roles/firewall/tasks/_verify_lifecycle.yml var-naming[no-role-prefix]
 roles/firewall/tasks/_verify.yml var-naming[no-role-prefix]
 roles/fluentbit/tasks/_verify.yml var-naming[no-role-prefix]
-roles/getmail/tasks/_setup.yml var-naming[no-role-prefix]
 roles/gitea_runner/tasks/_setup.yml var-naming[no-role-prefix]
 roles/gitea_runner/tasks/_verify.yml var-naming[no-role-prefix]
 roles/gitea/tasks/_verify.yml var-naming[no-role-prefix]
@@ -68,6 +67,8 @@ roles/systemd_timer/tasks/_verify.yml var-naming[no-role-prefix]
 roles/systemd_unit/tasks/_verify.yml var-naming[no-role-prefix]
 roles/tailscale/tasks/_setup.yml var-naming[no-role-prefix]
 roles/tailscale/tasks/_verify.yml var-naming[no-role-prefix]
+roles/webmail/tasks/_setup.yml var-naming[no-role-prefix]
+roles/webmail/tasks/_verify.yml var-naming[no-role-prefix]
 
 # ── Backlog: real role/var files — fix and DELETE the line ───────────────────
 # Each is a genuine lint debt in production code. Burn these down over time;
