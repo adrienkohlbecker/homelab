@@ -120,12 +120,16 @@ service_ports:
   # upstream's documented default.
   gitea_runner_metrics: 9101
   # headscale control-plane HTTP (loopback-published on the fox VPS, nginx
-  # fronts it on 443). The embedded DERP STUN listener is separate (udp/3478,
-  # published to the internet) and isn't a loopback service, so it's not here.
+  # fronts it on 443).
   headscale: 8080
   # headscale's prometheus metrics endpoint (container :9090), loopback-published
   # so fox's netdata scrapes it via the go.d prometheus collector.
   headscale_metrics: 9095
+  # embedded DERP STUN -- published to the internet (udp/3478), NOT loopback.
+  # Listed so the unit template + _verify share one literal; the Hetzner firewall
+  # (terraform/hetzner.tf) also opens 3478 but can't read this var, so it keeps
+  # its own copy -- the two must stay in sync.
+  headscale_stun: 3478
   healthchecks: 8000
   homeassistant: 8123
   # Sonos S2 event-subscription callback + HomeKit pairing. Published on
