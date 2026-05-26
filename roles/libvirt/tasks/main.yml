@@ -8,7 +8,14 @@
       - libvirt-clients
       - libvirt-daemon
       - libvirt-daemon-system
+      # Tooling to define/edit/clone guests (virt-install, virt-xml,
+      # virt-clone) on a host whose whole job is running VMs.
+      - virtinst
       - ovmf
+      # TPM 2.0 backend for UEFI guests that need a vTPM (e.g. Windows 11);
+      # pairs with the ovmf firmware above.
+      - swtpm
+      - swtpm-tools
       - libhugetlbfs-bin
     cache_valid_time: 3600
   become: true
@@ -182,6 +189,38 @@
   become: true
   tags:
     - libvirt
+
+# Declare the default dir storage pool in the repo rather than relying on
+# whatever a given host happens to have (libvirt-daemon-system ships the
+# default network but not always the default pool). Three steps because
+# the module's `state:` short-circuits before applying autostart;
+# `state: present` defines only when absent, so an existing pool is left
+# untouched. virsh_backup's pool-dumpxml captures the definition.
+- name: Declare the default storage pool
+  when: not (ansible_check_mode and (apt_install_libvirt.changed or apt_install_python_libvirt.changed or systemd_started.changed))
+  become: true
+  tags:
+    - libvirt
+  block:
+    - name: Define the default storage pool
+      community.libvirt.virt_pool:
+        name: default
+        state: present
+        xml: |
+          <pool type='dir'>
+            <name>default</name>
+            <target><path>/var/lib/libvirt/images</path></target>
+          </pool>
+
+    - name: Activate the default storage pool
+      community.libvirt.virt_pool:
+        name: default
+        state: active
+
+    - name: Autostart the default storage pool
+      community.libvirt.virt_pool:
+        name: default
+        autostart: true
 
 - name: Create libvirt backup executable
   copy:
