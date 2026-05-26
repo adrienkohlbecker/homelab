@@ -145,6 +145,10 @@ resource "hcloud_server" "fox" {
     pool = "homelab"
   }
 
+  lifecycle {
+    ignore_changes = [ user_data, ssh_keys, image ]
+  }
+
   # Boot with the fleet's regular `ak` user (sudo, key-only) instead of logging
   # in as root: Ansible connects as `ak` from first boot (the `user` role only
   # *configures* the existing login user, it doesn't create it). The SSH key is
