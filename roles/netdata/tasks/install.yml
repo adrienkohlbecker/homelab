@@ -189,12 +189,10 @@
   tags:
     - netdata
 
-- name: install | Install netdata plugins
-  when: not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed))
-  apt:
-    pkg:
-      - netdata-plugin-slabinfo
-    cache_valid_time: 3600
-  become: true
-  tags:
-    - netdata
+# No separate netdata-plugin-* packages: the base `netdata` package covers
+# what this fleet charts. slabinfo was installed historically but is unused
+# (disabled-by-default, and no collector/context/alarm references it) and has
+# no arm64 build on packagecloud — so it hard-failed local arm64 (Apple
+# Silicon) test VMs while the x86_64 fleet (lab/pug/fox) was unaffected.
+# Don't re-add it without a concrete consumer. See
+# notes/netdata_packagecloud_migration.md.
