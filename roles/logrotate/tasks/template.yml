@@ -1,10 +1,24 @@
 # Inputs: caller passes a single dict `logrotate_args` with keys
 #   src         required; template file under the calling role's templates/
 #   dest        required; on-disk path under /etc/logrotate.d/
+#   condition   optional bool, default true; gates the whole call
 #
 # The dict form prevents inter-call leakage at play-vars scope (see
 # compression.yml for the longer rationale; same shape).
+- name: template | Assert inputs
+  assert:
+    that:
+      - logrotate_args.src is defined
+      - logrotate_args.dest is defined
+      # constrain the root-owned write to the include dir — no traversal,
+      # no arbitrary-path clobber via a typo'd or hostile dest.
+      - logrotate_args.dest is match('/etc/logrotate[.]d/[A-Za-z0-9_.-]+$')
+    fail_msg: logrotate_args needs src and a dest under /etc/logrotate.d/
+
+# logrotate is a timer-fired oneshot, not a daemon — a new drop-in is picked
+# up on the next timer run, so there is nothing to restart/reload here.
 - name: template | Configure logrotate
+  when: logrotate_args.condition | default(true)
   template:
     src: "{{ logrotate_args.src }}"
     dest: "{{ logrotate_args.dest }}"
@@ -12,12 +26,8 @@
     group: root
     mode: "0644"
     backup: true
-  register: logrotate_conf
-  become: true
-
-- name: template | Restart logrotate
-  when: logrotate_conf.changed
-  systemd:
-    name: logrotate
-    state: restarted
+    # A broken drop-in isn't caught until the next run (and one bad file can
+    # abort rotation for the rest). -d parses without rotating or touching
+    # the state file.
+    validate: /usr/sbin/logrotate -d %s
   become: true
