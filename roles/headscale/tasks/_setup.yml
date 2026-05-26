@@ -61,7 +61,7 @@
   # mockoidc.MockUser (no json tags upstream). Static IP matches the issuer.
   containers.podman.podman_container:
     name: headscale_mockoidc
-    image: docker.io/headscale/headscale:0.26.1
+    image: "{{ headscale_image }}"
     command: mockoidc
     network: headscale
     ip: 10.166.0.10

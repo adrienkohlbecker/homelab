@@ -98,7 +98,7 @@ ExecStart=/usr/bin/podman run \
     --health-startup-timeout "5s" \
     --health-start-period "60s" \
     --stop-timeout 30 \
-    docker.io/headscale/headscale:0.26.1 \
+    {{ headscale_image }} \
     serve
 # ACL-only changes reload via SIGHUP, not a restart: headscale reloads the
 # HuJSON policy on HUP (same as `systemctl reload`), so a policy tweak needn't
