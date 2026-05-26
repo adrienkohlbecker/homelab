@@ -59,13 +59,16 @@
     content: "virsh_backup verify nvram sentinel\n"
   become: true
 
+# The domain name carries spaces so the dump lands at the sanitized path
+# dom_virsh_backup_verify.xml -- exercising virsh_backup's safe_name() tr
+# transform, which every real VM name with a space or slash relies on.
 - name: _verify | Stage a throwaway domain definition
   copy:
     dest: /tmp/virsh_backup_verify.xml
     mode: "0644"
     content: |
       <domain type='qemu'>
-        <name>virsh_backup_verify</name>
+        <name>virsh backup verify</name>
         <memory unit='MiB'>64</memory>
         <vcpu>1</vcpu>
         <os>
@@ -91,11 +94,12 @@
   changed_when: false
   become: true
 
-- name: _verify | Stat the domain, network and pool dumps
+- name: _verify | Stat the domain, network, pool and nvram dumps
   stat:
     path: "{{ item }}"
   loop:
     - /var/lib/libvirt/images/dom_virsh_backup_verify.xml
+    - /var/lib/libvirt/images/dom_virsh_backup_verify_VARS.fd
     - /var/lib/libvirt/images/net_default.xml
     - /var/lib/libvirt/images/pool_default.xml
   register: _libvirt_verify_dumps
@@ -108,6 +112,20 @@
     fail_msg: >-
       virsh_backup missing dumps:
       {{ _libvirt_verify_dumps.results | rejectattr('stat.exists')
+         | map(attribute='item') | list }}
+
+# The dumps can hold secrets (the varstore, and dumpxml --security-info
+# un-redacts <graphics passwd>), so the script's umask 077 + explicit
+# chmod 0600 must actually land -- a dropped chmod would otherwise pass the
+# existence + content checks unnoticed.
+- name: _verify | Dumps are root-owned and mode 0600
+  assert:
+    that:
+      - (_libvirt_verify_dumps.results | rejectattr('stat.mode', 'eq', '0600') | list | length) == 0
+      - (_libvirt_verify_dumps.results | rejectattr('stat.pw_name', 'eq', 'root') | list | length) == 0
+    fail_msg: >-
+      virsh_backup dumps not root:0600:
+      {{ _libvirt_verify_dumps.results | rejectattr('stat.mode', 'eq', '0600')
          | map(attribute='item') | list }}
 
 # cmp (not just stat) so a truncated or wrong-source varstore copy fails --
@@ -128,15 +146,81 @@
   changed_when: false
   become: true
 
-- name: _verify | Dumped domain XML names the throwaway domain
-  command: grep -q virsh_backup_verify /var/lib/libvirt/images/dom_virsh_backup_verify.xml
+- name: _verify | Dumped domain XML carries the throwaway domain's real name
+  command: grep -qF "virsh backup verify" /var/lib/libvirt/images/dom_virsh_backup_verify.xml
   changed_when: false
   become: true
 
+# Exercise the security guard + failure-exit contract the happy path never
+# touches: a domain whose <nvram> resolves outside libvirt's varstore dir
+# must be refused (no _VARS.fd written) and must drive a non-zero exit so
+# the timer's unit goes failed and the systemdunits collector notices.
+- name: _verify | Stage an out-of-tree nvram file
+  copy:
+    dest: /tmp/virsh_backup_evil_VARS.fd
+    mode: "0600"
+    content: "out-of-tree nvram must be refused\n"
+  become: true
+
+- name: _verify | Stage a domain pointing nvram outside the varstore tree
+  copy:
+    dest: /tmp/virsh_backup_evil.xml
+    mode: "0644"
+    content: |
+      <domain type='qemu'>
+        <name>virsh_backup_evil</name>
+        <memory unit='MiB'>64</memory>
+        <vcpu>1</vcpu>
+        <os>
+          <type arch='x86_64' machine='q35'>hvm</type>
+          <loader readonly='yes' type='pflash'>/var/lib/libvirt/qemu/nvram/virsh_backup_verify_CODE.fd</loader>
+          <nvram>/tmp/virsh_backup_evil_VARS.fd</nvram>
+        </os>
+        <features>
+          <acpi/>
+        </features>
+        <devices>
+          <emulator>/usr/bin/qemu-system-x86_64</emulator>
+        </devices>
+      </domain>
+
+- name: _verify | Define the out-of-tree-nvram domain
+  command: virsh define /tmp/virsh_backup_evil.xml
+  changed_when: true
+  become: true
+
+- name: _verify | Re-run the backup with the out-of-tree-nvram domain present
+  command: /usr/local/bin/virsh_backup
+  register: _libvirt_verify_evil_run
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | Stat the would-be out-of-tree varstore copy
+  stat:
+    path: /var/lib/libvirt/images/dom_virsh_backup_evil_VARS.fd
+  register: _libvirt_verify_evil_vars
+  become: true
+
+- name: _verify | Out-of-tree nvram refused and failure propagated
+  assert:
+    that:
+      - _libvirt_verify_evil_run.rc != 0
+      - not _libvirt_verify_evil_vars.stat.exists
+    fail_msg: >-
+      virsh_backup did not refuse the out-of-tree nvram
+      (rc={{ _libvirt_verify_evil_run.rc }},
+      vars_copied={{ _libvirt_verify_evil_vars.stat.exists }})
+
+- name: _verify | Undefine the out-of-tree-nvram domain
+  command: virsh undefine --keep-nvram virsh_backup_evil
+  changed_when: true
+  become: true
+
 # --nvram: a domain with a varstore refuses a plain undefine; this also
-# removes the nvram file (the cleanup below then no-ops on it).
+# removes the staged nvram file, so the cleanup below doesn't list it.
 - name: _verify | Undefine the throwaway domain
-  command: virsh undefine --nvram virsh_backup_verify
+  command: virsh undefine --nvram "virsh backup verify"
   changed_when: true
   become: true
 
@@ -149,7 +233,10 @@
     - /var/lib/libvirt/images/dom_virsh_backup_verify_VARS.fd
     - /var/lib/libvirt/images/net_default.xml
     - /var/lib/libvirt/images/pool_default.xml
+    - /var/lib/libvirt/images/dom_virsh_backup_evil.xml
+    - /var/lib/libvirt/images/dom_virsh_backup_evil_VARS.fd
     - /tmp/virsh_backup_verify.xml
-    - /var/lib/libvirt/qemu/nvram/virsh_backup_verify_VARS.fd
+    - /tmp/virsh_backup_evil.xml
+    - /tmp/virsh_backup_evil_VARS.fd
     - /var/lib/libvirt/qemu/nvram/virsh_backup_verify_CODE.fd
   become: true
