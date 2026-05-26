@@ -170,6 +170,19 @@
   args:
     chdir: "{{ ansible_user_dir }}"
     creates: "{{ ansible_user_dir }}/.dotfiles"
+  register: user_dotfiles_clone
+  tags:
+    - user
+
+# `git clone --bare` records no fetch refspec, so a later `dotfiles pull` fails
+# with "no such ref was fetched". Set the standard one so fetch/pull work.
+- name: Configure dotfiles fetch refspec
+  when: not (ansible_check_mode and user_dotfiles_clone.changed)
+  community.general.git_config:
+    name: remote.origin.fetch
+    value: "+refs/heads/*:refs/remotes/origin/*"
+    scope: file
+    file: "{{ ansible_user_dir }}/.dotfiles/config"
   tags:
     - user
 
@@ -178,26 +191,6 @@
   args:
     chdir: "{{ ansible_user_dir }}"
     creates: "{{ ansible_user_dir }}/.zshrc"
-  register: user_dotfiles_reset
-  tags:
-    - user
-
-# jammy ships git 2.34, which doesn't know the zdiff3 merge strategy
-# (added in 2.35); the dotfiles' .gitconfig sets it, so on jammy we
-# downgrade to diff3 in place. `replace` reports unchanged once
-# zdiff3 isn't there anymore, so the task no-ops on subsequent runs.
-# Gate on the reset-hard above: it's the task that materializes
-# .gitconfig from the bare clone, so in check mode on a fresh box
-# the file doesn't exist yet and replace would fail "Path ... does
-# not exist".
-- name: Fix git config
-  when:
-    - ansible_distribution_version == "22.04"
-    - not (ansible_check_mode and user_dotfiles_reset.changed)
-  replace:
-    path: "{{ ansible_user_dir }}/.gitconfig"
-    regexp: zdiff3
-    replace: diff3
   tags:
     - user
 
