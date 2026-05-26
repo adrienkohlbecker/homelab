@@ -35,7 +35,7 @@
 # probe that fails if `auth: required` is dropped from nginx_site_args
 # (the loopback apikey probes stay green without it); the Host header
 # still exercises the subdomain -> server_name routing.
-- name: _verify | lidarr UI gate redirects unauthenticated requests to Authelia
+- name: _verify | Lidarr UI gate redirects unauthenticated requests to Authelia
   uri:
     url: https://localhost/
     headers:
@@ -56,7 +56,7 @@
 # Assert it functionally: the on-disk paths are symlinks onto the dataset,
 # and lidarr wrote real schema through them (the API answering 200 above
 # means migration finished, so the dataset-side files are populated by now).
-- name: _verify | stat the lidarr DB paths
+- name: _verify | Stat the lidarr DB paths
   stat:
     path: "/mnt/services/lidarr/{{ item }}"
   loop:
@@ -65,7 +65,7 @@
   register: _verify_db_links
   become: true
 
-- name: _verify | lidarr DBs are symlinks onto the sqlite dataset
+- name: _verify | Lidarr DBs are symlinks onto the sqlite dataset
   assert:
     that:
       - item.stat.islnk
@@ -75,7 +75,7 @@
   loop_control:
     label: "{{ item.item }}"
 
-- name: _verify | stat the dataset-side lidarr DBs
+- name: _verify | Stat the dataset-side lidarr DBs
   stat:
     path: "/mnt/services/sqlite/lidarr/{{ item }}"
   loop:
@@ -84,7 +84,7 @@
   register: _verify_db_files
   become: true
 
-- name: _verify | lidarr wrote real, non-empty DBs onto the dataset
+- name: _verify | Lidarr wrote real, non-empty DBs onto the dataset
   assert:
     that:
       - item.stat.exists

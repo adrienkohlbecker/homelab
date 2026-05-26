@@ -2,7 +2,7 @@
 # auth'd probe below -- together they prove the apikey we templated is both
 # required by sonarr and the one it accepted. Without this, a future bug that
 # disabled apikey enforcement would let the auth'd probe pass on any key.
-- name: _verify | sonarr /api/v3/system/status rejects unauth'd requests
+- name: _verify | Sonarr /api/v3/system/status rejects unauth'd requests
   uri:
     url: http://127.0.0.1:{{ service_ports.sonarr }}/api/v3/system/status
     status_code: 401
@@ -14,7 +14,7 @@
 # Authenticated probe -- proves the apikey we templated into config.xml is
 # the one the running container accepted, not just one we wrote to disk.
 # Header form keeps the key out of journald.
-- name: _verify | sonarr answers /api/v3/system/status with our apikey
+- name: _verify | Sonarr answers /api/v3/system/status with our apikey
   uri:
     url: http://127.0.0.1:{{ service_ports.sonarr }}/api/v3/system/status
     headers:
@@ -30,7 +30,7 @@
 # Exercise the nginx-proxied path too, not just loopback. A regression in
 # the nginx_site wiring (typo'd subdomain, broken proxy_pass) would pass
 # the loopback probes above silently.
-- name: _verify | sonarr answers via nginx vhost
+- name: _verify | Sonarr answers via nginx vhost
   uri:
     url: https://localhost/api/v3/system/status
     headers:
@@ -53,7 +53,7 @@
 # Assert it functionally: the on-disk paths are symlinks onto the dataset,
 # and sonarr wrote real schema through them (the API answering 200 above
 # means migration finished, so the dataset-side files are populated by now).
-- name: _verify | stat the sonarr DB paths
+- name: _verify | Stat the sonarr DB paths
   stat:
     path: "/mnt/services/sonarr/{{ item }}"
   loop:
@@ -62,7 +62,7 @@
   register: _verify_db_links
   become: true
 
-- name: _verify | sonarr DBs are symlinks onto the sqlite dataset
+- name: _verify | Sonarr DBs are symlinks onto the sqlite dataset
   assert:
     that:
       - item.stat.islnk
@@ -72,7 +72,7 @@
   loop_control:
     label: "{{ item.item }}"
 
-- name: _verify | stat the dataset-side sonarr DBs
+- name: _verify | Stat the dataset-side sonarr DBs
   stat:
     path: "/mnt/services/sqlite/sonarr/{{ item }}"
   loop:
@@ -81,7 +81,7 @@
   register: _verify_db_files
   become: true
 
-- name: _verify | sonarr wrote real, non-empty DBs onto the dataset
+- name: _verify | Sonarr wrote real, non-empty DBs onto the dataset
   assert:
     that:
       - item.stat.exists
