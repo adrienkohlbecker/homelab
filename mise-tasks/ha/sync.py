@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-#MISE description="Sync HA GUI YAML files (automations/scripts/scenes) between the ha_gui_config submodule and lab. Default mode: pull then push."
-#USAGE arg "<mode>" help="pull | push | sync (default)" default="sync"
-#USAGE flag "--dry-run" help="preview a push (diff + syntax validation) without writing to the host, moving the synced tag, or reloading HA"
+# [MISE] description="Sync HA GUI YAML files (automations/scripts/scenes) between the ha_gui_config submodule and lab. Default mode: pull then push."
+# [USAGE] arg "<mode>" help="pull | push | sync (default)" default="sync"
+# [USAGE] flag "--dry-run" help="preview a push (diff + syntax validation) without writing to the host, moving the synced tag, or reloading HA"
 """
 Bidirectional sync for /mnt/services/homeassistant/ user-editable files:
 automations.yaml, scripts.yaml, scenes.yaml, sensors.yaml, templates.yaml,
@@ -186,7 +186,9 @@ def worktree_sha(filename: str) -> str | None:
 
 def assert_submodule_initialized() -> None:
     if not (SUBMODULE / ".git").exists():
-        sys.exit(f"submodule not initialized at {SUBMODULE}; run `git submodule update --init {SUBMODULE.relative_to(REPO_ROOT)}`")
+        sys.exit(
+            f"submodule not initialized at {SUBMODULE}; run `git submodule update --init {SUBMODULE.relative_to(REPO_ROOT)}`"
+        )
 
 
 def assert_clean_working_tree() -> None:
@@ -235,14 +237,23 @@ def upload_to_host(entries: list[tuple[str, str]]) -> None:
         sh(["scp", "-q", str(SUBMODULE / rel), f"{HOST}:{tmp_remote}"])
         # Make sure the parent dir exists on the host before installing.
         host_parent = f"{HOST_DIR}/{rel.rsplit('/', 1)[0]}" if "/" in rel else HOST_DIR
-        sh(["ssh", HOST, f"sudo install -d -o homeassistant -g homeassistant -m 0755 {host_parent} && sudo install -o homeassistant -g homeassistant -m {mode} -b {tmp_remote} {HOST_DIR}/{rel} && sudo rm -f {tmp_remote}"])
+        sh(
+            [
+                "ssh",
+                HOST,
+                f"sudo install -d -o homeassistant -g homeassistant -m 0755 {host_parent} && sudo install -o homeassistant -g homeassistant -m {mode} -b {tmp_remote} {HOST_DIR}/{rel} && sudo rm -f {tmp_remote}",
+            ]
+        )
 
 
 def _ha_post(service: str) -> None:
     """POST /api/services/<domain>/<action> with the bearer. service is `domain.action`."""
     token = os.environ.get("HA_API_TOKEN", "").strip()
     if not token:
-        print(f"WARN: HA_API_TOKEN unset; skipping {service}. Files landed on disk; reload/restart manually.", file=sys.stderr)
+        print(
+            f"WARN: HA_API_TOKEN unset; skipping {service}. Files landed on disk; reload/restart manually.",
+            file=sys.stderr,
+        )
         return
     domain, _, action = service.partition(".")
     url = f"{HA_URL}/api/services/{domain}/{action}"
@@ -319,7 +330,11 @@ def do_pull() -> None:
     sh(["git", "pull", "--ff-only", "--quiet"], cwd=SUBMODULE)
     fetch_from_host()
     if not sh(["git", "status", "--porcelain"], cwd=SUBMODULE).stdout.strip():
-        if not has_tag(SYNCED_TAG) or sh(["git", "rev-parse", SYNCED_TAG], cwd=SUBMODULE).stdout.strip() != sh(["git", "rev-parse", "HEAD"], cwd=SUBMODULE).stdout.strip():
+        if (
+            not has_tag(SYNCED_TAG)
+            or sh(["git", "rev-parse", SYNCED_TAG], cwd=SUBMODULE).stdout.strip()
+            != sh(["git", "rev-parse", "HEAD"], cwd=SUBMODULE).stdout.strip()
+        ):
             advance_synced_tag()
             print("pull: no host changes; advanced tag to HEAD")
         else:
@@ -331,7 +346,9 @@ def do_pull() -> None:
     sh(["git", "commit", "-m", f"pull: capture GUI edits from lab ({ts})"], cwd=SUBMODULE)
     sh(["git", "push", "origin", "main"], cwd=SUBMODULE)
     advance_synced_tag()
-    print(f"pull: committed GUI edits + pushed (tag now at {sh(['git', 'rev-parse', '--short', 'HEAD'], cwd=SUBMODULE).stdout.strip()})")
+    print(
+        f"pull: committed GUI edits + pushed (tag now at {sh(['git', 'rev-parse', '--short', 'HEAD'], cwd=SUBMODULE).stdout.strip()})"
+    )
 
 
 def do_push(dry_run: bool = False) -> None:

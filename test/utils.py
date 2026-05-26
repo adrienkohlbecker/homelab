@@ -199,7 +199,10 @@ async def terminate_subprocess(
     if grace_seconds <= 0 and initial_signal != signal.SIGKILL:
         # Without a deadline, the final wait() is unbounded -- a child that
         # ignores the signal would hang us forever.
-        raise ValueError(f"grace_seconds must be > 0 when initial_signal is not SIGKILL " f"(got grace_seconds={grace_seconds}, signal={initial_signal})")
+        raise ValueError(
+            f"grace_seconds must be > 0 when initial_signal is not SIGKILL "
+            f"(got grace_seconds={grace_seconds}, signal={initial_signal})"
+        )
     with contextlib.suppress(ProcessLookupError):
         proc.send_signal(initial_signal)
     if grace_seconds > 0:

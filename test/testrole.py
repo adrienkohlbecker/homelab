@@ -186,11 +186,7 @@ _RECAP_CHANGED_RE = re.compile(r"\bchanged=(\d+)")
 
 def _count_changed_tasks(stdout: list[str]) -> int:
     """Sum `changed=N` across every PLAY RECAP host line in the output."""
-    return sum(
-        int(m.group(1))
-        for line in stdout
-        if (m := _RECAP_CHANGED_RE.search(_ANSI_CSI_RE.sub("", line)))
-    )
+    return sum(int(m.group(1)) for line in stdout if (m := _RECAP_CHANGED_RE.search(_ANSI_CSI_RE.sub("", line))))
 
 
 async def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -> None:
@@ -200,7 +196,9 @@ async def _verify_idempotence(site_yml: str, m: Machine, pass_args: list[str]) -
         result = await m.ansible_command(site_yml, *pass_args)
     changed = _count_changed_tasks(result.stdout)
     if changed > 0:
-        raise IdempotenceFailedException(f"Role is not idempotent: {changed} task(s) reported changed on the second run")
+        raise IdempotenceFailedException(
+            f"Role is not idempotent: {changed} task(s) reported changed on the second run"
+        )
 
 
 async def _run_checkmode(site_yml: str, m: Machine, pass_args: list[str]) -> None:

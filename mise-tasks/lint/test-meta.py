@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-#MISE description="Validate roles/*/meta/test.yml against the harness's MACHINE_CHOICES"
+# [MISE] description="Validate roles/*/meta/test.yml against the harness's MACHINE_CHOICES"
 """
 Catch typos and unknown machine names in role test metadata before they
 become a confusing CI failure. Single pass over `roles/*/meta/test.yml`,

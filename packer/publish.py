@@ -45,7 +45,10 @@ def acquire_exclusive(fd: int, lockfile: str, deadline_sec: float) -> None:
             if e.errno not in (errno.EWOULDBLOCK, errno.EAGAIN):
                 raise
             if time.monotonic() >= end:
-                sys.exit(f"publish-lock held >{deadline_sec:.0f}s; " f"concurrent test harness wedged? check `lsof {lockfile}`")
+                sys.exit(
+                    f"publish-lock held >{deadline_sec:.0f}s; "
+                    f"concurrent test harness wedged? check `lsof {lockfile}`"
+                )
             time.sleep(0.5)
 
 
