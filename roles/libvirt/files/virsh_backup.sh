@@ -45,38 +45,64 @@ dump() {
 # Process substitution (not a pipe) so the loop body runs in this shell
 # and updates $failed. Plain `read -r` (default IFS) trims the trailing
 # whitespace `virsh ... --name` pads onto names, and the emptiness guard
-# drops the trailing blank line; names flow into paths, so strip any
-# directory component (${name##*/}) defensively.
+# drops the trailing blank line. --persistent skips transient objects,
+# which have no --inactive definition to dump. Names flow into paths, so
+# collapse each to a safe filename charset (tr replaces anything outside
+# [A-Za-z0-9._-]) and namespace the three object kinds (dom_/net_/pool_)
+# so a domain named `net_default` can't clobber the network dump.
 while read -r domain; do
   [ -n "$domain" ] || continue
-  safe=${domain##*/}
-  dest="$backup_dir/$safe.xml"
+  safe=$(printf '%s' "${domain##*/}" | tr -c 'A-Za-z0-9._-' '_')
+  dest="$backup_dir/dom_$safe.xml"
   tmp=$(mktemp "$dest.XXXXXX")
   if virsh dumpxml --inactive "$domain" >"$tmp"; then
+    mv -f "$tmp" "$dest"
     # The NVRAM varstore holds UEFI / Secure Boot state (e.g. the macOS
     # guest's OpenCore + iCloud activation) that dumpxml records only by
-    # path. Extract the path from the XML we just captured and copy the
-    # file itself alongside the definition.
-    nvram=$(sed -n 's:.*<nvram[^>]*>\([^<]*\)</nvram>.*:\1:p' "$tmp")
-    mv -f "$tmp" "$dest"
+    # path. Read the path with a real XML parser over the dump rather than
+    # a regex -- robust to attribute reordering. (`virsh --xpath` would be
+    # the native option but its string() support varies by libvirt version
+    # -- it exits 1 on jammy's 8.0; ElementTree behaves the same on every
+    # release.) `|| nvram=` keeps a parse miss from tripping set -e. The
+    # path is domain-controlled, so realpath it and refuse anything outside
+    # libvirt's tree before a root-run cp reads it (a crafted <nvram> would
+    # otherwise exfiltrate any root-readable file). Plain cp (not cp -a) so
+    # umask 077 applies instead of inheriting the source mode; pin 0600
+    # explicitly since the varstore can hold secrets.
+    nvram=$(python3 -c 'import sys, xml.etree.ElementTree as ET; n = ET.parse(sys.argv[1]).find("./os/nvram"); print((n.text or "") if n is not None else "")' "$dest" 2>/dev/null) || nvram=
     if [ -n "$nvram" ] && [ -f "$nvram" ]; then
-      cp -a "$nvram" "$backup_dir/${safe}_VARS.fd" || failed=1
+      nvram_real=$(realpath -e -- "$nvram")
+      case "$nvram_real" in
+        /var/lib/libvirt/*)
+          if cp -- "$nvram_real" "$backup_dir/dom_${safe}_VARS.fd"; then
+            chmod 0600 "$backup_dir/dom_${safe}_VARS.fd"
+          else
+            failed=1
+          fi
+          ;;
+        *)
+          echo >&2 "refusing out-of-tree nvram for $domain: $nvram_real"
+          failed=1
+          ;;
+      esac
     fi
   else
     rm -f "$tmp"
     echo >&2 "virsh dumpxml failed for domain: $domain"
     failed=1
   fi
-done < <(virsh list --all --name)
+done < <(virsh list --all --persistent --name)
 
 while read -r net; do
   [ -n "$net" ] || continue
-  dump net-dumpxml "$net" "$backup_dir/net_${net##*/}.xml"
-done < <(virsh net-list --all --name)
+  safe=$(printf '%s' "${net##*/}" | tr -c 'A-Za-z0-9._-' '_')
+  dump net-dumpxml "$net" "$backup_dir/net_$safe.xml"
+done < <(virsh net-list --all --persistent --name)
 
 while read -r pool; do
   [ -n "$pool" ] || continue
-  dump pool-dumpxml "$pool" "$backup_dir/pool_${pool##*/}.xml"
-done < <(virsh pool-list --all --name)
+  safe=$(printf '%s' "${pool##*/}" | tr -c 'A-Za-z0-9._-' '_')
+  dump pool-dumpxml "$pool" "$backup_dir/pool_$safe.xml"
+done < <(virsh pool-list --all --persistent --name)
 
 exit "$failed"
