@@ -91,6 +91,7 @@
     - hetzner_private_net
     - wireguard
     - locale
+    - console
     - timezone
     - unattended_upgrades
     - logrotate
