@@ -90,9 +90,13 @@
 
 - name: _verify | Live VT keymap is French AZERTY
   assert:
-    # AZERTY maps keycode 16 to 'a' (QWERTY would map it to 'q').
+    # AZERTY maps keycode 16 to 'a' (QWERTY would map it to 'q'). The `\s*$`
+    # end-anchor stands in for a `\b`: under ansible-core 2.20 a `\b` in a
+    # quoted regex evaluated inside a `that:` conditional is mangled into a
+    # backspace escape and never matches. regex_findall | length mirrors the
+    # config-directive checks above.
     that:
-      - _verify_console_dumpkeys.stdout | regex_search('^\s*keycode\s+16\s*=\s*\+?a\b', multiline=True) is not none
+      - _verify_console_dumpkeys.stdout | regex_findall('^\s*keycode\s+16\s*=\s*\+?a\s*$', multiline=True) | length > 0
     fail_msg: >-
       Live VT keymap doesn't look like French AZERTY:
       keycode 16 did not map to 'a'.
