@@ -87,7 +87,7 @@
     systemd_unit_args:
       src: lidarr
       condition: "{{ not (ansible_check_mode and (lidarr_service_result.changed or lidarr_user.changed)) }}"
-      restart: "{{ lidarr_service_result.changed or lidarr_conf.changed or lidarr_user.changed or media_group.changed }}"
+      restart: "{{ lidarr_service_result.changed or lidarr_conf.changed or media_group.changed }}"
   tags:
     - lidarr
 
