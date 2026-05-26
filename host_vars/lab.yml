@@ -24,6 +24,7 @@ swap_zvol:
   dataset: rpool/swap
   size: 16G
 
+# Derived from `sudo sensors-detect` on the host; re-run after hardware changes.
 sensor_modules:
   - drivetemp
   - coretemp

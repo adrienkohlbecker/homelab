@@ -10,6 +10,7 @@ zfs_mount_cache_datasets: # must list one dataset per pool. canmount must be set
   - rpool/ROOT/jammy
 zfs_has_bpool: false
 
+# Derived from `sudo sensors-detect` on the host; re-run after hardware changes.
 sensor_modules:
   - drivetemp
   - coretemp
