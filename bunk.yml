@@ -154,14 +154,27 @@
             bunk_ts_preauth_key: "{{ (bunk_ts_preauth.stdout | from_json).key }}"
           no_log: true
 
+        # Pass the key to `tailscale up` via a file, not --authkey <key> on argv
+        # (world-readable in ps / /proc for the duration of the call). Root-only,
+        # removed right after; single-use 5-min key regardless. /tmp is the
+        # portable choice on DSM (no guaranteed /run tmpfs, unlike lab/pug).
+        - name: Stage the pre-auth key in a root-only file
+          copy:
+            content: "{{ bunk_ts_preauth_key }}"
+            dest: /tmp/tailscale_authkey
+            owner: root
+            group: root
+            mode: "0600"
+          no_log: true
+
         # --reset so the advertised set is exactly what we pass (no stale flags
-        # from a prior manual `tailscale up`). --accept-dns=false: bunk is a
-        # server, not a MagicDNS consumer (mirrors lab/pug).
+        # from a prior manual `tailscale up`). --authkey file: keeps the key off
+        # argv. --accept-dns=false: bunk is a server, not a MagicDNS consumer.
         - name: Register with headscale and advertise routes + exit node
           command: >-
             {{ tailscale_bin }} up
             --login-server {{ tailscale_login_server }}
-            --authkey {{ bunk_ts_preauth_key }}
+            --authkey file:/tmp/tailscale_authkey
             --advertise-routes={{ tailscale_advertise_routes }}
             {{ tailscale_advertise_exit_node | ternary('--advertise-exit-node', '') }}
             --accept-dns=false
@@ -170,6 +183,12 @@
           register: bunk_ts_up
           changed_when: bunk_ts_up.rc == 0
           no_log: true
+          become: true
+
+        - name: Remove the staged pre-auth key file
+          file:
+            path: /tmp/tailscale_authkey
+            state: absent
           become: true
 
     # Route approval is a separate opt-in on the control server, keyed by the
