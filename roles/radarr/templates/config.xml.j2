@@ -3,10 +3,11 @@
   <UrlBase></UrlBase>
   <UpdateMechanism>Docker</UpdateMechanism>
   <BindAddress>*</BindAddress>
-  <Port>7878</Port>
+  <Port>{{ service_ports.radarr }}</Port>
   <SslPort>9898</SslPort>
   <EnableSsl>False</EnableSsl>
-  <LaunchBrowser>True</LaunchBrowser>
+  <LaunchBrowser>False</LaunchBrowser>
+  <AnalyticsEnabled>False</AnalyticsEnabled>
   <ApiKey>{{ radarr_api_key }}</ApiKey>
   <AuthenticationMethod>External</AuthenticationMethod>
   <Branch>master</Branch>

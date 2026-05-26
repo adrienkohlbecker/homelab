@@ -146,7 +146,9 @@ service_ports:
   kuma: 3001
   lidarr: 8686
   nut: 3493
+  radarr: 7878
   seerr: 5055
+  sonarr: 8989
   transmission_bt: 51413
   wireguard: 51820
 
