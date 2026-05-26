@@ -41,8 +41,13 @@
       - linger_args.name is defined
       - linger_args.name is string
       - linger_args.name is match('^[a-z_][a-z0-9_-]*$')
-      - linger_args.uid is defined
-      - linger_args.uid | string is match('^[0-9]+$')
+      # Under --check on a not-yet-provisioned host, service_user only
+      # *reports* creating the account, so <svc>_user.uid is still unset
+      # and linger_args.uid resolves undefined. Tolerate that — the
+      # user-manager start below self-gates on the same case, so a numeric
+      # uid is only actually consumed on a real run.
+      - linger_args.uid is defined or ansible_check_mode
+      - linger_args.uid is not defined or (linger_args.uid | string is match('^[0-9]+$'))
     quiet: true
     fail_msg: >-
       linger_args needs name (a valid username matching [a-z_][a-z0-9_-]*)
