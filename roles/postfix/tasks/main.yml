@@ -41,7 +41,7 @@
     mode: "0600"
     backup: true
   become: true
-  register: sasl_auth
+  register: postfix_sasl_auth
   tags:
     - postfix
 
@@ -49,7 +49,7 @@
   command: postmap /etc/postfix/sasl_passwd
   changed_when: true
   become: true
-  when: sasl_auth.changed
+  when: postfix_sasl_auth.changed
   tags:
     - postfix
 
@@ -61,7 +61,7 @@
     systemd_unit_args:
       src: postfix
       condition: "{{ not (ansible_check_mode and postfix_apt.changed) }}"
-      restart: "{{ postfix_cfg.changed or sasl_auth.changed }}"
+      restart: "{{ postfix_cfg.changed or postfix_sasl_auth.changed }}"
   tags:
     - postfix
 
@@ -74,14 +74,14 @@
     mode: "0644"
     backup: true
   become: true
-  register: aliases
+  register: postfix_aliases
   tags:
     - postfix
 
 - name: Rebuild aliases database
   command: newaliases
   become: true
-  when: aliases.changed
+  when: postfix_aliases.changed
   changed_when: true
   tags:
     - postfix

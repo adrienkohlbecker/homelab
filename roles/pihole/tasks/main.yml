@@ -65,7 +65,7 @@
     group: root
     mode: "0644"
     backup: true
-  register: fahm_cfg
+  register: pihole_fahm_cfg
   become: true
   tags:
     - pihole
@@ -113,7 +113,7 @@
 #   vars:
 #     logrotate_args:
 #       item: /mnt/services/pihole/etc/logrotate
-#       condition: "{{ not (ansible_check_mode and (systemd_started.changed or pihole_service_result.changed or pihole_user.changed)) }}"
+#       condition: "{{ not (ansible_check_mode and (systemd_unit_started.changed or pihole_service_result.changed or pihole_user.changed)) }}"
 #   tags:
 #     - pihole
 
@@ -131,7 +131,7 @@
     - pihole
 
 - name: Restart the service
-  when: not (ansible_check_mode and (pihole_service_result.changed or pihole_user.changed)) and ((pihole_service_result.changed and not systemd_started.changed) or fahm_cfg.changed)
+  when: not (ansible_check_mode and (pihole_service_result.changed or pihole_user.changed)) and ((pihole_service_result.changed and not systemd_unit_started.changed) or pihole_fahm_cfg.changed)
   systemd:
     name: pihole
     state: restarted

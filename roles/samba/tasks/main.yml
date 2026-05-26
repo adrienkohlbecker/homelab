@@ -60,7 +60,7 @@
     group: root
     mode: "0644"
     backup: true
-  register: smbd_override
+  register: samba_smbd_override
   become: true
   tags:
     - samba
@@ -68,7 +68,7 @@
 - name: Reload systemd after smbd override
   when:
     - (smb_shares | default([])) | length > 0
-    - smbd_override.changed
+    - samba_smbd_override.changed
   systemd:
     daemon_reload: true
   become: true
@@ -95,7 +95,7 @@
     owner: root
     group: root
   become: true
-  register: avahi_smb
+  register: samba_avahi_smb
   tags:
     - samba
 
@@ -106,7 +106,7 @@
 - name: Check avahi-daemon state
   systemd:
     name: avahi-daemon
-  register: avahi_state
+  register: samba_avahi_state
   failed_when: false
   changed_when: false
   become: true
@@ -115,8 +115,8 @@
 
 - name: Signal avahi to reload its services dir
   when:
-    - avahi_smb.changed
-    - avahi_state.status.ActiveState | default('') == 'active'
+    - samba_avahi_smb.changed
+    - samba_avahi_state.status.ActiveState | default('') == 'active'
   systemd:
     name: avahi-daemon
     state: reloaded
@@ -128,8 +128,8 @@
   shell: set -euo pipefail; (pdbedit --user={{ ansible_user_id }} 2>&1 > /dev/null) || (echo '{{ samba_password }}'; echo '{{ samba_password }}') | smbpasswd -s -a {{ ansible_user_id }}
   args:
     executable: /bin/bash
-  register: smbpasswd
-  changed_when: "'Added user' in smbpasswd.stdout"
+  register: samba_smbpasswd
+  changed_when: "'Added user' in samba_smbpasswd.stdout"
   become: true
   tags:
     - samba

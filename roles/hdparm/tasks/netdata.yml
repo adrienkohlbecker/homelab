@@ -29,12 +29,12 @@
 - name: Restart netdata to pick up disk-group membership
   when:
     - hdparm_netdata_disk_group.changed
-    # apt_repository_netdata.changed is the earliest sentinel — when the
+    # netdata_apt_repo.changed is the earliest sentinel — when the
     # repo task changes in check mode the install task is gated off, so
     # netdata_apt.changed is False even though the package isn't actually
     # installed. Both must be checked or `systemd: state=restarted` hits
     # "Could not find the requested service netdata".
-    - not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed))
+    - not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed))
   systemd:
     name: netdata
     state: restarted
