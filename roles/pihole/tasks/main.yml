@@ -236,29 +236,63 @@
     - pihole
 
 - name: Configure keepalived
-  template:
-    src: keepalived.conf.j2
-    dest: /etc/keepalived/conf.d/pihole.conf
-    owner: root
-    group: root
-    mode: "0640"
-    backup: true
-  register: pihole_keepalived_cfg
-  become: true
-  tags:
-    - pihole
+  block:
+    - name: Render the pihole keepalived fragment
+      template:
+        src: keepalived.conf.j2
+        dest: /etc/keepalived/conf.d/pihole.conf
+        owner: root
+        group: root
+        mode: "0640"
+        backup: true
+      register: pihole_keepalived_cfg
+      become: true
 
-# SIGHUP-reload (hitless) for the common edits: priority, VIP, peers,
-# healthcheck params, notify hooks. Structural changes (interface, VRID)
-# need a manual `systemctl restart keepalived`. throttle: 1 serializes
-# across pihole_keepalived_peers so that even on the rare manual
-# restart, only one peer is unavailable at a time.
-- name: Reload keepalived
-  when: (pihole_keepalived_cfg.changed)
-  systemd:
-    name: keepalived
-    state: reloaded
-  become: true
-  throttle: 1
+    # SIGHUP-reload (hitless) for the common edits: priority, VIP, peers,
+    # healthcheck params, notify hooks. Structural changes (interface, VRID)
+    # need a manual `systemctl restart keepalived`. throttle: 1 serializes
+    # across pihole_keepalived_peers so that even on the rare manual
+    # restart, only one peer is unavailable at a time.
+    - name: Reload keepalived
+      when: pihole_keepalived_cfg.changed
+      systemd:
+        name: keepalived
+        state: reloaded
+      become: true
+      throttle: 1
+  rescue:
+    # roles/keepalived's ExecReload drop-in runs `keepalived -t` before the
+    # SIGHUP, so a malformed fragment fails the reload with the live daemon
+    # untouched. Restore the previous good fragment (or remove a freshly
+    # added one) so the broken file doesn't linger on disk for the next
+    # reboot/converge, then fail loudly. Mirrors roles/nginx/tasks/conf_d.yml.
+    - name: Restore previous keepalived fragment
+      when: '"backup_file" in pihole_keepalived_cfg'
+      copy:
+        remote_src: true
+        src: "{{ pihole_keepalived_cfg.backup_file }}"
+        dest: /etc/keepalived/conf.d/pihole.conf
+        owner: root
+        group: root
+        mode: "0640"
+      become: true
+    - name: Remove the keepalived fragment backup
+      when: '"backup_file" in pihole_keepalived_cfg'
+      file:
+        path: "{{ pihole_keepalived_cfg.backup_file }}"
+        state: absent
+      become: true
+    - name: Remove the freshly-added keepalived fragment
+      when: pihole_keepalived_cfg.changed and "backup_file" not in pihole_keepalived_cfg
+      file:
+        path: /etc/keepalived/conf.d/pihole.conf
+        state: absent
+      become: true
+    - name: Fail after restoring keepalived fragment
+      fail:
+        msg: >-
+          keepalived rejected the rendered pihole fragment on reload; the
+          previous fragment was restored (or removed if newly added). Inspect
+          the reload output above and roles/pihole/templates/keepalived.conf.j2.
   tags:
     - pihole
