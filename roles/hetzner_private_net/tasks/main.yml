@@ -65,7 +65,6 @@
   become: true
   changed_when: true
   when:
-    - hetzner_private_net_iface | length > 0
     - hetzner_private_net_cfg.changed
     - not ansible_check_mode
   tags:
