@@ -66,7 +66,7 @@
 # the fixture user has never logged in, so loginctl must list no session
 # for it while user@<uid>.service is nonetheless active.
 - name: _verify | List active sessions
-  command: loginctl list-sessions --no-legend
+  command: loginctl list-sessions --no-legend --no-pager
   register: _verify_sessions
   changed_when: false
   become: true
@@ -76,7 +76,10 @@
     that:
       - _verify_runtime_dir.stat.exists
       - _verify_runtime_dir.stat.isdir
-      - _verify_sessions.stdout is not search('linger_test')
+      # Exact token match on the whitespace-split output (the USER column is
+      # its own field), so a substring like a hypothetical linger_test_2
+      # can't false-match the way `is search('linger_test')` would.
+      - "'linger_test' not in _verify_sessions.stdout.split()"
 
 - name: _verify | Drive the helper again (idempotence)
   import_role:
@@ -101,6 +104,15 @@
     linger_args:
       name: linger_test
       uid: "{{ _verify_user.uid }}"
+
+# disable.yml stops the user manager before dropping the marker; prove the
+# stop actually took effect (is-active returns "inactive" + non-zero here).
+- name: _verify | User manager is no longer active after disable
+  command: systemctl is-active user@{{ _verify_user.uid }}.service
+  register: _verify_inactive
+  changed_when: false
+  failed_when: _verify_inactive.stdout | trim == 'active'
+  become: true
 
 - name: _verify | Confirm the linger marker is gone after disable
   stat:
