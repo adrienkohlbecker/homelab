@@ -1,0 +1,74 @@
+#jinja2: lstrip_blocks: True
+# roundcube.service #######################################################################
+# Webmail UI for the getmail archive. Talks IMAP to the dovecot container over
+# the internal getmail_webmail network; nginx fronts it with Authelia auth.
+[Unit]
+Description=roundcube
+After=network-online.target
+Wants=network-online.target
+# dovecot.service is Type=notify --sdnotify=healthy, so ordering after it means
+# Roundcube boots against a ready IMAP backend (and guarantees the shared
+# getmail_webmail network exists). Wants, not Requires: Roundcube tolerates
+# dovecot bouncing — the user just re-logs in.
+After=dovecot.service
+Wants=dovecot.service
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+{% if zfs_has_services_mount %}
+After=zfs_mount_mnt_services.service
+Requires=zfs_mount_mnt_services.service
+{% endif %}
+After=zfs_autosnapshot.target
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=always
+Delegate=yes
+TimeoutStartSec=120
+TimeoutStopSec=40
+RestartSec=5
+Type=notify
+NotifyAccess=all
+SyslogIdentifier=%N
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name roundcube \
+    --log-driver journald \
+    --log-opt tag="roundcube" \
+    --network getmail_webmail \
+    --volume /mnt/services/getmail_webmail/roundcube/db:/var/roundcube/db \
+    --volume /mnt/services/getmail_webmail/roundcube/config:/var/roundcube/config \
+    --publish 127.0.0.1:{{ service_ports.roundcube }}:80/tcp \
+    {# Plain IMAP on 143 to the dovecot container; the hop stays on the internal
+       podman bridge so TLS would be ceremony. SQLite holds only this single
+       operator's prefs/contacts/cache — light enough to skip the sqlite
+       dataset + symlink machinery (see notes/getmail_webmail_design.md). #}
+    --env ROUNDCUBEMAIL_DEFAULT_HOST=dovecot \
+    --env ROUNDCUBEMAIL_DEFAULT_PORT=143 \
+    --env ROUNDCUBEMAIL_DB_TYPE=sqlite \
+    --env ROUNDCUBEMAIL_SKIN=elastic \
+    --health-cmd         '["curl","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:80/"]' \
+    --health-startup-cmd '["curl","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:80/"]' \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    --health-start-period "60s" \
+    --stop-timeout 30 \
+    docker.io/roundcube/roundcubemail:1.6.16-apache
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=multi-user.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

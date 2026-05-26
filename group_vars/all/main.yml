@@ -147,6 +147,10 @@ service_ports:
   lidarr: 8686
   nut: 3493
   radarr: 7878
+  # Roundcube webmail (getmail archive viewer), loopback-published; Dovecot's
+  # IMAP backend stays internal to the getmail_webmail podman network and so
+  # isn't registered here.
+  roundcube: 8002
   seerr: 5055
   sonarr: 8989
   transmission_bt: 51413
