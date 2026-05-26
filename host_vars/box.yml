@@ -61,7 +61,16 @@ zfs_has_brumath_mount: false
 zfs_has_eckwersheim_mount: false
 zfs_has_minio_mount: false
 
-sensor_modules: []
+# A sensorless qemu box can't bind the prod drivers (drivetemp/coretemp/
+# nct6775 -- no matching hardware), so under the lm_sensors test we load a
+# single module that loads cleanly anywhere, purely to exercise the
+# modules-load + live-modprobe path (_verify asserts it landed and loaded).
+# Keyed on _role_under_test so every other role tested on box keeps [].
+sensor_modules: "{{ ['dummy'] if (_role_under_test | default('')) == 'lm_sensors' else [] }}"
+# Test relabel entry exercised by lm_sensors/_verify.yml (finding 11's
+# go.d template path); only set under the lm_sensors test, like the modules
+# above. main.yml ignores sensor_relabel -- it's consumed only by netdata.yml.
+sensor_relabel: "{{ [{'chip': 'lm-sensors-test-0', 'sensors': [{'name': 'temp1', 'label': 'Verify Probe'}]}] if (_role_under_test | default('')) == 'lm_sensors' else [] }}"
 
 # Two blocks on the same en* parent: exercises the multi-block iteration
 # in main.yml's loop, distinct MAC seeds across sibling blocks, and two

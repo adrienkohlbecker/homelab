@@ -1,0 +1,83 @@
+# The harness runs main.yml (apt + modules-load + live modprobe) on its own
+# with box's test sensor_modules; this file asserts that took effect, then
+# exercises the netdata collector arm (normally invoked from
+# roles/netdata/tasks/main.yml).
+#
+# Scope note: the qemu box is a sensorless arm64 `virt` machine -- it
+# registers thermal *governors* but exposes no hwmon device, so netdata's
+# sensors collector has nothing to chart, and netdata's arm64 build omits the
+# stock /usr/lib/netdata/conf.d/go.d/sensors.conf that prod (x86_64) ships and
+# the copy helper seeds from. Live charting therefore can't be verified here
+# (it's observed on prod); instead we verify modules load for real, and that
+# netdata.yml renders + deploys a valid go.d config including the relabel
+# template path (host_vars/box.yml feeds a test sensor_relabel).
+
+- name: _verify | read the modules-load.d file
+  slurp:
+    path: /etc/modules-load.d/lm_sensors.conf
+  register: _verify_modload
+  become: true
+
+- name: _verify | assert it lists exactly sensor_modules
+  assert:
+    that:
+      - (_verify_modload.content | b64decode).split() == sensor_modules
+    fail_msg: >-
+      /etc/modules-load.d/lm_sensors.conf = {{ _verify_modload.content | b64decode | trim }};
+      expected {{ sensor_modules }}
+
+- name: _verify | assert each module is loaded in the running kernel
+  command: grep -qw {{ item | replace('-', '_') }} /proc/modules
+  loop: "{{ sensor_modules }}"
+  changed_when: false
+  become: true
+
+# install.yml uses policy_rc_d=101 so apt won't auto-start netdata; prod
+# starts it in netdata's main.yml after configuration. The test path skips
+# that, so start the daemon here before installing the collector.
+- name: _verify | start netdata
+  systemd:
+    name: netdata
+    state: started
+  become: true
+
+- name: _verify | ensure netdata go.d conf.d dir exists
+  file:
+    path: /usr/lib/netdata/conf.d/go.d
+    state: directory
+    mode: "0755"
+  become: true
+
+# The netdata copy helper seeds dest from this stock file before overwriting
+# it with our render. prod (x86_64) ships it; the arm64 test box doesn't, so
+# seed a stub (force:false leaves the real file untouched on x86_64) to
+# exercise the same code path. Content is irrelevant -- it gets overwritten.
+- name: _verify | seed stub stock sensors.conf (arm64 build omits it)
+  copy:
+    content: "jobs:\n  - name: sensors\n"
+    dest: /usr/lib/netdata/conf.d/go.d/sensors.conf
+    mode: "0644"
+    force: false
+  become: true
+
+# No netdata_restart set here -- relies on netdata.yml's default(true), which
+# is exactly finding 9's standalone-invocation fix.
+- name: _verify | install lm_sensors netdata collector
+  import_tasks: netdata.yml
+
+- name: _verify | read the deployed go.d sensors config
+  slurp:
+    path: /etc/netdata/go.d/sensors.conf
+  register: _verify_godconf
+  become: true
+
+- name: _verify | assert it is valid YAML and rendered the relabel map
+  vars:
+    _parsed: "{{ _verify_godconf.content | b64decode | from_yaml }}"
+  assert:
+    that:
+      - _parsed.jobs | length > 0
+      - _parsed.jobs[0].name == 'sensors'
+      - _parsed.jobs[0].relabel[0].chip == 'lm-sensors-test-0'
+      - _parsed.jobs[0].relabel[0].sensors[0].label == 'Verify Probe'
+    fail_msg: "deployed /etc/netdata/go.d/sensors.conf:\n{{ _verify_godconf.content | b64decode }}"
