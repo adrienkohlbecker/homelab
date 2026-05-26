@@ -4,14 +4,20 @@
 #    /etc/keepalived/conf.d/<tenant>.conf and own its lifecycle.
 # 2. Tenants own their own reload: after rendering the fragment, reload
 #    keepalived with `throttle: 1` so peers reload one at a time and the
-#    VIP doesn't flap on both nodes at once. Copy the "Reload keepalived"
-#    task from roles/pihole/tasks/main.yml verbatim:
+#    VIP doesn't flap on both nodes at once. `enabled: true` is part of the
+#    contract, not optional: this role runs first and disables the unit
+#    while conf.d is empty, so the tenant must re-enable it or a reboot
+#    before the next converge loses the VIP (on an inactive unit
+#    `state: reloaded` also starts it, bringing the VIP up the same
+#    converge). Copy the "Reload keepalived" task from
+#    roles/pihole/tasks/main.yml verbatim:
 #
 #        - name: Reload keepalived
 #          when: <tenant>_keepalived_cfg.changed
 #          systemd:
 #            name: keepalived
 #            state: reloaded
+#            enabled: true
 #          become: true
 #          throttle: 1
 #
