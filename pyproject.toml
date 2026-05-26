@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [tool.black]
-line-length = 250
+line-length = 120
 
 [tool.ruff]
 exclude = [".claude"]

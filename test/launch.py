@@ -82,7 +82,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--append",
         default="",
-        help="Kernel cmdline (used with --kernel/--initrd). The harness " "auto-appends an arch-appropriate serial console= + earlycon= unless " "you already supplied one (ttyAMA on aarch64, ttyS on x86_64).",
+        help="Kernel cmdline (used with --kernel/--initrd). The harness "
+        "auto-appends an arch-appropriate serial console= + earlycon= unless "
+        "you already supplied one (ttyAMA on aarch64, ttyS on x86_64).",
     )
     parser.add_argument(
         "--mem",
@@ -126,12 +128,15 @@ def parse_args() -> argparse.Namespace:
         action="append",
         default=[],
         metavar="PATH:TAG",
-        help="Mount PATH on the host as a 9p share with mount_tag=TAG inside " "the guest (`mount -t 9p TAG /mnt`). Repeatable.",
+        help="Mount PATH on the host as a 9p share with mount_tag=TAG inside "
+        "the guest (`mount -t 9p TAG /mnt`). Repeatable.",
     )
     parser.add_argument(
         "--foreground",
         action="store_true",
-        help="Inherit qemu's stdio and use -serial mon:stdio so HMP is " "reachable via Ctrl-A,c (Ctrl-A,x to quit). The boot log is NOT " "captured to a file; implies --no-ssh-wait.",
+        help="Inherit qemu's stdio and use -serial mon:stdio so HMP is "
+        "reachable via Ctrl-A,c (Ctrl-A,x to quit). The boot log is NOT "
+        "captured to a file; implies --no-ssh-wait.",
     )
     parser.add_argument(
         "--qmp",
@@ -154,12 +159,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--no-ssh-wait",
         action="store_true",
-        help="Skip the SSH ready-check after boot -- e.g. when launching ZBM " "or any payload that doesn't expose sshd",
+        help="Skip the SSH ready-check after boot -- e.g. when launching ZBM "
+        "or any payload that doesn't expose sshd",
     )
     parser.add_argument(
         "--exit-after-ready",
         action="store_true",
-        help="Exit cleanly after the SSH ready-check succeeds instead of " "blocking until Ctrl-C. Smoke-test mode: prove the image boots, " "then shut down. Mutually exclusive with --foreground and " "--no-ssh-wait (nothing to wait on for either).",
+        help="Exit cleanly after the SSH ready-check succeeds instead of "
+        "blocking until Ctrl-C. Smoke-test mode: prove the image boots, "
+        "then shut down. Mutually exclusive with --foreground and "
+        "--no-ssh-wait (nothing to wait on for either).",
     )
     parser.add_argument(
         "--seed",
@@ -191,7 +200,9 @@ def parse_args() -> argparse.Namespace:
     if args.seed is not None and not args.seed.exists():
         parser.error(f"--seed playbook not found: {args.seed}")
     if args.commit and args.image_dir is None:
-        parser.error("--commit requires --image-dir to be set explicitly (refusing to mutate the published artifact directory)")
+        parser.error(
+            "--commit requires --image-dir to be set explicitly (refusing to mutate the published artifact directory)"
+        )
     try:
         args.virtfs = _parse_virtfs(args.virtfs)
     except argparse.ArgumentTypeError as exc:
@@ -238,7 +249,9 @@ async def _run_async(m: QemuMachine, *, wait_for_ssh: bool, exit_after_ready: bo
                 else:
                     failed = await m.ssh_command("systemctl", "--failed", "--no-legend", check=False)
                     failed_units = "\n".join(failed.stdout).rstrip() or "(none)"
-                    print_line(f"System reached state {state!r} (rc={result.exitcode}); failed units:\n" f"{failed_units}")
+                    print_line(
+                        f"System reached state {state!r} (rc={result.exitcode}); failed units:\n" f"{failed_units}"
+                    )
                     raise RuntimeError(f"systemd is-system-running returned {state!r}")
             if seed is not None:
                 # Run the seed playbook against the booted VM, then ask

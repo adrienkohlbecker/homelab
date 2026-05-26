@@ -45,7 +45,9 @@ def machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
 
 
 @pytest.fixture
-def qemu_machine_factory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Callable[..., machine.QemuMachine]]:
+def qemu_machine_factory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[Callable[..., machine.QemuMachine]]:
     """Build QemuMachine instances with imagedir + arch under our control."""
     # Pin host-platform discovery to Darwin so QemuMachine resolves
     # imagedir to tmp_path/packer/artifacts (writable, host-agnostic).

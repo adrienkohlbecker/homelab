@@ -846,7 +846,10 @@ def imagedir_for_host() -> Path:
     if system == "Linux":
         d = Path("/mnt/scratch/qemu")
         if not d.is_dir():
-            raise RuntimeError(f"Imagedir {str(d)!r} does not exist. " f"Mount the qemu image volume (e.g. `sudo mount /mnt/scratch/qemu`).")
+            raise RuntimeError(
+                f"Imagedir {str(d)!r} does not exist. "
+                f"Mount the qemu image volume (e.g. `sudo mount /mnt/scratch/qemu`)."
+            )
         return d
     raise RuntimeError(f"Unknown operating system: {system}")
 
@@ -881,7 +884,9 @@ def sweep_stale_workdirs(imagedir: Path) -> None:
 
     grace_seconds = 60
     now = time.time()
-    candidates = [d for d in imagedir.iterdir() if d.is_dir() and (d.name.startswith("tmp") or d.name.startswith(".build-"))]
+    candidates = [
+        d for d in imagedir.iterdir() if d.is_dir() and (d.name.startswith("tmp") or d.name.startswith(".build-"))
+    ]
     if not candidates:
         return
 
@@ -1031,7 +1036,9 @@ class QemuMachine(Machine):
         self._image_dir_override = image_dir.resolve() if image_dir is not None else None
         # launch.py-only knobs; defaults are no-ops (every gate below the
         # super().__init__ call short-circuits when each is None/False/[]).
-        self._direct_boot_override: tuple[Path, Path, str] | None = (kernel.resolve(), initrd.resolve(), append) if kernel is not None else None
+        self._direct_boot_override: tuple[Path, Path, str] | None = (
+            (kernel.resolve(), initrd.resolve(), append) if kernel is not None else None
+        )
         self._mem = mem
         self._with_pflash = with_pflash
         self._efi_code = efi_code.resolve() if efi_code is not None else None
@@ -1109,7 +1116,8 @@ class QemuMachine(Machine):
         """Verify the qemu binary, GNU timeout, and lsof are reachable."""
         self._require_binary(
             self.arch.qemu_binary,
-            "Install via `brew install qemu` (macOS) " f"or `apt install qemu-system-{self.arch.name}` (Debian/Ubuntu).",
+            "Install via `brew install qemu` (macOS) "
+            f"or `apt install qemu-system-{self.arch.name}` (Debian/Ubuntu).",
         )
         # The boot wrapper uses GNU timeout; macOS doesn't ship one out of
         # the box, but `brew install coreutils` puts a `timeout` shim on PATH.
@@ -1204,7 +1212,9 @@ class QemuMachine(Machine):
             # Packer renames per-OS disks to packer-ubuntu-N.<format> in its
             # `extension` post-processor; mirror that suffix here. The format
             # matches arch (raw on Linux, qcow2 on Mac).
-            os_src_paths = [f"{image_dir}/packer-ubuntu-{idx}.{self._packer_disk_format}" for idx in range(1, os_disk_count + 1)]
+            os_src_paths = [
+                f"{image_dir}/packer-ubuntu-{idx}.{self._packer_disk_format}" for idx in range(1, os_disk_count + 1)
+            ]
             os_disk_paths: list[str] = []
             if self._commit_in_place:
                 # No overlay: pass the source files straight to qemu in
@@ -1282,7 +1292,10 @@ class QemuMachine(Machine):
                     raise
                 if time.monotonic() >= end:
                     os.close(fd)
-                    raise TimeoutError(f"publish-lock held >{PUBLISH_LOCK_TIMEOUT:.0f}s; " f"concurrent packer-build wedged? check `lsof {lockfile}`")
+                    raise TimeoutError(
+                        f"publish-lock held >{PUBLISH_LOCK_TIMEOUT:.0f}s; "
+                        f"concurrent packer-build wedged? check `lsof {lockfile}`"
+                    )
                 time.sleep(0.5)
 
     async def _ensure_minimal_cloudimg(self) -> Path:
@@ -1294,7 +1307,11 @@ class QemuMachine(Machine):
         # Ubuntu publishes minimal-cloudimg arm64 only from noble onwards;
         # jammy is amd64-only. Fail loud rather than 404'ing on the curl.
         if self.arch.cloud_image_suffix == "arm64" and self.ubuntu_name == "jammy":
-            raise RuntimeError(f"Ubuntu does not publish a minimal-cloudimg for {self.ubuntu_name}/arm64. " "Use --ubuntu noble (or later) on arm64 hosts, " "or run --machine minimal on x86_64.")
+            raise RuntimeError(
+                f"Ubuntu does not publish a minimal-cloudimg for {self.ubuntu_name}/arm64. "
+                "Use --ubuntu noble (or later) on arm64 hosts, "
+                "or run --machine minimal on x86_64."
+            )
         name = f"ubuntu-{self.ubuntu_version}-minimal-cloudimg-{self.arch.cloud_image_suffix}.img"
         cache = self.imagedir / "cloud-images"
         cache.mkdir(parents=True, exist_ok=True)
@@ -1302,7 +1319,11 @@ class QemuMachine(Machine):
         if target.exists():
             return target
 
-        base = "https://cloud-images.ubuntu.com" if self.upstream_mirrors else "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images"
+        base = (
+            "https://cloud-images.ubuntu.com"
+            if self.upstream_mirrors
+            else "https://nexus.lab.fahm.fr/repository/ubuntu-cloud-images"
+        )
         url = f"{base}/minimal/releases/{self.ubuntu_name}/release/{name}"
         tmp = target.with_suffix(target.suffix + ".tmp")
         print_line(f"Downloading {url}")

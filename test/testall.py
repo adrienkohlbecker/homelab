@@ -191,7 +191,11 @@ def list_roles() -> list[str]:
     if not roles_dir.exists():
         return []
 
-    return [role_dir.name for role_dir in sorted(roles_dir.iterdir()) if role_dir.is_dir() and (role_dir / "tasks" / "main.yml").exists()]
+    return [
+        role_dir.name
+        for role_dir in sorted(roles_dir.iterdir())
+        if role_dir.is_dir() and (role_dir / "tasks" / "main.yml").exists()
+    ]
 
 
 def get_failed_roles() -> list[MachineRole]:
@@ -399,7 +403,14 @@ async def run_all(
     try:
         with cancel_on_signal(task):
             async with asyncio.TaskGroup() as tg:
-                tasks = [tg.create_task(_run_role(seq, mr.machine, mr.ubuntu_name, mr.role, role_args, semaphore, checkmode, idempotence)) for seq, mr in enumerate(machine_roles, start=1)]
+                tasks = [
+                    tg.create_task(
+                        _run_role(
+                            seq, mr.machine, mr.ubuntu_name, mr.role, role_args, semaphore, checkmode, idempotence
+                        )
+                    )
+                    for seq, mr in enumerate(machine_roles, start=1)
+                ]
     except asyncio.CancelledError:
         # When the parent task is cancelled, TaskGroup cascades cancellation
         # into every child and re-raises bare CancelledError on exit. Swallow
@@ -437,7 +448,10 @@ def _cancelled_result(mr: MachineRole) -> JobResult:
 
 def _print_failure_table(failures: list[JobResult]) -> None:
     """Render a table of failed runs with exit codes and runtime."""
-    rows = [[r.machine, r.ubuntu_name, r.role, r.exitval, f"{r.runtime:.1f}s"] for r in sorted(failures, key=lambda r: (r.machine, r.ubuntu_name, r.role))]
+    rows = [
+        [r.machine, r.ubuntu_name, r.role, r.exitval, f"{r.runtime:.1f}s"]
+        for r in sorted(failures, key=lambda r: (r.machine, r.ubuntu_name, r.role))
+    ]
     print("\nFailure summary:", file=sys.stderr)
     print(
         tabulate(rows, headers=["Machine", "Ubuntu", "Role", "Exit", "Runtime"]),
@@ -475,7 +489,8 @@ def main() -> int:
     conflicts = [a for a in args.role_args if a in TESTROLE_OWNED_FLAGS]
     if conflicts:
         print(
-            f"Error: testall.py controls these flags itself; pass them to testall instead " f"of forwarding via role_args: {conflicts}",
+            f"Error: testall.py controls these flags itself; pass them to testall instead "
+            f"of forwarding via role_args: {conflicts}",
             file=sys.stderr,
         )
         return 1
@@ -483,7 +498,8 @@ def main() -> int:
     if args.retry_failed:
         if args.machines != "box" or args.ubuntu != DEFAULT_UBUNTU:
             print(
-                "Warning: --machines/--ubuntu are ignored with --retry-failed; " "the machine and ubuntu of each rerun come from the prior joblog",
+                "Warning: --machines/--ubuntu are ignored with --retry-failed; "
+                "the machine and ubuntu of each rerun come from the prior joblog",
                 file=sys.stderr,
             )
         machine_roles = get_failed_roles()
@@ -526,7 +542,11 @@ def main() -> int:
         # testrole.py's resolution and prevents (box_deps-roles, box)
         # combinations from running against the wrong fixture.
         machine_roles = [
-            MachineRole(resolve_default_machine(role) if Path(f"roles/{role}/meta/test.yml").exists() else machine, ubuntu_name, role)
+            MachineRole(
+                resolve_default_machine(role) if Path(f"roles/{role}/meta/test.yml").exists() else machine,
+                ubuntu_name,
+                role,
+            )
             for role in roles
             for ubuntu_name in ubuntus
             for machine in machines
@@ -569,7 +589,9 @@ def main() -> int:
     prior_results = _read_prior_results() if is_partial_rerun else {}
 
     test_start = time.time()
-    results, cancelled = asyncio.run(run_all(machine_roles, args.role_args, args.jobs, args.checkmode, args.idempotence))
+    results, cancelled = asyncio.run(
+        run_all(machine_roles, args.role_args, args.jobs, args.checkmode, args.idempotence)
+    )
     wall_clock = time.time() - test_start
 
     if results:
@@ -581,7 +603,10 @@ def main() -> int:
         # Synthesized cancellation entries have empty started_at; everything
         # else actually ran (whether it passed or failed).
         completed = sum(1 for r in results if r.started_at)
-        msg = f"\nInterrupted, shutting down ({completed}/{len(machine_roles)} completed); " f"joblog written to {LOG_FILE} -- rerun with --retry-failed to retry the rest"
+        msg = (
+            f"\nInterrupted, shutting down ({completed}/{len(machine_roles)} completed); "
+            f"joblog written to {LOG_FILE} -- rerun with --retry-failed to retry the rest"
+        )
         print(msg, file=sys.stderr)
         return 130
 
@@ -593,7 +618,9 @@ def main() -> int:
     if results:
         longest = max(results, key=lambda r: r.runtime)
         print(
-            f"\n{len(results)} role(s) passed in {wall_clock:.0f}s wall clock " f"(parallelism={args.jobs}, longest: {longest.role} on " f"{longest.machine}:{longest.ubuntu_name} at {longest.runtime:.0f}s)",
+            f"\n{len(results)} role(s) passed in {wall_clock:.0f}s wall clock "
+            f"(parallelism={args.jobs}, longest: {longest.role} on "
+            f"{longest.machine}:{longest.ubuntu_name} at {longest.runtime:.0f}s)",
             file=sys.stderr,
         )
 
