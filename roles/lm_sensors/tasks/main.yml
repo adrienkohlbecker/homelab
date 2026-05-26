@@ -1,3 +1,15 @@
+- name: Assert sensor_modules is a list of valid module names
+  assert:
+    that:
+      - sensor_modules is defined
+      - sensor_modules is not string
+      - (sensor_modules | default([])) | reject('match', '^[a-z0-9_]+$') | list | length == 0
+    fail_msg: >-
+      sensor_modules must be set in host_vars to a list of kernel module names
+      (lowercase letters, digits, underscore). Got: {{ sensor_modules | default('<undefined>') }}
+  tags:
+    - lm_sensors
+
 - name: Install lm-sensors
   apt:
     pkg:
@@ -31,8 +43,27 @@
   tags:
     - lm_sensors
 
-- name: Ask to reboot
-  when: lm_sensors_modules_copy.changed or lm_sensors_modules_rm.changed
+# Load the modules live so sensors (and their netdata charts) appear
+# immediately instead of waiting for the next boot. modprobe is
+# idempotent, so on a host where the drivers are already loaded this is a
+# no-op after first apply; modules-load.d above keeps them loaded at boot.
+- name: Load sensor modules now
+  when: sensor_modules | length > 0
+  modprobe:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ sensor_modules }}"
+  become: true
+  tags:
+    - lm_sensors
+
+# Only a removal needs a reboot: dropping a module from modules-load.d
+# doesn't unload it from the running kernel, and rmmod mid-run is risky (a
+# driver may be in use). Adding modules no longer reboots -- they're
+# modprobe'd live above. (Shrinking the list leaves the dropped module
+# loaded until the next boot, which is harmless for sensor drivers.)
+- name: Touch /var/run/reboot-required (sensor modules removed)
+  when: lm_sensors_modules_rm.changed
   file:
     path: /var/run/reboot-required
     state: touch
