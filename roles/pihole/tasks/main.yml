@@ -236,6 +236,8 @@
     - pihole
 
 - name: Configure keepalived
+  tags:
+    - pihole
   block:
     - name: Render the pihole keepalived fragment
       template:
@@ -294,5 +296,3 @@
           keepalived rejected the rendered pihole fragment on reload; the
           previous fragment was restored (or removed if newly added). Inspect
           the reload output above and roles/pihole/templates/keepalived.conf.j2.
-  tags:
-    - pihole

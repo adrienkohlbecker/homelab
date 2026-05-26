@@ -150,6 +150,8 @@
   when:
     - keepalived_confs.matched > 0
     - not (ansible_check_mode and keepalived_apt.changed)
+  tags:
+    - keepalived
   block:
     - name: Run keepalived -t on the assembled config
       command: keepalived -t -f /etc/keepalived/keepalived.conf
@@ -185,8 +187,6 @@
           conf was restored. Inspect the validate output above — a tenant
           fragment in /etc/keepalived/conf.d/ or files/keepalived.conf is
           malformed.
-  tags:
-    - keepalived
 
 - name: Enable keepalived service
   import_role:
