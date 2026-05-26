@@ -2,8 +2,9 @@
 # installs the host-native qemu emulator -- on the aarch64 test box that's
 # qemu-system-arm, not x86. _verify defines an x86_64 domain to exercise
 # virsh_backup's domain-dump path, so install the x86 emulator here and
-# let libvirt validate that XML cross-arch under TCG, exactly as
-# roles/macos_vm/tasks/_setup.yml does.
+# let libvirt validate that XML cross-arch under TCG -- the same cross-arch
+# qemu-system-x86 install roles/macos_vm/tasks/_setup.yml uses (that role
+# starts libvirtd from _setup too; here the role under test does it itself).
 - name: _setup | Install x86_64 emulator for cross-arch domain validation
   apt:
     pkg:
