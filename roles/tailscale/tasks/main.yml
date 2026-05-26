@@ -198,15 +198,29 @@
         tailscale_preauth_key: "{{ (tailscale_preauth.stdout | from_json).key }}"
       no_log: true
 
-# --reset so the advertised set on first registration is exactly what we pass
-# (no stale flags from a prior manual `tailscale up`). no_log: the authkey is a
-# bearer credential. --timeout bounds the call so a control-plane hiccup can't
+    # Hand the key to `tailscale up` via a file rather than --authkey <key> on the
+    # command line, where it would be world-readable in /proc/<pid>/cmdline / ps
+    # for the duration of the call. Root-only, on tmpfs (/run), removed right
+    # after registration; the key is single-use and 5-min-lived regardless.
+    - name: Stage the pre-auth key in a root-only tmpfs file
+      copy:
+        content: "{{ tailscale_preauth_key }}"
+        dest: /run/tailscale_authkey
+        owner: root
+        group: root
+        mode: "0600"
+      no_log: true
+
+# --reset so the advertised set on first registration is exactly what we pass (no
+# stale flags from a prior manual `tailscale up`). --authkey file: reads the key
+# from the staged tmpfs file so it never lands in argv/ps; no_log keeps the task's
+# own logging quiet too. --timeout bounds the call so a control-plane hiccup can't
 # wedge the converge.
 - name: Register with headscale and advertise routes / exit node
   command: >-
     tailscale up
     --login-server {{ tailscale_login_server }}
-    --authkey {{ tailscale_preauth_key }}
+    --authkey file:/run/tailscale_authkey
     --advertise-routes={{ tailscale_advertise_routes }}
     {{ tailscale_advertise_exit_node | ternary('--advertise-exit-node', '') }}
     --accept-routes={{ tailscale_accept_routes | ternary('true', 'false') }}
@@ -223,6 +237,22 @@
     - not ansible_check_mode
     - not (tailscale_running | bool)
   no_log: true
+  become: true
+  tags:
+    - tailscale
+
+# Drop the staged key immediately after registration consumes it. Same gate as
+# the register task, so it only runs on a registration converge -- on the
+# steady-state idempotence re-run (node already Running) the whole mint/register
+# path is skipped, so this doesn't fire and idempotence holds. A failed register
+# leaves the root-only file on tmpfs; the next converge re-mints and overwrites it.
+- name: Remove the staged pre-auth key file
+  file:
+    path: /run/tailscale_authkey
+    state: absent
+  when:
+    - not ansible_check_mode
+    - not (tailscale_running | bool)
   become: true
   tags:
     - tailscale
