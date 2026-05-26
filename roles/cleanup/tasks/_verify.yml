@@ -82,3 +82,65 @@
     path: /etc/apt/preferences.d/nosnap.pref
   register: _cleanup_verify_nosnap_pin
   failed_when: not _cleanup_verify_nosnap_pin.stat.exists
+
+# Exercise prune_ansible_backups: it must evict a backup whose FILENAME
+# timestamp is older than the cutoff, keep a fresh one, and never touch files
+# that don't match the ansible <name>.<pid>.<ts>~ pattern. The fresh fixture's
+# timestamp is taken from the target's own clock so it can't drift stale.
+- name: _verify | Capture a 'now' timestamp for the fresh fixture
+  command: date +%Y-%m-%d@%H:%M:%S
+  register: _cleanup_verify_now
+  changed_when: false
+
+- name: _verify | Create the prune fixture dir
+  file:
+    path: /etc/_verify_prune
+    state: directory
+    mode: "0755"
+  become: true
+
+- name: _verify | Plant prune fixtures
+  copy:
+    dest: "{{ item }}"
+    content: x
+    mode: "0644"
+  loop:
+    - /etc/_verify_prune/old.111.2020-01-01@00:00:00~                  # > 7d → pruned
+    - /etc/_verify_prune/fresh.222.{{ _cleanup_verify_now.stdout }}~   # today → kept
+    - /etc/_verify_prune/notkept.txt                                   # no ~ → never matched
+    - /etc/_verify_prune/editor~                                       # bare ~, wrong shape → kept
+  become: true
+
+- name: _verify | Run the prune scoped to the fixture dir
+  command:
+    argv:
+      - /usr/local/sbin/prune_ansible_backups
+      - /etc/_verify_prune
+  changed_when: false
+  become: true
+
+- name: _verify | Stat the prune fixtures
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /etc/_verify_prune/old.111.2020-01-01@00:00:00~
+    - /etc/_verify_prune/fresh.222.{{ _cleanup_verify_now.stdout }}~
+    - /etc/_verify_prune/notkept.txt
+    - /etc/_verify_prune/editor~
+  register: _cleanup_verify_prune
+  become: true
+
+- name: _verify | Assert old pruned, fresh + non-matching kept
+  assert:
+    that:
+      - not _cleanup_verify_prune.results[0].stat.exists
+      - _cleanup_verify_prune.results[1].stat.exists
+      - _cleanup_verify_prune.results[2].stat.exists
+      - _cleanup_verify_prune.results[3].stat.exists
+    fail_msg: prune did not honor the 7-day cutoff / ansible-backup pattern
+
+- name: _verify | Clean up the prune fixture dir
+  file:
+    path: /etc/_verify_prune
+    state: absent
+  become: true
