@@ -21,8 +21,17 @@
       linger_args needs name (a valid username matching [a-z_][a-z0-9_-]*);
       got name={{ linger_args.name | default('<unset>') }}.
 
+- name: disable | Check whether linger was enabled for {{ linger_args.name }}
+  stat:
+    path: /var/lib/systemd/linger/{{ linger_args.name }}
+  register: _linger_marker
+  become: true
+
 - name: disable | Stop the user manager for {{ linger_args.name }}
-  when: linger_args.uid is defined
+  # Only stop the manager when linger actually enabled it. On a tombstone
+  # call against a never-lingered user the marker is absent and that uid
+  # may belong to a live login session whose manager we must not kill.
+  when: linger_args.uid is defined and _linger_marker.stat.exists
   systemd:
     name: user@{{ linger_args.uid }}.service
     state: stopped
