@@ -41,8 +41,12 @@
 - name: _setup | Pre-create the headscale podman network with a fixed subnet
   # Fixed subnet so mockoidc can take a static IP that the issuer URL names
   # (mockoidc derives its issuer from its bind address, so it must bind a
-  # concrete reachable IP, not 0.0.0.0). The role re-declares this network
-  # (ipv6:true) and is idempotent against the already-present one.
+  # concrete reachable IP, not 0.0.0.0). The role then re-declares this network
+  # with the SAME name + ipv6:true (it omits subnet/gateway, which the module
+  # treats as "don't care") and is idempotent against the already-present one --
+  # so keep name/ipv6 in sync with main.yml's podman_network task. Adding any
+  # other field there that conflicts with this fixed subnet would force a
+  # recreate, which fails while mockoidc is attached.
   containers.podman.podman_network:
     name: headscale
     ipv6: true
