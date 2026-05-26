@@ -1,3 +1,18 @@
+- name: Assert grub_bootloader is set
+  assert:
+    that: grub_bootloader is defined
+    fail_msg: console requires grub_bootloader (bool) in host/group vars.
+  tags:
+    - console
+
+- name: Assert zfs_root is set on ZBM hosts
+  when: not grub_bootloader
+  assert:
+    that: zfs_root is defined
+    fail_msg: ZBM console hosts (grub_bootloader=false) require zfs_root for the cmdline property write.
+  tags:
+    - console
+
 - name: Install console-setup + keyboard-configuration
   apt:
     pkg:
