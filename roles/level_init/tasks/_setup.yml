@@ -1,7 +1,0 @@
-# Orphan-reaping _verify spawns a real podman container so PID 1 of
-# the namespace is the installed level_init binary. The role itself
-# only needs `golang-go`; podman is a runtime-only dep that prod gets
-# from site.yml's ordering. Pull it in here for testrole.py.
-- name: _setup | Install podman for orphan-reap _verify
-  import_role:
-    name: podman
