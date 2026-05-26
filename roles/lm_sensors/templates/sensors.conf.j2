@@ -14,7 +14,6 @@
 {% set relabel = sensor_relabel | default([]) %}
 jobs:
   - name: sensors
-    update_every: 5
     autodetection_retry: 60
 {% if relabel | length > 0 %}
     relabel:
