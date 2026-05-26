@@ -18,7 +18,7 @@ SCRUB_EXPIRE=3456000
 TMP_OUTPUT=$(mktemp)
 trap 'rm -rf $TMP_OUTPUT' EXIT
 
-zpool status | tee $TMP_OUTPUT
+zpool status | tee "$TMP_OUTPUT"
 
 # Health - Check if all zfs volumes are in good condition. We are looking for
 # any keyword signifying a degraded or broken array.

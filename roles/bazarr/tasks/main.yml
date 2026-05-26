@@ -12,7 +12,7 @@
   vars:
     service_user_args:
       name: bazarr
-      extra_groups: [media]
+      extra_groups: [ media ]
       # linuxserver/bazarr's s6 init recursively chowns /config to
       # PUID:PGID=bazarr:media on every container start. Match it here
       # so ansible doesn't flap the dir's gid back to `bazarr` each run.

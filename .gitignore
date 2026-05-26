@@ -4,6 +4,7 @@ __pycache__
 test/out.tsv
 test/out.tsv.prev
 test/out/
+test/out_*.log
 /.ansible-mitogen-strategy
 /packer/artifacts
 /zbm-build

@@ -155,7 +155,7 @@
       auto_init: true
       default_branch: main
     # 201 on first run, 409 on a --keep re-run.
-    status_code: [201, 409]
+    status_code: [ 201, 409 ]
   no_log: true
 
 - name: _verify | Push smoke workflow via Files API (test only)
@@ -180,7 +180,7 @@
       message: "add smoke workflow"
       content: "{{ _smoke_workflow | b64encode }}"
     # 201 on first run, 422 on a --keep re-run (file already exists).
-    status_code: [201, 422]
+    status_code: [ 201, 422 ]
   no_log: true
 
 # Workflow files in .gitea/workflows/ are auto-triggered by the push

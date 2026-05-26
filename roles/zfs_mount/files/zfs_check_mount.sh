@@ -10,13 +10,13 @@ if [ -z "$DATASET" ] || [ -z "$MOUNTPOINT" ]; then
   exit 1
 fi
 
-OUTPUT=$(zfs get -pH -o value name,type,mounted,mountpoint,readonly,canmount $DATASET | xargs echo -n | tr '\n' ' ')
+OUTPUT=$(zfs get -pH -o value name,type,mounted,mountpoint,readonly,canmount "$DATASET" | xargs echo -n | tr '\n' ' ')
 if [ "$OUTPUT" != "$DATASET filesystem yes $MOUNTPOINT off on" ]; then
   echo >&2 "Error: Cannot ensure $DATASET is mounted correctly at $MOUNTPOINT, got $OUTPUT (name,type,mounted,mountpoint,readonly,canmount)"
   exit 1
 fi
 
-OUTPUT=$(mount | grep "on $MOUNTPOINT type zfs" | wc -l)
+OUTPUT=$(mount | grep -c "on $MOUNTPOINT type zfs")
 if [ "$OUTPUT" != "1" ]; then
   echo >&2 "Error: Multiple ($OUTPUT) active mounts at $MOUNTPOINT, are two datasets active at the same time?"
   exit 1

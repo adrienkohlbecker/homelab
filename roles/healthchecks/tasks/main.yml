@@ -34,8 +34,8 @@
 
 # Pre-create hc.sqlite in WAL journal mode so Django inherits it on its
 # first connection. journal_mode is persisted in the SQLite header, so
-# once set on an empty DB it survives Django's `migrate` (which
-# CREATE TABLEs into the same file). Running as the healthchecks user
+# once set on an empty DB it survives Django's `migrate` (which runs
+# CREATE TABLE statements into the same file). Running as the healthchecks user
 # means the file lands at the host uid the +0:N:1 uidmap routes
 # in-container root to -- the container can then open it read/write.
 # The alternative -- letting Django create the DB in rollback-journal
