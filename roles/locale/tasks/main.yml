@@ -10,7 +10,7 @@
 
 - name: Set up locales
   when: not (ansible_check_mode and locale_apt.changed)
-  locale_gen:
+  community.general.locale_gen:
     name: en_US.UTF-8
   become: true
   tags:
