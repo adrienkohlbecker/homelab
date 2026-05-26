@@ -21,7 +21,10 @@
 # roles/data/tasks/_dataset.yml) only populate it at runtime, so a parse-
 # time render would fail with "zfs_dataset_args is undefined". Per-iteration
 # context comes from the caller's loop_control.label.
-- block:
+- name: Create and mount zfs dataset
+  vars:
+    _zfs_dataset_resolved: "{{ zfs_dataset_args.dataset | regex_replace('^tank/', (zfs_tank_filesystem | default('tank')) ~ '/') }}"
+  block:
     - name: Reject mountpoint inside extra_properties
       assert:
         that: "'mountpoint' not in (zfs_dataset_args.extra_properties | default({}))"
@@ -57,5 +60,3 @@
       vars:
         zfs_mount_dataset: '{{ _zfs_dataset_resolved }}'
         zfs_mount_mountpoint: '{{ zfs_dataset_args.mountpoint }}'
-  vars:
-    _zfs_dataset_resolved: "{{ zfs_dataset_args.dataset | regex_replace('^tank/', (zfs_tank_filesystem | default('tank')) ~ '/') }}"

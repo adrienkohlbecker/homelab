@@ -223,6 +223,9 @@
     - not ansible_check_mode
     - paperless_sqlite_stat.stat.exists
     - paperless_sqlite_pragma.stdout | default('') | trim != 'wal'
+  become: true
+  tags:
+    - paperless
   block:
     - name: Assert paperless sqlite DB is a regular file owned by paperless
       assert:
@@ -262,9 +265,6 @@
       systemd:
         name: paperless
         state: started
-  become: true
-  tags:
-    - paperless
 
 - name: Configure nginx
   import_role:

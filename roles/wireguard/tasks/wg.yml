@@ -27,7 +27,7 @@
 # re-handshakes (a brief blip + reset transfer counters / NAT source-port
 # mappings) on a config change -- acceptable for a home backbone, and far
 # simpler than reconciling routes alongside syncconf.
-- name: wg | Enable wg-quick@{{ iface }} service
+- name: "wg | Enable wg-quick@{{ iface }}"
   import_role:
     name: systemd_unit
     tasks_from: service

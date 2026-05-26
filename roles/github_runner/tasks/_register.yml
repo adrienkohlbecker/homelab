@@ -96,7 +96,7 @@
 # config.sh writes .runner last in its setup sequence, so its presence
 # is a robust signal. _register.yml only mints a registration token +
 # runs config.sh when this is absent.
-- name: _register | Check whether {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }} is already configured
+- name: "_register | Check whether instance is already configured: {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}"
   when: not (ansible_check_mode and github_runner_user.changed)
   stat:
     path: /opt/actions-runner/{{ runner_iid }}/.runner
