@@ -4,7 +4,7 @@
       - powertop
     cache_valid_time: 3600
   become: true
-  register: apt_install_powertop
+  register: powertop_apt
   tags:
     - powertop
 
@@ -25,7 +25,7 @@
   vars:
     systemd_unit_args:
       src: powertop
-      condition: "{{ not (ansible_check_mode and (apt_install_powertop.changed or powertop_service_result.changed)) }}"
+      condition: "{{ not (ansible_check_mode and (powertop_apt.changed or powertop_service_result.changed)) }}"
       restart: "{{ powertop_service_result.changed }}"
   tags:
     - powertop

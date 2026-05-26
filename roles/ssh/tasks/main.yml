@@ -6,7 +6,7 @@
     group: root
     mode: "0644"
     backup: true
-  register: sshd_config
+  register: ssh_sshd_config
   become: true
   tags:
     - ssh
@@ -17,13 +17,13 @@
     regexp: '^(#? ?)Subsystem(\s+)sftp(\s+)(.*)$'
     line: '# Subsystem\2sftp\3\4'
     backrefs: true
-  register: sshd_config_sftp
+  register: ssh_sshd_config_sftp
   become: true
   tags:
     - ssh
 
 - name: Restart ssh
-  when: sshd_config.changed or sshd_config_sftp.changed
+  when: ssh_sshd_config.changed or ssh_sshd_config_sftp.changed
   systemd:
     name: ssh
     state: restarted
