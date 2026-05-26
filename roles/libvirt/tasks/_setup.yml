@@ -1,0 +1,19 @@
+# Test fixture (harness-only; never runs against prod). The libvirt role
+# installs the host-native qemu emulator -- on the aarch64 test box that's
+# qemu-system-arm, not x86. _verify defines an x86_64 domain to exercise
+# virsh_backup's domain-dump path, so install the x86 emulator here and
+# let libvirt validate that XML cross-arch under TCG, exactly as
+# roles/macos_vm/tasks/_setup.yml does.
+- name: _setup | Install x86_64 emulator for cross-arch domain validation
+  apt:
+    pkg:
+      - qemu-system-x86
+    cache_valid_time: 3600
+  become: true
+
+# virsh_backup sources /usr/local/lib/functions.sh, deployed by the bash
+# role (which runs before libvirt in site.yml). The harness runs libvirt
+# in isolation, so deploy the library here too.
+- name: _setup | Deploy the shared shell functions library
+  import_role:
+    name: bash

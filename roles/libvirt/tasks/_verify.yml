@@ -1,0 +1,106 @@
+# _verify is test-only (CLAUDE.md) and runs against the box qemu VM. It
+# exercises virsh_backup end-to-end -- something site.yml never does,
+# since a fresh host has zero domains and the backup loop is a no-op.
+# Defining a throwaway TCG domain (type='qemu', so no nested KVM needed)
+# and dumping it proves the script's real behavior, not just that the
+# file landed on disk.
+
+- name: _verify | Gather default network state
+  command: virsh net-info default
+  register: _libvirt_verify_net
+  changed_when: false
+  become: true
+
+- name: _verify | Default network is active and autostarted
+  assert:
+    that:
+      - _libvirt_verify_net.stdout is search('Active:\s+yes')
+      - _libvirt_verify_net.stdout is search('Autostart:\s+yes')
+    fail_msg: "default network not active+autostart:\n{{ _libvirt_verify_net.stdout }}"
+
+- name: _verify | Gather default storage pool state
+  command: virsh pool-info default
+  register: _libvirt_verify_pool
+  changed_when: false
+  become: true
+
+- name: _verify | Default storage pool is running and autostarted
+  assert:
+    that:
+      - _libvirt_verify_pool.stdout is search('State:\s+running')
+      - _libvirt_verify_pool.stdout is search('Autostart:\s+yes')
+    fail_msg: "default pool not running+autostart:\n{{ _libvirt_verify_pool.stdout }}"
+
+- name: _verify | Stage a throwaway domain definition
+  copy:
+    dest: /tmp/virsh_backup_verify.xml
+    mode: "0644"
+    content: |
+      <domain type='qemu'>
+        <name>virsh_backup_verify</name>
+        <memory unit='MiB'>64</memory>
+        <vcpu>1</vcpu>
+        <os>
+          <type arch='x86_64' machine='q35'>hvm</type>
+        </os>
+        <devices>
+          <emulator>/usr/bin/qemu-system-x86_64</emulator>
+        </devices>
+      </domain>
+
+- name: _verify | Define the throwaway domain
+  command: virsh define /tmp/virsh_backup_verify.xml
+  changed_when: true
+  become: true
+
+- name: _verify | Run the backup script
+  command: /usr/local/bin/virsh_backup
+  changed_when: false
+  become: true
+
+- name: _verify | Stat the domain, network and pool dumps
+  stat:
+    path: "{{ item }}"
+  loop:
+    - /var/lib/libvirt/images/virsh_backup_verify.xml
+    - /var/lib/libvirt/images/net_default.xml
+    - /var/lib/libvirt/images/pool_default.xml
+  register: _libvirt_verify_dumps
+  become: true
+
+- name: _verify | All expected dumps exist
+  assert:
+    that:
+      - (_libvirt_verify_dumps.results | rejectattr('stat.exists') | list | length) == 0
+    fail_msg: >-
+      virsh_backup missing dumps:
+      {{ _libvirt_verify_dumps.results | rejectattr('stat.exists')
+         | map(attribute='item') | list }}
+
+# Parse (not just read) the dump to catch a truncated/partial write, then
+# confirm it is the domain we defined rather than an empty stub.
+- name: _verify | Dumped domain XML is well-formed
+  command: python3 -c "import sys, xml.dom.minidom as m; m.parse(sys.argv[1])" /var/lib/libvirt/images/virsh_backup_verify.xml
+  changed_when: false
+  become: true
+
+- name: _verify | Dumped domain XML names the throwaway domain
+  command: grep -q virsh_backup_verify /var/lib/libvirt/images/virsh_backup_verify.xml
+  changed_when: false
+  become: true
+
+- name: _verify | Undefine the throwaway domain
+  command: virsh undefine virsh_backup_verify
+  changed_when: true
+  become: true
+
+- name: _verify | Remove backup artifacts and staged definition
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /var/lib/libvirt/images/virsh_backup_verify.xml
+    - /var/lib/libvirt/images/net_default.xml
+    - /var/lib/libvirt/images/pool_default.xml
+    - /tmp/virsh_backup_verify.xml
+  become: true
