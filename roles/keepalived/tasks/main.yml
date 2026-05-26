@@ -2,16 +2,32 @@
 #
 # 1. Tenants drop a self-contained config fragment at
 #    /etc/keepalived/conf.d/<tenant>.conf and own its lifecycle.
-# 2. Tenants own their own reload: after rendering the fragment,
-#    `systemd: state=reloaded name=keepalived` with `throttle: 1`
-#    across peers (rolling, so the VIP doesn't flap on both nodes
-#    simultaneously). Structural changes (interface, VRID, vmac) need
-#    a manual restart — reload won't pick those up.
+# 2. Tenants own their own reload: after rendering the fragment, reload
+#    keepalived with `throttle: 1` so peers reload one at a time and the
+#    VIP doesn't flap on both nodes at once. Copy the "Reload keepalived"
+#    task from roles/pihole/tasks/main.yml verbatim:
+#
+#        - name: Reload keepalived
+#          when: <tenant>_keepalived_cfg.changed
+#          systemd:
+#            name: keepalived
+#            state: reloaded
+#          become: true
+#          throttle: 1
+#
+#    The throttle is per-task: a base-conf edit (reloaded by THIS role)
+#    and a tenant-fragment edit in the same converge serialize
+#    independently, so the rolling guarantee holds within each task, not
+#    across the pair. Structural changes (interface, VRID, vmac) need a
+#    manual restart — reload won't pick those up.
 # 3. Retiring a tenant: drop a `file: state=absent` task targeting
 #    its conf.d/<tenant>.conf and KEEP it as a tombstone in the role
 #    until you're sure every host has converged. This role does not
 #    GC stale fragments — without the tombstone, an old tenant config
-#    silently keeps running.
+#    silently keeps running. Retire on the BACKUP node first: stopping
+#    keepalived while it holds the VIP as MASTER can strand the VIP on
+#    the interface until a peer/kernel notices, so converge the
+#    non-MASTER host before the one currently holding the VIP.
 # 4. This role gates `keepalived.service` on conf.d having ≥1
 #    fragment (Type=notify wedges for ~90s on empty conf), and
 #    explicitly stops the unit when the last tenant leaves.
@@ -22,7 +38,11 @@
 #    semantics for global_defs are flaky in 2.2.x.
 # 6. site.yml runs `keepalived` BEFORE its tenants (see site.yml:58),
 #    so on a fresh host the base conf + conf.d dir + sysctl are in
-#    place by the time tenant roles render fragments.
+#    place by the time tenant roles render fragments. Keep that order:
+#    the gate snapshots the conf.d count once per converge, so a tenant
+#    that renders its fragment AFTER keepalived has counted (wrong
+#    site.yml order, or a tags-limited run) leaves the unit gated-off
+#    until the next converge.
 #
 # Current tenants: roles/pihole. Adding a new tenant (e.g. the
 # wireguard-VIP follow-up): mirror roles/pihole/tasks/main.yml:238
@@ -84,9 +104,16 @@
 # until TimeoutStartSec (~90s) and then fails — at first start AND at
 # every reboot if it's left enabled. So we gate the whole systemd_unit
 # invocation on conf.d having a tenant, and explicitly tear down when
-# the last tenant leaves so the unit doesn't auto-start broken. The
-# override_keepalived.conf drop-in installed below is belt-and-braces
-# for the same gate at start time.
+# the last tenant leaves so the unit doesn't auto-start broken.
+#
+# The override_keepalived.conf drop-in below is NOT a redundant copy of
+# this gate — the two cover disjoint triggers, so don't delete either as
+# "belt-and-braces". This converge-time logic validates (keepalived -t)
+# and, on tenant retirement, explicitly stops + disables the running
+# unit — the drop-in does neither. The drop-in's ConditionPathExistsGlob
+# is the only gate at an out-of-band / boot-time start (conf.d emptied
+# between converges, unit still enabled), where this ansible logic isn't
+# running; systemd then silently skips the start instead of wedging.
 - name: Install conf.d-gating drop-in for keepalived.service
   import_role:
     name: systemd_unit
@@ -98,10 +125,10 @@
   tags:
     - keepalived
 
-# excludes / size: '1' so a zero-byte placeholder (which keepalived's
-# include would still load and then wedge on, since wildcard_match only
-# rejects no-file matches) or a stale `.disabled` rollback fragment
-# doesn't trip the gate.
+# excludes / size: '1' so a zero-byte placeholder (plain `include` still
+# loads it and then wedges, since `include` neither validates nor skips
+# empty matches) or a stale `.disabled` rollback fragment doesn't trip
+# the gate.
 - name: Count number of configurations
   find:
     paths: /etc/keepalived/conf.d
@@ -114,11 +141,11 @@
     - keepalived
 
 # Catches base-conf typos and stale tenant fragments before they
-# propagate to the running daemon via SIGHUP-reload. Skipped on
-# first-converge before any tenant has rendered a fragment (when
-# conf.d is empty, keepalived -t refuses on include_check
-# wildcard_match), and skipped in check-mode when apt would have
-# installed the package this run (binary doesn't exist yet).
+# propagate to the running daemon via SIGHUP-reload. Skipped when conf.d
+# is empty (matched == 0): the unit isn't started then, so there's
+# nothing to validate, and on a fresh host the keepalived binary may not
+# exist yet. Also skipped in check-mode when apt would have installed the
+# package this run (binary doesn't exist yet).
 - name: Validate assembled keepalived config
   when:
     - keepalived_confs.matched > 0
