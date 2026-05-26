@@ -255,11 +255,20 @@
     # need a manual `systemctl restart keepalived`. throttle: 1 serializes
     # across pihole_keepalived_peers so that even on the rare manual
     # restart, only one peer is unavailable at a time.
+    #
+    # enabled: true is load-bearing on a fresh host. The keepalived role
+    # runs before pihole and, finding conf.d empty, disables the unit; once
+    # we drop our fragment it must be enabled again or a reboot before the
+    # next converge (which re-enables it) silently loses the VIP. On an
+    # inactive unit `state: reloaded` also starts it, so this brings the VIP
+    # up on the first converge. The base-conf ExecStartPre validate
+    # (roles/keepalived) gates that start, so it can't come up on a bad conf.
     - name: Reload keepalived
       when: pihole_keepalived_cfg.changed
       systemd:
         name: keepalived
         state: reloaded
+        enabled: true
       become: true
       throttle: 1
   rescue:
