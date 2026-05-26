@@ -184,6 +184,9 @@ github_runner_instances:
 # assert the advertise + approve round-trip without colliding with the test topology.
 tailscale_advertise_routes: "10.99.99.0/24"
 tailscale_advertise_exit_node: true
+# Exercise the --accept-routes=true path under the harness (harmless on the
+# single-node test tailnet; the throwaway subnet isn't on box's real interfaces).
+tailscale_accept_routes: true
 
 # roles/headscale OIDC boot test. Enable headscale's OIDC path under the harness
 # ONLY when headscale is the role under test, pointed at the local mockoidc that
