@@ -1,6 +1,21 @@
 # Invoked from roles/netdata/tasks/main.yml after netdata is installed --
 # don't call this before the netdata role has run. netdata_restart is set
 # by that caller; default it so a standalone import (or _verify) still works.
+
+# The shared netdata `template` helper carries no validate: -- it also writes
+# non-YAML configs (netdata health .conf, logrotate) for other callers -- so
+# parse-check the render here. Catches a malformed sensor_relabel before it
+# lands as a go.d config netdata would silently accept-then-default.
+- name: Assert the sensors collector config renders as valid YAML
+  assert:
+    that:
+      - (lookup('ansible.builtin.template', 'sensors.conf.j2') | from_yaml).jobs | length > 0
+    fail_msg: >-
+      sensors.conf.j2 did not render to valid go.d YAML -- check sensor_relabel
+      (each entry needs a chip and a sensors list of name/label dicts).
+  tags:
+    - lm_sensors
+
 - name: Configure lm_sensors metrics
   import_role:
     name: netdata
