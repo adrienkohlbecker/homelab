@@ -100,6 +100,14 @@ ExecStart=/usr/bin/podman run \
     --stop-timeout 30 \
     docker.io/headscale/headscale:0.26.1 \
     serve
+# ACL-only changes reload via SIGHUP, not a restart: headscale reloads the
+# HuJSON policy on HUP (same as `systemctl reload`), so a policy tweak needn't
+# bounce the control plane + embedded DERP + every client long-poll. Fails soft
+# -- a malformed policy leaves the running server on its previous ACL. Driven by
+# the systemd_unit helper's reload: arg (roles/headscale/tasks/main.yml), which
+# only reloads when the unit was already active. --init forwards the HUP to the
+# headscale process.
+ExecReload=/usr/bin/podman kill --signal HUP headscale
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
 ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
 

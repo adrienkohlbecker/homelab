@@ -140,9 +140,14 @@
     mode: "0640"
   become: true
 
-- name: _verify | SIGHUP headscale to reload the (malformed) policy
-  command: podman kill --signal HUP headscale
-  changed_when: false
+# Reload via the unit's ExecReload -- the same path prod takes for an ACL change
+# (tasks/main.yml drives it through the helper's reload: arg, which is also a
+# `state: reloaded`) -- so this exercises the real reload wiring, not a bare
+# `podman kill`.
+- name: _verify | reload headscale to load the (malformed) policy
+  systemd:
+    name: headscale.service
+    state: reloaded
   become: true
 
 # `users list` round-trips gRPC over the socket to the running serve process,

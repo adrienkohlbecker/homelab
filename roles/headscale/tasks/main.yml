@@ -161,10 +161,11 @@
   tags:
     - headscale
 
-# Whether this run will (re)start the unit -- consumed both by the restart
-# trigger below and by the ACL-reload guard further down. Single jinja
-# expression so ansible preserves the bool. (A config/secret/network/unit change
-# all imply a restart, which itself reloads the ACL on start.)
+# Whether this run (re)starts the unit -- consumed by both the restart trigger
+# and the ACL-reload guard below (single jinja expression so ansible keeps the
+# bool). A restart is also the only thing that re-reads a rotated OIDC secret:
+# it's mounted (--secret type=mount), so the running container won't pick up a
+# new value without one -- hence headscale_oidc_secret_rotated is in the chain.
 - name: Compute whether the headscale unit restarts this run
   set_fact:
     headscale_will_restart: >-
@@ -175,6 +176,14 @@
   tags:
     - headscale
 
+# reload: drives an ACL-only change through the unit's ExecReload (SIGHUP, no
+# restart) -- see the unit template. The systemd_unit helper starts-then-reloads,
+# so it reloads only when the unit was already active and skips the reload on a
+# run that (re)started the unit: a fresh start loads the current policy anyway,
+# and `systemctl reload` on a down unit would error (the bug a standalone `podman
+# kill` had). restart and reload are mutually exclusive here by construction --
+# reload requires not headscale_will_restart. A clean re-run leaves
+# headscale_acl_result.changed false, so neither fires and idempotence holds.
 - name: Enable headscale service
   import_role:
     name: systemd_unit
@@ -184,29 +193,7 @@
       src: headscale
       condition: "{{ not (ansible_check_mode and (headscale_service_result.changed or headscale_user.changed)) }}"
       restart: "{{ headscale_will_restart }}"
-  tags:
-    - headscale
-
-# ACL-only changes reload via SIGHUP, NOT a unit restart: headscale reloads the
-# HuJSON policy on SIGHUP (the same as `systemctl reload`), so an ACL tweak
-# needn't bounce the control plane + embedded DERP + every client long-poll. It
-# also fails soft -- a malformed policy leaves the running server on its previous
-# ACL, whereas a restart could refuse to come back. Sent to the container's PID 1
-# (headscale serve). Skipped when the unit also restarts this run
-# (headscale_will_restart): that restart reloads the policy on start, so the HUP
-# would be redundant -- and `podman kill` would error (aborting the play) if the
-# container isn't up yet, e.g. a fresh host still completing OIDC discovery.
-# Also skipped on a clean re-run since headscale_acl_result.changed is then
-# false, so idempotence holds. Hence acl is dropped from the service task's
-# restart: chain above.
-- name: Reload headscale policy on ACL change (SIGHUP, no restart)
-  command: podman kill --signal HUP headscale
-  when:
-    - headscale_acl_result.changed
-    - not ansible_check_mode
-    - not headscale_will_restart
-  changed_when: true
-  become: true
+      reload: "{{ headscale_acl_result.changed and not headscale_will_restart }}"
   tags:
     - headscale
 
