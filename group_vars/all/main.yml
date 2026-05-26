@@ -166,13 +166,7 @@ service_ports:
 # authelia_host (see roles/firewall/templates/nftables.conf.j2). The
 # lookup pulls authelia_host's wireguard_peers entry; if you add a new
 # authelia_host, make sure it has a wireguard_peers entry first.
-authelia_internal_url: >-
-  http://{% if inventory_hostname == authelia_host -%}
-  127.0.0.1
-  {%- else -%}
-  {{ (wireguard_peers | selectattr('name', 'eq', authelia_host) | first).address }}
-  {%- endif -%}
-  :{{ service_ports.authelia }}/api/authz/auth-request
+authelia_internal_url: "http://{% if inventory_hostname == authelia_host -%} 127.0.0.1{%- else -%} {{ (wireguard_peers | selectattr('name', 'eq', authelia_host) | first).address }}{%- endif -%} :{{ service_ports.authelia }}/api/authz/auth-request"
 
 # mDNS device-info model -- drives the Finder sidebar icon for the host.
 # Maps to an .icns under /System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/
