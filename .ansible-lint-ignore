@@ -4,6 +4,11 @@
 # ── Permanent: test scaffolding ──────────────────────────────────────────────
 # _verify.yml / _setup.yml are exempt from naming/strict conventions by design
 # (CLAUDE.md → Repo Conventions). These stay ignored; do not "fix" throwaway probes.
+# roles/_packer and roles/_test use a deliberate _ prefix (CLAUDE.md → Project
+# Structure: "Roles whose own name starts with _ are test-fixture roles"). The
+# role-name rule requires ^[a-z]... so the leading _ will always fail.
+roles/_packer role-name
+roles/_test role-name
 roles/_packer/tasks/_verify.yml var-naming[no-role-prefix]
 roles/_test/tasks/_verify.yml var-naming[no-role-prefix]
 roles/apt/tasks/_verify.yml var-naming[no-role-prefix]
@@ -46,6 +51,8 @@ roles/jellyfin/tasks/_verify.yml var-naming[no-role-prefix]
 roles/kuma/tasks/_setup.yml var-naming[no-role-prefix]
 roles/kuma/tasks/_verify.yml var-naming[no-role-prefix]
 roles/lidarr/tasks/_verify.yml var-naming[no-role-prefix]
+roles/radarr/tasks/_verify.yml var-naming[no-role-prefix]
+roles/sonarr/tasks/_verify.yml var-naming[no-role-prefix]
 roles/linger/tasks/_verify.yml var-naming[no-role-prefix]
 roles/netdata/tasks/_setup.yml var-naming[no-role-prefix]
 roles/netdata/tasks/_verify.yml var-naming[no-role-prefix]
