@@ -93,17 +93,14 @@
       - linger_test_linger is defined
       - not linger_test_linger.changed
 
-- name: _verify | Tear down user manager
-  systemd:
-    name: user@{{ _verify_user.uid }}.service
-    state: stopped
-  become: true
-
-- name: _verify | Disable linger
-  command: loginctl disable-linger linger_test
-  args:
-    removes: /var/lib/systemd/linger/linger_test
-  become: true
+- name: _verify | Drive the disable subtask (also exercises the disable path)
+  import_role:
+    name: linger
+    tasks_from: disable
+  vars:
+    linger_args:
+      name: linger_test
+      uid: "{{ _verify_user.uid }}"
 
 - name: _verify | Confirm the linger marker is gone after disable
   stat:

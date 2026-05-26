@@ -1,0 +1,39 @@
+# Inputs: caller passes the same `linger_args` dict as linger.yml.
+#   name  required; the user to un-linger.
+#   uid   optional; when given, the user manager is stopped first. Omit it
+#         on a tombstone call where the account may not exist.
+#
+# The teardown half of the helper. Idempotent and tombstone-safe: the
+# `removes:` guard skips disable-linger when the marker is already gone
+# (linger never enabled, or the account never existed), so a caller can
+# leave a `tasks_from: disable` call in place on host groups that should
+# not linger the user — same contract as systemd_timer's remove.yml.
+# Order mirrors the enable path in reverse: stop the running manager
+# before dropping the persistence marker.
+- name: disable | Validate inputs for {{ linger_args.name | default('<unset>') }}
+  assert:
+    that:
+      - linger_args.name is defined
+      - linger_args.name is string
+      - linger_args.name is match('^[a-z_][a-z0-9_-]*$')
+    quiet: true
+    fail_msg: >-
+      linger_args needs name (a valid username matching [a-z_][a-z0-9_-]*);
+      got name={{ linger_args.name | default('<unset>') }}.
+
+- name: disable | Stop the user manager for {{ linger_args.name }}
+  when: linger_args.uid is defined
+  systemd:
+    name: user@{{ linger_args.uid }}.service
+    state: stopped
+  become: true
+
+- name: disable | Disable linger for {{ linger_args.name }}
+  command:
+    argv:
+      - loginctl
+      - --no-ask-password
+      - disable-linger
+      - "{{ linger_args.name }}"
+    removes: /var/lib/systemd/linger/{{ linger_args.name }}
+  become: true
