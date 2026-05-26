@@ -29,11 +29,13 @@
     # --- Tailscale mesh enrollment (Bonniers subnet router + exit node) -------
     # bunk is DSM, so roles/tailscale's apt + systemd install half doesn't apply
     # and the Ubuntu box harness can't exercise this path. The Tailscale package
-    # is installed out-of-band via Package Center (operator runbook); these tasks
-    # only do the register -> advertise -> approve orchestration roles/tailscale
-    # does for lab/pug, against the DSM binary path. Pre-auth key is minted on the
-    # control server (fox) and spent here; routes are approved back on fox.
-    # Idempotent: skips `tailscale up` when already Running, approves only on drift.
+    # is installed out-of-band via Package Center (operator runbook). What's left
+    # -- the register -> advertise -> approve orchestration -- is identical to
+    # lab/pug, so it's imported from roles/tailscale/tasks/register.yml rather than
+    # duplicated here; only the DSM permission grant below is bunk-specific. The
+    # shared module reads tailscale_bin + tailscale_authkey_file (set in
+    # host_vars/bunk.yml: the DSM binary path + /tmp, since DSM has no guaranteed
+    # /run tmpfs) and the control-plane constants from group_vars/prod.yml.
     - name: Assert the DSM Tailscale package is installed
       stat:
         path: "{{ tailscale_bin }}"
@@ -69,197 +71,14 @@
       tags:
         - tailscale
 
-    # check_mode:false so the read-only probe still runs under --check. Before the
-    # first login `status` exits non-zero -> failed_when:false maps that to "not
-    # running" rather than a task failure.
-    - name: Check whether tailscale is already registered and running
-      command: "{{ tailscale_bin }} status --json"
-      register: bunk_ts_status
-      changed_when: false
-      failed_when: false
-      check_mode: false
-      become: true
-      tags:
-        - tailscale
-
-    - name: Determine tailscale backend state
-      set_fact:
-        bunk_ts_running: >-
-          {{ (bunk_ts_status.rc | default(1)) == 0
-             and (bunk_ts_status.stdout | default('') | trim | length > 0)
-             and (bunk_ts_status.stdout | default('') | trim).startswith('{')
-             and ((bunk_ts_status.stdout | from_json).BackendState | default('')) == 'Running' }}
-      tags:
-        - tailscale
-
-    # Mint a single-use pre-auth key straight from the control plane (delegated to
-    # fox) and spend it in the same play -- never vaulted, never on disk, 5m TTL.
-    # Gated on not-already-registered so steady-state re-runs mint nothing.
-    # Skipped in --check (minting + registering are mutations). 0.26 CLI: --user
-    # takes the numeric id, resolved from `users list` by name.
-    - name: Register bunk with headscale
-      when:
-        - not ansible_check_mode
-        - not (bunk_ts_running | bool)
-      tags:
-        - tailscale
-      block:
-        # bunk must create its own headscale user -- it can't assume lab/pug were
-        # registered first (which would have created it). Without this, enrolling
-        # bunk against a fresh control plane fails with a cryptic "first on empty
-        # list" error at the user-id lookup below. Mirrors roles/tailscale.
-        - name: Ensure the headscale user for bunk exists (on the control server)
-          command: podman exec headscale headscale users create {{ tailscale_headscale_user }}
-          delegate_to: "{{ tailscale_headscale_host }}"
-          become: true
-          register: bunk_ts_user_create
-          changed_when: false
-          failed_when: false
-
-        # failed_when:false + the assert below turn an unreachable control plane
-        # (headscale not converged on fox yet) into a clear message instead of an
-        # opaque podman error -- this and the create above delegate to fox.
-        - name: Resolve the headscale user id (on the control server)
-          command: podman exec headscale headscale users list -o json
-          delegate_to: "{{ tailscale_headscale_host }}"
-          become: true
-          register: bunk_ts_users
-          changed_when: false
-          failed_when: false
-
-        - name: Assert the headscale control plane is reachable
-          assert:
-            that:
-              - bunk_ts_users.rc == 0
-              - (bunk_ts_users.stdout | default('') | trim).startswith('[')
-            fail_msg: >-
-              headscale control plane on {{ tailscale_headscale_host }} is not
-              answering (rc={{ bunk_ts_users.rc | default('n/a') }}). Converge
-              fox/headscale there before enrolling bunk -- this play mints bunk's
-              pre-auth key and approves its routes by delegating to it.
-
-        - name: Mint a single-use pre-auth key (on the control server)
-          command: >-
-            podman exec headscale headscale preauthkeys create
-            --user {{ (bunk_ts_users.stdout | from_json | selectattr('name', 'equalto', tailscale_headscale_user) | list | first).id }}
-            --expiration 5m -o json
-          delegate_to: "{{ tailscale_headscale_host }}"
-          become: true
-          register: bunk_ts_preauth
-          changed_when: false
-          no_log: true
-
-        - name: Set the pre-auth key fact
-          set_fact:
-            bunk_ts_preauth_key: "{{ (bunk_ts_preauth.stdout | from_json).key }}"
-          no_log: true
-
-        # Pass the key to `tailscale up` via a file, not --authkey <key> on argv
-        # (world-readable in ps / /proc for the duration of the call). Root-only,
-        # removed right after; single-use 5-min key regardless. /tmp is the
-        # portable choice on DSM (no guaranteed /run tmpfs, unlike lab/pug).
-        - name: Stage the pre-auth key in a root-only file
-          copy:
-            content: "{{ bunk_ts_preauth_key }}"
-            dest: /tmp/tailscale_authkey
-            owner: root
-            group: root
-            mode: "0600"
-          no_log: true
-
-        # --reset so the advertised set is exactly what we pass (no stale flags
-        # from a prior manual `tailscale up`). --authkey file: keeps the key off
-        # argv. --accept-dns=false: bunk is a server, not a MagicDNS consumer.
-        - name: Register with headscale and advertise routes + exit node
-          command: >-
-            {{ tailscale_bin }} up
-            --login-server {{ tailscale_login_server }}
-            --authkey file:/tmp/tailscale_authkey
-            --advertise-routes={{ tailscale_advertise_routes }}
-            {{ tailscale_advertise_exit_node | ternary('--advertise-exit-node', '') }}
-            --accept-dns=false
-            --timeout=60s
-            --reset
-          register: bunk_ts_up
-          changed_when: bunk_ts_up.rc == 0
-          no_log: true
-          become: true
-
-        - name: Remove the staged pre-auth key file
-          file:
-            path: /tmp/tailscale_authkey
-            state: absent
-          become: true
-
-    # Route approval is a separate opt-in on the control server, keyed by the
-    # node's headscale id. Desired = advertised subnet(s) + the exit-node default
-    # routes (advertising an exit node surfaces 0.0.0.0/0 + ::/0).
-    - name: Compute the desired approved-route set
-      set_fact:
-        bunk_ts_desired_routes: >-
-          {{ (tailscale_advertise_routes.split(','))
-             + (tailscale_advertise_exit_node | ternary(['0.0.0.0/0', '::/0'], [])) }}
-      tags:
-        - tailscale
-
-    # Poll: a just-registered node can lag in `nodes list` over the fox link.
-    # check_mode short-circuits the wait (no registration happens in --check).
-    # Match on ansible_hostname | lower: headscale sanitizes given_name to
-    # lowercase (DSM reports the host as "Bunk", headscale records "bunk"), so an
-    # exact-case compare against ansible_hostname never hits.
-    - name: List headscale nodes (on the control server)
-      command: podman exec headscale headscale nodes list -o json
-      delegate_to: "{{ tailscale_headscale_host }}"
-      become: true
-      register: bunk_ts_nodes
-      changed_when: false
-      check_mode: false
-      retries: 15
-      delay: 2
-      until: >-
-        ansible_check_mode
-        or ((bunk_ts_nodes.stdout | default('[]') | from_json)
-            | selectattr('given_name', 'equalto', ansible_hostname | lower) | list | length > 0)
-      tags:
-        - tailscale
-
-    - name: Resolve bunk's headscale node
-      set_fact:
-        bunk_ts_node: >-
-          {{ (bunk_ts_nodes.stdout | default('[]') | from_json)
-             | selectattr('given_name', 'equalto', ansible_hostname | lower)
-             | list | first | default({}) }}
-      tags:
-        - tailscale
-
-    # Skipped in --check: registration doesn't run there, so the node legitimately
-    # won't exist yet. On a real run a missing node means registration failed.
-    - name: Fail if bunk has no headscale node yet
-      assert:
-        that:
-          - bunk_ts_node.id is defined
-        fail_msg: >-
-          No headscale node with given_name {{ ansible_hostname | lower }} on
-          {{ tailscale_headscale_host }} -- registration did not complete, or DSM
-          reports a different hostname than headscale recorded. Check
-          headscale nodes list on the control server.
-      when: not ansible_check_mode
-      tags:
-        - tailscale
-
-    # approve-routes replaces the whole approved set, so only run on drift to keep
-    # the play idempotent. Skipped in --check (no node yet, and it's a mutation).
-    - name: Approve advertised routes + exit node on headscale
-      command: >-
-        podman exec headscale headscale nodes approve-routes
-        --identifier {{ bunk_ts_node.id }}
-        --routes {{ bunk_ts_desired_routes | join(',') }}
-      delegate_to: "{{ tailscale_headscale_host }}"
-      become: true
-      when:
-        - not ansible_check_mode
-        - (bunk_ts_desired_routes | sort) != ((bunk_ts_node.approved_routes | default([])) | sort)
-      changed_when: true
+    # The DSM perms are in place; hand off to the shared register -> advertise ->
+    # approve sequence (same code lab/pug run). import_role (not import_tasks) so
+    # roles/tailscale/defaults/main.yml loads -- the module reads tailscale_bin,
+    # tailscale_authkey_file, tailscale_accept_dns/_routes from there.
+    - name: Register bunk against the headscale control plane
+      import_role:
+        name: tailscale
+        tasks_from: register
       tags:
         - tailscale
 

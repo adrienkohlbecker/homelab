@@ -18,3 +18,6 @@ tailscale_advertise_routes: "10.123.57.0/24"
 tailscale_advertise_exit_node: true
 # DSM package binary path (vs lab/pug's apt-installed `tailscale` on PATH).
 tailscale_bin: /var/packages/Tailscale/target/bin/tailscale
+# Stage the pre-auth key under /tmp: DSM has no guaranteed /run tmpfs (the role
+# default). Root-only, single-use, removed right after `tailscale up` consumes it.
+tailscale_authkey_file: /tmp/tailscale_authkey
