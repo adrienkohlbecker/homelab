@@ -1,0 +1,93 @@
+# Negative probe first: confirms /api/v3/* enforces the apikey. Pairs with the
+# auth'd probe below -- together they prove the apikey we templated is both
+# required by sonarr and the one it accepted. Without this, a future bug that
+# disabled apikey enforcement would let the auth'd probe pass on any key.
+- name: _verify | sonarr /api/v3/system/status rejects unauth'd requests
+  uri:
+    url: http://127.0.0.1:{{ service_ports.sonarr }}/api/v3/system/status
+    status_code: 401
+  register: _verify_http_unauth
+  retries: 30
+  delay: 2
+  until: _verify_http_unauth.status == 401
+
+# Authenticated probe -- proves the apikey we templated into config.xml is
+# the one the running container accepted, not just one we wrote to disk.
+# Header form keeps the key out of journald.
+- name: _verify | sonarr answers /api/v3/system/status with our apikey
+  uri:
+    url: http://127.0.0.1:{{ service_ports.sonarr }}/api/v3/system/status
+    headers:
+      X-Api-Key: "{{ sonarr_api_key }}"
+    status_code: 200
+    return_content: true
+  register: _verify_http
+  retries: 30
+  delay: 2
+  until: _verify_http.status == 200
+  failed_when: (_verify_http.json | default({})) | length == 0
+
+# Exercise the nginx-proxied path too, not just loopback. A regression in
+# the nginx_site wiring (typo'd subdomain, broken proxy_pass) would pass
+# the loopback probes above silently.
+- name: _verify | sonarr answers via nginx vhost
+  uri:
+    url: https://localhost/api/v3/system/status
+    headers:
+      Host: "sonarr.{{ inventory_hostname }}.{{ domain }}"
+      X-Api-Key: "{{ sonarr_api_key }}"
+    validate_certs: false
+    status_code: 200
+    return_content: true
+  register: _verify_http_nginx
+  retries: 30
+  delay: 2
+  until: _verify_http_nginx.status == 200
+  failed_when: (_verify_http_nginx.json | default({})) | length == 0
+
+# The sqlite_dataset symlink + matching --volume is the role's whole reason
+# for its non-obvious structure: it lands the DBs (and their -wal/-shm
+# siblings) on the 4K-recordsize sqlite dataset. The HTTP probes above pass
+# whether or not that routing holds -- a dropped symlink or --volume strands
+# the DB at /config inside the container and nothing here would notice.
+# Assert it functionally: the on-disk paths are symlinks onto the dataset,
+# and sonarr wrote real schema through them (the API answering 200 above
+# means migration finished, so the dataset-side files are populated by now).
+- name: _verify | stat the sonarr DB paths
+  stat:
+    path: "/mnt/services/sonarr/{{ item }}"
+  loop:
+    - sonarr.db
+    - logs.db
+  register: _verify_db_links
+  become: true
+
+- name: _verify | sonarr DBs are symlinks onto the sqlite dataset
+  assert:
+    that:
+      - item.stat.islnk
+      - item.stat.lnk_target == "/mnt/services/sqlite/sonarr/" ~ item.item
+    fail_msg: "{{ item.item }} is not a symlink onto the sqlite dataset (stat={{ item.stat }})"
+  loop: "{{ _verify_db_links.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: _verify | stat the dataset-side sonarr DBs
+  stat:
+    path: "/mnt/services/sqlite/sonarr/{{ item }}"
+  loop:
+    - sonarr.db
+    - logs.db
+  register: _verify_db_files
+  become: true
+
+- name: _verify | sonarr wrote real, non-empty DBs onto the dataset
+  assert:
+    that:
+      - item.stat.exists
+      - not item.stat.islnk
+      - item.stat.size > 0
+    fail_msg: "{{ item.item }} on the dataset is missing or empty (stat={{ item.stat }})"
+  loop: "{{ _verify_db_files.results }}"
+  loop_control:
+    label: "{{ item.item }}"
