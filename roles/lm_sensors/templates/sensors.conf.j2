@@ -14,14 +14,16 @@
 {% set relabel = sensor_relabel | default([]) %}
 jobs:
   - name: sensors
+    update_every: 5
+    autodetection_retry: 60
 {% if relabel | length > 0 %}
     relabel:
 {% for entry in relabel %}
-      - chip: {{ entry.chip }}
+      - chip: {{ entry.chip | to_json }}
         sensors:
 {% for sensor in entry.sensors %}
-          - name: {{ sensor.name }}
-            label: {{ sensor.label }}
+          - name: {{ sensor.name | to_json }}
+            label: {{ sensor.label | to_json }}
 {% endfor %}
 {% endfor %}
 {% endif %}
