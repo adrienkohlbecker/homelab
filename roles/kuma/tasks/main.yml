@@ -31,11 +31,19 @@
   tags:
     - kuma
 
-# Uptime-Kuma writes kuma.db at /app/data root alongside upload assets.
-# Symlink so SQLite resolves to the 4K sqlite dataset before placing WAL.
-# `force: true` is needed on first deploy because the DB file doesn't
-# exist yet (kuma creates it on first start); sqlite_dataset's
-# state:link-without-force shape doesn't work for the cold-start case.
+# Uptime-Kuma writes kuma.db at /app/data root alongside upload assets;
+# symlink it onto the dedicated 4K-recordsize sqlite dataset so the WAL
+# workload lands there.
+#
+# Hand-rolled rather than the sqlite_dataset helper, and force: true is
+# load-bearing: kuma must create kuma.db ITSELF on first boot -- it runs the
+# schema bootstrap only when the file is ABSENT. Both helper shapes break
+# that: plain state:link refuses to plant a dangling symlink (cold-start
+# errors), and pre_create plants an empty kuma.db that kuma then treats as
+# an already-initialised DB, skips the bootstrap, and dies on `no such
+# table: setting`. So plant the dangling symlink with force: true and let
+# kuma create the real DB through it. (jellyfin uses pre_create because it
+# migrates an empty DB; kuma cannot -- do not migrate this to the helper.)
 - name: Symlink kuma SQLite DB onto sqlite dataset
   when: not (ansible_check_mode and kuma_user.changed)
   file:
