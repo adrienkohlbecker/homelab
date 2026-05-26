@@ -1,12 +1,11 @@
 - name: Assert sensor_modules is a list of valid module names
   assert:
     that:
-      - sensor_modules is defined
       - sensor_modules is not string
-      - sensor_modules | reject('match', '^[a-z0-9_-]+$') | list | length == 0
+      - sensor_modules | reject('match', '^[a-z0-9_-]+\Z') | list | length == 0
     fail_msg: >-
-      sensor_modules must be set in host_vars to a list of kernel module names
-      (lowercase letters, digits, underscore). Got: {{ sensor_modules | default('<undefined>') }}
+      sensor_modules must be a list of kernel module names (lowercase letters,
+      digits, underscore, hyphen). Got: {{ sensor_modules }}
   tags:
     - lm_sensors
 
