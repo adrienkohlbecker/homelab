@@ -13,6 +13,9 @@
     service_user_args:
       name: lidarr
       extra_groups: [ media ]
+      # linuxserver/lidarr's s6 init recursively chowns /config to
+      # PUID:PGID=lidarr:media on every container start. Match it here
+      # so ansible doesn't flap the dir's gid back to `lidarr` each run.
       config_dir_group: media
   tags:
     - lidarr
