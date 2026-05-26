@@ -8,6 +8,9 @@
 // to load it. Subnet routes and exit nodes are approved explicitly via
 // `headscale nodes approve-routes` (delegated from the tailscale role), not via
 // autoApprovers (which would need the tagOwners we deliberately omit here).
+// End-state: once the policy is tightened (groups/tagOwners introduced),
+// migrate route approval to a declarative `autoApprovers` block here -- the
+// upstream idiom -- and retire the imperative approve-routes path.
 {
   "acls": [
     {
