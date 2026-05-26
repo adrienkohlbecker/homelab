@@ -33,7 +33,7 @@
   args:
     executable: /bin/bash
   changed_when: false
-  register: zfs_backup_datasets
+  register: zfs_autobackup_datasets
   become: true
   tags:
     - zfs_autobackup
@@ -43,9 +43,9 @@
   shell: set -euo pipefail; bfr=`zfs allow {{ item }} | md5sum | cut -f 1 -d " "`; zfs allow zfs_autobackup send,hold,release {{ item }}; aftr=`zfs allow {{ item }} | md5sum | cut -f 1 -d " "`; test $bfr = $aftr || ([ "$?" = 1 ] && echo "permissions updated" || exit 1)
   args:
     executable: /bin/bash
-  register: zfs_allow_cmd
-  changed_when: "'permissions updated' in zfs_allow_cmd.stdout"
-  loop: "{{ zfs_backup_datasets.stdout_lines }}"
+  register: zfs_autobackup_allow_cmd
+  changed_when: "'permissions updated' in zfs_autobackup_allow_cmd.stdout"
+  loop: "{{ zfs_autobackup_datasets.stdout_lines }}"
   become: true
   tags:
     - zfs_autobackup

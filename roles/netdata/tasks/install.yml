@@ -3,7 +3,7 @@
     pkg: gpg
     cache_valid_time: 3600
   become: true
-  register: apt_install_gpg
+  register: netdata_apt_gpg
   tags:
     - netdata
 
@@ -23,7 +23,7 @@
 - name: install | Add repository key
   when:
     - ansible_distribution_major_version | int < 26
-    - not (ansible_check_mode and apt_install_gpg.changed)
+    - not (ansible_check_mode and netdata_apt_gpg.changed)
   apt_key:
     id: A799AB702EA6DEE3E21AA716B4188B90F6FB8FD3
     url: https://packagecloud.io/netdata/netdata/gpgkey
@@ -36,7 +36,7 @@
   when: ansible_distribution_major_version | int < 26
   apt_repository:
     repo: deb [signed-by=/etc/apt/trusted.gpg.d/netdata.gpg] {{ mirror_apt_netdata }} {{ ansible_distribution_release }} main
-  register: apt_repository_netdata_legacy
+  register: netdata_apt_repo_legacy
   become: true
   tags:
     - netdata
@@ -52,7 +52,7 @@
   file:
     path: /etc/apt/sources.list.d/repo_netdata_cloud_repos_stable_ubuntu.list
     state: absent
-  register: apt_old_netdata_repo_removed
+  register: netdata_apt_old_repo_removed
   become: true
   tags:
     - netdata
@@ -80,7 +80,7 @@
     pkg: python3-debian
     cache_valid_time: 3600
   become: true
-  register: apt_install_python3_debian
+  register: netdata_apt_python3_debian
   tags:
     - netdata
 
@@ -88,7 +88,7 @@
 - name: install | Add repository (deb822)
   when:
     - ansible_distribution_major_version | int >= 26
-    - not (ansible_check_mode and apt_install_python3_debian.changed)
+    - not (ansible_check_mode and netdata_apt_python3_debian.changed)
   ansible.builtin.deb822_repository:
     name: netdata
     types: deb
@@ -96,7 +96,7 @@
     suites: "{{ ansible_distribution_release }}"
     components: main
     signed_by: https://packagecloud.io/netdata/netdata/gpgkey
-  register: apt_repository_netdata_deb822
+  register: netdata_apt_repo_deb822
   become: true
   tags:
     - netdata
@@ -109,21 +109,21 @@
     group: root
     mode: "0644"
     backup: true
-  register: apt_pin_netdata
+  register: netdata_apt_pin
   become: true
   tags:
     - netdata
 
 # Coalesce the version-gated registers so downstream tasks keep
-# referencing apt_repository_netdata.changed without caring which
-# branch ran. Includes apt_install_python3_debian so check mode on
+# referencing netdata_apt_repo.changed without caring which
+# branch ran. Includes netdata_apt_python3_debian so check mode on
 # resolute (where the deb822 task is gated out by the prereq install)
 # still propagates a "would-change" signal -- otherwise install
 # netdata would run in check mode against an unconfigured repo.
 - name: install | Track repository changes
   set_fact:
-    apt_repository_netdata:
-      changed: "{{ apt_repository_netdata_legacy is changed or apt_old_netdata_repo_removed is changed or apt_repository_netdata_deb822 is changed or apt_install_python3_debian is changed }}"
+    netdata_apt_repo:
+      changed: "{{ netdata_apt_repo_legacy is changed or netdata_apt_old_repo_removed is changed or netdata_apt_repo_deb822 is changed or netdata_apt_python3_debian is changed }}"
   tags:
     - netdata
 
@@ -132,7 +132,7 @@
 # cache (cache_valid_time=3600) and fail to find `netdata`. Force
 # a refresh on the run that actually changed the repo.
 - name: install | Refresh apt cache after netdata repo change
-  when: apt_repository_netdata.changed and not ansible_check_mode
+  when: netdata_apt_repo.changed and not ansible_check_mode
   apt:
     update_cache: true
   become: true
@@ -140,7 +140,7 @@
     - netdata
 
 - name: install | Install netdata
-  when: not (ansible_check_mode and apt_repository_netdata.changed)
+  when: not (ansible_check_mode and netdata_apt_repo.changed)
   apt:
     pkg:
       - netdata
@@ -178,7 +178,7 @@
     - netdata
 
 - name: install | Install netdata plugins
-  when: not (ansible_check_mode and (netdata_apt.changed or apt_repository_netdata.changed))
+  when: not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed))
   apt:
     pkg:
       - netdata-plugin-slabinfo

@@ -85,7 +85,7 @@
     owner: root
     group: root
     mode: "0644"
-  register: grub_cfg
+  register: zfs_grub_cfg
   become: true
   tags:
     - zfs
@@ -102,7 +102,7 @@
     - zfs
 
 - name: Update grub
-  when: grub_bootloader and grub_cfg.changed
+  when: grub_bootloader and zfs_grub_cfg.changed
   command: update-grub
   changed_when: true
   become: true

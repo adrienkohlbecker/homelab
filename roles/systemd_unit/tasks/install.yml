@@ -32,7 +32,7 @@
 # keys in a single set_fact concurrently — a key can't read a sibling
 # defined in the same task. Primitives (caller-var defaulting) first,
 # derived facts (scope/dir) second.
-- name: Resolve caller defaults for {{ systemd_unit_args.src }}
+- name: Resolve caller defaults for {{ systemd_unit_args.src }}  # noqa: var-naming[no-role-prefix]
   set_fact:
     _systemd_unit_user: "{{ systemd_unit_args.user | default('root') }}"
     _systemd_unit_condition: "{{ systemd_unit_args.condition | default(true) }}"
@@ -53,14 +53,14 @@
                    else (systemd_unit_args.dest
                          | default(systemd_unit_args.src | regex_replace('\.j2$', '')))) }}
 
-- name: Derive install scope for {{ systemd_unit_args.src }}
+- name: Derive install scope for {{ systemd_unit_args.src }}  # noqa: var-naming[no-role-prefix]
   set_fact:
     _systemd_unit_scope: "{{ 'system' if _systemd_unit_user == 'root' else 'user' }}"
     _systemd_unit_dir: "{{ '/etc/systemd/system' if _systemd_unit_user == 'root' else '/etc/systemd/user' }}"
 
 # Third layer: needs _systemd_unit_dir + _systemd_unit_name from above,
 # which set_fact evaluates concurrently within a single task.
-- name: Derive install path for {{ systemd_unit_args.src }}
+- name: Derive install path for {{ systemd_unit_args.src }}  # noqa: var-naming[no-role-prefix]
   set_fact:
     _systemd_unit_path: "{{ systemd_unit_args.dest_abs | default(_systemd_unit_dir ~ '/' ~ _systemd_unit_name) }}"
 
@@ -91,7 +91,7 @@
     - _systemd_unit_scope == 'user'
   stat:
     path: "/var/lib/systemd/linger/{{ _systemd_unit_user }}"
-  register: _systemd_unit_linger
+  register: _systemd_unit_linger  # noqa: var-naming[no-role-prefix]
   failed_when: not _systemd_unit_linger.stat.exists and not ansible_check_mode
 
 # Refuse to overwrite a masked unit. `systemctl mask` creates a /dev/null
@@ -105,7 +105,7 @@
   when: _systemd_unit_condition
   stat:
     path: "{{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}"
-  register: _systemd_unit_mask
+  register: _systemd_unit_mask  # noqa: var-naming[no-role-prefix]
   become: true
 
 - name: Refuse to overwrite masked unit
@@ -148,7 +148,7 @@
         mode: "0644"
         backup: true
       become: true
-      register: systemd_unit
+      register: systemd_unit_file
 
     # --man=no because Documentation=man:foo(8) refs trigger
     # `man <topic>` lookups that can fail on minimal images (e.g.
@@ -158,15 +158,15 @@
     # validation — drop it. `--man=no` works on systemd 249+; the
     # newer `--no-man` form is 254+ only.
     - name: Validate unit file
-      when: systemd_unit.changed
+      when: systemd_unit_file.changed
       command: systemd-analyze verify --man=no {{ _systemd_unit_dir }}/{{ _systemd_unit_verify }}
-      register: systemd_verify
+      register: systemd_unit_verify
       changed_when: false
-      failed_when: systemd_verify.rc != 0 or systemd_verify.stderr != ''
+      failed_when: systemd_unit_verify.rc != 0 or systemd_unit_verify.stderr != ''
       become: true
 
     - name: Reload daemon
-      when: systemd_unit.changed
+      when: systemd_unit_file.changed
       systemd:
         daemon_reload: true
         scope: "{{ _systemd_unit_scope }}"
@@ -184,7 +184,7 @@
     # set_fact'd _systemd_unit_name because by execution time it's set.
     - name: Record install result for {{ systemd_unit_args.src }}
       set_fact:
-        "{{ _systemd_unit_name | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ systemd_unit }}"
+        "{{ _systemd_unit_name | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ systemd_unit_file }}"
 
   # systemd-analyze verify takes a file path, so the unit has to land at
   # its production location first and is then validated in place. If
@@ -197,25 +197,25 @@
   # it doesn't fail on warnings; see the comment at the top of this file.)
   rescue:
     - name: Copy backup file to original
-      when: '"backup_file" in systemd_unit'
+      when: '"backup_file" in systemd_unit_file'
       copy:
         remote_src: true
         dest: "{{ _systemd_unit_path }}"
-        src: "{{ systemd_unit.backup_file }}"
+        src: "{{ systemd_unit_file.backup_file }}"
         owner: root
         group: root
         mode: "0644"
       become: true
 
     - name: Delete backup file
-      when: '"backup_file" in systemd_unit'
+      when: '"backup_file" in systemd_unit_file'
       file:
-        path: "{{ systemd_unit.backup_file }}"
+        path: "{{ systemd_unit_file.backup_file }}"
         state: absent
       become: true
 
     - name: Delete newly added file
-      when: systemd_unit.changed and "backup_file" not in systemd_unit
+      when: systemd_unit_file.changed and "backup_file" not in systemd_unit_file
       file:
         path: "{{ _systemd_unit_path }}"
         state: absent

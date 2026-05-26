@@ -19,6 +19,6 @@
   command:
     cmd: podman exec -i hyperdx curl --fail -s --max-time 5 --data-binary @- "http://localhost:8123/"
     stdin: "{{ _test_args.sql }}"
-  register: _test_clickhouse_result
+  register: _test_clickhouse_result  # noqa: var-naming[no-role-prefix]
   changed_when: false
   become: true

@@ -109,7 +109,7 @@
     - libvirt
 
 - name: Start default network
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or systemd_started.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or systemd_unit_started.changed))
   community.libvirt.virt_net:
     name: default
     state: active
@@ -118,7 +118,7 @@
     - libvirt
 
 - name: Autostart default network
-  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or systemd_started.changed))
+  when: not (ansible_check_mode and (libvirt_apt.changed or libvirt_apt_python.changed or systemd_unit_started.changed))
   community.libvirt.virt_net:
     name: default
     autostart: true

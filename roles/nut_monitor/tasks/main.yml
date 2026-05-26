@@ -4,12 +4,12 @@
       - nut-client
     cache_valid_time: 3600
   become: true
-  register: apt_install_nut
+  register: nut_monitor_apt
   tags:
     - nut_monitor
 
 - name: Configure nut upsmon.conf
-  when: not (ansible_check_mode and apt_install_nut.changed)
+  when: not (ansible_check_mode and nut_monitor_apt.changed)
   template:
     src: upsmon.conf.j2
     dest: /etc/nut/upsmon.conf
@@ -18,12 +18,12 @@
     group: nut
     mode: "0640"
   become: true
-  register: nut_upsmon_conf
+  register: nut_monitor_upsmon_conf
   tags:
     - nut_monitor
 
 - name: Configure nut upssched.conf
-  when: not (ansible_check_mode and apt_install_nut.changed)
+  when: not (ansible_check_mode and nut_monitor_apt.changed)
   copy:
     src: upssched.conf
     dest: /etc/nut/upssched.conf
@@ -32,7 +32,7 @@
     group: nut
     mode: "0640"
   become: true
-  register: nut_upssched_conf
+  register: nut_monitor_upssched_conf
   tags:
     - nut_monitor
 
@@ -61,7 +61,7 @@
   vars:
     systemd_unit_args:
       src: nut-client
-      condition: "{{ (nut_monitor_enabled | default(false)) and not (ansible_check_mode and apt_install_nut.changed) }}"
-      restart: "{{ nut_upsmon_conf.changed or nut_upssched_conf.changed }}"
+      condition: "{{ (nut_monitor_enabled | default(false)) and not (ansible_check_mode and nut_monitor_apt.changed) }}"
+      restart: "{{ nut_monitor_upsmon_conf.changed or nut_monitor_upssched_conf.changed }}"
   tags:
     - nut_monitor

@@ -6,12 +6,12 @@
       - fcgiwrap
     cache_valid_time: 3600
   become: true
-  register: apt_install_nut
+  register: nut_server_apt
   tags:
     - nut_server
 
 - name: Configure nut nut.conf
-  when: not (ansible_check_mode and apt_install_nut.changed)
+  when: not (ansible_check_mode and nut_server_apt.changed)
   copy:
     src: nut.conf
     dest: /etc/nut/nut.conf
@@ -20,12 +20,12 @@
     group: nut
     mode: "0640"
   become: true
-  register: nut_nut_conf
+  register: nut_server_nut_conf
   tags:
     - nut_server
 
 - name: Configure nut ups.conf
-  when: not (ansible_check_mode and apt_install_nut.changed) and (ansible_distribution_major_version == "22" or ansible_distribution_major_version == "24")
+  when: not (ansible_check_mode and nut_server_apt.changed) and (ansible_distribution_major_version == "22" or ansible_distribution_major_version == "24")
   template:
     src: ups.conf.j2
     dest: /etc/nut/ups.conf
@@ -33,13 +33,13 @@
     group: nut
     mode: "0640"
     backup: true
-  register: nut_ups_conf
+  register: nut_server_ups_conf
   become: true
   tags:
     - nut_server
 
 - name: Configure nut ups.conf
-  when: not (ansible_check_mode and apt_install_nut.changed) and (ansible_distribution_major_version != "22" and ansible_distribution_major_version != "24")
+  when: not (ansible_check_mode and nut_server_apt.changed) and (ansible_distribution_major_version != "22" and ansible_distribution_major_version != "24")
   template:
     src: ups.conf.j2
     dest: /etc/nut/ups.conf
@@ -48,13 +48,13 @@
     mode: "0640"
     backup: true
     validate: python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True, allow_unnamed_section=True).read("%s")'
-  register: nut_ups_conf
+  register: nut_server_ups_conf
   become: true
   tags:
     - nut_server
 
 - name: Configure nut upsd.conf
-  when: not (ansible_check_mode and apt_install_nut.changed)
+  when: not (ansible_check_mode and nut_server_apt.changed)
   copy:
     src: upsd.conf
     dest: /etc/nut/upsd.conf
@@ -63,12 +63,12 @@
     group: nut
     mode: "0640"
   become: true
-  register: nut_upsd_conf
+  register: nut_server_upsd_conf
   tags:
     - nut_server
 
 - name: Configure nut upsd.users
-  when: not (ansible_check_mode and apt_install_nut.changed)
+  when: not (ansible_check_mode and nut_server_apt.changed)
   template:
     src: upsd.users.j2
     dest: /etc/nut/upsd.users
@@ -78,7 +78,7 @@
     backup: true
     validate: python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True).read("%s")'
   become: true
-  register: nut_upsd_users
+  register: nut_server_upsd_users
   tags:
     - nut_server
 
@@ -89,8 +89,8 @@
   vars:
     systemd_unit_args:
       src: '{{ "nut-driver@eaton" if ansible_distribution_major_version != "22" else "nut-driver" }}'
-      condition: "{{ not (ansible_check_mode and apt_install_nut.changed) }}"
-      restart: "{{ nut_nut_conf.changed or nut_ups_conf.changed }}"
+      condition: "{{ not (ansible_check_mode and nut_server_apt.changed) }}"
+      restart: "{{ nut_server_nut_conf.changed or nut_server_ups_conf.changed }}"
       start: "{{ not qemu_test }}"
   tags:
     - nut_server
@@ -102,14 +102,14 @@
   vars:
     systemd_unit_args:
       src: nut-server
-      condition: "{{ not (ansible_check_mode and apt_install_nut.changed) }}"
-      restart: "{{ nut_nut_conf.changed or nut_upsd_conf.changed or nut_upsd_users.changed }}"
+      condition: "{{ not (ansible_check_mode and nut_server_apt.changed) }}"
+      restart: "{{ nut_server_nut_conf.changed or nut_server_upsd_conf.changed or nut_server_upsd_users.changed }}"
       start: "{{ not qemu_test }}" # TODO: no hardware UPS to talk to
   tags:
     - nut_server
 
 - name: Configure nut hosts.conf
-  when: not (ansible_check_mode and apt_install_nut.changed)
+  when: not (ansible_check_mode and nut_server_apt.changed)
   copy:
     src: hosts.conf
     dest: /etc/nut/hosts.conf
@@ -122,7 +122,7 @@
     - nut_server
 
 - name: Configure nut upsset.conf
-  when: not (ansible_check_mode and apt_install_nut.changed)
+  when: not (ansible_check_mode and nut_server_apt.changed)
   copy:
     src: upsset.conf
     dest: /etc/nut/upsset.conf

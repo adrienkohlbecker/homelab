@@ -3,9 +3,9 @@
     name: "{{ ansible_user_id }}"
     groups: "{{ usergroup_immediate_group }}"
     append: true
-  register: usergroup
+  register: usergroup_immediate_result
   become: true
 
 - name: Reset ssh connection
-  when: usergroup.changed
+  when: usergroup_immediate_result.changed
   include_tasks: reset_connection.yml
