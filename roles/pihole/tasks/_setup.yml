@@ -3,10 +3,15 @@
     name: _test
     tasks_from: nginx
 
+# netdata is x86_64-only (no arm64 build of the pinned 1.46.x — see
+# roles/netdata/tasks/main.yml). pihole itself doesn't depend on netdata
+# (its go.d collector registration is disabled), so skip the install on
+# arm64 test VMs; no-op on the x86_64 fleet/CI.
 - name: _setup | Install netdata
   import_role:
     name: netdata
     tasks_from: install
+  when: ansible_architecture == 'x86_64'
 
 - name: _setup | Install podman
   import_role:
