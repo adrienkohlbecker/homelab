@@ -25,6 +25,9 @@
         ethernets:
           {{ hetzner_private_net_iface }}:
             dhcp4: true
+            # Not boot-critical: if the private DHCP never leases, this stops
+            # systemd-networkd-wait-online from blocking fox's boot on this NIC.
+            optional: true
             dhcp4-overrides:
               use-dns: false
     owner: root
