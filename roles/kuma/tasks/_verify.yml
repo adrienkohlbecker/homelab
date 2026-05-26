@@ -109,3 +109,52 @@
   changed_when: false
   failed_when: _verify_wal.stdout | trim != 'wal'
   become: true
+
+# Positive seed path -- the empty-table guard above proves the seed is
+# SKIPPED with no user; this proves it FLIPS once a user exists, the
+# prod-only branch unreachable against the harness's fresh kuma (which has
+# an empty user table). Run against a synthetic kuma-shaped DB so we neither
+# mutate the live instance nor depend on kuma's full user schema; the
+# statement mirrors main.yml's seed -- keep the two in sync.
+- name: _verify | disableAuth seed flips once, then is idempotent
+  block:
+    - name: _verify | build a synthetic kuma-shaped DB with one user
+      command: >-
+        sqlite3 /tmp/_verify_kuma_seed.db
+        "CREATE TABLE user (id INTEGER PRIMARY KEY, username TEXT);
+         CREATE TABLE setting (key TEXT PRIMARY KEY, value TEXT, type TEXT);
+         INSERT INTO user (username) VALUES ('_verify');"
+      changed_when: true
+      become: true
+
+    - name: _verify | first seed pass mutates (changes()=1)
+      command: >-
+        sqlite3 -cmd ".timeout 30000" /tmp/_verify_kuma_seed.db
+        "INSERT INTO setting (key, value, type)
+           SELECT 'disableAuth', 'true', 'general' WHERE EXISTS (SELECT 1 FROM user)
+         ON CONFLICT(key) DO UPDATE SET value='true', type='general'
+           WHERE setting.value != 'true';
+         SELECT changes();"
+      register: _verify_seed_first
+      changed_when: false
+      failed_when: (_verify_seed_first.stdout | trim) != '1'
+      become: true
+
+    - name: _verify | second seed pass is a no-op (changes()=0)
+      command: >-
+        sqlite3 -cmd ".timeout 30000" /tmp/_verify_kuma_seed.db
+        "INSERT INTO setting (key, value, type)
+           SELECT 'disableAuth', 'true', 'general' WHERE EXISTS (SELECT 1 FROM user)
+         ON CONFLICT(key) DO UPDATE SET value='true', type='general'
+           WHERE setting.value != 'true';
+         SELECT changes();"
+      register: _verify_seed_second
+      changed_when: false
+      failed_when: (_verify_seed_second.stdout | trim) != '0'
+      become: true
+  always:
+    - name: _verify | drop the synthetic DB
+      file:
+        path: /tmp/_verify_kuma_seed.db
+        state: absent
+      become: true
