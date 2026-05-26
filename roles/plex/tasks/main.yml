@@ -21,8 +21,10 @@
 - name: Lookup render group gid (HW transcoding hosts only)
   when: has_transcoding_acceleration
   become: true
+  tags:
+    - plex
   block:
-    - name: getent render group
+    - name: Getent render group
       getent:
         database: group
         key: render
@@ -37,8 +39,6 @@
           transcoding driver packages (mesa-va-drivers,
           intel-media-va-driver) — they ship a sysusers.d that owns
           this group — and re-run.
-  tags:
-    - plex
 
 - name: Add plex user
   user:

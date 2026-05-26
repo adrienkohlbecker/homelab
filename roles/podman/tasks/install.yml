@@ -225,6 +225,8 @@
     - podman_zvol_mount.rc == 0
     - podman_zvol_mount.stdout == "/var/lib/containers/storage"
   become: true
+  tags:
+    - podman
   block:
     - name: install | Stop podman.socket before remount
       systemd:
@@ -261,8 +263,6 @@
       mount:
         path: /var/lib/containers/storage
         state: absent
-  tags:
-    - podman
 
 - name: install | Mount podman zvol
   when: zfs_root

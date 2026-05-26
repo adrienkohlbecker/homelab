@@ -41,7 +41,7 @@
   tags:
     - macvlan
 
-- name: install | Install {{ macvlan_args.name }} systemd unit
+- name: "install | Install systemd unit for {{ macvlan_args.name }}"
   import_role:
     name: systemd_unit
     tasks_from: install

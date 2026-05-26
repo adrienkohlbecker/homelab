@@ -5,7 +5,7 @@
 #
 # The dict form prevents inter-call leakage at play-vars scope (see
 # template.yml for the longer rationale; same shape).
-- name: health_copy | Ensure netdata directory exists
+- name: health_template | Ensure netdata directory exists
   file:
     dest: "{{ item }}"
     state: directory
@@ -17,13 +17,13 @@
     - /etc/netdata/health.d/
   become: true
 
-- name: health_copy | Check if built-in template
+- name: health_template | Check if built-in template
   stat:
     path: /usr/lib/netdata/conf.d/health.d/{{ netdata_args.dest }}
   register: netdata_alerts_template_builtin
   become: true
 
-- name: health_copy | Copy alerting template
+- name: health_template | Copy alerting template
   when: netdata_alerts_template_builtin.stat.exists
   command: cp /usr/lib/netdata/conf.d/health.d/{{ netdata_args.dest }} /etc/netdata/health.d/{{ netdata_args.dest }}
   args:
@@ -31,7 +31,7 @@
   register: netdata_alerts_template
   become: true
 
-- name: health_copy | Copy the alerting config
+- name: health_template | Copy the alerting config
   template:
     src: "{{ netdata_args.src }}"
     dest: "/etc/netdata/health.d/{{ netdata_args.dest }}"
@@ -42,7 +42,7 @@
   register: netdata_alerts_conf
   become: true
 
-- name: health_copy | Reload health configuration
+- name: health_template | Reload health configuration
   when: (netdata_alerts_conf.changed or netdata_alerts_template.changed)
   command: netdatacli reload-health
   changed_when: true

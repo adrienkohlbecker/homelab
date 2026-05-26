@@ -61,6 +61,8 @@
 - name: Remove legacy mac0.service (renamed to mac_mgmt)
   when: _macvlan_legacy_mac0.stat.exists
   become: true
+  tags:
+    - macvlan
   block:
     - name: Stop legacy mac0.service
       systemd:
@@ -74,8 +76,6 @@
     - name: Daemon-reload after legacy mac0 removal
       systemd:
         daemon_reload: yes
-  tags:
-    - macvlan
 
 - name: Set up macvlan blocks
   include_tasks: install.yml

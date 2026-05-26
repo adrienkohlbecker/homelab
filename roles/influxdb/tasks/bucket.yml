@@ -75,7 +75,7 @@
 # so the assert gives the operator a concrete next step. First
 # `that:` clause short-circuits the from_json filter when stdout is
 # non-JSON (rc != 0 case).
-- name: bucket | Assert org {{ influxdb_bucket_args.org }} exists
+- name: "bucket | Assert org exists: {{ influxdb_bucket_args.org }}"
   assert:
     that:
       - _influxdb_bucket_org_query.rc == 0
@@ -94,7 +94,7 @@
 # reference re-evaluates from the relevant query register; values
 # never enter host-fact scope, so a subsequent import_role with
 # different inputs can't pick up the previous call's ids.
-- name: bucket | Provision tenant {{ influxdb_bucket_args.user }} / {{ influxdb_bucket_args.bucket }} in org {{ influxdb_bucket_args.org }}
+- name: bucket | Provision tenant {{ influxdb_bucket_args.user ~ ' / ' ~ influxdb_bucket_args.bucket ~ ' in org ' ~ influxdb_bucket_args.org }}
   vars:
     _influxdb_org_id: >-
       {{ (_influxdb_bucket_org_query.stdout
@@ -317,7 +317,7 @@
     # below is guaranteed defined (and a regression in the create or
     # detection regex fails here loudly rather than producing an
     # Undefined token silently).
-    - name: bucket | Re-query auth for {{ influxdb_bucket_args.user }} to capture token
+    - name: "bucket | Re-query auth to capture token for {{ influxdb_bucket_args.user }}"
       command:
         argv:
           - podman
