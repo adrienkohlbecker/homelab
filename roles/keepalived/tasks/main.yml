@@ -150,9 +150,41 @@
   when:
     - keepalived_confs.matched > 0
     - not (ansible_check_mode and keepalived_apt.changed)
-  command: keepalived -t -f /etc/keepalived/keepalived.conf
-  changed_when: false
-  become: true
+  block:
+    - name: Run keepalived -t on the assembled config
+      command: keepalived -t -f /etc/keepalived/keepalived.conf
+      changed_when: false
+      become: true
+  rescue:
+    # keepalived -t reads the assembled config in place, so a bad base
+    # conf is already on disk; restore the previous version from the
+    # backup the copy above made (mirrors roles/nginx/tasks/conf_d.yml)
+    # so the next SIGHUP-reload can't pick up the broken file. A bad
+    # *tenant* fragment trips the same validate but isn't ours to roll
+    # back (restore is a no-op then) — the fail still aborts the run.
+    - name: Restore previous base configuration after failed validation
+      when: '"backup_file" in keepalived_base_conf'
+      copy:
+        remote_src: true
+        src: "{{ keepalived_base_conf.backup_file }}"
+        dest: /etc/keepalived/keepalived.conf
+        mode: "0640"
+        owner: root
+        group: root
+      become: true
+    - name: Remove the base configuration backup
+      when: '"backup_file" in keepalived_base_conf'
+      file:
+        path: "{{ keepalived_base_conf.backup_file }}"
+        state: absent
+      become: true
+    - name: Fail after restoring base configuration
+      fail:
+        msg: >-
+          keepalived -t failed on the assembled config; the previous base
+          conf was restored. Inspect the validate output above — a tenant
+          fragment in /etc/keepalived/conf.d/ or files/keepalived.conf is
+          malformed.
   tags:
     - keepalived
 
