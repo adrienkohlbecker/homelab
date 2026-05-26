@@ -87,6 +87,7 @@
         bunk_ts_running: >-
           {{ (bunk_ts_status.rc | default(1)) == 0
              and (bunk_ts_status.stdout | default('') | trim | length > 0)
+             and (bunk_ts_status.stdout | default('') | trim).startswith('{')
              and ((bunk_ts_status.stdout | from_json).BackendState | default('')) == 'Running' }}
       tags:
         - tailscale
@@ -103,12 +104,39 @@
       tags:
         - tailscale
       block:
+        # bunk must create its own headscale user -- it can't assume lab/pug were
+        # registered first (which would have created it). Without this, enrolling
+        # bunk against a fresh control plane fails with a cryptic "first on empty
+        # list" error at the user-id lookup below. Mirrors roles/tailscale.
+        - name: Ensure the headscale user for bunk exists (on the control server)
+          command: podman exec headscale headscale users create {{ tailscale_headscale_user }}
+          delegate_to: "{{ tailscale_headscale_host }}"
+          become: true
+          register: bunk_ts_user_create
+          changed_when: false
+          failed_when: false
+
+        # failed_when:false + the assert below turn an unreachable control plane
+        # (headscale not converged on fox yet) into a clear message instead of an
+        # opaque podman error -- this and the create above delegate to fox.
         - name: Resolve the headscale user id (on the control server)
           command: podman exec headscale headscale users list -o json
           delegate_to: "{{ tailscale_headscale_host }}"
           become: true
           register: bunk_ts_users
           changed_when: false
+          failed_when: false
+
+        - name: Assert the headscale control plane is reachable
+          assert:
+            that:
+              - bunk_ts_users.rc == 0
+              - (bunk_ts_users.stdout | default('') | trim).startswith('[')
+            fail_msg: >-
+              headscale control plane on {{ tailscale_headscale_host }} is not
+              answering (rc={{ bunk_ts_users.rc | default('n/a') }}). Converge
+              fox/headscale there before enrolling bunk -- this play mints bunk's
+              pre-auth key and approves its routes by delegating to it.
 
         - name: Mint a single-use pre-auth key (on the control server)
           command: >-
