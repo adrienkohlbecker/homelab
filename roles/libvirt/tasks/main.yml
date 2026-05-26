@@ -50,7 +50,10 @@
       # Guests cache their own pages; keep them out of the host ARC, which
       # lab deliberately squeezes for VM RAM (host_vars/lab.yml).
       primarycache: metadata
-      atime: 'off'
+      # Keep atime accounting (inherited on) but cap its write cost with
+      # relatime -- updated at most once a day or when mtime/ctime change
+      # -- instead of the write-per-read of full atime on an image store.
+      relatime: 'on'
       # VM images are not replicated today and the daily virsh_backup
       # config dump rides this dataset. Tag explicitly (not inherited) so
       # the choice is visible and zfs-autobackup's `-s local` picker
