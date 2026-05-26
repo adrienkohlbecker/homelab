@@ -1,0 +1,5 @@
+# The webmail viewer (tasks/webmail.yml) runs Dovecot + Roundcube containers
+# behind nginx; _setup.yml imports podman/install + _test/nginx + the authelia
+# stub, all pre-baked into box_deps (see packer/seed_deps.yml), so route there
+# to skip ~140s of backports + podman + nginx install on every test run.
+machine: box_deps

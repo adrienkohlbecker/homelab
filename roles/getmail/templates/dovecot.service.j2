@@ -1,0 +1,82 @@
+#jinja2: lstrip_blocks: True
+# dovecot.service #######################################################################
+# IMAP server fronting the read-only getmail Maildir archive for Roundcube.
+# Listens only on the internal getmail_webmail podman network (no --publish);
+# Roundcube reaches it by container name via aardvark-dns.
+[Unit]
+Description=dovecot
+After=network-online.target
+Wants=network-online.target
+StartLimitInterval=600
+StartLimitBurst=3
+{% if zfs_root %}
+{% if zfs_has_services_mount %}
+After=zfs_mount_mnt_services.service
+Requires=zfs_mount_mnt_services.service
+{% endif %}
+After=zfs_autosnapshot.target
+PartOf=zfs_autosnapshot.target
+{% endif %}
+
+[Service]
+Environment=PODMAN_SYSTEMD_UNIT=%n
+Restart=always
+Delegate=yes
+TimeoutStartSec=120
+TimeoutStopSec=70
+RestartSec=5
+Type=notify
+NotifyAccess=all
+SyslogIdentifier=%N
+
+ExecStartPre=/bin/rm -f %t/%n.ctr-id
+ExecStart=/usr/bin/podman run \
+    --cidfile=%t/%n.ctr-id \
+    --cgroups=split \
+    --sdnotify=healthy \
+    --detach \
+    --replace \
+    --rm \
+    --name dovecot \
+    {# Image defaults to User=vmail (rootless); override to root so Dovecot can
+       bind 143, run its login/internal helpers, and setuid the mail process to
+       the operator (mail_uid in dovecot.conf) to read the 0700 Maildir. The
+       read-only Maildir mount means root-in-container still can't mutate the
+       archive. #}
+    --user 0:0 \
+    --log-driver journald \
+    --log-opt tag="dovecot" \
+    --security-opt=no-new-privileges \
+    --network getmail_webmail \
+    {# Maildir read-only: the archive bytes are never mutated. Index + control
+       (which Dovecot must write) are redirected to the rw volume below via
+       mail_index_path / mail_control_path in dovecot.conf. #}
+    --volume /mnt/services/getmail:/mnt/services/getmail:ro \
+    {# Mount the rw index/control volume at /state, NOT /dovecot: the image's
+       dovecot install prefix is /dovecot (binary at /dovecot/sbin/dovecot), so
+       mounting over it shadows the binary (exec: No such file or directory). #}
+    --volume /mnt/services/getmail_webmail/dovecot:/state \
+    --volume /mnt/services/getmail_webmail/dovecot.conf:/etc/dovecot/dovecot.conf:ro \
+    {# doveadm auth test exercises the real passdb→userdb path (returns 0 only
+       when auth succeeds AND the userdb resolves), a functional check rather
+       than a port-open stat. The fixed creds match dovecot.conf's static
+       passdb. #}
+    --health-cmd         '["doveadm","auth","test","archive","archive"]' \
+    --health-startup-cmd '["doveadm","auth","test","archive","archive"]' \
+    --health-startup-interval "1s" \
+    --health-startup-timeout "5s" \
+    --health-start-period "30s" \
+    --stop-timeout 60 \
+    {# 2.4.x is the multi-arch line (amd64 + arm64); the 2.3.x tags are
+       amd64-only and fail on the arm64 test VM. dovecot.conf is written to the
+       2.4 grammar (dovecot_config_version pin, mail_driver/mail_path,
+       passdb static filter) — bumping major requires re-checking the config. #}
+    docker.io/dovecot/dovecot:2.4.4
+ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id
+ExecStopPost=/usr/bin/podman rm --force --ignore --cidfile=%t/%n.ctr-id
+
+[Install]
+WantedBy=multi-user.target
+{% if zfs_root %}
+WantedBy=zfs_autosnapshot.target
+{% endif %}

@@ -100,3 +100,8 @@
       timeout_start_sec: 15m
   tags:
     - getmail
+
+- name: Set up the webmail archive viewer
+  import_tasks: webmail.yml
+  tags:
+    - getmail

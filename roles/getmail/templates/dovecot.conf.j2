@@ -1,0 +1,63 @@
+# {{ ansible_managed }}
+# Self-contained Dovecot 2.4 config for the read-only getmail archive viewer.
+# Deliberately does NOT include conf.d/ or vendor.d/ — the stock image's
+# rootless vendor defaults (run-as-vmail, high ports 31143/31993) and conf.d
+# (SSL, submission, sieve) would fight this single-user, internal-network,
+# read-only setup. Everything needed is inline. 2.4 requires both version
+# pins below or it refuses to start.
+dovecot_config_version = 2.4.4
+dovecot_storage_version = 2.4.4
+
+base_dir = /run/dovecot
+log_path = /dev/stderr
+protocols = imap
+
+# The container runs as root (--user 0:0 in the unit) so it can bind 143 and
+# setuid per-process; these are the only non-root users the minimal image
+# ships, used for the login/internal helper processes. The mail process itself
+# drops to mail_uid/mail_gid below.
+default_internal_user = vmail
+default_login_user = vmail
+default_internal_group = vmail
+
+# The Maildir is bind-mounted read-only; index + control (which Dovecot must
+# write: UIDs, keywords, message state) are redirected onto the rw /dovecot
+# volume so the archive bytes are never modified. Without the redirect Dovecot
+# tries to drop dovecot.index* / dovecot-uidlist inside the read-only Maildir
+# and errors on every mailbox open. getmail delivers into new/; on a read-only
+# Maildir Dovecot serves those messages in place without the usual new/→cur/
+# migration (verified in _verify: the planted message stays in new/).
+mail_driver = maildir
+mail_path = /mnt/services/getmail
+mail_home = /mnt/services/getmail
+mail_index_path = /state/index
+mail_control_path = /state/control
+
+# Map the mail process to the operator who owns the Maildir (0700), so it can
+# read the archive. root setuids to this for the imap worker.
+mail_uid = {{ ansible_user_uid }}
+mail_gid = {{ ansible_user_gid }}
+
+# Fixed, non-secret credential. The IMAP listener is published only on the
+# internal getmail_webmail podman network (never to the host/LAN) and the
+# Roundcube vhost is Authelia-gated, so this password guards nothing extra —
+# it only satisfies the IMAP handshake. Any username authenticates with it and
+# maps to the single mail_uid above. See notes/getmail_webmail_design.md.
+passdb static {
+  password = archive
+}
+
+# Plaintext auth is fine: the only hop is Roundcube→Dovecot on the internal
+# podman bridge, equivalent to loopback, so TLS would be ceremony.
+auth_allow_cleartext = yes
+ssl = no
+
+service imap-login {
+  inet_listener imap {
+    port = 143
+  }
+  # Disable the compiled-in imaps (993) listener — no TLS on the internal hop.
+  inet_listener imaps {
+    port = 0
+  }
+}
