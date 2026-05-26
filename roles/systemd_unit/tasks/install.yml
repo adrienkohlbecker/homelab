@@ -196,7 +196,7 @@
   # template/copy `validate:` arg would let us check before placing, but
   # it doesn't fail on warnings; see the comment at the top of this file.)
   rescue:
-    - name: Copy backup file to original
+    - name: Copy backup file to original  # noqa: require-backup
       when: '"backup_file" in systemd_unit_file'
       copy:
         remote_src: true

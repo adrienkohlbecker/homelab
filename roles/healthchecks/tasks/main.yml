@@ -56,7 +56,7 @@
 # task drops a stock one in place so the SITE_LOGO_URL env below has
 # something to render. ro bind-mount in the unit overrides the upstream
 # static-collected/img/logo.png with this file.
-- name: Copy healthchecks logo
+- name: Copy healthchecks logo  # noqa: require-backup
   when: not (ansible_check_mode and healthchecks_user.changed)
   copy:
     src: logo.png

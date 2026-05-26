@@ -130,7 +130,7 @@
     # for the duration of the call. Root-only, removed right after registration;
     # the key is single-use and 5-min-lived regardless. tailscale_authkey_file is
     # tmpfs /run on lab/pug, /tmp on bunk (DSM has no guaranteed /run tmpfs).
-    - name: register | Stage the pre-auth key in a root-only file
+    - name: register | Stage the pre-auth key in a root-only file  # noqa: require-backup
       copy:
         content: "{{ tailscale_preauth_key }}"
         dest: "{{ tailscale_authkey_file }}"

@@ -29,6 +29,7 @@
     owner: root
     group: root
     mode: "0644"
+    backup: true
     content: |
       # Managed by roles/macos_vm.
       # Allows the libvirt-qemu user (group kvm) to open the macOS VM's

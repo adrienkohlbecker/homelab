@@ -40,7 +40,7 @@
 # force=false: only plants the empty file when the src is absent (cold
 # start). On snapshot-restore the real DB already sits here and is left
 # untouched, so we never zero out live data.
-- name: Pre-create SQLite DB src files for {{ sqlite_dataset_args.name }}
+- name: Pre-create SQLite DB src files for {{ sqlite_dataset_args.name }}  # noqa: require-backup
   when:
     - sqlite_dataset_args.condition | default(true)
     - sqlite_dataset_args.pre_create | default(false)

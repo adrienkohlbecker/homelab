@@ -94,6 +94,7 @@
     mode: "0644"
     owner: root
     group: root
+    backup: true
   become: true
   register: samba_avahi_smb
   tags:

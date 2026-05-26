@@ -27,6 +27,8 @@ var_naming_pattern: "^[a-z_][a-z0-9_]*$"
 use_default_rules: true
 # shell-strict-mode enforces `set -euo pipefail` + executable:/bin/bash on
 # production shell tasks (test scaffolding is exempt — see the rule's docstring).
+# require-backup enforces `backup: true` on file-writing tasks (copy/template/
+# replace/lineinfile/...); genuine exceptions carry `# noqa: require-backup`.
 rulesdir:
   - ./lint/ansible_rules/
 

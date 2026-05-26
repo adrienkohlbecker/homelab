@@ -63,19 +63,20 @@
   tags:
     - refind
 
-- name: Configure refind
+# No backup: true on these two — /boot/efi is vfat, and backup_local's chown
+# to preserve ownership fails on FAT, so a backup can't be written on the ESP.
+- name: Configure refind  # noqa: require-backup
   copy:
     src: refind.conf
     dest: /boot/efi/EFI/refind/refind.conf
     owner: root
     group: root
     mode: "0755"
-    # backup: true # TODO: this fails?
   become: true
   tags:
     - refind
 
-- name: Configure refind
+- name: Configure refind  # noqa: require-backup
   copy:
     src: theme.conf
     dest: /boot/efi/EFI/refind/themes/refind-theme-regular/theme.conf

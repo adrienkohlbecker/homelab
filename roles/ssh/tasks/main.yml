@@ -17,6 +17,7 @@
     regexp: '^(#? ?)Subsystem(\s+)sftp(\s+)(.*)$'
     line: '# Subsystem\2sftp\3\4'
     backrefs: true
+    backup: true
   register: ssh_sshd_config_sftp
   become: true
   tags:

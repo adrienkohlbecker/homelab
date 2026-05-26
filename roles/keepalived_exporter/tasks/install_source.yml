@@ -91,7 +91,7 @@
     CGO_ENABLED: "0"
   become: true
 
-- name: install_source | Install built keepalived_exporter binary
+- name: install_source | Install built keepalived_exporter binary  # noqa: require-backup
   when: not (ansible_check_mode and keepalived_exporter_src.changed)
   copy:
     src: "/var/cache/keepalived_exporter-{{ keepalived_exporter_version }}-src/bin/keepalived_exporter"

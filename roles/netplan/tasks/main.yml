@@ -89,7 +89,7 @@
   tags:
     - netplan
 
-- name: Snapshot current /etc/netplan to /run/netplan_prev
+- name: Snapshot current /etc/netplan to /run/netplan_prev  # noqa: require-backup
   copy:
     src: /etc/netplan/
     dest: /run/netplan_prev/

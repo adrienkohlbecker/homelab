@@ -193,6 +193,7 @@
     # shape -- _verify_counters' grep asserts the no-space form.
     line: 'net.netfilter.nf_conntrack_tcp_loose=0'
     create: false
+    backup: true
   register: firewall_conntrack_pinned
   become: true
   tags:
@@ -398,7 +399,7 @@
 # Source-exists gate covers the same-run-as-install check-mode branch
 # (apt reported changed but didn't install, so /etc/nftables.conf
 # isn't on disk yet to snapshot).
-- name: Snapshot post-reload ruleset for next run's auto-revert
+- name: Snapshot post-reload ruleset for next run's auto-revert  # noqa: require-backup
   when:
     - firewall_post_reload_stats.results[0].stat.exists
     - >-
