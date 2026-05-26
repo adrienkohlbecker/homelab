@@ -209,7 +209,7 @@
     - gitea_runner
 
 - name: Enable and start rootless podman socket
-  when: not (ansible_check_mode and (gitea_runner_user.changed or gitea_runner_linger.changed))
+  when: not (ansible_check_mode and (gitea_runner_user.changed or gitea_runner_lingered))
   systemd:
     name: podman.socket
     enabled: true

@@ -46,3 +46,11 @@
       - "{{ linger_args.name }}"
     removes: /var/lib/systemd/linger/{{ linger_args.name }}
   become: true
+  register: _linger_disable_result
+
+# Export the same bool fact as the enable path (true iff this call changed
+# linger state) so the enable/disable pair is fact-symmetric — mirrors
+# systemd_unit recording its result under one name in both install and remove.
+- name: disable | Record linger result for {{ linger_args.name }}
+  set_fact:
+    "{{ linger_args.name | regex_replace('[^A-Za-z0-9_]', '_') }}_lingered": "{{ _linger_disable_result is changed }}"
