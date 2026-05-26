@@ -37,8 +37,8 @@
   assert:
     that:
       - _verify_sentinel.stat.exists
-      - linger_test_linger is defined
-      - linger_test_linger.changed
+      - linger_test_lingered is defined
+      - linger_test_lingered
 
 # The user manager being active is the headline behavior callers depend on
 # (a live bus for rootless podman / user-scope timers); failed_when makes
@@ -90,8 +90,8 @@
 - name: _verify | Assert the re-run was a no-op
   assert:
     that:
-      - linger_test_linger is defined
-      - not linger_test_linger.changed
+      - linger_test_lingered is defined
+      - not linger_test_lingered
 
 - name: _verify | Drive the disable subtask (also exercises the disable path)
   import_role:
