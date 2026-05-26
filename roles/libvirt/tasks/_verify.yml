@@ -31,6 +31,34 @@
       - _libvirt_verify_pool.stdout is search('Autostart:\s+yes')
     fail_msg: "default pool not running+autostart:\n{{ _libvirt_verify_pool.stdout }}"
 
+# Exercise virsh_backup's NVRAM-copy branch: give the throwaway domain a
+# pflash loader + nvram pointing at files we pre-create under
+# /var/lib/libvirt/ (which also satisfies the script's realpath allowlist).
+# A sentinel byte-string in the varstore lets us assert the copy is
+# faithful, not just present. define records the paths without needing
+# real OVMF firmware; the domain is never started, so libvirt never
+# rewrites the varstore from a template.
+- name: _verify | Ensure the libvirt nvram directory exists
+  file:
+    path: /var/lib/libvirt/qemu/nvram
+    state: directory
+    mode: "0700"
+  become: true
+
+- name: _verify | Stage a dummy pflash loader
+  copy:
+    dest: /var/lib/libvirt/qemu/nvram/virsh_backup_verify_CODE.fd
+    mode: "0600"
+    content: "virsh_backup verify loader\n"
+  become: true
+
+- name: _verify | Stage a sentinel nvram varstore
+  copy:
+    dest: /var/lib/libvirt/qemu/nvram/virsh_backup_verify_VARS.fd
+    mode: "0600"
+    content: "virsh_backup verify nvram sentinel\n"
+  become: true
+
 - name: _verify | Stage a throwaway domain definition
   copy:
     dest: /tmp/virsh_backup_verify.xml
@@ -42,7 +70,12 @@
         <vcpu>1</vcpu>
         <os>
           <type arch='x86_64' machine='q35'>hvm</type>
+          <loader readonly='yes' type='pflash'>/var/lib/libvirt/qemu/nvram/virsh_backup_verify_CODE.fd</loader>
+          <nvram>/var/lib/libvirt/qemu/nvram/virsh_backup_verify_VARS.fd</nvram>
         </os>
+        <features>
+          <acpi/>
+        </features>
         <devices>
           <emulator>/usr/bin/qemu-system-x86_64</emulator>
         </devices>
@@ -62,7 +95,7 @@
   stat:
     path: "{{ item }}"
   loop:
-    - /var/lib/libvirt/images/virsh_backup_verify.xml
+    - /var/lib/libvirt/images/dom_virsh_backup_verify.xml
     - /var/lib/libvirt/images/net_default.xml
     - /var/lib/libvirt/images/pool_default.xml
   register: _libvirt_verify_dumps
@@ -77,20 +110,33 @@
       {{ _libvirt_verify_dumps.results | rejectattr('stat.exists')
          | map(attribute='item') | list }}
 
-# Parse (not just read) the dump to catch a truncated/partial write, then
-# confirm it is the domain we defined rather than an empty stub.
-- name: _verify | Dumped domain XML is well-formed
-  command: python3 -c "import sys, xml.dom.minidom as m; m.parse(sys.argv[1])" /var/lib/libvirt/images/virsh_backup_verify.xml
+# cmp (not just stat) so a truncated or wrong-source varstore copy fails --
+# this is the NVRAM-copy branch the BIOS-only domain never exercised.
+- name: _verify | Dumped NVRAM varstore byte-matches the source
+  command: cmp -s /var/lib/libvirt/qemu/nvram/virsh_backup_verify_VARS.fd /var/lib/libvirt/images/dom_virsh_backup_verify_VARS.fd
+  changed_when: false
+  become: true
+
+# Parse (not just read) every dump to catch a truncated/partial write, then
+# confirm the domain dump is the one we defined rather than an empty stub.
+- name: _verify | Every dumped XML is well-formed
+  command: python3 -c "import sys, xml.dom.minidom as m; m.parse(sys.argv[1])" "{{ item }}"
+  loop:
+    - /var/lib/libvirt/images/dom_virsh_backup_verify.xml
+    - /var/lib/libvirt/images/net_default.xml
+    - /var/lib/libvirt/images/pool_default.xml
   changed_when: false
   become: true
 
 - name: _verify | Dumped domain XML names the throwaway domain
-  command: grep -q virsh_backup_verify /var/lib/libvirt/images/virsh_backup_verify.xml
+  command: grep -q virsh_backup_verify /var/lib/libvirt/images/dom_virsh_backup_verify.xml
   changed_when: false
   become: true
 
+# --nvram: a domain with a varstore refuses a plain undefine; this also
+# removes the nvram file (the cleanup below then no-ops on it).
 - name: _verify | Undefine the throwaway domain
-  command: virsh undefine virsh_backup_verify
+  command: virsh undefine --nvram virsh_backup_verify
   changed_when: true
   become: true
 
@@ -99,8 +145,11 @@
     path: "{{ item }}"
     state: absent
   loop:
-    - /var/lib/libvirt/images/virsh_backup_verify.xml
+    - /var/lib/libvirt/images/dom_virsh_backup_verify.xml
+    - /var/lib/libvirt/images/dom_virsh_backup_verify_VARS.fd
     - /var/lib/libvirt/images/net_default.xml
     - /var/lib/libvirt/images/pool_default.xml
     - /tmp/virsh_backup_verify.xml
+    - /var/lib/libvirt/qemu/nvram/virsh_backup_verify_VARS.fd
+    - /var/lib/libvirt/qemu/nvram/virsh_backup_verify_CODE.fd
   become: true
