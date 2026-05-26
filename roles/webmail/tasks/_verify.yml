@@ -1,0 +1,110 @@
+# Plant a known message straight into the getmail Maildir's new/. The operator
+# owns the Maildir, so this host-side write is the only way to seed test mail
+# (the container mounts it read-only) -- and it sets up the read-only proof
+# below: serving this message must never migrate it out of new/.
+- name: _verify | Plant a test message in the archive Maildir
+  copy:
+    dest: /mnt/services/getmail/new/1700000000.webmailverify.box
+    owner: "{{ ansible_user_id }}"
+    group: "{{ ansible_user_id }}"
+    mode: "0600"
+    content: |
+      From: Test Sender <sender@example.com>
+      To: {{ root_email }}
+      Subject: Webmail Verify
+      Date: Tue, 14 Nov 2023 22:13:20 +0000
+      Message-ID: <webmailverify@example.com>
+
+      Archive viewer verification body.
+  become: true
+
+# Roundcube's --sdnotify=healthy gates `active` on its own HTTP healthcheck,
+# so HTTP is up by the time _verify runs; the short retry covers the active-
+# transition race. amd64-only: Roundcube ships no arm64 image, so the
+# container isn't started on the arm64 test VM (see tasks/main.yml).
+- name: _verify | Roundcube answers on its loopback port
+  when: ansible_architecture == 'x86_64'
+  uri:
+    url: http://localhost:{{ service_ports.roundcube }}/
+    status_code: 200
+  register: _webmail_rc_loopback
+  retries: 10
+  delay: 2
+  until: _webmail_rc_loopback.status == 200
+  become: true
+
+# auth: required -- a cookieless GET / must land on the Authelia 302 redirect
+# chain (stub is in gate mode). Validates the auth_request wiring and the
+# proxy_pass port together; the loopback probe above already proved Roundcube
+# itself serves. Runs on all arches: the 302 fires before proxy_pass, so it's
+# valid even where Roundcube (amd64-only) isn't running.
+- name: _verify | Roundcube vhost gate redirects unauthenticated to Authelia
+  uri:
+    url: https://localhost/
+    headers:
+      Host: mail.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: _webmail_rc_gate
+  failed_when: >-
+    _webmail_rc_gate.status != 302
+    or 'auth.' not in (_webmail_rc_gate.location | default(''))
+  become: true
+
+# Functional IMAP probe: doveadm search forces Dovecot to scan new/ and serve
+# the planted message over the real passdb->userdb->Maildir path. Non-empty
+# stdout (one `<guid> <uid>` line per match) means the message is reachable --
+# the load-bearing "can I actually browse the archive" assertion.
+- name: _verify | Dovecot serves the planted message over IMAP
+  command:
+    argv:
+      - podman
+      - exec
+      - dovecot
+      - doveadm
+      - search
+      - -u
+      - archive
+      - mailbox
+      - INBOX
+      - subject
+      - Webmail Verify
+  register: _webmail_doveadm
+  changed_when: false
+  retries: 10
+  delay: 2
+  until: _webmail_doveadm.rc == 0 and (_webmail_doveadm.stdout | trim | length > 0)
+  become: true
+
+# Read-only guarantee, three ways. (1) The planted message stays in new/:
+# Dovecot couldn't migrate it to cur/ because the mount is read-only.
+- name: _verify | Planted message stays in new/ (Maildir never mutated)
+  stat:
+    path: /mnt/services/getmail/new/1700000000.webmailverify.box
+  register: _webmail_newfile
+  failed_when: not _webmail_newfile.stat.exists
+  become: true
+
+# (2) No Dovecot index/uidlist files leaked into the Maildir -- proves the
+# index/control redirect in dovecot.conf is in effect, not silently ignored.
+- name: _verify | No dovecot index/uidlist files leaked into the read-only Maildir
+  find:
+    paths: /mnt/services/getmail
+    patterns:
+      - "dovecot.index*"
+      - "dovecot-uidlist*"
+      - "dovecot.list.index*"
+    recurse: true
+  register: _webmail_no_index_in_maildir
+  failed_when: _webmail_no_index_in_maildir.matched > 0
+  become: true
+
+# (3) ...and they landed on the writable volume instead.
+- name: _verify | Dovecot index/control landed on the writable volume
+  find:
+    paths: /mnt/services/webmail/dovecot
+    recurse: true
+  register: _webmail_index_redirected
+  failed_when: _webmail_index_redirected.matched == 0
+  become: true

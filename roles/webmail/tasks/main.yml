@@ -1,50 +1,66 @@
-# Read-only web interface for the getmail archive: Dovecot (IMAP over the
-# Maildir) behind Roundcube (webmail), fronted by nginx + Authelia. Design and
-# the read-only rationale: notes/getmail_webmail_design.md.
+# Read-only web interface for the getmail mail archive: Dovecot (IMAP over the
+# Maildir) behind Roundcube (webmail), fronted by nginx + Authelia. The getmail
+# role fetches/owns the Maildir at /mnt/services/getmail; this role only reads
+# it. Design and the read-only rationale: notes/getmail_webmail_design.md.
 
-- name: Create getmail_webmail podman network
+# Hard dependency: the Maildir is created and populated by the getmail role,
+# which runs before this one in site.yml. Fail loudly here rather than with a
+# cryptic podman bind-mount error when dovecot starts. Skipped in check mode:
+# on a fresh host getmail's maildir-create only *reports*, so the dir legitimately
+# won't exist yet during a check run.
+- name: Assert the getmail Maildir exists
+  when: not ansible_check_mode
+  stat:
+    path: /mnt/services/getmail/cur
+  register: _webmail_maildir
+  failed_when: not _webmail_maildir.stat.exists
+  become: true
+  tags:
+    - webmail
+
+- name: Create webmail podman network
   when: not ansible_check_mode
   containers.podman.podman_network:
-    name: getmail_webmail
+    name: webmail
     disable_dns: false
     state: present
   become: true
   tags:
-    - getmail
+    - webmail
 
 # Registered so the unit install/enable tasks below can gate on
-# `not (ansible_check_mode and _getmail_webmail_dir.changed)` — the
-# fresh-host check-mode guard. On a fresh host in check mode this dir
-# would-change, so the systemd-analyze validate (which needs the unit file
-# actually on disk) and `systemctl enable` (which needs the unit known to
-# systemd) are skipped; on a converged host it's unchanged and they run.
-# This role creates no service user, so the base dir stands in for the
-# `<svc>_user.changed` signal other podman roles use.
+# `not (ansible_check_mode and _webmail_dir.changed)` — the fresh-host
+# check-mode guard. On a fresh host in check mode this dir would-change, so the
+# systemd-analyze validate (which needs the unit file actually on disk) and
+# `systemctl enable` (which needs the unit known to systemd) are skipped; on a
+# converged host it's unchanged and they run. This role creates no service
+# user, so the base dir stands in for the `<svc>_user.changed` signal other
+# podman roles use.
 - name: Create webmail base directory
   file:
-    dest: /mnt/services/getmail_webmail
+    dest: /mnt/services/webmail
     state: directory
     owner: root
     group: root
     mode: "0755"
   become: true
-  register: _getmail_webmail_dir
+  register: _webmail_dir
   tags:
-    - getmail
+    - webmail
 
 # Dovecot writes its index + control files here (redirected out of the
 # read-only Maildir). Owned by the operator because the IMAP process runs as
-# the operator uid (static userdb in dovecot.conf).
+# the operator uid (mail_uid in dovecot.conf).
 - name: Create dovecot index/control directory
   file:
-    dest: /mnt/services/getmail_webmail/dovecot
+    dest: /mnt/services/webmail/dovecot
     state: directory
     owner: "{{ ansible_user_id }}"
     group: "{{ ansible_user_id }}"
     mode: "0700"
   become: true
   tags:
-    - getmail
+    - webmail
 
 # Roundcube's apache image chowns its mounted dirs to in-container www-data at
 # startup, so root-owned 0755 host dirs are fine. config rides the services
@@ -52,14 +68,14 @@
 # below.
 - name: Create roundcube config directory
   file:
-    dest: /mnt/services/getmail_webmail/roundcube/config
+    dest: /mnt/services/webmail/roundcube/config
     state: directory
     owner: root
     group: root
     mode: "0755"
   become: true
   tags:
-    - getmail
+    - webmail
 
 # Roundcube's sqlite DB on the dedicated sqlite dataset (4K recordsize, matches
 # kuma/paperless). The unit mounts this dir as ROUNDCUBEMAIL_DB_DIR directly
@@ -75,7 +91,7 @@
     mode: "0755"
   become: true
   tags:
-    - getmail
+    - webmail
 
 # No validate: there's no dovecot binary on the host to parse-check against,
 # and faking one would violate the "real parser or none" rule. Config errors
@@ -84,15 +100,15 @@
 - name: Configure dovecot
   template:
     src: dovecot.conf.j2
-    dest: /mnt/services/getmail_webmail/dovecot.conf
+    dest: /mnt/services/webmail/dovecot.conf
     owner: root
     group: root
     mode: "0644"
     backup: true
   become: true
-  register: _getmail_dovecot_conf
+  register: _webmail_dovecot_conf
   tags:
-    - getmail
+    - webmail
 
 - name: Install dovecot service
   import_role:
@@ -101,9 +117,9 @@
   vars:
     systemd_unit_args:
       src: dovecot.service.j2
-      condition: "{{ not (ansible_check_mode and _getmail_webmail_dir.changed) }}"
+      condition: "{{ not (ansible_check_mode and _webmail_dir.changed) }}"
   tags:
-    - getmail
+    - webmail
 
 - name: Enable dovecot service
   import_role:
@@ -112,10 +128,10 @@
   vars:
     systemd_unit_args:
       src: dovecot
-      condition: "{{ not (ansible_check_mode and (dovecot_service_result.changed or _getmail_webmail_dir.changed)) }}"
-      restart: "{{ dovecot_service_result.changed or _getmail_dovecot_conf.changed }}"
+      condition: "{{ not (ansible_check_mode and (dovecot_service_result.changed or _webmail_dir.changed)) }}"
+      restart: "{{ dovecot_service_result.changed or _webmail_dovecot_conf.changed }}"
   tags:
-    - getmail
+    - webmail
 
 # Roundcube ships no arm64 image (only the unpinned latest-fpm-alpine is
 # multi-arch). Every prod host is amd64, so the gate is a no-op there and in
@@ -130,9 +146,9 @@
   vars:
     systemd_unit_args:
       src: roundcube.service.j2
-      condition: "{{ ansible_architecture == 'x86_64' and not (ansible_check_mode and _getmail_webmail_dir.changed) }}"
+      condition: "{{ ansible_architecture == 'x86_64' and not (ansible_check_mode and _webmail_dir.changed) }}"
   tags:
-    - getmail
+    - webmail
 
 - name: Enable roundcube service
   import_role:
@@ -141,10 +157,10 @@
   vars:
     systemd_unit_args:
       src: roundcube
-      condition: "{{ ansible_architecture == 'x86_64' and not (ansible_check_mode and (roundcube_service_result.changed or _getmail_webmail_dir.changed)) }}"
+      condition: "{{ ansible_architecture == 'x86_64' and not (ansible_check_mode and (roundcube_service_result.changed or _webmail_dir.changed)) }}"
       restart: "{{ roundcube_service_result.changed }}"
   tags:
-    - getmail
+    - webmail
 
 - name: Configure nginx
   import_role:
@@ -159,4 +175,4 @@
       # this forward-auth is what actually protects the archive.
       auth: required
   tags:
-    - getmail
+    - webmail

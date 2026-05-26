@@ -1,14 +1,14 @@
 #jinja2: lstrip_blocks: True
 # roundcube.service #######################################################################
 # Webmail UI for the getmail archive. Talks IMAP to the dovecot container over
-# the internal getmail_webmail network; nginx fronts it with Authelia auth.
+# the internal webmail network; nginx fronts it with Authelia auth.
 [Unit]
 Description=roundcube
 After=network-online.target
 Wants=network-online.target
 # dovecot.service is Type=notify --sdnotify=healthy, so ordering after it means
 # Roundcube boots against a ready IMAP backend (and guarantees the shared
-# getmail_webmail network exists). Wants, not Requires: Roundcube tolerates
+# webmail network exists). Wants, not Requires: Roundcube tolerates
 # dovecot bouncing — the user just re-logs in.
 After=dovecot.service
 Wants=dovecot.service
@@ -47,14 +47,14 @@ ExecStart=/usr/bin/podman run \
     --name roundcube \
     --log-driver journald \
     --log-opt tag="roundcube" \
-    --network getmail_webmail \
+    --network webmail \
     {# SQLite (Roundcube's prefs/contacts/cache) lives on the dedicated
        4K-recordsize sqlite dataset. ROUNDCUBEMAIL_DB_DIR is a dedicated mount
        point, so we point it straight at the dataset — no symlink dance (unlike
        kuma/paperless, whose DB sits inside a larger data dir). The image's
        entrypoint creates sqlite.db here on first boot. #}
     --volume /mnt/services/sqlite/roundcube:/var/roundcube/db \
-    --volume /mnt/services/getmail_webmail/roundcube/config:/var/roundcube/config \
+    --volume /mnt/services/webmail/roundcube/config:/var/roundcube/config \
     --publish 127.0.0.1:{{ service_ports.roundcube }}:80/tcp \
     {# Plain IMAP on 143 to the dovecot container; the hop stays on the internal
        podman bridge so TLS would be ceremony. #}
