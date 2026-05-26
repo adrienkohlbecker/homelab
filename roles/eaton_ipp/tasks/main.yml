@@ -34,15 +34,15 @@
         group: root
         checksum: "sha256:{{ eaton_ipp_release[ansible_architecture].sha256 }}"
         timeout: 30
-      register: ipp_linux_download
+      register: eaton_ipp_download
       retries: 3
       delay: 5
-      until: ipp_linux_download is succeeded
+      until: eaton_ipp_download is succeeded
 
     - name: Install ipp-linux
       apt:
         deb: /tmp/ipp-linux.deb
-      register: ipp_linux_installed
+      register: eaton_ipp_installed
 
   always:
 
@@ -61,8 +61,8 @@
   vars:
     systemd_unit_args:
       src: eaton-ipp
-      condition: '{{ not (ansible_check_mode and (ipp_linux_installed.changed | default(false))) and ansible_architecture == "x86_64" }}'
-      restart: '{{ ipp_linux_installed.changed | default(false) }}'
+      condition: '{{ not (ansible_check_mode and (eaton_ipp_installed.changed | default(false))) and ansible_architecture == "x86_64" }}'
+      restart: '{{ eaton_ipp_installed.changed | default(false) }}'
   tags:
     - eaton_ipp
 

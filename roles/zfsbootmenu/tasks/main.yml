@@ -6,12 +6,12 @@
     group: root
     mode: "0755"
   become: true
-  register: zbm_directory
+  register: zfsbootmenu_zbm_directory
   tags:
     - zfsbootmenu
 
 - name: Download zfsbootmenu
-  when: not (ansible_check_mode and zbm_directory.changed)
+  when: not (ansible_check_mode and zfsbootmenu_zbm_directory.changed)
   get_url:
     url: "{{ mirror_github }}/zbm-dev/zfsbootmenu/releases/download/v3.0.1/zfsbootmenu-recovery-x86_64-v3.0.1-linux6.1.EFI"
     checksum: sha256:3d4c55147964fdbc2b0042535d9ee117dc51bee82af045040d26ae9dfb9bdf0d
@@ -33,7 +33,7 @@
     - zfsbootmenu
 
 - name: Create backup the first time only
-  when: not (ansible_check_mode and (zbm_directory.changed or zfsbootmenu_efi.changed)) and not zfsbootmenu_efi_backup.stat.exists and not qemu_test_minimal
+  when: not (ansible_check_mode and (zfsbootmenu_zbm_directory.changed or zfsbootmenu_efi.changed)) and not zfsbootmenu_efi_backup.stat.exists and not qemu_test_minimal
   copy:
     src: /boot/efi/EFI/ZBM/VMLINUZ.EFI
     dest: /boot/efi/EFI/ZBM/VMLINUZ-BACKUP.EFI

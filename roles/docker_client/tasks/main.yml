@@ -3,7 +3,7 @@
     pkg: gpg
     cache_valid_time: 3600
   become: true
-  register: apt_install_gpg
+  register: docker_client_apt_gpg
   tags:
     - docker_client
 
@@ -13,7 +13,7 @@
 - name: Add repository key
   when:
     - ansible_distribution_major_version | int < 26
-    - not (ansible_check_mode and apt_install_gpg.changed)
+    - not (ansible_check_mode and docker_client_apt_gpg.changed)
   apt_key:
     id: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
     url: https://download.docker.com/linux/ubuntu/gpg
@@ -26,7 +26,7 @@
   when: ansible_distribution_major_version | int < 26
   apt_repository:
     repo: deb [arch={{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }} signed-by=/etc/apt/trusted.gpg.d/docker.gpg] {{ mirror_apt_docker }} {{ ansible_distribution_release }} stable
-  register: apt_repository_docker_client_legacy
+  register: docker_client_apt_repo_legacy
   become: true
   tags:
     - docker_client
@@ -52,14 +52,14 @@
     pkg: python3-debian
     cache_valid_time: 3600
   become: true
-  register: apt_install_python3_debian
+  register: docker_client_apt_python3_debian
   tags:
     - docker_client
 
 - name: Add repository (deb822)
   when:
     - ansible_distribution_major_version | int >= 26
-    - not (ansible_check_mode and apt_install_python3_debian.changed)
+    - not (ansible_check_mode and docker_client_apt_python3_debian.changed)
   deb822_repository:
     name: docker
     types: deb
@@ -68,23 +68,23 @@
     components: stable
     architectures: "{{ (ansible_architecture == 'aarch64') | ternary('arm64', 'amd64') }}"
     signed_by: https://download.docker.com/linux/ubuntu/gpg
-  register: apt_repository_docker_client_deb822
+  register: docker_client_apt_repo_deb822
   become: true
   tags:
     - docker_client
 
 # Coalesce the version-gated registers so downstream tasks keep
-# referencing apt_repository_docker_client.changed without caring
+# referencing docker_client_apt_repo.changed without caring
 # which branch ran. Includes the per-branch prereq installs
-# (apt_install_gpg on jammy, apt_install_python3_debian on
+# (docker_client_apt_gpg on jammy, docker_client_apt_python3_debian on
 # resolute) so check mode -- where the repo task is gated out by
 # the prereq install -- still propagates a "would-change" signal;
 # otherwise install docker client would run in check mode against
 # an unconfigured repo.
 - name: Track repository changes
   set_fact:
-    apt_repository_docker_client:
-      changed: "{{ apt_repository_docker_client_legacy is changed or apt_repository_docker_client_deb822 is changed or apt_install_gpg is changed or apt_install_python3_debian is changed }}"
+    docker_client_apt_repo:
+      changed: "{{ docker_client_apt_repo_legacy is changed or docker_client_apt_repo_deb822 is changed or docker_client_apt_gpg is changed or docker_client_apt_python3_debian is changed }}"
   tags:
     - docker_client
 
@@ -93,7 +93,7 @@
 # cache (cache_valid_time=3600) and fail to find docker-ce-cli.
 # Force a refresh on the run that actually changed the repo.
 - name: Refresh apt cache after docker repo change
-  when: apt_repository_docker_client.changed and not ansible_check_mode
+  when: docker_client_apt_repo.changed and not ansible_check_mode
   apt:
     update_cache: true
   become: true
@@ -101,7 +101,7 @@
     - docker_client
 
 - name: Install docker client
-  when: not (ansible_check_mode and apt_repository_docker_client.changed)
+  when: not (ansible_check_mode and docker_client_apt_repo.changed)
   apt:
     pkg:
       - docker-ce-cli
