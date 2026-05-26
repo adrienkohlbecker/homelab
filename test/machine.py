@@ -86,6 +86,7 @@ def qemu_user_net_args(machine: str) -> str:
     dns_ip = str(net.broadcast_address - 2)
     return f",net={supernet},host={host_ip},dns={dns_ip},dhcpstart={physical}"
 
+
 # git only tracks the executable bit; a fresh checkout (notably CI's
 # `actions/checkout@v4`) lands the vagrant key at 0644 and ssh refuses
 # to use it ("UNPROTECTED PRIVATE KEY FILE"). chmod once at import

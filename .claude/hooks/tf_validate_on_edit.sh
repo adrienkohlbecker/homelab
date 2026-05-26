@@ -10,8 +10,8 @@ input=$(cat)
 file=$(jq -r '.tool_input.file_path // empty' <<<"$input")
 
 case "$file" in
-  *.tf | *.tfvars) ;;
-  *) exit 0 ;;
+*.tf | *.tfvars) ;;
+*) exit 0 ;;
 esac
 
 [ -f "$file" ] || exit 0

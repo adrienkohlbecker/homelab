@@ -19,8 +19,8 @@ cwd=$(jq -r '.cwd // empty' <<<"$input")
 # or anything else routed through Bash. Use a token-level match rather than
 # substring so `git push-pr-helper`-style false positives don't trigger.
 case "$cmd" in
-  "git push"|"git push "*) ;;
-  *) exit 0 ;;
+"git push" | "git push "*) ;;
+*) exit 0 ;;
 esac
 
 [ -n "$cwd" ] || cwd=$(pwd)
