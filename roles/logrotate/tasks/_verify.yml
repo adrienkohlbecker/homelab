@@ -1,0 +1,79 @@
+# Test-only — the harness runs this against a qemu VM, never prod. Exercises:
+#   1. compression.yml toggles the bare `compress` directive per zfs_root and
+#      leaves compresscmd alone (regression for the once-too-broad regex).
+#   2. template.yml renders + validates a drop-in and parses clean.
+- name: _verify | Create a fixture logrotate config
+  copy:
+    dest: /etc/logrotate.d/_verify_logrotate
+    mode: "0644"
+    content: |
+      /var/log/_verify_logrotate/*.log {
+        weekly
+        missingok
+        rotate 4
+        compress
+        compresscmd /bin/true
+        notifempty
+      }
+  become: true
+
+- name: _verify | Run the compression toggle over the fixture
+  import_tasks: compression.yml
+  vars:
+    logrotate_args:
+      item: /etc/logrotate.d/_verify_logrotate
+
+- name: _verify | Read back the toggled fixture
+  slurp:
+    src: /etc/logrotate.d/_verify_logrotate
+  register: logrotate_verify_fixture
+  become: true
+
+- name: _verify | Assert compress matches zfs_root and compresscmd survived
+  vars:
+    fixture: "{{ logrotate_verify_fixture.content | b64decode }}"
+  assert:
+    that:
+      - >-
+        (zfs_root and fixture is search('(?m)^\s*# compress # zfs'))
+        or (not zfs_root and fixture is search('(?m)^\s*compress\s*$'))
+      - fixture is search('(?m)^\s*compresscmd /bin/true\s*$')
+    fail_msg: compress not toggled per zfs_root, or compresscmd was clobbered
+
+- name: _verify | Parse the toggled fixture with logrotate -d
+  command:
+    argv:
+      - /usr/sbin/logrotate
+      - -d
+      - /etc/logrotate.d/_verify_logrotate
+  changed_when: false
+  become: true
+
+- name: _verify | Exercise the template helper (renders + validates)
+  import_role:
+    name: logrotate
+    tasks_from: template
+  vars:
+    logrotate_args:
+      src: _verify_fixture.j2
+      dest: /etc/logrotate.d/_verify_logrotate_tmpl
+
+- name: _verify | Assert the templated drop-in landed
+  stat:
+    path: /etc/logrotate.d/_verify_logrotate_tmpl
+  register: logrotate_verify_tmpl
+  become: true
+
+- name: _verify | Templated drop-in must exist
+  assert:
+    that:
+      - logrotate_verify_tmpl.stat.exists
+
+- name: _verify | Clean up fixtures
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/logrotate.d/_verify_logrotate
+    - /etc/logrotate.d/_verify_logrotate_tmpl
+  become: true

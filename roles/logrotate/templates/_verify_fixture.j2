@@ -1,0 +1,7 @@
+/var/log/_verify_logrotate_tmpl/*.log {
+  weekly
+  missingok
+  rotate 4
+  {{ zfs_root | ternary("# compress", "compress") }}
+  notifempty
+}
