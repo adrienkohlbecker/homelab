@@ -134,14 +134,14 @@
     - libvirt
 
 # `systemd_unit` registers the libvirtd start-result as the play var
-# `systemd_started`, but a later systemd_unit caller (the virsh_backup
+# `systemd_unit_started`, but a later systemd_unit caller (the virsh_backup
 # timer below) overwrites it. Capture it under a role-local name now,
 # while it still reflects libvirtd, so the check-mode gates on the
 # network/pool tasks can't silently rebind to a different unit's result if
 # one is ever inserted between here and there.
 - name: Record libvirtd start result
   set_fact:
-    _libvirt_started: "{{ systemd_started }}"
+    _libvirt_started: "{{ systemd_unit_started }}"
   tags:
     - libvirt
 
@@ -168,7 +168,7 @@
     - libvirt
 
 # The check-mode gate reads `_libvirt_started` (captured right after the
-# libvirtd enable above) rather than the raw `systemd_started` play var, so
+# libvirtd enable above) rather than the raw `systemd_unit_started` play var, so
 # it can't rebind to a later systemd_unit caller's result.
 # The whole condition skips the network calls in check mode on a fresh
 # host where libvirtd / python3-libvirt aren't really installed yet.
