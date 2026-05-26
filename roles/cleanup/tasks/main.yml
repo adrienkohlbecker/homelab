@@ -120,3 +120,36 @@
   become: true
   tags:
     - cleanup
+
+# `backup: true` on every config-writing task (CLAUDE.md) leaves
+# <name>.<pid>.<timestamp>~ files accumulating under /etc, /mnt/services, etc.
+# (thousands, going back years). The daily ZFS snapshots hold deep history and
+# ansible --diff shows changes live, so the on-disk backups only need to cover a
+# recent window — a daily timer prunes anything older than a week. Not gated on
+# zfs_root: a 7-day window is reasonable on any host, and gating would trip the
+# same undefined-on-localhost trap logrotate just fixed.
+- name: Install the ansible-backup prune script
+  copy:
+    src: prune_ansible_backups
+    dest: /usr/local/sbin/prune_ansible_backups
+    owner: root
+    group: root
+    mode: "0755"
+    backup: true
+    validate: bash -n %s
+  become: true
+  tags:
+    - cleanup
+
+- name: Schedule the ansible-backup prune timer
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: prune_ansible_backups
+      description: Prune ansible config backups older than a week
+      on_calendar: "*-*-* 03:30:00"
+      exec_start: /usr/local/sbin/prune_ansible_backups
+  tags:
+    - cleanup

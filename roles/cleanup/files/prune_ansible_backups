@@ -1,0 +1,55 @@
+#!/bin/bash
+# Prune the config backups `backup: true` leaves behind — files named
+# <name>.<pid>.<YYYY-MM-DD@HH:MM:SS>~ scattered under /etc, /mnt/services, etc.
+# On these ZFS-root hosts the daily snapshots hold deep history and ansible's
+# --diff shows changes live at converge time, so the on-disk backups only need
+# to cover a short recent window (see CLAUDE.md `backup: true`). Bonus: old
+# /etc/wireguard key-bearing backups don't linger indefinitely.
+#
+# Age is read from the FILENAME timestamp, not mtime: ansible's backup_local()
+# uses shutil.copy2, which preserves the *original* file's mtime, so a backup of
+# a years-stable file (e.g. fstab) carries an ancient mtime even when freshly
+# created — `find -mtime` would wrongly evict today's backups. The embedded
+# timestamp is the only reliable creation time.
+#
+# Roots default to the whole root filesystem plus the services dataset; pass
+# explicit roots as args to scope it (the _verify harness does this).
+#
+# -xdev is load-bearing: / is a single dataset (rpool/ROOT/<be>), so one start
+# point reaches everywhere ansible writes — /etc, /usr/local, /usr/lib*,
+# /var/lib, /opt, /root — without us enumerating (an explicit list missed
+# /usr/local entirely). -xdev then stops find at mount boundaries, keeping it
+# off the big data pools (/mnt/media, /mnt/data, …), podman's
+# /var/lib/containers, and snapshot mounts. /mnt/services is its own dataset, so
+# it needs a second start point. (-name .zfs -prune is belt-and-suspenders;
+# -xdev already won't cross into snapshot mounts.)
+set -euo pipefail
+
+RETENTION_DAYS=7
+
+roots=("$@")
+[ "${#roots[@]}" -eq 0 ] && roots=(/ /mnt/services)
+
+# A host may lack /mnt/services; find errors on a missing start path.
+present=()
+for r in "${roots[@]}"; do [ -d "$r" ] && present+=("$r"); done
+[ "${#present[@]}" -eq 0 ] && exit 0
+
+cutoff=$(date -d "${RETENTION_DAYS} days ago" +%s)
+pruned=0
+
+while IFS= read -r -d '' f; do
+  ts=${f%\~}   # strip the trailing ~
+  ts=${ts##*.} # keep the last .-delimited field: YYYY-MM-DD@HH:MM:SS
+  epoch=$(date -d "${ts/@/ }" +%s 2>/dev/null) || continue
+  if [ "$epoch" -lt "$cutoff" ]; then
+    rm -f -- "$f"
+    pruned=$((pruned + 1))
+  fi
+done < <(
+  find "${present[@]}" -xdev -name .zfs -prune -o \
+    -type f -regextype posix-extended \
+    -regex '.*\.[0-9]+\.[0-9]{4}-[0-9]{2}-[0-9]{2}@[0-9]{2}:[0-9]{2}:[0-9]{2}~$' -print0
+)
+
+echo "pruned ${pruned} ansible backup(s) older than ${RETENTION_DAYS}d"
