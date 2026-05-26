@@ -50,6 +50,34 @@
   failed_when: _verify_active.stdout | trim != 'active'
   become: true
 
+# An active manager alone doesn't prove the user's runtime environment is
+# live; logind provisions /run/user/<uid> (XDG_RUNTIME_DIR — where rootless
+# podman and user-scope units place their sockets) precisely because linger
+# is on, and user@<uid>.service is ordered after it, so assert it exists.
+# (The per-user dbus socket /run/user/<uid>/bus would be a stronger probe,
+# but it depends on dbus-user-session, which the minimal box fixture lacks.)
+- name: _verify | XDG_RUNTIME_DIR is provisioned
+  stat:
+    path: /run/user/{{ _verify_user.uid }}
+  register: _verify_runtime_dir
+  become: true
+
+# Prove it is linger keeping the manager up, not a live login session:
+# the fixture user has never logged in, so loginctl must list no session
+# for it while user@<uid>.service is nonetheless active.
+- name: _verify | List active sessions
+  command: loginctl list-sessions --no-legend
+  register: _verify_sessions
+  changed_when: false
+  become: true
+
+- name: _verify | Assert runtime dir present and manager is lingering, not session-backed
+  assert:
+    that:
+      - _verify_runtime_dir.stat.exists
+      - _verify_runtime_dir.stat.isdir
+      - _verify_sessions.stdout is not search('linger_test')
+
 - name: _verify | Drive the helper again (idempotence)
   import_role:
     name: linger
