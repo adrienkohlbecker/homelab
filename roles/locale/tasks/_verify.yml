@@ -1,0 +1,67 @@
+# Functional checks for the locale role. The converge proves apt +
+# locale_gen + the /etc/default/locale write exit cleanly; these verify
+# the role's actual contract: en_US.UTF-8 is *compiled and usable*, and
+# it's the *system default* with no higher-priority override masking it.
+
+- name: _verify | List generated locales
+  command: locale -a
+  register: locale_verify_available
+  changed_when: false
+  become: true
+  tags:
+    - locale
+
+# locale(1) normalizes the generated name to en_US.utf8 (lowercase, no
+# dash), not the en_US.UTF-8 we asked locale_gen for -- assert against
+# that form. Empty/missing here means locale_gen silently no-op'd.
+- name: _verify | Generated locales include en_US.UTF-8
+  assert:
+    that: "'en_US.utf8' in locale_verify_available.stdout_lines"
+    fail_msg: "en_US.utf8 not in `locale -a` -- locale_gen did not compile it"
+  tags:
+    - locale
+
+# localectl reads /etc/default/locale on Debian/Ubuntu (systemd-localed
+# is patched to use it instead of /etc/locale.conf), so this proves the
+# file we wrote is parseable by systemd and sets the system default.
+- name: _verify | Read system default locale
+  command: localectl status
+  register: locale_verify_localectl
+  changed_when: false
+  become: true
+  tags:
+    - locale
+
+- name: _verify | System default locale is LANG=en_US.UTF-8
+  assert:
+    that: "'System Locale: LANG=en_US.UTF-8' in locale_verify_localectl.stdout"
+    fail_msg: "localectl System Locale is not LANG=en_US.UTF-8"
+  tags:
+    - locale
+
+# Guard the deliberate omission documented in tasks/main.yml: a
+# regression re-adding LC_ALL (a transient-only override) or LANGUAGE
+# (a gettext priority list, not a locale) would mask per-shell and
+# per-service locale choices. Assert the file carries LANG and nothing
+# else. `$` end-anchors stand in for `\b` -- under ansible-core 2.20 a
+# `\b` in a quoted regex inside a `that:` conditional is mangled into a
+# backspace escape and never matches (see roles/console/tasks/_verify.yml).
+- name: _verify | Read /etc/default/locale
+  slurp:
+    src: /etc/default/locale
+  register: locale_verify_file
+  become: true
+  tags:
+    - locale
+
+- name: _verify | Default-locale file sets LANG only (no LC_ALL/LANGUAGE)
+  vars:
+    _content: "{{ locale_verify_file.content | b64decode }}"
+  assert:
+    that:
+      - _content | regex_findall('^LANG=en_US.UTF-8$', multiline=True) | length == 1
+      - _content | regex_findall('^LC_ALL=', multiline=True) | length == 0
+      - _content | regex_findall('^LANGUAGE=', multiline=True) | length == 0
+    fail_msg: "/etc/default/locale should set LANG only; LC_ALL or LANGUAGE was re-added"
+  tags:
+    - locale
