@@ -111,6 +111,17 @@ policy:
 # of *.fahm.fr to internal IPs. roles/pihole is unchanged.
 dns:
   magic_dns: true
+  # Send ALL queries from roaming devices to pihole (above), not just
+  # tailnet/MagicDNS names. Without this (the upstream default, false) a device
+  # on foreign WiFi resolves via that network's DNS and loses adblock +
+  # split-horizon *.fahm.fr -- so the adblock the comment above promises only
+  # actually holds with this on. Trade-off: pihole reachability (mesh -> lab/pug
+  # subnet router -> pihole) becomes a hard dependency for DNS on roaming
+  # devices; if that chain breaks they have no resolution until the client opts
+  # out with `tailscale set --accept-dns=false` (a per-device escape hatch this
+  # server setting can't override). Headless hosts already run --accept-dns=false,
+  # so only roaming user-devices are affected.
+  override_local_dns: true
   base_domain: ts.{{ domain }}
   nameservers:
     global:
