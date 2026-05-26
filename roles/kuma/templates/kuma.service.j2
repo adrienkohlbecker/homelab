@@ -59,9 +59,16 @@ ExecStart=/usr/bin/podman run \
        Pinning the type skips the setup page and writes db-config.json itself.
        (lab's existing kuma.db would auto-select sqlite, but new hosts wouldn't.) #}
     --env UPTIME_KUMA_DB_TYPE=sqlite \
+    {# Pin the data dir: the kuma.db symlink and the /app/data volume below
+       both assume kuma writes its DB at /app/data root. Declaring it makes
+       that load-bearing assumption explicit rather than an image default. #}
+    --env DATA_DIR=/app/data \
     --volume /mnt/services/kuma:/app/data \
     --volume /mnt/services/sqlite/kuma:/mnt/services/sqlite/kuma \
     --publish 127.0.0.1:{{ service_ports.kuma }}:3001/tcp \
+    {# extra/healthcheck is kuma's own image-shipped liveness script (node),
+       chosen over a hand-rolled tier-2 curl probe; UPTIME_KUMA_DB_TYPE above
+       prevents the setup-page false-positive it would otherwise return. #}
     --health-cmd '["extra/healthcheck"]' \
     --health-startup-cmd '["extra/healthcheck"]' \
     --health-startup-interval "1s" \
