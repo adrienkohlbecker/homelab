@@ -83,6 +83,9 @@
     backup: true
     validate: python3 -c 'import xml.etree.ElementTree as ET, sys; ET.parse(sys.argv[1])' "%s"
   register: radarr_conf
+  # ansible.cfg sets [diff] always=True + verbosity=1, so without this the
+  # rendered <ApiKey> would print to the operator/CI log on write & rotation.
+  no_log: true
   become: true
   tags:
     - radarr
