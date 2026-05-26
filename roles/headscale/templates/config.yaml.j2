@@ -152,12 +152,19 @@ oidc:
   # unaffected). 180d is the upstream default, pinned so the household re-login
   # interval is a deliberate dial -- lengthen if family re-logins get annoying.
   expiry: 180d
+  # headscale's own `expiry` (above) governs re-auth, not the OIDC token's
+  # lifetime. Pinned to the upstream default explicitly so a short Authelia token
+  # lifetime can't unexpectedly shorten the household re-login interval.
+  use_expiry_from_token: false
   # PKCE (S256) hardens the public auth-code flow against authorization-code
   # interception. Authelia accepts a PKCE challenge from clients that send one,
   # so this needs no Authelia-side client change. Exercised under the harness by
   # the mockoidc OIDC boot test (roles/headscale/tasks/_setup.yml + _verify.yml).
   pkce:
     enabled: true
+    # S256 is the upstream default; pin it explicitly so a default-flip can't
+    # silently weaken the challenge method (matches the WAL/expiry pins).
+    method: S256
 {% if headscale_oidc_allowed_domains | default([]) | length > 0 %}
   allowed_domains:
 {% for d in headscale_oidc_allowed_domains %}
