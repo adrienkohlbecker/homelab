@@ -34,7 +34,22 @@
     state: present
     extra_zfs_properties:
       mountpoint: /var/lib/libvirt/images
-      recordsize: '4096'
+      # 64K matches qemu's default qcow2 cluster_size: a guest write lands
+      # in one record instead of straddling many. (The prior '4096' was
+      # copy-pasted from the SQLite datasets and maximized metadata +
+      # write amplification for multi-GB images.) Only governs newly
+      # written files. compression is left inherited (zstd from rpool).
+      recordsize: '65536'
+      # Guests cache their own pages; keep them out of the host ARC, which
+      # lab deliberately squeezes for VM RAM (host_vars/lab.yml).
+      primarycache: metadata
+      atime: 'off'
+      # VM images are not replicated today and the daily virsh_backup
+      # config dump rides this dataset. Tag explicitly (not inherited) so
+      # the choice is visible and zfs-autobackup's `-s local` picker
+      # doesn't silently skip it. See notes/SOMEDAY.md "Back up libvirt
+      # VMs and their definitions".
+      'autobackup:bak': 'false'
   become: true
   tags:
     - libvirt
