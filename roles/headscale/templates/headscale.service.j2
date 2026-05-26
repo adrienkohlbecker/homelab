@@ -4,10 +4,18 @@
 Description=headscale
 After=network-online.target
 Wants=network-online.target
+# Baseline start-limit, present regardless of OIDC: Restart=always + RestartSec=5
+# can trip systemd's default 5-starts-in-10s burst during a slow dependency
+# warmup and land the unit in `failed` rather than retrying. Matches the sibling
+# podman units (e.g. roles/healthchecks). OIDC widens the burst to 15 -- fox is a
+# wg *listener*, so the tunnel to lab only carries traffic once lab/pug send their
+# next keepalive (~25s after a fox reboot), and headscale must keep retrying
+# boot-time OIDC discovery through that wg0 warmup rather than exhausting the
+# burst. A genuinely-broken server still surfaces (Restart=always loops, and
+# fox's netdata headscale collector goes missing -- see host_vars/fox.yml).
+StartLimitIntervalSec=600
+StartLimitBurst={{ 15 if (headscale_oidc_enabled | default(false)) else 3 }}
 {% if headscale_oidc_enabled | default(false) %}
-# Both the wg0 ordering and the wide start-limit exist ONLY for OIDC discovery,
-# so they're gated on it -- with OIDC off headscale has no boot-time dependency
-# on the backbone and the default start-limit applies.
 {% if not (qemu_test | default(false)) %}
 # OIDC discovery hits the Authelia issuer at startup, and on fox that issuer
 # (auth.fahm.fr) resolves to lab's wg /32 -- reachable only over the wg0
@@ -18,14 +26,6 @@ Wants=network-online.target
 # and an After= on a unit that doesn't exist would warn under systemd-analyze.
 After=wg-quick@wg0.service
 {% endif %}
-# fox is a wg *listener*: the tunnel to lab only carries traffic once lab/pug
-# send their next keepalive (~25s after a fox reboot), which lags wg-quick's own
-# activation. A wide start-limit window lets headscale keep retrying OIDC
-# discovery through that warmup rather than exhausting the burst and landing in
-# `failed`. A genuinely-broken server still surfaces (Restart=always loops, and
-# fox's netdata headscale collector goes missing -- see host_vars/fox.yml).
-StartLimitInterval=600
-StartLimitBurst=15
 {% endif %}
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
@@ -63,6 +63,9 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="headscale" \
     --security-opt=no-new-privileges \
+    {# tini PID 1: reaps zombies and forwards signals -- notably the SIGHUP the
+       unit's ExecReload sends for an ACL policy reload. Matches sibling units. #}
+    --init \
     --volume /mnt/services/headscale/config.yaml:/etc/headscale/config.yaml:ro \
     --volume /mnt/services/headscale/acl.hujson:/etc/headscale/acl.hujson:ro \
     --volume /mnt/services/headscale/data:/var/lib/headscale \
