@@ -42,7 +42,7 @@ HCLOUD_TOKEN = "op://Lab/fsqg4d3rwrfjzoycq6yu73ayce/password"
 # tasks still reference `{{vars.X}}`; both forms resolve to the same value.
 QEMU_DIR = '{{vars.qemu_dir}}'
 ZBM_VERSION = "3.1.0"
-# Home Assistant long-lived access token -- consumed by mise-tasks/ha/sync
+# Home Assistant long-lived access token -- consumed by mise-tasks/ha/sync.py
 # to call /api/services/<domain>/reload after pushing the GUI YAML. Minted
 # in HA UI under Profile > Security > Long-Lived Access Tokens. The
 # script re-execs under `op run --` to substitute the op:// reference;
@@ -126,11 +126,11 @@ run = "git ls-files -z '*.yml' '*.yaml' | xargs -0 yamllint"
 
 [tasks."lint:shell"]
 description = "Run shellcheck on tracked shell scripts"
-run = "git ls-files -z '*.sh' 'mise-tasks/**' | xargs -0 shellcheck"
+run = "git ls-files -z '*.sh' | xargs -0 shellcheck"
 
 [tasks."lint:shfmt"]
 description = "Check shell script formatting (shfmt)"
-run = "git ls-files -z '*.sh' 'mise-tasks/**' | xargs -0 shfmt -i 2 -d"
+run = "git ls-files -z '*.sh' | xargs -0 shfmt -i 2 -d"
 
 [tasks."lint:typos"]
 description = "Run typos checker"
@@ -177,7 +177,7 @@ run = "mise fmt"
 
 [tasks."fmt:shfmt"]
 description = "Format shell scripts (shfmt)"
-run = "git ls-files -z '*.sh' 'mise-tasks/**' | xargs -0 shfmt -i 2 -w"
+run = "git ls-files -z '*.sh' | xargs -0 shfmt -i 2 -w"
 
 [tasks."tf"]
 description = "tofu (forwards subcommand + args)"

@@ -854,7 +854,7 @@ def sweep_stale_workdirs(imagedir: Path) -> None:
     """Reap orphaned tmp* (harness) and .build-* (packer) dirs from prior runs.
 
     Cleanup normally rides Machine.__aexit__'s finally chain (machine.py:579)
-    for tmp* and the trailing rmdir in mise-tasks/packer/build for .build-*.
+    for tmp* and the trailing rmdir in mise-tasks/packer/build.sh for .build-*.
     Both bypass on SIGKILL / OOM / power-loss, leaving orphan dirs. Each is a
     full repo copy plus a qcow2 overlay -- ansible-lint also walks into them
     until .ansible-lint excludes the path, so leaks are doubly expensive.
@@ -1040,7 +1040,7 @@ class QemuMachine(Machine):
         # commit_in_place: skip the qcow2-overlay step for the OS disks and
         # mount the image_dir's packer-ubuntu-N.<format> files as the qemu
         # drives directly. Writes during the run mutate those files in
-        # place — that's the whole point, since mise-tasks/packer/seed-deps
+        # place — that's the whole point, since mise-tasks/packer/seed-deps.sh
         # stages a fresh copy of box's artifacts into a tmpdir, runs
         # launch.py --commit --seed against it, and then publishes the
         # mutated tmpdir as box_deps. Refuses unless image_dir is also
@@ -1208,7 +1208,7 @@ class QemuMachine(Machine):
             if self._commit_in_place:
                 # No overlay: pass the source files straight to qemu in
                 # their on-disk format. Writes persist in image_dir so
-                # mise-tasks/packer/seed-deps can publish it afterwards.
+                # mise-tasks/packer/seed-deps.sh can publish it afterwards.
                 os_disk_paths = list(os_src_paths)
                 drive_format = self._packer_disk_format
             else:
