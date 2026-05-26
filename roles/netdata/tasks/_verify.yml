@@ -15,6 +15,14 @@
 # into prometheus.custom.* dimensions). This file is the replacement
 # for what custom_exporter/_verify.yml exercised.
 
+# netdata is x86_64-only (no arm64 build of the pinned 1.46.x — see
+# tasks/main.yml), so on arm64 the role is skipped at converge and there
+# is no running netdata to verify. End this test-only play cleanly.
+# _verify never runs in prod, so end_play is safe here.
+- name: _verify | Skip on non-x86_64 (netdata not installed there)
+  when: ansible_architecture != 'x86_64'
+  ansible.builtin.meta: end_play
+
 - name: _verify | Netdata.service is loaded and active
   systemd:
     name: netdata
