@@ -31,5 +31,18 @@
     group: root
     mode: "0644"
   become: true
+  register: locale_cfg
+  tags:
+    - locale
+
+- name: Ask to reboot
+  when: locale_cfg.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
   tags:
     - locale
