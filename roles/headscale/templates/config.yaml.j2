@@ -46,6 +46,17 @@ derp:
     stun_listen_addr: "[::]:3478"
     private_key_path: /var/lib/headscale/derp_server_private.key
     automatically_add_embedded_derp_region: true
+    # Pin the public addresses the embedded DERP advertises (host_vars/fox.yml,
+    # the terraform-reserved primary IPs). headscale's auto-detection would
+    # otherwise see the container's podman bridge/ULA address behind nginx + the
+    # DNAT bridge, degrading NAT traversal for roaming clients. Unset on the
+    # IPv4-only box harness (no host_var), so the keys are simply omitted there.
+{% if headscale_derp_ipv4 is defined %}
+    ipv4: "{{ headscale_derp_ipv4 }}"
+{% endif %}
+{% if headscale_derp_ipv6 is defined %}
+    ipv6: "{{ headscale_derp_ipv6 }}"
+{% endif %}
   urls: []
   paths: []
   auto_update_enabled: false
@@ -55,10 +66,23 @@ derp:
 disable_check_updates: true
 ephemeral_node_inactivity_timeout: 30m
 
+# Pinned off (the upstream default), deliberately. Randomizing the WireGuard
+# source port helps hole-punching on some NAT types but hurts it on others, so
+# it's a per-deployment field-test knob (verify with `tailscale netcheck` from a
+# roaming cellular client), not a blind on. Left explicit so flipping it is a
+# conscious decision rather than an accidental default.
+randomize_client_port: false
+
 database:
   type: sqlite
   sqlite:
     path: /var/lib/headscale/db.sqlite
+    # Pin WAL on explicitly. It's the upstream default today, but the whole
+    # reason db.sqlite lives on the dedicated 4K-recordsize sqlite dataset
+    # (roles/sqlite_dataset) is so its WAL/SHM siblings land there too -- an
+    # upstream default-flip to rollback-journal would silently undo that. State
+    # the assumption the storage layout depends on.
+    write_ahead_log: true
 
 # TLS is terminated by nginx (roles/nginx site). Leave headscale's own TLS off.
 tls_letsencrypt_hostname: ""
@@ -98,6 +122,18 @@ oidc:
   client_id: "{{ headscale_oidc_client_id }}"
   client_secret_path: "/run/secrets/oidc_client_secret"
   scope: ["openid", "profile", "email"]
+  # Fail closed at boot (the upstream default, pinned explicitly): refuse to
+  # start until OIDC discovery against the issuer succeeds. With the unit's
+  # After=wg-quick@wg0 + wide StartLimit window, this guarantees that whenever
+  # headscale is `active` the family Apple-device login flow actually works -- a
+  # started-but-OIDC-broken control plane would be a silent WAF regression. Flip
+  # to false only to keep serving pre-auth (lab/pug) clients through an Authelia
+  # outage, at the cost of OIDC possibly staying broken until a restart.
+  only_start_if_oidc_is_available: true
+  # Re-auth cadence for OIDC-enrolled user devices (pre-auth-key hosts are
+  # unaffected). 180d is the upstream default, pinned so the household re-login
+  # interval is a deliberate dial -- lengthen if family re-logins get annoying.
+  expiry: 180d
 {% if headscale_oidc_allowed_domains | default([]) | length > 0 %}
   allowed_domains:
 {% for d in headscale_oidc_allowed_domains %}
