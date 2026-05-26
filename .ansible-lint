@@ -1,139 +1,66 @@
-# .ansible-lint
+# .ansible-lint — the conventions these rules back are documented in CLAUDE.md.
 
-profile: null # min, basic, moderate,safety, shared, production
+# No profile. The `shared`/`production` profiles pull in galaxy + meta rules
+# (meta-no-info, galaxy[*], meta-runtime) that don't apply here — roles carry
+# meta/test.yml, not galaxy metadata. We curate enable/skip explicitly instead.
+profile: null
 
-# Allows dumping of results in SARIF format
-# sarif_file: result.sarif
-
-# exclude_paths included in this file are parsed relative to this file's location
-# and not relative to the CWD of execution. CLI arguments passed to the --exclude
-# option are parsed relative to the CWD of execution.
+# exclude_paths are parsed relative to THIS file, not the CWD.
 exclude_paths:
-  - .cache/ # implicit unless exclude_paths is defined in config
+  - .cache/
   - .claude/
-  # packer/artifacts/ is in .gitignore but ansible-lint still descends into
-  # leftover tmp* build trees, each containing a full repo copy (~240 yml ×
-  # ~10 stale dirs), inflating wall-clock from ~10s to ~70s.
+  # Leftover packer tmp* build trees each hold a full repo copy; descending into
+  # them inflates wall-clock ~7x (~10s → ~70s).
   - packer/artifacts/
-  # - test/fixtures/formatting-before/
-  # - test/fixtures/formatting-prettier/
-# parseable: true
-# quiet: true
-# strict: true
-# verbosity: 1
+  # HA GUI submodule: home-assistant YAML, not ansible content. ansible-lint
+  # can't load the blueprints (load-failure) and mis-lints the automation files.
+  - roles/homeassistant/files/ha_gui_config/
+  # Harness driver playbooks reference `_role_under_test`, injected at runtime —
+  # they don't syntax-check standalone.
+  - test/playbooks/
 
-# Mock modules or roles in order to pass ansible-playbook --syntax-check
-mock_modules: []
-  # - foo_return
-  # # note the foo.bar is invalid as being neither a module or a collection
-  # - fake_namespace.fake_collection.fake_module
-  # - fake_namespace.fake_collection.fake_module.fake_submodule
-mock_roles: []
-  # - mocked_role
-  # - author.role_name # old standalone galaxy role
-  # - fake_namespace.fake_collection.fake_role # role within a collection
-
-# Enable checking of loop variable prefixes in roles
+# Loop vars must be `__`-prefixed or `{role}_`-prefixed.
 loop_var_prefix: "^(__|{role}_)"
-
-# Enforce variable names to follow pattern below, in addition to Ansible own
-# requirements, like avoiding python identifiers. To disable add `var-naming`
-# to skip_list.
+# Var names: lowercase snake_case (plus ansible's own identifier rules).
 var_naming_pattern: "^[a-z_][a-z0-9_]*$"
 
 use_default_rules: true
-# Load custom rules from this specific folder. shell-strict-mode enforces
-# `set -euo pipefail` + `executable: /bin/bash` on every production shell
-# task (test scaffolding is exempt — see the rule's docstring).
+# shell-strict-mode enforces `set -euo pipefail` + executable:/bin/bash on
+# production shell tasks (test scaffolding is exempt — see the rule's docstring).
 rulesdir:
   - ./lint/ansible_rules/
 
-# Ansible-lint is able to recognize and load skip rules stored inside
-# `.ansible-lint-ignore` (or `.config/ansible-lint-ignore.txt`) files.
-# To skip a rule just enter filename and tag, like "playbook.yml package-latest"
-# on a new line.
-# Optionally you can add comments after the tag, prefixed by "#". We discourage
-# the use of skip_list below because that will hide violations from the output.
-# When putting ignores inside the ignore file, they are marked as ignored, but
-# still visible, making it easier to address later.
 skip_list:
-  - skip_this_tag
-  - fqcn[action-core]
-  - fqcn[action]
-  - yaml[line-length]
-  - yaml[document-start]
+  # Bare ansible.builtin.* names are the repo convention; FQCN is reserved for
+  # other collections (CLAUDE.md → Coding Style & Naming). Skip the whole rule,
+  # not just fqcn[action]/[action-core]: the rule's matchtask still RUNS when only
+  # sub-tags are skipped, and it logs a spurious WARNING on the systemd_unit
+  # helper's deliberate `action: "{{ _module }}"` dynamic dispatch (it can't
+  # resolve a templated module's FQCN). fqcn[canonical] has zero matches here.
+  - fqcn
+  # Handlers are banned (CLAUDE.md Hard Rule) — restarts run off *_result.changed,
+  # so the "use a handler" rule is permanently wrong here.
   - no-handler
+  # YAML formatting is owned by yamllint + .yamllint (brackets/commas house
+  # style). ansible-lint's `yaml` rule re-applies yamllint's full default set and
+  # diverges (flags files yamllint passes), so delegate to yamllint rather than
+  # run two YAML linters that disagree. Want stricter YAML? Edit .yamllint.
+  - yaml
+  # Loop vars with no prefix at all — too noisy to gate on for now.
   - loop-var-prefix[missing]
 
-# Ansible-lint does not automatically load rules that have the 'opt-in' tag.
-# You must enable opt-in rules by listing each rule 'id' below.
+# Opt-in rules (not loaded by default) we do want enforced.
 enable_list:
   - args
-  - empty-string-compare # opt-in
-  - no-log-password # opt-in
-  - no-prompting # opt-in
-  - no-same-owner # opt-in
-  - warning
+  - empty-string-compare
+  - no-log-password
+  - no-prompting
+  - no-same-owner
   - loop-var-prefix
-  - name[prefix] # opt-in
-  # add yaml here if you want to avoid ignoring yaml checks when yamllint
-  # library is missing. Normally its absence just skips using that rule.
-  - yaml
-# Report only a subset of tags and fully ignore any others
-# tags:
-#   - jinja[spacing]
 
-# Ansible-lint does not fail on warnings from the rules or tags listed below
+# Rules that surface as warnings, never failures.
 warn_list:
-  - skip_this_tag
-  - experimental # experimental is included in the implicit list
-  # - role-name
-  # - yaml[document-start]  # you can also use sub-rule matches
+  - experimental
 
-# Some rules can transform files to fix (or make it easier to fix) identified
-# errors. `ansible-lint --fix` will reformat YAML files and run these transforms.
-# By default it will run all transforms (effectively `write_list: ["all"]`).
-# You can disable running transforms by setting `write_list: ["none"]`.
-# Or only enable a subset of rule transforms by listing rules/tags here.
-# write_list:
-#   - all
-
-# Offline mode disables installation of requirements.yml and schema refreshing
+# Don't fetch requirements.yml / refresh schemas at lint time.
 offline: true
-
-# Define required Ansible's variables to satisfy syntax check
-extra_vars: {}
-  # foo: bar
-  # multiline_string_variable: |
-  #   line1
-  #   line2
-  # complex_variable: ":{;\t$()"
-
-# Uncomment to enforce action validation with tasks, usually is not
-# needed as Ansible syntax check also covers it.
-# skip_action_validation: false
-
-# List of additional kind:pattern to be added at the top of the default
-# match list, first match determines the file kind.
-kinds: []
-  # - playbook: "**/examples/*.{yml,yaml}"
-  # - galaxy: "**/folder/galaxy.yml"
-  # - tasks: "**/tasks/*.yml"
-  # - vars: "**/vars/*.yml"
-  # - meta: "**/meta/main.yml"
-  # - yaml: "**/*.yaml-too"
-
-# List of additional collections to allow in only-builtins rule.
-# only_builtins_allow_collections:
-#   - example_ns.example_collection
-
-# List of additions modules to allow in only-builtins rule.
-# only_builtins_allow_modules:
-#   - example_module
-
-# Allow setting custom prefix for name[prefix] rule
-task_name_prefix: "{stem} | "
-# Complexity related settings
-
-# Limit the depth of the nested blocks:
-# max_block_depth: 20

@@ -7,6 +7,11 @@
 # only when the base ref is missing (e.g. fresh clone with no remote fetched).
 set -euo pipefail
 
+# Silence ansible-core's own to_bytes/to_native deprecation spam (collection-internal
+# imports, not our code) during lint. Scoped here, not in ansible.cfg, so real
+# playbook runs still surface deprecations. Mirrors the lint:ansible task in mise.toml.
+export ANSIBLE_DEPRECATION_WARNINGS=False
+
 base="${LINT_BASE:-origin/master}"
 
 if git rev-parse --verify --quiet "$base" >/dev/null; then

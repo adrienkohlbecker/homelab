@@ -49,6 +49,7 @@ class ShellStrictMode(AnsibleLintRule):
     )
     severity = "MEDIUM"
     tags = ["command-shell", "idiom"]
+    version_changed = "1.0.0"
 
     def matchtask(self, task: Task, file: Lintable | None = None) -> bool | str:
         if task["__ansible_action_type__"] != "task":
