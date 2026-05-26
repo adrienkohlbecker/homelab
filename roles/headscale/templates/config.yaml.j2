@@ -17,9 +17,12 @@ grpc_allow_insecure: false
 # CLI talks to the running `serve` over this socket (used by _verify and by
 # the tailscale role's preauthkey mint). Kept inside the writable state dir so
 # the tier-1 non-root container user can create it (default /var/run isn't
-# writable without root).
+# writable without root). 0700 (owner-only): the only callers are the
+# headscale-uid serve process and `podman exec` as that same uid (_verify, the
+# tailscale role's mint), so the group bit the upstream example sets buys
+# nothing here -- it just widens who could drive the admin gRPC socket.
 unix_socket: /var/lib/headscale/headscale.sock
-unix_socket_permission: "0770"
+unix_socket_permission: "0700"
 
 noise:
   private_key_path: /var/lib/headscale/noise_private.key
@@ -83,6 +86,10 @@ database:
     # upstream default-flip to rollback-journal would silently undo that. State
     # the assumption the storage layout depends on.
     write_ahead_log: true
+    # Same rationale: pin the checkpoint cadence (upstream default, 1000 frames)
+    # so WAL growth/churn on the 4K dataset stays a stated constant rather than
+    # an inherited default that could shift under us.
+    wal_autocheckpoint: 1000
 
 # TLS is terminated by nginx (roles/nginx site). Leave headscale's own TLS off.
 tls_letsencrypt_hostname: ""
