@@ -3,7 +3,7 @@
     that:
       - sensor_modules is defined
       - sensor_modules is not string
-      - (sensor_modules | default([])) | reject('match', '^[a-z0-9_]+$') | list | length == 0
+      - sensor_modules | reject('match', '^[a-z0-9_-]+$') | list | length == 0
     fail_msg: >-
       sensor_modules must be set in host_vars to a list of kernel module names
       (lowercase letters, digits, underscore). Got: {{ sensor_modules | default('<undefined>') }}
@@ -14,16 +14,17 @@
   apt:
     pkg:
       - lm-sensors
+    policy_rc_d: 101
     cache_valid_time: 3600
   become: true
   tags:
     - lm_sensors
 
 - name: Load detected sensor modules
-  when: sensor_modules|length > 0
+  when: sensor_modules | length > 0
   copy:
     dest: /etc/modules-load.d/lm_sensors.conf
-    content: "{{ sensor_modules|join('\n') }}\n"
+    content: "{{ sensor_modules | join('\n') }}\n"
     mode: "0644"
     owner: root
     group: root
@@ -34,7 +35,7 @@
     - lm_sensors
 
 - name: Remove sensor modules
-  when: sensor_modules|length == 0
+  when: sensor_modules | length == 0
   file:
     path: /etc/modules-load.d/lm_sensors.conf
     state: absent
