@@ -85,6 +85,12 @@
   tags:
     - headscale
 
+# No validate: here -- HuJSON (JSON + comments/trailing commas) has no host-side
+# parser (python's json rejects the trailing commas; headscale's own checker is
+# in-container, and the file isn't at its in-container path when validate runs).
+# A malformed policy fails soft anyway: the unit's SIGHUP ExecReload keeps the
+# previously-loaded policy, and _verify exercises exactly that with a planted
+# malformed file. Per CLAUDE.md: omit validate rather than invent a fake one.
 - name: Render headscale ACL policy
   when: not (ansible_check_mode and headscale_user.changed)
   template:
