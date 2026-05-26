@@ -5,6 +5,8 @@
 #      compress (the divert branch, now reachable without a dpkg-owned file).
 #   3. template.yml renders + validates a drop-in, which parses clean and
 #      renders compress per zfs_root.
+#   4. both helpers honor condition:false — they gate the call without
+#      writing/editing (and without reading their target).
 - name: _verify | Create a fixture logrotate config
   copy:
     dest: /etc/logrotate.d/_verify_logrotate
@@ -96,6 +98,43 @@
         (zfs_root and tmpl is search('(?m)^\s*# compress\s*$'))
         or (not zfs_root and tmpl is search('(?m)^\s*compress\s*$'))
     fail_msg: templated drop-in did not render compress per zfs_root
+
+- name: _verify | Template helper with condition:false
+  # import_tasks (not a second import_role: tasks_from: template) so it can't be
+  # deduped against the real template test above into a trivially-passing assert.
+  import_tasks: template.yml
+  vars:
+    logrotate_args:
+      src: _verify_fixture.j2
+      dest: /etc/logrotate.d/_verify_logrotate_cond
+      condition: false
+
+- name: _verify | Stat the condition:false template dest
+  stat:
+    path: /etc/logrotate.d/_verify_logrotate_cond
+  register: logrotate_verify_cond
+  become: true
+
+- name: _verify | Assert condition:false skipped the template
+  assert:
+    that:
+      - not logrotate_verify_cond.stat.exists
+    fail_msg: condition:false still wrote the drop-in
+
+- name: _verify | Compression helper with condition:false over a bogus path
+  # condition:false must skip the replace before it reads `item`, so a path that
+  # doesn't exist must not error — and logrotate_conf is left skipped.
+  import_tasks: compression.yml
+  vars:
+    logrotate_args:
+      item: /etc/logrotate.d/_verify_does_not_exist
+      condition: false
+
+- name: _verify | Assert condition:false skipped the compression replace
+  assert:
+    that:
+      - logrotate_conf is skipped
+    fail_msg: condition:false did not skip the compression replace
 
 - name: _verify | Remove the test diversion
   # Drop the diversion the toggle registered, so a --keep box isn't left with a
