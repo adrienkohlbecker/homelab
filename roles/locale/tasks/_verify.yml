@@ -18,6 +18,29 @@
   assert:
     that: "'en_US.utf8' in locale_verify_available.stdout_lines"
     fail_msg: "en_US.utf8 not in `locale -a` -- locale_gen did not compile it"
+    quiet: true
+  tags:
+    - locale
+
+# `locale -a` listing a locale doesn't prove it's usable -- a broken
+# charmap still lists. Select it and ask glibc to resolve the character
+# map; the C-locale fallback (ANSI_X3.4-1968) or any non-UTF-8 answer
+# means en_US.UTF-8 isn't actually functional.
+- name: _verify | Resolve en_US.UTF-8 at runtime
+  command: locale charmap
+  environment:
+    LC_ALL: en_US.UTF-8
+  register: locale_verify_charmap
+  changed_when: false
+  become: true
+  tags:
+    - locale
+
+- name: _verify | Runtime charmap is UTF-8
+  assert:
+    that: "locale_verify_charmap.stdout == 'UTF-8'"
+    fail_msg: "`locale charmap` under LC_ALL=en_US.UTF-8 returned {{ locale_verify_charmap.stdout }}, not UTF-8 -- locale unusable"
+    quiet: true
   tags:
     - locale
 
@@ -32,20 +55,23 @@
   tags:
     - locale
 
+# Match the `System Locale:` line tolerant of localectl's label
+# alignment (leading indent / spacing is cosmetic and varies across
+# systemd versions); the `$` end-anchor still pins LANG as the only
+# value on that line (extra LC_* land on indented continuation lines).
 - name: _verify | System default locale is LANG=en_US.UTF-8
   assert:
-    that: "'System Locale: LANG=en_US.UTF-8' in locale_verify_localectl.stdout"
+    that: locale_verify_localectl.stdout | regex_findall('^\s*System Locale:\s+LANG=en_US\.UTF-8$', multiline=True) | length == 1
     fail_msg: "localectl System Locale is not LANG=en_US.UTF-8"
+    quiet: true
   tags:
     - locale
 
-# Guard the deliberate omission documented in tasks/main.yml: a
-# regression re-adding LC_ALL (a transient-only override) or LANGUAGE
-# (a gettext priority list, not a locale) would mask per-shell and
-# per-service locale choices. Assert the file carries LANG and nothing
-# else. `$` end-anchors stand in for `\b` -- under ansible-core 2.20 a
-# `\b` in a quoted regex inside a `that:` conditional is mangled into a
-# backspace escape and never matches (see roles/console/tasks/_verify.yml).
+# Guard the LANG-only choice documented in tasks/main.yml: assert the
+# file carries LANG and nothing else. The `$` end-anchors stand in for
+# `\b` -- under ansible-core 2.20 a `\b` in a quoted regex inside a
+# `that:` conditional is mangled into a backspace escape and never
+# matches (see roles/console/tasks/_verify.yml).
 - name: _verify | Read /etc/default/locale
   slurp:
     src: /etc/default/locale
@@ -59,9 +85,10 @@
     _content: "{{ locale_verify_file.content | b64decode }}"
   assert:
     that:
-      - _content | regex_findall('^LANG=en_US.UTF-8$', multiline=True) | length == 1
+      - _content | regex_findall('^LANG=en_US\.UTF-8$', multiline=True) | length == 1
       - _content | regex_findall('^LC_ALL=', multiline=True) | length == 0
       - _content | regex_findall('^LANGUAGE=', multiline=True) | length == 0
     fail_msg: "/etc/default/locale should set LANG only; LC_ALL or LANGUAGE was re-added"
+    quiet: true
   tags:
     - locale
