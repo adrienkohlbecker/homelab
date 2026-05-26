@@ -1,11 +1,24 @@
 # _verify is test-only by contract (runs only under test/testrole.py).
-# It exercises the role's load-bearing invariant — the "no tenants →
-# don't wedge" gate documented in tasks/main.yml's head comment — by
-# asserting the empty-conf.d branch, then dropping a self-contained
-# sentinel fragment and asserting the unit reaches active, then
-# removing the sentinel and asserting the unit returns to
-# stopped+disabled. The sentinel uses interface lo and a TEST-NET-1
-# VIP so no VRRP traffic leaves the host.
+# It exercises the role's load-bearing invariants — documented in
+# tasks/main.yml's head comment — against the live unit on the box VM:
+#
+#   * conf.d perms + the gating drop-in (incl. its ExecReload validate).
+#   * Populated conf.d  -> unit active+enabled, and re-running the role
+#     is idempotent (no spurious restart). The harness idempotence pass
+#     only sees box's empty conf.d, so the populated path is checked here.
+#   * A base-conf change reloads hitlessly (SIGHUP), never restarts, so
+#     the VIP does not flap.
+#   * A malformed fragment is NEVER pushed onto the live daemon: a direct
+#     `systemctl reload` aborts on the ExecReload validate, and a role
+#     converge aborts on its own keepalived -t gate — both leaving the
+#     daemon running the previous good config.
+#   * Empty conf.d  -> unit stopped+disabled.
+#
+# The sentinel uses the box default interface (keepalived refuses lo and
+# dummy interfaces — no multicast) and a TEST-NET-1 VIP, so no VRRP
+# traffic of consequence leaves the closed VM bridge. The restart probe
+# throughout is status.ActiveEnterTimestampMonotonic: a reload leaves it
+# unchanged, a restart bumps it.
 
 - name: _verify | Stat conf.d directory
   stat:
@@ -28,30 +41,18 @@
   register: _keepalived_dropin
   become: true
 
-- name: _verify | Drop-in carries the expected ConditionPathExistsGlob
+- name: _verify | Drop-in carries the conf.d gate and the ExecReload validate
+  vars:
+    _dropin: "{{ _keepalived_dropin.content | b64decode }}"
   assert:
     that:
-      - "'ConditionPathExistsGlob=/etc/keepalived/conf.d/*.conf' in (_keepalived_dropin.content | b64decode)"
+      - "'ConditionPathExistsGlob=/etc/keepalived/conf.d/*.conf' in _dropin"
+      # F16: the reload path runs keepalived -t before SIGHUP.
+      - "'ExecReload=/usr/sbin/keepalived -t -f /etc/keepalived/keepalived.conf' in _dropin"
 
-# Branch 1: empty conf.d → unit stopped + disabled (the role's previous
-# converge left it this way; testrole.py's box fixture has no tenant).
-- name: _verify | Empty-conf.d branch — query unit state
-  systemd:
-    name: keepalived
-  register: _keepalived_unit_empty
-  become: true
-
-- name: _verify | Empty-conf.d branch — assert inactive + disabled
-  assert:
-    that:
-      - _keepalived_unit_empty.status.ActiveState == 'inactive'
-      - _keepalived_unit_empty.status.UnitFileState in ['disabled', 'masked']
-
-# Branch 2: drop a self-contained sentinel fragment and re-run the role.
-# Keepalived refuses loopback (`lo`) and dummy interfaces (no multicast
-# support) for VRRP, so use the box's actual default interface. The
-# GARPs keepalived emits as MASTER go onto the harness's closed VM
-# bridge — harmless. TEST-NET-1 VIP guarantees no collision with prod.
+# Branch A: drop a self-contained sentinel fragment and re-run the role.
+# TEST-NET-1 VIP guarantees no collision with prod; the GARPs keepalived
+# emits as it transitions go onto the harness closed VM bridge — harmless.
 - name: _verify | Drop sentinel conf.d fragment
   copy:
     content: |
@@ -87,8 +88,154 @@
       - _keepalived_unit_pop.status.ActiveState == 'active'
       - _keepalived_unit_pop.status.UnitFileState == 'enabled'
 
-# Branch 3: remove the sentinel and re-run; the disable branch should
-# return the unit to stopped+disabled.
+# Pin the active-enter timestamp; every later branch asserts it is
+# unchanged (no restart -> no VIP flap).
+- name: _verify | Capture the active-enter timestamp (restart probe)
+  set_fact:
+    _keepalived_ts_active: "{{ _keepalived_unit_pop.status.ActiveEnterTimestampMonotonic }}"
+
+# Branch B (F12): re-run the role with conf.d unchanged. The harness
+# idempotence pass runs against box's empty conf.d (no tenant), so the
+# populated path — the one most likely to churn (Enable/Start/Reload
+# firing every converge) — is only ever idempotence-checked here.
+- name: _verify | Idempotence — re-run the role with no change
+  import_role:
+    name: keepalived
+
+- name: _verify | Idempotence — query unit state
+  systemd:
+    name: keepalived
+  register: _keepalived_unit_idem
+  become: true
+
+- name: _verify | Idempotence — still active+enabled, no spurious restart
+  assert:
+    that:
+      - _keepalived_unit_idem.status.ActiveState == 'active'
+      - _keepalived_unit_idem.status.UnitFileState == 'enabled'
+      - _keepalived_unit_idem.status.ActiveEnterTimestampMonotonic == _keepalived_ts_active
+
+# Branch C (F11): a base-conf change must reload hitlessly (SIGHUP), not
+# restart. Perturb the on-disk base conf so the role's `copy` detects
+# drift and rewrites it (changed -> the role's reload trigger fires),
+# then assert the unit was reloaded (a fresh reload line in the journal)
+# without re-entering the active state (timestamp unchanged).
+- name: _verify | Snapshot keepalived journal before the base-conf reload
+  command: journalctl -u keepalived --no-pager
+  register: _keepalived_journal_pre
+  changed_when: false
+  become: true
+
+- name: _verify | Record the pre-reload SIGHUP line count
+  set_fact:
+    _keepalived_reload_pre: "{{ _keepalived_journal_pre.stdout_lines | select('search', '(?i)reload') | list | length }}"
+
+- name: _verify | Perturb the base conf on disk to force a reload next run
+  lineinfile:
+    path: /etc/keepalived/keepalived.conf
+    line: "# _verify reload perturbation"
+    insertafter: EOF
+  become: true
+
+- name: _verify | Re-run keepalived role to exercise the reload path
+  import_role:
+    name: keepalived
+
+- name: _verify | Reload branch — query unit state
+  systemd:
+    name: keepalived
+  register: _keepalived_unit_reloaded
+  become: true
+
+- name: _verify | Snapshot keepalived journal after the base-conf reload
+  command: journalctl -u keepalived --no-pager
+  register: _keepalived_journal_post
+  changed_when: false
+  become: true
+
+- name: _verify | A SIGHUP reload fired and the unit was not restarted
+  assert:
+    that:
+      - _keepalived_unit_reloaded.status.ActiveState == 'active'
+      # Active-enter timestamp unchanged => reloaded in place, not restarted.
+      - _keepalived_unit_reloaded.status.ActiveEnterTimestampMonotonic == _keepalived_ts_active
+      # A new reload line appeared => the role actually reloaded (vs a no-op).
+      - (_keepalived_journal_post.stdout_lines | select('search', '(?i)reload') | list | length) > (_keepalived_reload_pre | int)
+
+# Branch D (F9 + F16 abort path): a malformed fragment must never reach
+# the live daemon. First a direct `systemctl reload` must abort on the
+# drop-in ExecReload validate (keepalived -t), then a full role converge
+# must abort on its own validate gate — both leaving keepalived running
+# the previous good config.
+# A bogus *top-level* keyword makes keepalived -t exit non-zero (rc=5,
+# "Unknown keyword") — the same hard failure the include_check revert
+# (b47e09536) hit. Unknown keywords *inside* a block are often only
+# warned about, so keep this at the fragment top level to be deterministic.
+- name: _verify | Drop a malformed sentinel fragment
+  copy:
+    content: |
+      _verify_bogus_top_level_keyword
+    dest: /etc/keepalived/conf.d/_verify_bad.conf
+    owner: root
+    group: root
+    mode: "0640"
+  become: true
+
+- name: _verify | F16 — systemctl reload aborts on the ExecReload validate
+  command: systemctl reload keepalived
+  register: _keepalived_bad_reload
+  changed_when: false
+  failed_when: false
+  become: true
+
+- name: _verify | F16 — reload failed and the daemon kept the good config
+  systemd:
+    name: keepalived
+  register: _keepalived_unit_after_bad_reload
+  become: true
+
+- name: _verify | F16 — assert reload rejected, unit untouched
+  assert:
+    that:
+      - _keepalived_bad_reload.rc != 0
+      - _keepalived_unit_after_bad_reload.status.ActiveState == 'active'
+      - _keepalived_unit_after_bad_reload.status.ActiveEnterTimestampMonotonic == _keepalived_ts_active
+
+- name: _verify | F9 — a converge with a malformed fragment must fail
+  block:
+    - name: _verify | Re-run keepalived role expecting a validation failure
+      import_role:
+        name: keepalived
+    - name: _verify | Role unexpectedly succeeded on a malformed fragment
+      fail:
+        msg: >-
+          keepalived role converged with a malformed conf.d fragment present;
+          the keepalived -t gate did not fail the run as it must.
+  rescue:
+    - name: _verify | Role aborted on the malformed fragment as expected
+      debug:
+        msg: keepalived role failed validation as expected — daemon left untouched.
+
+- name: _verify | F9 — query unit state after the failed converge
+  systemd:
+    name: keepalived
+  register: _keepalived_unit_after_bad_converge
+  become: true
+
+- name: _verify | F9 — daemon still active on the good config, never reloaded
+  assert:
+    that:
+      - _keepalived_unit_after_bad_converge.status.ActiveState == 'active'
+      - _keepalived_unit_after_bad_converge.status.ActiveEnterTimestampMonotonic == _keepalived_ts_active
+
+- name: _verify | Remove the malformed fragment
+  file:
+    path: /etc/keepalived/conf.d/_verify_bad.conf
+    state: absent
+  become: true
+
+# Branch E: remove the good sentinel and re-run; the disable branch
+# should return the unit to stopped+disabled (last tenant left).
 - name: _verify | Remove sentinel fragment
   file:
     path: /etc/keepalived/conf.d/_verify_sentinel.conf
