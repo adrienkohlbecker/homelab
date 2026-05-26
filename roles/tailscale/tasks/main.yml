@@ -118,10 +118,15 @@
     - tailscale
 
 - name: Determine tailscale backend state
+  # The startswith('{') guard is load-bearing: tailscaled can return rc==0 with
+  # non-JSON on stdout (a warning banner mid-restart), and from_json would then
+  # raise and fail the play. Jinja `and` short-circuits, so from_json only runs
+  # once we know rc==0, stdout is non-empty, and it looks like a JSON object.
   set_fact:
     tailscale_running: >-
       {{ (tailscale_status.rc | default(1)) == 0
          and (tailscale_status.stdout | default('') | trim | length > 0)
+         and (tailscale_status.stdout | default('') | trim).startswith('{')
          and ((tailscale_status.stdout | from_json).BackendState | default('')) == 'Running' }}
   tags:
     - tailscale
@@ -154,11 +159,29 @@
       changed_when: false
       failed_when: false
 
+    # This is also the control-plane reachability gate: it (and `users create`
+    # above) delegate to tailscale_headscale_host, so if headscale isn't up there
+    # -- the common case when lab/pug are converged via `--tags tailscale` before
+    # fox -- the podman exec fails. failed_when:false + the assert below turn that
+    # into a clear "converge fox first" message instead of an opaque podman error.
     - name: List headscale users to resolve the user id
       command: podman exec headscale headscale users list -o json
       delegate_to: "{{ tailscale_headscale_host }}"
       register: tailscale_users
       changed_when: false
+      failed_when: false
+
+    - name: Assert the headscale control plane is reachable
+      assert:
+        that:
+          - tailscale_users.rc == 0
+          - (tailscale_users.stdout | default('') | trim).startswith('[')
+        fail_msg: >-
+          headscale control plane on {{ tailscale_headscale_host }} is not
+          answering (rc={{ tailscale_users.rc | default('n/a') }}). It must be
+          converged and up before {{ inventory_hostname }} can register: this
+          role mints its pre-auth key and approves routes by delegating to
+          {{ tailscale_headscale_host }}. Converge fox/headscale there first.
 
     - name: Mint a single-use pre-auth key
       command: >-
@@ -186,6 +209,7 @@
     --authkey {{ tailscale_preauth_key }}
     --advertise-routes={{ tailscale_advertise_routes }}
     {{ tailscale_advertise_exit_node | ternary('--advertise-exit-node', '') }}
+    --accept-routes={{ tailscale_accept_routes | ternary('true', 'false') }}
     --accept-dns={{ tailscale_accept_dns | ternary('true', 'false') }}
     --timeout=60s
     --reset
@@ -213,6 +237,40 @@
   tags:
     - tailscale
 
+# Reconcile advertised routes on an ALREADY-registered node. `tailscale up` is
+# gated on not-Running, so editing tailscale_advertise_routes / the exit-node
+# flag later would otherwise never take effect on a live node (the old comment
+# above said "re-register by hand"). `tailscale set` applies it in place. Gate on
+# drift between desired and the node's own local prefs (`tailscale debug prefs` ->
+# AdvertiseRoutes, which carries the exit-node 0.0.0.0/0 + ::/0 when advertised)
+# so steady-state converges detect nothing and stay idempotent. Only meaningful
+# once Running -- first registration is handled by `tailscale up` above.
+- name: Read the node's locally-advertised routes
+  command: tailscale debug prefs
+  register: tailscale_prefs
+  changed_when: false
+  check_mode: false
+  failed_when: false
+  become: true
+  tags:
+    - tailscale
+
+- name: Reconcile advertised routes / exit node on a registered node
+  command: >-
+    tailscale set
+    --advertise-routes={{ tailscale_advertise_routes }}
+    --advertise-exit-node={{ tailscale_advertise_exit_node | ternary('true', 'false') }}
+  when:
+    - not ansible_check_mode
+    - tailscale_running | bool
+    - (tailscale_prefs.stdout | default('') | trim).startswith('{')
+    - (tailscale_desired_routes | sort)
+      != ((tailscale_prefs.stdout | from_json).AdvertiseRoutes | default([]) | sort)
+  changed_when: true
+  become: true
+  tags:
+    - tailscale
+
 # Route approval is a second opt-in on the control server, keyed by the node's
 # headscale ID (assigned at registration). Look the node up by its given name
 # (= this host's short hostname) on the headscale host.
@@ -237,19 +295,21 @@
   until: >-
     ansible_check_mode
     or ((tailscale_nodes.stdout | default('[]') | from_json)
-        | selectattr('given_name', 'equalto', ansible_hostname) | list | length > 0)
+        | selectattr('given_name', 'equalto', ansible_hostname | lower) | list | length > 0)
   become: true
   tags:
     - tailscale
 
 # default({}) so a fresh system (no node registered yet -- e.g. the --check
 # phase, where `tailscale up` is skipped) yields an empty dict instead of an
-# undefined-var error in the tasks below.
+# undefined-var error in the tasks below. ansible_hostname | lower: headscale
+# sanitizes given_name to lowercase, so an exact-case match would miss a node on
+# any mixed-case host (matches bunk.yml, which hit this with DSM's "Bunk").
 - name: Resolve this host's headscale node
   set_fact:
     tailscale_node: >-
       {{ (tailscale_nodes.stdout | from_json)
-         | selectattr('given_name', 'equalto', ansible_hostname)
+         | selectattr('given_name', 'equalto', ansible_hostname | lower)
          | list | first | default({}) }}
   tags:
     - tailscale
@@ -262,9 +322,12 @@
     that:
       - tailscale_node.id is defined
     fail_msg: >-
-      No headscale node named '{{ ansible_hostname }}' found on
-      {{ tailscale_headscale_host }} -- registration via `tailscale up` did not
-      complete. Check tailscaled logs and the login-server reachability.
+      No headscale node with given_name {{ ansible_hostname | lower }} on
+      {{ tailscale_headscale_host }}. Either `tailscale up` registration did not
+      complete (check tailscaled logs + login-server reachability), or this node
+      is already Running but joined a DIFFERENT control plane -- the liveness-only
+      gate then skips re-registration, so it never appears here. In that case
+      `tailscale down` on {{ inventory_hostname }} and re-run to rebind.
   when: not ansible_check_mode
   tags:
     - tailscale

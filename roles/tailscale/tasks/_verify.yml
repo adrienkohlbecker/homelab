@@ -25,19 +25,24 @@
   set_fact:
     _verify_node: >-
       {{ (_verify_nodes.stdout | from_json)
-         | selectattr('given_name', 'equalto', ansible_hostname)
+         | selectattr('given_name', 'equalto', ansible_hostname | lower)
          | list | first | default({}) }}
 
-- name: _verify | the node registered and its advertised routes were approved
+# Derive the expected set from the same host_vars the role advertises from
+# (subnets + the exit-node defaults), rather than hardcoding box's CIDR -- so the
+# assertion can't silently drift from tailscale_advertise_routes.
+- name: _verify | the node registered and every advertised route was approved
   assert:
     that:
       - _verify_node.id is defined
-      - "'10.99.99.0/24' in (_verify_node.approved_routes | default([]))"
-      - "'0.0.0.0/0' in (_verify_node.approved_routes | default([]))"
+      - >-
+        ((tailscale_advertise_routes.split(','))
+         + (tailscale_advertise_exit_node | ternary(['0.0.0.0/0', '::/0'], [])))
+        | difference(_verify_node.approved_routes | default([])) | length == 0
     fail_msg: >-
-      headscale node for {{ ansible_hostname }} is missing or its advertised
-      subnet/exit routes were not approved:
-      {{ _verify_node | default({}) }}
+      headscale node for {{ ansible_hostname | lower }} is missing, or its
+      advertised subnet/exit routes were not all approved.
+      approved={{ _verify_node.approved_routes | default([]) }}
 
 # The forwarding sysctls are what make the approved subnet route / exit node
 # actually pass traffic -- assert the role set them (live value, not just the
