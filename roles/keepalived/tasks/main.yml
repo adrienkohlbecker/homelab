@@ -125,15 +125,16 @@
   tags:
     - keepalived
 
-# excludes / size: '1' so a zero-byte placeholder (plain `include` still
-# loads it and then wedges, since `include` neither validates nor skips
-# empty matches) or a stale `.disabled` rollback fragment doesn't trip
-# the gate.
+# size: '1' so a zero-byte placeholder doesn't trip the gate — plain
+# `include` still loads it and then wedges, since `include` neither
+# validates nor skips empty matches. The `.*` exclude skips editor/dot
+# tempfiles; `*.conf` already ignores the `.bak~`-style backups ansible
+# leaves on a fragment edit.
 - name: Count number of configurations
   find:
     paths: /etc/keepalived/conf.d
     patterns: '*.conf'
-    excludes: [ '.*', '*.disabled' ]
+    excludes: [ '.*' ]
     size: '1'
   register: keepalived_confs
   become: true
@@ -178,6 +179,16 @@
       when: '"backup_file" in keepalived_base_conf'
       file:
         path: "{{ keepalived_base_conf.backup_file }}"
+        state: absent
+      become: true
+    # First-ever write on a fresh host has no backup to restore; drop the
+    # broken file so a SIGHUP-reload / boot-time start can't pick it up.
+    # (A committed-bad base conf is a CI failure, but this completes the
+    # nginx mirror rather than leaving a half-rescue.)
+    - name: Remove the freshly-added base configuration
+      when: keepalived_base_conf.changed and "backup_file" not in keepalived_base_conf
+      file:
+        path: /etc/keepalived/keepalived.conf
         state: absent
       become: true
     - name: Fail after restoring base configuration
