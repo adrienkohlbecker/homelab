@@ -114,7 +114,7 @@
   command: ss -ulnH
   register: _verify_stun_listen
   changed_when: false
-  failed_when: "'[::]:3478' not in _verify_stun_listen.stdout"
+  failed_when: "('[::]:' ~ service_ports.headscale_stun) not in _verify_stun_listen.stdout"
   become: true
 
 # netavark's firewall driver is iptables on jammy/noble (see roles/podman
@@ -124,7 +124,7 @@
 # _verify) is noble today, so the iptables branch is the one that executes; the
 # nft branch is a best-effort placeholder to refine when the box base OS moves.
 - name: _verify | netavark forwards inbound v6 STUN into the headscale container (iptables)
-  shell: set -o pipefail; ip6tables -t nat -S | grep -- "--dport 3478 -j DNAT"
+  shell: set -o pipefail; ip6tables -t nat -S | grep -- "--dport {{ service_ports.headscale_stun }} -j DNAT"
   args:
     executable: /bin/bash
   register: _verify_stun_dnat
@@ -133,7 +133,7 @@
   become: true
 
 - name: _verify | netavark forwards inbound v6 STUN into the headscale container (nftables)
-  shell: set -o pipefail; nft list ruleset | grep -- "3478" | grep -iq "dnat"
+  shell: set -o pipefail; nft list ruleset | grep -- "{{ service_ports.headscale_stun }}" | grep -iq "dnat"
   args:
     executable: /bin/bash
   register: _verify_stun_dnat_nft
