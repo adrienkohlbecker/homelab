@@ -16,7 +16,7 @@
 # Doubles as the A2 check: the sshd jail was pinned explicitly rather
 # than left to upstream defaults. fail2ban cold-starts in a few seconds
 # after enable; status returns error before the daemon is ready.
-- name: _verify | fail2ban-client status lists the sshd jail
+- name: _verify | Fail2ban-client status lists the sshd jail
   command: fail2ban-client status
   register: _verify_status
   retries: 15
@@ -34,7 +34,7 @@
 # proves the daemon parsed the rendered jail and loaded each expected
 # entry — catches empty-interpolation regressions of site_subnets.home
 # or wireguard_subnet that would silently shrink the whitelist.
-- name: _verify | fail2ban-client knows the configured ignoreip
+- name: _verify | Fail2ban-client knows the configured ignoreip
   command: fail2ban-client get sshd ignoreip
   register: _verify_ignoreip
   changed_when: false
@@ -72,7 +72,7 @@
 # of arbitrary IPs), and only the real sshd binary processes
 # carry `_COMM=sshd`. So we state-check the backend wiring and
 # leave the BanManager-via-CLI path to the synthetic-ban below.
-- name: _verify | sshd jail uses the systemd journal backend
+- name: _verify | Sshd jail uses the systemd journal backend
   command: fail2ban-client status sshd
   register: _verify_status_sshd
   changed_when: false
@@ -95,7 +95,7 @@
 # (e.g. the .local not winning over sendmail-common.conf) would surface.
 # actionban is left intact and not asserted here (it carries the whois
 # expansion that the synthetic-ban path below already exercises).
-- name: _verify | sendmail action start/stop handlers are empty
+- name: _verify | Sendmail action start/stop handlers are empty
   command: fail2ban-client get sshd action sendmail-whois-lines {{ item }}
   register: _verify_mail_handlers
   changed_when: false
@@ -135,7 +135,7 @@
 # Negative assertion: the iptables-nft compat `ip filter` table either
 # does not exist (rc != 0) or does not carry an f2b-sshd chain. If it
 # does, the banaction override silently reverted to iptables-multiport.
-- name: _verify | iptables-nft compat path is NOT used
+- name: _verify | Iptables-nft compat path is NOT used
   command: nft list table ip filter
   register: _verify_ip_filter
   changed_when: false

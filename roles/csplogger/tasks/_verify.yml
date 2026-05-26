@@ -59,7 +59,7 @@
 # Content-Type rewritten to application/json. The shared Origin matches
 # the production allowlist regex (any subdomain of {{ domain }}) so
 # through-nginx probes reach the proxied path.
-- name: _verify | shared CSP body fixtures
+- name: _verify | Shared CSP body fixtures
   set_fact:
     csplogger_verify_host: "csplogger.{{ inventory_hostname }}.{{ domain }}"
     # Pick an origin under {{ domain }} that does NOT include the
@@ -96,7 +96,7 @@
 # two standalone probes below (foreign Origin, OPTIONS preflight) carry
 # bespoke failed_when on response headers that don't compose cleanly
 # with the loop.
-- name: _verify | per-case nginx probes
+- name: _verify | Per-case nginx probes
   uri:
     url: "{{ item.url | default('https://localhost/log') }}"
     method: "{{ item.method | default('POST') }}"

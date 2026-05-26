@@ -43,9 +43,15 @@
     # the FORWARD chain's iif=wg0/oif=podman0 path resolves to.
     probe_container_dest: "{{ podman_default_network | ansible.utils.ipmath(2) }}"
 
-- import_tasks: _verify_rig.yml
-- import_tasks: _verify_input.yml
-- import_tasks: _verify_forward.yml
-- import_tasks: _verify_drops.yml
-- import_tasks: _verify_counters.yml
-- import_tasks: _verify_lifecycle.yml
+- name: _verify | Set up netns/veth test rig
+  import_tasks: _verify_rig.yml
+- name: _verify | Run INPUT chain probes
+  import_tasks: _verify_input.yml
+- name: _verify | Run FORWARD chain probes
+  import_tasks: _verify_forward.yml
+- name: _verify | Run drop-path probes
+  import_tasks: _verify_drops.yml
+- name: _verify | Assert nftables counters
+  import_tasks: _verify_counters.yml
+- name: _verify | Run lifecycle (stop/start) probes
+  import_tasks: _verify_lifecycle.yml

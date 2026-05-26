@@ -2,7 +2,7 @@
 # is wired. Retries cover cold-start (--health-start-period is 30s; the
 # budget below gives ~60s headroom). Host header matches the nginx leg
 # below to future-proof against ALLOWED_HOSTS-style restrictions.
-- name: _verify | influxdb /health on loopback port
+- name: _verify | Influxdb /health on loopback port
   uri:
     url: http://localhost:{{ service_ports.influxdb }}/health
     headers:
@@ -20,7 +20,7 @@
 # so a cookie-less GET / has to land on Authelia's 302 redirect chain.
 # Validates the auth_request wiring (without it the request would reach
 # InfluxDB and return the SPA's HTML 200).
-- name: _verify | influxdb / gate redirects unauthenticated to Authelia
+- name: _verify | Influxdb / gate redirects unauthenticated to Authelia
   uri:
     url: https://localhost/
     headers:
@@ -61,7 +61,7 @@
 # 204` in /internal/authelia) and reach InfluxDB unchanged. /health
 # returns 200 with status=pass; the same probe also covers the
 # proxy_pass wiring (a typo in nginx_site_args would fail this too).
-- name: _verify | influxdb /health reachable via nginx with bypass-on-Authorization
+- name: _verify | Influxdb /health reachable via nginx with bypass-on-Authorization
   vars:
     _admin_token: "{{ (_verify_admin_auth.stdout | from_json | first).token }}"
   uri:
@@ -81,7 +81,7 @@
 # Service-native CLI liveness -- catches a regression where /health
 # returns 200 but the in-container CLI can't talk to influxd (e.g. a
 # misconfigured /etc/influxdb2/configs after a bind-mount perms change).
-- name: _verify | influx ping succeeds
+- name: _verify | Influx ping succeeds
   command: podman exec influxdb influx ping
   changed_when: false
   become: true
@@ -123,7 +123,7 @@
 # its per-bucket fact. An Undefined fact would mean either the
 # bucket-scoped auth was never created or the regex/selectattr path
 # in bucket.yml's token-extraction stopped matching.
-- name: _verify | bucket.yml surfaced a write-auth token for verify_bucket
+- name: _verify | Bucket.yml surfaced a write-auth token for verify_bucket
   assert:
     that:
       - influxdb_bucket_verify_bucket_token is defined
@@ -198,7 +198,7 @@
 # next-step message; exercise the path so a regression in the selectattr
 # expression or assert wording is loud here rather than misleading on a
 # real prod apply.
-- name: _verify | bucket.yml against a nonexistent org fails at the assert
+- name: _verify | Bucket.yml against a nonexistent org fails at the assert
   block:
     - name: _verify | Call bucket.yml with definitely_not_here org
       import_role:
@@ -230,7 +230,7 @@
 # matter: the image's entrypoint actively flaps config/ to 0775 every
 # restart, so a uid drift on it would silently break the CLI's
 # /etc/influxdb2/configs reads inside the container.
-- name: _verify | influxdb data and config dirs are owned by influxdb
+- name: _verify | Influxdb data and config dirs are owned by influxdb
   stat:
     path: /mnt/services/influxdb/{{ item }}
   register: _verify_dir_owner

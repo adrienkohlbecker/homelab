@@ -24,24 +24,24 @@
 # main apply + _verify both see the ghost. No cleanup -- the harness
 # destroys the VM at end of test.
 
-- name: _setup | install linux-modules-extra to make scsi_debug available
+- name: _setup | Install linux-modules-extra to make scsi_debug available
   apt:
     pkg: "linux-modules-extra-{{ ansible_kernel }}"
     cache_valid_time: 3600
   become: true
 
-- name: _setup | load scsi_debug to provide a fake rotational disk
+- name: _setup | Load scsi_debug to provide a fake rotational disk
   modprobe:
     name: scsi_debug
     params: "dev_size_mb=8 num_tgts=1"
   become: true
 
-- name: _setup | wait for udev to populate /dev/disk/by-id/scsi-*
+- name: _setup | Wait for udev to populate /dev/disk/by-id/scsi-*
   command: udevadm settle
   changed_when: false
   become: true
 
-- name: _setup | locate the scsi_debug block device
+- name: _setup | Locate the scsi_debug block device
   # SCSI INQUIRY pads MODEL to 16 bytes with spaces, so exact-match
   # against "scsi_debug" misses; case-glob handles the padding.
   shell: |
@@ -56,10 +56,10 @@
   become: true
   failed_when: scsi_debug_block.stdout_lines | length != 1
 
-- name: _setup | flag scsi_debug device as rotational (jammy 5.15 lacks the module param)
+- name: _setup | Flag scsi_debug device as rotational (jammy 5.15 lacks the module param)
   shell: "echo 1 > /sys/block/{{ scsi_debug_block.stdout }}/queue/rotational"
   become: true
   changed_when: true
 
-- name: _setup | refresh facts cache so main + _verify see the ghost
+- name: _setup | Refresh facts cache so main + _verify see the ghost
   setup:

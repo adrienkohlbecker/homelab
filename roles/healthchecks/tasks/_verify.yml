@@ -2,7 +2,7 @@
 # port. Retries cover cold-start (--health-start-period is 10s; budget
 # below gives 2 minutes to cover restart-after-deploy too). Uses the
 # canonical Host header since ALLOWED_HOSTS no longer includes localhost.
-- name: _verify | healthchecks answers /api/v3/status/ on its loopback port
+- name: _verify | Healthchecks answers /api/v3/status/ on its loopback port
   uri:
     url: http://localhost:{{ service_ports.healthchecks }}/api/v3/status/
     headers:
@@ -23,7 +23,7 @@
 # Validates both the auth_request wiring and the SECURE_PROXY_SSL_HEADER
 # pass-through (Django would 400 a wrong scheme before we ever see the
 # 302).
-- name: _verify | healthchecks UI gate redirects unauthenticated to Authelia
+- name: _verify | Healthchecks UI gate redirects unauthenticated to Authelia
   uri:
     url: https://localhost/
     headers:
@@ -61,7 +61,7 @@
 # check proves the vault-backed podman secret reached Django. Replaces
 # an older login-form probe that depended on Django's CSRF template
 # shape (incidental detail, churned across upstream releases).
-- name: _verify | healthchecks Django config passes manage.py check
+- name: _verify | Healthchecks Django config passes manage.py check
   command: podman exec --workdir /app/healthchecks healthchecks python manage.py check
   register: _verify_check
   changed_when: false
@@ -70,7 +70,7 @@
 # Functional WAL assertion -- confirms the WAL conversion actually
 # stuck (the prior "PRAGMA against a held DB" race silently no-op'd
 # and reported ok). Read-only probe, doesn't lock.
-- name: _verify | healthchecks sqlite is in WAL journal mode
+- name: _verify | Healthchecks sqlite is in WAL journal mode
   command: sqlite3 -readonly /mnt/services/sqlite/healthchecks/hc.sqlite 'PRAGMA journal_mode;'
   register: _verify_wal
   changed_when: false
@@ -82,7 +82,7 @@
 # mapping drift (wrong uid in the override, mismatch between
 # service_user and the unit) would land the file at a different host
 # uid silently; assert ownership so the regression is loud.
-- name: _verify | healthchecks sqlite DB is owned by healthchecks
+- name: _verify | Healthchecks sqlite DB is owned by healthchecks
   stat:
     path: /mnt/services/sqlite/healthchecks/hc.sqlite
   register: _verify_db_owner

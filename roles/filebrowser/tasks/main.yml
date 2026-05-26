@@ -21,7 +21,7 @@
 # the corresponding link between `present` and `absent` so a flag
 # change is reflected on the next converge without a manual cleanup.
 # `src` must be omitted when state != link/hard, hence the ternary.
-- name: Place filebrowser tree symlinks under /srv/filebrowser
+- name: Place filebrowser tree symlinks under /srv/filebrowser  # noqa: risky-file-permissions
   file:
     path: /srv/filebrowser/{{ item.name }}
     src: "{{ item.src if item.enabled | bool else omit }}"

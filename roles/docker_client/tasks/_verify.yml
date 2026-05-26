@@ -14,14 +14,14 @@
 # is expected; we only care that stdout reports a parseable client
 # version. failed_when: false keeps the task green so the assert
 # below speaks for itself.
-- name: _verify | docker CLI is installed and runnable
+- name: _verify | Docker CLI is installed and runnable
   command: >-
     docker version --format '{% raw %}{{.Client.Version}}{% endraw %}'
   changed_when: false
   failed_when: false
   register: _verify_docker_version
 
-- name: _verify | docker client version parses
+- name: _verify | Docker client version parses
   assert:
     that:
       - _verify_docker_version.stdout is match('^[0-9]+\.[0-9]+\.[0-9]+')
@@ -29,12 +29,12 @@
       Expected docker client version like X.Y.Z,
       got stdout={{ _verify_docker_version.stdout | default('') }}
 
-- name: _verify | buildx plugin loads
+- name: _verify | Buildx plugin loads
   command: docker buildx version
   changed_when: false
   register: _verify_buildx_version
 
-- name: _verify | buildx version is non-empty
+- name: _verify | Buildx version is non-empty
   assert:
     that:
       - _verify_buildx_version.stdout | length > 0
@@ -42,12 +42,12 @@
       docker buildx version produced no stdout;
       got stdout={{ _verify_buildx_version.stdout | default('') }}
 
-- name: _verify | compose plugin loads
+- name: _verify | Compose plugin loads
   command: docker compose version --short
   changed_when: false
   register: _verify_compose_version
 
-- name: _verify | compose version is non-empty
+- name: _verify | Compose version is non-empty
   assert:
     that:
       - _verify_compose_version.stdout | length > 0
@@ -63,7 +63,7 @@
 # quirks -- e.g. `docker context inspect default` returns the
 # static context's stored endpoint, which DOCKER_HOST overrides
 # at the resolver level rather than mutating.
-- name: _verify | login-shell shim exports DOCKER_HOST
+- name: _verify | Login-shell shim exports DOCKER_HOST
   command: bash -lc 'printf %s "$DOCKER_HOST"'
   changed_when: false
   register: _verify_docker_host_env
@@ -88,7 +88,7 @@
   changed_when: false
   register: _verify_ansible_user_groups
 
-- name: _verify | ansible_user_id resolves to podman-socket member
+- name: _verify | Ansible_user_id resolves to podman-socket member
   assert:
     that:
       - "'podman-socket' in _verify_ansible_user_groups.stdout.split()"

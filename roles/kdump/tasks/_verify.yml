@@ -51,7 +51,7 @@
   failed_when: (kdump_verify_kexec_size.stdout | trim | int) == 0
   become: true
 
-- name: _verify | Kdump-tools.service is active post-reboot
+- name: _verify | Kdump-tools.service is active post-reboot  # noqa: command-instead-of-module
   when: ansible_architecture != 'aarch64'
   command: systemctl is-active kdump-tools
   register: kdump_verify_active

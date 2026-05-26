@@ -15,7 +15,7 @@
   changed_when: false
   failed_when: wireguard_listen_port.stdout | int != (listen_port | default('51820') | int)
 
-- name: _verify | Assert peer count matches wireguard_peers - 1
+- name: _verify | Assert peer count matches wireguard_peers - 1  # noqa: risky-shell-pipe
   shell: wg show {{ iface | default('wg0') }} peers | wc -l
   args:
     executable: /bin/bash

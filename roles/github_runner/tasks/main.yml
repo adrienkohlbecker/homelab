@@ -367,8 +367,8 @@
         - github_runner
   loop: "{{ github_runner_instances }}"
   loop_control:
-    loop_var: runner_instance
-    label: "{{ runner_instance.repo }}_{{ runner_instance.suffix }}"
+    loop_var: github_runner_instance
+    label: "{{ github_runner_instance.repo }}_{{ github_runner_instance.suffix }}"
   tags:
     - github_runner
 

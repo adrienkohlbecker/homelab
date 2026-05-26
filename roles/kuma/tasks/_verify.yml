@@ -3,7 +3,7 @@
 # time _verify runs HTTP is already up. The short retry covers the tiny
 # race between active transition and this task firing; a real failure
 # reports in seconds, not minutes.
-- name: _verify | kuma answers on its loopback port
+- name: _verify | Kuma answers on its loopback port
   uri:
     url: http://localhost:{{ service_ports.kuma }}/
     status_code: 200
@@ -16,7 +16,7 @@
 # nginx auth-gate probe -- the UI subdomain is `auth: required`, so a
 # cookieless GET / has to land on Authelia's 302 redirect chain. Validates
 # both the auth_request wiring and the proxy_pass port.
-- name: _verify | kuma UI gate redirects unauthenticated to Authelia
+- name: _verify | Kuma UI gate redirects unauthenticated to Authelia
   uri:
     url: https://localhost/
     headers:
@@ -55,7 +55,7 @@
 # symlink onto the dedicated sqlite dataset. A snapshot-restore or a
 # regression in sqlite_dataset could leave a real file at the dest; assert
 # the symlink shape so the drift is loud, not silent.
-- name: _verify | kuma.db is a symlink onto the sqlite dataset
+- name: _verify | Kuma.db is a symlink onto the sqlite dataset
   stat:
     path: /mnt/services/kuma/kuma.db
     follow: false
@@ -71,7 +71,7 @@
 # should land owned by that user. A regression that drops the --user
 # flag or re-introduces uidmap could land the file as root or another
 # uid silently; assert ownership so the regression is loud.
-- name: _verify | kuma sqlite DB is owned by kuma
+- name: _verify | Kuma sqlite DB is owned by kuma
   stat:
     path: /mnt/services/sqlite/kuma/kuma.db
   register: _verify_db_owner
@@ -86,7 +86,7 @@
 # assert the row was left unset. The populated-user (prod) path can't be
 # driven here without scripting kuma's socket.io setup wizard to mint a
 # user, so only the safety-critical guard is exercised in-harness.
-- name: _verify | disableAuth stays unset while the user table is empty
+- name: _verify | DisableAuth stays unset while the user table is empty
   command: >-
     sqlite3 -readonly /mnt/services/sqlite/kuma/kuma.db
     "SELECT (SELECT count(*) FROM user),
@@ -103,7 +103,7 @@
 # a held DB silently no-ops; default journal=delete if WAL isn't forced)
 # would land the file on the right dataset but with the wrong access
 # pattern. Read-only probe, doesn't lock.
-- name: _verify | kuma sqlite is in WAL journal mode
+- name: _verify | Kuma sqlite is in WAL journal mode
   command: sqlite3 -readonly /mnt/services/sqlite/kuma/kuma.db 'PRAGMA journal_mode;'
   register: _verify_wal
   changed_when: false
@@ -116,9 +116,9 @@
 # an empty user table). Run against a synthetic kuma-shaped DB so we neither
 # mutate the live instance nor depend on kuma's full user schema; the
 # statement mirrors main.yml's seed -- keep the two in sync.
-- name: _verify | disableAuth seed flips once, then is idempotent
+- name: _verify | DisableAuth seed flips once, then is idempotent
   block:
-    - name: _verify | build a synthetic kuma-shaped DB with one user
+    - name: _verify | Build a synthetic kuma-shaped DB with one user
       command: >-
         sqlite3 /tmp/_verify_kuma_seed.db
         "CREATE TABLE user (id INTEGER PRIMARY KEY, username TEXT);
@@ -127,7 +127,7 @@
       changed_when: true
       become: true
 
-    - name: _verify | first seed pass mutates (changes()=1)
+    - name: _verify | First seed pass mutates (changes()=1)
       command: >-
         sqlite3 -cmd ".timeout 30000" /tmp/_verify_kuma_seed.db
         "INSERT INTO setting (key, value, type)
@@ -140,7 +140,7 @@
       failed_when: (_verify_seed_first.stdout | trim) != '1'
       become: true
 
-    - name: _verify | second seed pass is a no-op (changes()=0)
+    - name: _verify | Second seed pass is a no-op (changes()=0)
       command: >-
         sqlite3 -cmd ".timeout 30000" /tmp/_verify_kuma_seed.db
         "INSERT INTO setting (key, value, type)
@@ -153,7 +153,7 @@
       failed_when: (_verify_seed_second.stdout | trim) != '0'
       become: true
   always:
-    - name: _verify | drop the synthetic DB
+    - name: _verify | Drop the synthetic DB
       file:
         path: /tmp/_verify_kuma_seed.db
         state: absent

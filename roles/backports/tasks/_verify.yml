@@ -13,11 +13,11 @@
 # name lands its own pin file and per-call fact without clobbering
 # the first -- the multi-consumer guarantee the docstring's per-call
 # fact naming exists to provide.
-- name: _verify | load ntp's production backport list
+- name: _verify | Load ntp's production backport list
   include_vars:
     file: roles/ntp/vars/main.yml
 
-- name: _verify | apply pin.yml
+- name: _verify | Apply pin.yml
   import_role:
     name: backports
     tasks_from: pin
@@ -26,7 +26,7 @@
       name: test_libc6_transition
       packages: "{{ ntp_backport_packages }}"
 
-- name: _verify (jammy) | pin file lands at the documented path
+- name: _verify (jammy) | Pin file lands at the documented path
   when: ansible_distribution_major_version == "22"
   stat:
     path: /etc/apt/preferences.d/backports_test_libc6_transition.pref
@@ -44,7 +44,7 @@
 # lines (one per suite × component × arch target) rather than
 # `--format '$(SUITE)'` — that placeholder is unsubstituted on
 # jammy's apt 2.4 and lands in stdout as the literal "$(SUITE)".
-- name: _verify (jammy) | all four noble suites are configured index targets
+- name: _verify (jammy) | All four noble suites are configured index targets
   when: ansible_distribution_major_version == "22"
   command:
     argv: [ apt-get, indextargets ]
@@ -67,12 +67,12 @@
 # sensitive to whitespace and the leading `***` marker. The pin is the
 # only thing that could have made apt prefer noble over jammy, so a
 # noble installed version implies the 991 band took effect.
-- name: _verify (jammy) | gather installed package versions
+- name: _verify (jammy) | Gather installed package versions
   when: ansible_distribution_major_version == "22"
   package_facts:
     manager: apt
 
-- name: _verify (jammy) | apt picks the noble candidate for every pinned package
+- name: _verify (jammy) | Apt picks the noble candidate for every pinned package
   when: ansible_distribution_major_version == "22"
   command:
     argv: [ apt-cache, madison, "{{ item }}" ]
@@ -96,7 +96,7 @@
 # the noble entry would default to 500 and the role would silently
 # drift jammy hosts to noble on every `apt upgrade` -- this is the
 # test that catches that regression.
-- name: _verify (jammy) | unpinned noble packages stay below jammy priority
+- name: _verify (jammy) | Unpinned noble packages stay below jammy priority
   when: ansible_distribution_major_version == "22"
   command: apt-cache policy nano
   register: backports_negative_policy
@@ -110,7 +110,7 @@
 # Functional check: state=latest on a packer image that doesn't ship
 # chrony forces a real install, so the per-call fact must report true.
 # `is defined` would pass even on a no-op run -- assert the value.
-- name: _verify (jammy) | first apply actually installed/upgraded the pin set
+- name: _verify (jammy) | First apply actually installed/upgraded the pin set
   when: ansible_distribution_major_version == "22"
   assert:
     that:
@@ -121,7 +121,7 @@
 # unchanged, sources unchanged, apt has nothing to do, fact flips to
 # false. The harness's idempotence phase re-runs main.yml (empty for
 # this role) so it doesn't cover the same-name re-import case.
-- name: _verify | re-apply pin.yml with the same name
+- name: _verify | Re-apply pin.yml with the same name
   import_role:
     name: backports
     tasks_from: pin
@@ -130,7 +130,7 @@
       name: test_libc6_transition
       packages: "{{ ntp_backport_packages }}"
 
-- name: _verify (jammy) | second apply is a no-op (fact flips to false)
+- name: _verify (jammy) | Second apply is a no-op (fact flips to false)
   when: ansible_distribution_major_version == "22"
   assert:
     that:
@@ -143,7 +143,7 @@
 # first apply (it's in ntp_backport_packages), so this is a no-op
 # install -- but the pin file is new, so we still get a fresh apt
 # update and a fresh fact.
-- name: _verify | apply pin.yml under a second distinct name
+- name: _verify | Apply pin.yml under a second distinct name
   import_role:
     name: backports
     tasks_from: pin
@@ -152,14 +152,14 @@
       name: test_second
       packages: [ libc6 ]
 
-- name: _verify (jammy) | second import lands its own pin file
+- name: _verify (jammy) | Second import lands its own pin file
   when: ansible_distribution_major_version == "22"
   stat:
     path: /etc/apt/preferences.d/backports_test_second.pref
   register: backports_second_stat
   failed_when: not backports_second_stat.stat.exists
 
-- name: _verify (jammy) | per-call facts are independent
+- name: _verify (jammy) | Per-call facts are independent
   when: ansible_distribution_major_version == "22"
   assert:
     that:
@@ -172,7 +172,7 @@
 # skipped upgrade result and therefore false. Consumers wrap the lookup
 # in `| default(false)` so a missing fact wouldn't fail loudly; verify
 # the documented contract directly.
-- name: _verify (noble) | per-call facts are defined and false
+- name: _verify (noble) | Per-call facts are defined and false
   when: ansible_distribution_major_version != "22"
   assert:
     that:

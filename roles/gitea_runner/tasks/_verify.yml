@@ -1,9 +1,9 @@
-- name: _verify | gitea_runner user exists
+- name: _verify | Gitea_runner user exists
   command: getent passwd gitea_runner
   changed_when: false
   become: true
 
-- name: _verify | gitea-runner binary version matches gitea_runner_version
+- name: _verify | Gitea-runner binary version matches gitea_runner_version
   command: gitea-runner --version
   register: _verify_version
   changed_when: false
@@ -13,7 +13,7 @@
   failed_when: (_verify_version.stdout | regex_search('\d+\.\d+\.\d+')) != gitea_runner_version
   become: true
 
-- name: _verify | gitea_runner config file exists
+- name: _verify | Gitea_runner config file exists
   stat:
     path: /mnt/services/gitea_runner/config.yml
   register: _verify_config_file
@@ -43,7 +43,7 @@
     or (_runner_data.labels | default([]) | sort) != (gitea_runner_labels | sort)
   become: true
 
-- name: _verify | gitea_runner.service is loaded and active
+- name: _verify | Gitea_runner.service is loaded and active
   systemd:
     name: gitea_runner
   register: _verify_unit
@@ -57,7 +57,7 @@
 # up -- a stronger signal than systemd ActiveState, which flips active
 # the moment ExecStart's process exec's, before the daemon has connected
 # to gitea. Runs in both prod and qemu_test (loopback, no auth).
-- name: _verify | gitea_runner daemon is serving /healthz
+- name: _verify | Gitea_runner daemon is serving /healthz
   uri:
     url: "http://127.0.0.1:{{ service_ports.gitea_runner_metrics }}/healthz"
     status_code: 200

@@ -1,5 +1,5 @@
 # Per-instance setup for the templated github_runner@.service. Called
-# from main.yml with loop_var: runner_instance (keys: repo, suffix,
+# from main.yml with loop_var: github_runner_instance (keys: repo, suffix,
 # owner, labels).
 #
 # Long-lived registration: config.sh runs once per instance at first
@@ -12,12 +12,12 @@
 
 # Reset at the top of every iteration so a previous instance's facts
 # can't bleed into the next via set_fact persistence.
-- name: _register | Set instance facts for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
+- name: _register | Set instance facts for {{ github_runner_instance.repo ~ '_' ~ github_runner_instance.suffix }}
   set_fact:
-    github_runner_iid: "{{ runner_instance.repo }}_{{ runner_instance.suffix }}"
-    github_runner_name: "{{ inventory_hostname }}_{{ runner_instance.repo }}_{{ runner_instance.suffix }}"
+    github_runner_iid: "{{ github_runner_instance.repo }}_{{ github_runner_instance.suffix }}"
+    github_runner_name: "{{ inventory_hostname }}_{{ github_runner_instance.repo }}_{{ github_runner_instance.suffix }}"
 
-- name: _register | Create workdir on scratch for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
+- name: _register | Create workdir on scratch for {{ github_runner_instance.repo ~ '_' ~ github_runner_instance.suffix }}
   file:
     path: /mnt/scratch/github_runner/workdir_{{ github_runner_iid }}
     state: directory
@@ -26,7 +26,7 @@
     mode: "0755"
   become: true
 
-- name: _register | Create per-instance runner dir for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
+- name: _register | Create per-instance runner dir for {{ github_runner_instance.repo ~ '_' ~ github_runner_instance.suffix }}
   file:
     path: /opt/actions-runner/{{ github_runner_iid }}
     state: directory
@@ -97,7 +97,7 @@
 # config.sh writes .runner last in its setup sequence, so its presence
 # is a robust signal. _register.yml only mints a registration token +
 # runs config.sh when this is absent.
-- name: "_register | Check whether instance is already configured: {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}"
+- name: "_register | Check whether instance is already configured: {{ github_runner_instance.repo ~ '_' ~ github_runner_instance.suffix }}"
   when: not (ansible_check_mode and github_runner_user.changed)
   stat:
     path: /opt/actions-runner/{{ github_runner_iid }}/.runner
@@ -109,13 +109,13 @@
 # and GitHub invalidates it. Subsequent run.sh launches authenticate
 # via the long-lived .credentials_rsaparams written next to .runner --
 # the PAT itself never crosses into the runner's runtime path.
-- name: _register | Mint registration token for {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
+- name: _register | Mint registration token for {{ github_runner_instance.repo ~ '_' ~ github_runner_instance.suffix }}
   when:
     - not (ansible_check_mode and github_runner_user.changed)
     - not qemu_test
     - not github_runner_dotrunner.stat.exists
   uri:
-    url: https://api.github.com/repos/{{ runner_instance.owner }}/{{ runner_instance.repo }}/actions/runners/registration-token
+    url: https://api.github.com/repos/{{ github_runner_instance.owner }}/{{ github_runner_instance.repo }}/actions/runners/registration-token
     method: POST
     headers:
       Authorization: "Bearer {{ github_runner_pat }}"
@@ -134,7 +134,7 @@
 # is fine -- it's single-use and already consumed by the time the
 # command returns. no_log keeps it out of ansible's stdout in case
 # verbose mode is on.
-- name: _register | Configure runner {{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
+- name: _register | Configure runner {{ github_runner_instance.repo ~ '_' ~ github_runner_instance.suffix }}
   when:
     - not (ansible_check_mode and github_runner_user.changed)
     - not qemu_test
@@ -144,20 +144,20 @@
   # Personal-account repos have only the implicit Default group and a
   # missing --runnergroup picks it. For an org repo with custom groups,
   # set runner_group_name on the instance and add `- --runnergroup` +
-  # `- "{{ runner_instance.runner_group_name }}"` here.
+  # `- "{{ github_runner_instance.runner_group_name }}"` here.
   command:
     argv:
       - ./config.sh
       - --unattended
       - --replace
       - --url
-      - https://github.com/{{ runner_instance.owner }}/{{ runner_instance.repo }}
+      - https://github.com/{{ github_runner_instance.owner }}/{{ github_runner_instance.repo }}
       - --token
       - "{{ github_runner_reg_token.json.token }}"
       - --name
       - "{{ github_runner_name }}"
       - --labels
-      - "{{ runner_instance.labels }}"
+      - "{{ github_runner_instance.labels }}"
       - --work
       - /mnt/scratch/github_runner/workdir_{{ github_runner_iid }}
   args:
@@ -172,7 +172,7 @@
 # actual readiness is the runner's "Listening for Jobs" log line which
 # follows ~1s later. Skipped under qemu_test (no GitHub-side
 # registration, so run.sh would exit non-zero on .runner parse).
-- name: _register | Enable github_runner@{{ runner_instance.repo ~ '_' ~ runner_instance.suffix }}
+- name: _register | Enable github_runner@{{ github_runner_instance.repo ~ '_' ~ github_runner_instance.suffix }}
   when: not qemu_test
   import_role:
     name: systemd_unit

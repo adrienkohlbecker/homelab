@@ -6,13 +6,13 @@
 #      tracks real LastTriggerUSec, and overdue fires when the file's mtime
 #      is older than 2 * period without a trigger
 
-- name: _verify | install systemd_timers netdata collector
+- name: _verify | Install systemd_timers netdata collector
   import_tasks: netdata.yml
 
 # Drop a fast-poll override so a fixture chart materializes in seconds
 # rather than the default 60s. Restart netdata so charts.d.plugin picks it
 # up before any of the later assertions run.
-- name: _verify | speed up systemd_timers update_every for tests
+- name: _verify | Speed up systemd_timers update_every for tests
   copy:
     content: |
       systemd_timers_meta_dir=/etc/netdata/charts.d/systemd_timers.d
@@ -23,12 +23,12 @@
     mode: "0644"
     backup: true
   become: true
-- name: _verify | restart netdata to apply update_every override
+- name: _verify | Restart netdata to apply update_every override
   systemd:
     name: netdata
     state: restarted
   become: true
-- name: _verify | wait for netdata control socket
+- name: _verify | Wait for netdata control socket
   wait_for:
     path: /run/netdata/netdata.pipe
     timeout: 120
@@ -49,12 +49,12 @@
       exec_start: /bin/sh -c 'echo CRON_VERIFY_OK > /tmp/_verify_timer.out'
       monitor: false
 
-- name: _verify | Trigger the fixture service manually
+- name: _verify | Trigger the fixture service manually  # noqa: command-instead-of-module
   command: systemctl start --wait _verify_timer.service
   changed_when: false
   become: true
 
-- name: _verify | Read service Result property
+- name: _verify | Read service Result property  # noqa: command-instead-of-module
   command: systemctl show -p Result --value _verify_timer.service
   register: _verify_timer_result
   changed_when: false
@@ -66,7 +66,7 @@
   register: _verify_timer_out
   become: true
 
-- name: _verify | Read timer ActiveState
+- name: _verify | Read timer ActiveState  # noqa: command-instead-of-module
   command: systemctl show -p ActiveState --value _verify_timer.timer
   register: _verify_timer_active
   changed_when: false
@@ -105,7 +105,7 @@
   register: _verify_timer_files
   become: true
 
-- name: _verify | systemctl status for the removed timer
+- name: _verify | Systemctl status for the removed timer  # noqa: command-instead-of-module
   command: systemctl status _verify_timer.timer
   register: _verify_timer_status
   changed_when: false
@@ -143,7 +143,7 @@
       exec_start: /bin/sh -c 'echo STDOUT_VERIFY_LINE; echo STDERR_VERIFY_LINE >&2'
       monitor: false
 
-- name: _verify | Trigger the stderr fixture manually
+- name: _verify | Trigger the stderr fixture manually  # noqa: command-instead-of-module
   command: systemctl start --wait _verify_timer_stderr.service
   changed_when: false
   become: true
@@ -205,7 +205,7 @@
         - "ProtectHome=yes"
         - "ReadWritePaths=/tmp"
 
-- name: _verify | Trigger the knobs fixture manually
+- name: _verify | Trigger the knobs fixture manually  # noqa: command-instead-of-module
   command: systemctl start --wait _verify_timer_knobs.service
   changed_when: false
   become: true
@@ -216,7 +216,7 @@
   register: _verify_knobs_out
   become: true
 
-- name: _verify | Read systemctl show properties for knobs fixture
+- name: _verify | Read systemctl show properties for knobs fixture  # noqa: command-instead-of-module
   command: >-
     systemctl show -p AccuracyUSec,ProtectSystem,ProtectHome
     _verify_timer_knobs.timer _verify_timer_knobs.service

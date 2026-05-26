@@ -79,10 +79,10 @@
   uri:
     url: http://10.166.0.10:8090/oidc/.well-known/openid-configuration
     status_code: 200
-  register: _setup_mockoidc
+  register: headscale_setup_mockoidc
   retries: 15
   delay: 1
-  until: _setup_mockoidc.status == 200
+  until: headscale_setup_mockoidc.status == 200
 # OIDC is enabled for the converge via host_vars/box.yml (headscale_oidc_*),
 # keyed on _role_under_test so it persists across the harness's separate
 # converge/idempotence/_verify ansible invocations -- a set_fact here would not.

@@ -1,7 +1,7 @@
 # Loopback probe -- exercises the container directly via the published
 # port. Retries cover cold-start (--health-start-period is 100s; budget
 # below gives 3 minutes to cover restart-after-deploy too).
-- name: _verify | seerr answers /api/v1/status on its loopback port
+- name: _verify | Seerr answers /api/v1/status on its loopback port
   uri:
     url: http://localhost:{{ service_ports.seerr }}/api/v1/status
     status_code: 200
@@ -20,7 +20,7 @@
 # a typo in nginx_site_args / proxy_pass fails here too. trustProxy is
 # set in settings.json so the upstream X-Forwarded-* headers from nginx
 # don't get rejected.
-- name: _verify | seerr is reachable through nginx
+- name: _verify | Seerr is reachable through nginx
   uri:
     url: https://localhost/api/v1/status
     headers:
@@ -40,7 +40,7 @@
 # host seerr user. A mapping drift (wrong uid in the override, mismatch
 # between service_user and the unit) would land the file at a different
 # host uid silently; assert ownership so the regression is loud.
-- name: _verify | seerr writes settings.json as host seerr user
+- name: _verify | Seerr writes settings.json as host seerr user
   stat:
     path: /mnt/services/seerr/settings.json
   register: _verify_settings_owner

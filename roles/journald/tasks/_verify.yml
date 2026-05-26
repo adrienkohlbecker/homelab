@@ -60,7 +60,7 @@
 #      land in journald _TRANSPORT=audit.
 # Test-only — _verify never runs against prod.
 
-- name: _verify | systemd-journald-audit.socket is masked + inactive
+- name: _verify | Systemd-journald-audit.socket is masked + inactive
   systemd:
     name: systemd-journald-audit.socket
   register: journald_verify_audit_socket

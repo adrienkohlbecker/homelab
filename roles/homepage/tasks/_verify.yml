@@ -1,4 +1,4 @@
-- name: _verify | homepage answers on its loopback port
+- name: _verify | Homepage answers on its loopback port
   uri:
     url: http://localhost:{{ service_ports.homepage }}/api/healthcheck
     status_code: 200
@@ -8,7 +8,7 @@
   until: _verify_http.status == 200
   become: true
 
-- name: _verify | homepage answers through nginx via Host header
+- name: _verify | Homepage answers through nginx via Host header
   uri:
     url: https://localhost/api/healthcheck
     headers:
@@ -22,7 +22,7 @@
 # run. Combining retry-until with failed_when=content-check would fail-fast
 # on the first 404; split into two tasks so retries get their full budget
 # before content assertions fire.
-- name: _verify | homepage_alerts renders HTML through nginx
+- name: _verify | Homepage_alerts renders HTML through nginx
   uri:
     url: https://localhost/alerts/
     headers:
@@ -36,13 +36,13 @@
   until: _verify_alerts_html.status == 200
   become: true
 
-- name: _verify | homepage_alerts HTML carries the iframe-resize script
+- name: _verify | Homepage_alerts HTML carries the iframe-resize script
   assert:
     that:
       - "'frameElement' in _verify_alerts_html.content"
     fail_msg: "Expected the same-origin iframe-resize script (frameElement) in the rendered HTML"
 
-- name: _verify | homepage_alerts HTML names every configured host
+- name: _verify | Homepage_alerts HTML names every configured host
   assert:
     that: item in _verify_alerts_html.content
     fail_msg: "Host {{ item }} missing from rendered HTML"
@@ -56,7 +56,7 @@
 # stripping the err branch) would pass the "host name in content" check
 # above (because the <h2> still renders) but fail this one. Box-only — on
 # lab-qemu/pug-qemu the netdata targets may be reachable from the test VM.
-- name: _verify | per-host error path renders on test box
+- name: _verify | Per-host error path renders on test box
   when: inventory_hostname == 'box'
   assert:
     that:
@@ -70,7 +70,7 @@
 # edits because gethomepage watches /app/config. If a future image bump
 # drops the watcher this assertion fires loudly instead of letting the
 # regression hide as "ansible reports changed, dashboard shows old data".
-- name: _verify | inject sentinel bookmark to exercise homepage hot-reload
+- name: _verify | Inject sentinel bookmark to exercise homepage hot-reload
   copy:
     dest: /mnt/services/homepage/bookmarks.yaml
     content: |
@@ -83,7 +83,7 @@
     mode: "0644"
   become: true
 
-- name: _verify | homepage hot-reloads bookmarks.yaml and renders the sentinel
+- name: _verify | Homepage hot-reloads bookmarks.yaml and renders the sentinel
   # Probe /api/bookmarks rather than the SSR'd `/` page: getStaticProps
   # caches the rendered HTML by path (query string doesn't differentiate
   # SSG output), so polling `/?_t=N` returns the same year-old HIT

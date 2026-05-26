@@ -16,19 +16,19 @@
 # module is pinned via /etc/modules-load.d/ to load at next boot. The
 # nftables non-SYN drop rules above remain the runtime protection
 # until then.
-- name: _verify_counters | sysctl — nf_conntrack_tcp_loose=0 persisted in sysctl.d
+- name: _verify_counters | Sysctl — nf_conntrack_tcp_loose=0 persisted in sysctl.d
   slurp:
     src: /etc/sysctl.d/90-firewall-hardening.conf
   register: sysctl_persist
   become: true
 
-- name: _verify_counters | sysctl — nf_conntrack module pinned in modules-load.d
+- name: _verify_counters | Sysctl — nf_conntrack module pinned in modules-load.d
   slurp:
     src: /etc/modules-load.d/30-firewall-hardening.conf
   register: modload_persist
   become: true
 
-- name: _verify_counters | sysctl — assert persistence
+- name: _verify_counters | Sysctl — assert persistence
   assert:
     that:
       # ansible.posix.sysctl writes `key=value` without surrounding
@@ -46,7 +46,7 @@
 # First-apply path: nf_conntrack wasn't loaded at sysctl-write time,
 # so the role should have created /var/run/reboot-required to let
 # site.yml's tail block schedule a reboot.
-- name: _verify_counters | reboot signal — /var/run/reboot-required exists
+- name: _verify_counters | Reboot signal — /var/run/reboot-required exists
   stat:
     path: /var/run/reboot-required
   register: reboot_required_stat
@@ -56,7 +56,7 @@
 # doesn't false-pass. The role's apply is well within an hour of
 # verify on a normal harness cycle (~10 min total); cross-session
 # --keep'd re-runs (file from yesterday) correctly fail.
-- name: _verify_counters | reboot signal — assert reboot was signaled this run
+- name: _verify_counters | Reboot signal — assert reboot was signaled this run
   assert:
     that:
       - reboot_required_stat.stat.exists

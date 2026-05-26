@@ -1,4 +1,4 @@
-- name: _verify | f_require_root succeeds as root
+- name: _verify | F_require_root succeeds as root
   shell: |
     source /usr/local/lib/functions.sh
     f_require_root
@@ -9,13 +9,13 @@
   changed_when: false
   become: true
 
-- name: _verify | f_require_root root assertions
+- name: _verify | F_require_root root assertions
   assert:
     that:
       - _verify_require_root_ok.rc == 0
       - "'ok' in _verify_require_root_ok.stdout"
 
-- name: _verify | f_require_root fails as non-root
+- name: _verify | F_require_root fails as non-root
   shell: |
     runuser -u nobody -- bash -c '
       source /usr/local/lib/functions.sh
@@ -29,14 +29,14 @@
   failed_when: false
   become: true
 
-- name: _verify | f_require_root non-root assertions
+- name: _verify | F_require_root non-root assertions
   assert:
     that:
       - _verify_require_root_fail.rc == 1
       - "'I require root' in _verify_require_root_fail.stderr"
       - "'should-not-run' not in _verify_require_root_fail.stdout"
 
-- name: _verify | f_rescue continues past failures and records them in f_failed
+- name: _verify | F_rescue continues past failures and records them in f_failed
   shell: |
     source /usr/local/lib/functions.sh
     f_rescue false
@@ -48,7 +48,7 @@
   register: _verify_f_rescue
   changed_when: false
 
-- name: _verify | f_rescue assertions
+- name: _verify | F_rescue assertions
   assert:
     that:
       - _verify_f_rescue.rc == 0
@@ -60,7 +60,7 @@
 # calls f_rescue, then inspects $- to confirm -e is still off. Catches a
 # regression of the prior `set +e; ...; set -e` toggle that unconditionally
 # re-enabled errexit regardless of the caller's prior state.
-- name: _verify | f_rescue preserves caller's errexit state
+- name: _verify | F_rescue preserves caller's errexit state
   shell: |
     source /usr/local/lib/functions.sh
     set +e
@@ -74,13 +74,13 @@
   register: _verify_f_rescue_errexit
   changed_when: false
 
-- name: _verify | f_rescue errexit-preservation assertion
+- name: _verify | F_rescue errexit-preservation assertion
   assert:
     that:
       - _verify_f_rescue_errexit.rc == 0
       - "'errexit=off' in _verify_f_rescue_errexit.stdout"
 
-- name: _verify | f_trace echoes the shell-quoted command to stderr then runs it
+- name: _verify | F_trace echoes the shell-quoted command to stderr then runs it
   shell: |
     source /usr/local/lib/functions.sh
     f_trace echo hello "two words"
@@ -89,7 +89,7 @@
   register: _verify_f_trace
   changed_when: false
 
-- name: _verify | f_trace assertions
+- name: _verify | F_trace assertions
   assert:
     that:
       - _verify_f_trace.rc == 0

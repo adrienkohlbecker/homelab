@@ -249,7 +249,7 @@
 # check_mode: false forces a real probe even in --check; otherwise
 # command{} reports "would have run" with rc=0 in the register and
 # the gates below trust a fabricated state.
-- name: Check if nftables.service is currently active (gates auto-revert)
+- name: Check if nftables.service is currently active (gates auto-revert)  # noqa: command-instead-of-module
   command: systemctl is-active nftables.service
   register: firewall_nftables_pre_active
   changed_when: false
@@ -457,7 +457,7 @@
 # service_facts can't be used here because it maps Type=oneshot
 # +RemainAfterExit=yes units (which nftables.service is) to
 # state: stopped regardless of actual liveness.
-- name: Confirm nftables.service is active before removing ufw/iptables
+- name: Confirm nftables.service is active before removing ufw/iptables  # noqa: command-instead-of-module
   command: systemctl is-active nftables.service
   register: firewall_nftables_active
   changed_when: false
