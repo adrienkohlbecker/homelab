@@ -1,11 +1,14 @@
+# Invoked from roles/netdata/tasks/main.yml after netdata is installed --
+# don't call this before the netdata role has run. netdata_restart is set
+# by that caller; default it so a standalone import (or _verify) still works.
 - name: Configure lm_sensors metrics
   import_role:
     name: netdata
-    tasks_from: copy
+    tasks_from: template
   vars:
     netdata_args:
-      src: sensors.conf
+      src: sensors.conf.j2
       dest: go.d/sensors.conf
-      restart: "{{ netdata_restart }}"
+      restart: "{{ netdata_restart | default(true) }}"
   tags:
     - lm_sensors
