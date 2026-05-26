@@ -18,8 +18,14 @@
 
 - name: Set default locale
   copy:
-    src: locale
+    # LANG alone is the system default -- it cascades to every unset LC_*
+    # category. We deliberately set nothing else: LC_ALL is a transient
+    # debugging override (system-wide it masks every per-shell/per-service
+    # locale choice), and LANGUAGE is a gettext message-priority list, not
+    # a locale. `_verify.yml` asserts neither creeps back in.
+    content: "LANG=en_US.UTF-8\n"
     dest: /etc/default/locale
+    validate: sh -n %s
     backup: true
     owner: root
     group: root
