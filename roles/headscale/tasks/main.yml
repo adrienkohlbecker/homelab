@@ -1,3 +1,23 @@
+# Required inputs live in host_vars/group_vars and the role asserts them (per
+# CLAUDE.md) -- the OIDC trio is only consulted when enrollment is enabled, so
+# gate the assert on the same flag. A missing/typo'd issuer would otherwise fail
+# opaquely at headscale's boot-time OIDC discovery on the one public host rather
+# than loudly here at parse time. Mirrors roles/tailscale's input assert.
+- name: Assert required headscale OIDC inputs are set when OIDC is enabled
+  assert:
+    that:
+      - headscale_oidc_issuer is defined
+      - headscale_oidc_client_id is defined
+      - headscale_oidc_client_secret is defined
+    fail_msg: >-
+      headscale_oidc_enabled is true but one of headscale_oidc_issuer,
+      headscale_oidc_client_id, headscale_oidc_client_secret is unset (set them
+      in host_vars + vaulted group_vars/prod.yml; see
+      notes/headscale_mesh_redesign.md §E).
+  when: headscale_oidc_enabled | default(false)
+  tags:
+    - headscale
+
 - name: Set up headscale system user, group, and config dir
   import_role:
     name: service_user
@@ -81,6 +101,11 @@
     group: headscale
     mode: "0640"
     backup: true
+    # YAML-only validation is the ceiling here: headscale's native semantic
+    # checker (headscale configtest) lives in the container, not on the host, and
+    # the file isn't yet at its in-container path when validate runs -- so this
+    # catches jinja/quoting/vault-substitution breakage but not schema errors.
+    # The unit's --sdnotify=healthy gate surfaces a config headscale rejects.
     validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' %s
   become: true
   register: headscale_config_result
@@ -125,7 +150,26 @@
     systemd_unit_args:
       src: headscale
       condition: "{{ not (ansible_check_mode and (headscale_service_result.changed or headscale_user.changed)) }}"
-      restart: "{{ headscale_service_result.changed or headscale_config_result.changed or headscale_acl_result.changed or (headscale_network.changed | default(false)) or (headscale_oidc_secret_rotated | default(false)) }}"
+      restart: "{{ headscale_service_result.changed or headscale_config_result.changed or (headscale_network.changed | default(false)) or (headscale_oidc_secret_rotated | default(false)) }}"
+  tags:
+    - headscale
+
+# ACL-only changes reload via SIGHUP, NOT a unit restart: headscale reloads the
+# HuJSON policy on SIGHUP (the same as `systemctl reload`), so an ACL tweak
+# needn't bounce the control plane + embedded DERP + every client long-poll. It
+# also fails soft -- a malformed policy leaves the running server on its previous
+# ACL, whereas a restart could refuse to come back. Sent to the container's PID 1
+# (headscale serve). Redundant-but-harmless when a co-occurring config change
+# already restarted the unit (which reloaded the ACL on start); skipped on a
+# clean re-run since headscale_acl_result.changed is then false, so idempotence
+# holds. Hence acl is dropped from the service task's restart: chain above.
+- name: Reload headscale policy on ACL change (SIGHUP, no restart)
+  command: podman kill --signal HUP headscale
+  when:
+    - headscale_acl_result.changed
+    - not ansible_check_mode
+  changed_when: true
+  become: true
   tags:
     - headscale
 

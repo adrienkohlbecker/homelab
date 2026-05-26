@@ -4,11 +4,15 @@
 Description=headscale
 After=network-online.target
 Wants=network-online.target
-# OIDC discovery (when headscale_oidc_enabled) hits the Authelia issuer at
-# startup, and on fox that issuer (auth.fahm.fr) resolves to lab's wg /32 --
-# reachable only over the wg0 backbone. Order after wg-quick so the interface +
-# route exist before headscale's first start attempt. fox always runs the
-# wireguard role, and this unit only ever runs on fox, so the dep always holds.
+{% if headscale_oidc_enabled | default(false) %}
+# Both the wg0 ordering and the wide start-limit exist ONLY for OIDC discovery,
+# so they're gated on it -- with OIDC off (e.g. the test harness) headscale has
+# no boot-time dependency on the backbone and the default start-limit applies.
+# OIDC discovery hits the Authelia issuer at startup, and on fox that issuer
+# (auth.fahm.fr) resolves to lab's wg /32 -- reachable only over the wg0
+# backbone. Order after wg-quick so the interface + route exist before
+# headscale's first start attempt. fox always runs the wireguard role, and this
+# unit only ever runs on fox, so the dep always holds.
 After=wg-quick@wg0.service
 # fox is a wg *listener*: the tunnel to lab only carries traffic once lab/pug
 # send their next keepalive (~25s after a fox reboot), which lags wg-quick's own
@@ -18,6 +22,7 @@ After=wg-quick@wg0.service
 # fox's netdata headscale collector goes missing -- see host_vars/fox.yml).
 StartLimitInterval=600
 StartLimitBurst=15
+{% endif %}
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
 After=zfs_mount_mnt_services.service
