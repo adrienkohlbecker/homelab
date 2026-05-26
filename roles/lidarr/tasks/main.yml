@@ -12,7 +12,7 @@
   vars:
     service_user_args:
       name: lidarr
-      extra_groups: [media]
+      extra_groups: [ media ]
       config_dir_group: media
   tags:
     - lidarr

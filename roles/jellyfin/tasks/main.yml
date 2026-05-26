@@ -39,7 +39,7 @@
   vars:
     service_user_args:
       name: jellyfin
-      extra_groups: [media]
+      extra_groups: [ media ]
       config_dir_group: media
   tags:
     - jellyfin
@@ -337,7 +337,7 @@
       Authorization: 'MediaBrowser Token="{{ jellyfin_api_token }}"'
     body_format: json
     body: "{{ jellyfin_oidc_state }}"
-    status_code: [200, 204]
+    status_code: [ 200, 204 ]
   register: jellyfin_oidc_post
   retries: 30
   delay: 2

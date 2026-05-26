@@ -16,9 +16,9 @@ if [ ! -f "/etc/zfs/zfs-list.cache/$cachefile" ]; then
   exit 1
 fi
 
-canmount=$(zfs get -o value -pH canmount $filesystem)
-before=$(md5sum /etc/zfs/zfs-list.cache/$cachefile | cut -f 1 -d " ")
-zfs set canmount=$canmount $filesystem
+canmount=$(zfs get -o value -pH canmount "$filesystem")
+before=$(md5sum "/etc/zfs/zfs-list.cache/$cachefile" | cut -f 1 -d " ")
+zfs set canmount="$canmount" "$filesystem"
 
 # zed's history_event-zfs-list-cacher.sh regenerates this cache file
 # asynchronously in response to the canmount-set above. Poll for the
@@ -32,7 +32,7 @@ prev=$before
 after=$before
 for _ in $(seq 1 25); do
   sleep 0.2
-  after=$(md5sum /etc/zfs/zfs-list.cache/$cachefile | cut -f 1 -d " ")
+  after=$(md5sum "/etc/zfs/zfs-list.cache/$cachefile" | cut -f 1 -d " ")
   if [ "$after" != "$prev" ]; then
     prev=$after
     continue

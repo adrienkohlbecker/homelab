@@ -44,7 +44,7 @@
       Host: kuma.{{ inventory_hostname }}.{{ domain }}
     validate_certs: false
     follow_redirects: none
-    status_code: [200, 404]
+    status_code: [ 200, 404 ]
   register: _verify_push_bypass
   failed_when: >-
     _verify_push_bypass.status == 302

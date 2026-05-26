@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # vim:ft=sh
+# shellcheck shell=bash  # sourced by netdata charts.d.plugin, no shebang
 #
 # Netdata charts.d collector: systemd timer freshness.
 #

@@ -1,1 +1,5 @@
 external-sources=true
+# Resolve `# shellcheck source=` directives relative to the sourcing script's
+# own directory rather than shellcheck's CWD, so roles/*/files/*.sh can follow
+# the deployed-as /usr/local/lib/functions.sh via its in-repo relative path.
+source-path=SCRIPTDIR

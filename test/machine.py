@@ -24,7 +24,6 @@ from arch import ArchProfile, detect_host_arch, uefi_code_path_for
 from setup_mitogen import ensure_mitogen_symlink
 from utils import (
     CommandResult,
-    IdempotenceFailedException,
     build_seed_iso,
     print_cmd_line,
     print_line,

@@ -64,7 +64,9 @@ is_minimal_role() {
 # per-role to avoid ~50ms python startup * N roles. The mise lint
 # task `lint:test-meta` validates the machine value against
 # MACHINE_CHOICES at PR time, so detect-roles doesn't re-check.
-ROLE_MACHINE=$(python3 <<'EOF'
+# read -d '' returns 1 at EOF (no NUL delimiter in a heredoc), so `|| true`
+# keeps it from tripping errexit; PY ends up holding the whole script body.
+read -r -d '' PY <<'EOF' || true
 import sys
 import yaml
 from pathlib import Path
@@ -78,7 +80,7 @@ for meta in sorted(Path("roles").glob("*/meta/test.yml")):
     if machine is not None:
         print(f"{role}={machine}")
 EOF
-)
+ROLE_MACHINE=$(python3 -c "$PY")
 
 default_machine_for() {
   local role=$1 m
