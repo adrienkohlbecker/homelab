@@ -93,7 +93,7 @@
       - kdump-tools
     policy_rc_d: 101
     cache_valid_time: 3600
-  register: apt_kdump_tools
+  register: kdump_apt_tools
   become: true
   tags:
     - kdump
@@ -151,7 +151,7 @@
 # directory to root-only so a package default drift can't silently
 # widen access.
 - name: Lock down /var/crash permissions
-  when: not (ansible_check_mode and apt_kdump_tools.changed)
+  when: not (ansible_check_mode and kdump_apt_tools.changed)
   file:
     path: /var/crash
     state: directory
@@ -169,7 +169,7 @@
 # untouched so kdump-tools' own 0640 dump.<n> / dmesg.<n> stay as
 # the package writes them.
 - name: Lock down /var/crash contents (recursive)
-  when: not (ansible_check_mode and apt_kdump_tools.changed)
+  when: not (ansible_check_mode and kdump_apt_tools.changed)
   file:
     path: /var/crash
     state: directory
@@ -190,7 +190,7 @@
 # `sh -n` against the rendered file before it lands so quoting bugs
 # don't break the init script's source.
 - name: Template /etc/default/kdump-tools
-  when: not (ansible_check_mode and apt_kdump_tools.changed)
+  when: not (ansible_check_mode and kdump_apt_tools.changed)
   template:
     src: kdump-tools.j2
     dest: /etc/default/kdump-tools
@@ -296,7 +296,7 @@
   vars:
     systemd_unit_args:
       src: kdump-tools
-      condition: "{{ not (ansible_check_mode and apt_kdump_tools.changed) }}"
+      condition: "{{ not (ansible_check_mode and kdump_apt_tools.changed) }}"
       start: "{{ (kdump_kexec_crash_size.content | default('') | b64decode | trim | default('0', true) | int) > 0 }}"
       restart: "{{ kdump_tools_cfg.changed }}"
   tags:

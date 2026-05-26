@@ -3,7 +3,7 @@
     pkg: gpg
     cache_valid_time: 3600
   become: true
-  register: apt_install_gpg
+  register: nodejs_apt_gpg
   tags:
     - nodejs
 
@@ -13,7 +13,7 @@
 - name: Add repository key
   when:
     - ansible_distribution_major_version | int < 26
-    - not (ansible_check_mode and apt_install_gpg.changed)
+    - not (ansible_check_mode and nodejs_apt_gpg.changed)
   apt_key:
     id: 2F59B5F99B1BE0B4
     url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
@@ -30,7 +30,7 @@
     group: root
     mode: "0644"
     backup: true
-  register: apt_pin_node
+  register: nodejs_apt_pin
   become: true
   tags:
     - nodejs
@@ -39,7 +39,7 @@
   when: ansible_distribution_major_version | int < 26
   apt_repository:
     repo: deb [arch={{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }} signed-by=/etc/apt/trusted.gpg.d/nodesource.gpg] {{ mirror_apt_nodesource }} nodistro main
-  register: apt_repository_node_legacy
+  register: nodejs_apt_repo_legacy
   become: true
   tags:
     - nodejs
@@ -65,14 +65,14 @@
     pkg: python3-debian
     cache_valid_time: 3600
   become: true
-  register: apt_install_python3_debian
+  register: nodejs_apt_python3_debian
   tags:
     - nodejs
 
 - name: Add repository (deb822)
   when:
     - ansible_distribution_major_version | int >= 26
-    - not (ansible_check_mode and apt_install_python3_debian.changed)
+    - not (ansible_check_mode and nodejs_apt_python3_debian.changed)
   ansible.builtin.deb822_repository:
     name: nodesource
     types: deb
@@ -81,7 +81,7 @@
     components: main
     architectures: "{{ (ansible_architecture == 'aarch64') | ternary('arm64', 'amd64') }}"
     signed_by: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
-  register: apt_repository_node_deb822
+  register: nodejs_apt_repo_deb822
   become: true
   tags:
     - nodejs
@@ -89,12 +89,12 @@
 # Skip in check mode if any prereq would have changed -- the apt cache
 # wouldn't reflect the deb822 source that wasn't actually written.
 - name: Install node
-  when: not (ansible_check_mode and (apt_repository_node_legacy is changed or apt_repository_node_deb822 is changed or apt_install_python3_debian is changed))
+  when: not (ansible_check_mode and (nodejs_apt_repo_legacy is changed or nodejs_apt_repo_deb822 is changed or nodejs_apt_python3_debian is changed))
   apt:
     pkg:
       - nodejs
     cache_valid_time: 3600
   become: true
-  register: apt_install_node
+  register: nodejs_apt
   tags:
     - nodejs

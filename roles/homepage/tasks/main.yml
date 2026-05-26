@@ -187,7 +187,7 @@
 # via the systemd_timer helper. monitor: false because sub-minute cadences
 # don't map to netdata's overdue-detector hourly/daily/weekly/monthly buckets;
 # systemd_service_unit_failed_state catches a wedged timer independently.
-- name: Install and enable homepage_alerts timer
+- name: Install and enable homepage_alerts timer  # noqa: var-naming[no-role-prefix]
   import_role:
     name: systemd_timer
     tasks_from: install

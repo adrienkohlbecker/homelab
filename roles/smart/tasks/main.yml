@@ -26,7 +26,7 @@
     group: root
     mode: "0644"
     backup: true
-  register: smartd_cfg
+  register: smart_smartd_cfg
   become: true
   tags:
     - smart
@@ -46,7 +46,7 @@
     group: root
     mode: "0644"
     backup: true
-  register: smartmontools_cfg
+  register: smart_smartmontools_cfg
   become: true
   tags:
     - smart
@@ -59,6 +59,6 @@
     systemd_unit_args:
       src: smartmontools
       condition: "{{ not (ansible_check_mode and smart_apt.changed) }}"
-      restart: "{{ smartd_cfg.changed or smartmontools_cfg.changed }}"
+      restart: "{{ smart_smartd_cfg.changed or smart_smartmontools_cfg.changed }}"
   tags:
     - smart
