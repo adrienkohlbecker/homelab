@@ -1,7 +1,10 @@
 # Test-only — the harness runs this against a qemu VM, never prod. Exercises:
 #   1. compression.yml toggles the bare `compress` directive per zfs_root and
 #      leaves compresscmd alone (regression for the once-too-broad regex).
-#   2. template.yml renders + validates a drop-in and parses clean.
+#   2. compression.yml diverts a changed file so an apt upgrade can't re-add
+#      compress (the divert branch, now reachable without a dpkg-owned file).
+#   3. template.yml renders + validates a drop-in, which parses clean and
+#      renders compress per zfs_root.
 - name: _verify | Create a fixture logrotate config
   copy:
     dest: /etc/logrotate.d/_verify_logrotate
@@ -22,6 +25,24 @@
   vars:
     logrotate_args:
       item: /etc/logrotate.d/_verify_logrotate
+
+- name: _verify | Assert the toggle diverted the changed fixture
+  # On box (zfs_root: true) the toggle changes the fixture, so the divert branch
+  # adds a diversion to <path>.dpkg-dist. --list prints the registered diversion.
+  command:
+    argv:
+      - dpkg-divert
+      - --list
+      - /etc/logrotate.d/_verify_logrotate
+  changed_when: false
+  register: logrotate_verify_divert
+  become: true
+
+- name: _verify | Divert must be registered
+  assert:
+    that:
+      - "'/etc/logrotate.d/_verify_logrotate.dpkg-dist' in logrotate_verify_divert.stdout"
+    fail_msg: compression toggle did not register the dpkg diversion
 
 - name: _verify | Read back the toggled fixture
   slurp:
@@ -58,16 +79,32 @@
       src: _verify_fixture.j2
       dest: /etc/logrotate.d/_verify_logrotate_tmpl
 
-- name: _verify | Assert the templated drop-in landed
-  stat:
-    path: /etc/logrotate.d/_verify_logrotate_tmpl
+- name: _verify | Read back the templated drop-in
+  slurp:
+    src: /etc/logrotate.d/_verify_logrotate_tmpl
   register: logrotate_verify_tmpl
   become: true
 
-- name: _verify | Templated drop-in must exist
+- name: _verify | Templated drop-in rendered compress per zfs_root
+  vars:
+    tmpl: "{{ logrotate_verify_tmpl.content | b64decode }}"
   assert:
     that:
-      - logrotate_verify_tmpl.stat.exists
+      # The slurp proves it exists; the content proves the ternary rendered
+      # the right form for this host.
+      - >-
+        (zfs_root and tmpl is search('(?m)^\s*# compress\s*$'))
+        or (not zfs_root and tmpl is search('(?m)^\s*compress\s*$'))
+    fail_msg: templated drop-in did not render compress per zfs_root
+
+- name: _verify | Remove the test diversion
+  # Drop the diversion the toggle registered, so a --keep box isn't left with a
+  # dangling diversion pointing at a path we're about to delete.
+  community.general.dpkg_divert:
+    path: /etc/logrotate.d/_verify_logrotate
+    divert: /etc/logrotate.d/_verify_logrotate.dpkg-dist
+    state: absent
+  become: true
 
 - name: _verify | Clean up fixtures
   file:
