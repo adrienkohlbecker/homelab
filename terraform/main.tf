@@ -51,6 +51,11 @@ terraform {
     endpoints = {
       s3 = "https://minio-api.lab.fahm.fr"
     }
+    # Static MinIO keys via [profile minio] (minio-credential-process) instead
+    # of AWS_* env vars -- that frees the default credential chain for the real
+    # `provider "aws"` (account 000390721279, MFA via the default profile). See
+    # terraform/aws.tf and ~/.aws/config.
+    profile        = "minio"
     use_path_style = true
     use_lockfile   = true
     # MinIO doesn't speak STS or IMDS; without these the AWS provider
