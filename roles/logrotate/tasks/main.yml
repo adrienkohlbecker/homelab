@@ -1,3 +1,15 @@
+- name: Assert inputs
+  assert:
+    that:
+      # zfs_root decides the compression direction (off on ZFS, which already
+      # compresses on disk; on elsewhere). It lives only in host_vars, so a host
+      # in the play without it — e.g. localhost — would otherwise fail mid-loop
+      # with a cryptic "zfs_root is undefined" rather than here.
+      - zfs_root is defined
+    fail_msg: zfs_root must be set in host_vars (true on ZFS-root hosts, false elsewhere)
+  tags:
+    - logrotate
+
 - name: Install logrotate
   apt:
     pkg:
