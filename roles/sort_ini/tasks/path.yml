@@ -8,7 +8,7 @@
       dest: sort_ini_{{ sort_ini_escaped_path }}.service
 
 - name: path | Enable sort_ini.service
-  when: not (ansible_check_mode and systemd_unit.changed)
+  when: not (ansible_check_mode and systemd_unit_file.changed)
   systemd:
     name: sort_ini_{{ sort_ini_escaped_path }}.service
     enabled: true
@@ -30,5 +30,5 @@
   vars:
     systemd_unit_args:
       src: sort_ini_{{ sort_ini_escaped_path }}.path
-      condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
-      restart: "{{ systemd_unit.changed }}"
+      condition: "{{ not (ansible_check_mode and systemd_unit_file.changed) }}"
+      restart: "{{ systemd_unit_file.changed }}"

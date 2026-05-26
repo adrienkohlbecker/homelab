@@ -59,8 +59,8 @@
   vars:
     systemd_unit_args:
       src: "{{ macvlan_args.name }}"
-      condition: "{{ not (ansible_check_mode and systemd_unit.changed) }}"
-      restart: "{{ systemd_unit.changed }}"
+      condition: "{{ not (ansible_check_mode and systemd_unit_file.changed) }}"
+      restart: "{{ systemd_unit_file.changed }}"
   tags:
     - macvlan
 
