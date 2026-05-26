@@ -101,4 +101,3 @@
   changed_when: _test_admin_create.rc == 0
   become: true
   become_user: git
-  no_log: true

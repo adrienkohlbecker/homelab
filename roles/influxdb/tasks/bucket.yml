@@ -339,7 +339,6 @@
             | selectattr('permissions', 'contains',
                 'write:orgs/' ~ _influxdb_org_id ~ '/buckets/' ~ _influxdb_bucket_id)
             | list | length) == 0
-      no_log: true
       become: true
 
     # Per-bucket key so concurrent bucket.yml invocations against
@@ -356,4 +355,3 @@
               | selectattr('permissions', 'contains',
                   'write:orgs/' ~ _influxdb_org_id ~ '/buckets/' ~ _influxdb_bucket_id)
               | first).token }}
-      no_log: true

@@ -82,9 +82,6 @@
   tags:
     - gitea
 
-# no_log: the rendered file carries every gitea_* secret; without this
-# an operator running `ansible-playbook -vvv` (common when debugging)
-# spills the diff into stdout and any tee'd log.
 - name: Configure gitea
   template:
     src: app.ini.j2
@@ -98,7 +95,6 @@
     # would do the same but is Python 3.13+ only; jammy ships 3.10.
     validate: python3 -c 'import configparser,sys; configparser.ConfigParser(allow_no_value=True).read_string("[__top__]\n" + open(sys.argv[1]).read())' "%s"
   register: gitea_conf
-  no_log: true
   become: true
   tags:
     - gitea
@@ -274,7 +270,6 @@
     GITEA_WORK_DIR: /mnt/services/gitea
   become: true
   become_user: git
-  no_log: true
   # Reaches this branch only when the fingerprint sentinel drifted and
   # no row exists for `authelia`: every successful exit writes a new
   # auth_source row, so changed=true is the honest signal.
@@ -312,7 +307,6 @@
     GITEA_WORK_DIR: /mnt/services/gitea
   become: true
   become_user: git
-  no_log: true
   # Same justification as the add-oauth branch -- the fingerprint
   # sentinel gates us to "state drifted, persist new state".
   changed_when: true

@@ -60,7 +60,6 @@
   register: lidarr_conf
   # ansible.cfg sets [diff] always=True + verbosity=1, so without this the
   # rendered <ApiKey> would print to the operator/CI log on write & rotation.
-  no_log: true
   become: true
   tags:
     - lidarr

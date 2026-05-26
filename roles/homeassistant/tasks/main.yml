@@ -167,7 +167,6 @@
     group: homeassistant
     mode: "0600"
   become: true
-  no_log: true
   tags:
     - homeassistant
 
