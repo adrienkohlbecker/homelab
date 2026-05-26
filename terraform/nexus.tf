@@ -40,19 +40,16 @@ resource "nexus_security_realms" "this" {
 
 locals {
   apt_proxies = {
-    "ubuntu-archive"    = "https://archive.ubuntu.com/ubuntu/"
-    "ubuntu-security"   = "https://security.ubuntu.com/ubuntu/"
-    "ubuntu-ports"      = "https://ports.ubuntu.com/ubuntu-ports/"
-    "azlux-debian"      = "https://packages.azlux.fr/debian/"
-    "nodesource-node22" = "https://deb.nodesource.com/node_22.x/"
-    # packagecloud, not repo.netdata.cloud: the latter prunes old releases and
-    # dropped the 1.46.* series the netdata role pins. packagecloud still serves
-    # it. Component-based, so flat=false on the shared resource fits.
-    # See notes/netdata_packagecloud_migration.md.
-    "netdata"   = "https://packagecloud.io/netdata/netdata/ubuntu/"
-    "fluentbit" = "https://packages.fluentbit.io/ubuntu/"
-    "1password" = "https://downloads.1password.com/linux/debian/amd64/"
-    "docker-ce" = "https://download.docker.com/linux/ubuntu/"
+    "ubuntu-archive"       = "https://archive.ubuntu.com/ubuntu/"
+    "ubuntu-security"      = "https://security.ubuntu.com/ubuntu/"
+    "ubuntu-ports"         = "https://ports.ubuntu.com/ubuntu-ports/"
+    "azlux-debian"         = "https://packages.azlux.fr/debian/"
+    "nodesource-node22"    = "https://deb.nodesource.com/node_22.x/"
+    "netdata"              = "https://repo.netdata.cloud/repos/stable/ubuntu/"
+    "netdata-packagecloud" = "https://packagecloud.io/netdata/netdata/ubuntu/"
+    "fluentbit"            = "https://packages.fluentbit.io/ubuntu/"
+    "1password"            = "https://downloads.1password.com/linux/debian/amd64/"
+    "docker-ce"            = "https://download.docker.com/linux/ubuntu/"
   }
 
   raw_proxies = {

@@ -20,7 +20,19 @@
 # module errors with "Either apt-key or gpg binary is required". The
 # deb822_repository module replaces both apt_key + apt_repository with
 # a single sources.list.d/*.sources file that embeds the key inline.
-- name: install | Add repository key
+- name: install | Add repository key (upstream)
+  when:
+    - ansible_distribution_major_version | int < 26
+    - not (ansible_check_mode and netdata_apt_gpg.changed)
+  apt_key:
+    id: 6E155DC153906B73765A74A99DD4A74CECFA8F4F
+    url: https://repo.netdata.cloud/netdatabot.gpg.key
+    keyring: /etc/apt/trusted.gpg.d/netdata.gpg
+  become: true
+  tags:
+    - netdata
+
+- name: install | Add repository key (packagecloud)
   when:
     - ansible_distribution_major_version | int < 26
     - not (ansible_check_mode and netdata_apt_gpg.changed)
@@ -35,7 +47,7 @@
 - name: install | Add repository
   when: ansible_distribution_major_version | int < 26
   apt_repository:
-    repo: deb [signed-by=/etc/apt/trusted.gpg.d/netdata.gpg] {{ mirror_apt_netdata }} {{ ansible_distribution_release }} main
+    repo: deb [signed-by=/etc/apt/trusted.gpg.d/netdata.gpg] {{ mirror_apt_netdata_packagecloud }} {{ ansible_distribution_release }} main
   register: netdata_apt_repo_legacy
   become: true
   tags:
