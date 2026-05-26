@@ -124,7 +124,6 @@
     status_code: 201
     return_content: true
   register: github_runner_reg_token
-  no_log: true
   become: true
 
 # Configure the runner. --replace handles the "previous registration
@@ -132,8 +131,7 @@
 # the per-instance dir locally but didn't deregister GitHub-side);
 # without it config.sh would fail with HTTP 409. Token passed via argv
 # is fine -- it's single-use and already consumed by the time the
-# command returns. no_log keeps it out of ansible's stdout in case
-# verbose mode is on.
+# command returns.
 - name: _register | Configure runner {{ github_runner_instance.repo ~ '_' ~ github_runner_instance.suffix }}
   when:
     - not (ansible_check_mode and github_runner_user.changed)
@@ -163,7 +161,6 @@
   args:
     chdir: /opt/actions-runner/{{ github_runner_iid }}
   changed_when: true
-  no_log: false
   become: true
   become_user: github_runner
 

@@ -190,7 +190,6 @@
   register: _influxdb_root_auth_query
   changed_when: false
   check_mode: false
-  no_log: true
   become: true
   tags:
     - influxdb
@@ -200,7 +199,6 @@
   set_fact:
     influxdb_root_token: >-
       {{ (_influxdb_root_auth_query.stdout | from_json | first).token }}
-  no_log: true
   tags:
     - influxdb
 

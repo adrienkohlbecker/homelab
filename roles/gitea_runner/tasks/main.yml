@@ -110,7 +110,6 @@
   register: gitea_runner_test_token
   become: true
   become_user: git
-  no_log: true
   tags:
     - gitea_runner
 
@@ -128,12 +127,6 @@
 # shell: (not command:) is required because we need a shell to expand
 # $REGISTRATION_TOKEN. executable: /bin/bash so `set -o pipefail` (a
 # bashism) is honoured; the env always sets the var, so `set -u` is safe.
-#
-# failed_when: false + the follow-up Surface task is the defence-in-
-# depth pairing with no_log: true: hiding the task output would
-# otherwise hide the real failure cause (gitea unreachable, token
-# rejected, cert untrusted). The follow-up scrubs the token from
-# stderr before failing loudly.
 #
 # REGISTRATION_TOKEN expression: in qemu_test the mint above set
 # gitea_runner_test_token.stdout to a single-line token; in prod the
@@ -164,7 +157,6 @@
   become_user: gitea_runner
   register: gitea_runner_registration
   failed_when: false
-  no_log: true
   tags:
     - gitea_runner
 

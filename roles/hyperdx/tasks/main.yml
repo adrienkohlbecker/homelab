@@ -186,7 +186,6 @@
   delay: 5
   until: hyperdx_register.status in [200, 409]
   when: not ansible_check_mode
-  no_log: true
   become: true
   tags:
     - hyperdx
@@ -242,7 +241,6 @@
       or '"matchedCount":1' in hyperdx_mongo_bootstrap.stdout
     )
   when: not ansible_check_mode
-  no_log: true
   become: true
   tags:
     - hyperdx

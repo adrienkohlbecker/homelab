@@ -120,12 +120,10 @@
       delegate_to: "{{ tailscale_headscale_host }}"
       register: tailscale_preauth
       changed_when: false
-      no_log: true
 
     - name: register | Set the pre-auth key fact
       set_fact:
         tailscale_preauth_key: "{{ (tailscale_preauth.stdout | from_json).key }}"
-      no_log: true
 
     # Hand the key to `tailscale up` via a file rather than --authkey <key> on the
     # command line, where it would be world-readable in /proc/<pid>/cmdline / ps
@@ -139,13 +137,11 @@
         owner: root
         group: root
         mode: "0600"
-      no_log: true
 
 # --reset so the advertised set on first registration is exactly what we pass (no
 # stale flags from a prior manual `tailscale up`). --authkey file: reads the key
-# from the staged file so it never lands in argv/ps; no_log keeps the task's own
-# logging quiet too. --timeout bounds the call so a control-plane hiccup can't
-# wedge the converge.
+# from the staged file so it never lands in argv/ps.
+# --timeout bounds the call so a control-plane hiccup can't wedge the converge.
 - name: register | Register with headscale and advertise routes / exit node
   command: >-
     {{ tailscale_bin }} up
@@ -166,7 +162,6 @@
   when:
     - not ansible_check_mode
     - not (tailscale_running | bool)
-  no_log: true
   become: true
   tags:
     - tailscale

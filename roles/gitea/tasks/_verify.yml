@@ -94,7 +94,6 @@
   failed_when: >-
     _verify_user_create.rc != 0
     and "already exists" not in _verify_user_create.stderr
-  no_log: true
 
 # gitea 1.26+ rejects HTTP basic auth for /api/v1/* with "token is
 # required" -- need a real access token. --raw prints just the token
@@ -113,7 +112,6 @@
   become_user: git
   register: _verify_token
   changed_when: false
-  no_log: true
 
 # Status 201 on first run, 409 on a --keep re-run. gitea accepts the
 # API token as the Basic-auth password (DISABLE_QUERY_AUTH_TOKEN in
@@ -132,7 +130,6 @@
       auto_init: true
       default_branch: main
     status_code: [ 201, 409 ]
-  no_log: true
 
 - name: _verify | Git clone the throwaway repo over HTTP  # noqa: latest[git]
   git:
@@ -140,7 +137,6 @@
     dest: /tmp/gitea_verify_clone
   environment:
     GIT_TERMINAL_PROMPT: "0"
-  no_log: true
 
 # Commit + push exercises the receive-pack path, which writes through
 # gitea -> on-disk repo + sqlite -- the same path a real developer hits.
@@ -160,7 +156,6 @@
     GIT_TERMINAL_PROMPT: "0"
   register: _verify_push
   changed_when: true
-  no_log: true
 
 - name: _verify | Confirm pushed file is fetchable through the API
   uri:
@@ -169,7 +164,6 @@
     url_password: "{{ _verify_token.stdout | trim }}"
     force_basic_auth: true
     status_code: 200
-  no_log: true
 
 # SSH roundtrip: the HTTP path above exercises gitea's own listener;
 # this exercises a different code path -- host sshd matching the
@@ -202,7 +196,6 @@
       title: "verify_{{ ansible_date_time.epoch }}"
       key: "{{ _verify_ssh_pubkey.content | b64decode | trim }}"
     status_code: [ 201, 422 ]
-  no_log: true
 
 - name: _verify | Git ls-remote over SSH (exercises gitea-serv + authorized_keys)  # noqa: command-instead-of-module
   command: git ls-remote ssh://git@127.0.0.1:22/verify/functional_test.git HEAD
@@ -210,7 +203,6 @@
     GIT_SSH_COMMAND: ssh -i /tmp/gitea_verify_ssh_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes
     GIT_TERMINAL_PROMPT: "0"
   changed_when: false
-  no_log: true
 
 # Smoke test for the OIDC CLI tooling. main.yml's add-oauth /
 # update-oauth path is gated on `not qemu_test` (the box VM can't

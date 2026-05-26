@@ -127,13 +127,11 @@
   retries: 150
   delay: 2
   until: _verify_otlp_nginx.status == 200
-  no_log: true
 
 # Negative-path: a syntactically-valid but wrong Bearer must be rejected
 # by the collector's bearertokenauth extension (hitting 4318 directly so
 # the request bypasses any nginx-side validation). Derived from the real
-# key so a collision is impossible by construction. no_log because the
-# derived value still embeds the real key as a prefix. Runs after the
+# key so a collision is impossible by construction. Runs after the
 # nginx-positive probe above so the OTLP receiver is guaranteed bound.
 - name: _verify | OTLP loopback rejects a syntactically-valid wrong key
   uri:
@@ -145,7 +143,6 @@
     body:
       resourceLogs: []
     status_code: 401
-  no_log: true
 
 # Negative-path: missing Authorization must be rejected. Fires at the
 # OTel collector's bearertokenauth extension (nginx forwards through;

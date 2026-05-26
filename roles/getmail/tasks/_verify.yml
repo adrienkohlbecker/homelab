@@ -4,9 +4,6 @@
 # permissions regression on the maildir surface here. We can't safely
 # exercise the live IMAP fetch path from the harness (no Gmail creds in
 # test/, no outbound), so this is the state-only fallback per CLAUDE.md.
-# no_log: true because --dump echoes the parsed config to stdout
-# including `password = <gmail_app_password>`; the captured register is
-# still usable by downstream asserts in-memory.
 - name: _verify | Getmailrc parses and arg shape is valid
   command: >-
     getmail --dump
@@ -14,21 +11,17 @@
     --getmaildir /mnt/services/getmail
   register: _getmail_verify
   changed_when: false
-  no_log: true
 
-# Convert the no_log'd dump output into boolean facts so the
-# assertion task can reference safe values; on assertion failure
-# only the expression and the booleans are displayed, never the
-# raw dump (which contains the password line). The substring checks
-# are intentionally not pinned to getmail's --dump format style
-# (could be `key=val` or `key="val"` depending on version).
+# Convert the dump output into boolean facts so the assertion task below
+# reports readable booleans on failure rather than the whole rendered dump.
+# The substring checks are intentionally not pinned to getmail's --dump format
+# style (could be `key=val` or `key="val"` depending on version).
 - name: _verify | Extract assertion booleans from dump
   set_fact:
     _getmail_dump_has_username: "{{ root_email in _getmail_verify.stdout }}"
     _getmail_dump_has_destination: "{{ '/mnt/services/getmail' in _getmail_verify.stdout }}"
     _getmail_dump_has_mailbox: "{{ '[Gmail]/All Mail' in _getmail_verify.stdout }}"
     _getmail_password_var_nonempty: "{{ gmail_app_password | length > 0 }}"
-  no_log: true
 
 # Replaces a prior tautological `'imap.gmail.com' in stdout` check
 # (imap.gmail.com is a literal in the template; that check passes

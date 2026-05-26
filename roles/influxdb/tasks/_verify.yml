@@ -52,7 +52,6 @@
       - --json
   register: _verify_admin_auth
   changed_when: false
-  no_log: true
   become: true
 
 # nginx-leg bypass-on-Authorization: a machine client presenting its
@@ -75,7 +74,6 @@
   failed_when: >-
     _verify_nginx.status != 200
     or _verify_nginx.json.status | default('') != 'pass'
-  no_log: true
   become: true
 
 # Service-native CLI liveness -- catches a regression where /health
@@ -102,7 +100,6 @@
       - 'if ($authelia_user = "{{ influxdb_authelia_user }}") { set $upstream_auth "Token '
       - /etc/nginx/sites-available/influxdb
   changed_when: false
-  no_log: true
   become: true
 
 # Exercise bucket.yml end-to-end with a throwaway tenant. Verifies the
@@ -138,8 +135,7 @@
 # step's 204 proves the token is honored; the read step (which must fail
 # rc != 0) proves write-bucket doesn't accidentally grant read. A previous
 # admin-as-self query step was redundant -- 204 + rc-check span both.
-# argv form keeps the line-protocol point's embedded space in one slot;
-# no_log keeps the token out of ansible's task log.
+# argv form keeps the line-protocol point's embedded space in one slot.
 - name: _verify | Exercise bucket-scoped write-auth (positive write + negative read)
   vars:
     _verify_token: "{{ influxdb_bucket_verify_bucket_token }}"
@@ -160,7 +156,6 @@
           - "{{ _verify_token }}"
           - sentinel,source=ansible_verify value=1
       changed_when: false
-      no_log: true
       become: true
 
     - name: _verify | Write-bucket-only token attempts read
@@ -180,7 +175,6 @@
       register: _verify_neg_query
       changed_when: false
       failed_when: false
-      no_log: true
       become: true
 
     - name: _verify | Write-bucket-only token cannot read (auth scope enforced)
