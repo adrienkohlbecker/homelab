@@ -11,6 +11,22 @@
   until: _verify_loopback.status == 200
   become: true
 
+# Metrics probe -- fox's netdata prometheus collector scrapes this loopback
+# endpoint and its presence alert doubles as a headscale liveness signal, so a
+# broken --publish or a changed metrics path must fail here, not silently on
+# prod (the metrics surface is otherwise untested). Same URL netdata scrapes.
+- name: _verify | headscale serves prometheus metrics on its loopback port
+  uri:
+    url: http://localhost:{{ service_ports.headscale_metrics }}/metrics
+    status_code: 200
+    return_content: true
+  register: _verify_metrics
+  failed_when: "'headscale_' not in (_verify_metrics.content | default(''))"
+  retries: 5
+  delay: 1
+  until: _verify_metrics.status | default(0) == 200
+  become: true
+
 # nginx vhost probe -- the control endpoint is public (auth: none), so a plain
 # GET /health through the TLS vhost must return 200. Validates the proxy_pass
 # port + TLS termination that the Tailscale clients depend on.
@@ -71,6 +87,17 @@
   failed_when: "'test-harness' not in _verify_user_list.stdout"
   become: true
 
+# Tie the symlink-shape check above to an observed write: the gRPC user-create
+# just wrote through data/db.sqlite (the symlink), so the real DB file must now
+# exist and be non-empty on the dedicated sqlite dataset -- catches a regression
+# that leaves the DB off the 4K dataset even when the symlink stat still passes.
+- name: _verify | the gRPC write landed on the sqlite dataset (real DB on-disk)
+  stat:
+    path: /mnt/services/sqlite/headscale/db.sqlite
+  register: _verify_db_real
+  failed_when: not _verify_db_real.stat.exists or _verify_db_real.stat.size == 0
+  become: true
+
 # Dual-stack STUN publish -- fox is a dual-stack relay, so the embedded DERP
 # STUN (udp/3478) must be reachable over IPv6, not just v4. This is asserted
 # structurally rather than functionally on purpose: headscale's STUN answers
@@ -90,12 +117,28 @@
   failed_when: "'[::]:3478' not in _verify_stun_listen.stdout"
   become: true
 
-- name: _verify | netavark forwards inbound v6 STUN into the headscale container
-  shell: ip6tables -t nat -S | grep -- "--dport 3478 -j DNAT"
+# netavark's firewall driver is iptables on jammy/noble (see roles/podman
+# install.yml), so the v6 DNAT rule lives in the ip6tables nat table. On
+# resolute+ netavark uses the native nftables driver and ip6tables is empty --
+# check the nft ruleset there instead. box_deps (the only machine that runs this
+# _verify) is noble today, so the iptables branch is the one that executes; the
+# nft branch is a best-effort placeholder to refine when the box base OS moves.
+- name: _verify | netavark forwards inbound v6 STUN into the headscale container (iptables)
+  shell: set -o pipefail; ip6tables -t nat -S | grep -- "--dport 3478 -j DNAT"
   args:
     executable: /bin/bash
   register: _verify_stun_dnat
   changed_when: false
+  when: ansible_distribution_release in ['jammy', 'noble']
+  become: true
+
+- name: _verify | netavark forwards inbound v6 STUN into the headscale container (nftables)
+  shell: set -o pipefail; nft list ruleset | grep -- "3478" | grep -iq "dnat"
+  args:
+    executable: /bin/bash
+  register: _verify_stun_dnat_nft
+  changed_when: false
+  when: ansible_distribution_release not in ['jammy', 'noble']
   become: true
 
 # OIDC boot test -- _setup stood up a local mockoidc issuer and enabled OIDC for
