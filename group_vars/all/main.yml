@@ -190,7 +190,7 @@ mirror_apt_nodesource: 'https://{{ nexus_url ~ "/repository/nodesource-node22" i
 # packagecloud, not repo.netdata.cloud: the latter dropped the pinned 1.46.* series.
 # See notes/netdata_packagecloud_migration.md and roles/netdata/tasks/install.yml.
 mirror_apt_netdata: 'https://{{ nexus_url ~ "/repository/netdata" if nexus_url else "repo.netdata.cloud/repos/stable/ubuntu" }}'
-mirror_apt_netdata_packagecloud: 'https://{{ nexus_url ~ "/repository/netdata_packagecloud" if nexus_url else "packagecloud.io/netdata/netdata/ubuntu" }}'
+mirror_apt_netdata_packagecloud: 'https://{{ nexus_url ~ "/repository/netdata-packagecloud" if nexus_url else "packagecloud.io/netdata/netdata/ubuntu" }}'
 mirror_apt_fluentbit: 'https://{{ nexus_url ~ "/repository/fluentbit" if nexus_url else "packages.fluentbit.io/ubuntu" }}'
 mirror_apt_docker: 'https://{{ nexus_url ~ "/repository/docker-ce" if nexus_url else "download.docker.com/linux/ubuntu" }}'
 # 1password apt proxy targets amd64; aarch64 falls back to upstream.
