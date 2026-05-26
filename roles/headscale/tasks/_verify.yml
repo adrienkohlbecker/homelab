@@ -147,7 +147,11 @@
 # issuer (a malformed oidc block or unreachable issuer would leave the unit
 # failed). Assert that, plus that the rendered config actually carried OIDC +
 # the pkce block + the mock issuer -- so a regression that drops PKCE or the OIDC
-# wiring fails here rather than silently shipping OIDC untested.
+# wiring fails here rather than silently shipping OIDC untested. Coverage
+# boundary: this proves boot-time OIDC *discovery* + that the oidc/pkce block
+# rendered -- NOT a live authorization-code / PKCE-S256 token exchange (the
+# harness has no browser/OAuth client to drive enrollment). The end-to-end login
+# flow is checked in the field after deploy.
 - name: _verify | headscale.service is active (boot-time OIDC discovery succeeded)
   command: systemctl is-active headscale.service
   register: _verify_hs_active
