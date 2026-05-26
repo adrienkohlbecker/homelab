@@ -236,6 +236,95 @@
     state: absent
   become: true
 
+# Branch D2 (base-conf rollback): the rescue's restore + backup-removal
+# arms (main.yml) only fire when the BASE conf changed AND the assembled
+# config then fails validation. Branch D's bad fragment leaves the base
+# conf untouched, so the restore is a skipped no-op there. Force it:
+# perturb the base conf (so the role's `copy` rewrites it from files/ and
+# leaves a backup of the perturbed version) WITH a malformed fragment
+# present (so `keepalived -t` fails after the good base is written). The
+# rescue must then restore the pre-copy base from its backup and delete
+# that backup, leaving the live daemon on the previous good config.
+- name: _verify | Count base-conf backups before the rollback probe
+  find:
+    paths: /etc/keepalived
+    patterns: 'keepalived.conf.*'
+  register: _keepalived_backups_pre
+  become: true
+
+- name: _verify | Perturb the base conf so the next copy leaves a backup
+  lineinfile:
+    path: /etc/keepalived/keepalived.conf
+    line: "# _verify rollback perturbation"
+    insertafter: EOF
+  become: true
+
+- name: _verify | Drop a malformed fragment to fail validation after the copy
+  copy:
+    content: |
+      _verify_rollback_bogus_keyword
+    dest: /etc/keepalived/conf.d/_verify_rollback_bad.conf
+    owner: root
+    group: root
+    mode: "0640"
+  become: true
+
+- name: _verify | Re-run the role expecting the base-conf rescue to fire
+  block:
+    - name: _verify | Converge with a perturbed base conf and a bad fragment
+      import_role:
+        name: keepalived
+    - name: _verify | Role unexpectedly succeeded on the rollback probe
+      fail:
+        msg: >-
+          keepalived role converged with a malformed fragment present; the
+          keepalived -t gate did not fail the run as it must.
+  rescue:
+    - name: _verify | Role aborted and the base-conf rescue ran as expected
+      debug:
+        msg: keepalived role failed validation as expected — base conf restored from backup.
+
+- name: _verify | Rollback probe — query unit state
+  systemd:
+    name: keepalived
+  register: _keepalived_unit_after_rollback
+  become: true
+
+- name: _verify | Slurp the base conf after the rollback
+  slurp:
+    src: /etc/keepalived/keepalived.conf
+  register: _keepalived_base_after_rollback
+  become: true
+
+- name: _verify | Count base-conf backups after the rollback probe
+  find:
+    paths: /etc/keepalived
+    patterns: 'keepalived.conf.*'
+  register: _keepalived_backups_post
+  become: true
+
+- name: _verify | Rollback restored the pre-copy base conf and cleaned its backup
+  vars:
+    _base: "{{ _keepalived_base_after_rollback.content | b64decode }}"
+  assert:
+    that:
+      # Daemon untouched: the bad config never reached it.
+      - _keepalived_unit_after_rollback.status.ActiveState == 'active'
+      - _keepalived_unit_after_rollback.status.ActiveEnterTimestampMonotonic == _keepalived_ts_active
+      # Restore arm ran: the perturbation we appended (i.e. the backed-up
+      # pre-copy version) is back on disk — the freshly-copied clean base
+      # was reverted to the backup.
+      - "'# _verify rollback perturbation' in _base"
+      # Remove-backup arm ran: the rescue deleted the backup it created, so
+      # the count is unchanged vs before the probe.
+      - _keepalived_backups_post.matched == _keepalived_backups_pre.matched
+
+- name: _verify | Remove the rollback probe fragment
+  file:
+    path: /etc/keepalived/conf.d/_verify_rollback_bad.conf
+    state: absent
+  become: true
+
 # Branch E: remove the good sentinel and re-run; the disable branch
 # should return the unit to stopped+disabled (last tenant left).
 - name: _verify | Remove sentinel fragment
