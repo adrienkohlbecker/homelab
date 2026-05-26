@@ -44,6 +44,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name sonarr \
+    --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="sonarr" \
     --env PUID={{ sonarr_user.uid }} \

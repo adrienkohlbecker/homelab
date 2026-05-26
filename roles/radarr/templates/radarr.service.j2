@@ -44,6 +44,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name radarr \
+    --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="radarr" \
     --env PUID={{ radarr_user.uid }} \
