@@ -166,12 +166,19 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         metavar="PLAYBOOK",
-        help="After SSH + system-running ready, run ansible-playbook " "PLAYBOOK against the booted VM, then cleanly shut down. Used by " "mise-tasks/packer/seed-deps.sh to bake deps into a derived variant " "image. Implies --exit-after-ready semantics.",
+        help="After SSH + system-running ready, run ansible-playbook "
+        "PLAYBOOK against the booted VM, then cleanly shut down. Used by "
+        "mise-tasks/packer/seed-deps.sh to bake deps into a derived variant "
+        "image. Implies --exit-after-ready semantics.",
     )
     parser.add_argument(
         "--commit",
         action="store_true",
-        help="Skip the qcow2 overlay step for the OS disks and mount the " "--image-dir's packer-ubuntu-N.<format> files directly into qemu. " "Writes during the run mutate those files in place. Requires " "--image-dir to be explicit so it can't accidentally corrupt a " "published artifact directory.",
+        help="Skip the qcow2 overlay step for the OS disks and mount the "
+        "--image-dir's packer-ubuntu-N.<format> files directly into qemu. "
+        "Writes during the run mutate those files in place. Requires "
+        "--image-dir to be explicit so it can't accidentally corrupt a "
+        "published artifact directory.",
     )
 
     args = parser.parse_args()

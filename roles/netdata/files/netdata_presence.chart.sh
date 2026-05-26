@@ -69,13 +69,13 @@ declare -A _netdata_presence_seen_collectors
 # any failure we return non-zero so update() can skip emission rather
 # than emit fake "missing" values.
 _netdata_presence_fetch_contexts() {
-  curl -sS --max-time 3 "${netdata_presence_api}/api/v2/contexts" 2>/dev/null \
-    | jq -r '.contexts | keys[]' 2>/dev/null
+  curl -sS --max-time 3 "${netdata_presence_api}/api/v2/contexts" 2>/dev/null |
+    jq -r '.contexts | keys[]' 2>/dev/null
 }
 
 _netdata_presence_fetch_charts() {
-  curl -sS --max-time 3 "${netdata_presence_api}/api/v1/charts" 2>/dev/null \
-    | jq -r '.charts | keys[]' 2>/dev/null
+  curl -sS --max-time 3 "${netdata_presence_api}/api/v1/charts" 2>/dev/null |
+    jq -r '.charts | keys[]' 2>/dev/null
 }
 
 # go.d:collector:<plugin>:<job> -> chart-id prefix used by that job.
@@ -168,7 +168,10 @@ EOF
       # the keyset; ~6k charts on lab takes O(ms) at 60s update cadence.
       for _chart_id in "${!api_charts[@]}"; do
         case "$_chart_id" in
-          "$expected".*|"$expected"_*) present=1; break ;;
+        "$expected".* | "$expected"_*)
+          present=1
+          break
+          ;;
         esac
       done
     fi

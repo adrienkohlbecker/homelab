@@ -7,9 +7,9 @@
 # /etc/netplan and re-apply.
 set -e
 if [ -f /run/netplan_keep ]; then
-    rm -f /run/netplan_keep
-    logger -t netplan_rollback "cancelled — apply confirmed OK"
-    exit 0
+  rm -f /run/netplan_keep
+  logger -t netplan_rollback "cancelled — apply confirmed OK"
+  exit 0
 fi
 logger -t netplan_rollback "auto-rollback firing: restoring previous /etc/netplan"
 rm -rf /etc/netplan

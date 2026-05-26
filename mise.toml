@@ -6,7 +6,7 @@ CLOUDFLARE_API_TOKEN = "op://Lab/seckvi7vjb6ahgtt7w4l3r73zq/password"
 NEXUS_USERNAME = "op://Lab/u2lem3tvichptsn37new73ftv4/username"
 NEXUS_PASSWORD = "op://Lab/u2lem3tvichptsn37new73ftv4/password"
 # MinIO creds for the tofu s3 backend (state in bucket "terraform" on minio-api.lab.fahm.fr).
-AWS_ACCESS_KEY_ID     = "op://Lab/iiis755ps5mhhlpmcv25lrctgu/username"
+AWS_ACCESS_KEY_ID = "op://Lab/iiis755ps5mhhlpmcv25lrctgu/username"
 AWS_SECRET_ACCESS_KEY = "op://Lab/iiis755ps5mhhlpmcv25lrctgu/password"
 # Tofu client-side state encryption: feeds var.state_passphrase in main.tf
 # via the standard TF_VAR_<name> env mechanism. op run substitutes the

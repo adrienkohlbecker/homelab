@@ -68,7 +68,11 @@ hdparm_update() {
   for dev in "${hdparm_disks[@]}"; do
     safe=$(_hdparm_safe "$dev")
     path="/dev/disk/by-id/${dev}"
-    a=0; s=0; sl=0; u=0; ce=0
+    a=0
+    s=0
+    sl=0
+    u=0
+    ce=0
     # Per-device call so a single bad drive (missing by-id symlink after
     # a disk replacement, transient SATA-link drop) only collapses its
     # own chart — not every drive in the list. The previous batch form
@@ -87,11 +91,11 @@ hdparm_update() {
     # update cycle.
     if [ -e "$path" ] && state=$(timeout -k 2 5 hdparm -C "$path" 2>/dev/null | awk '/^ drive state is:/{sub(/^ drive state is:  /,""); print; exit}'); then
       case "$state" in
-        "active/idle") a=1 ;;
-        "standby")     s=1 ;;
-        "sleeping")    sl=1 ;;
-        "unknown")     u=1 ;;
-        *)             ce=1 ;;
+      "active/idle") a=1 ;;
+      "standby") s=1 ;;
+      "sleeping") sl=1 ;;
+      "unknown") u=1 ;;
+      *) ce=1 ;;
       esac
     else
       ce=1

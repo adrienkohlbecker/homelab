@@ -19,28 +19,28 @@ set -euo pipefail
 id=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --vault-id)
-      id="${2:-}"
-      shift 2
-      ;;
-    --vault-id=*)
-      id="${1#--vault-id=}"
-      shift
-      ;;
-    *)
-      [ -z "$id" ] && id="$1"
-      shift
-      ;;
+  --vault-id)
+    id="${2:-}"
+    shift 2
+    ;;
+  --vault-id=*)
+    id="${1#--vault-id=}"
+    shift
+    ;;
+  *)
+    [ -z "$id" ] && id="$1"
+    shift
+    ;;
   esac
 done
 id="${id:-prod}"
 
 case "$id" in
-  prod | test) ;;
-  *)
-    echo "vault-client.sh: unknown vault-id '$id' (expected: prod, test)" >&2
-    exit 1
-    ;;
+prod | test) ;;
+*)
+  echo "vault-client.sh: unknown vault-id '$id' (expected: prod, test)" >&2
+  exit 1
+  ;;
 esac
 
 upper=$(printf '%s' "$id" | tr '[:lower:]' '[:upper:]')

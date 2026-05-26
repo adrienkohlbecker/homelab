@@ -63,7 +63,7 @@ f_rescue() {
 
 # Assert effective uid is 0. (( )) form: EUID is a bash integer special.
 f_require_root() {
-  if (( EUID != 0 )); then
+  if ((EUID != 0)); then
     echo >&2 "Error: I require root"
     exit 1
   fi

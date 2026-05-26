@@ -9,8 +9,8 @@ input=$(cat)
 file=$(jq -r '.tool_input.file_path // empty' <<<"$input")
 
 case "$file" in
-  *.yml | *.yaml) ;;
-  *) exit 0 ;;
+*.yml | *.yaml) ;;
+*) exit 0 ;;
 esac
 
 [ -f "$file" ] || exit 0
