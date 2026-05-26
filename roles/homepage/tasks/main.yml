@@ -44,7 +44,7 @@
 # each file so the entrypoint's "copy if absent" path no-ops.
 # force: false leaves any operator-edited content alone on prod
 # (those files preexist from before the :ro switch).
-- name: Touch homepage skeleton-seeded config files (entrypoint copyfile no-op)
+- name: Touch homepage skeleton-seeded config files (entrypoint copyfile no-op)  # noqa: require-backup
   when: not (ansible_check_mode and homepage_user.changed)
   copy:
     content: ""

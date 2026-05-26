@@ -44,7 +44,7 @@
     mode: "0644"
   become: true
 
-- name: artifacts | Stage per-VM OpenCore.qcow2 working copy
+- name: artifacts | Stage per-VM OpenCore.qcow2 working copy  # noqa: require-backup
   # Copy from the cache only on first install. Once the VM has booted, this
   # qcow2 holds NVRAM (incl. iCloud activation) — overwriting it logs the
   # guest out of Apple services. To intentionally re-pristine, delete the

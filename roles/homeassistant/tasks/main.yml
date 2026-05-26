@@ -87,6 +87,7 @@
     group: homeassistant
     mode: "0600"
     force: false
+    backup: true
   register: homeassistant_network_storage
   become: true
   tags:
@@ -158,7 +159,7 @@
 # 0600 owned by homeassistant so only the operator (via sudo) and the
 # homeassistant uid can read it. Skip in check mode because the token
 # fact isn't populated when bucket.yml's tasks are skipped.
-- name: Materialise the influxdb write-auth token for operator paste
+- name: Materialise the influxdb write-auth token for operator paste  # noqa: require-backup
   when: not ansible_check_mode
   copy:
     content: "{{ influxdb_bucket_homeassistant_token }}\n"

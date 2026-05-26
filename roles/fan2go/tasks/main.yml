@@ -103,7 +103,7 @@
         creates: "/var/cache/fan2go-{{ fan2go_version }}-src/bin/fan2go"
       become: true
 
-    - name: Install built fan2go binary (aarch64)
+    - name: Install built fan2go binary (aarch64)  # noqa: require-backup
       copy:
         src: "/var/cache/fan2go-{{ fan2go_version }}-src/bin/fan2go"
         dest: "/usr/local/bin/fan2go-{{ fan2go_version }}"
@@ -160,7 +160,7 @@
         creates: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src/bin/fan2go-tui"
       become: true
 
-    - name: Install built fan2go-tui binary
+    - name: Install built fan2go-tui binary  # noqa: require-backup
       copy:
         src: "/var/cache/fan2go-tui-{{ fan2go_tui_version }}-src/bin/fan2go-tui"
         dest: "/usr/local/bin/fan2go-tui-{{ fan2go_tui_version }}"

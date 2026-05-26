@@ -14,7 +14,7 @@
 # daemon. Runs at every service start (ExecStartPre, see restart.conf)
 # AND as `--check %s` during the template task's validate, so a missing
 # chip is caught at apply time rather than at next boot.
-- name: Install fancontrol_remap script
+- name: Install fancontrol_remap script  # noqa: require-backup
   copy:
     src: fancontrol_remap
     dest: /usr/local/sbin/fancontrol_remap

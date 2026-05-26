@@ -343,6 +343,7 @@
     owner: root
     group: root
     mode: "0644"
+    backup: true
   become: true
   tags:
     - podman

@@ -107,7 +107,7 @@
   # the freshly-added file. Don't trim this — without it any typo in
   # the snippet bricks `nginx -s reload` host-wide.
   rescue:
-    - name: conf_d | Copy backup file to original
+    - name: conf_d | Copy backup file to original  # noqa: require-backup
       when: '"backup_file" in nginx_conf_d'
       copy:
         remote_src: true
