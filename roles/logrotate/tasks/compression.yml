@@ -15,42 +15,45 @@
 - name: compression | Configure logrotate compression {{ logrotate_args.item }}
   when: logrotate_args.condition | default(true)
   replace:
-    # Match the bare `compress` directive only. The trailing group uses
-    # [ \t] (not \s, which also matches \n and would swallow the next line)
-    # so compresscmd/compressoptions/compressext aren't clobbered.
-    regexp: ^(\s*)(# )?compress([ \t].*)?$
-    replace: "{{ zfs_root | ternary(disable, enable) }}"
+    # Disable matches a bare `compress` only; enable matches just the exact line
+    # disable writes (disabled_line), so a stray prose comment that merely
+    # mentions compress (e.g. "# compress: off here") on a non-ZFS host isn't
+    # turned into a live directive. [ \t] (not \s, which also matches \n) keeps
+    # compresscmd/compressoptions/compressext from being clobbered. Both stay
+    # idempotent: disable's output `# compress …` no longer matches disable_rx,
+    # and enable's output `compress` no longer matches enable_rx.
+    regexp: "{{ zfs_root | ternary(disable_rx, enable_rx) }}"
+    replace: "{{ zfs_root | ternary(disable_to, enable_to) }}"
     path: "{{ logrotate_args.item }}"
     backup: true
+    # No validate: here. The edit is a surgical one-directive toggle (it can't
+    # break config syntax), and `logrotate -d` over an arbitrary existing package
+    # config fails on unrelated pre-existing issues — e.g. /etc/logrotate.d/
+    # alternatives errors rc:1 because /var/log is group-writable and it has no
+    # `su` directive. template.yml validates the files *it* renders, which is safe.
   register: logrotate_conf
   become: true
   vars:
-    disable: '\1# compress # zfs already compresses disk contents'
-    enable: '\1compress'
+    disabled_line: '# compress # zfs already compresses disk contents'
+    disable_rx: ^(\s*)compress([ \t].*)?$
+    enable_rx: '^(\s*){{ disabled_line }}[ \t]*$'
+    disable_to: '\1{{ disabled_line }}'
+    enable_to: '\1compress'
 
-- name: compression | Check apt source for {{ logrotate_args.item }}
+# Any file the toggle actually changed had a live, uncommented `compress` we just
+# neutralized — by construction that's a package-shipped config, because our own
+# drop-ins (zfs_autobackup, the template helper) render the final compress state
+# directly and so never trigger a change here. That lets us divert without probing
+# dpkg for ownership (no `dpkg -S` + locale-pinned stderr grep). On ZFS we add the
+# diversion so a future apt upgrade writes the package's new config to
+# <item>.dpkg-dist (a logrotate taboo extension, so it is ignored) instead of
+# clobbering our edit; off ZFS we remove it so the package owns the file again.
+# A manually-removed diversion isn't re-added until the next upgrade flips the file
+# back to `compress` (re-disable + re-divert), which is an acceptable self-heal.
+- name: compression | (Un)divert {{ logrotate_args.item }}
   when: logrotate_conf.changed
-  # argv form so a config path with spaces/quotes can't word-split into extra
-  # dpkg args; LC_ALL=C pins the "no path found matching pattern" message the
-  # failed_when / divert guards below grep for.
-  command:
-    argv:
-      - dpkg
-      - -S
-      - "{{ logrotate_args.item }}"
-  environment:
-    LC_ALL: C
-  check_mode: false
-  changed_when: false
-  failed_when:
-    - logrotate_conf_dpkg.rc != 0
-    - '"no path found matching pattern" not in logrotate_conf_dpkg.stderr'
-  register: logrotate_conf_dpkg
-  become: true
-
-- name: compression | Divert {{ logrotate_args.item }}
-  when: 'logrotate_conf.changed and "no path found matching pattern" not in logrotate_conf_dpkg.stderr'
   community.general.dpkg_divert:
     path: "{{ logrotate_args.item }}"
-    divert: "{{ logrotate_args.item }}.dpkg-dist" # so it is not included by logrotate.conf
+    divert: "{{ logrotate_args.item }}.dpkg-dist"
+    state: "{{ zfs_root | ternary('present', 'absent') }}"
   become: true
