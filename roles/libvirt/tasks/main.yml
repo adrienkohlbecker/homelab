@@ -187,20 +187,14 @@
 # started — restarting libvirtd doesn't re-install per-network rules.
 # Cycle the default network so it picks up the new firewall_backend.
 # ~1s connectivity blip for any guest attached; guests don't reboot.
-- name: Cycle default network for firewall backend change (deactivate)
+- name: Cycle default network for firewall backend change
   when: libvirt_firewall_backend.changed | default(false) and not ansible_check_mode
   community.libvirt.virt_net:
     name: default
-    state: inactive
-  become: true
-  tags:
-    - libvirt
-
-- name: Cycle default network for firewall backend change (reactivate)
-  when: libvirt_firewall_backend.changed | default(false) and not ansible_check_mode
-  community.libvirt.virt_net:
-    name: default
-    state: active
+    state: "{{ item }}"
+  loop:
+    - inactive
+    - active
   become: true
   tags:
     - libvirt
