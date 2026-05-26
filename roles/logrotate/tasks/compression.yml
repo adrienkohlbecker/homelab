@@ -6,10 +6,19 @@
 # import_role pass replaces the whole `logrotate_args` value, so a
 # previous caller's condition can't bleed into the next caller that
 # doesn't explicitly override.
+- name: compression | Assert inputs
+  assert:
+    that:
+      - logrotate_args.item is defined
+    fail_msg: logrotate_args.item is required (path to the config file to edit)
+
 - name: compression | Configure logrotate compression {{ logrotate_args.item }}
   when: logrotate_args.condition | default(true)
   replace:
-    regexp: ^(\s*)(# )?compress(.*)$
+    # Match the bare `compress` directive only. The trailing group uses
+    # [ \t] (not \s, which also matches \n and would swallow the next line)
+    # so compresscmd/compressoptions/compressext aren't clobbered.
+    regexp: ^(\s*)(# )?compress([ \t].*)?$
     replace: "{{ zfs_root | ternary(disable, enable) }}"
     path: "{{ logrotate_args.item }}"
     backup: true
@@ -21,7 +30,16 @@
 
 - name: compression | Check apt source for {{ logrotate_args.item }}
   when: logrotate_conf.changed
-  command: dpkg -S {{ logrotate_args.item }}
+  # argv form so a config path with spaces/quotes can't word-split into extra
+  # dpkg args; LC_ALL=C pins the "no path found matching pattern" message the
+  # failed_when / divert guards below grep for.
+  command:
+    argv:
+      - dpkg
+      - -S
+      - "{{ logrotate_args.item }}"
+  environment:
+    LC_ALL: C
   check_mode: false
   changed_when: false
   failed_when:
