@@ -4,7 +4,7 @@
 # disabled apikey enforcement would let the auth'd probe pass on any key.
 - name: _verify | Lidarr /api/v1/system/status rejects unauth'd requests
   uri:
-    url: http://localhost:{{ service_ports.lidarr }}/api/v1/system/status
+    url: http://127.0.0.1:{{ service_ports.lidarr }}/api/v1/system/status
     status_code: 401
   register: _verify_http_unauth
   retries: 30
@@ -16,7 +16,7 @@
 # Header form keeps the key out of journald.
 - name: _verify | Lidarr answers /api/v1/system/status with our apikey
   uri:
-    url: http://localhost:{{ service_ports.lidarr }}/api/v1/system/status
+    url: http://127.0.0.1:{{ service_ports.lidarr }}/api/v1/system/status
     headers:
       X-Api-Key: "{{ lidarr_api_key }}"
     status_code: 200
