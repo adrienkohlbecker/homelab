@@ -81,6 +81,7 @@
     group: media
     mode: "0600"
     backup: true
+    validate: python3 -c 'import xml.etree.ElementTree as ET, sys; ET.parse(sys.argv[1])' "%s"
   register: radarr_conf
   become: true
   tags:
