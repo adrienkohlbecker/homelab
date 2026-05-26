@@ -3,6 +3,7 @@
     pkg:
       - logrotate
     policy_rc_d: 101
+    update_cache: true
     cache_valid_time: 3600
   register: logrotate_apt
   become: true
@@ -26,7 +27,15 @@
     file: compression.yml
     apply:
       tags: logrotate
-  loop: "{{ logrotate_confs.files | map(attribute='path') + (ansible_check_mode and logrotate_apt.changed) | ternary([], ['/etc/logrotate.conf']) }}"
+  # /etc/logrotate.conf lives outside logrotate.d, so append it to the file
+  # list explicitly — except in check mode on a host where logrotate was just
+  # (would-be) installed: nothing's on disk yet, so reading it would fail.
+  # ternary([], [...]) drops it only in that one case.
+  loop: >-
+    {{
+      (logrotate_confs.files | map(attribute='path') | list)
+      + ((ansible_check_mode and logrotate_apt.changed) | ternary([], ['/etc/logrotate.conf']))
+    }}
   loop_control:
     loop_var: logrotate_compression_path
   vars:
