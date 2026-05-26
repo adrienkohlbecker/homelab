@@ -37,6 +37,16 @@ grub_bootloader: true
 # dual-stack podman network (roles/headscale).
 nginx_ipv6: true
 
+# Public addresses the embedded DERP advertises in the DERPMap, pinned to the
+# terraform-reserved primary IPs (terraform/hetzner.tf hcloud_primary_ip.fox /
+# .fox_v6, auto_delete=false so they survive rebuilds; these are the same
+# addresses fox.fahm.fr A/AAAA resolve to). headscale can't auto-detect them:
+# behind nginx + the dual-stack podman bridge it would advertise the container's
+# bridge/ULA address, and ansible_default_ipv6 is itself hijacked by podman's ULA
+# gateway. So hardcode them -- update here if the reserved IPs ever change.
+headscale_derp_ipv4: "65.21.50.14"
+headscale_derp_ipv6: "2a01:4f9:c012:8f72::"
+
 # Headscale OIDC (user-device enrollment via Authelia), ENABLED. Headless hosts
 # (lab/pug) still enroll via pre-auth keys regardless; this is for the Apple-app
 # enrollment flow. The operator prerequisites (notes/headscale_mesh_redesign.md
