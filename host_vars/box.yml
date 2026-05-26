@@ -184,3 +184,18 @@ github_runner_instances:
 # assert the advertise + approve round-trip without colliding with the test topology.
 tailscale_advertise_routes: "10.99.99.0/24"
 tailscale_advertise_exit_node: true
+
+# roles/headscale OIDC boot test. Enable headscale's OIDC path under the harness
+# ONLY when headscale is the role under test, pointed at the local mockoidc that
+# roles/headscale/tasks/_setup.yml stands up (static 10.166.0.10:8090 on the
+# headscale podman net). Keyed on _role_under_test (a single-expression template,
+# so ansible preserves the bool) so the tailscale role's headscale-on-box stays
+# OIDC-free -- it doesn't run mockoidc. It must live in host_vars (not a _setup
+# set_fact) to survive the harness's separate converge/idempotence/_verify
+# ansible invocations. only_start_if_oidc_is_available makes headscale's boot the
+# OIDC-discovery assertion (see _verify). The secret is a throwaway matching
+# mockoidc's MOCKOIDC_CLIENT_SECRET -- no blast radius.
+headscale_oidc_enabled: "{{ (_role_under_test | default('')) == 'headscale' }}"
+headscale_oidc_issuer: http://10.166.0.10:8090/oidc
+headscale_oidc_client_id: headscale
+headscale_oidc_client_secret: test-oidc-client-secret

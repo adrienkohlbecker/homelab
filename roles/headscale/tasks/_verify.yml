@@ -97,3 +97,29 @@
   register: _verify_stun_dnat
   changed_when: false
   become: true
+
+# OIDC boot test -- _setup stood up a local mockoidc issuer and enabled OIDC for
+# this converge. With only_start_if_oidc_is_available:true, headscale reaching
+# `active` is itself proof that it completed boot-time OIDC discovery against the
+# issuer (a malformed oidc block or unreachable issuer would leave the unit
+# failed). Assert that, plus that the rendered config actually carried OIDC +
+# the pkce block + the mock issuer -- so a regression that drops PKCE or the OIDC
+# wiring fails here rather than silently shipping OIDC untested.
+- name: _verify | headscale.service is active (boot-time OIDC discovery succeeded)
+  command: systemctl is-active headscale.service
+  register: _verify_hs_active
+  changed_when: false
+  failed_when: _verify_hs_active.stdout | trim != 'active'
+  become: true
+
+# Read the rendered config from the host (the distroless headscale image has no
+# cat to podman-exec); /mnt/services/headscale/config.yaml is the file mounted
+# read-only into the container.
+- name: _verify | rendered config enabled OIDC + PKCE against the mock issuer
+  command: cat /mnt/services/headscale/config.yaml
+  register: _verify_hs_oidc_cfg
+  changed_when: false
+  failed_when: >-
+    'http://10.166.0.10:8090/oidc' not in _verify_hs_oidc_cfg.stdout
+    or 'pkce:' not in _verify_hs_oidc_cfg.stdout
+  become: true
