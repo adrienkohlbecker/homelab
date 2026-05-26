@@ -4,7 +4,7 @@
 # advertised must be approved. A stat-only "tailscaled is active" check would
 # pass even if registration silently failed, so assert the round-trip instead.
 
-- name: _verify | tailscale backend is Running (registered with headscale)
+- name: _verify | Tailscale backend is Running (registered with headscale)
   command: tailscale status --json
   register: _verify_status
   changed_when: false
@@ -15,13 +15,13 @@
     and (_verify_status.stdout | from_json).BackendState == 'Running'
   become: true
 
-- name: _verify | this node appears in headscale's node list
+- name: _verify | This node appears in headscale's node list
   command: podman exec headscale headscale nodes list -o json
   register: _verify_nodes
   changed_when: false
   become: true
 
-- name: _verify | resolve the registered node + its approved routes
+- name: _verify | Resolve the registered node + its approved routes
   set_fact:
     _verify_node: >-
       {{ (_verify_nodes.stdout | from_json)
@@ -31,7 +31,7 @@
 # Derive the expected set from the same host_vars the role advertises from
 # (subnets + the exit-node defaults), rather than hardcoding box's CIDR -- so the
 # assertion can't silently drift from tailscale_advertise_routes.
-- name: _verify | the node registered and every advertised route was approved
+- name: _verify | The node registered and every advertised route was approved
   assert:
     that:
       - _verify_node.id is defined

@@ -20,7 +20,7 @@
     cache_valid_time: 3600
   become: true
 
-- name: _verify | dnscrypt-proxy.socket is loaded and active
+- name: _verify | Dnscrypt-proxy.socket is loaded and active
   systemd:
     name: dnscrypt-proxy.socket
   register: _verify_socket
@@ -33,7 +33,7 @@
 # connects -- proves the .socket is lazily activating rather than the
 # .service running as a normal daemon. If someone disables socket
 # activation in the future, this catches it.
-- name: _verify | dnscrypt-proxy.service is inactive before first query
+- name: _verify | Dnscrypt-proxy.service is inactive before first query
   systemd:
     name: dnscrypt-proxy.service
   register: _verify_service_pre
@@ -92,7 +92,7 @@
   until: _verify_probe_tcp.rc == 0 and _verify_probe_tcp.stdout != ''
   changed_when: false
 
-- name: _verify | dnscrypt-proxy.service was woken by socket activation
+- name: _verify | Dnscrypt-proxy.service was woken by socket activation
   systemd:
     name: dnscrypt-proxy.service
   register: _verify_service_post
@@ -112,7 +112,7 @@
 #    = 0.5^20 ~ 1e-6). Both servers are DNSCrypt-protocol stamps, so both
 #    should appear; if one is missing, that server's stamp doesn't advertise
 #    the supports-relay flag and queries to it silently fall back to direct.
-- name: _verify | dnscrypt-proxy registered anonymized routes at startup
+- name: _verify | Dnscrypt-proxy registered anonymized routes at startup
   command: journalctl --no-pager -u dnscrypt-proxy.service
   register: _verify_journal_startup
   changed_when: false

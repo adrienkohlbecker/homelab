@@ -111,6 +111,7 @@
     podman rm nexus-prestage
   args:
     executable: /bin/bash
+  changed_when: true
   become: true
   tags:
     - nexus

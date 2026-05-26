@@ -1,4 +1,4 @@
-- name: _verify | fluent-bit.service is loaded and active
+- name: _verify | Fluent-bit.service is loaded and active
   systemd:
     name: fluent-bit
   register: _verify_unit
@@ -7,7 +7,7 @@
     or _verify_unit.status.ActiveState != "active"
   become: true
 
-- name: _verify | state-directory perms | stat
+- name: _verify | State-directory perms | stat
   stat:
     path: "{{ item }}"
   loop:
@@ -16,7 +16,7 @@
   register: _verify_state_dirs
   become: true
 
-- name: _verify | state-directory perms | assert 0700 root:root
+- name: _verify | State-directory perms | assert 0700 root:root
   assert:
     that:
       - item.stat.exists
@@ -205,7 +205,7 @@
 # nginx.* branches see no record. A regression that crashes the lua
 # only on systemd or tail records would otherwise land green here.
 
-- name: _verify | journald path | build per-run marker
+- name: _verify | Journald path | build per-run marker
   set_fact:
     fluentbit_otlp_journald_marker: "verify_journald_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
@@ -214,7 +214,7 @@
 # .service and otlp_shape strips .service to produce a predictable
 # service.name. The "ERROR <marker>" body fires level_from_message's
 # error-keyword arm (severity 17).
-- name: _verify | journald path | emit marked log via transient unit
+- name: _verify | Journald path | emit marked log via transient unit
   command: >-
     systemd-run --unit=fluentbit_verify_journald --no-block --quiet
     /usr/bin/logger -t fluentbit_verify_journald
@@ -226,7 +226,7 @@
 # (SYSLOG_IDENTIFIER=ansible-ansible.legacy.command, scoped to the ssh
 # session unit) carrying the marker in its logged command line doesn't
 # satisfy the count.
-- name: _verify | journald path | wait for ClickHouse row matching marker
+- name: _verify | Journald path | wait for ClickHouse row matching marker
   import_role:
     name: _test
     tasks_from: clickhouse_query_wait
@@ -241,7 +241,7 @@
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
 
-- name: _verify | journald path | fetch row as JSON
+- name: _verify | Journald path | fetch row as JSON
   import_role:
     name: _test
     tasks_from: clickhouse_query
@@ -268,7 +268,7 @@
 # record into metadata.otlp.attributes" loop. An earlier version only
 # lifted "host" and silently dropped every journald metadata field; the
 # bug stuck around precisely because nothing here checked.
-- name: _verify | journald path | assert lua filter output
+- name: _verify | Journald path | assert lua filter output
   vars:
     row: "{{ _test_clickhouse_result.stdout | from_json }}"
   assert:
@@ -287,18 +287,18 @@
 # tag-gated lift of that field into metadata, AND otlp_shape's nginx.*
 # branch. Appended via tee -a so fluent-bit's tail input sees a fresh
 # line on the existing inode without rotation confusion.
-- name: _verify | nginx tail | build per-run marker
+- name: _verify | Nginx tail | build per-run marker
   set_fact:
     fluentbit_otlp_nginx_marker: "verify_nginx_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
-- name: _verify | nginx tail | append marked line to access.log
+- name: _verify | Nginx tail | append marked line to access.log
   command: tee -a /var/log/nginx/access.log
   args:
     stdin: "{{ fluentbit_otlp_nginx_marker }}\n"
   changed_when: false
   become: true
 
-- name: _verify | nginx tail | wait for ClickHouse row matching marker
+- name: _verify | Nginx tail | wait for ClickHouse row matching marker
   import_role:
     name: _test
     tasks_from: clickhouse_query_wait
@@ -313,7 +313,7 @@
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
 
-- name: _verify | nginx tail | fetch row as JSON
+- name: _verify | Nginx tail | fetch row as JSON
   import_role:
     name: _test
     tasks_from: clickhouse_query
@@ -333,7 +333,7 @@
         LIMIT 1
         FORMAT JSONEachRow
 
-- name: _verify | nginx tail | assert lua filter output
+- name: _verify | Nginx tail | assert lua filter output
   vars:
     row: "{{ _test_clickhouse_result.stdout | from_json }}"
   assert:
@@ -348,11 +348,11 @@
 # keyword (WARN), distinct from the existing ERROR probe above:
 # catches mis-ordering of the priority table and SEV-mapping drift
 # after the SMP2 if/elseif -> table rewrite.
-- name: _verify | journald warn | build per-run marker
+- name: _verify | Journald warn | build per-run marker
   set_fact:
     fluentbit_otlp_warn_marker: "verify_warn_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
-- name: _verify | journald warn | emit marked log via transient unit
+- name: _verify | Journald warn | emit marked log via transient unit
   command: >-
     systemd-run --unit=fluentbit_verify_warn --no-block --quiet
     /usr/bin/logger -t fluentbit_verify_warn
@@ -360,7 +360,7 @@
   changed_when: false
   become: true
 
-- name: _verify | journald warn | wait for ClickHouse row matching marker
+- name: _verify | Journald warn | wait for ClickHouse row matching marker
   import_role:
     name: _test
     tasks_from: clickhouse_query_wait
@@ -375,7 +375,7 @@
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
 
-- name: _verify | journald warn | fetch row
+- name: _verify | Journald warn | fetch row
   import_role:
     name: _test
     tasks_from: clickhouse_query
@@ -394,7 +394,7 @@
         LIMIT 1
         FORMAT JSONEachRow
 
-- name: _verify | journald warn | assert severity classification
+- name: _verify | Journald warn | assert severity classification
   vars:
     row: "{{ _test_clickhouse_result.stdout | from_json }}"
   assert:
@@ -410,7 +410,7 @@
 # fluent-bit-python-parser dup-record that re-emits the trailing
 # exception line on its own (see fluent-bit.conf.j2's multiline
 # filter block for the quirk's documented context).
-- name: _verify | multiline | build per-run marker
+- name: _verify | Multiline | build per-run marker
   set_fact:
     fluentbit_otlp_multiline_marker: "verify_trace_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
@@ -422,7 +422,7 @@
 # should set SyslogIdentifier= in their unit file (or pass through a
 # `logger -t` wrapper) for the same reason; this probe doubles as a
 # canonical example.
-- name: _verify | multiline | emit python traceback via transient unit
+- name: _verify | Multiline | emit python traceback via transient unit
   command: >-
     systemd-run --unit=fluentbit_verify_multiline --no-block --quiet
     --property=SyslogIdentifier=fluentbit_verify_multiline
@@ -430,7 +430,7 @@
   changed_when: false
   become: true
 
-- name: _verify | multiline | wait for joined traceback row
+- name: _verify | Multiline | wait for joined traceback row
   import_role:
     name: _test
     tasks_from: clickhouse_query_wait
@@ -446,7 +446,7 @@
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
 
-- name: _verify | multiline | fetch row
+- name: _verify | Multiline | fetch row
   import_role:
     name: _test
     tasks_from: clickhouse_query
@@ -463,7 +463,7 @@
         LIMIT 1
         FORMAT JSONEachRow
 
-- name: _verify | multiline | assert traceback joined
+- name: _verify | Multiline | assert traceback joined
   vars:
     row: "{{ _test_clickhouse_result.stdout | from_json }}"
   assert:
@@ -487,11 +487,11 @@
 # a real python is no good either -- the kernel comm has a 15-byte
 # cap and "python3(mitogen" gets truncated before the ":" that the
 # detection key matches against.
-- name: _verify | mitogen | build per-run marker
+- name: _verify | Mitogen | build per-run marker
   set_fact:
     fluentbit_otlp_mitogen_marker: "verify_mitogen_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
-- name: _verify | mitogen | emit marked log via transient unit with mitogen-shaped identifier
+- name: _verify | Mitogen | emit marked log via transient unit with mitogen-shaped identifier
   command: >-
     systemd-run --unit=fluentbit_verify_mitogen --no-block --quiet
     --property=SyslogIdentifier=python3(mitogen:fake@host:9999)
@@ -499,7 +499,7 @@
   changed_when: false
   become: true
 
-- name: _verify | mitogen | wait for ClickHouse row matching marker
+- name: _verify | Mitogen | wait for ClickHouse row matching marker
   import_role:
     name: _test
     tasks_from: clickhouse_query_wait
@@ -514,7 +514,7 @@
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
 
-- name: _verify | mitogen | fetch row
+- name: _verify | Mitogen | fetch row
   import_role:
     name: _test
     tasks_from: clickhouse_query
@@ -530,7 +530,7 @@
         LIMIT 1
         FORMAT JSONEachRow
 
-- name: _verify | mitogen | assert collapse fired
+- name: _verify | Mitogen | assert collapse fired
   vars:
     row: "{{ _test_clickhouse_result.stdout | from_json }}"
   assert:
@@ -546,19 +546,19 @@
 # "libpod-conmon-" tag prefix and labels the records "podman_unnamed"
 # as a class. Probe drives an actual `podman run --rm` (deliberately
 # no --name) so the conmon-scope path lights up end to end.
-- name: _verify | podman_unnamed | build per-run marker
+- name: _verify | Podman_unnamed | build per-run marker
   set_fact:
     fluentbit_otlp_podman_marker: "verify_podman_unnamed_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
 # Image is already pulled by _setup's hyperdx import (busybox isn't
 # part of that, so pull explicitly here). One-shot, creates: gate not
 # applicable -- podman pull is idempotent on its own.
-- name: _verify | podman_unnamed | ensure busybox image present
+- name: _verify | Podman_unnamed | ensure busybox image present
   command: podman pull docker.io/library/busybox
   changed_when: false
   become: true
 
-- name: _verify | podman_unnamed | run marked busybox container (no --name on purpose)
+- name: _verify | Podman_unnamed | run marked busybox container (no --name on purpose)
   command: >-
     podman run --rm --log-driver journald
     docker.io/library/busybox
@@ -566,7 +566,7 @@
   changed_when: false
   become: true
 
-- name: _verify | podman_unnamed | wait for ClickHouse row matching marker
+- name: _verify | Podman_unnamed | wait for ClickHouse row matching marker
   import_role:
     name: _test
     tasks_from: clickhouse_query_wait
@@ -581,7 +581,7 @@
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
 
-- name: _verify | podman_unnamed | fetch row
+- name: _verify | Podman_unnamed | fetch row
   import_role:
     name: _test
     tasks_from: clickhouse_query
@@ -597,7 +597,7 @@
         LIMIT 1
         FORMAT JSONEachRow
 
-- name: _verify | podman_unnamed | assert libpod-conmon fallback fired
+- name: _verify | Podman_unnamed | assert libpod-conmon fallback fired
   vars:
     row: "{{ _test_clickhouse_result.stdout | from_json }}"
   assert:
@@ -618,19 +618,19 @@
 # podman's journald log driver tags with the same CONTAINER_ID_FULL).
 # Spoof a real healthcheck by minting a fake 64-hex unit name and
 # letting a transient unit exit non-zero; PID 1 emits the same shape.
-- name: _verify | podman_healthcheck | build per-run marker
+- name: _verify | Podman_healthcheck | build per-run marker
   set_fact:
     fluentbit_otlp_healthcheck_marker: "verify_healthcheck_{{ ansible_date_time.iso8601_basic_short }}_{{ 99999 | random }}"
 
 # SHA-256 of the marker is a unique 64-char lowercase hex string —
 # the exact shape podman uses for container IDs.
-- name: _verify | podman_healthcheck | derive fake 64-hex container id
+- name: _verify | Podman_healthcheck | derive fake 64-hex container id
   set_fact:
     fluentbit_otlp_healthcheck_cid: "{{ fluentbit_otlp_healthcheck_marker | hash('sha256') }}"
 
 # Default systemd-run is async-start: returns 0 after the unit launches,
 # the unit then exits 1 and PID 1 logs "Failed with result 'exit-code'."
-- name: _verify | podman_healthcheck | run failing transient unit named like a container id
+- name: _verify | Podman_healthcheck | run failing transient unit named like a container id
   command: >-
     systemd-run --unit={{ fluentbit_otlp_healthcheck_cid }}.service
     --quiet
@@ -638,7 +638,7 @@
   changed_when: false
   become: true
 
-- name: _verify | podman_healthcheck | wait for ClickHouse row matching cid
+- name: _verify | Podman_healthcheck | wait for ClickHouse row matching cid
   import_role:
     name: _test
     tasks_from: clickhouse_query_wait
@@ -653,7 +653,7 @@
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
 
-- name: _verify | podman_healthcheck | fetch row
+- name: _verify | Podman_healthcheck | fetch row
   import_role:
     name: _test
     tasks_from: clickhouse_query
@@ -674,7 +674,7 @@
         LIMIT 1
         FORMAT JSONEachRow
 
-- name: _verify | podman_healthcheck | assert rewrite shape
+- name: _verify | Podman_healthcheck | assert rewrite shape
   vars:
     row: "{{ _test_clickhouse_result.stdout | from_json }}"
   assert:

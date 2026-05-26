@@ -1,7 +1,7 @@
 # Loopback probe -- the unit's --sdnotify=healthy gates systemd `active` on the
 # in-container `headscale users list` CLI check, so by the time _verify runs the
 # server is answering. /health is headscale's own liveness endpoint (200 {}).
-- name: _verify | headscale answers /health on its loopback port
+- name: _verify | Headscale answers /health on its loopback port
   uri:
     url: http://localhost:{{ service_ports.headscale }}/health
     status_code: 200
@@ -15,7 +15,7 @@
 # endpoint and its presence alert doubles as a headscale liveness signal, so a
 # broken --publish or a changed metrics path must fail here, not silently on
 # prod (the metrics surface is otherwise untested). Same URL netdata scrapes.
-- name: _verify | headscale serves prometheus metrics on its loopback port
+- name: _verify | Headscale serves prometheus metrics on its loopback port
   uri:
     url: http://localhost:{{ service_ports.headscale_metrics }}/metrics
     status_code: 200
@@ -30,7 +30,7 @@
 # nginx vhost probe -- the control endpoint is public (auth: none), so a plain
 # GET /health through the TLS vhost must return 200. Validates the proxy_pass
 # port + TLS termination that the Tailscale clients depend on.
-- name: _verify | headscale /health is reachable through the nginx TLS vhost
+- name: _verify | Headscale /health is reachable through the nginx TLS vhost
   uri:
     url: https://localhost/health
     headers:
@@ -43,7 +43,7 @@
 # (tier-1 --user, no uidmap), so the SQLite DB + keys it writes into the state
 # dir should be owned by that user. A dropped --user flag would land them as
 # root silently; assert ownership so the drift is loud.
-- name: _verify | headscale data dir is owned by headscale
+- name: _verify | Headscale data dir is owned by headscale
   stat:
     path: /mnt/services/headscale/data
   register: _verify_data_owner
@@ -56,7 +56,7 @@
 # dedicated sqlite dataset. A snapshot-restore or a sqlite_dataset regression
 # could leave a real file at the dest (DB silently off the 4K dataset); assert
 # the symlink shape so the drift is loud.
-- name: _verify | headscale db.sqlite is a symlink onto the sqlite dataset
+- name: _verify | Headscale db.sqlite is a symlink onto the sqlite dataset
   stat:
     path: /mnt/services/headscale/data/db.sqlite
     follow: false
@@ -73,14 +73,14 @@
 # check would pass even if the gRPC API or DB were wedged. Create is
 # failed_when:false so a re-run against a kept VM (user already present) still
 # proves the read path below.
-- name: _verify | create a throwaway headscale user (gRPC write path)
+- name: _verify | Create a throwaway headscale user (gRPC write path)
   command: podman exec headscale headscale users create test-harness
   register: _verify_user_create
   changed_when: false
   failed_when: false
   become: true
 
-- name: _verify | the throwaway user round-trips back through list
+- name: _verify | The throwaway user round-trips back through list
   command: podman exec headscale headscale users list
   register: _verify_user_list
   changed_when: false
@@ -91,7 +91,7 @@
 # just wrote through data/db.sqlite (the symlink), so the real DB file must now
 # exist and be non-empty on the dedicated sqlite dataset -- catches a regression
 # that leaves the DB off the 4K dataset even when the symlink stat still passes.
-- name: _verify | the gRPC write landed on the sqlite dataset (real DB on-disk)
+- name: _verify | The gRPC write landed on the sqlite dataset (real DB on-disk)
   stat:
     path: /mnt/services/sqlite/headscale/db.sqlite
   register: _verify_db_real
@@ -110,7 +110,7 @@
 # into the container. A missing [::] listener or a non-dual-stack podman network
 # fails this. End-to-end v6 STUN is verified in the field via `tailscale
 # netcheck` from a v6-capable client after deploy.
-- name: _verify | host publishes DERP STUN on IPv6 ([::]:3478)
+- name: _verify | Host publishes DERP STUN on IPv6 ([::]:3478)
   command: ss -ulnH
   register: _verify_stun_listen
   changed_when: false
@@ -123,7 +123,7 @@
 # check the nft ruleset there instead. box_deps (the only machine that runs this
 # _verify) is noble today, so the iptables branch is the one that executes; the
 # nft branch is a best-effort placeholder to refine when the box base OS moves.
-- name: _verify | netavark forwards inbound v6 STUN into the headscale container (iptables)
+- name: _verify | Netavark forwards inbound v6 STUN into the headscale container (iptables)
   shell: set -o pipefail; ip6tables -t nat -S | grep -- "--dport {{ service_ports.headscale_stun }} -j DNAT"
   args:
     executable: /bin/bash
@@ -132,7 +132,7 @@
   when: ansible_distribution_release in ['jammy', 'noble']
   become: true
 
-- name: _verify | netavark forwards inbound v6 STUN into the headscale container (nftables)
+- name: _verify | Netavark forwards inbound v6 STUN into the headscale container (nftables)
   shell: set -o pipefail; nft list ruleset | grep -- "{{ service_ports.headscale_stun }}" | grep -iq "dnat"
   args:
     executable: /bin/bash
@@ -152,7 +152,7 @@
 # rendered -- NOT a live authorization-code / PKCE-S256 token exchange (the
 # harness has no browser/OAuth client to drive enrollment). The end-to-end login
 # flow is checked in the field after deploy.
-- name: _verify | headscale.service is active (boot-time OIDC discovery succeeded)
+- name: _verify | Headscale.service is active (boot-time OIDC discovery succeeded)  # noqa: command-instead-of-module
   command: systemctl is-active headscale.service
   register: _verify_hs_active
   changed_when: false
@@ -162,7 +162,7 @@
 # Read the rendered config from the host (the distroless headscale image has no
 # cat to podman-exec); /mnt/services/headscale/config.yaml is the file mounted
 # read-only into the container.
-- name: _verify | rendered config enabled OIDC + PKCE against the mock issuer
+- name: _verify | Rendered config enabled OIDC + PKCE against the mock issuer
   command: cat /mnt/services/headscale/config.yaml
   register: _verify_hs_oidc_cfg
   changed_when: false
@@ -178,7 +178,7 @@
 # "restart on ACL change" (or a headscale change that hard-fails on a bad
 # policy) surfaces here. Destructive to the on-disk ACL, which is fine: _verify
 # is test-only and the VM is discarded after -- so this runs last.
-- name: _verify | plant a malformed ACL policy on disk
+- name: _verify | Plant a malformed ACL policy on disk
   copy:
     dest: /mnt/services/headscale/acl.hujson
     content: "{ this is not valid hujson policy "
@@ -191,7 +191,7 @@
 # (tasks/main.yml drives it through the helper's reload: arg, which is also a
 # `state: reloaded`) -- so this exercises the real reload wiring, not a bare
 # `podman kill`.
-- name: _verify | reload headscale to load the (malformed) policy
+- name: _verify | Reload headscale to load the (malformed) policy
   systemd:
     name: headscale.service
     state: reloaded
@@ -202,7 +202,7 @@
 # policy rather than crashing on the malformed file -- the fail-soft contract.
 # Retried because the policy reload is async to signal receipt. (A stronger
 # check than `systemctl is-active`, which could read 'active' mid crash-restart.)
-- name: _verify | server survived the bad reload and still serves (fail-soft)
+- name: _verify | Server survived the bad reload and still serves (fail-soft)
   command: podman exec headscale headscale users list
   register: _verify_failsoft_list
   changed_when: false

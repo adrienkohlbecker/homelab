@@ -1,7 +1,7 @@
 # Loopback probe -- confirms gitea is serving. Type=notify already gates
 # "active" on the HTTP listener being bound, so the retries here are
 # mostly belt-and-suspenders for slow-cold-DB cases.
-- name: _verify | gitea answers /api/healthz on loopback
+- name: _verify | Gitea answers /api/healthz on loopback
   uri:
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/healthz
     status_code: 200
@@ -12,7 +12,7 @@
 
 # Asserts the running gitea matches the version pinned in vars/main.yml
 # -- catches "binary updated, unit not restarted" and bad-download cases.
-- name: _verify | gitea /api/v1/version matches pinned gitea_version
+- name: _verify | Gitea /api/v1/version matches pinned gitea_version
   uri:
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/version
     status_code: 200
@@ -26,7 +26,7 @@
 
 # Reverse-proxy chain probe -- a typo'd subdomain or broken
 # nginx_site_args would pass the loopback probe above silently.
-- name: _verify | gitea reachable via nginx vhost
+- name: _verify | Gitea reachable via nginx vhost
   uri:
     url: https://localhost/api/healthz
     headers:
@@ -37,7 +37,7 @@
 # Confirms gitea actually opened the sqlite db at the path we configured
 # -- a permissions/mount regression on /mnt/services/sqlite/gitea/ would
 # land here as "no such file" with a unit still active.
-- name: _verify | gitea sqlite database exists and is owned by git
+- name: _verify | Gitea sqlite database exists and is owned by git
   stat:
     path: /mnt/services/sqlite/gitea/gitea.db
   register: _verify_sqlite
@@ -54,7 +54,7 @@
 # command= prefix is lost). Skipping the `paths` check -- it requires
 # Log.RootPath + Repository.ROOT to pre-exist as writable dirs, which
 # the role intentionally doesn't create.
-- name: _verify | gitea doctor self-checks (db + authorized_keys)
+- name: _verify | Gitea doctor self-checks (db + authorized_keys)
   command: >-
     /usr/local/bin/gitea doctor check
     --run check-db-version,check-db-consistency,authorized-keys
@@ -69,7 +69,7 @@
 # HTTP, sqlite write path, and on-disk repo creation all work end-to-
 # end. State checks above can pass on a build that is "running but not
 # functional"; this is the smoke test that actually does the job.
-- name: _verify | wipe any prior throwaway clone directory
+- name: _verify | Wipe any prior throwaway clone directory
   file:
     path: /tmp/gitea_verify_clone
     state: absent
@@ -79,7 +79,7 @@
 # out of the source tree. The two-step (create user, mint token) shape
 # is retained on purpose -- `--access-token` only prints a token on
 # fresh create, which would break --keep re-runs.
-- name: _verify | create throwaway admin user
+- name: _verify | Create throwaway admin user
   command: >-
     /usr/local/bin/gitea admin user create
     --username verify --random-password
@@ -100,7 +100,7 @@
 # required" -- need a real access token. --raw prints just the token
 # (no preamble) so capture is one filter. Token-name embeds epoch so
 # --keep re-runs don't collide with the "name already used" check.
-- name: _verify | generate an access token for the throwaway user
+- name: _verify | Generate an access token for the throwaway user
   command: >-
     /usr/local/bin/gitea admin user generate-access-token
     --username verify
@@ -119,7 +119,7 @@
 # API token as the Basic-auth password (DISABLE_QUERY_AUTH_TOKEN in
 # app.ini blocks the ?token=... URL variant); force_basic_auth keeps
 # the credential out of ansible's failure-display dict.
-- name: _verify | create a throwaway repo via API
+- name: _verify | Create a throwaway repo via API
   uri:
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/user/repos
     method: POST
@@ -134,7 +134,7 @@
     status_code: [ 201, 409 ]
   no_log: true
 
-- name: _verify | git clone the throwaway repo over HTTP
+- name: _verify | Git clone the throwaway repo over HTTP  # noqa: latest[git]
   git:
     repo: "http://verify:{{ _verify_token.stdout | trim }}@127.0.0.1:{{ service_ports.gitea }}/verify/functional_test.git"
     dest: /tmp/gitea_verify_clone
@@ -144,7 +144,7 @@
 
 # Commit + push exercises the receive-pack path, which writes through
 # gitea -> on-disk repo + sqlite -- the same path a real developer hits.
-- name: _verify | commit and push a stamp
+- name: _verify | Commit and push a stamp
   shell: |
     set -euo pipefail
     cd /tmp/gitea_verify_clone
@@ -162,7 +162,7 @@
   changed_when: true
   no_log: true
 
-- name: _verify | confirm pushed file is fetchable through the API
+- name: _verify | Confirm pushed file is fetchable through the API
   uri:
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/repos/verify/functional_test/contents/stamp.txt
     url_username: verify
@@ -177,20 +177,20 @@
 # add), running the forced `gitea serv` command, and handing off to
 # git-upload-pack. ls-remote does the full handshake in ~1s without
 # transferring objects.
-- name: _verify | generate throwaway SSH keypair on the target
+- name: _verify | Generate throwaway SSH keypair on the target
   command: ssh-keygen -t ed25519 -N "" -f /tmp/gitea_verify_ssh_key -C verify@verify.invalid
   args:
     creates: /tmp/gitea_verify_ssh_key
   changed_when: false
 
-- name: _verify | slurp throwaway SSH pubkey
+- name: _verify | Slurp throwaway SSH pubkey
   slurp:
     src: /tmp/gitea_verify_ssh_key.pub
   register: _verify_ssh_pubkey
 
 # 201 on first run, 422 on a --keep re-run (gitea rejects a duplicate
 # key fingerprint regardless of title).
-- name: _verify | upload pubkey to verify user via API
+- name: _verify | Upload pubkey to verify user via API
   uri:
     url: http://127.0.0.1:{{ service_ports.gitea }}/api/v1/user/keys
     method: POST
@@ -204,7 +204,7 @@
     status_code: [ 201, 422 ]
   no_log: true
 
-- name: _verify | git ls-remote over SSH (exercises gitea-serv + authorized_keys)
+- name: _verify | Git ls-remote over SSH (exercises gitea-serv + authorized_keys)  # noqa: command-instead-of-module
   command: git ls-remote ssh://git@127.0.0.1:22/verify/functional_test.git HEAD
   environment:
     GIT_SSH_COMMAND: ssh -i /tmp/gitea_verify_ssh_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o BatchMode=yes
@@ -218,7 +218,7 @@
 # main.yml), so this assertion is shape-only on box: that the CLI
 # parses the auth-source DB without erroring. On prod it doubles as
 # proof that the provisioning landed.
-- name: _verify | gitea admin auth list runs cleanly
+- name: _verify | Gitea admin auth list runs cleanly
   command: /usr/local/bin/gitea admin auth list --config /etc/gitea/app.ini
   environment:
     GITEA_WORK_DIR: /mnt/services/gitea

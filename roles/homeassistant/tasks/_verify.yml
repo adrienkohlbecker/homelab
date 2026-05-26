@@ -1,4 +1,4 @@
-- name: _verify | homeassistant unit is loaded and active
+- name: _verify | Homeassistant unit is loaded and active
   systemd:
     name: homeassistant
   register: _verify_unit
@@ -14,7 +14,7 @@
 # opaque 400 (HA rejecting the proxied request); assert the real cause here
 # first. Guards against a new `!include` landing in configuration.yaml
 # without a matching stub in main.yml's "Ensure files exist" list.
-- name: _verify | homeassistant did not fall back to recovery mode
+- name: _verify | Homeassistant did not fall back to recovery mode
   command:
     argv:
       - journalctl
@@ -32,7 +32,7 @@
 # the unit's --health-cmd polls, so a 200 here proves the container
 # is serving on the published port -- not just that systemd called it
 # active. Retry budget matches the unit's 100s start-period plus slack.
-- name: _verify | homeassistant answers /manifest.json on loopback
+- name: _verify | Homeassistant answers /manifest.json on loopback
   uri:
     url: http://localhost:{{ service_ports.homeassistant }}/manifest.json
     status_code: 200
@@ -44,7 +44,7 @@
 # Exercise the nginx-proxied path too. A regression in the nginx_site
 # wiring (typo'd subdomain, broken proxy_pass, CSP rewriting the
 # response away) would pass the loopback probe above silently.
-- name: _verify | homeassistant answers /manifest.json via nginx vhost
+- name: _verify | Homeassistant answers /manifest.json via nginx vhost
   uri:
     url: https://localhost/manifest.json
     headers:
@@ -74,7 +74,7 @@
 # from the topology) keeps the check correct for both prod hosts
 # (block in 10.123.x) and qemu test fixtures (block in qemu_subnet's
 # 10.0.2.x, since netavark requires ip_range ⊂ parent's subnet).
-- name: _verify | homeassistant mac_iot IP is in this host's IoT /29
+- name: _verify | Homeassistant mac_iot IP is in this host's IoT /29
   vars:
     _mac_iot_block: "{{ (macvlan_blocks | selectattr('name', 'eq', 'mac_iot') | list | first).block }}"
     _expected_range: "{{ _mac_iot_block | ansible.utils.ipsubnet(_mac_iot_block | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
@@ -93,7 +93,7 @@
 # mode of the route surgery. On box the macvlan is the only default and
 # the script no-ops (single-default host), so this can't validate lab's
 # "bridge wins" preference -- that's checked by hand on lab after deploy.
-- name: _verify | homeassistant retains off-subnet egress (route not stranded)
+- name: _verify | Homeassistant retains off-subnet egress (route not stranded)
   command: podman exec homeassistant ip route get 1.1.1.1
   register: _verify_ha_egress
   changed_when: false
@@ -118,7 +118,7 @@
 # same reason the script does. Test-only route surgery; _verify never runs
 # against prod and the box VM is torn down right after, so leaving HA on the
 # post-script routes (bridge default still present) is fine.
-- name: _verify | pin_default_route down-ranks a preferred mac_iot default so the bridge wins
+- name: _verify | Pin_default_route down-ranks a preferred mac_iot default so the bridge wins
   shell: |
     set -euo pipefail
     {% raw %}
@@ -176,14 +176,14 @@
 # by listing it back. Catches a regression in the from_json filters,
 # the selectattr permission match, or a future influx-cli rename that
 # breaks --json output.
-- name: _verify | influxdb homeassistant user exists
+- name: _verify | Influxdb homeassistant user exists
   command: podman exec influxdb influx user list --name homeassistant --json
   register: _verify_influxdb_user
   changed_when: false
   failed_when: (_verify_influxdb_user.stdout | from_json | length) == 0
   become: true
 
-- name: _verify | influxdb homeassistant bucket exists
+- name: _verify | Influxdb homeassistant bucket exists
   command: podman exec influxdb influx bucket list --name homeassistant --json
   register: _verify_influxdb_bucket
   changed_when: false
@@ -200,7 +200,7 @@
 # id, matching bucket.yml's tightened detection regex -- a perm
 # pointing at the same bucket id under a different org would not
 # false-positive here.
-- name: _verify | influxdb write-auth on homeassistant bucket exists
+- name: _verify | Influxdb write-auth on homeassistant bucket exists
   command: podman exec influxdb influx auth list --user homeassistant --json
   register: _verify_influxdb_auth
   changed_when: false
@@ -228,7 +228,7 @@
     label: "{{ item }}"
   become: true
 
-- name: _verify | sqlite DBs are in WAL mode (when present)
+- name: _verify | Sqlite DBs are in WAL mode (when present)
   command: sqlite3 -readonly /mnt/services/sqlite/homeassistant/{{ item.item }} 'PRAGMA journal_mode;'
   register: _verify_sqlite_wal
   changed_when: false

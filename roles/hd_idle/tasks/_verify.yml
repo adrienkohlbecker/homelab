@@ -17,18 +17,18 @@
 # the template filter, so (2) always exercises the filter chain end-
 # to-end. On lab/pug the ghost is joined by real spinning disks.
 
-- name: _verify | confirm hd-idle is active
+- name: _verify | Confirm hd-idle is active  # noqa: command-instead-of-module
   command: systemctl is-active hd-idle
   changed_when: false
   become: true
 
-- name: _verify | read hd-idle process argv
+- name: _verify | Read hd-idle process argv
   command: pgrep -a hd-idle
   register: hd_idle_proc
   changed_when: false
   become: true
 
-- name: _verify | assert hd-idle argv carries global flags from the env file
+- name: _verify | Assert hd-idle argv carries global flags from the env file
   assert:
     that:
       - "'-i 0' in hd_idle_proc.stdout"
@@ -38,7 +38,7 @@
       failed to parse from /etc/default/hd-idle.
       pgrep output: {{ hd_idle_proc.stdout }}
 
-- name: _verify | assert each expected per-disk -a entry appears in argv
+- name: _verify | Assert each expected per-disk -a entry appears in argv
   # Mirror of the template filter chain at templates/hd-idle.j2:61 --
   # keep these two in sync. See the template's comment block for why
   # we discriminate pseudo-devices by name prefix and not via `virtual`.

@@ -144,6 +144,7 @@
     podman rm openproject-prestage
   args:
     executable: /bin/bash
+  changed_when: true
   become: true
   tags:
     - openproject

@@ -1,4 +1,4 @@
-- name: _verify | github_runner user exists; populate getent_passwd for uid lookups
+- name: _verify | Github_runner user exists; populate getent_passwd for uid lookups
   getent:
     database: passwd
     key: github_runner
@@ -11,19 +11,19 @@
 # a kvm group and asks subid for the passthrough; slurp /etc/subgid
 # and assert both ranges so a regression in subid's template (or in
 # the ordering invariant) fails loud.
-- name: _verify | resolve kvm gid for the subid range check
+- name: _verify | Resolve kvm gid for the subid range check
   getent:
     database: group
     key: kvm
   become: true
 
-- name: _verify | slurp /etc/subgid
+- name: _verify | Slurp /etc/subgid
   slurp:
     src: /etc/subgid
   register: _verify_subgid
   become: true
 
-- name: _verify | github_runner has the 65536 base range + kvm single-gid range
+- name: _verify | Github_runner has the 65536 base range + kvm single-gid range
   vars:
     _subgid_lines: "{{ (_verify_subgid.content | b64decode).splitlines() }}"
     _kvm_gid: "{{ ansible_facts.getent_group.kvm[1] }}"
@@ -37,7 +37,7 @@
       Expected a 65536-count base range and a 1-count range mapping
       the host kvm gid {{ _kvm_gid }}.
 
-- name: _verify | rootless podman.socket is active under github_runner
+- name: _verify | Rootless podman.socket is active under github_runner
   systemd:
     name: podman.socket
     scope: user
@@ -74,15 +74,18 @@
   vars:
     _instance: "{{ github_runner_instances[0].repo }}_{{ github_runner_instances[0].suffix }}"
   block:
-    - stat:
+    - name: _verify | Stat canonical run.sh
+      stat:
         path: /opt/actions-runner/run.sh
       register: _verify_can_inode
       become: true
-    - stat:
+    - name: _verify | Stat per-instance run.sh
+      stat:
         path: /opt/actions-runner/{{ _instance }}/run.sh
       register: _verify_inst_inode
       become: true
-    - assert:
+    - name: _verify | Assert canonical and per-instance run.sh share an inode
+      assert:
         that:
           - _verify_inst_inode.stat.exists
           - _verify_inst_inode.stat.executable
@@ -117,7 +120,7 @@
 # registration), so we drive a full start manually below with a stub
 # run.sh -- this load check just ensures the unit template renders
 # correctly for every declared instance.
-- name: _verify | github_runner@<instance>.service loads
+- name: _verify | Github_runner@<instance>.service loads
   systemd:
     name: github_runner@{{ item.repo }}_{{ item.suffix }}.service
   register: _verify_unit_load

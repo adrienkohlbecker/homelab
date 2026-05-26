@@ -6,7 +6,7 @@
 # group on the real uplink wouldn't be joined and this would fail.
 # Retried because the first multicast announcement lags unit-active
 # by several seconds on cold start (esp. in QEMU).
-- name: _verify | host's own .local name resolves via mDNS on the wire
+- name: _verify | Host's own .local name resolves via mDNS on the wire
   command: getent ahosts {{ ansible_hostname }}.local
   register: _verify_resolve
   retries: 20
@@ -24,7 +24,7 @@
 # catches a regression that failed to join the group at all (typo
 # in allow-interfaces, socket-option bug) which the getent above
 # could still mask via the kernel's loopback path for local queries.
-- name: _verify | avahi joined 224.0.0.251 on the pinned iface
+- name: _verify | Avahi joined 224.0.0.251 on the pinned iface
   command: ip -j maddr show dev {{ default_interface }}
   register: _verify_maddr
   changed_when: false
@@ -50,7 +50,7 @@
 # tautologically true and not regress on a real bug. The
 # allow-interfaces pin + check-response-ttl in the conf are the
 # enforcement; this probe is functional-positive only.
-- name: _verify | device-info service is announced on the pinned iface with the configured model
+- name: _verify | Device-info service is announced on the pinned iface with the configured model
   command: avahi-browse -prt _device-info._tcp
   register: _verify_browse
   retries: 20

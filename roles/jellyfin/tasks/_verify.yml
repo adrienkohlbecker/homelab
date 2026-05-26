@@ -2,7 +2,7 @@
 # /System/Info/Public returns valid JSON, not just that the container's
 # own healthcheck passes (which the unit's --sdnotify=healthy already
 # gates the "active" state on).
-- name: _verify | jellyfin /System/Info/Public over loopback
+- name: _verify | Jellyfin /System/Info/Public over loopback
   uri:
     url: http://localhost:{{ service_ports.jellyfin }}/System/Info/Public
     status_code: 200
@@ -15,7 +15,7 @@
 
 # Exercise the nginx-proxied path -- catches typo'd subdomain or
 # proxy_pass regressions that the loopback probe would miss.
-- name: _verify | jellyfin /System/Info/Public via nginx vhost
+- name: _verify | Jellyfin /System/Info/Public via nginx vhost
   uri:
     url: https://localhost/System/Info/Public
     headers:

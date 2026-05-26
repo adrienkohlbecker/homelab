@@ -1,9 +1,9 @@
-- name: _verify | curl_static --version runs successfully
+- name: _verify | Curl_static --version runs successfully
   command: /usr/local/bin/curl_static --version
   changed_when: false
   register: _verify_curl_version
 
-- name: _verify | curl_static reports the expected version
+- name: _verify | Curl_static reports the expected version
   assert:
     that:
       - _verify_curl_version.stdout is search('^curl ' ~ (static_curl_version | regex_escape) ~ ' ')
@@ -20,13 +20,13 @@
 # libc-bin (always present on Ubuntu); `file` is not in the base
 # image. failed_when: false because ldd of a static binary on some
 # glibc versions exits non-zero.
-- name: _verify | curl_static is fully statically linked
+- name: _verify | Curl_static is fully statically linked
   command: ldd /usr/local/bin/curl_static
   changed_when: false
   failed_when: false
   register: _verify_curl_ldd
 
-- name: _verify | assert curl_static reports no dynamic libraries
+- name: _verify | Assert curl_static reports no dynamic libraries
   assert:
     that:
       - "'=>' not in _verify_curl_ldd.stdout"

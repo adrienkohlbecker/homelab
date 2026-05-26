@@ -41,7 +41,7 @@
     _packer_verify_upstream_archive: "{{ 'http://ports.ubuntu.com/ubuntu-ports' if ansible_architecture == 'aarch64' else 'http://archive.ubuntu.com/ubuntu' }}"
     _packer_verify_upstream_security: "{{ 'http://ports.ubuntu.com/ubuntu-ports' if ansible_architecture == 'aarch64' else 'http://security.ubuntu.com/ubuntu' }}"
 
-- name: _verify | sources.list points at upstream Ubuntu mirrors
+- name: _verify | Sources.list points at upstream Ubuntu mirrors
   ansible.builtin.assert:
     that:
       - _packer_verify_upstream_archive in _packer_verify_sources_list_text
@@ -53,7 +53,7 @@
       write_sources_list with $UBUNTU_MIRROR_UPSTREAM didn't run or
       didn't land; shipped image is pinned to a build-time URL.
 
-- name: _verify | sources.list doesn't carry the build-time Nexus URL
+- name: _verify | Sources.list doesn't carry the build-time Nexus URL
   ansible.builtin.assert:
     that:
       - "'nexus' not in _packer_verify_sources_list_text"
@@ -62,7 +62,7 @@
       upstream reset got skipped, image is shipping with build-time
       mirror URLs and won't apt-update at sites without Nexus access.
 
-- name: _verify | sources.list mentions every expected suite
+- name: _verify | Sources.list mentions every expected suite
   ansible.builtin.assert:
     that:
       - item in _packer_verify_sources_list_text
@@ -73,7 +73,7 @@
     - "{{ ansible_distribution_release }}-backports"
     - "{{ ansible_distribution_release }}-security"
 
-- name: _verify | sources.list mentions every expected component
+- name: _verify | Sources.list mentions every expected component
   ansible.builtin.assert:
     that:
       - item in _packer_verify_sources_list_text
@@ -154,7 +154,7 @@
 # path (kicks in on CMOS clear / BIOS reset), not the everyday loader.
 # A green fallback + missing primary entry would silently force every
 # reboot through the fallback chain.
-- name: _verify | rEFInd Boot entry registered in NVRAM
+- name: _verify | REFInd Boot entry registered in NVRAM
   ansible.builtin.assert:
     that: >-
       _packer_verify_efibootmgr.stdout
@@ -180,10 +180,10 @@
     path: /dev/md/efi
   register: _packer_verify_md_efi
 
-- name: _verify | mdadm-EFI multi-disk assertions
+- name: _verify | Mdadm-EFI multi-disk assertions
   when: _packer_verify_md_efi.stat.exists
   block:
-    - name: _verify | mdadm --detail --test (clean=0, degraded=1, failed=2)
+    - name: _verify | Mdadm --detail --test (clean=0, degraded=1, failed=2)
       ansible.builtin.command: mdadm --detail --test {{ item }}
       changed_when: false
       failed_when: false
@@ -243,7 +243,7 @@
   become: true
   register: _packer_verify_zbm_cmdline_source
 
-- name: _verify | org.zfsbootmenu:commandline is set locally on rpool/ROOT
+- name: _verify | Org.zfsbootmenu:commandline is set locally on rpool/ROOT
   ansible.builtin.assert:
     # Source must be `local` (set by chroot.sh's `zfs set`), not `-`
     # (never set) or `inherited` (would mean a parent set it, which
@@ -266,7 +266,7 @@
 # dict and leaving the reader to spot the mismatch. The "want"
 # dicts double as the spec -- adding a new property to check is
 # one line.
-- name: _verify | rpool zpool properties
+- name: _verify | Rpool zpool properties
   vars:
     _packer_zpool_want:
       ashift: "12"
@@ -284,7 +284,7 @@
   register: _packer_verify_zpool_prop
   failed_when: (_packer_verify_zpool_prop.stdout | trim) != item.value
 
-- name: _verify | rpool root-dataset properties
+- name: _verify | Rpool root-dataset properties
   vars:
     _packer_zfs_want:
       compression: "zstd"
@@ -345,7 +345,7 @@
 # regressions in initramfs.conf, in the update-initramfs invocation,
 # and in the dpkg trigger ordering (a stale initrd built before the
 # sed would still pass the slurp+grep check).
-- name: _verify | initramfs carries server-class HBA drivers (functional MODULES=most check)
+- name: _verify | Initramfs carries server-class HBA drivers (functional MODULES=most check)
   ansible.builtin.shell:
     # Plain `grep -E` rather than `grep -qE`: with `set -o pipefail`,
     # grep -q's early-exit-on-first-match SIGPIPEs lsinitramfs (rc=141)
@@ -377,7 +377,7 @@
 # "hold" / "deinstall" / "purge") -- a held-but-not-installed package
 # has Status-Status=not-installed, which we want, while an installed-
 # and-held package has Status-Status=installed, which we want to fail.
-- name: _verify | dpkg install status for grub*
+- name: _verify | Dpkg install status for grub*
   ansible.builtin.command: dpkg-query -W -f='${binary:Package} ${db:Status-Status}\n' 'grub*'
   changed_when: false
   failed_when: false  # exits 1 when the pattern matches nothing
@@ -404,7 +404,7 @@
 # exits non-zero on held-package changes. Picking grub-pc because
 # it's the bare-metal x86 grub variant linux-generic Recommends
 # alongside grub-efi-amd64; both arches have it in the archive.
-- name: _verify | Apt refuses to install grub-pc (dry-run)
+- name: _verify | Apt refuses to install grub-pc (dry-run)  # noqa: command-instead-of-module
   ansible.builtin.command: apt-get install --simulate --yes --no-install-recommends grub-pc
   changed_when: false
   failed_when: false
@@ -440,7 +440,7 @@
   become: true
   register: _packer_verify_sshd_effective
 
-- name: _verify | sshd effective config disables password authentication
+- name: _verify | Sshd effective config disables password authentication
   ansible.builtin.assert:
     that: >-
       _packer_verify_sshd_effective.stdout_lines
@@ -468,7 +468,7 @@
 # of authorized_keys is implicitly proven: the harness logs in via
 # that key to run this playbook.
 
-- name: _verify | vagrant escalates to root via NOPASSWD sudo
+- name: _verify | Vagrant escalates to root via NOPASSWD sudo
   ansible.builtin.command: sudo -n whoami
   changed_when: false
   failed_when: false
@@ -587,7 +587,7 @@
 
 # --- x86_64: no /EFI/Linux staging (only the aarch64 branch creates it) ---
 
-- name: _verify | x86_64-only assertions
+- name: _verify | X86_64-only assertions
   when: ansible_architecture == "x86_64"
   block:
     - name: _verify | Stat /EFI/Linux on x86_64
@@ -727,11 +727,13 @@
               mv -f /boot/vmlinuz-{{ ansible_kernel }} /boot/.vmlinuz-{{ ansible_kernel }}
               mv -f /boot/initrd.img-{{ ansible_kernel }} /boot/.initrd.img-{{ ansible_kernel }}
             executable: /bin/bash
+          changed_when: true
           become: true
 
         - name: _verify | Re-run the hook to stage the older kernel onto /EFI/Linux/ (aarch64)
           when: ansible_architecture == "aarch64"
           ansible.builtin.command: /etc/kernel/postinst.d/zz-stage-efi-stub
+          changed_when: true
           become: true
 
     - name: _verify | Capture /EFI/Linux/{vmlinuz.efi,initrd} hashes after (aarch64)

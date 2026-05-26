@@ -1,4 +1,4 @@
-- name: _verify | scenario 1 — create new secret
+- name: _verify | Scenario 1 — create new secret
   import_role:
     name: podman_secret
     tasks_from: secret
@@ -7,13 +7,13 @@
       name: podman_secret_test
       data: alpha
 
-- name: _verify | scenario 1 — assert created and not pre-existing
+- name: _verify | Scenario 1 — assert created and not pre-existing
   assert:
     that:
       - podman_secret_test_rotated
       - not podman_secret_test_existed_before
 
-- name: _verify | scenario 2 — re-run with same data
+- name: _verify | Scenario 2 — re-run with same data
   import_role:
     name: podman_secret
     tasks_from: secret
@@ -22,13 +22,13 @@
       name: podman_secret_test
       data: alpha
 
-- name: _verify | scenario 2 — assert NOT rotated and pre-existing
+- name: _verify | Scenario 2 — assert NOT rotated and pre-existing
   assert:
     that:
       - not podman_secret_test_rotated
       - podman_secret_test_existed_before
 
-- name: _verify | scenario 3 — re-run with new data
+- name: _verify | Scenario 3 — re-run with new data
   import_role:
     name: podman_secret
     tasks_from: secret
@@ -37,24 +37,24 @@
       name: podman_secret_test
       data: beta
 
-- name: _verify | scenario 3 — assert rotated and pre-existing
+- name: _verify | Scenario 3 — assert rotated and pre-existing
   assert:
     that:
       - podman_secret_test_rotated
       - podman_secret_test_existed_before
 
-- name: _verify | inspect label on rotated secret
+- name: _verify | Inspect label on rotated secret
   containers.podman.podman_secret_info:
     name: podman_secret_test
   register: _verify_secret_info
   become: true
 
-- name: _verify | label matches new data hash
+- name: _verify | Label matches new data hash
   assert:
     that:
       - _verify_secret_info.secrets[0].Spec.Labels.data_sha256 == ('beta' | hash('sha256'))
 
-- name: _verify | cleanup test secret
+- name: _verify | Cleanup test secret
   containers.podman.podman_secret:
     name: podman_secret_test
     state: absent

@@ -17,7 +17,7 @@
   register: netplan_verify_networkd
   failed_when: netplan_verify_networkd.status.ActiveState != "active"
 
-- name: _verify | networkd-dispatcher is masked (can't start to spew veth noise)
+- name: _verify | Networkd-dispatcher is masked (can't start to spew veth noise)  # noqa: command-instead-of-module
   # `is-enabled` returns "masked" only when the unit is symlinked to
   # /dev/null, which is what blocks it from being triggered by networkd's
   # D-Bus signals. A plain `disabled`/`static` would still let it start.
@@ -112,7 +112,8 @@
 - name: _verify rollback | Run the role's apply path against the broken config
   become: true
   block:
-    - import_tasks: apply.yml
+    - name: _verify rollback | Apply the broken netplan config (expect SSH loss)
+      import_tasks: apply.yml
 
     - name: _verify rollback | Apply path completed cleanly — rollback was not exercised
       # We should never reach this task: the wait_for_connection inside

@@ -47,6 +47,7 @@
   file:
     path: /run/netplan_keep
     state: touch
+    mode: "0644"
 
 - name: Stop the rollback timer (suspenders)
   # Collapses the +90 s wait so `_verify` doesn't have to race the

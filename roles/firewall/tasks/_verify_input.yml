@@ -35,7 +35,7 @@
 # decides there's nowhere to deliver the SYN. A regression that
 # breaks the iif=lo rule diverts the packet to the catch-all chain;
 # the counter assertion at the end of _verify catches that.
-- name: _verify_input | INPUT allow — iif lo (loopback 127.0.0.1:80 from host)
+- name: _verify_input | INPUT allow — iif lo (loopback 127.0.0.1:80 from host)  # noqa: command-instead-of-module
   command: curl --connect-timeout 3 --max-time 5 -sf http://127.0.0.1:80/
   changed_when: false
   failed_when: false
@@ -58,14 +58,14 @@
 # the controller-side UDP hostfwd (slirp ingresses on enp0s2, which
 # is the WAN iface in the test VM) and negative from the netns where
 # traffic always ingresses on wg0.
-- name: _verify_input | INPUT allow — wireguard (51820/udp) reachable on WAN iface from controller
+- name: _verify_input | INPUT allow — wireguard (51820/udp) reachable on WAN iface from controller  # noqa: risky-shell-pipe
   delegate_to: localhost
   shell: |
     echo . | nc -u -w 1 127.0.0.1 {{ wan_udp_test_port }} >/dev/null 2>&1 || true
   args: { executable: /bin/bash }
   changed_when: false
 
-- name: _verify_input | INPUT — wireguard (51820/udp) rejected when ingressing on wg0
+- name: _verify_input | INPUT — wireguard (51820/udp) rejected when ingressing on wg0  # noqa: risky-shell-pipe
   shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_nonscope }} 10.99.0.1 51820
   args: { executable: /bin/bash }
   changed_when: false
@@ -97,7 +97,7 @@
   changed_when: true
   become: true
 
-- name: _verify_input | INPUT — mosh (60000/udp) reachable from wireguard source
+- name: _verify_input | INPUT — mosh (60000/udp) reachable from wireguard source  # noqa: risky-shell-pipe
   shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_wg }} 10.99.0.1 60000
   args: { executable: /bin/bash }
   changed_when: false
@@ -122,7 +122,7 @@
 # NetBIOS uses the same lan_admin_pairs (iif, saddr) intersection.
 # Positive case from wg-source via wg0; the home_LAN-via-wg0 mismatch
 # is structurally identical and already covered by the Samba probes.
-- name: _verify_input | INPUT — NetBIOS (137/udp) reachable from wireguard source
+- name: _verify_input | INPUT — NetBIOS (137/udp) reachable from wireguard source  # noqa: risky-shell-pipe
   shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_wg }} 10.99.0.1 137
   args: { executable: /bin/bash }
   changed_when: false
@@ -130,7 +130,7 @@
 
 # mDNS rule requires iif=$WAN_IFACE + saddr=$HOME_LAN simultaneously.
 # wg saddr fails the saddr half — counter must not increment.
-- name: _verify_input | INPUT — mDNS (5353/udp) sent from wg saddr (saddr scope rejects)
+- name: _verify_input | INPUT — mDNS (5353/udp) sent from wg saddr (saddr scope rejects)  # noqa: risky-shell-pipe
   shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_wg }} 10.99.0.1 5353
   args: { executable: /bin/bash }
   changed_when: false
@@ -157,7 +157,7 @@
   changed_when: true
   become: true
 
-- name: _verify_input | INPUT — mosh (60000/udp) rejected from home_LAN source via wg0 (iif/saddr mismatch)
+- name: _verify_input | INPUT — mosh (60000/udp) rejected from home_LAN source via wg0 (iif/saddr mismatch)  # noqa: risky-shell-pipe
   shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_home }} 10.99.0.1 60000
   args: { executable: /bin/bash }
   changed_when: false
@@ -179,7 +179,7 @@
   failed_when: false
   become: true
 
-- name: _verify_input | INPUT — mDNS (5353/udp) sent from home_LAN saddr via wg0 (iif scope rejects)
+- name: _verify_input | INPUT — mDNS (5353/udp) sent from home_LAN saddr via wg0 (iif scope rejects)  # noqa: risky-shell-pipe
   shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_home }} 10.99.0.1 5353
   args: { executable: /bin/bash }
   changed_when: false
@@ -190,7 +190,7 @@
 # $HOME_LAN nor $WG_SUBNET nor $PODMAN_DEFAULT — every saddr-scoped
 # rule must reject it. No bind task: the primary alias is in place
 # from the netns setup above.
-- name: _verify_input | INPUT — mosh (60000/udp) rejected from non-scope source
+- name: _verify_input | INPUT — mosh (60000/udp) rejected from non-scope source  # noqa: risky-shell-pipe
   shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_nonscope }} 10.99.0.1 60000
   args: { executable: /bin/bash }
   changed_when: false
@@ -212,7 +212,7 @@
   failed_when: false
   become: true
 
-- name: _verify_input | INPUT — dnscrypt (5053/udp) rejected from non-scope source
+- name: _verify_input | INPUT — dnscrypt (5053/udp) rejected from non-scope source  # noqa: risky-shell-pipe
   shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_nonscope }} 10.99.0.1 {{ service_ports.dnscrypt_proxy }}
   args: { executable: /bin/bash }
   changed_when: false
@@ -232,7 +232,7 @@
   changed_when: true
   become: true
 
-- name: _verify_input | INPUT — dnscrypt (5053/udp) reachable from container source
+- name: _verify_input | INPUT — dnscrypt (5053/udp) reachable from container source  # noqa: risky-shell-pipe
   shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_podman }} 10.99.0.1 {{ service_ports.dnscrypt_proxy }}
   args: { executable: /bin/bash }
   changed_when: false
@@ -246,7 +246,7 @@
   failed_when: false
   become: true
 
-- name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from default-bridge source
+- name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from default-bridge source  # noqa: risky-shell-pipe
   shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_podman }} 10.99.0.1 5333
   args: { executable: /bin/bash }
   changed_when: false
@@ -274,7 +274,7 @@
   failed_when: false
   become: true
 
-- name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from non-default-bridge source
+- name: _verify_input | INPUT — aardvark-dns (5333/udp) reachable from non-default-bridge source  # noqa: risky-shell-pipe
   shell: echo . | ip netns exec extns nc -u -w 1 -s {{ probe_podman_pool }} 10.99.0.1 5333
   args: { executable: /bin/bash }
   changed_when: false

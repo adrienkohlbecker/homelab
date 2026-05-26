@@ -3,7 +3,7 @@
 # systemctl show forces systemd to parse the unit so its ExecStart properties
 # show up on the bus where the module can read them.
 
-- name: _verify | install unit with single podman ExecStart
+- name: _verify | Install unit with single podman ExecStart
   copy:
     dest: /etc/systemd/system/extract_podman_image_test.service
     content: |
@@ -17,23 +17,23 @@
     mode: "0644"
   become: true
 
-- name: _verify | reload systemd so the new unit lands on the bus
+- name: _verify | Reload systemd so the new unit lands on the bus
   systemd:
     daemon_reload: true
   become: true
 
-- name: _verify | force systemd to load the unit so ExecStart is queryable
+- name: _verify | Force systemd to load the unit so ExecStart is queryable  # noqa: command-instead-of-module
   command: systemctl show extract_podman_image_test.service
   changed_when: false
   become: true
 
-- name: _verify | extract image from normal unit
+- name: _verify | Extract image from normal unit
   extract_podman_image:
     name: extract_podman_image_test
   register: _verify_normal
   become: true
 
-- name: _verify | normal unit yields the single image and no unresolved argvs
+- name: _verify | Normal unit yields the single image and no unresolved argvs
   assert:
     that:
       - _verify_normal.images == ["docker.io/library/alpine:3.19"]
@@ -44,7 +44,7 @@
       # case must round-trip cleanly.
       - _verify_normal.user == ""
 
-- name: _verify | replace with a non-podman unit
+- name: _verify | Replace with a non-podman unit
   copy:
     dest: /etc/systemd/system/extract_podman_image_test.service
     content: |
@@ -58,29 +58,29 @@
     mode: "0644"
   become: true
 
-- name: _verify | reload systemd
+- name: _verify | Reload systemd
   systemd:
     daemon_reload: true
   become: true
 
-- name: _verify | force load
+- name: _verify | Force load  # noqa: command-instead-of-module
   command: systemctl show extract_podman_image_test.service
   changed_when: false
   become: true
 
-- name: _verify | non-podman unit returns empty images and no unresolved argvs
+- name: _verify | Non-podman unit returns empty images and no unresolved argvs
   extract_podman_image:
     name: extract_podman_image_test
   register: _verify_nonpodman
   become: true
 
-- name: _verify | non-podman unit yields empty result
+- name: _verify | Non-podman unit yields empty result
   assert:
     that:
       - _verify_nonpodman.images == []
       - _verify_nonpodman.unresolved == []
 
-- name: _verify | replace with a podman argv that has no positional image
+- name: _verify | Replace with a podman argv that has no positional image
   copy:
     dest: /etc/systemd/system/extract_podman_image_test.service
     content: |
@@ -94,24 +94,24 @@
     mode: "0644"
   become: true
 
-- name: _verify | reload systemd
+- name: _verify | Reload systemd
   systemd:
     daemon_reload: true
   become: true
 
-- name: _verify | force load
+- name: _verify | Force load  # noqa: command-instead-of-module
   command: systemctl show extract_podman_image_test.service
   changed_when: false
   become: true
 
-- name: _verify | unresolvable podman argv fails the play
+- name: _verify | Unresolvable podman argv fails the play
   extract_podman_image:
     name: extract_podman_image_test
   register: _verify_unresolvable
   become: true
   ignore_errors: true
 
-- name: _verify | unresolvable case surfaces a fail with the expected msg
+- name: _verify | Unresolvable case surfaces a fail with the expected msg
   assert:
     that:
       - _verify_unresolvable.failed
@@ -122,7 +122,7 @@
 # via the module's `user` return so service.yml can route the pre-pull
 # into the right podman store. nobody exists on every Ubuntu so the
 # fixture installs cleanly without inventing a system user.
-- name: _verify | replace with a unit that declares User=nobody
+- name: _verify | Replace with a unit that declares User=nobody
   copy:
     dest: /etc/systemd/system/extract_podman_image_test.service
     content: |
@@ -137,17 +137,17 @@
     mode: "0644"
   become: true
 
-- name: _verify | reload systemd
+- name: _verify | Reload systemd
   systemd:
     daemon_reload: true
   become: true
 
-- name: _verify | force load
+- name: _verify | Force load  # noqa: command-instead-of-module
   command: systemctl show extract_podman_image_test.service
   changed_when: false
   become: true
 
-- name: _verify | extract from User=nobody unit
+- name: _verify | Extract from User=nobody unit
   extract_podman_image:
     name: extract_podman_image_test
   register: _verify_user
@@ -160,13 +160,13 @@
       - _verify_user.user == "nobody"
       - _verify_user.unresolved == []
 
-- name: _verify | cleanup test unit file
+- name: _verify | Cleanup test unit file
   file:
     path: /etc/systemd/system/extract_podman_image_test.service
     state: absent
   become: true
 
-- name: _verify | final daemon_reload
+- name: _verify | Final daemon_reload
   systemd:
     daemon_reload: true
   become: true
@@ -180,7 +180,7 @@
 # is a stable trip-wire across systemd versions), and assert both rescue
 # branches: backup-restore and fresh-file-delete.
 
-- name: _verify | install valid template via tasks_from=install
+- name: _verify | Install valid template via tasks_from=install
   import_role:
     name: systemd_unit
     tasks_from: install
@@ -188,18 +188,20 @@
     systemd_unit_args:
       src: systemd_unit_verify_ok.service.j2
 
-- name: _verify | first install set the per-unit fact and put file on disk
+- name: _verify | First install set the per-unit fact and put file on disk
   block:
-    - stat:
+    - name: _verify | Stat verify_ok service after first install
+      stat:
         path: /etc/systemd/system/systemd_unit_verify_ok.service
       register: _verify_ok_stat
-    - assert:
+    - name: _verify | Assert verify_ok result and file exist after first install
+      assert:
         that:
           - systemd_unit_verify_ok_service_result is defined
           - systemd_unit_verify_ok_service_result.changed
           - _verify_ok_stat.stat.exists
 
-- name: _verify | re-install same template is idempotent
+- name: _verify | Re-install same template is idempotent
   import_role:
     name: systemd_unit
     tasks_from: install
@@ -207,13 +209,13 @@
     systemd_unit_args:
       src: systemd_unit_verify_ok.service.j2
 
-- name: _verify | second install reported no change
+- name: _verify | Second install reported no change
   assert:
     that: not systemd_unit_verify_ok_service_result.changed
 
-- name: _verify | rescue restores backup when validate fails over a prior unit
+- name: _verify | Rescue restores backup when validate fails over a prior unit
   block:
-    - name: _verify | install broken unit over the good one (expect failure)
+    - name: _verify | Install broken unit over the good one (expect failure)
       import_role:
         name: systemd_unit
         tasks_from: install
@@ -221,29 +223,33 @@
         systemd_unit_args:
           src: systemd_unit_verify_bad.service.j2
           dest: systemd_unit_verify_ok.service
-    - fail:
+    - name: _verify | Sentinel fail if bad-over-good install succeeded
+      fail:
         msg: broken install over the good unit should have failed but did not
   rescue:
-    - name: _verify | on-disk content reverted to the good unit
+    - name: _verify | On-disk content reverted to the good unit
       command: grep -qF Description=systemd_unit_verify_ok /etc/systemd/system/systemd_unit_verify_ok.service
       changed_when: false
 
-- name: _verify | rescue deletes new file on fresh-install validate failure
+- name: _verify | Rescue deletes new file on fresh-install validate failure
   block:
-    - name: _verify | install broken unit fresh (expect failure)
+    - name: _verify | Install broken unit fresh (expect failure)
       import_role:
         name: systemd_unit
         tasks_from: install
       vars:
         systemd_unit_args:
           src: systemd_unit_verify_bad.service.j2
-    - fail:
+    - name: _verify | Sentinel fail if fresh bad install succeeded
+      fail:
         msg: broken install should have failed but did not
   rescue:
-    - stat:
+    - name: _verify | Stat verify_bad path after expected rescue
+      stat:
         path: /etc/systemd/system/systemd_unit_verify_bad.service
       register: _verify_bad_stat
-    - assert:
+    - name: _verify | Assert fresh bad unit was deleted by rescue
+      assert:
         that: not _verify_bad_stat.stat.exists
 
 # Mask guardrail: `systemctl mask` lives as a symlink to /dev/null at the
@@ -252,7 +258,7 @@
 # (no daemon-reload needed -- we never call systemctl, we just check
 # the on-disk shape), tries to install over it, asserts the play failed
 # AND the symlink survived.
-- name: _verify | pre-mask a test unit path
+- name: _verify | Pre-mask a test unit path
   file:
     src: /dev/null
     dest: /etc/systemd/system/systemd_unit_mask_test.service
@@ -260,33 +266,37 @@
     force: true
   become: true
 
-- name: _verify | install over a masked unit (expect failure)
+- name: _verify | Install over a masked unit (expect failure)
   block:
-    - import_role:
+    - name: _verify | Attempt install over masked unit (should raise)
+      import_role:
         name: systemd_unit
         tasks_from: install
       vars:
         systemd_unit_args:
           src: systemd_unit_verify_ok.service.j2
           dest: systemd_unit_mask_test.service
-    - fail:
+    - name: _verify | Sentinel fail if masked-unit install succeeded
+      fail:
         msg: install over masked unit should have refused but did not
   rescue:
-    - stat:
+    - name: _verify | Stat mask-test path after expected install refusal
+      stat:
         path: /etc/systemd/system/systemd_unit_mask_test.service
       register: _verify_masked_stat
-    - assert:
+    - name: _verify | Assert mask symlink survived the install refusal
+      assert:
         that:
           - _verify_masked_stat.stat.islnk
           - _verify_masked_stat.stat.lnk_target == '/dev/null'
 
-- name: _verify | unmask + remove mask-test fixture
+- name: _verify | Unmask + remove mask-test fixture
   file:
     path: /etc/systemd/system/systemd_unit_mask_test.service
     state: absent
   become: true
 
-- name: _verify | cleanup install-path test units
+- name: _verify | Cleanup install-path test units
   file:
     path: "{{ item }}"
     state: absent
@@ -295,14 +305,14 @@
     - /etc/systemd/system/systemd_unit_verify_bad.service
   become: true
 
-- name: _verify | daemon-reload after install-path cleanup
+- name: _verify | Daemon-reload after install-path cleanup
   systemd:
     daemon_reload: true
   become: true
 
 # Smoke the copy dispatch (extension-derived): src without .j2 picks the
 # copy module so install.yml reads from files/ rather than templates/.
-- name: _verify | install valid unit via tasks_from=install (copy path)
+- name: _verify | Install valid unit via tasks_from=install (copy path)
   import_role:
     name: systemd_unit
     tasks_from: install
@@ -310,12 +320,14 @@
     systemd_unit_args:
       src: systemd_unit_verify_copy_ok.service
 
-- name: _verify | copy-path install set the per-unit fact and put file on disk
+- name: _verify | Copy-path install set the per-unit fact and put file on disk
   block:
-    - stat:
+    - name: _verify | Stat verify_copy_ok service after copy-path install
+      stat:
         path: /etc/systemd/system/systemd_unit_verify_copy_ok.service
       register: _verify_copy_stat
-    - assert:
+    - name: _verify | Assert verify_copy_ok result and file exist after install
+      assert:
         that:
           - systemd_unit_verify_copy_ok_service_result is defined
           - systemd_unit_verify_copy_ok_service_result.changed
@@ -325,7 +337,7 @@
 # <unit>.d/override.conf and verify as the parent unit, so the override
 # is validated as part of the composed unit. Layer over the still-installed
 # copy-path fixture (cleanup is shared below).
-- name: _verify | install drop-in via tasks_from=dropin
+- name: _verify | Install drop-in via tasks_from=dropin
   import_role:
     name: systemd_unit
     tasks_from: dropin
@@ -334,31 +346,34 @@
       src: systemd_unit_verify_dropin.conf
       for: systemd_unit_verify_copy_ok.service
 
-- name: _verify | drop-in landed under <unit>.d and carries the expected line
+- name: _verify | Drop-in landed under <unit>.d and carries the expected line
   block:
-    - stat:
+    - name: _verify | Stat drop-in override.conf path
+      stat:
         path: /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/override.conf
       register: _verify_dropin_stat
-    - command: grep -qF Environment=DROPIN_TEST=1 /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/override.conf
+    - name: _verify | Assert drop-in carries the expected Environment line
+      command: grep -qF Environment=DROPIN_TEST=1 /etc/systemd/system/systemd_unit_verify_copy_ok.service.d/override.conf
       changed_when: false
-    - assert:
+    - name: _verify | Assert drop-in is a regular file (not a symlink)
+      assert:
         that:
           - _verify_dropin_stat.stat.exists
           - not _verify_dropin_stat.stat.islnk
 
-- name: _verify | cleanup drop-in directory
+- name: _verify | Cleanup drop-in directory
   file:
     path: /etc/systemd/system/systemd_unit_verify_copy_ok.service.d
     state: absent
   become: true
 
-- name: _verify | cleanup copy-path test unit
+- name: _verify | Cleanup copy-path test unit
   file:
     path: /etc/systemd/system/systemd_unit_verify_copy_ok.service
     state: absent
   become: true
 
-- name: _verify | daemon-reload after copy-path cleanup
+- name: _verify | Daemon-reload after copy-path cleanup
   systemd:
     daemon_reload: true
   become: true
@@ -368,7 +383,7 @@
 # scenarios, then exercise the three observable behaviours of
 # tasks_from=remove: deletes-on-first-call, idempotent on second call,
 # refuses to delete a mask.
-- name: _verify | install fixture for remove-path tests
+- name: _verify | Install fixture for remove-path tests
   import_role:
     name: systemd_unit
     tasks_from: install
@@ -376,7 +391,7 @@
     systemd_unit_args:
       src: systemd_unit_verify_ok.service.j2
 
-- name: _verify | remove via tasks_from=remove
+- name: _verify | Remove via tasks_from=remove
   import_role:
     name: systemd_unit
     tasks_from: remove
@@ -384,18 +399,20 @@
     systemd_unit_args:
       dest: systemd_unit_verify_ok.service
 
-- name: _verify | first remove deleted the file and reported changed
+- name: _verify | First remove deleted the file and reported changed
   block:
-    - stat:
+    - name: _verify | Stat verify_ok path after remove
+      stat:
         path: /etc/systemd/system/systemd_unit_verify_ok.service
       register: _verify_removed_stat
-    - assert:
+    - name: _verify | Assert verify_ok result shows changed and file is gone
+      assert:
         that:
           - systemd_unit_verify_ok_service_result is defined
           - systemd_unit_verify_ok_service_result.changed
           - not _verify_removed_stat.stat.exists
 
-- name: _verify | re-remove same unit is idempotent
+- name: _verify | Re-remove same unit is idempotent
   import_role:
     name: systemd_unit
     tasks_from: remove
@@ -403,14 +420,14 @@
     systemd_unit_args:
       dest: systemd_unit_verify_ok.service
 
-- name: _verify | second remove reported no change
+- name: _verify | Second remove reported no change
   assert:
     that: not systemd_unit_verify_ok_service_result.changed
 
 # Mask guardrail (symmetric with the install-path mask test): a
 # pre-existing symlink to /dev/null is operator intent that `rm`
 # must not silently undo.
-- name: _verify | pre-mask a test unit path
+- name: _verify | Pre-mask a test unit path
   file:
     src: /dev/null
     dest: /etc/systemd/system/systemd_unit_remove_mask_test.service
@@ -418,26 +435,30 @@
     force: true
   become: true
 
-- name: _verify | remove a masked unit (expect failure)
+- name: _verify | Remove a masked unit (expect failure)
   block:
-    - import_role:
+    - name: _verify | Attempt to remove a masked unit (should raise)
+      import_role:
         name: systemd_unit
         tasks_from: remove
       vars:
         systemd_unit_args:
           dest: systemd_unit_remove_mask_test.service
-    - fail:
+    - name: _verify | Sentinel fail if remove succeeded (should not reach here)
+      fail:
         msg: remove of a masked unit should have refused but did not
   rescue:
-    - stat:
+    - name: _verify | Stat mask-test path after expected refusal
+      stat:
         path: /etc/systemd/system/systemd_unit_remove_mask_test.service
       register: _verify_remove_masked_stat
-    - assert:
+    - name: _verify | Assert mask is still intact after refusal
+      assert:
         that:
           - _verify_remove_masked_stat.stat.islnk
           - _verify_remove_masked_stat.stat.lnk_target == '/dev/null'
 
-- name: _verify | unmask + remove the mask-test fixture
+- name: _verify | Unmask + remove the mask-test fixture
   file:
     path: /etc/systemd/system/systemd_unit_remove_mask_test.service
     state: absent

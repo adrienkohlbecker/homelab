@@ -1,4 +1,4 @@
-- name: _verify | provision a test service user
+- name: _verify | Provision a test service user
   import_role:
     name: service_user
     tasks_from: user
@@ -6,36 +6,36 @@
     service_user_args:
       name: service_user_test
 
-- name: _verify | user record fact is exposed
+- name: _verify | User record fact is exposed
   assert:
     that:
       - service_user_test_user is defined
       - service_user_test_user.uid is defined
       - service_user_test_user.group is defined
 
-- name: _verify | system user exists with the expected attributes
+- name: _verify | System user exists with the expected attributes
   command: getent passwd service_user_test
   register: _verify_passwd
   changed_when: false
   become: true
 
-- name: _verify | passwd entry is a system user with nologin shell and /nonexistent home
+- name: _verify | Passwd entry is a system user with nologin shell and /nonexistent home
   assert:
     that:
       - "':/nonexistent:/usr/sbin/nologin' in _verify_passwd.stdout"
 
-- name: _verify | system group exists
+- name: _verify | System group exists
   command: getent group service_user_test
   changed_when: false
   become: true
 
-- name: _verify | config directory exists with correct ownership
+- name: _verify | Config directory exists with correct ownership
   stat:
     path: /mnt/services/service_user_test
   register: _verify_dir
   become: true
 
-- name: _verify | dir attributes
+- name: _verify | Dir attributes
   assert:
     that:
       - _verify_dir.stat.exists
@@ -44,13 +44,13 @@
       - _verify_dir.stat.gr_name == 'service_user_test'
       - _verify_dir.stat.mode == '0755'
 
-- name: _verify | cleanup test config dir
+- name: _verify | Cleanup test config dir
   file:
     path: /mnt/services/service_user_test
     state: absent
   become: true
 
-- name: _verify | cleanup test user
+- name: _verify | Cleanup test user
   user:
     name: service_user_test
     state: absent
@@ -58,7 +58,7 @@
     force: true
   become: true
 
-- name: _verify | cleanup test group
+- name: _verify | Cleanup test group
   group:
     name: service_user_test
     state: absent
@@ -68,7 +68,7 @@
 # chmods the home dir to the caller-requested mode instead of relying
 # on /etc/login.defs HOME_MODE. Exercised by github_runner today to
 # work around a crun-bind-mount-stat EACCES under 0750.
-- name: _verify | provision a test user with createhome + home_mode override
+- name: _verify | Provision a test user with createhome + home_mode override
   import_role:
     name: service_user
     tasks_from: user
@@ -80,13 +80,13 @@
       home_mode: "0755"
       config_dir: false
 
-- name: _verify | home dir landed at the requested mode
+- name: _verify | Home dir landed at the requested mode
   stat:
     path: /tmp/service_user_test_home
   register: _verify_home
   become: true
 
-- name: _verify | home dir attributes
+- name: _verify | Home dir attributes
   assert:
     that:
       - _verify_home.stat.exists
@@ -95,13 +95,13 @@
       - _verify_home.stat.gr_name == 'service_user_test_home'
       - _verify_home.stat.mode == '0755'
 
-- name: _verify | cleanup home_mode test home dir
+- name: _verify | Cleanup home_mode test home dir
   file:
     path: /tmp/service_user_test_home
     state: absent
   become: true
 
-- name: _verify | cleanup home_mode test user
+- name: _verify | Cleanup home_mode test user
   user:
     name: service_user_test_home
     state: absent
@@ -109,7 +109,7 @@
     force: true
   become: true
 
-- name: _verify | cleanup home_mode test group
+- name: _verify | Cleanup home_mode test group
   group:
     name: service_user_test_home
     state: absent

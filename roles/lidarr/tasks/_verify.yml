@@ -2,7 +2,7 @@
 # auth'd probe below -- together they prove the apikey we templated is both
 # required by lidarr and the one it accepted. Without this, a future bug that
 # disabled apikey enforcement would let the auth'd probe pass on any key.
-- name: _verify | lidarr /api/v1/system/status rejects unauth'd requests
+- name: _verify | Lidarr /api/v1/system/status rejects unauth'd requests
   uri:
     url: http://localhost:{{ service_ports.lidarr }}/api/v1/system/status
     status_code: 401
@@ -14,7 +14,7 @@
 # Authenticated probe -- proves the apikey we templated into config.xml is
 # the one the running container accepted, not just one we wrote to disk.
 # Header form keeps the key out of journald.
-- name: _verify | lidarr answers /api/v1/system/status with our apikey
+- name: _verify | Lidarr answers /api/v1/system/status with our apikey
   uri:
     url: http://localhost:{{ service_ports.lidarr }}/api/v1/system/status
     headers:
@@ -30,7 +30,7 @@
 # Exercise the nginx-proxied path too, not just loopback. A regression in
 # the nginx_site wiring (typo'd subdomain, broken proxy_pass) would pass
 # the loopback probes above silently.
-- name: _verify | lidarr answers via nginx vhost
+- name: _verify | Lidarr answers via nginx vhost
   uri:
     url: https://localhost/api/v1/system/status
     headers:
