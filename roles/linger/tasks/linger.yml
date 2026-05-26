@@ -42,9 +42,12 @@
       - linger_args.name is match('^[a-z_][a-z0-9_-]*$')
       # Under --check on a not-yet-provisioned host, service_user only
       # *reports* creating the account, so <svc>_user.uid is still unset
-      # and linger_args.uid resolves undefined. Tolerate that — the
-      # user-manager start below self-gates on the same case, so a numeric
-      # uid is only actually consumed on a real run.
+      # and linger_args.uid resolves undefined. Tolerate that in check mode
+      # only: on a real run this assert requires a uid. The one path that
+      # reaches here undefined is check-mode-on-a-fresh-host, and there the
+      # enable-linger task reports "would change", so the user-manager start
+      # below is skipped by its own check-mode gate — the undefined uid is
+      # never consumed.
       - linger_args.uid is defined or ansible_check_mode
       - linger_args.uid is not defined or (linger_args.uid | string is match('^[0-9]+$'))
     quiet: true
