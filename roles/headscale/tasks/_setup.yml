@@ -28,3 +28,57 @@
     group: root
     mode: "0755"
   become: true
+
+# --- OIDC boot-test fixture -------------------------------------------------
+# Prod points headscale's OIDC at Authelia, which the box VM can't reach, so the
+# OIDC path used to be entirely untested. Stand up headscale's built-in
+# `mockoidc` as a local issuer the box CAN reach; host_vars/box.yml then enables
+# OIDC (+PKCE) against it -- keyed on _role_under_test so only the headscale test
+# turns it on (the tailscale role's headscale-on-box stays OIDC-free). With
+# only_start_if_oidc_is_available:true, headscale reaching `active` proves it
+# completed boot-time OIDC discovery and accepted the oidc+pkce config block --
+# that's what _verify asserts.
+- name: _setup | Pre-create the headscale podman network with a fixed subnet
+  # Fixed subnet so mockoidc can take a static IP that the issuer URL names
+  # (mockoidc derives its issuer from its bind address, so it must bind a
+  # concrete reachable IP, not 0.0.0.0). The role re-declares this network
+  # (ipv6:true) and is idempotent against the already-present one.
+  containers.podman.podman_network:
+    name: headscale
+    ipv6: true
+    subnet: 10.166.0.0/24
+    gateway: 10.166.0.1
+    state: present
+  become: true
+
+- name: _setup | Run headscale's mockoidc as a local OIDC provider
+  # Same image as the service; `mockoidc` is a subcommand of the headscale
+  # binary. MOCKOIDC_USERS keys are the capitalized Go field names of
+  # mockoidc.MockUser (no json tags upstream). Static IP matches the issuer.
+  containers.podman.podman_container:
+    name: headscale_mockoidc
+    image: docker.io/headscale/headscale:0.26.1
+    command: mockoidc
+    network: headscale
+    ip: 10.166.0.10
+    state: started
+    recreate: true
+    env:
+      MOCKOIDC_ADDR: "10.166.0.10"
+      MOCKOIDC_PORT: "8090"
+      MOCKOIDC_CLIENT_ID: headscale
+      MOCKOIDC_CLIENT_SECRET: test-oidc-client-secret
+      MOCKOIDC_USERS: '[{"Subject": "test", "Email": "test@headscale.net", "EmailVerified": true, "PreferredUsername": "test"}]'
+  become: true
+
+- name: _setup | Wait for mockoidc discovery to answer
+  uri:
+    url: http://10.166.0.10:8090/oidc/.well-known/openid-configuration
+    status_code: 200
+  register: _setup_mockoidc
+  retries: 15
+  delay: 1
+  until: _setup_mockoidc.status == 200
+# OIDC is enabled for the converge via host_vars/box.yml (headscale_oidc_*),
+# keyed on _role_under_test so it persists across the harness's separate
+# converge/idempotence/_verify ansible invocations -- a set_fact here would not.
