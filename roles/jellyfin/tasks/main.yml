@@ -143,7 +143,25 @@
   tags:
     - jellyfin
 
+# Gate the download on the same version-stamped sentinel the Extract task
+# below keys off. The zip stages under /tmp, which is wiped on reboot and
+# aged out by systemd-tmpfiles -- so a bare get_url re-fetches every
+# converge once the file is gone, even though the plugin is already
+# installed. (CI misses this: its two converges run back-to-back with no
+# reboot, so /tmp still holds the zip and get_url's checksum short-circuits.)
+# When the version is already installed we skip the fetch entirely; a pin
+# bump removes the old sentinel match, so the download re-fires for the new
+# version.
+- name: Check whether the pinned SSO plugin version is installed
+  stat:
+    path: /mnt/services/jellyfin/plugins/sso/.installed-{{ jellyfin_sso_plugin_version }}
+  register: jellyfin_sso_sentinel
+  become: true
+  tags:
+    - jellyfin
+
 - name: Download SSO plugin
+  when: not jellyfin_sso_sentinel.stat.exists
   get_url:
     url: "{{ jellyfin_sso_plugin.url }}"
     dest: /tmp/sso-authentication_{{ jellyfin_sso_plugin_version }}.zip
