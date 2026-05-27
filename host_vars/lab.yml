@@ -118,7 +118,7 @@ prometheus_enabled: true
 minio_enabled: true
 minio_buckets:
   - arq-adrien
-  - arq-spouse
+  - arq-{{ spouse_firstname }}
   - arq-game
   - terraform
   - test
@@ -232,7 +232,7 @@ smb_shares:
 # Append new entries at the end; don't sort.
 subid_users:
   - gitea_runner
-  - spouse
+  - "{{ spouse_firstname }}"
   - github_runner
 
 # Expose the host kvm gid inside github_runner's rootless userns so

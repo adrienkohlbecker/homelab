@@ -8,8 +8,8 @@
 # Schema reference: https://www.authelia.com/configuration/first-factor/file/
 ---
 users:
-{% for username, user in authelia_users.items() %}
-  {{ username }}:
+{% for user in authelia_users %}
+  {{ user.username }}:
     displayname: {{ user.displayname | to_json }}
     password: {{ user.password_hash | to_json }}
     email: {{ user.email | to_json }}

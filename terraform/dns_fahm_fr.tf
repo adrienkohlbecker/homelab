@@ -41,10 +41,10 @@ variable "fahm_fr_records" {
 
   default = {
     # A — host records (box/bunk/lab/pug) derive from
-    # data/network_topology.yml in `local.fahm_fr_host_records`
-    # below; this default holds only the records that don't
-    # reference the topology (public WAN + Fastmail relay).
-    a_home = { type = "A", name = "home.fahm.fr", content = "203.0.113.10" }
+    # data/network_topology.yml in `local.fahm_fr_host_records` below; the
+    # home WAN A record reads var.home_wan_ip via local.fahm_fr_wan_records.
+    # This default holds only the static records that reference neither the
+    # topology nor a variable (the Fastmail relay).
     a_mail = { type = "A", name = "mail.fahm.fr", content = "103.168.172.65", comment = "fastmail" }
 
     # CNAME
@@ -108,7 +108,15 @@ locals {
     a_fox    = { type = "A", name = "fox.fahm.fr", content = hcloud_primary_ip.fox.ip_address }
     aaaa_fox = { type = "AAAA", name = "fox.fahm.fr", content = hcloud_primary_ip.fox_v6.ip_address }
   }
-  fahm_fr_records = merge(var.fahm_fr_records, local.fahm_fr_host_records, local.fahm_fr_fox_records)
+
+  # home.fahm.fr — residential WAN IP from var.home_wan_ip (TF_VAR via
+  # 1Password), kept out of this public repo. In a local rather than
+  # var.fahm_fr_records' default because variable defaults can't reference
+  # another variable.
+  fahm_fr_wan_records = {
+    a_home = { type = "A", name = "home.fahm.fr", content = var.home_wan_ip }
+  }
+  fahm_fr_records = merge(var.fahm_fr_records, local.fahm_fr_host_records, local.fahm_fr_fox_records, local.fahm_fr_wan_records)
 }
 
 resource "cloudflare_dns_record" "fahm_fr" {

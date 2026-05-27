@@ -109,17 +109,30 @@ variable "state_passphrase" {
 }
 
 
+# Resolved from TF_VAR_home_wan_ip in mise.toml [env] (1Password via op
+# run). The residential WAN IP, kept out of this public repo.
+variable "home_wan_ip" {
+  type      = string
+  sensitive = true
+
+  validation {
+    condition     = length(var.home_wan_ip) > 0
+    error_message = "home_wan_ip must be non-empty (resolved via TF_VAR_home_wan_ip from 1Password through `op run`)."
+  }
+}
+
+
 # Single human-owned account; pinning the literal avoids one
 # resolve-by-name API call per plan.
 locals {
   cloudflare_account_id = "43f1339d1841088669b616cecc6562de"
 
   # Home WAN IP (the Freebox public v4), scoping fox's SSH firewall rule to the
-  # home network. Residential, so it can change -- if it does, update here (and
-  # unblock fox SSH via the Hetzner Cloud console in the meantime). NB: the
-  # home.fahm.fr A record repeats this literal because it lives in a `variable`
-  # default (dns_fahm_fr.tf), where locals aren't allowed -- keep them in sync.
-  home_wan_ip = "203.0.113.10"
+  # home network. Sourced from var.home_wan_ip (TF_VAR via 1Password). Residential,
+  # so it can change -- update the 1Password item if it does (and unblock fox SSH
+  # via the Hetzner Cloud console in the meantime). The home.fahm.fr A record reads
+  # the same var (dns_fahm_fr.tf) via local.fahm_fr_wan_records -- single source now.
+  home_wan_ip = var.home_wan_ip
 
   # data/network_topology.yml is the canonical IP topology, also
   # consumed by ansible (group_vars/all/network.yml — same source of

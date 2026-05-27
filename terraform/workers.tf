@@ -7,8 +7,36 @@ locals {
   # resources in email.tf so the worker auto-tracks renames there.
   email_routes = {
     ak = [cloudflare_email_routing_address.adrien_gmail.email]
-    sp = [cloudflare_email_routing_address.spouse_email.email]
-    cp = [cloudflare_email_routing_address.adrien_gmail.email, cloudflare_email_routing_address.spouse_email.email]
+    # spouse prefix sourced from 1P (var.spouse_initials) so the initials
+    # aren't in this public repo; the value is unchanged so routing is intact.
+    (var.spouse_initials) = [cloudflare_email_routing_address.spouse_email.email]
+    # couple alias prefix, also sourced from 1P (var.couple_alias); value unchanged.
+    (var.couple_alias) = [cloudflare_email_routing_address.adrien_gmail.email, cloudflare_email_routing_address.spouse_email.email]
+  }
+}
+
+# Spouse's email-route prefix (local-part). Resolved from TF_VAR_spouse_initials
+# in mise.toml [env] (1Password via op run) -- keeps the initials out of this
+# public repo. Value unchanged, so the route map is identical at apply time.
+variable "spouse_initials" {
+  type      = string
+  sensitive = true
+
+  validation {
+    condition     = length(var.spouse_initials) > 0
+    error_message = "spouse_initials must be non-empty (resolved via TF_VAR_spouse_initials from 1Password)."
+  }
+}
+
+# Couple email-route prefix (the adrien+spouse combined alias). Resolved from
+# TF_VAR_couple_alias in mise.toml [env] (1Password) -- value unchanged.
+variable "couple_alias" {
+  type      = string
+  sensitive = true
+
+  validation {
+    condition     = length(var.couple_alias) > 0
+    error_message = "couple_alias must be non-empty (resolved via TF_VAR_couple_alias from 1Password)."
   }
 }
 

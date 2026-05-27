@@ -168,20 +168,20 @@ static_leases:
   airgradient_outdoor:     { ip: 10.123.4.11, site: home, vlan: iot }
   velux_klf200:            { ip: 10.123.4.12, site: home, vlan: iot }
   somfy_remote_esphome:    { ip: 10.123.4.13, site: home, vlan: iot }
-  venta_ah510_kid1:       { ip: 10.123.4.14, site: home, vlan: iot }
+  venta_ah510_kid1:        { ip: 10.123.4.14, site: home, vlan: iot }
   venta_ah510_kid2:        { ip: 10.123.4.15, site: home, vlan: iot }
   tubeszb:                 { ip: 10.123.4.16, site: home, vlan: iot }
-  philips_ac0850_kid1:    { ip: 10.123.4.17, site: home, vlan: iot }
+  philips_ac0850_kid1:     { ip: 10.123.4.17, site: home, vlan: iot }
   philips_ac0850_kid2:     { ip: 10.123.4.18, site: home, vlan: iot }
   philips_ac0850_master:   { ip: 10.123.4.19, site: home, vlan: iot }
-  philips_ac0850_spouse:    { ip: 10.123.4.20, site: home, vlan: iot }
+  philips_ac0850_spouse:   { ip: 10.123.4.20, site: home, vlan: iot }
   philips_ac0850_adrien:   { ip: 10.123.4.21, site: home, vlan: iot }
   philips_ac0850_living:   { ip: 10.123.4.22, site: home, vlan: iot }
   venta_lw74:              { ip: 10.123.4.23, site: home, vlan: iot }
-  daikin_kid1:            { ip: 10.123.4.24, site: home, vlan: iot }
+  daikin_kid1:             { ip: 10.123.4.24, site: home, vlan: iot }
   daikin_kid2:             { ip: 10.123.4.25, site: home, vlan: iot }
   daikin_master:           { ip: 10.123.4.26, site: home, vlan: iot }
-  daikin_spouse:            { ip: 10.123.4.27, site: home, vlan: iot }
+  daikin_spouse:           { ip: 10.123.4.27, site: home, vlan: iot }
   daikin_adrien:           { ip: 10.123.4.28, site: home, vlan: iot }
   daikin_kitchen:          { ip: 10.123.4.29, site: home, vlan: iot }
   daikin_tv:               { ip: 10.123.4.30, site: home, vlan: iot }
