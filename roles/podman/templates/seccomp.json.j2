@@ -1,0 +1,11 @@
+{#- Stock podman seccomp profile (slurped at deploy time from
+    /usr/share/containers/seccomp.json) with the fchmodat2 syscall appended
+    to its allow list. These Jinja comments are stripped from the rendered
+    file, so the output is pure JSON. Rationale: notes/podman_seccomp_fchmodat2.md. -#}
+{%- set _profile = podman_seccomp_stock.content | b64decode | from_json -%}
+{%- for _block in _profile.syscalls -%}
+{%-   if _block.action == 'SCMP_ACT_ALLOW' and 'fchmodat' in _block.names and 'fchmodat2' not in _block.names -%}
+{%-     set _ = _block.names.append('fchmodat2') -%}
+{%-   endif -%}
+{%- endfor -%}
+{{ _profile | to_nice_json }}
