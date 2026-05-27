@@ -146,7 +146,10 @@ run = "git ls-files -z '*.sh' | xargs -0 shfmt -i 2 -d"
 
 [tasks."lint:topology"]
 description = "Validate data/network_topology.yml against its JSON Schema"
-run = "uvx check-jsonschema --schemafile data/network_topology.schema.json data/network_topology.yml"
+# check-jsonschema is a project dep (not `uvx`-fetched) so `uv sync`
+# installs it from the warm /opt/uv-cache; uvx would re-resolve and
+# download it from the index on every CI run.
+run = "check-jsonschema --schemafile data/network_topology.schema.json data/network_topology.yml"
 
 [tasks.test]
 description = "Run Python unit tests (pytest)"
