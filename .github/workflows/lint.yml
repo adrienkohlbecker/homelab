@@ -33,5 +33,5 @@ jobs:
       # tflint, shellcheck, shfmt, ...) are baked into the ci image.
       # `uv sync` rebuilds .venv against this checkout's lockfile (fast --
       # uv's wheel cache is pre-warmed in the image).
-      - run: uv sync --frozen
+      - run: uv sync --locked
       - run: mise run lint
