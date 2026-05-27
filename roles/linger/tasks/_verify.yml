@@ -43,7 +43,7 @@
 # The user manager being active is the headline behavior callers depend on
 # (a live bus for rootless podman / user-scope timers); failed_when makes
 # the probe its own assertion.
-- name: _verify | User manager is active
+- name: _verify | User manager is active  # noqa: command-instead-of-module -- is-active query, not a state change
   command: systemctl is-active user@{{ _verify_user.uid }}.service
   register: _verify_active
   changed_when: false
@@ -107,7 +107,7 @@
 
 # disable.yml stops the user manager before dropping the marker; prove the
 # stop actually took effect (is-active returns "inactive" + non-zero here).
-- name: _verify | User manager is no longer active after disable
+- name: _verify | User manager is no longer active after disable  # noqa: command-instead-of-module -- is-active query, not a state change
   command: systemctl is-active user@{{ _verify_user.uid }}.service
   register: _verify_inactive
   changed_when: false

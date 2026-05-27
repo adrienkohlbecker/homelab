@@ -181,7 +181,7 @@
     # so the next SIGHUP-reload can't pick up the broken file. A bad
     # *tenant* fragment trips the same validate but isn't ours to roll
     # back (restore is a no-op then) — the fail still aborts the run.
-    - name: Restore previous base configuration after failed validation
+    - name: Restore previous base configuration after failed validation  # noqa: require-backup
       when: '"backup_file" in keepalived_base_conf'
       copy:
         remote_src: true

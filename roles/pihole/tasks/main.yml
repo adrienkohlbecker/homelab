@@ -277,7 +277,7 @@
     # untouched. Restore the previous good fragment (or remove a freshly
     # added one) so the broken file doesn't linger on disk for the next
     # reboot/converge, then fail loudly. Mirrors roles/nginx/tasks/conf_d.yml.
-    - name: Restore previous keepalived fragment
+    - name: Restore previous keepalived fragment  # noqa: require-backup
       when: '"backup_file" in pihole_keepalived_cfg'
       copy:
         remote_src: true
