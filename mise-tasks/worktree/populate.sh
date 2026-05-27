@@ -49,3 +49,21 @@ fi
 if command -v mise >/dev/null; then
   mise trust "$wt/mise.toml"
 fi
+
+# notes submodule: populate it and put it on a branch matching the parent
+# worktree's branch, so notes edits here commit onto <branch> (which wt:merge
+# later integrates into notes/main). A detached worktree (agent isolation, where
+# new==base) has no parent branch -> notes stays detached at the recorded SHA.
+# Non-fatal: an offline create still yields a usable code worktree, and a
+# missing notes branch just means wt:merge skips the notes step.
+if git -C "$wt" config -f "$wt/.gitmodules" --get submodule.notes.path >/dev/null 2>&1; then
+  if git -C "$wt" submodule update --init notes >/dev/null 2>&1; then
+    branch=$(git -C "$wt" symbolic-ref --short -q HEAD || true)
+    if [ -n "$branch" ] && [ "$branch" != master ] &&
+      ! git -C "$wt/notes" rev-parse --verify -q "$branch" >/dev/null; then
+      git -C "$wt/notes" switch -c "$branch" >/dev/null
+    fi
+  else
+    echo "worktree:populate: notes submodule init skipped (offline?)" >&2
+  fi
+fi
