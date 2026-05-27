@@ -1,0 +1,194 @@
+# Contracts 3+4: monitored timer (monitor: true) writes netdata metadata
+# with the right period, and the systemd_timers charts.d collector emits a
+# chart per timer with age_secs / overdue tracking.
+#
+# Split out of _verify.yml and imported under an x86_64 gate: the collector
+# rides netdata-plugin-chartsd, which cannot install on aarch64 (its
+# `Depends: netdata (= 1.46.3)` is unsatisfiable against the lagging arm64
+# build — see roles/netdata/tasks/charts_d.yml). Without the collector the
+# charts never register, so these assertions have nothing to probe. The
+# local arm64 test box is the only aarch64 host; all prod is x86_64.
+
+# ============================================================
+# Contract 3+4: monitored timer + overdue detection via netdata
+# ============================================================
+# _verify_timer_recent fires immediately (OnCalendar matches every
+# second) so LastTriggerUSec lands within ~2-3 seconds; then we stop
+# the timer to freeze the value. Expected: age_secs small, overdue=0.
+- name: _verify | Install recent monitored fixture (frequency=hourly)
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_recent
+      description: monitored fixture, fires immediately
+      frequency: hourly
+      on_calendar: "*-*-* *:*:*"
+      exec_start: /bin/true
+
+# Manually wait for the timer to fire (LastTriggerUSec moves off n/a)
+# rather than `sleep N`, so the test races less with QEMU clock skew.
+- name: _verify | Wait for the recent timer to fire at least once
+  shell: |
+    for i in $(seq 1 30); do
+      last=$(LC_ALL=C systemctl show --value -p LastTriggerUSec _verify_timer_recent.timer 2>/dev/null)
+      if [ -n "$last" ] && [ "$last" != "n/a" ]; then
+        echo "$last"
+        exit 0
+      fi
+      sleep 1
+    done
+    echo "timer never fired after 30s" >&2
+    exit 1
+  changed_when: false
+  become: true
+
+- name: _verify | Stop the timer to freeze LastTriggerUSec
+  systemd:
+    name: _verify_timer_recent.timer
+    state: stopped
+  become: true
+
+# _verify_timer_overdue: OnCalendar in 2099 so it never fires; backdate
+# the metadata file's mtime to 3h ago so the collector treats it as
+# "installed >2*hourly_period ago, never fired" → overdue=1.
+- name: _verify | Install overdue monitored fixture (frequency=hourly)
+  import_role:
+    name: systemd_timer
+    tasks_from: install
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_overdue
+      description: monitored fixture, never fires
+      frequency: hourly
+      on_calendar: "2099-01-01 00:00:00"
+      exec_start: /bin/true
+
+- name: _verify | Backdate overdue fixture's metadata mtime to 3h ago
+  command: touch -d "3 hours ago" /etc/netdata/charts.d/systemd_timers.d/_verify_timer_overdue.conf
+  changed_when: false
+  become: true
+
+- name: _verify | Assert metadata files exist with the right period_secs
+  command: cat /etc/netdata/charts.d/systemd_timers.d/{{ item }}.conf
+  register: _verify_meta
+  changed_when: false
+  loop:
+    - _verify_timer_recent
+    - _verify_timer_overdue
+  become: true
+- name: _verify | Assert period_secs=3600 (hourly) in both metadata files
+  assert:
+    that:
+      - "'period_secs=3600' in item.stdout"
+    fail_msg: "metadata missing period_secs=3600: {{ item.stdout }}"
+  loop: "{{ _verify_meta.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+# Charts.d.plugin re-scans the metadata dir each tick (update_every=5s
+# under our override). Wait for both charts to appear in netdata's
+# registry, then check the data API for the expected age + overdue.
+- name: _verify | Wait for both fixture charts to register
+  uri:
+    url: http://localhost:19999/api/v1/charts
+    return_content: true
+  register: _verify_charts
+  retries: 30
+  delay: 2
+  until: >-
+    _verify_charts.status == 200
+    and 'systemd_timers._verify_timer_recent' in (_verify_charts.content | from_json).charts.keys()
+    and 'systemd_timers._verify_timer_overdue' in (_verify_charts.content | from_json).charts.keys()
+
+- name: _verify | Recent fixture reports overdue=0
+  uri:
+    url: http://localhost:19999/api/v1/data?chart=systemd_timers._verify_timer_recent&points=1&after=-30&format=json
+    return_content: true
+  register: _verify_recent_data
+  retries: 30
+  delay: 2
+  until: >-
+    _verify_recent_data.status == 200
+    and 'overdue' in (_verify_recent_data.json.labels | default([]))
+    and 'age_secs' in _verify_recent_data.json.labels
+    and (_verify_recent_data.json.data | default([])) | length > 0
+    and _verify_recent_data.json.data[0][_verify_recent_data.json.labels.index('overdue')] | int == 0
+    and _verify_recent_data.json.data[0][_verify_recent_data.json.labels.index('age_secs')] | int < 600
+
+- name: _verify | Overdue fixture reports overdue=1
+  uri:
+    url: http://localhost:19999/api/v1/data?chart=systemd_timers._verify_timer_overdue&points=1&after=-30&format=json
+    return_content: true
+  register: _verify_overdue_data
+  retries: 30
+  delay: 2
+  until: >-
+    _verify_overdue_data.status == 200
+    and 'overdue' in (_verify_overdue_data.json.labels | default([]))
+    and (_verify_overdue_data.json.data | default([])) | length > 0
+    and _verify_overdue_data.json.data[0][_verify_overdue_data.json.labels.index('overdue')] | int == 1
+    and _verify_overdue_data.json.data[0][_verify_overdue_data.json.labels.index('age_secs')] | int > 7200
+
+# Alert binds on context systemd.timer_lag; netdata keys the instance
+# as <chart_id>.<template_name>, e.g.
+# systemd_timers._verify_timer_overdue.systemd_timer_overdue.
+- name: _verify | Wait for overdue alert to register against the fixture
+  uri:
+    url: http://localhost:19999/api/v1/alarms?all
+    return_content: true
+  register: _verify_alarms
+  retries: 30
+  delay: 2
+  until: >-
+    _verify_alarms.status == 200
+    and (_verify_alarms.content | from_json).alarms.keys() | list
+        | select('search', 'systemd_timers._verify_timer_overdue.systemd_timer_overdue') | list | length > 0
+
+- name: _verify | Assert overdue alert instantiated against both fixtures
+  vars:
+    _keys: "{{ (_verify_alarms.content | from_json).alarms.keys() | list }}"
+  assert:
+    that:
+      - _keys | select('search', 'systemd_timers._verify_timer_recent.systemd_timer_overdue') | list | length > 0
+      - _keys | select('search', 'systemd_timers._verify_timer_overdue.systemd_timer_overdue') | list | length > 0
+    fail_msg: >-
+      Expected systemd_timer_overdue template to bind on both fixtures.
+      Got keys: {{ _keys | select('search', 'systemd_timers') | list }}
+
+# Cleanup: remove fixtures so a follow-on test run starts clean.
+# Two separate import_role calls instead of a loop — import_role
+# doesn't accept `loop:`, and include_role + loop binds the vars
+# block once (per [[feedback_include_role_loop_vars]]) so {{ item }}
+# inside systemd_timer_args wouldn't re-evaluate per iteration.
+- name: _verify | Remove recent monitored fixture
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_recent
+- name: _verify | Remove overdue monitored fixture
+  import_role:
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: _verify_timer_overdue
+
+- name: _verify | Stat metadata files after removal (should NOT exist)
+  stat:
+    path: /etc/netdata/charts.d/systemd_timers.d/{{ item }}.conf
+  loop:
+    - _verify_timer_recent
+    - _verify_timer_overdue
+  register: _verify_meta_after
+- name: _verify | Assert metadata cleaned up
+  assert:
+    that:
+      - not item.stat.exists
+    fail_msg: "metadata for {{ item.item }} still present"
+  loop: "{{ _verify_meta_after.results }}"
+  loop_control:
+    label: "{{ item.item }}"
