@@ -78,6 +78,20 @@
 # Sabnzbd writes history1.db inside /config/admin/ alongside cookies.dat,
 # server.cert, queue.sav, etc. Symlink only the SQLite DB so SQLite resolves
 # through to the 4K sqlite dataset before computing WAL/SHM placement.
+#
+# force: true is load-bearing on a cold host: it lets ansible plant the
+# symlink while the target doesn't exist yet, and sabnzbd then creates
+# history1.db *through* the dangling link on first start (SQLite follows it
+# and writes the real DB at the sqlite-dataset target — this is exactly the
+# state prod runs in). Without force, state=link refuses the dangling link
+# and the converge dies before sabnzbd ever runs. Do NOT instead pre-create
+# an empty target file: sabnzbd treats a 0-byte history1.db as needing
+# reinitialization and rewrites it via temp+rename, which replaces the
+# symlink with a real file — breaking both the 4K placement and idempotence.
+# Same hand-rolled force:true shape as roles/kuma (not the sqlite_dataset
+# helper, whose pre_create path suits apps like jellyfin that migrate an
+# empty DB cleanly). Idempotent once planted: an already-correct symlink is
+# left unchanged.
 - name: Symlink sabnzbd history DB onto sqlite dataset
   when: not (ansible_check_mode and sabnzbd_user.changed)
   file:
@@ -87,6 +101,7 @@
     owner: sabnzbd
     group: media
     follow: false
+    force: true
   become: true
   tags:
     - sabnzbd
