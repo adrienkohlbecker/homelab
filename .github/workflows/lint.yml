@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       # mise + uv + the resolved tool dir (ansible-lint, black, ruff,
-      # tflint, shellcheck, shfmt, typos, ...) are baked into the ci image.
+      # tflint, shellcheck, shfmt, ...) are baked into the ci image.
       # `uv sync` rebuilds .venv against this checkout's lockfile (fast --
       # uv's wheel cache is pre-warmed in the image).
       - run: uv sync
