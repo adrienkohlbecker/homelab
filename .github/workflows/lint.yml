@@ -17,6 +17,16 @@ jobs:
     runs-on: [ self-hosted, lab ]
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest
+    env:
+      # ansible-lint runs `ansible-playbook --syntax-check`, which loads
+      # vault-encrypted group_vars/host_vars. Restrict ansible to the
+      # `test` identity (its password is a CI-available repo secret) so
+      # the prod identity -- whose password is never in CI by design --
+      # isn't attempted; without this, syntax-check of prod playbooks
+      # (bunk.yml, site.yml's prod hosts) errors on undecryptable vars.
+      # Mirrors the test-role job's vault env.
+      HOMELAB_VAULT_PASSWORD_TEST: ${{ secrets.HOMELAB_VAULT_PASSWORD_TEST }}
+      ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
     steps:
       - uses: actions/checkout@v6
       # mise + uv + the resolved tool dir (ansible-lint, black, ruff,
