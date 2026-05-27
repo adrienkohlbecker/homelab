@@ -74,7 +74,7 @@ jobs:
       ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
     steps:
       - uses: actions/checkout@v6
-      - run: uv sync --frozen
+      - run: uv sync --locked
       - name: Run test cell
         env:
           SPEC: ${{ matrix.spec }}

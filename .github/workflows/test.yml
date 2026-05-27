@@ -44,7 +44,7 @@ jobs:
       # checkout but doesn't populate it, so without this the import
       # fails (PyYAML arrives transitively via ansible). Same uv sync
       # the lint / test-role jobs run; fast off the image's warm cache.
-      - run: uv sync --frozen
+      - run: uv sync --locked
       - id: detect
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
@@ -212,7 +212,7 @@ jobs:
       ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
     steps:
       - uses: actions/checkout@v6
-      - run: uv sync --frozen
+      - run: uv sync --locked
       - name: Run test cell
         env:
           SPEC: ${{ matrix.spec }}

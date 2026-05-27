@@ -45,7 +45,7 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v6
-      - run: uv sync --frozen
+      - run: uv sync --locked
       - name: Packer init
         # Plugins are pre-installed into /opt/packer/plugins by the
         # ci Dockerfile, so this is a no-op on the steady
