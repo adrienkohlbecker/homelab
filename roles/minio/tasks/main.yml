@@ -157,7 +157,6 @@
       location_conf: |
         proxy_set_header Accept-Encoding "";
         sub_filter_once on;
-        sub_filter_types text/html;
         sub_filter '</head>' '<script>(function(){if(location.pathname==="/oauth_callback")return;if(document.cookie.match(/(?:^|;\s*)token=/))return;fetch("/api/v1/login").then(function(r){return r.json()}).then(function(d){if(d.loginStrategy==="redirect"&&d.redirect){location.replace(d.redirect)}}).catch(function(){})})();</script></head>';
   tags:
     - minio
