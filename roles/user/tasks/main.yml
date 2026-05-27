@@ -165,40 +165,80 @@
   tags:
     - user
 
-- name: Install dotfiles repo  # noqa: command-instead-of-module
-  command: git clone --bare https://github.com/adrienkohlbecker/dotfiles.git .dotfiles
+# GNU stow symlinks the dotfiles into $HOME (replaces the old bare-repo
+# reset --hard model). The repo is a normal clone at ~/.dotfiles on the fleet.
+- name: Install GNU stow
+  apt:
+    name: stow
+    state: present
+  become: true
+  tags:
+    - user
+
+# One-time migration off the legacy bare-repo model. Older hosts have ~/.dotfiles
+# as a *bare* repo (no .git subdir) with real files reset --hard'd into $HOME;
+# stow can't symlink over those. When that layout is detected, delete the
+# bare-repo-deployed files (recoverable from the repo) and the bare repo itself,
+# so the clone + stow below install the symlinked layout cleanly. Fresh hosts
+# (~/.dotfiles absent) and already-migrated hosts (~/.dotfiles/.git present) skip
+# this, so it fires at most once per host and never on the test fixtures.
+- name: Stat dotfiles dir + its .git
+  stat:
+    path: "{{ ansible_user_dir }}/{{ item }}"
+  loop:
+    - .dotfiles
+    - .dotfiles/.git
+  register: user_dotfiles_stat
+  tags:
+    - user
+
+- name: Migrate off the legacy bare dotfiles repo
+  when:
+    - user_dotfiles_stat.results[0].stat.exists
+    - not user_dotfiles_stat.results[1].stat.exists
+  tags:
+    - user
+  block:
+    - name: List files the legacy bare repo deployed into $HOME  # noqa: command-instead-of-module
+      command: git -C {{ ansible_user_dir }} --git-dir={{ ansible_user_dir }}/.dotfiles --work-tree={{ ansible_user_dir }} ls-files
+      register: user_legacy_files
+      changed_when: false
+      check_mode: false
+
+    - name: Remove legacy-deployed real files ($HOME) — stow re-links them below
+      file:
+        path: "{{ ansible_user_dir }}/{{ item }}"
+        state: absent
+      loop: "{{ user_legacy_files.stdout_lines }}"
+      loop_control:
+        label: "{{ item }}"
+
+    - name: Remove the legacy bare repo
+      file:
+        path: "{{ ansible_user_dir }}/.dotfiles"
+        state: absent
+
+- name: Clone dotfiles repo  # noqa: command-instead-of-module
+  command: git clone https://github.com/adrienkohlbecker/dotfiles.git .dotfiles
   args:
     chdir: "{{ ansible_user_dir }}"
-    creates: "{{ ansible_user_dir }}/.dotfiles"
+    creates: "{{ ansible_user_dir }}/.dotfiles/.git"
   register: user_dotfiles_clone
   tags:
     - user
 
-# `git clone --bare` records no fetch refspec, so a later `dotfiles pull` fails
-# with "no such ref was fetched". Set the standard one so fetch/pull work.
-- name: Configure dotfiles fetch refspec
+# --no-folding keeps shared, perms-sensitive dirs (~/.ssh, ~/.gnupg, ~/.config)
+# as real directories and only symlinks the tracked leaf files. The vscode
+# package is mac-only (a ~/Library path), so it's omitted. Plugins are no longer
+# submodules — the mise install below pulls them (http backend) from config.toml.
+- name: Stow dotfiles into $HOME  # noqa: command-instead-of-module
   when: not (ansible_check_mode and user_dotfiles_clone.changed)
-  community.general.git_config:
-    name: remote.origin.fetch
-    value: "+refs/heads/*:refs/remotes/origin/*"
-    scope: file
-    file: "{{ ansible_user_dir }}/.dotfiles/config"
-  tags:
-    - user
-
-- name: Install dotfiles  # noqa: command-instead-of-module
-  command: git --git-dir={{ ansible_user_dir }}/.dotfiles --work-tree={{ ansible_user_dir }} reset --hard
+  command: >-
+    stow --dir={{ ansible_user_dir }}/.dotfiles --target={{ ansible_user_dir }}
+    --no-folding zsh git vim ssh gnupg config bin claude aws ruby node python misc
   args:
     chdir: "{{ ansible_user_dir }}"
     creates: "{{ ansible_user_dir }}/.zshrc"
-  tags:
-    - user
-
-- name: Install dotfiles submodules  # noqa: command-instead-of-module
-  command: git --git-dir={{ ansible_user_dir }}/.dotfiles --work-tree={{ ansible_user_dir }} submodule update --init --recursive
-  args:
-    chdir: "{{ ansible_user_dir }}"
-    creates: "{{ ansible_user_dir }}/.zsh/pure/readme.md"
   tags:
     - user
 
