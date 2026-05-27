@@ -103,7 +103,7 @@ RUN install -dm 755 /etc/apt/keyrings && \
     rm -rf /var/lib/apt/lists/*
 
 # Pre-resolve everything mise.toml asks for (python 3.14, uv, terraform,
-# packer, shellcheck, shfmt, tflint, typos), then warm uv's wheel cache
+# packer, shellcheck, shfmt, tflint), then warm uv's wheel cache
 # by syncing the dependency tree once. The resulting .venv is discarded
 # because it's tied to /tmp/build and per-checkout venvs at workflow
 # time will be built against the actual GITHUB_WORKSPACE checkout — but
