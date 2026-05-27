@@ -29,5 +29,13 @@ if [ -d "$src_proj" ]; then
   fi
   rmdir "$src_proj" 2>/dev/null || true
 fi
-git -C "$repo" worktree remove "$wt"
+# git refuses to remove a worktree containing a submodule (notes) even when
+# clean, so --force is required to clear that structural guard. Guard with an
+# explicit dirty-check first so --force only bypasses the submodule guard and
+# never silently discards uncommitted work (code or notes).
+if [ -n "$(git -C "$wt" status --porcelain)" ]; then
+  echo "worktree:rm: $wt has uncommitted changes; commit/stash or remove it manually" >&2
+  exit 1
+fi
+git -C "$repo" worktree remove --force "$wt"
 git -C "$repo" branch -D "$usage_name" 2>/dev/null || true
