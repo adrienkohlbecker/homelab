@@ -48,13 +48,22 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="roundcube" \
     --network webmail \
-    {# SQLite (Roundcube's prefs/contacts/cache) lives on the dedicated
-       4K-recordsize sqlite dataset. ROUNDCUBEMAIL_DB_DIR is a dedicated mount
-       point, so we point it straight at the dataset — no symlink dance (unlike
-       kuma/paperless, whose DB sits inside a larger data dir). The image's
-       entrypoint creates sqlite.db here on first boot. #}
+    {# The webroot is ephemeral: the image re-extracts its whole tree into
+       /var/www/html on every boot (--rm wipes the prior copy), so des_key and
+       the env-rendered config.inc.php regenerate each start and a restart
+       forces a re-login — fine for an occasional archive viewer. The extract
+       chmods every dir via fchmodat2; podman's default seccomp profile blocks
+       that until the podman role's fchmodat2 allow-list lands (see
+       notes/podman_seccomp_fchmodat2.md), without which apache 403s the lot. #}
+    {# SQLite is the real state (prefs/contacts/identities) and persists on the
+       dedicated 4K-recordsize sqlite dataset. ROUNDCUBEMAIL_DB_DIR is a
+       dedicated mount point, so we point it straight at the dataset — no
+       symlink dance (unlike kuma/paperless, whose DB sits inside a larger data
+       dir). The image's entrypoint creates sqlite.db here on first boot. #}
     --volume /mnt/services/sqlite/roundcube:/var/roundcube/db \
-    --volume /mnt/services/webmail/roundcube/config:/var/roundcube/config \
+    {# Sets apache's ServerName (cosmetic — nginx fronts it) to silence the
+       AH00558 "could not determine FQDN" startup line. See tasks/main.yml. #}
+    --volume /mnt/services/webmail/roundcube_apache.conf:/etc/apache2/conf-enabled/zz-servername.conf:ro \
     --publish 127.0.0.1:{{ service_ports.roundcube }}:80/tcp \
     {# Plain IMAP on 143 to the dovecot container; the hop stays on the internal
        podman bridge so TLS would be ceremony. #}
@@ -62,6 +71,12 @@ ExecStart=/usr/bin/podman run \
     --env ROUNDCUBEMAIL_DEFAULT_PORT=143 \
     --env ROUNDCUBEMAIL_DB_TYPE=sqlite \
     --env ROUNDCUBEMAIL_SKIN=elastic \
+    {# Skip Roundcube's own login form: the http_authentication plugin logs in
+       from the HTTP Basic credentials nginx injects (archive:archive — the same
+       non-secret IMAP cred), so the only gate the user sees is Authelia. mod_php
+       populates PHP_AUTH_USER/PW from the Authorization header natively. See the
+       nginx location_conf in tasks/main.yml and notes/getmail_webmail_design.md. #}
+    --env ROUNDCUBEMAIL_PLUGINS=http_authentication \
     --health-cmd         '["curl","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:80/"]' \
     --health-startup-cmd '["curl","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:80/"]' \
     --health-startup-interval "1s" \

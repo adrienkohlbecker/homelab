@@ -42,7 +42,7 @@
   uri:
     url: https://localhost/
     headers:
-      Host: mail.{{ inventory_hostname }}.{{ domain }}
+      Host: roundcube.{{ inventory_hostname }}.{{ domain }}
     validate_certs: false
     follow_redirects: none
     status_code: 302

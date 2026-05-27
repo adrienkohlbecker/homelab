@@ -62,32 +62,23 @@
   tags:
     - webmail
 
-# Roundcube's apache image chowns its mounted dirs to in-container www-data at
-# startup, so root-owned 0755 host dirs are fine. config rides the services
-# dataset; the sqlite DB goes on the dedicated 4K-recordsize sqlite dataset
-# below.
-- name: Create roundcube config directory
-  file:
-    dest: /mnt/services/webmail/roundcube/config
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - webmail
-
 # Roundcube's sqlite DB on the dedicated sqlite dataset (4K recordsize, matches
 # kuma/paperless). The unit mounts this dir as ROUNDCUBEMAIL_DB_DIR directly
 # (no symlink) and the image creates sqlite.db in it on first boot. Intermediate
 # /mnt/services/sqlite is created here too on the test box; on prod it's the
 # sqlite dataset mountpoint.
+#
+# Owned by uid 33 (the roundcube image's baked-in www-data, which the apache
+# worker writes the DB as). The container runs without a userns, so container
+# uid 33 == host uid 33; the entrypoint chowns the DB dir to 33 on boot, so if
+# we created it root-owned the next converge would flap it back (33 -> 0 -> 33).
+# Numeric to avoid depending on a www-data passwd entry existing on the host.
 - name: Create roundcube sqlite directory
   file:
     dest: /mnt/services/sqlite/roundcube
     state: directory
-    owner: root
-    group: root
+    owner: "33"
+    group: "33"
     mode: "0755"
   become: true
   tags:
@@ -133,6 +124,23 @@
   tags:
     - webmail
 
+# Apache ServerName, mounted read-only into the roundcube container's
+# conf-enabled. amd64-gated like the unit below — it's only ever consumed by
+# the Roundcube container, so there's no point staging it on the arm64 box.
+- name: Install roundcube apache config
+  when: ansible_architecture == 'x86_64'
+  copy:
+    src: roundcube_apache.conf
+    dest: /mnt/services/webmail/roundcube_apache.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: _webmail_roundcube_apache
+  tags:
+    - webmail
+
 # Roundcube ships no arm64 image (only the unpinned latest-fpm-alpine is
 # multi-arch). Every prod host is amd64, so the gate is a no-op there and in
 # CI (amd64 runners); it only skips the Roundcube container on the operator's
@@ -158,7 +166,7 @@
     systemd_unit_args:
       src: roundcube
       condition: "{{ ansible_architecture == 'x86_64' and not (ansible_check_mode and (roundcube_service_result.changed or _webmail_dir.changed)) }}"
-      restart: "{{ roundcube_service_result.changed }}"
+      restart: "{{ roundcube_service_result.changed or _webmail_roundcube_apache.changed }}"
   tags:
     - webmail
 
@@ -168,11 +176,20 @@
     tasks_from: site
   vars:
     nginx_site_args:
-      subdomain: mail
+      subdomain: roundcube
       proxy_pass: http://127.0.0.1:{{ service_ports.roundcube }}/
       # Authelia is the sole gate: Roundcube's own login uses a fixed
       # non-secret IMAP credential (see notes/getmail_webmail_design.md), so
       # this forward-auth is what actually protects the archive.
       auth: required
+      # Inject the fixed IMAP credential (archive:archive, base64) as HTTP
+      # Basic so Roundcube's http_authentication plugin auto-logs-in and the
+      # user never sees Roundcube's own form — Authelia is the only login.
+      # Plain proxy_set_header (not the upstream_authorization knob, which
+      # would also let an Authorization-bearing request bypass Authelia); here
+      # Authelia stays mandatory and we just hand the upstream the cred. The
+      # credential is non-secret by design, so it's fine inline / unvaulted.
+      location_conf: |
+        proxy_set_header Authorization "Basic YXJjaGl2ZTphcmNoaXZl";
   tags:
     - webmail
