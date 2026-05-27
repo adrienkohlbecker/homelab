@@ -34,7 +34,7 @@ jobs:
       packer_changed: ${{ steps.detect.outputs.packer_changed }}
       ci_image_changed: ${{ steps.detect.outputs.ci_image_changed }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         # 50 commits is enough for HEAD~1 plus a typical session of pushes;
         # detect-roles only ever looks at HEAD..HEAD~1 anyway.
         with: { fetch-depth: 50 }
@@ -58,7 +58,7 @@ jobs:
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with: { fetch-depth: 50 }
       - run: mise run ci:mail-cross-cut
         env:
@@ -211,7 +211,7 @@ jobs:
       # fail loudly (not silently) if they're ever loaded.
       ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: uv sync
       - name: Run test cell
         env:
@@ -230,8 +230,8 @@ jobs:
           test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /scratch
       - name: Upload harness output on failure
         if: failure()
-        uses: actions/upload-artifact@v4
-        # actions/upload-artifact@v4 requires unique artifact names per
+        uses: actions/upload-artifact@v7
+        # actions/upload-artifact@v7 requires unique artifact names per
         # run; ROLE + VARIANT come from the parsed SPEC so the name is
         # plain alnum/underscores/hyphens and unique per matrix cell.
         with:

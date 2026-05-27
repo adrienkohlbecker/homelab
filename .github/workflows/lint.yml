@@ -18,7 +18,7 @@ jobs:
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       # mise + uv + the resolved tool dir (ansible-lint, black, ruff,
       # tflint, shellcheck, shfmt, ...) are baked into the ci image.
       # `uv sync` rebuilds .venv against this checkout's lockfile (fast --
