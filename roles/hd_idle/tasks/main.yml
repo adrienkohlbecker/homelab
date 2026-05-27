@@ -31,6 +31,25 @@
   tags:
     - hd_idle
 
+# jammy/noble ship hd-idle 1.05 (C), a forking daemon with no PIDFile that
+# systemd's Type=forking unit tracks unreliably under rapid restarts —
+# breaking idempotence. Override it to foreground/Type=simple (rationale in
+# files/hd-idle-override.conf). Must land before the service start below so
+# the unit comes up as Type=simple. Gated to the C-version releases; the Go
+# rewrite (resolute+) has a proper Type=simple unit already.
+- name: Run hd-idle in the foreground (jammy/noble fork-tracking race)
+  import_role:
+    name: systemd_unit
+    tasks_from: dropin
+  vars:
+    systemd_unit_args:
+      for: hd-idle.service
+      src: hd-idle-override.conf
+      condition: "{{ not (ansible_check_mode and hd_idle_apt.changed) }}"
+  when: ansible_distribution_release in ['jammy', 'noble']
+  tags:
+    - hd_idle
+
 - name: Enable hd_idle service
   import_role:
     name: systemd_unit
@@ -39,7 +58,9 @@
     systemd_unit_args:
       src: hd-idle
       condition: "{{ not (ansible_check_mode and hd_idle_apt.changed) }}"
-      restart: "{{ hd_idle_apt.changed or hd_idle_conf.changed }}"
+      restart: >-
+        {{ hd_idle_apt.changed or hd_idle_conf.changed
+           or (hd_idle_service_d_override_conf_result.changed | default(false)) }}
   tags:
     - hd_idle
 
