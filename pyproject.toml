@@ -18,6 +18,7 @@ dependencies = [
     "passlib>=1.7.4", # mosquitto_passwd
     "dnspython>=2.8.0", # dig
     "pytest>=8.0",
+    "check-jsonschema>=0.37.2", # lint:topology (a dep, not uvx, so it's CI-cached)
 ]
 
 [tool.black]
