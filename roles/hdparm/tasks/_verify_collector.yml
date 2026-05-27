@@ -1,0 +1,256 @@
+# The harness runs tasks/main.yml (apt install hdparm + /etc/hdparm.conf) on
+# its own; this file applies the netdata-side integration (normally invoked
+# from roles/netdata/tasks/main.yml) and exercises the collector end-to-end.
+#
+# QEMU virtio disks all report rotational=0, so ansible_devices fact yields
+# an empty hdparm_disks list and hdparm_check() would short-circuit. We
+# overlay four ghost devices to exercise every parse arm:
+#   _verify_ghost     no symlink → `collector_error` branch (the same
+#                     path a missing by-id symlink triggers on prod
+#                     when a drive's been physically replaced).
+#   _verify_active    symlink + shim emits "active/idle".
+#   _verify_standby   symlink + shim emits "standby".
+#   _verify_sleeping  symlink + shim emits "sleeping".
+# The shim lives at /usr/local/sbin/hdparm; systemd's default PATH puts
+# /usr/local/sbin ahead of /sbin, so the chart.sh's bare `hdparm` call
+# resolves to it under netdata's service environment. Real device paths
+# (none on a QEMU box) would fall through to /sbin/hdparm.
+
+# install.yml uses policy_rc_d=101 so apt won't auto-start; prod starts
+# netdata in main.yml after configuration. The test path skips netdata's
+# main.yml, so start the daemon here -- health_copy below issues
+# `netdatacli reload-health` which talks to netdata's HTTP API
+# (replaced the legacy /run/netdata/netdata.pipe path in 1.46+).
+- name: _verify | Start netdata
+  systemd:
+    name: netdata
+    state: started
+  become: true
+
+- name: _verify | Install hdparm netdata collector
+  import_tasks: netdata.yml
+
+# The hdparm_drive_active alert calc references $zfs_scan.any_in_progress.active
+# (so multi-hour ZFS scrubs don't pin it at crit). On a host where the
+# referenced chart never registers, the calc is NaN and the alert is
+# UNDEFINED -- harmless functionally but a noisy gap in the dashboard.
+# Install the collector here so _verify exercises the wired-up flow.
+- name: _verify | Install zfs_scan collector (alerts cross-reference it)
+  import_role:
+    name: zfs
+    tasks_from: netdata
+
+- name: _verify | Install hdparm shim for canned power-state output
+  copy:
+    content: |
+      #!/bin/bash
+      # Test shim for the hdparm charts.d collector. Intercepts `hdparm
+      # -C /dev/disk/by-id/_verify_*` and emits the matching canned
+      # power-state line; everything else execs the real binary at
+      # /sbin/hdparm (which carries cap_sys_rawio from the role's main
+      # play). Removed at end of _verify.
+      set -euo pipefail
+      if [ "${1:-}" = "-C" ]; then
+        case "${2:-}" in
+          /dev/disk/by-id/_verify_active)
+            printf '\n%s\n drive state is:  active/idle\n' "$2"; exit 0 ;;
+          /dev/disk/by-id/_verify_standby)
+            printf '\n%s\n drive state is:  standby\n' "$2"; exit 0 ;;
+          /dev/disk/by-id/_verify_sleeping)
+            printf '\n%s\n drive state is:  sleeping\n' "$2"; exit 0 ;;
+        esac
+      fi
+      exec /sbin/hdparm "$@"
+    dest: /usr/local/sbin/hdparm
+    owner: root
+    group: root
+    mode: "0755"
+    validate: bash -n %s
+  become: true
+
+# Symlink-to-/dev/null is enough for the chart.sh `[ -e "$path" ]` guard
+# (which dereferences) to pass; the shim then intercepts the hdparm
+# call based on the canonical path string. /dev/disk/by-id/ is created
+# by udev on prod whenever a real disk (with a stable id) shows up;
+# the qemu box has only virtio drives (no ids), so udev never makes
+# the dir and the symlink task would fail with ENOENT.
+- name: _verify | Ensure /dev/disk/by-id exists for ghost symlinks
+  file:
+    path: /dev/disk/by-id
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
+
+- name: _verify | Create symlinks for canned-state ghost devices
+  file:
+    src: /dev/null
+    dest: "/dev/disk/by-id/{{ item }}"
+    state: link
+    force: true
+  loop:
+    - _verify_active
+    - _verify_standby
+    - _verify_sleeping
+  become: true
+
+- name: _verify | Seed ghost disks + fast update_every
+  copy:
+    content: |
+      hdparm_update_every=5
+      hdparm_disks=("_verify_ghost" "_verify_active" "_verify_standby" "_verify_sleeping")
+    dest: /etc/netdata/charts.d/hdparm.conf
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: true
+  become: true
+
+- name: _verify | Restart netdata so charts.d rereads hdparm.conf
+  systemd:
+    name: netdata
+    state: restarted
+  become: true
+
+# Chart id is derived from _hdparm_safe(); the _verify_* stems are
+# already safe. Gate first on the charts appearing in the registry --
+# the data endpoint 404s for unknown charts (uri module fails the task),
+# and an `until:` expression on the data response can't run before the
+# charts exist.
+- name: _verify | Wait for all ghost charts to register
+  uri:
+    url: http://localhost:19999/api/v1/charts
+    return_content: true
+  register: _verify_charts
+  retries: 30
+  delay: 2
+  until: >-
+    _verify_charts.status == 200
+    and 'hdparm._verify_ghost' in (_verify_charts.content | from_json).charts.keys()
+    and 'hdparm._verify_active' in (_verify_charts.content | from_json).charts.keys()
+    and 'hdparm._verify_standby' in (_verify_charts.content | from_json).charts.keys()
+    and 'hdparm._verify_sleeping' in (_verify_charts.content | from_json).charts.keys()
+    and 'zfs_scan.any_in_progress' in (_verify_charts.content | from_json).charts.keys()
+
+# `points=1` with no &after defaults to a 1-second window; with our
+# update_every=5s that misses 4 polls out of 5. `&after=-30` widens to
+# 30s so any healthy collector lands at least a few points in range.
+# Membership test (`'collector_error' in labels`) instead of `.index(...)`
+# so a transient response shape (no dimension labels collected yet)
+# returns False cleanly rather than raising and aborting the retry loop.
+- name: _verify | Hdparm._verify_ghost reports collector_error=1 (active=0)
+  uri:
+    url: http://localhost:19999/api/v1/data?chart=hdparm._verify_ghost&points=1&after=-30&format=json
+    return_content: true
+  register: _verify_ghost_data
+  retries: 30
+  delay: 2
+  until: >-
+    _verify_ghost_data.status == 200
+    and 'collector_error' in (_verify_ghost_data.json.labels | default([]))
+    and 'active' in _verify_ghost_data.json.labels
+    and (_verify_ghost_data.json.data | default([])) | length > 0
+    and _verify_ghost_data.json.data[0][_verify_ghost_data.json.labels.index('collector_error')] | int == 1
+    and _verify_ghost_data.json.data[0][_verify_ghost_data.json.labels.index('active')] | int == 0
+
+# Exercise the three known-state parse arms via the shim. The case
+# statement in hdparm_update() is whitespace-fragile (literal
+# `active/idle`, two-space prefix in the awk `sub`) -- a regression in
+# either would flip all three to collector_error and only the existing
+# collector_error assertion above would still pass.
+- name: _verify | Hdparm._verify_<state> reports <state>=1
+  uri:
+    url: "http://localhost:19999/api/v1/data?chart=hdparm._verify_{{ item }}&points=1&after=-30&format=json"
+    return_content: true
+  register: _verify_state_data
+  retries: 30
+  delay: 2
+  until: >-
+    _verify_state_data.status == 200
+    and item in (_verify_state_data.json.labels | default([]))
+    and (_verify_state_data.json.data | default([])) | length > 0
+    and _verify_state_data.json.data[0][_verify_state_data.json.labels.index(item)] | int == 1
+    and _verify_state_data.json.data[0][_verify_state_data.json.labels.index('collector_error')] | int == 0
+  loop:
+    - active
+    - standby
+    - sleeping
+  loop_control:
+    label: "{{ item }}"
+
+# The chart carries the device label from CLABEL; alerts use ${label:device}
+# so the alert text identifies which drive misbehaved. Verify it's set.
+- name: _verify | Hdparm._verify_ghost chart carries device label
+  uri:
+    url: http://localhost:19999/api/v1/chart?chart=hdparm._verify_ghost
+    return_content: true
+  register: _verify_ghost_chart
+- name: _verify | Assert device label and shared context
+  assert:
+    that:
+      - _verify_ghost_chart.json.context == "hdparm.power_state"
+      - _verify_ghost_chart.json.chart_labels.device | default('') == "_verify_ghost"
+    fail_msg: >-
+      chart {{ _verify_ghost_chart.json.id }} context={{ _verify_ghost_chart.json.context }}
+      labels={{ _verify_ghost_chart.json.chart_labels | default({}) }}
+
+# The health templates bind on context (`on: hdparm.power_state`), so
+# they should instantiate against the new chart with alarm names
+# `hdparm._verify_ghost.hdparm_drive_{active,unknown,collector_error}`.
+# `?all` is needed so UNDEFINED instances (active alert's calc is NaN
+# because the test doesn't run for 8h) still appear in the listing.
+- name: _verify | Alerts registered against hdparm._verify_ghost
+  uri:
+    url: http://localhost:19999/api/v1/alarms?all
+    return_content: true
+  register: _verify_alarms
+  retries: 10
+  delay: 2
+  until: >-
+    _verify_alarms.status == 200
+    and (_verify_alarms.content | from_json).alarms.keys() | list
+        | select('search', 'hdparm._verify_ghost.hdparm_drive_collector_error') | list | length > 0
+- name: _verify | All three alert templates instantiated
+  vars:
+    _keys: "{{ (_verify_alarms.content | from_json).alarms.keys() | list }}"
+  assert:
+    that:
+      - _keys | select('search', 'hdparm._verify_ghost.hdparm_drive_active') | list | length > 0
+      - _keys | select('search', 'hdparm._verify_ghost.hdparm_drive_unknown') | list | length > 0
+      - _keys | select('search', 'hdparm._verify_ghost.hdparm_drive_collector_error') | list | length > 0
+    fail_msg: >-
+      Expected hdparm_drive_{active,unknown,collector_error} to bind on
+      hdparm._verify_ghost. Got keys: {{ _keys | select('search', 'hdparm') | list }}
+
+- name: _verify | Restore empty hdparm.conf
+  template:
+    src: charts_d_hdparm.conf.j2
+    dest: /etc/netdata/charts.d/hdparm.conf
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: true
+  become: true
+
+- name: _verify | Remove canned-state ghost symlinks
+  file:
+    path: "/dev/disk/by-id/{{ item }}"
+    state: absent
+  loop:
+    - _verify_active
+    - _verify_standby
+    - _verify_sleeping
+  become: true
+
+- name: _verify | Remove hdparm shim
+  file:
+    path: /usr/local/sbin/hdparm
+    state: absent
+  become: true
+
+- name: _verify | Restart netdata to drop ghost charts
+  systemd:
+    name: netdata
+    state: restarted
+  become: true

@@ -23,7 +23,15 @@
   set_fact:
     _netdata_charts_d_script: "{{ netdata_args.script }}"
     _netdata_charts_d_conf: "{{ netdata_args.conf }}"
-    _netdata_charts_d_condition: "{{ netdata_args.condition | default(true) }}"
+    # netdata-plugin-chartsd is an arch-`all` package whose `Depends:
+    # netdata (= <ver>)` pins it to the exact main-package version. The
+    # apt_preferences pin holds netdata at 1.46.*, but the packagecloud
+    # arm64 build lags at 1.39.1 -- so on aarch64 the plugin resolves to
+    # 1.46.3 while netdata-main can only be 1.39.1, leaving the dependency
+    # unsatisfiable ("held broken packages"). arm64 is the local test box
+    # only (all prod hosts are x86_64), so skip the charts.d collector
+    # there rather than chase the upstream arch gap.
+    _netdata_charts_d_condition: "{{ (netdata_args.condition | default(true)) and ansible_architecture == 'x86_64' }}"
     _netdata_charts_d_restart: "{{ netdata_args.restart | default(true) }}"
 
 # charts.d.plugin is shipped in a separate package on the netdata.cloud
@@ -71,7 +79,12 @@
     - _netdata_charts_d_condition
     - not (ansible_check_mode and _netdata_charts_d_apt.changed)
   vars:
-    _module: "{{ 'template' if _netdata_charts_d_conf.endswith('.j2') else 'copy' }}"
+    # default('') so the dynamic `action` resolves even when a caller gates
+    # the whole charts_d import out (e.g. the x86_64-only hdparm collector
+    # verify): ansible templates the module name to load its arg spec before
+    # honoring `when:`, so an undefined _netdata_charts_d_conf here would
+    # raise even though the task itself is skipped.
+    _module: "{{ 'template' if (_netdata_charts_d_conf | default('')).endswith('.j2') else 'copy' }}"
   action: "{{ _module }}"
   args:
     src: "{{ _netdata_charts_d_conf }}"
