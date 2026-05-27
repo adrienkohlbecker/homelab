@@ -1,6 +1,6 @@
 - name: Add spouse group
   group:
-    name: spouse
+    name: "{{ spouse_firstname }}"
     system: false
   become: true
   tags:
@@ -8,19 +8,19 @@
 
 - name: Add spouse user
   user:
-    name: spouse
-    group: spouse
+    name: "{{ spouse_firstname }}"
+    group: "{{ spouse_firstname }}"
     createhome: true
     system: false
     shell: /bin/bash
-    home: /mnt/data/spouse
+    home: /mnt/data/{{ spouse_firstname }}
   become: true
   register: spouse_user
   tags:
     - spouse
 
 - name: Configure spouse samba user
-  shell: set -euo pipefail; (pdbedit --user=spouse 2>&1 > /dev/null) || (echo '{{ spouse_samba_password }}'; echo '{{ spouse_samba_password }}') | smbpasswd -s -a spouse
+  shell: set -euo pipefail; (pdbedit --user={{ spouse_firstname }} 2>&1 > /dev/null) || (echo '{{ spouse_samba_password }}'; echo '{{ spouse_samba_password }}') | smbpasswd -s -a {{ spouse_firstname }}
   args:
     executable: /bin/bash
   register: spouse_smbpasswd

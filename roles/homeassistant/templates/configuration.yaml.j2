@@ -23,7 +23,7 @@ notify:
     name: family
     services:
       - service: mobile_app_adriens_iphone
-      - service: mobile_app_iphone_de_spouse
+      - service: mobile_app_iphone_de_{{ spouse_firstname }}
 
 recorder:
   db_url: sqlite:////config/db/home-assistant_v2.db

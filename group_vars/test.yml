@@ -228,6 +228,7 @@ nexus_encryption_iv: changeme
 # Shrink the JVM so nexus fits the 3.6 GB podman test VM. Real prod
 # uses the 4G/4G/2g defaults baked into the template.
 nexus_jvm_params: -Xms512M -Xmx1G -XX:MaxDirectMemorySize=512m
+spouse_firstname: changeme
 
 minio_users:
   - access_key: test
@@ -443,7 +444,7 @@ gitea_oidc_client_secret: changeme
 # unauthenticated probes, (3) Authelia's file backend needs at
 # least one entry to start. Prod users live vaulted in prod.yml.
 authelia_users:
-  testuser:
+  - username: testuser
     displayname: Test User
     password_hash: "$argon2id$v=19$m=65536,t=3,p=4$BpLnfgDsc2WD8F2q$o/vzA4myCqZZ36WUPneNS5x4MaDXFGYrYqOnjvKK4Cw"
     email: testuser@{{ inventory_hostname }}.{{ domain }}

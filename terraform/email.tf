@@ -12,9 +12,21 @@ resource "cloudflare_email_routing_address" "adrien_gmail" {
   email      = "adrien.kohlbecker@gmail.com"
 }
 
+# Resolved from TF_VAR_spouse_email in mise.toml [env] (1Password via op
+# run) — keeps the address out of this public repo.
+variable "spouse_email" {
+  type      = string
+  sensitive = true
+
+  validation {
+    condition     = can(regex("@", var.spouse_email))
+    error_message = "spouse_email must be an email address (resolved via TF_VAR_spouse_email from 1Password)."
+  }
+}
+
 resource "cloudflare_email_routing_address" "spouse_email" {
   account_id = local.cloudflare_account_id
-  email      = "spouse@example.com"
+  email      = var.spouse_email
 }
 
 # --- per-zone settings (enabled toggle) ---
