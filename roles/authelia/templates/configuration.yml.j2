@@ -113,6 +113,17 @@ access_control:
     # Portal itself must be reachable without prior auth.
     - domain: 'auth.{{ authelia_cookie_domain }}'
       policy: 'bypass'
+    # roundcube (the Gmail archive viewer) is operator-only — the household
+    # member has no reason to browse the operator's mail archive. The first
+    # rule admits the operator (still 2FA); the second denies everyone else on
+    # that exact host, so a non-operator can't fall through to the `*.` rule
+    # below. Literal FQDN (not authelia_cookie_domain, which is the bare
+    # `domain` on prod) so it matches the roundcube.<host>.<domain> vhost.
+    - domain: 'roundcube.{{ inventory_hostname }}.{{ domain }}'
+      subject: 'user:akohlbecker'
+      policy: 'two_factor'
+    - domain: 'roundcube.{{ inventory_hostname }}.{{ domain }}'
+      policy: 'deny'
     - domain: '*.{{ authelia_cookie_domain }}'
       policy: 'two_factor'
 
