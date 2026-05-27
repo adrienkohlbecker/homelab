@@ -146,7 +146,7 @@ resource "hcloud_server" "fox" {
   }
 
   lifecycle {
-    ignore_changes = [ user_data, ssh_keys, image ]
+    ignore_changes = [user_data, ssh_keys, image]
   }
 
   # Boot with the fleet's regular `ak` user (sudo, key-only) instead of logging
