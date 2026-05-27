@@ -44,7 +44,7 @@ jobs:
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:rw
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: uv sync
       - name: Packer init
         # Plugins are pre-installed into /opt/packer/plugins by the

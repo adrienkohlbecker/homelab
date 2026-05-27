@@ -27,7 +27,7 @@ jobs:
     outputs:
       matrix: ${{ steps.gate.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         # Full history so `git log --since='25 hours ago'` actually has
         # the timestamps to walk; the default fetch-depth of 1 only has
         # HEAD's commit metadata.
@@ -73,7 +73,7 @@ jobs:
       HOMELAB_VAULT_PASSWORD_TEST: ${{ secrets.HOMELAB_VAULT_PASSWORD_TEST }}
       ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: uv sync
       - name: Run test cell
         env:
@@ -89,7 +89,7 @@ jobs:
           test/testrole.py "$role" --machine "$variant" --timeout 1500 --workdir-parent /scratch
       - name: Upload harness output on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: testout-${{ env.ROLE }}-${{ env.VARIANT }}
           path: |
@@ -105,7 +105,7 @@ jobs:
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - run: mise run ci:mail-failures
         env:
           NEEDS_RESULT: ${{ toJson(needs.test-role.result) }}

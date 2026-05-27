@@ -53,7 +53,7 @@ jobs:
       REGISTRY: nexus.lab.fahm.fr
       REPO: homelab/ci
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           # No git history needed -- Dockerfile COPY references working-tree
           # files only. persist-credentials=false drops checkout's default
