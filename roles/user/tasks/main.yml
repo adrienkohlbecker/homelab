@@ -227,21 +227,6 @@
   tags:
     - user
 
-# --no-folding keeps shared, perms-sensitive dirs (~/.ssh, ~/.gnupg, ~/.config)
-# as real directories and only symlinks the tracked leaf files. The vscode
-# package is mac-only (a ~/Library path), so it's omitted. Plugins are no longer
-# submodules — the mise install below pulls them (http backend) from config.toml.
-- name: Stow dotfiles into $HOME  # noqa: command-instead-of-module
-  when: not (ansible_check_mode and user_dotfiles_clone.changed)
-  command: >-
-    stow --dir={{ ansible_user_dir }}/.dotfiles --target={{ ansible_user_dir }}
-    --no-folding zsh git vim ssh gnupg config bin claude aws ruby node python misc
-  args:
-    chdir: "{{ ansible_user_dir }}"
-    creates: "{{ ansible_user_dir }}/.zshrc"
-  tags:
-    - user
-
 - name: Check installed mise version
   command: "{{ ansible_user_dir }}/.local/share/mise/bin/mise --version"
   register: user_mise_check
@@ -333,6 +318,27 @@
   file:
     path: /tmp/mise-{{ user_mise_version }}.tar.gz
     state: absent
+  tags:
+    - user
+
+# Deploy the dotfiles via the repo's own `stow` mise task — single source of
+# truth for the stow flags/package set (see mise.toml in the dotfiles repo)
+# instead of duplicating them here. Runs from ~/.dotfiles so mise finds the
+# repo's task; `mise trust` accepts the freshly cloned project config. Ordered
+# after the mise binary install (needs it) and before the tool install below
+# (which needs the ~/.config/mise symlink this lays down, along with every other
+# dotfile symlink). creates: makes it a one-time deploy, like the old reset --hard.
+- name: Deploy dotfiles into $HOME (mise stow task)
+  when: not (ansible_check_mode and user_dotfiles_clone.changed)
+  shell: |
+    set -euo pipefail
+    mise="{{ ansible_user_dir }}/.local/share/mise/bin/mise"
+    "$mise" trust
+    "$mise" run stow
+  args:
+    executable: /bin/bash
+    chdir: "{{ ansible_user_dir }}/.dotfiles"
+    creates: "{{ ansible_user_dir }}/.zshrc"
   tags:
     - user
 
