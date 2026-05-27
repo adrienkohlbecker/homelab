@@ -38,6 +38,13 @@ jobs:
         # 50 commits is enough for HEAD~1 plus a typical session of pushes;
         # detect-roles only ever looks at HEAD..HEAD~1 anyway.
         with: { fetch-depth: 50 }
+      # detect-roles parses roles/*/meta/test.yml (and shells out to
+      # role-deps.py) with `import yaml`, resolved against the project
+      # venv. mise's uv_venv_auto creates+sources a fresh .venv per
+      # checkout but doesn't populate it, so without this the import
+      # fails (PyYAML arrives transitively via ansible). Same uv sync
+      # the lint / test-role jobs run; fast off the image's warm cache.
+      - run: uv sync
       - id: detect
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
