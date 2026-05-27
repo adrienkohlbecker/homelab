@@ -80,7 +80,7 @@
       - _verify_f_rescue_errexit.rc == 0
       - "'errexit=off' in _verify_f_rescue_errexit.stdout"
 
-- name: _verify | F_trace echoes the shell-quoted command to stderr then runs it
+- name: _verify | F_trace echoes the shell-quoted command to stdout then runs it
   shell: |
     source /usr/local/lib/functions.sh
     f_trace echo hello "two words"
@@ -89,11 +89,13 @@
   register: _verify_f_trace
   changed_when: false
 
+# The `$ <cmd>` banner is a plain printf (not redirected to >&2), so it lands
+# on stdout alongside the command's own output — assert both there.
 - name: _verify | F_trace assertions
   assert:
     that:
       - _verify_f_trace.rc == 0
-      - "'$ echo hello' in _verify_f_trace.stderr"
+      - "'$ echo hello' in _verify_f_trace.stdout"
       - "'hello two words' in _verify_f_trace.stdout"
 
 - name: _verify | ERR trap fires on errexit with file:line:func breadcrumb
