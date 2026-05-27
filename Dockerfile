@@ -102,12 +102,25 @@ RUN install -dm 755 /etc/apt/keyrings && \
     apt-get update && apt-get install -y --no-install-recommends mise && \
     rm -rf /var/lib/apt/lists/*
 
+# Pin uv's cache to a fixed absolute path instead of the default
+# $HOME/.cache/uv. GitHub Actions overrides HOME to /github/home inside
+# job containers (same reason PACKER_PLUGIN_PATH is pinned below), so a
+# cache warmed at build time under root's home would never be consulted
+# at runtime -- every `uv sync` would re-download from the index. Pinning
+# here means the warm-up below and every workflow `uv sync` share
+# /opt/uv-cache. UV_LINK_MODE=copy because the per-checkout .venv lands on
+# the bind-mounted GITHUB_WORKSPACE (a different filesystem than the
+# cache), so uv's default hardlink fails and falls back to copy with a
+# warning anyway -- this just makes the copy the deliberate path.
+ENV UV_CACHE_DIR=/opt/uv-cache \
+    UV_LINK_MODE=copy
+
 # Pre-resolve everything mise.toml asks for (python 3.14, uv, terraform,
 # packer, shellcheck, shfmt, tflint), then warm uv's wheel cache
 # by syncing the dependency tree once. The resulting .venv is discarded
 # because it's tied to /tmp/build and per-checkout venvs at workflow
 # time will be built against the actual GITHUB_WORKSPACE checkout — but
-# the cached wheels in ~/.cache/uv stay and make those `uv sync` calls
+# the cached wheels in /opt/uv-cache stay and make those `uv sync` calls
 # resolve in seconds instead of minutes.
 WORKDIR /tmp/build
 COPY mise.toml pyproject.toml uv.lock ./
@@ -122,9 +135,10 @@ COPY mise.toml pyproject.toml uv.lock ./
 # GITHUB_TOKEN is scoped to the single `mise install` invocation via
 # inline-env rather than `export`ed for the whole RUN: a mise plugin
 # post-install hook that dumps env into a cached file under
-# MISE_DATA_DIR (/opt/mise) or ~/.cache/uv would otherwise bake the
-# token into the layer. mise trust is a local file op and uv sync
-# doesn't need GitHub auth, so both run without the token visible.
+# MISE_DATA_DIR (/opt/mise) or UV_CACHE_DIR (/opt/uv-cache) would
+# otherwise bake the token into the layer. mise trust is a local file
+# op and uv sync doesn't need GitHub auth, so both run without the
+# token visible.
 RUN --mount=type=secret,id=mise_github_token \
     mise trust && \
     if [ -s /run/secrets/mise_github_token ]; then \
