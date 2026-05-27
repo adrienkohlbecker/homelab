@@ -105,6 +105,20 @@
   tags:
     - firewall
 
+# Transitional: earlier revisions wrote net.ipv4.conf.all.rp_filter=2 into
+# the hardening file. We now cede `all` to keepalived (see the rp_filter
+# comment below), so strip the stale line — otherwise the file re-asserts
+# all=2 at boot (only for keepalived to lower it to 0) and contradicts the
+# comment. No-op on fresh hosts and once removed.
+- name: Drop the ceded all.rp_filter from the hardening sysctls
+  ansible.posix.sysctl:
+    name: net.ipv4.conf.all.rp_filter
+    sysctl_file: /etc/sysctl.d/90-firewall-hardening.conf
+    state: absent
+  become: true
+  tags:
+    - firewall
+
 - name: Install network-stack hardening sysctls
   ansible.posix.sysctl:
     name: "{{ item.name }}"
@@ -124,9 +138,16 @@
     # macvlan that shares eth0's L2 segment, so VRRP-unicast and LAN
     # broadcast/multicast legitimately ingress on an iface other than
     # the one their source routes back through. Strict (=1) would drop
-    # that traffic and break keepalived failover. =2 is also what Ubuntu
-    # ships, so this no longer fights /usr/lib/sysctl.d/50-default.conf.
-    - { name: net.ipv4.conf.all.rp_filter, value: '2' }
+    # that traffic and break keepalived failover.
+    #
+    # Only `default` is set, NOT `all`: on keepalived hosts the vrrp
+    # daemon forces net.ipv4.conf.all.rp_filter to 0 at startup (journal:
+    # "setting net.ipv4.conf.all.rp_filter from 2 to 0") to protect VRRP,
+    # so an `all=2` here loses a race on every converge and the sysctl
+    # flaps changed forever. Ceding `all` is safe: effective per-iface RPF
+    # is max(all, <iface>), and every real iface already carries =2 (from
+    # `default` below at creation + /usr/lib/sysctl.d/50-default.conf's
+    # `net.ipv4.conf.*.rp_filter=2` glob), so loose RPF holds regardless.
     - { name: net.ipv4.conf.default.rp_filter, value: '2' }
     # Refuse source-routed packets (no attacker-dictated path).
     - { name: net.ipv4.conf.all.accept_source_route, value: '0' }
