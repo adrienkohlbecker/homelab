@@ -539,7 +539,6 @@
       # See notes/authelia_rollout.md and alerts_generate.py.
       auth: required
       bypass_query_param:
-        name: auth_token
         value: "{{ netdata_alerts_token }}"
       # alarm_log?count=10000 (polled by homepage_alerts every 30s) returns
       # ~hundreds of KB to a few MB; default 8x4k buffers spill to disk.

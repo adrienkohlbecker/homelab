@@ -32,6 +32,13 @@ http {
     include                mime.types;
     default_type           application/octet-stream;
 
+    # gzip — set once here, inherited by every server/location below
+    gzip                   on;
+    gzip_vary              on;
+    gzip_proxied           any;
+    gzip_comp_level        6;
+    gzip_types             text/plain text/css text/xml application/json application/javascript application/rss+xml application/atom+xml image/svg+xml;
+
     # Logging. $request includes the full request line ("GET /path?q=1
     # HTTP/1.1"), which would leak any URL-param secret a site uses (see
     # nginx_site_args.bypass_query_param in roles/nginx/tasks/site.yml).
@@ -61,6 +68,13 @@ http {
     # express the conjunction with nginx's `if` directive, so the
     # decision lives in this http-scope map and the location-scope `if`
     # just tests the resulting 0/1.
+    #
+    # SECURITY: a 1 here admits the request without consulting Authelia, so
+    # for cookieless clients the UPSTREAM becomes the sole authenticator --
+    # any non-empty Authorization value is accepted at this layer. Only pair
+    # `upstream_authorization` with an upstream that validates the credential
+    # itself (InfluxDB does). The empty-cookie requirement is what stops a
+    # logged-in browser's stale localStorage token from bypassing.
     map "$cookie_authelia_session:$http_authorization" $authelia_bypass {
         default       0;
         "~^:.+"       1;
@@ -95,7 +109,7 @@ http {
 
     # Mozilla Intermediate configuration
     ssl_protocols          TLSv1.2 TLSv1.3;
-    ssl_ciphers            ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384;
+    ssl_ciphers            ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
 
     # OCSP stapling disabled: Let's Encrypt shut down its OCSP responder in 2025
     # (in favor of CRLs), so issued certs no longer carry an OCSP URL and nginx
@@ -112,27 +126,6 @@ http {
         ""      close;
     }
 
-    map $remote_addr $proxy_forwarded_elem {
-
-        # IPv4 addresses can be sent as-is
-        ~^[0-9.]+$        "for=$remote_addr";
-
-        # IPv6 addresses need to be bracketed and quoted
-        ~^[0-9A-Fa-f:.]+$ "for=\"[$remote_addr]\"";
-
-        # Unix domain socket names cannot be represented in RFC 7239 syntax
-        default           "for=unknown";
-    }
-
-    map $http_forwarded $proxy_add_forwarded {
-
-        # If the incoming Forwarded header is syntactically valid, append to it
-        "~^(,[ \\t]*)*([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\\t \\x21\\x23-\\x5B\\x5D-\\x7E\\x80-\\xFF]|\\\\[\\t \\x21-\\x7E\\x80-\\xFF])*\"))?(;([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\\t \\x21\\x23-\\x5B\\x5D-\\x7E\\x80-\\xFF]|\\\\[\\t \\x21-\\x7E\\x80-\\xFF])*\"))?)*([ \\t]*,([ \\t]*([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\\t \\x21\\x23-\\x5B\\x5D-\\x7E\\x80-\\xFF]|\\\\[\\t \\x21-\\x7E\\x80-\\xFF])*\"))?(;([!#$%&'*+.^_`|~0-9A-Za-z-]+=([!#$%&'*+.^_`|~0-9A-Za-z-]+|\"([\\t \\x21\\x23-\\x5B\\x5D-\\x7E\\x80-\\xFF]|\\\\[\\t \\x21-\\x7E\\x80-\\xFF])*\"))?)*)?)*$" "$http_forwarded, $proxy_forwarded_elem";
-
-        # Otherwise, replace it
-        default "$proxy_forwarded_elem";
-    }
-
     # Default servers for missing Host header, or header not matching configured site
     server {
         listen              80 default_server;
@@ -147,8 +140,17 @@ http {
 {% if nginx_ipv6 | default(false) %}
         listen              [::]:443 default_server ssl http2;
 {% endif %}
+{% if ansible_distribution_release not in ['jammy'] %}
+        # Reject the TLS handshake for absent/unmatched SNI rather than
+        # completing it with the host cert and returning 404 — keeps the
+        # real cert off scanners hitting the IP with a bogus SNI. Needs
+        # nginx >= 1.19.4 (not on jammy/1.18); blacklist-gated so future
+        # releases pick it up automatically.
+        ssl_reject_handshake on;
+{% else %}
         server_name         _;
         return              404;
+{% endif %}
     }
 
     # Load configs
