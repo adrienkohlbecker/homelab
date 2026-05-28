@@ -258,14 +258,24 @@ udevadm settle
 
 mount | grep mnt
 
-# Install Ubuntu. Under concurrent matrix builds debootstrap intermittently
-# aborts "Couldn't download packages" for base packages the mirror served in
-# full (Nexus logs a 200 at the right byte count, a different cell each run),
-# so the fault is client-side. The per-package transport error that explains
-# it (truncated body? checksum? connection reset?) lives in debootstrap's own
-# log, which dies with the build VM before we can read it -- so --verbose
-# surfaces each retrieve/validate step live, and on failure we dump that log
-# to the build console so the next occurrence is diagnosable.
+# Pin nexus to lab's LAN IP so debootstrap's package fetches skip DNS. The
+# build VM resolves through two stacked userspace NATs (qemu user-mode SLIRP,
+# itself nested in the runner container's slirp4netns), which shed concurrent
+# UDP datagrams under load; debootstrap fires hundreds of back-to-back A+AAAA
+# lookups for the mirror host, so a dropped query surfaces as the client-side
+# "Couldn't download packages" / EAI_AGAIN abort on a random base package each
+# run. A hosts entry resolves nexus with no DNS round-trip. 10.123.0.2 is
+# lab's physical LAN IP (prod_network.hosts.lab.physical), reachable from the
+# build VM via SLIRP NAT -- the same target ansible's etc_hosts_entries pins
+# at converge. Dropped from the chroot before the image ships (chroot.sh) so
+# prod images carry no lab-only pin. No-op when UBUNTU_MIRROR is upstream.
+echo "10.123.0.2 nexus.lab.fahm.fr" >>/etc/hosts
+
+# Install Ubuntu. The nexus pin above keeps debootstrap's hundreds of mirror
+# lookups off the flaky DNS path. If a fetch still fails, --verbose surfaces
+# each retrieve/validate step live and the handler dumps debootstrap's own log
+# -- which otherwise dies with the build VM -- so the next occurrence stays
+# diagnosable.
 debootstrap --verbose "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR" || {
   rc=$?
   echo "=== debootstrap failed (exit $rc); /mnt/debootstrap/debootstrap.log tail ===" >&2

@@ -134,6 +134,14 @@ EOF
 
 write_sources_list "$UBUNTU_MIRROR" "$UBUNTU_MIRROR_SECURITY"
 
+# Pin nexus to lab's LAN IP for the chroot apt installs below. Same root cause
+# as the build-host pin in provision.sh: the build VM's stacked userspace NATs
+# (qemu SLIRP over the runner's slirp4netns) drop concurrent UDP DNS under
+# load, and the installs below resolve nexus.lab.fahm.fr hundreds of times.
+# Resolving it from /etc/hosts skips DNS entirely. Removed before the
+# upstream-sources swap so the shipped image's /etc/hosts stays clean.
+echo "10.123.0.2 nexus.lab.fahm.fr" >>/etc/hosts
+
 # Configure locale
 
 locale-gen en_US.UTF-8
@@ -656,6 +664,11 @@ EOF
   chown root:root "/etc/sudoers.d/$USERNAME"
   chmod 400 "/etc/sudoers.d/$USERNAME"
 fi
+
+# Drop the build-only nexus pin (added after the Nexus sources above) so the
+# shipped image's /etc/hosts carries no lab-internal entry: test images get it
+# back via ansible's etc_hosts_entries, prod images must not have it.
+sed -i '/[[:space:]]nexus\.lab\.fahm\.fr$/d' /etc/hosts
 
 # Reset apt sources to upstream so the shipped image isn't pinned to a
 # Nexus-internal URL. Build-time installs above used $UBUNTU_MIRROR
