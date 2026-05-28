@@ -78,9 +78,10 @@
 # Snapshot BEFORE the template runs so /run/netplan_prev captures the
 # genuine *previous* /etc/netplan, not the just-rendered new one. Two
 # downstream consumers read this:
-#   - `netplan apply --state` diffs new-vs-prev to restrict restart
-#     scope to genuinely-changed ifaces.
-#   - the systemd-run rollback timer mv's it over /etc/netplan if we
+#   - `netplan apply --state` reads it to tear down virtual devices
+#     (the iot VLAN, future bonds/bridges) removed from the new config;
+#     it does NOT restrict the networkd restart scope.
+#   - the netplan_rollback.timer mv's it over /etc/netplan if we
 #     don't reconnect post-apply.
 # Unconditional so the snapshot is always available; the apply block
 # below is what's gated on netplan_cfg.changed.
