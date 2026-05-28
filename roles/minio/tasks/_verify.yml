@@ -4,7 +4,7 @@
 # sub-system load on cold start.
 - name: _verify | MinIO S3 API answers /minio/health/live
   uri:
-    url: http://localhost:9199/minio/health/live
+    url: http://localhost:{{ service_ports.minio_api }}/minio/health/live
     status_code: 200
   register: minio_verify_api
   retries: 30
@@ -18,7 +18,7 @@
 # console server is up independent of the OIDC config loading.
 - name: _verify | MinIO console answers /api/v1/login
   uri:
-    url: http://localhost:9001/api/v1/login
+    url: http://localhost:{{ service_ports.minio_console }}/api/v1/login
     status_code: 200
     return_content: true
   register: minio_verify_console

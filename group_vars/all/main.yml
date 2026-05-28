@@ -145,6 +145,11 @@ service_ports:
   keepalived_exporter: 9650
   kuma: 3001
   lidarr: 8686
+  # MinIO S3 API + console, both loopback-only (nginx fronts them on the
+  # minio-api / minio subdomains). The console 9001 is the collision the
+  # fan2go_api comment above refers to.
+  minio_api: 9199
+  minio_console: 9001
   nut: 3493
   radarr: 7878
   # Roundcube webmail (getmail archive viewer), loopback-published; Dovecot's

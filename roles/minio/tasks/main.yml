@@ -134,19 +134,19 @@
   vars:
     systemd_unit_args:
       src: minio
-      condition: "{{ not (ansible_check_mode and minio_installed.changed) }}"
-      restart: "{{ minio_service_d_override_conf_result.changed or minio_cfg.changed }}"
+      condition: "{{ not (ansible_check_mode and (minio_installed.changed | default(false))) }}"
+      restart: "{{ minio_service_d_override_conf_result.changed or minio_cfg.changed or (minio_installed.changed | default(false)) }}"
   tags:
     - minio
 
-- name: Configure nginx
+- name: Configure nginx (console)
   import_role:
     name: nginx
     tasks_from: site
   vars:
     nginx_site_args:
       subdomain: minio
-      proxy_pass: http://127.0.0.1:9001/
+      proxy_pass: http://127.0.0.1:{{ service_ports.minio_console }}/
       # Skip the "Login with SSO" click. MinIO 2022's console SPA
       # renders a button when /api/v1/login returns
       # loginStrategy=redirect; inject a script that runs the same
@@ -161,19 +161,20 @@
   tags:
     - minio
 
-- name: Configure nginx
+- name: Configure nginx (api)
   import_role:
     name: nginx
     tasks_from: site
   vars:
     nginx_site_args:
       subdomain: minio-api
-      proxy_pass: http://127.0.0.1:9199/
+      proxy_pass: http://127.0.0.1:{{ service_ports.minio_api }}/
+      # Stream large S3 uploads (ARQ/restic) to MinIO as they arrive
+      # instead of buffering the whole request body in nginx first.
+      proxy_request_buffering: 'off'
       location_conf: |
         # Otherwise ARQ uploads return HTTP 413
         client_max_body_size     60M;
-        # Increase body buffer size to not buffer uploads to disk
-        client_body_buffer_size  60M;
   tags:
     - minio
 
