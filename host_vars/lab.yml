@@ -24,6 +24,11 @@ swap_zvol:
   dataset: rpool/swap
   size: 16G
 
+# zram is the primary swap; the 16G zvol above is the deadlock-free-by-
+# coldness overflow (notes/swap_strategy.md).
+swap_zram:
+  size: 8G
+
 # Derived from `sudo sensors-detect` on the host; re-run after hardware changes.
 sensor_modules:
   - drivetemp
