@@ -79,10 +79,18 @@ jobs:
       # can't see this cell's qemu) could reap files mid-run. Cleanup
       # of old per-cell dirs lives in the github_runner role's
       # tmpfiles.d entry (Age=1d).
+      #
+      # qemu is ro (packer is the sole writer of the qcow2 tree), but the
+      # `minimal` variant downloads its vanilla cloud image to a shared cache
+      # under it (machine.py _ensure_minimal_cloudimg -> qemu/cloud-images),
+      # so that one subdir is overlaid rw. podman auto-creates the host dir as
+      # the runner user (same as it did for qemu/ itself on packer's first rw
+      # mount). Only cleanup:minimal uses it, so no concurrent-writer race.
       options: >-
         --device /dev/kvm
         --group-add 1
         --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
+        --volume /mnt/scratch/qemu/cloud-images:/mnt/scratch/qemu/cloud-images:rw
         --volume /mnt/scratch/github_runner/scratch/${{ github.run_id }}-${{ strategy.job-index }}:/scratch:rw
     strategy:
       fail-fast: false
