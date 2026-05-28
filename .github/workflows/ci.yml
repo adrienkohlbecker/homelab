@@ -36,14 +36,16 @@ defaults:
 
 jobs:
   detect:
-    # Only needs packer_changed here to gate the packer call below; the
-    # role matrix is detected again inside test.yml. That double-detect
-    # is cheap (~seconds on the warm cache) -- if this shape is adopted,
-    # fold test.yml's detect up into this job and pass the matrix down.
+    # Single detection pass for the whole pipeline. Emits the role test
+    # matrix + cross_cut (passed down to test) and the packer_changed /
+    # ci_image_changed gates (consumed by the packer / ci-image calls).
+    # test.yml no longer detects -- it takes the matrix as an input.
     runs-on: [ self-hosted, lab ]
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest
     outputs:
+      matrix: ${{ steps.detect.outputs.matrix }}
+      cross_cut: ${{ steps.detect.outputs.cross_cut }}
       packer_changed: ${{ steps.detect.outputs.packer_changed }}
       ci_image_changed: ${{ steps.detect.outputs.ci_image_changed }}
     steps:
@@ -97,4 +99,5 @@ jobs:
     uses: ./.github/workflows/test.yml
     secrets: inherit
     with:
-      roles: ${{ inputs.roles }}
+      matrix: ${{ needs.detect.outputs.matrix }}
+      cross_cut: ${{ needs.detect.outputs.cross_cut }}
