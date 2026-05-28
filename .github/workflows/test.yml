@@ -136,8 +136,12 @@ jobs:
         # plain alnum/underscores/hyphens and unique per matrix cell.
         with:
           name: testout-${{ env.ROLE }}-${{ env.VARIANT }}
+          # The harness names files <machine>.<ubuntu>.<role>.<kind>.ansi
+          # (machine.py: prefix = f"{machine}.{ubuntu_name}.{role}"), so the
+          # glob needs the ubuntu-codename segment -- the earlier
+          # <variant>.<role>.* dropped it and matched nothing (zero uploads).
           path: |
-            test/out/${{ env.VARIANT }}.${{ env.ROLE }}.*
+            test/out/${{ env.VARIANT }}.*.${{ env.ROLE }}.*
             /scratch/**
           retention-days: 30
           if-no-files-found: warn
