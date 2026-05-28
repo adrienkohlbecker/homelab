@@ -4,7 +4,16 @@
 # Sources (in priority order):
 #   workflow_dispatch with INPUTS_ROLES set -- explicit list (or "ALL").
 #   --all on the CLI                       -- full universe (used by test-nightly.yml).
-#   default                                -- git diff HEAD~1 HEAD.
+#   default (push)                         -- git diff <base>..HEAD, where
+#       <base> is the newest entirely-successful ci.yml push run that is an
+#       ancestor of HEAD: the last green run on this branch, or (on a feature
+#       branch with none) the last green run on the default branch at/below
+#       the merge base. A red run therefore carries its change set forward
+#       into the next run's matrix -- every role touched since the last green
+#       state is retested, not just the latest commit's. On a push with no
+#       green ancestor (or a missing/invalid token), tests the FULL universe
+#       rather than risk an untrustworthy incremental diff; off a push (local
+#       preview, empty dispatch) uses HEAD~1. CI_BASE_REF overrides.
 #
 # Outputs (to $GITHUB_OUTPUT, or stdout when $GITHUB_OUTPUT is unset):
 #   matrix=<JSON array of {role, variant}>  -- input to fromJson() in workflow.
@@ -15,10 +24,12 @@
 #                                              manually).
 #   packer_changed=true|false               -- whether the change touches
 #                                              packer/ or mise-tasks/packer/
-#                                              (gates wait-for-packer-build).
+#                                              (gates ci.yml's packer call,
+#                                              ordered before test).
 #   ci_image_changed=true|false             -- whether the change touches a
 #                                              ci-image.yml input on a master
-#                                              push (gates wait-for-ci-image).
+#                                              push (gates ci.yml's ci-image
+#                                              call, ordered before test).
 #
 # A change to a helper role (one with no roles/<name>/tasks/main.yml) is
 # expanded via ci:role-deps into the set of consumer roles. So editing
@@ -26,10 +37,16 @@
 # imports usergroup_immediate.
 #
 # Local testing:
-#   mise run ci:detect-roles                # uses git diff HEAD~1 HEAD
+#   mise run ci:detect-roles                # no token -> diff base = HEAD~1
+#   CI_BASE_REF=HEAD~5 mise run ci:detect-roles   # force a base (preview)
 #   INPUTS_ROLES=foo,bar:minimal GITHUB_EVENT_NAME=workflow_dispatch mise run ci:detect-roles
 #   mise run ci:detect-roles --all
 set -euo pipefail
+
+# All human-readable progress goes to stderr with a consistent prefix, so it
+# shows in the GitHub step log without polluting the matrix=... stdout the
+# workflow parses (in CI those land in $GITHUB_OUTPUT; locally on stdout).
+log() { echo "[detect-roles] $*" >&2; }
 
 # Universe: roles with tasks/main.yml. Helpers without main.yml fall outside
 # and reach the matrix only through role-deps expansion.
@@ -98,6 +115,7 @@ CROSS_CUT_RE='^(group_vars/all/[^/]+\.(yml|yaml)|group_vars/test\.yml|host_vars/
 
 emit() {
   local matrix=$1 cross_cut=$2 packer_changed=${3:-false} ci_image_changed=${4:-false}
+  log "result: matrix=$matrix cross_cut=$cross_cut packer_changed=$packer_changed ci_image_changed=$ci_image_changed"
   if [ -n "${GITHUB_OUTPUT:-}" ]; then
     {
       echo "matrix=$matrix"
@@ -146,12 +164,15 @@ build_matrix() {
 # Resolve the role list from --all / INPUTS_ROLES / git diff, then emit.
 
 if [ "${1:-}" = "--all" ]; then
+  log "mode: --all (full universe)"
   emit "$(build_matrix "$UNIVERSE")" "false"
   exit 0
 fi
 
 if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}" ]; then
+  log "mode: workflow_dispatch roles='$INPUTS_ROLES'"
   if [ "$INPUTS_ROLES" = "ALL" ]; then
+    log "roles=ALL -> full universe"
     emit "$(build_matrix "$UNIVERSE")" "false"
     exit 0
   fi
@@ -195,21 +216,145 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}
   exit 0
 fi
 
-# Push event (or default): diff HEAD~1 HEAD. CI_BASE_REF overrides the base
-# revision (lets unit tests exercise the diff logic against a chosen point;
-# CI itself just leaves it unset).
-BASE_REF="${CI_BASE_REF:-HEAD~1}"
-if ! BASE=$(git rev-parse "$BASE_REF" 2>/dev/null); then
-  echo "no $BASE_REF -- treating as cross-cut so the operator can dispatch a roles=ALL run" >&2
-  emit "[]" "true"
+# Change-detection path (push, or non-push fall-through). The diff base is
+# the newest entirely-successful ci.yml push run whose commit is an ancestor
+# of HEAD, so a red run's change set carries forward into the next run's
+# matrix (every role touched since the last green state is retested), not
+# just the latest commit's roles. Resolution order:
+#   1. the last green push run on THIS branch;
+#   2. on a feature branch with none of its own, the last green push run on
+#      the default branch that is an ancestor of HEAD -- the merge base if it
+#      was green, else the most recent green commit before it (we keep going
+#      back in time until a green ancestor is found).
+# When a push can't establish a green base (no green ancestor anywhere, or a
+# missing/invalid token), we test the FULL universe rather than an
+# untrustworthy incremental diff -- HEAD~1 would only test the latest commit
+# and miss regressions in roles changed earlier but never validated.
+# CI_BASE_REF overrides everything; off a push (local preview, empty
+# dispatch) we use HEAD~1.
+head_sha=${GITHUB_SHA:-} # guard substring below: set -u trips on unset
+log "mode: change detection (event=${GITHUB_EVENT_NAME:-local}, branch=${GITHUB_REF_NAME:-?}, sha=${head_sha:0:12})"
+
+GH_API_URL="${GITHUB_API_URL:-https://api.github.com}"
+# The repo's permanent default branch. Hardcoded (env-overridable) rather
+# than fetched: master has been the main line since inception and a rename
+# is a one-liner here -- not worth an API round-trip on every push.
+CI_DEFAULT_BRANCH="${CI_DEFAULT_BRANCH:-master}"
+
+gh_api() {
+  # GET a GitHub REST endpoint; echo the body, non-zero on HTTP error.
+  curl -sS --fail-with-body \
+    -H "Authorization: Bearer $GITHUB_TOKEN" \
+    -H "Accept: application/vnd.github+json" \
+    -H "X-GitHub-Api-Version: 2022-11-28" \
+    "$@"
+}
+
+is_ancestor_of_head() {
+  # True when commit $1 is an ancestor of GITHUB_SHA, via the compare API
+  # (status "ahead" => head is ahead of base => base is an ancestor;
+  # "diverged" => $1 branched off, e.g. a default-branch commit past the
+  # fork point). Server-side, so it works on the shallow checkout.
+  local resp status
+  resp=$(gh_api "$GH_API_URL/repos/$GITHUB_REPOSITORY/compare/$1...$GITHUB_SHA" 2>/dev/null) || return 1
+  status=$(jq -r '.status // empty' <<<"$resp" 2>/dev/null || true)
+  [ "$status" = "ahead" ] || [ "$status" = "identical" ]
+}
+
+newest_green_ancestor() {
+  # Echo the newest entirely-successful ci.yml push run on branch $1 whose
+  # commit is an ancestor of HEAD, or nothing. status=success means every
+  # job -- including the nested test.yml cells -- passed; event=push excludes
+  # roles= dispatches, whose green only validates a subset. Pages back
+  # through history (newest first) until a green ancestor is found or the
+  # runs are exhausted, so a branch that forked far back still finds its
+  # fork rather than giving up after one page.
+  local branch=$1 page=1 resp count sha created
+  log "  searching green push runs on '$branch'..."
+  while :; do
+    resp=$(gh_api -G \
+      --data-urlencode "branch=$branch" \
+      --data-urlencode "event=push" \
+      --data-urlencode "status=success" \
+      --data-urlencode "per_page=100" \
+      --data-urlencode "page=$page" \
+      "$GH_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" 2>/dev/null) || {
+      log "  runs query failed on '$branch' (page $page)"
+      return 0
+    }
+    count=$(jq -r '.workflow_runs | length' <<<"$resp" 2>/dev/null || echo 0)
+    [ "$count" -gt 0 ] || break
+    while IFS=$'\t' read -r sha created; do
+      [ -n "$sha" ] || continue
+      if is_ancestor_of_head "$sha"; then
+        log "  green ancestor: ${sha:0:12} ($created)"
+        echo "$sha"
+        return 0
+      fi
+      log "    skip ${sha:0:12} ($created): not an ancestor of HEAD"
+    done < <(jq -r '.workflow_runs[] | "\(.head_sha)\t\(.created_at)"' <<<"$resp" 2>/dev/null || true)
+    page=$((page + 1))
+  done
+  log "  no green ancestor on '$branch'"
+  return 0
+}
+
+resolve_green_base() {
+  [ -n "${GITHUB_TOKEN:-}" ] || {
+    log "  no GITHUB_TOKEN -- cannot query run history"
+    return 0
+  }
+  [ -n "${GITHUB_REPOSITORY:-}" ] && [ -n "${GITHUB_REF_NAME:-}" ] && [ -n "${GITHUB_SHA:-}" ] || return 0
+  local sha
+  sha=$(newest_green_ancestor "$GITHUB_REF_NAME")
+  if [ -z "$sha" ] && [ "$GITHUB_REF_NAME" != "$CI_DEFAULT_BRANCH" ]; then
+    log "  none on '$GITHUB_REF_NAME'; falling back to default branch '$CI_DEFAULT_BRANCH'"
+    sha=$(newest_green_ancestor "$CI_DEFAULT_BRANCH")
+  fi
+  echo "$sha"
+}
+
+full_universe() {
+  # Fallback when we can't establish a trustworthy incremental base on a
+  # push: test everything. $1 is a short reason for the log.
+  log "diff base: $1 -> testing the FULL universe"
+  emit "$(build_matrix "$UNIVERSE")" "false"
   exit 0
+}
+
+if [ -n "${CI_BASE_REF:-}" ]; then
+  BASE_REF="$CI_BASE_REF"
+  log "diff base: $BASE_REF (CI_BASE_REF override)"
+elif [ "${GITHUB_EVENT_NAME:-}" = "push" ]; then
+  green=$(resolve_green_base)
+  [ -n "$green" ] || full_universe "no green ancestor run found"
+  # `git diff A B` compares the two trees directly, so only the green commit
+  # object needs to be present locally -- not the history between it and
+  # HEAD. If it's outside the shallow (depth-50) checkout, fetch just that
+  # commit (github.com allows want-sha for ref-reachable shas).
+  if ! git rev-parse --verify --quiet "${green}^{commit}" >/dev/null 2>&1; then
+    log "  base ${green:0:12} outside shallow checkout; fetching the commit"
+    git fetch --no-tags --quiet origin "$green" 2>/dev/null || true
+  fi
+  git rev-parse --verify --quiet "${green}^{commit}" >/dev/null 2>&1 ||
+    full_universe "green run ${green:0:12} unreachable"
+  BASE_REF="$green"
+  log "diff base: ${green:0:12} (last green ci run)"
+else
+  BASE_REF="HEAD~1"
+  log "diff base: HEAD~1 (non-push: local/preview)"
+fi
+
+if ! BASE=$(git rev-parse "$BASE_REF" 2>/dev/null); then
+  full_universe "base ref '$BASE_REF' does not resolve"
 fi
 
 CHANGED=$(git diff --name-only "$BASE" HEAD)
+log "comparing ${BASE:0:12}..$(git rev-parse --short HEAD): $(echo "$CHANGED" | grep -c . || true) file(s) changed"
 
 if echo "$CHANGED" | grep -qE "$CROSS_CUT_RE"; then
-  echo "cross-cut detected:" >&2
-  echo "$CHANGED" | grep -E "$CROSS_CUT_RE" | sed 's/^/  /' >&2
+  log "cross-cut paths changed -> empty matrix + operator mail:"
+  echo "$CHANGED" | grep -E "$CROSS_CUT_RE" | sed 's/^/[detect-roles]     /' >&2
   emit "[]" "true"
   exit 0
 fi
@@ -229,6 +374,9 @@ for role in $DIRECT; do
   fi
   # Helper role: expand to consumers (intersected with universe).
   expanded=$(mise run ci:role-deps "$role" 2>/dev/null || true)
+  if [ -n "$expanded" ]; then
+    log "helper '$role' changed -> consumers: $(echo "$expanded" | tr '\n' ' ')"
+  fi
   for consumer in $expanded; do
     if in_universe "$consumer"; then
       ROLES="$ROLES $consumer"
@@ -241,30 +389,37 @@ done
 # re-exercise roles/_packer's assertions against the rebuilt image.
 # detect-roles only scans roles/<X>/ paths by default, so without this
 # clause those edits would wait for the nightly run to catch a
-# regression. packer_changed is consumed by test.yml's
-# wait-for-packer-build job so the _packer cell only reads the qcow2s
-# *after* packer-build finishes -- firing on _packer-in-matrix alone
-# would also block pushes that only touch roles/_packer/.
+# regression. packer_changed gates ci.yml's packer call, which is ordered
+# before test (needs: packer), so the _packer cell only reads the qcow2s
+# *after* packer-build republishes them -- firing on _packer-in-matrix
+# alone would also rebuild on pushes that only touch roles/_packer/.
 packer_changed=false
 if echo "$CHANGED" | grep -qE '^(packer/|mise-tasks/packer/)'; then
   ROLES="$ROLES _packer"
   packer_changed=true
+  log "packer inputs changed -> +_packer cell, packer_changed=true"
 fi
 
-# Any change to a ci-image.yml input means ci-image.yml is publishing
-# a new :latest for this SHA; downstream workflows must wait on
-# wait-for-ci-image before resolving their container: blocks.
-# ci-image.yml only fires on master pushes (branches: [master] in its
-# `on:`), so triple-gate on event=push + ref=master + input-diff;
-# anything else (workflow_dispatch, feature-branch push, no input
-# touched) leaves the boolean false and the waiter is skipped --
-# downstream never blocks on a build that won't happen.
+# Any change to a ci-image.yml input means ci.yml will rebuild + republish
+# the :latest image for this SHA; test must run after that so its cells
+# resolve the new image. ci_image_changed gates ci.yml's ci-image call,
+# which is ordered before test (needs: ci-image). The image is only
+# republished on master pushes, so triple-gate on event=push + ref=master
+# + input-diff; anything else (workflow_dispatch, feature-branch push, no
+# input touched) leaves the boolean false and the ci-image call is skipped
+# -- test never waits on a build that won't happen.
 ci_image_changed=false
 if [ "${GITHUB_EVENT_NAME:-}" = "push" ] &&
   [ "${GITHUB_REF:-}" = "refs/heads/master" ] &&
   echo "$CHANGED" | grep -qE '^(Dockerfile|mise\.toml|pyproject\.toml|uv\.lock|packer/qemu\.pkr\.hcl)$'; then
   ci_image_changed=true
+  log "ci-image inputs changed (master push) -> ci_image_changed=true"
 fi
 
 ROLES_DEDUPED=$(echo "$ROLES" | tr ' ' '\n' | grep -v '^$' | sort -u || true)
+if [ -n "$ROLES_DEDUPED" ]; then
+  log "roles to test: $(echo "$ROLES_DEDUPED" | tr '\n' ' ')"
+else
+  log "no role-relevant changes; matrix will be empty"
+fi
 emit "$(build_matrix "$ROLES_DEDUPED")" "false" "$packer_changed" "$ci_image_changed"
