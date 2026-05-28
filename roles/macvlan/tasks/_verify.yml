@@ -75,3 +75,48 @@
     macvlan_verify_podman.rc != 0
     or 'macvlan' not in macvlan_verify_podman.stdout
     or item.parent not in macvlan_verify_podman.stdout
+
+# Self-heal regression guard for the child-device BindsTo: removing the iface
+# (a udev remove) must flip the unit to inactive, and starting it again must
+# recreate the iface. Destructive, but _verify only runs against a throwaway
+# qemu VM.
+- name: _verify | Remove each iface to simulate a manual/driver deletion
+  command: ip link delete {{ item.name }}
+  loop: "{{ macvlan_blocks | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  changed_when: true
+
+- name: _verify | Assert BindsTo drove the unit inactive
+  systemd:
+    name: "{{ item.name }}.service"
+  loop: "{{ macvlan_blocks | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  register: macvlan_verify_drift
+  changed_when: false
+  retries: 15
+  delay: 1
+  until: macvlan_verify_drift.status.ActiveState != "active"
+  failed_when: macvlan_verify_drift.status.ActiveState == "active"
+
+- name: _verify | Heal by starting the unit again (mirrors a reconverge)
+  systemd:
+    name: "{{ item.name }}.service"
+    state: restarted
+  loop: "{{ macvlan_blocks | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+
+- name: _verify | Assert the iface is back UP after the heal
+  command: ip -br link show {{ item.name }}
+  loop: "{{ macvlan_blocks | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  become: true
+  register: macvlan_verify_heal
+  changed_when: false
+  failed_when: "'UP' not in macvlan_verify_heal.stdout"
