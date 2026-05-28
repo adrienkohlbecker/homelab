@@ -59,18 +59,26 @@
     or 'fetch("/api/v1/login")' not in minio_verify_console_spa.content
   become: true
 
-# Admins IAM policy file landed under MinIO's policy dir. This is the
-# policy that attaches at OIDC login for any user whose token carries
-# groups: ["admins"]; a missing policy file means OIDC operators
-# would 200-login but immediately get "access denied" on any admin
-# operation. The state-of-the-policy-dir is the cheapest functional
-# check -- mcli admin policy info would be more idiomatic but
-# requires the client alias and adds a couple of seconds.
-- name: _verify | Admins IAM policy exists
-  stat:
-    path: /mnt/minio/.minio.sys/config/iam/policies/admins
-  register: minio_verify_admins_policy
-  failed_when: not minio_verify_admins_policy.stat.exists
+# Data-plane provisioning, exercised through the `default` alias
+# (configured in client.yml). Catches the 403-class regressions a stat on
+# the policy dir can't -- a user created without its policy, a bucket that
+# never got made, a policy file that failed to load.
+- name: _verify | Provisioned bucket is listable
+  command: mcli ls default/{{ minio_buckets[0] }}
+  changed_when: false
+  become: true
+
+- name: _verify | useronly + admins IAM policies exist
+  command: mcli admin policy info default {{ item }}
+  changed_when: false
+  loop:
+    - useronly
+    - admins
+  become: true
+
+- name: _verify | Provisioned user exists
+  command: mcli admin user info default {{ minio_users[0].access_key }}
+  changed_when: false
   become: true
 
 # OIDC integration end-to-end (console flips loginStrategy=redirect,
