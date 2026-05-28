@@ -17,7 +17,7 @@ MINIO_VOLUMES="/mnt/minio"
 # port 9001 on all network interfaces. The default behavior is dynamic
 # port selection.
 
-MINIO_OPTS="--address 127.0.0.1:9199 --console-address 127.0.0.1:9001"
+MINIO_OPTS="--address 127.0.0.1:{{ service_ports.minio_api }} --console-address 127.0.0.1:{{ service_ports.minio_console }}"
 
 # Set the root username. This user has unrestricted permissions to
 # perform S3 and administrative API operations on any resource in the
@@ -65,4 +65,6 @@ MINIO_IDENTITY_OPENID_CLIENT_SECRET={{ minio_oidc_client_secret }}
 MINIO_IDENTITY_OPENID_SCOPES=openid,profile,email,groups
 MINIO_IDENTITY_OPENID_CLAIM_NAME=groups
 MINIO_IDENTITY_OPENID_DISPLAY_NAME=Authelia
-MINIO_IDENTITY_OPENID_REDIRECT_URI=https://minio.{{ inventory_hostname }}.{{ domain }}/oauth_callback
+# Derive the OAuth callback from the request Host header (nginx sets it to
+# minio.<host>.<domain>) rather than pinning a per-host REDIRECT_URI.
+MINIO_IDENTITY_OPENID_REDIRECT_URI_DYNAMIC=on
