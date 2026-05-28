@@ -51,11 +51,11 @@ jobs:
     # the `sources` input (space-separated); a push (no inputs) or an
     # empty dispatch input builds all four. Non-VM work -> lab pool.
     #
-    # `hetzner` builds only the rpool disk image (its verify-boot post-
-    # processor is excepted -- the cloud-init-only image has no harness
-    # machine spec). Turning that disk into a Hetzner Cloud snapshot is the
-    # separate `mise run packer:hetzner` path, which needs HCLOUD_TOKEN and
-    # creates real cloud resources -- intentionally NOT wired into CI here.
+    # `hetzner` builds the rpool disk image (its verify-boot post-processor is
+    # excepted -- the cloud-init-only image has no harness machine spec), then
+    # on a master push the build cell publishes it as a Hetzner Cloud snapshot
+    # via `mise run packer:hetzner` (HCLOUD_TOKEN from a repo secret). Feature
+    # branches build the disk but skip the publish -- see that step below.
     #
     # Why one job per source instead of packer's internal parallel
     # builds in a single job: each build VM then occupies one lab-vm
@@ -132,6 +132,28 @@ jobs:
             args+=(--ubuntu "$PACKER_UBUNTU")
           fi
           mise run packer:build "${args[@]}"
+      - name: Publish Hetzner snapshot
+        # Turn the rpool disk this cell just built into a Hetzner Cloud snapshot
+        # (mise run packer:hetzner: temp cpx22 -> rescue -> dd onto /dev/sda ->
+        # create_image, then prune all but the 2 newest). Master only: a
+        # snapshot is a project-global resource that terraform's
+        # data.hcloud_image selects by most_recent, so a feature-branch publish
+        # could silently become fox's next boot image. HCLOUD_TOKEN is a repo
+        # secret set manually via `gh secret set` (kept out of terraform state --
+        # see terraform/github.tf); hetzner.sh skips its op re-exec when the
+        # token is already resolved.
+        # Reads the disk built by the step above from the shared qemu volume.
+        if: matrix.source == 'hetzner' && github.ref == 'refs/heads/master'
+        env:
+          PACKER_UBUNTU: ${{ inputs.ubuntu }}
+          HCLOUD_TOKEN: ${{ secrets.HCLOUD_TOKEN }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ -n "$PACKER_UBUNTU" ]; then
+            args+=(--ubuntu "$PACKER_UBUNTU")
+          fi
+          mise run packer:hetzner "${args[@]}"
       - name: Seed box_deps on top of box
         # box_deps is a derivation: mise-tasks/packer/seed-deps.sh stages a
         # reflink-copy of box's artifacts, boots them via launch.py
