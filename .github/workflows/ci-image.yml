@@ -21,12 +21,11 @@ permissions:
 # push). cancel-in-progress=false because a half-pushed manifest is
 # strictly worse than a delayed run.
 #
-# Known same-push race with sibling workflows: a push that simultaneously
-# touches a build-input AND a role fires ci-image + test.yml in parallel.
-# test.yml's wait-for-ci-image job (gated on detect's ci_image_changed
-# output) blocks its test-role cells on the sentinel this workflow writes
-# at the end of the build, so test-role's container: resolves the new
-# :latest rather than the stale one.
+# Ordering vs. test: ci.yml runs this job before test (needs: ci-image,
+# gated on detect's ci_image_changed), so a push that touches both a
+# build-input and a role rebuilds + republishes :latest before any
+# test-role cell resolves its container: block -- no cross-workflow
+# sentinel needed (that's what the old wait-for-ci-image poll did).
 concurrency:
   group: ci-image
   cancel-in-progress: false
