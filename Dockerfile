@@ -18,12 +18,13 @@
 FROM ubuntu:24.04
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Build-time toggle for the homelab nexus mirror redirects below
-# (apt + pip + uv). Default 1 = route through nexus.lab.fahm.fr because
-# that's the CI path. Set to 0 for builds outside the lab network:
-# `podman build --build-arg USE_NEXUS_MIRRORS=0 .`. When off, the
-# noble image's stock /etc/apt/sources.list.d/ubuntu.sources stays put
-# and pip+uv inherit their package-manager defaults (PyPI).
+# Build-time toggle for the homelab nexus apt mirror redirect below.
+# Default 1 = route apt through nexus.lab.fahm.fr because that's the CI
+# path. Set to 0 for builds outside the lab network:
+# `podman build --build-arg USE_NEXUS_MIRRORS=0 .`. When off, the noble
+# image's stock /etc/apt/sources.list.d/ubuntu.sources stays put. pip +
+# uv always resolve against PyPI regardless of this toggle (see the note
+# below the apt block for why they're not proxied).
 ARG USE_NEXUS_MIRRORS=1
 
 # Route apt through the homelab nexus proxy. Same arch split as
@@ -51,17 +52,16 @@ RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
         > /etc/apt/sources.list.d/ubuntu.sources; \
     fi
 
-# Route pip + uv at the homelab nexus pypi proxy. Same pattern
-# roles/_test/tasks/mirrors.yml uses for test VMs. /etc-scoped so the
-# config applies to every user / venv inside the image. HTTPS (vs HTTP
-# for apt) because pypi is published over TLS-only on the nexus side.
-RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
-      install -dm 755 /etc/uv; \
-      printf '[[index]]\nurl = "https://nexus.lab.fahm.fr/repository/pypi/simple/"\ndefault = true\n' \
-        > /etc/uv/uv.toml; \
-      printf '[global]\nindex-url = https://nexus.lab.fahm.fr/repository/pypi/simple/\n' \
-        > /etc/pip.conf; \
-    fi
+# pip + uv are intentionally NOT routed through the nexus pypi proxy
+# (unlike apt above). uv.lock pins each package's resolved index URL, so
+# resolving against nexus.lab.fahm.fr rewrites those URLs to
+# nexus.lab.fahm.fr/... and `uv sync --locked` then fails against a
+# lockfile authored on dev machines via PyPI -- same package versions,
+# different URLs (the diff is URL/hash fields only). Devs author the lock
+# against PyPI, so CI must resolve against PyPI too or --locked can never
+# pass. uv's wheel cache is pre-warmed below, so dropping the proxy costs
+# no per-run network fetch in the steady state. (pip is unused -- uv is
+# the package manager -- so no /etc/pip.conf either.)
 
 # Harness needs qemu-system-x86 + qemu-utils for booting test VMs;
 # openssh-client for talking to the guests; xorriso + cloud-image-utils
