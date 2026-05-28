@@ -21,6 +21,10 @@ if [ ! -e "$wt/terraform/.terraform" ] && [ ! -L "$wt/terraform/.terraform" ]; t
   ln -s "$repo/terraform/.terraform" "$wt/terraform/.terraform"
 fi
 
+if [ ! -e "$wt/.claude/settings.local.json" ] && [ ! -L "$wt/.claude/settings.local.json" ]; then
+  ln -s "$repo/.claude/settings.local.json" "$wt/.claude/settings.local.json"
+fi
+
 # remember-plugin memory store: the plugin hardcodes $CLAUDE_PROJECT_DIR/.remember,
 # so a per-worktree store dies with `git worktree remove`. Share the main checkout's
 # (ignored via the common git dir's info/exclude). Guard on the source existing — a
