@@ -1,19 +1,14 @@
 name: ci-image
+# Reusable + directly dispatchable. ci.yml calls this via `uses:` gated on
+# detect's ci_image_changed (which itself enforces push + ref=master +
+# build-input-diff), so the old `push: branches/paths` gate now lives in
+# detect-roles. ci.yml orders `test` after this job (needs: ci-image), so
+# test-role resolves the freshly-pushed :latest -- replacing the old
+# ci-image-<sha> sentinel poll. workflow_dispatch still builds from any
+# ref (the :latest tag gate below handles the tag policy).
 on:
+  workflow_call:
   workflow_dispatch:
-  push:
-    # Branch gate: only master pushes trigger automatic builds. A feature
-    # branch that happens to touch a build-input file shouldn't silently
-    # republish :latest under everyone else; workflow_dispatch can still
-    # build from any ref (the :latest tag gate further down handles the
-    # tag policy for the dispatch case).
-    branches: [ master ]
-    paths:
-      - 'Dockerfile'
-      - 'mise.toml'
-      - 'pyproject.toml'
-      - 'uv.lock'
-      - 'packer/qemu.pkr.hcl'
 
 # Workflow only reads the repo; Nexus push uses out-of-band creds. Drop
 # the repo-default GITHUB_TOKEN scope so a future shell injection can't
@@ -187,19 +182,7 @@ jobs:
           fi
           podman rmi "${REGISTRY}/${REPO}:${GITHUB_SHA}" 2>/dev/null || true
 
-      # Downstream workflows (test.yml's wait-for-ci-image) poll this
-      # sentinel before letting their test-role cells resolve :latest.
-      # Same /mnt/scratch/qemu/_sentinels/ dir as packer-build (it's the
-      # only shared sentinel location already bind-mounted into the
-      # downstream containers); distinct filename prefix. Only writes on
-      # master because :latest is only published from master --
-      # feature-branch dispatches have nothing for downstream to wait on.
-      # Step only fires after a successful push: a failed push leaves no
-      # sentinel, the waiter times out, and test-role skips rather than
-      # asserting against the previous :latest mid-rebuild.
-      - name: Mark ci-image complete for waiters
-        if: github.ref == 'refs/heads/master'
-        run: |
-          set -euo pipefail
-          mkdir -p /mnt/scratch/qemu/_sentinels
-          touch "/mnt/scratch/qemu/_sentinels/ci-image-${GITHUB_SHA}"
+      # The old "Mark ci-image complete for waiters" step (touch
+      # _sentinels/ci-image-<sha>) is gone -- ci.yml orders `test` after
+      # this job via `needs: ci-image`, so test-role resolves the new
+      # :latest without polling a sentinel.
