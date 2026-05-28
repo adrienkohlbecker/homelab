@@ -113,7 +113,12 @@ default_machine_for() {
 # host_vars/box.yml and host_vars/minimal.yml are the test fixtures that
 # every push cell consumes; lab-qemu.yml / pug-qemu.yml only matter for
 # on-demand --machine lab/pug runs and aren't cross-cut for push CI.
-CROSS_CUT_RE='^(group_vars/all/[^/]+\.(yml|yaml)|group_vars/test\.yml|host_vars/(box|minimal)\.yml|test/(testrole|testall|machine)\.py|mise\.toml|data/network_topology\.(yml|schema\.json))$'
+# test/*.py is the whole harness (testrole/testall import launch, machine,
+# arch, utils, ... -- a bug in any of it mis-runs every cell), so the slice
+# is all of test/*.py, not just the entrypoints. ansible.cfg and
+# vault-client.sh govern every ansible invocation + vault decryption, so a
+# change to either can alter any cell's behaviour.
+CROSS_CUT_RE='^(group_vars/all/[^/]+\.(yml|yaml)|group_vars/test\.yml|host_vars/(box|minimal)\.yml|test/[^/]+\.py|ansible\.cfg|vault-client\.sh|mise\.toml|data/network_topology\.(yml|schema\.json))$'
 
 emit() {
   local matrix=$1 cross_cut=$2 packer_changed=${3:-false} ci_image_changed=${4:-false}
@@ -385,23 +390,27 @@ if echo "$CHANGED" | grep -qE "$CROSS_CUT_RE"; then
   exit 0
 fi
 
-# Direct role detection: extract role names from `^roles/<X>/...` paths,
-# then for each one either add to the matrix (if in universe) or expand
-# via role-deps (if it's a helper). The `|| true` keeps the empty case
-# from tripping `set -o pipefail` -- grep -oE exits 1 with no matches,
-# which is fine here (no-role-paths diff is normal).
+# Direct role detection: extract role names from `^roles/<X>/...` paths.
+# For each, add the role itself if it's testable AND expand to its
+# consumers via role-deps. Both are needed: most helpers (systemd_unit,
+# nginx, service_user, ...) ship their own tasks/main.yml so they ARE
+# testable -- but their standalone cell won't exercise a consumer-specific
+# break, so a change to them must also retest every role that imports them.
+# role-deps returns the consumer set (empty for a leaf role with no
+# importers). The `|| true` keeps the empty case from tripping `set -o
+# pipefail` -- grep -oE exits 1 with no matches (no-role-paths diff is fine).
 DIRECT=$(echo "$CHANGED" | grep -oE '^roles/[^/]+' | sed 's|^roles/||' | sort -u || true)
 
 ROLES=""
 for role in $DIRECT; do
   if in_universe "$role"; then
     ROLES="$ROLES $role"
-    continue
   fi
-  # Helper role: expand to consumers (intersected with universe).
+  # Expand to consumers regardless of whether the role is itself testable
+  # -- a changed helper-with-main.yml is both a cell and a dependency.
   expanded=$(mise run ci:role-deps "$role" 2>/dev/null || true)
   if [ -n "$expanded" ]; then
-    log "helper '$role' changed -> consumers: $(echo "$expanded" | tr '\n' ' ')"
+    log "role '$role' changed -> consumers: $(echo "$expanded" | tr '\n' ' ')"
   fi
   for consumer in $expanded; do
     if in_universe "$consumer"; then
