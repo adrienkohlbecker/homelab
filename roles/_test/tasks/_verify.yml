@@ -160,8 +160,7 @@
     that:
       - "'/etc/letsencrypt/live/' in (_verify_nginx_conf.content | b64decode)"
       - "'$connection_upgrade' in (_verify_nginx_conf.content | b64decode)"
-      - "'$proxy_forwarded_elem' in (_verify_nginx_conf.content | b64decode)"
-      - "'$proxy_add_forwarded' in (_verify_nginx_conf.content | b64decode)"
+      - "'$request_safe' in (_verify_nginx_conf.content | b64decode)"
     fail_msg: "/etc/nginx/nginx.conf doesn't look like prod's nginx.conf.j2 render"
 
 - name: _verify | Nginx is active

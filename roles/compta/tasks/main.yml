@@ -94,7 +94,6 @@
       # $request_safe map. See roles/nginx/tasks/site.yml docstring.
       auth: required
       bypass_query_param:
-        name: auth_token
         value: "{{ compta_api_token }}"
   tags:
     - compta

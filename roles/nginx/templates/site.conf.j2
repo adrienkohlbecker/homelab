@@ -12,16 +12,34 @@ server {
 
   server_name         {{ nginx_site_args.subdomain }} {{ nginx_site_args.subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_site_args.subdomain }}.{{ domain}};
 
-  # security headers
+  # Security headers. Captured once into `security_headers` and emitted both
+  # here at server scope (covering the favicon/robots locations, the Authelia
+  # 401->302 redirect, and error responses, all via the `always` flag) and
+  # re-emitted inside `location /` when a location_conf is present: nginx
+  # inherits add_header only into levels that define none of their own, so a
+  # location_conf adding e.g. Access-Control-Allow-Origin would otherwise
+  # strip every security header from the proxied path.
+  #
+  # Referrer-Policy is no-referrer on bypass_query_param sites (the URL carries
+  # the vaulted auth_token; $request_safe redacts only our own access log, so
+  # the token must never leak via a Referer to third-party assets), same-origin
+  # elsewhere.
+{% set security_headers %}
   add_header X-XSS-Protection          "1; mode=block" always;
   add_header X-Content-Type-Options    "nosniff" always;
+{% if nginx_site_args.bypass_query_param is defined %}
+  add_header Referrer-Policy           "no-referrer" always;
+{% else %}
   add_header Referrer-Policy           "same-origin" always;
+{% endif %}
 {% if not (nginx_site_args.csp_passthrough | default(false)) %}
   add_header Content-Security-Policy   "{% if nginx_site_args.csp_additional is defined %}{{ nginx_site_args.csp_additional }}; {% endif %}default-src {% if nginx_site_args.csp_default_src is defined %}{{ nginx_site_args.csp_default_src }} {% endif %}{{ nginx_csp_default }}; frame-ancestors {% if nginx_site_args.csp_frame_ancestors is defined %}{{ nginx_site_args.csp_frame_ancestors }}{% else %}'self'{% endif %}; report-uri https://csplogger.{{ inventory_hostname }}.{{ domain }}/log; report-to csp-endpoint;" always;
 {% endif %}
   add_header Permissions-Policy        "interest-cohort=()" always;
   add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
   add_header Reporting-Endpoints       'csp-endpoint="https://csplogger.{{ inventory_hostname }}.{{ domain }}/log"' always;
+{% endset %}
+{{ security_headers }}
 
   # favicon.ico
   location = /favicon.ico {
@@ -32,13 +50,6 @@ server {
   location = /robots.txt {
       log_not_found off;
   }
-
-  # gzip
-  gzip            on;
-  gzip_vary       on;
-  gzip_proxied    any;
-  gzip_comp_level 6;
-  gzip_types      text/plain text/css text/xml application/json application/javascript application/rss+xml application/atom+xml image/svg+xml;
 
 {% set _auth_enabled = nginx_site_args.auth | default('none') == 'required' %}
 {% if _auth_enabled %}
@@ -75,8 +86,12 @@ server {
     # (a 2xx -> auth_request lets the parent through) without consulting
     # Authelia. Why not `if ($arg_auth_token = ...)`: $arg_X inside an
     # auth_request subrequest refers to the subrequest's own (empty) query,
-    # not the parent's -- so that comparison never matches. The token
-    # itself is redacted from the access log via $request_safe.
+    # not the parent's -- so that comparison never matches. The param name
+    # is fixed to `auth_token` (the $req_auth_token/$request_safe maps in
+    # nginx.conf.j2 hardcode it). The token is redacted from OUR access log
+    # via $request_safe, but redaction can't reach error_log or a Referer
+    # to a third party -- the no-referrer Referrer-Policy above covers the
+    # latter.
     if ($req_auth_token = "{{ nginx_site_args.bypass_query_param.value }}") {
       return 204;
     }
@@ -93,11 +108,11 @@ server {
     proxy_pass_request_body off;
     proxy_set_header Content-Length          "";
     proxy_set_header X-Original-Method       $request_method;
-    proxy_set_header X-Original-URL          $scheme://$http_host$request_uri;
+    proxy_set_header X-Original-URL          $scheme://$host$request_uri;
     proxy_set_header X-Forwarded-For         $remote_addr;
     proxy_set_header X-Forwarded-Method      $request_method;
     proxy_set_header X-Forwarded-Proto       $scheme;
-    proxy_set_header X-Forwarded-Host        $http_host;
+    proxy_set_header X-Forwarded-Host        $host;
     proxy_set_header X-Forwarded-Uri         $request_uri;
   }
 
@@ -106,7 +121,7 @@ server {
   # rewrites the 401 into a 302 to the portal with returnUrl + method
   # preserved, so users land on the login page and bounce back here
   # after a successful auth.
-  error_page 401 =302 https://auth.{{ authelia_cookie_domain }}/?rd=$scheme://$http_host$request_uri&rm=$request_method;
+  error_page 401 =302 https://auth.{{ authelia_cookie_domain }}/?rd=$scheme://$host$request_uri&rm=$request_method;
 
 {% endif %}
   location / {
@@ -133,10 +148,10 @@ server {
     # $is_args$args when the upstream URL has no own query string, so
     # rewriting $args here removes the param from the forwarded URL.
     # Two rewrites cover (1) param-first and (2) param-not-first:
-    if ($args ~ "^{{ nginx_site_args.bypass_query_param.name }}=[^&]*&?(.*)$") {
+    if ($args ~ "^auth_token=[^&]*&?(.*)$") {
       set $args $1;
     }
-    if ($args ~ "^(.*)&{{ nginx_site_args.bypass_query_param.name }}=[^&]*(.*)$") {
+    if ($args ~ "^(.*)&auth_token=[^&]*(.*)$") {
       set $args "$1$2";
     }
 {% endif %}
@@ -146,7 +161,11 @@ server {
     proxy_http_version 1.1;
     proxy_cache_bypass $http_upgrade;
 
-    # Proxy SSL
+    # Proxy SSL. proxy_ssl_server_name forwards SNI to the upstream; the
+    # upstream cert is deliberately NOT verified (no proxy_ssl_verify) -- the
+    # HTTPS upstreams are LAN devices (UDM, Eaton, marantz) carrying self-signed
+    # certs, reached over the trusted home LAN. An on-path attacker on that VLAN
+    # could MITM the leg; that's out of scope for the home threat model.
     proxy_ssl_server_name on;
 
     # Proxy headers
@@ -154,7 +173,6 @@ server {
     proxy_set_header Upgrade           $http_upgrade;
     proxy_set_header Connection        $connection_upgrade;
     proxy_set_header X-Real-IP         $remote_addr;
-    proxy_set_header Forwarded         $proxy_add_forwarded;
     proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Forwarded-Host  $host;
@@ -206,6 +224,10 @@ server {
 {% endif %}
 {% endif %}
 {% if nginx_site_args.location_conf is defined %}
+    # Re-establish the server-scope security headers at this location level:
+    # the location_conf below may add its own add_header, which would
+    # otherwise drop them all here (see the security_headers note above).
+{{ security_headers }}
 
     {{ nginx_site_args.location_conf | trim | indent(4) }}
 {% endif %}
