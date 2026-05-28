@@ -55,21 +55,30 @@ resource "cloudflare_zone_dnssec" "adrienkohlbecker_com" {
   zone_id = cloudflare_zone.adrienkohlbecker_com.id
   status  = "active"
 
-  lifecycle { prevent_destroy = true }
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [status]   # CF flaps pending↔active; don't let it churn the Gandi DS
+  }
 }
 
 resource "cloudflare_zone_dnssec" "fahm_fr" {
   zone_id = cloudflare_zone.fahm_fr.id
   status  = "active"
 
-  lifecycle { prevent_destroy = true }
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [status]   # CF flaps pending↔active; don't let it churn the Gandi DS
+  }
 }
 
 resource "cloudflare_zone_dnssec" "mhaf_fr" {
   zone_id = cloudflare_zone.mhaf_fr.id
   status  = "active"
 
-  lifecycle { prevent_destroy = true }
+  lifecycle {
+    prevent_destroy = true
+    ignore_changes  = [status]   # CF flaps pending↔active; don't let it churn the Gandi DS
+  }
 }
 
 # Canonical zone-name → id map for use across surfaces that fan out
