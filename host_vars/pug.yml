@@ -49,6 +49,12 @@ netplan:
       wakeonlan: true
       dhcp4: true
       dhcp6: false
+      # Keep the DHCP lease through a networkd restart so a netplan
+      # apply can't momentarily drop eth0 and sever in-flight SSH (the
+      # 2026-05-10 lockout). Upstream's lease-preservation fix; the
+      # timer-armed rollback in roles/netplan is the backstop for what
+      # it can't cover.
+      critical: true
 
 hdparm_settings: {}
 
