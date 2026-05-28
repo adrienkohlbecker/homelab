@@ -5,14 +5,45 @@
 - name: install | Validate {{ macvlan_args.name }}
   assert:
     that:
-      - macvlan_args.name is string and macvlan_args.name | length > 0
-      - macvlan_args.parent is string and macvlan_args.parent | length > 0
+      # name lands in a systemd unit *filename*, an `ip link` argument, and
+      # a sysctl key — restrict it to a kernel-legal iface name so a typo
+      # can't write a unit outside the unit dir or silently mangle a key.
+      - macvlan_args.name is string and macvlan_args.name is match('^[a-z][a-z0-9_]*$')
+      - macvlan_args.name | length <= 15
+      # parent allows a `.` for VLAN subifs (e.g. eth0.4 / iot).
+      - macvlan_args.parent is string and macvlan_args.parent is match('^[a-z][a-z0-9_.]*$')
       - macvlan_args.block is string
       - macvlan_args.block | ansible.utils.ipaddr != false
       - macvlan_args.block == (macvlan_args.block | ansible.utils.ipaddr('net'))
+      # The podman pool is the upper /29 (ipsubnet(prefix+1, 1)); a /29-or-
+      # smaller block leaves no room for that split.
+      - macvlan_args.block | ansible.utils.ipaddr('prefix') | int <= 28
+      # host_ip / mac_address feed `ip addr add` / `ip link set address`
+      # inside the oneshot, so a malformed value fails at unit-runtime, not
+      # converge — validate the format here when supplied.
+      - macvlan_args.host_ip is not defined or (macvlan_args.host_ip | ansible.utils.ipaddr) != false
+      - "macvlan_args.mac_address is not defined or (macvlan_args.mac_address is match('^([0-9a-fA-F]{2}:){5}[0-9a-fA-F]{2}$'))"
     fail_msg: >-
       macvlan_args invalid for '{{ macvlan_args.name | default('<no name>') }}':
-      block={{ macvlan_args.block | default('<unset>') }} must be a CIDR (network/prefixlength)
+      name must be a kernel-legal iface name (^[a-z][a-z0-9_]*$, <=15 chars),
+      parent an iface name, block a CIDR with prefix <=28, and host_ip/mac_address
+      (if set) a valid IP / MAC.
+  tags:
+    - macvlan
+
+- name: install | Validate podman parent facts for {{ macvlan_args.name }}
+  when: macvlan_args.podman_network | default(false)
+  assert:
+    that:
+      # The podman network derives subnet/gateway from the parent's IPv4
+      # fact (see the podman_network task below), so the parent must be a
+      # gathered iface carrying an address — otherwise the network is
+      # created with an empty/garbage CIDR.
+      - macvlan_args.parent in ansible_facts
+      - ansible_facts[macvlan_args.parent].ipv4 is defined
+    fail_msg: >-
+      macvlan_args.podman_network is set for '{{ macvlan_args.name }}' but parent
+      '{{ macvlan_args.parent }}' has no gathered IPv4 fact to derive the network from.
   tags:
     - macvlan
 
@@ -32,6 +63,10 @@
   ansible.posix.sysctl:
     name: "net.ipv4.conf.{{ macvlan_args.parent }}.{{ item.key }}"
     value: "{{ item.value }}"
+    # Verify against (and -w) the running kernel, not just the persisted
+    # file — the mitigation has to be live on the already-up parent now,
+    # not only after the next reload/reboot.
+    sysctl_set: true
   loop:
     - { key: arp_ignore, value: '1' }
     - { key: arp_announce, value: '2' }
@@ -76,8 +111,7 @@
 #
 # This task runs inline (not via tasks_from: podman) to avoid the
 # macvlan_args dict-shadowing issue when re-importing the same role
-# inside a loop. podman.yml as a standalone entry point was retired
-# in the same change.
+# inside a loop.
 - name: install | Create podman macvlan network {{ macvlan_args.name }}
   when:
     - macvlan_args.podman_network | default(false)
@@ -90,6 +124,9 @@
     ip_range: "{{ macvlan_args.block | ansible.utils.ipsubnet(macvlan_args.block | ansible.utils.ipaddr('prefix') | int + 1, 1) }}"
     opt:
       parent: "{{ macvlan_args.parent }}"
+      # Must match the host child iface's `mode bridge` (macvlan_iface.service.j2)
+      # so containers and the host iface interoperate on the shared parent.
+      mode: bridge
   become: true
   tags:
     - macvlan
