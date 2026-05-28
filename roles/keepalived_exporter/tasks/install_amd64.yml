@@ -7,8 +7,13 @@
     mode: "0644"
     owner: root
     group: root
+  register: keepalived_exporter_tarball
 
+# Check-mode gate (mirrors install_source.yml's build/install steps): under
+# --check the download above only reports "would fetch" and the tarball stays
+# absent, so unarchive would die on a missing src. Skip cleanly instead.
 - name: install_amd64 | Install keepalived_exporter
+  when: not (ansible_check_mode and keepalived_exporter_tarball.changed)
   unarchive:
     src: "/var/cache/keepalived_exporter-{{ keepalived_exporter_version }}.amd64.tar.gz"
     remote_src: true
