@@ -1,0 +1,89 @@
+# Functional verify for the media infra produced by main.yml. As in
+# roles/data/tasks/_verify.yml, an idempotent converge is not evidence the
+# extra_properties landed source=local -- a value inherited from the pool
+# reads back correct while zfs-autobackup's `-s local` picker would skip it,
+# so `zfs get` is the only reliable witness. The podman network, media group
+# and storage dirs are consumed by ~10 service roles that don't run during
+# this role's test, so assert them here. Expected dataset properties mirror
+# main.yml; if they drift this fails loudly.
+
+- name: _verify | Media podman network exists
+  command:
+    argv:
+      - podman
+      - network
+      - exists
+      - media
+  changed_when: false
+  become: true
+
+- name: _verify | Media group resolves and operator is a member
+  command:
+    argv:
+      - id
+      - -nG
+      - "{{ ansible_user_id }}"
+  register: media_verify_groups
+  changed_when: false
+  failed_when: "'media' not in (media_verify_groups.stdout.split())"
+
+- name: _verify | Dataset mounted at /mnt/media
+  when: zfs_root
+  command:
+    argv:
+      - findmnt
+      - --noheadings
+      - --output
+      - SOURCE
+      - /mnt/media
+  register: media_verify_findmnt
+  changed_when: false
+  failed_when: media_verify_findmnt.stdout | trim != (zfs_tank_filesystem | default('tank')) ~ '/media'
+  become: true
+
+- name: _verify | Extra property set locally with expected value
+  when: zfs_root
+  command:
+    argv:
+      - zfs
+      - get
+      - -H
+      - -p
+      - -o
+      - source,value
+      - "{{ item.key }}"
+      - "{{ (zfs_tank_filesystem | default('tank')) ~ '/media' }}"
+  register: media_verify_prop
+  changed_when: false
+  failed_when: >-
+    (media_verify_prop.stdout.split('\t') | first | trim) != 'local'
+    or (media_verify_prop.stdout.split('\t') | last | trim) != item.value
+  loop: "{{ media_dataset_properties | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}={{ item.value }}"
+  vars:
+    media_dataset_properties:
+      'autobackup:bak': 'false'
+      recordsize: '1048576'
+      special_small_blocks: '32768'
+  become: true
+
+- name: _verify | Storage directories exist with media-group ownership
+  stat:
+    path: "{{ item }}"
+  register: media_verify_dir
+  failed_when: >-
+    not media_verify_dir.stat.exists
+    or not media_verify_dir.stat.isdir
+    or media_verify_dir.stat.pw_name != ansible_user_id
+    or media_verify_dir.stat.gr_name != 'media'
+    or media_verify_dir.stat.mode != '0775'
+  loop:
+    - /mnt/media/Lidarr
+    - /mnt/media/Live Music
+    - /mnt/media/Movies
+    - /mnt/media/Music
+    - /mnt/media/Other
+    - /mnt/media/TV
+  loop_control:
+    label: "{{ item }}"
