@@ -5,11 +5,21 @@
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
+# In CI the resolved token arrives as $HCLOUD_TOKEN_CI (a GitHub Actions secret;
+# see packer-build.yml). It can't be handed in as plain $HCLOUD_TOKEN because
+# mise.toml's [env] unconditionally re-injects the op:// ref over any inherited
+# value before this script runs -- so the workflow secret would be clobbered and
+# the op:// re-exec below would fire against an `op` binary the ci container
+# doesn't ship (exit 127). Prefer the CI var when present so the re-exec is
+# skipped on the resolved token.
+if [ -n "${HCLOUD_TOKEN_CI:-}" ]; then
+  HCLOUD_TOKEN="$HCLOUD_TOKEN_CI"
+fi
+
 # HCLOUD_TOKEN normally arrives as the literal op:// ref (file-based mise tasks
 # don't resolve op://, per CLAUDE.md), so re-exec under `op run --` to get the
-# real token. In CI there's no op: the token is injected directly as a GitHub
-# Actions secret (already resolved), so skip the re-exec when it doesn't look
-# like an op:// ref. Checking the value rather than a guard env var also breaks
+# real token. With $HCLOUD_TOKEN_CI set (CI) the token is already resolved, so
+# this is skipped. Checking the value rather than a guard env var also breaks
 # the would-be infinite loop -- the re-exec'd process sees the resolved token.
 # mise's usage_* vars are exported, so they ride through op run's inherited env.
 if [[ "${HCLOUD_TOKEN:-}" == op://* ]]; then
