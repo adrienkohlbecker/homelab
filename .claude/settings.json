@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "set -e; input=$(cat); cwd=$(jq -r '.cwd // empty' <<<\"$input\"); name=$(jq -r '.worktree_name // empty' <<<\"$input\"); base=$(jq -r '.base_branch // empty' <<<\"$input\"); new=$(jq -r '.new_branch // empty' <<<\"$input\"); for v in cwd name base new; do [ -n \"${!v}\" ] || { echo \"WorktreeCreate hook: missing $v\" >&2; exit 1; }; done; repo=$(git -C \"$cwd\" worktree list --porcelain | awk '/^worktree / {print $2; exit}'); [ -n \"$repo\" ] || { echo \"WorktreeCreate hook: cwd '$cwd' not in a git repo\" >&2; exit 1; }; wt=\"$repo/.worktrees/$name\"; if [ \"$new\" = \"$base\" ]; then git -C \"$repo\" worktree add --detach \"$wt\" \"$base\" >&2; else git -C \"$repo\" worktree add -b \"$new\" \"$wt\" \"$base\" >&2; fi; if [ -x \"$repo/mise-tasks/worktree/populate.sh\" ]; then \"$repo/mise-tasks/worktree/populate.sh\" \"$wt\" >&2 || echo \"WorktreeCreate hook: populate failed (non-fatal)\" >&2; fi; echo \"$wt\""
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/worktree_create.sh"
           }
         ]
       }
@@ -15,7 +15,27 @@
         "hooks": [
           {
             "type": "command",
-            "command": "input=$(cat); new=$(jq -r '.new_branch // empty' <<<\"$input\"); base=$(jq -r '.base_branch // empty' <<<\"$input\"); wt=$(jq -r '.worktree_path // empty' <<<\"$input\"); [ -n \"$wt\" ] || exit 0; main=$(dirname \"$(dirname \"$wt\")\"); [ -d \"$main/.git\" ] || exit 0; [ -e \"$wt\" ] && git -C \"$main\" worktree remove --force \"$wt\" 2>/dev/null; git -C \"$main\" worktree prune 2>/dev/null; [ -n \"$new\" ] && [ \"$new\" != \"$base\" ] && git -C \"$main\" branch -D \"$new\" 2>/dev/null; true"
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/worktree_remove.sh"
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session_start_context.sh"
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session_end_warn.sh"
           }
         ]
       }
