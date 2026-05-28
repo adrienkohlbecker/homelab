@@ -150,6 +150,9 @@ service_ports:
   # fan2go_api comment above refers to.
   minio_api: 9199
   minio_console: 9001
+  # Host-side loopback publish; Nexus's own listener is 8081 inside the
+  # container.
+  nexus: 8082
   nut: 3493
   # Paperless-ngx, loopback-published; nginx fronts it on the paperless
   # subdomain. Container listens on 8000 internally.
