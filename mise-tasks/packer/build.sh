@@ -42,14 +42,22 @@ if [ -n "${usage_sources:-}" ]; then
   only_args=("-only=${only}")
 fi
 
-# --on-error=ask keeps the build VM up on failure so it can be SSH'd
-# into for debugging. Dev-only: any non-interactive caller (CI, cron,
-# scheduled rebuilds) would hang on the prompt — swap to
-# --on-error=cleanup for those.
+# --on-error=ask keeps the failed build VM up so it can be SSH'd into
+# for debugging — but only useful with a human at the terminal. A
+# non-interactive caller (CI, cron, scheduled rebuilds) has no stdin to
+# answer the prompt: packer reads EOF and then tears down every
+# in-flight parallel build, so one source's failure kills its otherwise-
+# healthy siblings. Fall back to cleanup there so the unaffected sources
+# still finish and publish (the run still exits non-zero on the failure).
+on_error=cleanup
+if [ -t 0 ] && [ -z "${CI:-}" ]; then
+  on_error=ask
+fi
+
 packer build \
   -timestamp-ui \
   -warn-on-undeclared-var \
-  --on-error=ask \
+  "--on-error=${on_error}" \
   -var "ubuntu_name=${usage_ubuntu}" \
   -var "upstream_mirrors=${usage_upstream:-false}" \
   -var "build_directory=${tmp}" \
