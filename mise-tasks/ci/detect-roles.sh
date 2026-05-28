@@ -314,7 +314,13 @@ CI_DEFAULT_BRANCH="${CI_DEFAULT_BRANCH:-master}"
 
 gh_api() {
   # GET a GitHub REST endpoint; echo the body, non-zero on HTTP error.
+  # Retry transient failures: the Actions API intermittently 404s / 5xxs
+  # under load, and a single blip here otherwise collapses green-base
+  # resolution into a needless full-universe run. --retry-all-errors so the
+  # retry also covers the 404s that plain --retry (5xx/429/timeouts only)
+  # skips; these endpoints never legitimately 404 (the repo exists).
   curl -sS --fail-with-body \
+    --retry 4 --retry-delay 2 --retry-all-errors \
     -H "Authorization: Bearer $GITHUB_TOKEN" \
     -H "Accept: application/vnd.github+json" \
     -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -423,7 +429,14 @@ if [ -n "${CI_BASE_REF:-}" ]; then
   log "diff base: $BASE_REF (CI_BASE_REF override)"
 elif [ "${GITHUB_EVENT_NAME:-}" = "push" ]; then
   green=$(resolve_green_base)
-  [ -n "$green" ] || full_universe "no green ancestor run found"
+  # No base (genuinely none, or the API stayed down through gh_api's
+  # retries): test everything AND rebuild the substrate. A full-universe run
+  # exercises box_deps cells, which can't boot without a freshly-seeded
+  # box_deps image, so packer must run -- otherwise every box_deps cell dies
+  # on a missing artifact. (ci-image is left alone: the published :latest is
+  # serviceable, and a speculative rebuild on every base-miss isn't worth the
+  # minutes.)
+  [ -n "$green" ] || full_universe "no green ancestor run found" true
   # `git diff A B` compares the two trees directly, so only the green commit
   # object needs to be present locally -- not the history between it and
   # HEAD. If it's outside the shallow (depth-50) checkout, fetch just that
@@ -433,7 +446,7 @@ elif [ "${GITHUB_EVENT_NAME:-}" = "push" ]; then
     git fetch --no-tags --quiet origin "$green" 2>/dev/null || true
   fi
   git rev-parse --verify --quiet "${green}^{commit}" >/dev/null 2>&1 ||
-    full_universe "green run ${green:0:12} unreachable"
+    full_universe "green run ${green:0:12} unreachable" true
   BASE_REF="$green"
   log "diff base: ${green:0:12} (last green ci run)"
 else
@@ -442,7 +455,7 @@ else
 fi
 
 if ! BASE=$(git rev-parse "$BASE_REF" 2>/dev/null); then
-  full_universe "base ref '$BASE_REF' does not resolve"
+  full_universe "base ref '$BASE_REF' does not resolve" true
 fi
 
 CHANGED=$(git diff --name-only "$BASE" HEAD)
