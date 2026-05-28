@@ -47,23 +47,15 @@
         path: /tmp/minio.deb
         state: absent
 
-- name: Add minio group
-  group:
-    name: minio-user
-    system: true
-  become: true
-  tags:
-    - minio
-
-- name: Add minio user
-  user:
-    name: minio-user
-    group: minio-user
-    system: true
-    create_home: false
-    shell: /usr/sbin/nologin
-    home: /nonexistent
-  become: true
+- name: Create minio system user
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: minio-user
+      # /mnt/minio is a ZFS mountpoint (created below), not /mnt/services/<svc>
+      config_dir: false
   tags:
     - minio
 
@@ -80,6 +72,7 @@
     - minio
 
 - name: Create data dir
+  when: not (ansible_check_mode and minio_user_user.changed)
   file:
     dest: /mnt/minio
     state: directory
