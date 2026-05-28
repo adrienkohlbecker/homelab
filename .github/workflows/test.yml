@@ -1,23 +1,23 @@
 name: test
-# Reusable + directly dispatchable. ci.yml calls this via `uses:` with
-# `needs: packer`, so packer-build finishes before any test cell reads
-# the qcow2 tree -- that ordering replaces the old wait-for-packer-build
-# sentinel poll (now removed). Kept dispatchable for ad-hoc role runs.
-# No `push:` trigger -- ci.yml owns the push path.
+# Reusable, call-only. ci.yml runs a single detect pass and passes the
+# resolved role matrix + cross_cut flag in as inputs, so this workflow
+# does no detection of its own. ci.yml also orders it after packer +
+# ci-image (`needs: [packer, ci-image]`), which is why the old
+# wait-for-* sentinel polls are gone. Ad-hoc role runs go through
+# dispatching ci.yml (with roles=...), not this workflow directly --
+# without its own detect it can't compute a matrix from a bare dispatch.
 on:
   workflow_call:
     inputs:
-      roles:
-        description: 'Comma-separated role names (or role:variant). `ALL` = every role. Empty = use git diff.'
+      matrix:
+        description: 'JSON array of "role:variant" specs to test, from ci.yml''s detect.'
+        type: string
+        required: true
+      cross_cut:
+        description: 'Whether the push touched a cross-cut path (mail instead of testing).'
         type: string
         required: false
-        default: ''
-  workflow_dispatch:
-    inputs:
-      roles:
-        description: 'Comma-separated role names (or role:variant). `ALL` = every role. Empty = use git diff.'
-        required: false
-        default: ''
+        default: 'false'
 
 # Concurrency: no workflow- or job-level group on test-role any more.
 # The cap on concurrent VMs comes from the runner pool (4 lab-vm
@@ -26,45 +26,16 @@ on:
 # install post-processor + the harness's overlay-create/qemu-launch
 # (see notes/concurrency_rework.md). The previous static
 # `lab-qemu-artifacts` on test-role made every matrix cell compete for
-# one slot and cancel all but one. Detect / wait-for-* / notify run on
-# the lab pool (disjoint from lab-vm) so they never compete with VM
-# jobs for capacity.
+# one slot and cancel all but one. notify-cross-cut runs on the lab pool
+# (disjoint from lab-vm) so it never competes with VM jobs for capacity.
 
 defaults:
   run:
     shell: bash
 
 jobs:
-  detect:
-    runs-on: [ self-hosted, lab ]
-    container:
-      image: nexus.lab.fahm.fr/homelab/ci:latest
-    outputs:
-      matrix: ${{ steps.detect.outputs.matrix }}
-      cross_cut: ${{ steps.detect.outputs.cross_cut }}
-      packer_changed: ${{ steps.detect.outputs.packer_changed }}
-      ci_image_changed: ${{ steps.detect.outputs.ci_image_changed }}
-    steps:
-      - uses: actions/checkout@v6
-        # 50 commits is enough for HEAD~1 plus a typical session of pushes;
-        # detect-roles only ever looks at HEAD..HEAD~1 anyway.
-        with: { fetch-depth: 50 }
-      # detect-roles parses roles/*/meta/test.yml (and shells out to
-      # role-deps.py) with `import yaml`, resolved against the project
-      # venv. mise's uv_venv_auto creates+sources a fresh .venv per
-      # checkout but doesn't populate it, so without this the import
-      # fails (PyYAML arrives transitively via ansible). Same uv sync
-      # the lint / test-role jobs run; fast off the image's warm cache.
-      - run: uv sync --locked
-      - id: detect
-        env:
-          GITHUB_EVENT_NAME: ${{ github.event_name }}
-          INPUTS_ROLES: ${{ inputs.roles }}
-        run: mise run ci:detect-roles
-
   notify-cross-cut:
-    needs: detect
-    if: needs.detect.outputs.cross_cut == 'true'
+    if: inputs.cross_cut == 'true'
     runs-on: [ self-hosted, lab ]
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest
@@ -95,16 +66,13 @@ jobs:
     # the previous shape used a static `lab-qemu-artifacts` here, which
     # made every matrix cell compete for one slot and cancel all but
     # one -- see notes/concurrency_rework.md for the symptom.
-    needs: detect
-    # Both packer and ci-image ordering are handled one level up (ci.yml's
-    # `needs: [packer, ci-image]`), so test-role only gates on detect here.
-    # always() + the matrix-not-empty guard short-circuits the no-op case
-    # (cross-cut push, empty matrix) without spinning a runner.
+    # The matrix and packer/ci-image ordering both come from ci.yml (one
+    # detect pass, needs: [packer, ci-image]), so this job has no needs
+    # and only gates on a non-empty matrix -- short-circuiting the no-op
+    # case (cross-cut push, empty matrix) without spinning a runner.
     if: |
-      always()
-      && needs.detect.result == 'success'
-      && needs.detect.outputs.matrix != '[]'
-      && needs.detect.outputs.matrix != ''
+      inputs.matrix != '[]'
+      && inputs.matrix != ''
     runs-on: [ self-hosted, lab-vm ]
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest
@@ -131,12 +99,12 @@ jobs:
     strategy:
       fail-fast: false
       max-parallel: 2
-      # Dynamic matrix populated by the detect job. GitHub evaluates
-      # fromJSON against needs.<job>.outputs at job-resolve time, so
-      # each cell in the emitted JSON array becomes its own UI row with
-      # its own log and re-run button.
+      # Dynamic matrix passed in from ci.yml's detect. GitHub evaluates
+      # fromJSON against the input at job-resolve time, so each cell in
+      # the JSON array becomes its own UI row with its own log and re-run
+      # button.
       matrix:
-        spec: ${{ fromJSON(needs.detect.outputs.matrix) }}
+        spec: ${{ fromJSON(inputs.matrix) }}
     name: ${{ matrix.spec }}
     timeout-minutes: 30
     env:
