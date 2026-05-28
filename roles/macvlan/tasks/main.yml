@@ -17,8 +17,10 @@
 #               /32 IP within the block, plus a route to the whole
 #               block via the iface.
 #   host_ip     optional; IP for the iface. Defaults to
-#               `block | ansible.utils.ipmath(0)` (slot 0 of the
-#               block).
+#               `block | ansible.utils.ipmath(0)` — slot 0 of the
+#               block, i.e. its network address, usable as a host
+#               slot only because the iface is /32 + an explicit
+#               route to the whole block (nothing treats it as a subnet).
 #   mac_address optional; MAC for the iface. Defaults to a stable
 #               random MAC seeded by `inventory_hostname_<name>` so
 #               sibling blocks on the same host pick distinct MACs.
