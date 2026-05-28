@@ -206,6 +206,10 @@ zfs create -o canmount=noauto -o mountpoint=/ "rpool/ROOT/$UBUNTU_NAME"
 # swap-zvol guidance:
 #   -b $(getconf PAGESIZE): volblocksize = kernel page size so one
 #     page-out is one ZFS block (4K on x86_64 / arm64 4K-pages kernel).
+#     zfs warns this is below its 8K default minimum, but that minimum
+#     guards against raidz parity/padding waste — rpool is a mirror, so
+#     there's none, and 8K would force a read-modify-write per page-out.
+#     Keep 4K; the warning is benign here.
 #   compression=zle: cheap zero-page squash; pages are already-compressed
 #     memory, so general compression would just burn CPU.
 #   logbias=throughput + sync=always: every write hits stable storage
