@@ -5,15 +5,17 @@
 #   workflow_dispatch with INPUTS_ROLES set -- explicit list (or "ALL").
 #   --all on the CLI                       -- full universe (used by test-nightly.yml).
 #   default (push)                         -- git diff <base>..HEAD, where
-#       <base> is the newest entirely-successful ci.yml push run that is an
-#       ancestor of HEAD: the last green run on this branch, or (on a feature
-#       branch with none) the last green run on the default branch at/below
-#       the merge base. A red run therefore carries its change set forward
-#       into the next run's matrix -- every role touched since the last green
-#       state is retested, not just the latest commit's. On a push with no
-#       green ancestor (or a missing/invalid token), tests the FULL universe
-#       rather than risk an untrustworthy incremental diff; off a push (local
-#       preview, empty dispatch) uses HEAD~1. CI_BASE_REF overrides.
+#       <base> is the newest entirely-successful run that is an ancestor of
+#       HEAD -- either a ci.yml *push* run or a test-nightly run that actually
+#       tested (a 25h-no-commits nightly still concludes success but validates
+#       nothing, so it's filtered out). It picks the last such run on this
+#       branch, or (on a feature branch with none) on the default branch
+#       at/below the merge base. A red run therefore carries its change set
+#       forward into the next run's matrix -- every role touched since the
+#       last green state is retested, not just the latest commit's. On a push
+#       with no green ancestor (or a missing/invalid token), tests the FULL
+#       universe rather than risk an untrustworthy incremental diff; off a
+#       push (local preview, empty dispatch) uses HEAD~1. CI_BASE_REF wins.
 #
 # Outputs (to $GITHUB_OUTPUT, or stdout when $GITHUB_OUTPUT is unset):
 #   matrix=<JSON array of {role, variant}>  -- input to fromJson() in workflow.
@@ -261,38 +263,62 @@ is_ancestor_of_head() {
   [ "$status" = "ahead" ] || [ "$status" = "identical" ]
 }
 
+# Workflow files whose green runs count as a validated base: a ci.yml push
+# run validates that push's diff; a test-nightly run validates the full
+# universe. Matched on .path (stable across display-name changes).
+CI_WORKFLOW=".github/workflows/ci.yml"
+NIGHTLY_WORKFLOW=".github/workflows/test-nightly.yml"
+
+nightly_actually_tested() {
+  # True when test-nightly run $1 actually ran its matrix. The 25h-no-commits
+  # gate emits an empty matrix and skips the `test` job, yet the run still
+  # concludes success -- trusting that as a validated base would mask an
+  # earlier red push (the changes since it would never be retested). A real
+  # run has >=1 successful job other than `gate`; on a skip, `gate` is the
+  # only job that runs.
+  local resp
+  resp=$(gh_api "$GH_API_URL/repos/$GITHUB_REPOSITORY/actions/runs/$1/jobs?per_page=100" 2>/dev/null) || return 1
+  [ "$(jq -r '[.jobs[] | select(.name != "gate" and .conclusion == "success")] | length' <<<"$resp" 2>/dev/null || echo 0)" -gt 0 ]
+}
+
 newest_green_ancestor() {
-  # Echo the newest entirely-successful ci.yml push run on branch $1 whose
-  # commit is an ancestor of HEAD, or nothing. status=success means every
-  # job -- including the nested test.yml cells -- passed; event=push excludes
-  # roles= dispatches, whose green only validates a subset. Pages back
+  # Echo the newest entirely-successful run on branch $1 whose commit is an
+  # ancestor of HEAD, or nothing. Candidates are ci.yml *push* runs (a
+  # roles= dispatch only validates a subset) and test-nightly runs that
+  # actually tested. status=success means every job passed. Pages back
   # through history (newest first) until a green ancestor is found or the
   # runs are exhausted, so a branch that forked far back still finds its
   # fork rather than giving up after one page.
-  local branch=$1 page=1 resp count sha created
-  log "  searching green push runs on '$branch'..."
+  local branch=$1 page=1 resp count sha created path run_id
+  log "  searching green ci/nightly runs on '$branch'..."
   while :; do
     resp=$(gh_api -G \
       --data-urlencode "branch=$branch" \
-      --data-urlencode "event=push" \
       --data-urlencode "status=success" \
       --data-urlencode "per_page=100" \
       --data-urlencode "page=$page" \
-      "$GH_API_URL/repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs" 2>/dev/null) || {
+      "$GH_API_URL/repos/$GITHUB_REPOSITORY/actions/runs" 2>/dev/null) || {
       log "  runs query failed on '$branch' (page $page)"
       return 0
     }
     count=$(jq -r '.workflow_runs | length' <<<"$resp" 2>/dev/null || echo 0)
     [ "$count" -gt 0 ] || break
-    while IFS=$'\t' read -r sha created; do
+    while IFS=$'\t' read -r sha created path run_id; do
       [ -n "$sha" ] || continue
+      if [ "$path" = "$NIGHTLY_WORKFLOW" ] && ! nightly_actually_tested "$run_id"; then
+        log "    skip ${sha:0:12} ($created): nightly skipped its matrix (gate-only)"
+        continue
+      fi
       if is_ancestor_of_head "$sha"; then
-        log "  green ancestor: ${sha:0:12} ($created)"
+        log "  green ancestor: ${sha:0:12} ($created, $(basename "$path" .yml))"
         echo "$sha"
         return 0
       fi
       log "    skip ${sha:0:12} ($created): not an ancestor of HEAD"
-    done < <(jq -r '.workflow_runs[] | "\(.head_sha)\t\(.created_at)"' <<<"$resp" 2>/dev/null || true)
+    done < <(jq -r --arg ci "$CI_WORKFLOW" --arg nightly "$NIGHTLY_WORKFLOW" \
+      '.workflow_runs[]
+       | select((.path == $ci and .event == "push") or .path == $nightly)
+       | "\(.head_sha)\t\(.created_at)\t\(.path)\t\(.id)"' <<<"$resp" 2>/dev/null || true)
     page=$((page + 1))
   done
   log "  no green ancestor on '$branch'"
