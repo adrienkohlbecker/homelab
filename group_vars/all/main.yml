@@ -145,6 +145,11 @@ service_ports:
   keepalived_exporter: 9650
   kuma: 3001
   lidarr: 8686
+  # MQTT broker. Not host-published (consumers reach it container-to-container
+  # over the `mosquitto` podman network); registered so the conf, unit, _verify
+  # and z2m share one literal. The loopback 1880 health listener stays a literal
+  # -- internal-only, never consumed cross-role.
+  mosquitto: 1883
   nut: 3493
   radarr: 7878
   # Roundcube webmail (getmail archive viewer), loopback-published; Dovecot's

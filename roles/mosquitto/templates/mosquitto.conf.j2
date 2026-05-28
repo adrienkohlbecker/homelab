@@ -1,3 +1,4 @@
+# {{ ansible_managed }}
 persistence true
 persistence_location /mosquitto/data/
 # Flush the in-memory DB to persistence_location at most this often; the data
@@ -12,7 +13,7 @@ connection_messages false
 # anonymous. Load-bearing -- without it the global allow_anonymous wins.
 per_listener_settings true
 
-listener 1883 0.0.0.0
+listener {{ service_ports.mosquitto }} 0.0.0.0
 allow_anonymous false
 password_file /mosquitto/config/pwfile
 
