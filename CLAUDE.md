@@ -84,7 +84,7 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 
 ### Service ports
 
-Ports each host-level service publishes live in `group_vars/all/main.yml` under `service_ports:` — single source of truth for unit templates, nginx `proxy_pass`, firewall rules, cross-role consumers. Migrate roles to consume from there as you touch them ([notes/SOMEDAY.md](notes/SOMEDAY.md)). **When allocating a new port, grep both `service_ports:` and `127.0.0.1:` literals in `roles/*/templates/*.j2`** — un-migrated roles still hard-code their port.
+Ports each host-level service publishes live in `group_vars/all/main.yml` under `service_ports:` — single source of truth for unit templates, nginx `proxy_pass`, firewall rules, cross-role consumers. **Scope: only operator-reachable ports belong here** — a host-published `--publish` or a loopback bind the operator hits via `localhost`. A port that exists only for container-to-container traffic over a podman network (e.g. mosquitto's 1883, reached at `mosquitto.dns.podman`) is not operator-facing; leave it an inline literal rather than registering it. Migrate roles to consume from there as you touch them ([notes/SOMEDAY.md](notes/SOMEDAY.md)). **When allocating a new port, grep both `service_ports:` and `127.0.0.1:` literals in `roles/*/templates/*.j2`** — un-migrated roles still hard-code their port.
 
 ### ZFS site mountpoints
 
@@ -160,7 +160,7 @@ Default for new timers/services is **system-scope** (`/etc/systemd/system/`). Re
 
 ### Inter-container DNS
 
-Containers reach a co-located podman service by its **`<name>.dns.podman` FQDN** (aardvark-dns), never a host port or hard-coded IP. The producer creates a per-service `containers.podman.podman_network` with `disable_dns: false` — the flag only wires DNS under the **netavark** backend ([roles/podman](roles/podman)); on CNI it no-ops without the dnsname plugin. Each consumer joins via `--network <name>` and connects to `<name>.dns.podman`. Both producer and consumer create the network independently (it's idempotent), so each role stays self-contained. The bare short name `<name>` resolves too, but the FQDN is the canonical form in connection strings (z2m → `mqtt://mosquitto.dns.podman:{{ service_ports.mosquitto }}`). Canonical: [roles/redis/](roles/redis) (producer) + [roles/mosquitto/](roles/mosquitto) / [roles/z2m/](roles/z2m) (consumer). Target the network name or gateway IP, never an `ethN` index — interface ordering isn't stable across hosts.
+Containers reach a co-located podman service by its **`<name>.dns.podman` FQDN** (aardvark-dns), never a host port or hard-coded IP. The producer creates a per-service `containers.podman.podman_network` with `disable_dns: false` — the flag only wires DNS under the **netavark** backend ([roles/podman](roles/podman)); on CNI it no-ops without the dnsname plugin. Each consumer joins via `--network <name>` and connects to `<name>.dns.podman`. Both producer and consumer create the network independently (it's idempotent), so each role stays self-contained. The bare short name `<name>` resolves too, but the FQDN is the canonical form in connection strings (z2m → `mqtt://mosquitto.dns.podman:1883`). Canonical: [roles/redis/](roles/redis) (producer) + [roles/mosquitto/](roles/mosquitto) / [roles/z2m/](roles/z2m) (consumer). Target the network name or gateway IP, never an `ethN` index — interface ordering isn't stable across hosts.
 
 ## Testing Guidelines
 

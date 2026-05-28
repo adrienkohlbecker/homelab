@@ -11,11 +11,11 @@
   shell: |
     set -euo pipefail
     podman run --rm --network mosquitto {{ mosquitto_image }} \
-      mosquitto_pub -h mosquitto.dns.podman -p {{ service_ports.mosquitto }} \
+      mosquitto_pub -h mosquitto.dns.podman -p 1883 \
       -u {{ item.key }} -P {{ item.value.password }} \
       -t homelab/verify/{{ item.key }} -m ok -r
     podman run --rm --network mosquitto {{ mosquitto_image }} \
-      mosquitto_sub -h mosquitto.dns.podman -p {{ service_ports.mosquitto }} \
+      mosquitto_sub -h mosquitto.dns.podman -p 1883 \
       -u {{ item.key }} -P {{ item.value.password }} \
       -t homelab/verify/{{ item.key }} -C 1 -W 3
   args:
@@ -33,7 +33,7 @@
 - name: _verify | Anonymous connection is refused
   command: >-
     podman run --rm --network mosquitto {{ mosquitto_image }}
-    mosquitto_pub -h mosquitto.dns.podman -p {{ service_ports.mosquitto }}
+    mosquitto_pub -h mosquitto.dns.podman -p 1883
     -t homelab/verify -m nope
   become: true
   register: mosquitto_anon
@@ -43,7 +43,7 @@
 - name: _verify | Wrong password is refused
   command: >-
     podman run --rm --network mosquitto {{ mosquitto_image }}
-    mosquitto_pub -h mosquitto.dns.podman -p {{ service_ports.mosquitto }}
+    mosquitto_pub -h mosquitto.dns.podman -p 1883
     -u z2m -P definitely-wrong -t homelab/verify -m nope
   become: true
   register: mosquitto_badpw
@@ -57,7 +57,7 @@
   shell: |
     set -euo pipefail
     podman run --rm --network mosquitto {{ mosquitto_image }} \
-      mosquitto_pub -h mosquitto.dns.podman -p {{ service_ports.mosquitto }} \
+      mosquitto_pub -h mosquitto.dns.podman -p 1883 \
       -u z2m -P {{ mosquitto_accounts.z2m.password }} \
       -t homelab/persist -m survived -r
   args:
@@ -75,7 +75,7 @@
   shell: |
     set -euo pipefail
     podman run --rm --network mosquitto {{ mosquitto_image }} \
-      mosquitto_sub -h mosquitto.dns.podman -p {{ service_ports.mosquitto }} \
+      mosquitto_sub -h mosquitto.dns.podman -p 1883 \
       -u z2m -P {{ mosquitto_accounts.z2m.password }} \
       -t homelab/persist -C 1 -W 3
   args:
@@ -93,7 +93,7 @@
     set -euo pipefail
     for t in homelab/verify/z2m homelab/verify/homeassistant homelab/persist; do
       podman run --rm --network mosquitto {{ mosquitto_image }} \
-        mosquitto_pub -h mosquitto.dns.podman -p {{ service_ports.mosquitto }} \
+        mosquitto_pub -h mosquitto.dns.podman -p 1883 \
         -u z2m -P {{ mosquitto_accounts.z2m.password }} -t "$t" -r -n
     done
   args:

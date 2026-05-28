@@ -73,8 +73,8 @@
 # there is no host-side parser. A startup parse failure is caught by the unit's
 # Type=notify/--sdnotify=healthy gate instead.
 - name: Configure mosquitto
-  template:
-    src: mosquitto.conf.j2
+  copy:
+    src: mosquitto.conf
     dest: /mnt/services/mosquitto/config/mosquitto.conf
     owner: mosquitto
     group: mosquitto
