@@ -6,6 +6,13 @@ name: test
 # wait-for-* sentinel polls are gone. Ad-hoc role runs go through
 # dispatching ci.yml (with roles=...), not this workflow directly --
 # without its own detect it can't compute a matrix from a bare dispatch.
+#
+# test-nightly.yml is the OTHER caller: it computes a full-universe matrix
+# (its own schedule-gated `gate` job) and calls this workflow with that
+# matrix. The test-role job below is therefore defined once and shared;
+# push vs nightly differ only in the matrix passed in. Concurrent VMs are
+# capped by the lab-vm runner pool, not a per-call knob. Failures (push or
+# nightly) surface via GitHub's own Actions failure email.
 on:
   workflow_call:
     inputs:
@@ -98,8 +105,12 @@ jobs:
         --volume /mnt/scratch/github_runner/scratch/${{ github.run_id }}-${{ strategy.job-index }}:/scratch:rw
     strategy:
       fail-fast: false
-      max-parallel: 2
-      # Dynamic matrix passed in from ci.yml's detect. GitHub evaluates
+      # No max-parallel: the lab-vm pool (4 runners on lab; see
+      # host_vars/lab.yml) is the sole cap on concurrent VMs, for both the
+      # push and nightly callers. A single run may use the whole pool; a
+      # second concurrent run just queues behind it -- fine for one
+      # operator, and it means a push runs full-width instead of throttled.
+      # Dynamic matrix passed in from the caller's detect. GitHub evaluates
       # fromJSON against the input at job-resolve time, so each cell in
       # the JSON array becomes its own UI row with its own log and re-run
       # button.
@@ -147,5 +158,5 @@ jobs:
           path: |
             test/out/${{ env.VARIANT }}.${{ env.ROLE }}.*
             /scratch/**
-          retention-days: 14
+          retention-days: 30
           if-no-files-found: warn
