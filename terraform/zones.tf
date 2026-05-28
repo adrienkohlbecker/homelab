@@ -57,7 +57,7 @@ resource "cloudflare_zone_dnssec" "adrienkohlbecker_com" {
 
   lifecycle {
     prevent_destroy = true
-    ignore_changes  = [status]   # CF flaps pending↔active; don't let it churn the Gandi DS
+    ignore_changes  = [status] # CF flaps pending↔active; don't let it churn the Gandi DS
   }
 }
 
@@ -67,7 +67,7 @@ resource "cloudflare_zone_dnssec" "fahm_fr" {
 
   lifecycle {
     prevent_destroy = true
-    ignore_changes  = [status]   # CF flaps pending↔active; don't let it churn the Gandi DS
+    ignore_changes  = [status] # CF flaps pending↔active; don't let it churn the Gandi DS
   }
 }
 
@@ -77,7 +77,7 @@ resource "cloudflare_zone_dnssec" "mhaf_fr" {
 
   lifecycle {
     prevent_destroy = true
-    ignore_changes  = [status]   # CF flaps pending↔active; don't let it churn the Gandi DS
+    ignore_changes  = [status] # CF flaps pending↔active; don't let it churn the Gandi DS
   }
 }
 
