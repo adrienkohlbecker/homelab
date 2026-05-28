@@ -131,6 +131,10 @@ locals {
   # - layout: rpool zpool create layout token. "" for single-disk,
   #   "mirror" for an rpool mirror. Consumed by provision.sh and
   #   chroot.sh.
+  # - swap_size: image swap size. Single-disk bakes an 8200 partition of
+  #   this size; mirror bakes an rpool zvol of it (the swap role grows it
+  #   to the per-host size; see notes/swap_strategy.md). Consumed by
+  #   provision.sh as $SWAP_SIZE.
   # - extra_pools: space-delimited list of non-rpool pool layouts
   #   pools.sh creates after the rpool arch-chroot completes.
   #   Layouts: apoc (mirror, 2 disks), dozer (mirror, 2 disks),
@@ -147,18 +151,22 @@ locals {
       extra_disks  = "/dev/vdc /dev/vdd"
       disk_sizes   = ["40G", "1G", "1G"]
       layout       = ""
+      swap_size    = "8G"
       extra_pools  = "apoc"
       image_target = "qemu"
       zfs_arc_max  = ""
     }
-    # lab: mdadm-EFI + mdadm-swap + 3-disk mirror rpool + dozer mirror +
-    # tank raidz2 + mouse mirror. Matches the lab prod host.
+    # lab: mdadm-EFI + 3-disk mirror rpool + dozer mirror + tank raidz2 +
+    # mouse mirror. Matches the lab prod host. swap_size bakes an 8G rpool
+    # zvol; the swap role grows it to 16G from host_vars (zram is the
+    # primary device -- see notes/swap_strategy.md).
     lab = {
       machine      = "lab"
       disks        = "/dev/vdb /dev/vdc /dev/vdd"
       extra_disks  = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
       disk_sizes   = ["40G", "40G", "40G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
       layout       = "mirror"
+      swap_size    = "8G"
       extra_pools  = "dozer tank_mouse"
       image_target = "qemu"
       zfs_arc_max  = ""
@@ -178,6 +186,7 @@ locals {
       extra_disks  = ""
       disk_sizes   = ["40G"]
       layout       = ""
+      swap_size    = "4G"
       extra_pools  = ""
       image_target = "qemu"
       zfs_arc_max  = ""
@@ -192,6 +201,7 @@ locals {
       extra_disks  = ""
       disk_sizes   = ["20G"]
       layout       = ""
+      swap_size    = "4G"
       extra_pools  = ""
       image_target = "hetzner"
       zfs_arc_max  = "536870912"
@@ -342,6 +352,7 @@ build {
       "DISKS"                           = local.variant_config[source.name].disks
       "EXTRA_DISKS"                     = local.variant_config[source.name].extra_disks
       "LAYOUT"                          = local.variant_config[source.name].layout
+      "SWAP_SIZE"                       = local.variant_config[source.name].swap_size
       "EXTRA_POOLS"                     = local.variant_config[source.name].extra_pools
       "UBUNTU_NAME"                     = "${var.ubuntu_name}"
       "UBUNTU_MIRROR"                   = local.build_archive
