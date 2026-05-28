@@ -16,8 +16,12 @@
 # Inputs: caller passes a single dict `nginx_conf_d_args` with keys
 #   name        required; filename under /etc/nginx/conf.d/ (e.g.
 #               `csp_ratelimit.conf`)
+#   state       optional, default 'present'. Set to 'absent' to remove a
+#               retired drop: deletes /etc/nginx/conf.d/<name> and reloads.
+#               Keep the call as a tombstone so the file stays removed on a
+#               fresh install (mirrors site.yml's retired-site handling).
 #   src         file under the calling role's files/ to copy. Mutually
-#               exclusive with content.
+#               exclusive with content. Required when state is present.
 #   content     inline content string (Jinja is evaluated in the calling
 #               role's vars scope before this role sees it). Mutually
 #               exclusive with src.
@@ -37,15 +41,35 @@
 # callers reference its `.changed` to wire reload triggers (same pattern
 # as systemd_unit's per-unit `<name>_result`).
 
+- name: conf_d | Assert required inputs for {{ nginx_conf_d_args.name | default('<unnamed>') }}
+  assert:
+    that:
+      - nginx_conf_d_args.name is defined
+      - nginx_conf_d_args.name is string
+      - nginx_conf_d_args.name | length > 0
+    fail_msg: "nginx_conf_d_args.name is required and must be a non-empty string."
+
+- name: conf_d | Assert exactly one of src/content for {{ nginx_conf_d_args.name }}
+  when: (nginx_conf_d_args.state | default('present')) == 'present'
+  assert:
+    that:
+      - (nginx_conf_d_args.src is defined) != (nginx_conf_d_args.content is defined)
+    fail_msg: >-
+      nginx_conf_d_args requires exactly one of `src` or `content` when state
+      is present (they are mutually exclusive).
+
 - name: conf_d | Resolve caller defaults for {{ nginx_conf_d_args.name }}
   set_fact:
     _nginx_conf_d_condition: "{{ nginx_conf_d_args.condition | default(true) }}"
     _nginx_conf_d_name: "{{ nginx_conf_d_args.name }}"
     _nginx_conf_d_mode: "{{ nginx_conf_d_args.mode | default('0644') }}"
     _nginx_conf_d_reload: "{{ nginx_conf_d_args.reload | default(true) }}"
+    _nginx_conf_d_state: "{{ nginx_conf_d_args.state | default('present') }}"
 
 - name: conf_d | Install {{ nginx_conf_d_args.name }}
-  when: _nginx_conf_d_condition
+  when:
+    - _nginx_conf_d_condition
+    - _nginx_conf_d_state == 'present'
   block:
     - name: conf_d | Write {{ nginx_conf_d_args.name }}
       copy:
@@ -138,3 +162,32 @@
           nginx -t failed after writing /etc/nginx/conf.d/{{ _nginx_conf_d_name }};
           previous state restored. Inspect the validate output above
           and the managed content in the calling role.
+
+# Removal path (state: absent). Deleting a drop can't introduce a syntax
+# error, so there's no place-validate-rollback here -- just delete and
+# reload. Recorded under the same <sanitized_name>_result fact so callers
+# can wire reload triggers off a tombstone the same way as an install.
+- name: conf_d | Remove retired drop {{ nginx_conf_d_args.name }}
+  when:
+    - _nginx_conf_d_condition
+    - _nginx_conf_d_state == 'absent'
+  block:
+    - name: conf_d | Delete {{ nginx_conf_d_args.name }}
+      file:
+        path: "/etc/nginx/conf.d/{{ _nginx_conf_d_name }}"
+        state: absent
+      become: true
+      register: nginx_conf_d_absent
+
+    - name: conf_d | Record removal result for {{ nginx_conf_d_args.name }}
+      set_fact:
+        "{{ _nginx_conf_d_name | regex_replace('[^A-Za-z0-9_]', '_') }}_result": "{{ nginx_conf_d_absent }}"
+
+    - name: conf_d | Reload nginx after removing {{ nginx_conf_d_args.name }}
+      when:
+        - _nginx_conf_d_reload
+        - nginx_conf_d_absent.changed
+      systemd:
+        name: nginx
+        state: reloaded
+      become: true
