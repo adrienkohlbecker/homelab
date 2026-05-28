@@ -5,12 +5,15 @@
 # shellcheck disable=SC2154  # usage_* vars are injected by mise from the #USAGE spec
 set -euo pipefail
 
-# HCLOUD_TOKEN arrives as the literal op:// ref (file-based mise tasks don't
-# resolve op://, per CLAUDE.md). Re-exec once under `op run --` so the API gets
-# the real token; the guard env var prevents an infinite loop. mise's usage_*
-# vars are already exported, so they ride through op run's inherited env.
-if [ -z "${HETZNER_OP_REEXEC:-}" ]; then
-  exec env HETZNER_OP_REEXEC=1 op run -- "$0" "$@"
+# HCLOUD_TOKEN normally arrives as the literal op:// ref (file-based mise tasks
+# don't resolve op://, per CLAUDE.md), so re-exec under `op run --` to get the
+# real token. In CI there's no op: the token is injected directly as a GitHub
+# Actions secret (already resolved), so skip the re-exec when it no longer looks
+# like an op:// ref. Checking the value rather than a guard env var also breaks
+# the would-be infinite loop -- the re-exec'd process sees the resolved token.
+# mise's usage_* vars are exported, so they ride through op run's inherited env.
+if [[ "${HCLOUD_TOKEN:-}" == op://* ]]; then
+  exec op run -- "$0" "$@"
 fi
 
 UBUNTU="$usage_ubuntu"
@@ -107,6 +110,21 @@ for _ in $(seq 1 120); do
   st=$(api GET "/images/$imgid" | pyget 'd["image"]["status"]')
   [ "$st" = "available" ] && break
   sleep 5
+done
+
+# --- phase 4: prune old snapshots ---
+# Each master CI run publishes a fresh snapshot; without pruning they pile up as
+# dead cost -- terraform's data.hcloud_image always selects most_recent, so
+# older ones are never booted. Keep the two newest os=ubuntu-zfs,ubuntu=<release>
+# snapshots (current + one for manual rollback), delete the rest. Safe: deleting
+# a snapshot doesn't touch a server already built from it.
+echo "==> pruning old snapshots (keeping newest 2)"
+stale=$(api GET "/images?type=snapshot&sort=created:desc&label_selector=os=ubuntu-zfs,ubuntu=$UBUNTU" |
+  pyget 'd["images"][2:] and " ".join(str(i["id"]) for i in d["images"][2:]) or ""')
+# shellcheck disable=SC2086  # word-split the space-separated id list on purpose
+for old in $stale; do
+  echo "    deleting old snapshot $old"
+  api DELETE "/images/$old" >/dev/null || true
 done
 
 echo "==> DONE. Snapshot $imgid labelled os=ubuntu-zfs,ubuntu=$UBUNTU."
