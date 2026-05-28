@@ -169,6 +169,25 @@
   failed_when: "'192.0.2.99' in netplan_verify_rollback_addrs.stdout"
   become: true
 
+- name: _verify rollback | Confirm the rollback units settled cleanly after firing
+  # The unit-state check at the top of this file runs *before* the rollback
+  # was exercised (both inactive then). Post-fire the clean states differ:
+  # the timer is active (elapsed) -- it fired once and, unlike the happy
+  # path, was never stopped because wait_for_connection errored into the
+  # rescue -- and the service is active (exited via RemainAfterExit). What
+  # must NOT appear is a failed unit (rollback script errored) or one stuck
+  # activating/deactivating.
+  systemd:
+    name: "{{ item }}"
+  register: netplan_verify_postroll
+  changed_when: false
+  failed_when: netplan_verify_postroll.status.ActiveState in ["failed", "activating", "deactivating"]
+  loop:
+    - netplan_rollback.timer
+    - netplan_rollback.service
+  loop_control:
+    label: "{{ item }}"
+
 - name: _verify rollback | Wipe stale /run/netplan_prev before re-snapshot
   # mv consumed it during rollback; recreate matching what the role's
   # unconditional pre-template snapshot task would have produced.
