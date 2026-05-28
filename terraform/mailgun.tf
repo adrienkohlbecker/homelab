@@ -1,10 +1,8 @@
-# Mailgun powers transactional / notification email for the homelab:
-# the CI workflows (mise run ci:mail-cross-cut / ci:mail-failures) post
-# through Mailgun's HTTP API, and five service SMTP credentials
-# (postfix/sabnzbd/gitea/healthchecks/overseerr@noreply.fahm.fr) relay
-# through smtp.eu.mailgun.org. The DNS surface (MX, DKIM, SPF, DMARC,
-# click tracking CNAME) is in dns.tf; this file owns the Mailgun-side
-# domain configuration that those DNS records point at.
+# Mailgun powers transactional / notification email for the homelab: five
+# service SMTP credentials (postfix/sabnzbd/gitea/healthchecks/overseerr@
+# noreply.fahm.fr) relay through smtp.eu.mailgun.org. The DNS surface (MX,
+# DKIM, SPF, DMARC, click tracking CNAME) is in dns.tf; this file owns the
+# Mailgun-side domain configuration that those DNS records point at.
 #
 # Auth uses an account-scoped Mailgun Private API key (settings ->
 # "API security" in the Mailgun UI). Stored in 1Password and surfaced
@@ -58,31 +56,4 @@ resource "mailgun_domain" "noreply_fahm_fr" {
   click_tracking                = false
   web_scheme                    = "http"
   use_automatic_sender_security = true
-}
-
-# Dedicated CI sending key, pushed into the homelab repo's
-# MAILGUN_API_KEY GitHub Actions secret (see github.tf). Scoped to
-# role=sending + this domain so a CI compromise can't manage domains,
-# webhooks, or other credentials -- it can only send mail through
-# noreply.fahm.fr. The master account API key in var.mailgun_api_key
-# stays on the operator's workstation (mise.toml + 1P) and is never
-# exposed to CI.
-#
-# Rotate with `tofu apply -replace=mailgun_api_key.ci_send_noreply`,
-# which mints a new key, retires the old one, and pushes the new
-# secret value into GitHub in the same apply.
-resource "mailgun_api_key" "ci_send_noreply" {
-  region      = "eu"
-  role        = "sending"
-  kind        = "domain"
-  domain_name = mailgun_domain.noreply_fahm_fr.name
-  description = "homelab CI (.github/workflows/test*.yml mail steps)"
-
-  # NB: the wgebis/mailgun provider's Read returns secret=null on every
-  # refresh (Mailgun's API only returns the secret in the Create
-  # response). The consuming github_actions_secret.mailgun_api_key
-  # (github.tf) carries the ignore_changes + replace_triggered_by
-  # workaround so a `tofu apply` after refresh doesn't push null to
-  # the CI secret. Rotation via -replace on this resource is the
-  # supported path.
 }
