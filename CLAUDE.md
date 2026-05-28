@@ -158,6 +158,10 @@ Simplest that works. The repo grew up "uidmap everywhere" but that's inverted �
 
 Default for new timers/services is **system-scope** (`/etc/systemd/system/`). Reach for user-scope (linger) only when fundamentally required — today just rootless podman ([roles/gitea_runner/](roles/gitea_runner/), [roles/github_runner/](roles/github_runner/)). One operational vocabulary; netdata's `systemdunits` collector attaches to the system bus only; single privilege-drop model (`User=`/`Group=` or `systemd_timer`'s `run_as:`). When hardening, `systemd-analyze security <unit>` scores ~50 sandboxing directives and lists cheap wins — run it against any new `.service.j2` (syntax validation is already automated by `systemd_unit`'s `verify:`).
 
+### Inter-container DNS
+
+Containers reach a co-located podman service by its **`<name>.dns.podman` FQDN** (aardvark-dns), never a host port or hard-coded IP. The producer creates a per-service `containers.podman.podman_network` with `disable_dns: false` — the flag only wires DNS under the **netavark** backend ([roles/podman](roles/podman)); on CNI it no-ops without the dnsname plugin. Each consumer joins via `--network <name>` and connects to `<name>.dns.podman`. Both producer and consumer create the network independently (it's idempotent), so each role stays self-contained. The bare short name `<name>` resolves too, but the FQDN is the canonical form in connection strings (z2m → `mqtt://mosquitto.dns.podman:{{ service_ports.mosquitto }}`). Canonical: [roles/redis/](roles/redis) (producer) + [roles/mosquitto/](roles/mosquitto) / [roles/z2m/](roles/z2m) (consumer). Target the network name or gateway IP, never an `ethN` index — interface ordering isn't stable across hosts.
+
 ## Testing Guidelines
 
 The harness lives in `test/` (Python, asyncio).
