@@ -59,6 +59,24 @@ partdev() {
   esac
 }
 
+# Export a pool, tolerating the transient "pool is busy" race where
+# udev/systemd still hold a handle on a freshly-created dataset or zvol
+# device node (matches upstream openzfs/zfs#16036) — notably the mirror
+# variants' rpool/swap zvol, whose /dev/zvol/rpool/swap node trips the
+# very next `zpool export`. `zpool export -f` doesn't bypass the
+# spa_refcount EBUSY gate, so force is pointless. udevadm settle drains
+# pending uevents; one retry after 5s covers the rare slow-drain case.
+# A second failure is a genuinely wedged pool — let the build fail
+# rather than ship an image that wasn't cleanly quiesced.
+zpool_export_retry() {
+  local pool="$1"
+  udevadm settle
+  if ! zpool export "$pool"; then
+    sleep 5
+    zpool export "$pool"
+  fi
+}
+
 # Per-disk partition paths, computed once and exported as space-delimited
 # strings so chroot.sh consumes them directly without re-running partdev.
 # Partition layout (sgdisk below): 1 = EFI, 2 = swap (single-disk only),
@@ -199,9 +217,11 @@ fi
 
 zpool set "bootfs=rpool/ROOT/$UBUNTU_NAME" rpool
 
-# Export, then re-import with a temporary mountpoint of /mnt
+# Export, then re-import with a temporary mountpoint of /mnt. The
+# export races udev's probe of the just-created rpool/swap zvol on
+# mirror variants — zpool_export_retry settles first (see its comment).
 
-zpool export rpool
+zpool_export_retry rpool
 zpool import -N -R /mnt rpool
 zfs mount "rpool/ROOT/$UBUNTU_NAME"
 
@@ -282,23 +302,10 @@ bash /home/vagrant/pools.sh
 zfs unmount "rpool/ROOT/$UBUNTU_NAME"
 sync
 
-# Export every pool. The intermittent "pool is busy" failures we used to
-# hit are udev/systemd handles lingering on the freshly-bootstrapped root
-# (matches upstream openzfs/zfs#16036), not autotrim — `zpool export
-# -f` doesn't bypass the spa_refcount EBUSY gate either, so force is
-# pointless. udevadm settle drains pending uevents; one retry after 5s
-# covers the rare slow-drain case. If both attempts fail the pool is
-# genuinely wedged and we want the build to fail rather than ship an
-# image that wasn't cleanly quiesced. Extra pools go first; rpool last
-# because zfs unmount above has already quiesced its root dataset.
-udevadm settle
+# Export every pool (zpool_export_retry handles the "pool is busy"
+# udev/systemd race; see its comment). Extra pools go first; rpool last
+# because the zfs unmount above has already quiesced its root dataset.
 for pool in $(zpool list -H -o name | grep -vx rpool); do
-  if ! zpool export "$pool"; then
-    sleep 5
-    zpool export "$pool"
-  fi
+  zpool_export_retry "$pool"
 done
-if ! zpool export rpool; then
-  sleep 5
-  zpool export rpool
-fi
+zpool_export_retry rpool
