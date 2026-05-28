@@ -142,22 +142,26 @@ locals {
   variant_config = {
     # pug: single-disk rpool + apoc mirror. Matches the pug prod host.
     pug = {
-      machine     = "pug"
-      disks       = "/dev/vdb"
-      extra_disks = "/dev/vdc /dev/vdd"
-      disk_sizes  = ["40G", "1G", "1G"]
-      layout      = ""
-      extra_pools = "apoc"
+      machine      = "pug"
+      disks        = "/dev/vdb"
+      extra_disks  = "/dev/vdc /dev/vdd"
+      disk_sizes   = ["40G", "1G", "1G"]
+      layout       = ""
+      extra_pools  = "apoc"
+      image_target = "qemu"
+      zfs_arc_max  = ""
     }
     # lab: mdadm-EFI + mdadm-swap + 3-disk mirror rpool + dozer mirror +
     # tank raidz2 + mouse mirror. Matches the lab prod host.
     lab = {
-      machine     = "lab"
-      disks       = "/dev/vdb /dev/vdc /dev/vdd"
-      extra_disks = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
-      disk_sizes  = ["40G", "40G", "40G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
-      layout      = "mirror"
-      extra_pools = "dozer tank_mouse"
+      machine      = "lab"
+      disks        = "/dev/vdb /dev/vdc /dev/vdd"
+      extra_disks  = "/dev/vde /dev/vdf /dev/vdg /dev/vdh /dev/vdi /dev/vdj"
+      disk_sizes   = ["40G", "40G", "40G", "1G", "1G", "1.5G", "1.5G", "1G", "1G"]
+      layout       = "mirror"
+      extra_pools  = "dozer tank_mouse"
+      image_target = "qemu"
+      zfs_arc_max  = ""
     }
     # box: single-disk rpool, no extra pools. Minimal ZFS-on-root fixture
     # for push CI -- exercises every consumer-side role that doesn't need
@@ -169,12 +173,28 @@ locals {
     # a packer source — there's no point re-running provision.sh + chroot
     # for a derivation that just adds podman+nginx on top.
     box = {
-      machine     = "box"
-      disks       = "/dev/vdb"
-      extra_disks = ""
-      disk_sizes  = ["40G"]
-      layout      = ""
-      extra_pools = ""
+      machine      = "box"
+      disks        = "/dev/vdb"
+      extra_disks  = ""
+      disk_sizes   = ["40G"]
+      layout       = ""
+      extra_pools  = ""
+      image_target = "qemu"
+      zfs_arc_max  = ""
+    }
+    # hetzner: ZFS-root image for Hetzner Cloud. Small rpool disk — state is MB;
+    # chroot.sh's hetzner_growpart.service grows it into cpx22's ~76G on first
+    # boot. `machine` is unused here (verify-boot is excepted below), kept only
+    # for variant_config shape parity.
+    hetzner = {
+      machine      = "hetzner"
+      disks        = "/dev/vdb"
+      extra_disks  = ""
+      disk_sizes   = ["20G"]
+      layout       = ""
+      extra_pools  = ""
+      image_target = "hetzner"
+      zfs_arc_max  = "536870912"
     }
   }
 
@@ -292,6 +312,12 @@ build {
     disk_additional_size = local.variant_config[source.name].disk_sizes
   }
 
+  source "qemu.ubuntu" {
+    name                 = "hetzner"
+    output_directory     = "${var.build_directory}/${source.name}"
+    disk_additional_size = local.variant_config[source.name].disk_sizes
+  }
+
   provisioner "file" {
     source      = "${path.root}/scripts/"
     destination = "/home/vagrant/"
@@ -323,6 +349,8 @@ build {
       "UBUNTU_MIRROR_UPSTREAM"          = local.arch_cfg.upstream_archive
       "UBUNTU_MIRROR_SECURITY_UPSTREAM" = local.arch_cfg.upstream_security
       "SSH_KEY_PUB"                     = join("\n", local.vagrant_ssh_keys)
+      "IMAGE_TARGET"                    = local.variant_config[source.name].image_target
+      "ZFS_ARC_MAX"                     = local.variant_config[source.name].zfs_arc_max
     }
   }
 
@@ -366,7 +394,12 @@ build {
     # boots the variant, waits for SSH, runs `systemctl is-system-running
     # --wait`, and exits 0 only on state "running".
     post-processor "shell-local" {
-      name           = "verify-boot"
+      name = "verify-boot"
+      # Skip the hetzner image: it's cloud-init-only (no vagrant user) and has no
+      # entry in the harness's QEMU_MACHINE_SPECS, so launch.py can't boot+SSH-
+      # verify it. It's validated by deploying the snapshot to a throwaway cpx22
+      # (mise-tasks/packer/hetzner.sh).
+      except         = ["qemu.hetzner"]
       inline_shebang = "/bin/bash"
       inline = [<<-EOT
         set -euxo pipefail
