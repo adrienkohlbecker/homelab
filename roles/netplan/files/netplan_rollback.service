@@ -1,8 +1,5 @@
 [Unit]
 Description=Netplan auto-rollback (fires 90s after a safe-apply if SSH never came back)
-# Nothing to restore without a snapshot — skip cleanly rather than let
-# the script's own guard exit non-zero and park the unit in failed.
-ConditionPathExists=/run/netplan_prev
 
 [Service]
 Type=oneshot
@@ -10,4 +7,5 @@ Type=oneshot
 # operator (and _verify) can tell the rollback actually ran, instead
 # of it reverting to inactive — indistinguishable from "never fired".
 RemainAfterExit=yes
+SyslogIdentifier=%N
 ExecStart=/usr/local/bin/netplan_rollback
