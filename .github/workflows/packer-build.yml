@@ -49,7 +49,13 @@ jobs:
   prepare:
     # Compute the per-source build matrix. A dispatch can narrow it via
     # the `sources` input (space-separated); a push (no inputs) or an
-    # empty dispatch input builds all three. Non-VM work -> lab pool.
+    # empty dispatch input builds all four. Non-VM work -> lab pool.
+    #
+    # `hetzner` builds only the rpool disk image (its verify-boot post-
+    # processor is excepted -- the cloud-init-only image has no harness
+    # machine spec). Turning that disk into a Hetzner Cloud snapshot is the
+    # separate `mise run packer:hetzner` path, which needs HCLOUD_TOKEN and
+    # creates real cloud resources -- intentionally NOT wired into CI here.
     #
     # Why one job per source instead of packer's internal parallel
     # builds in a single job: each build VM then occupies one lab-vm
@@ -73,7 +79,7 @@ jobs:
           set -euo pipefail
           sources="${PACKER_SOURCES:-}"
           if [ -z "$sources" ]; then
-            sources="box pug lab"
+            sources="box pug lab hetzner"
           fi
           # space-separated string -> compact JSON array, dropping empties
           json=$(jq -cn --arg s "$sources" '$s | split(" ") | map(select(. != ""))')
