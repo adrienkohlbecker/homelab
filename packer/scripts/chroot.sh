@@ -465,16 +465,23 @@ timeout 1
 default_selection "Ubuntu (ZBM)"
 dont_scan_dirs /EFI/ZBM
 
+# No "quiet loglevel=0" on the ZBM stage: a stalled boot (e.g. the
+# intermittent first-boot SSH-bringup flake the test harness hits) is only
+# diagnosable if the rEFInd -> ZBM -> kexec handoff narrates itself on the
+# serial console. The real kernel already logs verbosely via the ttyS0
+# console arg in org.zfsbootmenu:commandline; this extends that to the
+# otherwise-silent bootmenu stage. zbm.skip still bypasses the menu so the
+# boot stays non-interactive.
 menuentry "Ubuntu (ZBM)" {
     loader /EFI/ZBM/${ZBM_KERNEL}
     initrd /EFI/ZBM/initramfs-bootmenu.img
-    options "quiet loglevel=0 zbm.skip"
+    options "zbm.skip"
 }
 
 menuentry "Ubuntu (ZBM Menu)" {
     loader /EFI/ZBM/${ZBM_KERNEL}
     initrd /EFI/ZBM/initramfs-bootmenu.img
-    options "quiet loglevel=0 zbm.show"
+    options "zbm.show"
 }
 EOF
 
