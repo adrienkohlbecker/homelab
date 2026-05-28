@@ -167,7 +167,7 @@
   vars:
     nginx_site_args:
       subdomain: nexus
-      proxy_pass: http://127.0.0.1:8082/
+      proxy_pass: http://127.0.0.1:{{ service_ports.nexus }}/
       enable_http: true
       # Stream large artifact transfers (Ubuntu ISOs, cloud images, docker
       # layers) without nginx buffering to disk or capping the body. Cold-
@@ -197,13 +197,17 @@
       server_conf: |
         location ~ ^/v2/repository/([^/]+)/(.*)$ {
           rewrite ^/v2/repository/([^/]+)/(.*)$ /repository/$1/v2/$2 break;
-          proxy_pass http://127.0.0.1:8082;
+          proxy_pass http://127.0.0.1:{{ service_ports.nexus }};
           proxy_http_version 1.1;
-          proxy_set_header Host $http_host;
+          proxy_set_header Host $host;
           proxy_set_header X-Real-IP $remote_addr;
           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
           proxy_set_header X-Forwarded-Proto $scheme;
-          proxy_redirect ~^https?://[^/]+/repository/([^/]+)/v2/(.*)$ https://$http_host/v2/repository/$1/$2;
+          proxy_redirect ~^https?://[^/]+/repository/([^/]+)/v2/(.*)$ https://$host/v2/repository/$1/$2;
+          # Repeated from the nginx_site_args above: the helper renders these
+          # streaming knobs inside `location /`, and nginx locations don't
+          # inherit directives from sibling locations, so this docker-mirror
+          # location needs its own copy.
           proxy_buffering off;
           proxy_request_buffering off;
           client_max_body_size 0;
