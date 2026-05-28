@@ -25,6 +25,10 @@
       mountpoint: /mnt/media
       group: media
       mode: '0775'
+      # 1 MB recordsize suits large media files; special_small_blocks
+      # routes metadata + sub-32K files to the special vdev (same 32K
+      # threshold as roles/data). autobackup:bak false excludes the bulk
+      # library from backup-pool replication (matches roles/scratch).
       extra_properties:
         'autobackup:bak': 'false'
         recordsize: '1048576'
@@ -32,27 +36,9 @@
   tags:
     - media
 
-- name: Check for legacy /mnt/media/Headphones (pre-lidarr rename)
-  stat:
-    path: /mnt/media/Headphones
-  register: media_headphones_legacy
-  tags:
-    - media
-
-# One-time migration: when headphones got retired in favour of lidarr, the
-# library tree moved from /mnt/media/Headphones to /mnt/media/Lidarr. mv
-# within the same zfs dataset is an inode rename, not a copy, so this is
-# cheap even with a multi-GB library. The creates: guard plus the when:
-# means subsequent runs (and fresh hosts that never had Headphones) skip.
-- name: Rename /mnt/media/Headphones to /mnt/media/Lidarr
-  command: mv /mnt/media/Headphones /mnt/media/Lidarr
-  args:
-    creates: /mnt/media/Lidarr
-  become: true
-  when: media_headphones_legacy.stat.exists
-  tags:
-    - media
-
+# Shared-ownership library dirs (ansible_user:media). Service-private dirs
+# live in their owning role (e.g. transmission creates /mnt/media/Torrents
+# owned transmission:media).
 - name: Create storage directories
   file:
     dest: "{{ item }}"
