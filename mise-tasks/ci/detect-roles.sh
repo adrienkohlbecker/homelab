@@ -19,11 +19,6 @@
 #
 # Outputs (to $GITHUB_OUTPUT, or stdout when $GITHUB_OUTPUT is unset):
 #   matrix=<JSON array of {role, variant}>  -- input to fromJson() in workflow.
-#   cross_cut=true|false                    -- whether the change touches
-#                                              files that affect every role
-#                                              (operator gets a mail and
-#                                              dispatches a targeted subset
-#                                              manually).
 #   packer_changed=true|false               -- whether the change touches
 #                                              packer/ or mise-tasks/packer/
 #                                              (gates ci.yml's packer call,
@@ -116,13 +111,13 @@ join_re() {
   printf '%s' "$*"
 }
 
-# Cross-cut: a change to any of these can't be attributed to specific roles
-# (it affects every cell), so we emit an empty matrix + cross_cut=true and
-# let the operator dispatch a targeted subset.
-CROSS_CUT_PATTERNS=(
+# Full-universe triggers: a change to any of these can't be attributed to
+# specific roles (it affects every cell), so we test the whole universe
+# rather than a scoped subset.
+FULL_UNIVERSE_PATTERNS=(
   'group_vars/all/[^/]+\.(yml|yaml)'          # shared defaults every role reads
   'group_vars/test\.yml'                      # test-scope vars/vault
-  'host_vars/(box|minimal)\.yml'              # push-CI fixtures (lab/pug host_vars aren't cross-cut)
+  'host_vars/(box|minimal)\.yml'              # push-CI fixtures (lab/pug host_vars don't trigger a wide run)
   'test/[^/]+\.py'                            # harness modules (testrole/testall import launch, machine, arch, utils)
   'test/inventory\.ini'                       # shared inventory
   'test/(playbooks|minimal)/.+'               # wrapper playbooks (site/_setup/_verify/_mirrors) + minimal cloud-init seed
@@ -133,7 +128,7 @@ CROSS_CUT_PATTERNS=(
   'uv\.lock'                                  # pinned harness python deps (also a ci-image input)
   'data/network_topology\.(yml|schema\.json)' # topology consumed across roles
 )
-CROSS_CUT_RE="^($(join_re "${CROSS_CUT_PATTERNS[@]}"))\$"
+FULL_UNIVERSE_RE="^($(join_re "${FULL_UNIVERSE_PATTERNS[@]}"))\$"
 
 # Packer inputs: rebuild the qcow2 tree (packer_changed) + add the _packer
 # cell. Prefix match -- any file under these dirs.
@@ -159,18 +154,16 @@ CI_IMAGE_INPUTS_RE="^($(join_re "${CI_IMAGE_INPUT_PATTERNS[@]}"))\$"
 ROLE_PATH_RE='^roles/[^/]+'
 
 emit() {
-  local matrix=$1 cross_cut=$2 packer_changed=${3:-false} ci_image_changed=${4:-false}
-  log "result: matrix=$matrix cross_cut=$cross_cut packer_changed=$packer_changed ci_image_changed=$ci_image_changed"
+  local matrix=$1 packer_changed=${2:-false} ci_image_changed=${3:-false}
+  log "result: matrix=$matrix packer_changed=$packer_changed ci_image_changed=$ci_image_changed"
   if [ -n "${GITHUB_OUTPUT:-}" ]; then
     {
       echo "matrix=$matrix"
-      echo "cross_cut=$cross_cut"
       echo "packer_changed=$packer_changed"
       echo "ci_image_changed=$ci_image_changed"
     } >>"$GITHUB_OUTPUT"
   else
     echo "matrix=$matrix"
-    echo "cross_cut=$cross_cut"
     echo "packer_changed=$packer_changed"
     echo "ci_image_changed=$ci_image_changed"
   fi
@@ -210,7 +203,7 @@ build_matrix() {
 
 if [ "${1:-}" = "--all" ]; then
   log "mode: --all (full universe)"
-  emit "$(build_matrix "$UNIVERSE")" "false"
+  emit "$(build_matrix "$UNIVERSE")"
   exit 0
 fi
 
@@ -218,7 +211,7 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}
   log "mode: workflow_dispatch roles='$INPUTS_ROLES'"
   if [ "$INPUTS_ROLES" = "ALL" ]; then
     log "roles=ALL -> full universe"
-    emit "$(build_matrix "$UNIVERSE")" "false"
+    emit "$(build_matrix "$UNIVERSE")"
     exit 0
   fi
   # Comma-separated list. Each token is `role` (variant defaulted, with
@@ -253,10 +246,10 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}
     fi
   done
   if [ ${#entries[@]} -eq 0 ]; then
-    emit "[]" "false"
+    emit "[]"
   else
     IFS=,
-    emit "[${entries[*]}]" "false"
+    emit "[${entries[*]}]"
   fi
   exit 0
 fi
@@ -384,10 +377,11 @@ resolve_green_base() {
 }
 
 full_universe() {
-  # Fallback when we can't establish a trustworthy incremental base on a
-  # push: test everything. $1 is a short reason for the log.
-  log "diff base: $1 -> testing the FULL universe"
-  emit "$(build_matrix "$UNIVERSE")" "false"
+  # Test everything. $1 is a short reason for the log; $2/$3 carry the
+  # substrate-rebuild flags through (default false) -- a full-universe run
+  # triggered by a uv.lock/packer change still needs the image/qcow2 rebuilt.
+  log "$1 -> testing the FULL universe"
+  emit "$(build_matrix "$UNIVERSE")" "${2:-false}" "${3:-false}"
   exit 0
 }
 
@@ -421,11 +415,11 @@ fi
 CHANGED=$(git diff --name-only "$BASE" HEAD)
 log "comparing ${BASE:0:12}..$(git rev-parse --short HEAD): $(echo "$CHANGED" | grep -c . || true) file(s) changed"
 
-# Substrate-rebuild flags, computed BEFORE the cross-cut decision so they
-# survive it: a uv.lock / mise.toml bump is BOTH a cross-cut change AND a
-# ci-image input -- the image must still rebuild (else a later targeted
-# dispatch resolves stale deps), and a packer change riding along with a
-# cross-cut edit must still rebuild the qcow2 tree.
+# Substrate-rebuild flags, computed BEFORE the full-universe decision so
+# they survive it: a uv.lock / mise.toml bump is BOTH a full-universe
+# trigger AND a ci-image input -- the image must still rebuild before the
+# wide run (else cells resolve stale deps), and a packer change riding along
+# with a full-universe trigger must still rebuild the qcow2 tree.
 #
 # packer_changed: any packer/ or mise-tasks/packer/ change rebuilds the
 # qcow2 tree via ci.yml's packer call (ordered before test, needs: packer).
@@ -450,14 +444,13 @@ if [ "${GITHUB_EVENT_NAME:-}" = "push" ] &&
   log "ci-image inputs changed (master push) -> ci_image_changed=true"
 fi
 
-# Cross-cut: the change can't be attributed to specific roles, so emit an
-# empty matrix + cross_cut=true (operator mail) -- but carry the substrate
-# flags through, so the image / qcow2 tree still rebuild for this push.
-if echo "$CHANGED" | grep -qE "$CROSS_CUT_RE"; then
-  log "cross-cut paths changed -> empty matrix + operator mail:"
-  echo "$CHANGED" | grep -E "$CROSS_CUT_RE" | sed 's/^/[detect-roles]     /' >&2
-  emit "[]" "true" "$packer_changed" "$ci_image_changed"
-  exit 0
+# Full-universe trigger: the change can't be attributed to specific roles,
+# so test everything -- carrying the substrate flags so the image / qcow2
+# tree rebuild alongside (the full run reads them).
+if echo "$CHANGED" | grep -qE "$FULL_UNIVERSE_RE"; then
+  log "full-universe paths changed:"
+  echo "$CHANGED" | grep -E "$FULL_UNIVERSE_RE" | sed 's/^/[detect-roles]     /' >&2
+  full_universe "full-universe path changed" "$packer_changed" "$ci_image_changed"
 fi
 
 # Direct role detection: extract role names from `^roles/<X>/...` paths.
@@ -499,4 +492,4 @@ if [ -n "$ROLES_DEDUPED" ]; then
 else
   log "no role-relevant changes; matrix will be empty"
 fi
-emit "$(build_matrix "$ROLES_DEDUPED")" "false" "$packer_changed" "$ci_image_changed"
+emit "$(build_matrix "$ROLES_DEDUPED")" "$packer_changed" "$ci_image_changed"

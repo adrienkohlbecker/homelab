@@ -6,13 +6,18 @@ name: ci
 # render as ONE run with nested jobs (GitLab-style), and `needs:` ordering
 # replaces both sentinel polls (test runs after packer + ci-image).
 #
-# No workflow-level concurrency: per-push runs are capped only by the
-# runner pool. Each callee keeps its OWN concurrency group -- packer-build
-# `lab-qemu-artifacts` (serialise rebuilds), ci-image `ci-image`
-# (serialise pushes), lint `lint-<ref>` (ref-cancel) -- so they self-
-# govern without one caller-level knob serialising everything. Whether a
-# called reusable workflow's concurrency is honoured independently is the
-# main thing this spike verifies.
+# Serialised per branch (concurrency below, cancel-in-progress: false): a
+# push touching a shared/cross-cutting path runs the FULL universe, which is
+# expensive, so we queue rather than fan out N concurrent wide runs. At most
+# one run executes + one queues per ref; an older *pending* run is superseded
+# (it never started, so no wasted work), while an in-flight run is NEVER
+# cancelled. Serialising also keeps the diff base maximally fresh -- when the
+# next run's detect fires, the prior run has already finished, so it diffs
+# from that run's commit (tightest matrix). Callees keep their own groups
+# (packer-build `lab-qemu-artifacts`, ci-image `ci-image`, lint `lint-<ref>`).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: false
 on:
   push:
   workflow_dispatch:
@@ -37,9 +42,9 @@ defaults:
 jobs:
   detect:
     # Single detection pass for the whole pipeline. Emits the role test
-    # matrix + cross_cut (passed down to test) and the packer_changed /
-    # ci_image_changed gates (consumed by the packer / ci-image calls).
-    # test.yml no longer detects -- it takes the matrix as an input.
+    # matrix (passed down to test) and the packer_changed / ci_image_changed
+    # gates (consumed by the packer / ci-image calls). test.yml no longer
+    # detects -- it takes the matrix as an input.
     runs-on: [ self-hosted, lab ]
     # actions:read lets detect-roles query the Actions API for the last
     # entirely-successful push run of this workflow on the branch (its diff
@@ -52,7 +57,6 @@ jobs:
       image: nexus.lab.fahm.fr/homelab/ci:latest
     outputs:
       matrix: ${{ steps.detect.outputs.matrix }}
-      cross_cut: ${{ steps.detect.outputs.cross_cut }}
       packer_changed: ${{ steps.detect.outputs.packer_changed }}
       ci_image_changed: ${{ steps.detect.outputs.ci_image_changed }}
     steps:
@@ -110,4 +114,3 @@ jobs:
     secrets: inherit
     with:
       matrix: ${{ needs.detect.outputs.matrix }}
-      cross_cut: ${{ needs.detect.outputs.cross_cut }}
