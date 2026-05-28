@@ -124,10 +124,26 @@ resource "hcloud_network_subnet" "hetzner" {
   ip_range     = local.network.sites.hetzner.cidr
 }
 
+# fox's boot image: the latest ZFS-root snapshot published by `mise run
+# packer:fox` (mechanic 2 -- see notes/fox_zfs_root_image.md). The build labels
+# each snapshot os=ubuntu-zfs,ubuntu=<release>; we select on os + release (NOT a
+# per-host role) so the same image can back multiple Hetzner servers later.
+# most_recent picks the newest, so a rebuild is consumed automatically on the
+# next (re)create; with_status=available avoids a half-published snapshot.
+# NB: paired with ignore_changes=[image] on the server below — a freshly built
+# snapshot does NOT auto-recreate the running fox (recreate wipes the disk +
+# headscale state); it only takes effect on a deliberate taint/replace.
+data "hcloud_image" "fox" {
+  with_selector     = "os=ubuntu-zfs,ubuntu=jammy"
+  with_architecture = "x86"
+  with_status       = ["available"]
+  most_recent       = true
+}
+
 resource "hcloud_server" "fox" {
   name        = "fox"
   server_type = "cx23"
-  image       = "ubuntu-22.04"
+  image       = data.hcloud_image.fox.id
   location    = var.hetzner_location
   ssh_keys    = [hcloud_ssh_key.laptop.name]
 

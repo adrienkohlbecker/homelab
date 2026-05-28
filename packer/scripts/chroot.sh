@@ -211,6 +211,14 @@ systemctl enable zfs-import-cache
 systemctl enable zfs-mount
 systemctl enable zfs-import.target
 
+# Cap the ARC on small-RAM cloud VMs (hetzner cpx22 = 3.7 GB; default ARC
+# of ~50% of RAM would starve headscale). Written to modprobe.d so it applies
+# both at boot and inside the initramfs (initramfs-tools bundles modprobe.d),
+# which matters because zfs loads from the initramfs on a root-on-ZFS host.
+if [ -n "${ZFS_ARC_MAX:-}" ]; then
+  echo "options zfs zfs_arc_max=${ZFS_ARC_MAX}" >/etc/modprobe.d/zfs.conf
+fi
+
 # Set ZFSBootMenu properties on datasets
 
 zfs set org.zfsbootmenu:commandline="" "rpool/ROOT"
@@ -512,18 +520,87 @@ apt-get install --yes openssh-server qemu-guest-agent
 # wins even if /etc/ssh/sshd_config is later edited.
 echo 'PasswordAuthentication no' >/etc/ssh/sshd_config.d/00-no-password-auth.conf
 
-# Configure networking. Match by name glob so the same image works
-# under any qemu device topology (packer's vs. testrole's direct-kernel
-# boot give the NIC different kernel names — ens3/ens4/etc.) and on
-# baremetal (eno1/enp0s31f6/...). All Predictable Network Interface
-# Names start with "en"; only old-style "eth*" is excluded, which
-# requires net.ifnames=0 on modern Ubuntu and so is essentially extinct.
-#
-# Multi-NIC hosts: this stanza claims every "en*" interface as
-# "primary", so each onboard NIC will DHCP independently. Bonded /
-# LACP setups need bare-metal callers to overwrite this file with an
-# explicit netplan before first boot.
-cat <<EOF >/etc/netplan/01-netcfg.yaml
+# User setup. The qemu fixtures bake a key-only `vagrant` sudoer so the test
+# harness can SSH back in. The hetzner image must NOT bake a login user (the
+# snapshot would ship a known key on the one internet-facing host); instead it
+# installs cloud-init so terraform's user_data creates `ak` + injects the SSH
+# key on first boot, exactly as the stock hcloud image does.
+if [ "${IMAGE_TARGET:-qemu}" = "hetzner" ]; then
+  # cloud-guest-utils ships growpart, used by hetzner_growpart.service below.
+  apt-get install --yes cloud-init cloud-guest-utils
+
+  # Pin the datasource so a fresh cloud-init (debootstrap'd, not the
+  # Hetzner-tuned stock image) finds Hetzner's metadata + user-data fast
+  # instead of probing the full list. Hetzner provides networking + user-data
+  # here, so cloud-init owns the netplan (provision.sh skipped its static one).
+  # VALIDATE on a throwaway cpx22: confirm `ak` is created and SSH works — if
+  # the Hetzner DS isn't detected (DMI mismatch), fall back to ConfigDrive/
+  # NoCloud or force ds=hetzner on the kernel cmdline. See notes.
+  cat <<EOF >/etc/cloud/cloud.cfg.d/99-hetzner.cfg
+datasource_list: [ Hetzner, ConfigDrive, NoCloud, None ]
+EOF
+
+  # Image ships at 20G but deploys onto cpx22's ~76G, leaving rpool's partition
+  # (p3, last on disk) short with the GPT backup header mid-disk.
+  # hetzner_growpart.service grows p3 (growpart relocates the backup header) and
+  # runs `zpool online -e` once on first boot — late + sentinel-gated so a
+  # failure can't wedge the root mount. autoexpand covers any later disk resize.
+  zpool set autoexpand=on rpool
+
+  cat <<'EOF' >/usr/local/sbin/hetzner_growpart.sh
+#!/bin/bash
+set -euo pipefail
+
+disk=/dev/sda
+part=3
+
+rc=0
+growpart "$disk" "$part" || rc=$?
+# growpart: 0 = resized, 1 = NOCHANGE (already full), >1 = real error.
+if [ "$rc" -gt 1 ]; then
+  exit "$rc"
+fi
+
+udevadm settle || true
+zpool online -e rpool "${disk}${part}"
+EOF
+  chmod 0755 /usr/local/sbin/hetzner_growpart.sh
+
+  cat <<'EOF' >/etc/systemd/system/hetzner_growpart.service
+[Unit]
+Description=Grow rpool into the rest of the boot disk on first boot
+After=zfs.target
+ConditionPathExists=!/var/lib/hetzner_growpart.done
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/hetzner_growpart.sh
+ExecStartPost=/usr/bin/touch /var/lib/hetzner_growpart.done
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl enable hetzner_growpart.service
+
+else
+
+  # Configure networking. Match by name glob so the same image works
+  # under any qemu device topology (packer's vs. testrole's direct-kernel
+  # boot give the NIC different kernel names — ens3/ens4/etc.) and on
+  # baremetal (eno1/enp0s31f6/...). All Predictable Network Interface
+  # Names start with "en"; only old-style "eth*" is excluded, which
+  # requires net.ifnames=0 on modern Ubuntu and so is essentially extinct.
+  #
+  # Multi-NIC hosts: this stanza claims every "en*" interface as
+  # "primary", so each onboard NIC will DHCP independently. Bonded /
+  # LACP setups need bare-metal callers to overwrite this file with an
+  # explicit netplan before first boot.
+  #
+  # Skipped on hetzner: cloud-init (configured in chroot.sh for the Hetzner
+  # datasource) owns networking there, exactly as the stock hcloud image does —
+  # a competing static netplan here would fight cloud-init's generated one.
+  cat <<EOF >/etc/netplan/01-netcfg.yaml
 network:
 version: 2
 ethernets:
@@ -534,22 +611,23 @@ ethernets:
     dhcp-identifier: mac
 EOF
 
-# Configure vagrant user
+  # Configure vagrant user
 
-adduser --disabled-password --gecos "" "$USERNAME"
-cp -a /etc/skel/. "/home/$USERNAME"
+  adduser --disabled-password --gecos "" "$USERNAME"
+  cp -a /etc/skel/. "/home/$USERNAME"
 
-mkdir "/home/$USERNAME/.ssh"
-echo "$SSH_KEY_PUB" >"/home/$USERNAME/.ssh/authorized_keys"
-chmod 0700 "/home/$USERNAME/.ssh"
-chmod 0600 "/home/$USERNAME/.ssh/authorized_keys"
+  mkdir "/home/$USERNAME/.ssh"
+  echo "$SSH_KEY_PUB" >"/home/$USERNAME/.ssh/authorized_keys"
+  chmod 0700 "/home/$USERNAME/.ssh"
+  chmod 0600 "/home/$USERNAME/.ssh/authorized_keys"
 
-chown -R "$USERNAME:$USERNAME" "/home/$USERNAME"
-usermod -a -G adm,sudo "$USERNAME"
+  chown -R "$USERNAME:$USERNAME" "/home/$USERNAME"
+  usermod -a -G adm,sudo "$USERNAME"
 
-echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >"/etc/sudoers.d/$USERNAME"
-chown root:root "/etc/sudoers.d/$USERNAME"
-chmod 400 "/etc/sudoers.d/$USERNAME"
+  echo "$USERNAME ALL=(ALL) NOPASSWD:ALL" >"/etc/sudoers.d/$USERNAME"
+  chown root:root "/etc/sudoers.d/$USERNAME"
+  chmod 400 "/etc/sudoers.d/$USERNAME"
+fi
 
 # Reset apt sources to upstream so the shipped image isn't pinned to a
 # Nexus-internal URL. Build-time installs above used $UBUNTU_MIRROR
