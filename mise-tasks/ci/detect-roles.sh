@@ -27,6 +27,14 @@
 #                                              ci-image.yml input on a master
 #                                              push (gates ci.yml's ci-image
 #                                              call, ordered before test).
+#   packer_sources=<JSON array>             -- the packer source matrix
+#                                              ci.yml feeds to packer-build's
+#                                              `build` job (folds in what
+#                                              packer-build's old `prepare`
+#                                              job computed). From INPUTS_SOURCES
+#                                              (ci.yml's `sources` dispatch
+#                                              input, space-separated); empty
+#                                              -> the full set.
 #
 # A changed role is also expanded via ci:role-deps into the set of roles
 # that import it (its consumers) -- so editing a helper like systemd_unit or
@@ -153,19 +161,31 @@ CI_IMAGE_INPUTS_RE="^($(join_re "${CI_IMAGE_INPUT_PATTERNS[@]}"))\$"
 # so it matches just the leading segment).
 ROLE_PATH_RE='^roles/[^/]+'
 
+# Packer source matrix, folded in from packer-build.yml's old `prepare` job so
+# detect is the single matrix computer for the whole pipeline. INPUTS_SOURCES
+# is ci.yml's `sources` dispatch input (space-separated, e.g. "box pug"); empty
+# (a push, or an empty dispatch input) builds the full set. Computed once and
+# emitted on every exit path -- the gate that decides *whether* packer runs is
+# packer_changed; this only shapes the matrix once it does.
+PACKER_SOURCES_JSON=$(jq -cn --arg s "${INPUTS_SOURCES:-}" \
+  '($s | split(" ") | map(select(. != ""))) as $l
+   | if ($l | length) == 0 then ["box", "pug", "lab", "hetzner"] else $l end')
+
 emit() {
   local matrix=$1 packer_changed=${2:-false} ci_image_changed=${3:-false}
-  log "result: matrix=$matrix packer_changed=$packer_changed ci_image_changed=$ci_image_changed"
+  log "result: matrix=$matrix packer_changed=$packer_changed ci_image_changed=$ci_image_changed packer_sources=$PACKER_SOURCES_JSON"
   if [ -n "${GITHUB_OUTPUT:-}" ]; then
     {
       echo "matrix=$matrix"
       echo "packer_changed=$packer_changed"
       echo "ci_image_changed=$ci_image_changed"
+      echo "packer_sources=$PACKER_SOURCES_JSON"
     } >>"$GITHUB_OUTPUT"
   else
     echo "matrix=$matrix"
     echo "packer_changed=$packer_changed"
     echo "ci_image_changed=$ci_image_changed"
+    echo "packer_sources=$PACKER_SOURCES_JSON"
   fi
 }
 
@@ -251,6 +271,19 @@ if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_ROLES:-}
     IFS=,
     emit "[${entries[*]}]"
   fi
+  exit 0
+fi
+
+# A dispatch that sets `sources` but no `roles` is an explicit packer-only
+# rebuild (the entry point that replaced packer-build.yml's standalone
+# workflow_dispatch). Force packer_changed=true so ci.yml's packer call fires
+# regardless of git diff, and emit an empty role matrix so test is skipped --
+# rebuilding just lab/pug doesn't drag the test fan-out along. A dispatch with
+# `roles` ALSO set returned via the INPUTS_ROLES branch above, so we only reach
+# here when roles is empty.
+if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ -n "${INPUTS_SOURCES:-}" ]; then
+  log "mode: workflow_dispatch sources='$INPUTS_SOURCES' (packer-only, empty test matrix)"
+  emit "[]" true false
   exit 0
 fi
 

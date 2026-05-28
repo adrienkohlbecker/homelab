@@ -1,31 +1,23 @@
 name: packer-build
-# Reusable + directly dispatchable. ci.yml calls this via `uses:` (gated
-# on detect's packer_changed) so a packer/** push runs it nested in the
-# one ci.yml run; it keeps workflow_dispatch so a standalone rebuild of
-# just `lab`/`pug` still works without dragging the test matrix along.
-# No `push:` trigger -- ci.yml owns the push path (a push trigger here
-# would double-fire alongside ci.yml's call).
+# Reusable, call-only. ci.yml calls this via `uses:` (gated on detect's
+# packer_changed), passing the source matrix detect computed in `sources_matrix`
+# -- the build matrix below reads that directly, which is why this workflow no
+# longer has its own matrix-compute `prepare` job (folded into detect). No
+# `push:` trigger (ci.yml owns the push path) and no `workflow_dispatch`: a
+# standalone rebuild of just `lab`/`pug` now goes through dispatching ci.yml
+# with `sources=lab pug`, which detect turns into a packer-only run (empty test
+# matrix). Without its own detect this workflow can't compute a matrix from a
+# bare dispatch anyway.
 on:
   workflow_call:
     inputs:
-      sources:
-        description: 'packer sources to build (e.g. "box pug"). Empty = all.'
+      sources_matrix:
+        description: 'JSON array of packer sources to build, from ci.yml''s detect (e.g. ["box","pug"]).'
         type: string
-        required: false
-        default: ''
+        required: true
       ubuntu:
         description: 'Ubuntu codename'
         type: string
-        required: false
-        default: jammy
-  workflow_dispatch:
-    inputs:
-      sources:
-        description: 'packer sources to build (e.g. "box pug"). Empty = all.'
-        required: false
-        default: ''
-      ubuntu:
-        description: 'Ubuntu codename'
         required: false
         default: jammy
 
@@ -34,9 +26,8 @@ on:
 # workflow that mounts the qemu volume rw. A reusable workflow keeps its
 # own concurrency group when called, so packer self-serialises across
 # ci.yml runs even though ci.yml itself isn't grouped -- the whole call
-# (prepare + every build matrix cell) holds one slot, so the matrix
-# below isn't self-cancelling; the group only serialises distinct
-# packer builds.
+# (every build matrix cell) holds one slot, so the matrix below isn't
+# self-cancelling; the group only serialises distinct packer builds.
 concurrency:
   group: lab-qemu-artifacts
   cancel-in-progress: false
@@ -46,10 +37,12 @@ defaults:
     shell: bash
 
 jobs:
-  prepare:
-    # Compute the per-source build matrix. A dispatch can narrow it via
-    # the `sources` input (space-separated); a push (no inputs) or an
-    # empty dispatch input builds all four. Non-VM work -> lab pool.
+  build:
+    # One job per source, from the JSON matrix detect computed (folded in from
+    # the old `prepare` job). Packer spawns one qemu VM per cell -- lands on the
+    # lab-vm pool. See notes/concurrency_rework.md for the pool model: lab-vm =
+    # 4 runners that take VM workloads (packer-build + test-role); lab = 2
+    # runners that take everything else.
     #
     # `hetzner` builds the rpool disk image (its verify-boot post-processor is
     # excepted -- the cloud-init-only image has no harness machine spec), then
@@ -57,44 +50,17 @@ jobs:
     # via `mise run packer:hetzner` (HCLOUD_TOKEN from a repo secret). Feature
     # branches build the disk but skip the publish -- see that step below.
     #
-    # Why one job per source instead of packer's internal parallel
-    # builds in a single job: each build VM then occupies one lab-vm
-    # runner slot, so the 4-VM pool cap (host_vars/lab.yml: vm1..vm4, all
-    # containers on the one lab host) actually governs concurrent packer
-    # VMs. A single job hid 3 VMs behind one slot and blew past the RAM
-    # budget. fail-fast:false keeps one source's failure from cancelling
-    # its siblings (the old single-invocation model tore them all down).
-    runs-on: [ self-hosted, lab ]
-    container:
-      image: nexus.lab.fahm.fr/homelab/ci:latest
-    timeout-minutes: 10
-    outputs:
-      sources: ${{ steps.compute.outputs.sources }}
-    steps:
-      - name: Compute build matrix
-        id: compute
-        env:
-          PACKER_SOURCES: ${{ inputs.sources }}
-        run: |
-          set -euo pipefail
-          sources="${PACKER_SOURCES:-}"
-          if [ -z "$sources" ]; then
-            sources="box pug lab hetzner"
-          fi
-          # space-separated string -> compact JSON array, dropping empties
-          json=$(jq -cn --arg s "$sources" '$s | split(" ") | map(select(. != ""))')
-          echo "sources=$json" >>"$GITHUB_OUTPUT"
-
-  build:
-    needs: prepare
-    # Packer spawns one qemu VM per cell -- lands on the lab-vm pool. See
-    # notes/concurrency_rework.md for the pool model: lab-vm = 4 runners
-    # that take VM workloads (packer-build + test-role); lab = 2 runners
-    # that take everything else.
+    # Why one job per source instead of packer's internal parallel builds in a
+    # single job: each build VM then occupies one lab-vm runner slot, so the
+    # 4-VM pool cap (host_vars/lab.yml: vm1..vm4, all containers on the one lab
+    # host) actually governs concurrent packer VMs. A single job hid 3 VMs
+    # behind one slot and blew past the RAM budget. fail-fast:false keeps one
+    # source's failure from cancelling its siblings (the old single-invocation
+    # model tore them all down).
     strategy:
       fail-fast: false
       matrix:
-        source: ${{ fromJSON(needs.prepare.outputs.sources) }}
+        source: ${{ fromJSON(inputs.sources_matrix) }}
     runs-on: [ self-hosted, lab-vm ]
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest
@@ -119,7 +85,7 @@ jobs:
         # would fail with a plugin-version mismatch.
         run: mise run packer:init
       - name: Build
-        # Pass the matrix source + dispatch ubuntu through env vars rather
+        # Pass the matrix source + ubuntu input through env vars rather
         # than substituting them straight into the shell command -- a
         # misbehaving input could otherwise break out of the args list.
         env:

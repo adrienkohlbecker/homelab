@@ -59,6 +59,9 @@ jobs:
       matrix: ${{ steps.detect.outputs.matrix }}
       packer_changed: ${{ steps.detect.outputs.packer_changed }}
       ci_image_changed: ${{ steps.detect.outputs.ci_image_changed }}
+      # The packer source matrix, folded in from packer-build's old `prepare`
+      # job -- passed to the packer call's sources_matrix below.
+      packer_sources: ${{ steps.detect.outputs.packer_sources }}
     steps:
       - uses: actions/checkout@v6
         with: { fetch-depth: 50 }
@@ -67,21 +70,34 @@ jobs:
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           INPUTS_ROLES: ${{ inputs.roles }}
+          # The `sources` dispatch input. On a push it's empty (-> full set);
+          # a dispatch that sets it (and not roles) is a packer-only rebuild.
+          INPUTS_SOURCES: ${{ inputs.sources }}
           # detect-roles queries the Actions API for the last green push run
           # as its diff base; GITHUB_TOKEN is not auto-exported to steps.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: mise run ci:detect-roles
 
   lint:
-    # Independent of detect/packer/test -- runs in parallel. Keeps its own
+    # Runs in the ci container, so it waits on ci-image whenever that's being
+    # rebuilt -- a stale :latest would lint against the wrong toolchain.
+    # always() + (success || skipped) lets it run when ci-image is NOT needed
+    # (skipped) and gates it behind a genuine ci-image failure; needs detect
+    # only so ci-image's skip/success is decided first. Keeps its own
     # ref-cancel concurrency group (in lint.yml).
+    needs: [ detect, ci-image ]
+    if: |
+      always()
+      && needs.detect.result == 'success'
+      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
     uses: ./.github/workflows/lint.yml
     secrets: inherit
 
   ci-image:
     # Rebuild + republish the ci :latest image only when a build input
     # changed on master (detect's ci_image_changed enforces that triple
-    # gate). Ordered before test so test-role resolves the new :latest.
+    # gate). Ordered before lint / packer / test so they all resolve the
+    # new :latest.
     needs: detect
     if: needs.detect.outputs.ci_image_changed == 'true'
     uses: ./.github/workflows/ci-image.yml
@@ -90,12 +106,22 @@ jobs:
   packer:
     # Rebuild + republish the qcow2 tree only when packer inputs changed.
     # Nested under this run; self-serialises via its own concurrency group.
-    needs: detect
-    if: needs.detect.outputs.packer_changed == 'true'
+    # Builds in the ci container, so (like test) it waits on ci-image when
+    # that's being rebuilt -- e.g. a packer/qemu.pkr.hcl change is BOTH a
+    # packer input and a ci-image input, and the build needs the image with
+    # the matching pre-installed packer plugins.
+    needs: [ detect, ci-image ]
+    if: |
+      always()
+      && needs.detect.result == 'success'
+      && needs.detect.outputs.packer_changed == 'true'
+      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
     uses: ./.github/workflows/packer-build.yml
     secrets: inherit
     with:
-      sources: ${{ inputs.sources }}
+      # The source matrix detect computed (folded in from packer-build's old
+      # `prepare` job). ubuntu still rides through from the dispatch input.
+      sources_matrix: ${{ needs.detect.outputs.packer_sources }}
       ubuntu: ${{ inputs.ubuntu }}
 
   test:
