@@ -1,0 +1,29 @@
+- name: _verify | Authenticated publish/subscribe round-trip succeeds
+  shell: |
+    set -euo pipefail
+    podman exec mosquitto mosquitto_pub -p 1883 -u z2m -P {{ mosquitto_accounts.z2m.password }} -t homelab/verify -m ok -r
+    podman exec mosquitto mosquitto_sub -p 1883 -u z2m -P {{ mosquitto_accounts.z2m.password }} -t homelab/verify -C 1 -W 3
+  args:
+    executable: /bin/bash
+  become: true
+  register: mosquitto_authed
+  until: mosquitto_authed.rc == 0 and 'ok' in mosquitto_authed.stdout
+  retries: 15
+  delay: 2
+  changed_when: false
+
+- name: _verify | Anonymous connection is refused on 1883
+  command: >-
+    podman exec mosquitto mosquitto_pub -p 1883 -t homelab/verify -m nope
+  become: true
+  register: mosquitto_anon
+  failed_when: mosquitto_anon.rc == 0
+  changed_when: false
+
+- name: _verify | Wrong password is refused on 1883
+  command: >-
+    podman exec mosquitto mosquitto_pub -p 1883 -u z2m -P definitely-wrong -t homelab/verify -m nope
+  become: true
+  register: mosquitto_badpw
+  failed_when: mosquitto_badpw.rc == 0
+  changed_when: false
