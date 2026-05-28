@@ -1,0 +1,30 @@
+# Dataset metadata for tank/media, consumed by both tasks/main.yml (fed to
+# the zfs/tasks_from: dataset helper) and tasks/_verify.yml (looped into the
+# zfs get / stat assertions), so a tuning change is one edit that keeps both
+# halves in sync. Mirrors roles/data/vars/main.yml.
+
+# 1 MB recordsize suits large media files; special_small_blocks routes
+# metadata + sub-32K files to the special vdev (same 32K threshold as
+# roles/data, proportionally stronger against the 1 MB recordsize).
+# autobackup:bak false excludes the bulk library from backup-pool
+# replication (matches roles/scratch).
+media_dataset_properties:
+  'autobackup:bak': 'false'
+  recordsize: '1048576'
+  special_small_blocks: '32768'
+
+# Shared-ownership library dirs (ansible_user_id:media). Service-private
+# dirs live in their owning role (e.g. transmission creates
+# /mnt/media/Torrents owned transmission:media).
+media_library_dirs:
+  - /mnt/media/Lidarr
+  - /mnt/media/Live Music
+  - /mnt/media/Movies
+  - /mnt/media/Music
+  - /mnt/media/Other
+  - /mnt/media/TV
+
+# Resolves the host's tank pool name; mirrors roles/data's data_pool. Stays
+# in sync with the default('tank') in roles/zfs/tasks/dataset.yml -- both
+# must agree or _verify checks a pool main.yml didn't create.
+media_pool: "{{ zfs_tank_filesystem | default('tank') }}"

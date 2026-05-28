@@ -25,20 +25,10 @@
       mountpoint: /mnt/media
       group: media
       mode: '0775'
-      # 1 MB recordsize suits large media files; special_small_blocks
-      # routes metadata + sub-32K files to the special vdev (same 32K
-      # threshold as roles/data). autobackup:bak false excludes the bulk
-      # library from backup-pool replication (matches roles/scratch).
-      extra_properties:
-        'autobackup:bak': 'false'
-        recordsize: '1048576'
-        special_small_blocks: '32768'
+      extra_properties: "{{ media_dataset_properties }}"
   tags:
     - media
 
-# Shared-ownership library dirs (ansible_user:media). Service-private dirs
-# live in their owning role (e.g. transmission creates /mnt/media/Torrents
-# owned transmission:media).
 - name: Create storage directories
   file:
     dest: "{{ item }}"
@@ -50,10 +40,4 @@
   when: not (ansible_check_mode and media_group.changed)
   tags:
     - media
-  loop:
-    - /mnt/media/Lidarr
-    - /mnt/media/Live Music
-    - /mnt/media/Movies
-    - /mnt/media/Music
-    - /mnt/media/Other
-    - /mnt/media/TV
+  loop: "{{ media_library_dirs }}"
