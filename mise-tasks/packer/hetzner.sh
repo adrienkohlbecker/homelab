@@ -8,7 +8,7 @@ set -euo pipefail
 # HCLOUD_TOKEN normally arrives as the literal op:// ref (file-based mise tasks
 # don't resolve op://, per CLAUDE.md), so re-exec under `op run --` to get the
 # real token. In CI there's no op: the token is injected directly as a GitHub
-# Actions secret (already resolved), so skip the re-exec when it no longer looks
+# Actions secret (already resolved), so skip the re-exec when it doesn't look
 # like an op:// ref. Checking the value rather than a guard env var also breaks
 # the would-be infinite loop -- the re-exec'd process sees the resolved token.
 # mise's usage_* vars are exported, so they ride through op run's inherited env.
@@ -114,13 +114,22 @@ done
 
 # --- phase 4: prune old snapshots ---
 # Each master CI run publishes a fresh snapshot; without pruning they pile up as
-# dead cost -- terraform's data.hcloud_image always selects most_recent, so
-# older ones are never booted. Keep the two newest os=ubuntu-zfs,ubuntu=<release>
-# snapshots (current + one for manual rollback), delete the rest. Safe: deleting
-# a snapshot doesn't touch a server already built from it.
-echo "==> pruning old snapshots (keeping newest 2)"
-stale=$(api GET "/images?type=snapshot&sort=created:desc&label_selector=os=ubuntu-zfs,ubuntu=$UBUNTU" |
-  pyget 'd["images"][2:] and " ".join(str(i["id"]) for i in d["images"][2:]) or ""')
+# dead cost. Keep the two newest os=ubuntu-zfs,ubuntu=<release> snapshots
+# (current + one for manual rollback) AND any snapshot a currently-running server
+# boots from, so a deployed host's source image is never pulled out from under a
+# future rebuild/rollback. Delete the rest (deleting a snapshot doesn't touch a
+# server already built from it).
+echo "==> pruning old snapshots (keeping newest 2 + any running server's image)"
+snaps_json=$(api GET "/images?type=snapshot&sort=created:desc&label_selector=os=ubuntu-zfs,ubuntu=$UBUNTU")
+servers_json=$(api GET "/servers")
+stale=$(python3 -c '
+import json, sys
+snaps = json.loads(sys.argv[1])["images"]
+servers = json.loads(sys.argv[2])["servers"]
+in_use = {s["image"]["id"] for s in servers if s.get("status") == "running" and s.get("image")}
+keep = {i["id"] for i in snaps[:2]} | in_use
+print(" ".join(str(i["id"]) for i in snaps if i["id"] not in keep))
+' "$snaps_json" "$servers_json")
 # shellcheck disable=SC2086  # word-split the space-separated id list on purpose
 for old in $stale; do
   echo "    deleting old snapshot $old"
