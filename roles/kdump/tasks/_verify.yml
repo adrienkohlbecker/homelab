@@ -50,11 +50,17 @@
   failed_when: (kdump_verify_kexec_size.stdout | trim | int) == 0
   become: true
 
+# kdump-tools regenerates the capture-kernel initrd and kexec-loads it on
+# each start, so right after the reboot it sits in `activating` (is-active
+# rc 3) for tens of seconds. Retry until it settles rather than racing it.
 - name: _verify | Kdump-tools.service is active post-reboot  # noqa: command-instead-of-module
   when: ansible_architecture != 'aarch64'
   command: systemctl is-active kdump-tools
   register: kdump_verify_active
   changed_when: false
+  retries: 30
+  delay: 4
+  until: kdump_verify_active.stdout | trim == 'active'
   failed_when: kdump_verify_active.stdout | trim != 'active'
   become: true
 
