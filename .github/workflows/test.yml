@@ -1,6 +1,17 @@
 name: test
+# Reusable + directly dispatchable. ci.yml calls this via `uses:` with
+# `needs: packer`, so packer-build finishes before any test cell reads
+# the qcow2 tree -- that ordering replaces the old wait-for-packer-build
+# sentinel poll (now removed). Kept dispatchable for ad-hoc role runs.
+# No `push:` trigger -- ci.yml owns the push path.
 on:
-  push:
+  workflow_call:
+    inputs:
+      roles:
+        description: 'Comma-separated role names (or role:variant). `ALL` = every role. Empty = use git diff.'
+        type: string
+        required: false
+        default: ''
   workflow_dispatch:
     inputs:
       roles:
@@ -65,75 +76,14 @@ jobs:
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
           MAILGUN_DOMAIN: ${{ secrets.MAILGUN_DOMAIN }}
 
-  wait-for-packer-build:
-    # When this push touched packer/** or mise-tasks/packer/** (the
-    # paths that trigger packer-build.yml), detect emits
-    # packer_changed=true and this job blocks test-role on packer-build
-    # finishing. Otherwise the _packer matrix cell could win the
-    # concurrency-queue race and read the qcow2 tree mid-rewrite.
-    # detect-roles emits packer_changed independently from
-    # _packer-in-matrix so edits to roles/_packer/ alone (no qcow2
-    # rebuild) don't trigger an 85-min wait for a packer-build that
-    # was never dispatched.
-    needs: detect
-    if: needs.detect.outputs.packer_changed == 'true'
-    runs-on: [ self-hosted, lab ]
-    container:
-      image: nexus.lab.fahm.fr/homelab/ci:latest
-      options: --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
-    timeout-minutes: 90
-    steps:
-      - name: Wait for packer-build sentinel for this SHA
-        env:
-          SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          target=/mnt/scratch/qemu/_sentinels/complete-$SHA
-          deadline=$(( $(date +%s) + 85 * 60 ))
-          while [ ! -f "$target" ]; do
-            if [ "$(date +%s)" -gt "$deadline" ]; then
-              echo >&2 "Timed out waiting for $target after 85min --"
-              echo >&2 "packer-build for this SHA likely failed or wasn't dispatched."
-              exit 1
-            fi
-            sleep 15
-          done
-          echo "Found $target -- releasing test-role."
-
-  wait-for-ci-image:
-    # When this push touched a ci-image.yml input (Dockerfile / mise.toml
-    # / pyproject.toml / uv.lock / packer/qemu.pkr.hcl) on master, detect
-    # emits ci_image_changed=true and this job blocks test-role on
-    # ci-image.yml finishing its push to :latest. Without this, test-role's
-    # container: block can resolve the OLD :latest while the new image is
-    # mid-build, and tests run against a stale toolchain. The triple gate
-    # in detect-roles (event=push + ref=master + input-diff) ensures
-    # workflow_dispatch / feature-branch / unrelated-paths cases land here
-    # as false -- the wait never blocks on a build that won't happen.
-    needs: detect
-    if: needs.detect.outputs.ci_image_changed == 'true'
-    runs-on: [ self-hosted, lab ]
-    container:
-      image: nexus.lab.fahm.fr/homelab/ci:latest
-      options: --volume /mnt/scratch/qemu:/mnt/scratch/qemu:ro
-    timeout-minutes: 30
-    steps:
-      - name: Wait for ci-image sentinel for this SHA
-        env:
-          SHA: ${{ github.sha }}
-        run: |
-          set -euo pipefail
-          target=/mnt/scratch/qemu/_sentinels/ci-image-$SHA
-          deadline=$(( $(date +%s) + 25 * 60 ))
-          while [ ! -f "$target" ]; do
-            if [ "$(date +%s)" -gt "$deadline" ]; then
-              echo >&2 "Timed out waiting for $target after 25min --"
-              echo >&2 "ci-image build for this SHA likely failed or wasn't dispatched."
-              exit 1
-            fi
-            sleep 15
-          done
-          echo "Found $target -- releasing test-role."
+  # NOTE: the old wait-for-packer-build AND wait-for-ci-image sentinel-poll
+  # jobs lived here. Both are gone -- ci.yml runs packer-build and ci-image
+  # (uses:) before this workflow via `needs: [packer, ci-image]`, so the
+  # qcow2 tree is published and :latest is rebuilt before any test cell
+  # starts. The cross-workflow ordering those filesystem sentinels faked is
+  # now native job dependencies one level up. (test-nightly still reads the
+  # tree concurrently with a packer publish, so packer's publish flock
+  # stays -- see notes/concurrency_rework.md.)
 
   test-role:
     # Lands on the lab-vm pool (4 runners) -- the cap on concurrent
@@ -145,24 +95,14 @@ jobs:
     # the previous shape used a static `lab-qemu-artifacts` here, which
     # made every matrix cell compete for one slot and cancel all but
     # one -- see notes/concurrency_rework.md for the symptom.
-    needs:
-      - detect
-      - wait-for-packer-build
-      - wait-for-ci-image
-    # always() lets this evaluate even when wait-for-packer-build or
-    # wait-for-ci-image was skipped (their default when packer_changed /
-    # ci_image_changed is false); the (success || skipped) clauses filter
-    # out the genuine failure cases (sentinel timeout) so test-role doesn't
-    # read against a stale or half-rebuilt qcow2 tree, nor against a
-    # mid-rebuild :latest. The matrix-not-empty guard short-circuits the
-    # no-op case (cross-cut push, empty matrix) without spinning a runner.
+    needs: detect
+    # Both packer and ci-image ordering are handled one level up (ci.yml's
+    # `needs: [packer, ci-image]`), so test-role only gates on detect here.
+    # always() + the matrix-not-empty guard short-circuits the no-op case
+    # (cross-cut push, empty matrix) without spinning a runner.
     if: |
       always()
       && needs.detect.result == 'success'
-      && (needs.wait-for-packer-build.result == 'success'
-          || needs.wait-for-packer-build.result == 'skipped')
-      && (needs.wait-for-ci-image.result == 'success'
-          || needs.wait-for-ci-image.result == 'skipped')
       && needs.detect.outputs.matrix != '[]'
       && needs.detect.outputs.matrix != ''
     runs-on: [ self-hosted, lab-vm ]

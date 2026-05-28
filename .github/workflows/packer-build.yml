@@ -1,5 +1,23 @@
 name: packer-build
+# Reusable + directly dispatchable. ci.yml calls this via `uses:` (gated
+# on detect's packer_changed) so a packer/** push runs it nested in the
+# one ci.yml run; it keeps workflow_dispatch so a standalone rebuild of
+# just `lab`/`pug` still works without dragging the test matrix along.
+# No `push:` trigger -- ci.yml owns the push path (a push trigger here
+# would double-fire alongside ci.yml's call).
 on:
+  workflow_call:
+    inputs:
+      sources:
+        description: 'packer sources to build (e.g. "box pug"). Empty = all.'
+        type: string
+        required: false
+        default: ''
+      ubuntu:
+        description: 'Ubuntu codename'
+        type: string
+        required: false
+        default: jammy
   workflow_dispatch:
     inputs:
       sources:
@@ -10,16 +28,15 @@ on:
         description: 'Ubuntu codename'
         required: false
         default: jammy
-  push:
-    paths:
-      - 'packer/**'
-      - 'mise-tasks/packer/**'
 
-# Shared with test.yml and test-nightly.yml so packer can't rewrite the
-# qcow2 tree mid-test. Packer-build is the ONLY workflow that mounts the
-# qemu volume rw. The whole run (prepare + every build matrix cell) holds
-# one slot, so the matrix below isn't self-cancelling -- the group only
-# serialises distinct packer-build runs.
+# Shared with test-nightly.yml (and any concurrent test read) so packer
+# can't rewrite the qcow2 tree mid-test. Packer-build is the ONLY
+# workflow that mounts the qemu volume rw. A reusable workflow keeps its
+# own concurrency group when called, so packer self-serialises across
+# ci.yml runs even though ci.yml itself isn't grouped -- the whole call
+# (prepare + every build matrix cell) holds one slot, so the matrix
+# below isn't self-cancelling; the group only serialises distinct
+# packer builds.
 concurrency:
   group: lab-qemu-artifacts
   cancel-in-progress: false
@@ -135,19 +152,8 @@ jobs:
             args+=(--ubuntu "$PACKER_UBUNTU")
           fi
           mise run packer:seed-deps "${args[@]}"
-      - name: Mark build complete for waiters
-        # test.yml's wait-for-packer-build job polls this sentinel before
-        # letting the _packer test cell read the qcow2s. Push CI only
-        # tests box/box_deps (minimal aside), so the sentinel is gated on
-        # the box cell -- pug/lab are nightly/on-demand and test-nightly
-        # doesn't wait on it. A failed box build/seed leaves no sentinel,
-        # the waiter times out, and the _packer cell skips rather than
-        # asserting against half-rebuilt artifacts. pug/lab failing no
-        # longer blocks the sentinel (was: any source's failure did).
-        # Sentinels live in a dedicated subdir (not next to the qcow2s)
-        # so the tmpfiles.d age-out rule in roles/github_runner doesn't
-        # mistakenly walk the artifact tree.
-        if: matrix.source == 'box'
-        run: |
-          mkdir -p /mnt/scratch/qemu/_sentinels
-          touch "/mnt/scratch/qemu/_sentinels/complete-${{ github.sha }}"
+      # The old "Mark build complete for waiters" step (touch
+      # _sentinels/complete-<sha>) is gone -- ci.yml orders this workflow
+      # before test via `needs: packer`, so there's no cross-workflow
+      # poll left to satisfy. (ci-image keeps its own ci-image-<sha>
+      # sentinel; that path is unchanged.)

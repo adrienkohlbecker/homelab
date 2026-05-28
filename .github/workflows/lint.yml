@@ -1,9 +1,16 @@
 name: lint
-on: [ push ]
+# Reusable + directly dispatchable; ci.yml calls this via `uses:` so it
+# runs nested in the one per-push run (in parallel with detect/packer).
+# No `push:` trigger -- ci.yml owns the push path.
+on:
+  workflow_call:
+  workflow_dispatch:
 
 # Lint is cheap, stateless, and only the latest commit's status matters --
 # cancel-in-progress on pushes to the same ref so a rapid follow-up push
-# doesn't leave the older lint queued.
+# doesn't leave the older lint queued. Kept as the callee's own group so
+# lint self-cancels per-ref even though the ci.yml caller isn't grouped
+# (and so a rapid push can't cancel an in-flight packer build).
 concurrency:
   group: lint-${{ github.ref }}
   cancel-in-progress: true
