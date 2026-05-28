@@ -33,6 +33,7 @@
     group: root
     mode: "0755"
     backup: true
+    validate: bash -n %s
   become: true
   tags:
     - netplan
@@ -57,17 +58,20 @@
   tags:
     - netplan
 
-- name: Assert netplan host var is a non-empty mapping
-  # Rendering an empty `netplan` would produce `network: { version: 2 }`
-  # with no interfaces — netplan accepts it silently, networkd ends up
-  # with no .network files in /run, and the host loses configured
-  # networking on next apply. Fail loudly before the template runs.
+- name: Assert netplan host var defines at least one device stanza
+  # A `netplan` that renders to `network: {version: 2}` with no
+  # interfaces — whether empty, or a mapping carrying only top-level
+  # keys like `renderer` and no device type — is accepted silently by
+  # netplan: networkd ends up with no .network files in /run and the
+  # host loses configured networking on next apply. Fail loudly before
+  # the template runs.
   assert:
     that:
       - netplan is defined
       - netplan is mapping
       - netplan | length > 0
-    fail_msg: "host_vars must define a non-empty `netplan` mapping (see host_vars/lab.yml for the schema)"
+      - netplan.keys() | list | intersect(['ethernets', 'modems', 'wifis', 'bonds', 'bridges', 'vlans', 'vrfs', 'tunnels']) | length > 0
+    fail_msg: "host_vars must define a `netplan` mapping with at least one device stanza (ethernets/bonds/bridges/vlans/...); see host_vars/lab.yml for the schema"
   tags:
     - netplan
 
@@ -108,6 +112,7 @@
     group: root
     mode: "0600"
     backup: true
+    validate: python3 -c 'import yaml,sys; yaml.safe_load(open(sys.argv[1]))' "%s"
   become: true
   register: netplan_cfg
   tags:
