@@ -32,7 +32,11 @@
 #               just attach via `--network={{ name }}` and don't
 #               need to know the parent / subnet / ip_range — see
 #               roles/homeassistant for an example (it consumes
-#               `mac_iot`).
+#               `mac_iot`). Precondition: the network's subnet/gateway
+#               derive from the parent's gathered primary IPv4 (subnet =
+#               that address's network, gateway = its .1), so the parent
+#               must carry the VLAN's address, the VLAN must route via .1,
+#               and `block` must sit within the parent network (asserted).
 #
 # Hosts that don't trunk any macvlan-bearing VLANs leave
 # macvlan_blocks undefined or empty; the role no-ops cleanly.
