@@ -45,6 +45,13 @@
   register: netplan_apply_async
   changed_when: true
 
+- name: Drop the multiplexed SSH master so the canary forces a fresh handshake
+  # ansible.cfg sets ControlPersist; without resetting, wait_for_connection
+  # can answer over the cached master on a brief carrier flap while a fresh
+  # TCP/SSH handshake would fail -- the false-positive the notes warn about,
+  # which would cancel the rollback on a box that is only partially up.
+  meta: reset_connection
+
 - name: Wait for SSH to re-establish (canary for the rollback timer)
   # If this fails (timeout: 60), the auto-rollback (deadline: 90) is
   # still pending and will restore the prior config. On the next
@@ -64,13 +71,14 @@
     jid: "{{ netplan_apply_async.ansible_job_id }}"
   register: netplan_apply_result
   until: netplan_apply_result.finished
-  retries: 10
+  retries: 5
   delay: 3
 
 - name: Touch cancel-marker so the timer no-ops when it fires
   # Belt: even if the timer fires between this and the stop below
-  # (would need apply + wait_for_connection to exceed 90 s), the
-  # script reads /run/netplan_keep and exits cleanly.
+  # (worst case: wait_for_connection's 65 s + the reap's ≤15 s = 80 s,
+  # under the timer's 90 s), the script reads /run/netplan_keep and exits
+  # cleanly.
   file:
     path: /run/netplan_keep
     state: touch
