@@ -59,6 +59,20 @@
   changed_when: false
   failed_when: macvlan_verify_arp.stdout_lines != ['1', '2']
 
+# The parent-side ARP-flux mitigation (install.yml) is the load-bearing half;
+# without it the LAN router sees the host IP bounce between parent and child
+# MACs. Loops the blocks keyed on parent — shared parents re-check harmlessly.
+- name: _verify | Assert the ARP-flux sysctls hold on each parent
+  command: >-
+    sysctl -n net.ipv4.conf.{{ item.parent }}.arp_ignore
+    net.ipv4.conf.{{ item.parent }}.arp_announce
+  loop: "{{ macvlan_blocks | default([]) }}"
+  loop_control:
+    label: "{{ item.parent }}"
+  register: macvlan_verify_parent_arp
+  changed_when: false
+  failed_when: macvlan_verify_parent_arp.stdout_lines != ['1', '2']
+
 # Existence + driver + parent only; the upper-/29 ip_range is exercised
 # end-to-end by roles/homeassistant/tasks/_verify.yml (a container actually
 # attaches and gets an address from the pool).
