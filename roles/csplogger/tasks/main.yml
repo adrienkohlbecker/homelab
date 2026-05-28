@@ -16,8 +16,11 @@
     tasks_from: conf_d
   vars:
     nginx_conf_d_args:
+      # nginx_apt is registered only by the nginx role's install task; default
+      # it so a tag-scoped run (`--tags csplogger`, no nginx install in the
+      # play) doesn't die on an undefined variable.
       name: csp_ratelimit.conf
-      reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
+      reload: "{{ not (ansible_check_mode and (nginx_apt.changed | default(false))) }}"
       content: |
         # Managed by roles/csplogger.
 
