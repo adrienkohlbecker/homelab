@@ -4,7 +4,7 @@
 Description=nexus
 After=network-online.target
 Wants=network-online.target
-StartLimitInterval=600
+StartLimitIntervalSec=600
 StartLimitBurst=3
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
@@ -29,6 +29,12 @@ Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N
 
+# Nexus's DB + config ride the snapshotted services dataset (/nexus-data);
+# the blob store is bind-mounted from /mnt/scratch (NOT snapshotted) by
+# design -- cached artifacts are reconstructible from upstream, so keeping
+# them out of snapshots keeps replication small. After a scratch loss the
+# cache is cold and re-proxies on demand; a DB restore against an empty
+# blob store is expected, not corruption.
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
