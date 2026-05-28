@@ -1,7 +1,9 @@
 ---
 description: Triage a homelab service — resolve host(s), gather state, summarize
 argument-hint: <service-name>
-allowed-tools: Bash(ssh lab:*), Bash(ssh pug:*), Bash(ssh bunk:*), Bash(ansible-inventory:*), Bash(git log:*), Bash(curl:*), Read, Grep, Glob
+model: sonnet
+disable-model-invocation: true
+allowed-tools: Bash(ssh lab:*), Bash(ssh pug:*), Bash(ssh fox:*), Bash(ansible-inventory:*), Bash(git log:*), Bash(curl -sS --max-time 5 http://netdata.*), Read, Grep, Glob
 ---
 
 Triage the homelab service **$ARGUMENTS** on prod.
@@ -38,7 +40,7 @@ Per `(host, unit)`:
 
 Once per service (local repo):
 
-- `git log --since=30.days.ago --format='%h %cr %s' -- roles/$ARGUMENTS/ host_vars/<h>.yml group_vars/all.yml` — commits within blast radius. Mark "unpushed" if `git log origin/master..HEAD -- roles/$ARGUMENTS/` is non-empty.
+- `git log --since=30.days.ago --format='%h %cr %s' -- roles/$ARGUMENTS/ host_vars/<h>.yml group_vars/all/` — commits within blast radius. Mark "unpushed" if `git log origin/master..HEAD -- roles/$ARGUMENTS/` is non-empty.
 
 Skip non-applicable commands gracefully (podman inspect on a native daemon, healthcheck run on a no-health container).
 
