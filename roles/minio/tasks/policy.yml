@@ -1,0 +1,25 @@
+# Provision one MinIO IAM policy from a committed JSON document
+# (files/<src>). The file is shipped to a stable path so `mcli admin
+# policy add` reads it in place -- no /tmp round-trip -- and the creates:
+# sentinel on MinIO's on-disk policy dir gates re-registration. Looped
+# from data.yml with `minio_policy` = {name, src}.
+- name: policy | Stage file for {{ minio_policy.name }}
+  copy:
+    src: "{{ minio_policy.src }}"
+    dest: /opt/minio/policies/{{ minio_policy.src }}
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+    validate: jq . %s
+  become: true
+  tags:
+    - minio
+
+- name: policy | Register {{ minio_policy.name }}
+  command: mcli admin policy add default {{ minio_policy.name }} /opt/minio/policies/{{ minio_policy.src }}
+  args:
+    creates: /mnt/minio/.minio.sys/config/iam/policies/{{ minio_policy.name }}
+  become: true
+  tags:
+    - minio

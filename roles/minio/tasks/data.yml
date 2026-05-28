@@ -6,11 +6,16 @@
   tags:
     - minio
 
+# Feed the keys on stdin (access key line 1, secret line 2) so the secret
+# never lands in argv / the process table; mcli reads them from stdin when
+# only the alias is passed.
 - name: data | Create users
-  command: mcli admin user add default {{ item.access_key }} {{ item.secret_key }}
+  command: mcli admin user add default
   args:
+    stdin: "{{ item.access_key }}\n{{ item.secret_key }}"
     creates: /mnt/minio/.minio.sys/config/iam/users/{{ item.access_key }}
   loop: "{{ minio_users }}"
+  become: true
   tags:
     - minio
 
@@ -19,97 +24,40 @@
   args:
     creates: /mnt/minio/{{ item }}
   loop: "{{ minio_buckets }}"
-  tags:
-    - minio
-
-- name: data | Check if policy exists
-  stat:
-    path: /mnt/minio/.minio.sys/config/iam/policies/useronly
-  register: minio_useronly_policy_dir
   become: true
   tags:
     - minio
 
-- name: data | Upload policy
-  when: not minio_useronly_policy_dir.stat.exists
-  copy:
-    src: useronly.json
-    dest: /tmp/useronly.json
+- name: data | Create policy dir
+  file:
+    path: /opt/minio/policies
+    state: directory
     owner: root
     group: root
-    mode: "0644"
-    backup: true
-    validate: jq . %s
+    mode: "0755"
   become: true
   tags:
     - minio
 
-- name: data | Add useronly policy
-  when: not minio_useronly_policy_dir.stat.exists
-  command: mcli admin policy add default useronly /tmp/useronly.json
-  args:
-    creates: /mnt/minio/.minio.sys/config/iam/policies/useronly
-    stdin: "{{ lookup('file', role_path + '/files/useronly.json') }}"
+# `useronly` scopes a user to their own bucket; `admins` grants full
+# admin + s3 -- it's the policy the OIDC groups:["admins"] claim attaches
+# at login (see MINIO_IDENTITY_OPENID_CLAIM_NAME=groups in minio.cfg.j2),
+# named to match Authelia's group so the claim->policy lookup just works.
+- name: data | Provision IAM policies
+  include_tasks: policy.yml
+  loop:
+    - { name: useronly, src: useronly.json }
+    - { name: admins, src: admins.json }
+  loop_control:
+    loop_var: minio_policy
   tags:
     - minio
 
-- name: data | Remove tempfile
-  when: not minio_useronly_policy_dir.stat.exists
-  file:
-    path: /tmp/useronly.json
-    state: absent
-  become: true
-  tags:
-    - minio
-
-- name: data | Attach policy
+- name: data | Attach useronly policy
   command: mcli admin policy set default useronly user={{ item.access_key }}
   args:
     creates: /mnt/minio/.minio.sys/config/iam/policydb/users/{{ item.access_key }}.json
   loop: "{{ minio_users }}"
-  tags:
-    - minio
-
-# `admins` is the IAM policy that the OIDC `groups: ["admins"]` claim
-# attaches to a user at login (see MINIO_IDENTITY_OPENID_CLAIM_NAME=groups
-# in minio.cfg.j2). It grants full admin + s3 perms -- equivalent to the
-# built-in consoleAdmin policy, but named to match Authelia's group so
-# the claim→policy lookup just works.
-- name: data | Check if admins policy exists
-  stat:
-    path: /mnt/minio/.minio.sys/config/iam/policies/admins
-  register: minio_admins_policy_dir
-  become: true
-  tags:
-    - minio
-
-- name: data | Upload admins policy
-  when: not minio_admins_policy_dir.stat.exists
-  copy:
-    src: admins.json
-    dest: /tmp/admins.json
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-    validate: jq . %s
-  become: true
-  tags:
-    - minio
-
-- name: data | Add admins policy
-  when: not minio_admins_policy_dir.stat.exists
-  command: mcli admin policy add default admins /tmp/admins.json
-  args:
-    creates: /mnt/minio/.minio.sys/config/iam/policies/admins
-  tags:
-    - minio
-
-- name: data | Remove admins tempfile
-  when: not minio_admins_policy_dir.stat.exists
-  file:
-    path: /tmp/admins.json
-    state: absent
   become: true
   tags:
     - minio
