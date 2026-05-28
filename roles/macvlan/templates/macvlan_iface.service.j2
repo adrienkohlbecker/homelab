@@ -57,7 +57,10 @@ ExecStart=/bin/ip addr add {{ _host_ip }}/32 dev {{ macvlan_args.name }}
 ExecStart=/sbin/sysctl -q -w net.ipv4.conf.{{ macvlan_args.name }}.arp_ignore=1
 ExecStart=/sbin/sysctl -q -w net.ipv4.conf.{{ macvlan_args.name }}.arp_announce=2
 ExecStart=/bin/ip link set {{ macvlan_args.name }} up
-ExecStart=/bin/ip route add {{ macvlan_args.block }} dev {{ macvlan_args.name }} proto static
+# `src` pins the preferred source for host-originated traffic into the block
+# to this iface's IP (same cross-iface-identity concern as the ARP knobs),
+# instead of the kernel's default source selection.
+ExecStart=/bin/ip route add {{ macvlan_args.block }} dev {{ macvlan_args.name }} proto static src {{ _host_ip }}
 ExecStop=-/bin/ip link delete {{ macvlan_args.name }}
 
 [Install]
