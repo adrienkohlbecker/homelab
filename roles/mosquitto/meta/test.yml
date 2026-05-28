@@ -1,4 +1,4 @@
-# _setup.yml imports podman/install + _test/nginx; both are pre-baked
-# into box_deps (see packer/seed_deps.yml), so route there to skip
-# ~140s of backports + podman + nginx install on every test run.
+# _setup.yml imports podman/install, pre-baked into box_deps (see
+# packer/seed_deps.yml), so route there to skip ~140s of backports +
+# podman install on every test run.
 machine: box_deps
