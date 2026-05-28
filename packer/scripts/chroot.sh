@@ -56,6 +56,16 @@ ff02::1         ip6-allnodes
 ff02::2         ip6-allrouters
 EOF
 
+# Retry transient apt failures (Nexus restart, packet loss) on the
+# build VM.
+# Acquire::Retries::Delay (apt 2.7+ in noble) adds backoff between
+# attempts so a Nexus restart of a few seconds isn't burned through
+# instantly; apt on jammy retries immediately.
+echo 'Acquire::Retries "3";' >/etc/apt/apt.conf.d/80-retries
+if [ "$UBUNTU_NAME" != "jammy" ]; then
+  echo 'Acquire::Retries::Delay "true";' >>/etc/apt/apt.conf.d/80-retries
+fi
+
 # Configure apt. Called twice: once now with the build-time mirror
 # ($UBUNTU_MIRROR, defaults to Nexus), and once at the very end with
 # the upstream pair so the shipped image points at canonical Ubuntu
@@ -501,6 +511,28 @@ apt-get install --yes openssh-server qemu-guest-agent
 # don't exist. Drop a snippet under sshd_config.d so the override
 # wins even if /etc/ssh/sshd_config is later edited.
 echo 'PasswordAuthentication no' >/etc/ssh/sshd_config.d/00-no-password-auth.conf
+
+# Configure networking. Match by name glob so the same image works
+# under any qemu device topology (packer's vs. testrole's direct-kernel
+# boot give the NIC different kernel names — ens3/ens4/etc.) and on
+# baremetal (eno1/enp0s31f6/...). All Predictable Network Interface
+# Names start with "en"; only old-style "eth*" is excluded, which
+# requires net.ifnames=0 on modern Ubuntu and so is essentially extinct.
+#
+# Multi-NIC hosts: this stanza claims every "en*" interface as
+# "primary", so each onboard NIC will DHCP independently. Bonded /
+# LACP setups need bare-metal callers to overwrite this file with an
+# explicit netplan before first boot.
+cat <<EOF >/etc/netplan/01-netcfg.yaml
+network:
+version: 2
+ethernets:
+  primary:
+    match:
+      name: "en*"
+    dhcp4: true
+    dhcp-identifier: mac
+EOF
 
 # Configure vagrant user
 

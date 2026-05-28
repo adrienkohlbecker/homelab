@@ -246,29 +246,6 @@ debootstrap "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR"
 # there (empty), not the build host's DNS settings.
 
 cp /etc/hostid /mnt/etc
-cp /etc/apt/apt.conf.d/80-retries /mnt/etc/apt/apt.conf.d
-
-# Configure networking. Match by name glob so the same image works
-# under any qemu device topology (packer's vs. testrole's direct-kernel
-# boot give the NIC different kernel names — ens3/ens4/etc.) and on
-# baremetal (eno1/enp0s31f6/...). All Predictable Network Interface
-# Names start with "en"; only old-style "eth*" is excluded, which
-# requires net.ifnames=0 on modern Ubuntu and so is essentially extinct.
-#
-# Multi-NIC hosts: this stanza claims every "en*" interface as
-# "primary", so each onboard NIC will DHCP independently. Bonded /
-# LACP setups need bare-metal callers to overwrite this file with an
-# explicit netplan before first boot.
-cat <<EOF >/mnt/etc/netplan/01-netcfg.yaml
-network:
-  version: 2
-  ethernets:
-    primary:
-      match:
-        name: "en*"
-      dhcp4: true
-      dhcp-identifier: mac
-EOF
 
 # Chroot into the new OS via arch-chroot (arch-install-scripts). It
 # bind-mounts proc/sys/dev/devpts/run/efivarfs and /etc/resolv.conf
