@@ -13,13 +13,13 @@
     - mosquitto
 
 # Per-service podman network with DNS enabled so consumers (z2m) can
-# reach mosquitto by container name. See redis/tasks/main.yml for the
-# full reasoning.
+# reach mosquitto at `mosquitto.dns.podman`. See redis/tasks/main.yml for
+# the full reasoning.
 - name: Create mosquitto podman network
   when: not ansible_check_mode
   containers.podman.podman_network:
     name: mosquitto
-    # See redis/tasks/main.yml -- explicit so z2m can resolve `mosquitto`.
+    # See redis/tasks/main.yml -- explicit so z2m can resolve `mosquitto.dns.podman`.
     disable_dns: false
     state: present
   become: true
@@ -68,9 +68,13 @@
   tags:
     - mosquitto
 
+# No validate: -- mosquitto only parses its config at full broker startup; the
+# offline --test-config flag landed in broker 2.1 and the image pins 2.0.21, so
+# there is no host-side parser. A startup parse failure is caught by the unit's
+# Type=notify/--sdnotify=healthy gate instead.
 - name: Configure mosquitto
-  copy:
-    src: mosquitto.conf
+  template:
+    src: mosquitto.conf.j2
     dest: /mnt/services/mosquitto/config/mosquitto.conf
     owner: mosquitto
     group: mosquitto

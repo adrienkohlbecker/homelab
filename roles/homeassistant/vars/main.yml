@@ -9,7 +9,7 @@
 # restriction stays pinned to whichever interface ends up holding the
 # mac_iot IP -- no separate runtime probe needed.
 homeassistant_networks:
-  # mosquitto bridge: HA needs aardvark-dns resolution of "mosquitto"
+  # mosquitto bridge: HA needs aardvark-dns resolution of "mosquitto.dns.podman"
   # to reach the broker. Discovery/zeroconf is intentionally NOT
   # enabled on this adapter (see core.network.j2 + main.yml).
   - name: mosquitto
