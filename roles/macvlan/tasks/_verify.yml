@@ -90,6 +90,19 @@
     or 'macvlan' not in macvlan_verify_podman.stdout
     or item.parent not in macvlan_verify_podman.stdout
 
+# Inverse of the above: a block without podman_network must NOT leave a network
+# behind (guards against the create task losing its `when` gate).
+- name: _verify | Assert no podman network for blocks without podman_network
+  command: podman network inspect {{ item.name }}
+  loop: "{{ macvlan_blocks | default([]) }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: not (item.podman_network | default(false))
+  register: macvlan_verify_no_podman
+  become: true
+  changed_when: false
+  failed_when: macvlan_verify_no_podman.rc == 0
+
 # Self-heal regression guard for the child-device BindsTo: removing the iface
 # (a udev remove) must flip the unit to inactive, and starting it again must
 # recreate the iface. Destructive, but _verify only runs against a throwaway
