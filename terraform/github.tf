@@ -72,33 +72,3 @@ resource "github_actions_secret" "mise_github_token" {
   secret_name = "MISE_GITHUB_TOKEN"
   value       = var.mise_github_token
 }
-
-# MAILGUN_API_KEY + MAILGUN_DOMAIN consumed by .github/workflows/test*.yml
-# (cross-cut and failure-notification mail steps via Mailgun's HTTP API,
-# see CLAUDE.md "Continuous Integration"). The pushed key is the
-# domain-scoped, role=sending key minted in mailgun.tf; the master
-# account API key (var.mailgun_api_key) is never exposed to CI.
-resource "github_actions_secret" "mailgun_api_key" {
-  repository  = "homelab"
-  secret_name = "MAILGUN_API_KEY"
-  value       = mailgun_api_key.ci_send_noreply.secret
-
-  lifecycle {
-    # mailgun_api_key.ci_send_noreply.secret refreshes to null on every
-    # refresh (wgebis/mailgun provider bug -- Read can't recover the
-    # secret post-Create). Without ignore_changes here, every apply
-    # would push null to the GitHub MAILGUN_API_KEY secret and break
-    # CI mail. Rotation still works: `tofu apply -replace=mailgun_
-    # api_key.ci_send_noreply` mints a new secret in the Create
-    # response, replace_triggered_by below forces this resource to be
-    # re-created with the new value, the GitHub secret updates.
-    ignore_changes       = [value]
-    replace_triggered_by = [mailgun_api_key.ci_send_noreply]
-  }
-}
-
-resource "github_actions_secret" "mailgun_domain" {
-  repository  = "homelab"
-  secret_name = "MAILGUN_DOMAIN"
-  value       = mailgun_domain.noreply_fahm_fr.name
-}
