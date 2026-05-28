@@ -24,6 +24,9 @@ Delegate=yes
 TimeoutSec=120
 RestartSec=5
 Type=notify
+# NotifyAccess=all (not main): with --sdnotify=healthy the readiness ping comes
+# from podman/conmon relaying the container healthcheck, not the unit's main
+# PID -- tightening to `main` would stop the unit ever reaching active.
 NotifyAccess=all
 SyslogIdentifier=%N
 
