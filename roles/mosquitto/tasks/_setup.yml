@@ -2,12 +2,3 @@
   import_role:
     name: podman
     tasks_from: install
-
-- name: _test | Setup dependencies
-  shell: |
-    set -euo pipefail
-    mkdir /mnt/services
-  args:
-    executable: /bin/bash
-    creates: /mnt/services
-  become: true
