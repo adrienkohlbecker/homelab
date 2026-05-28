@@ -1,8 +1,10 @@
 # Per-stack podman network so the arr stack + plex/jellyfin can reach
 # each other by name via aardvark-dns (e.g. sonarr→plex.dns.podman) instead
 # of round-tripping through nginx/authelia for cross-container API calls.
-# Pattern matches roles/redis + roles/mosquitto. Subnet is left to netavark
-# autoallocation -- no cross-host consumer keys on the CIDR.
+# Module args match roles/redis + roles/mosquitto; split into its own file
+# (unlike those) so consumer _setup.yml can import just the network via
+# `import_role: name: media, tasks_from: network`. Subnet is left to
+# netavark autoallocation -- no cross-host consumer keys on the CIDR.
 - name: Create media podman network
   when: not ansible_check_mode
   containers.podman.podman_network:
