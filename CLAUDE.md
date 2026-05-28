@@ -166,6 +166,8 @@ The harness lives in `test/` (Python, asyncio).
 
 `test/testrole.py <role>` boots `box` (default) and applies the role end-to-end. `test/testall.py` fans out role × machine in parallel. Load-bearing flags: `--machine {minimal,box,lab,pug}`, `--keep` (leave VM up for SSH debug), `testall.py --retry-failed`. Exit codes: `0` success, `1` converge, `124` timeout, `125` idempotence, `130` cancelled. Output → `test/out/<machine>.<role>.ansi` (journal + last 50 lines tailed on failure). Artifact trees under `/mnt/scratch/qemu/<codename>/` (Linux) or `packer/artifacts/<codename>/` (Mac); macOS needs `xorriso` for the cloud-init seed iso.
 
+**A flake must fail fast, not inflate CI duration.** Transient first-boot hiccups (sshd slow to bind, a half-open SLIRP hostfwd) are a fact of life on the qemu fixtures. The contract: every wait in the harness (`ensure_booted`/`ensure_ssh`, banner probe, socket close) is **bounded** so a stuck boot surfaces as a quick failure (~the SSH deadline) the operator re-runs — never a silent hang that burns the full per-cell `timeout` and makes a green-on-retry cell look like it *took* 25 min. Don't paper over flakes with auto-retry (it hides a real regression behind a re-roll); fix the unbounded wait that let the flake balloon, and keep the boot diagnosable (the ZBM stage logs to serial — see [packer/scripts/chroot.sh](packer/scripts/chroot.sh)).
+
 ### Debugging prod hosts directly
 
 SSH to `lab`/`pug`/`bunk` works out of the box (key+sudoers configured). For investigation — service logs, daemon state, hardware probes, on-disk config — connect and run diagnostics yourself rather than asking the operator to paste output (`ssh lab 'sudo fan2go detect'`).
