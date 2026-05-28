@@ -106,8 +106,11 @@
   vars:
     systemd_unit_args:
       src: "{{ macvlan_args.name }}"
-      condition: "{{ not (ansible_check_mode and systemd_unit_file.changed) }}"
-      restart: "{{ systemd_unit_file.changed }}"
+      # Per-unit result fact (systemd_unit exposes <basename>_<type>_result)
+      # rather than the shared systemd_unit_file register, which a second unit
+      # write in this loop would clobber. See roles/systemd_unit/tasks/install.yml.
+      condition: "{{ not (ansible_check_mode and vars[macvlan_args.name ~ '_service_result'].changed) }}"
+      restart: "{{ vars[macvlan_args.name ~ '_service_result'].changed }}"
   tags:
     - macvlan
 
