@@ -638,13 +638,13 @@ else
   # a competing static netplan here would fight cloud-init's generated one.
   cat <<EOF >/etc/netplan/01-netcfg.yaml
 network:
-version: 2
-ethernets:
-  primary:
-    match:
-      name: "en*"
-    dhcp4: true
-    dhcp-identifier: mac
+  version: 2
+  ethernets:
+    primary:
+      match:
+        name: "en*"
+      dhcp4: true
+      dhcp-identifier: mac
 EOF
 
   # Configure vagrant user
