@@ -1,3 +1,17 @@
+- name: Assert mosquitto_accounts is provided
+  assert:
+    that:
+      - mosquitto_accounts is defined
+      - mosquitto_accounts is mapping
+      - mosquitto_accounts | length > 0
+      - mosquitto_accounts | dict2items | rejectattr('value.password', 'defined') | list | length == 0
+      - mosquitto_accounts | dict2items | rejectattr('value.salt', 'defined') | list | length == 0
+    fail_msg: >-
+      mosquitto_accounts must be a non-empty mapping of username to a dict
+      with password and salt; define it in group_vars / host_vars.
+  tags:
+    - mosquitto
+
 # Per-service podman network with DNS enabled so consumers (z2m) can
 # reach mosquitto by container name. See redis/tasks/main.yml for the
 # full reasoning.
