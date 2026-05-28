@@ -158,3 +158,73 @@
   become: true
   tags:
     - swap
+
+#######################################################################
+# zram-backed swap (primary, high-priority)
+#######################################################################
+# Compressed-RAM swap fronting the disk/zvol overflow above. swap-priority
+# 100 (set in the generator config) sits above the disk/zvol swap, which
+# carries the kernel's default negative auto-priority, so routine paging
+# compresses into RAM and the disk/zvol is reached only under genuine
+# exhaustion. zram is deadlock-free (no ZFS allocation on the page-out
+# path), which is what keeps the zvol cold on the mirror hosts.
+- name: Install systemd-zram-generator
+  when: swap_zram is defined
+  apt:
+    name: systemd-zram-generator
+    state: present
+  register: swap_zram_installed
+  become: true
+  tags:
+    - swap
+
+- name: Configure zram swap device
+  when: swap_zram is defined
+  template:
+    src: zram-generator.conf.j2
+    dest: /etc/systemd/zram-generator.conf
+    owner: root
+    group: root
+    mode: '0644'
+    backup: true
+    validate: python3 -c 'import configparser,sys; configparser.ConfigParser().read(sys.argv[1])' "%s"
+  register: swap_zram_conf
+  become: true
+  tags:
+    - swap
+
+# zram-generator is a systemd generator: daemon-reload re-runs it to
+# (re)build the dev-zram0.swap + systemd-zram-setup@zram0 units from the
+# config. Starting dev-zram0.swap pulls in the setup service (Requires=),
+# which sizes /dev/zram0 and swaps it on. Restart on config change so a
+# resize takes effect.
+#
+# Skipped in check mode when the package install or config write is only
+# simulated: the generator hasn't run, so dev-zram0.swap doesn't exist
+# yet and the systemd module would fail looking for it.
+- name: Activate zram swap device
+  when:
+    - swap_zram is defined
+    - not (ansible_check_mode and (swap_zram_installed.changed or swap_zram_conf.changed))
+  systemd:
+    name: dev-zram0.swap
+    state: "{{ 'restarted' if swap_zram_conf.changed else 'started' }}"
+    daemon_reload: "{{ swap_zram_conf.changed }}"
+  become: true
+  tags:
+    - swap
+
+# Higher than the disk-tuned default of 60: paging into compressed RAM is
+# cheap, so prefer it over evicting file cache (especially on cloud hosts
+# whose cache re-reads come from slow network-backed disk).
+- name: Tune vm.swappiness for zram
+  when: swap_zram is defined
+  ansible.posix.sysctl:
+    name: vm.swappiness
+    value: "{{ swap_swappiness | default(100) | string }}"
+    sysctl_file: /etc/sysctl.d/30-swap.conf
+    state: present
+    reload: true
+  become: true
+  tags:
+    - swap

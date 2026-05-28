@@ -1,0 +1,47 @@
+# Swap role _verify: assert the live swap topology matches what the role
+# configured -- zram active and primary (highest priority), the disk/zvol
+# overflow coexisting below it, and swappiness tuned. testrole.py /
+# testall.py only (qemu); never site.yml. See notes/swap_strategy.md.
+
+- name: _verify | Read active swap devices with priorities
+  command: swapon --show=NAME,PRIO --noheadings
+  changed_when: false
+  register: _swap_verify_swapon
+
+- name: _verify | Zram swap active at the configured (primary) priority
+  when: swap_zram is defined
+  vars:
+    _zram_lines: "{{ _swap_verify_swapon.stdout_lines | select('search', 'zram') | list }}"
+  assert:
+    that:
+      - _zram_lines | length == 1
+      - _zram_lines[0].split()[1] | int == swap_zram.priority | default(100) | int
+    fail_msg: >-
+      zram swap missing or not at the configured priority (expected
+      {{ swap_zram.priority | default(100) }}, disk/zvol swap defaults
+      negative so this is primary): {{ _swap_verify_swapon.stdout }}
+
+- name: _verify | Disk/zvol overflow swap coexists below zram
+  when:
+    - swap_zram is defined
+    - swap_zvol is defined or swap_partition is defined
+  assert:
+    that: _swap_verify_swapon.stdout_lines | length >= 2
+    fail_msg: >-
+      Expected zram + a disk/zvol overflow device, got:
+      {{ _swap_verify_swapon.stdout }}
+
+- name: _verify | Read vm.swappiness
+  when: swap_zram is defined
+  slurp:
+    src: /proc/sys/vm/swappiness
+  register: _swap_verify_swappiness
+
+- name: _verify | Swappiness tuned to the configured value
+  when: swap_zram is defined
+  assert:
+    that:
+      - (_swap_verify_swappiness.content | b64decode | trim | int) == (swap_swappiness | default(100) | int)
+    fail_msg: >-
+      vm.swappiness is {{ _swap_verify_swappiness.content | b64decode | trim }},
+      expected {{ swap_swappiness | default(100) }}.

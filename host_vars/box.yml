@@ -47,6 +47,10 @@ swap_zvol:
   dataset: rpool/swap
   size: 1G
 
+# Exercises the zram-primary path in CI (zram + the zvol overflow below).
+swap_zram:
+  size: 2G
+
 # Consumer-side bind-mounts are gated off for test fixtures: the
 # producer datasets exist (and pools.sh seeded the pools) but the
 # datasets carry no real homelab data, so consumers that bind-mount

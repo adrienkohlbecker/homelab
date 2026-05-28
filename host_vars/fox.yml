@@ -15,6 +15,17 @@
 # and the *_mount consumers off.
 zfs_root: false
 
+# zram-only swap on this 4G VM: compression roughly doubles usable memory
+# and gives an OOM backstop the stock image lacks. No disk overflow yet --
+# the deadlock-free 8200 partition lands with the ZFS-root cutover (it needs
+# the new image's partition table). Higher swappiness than the fleet default
+# because this is the only RAM-constrained host: lean on cheap compressed swap
+# to keep the working set resident (the local NVMe disk is fast, so this is a
+# small-RAM call, not a slow-disk one). See notes/swap_strategy.md.
+swap_zram:
+  size: 4G
+swap_swappiness: 150
+
 # The Hetzner private-network NIC (terraform attaches fox to 10.123.55.2 on it).
 # cloud-init never configured this interface -- it was attached after first boot
 # -- so the hetzner_private_net role drops in an additive netplan stanza to bring

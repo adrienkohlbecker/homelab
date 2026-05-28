@@ -75,8 +75,10 @@
 # role instead),
 # firewall (the home nftables template is WAN/VLAN/wg-specific; fox relies on
 # its Hetzner Cloud firewall), resolved/pihole/dnscrypt (home DNS), the
-# zfs/boot/swap + hardware/UPS/sensor roles (cloud VM), macvlan/avahi/samba
-# (home LAN), keepalived (no VIP), static_curl (not needed). headscale's own
+# zfs/boot + hardware/UPS/sensor roles (cloud VM), macvlan/avahi/samba
+# (home LAN), keepalived (no VIP), static_curl (not needed). The swap role
+# IS run (zram-only here; the disk overflow is a ZFS-root-cutover concern).
+# headscale's own
 # vhost is auth: none; netdata's is auth: required and reaches lab's Authelia
 # over wg0.
 - name: External VPS (fox)
@@ -88,6 +90,7 @@
     - hostname
     - apt
     - apt_upgrade
+    - swap
     - hetzner_private_net
     - wireguard
     - locale

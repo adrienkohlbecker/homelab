@@ -1,0 +1,11 @@
+# {{ ansible_managed }}
+# zram swap: the primary, high-priority swap device. Routine cold-page
+# eviction compresses into RAM here; the disk/zvol swap (negative default
+# priority) is reached only under genuine exhaustion. See
+# notes/swap_strategy.md.
+[zram0]
+# Capped at MemTotal so a worst-case incompressible fill can't consume
+# more RAM than the box has (zram stores incompressible pages ~1:1).
+zram-size = min(ram, {{ (swap_zram.size | human_to_bytes) // 1048576 }})
+compression-algorithm = {{ swap_zram.algorithm | default('zstd') }}
+swap-priority = {{ swap_zram.priority | default(100) }}
