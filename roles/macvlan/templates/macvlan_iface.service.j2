@@ -12,10 +12,11 @@ Defaults:
                so sibling blocks on the same host pick distinct MACs
                (same seed = same MAC = L2 collision).
 
-Drift: the unit is Type=oneshot + RemainAfterExit, so a manual
-`ip link delete <name>` leaves systemd still reporting the unit active —
-a reconverge won't recreate the iface (the restart only fires on unit-file
-change). Next boot re-runs ExecStart and heals it.
+Manual-deletion caveat: Type=oneshot + RemainAfterExit keeps systemd
+reporting the unit `active` even after a hand-run `ip link delete <name>`
+has removed the iface, so a reconverge won't notice or recreate it (the
+role only restarts on a unit-file change). To bring it back, restart the
+unit (`systemctl restart <name>`, which re-runs ExecStart) or reboot.
 #}
 {% set _host_ip = macvlan_args.host_ip | default(macvlan_args.block | ansible.utils.ipmath(0)) %}
 {% set _mac = macvlan_args.mac_address | default('82:48:10' | random_mac(seed=(inventory_hostname ~ '_' ~ macvlan_args.name))) %}
