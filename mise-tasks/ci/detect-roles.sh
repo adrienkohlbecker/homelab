@@ -33,10 +33,9 @@
 #                                              push (gates ci.yml's ci-image
 #                                              call, ordered before test).
 #
-# A change to a helper role (one with no roles/<name>/tasks/main.yml) is
-# expanded via ci:role-deps into the set of consumer roles. So editing
-# roles/usergroup_immediate/tasks/main.yml fans out to every role that
-# imports usergroup_immediate.
+# A changed role is also expanded via ci:role-deps into the set of roles
+# that import it (its consumers) -- so editing a helper like systemd_unit or
+# nginx fans out to every role that uses it, not just the role's own cell.
 #
 # Local testing:
 #   mise run ci:detect-roles                # no token -> diff base = HEAD~1
@@ -107,18 +106,57 @@ default_machine_for() {
   echo "${m:-box}"
 }
 
-# Cross-cut regex: changes to these paths invalidate every role's matrix
-# entry, so we don't try to be clever -- emit empty matrix + cross_cut=true
-# and let the operator pick a targeted subset via workflow_dispatch.
-# host_vars/box.yml and host_vars/minimal.yml are the test fixtures that
-# every push cell consumes; lab-qemu.yml / pug-qemu.yml only matter for
-# on-demand --machine lab/pug runs and aren't cross-cut for push CI.
-# test/*.py is the whole harness (testrole/testall import launch, machine,
-# arch, utils, ... -- a bug in any of it mis-runs every cell), so the slice
-# is all of test/*.py, not just the entrypoints. ansible.cfg and
-# vault-client.sh govern every ansible invocation + vault decryption, so a
-# change to either can alter any cell's behaviour.
-CROSS_CUT_RE='^(group_vars/all/[^/]+\.(yml|yaml)|group_vars/test\.yml|host_vars/(box|minimal)\.yml|test/[^/]+\.py|ansible\.cfg|vault-client\.sh|mise\.toml|data/network_topology\.(yml|schema\.json))$'
+# ---------------------------------------------------------------------------
+# Path patterns -- edit here. Each group is a list of unanchored EREs (one
+# per line, trailing comment = why); join_re OR-joins them and each consumer
+# adds its own anchors. Keep the per-pattern comments current.
+# ---------------------------------------------------------------------------
+join_re() {
+  local IFS='|'
+  printf '%s' "$*"
+}
+
+# Cross-cut: a change to any of these can't be attributed to specific roles
+# (it affects every cell), so we emit an empty matrix + cross_cut=true and
+# let the operator dispatch a targeted subset.
+CROSS_CUT_PATTERNS=(
+  'group_vars/all/[^/]+\.(yml|yaml)'          # shared defaults every role reads
+  'group_vars/test\.yml'                      # test-scope vars/vault
+  'host_vars/(box|minimal)\.yml'              # push-CI fixtures (lab/pug host_vars aren't cross-cut)
+  'test/[^/]+\.py'                            # harness modules (testrole/testall import launch, machine, arch, utils)
+  'test/inventory\.ini'                       # shared inventory
+  'test/(playbooks|minimal)/.+'               # wrapper playbooks (site/_setup/_verify/_mirrors) + minimal cloud-init seed
+  'ansible\.cfg'                              # governs every ansible invocation
+  'vault-client\.sh'                          # governs vault decryption
+  'mise\.toml'                                # toolchain + env (also a ci-image input)
+  'pyproject\.toml'                           # harness python deps (also a ci-image input)
+  'uv\.lock'                                  # pinned harness python deps (also a ci-image input)
+  'data/network_topology\.(yml|schema\.json)' # topology consumed across roles
+)
+CROSS_CUT_RE="^($(join_re "${CROSS_CUT_PATTERNS[@]}"))\$"
+
+# Packer inputs: rebuild the qcow2 tree (packer_changed) + add the _packer
+# cell. Prefix match -- any file under these dirs.
+PACKER_PATH_PATTERNS=(
+  'packer/'            # image build definitions + provisioning scripts
+  'mise-tasks/packer/' # the packer:* task wrappers
+)
+PACKER_PATHS_RE="^($(join_re "${PACKER_PATH_PATTERNS[@]}"))"
+
+# ci-image inputs: a change here (on a master push) rebuilds + republishes
+# the ci :latest image (ci_image_changed). Exact full-path match.
+CI_IMAGE_INPUT_PATTERNS=(
+  'Dockerfile'            # the image recipe
+  'mise\.toml'            # toolchain pinned into the image
+  'pyproject\.toml'       # python deps baked into the image
+  'uv\.lock'              # pinned python deps
+  'packer/qemu\.pkr\.hcl' # packer plugins pre-installed in the image
+)
+CI_IMAGE_INPUTS_RE="^($(join_re "${CI_IMAGE_INPUT_PATTERNS[@]}"))\$"
+
+# Role path: pull the role name out of roles/<name>/... (used with grep -oE,
+# so it matches just the leading segment).
+ROLE_PATH_RE='^roles/[^/]+'
 
 emit() {
   local matrix=$1 cross_cut=$2 packer_changed=${3:-false} ci_image_changed=${4:-false}
@@ -383,10 +421,42 @@ fi
 CHANGED=$(git diff --name-only "$BASE" HEAD)
 log "comparing ${BASE:0:12}..$(git rev-parse --short HEAD): $(echo "$CHANGED" | grep -c . || true) file(s) changed"
 
+# Substrate-rebuild flags, computed BEFORE the cross-cut decision so they
+# survive it: a uv.lock / mise.toml bump is BOTH a cross-cut change AND a
+# ci-image input -- the image must still rebuild (else a later targeted
+# dispatch resolves stale deps), and a packer change riding along with a
+# cross-cut edit must still rebuild the qcow2 tree.
+#
+# packer_changed: any packer/ or mise-tasks/packer/ change rebuilds the
+# qcow2 tree via ci.yml's packer call (ordered before test, needs: packer).
+# The _packer cell, added below on the role path, re-exercises roles/_packer
+# against the rebuilt image.
+packer_changed=false
+if echo "$CHANGED" | grep -qE "$PACKER_PATHS_RE"; then
+  packer_changed=true
+  log "packer inputs changed -> packer_changed=true"
+fi
+
+# ci_image_changed gates ci.yml's ci-image call (ordered before test,
+# needs: ci-image). The image is only republished on master pushes, so
+# triple-gate on event=push + ref=master + input-diff; anything else leaves
+# it false and the ci-image call is skipped -- test never waits on a build
+# that won't happen.
+ci_image_changed=false
+if [ "${GITHUB_EVENT_NAME:-}" = "push" ] &&
+  [ "${GITHUB_REF:-}" = "refs/heads/master" ] &&
+  echo "$CHANGED" | grep -qE "$CI_IMAGE_INPUTS_RE"; then
+  ci_image_changed=true
+  log "ci-image inputs changed (master push) -> ci_image_changed=true"
+fi
+
+# Cross-cut: the change can't be attributed to specific roles, so emit an
+# empty matrix + cross_cut=true (operator mail) -- but carry the substrate
+# flags through, so the image / qcow2 tree still rebuild for this push.
 if echo "$CHANGED" | grep -qE "$CROSS_CUT_RE"; then
   log "cross-cut paths changed -> empty matrix + operator mail:"
   echo "$CHANGED" | grep -E "$CROSS_CUT_RE" | sed 's/^/[detect-roles]     /' >&2
-  emit "[]" "true"
+  emit "[]" "true" "$packer_changed" "$ci_image_changed"
   exit 0
 fi
 
@@ -399,9 +469,13 @@ fi
 # role-deps returns the consumer set (empty for a leaf role with no
 # importers). The `|| true` keeps the empty case from tripping `set -o
 # pipefail` -- grep -oE exits 1 with no matches (no-role-paths diff is fine).
-DIRECT=$(echo "$CHANGED" | grep -oE '^roles/[^/]+' | sed 's|^roles/||' | sort -u || true)
+DIRECT=$(echo "$CHANGED" | grep -oE "$ROLE_PATH_RE" | sed 's|^roles/||' | sort -u || true)
 
 ROLES=""
+# A packer change rebuilds the qcow2 tree, so test roles/_packer against it.
+if [ "$packer_changed" = true ]; then
+  ROLES="_packer"
+fi
 for role in $DIRECT; do
   if in_universe "$role"; then
     ROLES="$ROLES $role"
@@ -418,38 +492,6 @@ for role in $DIRECT; do
     fi
   done
 done
-
-# Any change under packer/ or mise-tasks/packer/ (the same paths that
-# trigger packer-build.yml) rebuilds the qcow2 tree and so should
-# re-exercise roles/_packer's assertions against the rebuilt image.
-# detect-roles only scans roles/<X>/ paths by default, so without this
-# clause those edits would wait for the nightly run to catch a
-# regression. packer_changed gates ci.yml's packer call, which is ordered
-# before test (needs: packer), so the _packer cell only reads the qcow2s
-# *after* packer-build republishes them -- firing on _packer-in-matrix
-# alone would also rebuild on pushes that only touch roles/_packer/.
-packer_changed=false
-if echo "$CHANGED" | grep -qE '^(packer/|mise-tasks/packer/)'; then
-  ROLES="$ROLES _packer"
-  packer_changed=true
-  log "packer inputs changed -> +_packer cell, packer_changed=true"
-fi
-
-# Any change to a ci-image.yml input means ci.yml will rebuild + republish
-# the :latest image for this SHA; test must run after that so its cells
-# resolve the new image. ci_image_changed gates ci.yml's ci-image call,
-# which is ordered before test (needs: ci-image). The image is only
-# republished on master pushes, so triple-gate on event=push + ref=master
-# + input-diff; anything else (workflow_dispatch, feature-branch push, no
-# input touched) leaves the boolean false and the ci-image call is skipped
-# -- test never waits on a build that won't happen.
-ci_image_changed=false
-if [ "${GITHUB_EVENT_NAME:-}" = "push" ] &&
-  [ "${GITHUB_REF:-}" = "refs/heads/master" ] &&
-  echo "$CHANGED" | grep -qE '^(Dockerfile|mise\.toml|pyproject\.toml|uv\.lock|packer/qemu\.pkr\.hcl)$'; then
-  ci_image_changed=true
-  log "ci-image inputs changed (master push) -> ci_image_changed=true"
-fi
 
 ROLES_DEDUPED=$(echo "$ROLES" | tr ' ' '\n' | grep -v '^$' | sort -u || true)
 if [ -n "$ROLES_DEDUPED" ]; then
