@@ -17,6 +17,17 @@ esac
 [ -f "$file" ] || exit 0
 
 root=$(git -C "$(dirname "$file")" rev-parse --show-toplevel 2>/dev/null) || exit 0
+
+# Confine to the project repo and its worktrees: a worktree shares the project's
+# git common dir, an unrelated repo does not. Without this, editing a .tf that
+# lives in a hostile clone would run that clone's mise/tofu (and load its
+# provider plugins from .terraform/) as the operator.
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+  proj=$(git -C "$CLAUDE_PROJECT_DIR" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0
+  here=$(git -C "$root" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || exit 0
+  [ "$proj" = "$here" ] || exit 0
+fi
+
 tf="$root/terraform"
 
 # .terraform/ is gitignored -- skip silently in fresh worktrees that haven't
@@ -30,5 +41,10 @@ if out=$(mise exec -- tofu validate 2>&1); then
   exit 0
 fi
 
-printf 'tofu validate failed (%s):\n%s\n' "$tf" "$out" >&2
+# Feed the failure back as additionalContext (guaranteed into Claude's context,
+# wrapped in a system reminder) rather than bare stderr. Non-blocking: the edit
+# already succeeded.
+msg=$(printf 'tofu validate failed (%s):\n%s' "$tf" "$out")
+jq -n --arg ctx "$msg" \
+  '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $ctx}}'
 exit 0
