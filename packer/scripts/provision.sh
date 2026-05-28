@@ -128,6 +128,13 @@ fi
 
 # Install helpers
 
+# The cloud base image ships a primed /var/lib/apt/lists whose cached base
+# jammy InRelease lets apt-get update record a "Hit" and skip re-fetching the
+# base suite -- but its Packages files aren't all present, so apt rejects the
+# whole base suite and the install below can't locate base packages
+# (debootstrap, zfsutils-linux, ...). Wipe the dir so update re-fetches every
+# index cleanly -- the same guard write_sources_list applies in chroot.sh.
+find /var/lib/apt/lists -type f -delete
 apt-get update
 apt-get install --yes arch-install-scripts debootstrap gdisk zfsutils-linux
 
