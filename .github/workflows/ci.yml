@@ -41,6 +41,13 @@ jobs:
     # ci_image_changed gates (consumed by the packer / ci-image calls).
     # test.yml no longer detects -- it takes the matrix as an input.
     runs-on: [ self-hosted, lab ]
+    # actions:read lets detect-roles query the Actions API for the last
+    # entirely-successful push run of this workflow on the branch (its diff
+    # base). contents:read is the checkout default -- listed explicitly
+    # because a permissions block replaces the default set, it doesn't merge.
+    permissions:
+      contents: read
+      actions: read
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest
     outputs:
@@ -56,6 +63,9 @@ jobs:
         env:
           GITHUB_EVENT_NAME: ${{ github.event_name }}
           INPUTS_ROLES: ${{ inputs.roles }}
+          # detect-roles queries the Actions API for the last green push run
+          # as its diff base; GITHUB_TOKEN is not auto-exported to steps.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: mise run ci:detect-roles
 
   lint:
