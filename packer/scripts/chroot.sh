@@ -9,7 +9,7 @@ set -euxo pipefail
 # - Inherited from provision.sh: DISKS, DISKS_COUNT, LAYOUT,
 #   PARTITIONS_EFI, PARTITIONS_SWAP, HOSTNAME, USERNAME.
 #   PARTITIONS_SWAP is only set for single-disk (LAYOUT=""); mirror
-#   variants take swap off rpool/swap (the zvol provision.sh creates).
+#   variants swap on the rpool/swap zvol provision.sh creates.
 # All list-shaped vars are space-delimited strings (bash arrays don't
 # survive `export`); use them unquoted to word-split.
 
@@ -541,8 +541,8 @@ datasource_list: [ Hetzner, ConfigDrive, NoCloud, None ]
 EOF
 
   # Image ships at 20G but deploys onto cpx22's ~76G, leaving rpool's partition
-  # (p3, last on disk) short with the GPT backup header mid-disk.
-  # hetzner_growpart.service grows p3 (growpart relocates the backup header) and
+  # (p4, last on disk) short with the GPT backup header mid-disk.
+  # hetzner_growpart.service grows p4 (growpart relocates the backup header) and
   # runs `zpool online -e` once on first boot — late + sentinel-gated so a
   # failure can't wedge the root mount. autoexpand covers any later disk resize.
   zpool set autoexpand=on rpool
@@ -552,7 +552,7 @@ EOF
 set -euo pipefail
 
 disk=/dev/sda
-part=3
+part=4
 
 rc=0
 growpart "$disk" "$part" || rc=$?

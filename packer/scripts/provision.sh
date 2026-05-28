@@ -27,8 +27,8 @@
 #    refuse to load it.
 set -euxo pipefail
 
-# DISKS, EXTRA_DISKS, LAYOUT, EXTRA_POOLS, SOURCE_NAME, UBUNTU_NAME,
-# UBUNTU_MIRROR come from packer's shell-provisioner env block (see
+# DISKS, EXTRA_DISKS, LAYOUT, SWAP_SIZE, EXTRA_POOLS, SOURCE_NAME,
+# UBUNTU_NAME, UBUNTU_MIRROR come from packer's shell-provisioner env block (see
 # qemu.pkr.hcl's variant_config map). Bare-metal callers export them
 # by hand before running. EXTRA_DISKS/EXTRA_POOLS are consumed by
 # pools.sh; the others by this script and chroot.sh. The
@@ -79,24 +79,36 @@ zpool_export_retry() {
 
 # Per-disk partition paths, computed once and exported as space-delimited
 # strings so chroot.sh consumes them directly without re-running partdev.
-# Partition layout (sgdisk below): 1 = EFI, 2 = swap (single-disk only),
-# 3 = rpool. Mirror variants drop the swap partition entirely and put
-# swap on an rpool zvol below — mirror rpool already gives the
-# redundancy that the per-disk swap + mdadm raid0 stripe used to fake,
-# without the failure mode where a single dead disk takes the whole
-# stripe (and any swapped-out pages) with it. The future-use
-# metadata-vdev slot (partition 5) is reserved on the mirror-rpool
-# variants only; nothing consumes it yet (see
-# notes/special-vdev-sizing.md for the planned wiring).
+# Partition layout (sgdisk below, numbered in on-disk order): 1 = BIOS
+# boot (EF02), 2 = EFI, 3 = swap (single-disk) / metadata vdev (mirror),
+# 4 = rpool. rpool is last so a cloud-image deploy can grow it into the
+# rest of the disk (chroot.sh's hetzner_growpart grows p4). Each gets a
+# GPT name (sgdisk -c: bios/efi/swap|meta/rpool) for readable lsblk/gdisk
+# output; consumers resolve by filesystem UUID or device path, never
+# by-partlabel (non-unique across the mirror's identically-named disks).
+#
+# Swap is the disk-backed *overflow* behind zram, which the swap role
+# runs as the primary high-priority device (notes/swap_strategy.md),
+# sized by SWAP_SIZE (per-variant in qemu.pkr.hcl):
+#   - single-disk: a dedicated 8200 partition (p3) — a real partition is
+#     deadlock-free, unlike swap on a zvol.
+#   - mirror: drops the swap partition and uses an rpool zvol (created
+#     below). The mirror rpool already gives the redundancy the old
+#     per-disk swap + mdadm raid0 stripe faked, without the failure mode
+#     where one dead disk took the whole stripe (and its swapped-out
+#     pages) down; zram-primary keeps the zvol cold so its residual
+#     deadlock risk is only reached in true exhaustion.
+# The metadata-vdev slot (partition 3, mirror variants only) is reserved;
+# nothing consumes it yet (see notes/special-vdev-sizing.md).
 PARTITIONS_EFI=""
 PARTITIONS_SWAP=""
 PARTITIONS_RPOOL=""
 for d in $DISKS; do
-  PARTITIONS_EFI+="${PARTITIONS_EFI:+ }$(partdev "$d" 1)"
+  PARTITIONS_EFI+="${PARTITIONS_EFI:+ }$(partdev "$d" 2)"
   if [ "$LAYOUT" = "" ]; then
-    PARTITIONS_SWAP+="${PARTITIONS_SWAP:+ }$(partdev "$d" 2)"
+    PARTITIONS_SWAP+="${PARTITIONS_SWAP:+ }$(partdev "$d" 3)"
   fi
-  PARTITIONS_RPOOL+="${PARTITIONS_RPOOL:+ }$(partdev "$d" 3)"
+  PARTITIONS_RPOOL+="${PARTITIONS_RPOOL:+ }$(partdev "$d" 4)"
 done
 export PARTITIONS_EFI PARTITIONS_SWAP PARTITIONS_RPOOL
 
@@ -138,20 +150,19 @@ for disk in $DISKS; do
   blkdiscard -f "$disk" || true
   sgdisk --zap-all "$disk"
 
-  sgdisk -n1:1M:+512M -t1:EF00 "$disk"       # EFI (EF00 = EFI system partition)
-  sgdisk -a1 -n4:24K:+1000K -t4:EF02 "$disk" # MBR booting (EF02 = BIOS boot partition)
+  sgdisk -a1 -n1:24K:+1000K -t1:EF02 -c1:bios "$disk" # MBR booting (EF02 = BIOS boot partition)
+  sgdisk -n2:1M:+512M -t2:EF00 -c2:efi "$disk"        # EFI (EF00 = EFI system partition)
 
-  # Mirror variants put swap on an rpool zvol (created below), so the
-  # dedicated per-disk swap partition only exists for single-disk
-  # installs. The post-rpool zvol create is where mirror swap lives.
+  # Single-disk swap partition, sized by SWAP_SIZE. Mirror variants swap
+  # on the rpool zvol below instead (see notes/swap_strategy.md).
   if [ "$LAYOUT" = "" ]; then
-    sgdisk -n2:0:+4G -t2:8200 "$disk" # Swap (8200 = Linux Swap)
+    sgdisk "-n3:0:+$SWAP_SIZE" -t3:8200 -c3:swap "$disk" # Swap (8200 = Linux Swap)
   fi
 
   if [ "$LAYOUT" = "mirror" ]; then
-    sgdisk -n5:-2G:0 -t5:BF01 "$disk" # metadata vdev (BF01 = Solaris /usr & Mac ZFS, default when doing zpool create)
+    sgdisk -n3:0:+2G -t3:BF01 -c3:meta "$disk" # metadata vdev (BF01 = Solaris /usr & Mac ZFS, default when doing zpool create)
   fi
-  sgdisk -n3:0:0 -t3:BF00 "$disk" # rpool (BF00 = Solaris root)
+  sgdisk -n4:0:0 -t4:BF00 -c4:rpool "$disk" # rpool (BF00 = Solaris root)
 
   sgdisk -p "$disk"
 done
@@ -189,9 +200,10 @@ zpool create -f \
 zfs create -o canmount=off -o mountpoint=none rpool/ROOT
 zfs create -o canmount=noauto -o mountpoint=/ "rpool/ROOT/$UBUNTU_NAME"
 
-# Mirror variants put swap on this zvol instead of a per-disk swap
-# partition + mdadm raid0; mirror rpool already provides redundancy.
-# Options follow OpenZFS swap-zvol guidance:
+# Mirror swap lands on this zvol instead of a per-disk swap partition +
+# mdadm raid0; mirror rpool already provides redundancy, and the swap
+# role can grow it to the per-host size later. Options follow OpenZFS
+# swap-zvol guidance:
 #   -b $(getconf PAGESIZE): volblocksize = kernel page size so one
 #     page-out is one ZFS block (4K on x86_64 / arm64 4K-pages kernel).
 #   compression=zle: cheap zero-page squash; pages are already-compressed
@@ -204,7 +216,7 @@ zfs create -o canmount=noauto -o mountpoint=/ "rpool/ROOT/$UBUNTU_NAME"
 #     forever for no benefit.
 if [ "$LAYOUT" = "mirror" ]; then
   zfs create \
-    -V 8G \
+    -V "$SWAP_SIZE" \
     -b "$(getconf PAGESIZE)" \
     -o compression=zle \
     -o logbias=throughput \

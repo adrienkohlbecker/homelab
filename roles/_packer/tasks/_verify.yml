@@ -168,9 +168,9 @@
 # --- mdadm-EFI multi-disk variants (lab variant) ---
 #
 # chroot.sh's LAYOUT=mirror branch builds an mdadm RAID1 EFI mirror
-# (/dev/md/efi) + RAID0 swap (/dev/md/swap) across the OS disks, and
-# registers per-disk "rEFInd (disk N)" NVRAM entries so the host
-# survives losing any single disk. Detect via /dev/md/efi presence --
+# (/dev/md/efi) across the OS disks (mirror swap is an rpool zvol, not
+# mdadm), and registers per-disk "rEFInd (disk N)" NVRAM entries so the
+# host survives losing any single disk. Detect via /dev/md/efi presence --
 # the LAYOUT="" branch (single-disk variants) doesn't create it.
 # Skipping the block on single-disk variants is intentional: the
 # universal rEFInd assertion above already covers them.
@@ -190,10 +190,9 @@
       become: true
       loop:
         - /dev/md/efi
-        - /dev/md/swap
       register: _packer_verify_md_test
 
-    - name: _verify | EFI mirror + swap array are clean
+    - name: _verify | EFI mirror is clean
       ansible.builtin.assert:
         that: item.rc == 0
         fail_msg: >-
@@ -224,8 +223,8 @@
 # rpool/ROOT so ZBM knows what cmdline to hand the kernel. The pool
 # also has to be *healthy* -- a degraded mirror on lab is invisible
 # without a status probe (zpool import succeeds in degraded state),
-# and the mdadm assertions above only cover the /boot/efi + swap
-# arrays, not rpool.
+# and the mdadm assertions above only cover the /boot/efi array,
+# not rpool.
 #
 # Properties asserted below are the ones whose absence is silent (the
 # pool still imports/boots without them) but functionally load-bearing:
@@ -304,14 +303,14 @@
 
 # --- swap active (universal) ---
 #
-# Single-disk variants format the partition-2 swap directly; the lab
-# variant builds a RAID0 mdadm-swap across all partition-2s. Either
-# way chroot.sh writes the fstab entry and systemd-fstab-generator
-# activates it at boot. We test the live `swapon` state rather than
-# parsing fstab because that exercises the full path (fstab entry +
-# device resolution + mkswap signature + systemd activation); a
-# broken fstab entry would leave swap inactive at runtime and the
-# kernel would silently OOM under memory pressure instead of paging.
+# chroot.sh bakes swap on every variant (sized by SWAP_SIZE): single-disk
+# variants format the 8200 partition, mirror variants the rpool/swap
+# zvol. Either way chroot.sh writes the fstab entry and
+# systemd-fstab-generator activates it at boot. We test the live `swapon`
+# state rather than parsing fstab because that exercises the full path
+# (fstab entry + device resolution + mkswap signature + systemd
+# activation); a broken fstab entry would leave swap inactive at runtime
+# and the kernel would silently OOM under memory pressure instead of paging.
 - name: _verify | Read active swap devices
   ansible.builtin.command: swapon --show=NAME --noheadings
   changed_when: false
