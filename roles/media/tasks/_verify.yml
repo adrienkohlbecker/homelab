@@ -4,8 +4,9 @@
 # reads back correct while zfs-autobackup's `-s local` picker would skip it,
 # so `zfs get` is the only reliable witness. The podman network, media group
 # and storage dirs are consumed by ~10 service roles that don't run during
-# this role's test, so assert them here. Expected dataset properties mirror
-# main.yml; if they drift this fails loudly.
+# this role's test, so assert them here. Expected dataset properties and
+# library dirs come from vars/main.yml, shared with main.yml so the two
+# halves cannot drift.
 
 - name: _verify | Media podman network exists
   command:
@@ -27,6 +28,25 @@
   changed_when: false
   failed_when: "'media' not in (media_verify_groups.stdout.split())"
 
+- name: _verify | Mountpoint property set locally
+  when: zfs_root
+  command:
+    argv:
+      - zfs
+      - get
+      - -H
+      - -p
+      - -o
+      - source,value
+      - mountpoint
+      - "{{ media_pool ~ '/media' }}"
+  register: media_verify_mountpoint
+  changed_when: false
+  failed_when: >-
+    (media_verify_mountpoint.stdout.split('\t') | first | trim) != 'local'
+    or (media_verify_mountpoint.stdout.split('\t') | last | trim) != '/mnt/media'
+  become: true
+
 - name: _verify | Dataset mounted at /mnt/media
   when: zfs_root
   command:
@@ -38,7 +58,7 @@
       - /mnt/media
   register: media_verify_findmnt
   changed_when: false
-  failed_when: media_verify_findmnt.stdout | trim != (zfs_tank_filesystem | default('tank')) ~ '/media'
+  failed_when: media_verify_findmnt.stdout | trim != media_pool ~ '/media'
   become: true
 
 - name: _verify | Extra property set locally with expected value
@@ -52,7 +72,7 @@
       - -o
       - source,value
       - "{{ item.key }}"
-      - "{{ (zfs_tank_filesystem | default('tank')) ~ '/media' }}"
+      - "{{ media_pool ~ '/media' }}"
   register: media_verify_prop
   changed_when: false
   failed_when: >-
@@ -61,12 +81,19 @@
   loop: "{{ media_dataset_properties | dict2items }}"
   loop_control:
     label: "{{ item.key }}={{ item.value }}"
-  vars:
-    media_dataset_properties:
-      'autobackup:bak': 'false'
-      recordsize: '1048576'
-      special_small_blocks: '32768'
   become: true
+
+- name: _verify | Dataset root owned by operator with media group
+  when: zfs_root
+  stat:
+    path: /mnt/media
+  register: media_verify_root
+  failed_when: >-
+    not media_verify_root.stat.exists
+    or not media_verify_root.stat.isdir
+    or media_verify_root.stat.pw_name != ansible_user_id
+    or media_verify_root.stat.gr_name != 'media'
+    or media_verify_root.stat.mode != '0775'
 
 - name: _verify | Storage directories exist with media-group ownership
   stat:
@@ -78,12 +105,23 @@
     or media_verify_dir.stat.pw_name != ansible_user_id
     or media_verify_dir.stat.gr_name != 'media'
     or media_verify_dir.stat.mode != '0775'
-  loop:
-    - /mnt/media/Lidarr
-    - /mnt/media/Live Music
-    - /mnt/media/Movies
-    - /mnt/media/Music
-    - /mnt/media/Other
-    - /mnt/media/TV
+  loop: "{{ media_library_dirs }}"
   loop_control:
     label: "{{ item }}"
+
+- name: _verify | Dataset root is writable as operator
+  when: zfs_root
+  file:
+    path: /mnt/media/.verify_probe
+    state: touch
+    mode: '0600'
+  changed_when: false
+  become: false
+
+- name: _verify | Remove write probe
+  when: zfs_root
+  file:
+    path: /mnt/media/.verify_probe
+    state: absent
+  changed_when: false
+  become: false
