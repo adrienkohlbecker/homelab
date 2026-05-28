@@ -75,6 +75,10 @@
     # file — the mitigation has to be live on the already-up parent now,
     # not only after the next reload/reboot.
     sysctl_set: true
+    # Persist to a role-owned drop-in, not the shared /etc/sysctl.conf, so
+    # the role's sysctl state stays self-contained (matches swap/kdump/
+    # firewall/tailscale).
+    sysctl_file: /etc/sysctl.d/30-macvlan.conf
   loop:
     - { key: arp_ignore, value: '1' }
     - { key: arp_announce, value: '2' }
