@@ -26,40 +26,32 @@
   tags:
     - mosquitto
 
-- name: Add mosquitto group
-  group:
-    name: mosquitto
-    system: true
-  become: true
+- name: Set up mosquitto system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: mosquitto
   tags:
     - mosquitto
 
-- name: Add mosquitto user
-  user:
-    name: mosquitto
-    group: mosquitto
-    createhome: false
-    system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
-  become: true
-  register: mosquitto_user
-  tags:
-    - mosquitto
-
-- name: Create configuration directory
+# /mnt/services/mosquitto/config holds mosquitto.conf + pwfile;
+# /mnt/services/sqlite/mosquitto is the bind-mounted persistence dir where
+# the broker writes mosquitto.db (its own format, no symlinks -- a plain dir
+# like authelia's, not the symlink-oriented sqlite_dataset helper).
+- name: Create mosquitto config and persistence directories
   when: not (ansible_check_mode and mosquitto_user.changed)
   file:
     dest: "{{ item }}"
     state: directory
     owner: mosquitto
     group: mosquitto
-    mode: "0755"
+    mode: "0750"
   become: true
   tags:
     - mosquitto
   loop:
-    - /mnt/services/mosquitto
     - /mnt/services/mosquitto/config
     - /mnt/services/sqlite/mosquitto
 
@@ -82,7 +74,7 @@
     dest: /mnt/services/mosquitto/config/mosquitto.conf
     owner: mosquitto
     group: mosquitto
-    mode: "0644"
+    mode: "0640"
     backup: true
   register: mosquitto_conf
   become: true
