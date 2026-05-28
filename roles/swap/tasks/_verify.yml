@@ -21,6 +21,29 @@
       {{ swap_zram.priority | default(100) }}, disk/zvol swap defaults
       negative so this is primary): {{ _swap_verify_swapon.stdout }}
 
+- name: _verify | Read zram0 device size
+  when: swap_zram is defined
+  command: cat /sys/block/zram0/disksize
+  changed_when: false
+  register: _swap_verify_zram_size
+
+# Catches the generator silently falling back to its default size (e.g. a
+# size key the installed version doesn't honor). Expected = min(configured,
+# MemTotal); zram rounds down by a page, so allow a small band.
+- name: _verify | Zram device sized per config (capped at RAM)
+  when: swap_zram is defined
+  vars:
+    _expected_mb: "{{ [(swap_zram.size | human_to_bytes) // 1048576, ansible_memtotal_mb] | min }}"
+    _actual_mb: "{{ (_swap_verify_zram_size.stdout | int) // 1048576 }}"
+  assert:
+    that:
+      - _actual_mb | int >= (_expected_mb | float * 0.95) | int
+      - _actual_mb | int <= (_expected_mb | float * 1.05) | int
+    fail_msg: >-
+      zram0 is {{ _actual_mb }} MB, expected ~{{ _expected_mb }} MB (min of
+      configured {{ swap_zram.size }} and MemTotal {{ ansible_memtotal_mb }} MB)
+      -- check zram-fraction/max-zram-size in zram-generator.conf.
+
 - name: _verify | Disk/zvol overflow swap coexists below zram
   when:
     - swap_zram is defined

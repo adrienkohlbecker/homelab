@@ -48,8 +48,10 @@ swap_zvol:
   size: 1G
 
 # Exercises the zram-primary path in CI (zram + the zvol overflow below).
+# 3G is deliberately not the generator's 2G default on this 4G VM, so the
+# _verify size assertion actually proves the config drove the size.
 swap_zram:
-  size: 2G
+  size: 3G
 
 # Consumer-side bind-mounts are gated off for test fixtures: the
 # producer datasets exist (and pools.sh seeded the pools) but the
