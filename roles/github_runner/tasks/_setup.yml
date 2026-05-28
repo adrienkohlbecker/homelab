@@ -1,8 +1,8 @@
-# Test-harness setup for roles/github_runner. The role no longer ships
-# a runner container image (the runner runs directly as the
-# github_runner system user); this file's job is just to bring up the
-# rootless-podman prerequisites and the kvm/subgid passthrough fixture
-# that prod uses for workflow `container:` blocks.
+# Test-harness setup for roles/github_runner. The runner runs directly
+# as the github_runner system user (no container image); this file's
+# job is just to bring up the rootless-podman prerequisites and the
+# kvm/subgid passthrough fixture that prod uses for workflow
+# `container:` blocks.
 
 # Synthesize a kvm group on the test VM (box has no /dev/kvm so there
 # is no upstream-managed kvm group). The role's service_user_args adds

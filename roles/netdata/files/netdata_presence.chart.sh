@@ -9,10 +9,7 @@
 # exist; a template with `on: <missing-chart>` silently fails to
 # instantiate. The gap-closer here lets us alert on "configured chart
 # never appeared in netdata's chart registry" (renamed collector job,
-# disabled plugin, upstream context rename, etc.). Replaces the
-# netdata_context_present / netdata_collector_present prometheus
-# metrics that custom_exporter used to scrape from /api/v2/contexts
-# and /api/v1/charts.
+# disabled plugin, upstream context rename, etc.).
 #
 # Self-reference: this collector runs *inside* netdata. If netdata is
 # wedged hard enough that the local HTTP API doesn't answer, charts.d

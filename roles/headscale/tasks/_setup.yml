@@ -30,9 +30,9 @@
   become: true
 
 # --- OIDC boot-test fixture -------------------------------------------------
-# Prod points headscale's OIDC at Authelia, which the box VM can't reach, so the
-# OIDC path used to be entirely untested. Stand up headscale's built-in
-# `mockoidc` as a local issuer the box CAN reach; host_vars/box.yml then enables
+# Prod points headscale's OIDC at Authelia, which the box VM can't reach. Stand
+# up headscale's built-in `mockoidc` as a local issuer the box CAN reach so the
+# OIDC path gets exercised in-test; host_vars/box.yml then enables
 # OIDC (+PKCE) against it -- keyed on _role_under_test so only the headscale test
 # turns it on (the tailscale role's headscale-on-box stays OIDC-free). With
 # only_start_if_oidc_is_available:true, headscale reaching `active` proves it

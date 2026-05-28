@@ -440,7 +440,7 @@
 # the static `devices = { ... }` clause in nftables.conf so the firewall
 # can come up at boot before wg-quick@wg0 brings the iface up (nft
 # errors out with ENOENT when a flowtable device doesn't exist yet,
-# which previously left the host without a firewall on every boot until
+# which would leave the host without a firewall on every boot until
 # manual restart). The unit's lifecycle is bound to wg-quick@wg0 via
 # WantedBy/PartOf, and nftables.service's ExecReload drop-in re-runs it
 # after a reload wipes the runtime flowtable. See the unit-file header

@@ -2,11 +2,10 @@
 # coretemp; CHA_FAN_1 follows the hotter of pug's rotational HDDs
 # (high startPwm=120 because that fan stalls below it).
 #
-# CHA_FAN_2 used to follow nct6798/temp1 (SYSTIN) in the fancontrol-era
-# config, but SYSTIN reads ~51°C idle on this box (probably positioned
-# near a heat source, not at the intake) and would have pinned the fan
-# at high PWM nonstop on fan2go. coretemp's Package id 0 is a more
-# honest "is the CPU actually warm?" signal.
+# CHA_FAN_2 tracks coretemp's Package id 0, not nct6798/temp1 (SYSTIN):
+# SYSTIN reads ~51°C idle on this box (probably positioned near a heat
+# source, not at the intake) and would pin the fan at high PWM nonstop.
+# Package id 0 is a more honest "is the CPU actually warm?" signal.
 #
 # Rotational disks are pulled from group_vars/all.yml:rotational_disks_by_id
 # (computed at apply time from ansible_devices) and aggregated via a

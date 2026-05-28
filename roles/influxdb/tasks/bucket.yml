@@ -16,10 +16,8 @@
 # Outputs:
 #   influxdb_bucket_<bucket>_token  -- the bucket-scoped write-auth
 #     token. Per-bucket key so two callers with different buckets in
-#     the same play don't clobber each other (the earlier shared
-#     `influxdb_bucket_id` / `_org_id` facts had exactly that bug; the
-#     ids are now block-scoped vars rather than facts at all). The
-#     bucket name is sanitised through regex_replace for the key.
+#     the same play don't clobber each other. The bucket name is
+#     sanitised through regex_replace for the key.
 #
 # An operator who only wants the token (HA UI paste, etc.) can also
 # read it out-of-band at any time via

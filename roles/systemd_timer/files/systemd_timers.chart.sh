@@ -12,9 +12,7 @@
 # Pairs with netdata's systemd_service_unit_failed_state alert: between
 # the two, "ran and failed" (unit state) and "never ran / ran too long
 # ago" (overdue) are both covered for every timer registered with the
-# systemd_timer role. Replaces the cron_next_run_timestamp /
-# cron_last_success_timestamp metrics that custom_exporter used to scrape
-# out of /var/log/jobs.
+# systemd_timer role.
 #
 # Per-timer metadata comes from /etc/netdata/charts.d/systemd_timers.d/<name>.conf;
 # each file declares period_secs=<n> and is written by

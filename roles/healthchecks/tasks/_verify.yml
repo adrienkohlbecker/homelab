@@ -1,7 +1,7 @@
 # Loopback probe -- exercises the container directly via the published
 # port. Retries cover cold-start (--health-start-period is 10s; budget
 # below gives 2 minutes to cover restart-after-deploy too). Uses the
-# canonical Host header since ALLOWED_HOSTS no longer includes localhost.
+# canonical Host header since ALLOWED_HOSTS doesn't include localhost.
 - name: _verify | Healthchecks answers /api/v3/status/ on its loopback port
   uri:
     url: http://localhost:{{ service_ports.healthchecks }}/api/v3/status/

@@ -116,11 +116,10 @@
 # callers that invoke charts_d outside that flow (e.g. role _setup
 # paths) need this uri probe as the equivalent backstop.
 #
-# Was previously a wait_for on /run/netdata/netdata.pipe -- that named
-# pipe is gone in netdata 1.46.x+ (netdatacli switched to HTTP-only),
-# so the pipe never appears and the wait_for would time out at 120s
-# even though netdata was perfectly healthy. /api/v1/info is the
-# functional check.
+# Don't wait_for /run/netdata/netdata.pipe -- that named pipe is gone in
+# netdata 1.46.x+ (netdatacli switched to HTTP-only), so it never appears
+# and the wait would time out at 120s even on a perfectly healthy netdata.
+# /api/v1/info is the functional check.
 - name: charts_d | Wait for netdata HTTP API
   when:
     - _netdata_charts_d_condition

@@ -30,12 +30,12 @@
 # whenever wg-quick is (re)started and brings wg0 up; ConditionPath
 # is re-evaluated on each start.
 #
-# Previously this used `ExecCondition=/bin/sh -c '... || exit 255'`,
-# which by systemd docs *should* skip the unit silently on exit-255
-# but in practice on jammy's systemd 249 the unit ends up in 'failed'
-# state and `systemctl start --wait` returns non-zero -- the static
-# Condition* directives are the documented "silent skip" mechanism
-# and behave consistently across systemd versions.
+# Not `ExecCondition=/bin/sh -c '... || exit 255'`: systemd docs say
+# exit-255 *should* skip the unit silently, but in practice on jammy's
+# systemd 249 the unit ends up in 'failed' state and `systemctl start
+# --wait` returns non-zero. The static Condition* directives are the
+# documented "silent skip" mechanism and behave consistently across
+# systemd versions.
 [Unit]
 Description=Attach wg0 to nftables homelab flowtable
 After=wg-quick@wg0.service nftables.service

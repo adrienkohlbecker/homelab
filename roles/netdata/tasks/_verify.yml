@@ -9,11 +9,6 @@
 # So the collector emits a 1 for system_cpu and 0 for ghost +
 # fake_plugin:fake_job, and the health templates fan out across the
 # resulting charts.
-#
-# The previous implementation lived in custom_exporter (a Python
-# Prometheus exporter scraping /api/v2/contexts + /api/v1/charts back
-# into prometheus.custom.* dimensions). This file is the replacement
-# for what custom_exporter/_verify.yml exercised.
 
 # netdata is x86_64-only (no arm64 build of the pinned 1.46.x — see
 # tasks/main.yml), so on arm64 the role is skipped at converge and there
@@ -192,12 +187,11 @@
       silently dropped (foo.does_not_exist isn't in the chart registry).
       Got liveness keys: {{ _keys | select('search', 'liveness_') | list }}
 
-# Note: previously this _verify asserted that `collector_stale` and
-# `collector_failing` alarms (binding to netdata.plugin_data_collection_status)
-# had instantiated. That chart context is netdata 2.x only; on the pinned
-# 1.46 the templates silently failed to instantiate and the assertion would
-# fail. The templates were dropped from context_liveness.conf.j2 in tandem
-# with this assertion removal -- re-add both when the version pin lifts.
+# No assertion for `collector_stale` / `collector_failing` alarms (binding
+# netdata.plugin_data_collection_status): that chart context is netdata 2.x
+# only, so on the pinned 1.46 the templates can't instantiate. They're
+# omitted from context_liveness.conf.j2 to match -- re-add both here and
+# there when the version pin lifts.
 
 # Restore the production conf (update_every back to 60s) so the role
 # leaves no surprise idempotency drift behind.
@@ -218,7 +212,7 @@
   become: true
 
 # --- nginx Authelia gate + URL-token bypass for cross-host polling ---
-# Browser path through `https://netdata.<host>.<domain>` is now gated
+# Browser path through `https://netdata.<host>.<domain>` is gated
 # by Authelia forward-auth; lab's homepage_alerts timer (and any
 # future cross-host poller) appends `?auth_token=<netdata_alerts_token>`
 # to bypass. Functional witnesses:

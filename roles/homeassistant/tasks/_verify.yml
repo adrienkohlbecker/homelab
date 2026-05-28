@@ -67,7 +67,7 @@
   failed_when: _verify_zigbee_link.stdout | trim != '/config/db/zigbee.db'
   become: true
 
-# HA's mac_iot IP is no longer pinned (vars/main.yml) — assert it
+# HA's mac_iot IP isn't pinned (vars/main.yml) — assert it
 # falls inside the network's ip_range (the upper /29 of mac_iot's
 # block; same derivation roles/macvlan/tasks/install.yml applies).
 # Pulling the expected range from `macvlan_blocks` directly (not

@@ -2,10 +2,8 @@
 # this file contributes to the assertion block in _verify_counters.yml
 # from a clean baseline; positives fire `>= 1` (any number is fine) and
 # negative-only counters (vrrp_accept, mdns_accept, input_transmission)
-# stay at 0. Previously the reset sat between the TCP and UDP blocks,
-# which silently wiped the TCP probe hits before assertion time —
-# input_unscoped_tcp / input_loopback / input_admin_tcp all failed
-# against `>= 1` because their pre-reset increments were gone.
+# stay at 0. The reset is up-front (not between the TCP and UDP blocks)
+# so it can't wipe TCP probe hits before assertion time.
 - name: _verify_input | Reset nftables counters before INPUT probes
   command: nft reset counters table inet homelab
   changed_when: false

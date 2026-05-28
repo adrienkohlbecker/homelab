@@ -197,11 +197,10 @@
     - homeassistant
 
 # sensors.yaml / templates.yaml / custom_templates/macros.jinja and the
-# blueprint sources used to be `copy:`-deployed from roles/homeassistant/files/
-# here; they're now in the ha_gui_config submodule and deployed by
-# `mise run ha:sync push`. See CLAUDE.md > Home Assistant GUI YAML sync.
-# Touch only the include-targets that HA reads at startup; absence would
-# log "file not found" before the operator runs the first sync.
+# blueprint sources live in the ha_gui_config submodule, deployed by
+# `mise run ha:sync push` (see CLAUDE.md > Home Assistant GUI YAML sync).
+# This task only touches the include-targets HA reads at startup; their
+# absence would log "file not found" before the operator runs the first sync.
 - name: Ensure files exist
   file:
     path: /mnt/services/homeassistant/{{ item }}

@@ -138,7 +138,7 @@
     - not qemu_test
     - not github_runner_dotrunner.stat.exists
   # --runnergroup intentionally omitted: config.sh expects a group NAME
-  # (e.g. "Default"), not the integer ID the JIT API used to take.
+  # (e.g. "Default"), not an integer ID.
   # Personal-account repos have only the implicit Default group and a
   # missing --runnergroup picks it. For an org repo with custom groups,
   # set runner_group_name on the instance and add `- --runnergroup` +

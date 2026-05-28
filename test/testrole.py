@@ -2,10 +2,8 @@
 """
 Configure and run a single role test with colored output.
 
-This replaces the bash shim that previously set environment variables before
-dispatching to test/testrole.sh. The heavy lifting still happens in that
-shell script; this file handles argument parsing, environment setup, and
-log streaming.
+Handles argument parsing, environment setup, machine bringup, and log
+streaming around an end-to-end converge of one role.
 """
 
 import argparse
@@ -159,7 +157,7 @@ def parse_args() -> tuple[argparse.Namespace, list[str]]:
 
     # argparse can leave one or more literal "--" tokens at the head of the
     # remainder depending on positional/optional interleaving; strip them all
-    # to mirror the old shell parsing behavior.
+    # before forwarding to ansible.
     while pass_args and pass_args[0] == "--":
         pass_args = pass_args[1:]
 

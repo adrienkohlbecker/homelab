@@ -5,11 +5,7 @@
 # URL adjacent to its sha256 per arch (CLAUDE.md "Centralize
 # downloadable artifact metadata") so a human auditing a checksum
 # sees exactly which URL it pins without recomposing from a version
-# constant. The runner image (runner/Dockerfile) used to ship these
-# binaries baked-in; the role-side download replaces that path-mirror
-# the runner container's /opt/actions-runner with the host so DooD
-# bind mounts that reference /opt/actions-runner/externals resolve to
-# real files on the host.
+# constant.
 github_runner_archive:
   x86_64:
     url: "https://github.com/actions/runner/releases/download/v2.334.0/actions-runner-linux-x64-2.334.0.tar.gz"

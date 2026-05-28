@@ -81,9 +81,9 @@
 # actually about to (re)start: a cold start needs the image present before
 # `systemctl start`, and a caller-requested restart may swap to a new image
 # tag. When the unit is already active and no restart is asked, the running
-# container already has its image and the pull is wasted work -- yet the
-# detect (a D-Bus ExecStart parse) + pull (a registry digest check) used to
-# run every converge for every service, ~15-25s across a full lab run. The
+# container already has its image and the pull is wasted work -- without
+# the gate, the detect (a D-Bus ExecStart parse) + pull (a registry digest
+# check) run every converge for every service, ~15-25s across a full lab run. The
 # Enable result above carries the unit's pre-start ActiveState (the systemd
 # module returns the full `systemctl show` dict, same source the Start task
 # reads ConditionResult from), so the gate reuses it rather than spending an

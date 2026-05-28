@@ -24,11 +24,10 @@
     name: podman
     tasks_from: install
 
-# git isn't part of the podman role. uidmap (newuidmap / newgidmap) is
-# what rootless podman shells out to for /etc/subuid + /etc/subgid; it
-# was only a Recommends of jammy's podman 3.4 (which is why this used
-# to install it explicitly) but is a Depends of noble's podman 4.9 and
-# lands automatically via podman/install.
+# git isn't part of the podman role, so install it here. uidmap
+# (newuidmap / newgidmap) — what rootless podman shells out to for
+# /etc/subuid + /etc/subgid — is a Depends of noble's podman 4.9 and
+# lands automatically via podman/install, so it doesn't need listing.
 - name: _test | Install gitea_runner dependencies
   apt:
     pkg:
