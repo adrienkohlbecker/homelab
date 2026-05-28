@@ -233,12 +233,22 @@ fi
 # Set ZFSBootMenu properties on datasets. The kernel cmdline carries a serial
 # console so the boot log reaches qemu's -serial stdio: the harness's
 # verify-boot post-processor captures it (a boot that never reaches SSH is
-# otherwise a black box), and it gives headless hosts a serial getty. ttyS0
-# is last so it's the primary /dev/console -- kernel printk and the login
-# prompt both land on serial; tty0 keeps VGA output for physical consoles.
-# aarch64 boots the EFI stub directly (console=ttyAMA0, set below), not ZBM,
-# so this property only shapes the x86_64 boot.
-zfs set org.zfsbootmenu:commandline="console=tty0 console=ttyS0,115200" "rpool/ROOT"
+# otherwise a black box), and it gives headless hosts a serial getty. The
+# serial console is last so it's the primary /dev/console -- kernel printk and
+# the login prompt both land on serial; tty0 keeps VGA output for physical
+# consoles; earlycon emits before the real driver registers its console.
+#
+# This is the single source of truth for the console args. x86_64 boots
+# rEFInd -> ZBM, which reads org.zfsbootmenu:commandline natively; aarch64's
+# default boot bypasses ZBM (direct EFI-stub Boot entry, below) and reads the
+# value back with `zfs get` to build its cmdline. The serial hardware differs
+# per arch (8250 COM1 at io 0x3f8 vs pl011 at mmio 0x9000000), so the value is
+# arch-specific.
+if [ "$ZBM_ARCH" = "aarch64" ]; then
+  zfs set org.zfsbootmenu:commandline="console=tty0 earlycon=pl011,0x9000000,115200 console=ttyAMA0,115200" "rpool/ROOT"
+else
+  zfs set org.zfsbootmenu:commandline="console=tty0 earlycon=uart8250,io,0x3f8 console=ttyS0,115200" "rpool/ROOT"
+fi
 
 # Create efi & swap
 
@@ -492,12 +502,13 @@ fi
 # BootOrder, so adding this AFTER the rEFInd entries makes it the
 # default while leaving rEFInd reachable as a manual selection. EFI
 # stub honours initrd= as a backslash-pathed file on the same volume
-# as the kernel; console=ttyAMA0 + earlycon target aarch64 virt's
-# pl011 at the standard MMIO base for serial-log capture in the test
-# harness; bare-metal hosts that lack a pl011 at this address simply
-# ignore the directive.
+# as the kernel. The console args (ttyAMA0 + pl011 earlycon for serial-log
+# capture in the test harness, ignored by bare-metal hosts without a pl011 at
+# this address) come from the org.zfsbootmenu:commandline property set above --
+# the single source for both the x86_64 ZBM path and this EFI-stub path.
 if [ "$ZBM_ARCH" = "aarch64" ]; then
-  direct_cmdline="root=zfs:rpool/ROOT/${UBUNTU_NAME} initrd=\\EFI\\Linux\\initrd console=ttyAMA0,115200 earlycon=pl011,0x9000000,115200"
+  zbm_cmdline="$(zfs get -H -o value org.zfsbootmenu:commandline rpool/ROOT)"
+  direct_cmdline="root=zfs:rpool/ROOT/${UBUNTU_NAME} initrd=\\EFI\\Linux\\initrd ${zbm_cmdline}"
 
   if [ "$DISKS_COUNT" -eq 1 ]; then
     efibootmgr -c -d "$DISKS" -p 1 \
