@@ -4,16 +4,31 @@ host_vars.macvlan_blocks via roles/macvlan/tasks/install.yml.
 macvlan_args is the loop var from main.yml.
 
 Defaults:
-  host_ip:     macvlan_args.block | ipmath(0) — slot 0 of the block.
+  host_ip:     macvlan_args.block | ipmath(0) — slot 0 of the block. This
+               is the block's network address, which is a usable host slot
+               here precisely because the iface is /32 + an explicit route
+               to the whole block (nothing treats the /28 as a subnet).
   mac_address: stable random_mac seeded by inventory_hostname_<name>
                so sibling blocks on the same host pick distinct MACs
                (same seed = same MAC = L2 collision).
+
+Drift: the unit is Type=oneshot + RemainAfterExit, so a manual
+`ip link delete <name>` leaves systemd still reporting the unit active —
+a reconverge won't recreate the iface (the restart only fires on unit-file
+change). Next boot re-runs ExecStart and heals it.
 #}
 {% set _host_ip = macvlan_args.host_ip | default(macvlan_args.block | ansible.utils.ipmath(0)) %}
 {% set _mac = macvlan_args.mac_address | default('82:48:10' | random_mac(seed=(inventory_hostname ~ '_' ~ macvlan_args.name))) %}
 [Unit]
 Description={{ macvlan_args.name }} interface setup
-After=network.target
+# `ip link add ... link <parent>` needs the parent to already exist; ordering
+# on network.target isn't enough (it says nothing about the parent iface).
+# Bind to the parent's device unit (pulled in + ordered by udev) and skip
+# cleanly if it's absent. BindsTo only tears down on device *removal* (udev),
+# not a link-down, so a hardware NIC / netplan subif won't flap it away.
+After=sys-subsystem-net-devices-{{ macvlan_args.parent }}.device
+BindsTo=sys-subsystem-net-devices-{{ macvlan_args.parent }}.device
+ConditionPathExists=/sys/class/net/{{ macvlan_args.parent }}
 
 [Service]
 Type=oneshot
@@ -26,16 +41,15 @@ SyslogIdentifier=%N
 # without always running ExecStop) leaves the iface around, and the
 # next start hits `RTNETLINK answers: File exists` on `ip link add`.
 ExecStartPre=-/bin/ip link delete {{ macvlan_args.name }}
-ExecStart=/bin/ip link add {{ macvlan_args.name }} link {{ macvlan_args.parent }} type macvlan mode bridge
+ExecStart=/bin/ip link add {{ macvlan_args.name }} link {{ macvlan_args.parent }} address {{ _mac }} type macvlan mode bridge
 ExecStart=/bin/ip addr add {{ _host_ip }}/32 dev {{ macvlan_args.name }}
-ExecStart=/bin/ip link set {{ macvlan_args.name }} address {{ _mac }}
 # Match the parent NIC's ARP-flux mitigation (see roles/macvlan/tasks/install.yml).
 # Set after `ip link add` because /proc/sys/net/ipv4/conf/{{ macvlan_args.name }}/
 # doesn't exist until then, so a sysctl.d drop-in would silently no-op at boot.
 ExecStart=/sbin/sysctl -q -w net.ipv4.conf.{{ macvlan_args.name }}.arp_ignore=1
 ExecStart=/sbin/sysctl -q -w net.ipv4.conf.{{ macvlan_args.name }}.arp_announce=2
 ExecStart=/bin/ip link set {{ macvlan_args.name }} up
-ExecStart=/bin/ip route add {{ macvlan_args.block }} dev {{ macvlan_args.name }}
+ExecStart=/bin/ip route add {{ macvlan_args.block }} dev {{ macvlan_args.name }} proto static
 ExecStop=-/bin/ip link delete {{ macvlan_args.name }}
 
 [Install]
