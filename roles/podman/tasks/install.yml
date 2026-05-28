@@ -384,9 +384,18 @@
     # device nodes baked into the layer (dev/console/dev/null in the
     # linuxserver/* base images) and aborts the start. fuse-overlayfs
     # implements idmap in userspace and skips the kernel chown-by-maps
-    # path entirely, so it works under 5.15. Lab/pug ride HWE 6.x and
+    # path entirely, so it works under 5.15. Bare-metal lab/pug ride HWE
+    # 6.x and the native idmapped-mount probe succeeds there, so they
     # don't need the userspace shim.
-    _podman_storage_needs_fuse_overlayfs: "{{ ansible_facts.kernel is version('5.19', '<') }}"
+    #
+    # The qemu test VMs run that same HWE 6.x kernel but the overlay
+    # idmapped-mount probe (containers/storage's idmapped-lower-dir
+    # feature check) comes back negative under nested KVM, so a fake-root
+    # --uidmap start there still drops to the chown-by-maps path and EIOs
+    # on /dev/console exactly as on 5.15. Force the shim whenever qemu_test
+    # so box_deps's uidmap roles (healthchecks/hyperdx/paperless/…) start;
+    # prod is untouched and keeps exercising the native path.
+    _podman_storage_needs_fuse_overlayfs: "{{ ansible_facts.kernel is version('5.19', '<') or qemu_test }}"
   copy:
     dest: /etc/containers/storage.conf
     content: |
