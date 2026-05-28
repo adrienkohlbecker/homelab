@@ -41,9 +41,17 @@
       # created with an empty/garbage CIDR.
       - macvlan_args.parent in ansible_facts
       - ansible_facts[macvlan_args.parent].ipv4 is defined
+      # The pool (upper /29 of block) is handed to netavark as an ip_range
+      # *inside* that derived subnet, so the block must sit within the
+      # parent's network — catches a block/parent mismatch at converge.
+      - >-
+        (macvlan_args.block | ansible.utils.ipaddr('network'))
+        | ansible.utils.ipaddr(ansible_facts[macvlan_args.parent].ipv4.network ~ '/' ~ ansible_facts[macvlan_args.parent].ipv4.prefix)
+        != false
     fail_msg: >-
       macvlan_args.podman_network is set for '{{ macvlan_args.name }}' but parent
-      '{{ macvlan_args.parent }}' has no gathered IPv4 fact to derive the network from.
+      '{{ macvlan_args.parent }}' has no gathered IPv4 fact to derive the network
+      from, or block '{{ macvlan_args.block }}' is not within the parent's subnet.
   tags:
     - macvlan
 
