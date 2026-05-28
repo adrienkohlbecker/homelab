@@ -1,8 +1,23 @@
-- name: _verify | Authenticated publish/subscribe round-trip succeeds
+- name: _verify | Resolve the broker image for peer-container probes
+  set_fact:
+    mosquitto_image: docker.io/eclipse-mosquitto:2.0.21
+
+# Each consumer reaches the broker from its own container over the `mosquitto`
+# network, resolving `mosquitto.dns.podman` via aardvark-dns -- the path z2m and
+# home-assistant use. A throwaway peer container (not `podman exec` into the
+# broker) is what exercises cross-container name resolution; looping over every
+# account covers the whole pwfile, not just the first line.
+- name: _verify | Each account authenticates over the network via DNS
   shell: |
     set -euo pipefail
-    podman exec mosquitto mosquitto_pub -p 1883 -u z2m -P {{ mosquitto_accounts.z2m.password }} -t homelab/verify -m ok -r
-    podman exec mosquitto mosquitto_sub -p 1883 -u z2m -P {{ mosquitto_accounts.z2m.password }} -t homelab/verify -C 1 -W 3
+    podman run --rm --network mosquitto {{ mosquitto_image }} \
+      mosquitto_pub -h mosquitto.dns.podman -p {{ service_ports.mosquitto }} \
+      -u {{ item.key }} -P {{ item.value.password }} \
+      -t homelab/verify/{{ item.key }} -m ok -r
+    podman run --rm --network mosquitto {{ mosquitto_image }} \
+      mosquitto_sub -h mosquitto.dns.podman -p {{ service_ports.mosquitto }} \
+      -u {{ item.key }} -P {{ item.value.password }} \
+      -t homelab/verify/{{ item.key }} -C 1 -W 3
   args:
     executable: /bin/bash
   become: true
@@ -11,19 +26,77 @@
   retries: 15
   delay: 2
   changed_when: false
+  loop: "{{ mosquitto_accounts | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
 
-- name: _verify | Anonymous connection is refused on 1883
+- name: _verify | Anonymous connection is refused
   command: >-
-    podman exec mosquitto mosquitto_pub -p 1883 -t homelab/verify -m nope
+    podman run --rm --network mosquitto {{ mosquitto_image }}
+    mosquitto_pub -h mosquitto.dns.podman -p {{ service_ports.mosquitto }}
+    -t homelab/verify -m nope
   become: true
   register: mosquitto_anon
   failed_when: mosquitto_anon.rc == 0
   changed_when: false
 
-- name: _verify | Wrong password is refused on 1883
+- name: _verify | Wrong password is refused
   command: >-
-    podman exec mosquitto mosquitto_pub -p 1883 -u z2m -P definitely-wrong -t homelab/verify -m nope
+    podman run --rm --network mosquitto {{ mosquitto_image }}
+    mosquitto_pub -h mosquitto.dns.podman -p {{ service_ports.mosquitto }}
+    -u z2m -P definitely-wrong -t homelab/verify -m nope
   become: true
   register: mosquitto_badpw
   failed_when: mosquitto_badpw.rc == 0
+  changed_when: false
+
+# A retained message must survive a broker bounce -- the nightly ZFS-snapshot
+# restart relies on clean-shutdown writes to the persistence dataset. Publish
+# retained, restart (Type=notify blocks until healthy), then resubscribe.
+- name: _verify | Publish a retained message before restart
+  shell: |
+    set -euo pipefail
+    podman run --rm --network mosquitto {{ mosquitto_image }} \
+      mosquitto_pub -h mosquitto.dns.podman -p {{ service_ports.mosquitto }} \
+      -u z2m -P {{ mosquitto_accounts.z2m.password }} \
+      -t homelab/persist -m survived -r
+  args:
+    executable: /bin/bash
+  become: true
+  changed_when: false
+
+- name: _verify | Restart the broker
+  systemd:
+    name: mosquitto
+    state: restarted
+  become: true
+
+- name: _verify | Retained message survived the restart
+  shell: |
+    set -euo pipefail
+    podman run --rm --network mosquitto {{ mosquitto_image }} \
+      mosquitto_sub -h mosquitto.dns.podman -p {{ service_ports.mosquitto }} \
+      -u z2m -P {{ mosquitto_accounts.z2m.password }} \
+      -t homelab/persist -C 1 -W 3
+  args:
+    executable: /bin/bash
+  become: true
+  register: mosquitto_persist
+  until: mosquitto_persist.rc == 0 and 'survived' in mosquitto_persist.stdout
+  retries: 15
+  delay: 2
+  changed_when: false
+
+# Clear the retained test messages so a re-run against a --keep VM starts clean.
+- name: _verify | Clear retained test messages
+  shell: |
+    set -euo pipefail
+    for t in homelab/verify/z2m homelab/verify/homeassistant homelab/persist; do
+      podman run --rm --network mosquitto {{ mosquitto_image }} \
+        mosquitto_pub -h mosquitto.dns.podman -p {{ service_ports.mosquitto }} \
+        -u z2m -P {{ mosquitto_accounts.z2m.password }} -t "$t" -r -n
+    done
+  args:
+    executable: /bin/bash
+  become: true
   changed_when: false
