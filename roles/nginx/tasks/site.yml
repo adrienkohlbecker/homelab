@@ -6,8 +6,15 @@
 #                             then reloads. Keep the call in main.yml as a
 #                             tombstone so retired sites stay decommissioned on
 #                             fresh installs.
-#   condition                 optional bool, default true; gates the whole call
-#   permissions               optional, default '0644'
+#   condition                 optional bool, default true; gates the whole
+#                             call. Gates *application of changes*, not desired
+#                             state -- `condition: false` does NOT tear down an
+#                             already-enabled site (use `state: absent` for
+#                             that), it just skips this pass. Typically a
+#                             check-mode / bootstrap guard.
+#   permissions               optional, default '0640' (root:root); the
+#                             rendered vhost can embed vaulted bypass /
+#                             upstream tokens, so it is not world-readable
 #   reload                    optional bool, default true; reload nginx after a
 #                             config change. Setting false makes the install
 #                             config-only — useful for pre-warming a site whose
@@ -40,29 +47,23 @@
 #                             /api/authz/auth-request endpoint (defaults to lab's
 #                             local Authelia; pug/bunk need a per-host override if
 #                             they ever enable forward-auth).
-#   bypass_query_param        optional dict { name: <str>, value: <str> }.
-#                             When set together with `auth: required`, the
-#                             auth_request subrequest short-circuits with a
-#                             204 if the parent request's `?<name>=<value>`
-#                             query param matches. Lets URL-param-only API
-#                             clients (apps that can't send Authorization
-#                             headers) bypass Authelia using a vaulted
-#                             pre-shared token. Browser hits without the
-#                             param fall through to Authelia normally.
-#                             The param is also stripped from `$args`
-#                             before proxy_pass so the upstream app never
-#                             sees the token (no leakage into the app's
-#                             own logs / error echoes). On the log side,
-#                             the http-scope `$request_safe` map in
-#                             nginx.conf.j2 redacts `auth_token=...` from
-#                             access-log lines.
-#                             The `name` field is documentary today --
-#                             the http-scope `$req_auth_token` map (used
-#                             by the bypass `if` because $arg_X is empty
-#                             in auth_request subrequests) and the
-#                             `$request_safe` redaction map both hardcode
-#                             `auth_token`. To use a different param name
-#                             you must update both maps in nginx.conf.j2.
+#   bypass_query_param        optional dict { value: <str> }. With
+#                             `auth: required`, the auth_request short-circuits
+#                             with a 204 when the request's
+#                             `?auth_token=<value>` matches the vaulted token,
+#                             letting URL-param-only API clients (apps that
+#                             can't send an Authorization header) bypass
+#                             Authelia; browser hits without the param fall
+#                             through to Authelia normally. The token is
+#                             stripped from `$args` before proxy_pass (the
+#                             upstream never sees it) and redacted from the
+#                             access log by the `$request_safe` map. The param
+#                             name is fixed to `auth_token` -- the
+#                             `$req_auth_token` and `$request_safe` maps in
+#                             nginx.conf.j2 hardcode it. Bypass sites also get
+#                             Referrer-Policy: no-referrer so the token can't
+#                             leak to third parties via a Referer header
+#                             (redaction only covers our own access log).
 #   upstream_authorization    optional dict {authelia_user: header_value};
 #                             when set (and `auth: required` is on) nginx
 #                             injects a per-user `Authorization` header into
@@ -91,13 +92,36 @@
 #                             trust in any presented Authorization -- only
 #                             safe when the upstream itself validates the
 #                             credential.
-#   server_conf               optional snippet inserted in the server block
-#   location_conf             optional snippet inserted in the / location block
+#   server_conf               optional snippet inserted in the server block.
+#                             A `location` added here is NOT covered by the
+#                             site's forward-auth (auth_request only wraps
+#                             `location /`) nor by the security headers (a
+#                             location declaring its own add_header drops the
+#                             inherited set) -- re-add `auth_request
+#                             /internal/authelia` and any needed headers
+#                             yourself, or that path is public and header-less.
+#   location_conf             optional snippet inserted in the / location
+#                             block. If it adds an `add_header`, the site's
+#                             security headers are automatically re-emitted at
+#                             this location level (see site.conf.j2) so nginx's
+#                             add_header inheritance rule doesn't drop them.
 #
 # The dict form prevents inter-call leakage at play-vars scope: each
 # import_role pass replaces the whole `nginx_site_args` value, so a
 # previous caller's proxy_pass / csp / etc. can't bleed into the next
 # caller that doesn't explicitly override.
+- name: site | Assert required inputs
+  assert:
+    that:
+      - nginx_site_args.subdomain is defined
+      - nginx_site_args.subdomain is string
+      - nginx_site_args.subdomain | length > 0
+    fail_msg: >-
+      nginx_site_args.subdomain is required and must be a non-empty string;
+      got {{ nginx_site_args.subdomain | default('<undefined>') }}.
+  tags:
+    - nginx_site
+
 - name: site | Ensure directories exists
   when: (nginx_site_args.condition | default(true)) and (nginx_site_args.state | default('present')) == 'present'
   file:
@@ -113,33 +137,97 @@
   tags:
     - nginx_site
 
-- name: site | Configure nginx site
-  when: (nginx_site_args.condition | default(true)) and (nginx_site_args.state | default('present')) == 'present'
-  template:
-    src: site.conf.j2
-    dest: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
-    owner: root
-    group: root
-    mode: "{{ nginx_site_args.permissions | default('0644') }}"
-    backup: true
-  become: true
-  register: nginx_static_conf
-  tags:
-    - nginx_site
-
-- name: site | Enable nginx site
+# Place-validate-then-rollback, mirroring conf_d.yml: the rendered vhost is
+# written to sites-available/ and symlinked into sites-enabled/ (where it
+# joins nginx's active config), then `nginx -t` validates it in place. On
+# failure the previous version is restored from the .backup (or the file and
+# symlink are removed if the site is new), so a malformed render -- a bad
+# server_conf/location_conf snippet, a CSP typo, an unbalanced quote -- can't
+# brick the next host-wide reload for every other site. The template task
+# carries no `validate:` because `nginx -t` needs the full assembled config
+# (events{}, http{}, the symlink in place), not a standalone server{} snippet
+# -- the same constraint conf_d documents. Validation runs on every change
+# regardless of the `reload` flag, so a `reload: false` pre-warm still can't
+# leave a broken file on disk to be discovered at the next unrelated reload.
+- name: site | Configure and enable nginx site
   when:
     - nginx_site_args.condition | default(true)
     - (nginx_site_args.state | default('present')) == 'present'
-    - not (ansible_check_mode and nginx_static_conf.changed)
-  file:
-    src: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
-    dest: /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
-    state: link
   become: true
-  register: nginx_static_conf_enable
   tags:
     - nginx_site
+  block:
+    - name: site | Configure nginx site
+      template:
+        src: site.conf.j2
+        dest: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
+        owner: root
+        group: root
+        mode: "{{ nginx_site_args.permissions | default('0640') }}"
+        backup: true
+      register: nginx_static_conf
+
+    - name: site | Enable nginx site
+      when: not (ansible_check_mode and nginx_static_conf.changed)
+      file:
+        src: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
+        dest: /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
+        state: link
+      register: nginx_static_conf_enable
+
+    - name: site | Validate nginx config in place
+      when:
+        - not ansible_check_mode
+        - nginx_static_conf.changed or nginx_static_conf_enable.changed
+      command: nginx -t
+      changed_when: false
+
+    - name: site | Reload nginx config
+      when:
+        - nginx_site_args.reload | default(true)
+        - nginx_static_conf.changed or nginx_static_conf_enable.changed
+      systemd:
+        name: nginx
+        state: reloaded
+
+  # nginx -t reads files at their on-disk locations, so a broken render is
+  # already symlinked into the active config by the time validation fails.
+  # Restore the previous version from the .backup if one was made, otherwise
+  # delete the freshly-added file and its symlink. Don't trim this -- without
+  # it any typo in a site snippet bricks `nginx -s reload` host-wide.
+  rescue:
+    - name: site | Restore previous site config from backup  # noqa: require-backup
+      when: '"backup_file" in nginx_static_conf'
+      copy:
+        remote_src: true
+        dest: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
+        src: "{{ nginx_static_conf.backup_file }}"
+        owner: root
+        group: root
+        mode: "{{ nginx_site_args.permissions | default('0640') }}"
+
+    - name: site | Delete backup file
+      when: '"backup_file" in nginx_static_conf'
+      file:
+        path: "{{ nginx_static_conf.backup_file }}"
+        state: absent
+
+    - name: site | Remove newly added site config and symlink
+      when: nginx_static_conf.changed and "backup_file" not in nginx_static_conf
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
+        - /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
+
+    - name: site | Record failure
+      fail:
+        msg: >-
+          nginx -t failed after writing
+          /etc/nginx/sites-available/{{ nginx_site_args.subdomain }};
+          previous state restored. Inspect the validate output above and the
+          nginx_site_args for {{ nginx_site_args.subdomain }}.
 
 - name: site | Remove retired nginx site
   when: (nginx_site_args.condition | default(true)) and (nginx_site_args.state | default('present')) == 'absent'
@@ -154,13 +242,12 @@
   tags:
     - nginx_site
 
-- name: site | Reload nginx config
-  when: >-
-    (nginx_site_args.condition | default(true))
-    and (nginx_site_args.reload | default(true))
-    and ((nginx_static_conf.changed | default(false))
-      or (nginx_static_conf_enable.changed | default(false))
-      or (nginx_static_conf_absent.changed | default(false)))
+- name: site | Reload nginx after removing retired site
+  when:
+    - nginx_site_args.condition | default(true)
+    - (nginx_site_args.state | default('present')) == 'absent'
+    - nginx_site_args.reload | default(true)
+    - nginx_static_conf_absent.changed | default(false)
   systemd:
     name: nginx
     state: reloaded
