@@ -119,6 +119,15 @@ jobs:
         if: matrix.source == 'box'
         env:
           PACKER_UBUNTU: ${{ inputs.ubuntu }}
+          # seed-deps boots box and runs `ansible-playbook --limit box`,
+          # which loads the test-vaulted host_vars/box.yml -- so it needs
+          # the test vault password (same as test.yml's test-role). Without
+          # it vault-client.sh returns non-zero for vault-id=test and the
+          # play aborts before its first task. ANSIBLE_VAULT_IDENTITY_LIST
+          # restricts to the test identity so the absent prod password
+          # doesn't also error.
+          HOMELAB_VAULT_PASSWORD_TEST: ${{ secrets.HOMELAB_VAULT_PASSWORD_TEST }}
+          ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
         run: |
           set -euo pipefail
           args=()
