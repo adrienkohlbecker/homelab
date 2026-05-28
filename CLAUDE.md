@@ -56,6 +56,8 @@ Load-bearing negatives, up-front so a fresh session sees them first.
 
 **Every bash script starts `set -euo pipefail`** — proper files *and* inline ansible `shell:` blocks, which must also declare `executable: /bin/bash` (`pipefail` is a bashism; default `/bin/sh` is dash). Enforced for `shell:` tasks by the custom **`shell-strict-mode`** rule ([lint/ansible_rules/shell_strict_mode.py](lint/ansible_rules/shell_strict_mode.py)). Test scaffolding (`_verify*`/`_setup*`) is **exempt**. `-e` obliges you to handle expected-failure commands: `|| true` where non-zero is normal (`snap list` exiting 1 when empty), and avoid `… | head` pipelines where the early reader raises SIGPIPE — collapse into one non-early-exiting `awk`. Canonical: snap-purge in [roles/cleanup/tasks/main.yml](roles/cleanup/tasks/main.yml).
 
+**Comments describe current state, not history.** No "this used to…", "was removed", "replaces the old…", or "NOTE: X lived here". That context belongs in the commit message / PR — tied to the change, where it won't rot or mislead someone reading the code as it is now. A comment that only makes sense to a reader who remembers the prior version is dead weight; delete it. (Explaining why the current code *deliberately* avoids an obvious-looking alternative — "not X because Y" — is current state and fine.)
+
 ## Repo Conventions
 
 ### Role conventions
