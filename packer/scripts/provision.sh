@@ -251,26 +251,20 @@ udevadm settle
 
 mount | grep mnt
 
-# Install Ubuntu. Under concurrent matrix builds debootstrap
-# intermittently aborts "Couldn't download packages" for base packages the
-# mirror demonstrably served in full — Nexus logs a 200 with the right
-# byte count for each, and a different cell trips it every run — so the
-# fault is client-side, between the wire and debootstrap accepting the
-# file, not the mirror. Retry a few times, wiping the half-populated
-# target between attempts so debootstrap doesn't trip on its own partial
-# tree (/mnt is the freshly-mounted, otherwise-empty rpool root here; the
-# arch-chroot bind mounts come later).
-deboot_n=1
-until debootstrap "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR"; do
-  if [ "$deboot_n" -ge 3 ]; then
-    echo "debootstrap failed after $deboot_n attempts" >&2
-    exit 1
-  fi
-  deboot_n=$((deboot_n + 1))
-  echo "debootstrap attempt failed; wiping /mnt, retrying ($deboot_n/3)"
-  find /mnt -mindepth 1 -delete
-  sleep 15
-done
+# Install Ubuntu. Under concurrent matrix builds debootstrap intermittently
+# aborts "Couldn't download packages" for base packages the mirror served in
+# full (Nexus logs a 200 at the right byte count, a different cell each run),
+# so the fault is client-side. The per-package transport error that explains
+# it (truncated body? checksum? connection reset?) lives in debootstrap's own
+# log, which dies with the build VM before we can read it -- so --verbose
+# surfaces each retrieve/validate step live, and on failure we dump that log
+# to the build console so the next occurrence is diagnosable.
+debootstrap --verbose "$UBUNTU_NAME" /mnt "$UBUNTU_MIRROR" || {
+  rc=$?
+  echo "=== debootstrap failed (exit $rc); /mnt/debootstrap/debootstrap.log tail ===" >&2
+  tail -n 300 /mnt/debootstrap/debootstrap.log >&2 || echo "(no debootstrap.log present)" >&2
+  exit "$rc"
+}
 
 # Copy files into the new install. /etc/hostid must match the one ZFS
 # saw at pool creation; arch-chroot bind-mounts /etc/resolv.conf so apt
