@@ -396,26 +396,10 @@
       runroot = "/run/containers/storage"
       graphroot = "/var/lib/containers/storage"
       rootless_storage_path = "/var/lib/containers/rootless/$USER"
-      {% if _podman_storage_needs_fuse_overlayfs or qemu_test %}
+      {% if _podman_storage_needs_fuse_overlayfs %}
 
       [storage.options.overlay]
-      {% if _podman_storage_needs_fuse_overlayfs %}
       mount_program = "/usr/bin/fuse-overlayfs"
-      {% endif %}
-      {% if qemu_test %}
-      # The qemu fixtures ride the same HWE 6.x kernel as lab/pug, but the
-      # overlay idmapped-lower-dir probe (containers/storage's feature
-      # check) comes back negative under nested KVM. A fake-root --uidmap
-      # start (healthchecks/hyperdx/paperless/…) then drops to the
-      # storage-chown-by-maps copy-up, which lchowns every layer file to
-      # the mapped host uid and EIOs on the device nodes baked into
-      # linuxserver/* base images (dev/console). Skip those chown failures:
-      # the OCI runtime bind-mounts the real device nodes at run time, so
-      # the layer copy's ownership of them is irrelevant. Prod takes the
-      # native idmapped-mount path (no copy, no chown) so never reaches
-      # this — test-only, hence the qemu_test gate rather than always-on.
-      ignore_chown_errors = "true"
-      {% endif %}
       {% endif %}
     owner: root
     group: root
