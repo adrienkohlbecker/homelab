@@ -646,3 +646,21 @@ write_sources_list "$UBUNTU_MIRROR_UPSTREAM" "$UBUNTU_MIRROR_SECURITY_UPSTREAM"
 # matching" because ansible skips its own update. One more refresh here
 # leaves the image with a coherent cache.
 apt-get update
+
+# Drop the downloaded .deb cache (build-only, ~hundreds of MB) so it doesn't
+# ride into every deployment. Clears /var/cache/apt/archives only — the
+# lists/ repopulated just above stay intact.
+apt-get clean
+
+# Blank machine-id so systemd regenerates a unique one on first boot —
+# otherwise every host from this snapshot shares one (journald, systemd
+# instance ids, DHCP DUID). Re-point dbus's copy at it when present.
+: >/etc/machine-id
+if [ -e /var/lib/dbus/machine-id ]; then
+  ln -sf /etc/machine-id /var/lib/dbus/machine-id
+fi
+
+# Drop build-time logs (dpkg/apt/debootstrap) so the image starts clean.
+# Files only — keep the dir tree services expect. Last, to catch the
+# writes from the steps just above.
+find /var/log -type f -delete
