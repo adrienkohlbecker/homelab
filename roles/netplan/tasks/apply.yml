@@ -7,6 +7,18 @@
 # rollback timer end-to-end. The block-level when:/become:/tags: gating
 # lives in main.yml.
 
+- name: Verify the pre-template snapshot exists before arming rollback
+  # apply.yml feeds /run/netplan_prev to both `netplan apply --state`
+  # and the rollback restore. main.yml snapshots it unconditionally
+  # before the template runs, but a `--start-at-task` resume that skips
+  # those tasks (or a reboot that wiped tmpfs) would leave it missing --
+  # arm nothing and fail loudly rather than apply against a stale/empty
+  # snapshot and feed the rollback garbage.
+  stat:
+    path: /run/netplan_prev
+  register: netplan_prev_snapshot
+  failed_when: not (netplan_prev_snapshot.stat.exists and netplan_prev_snapshot.stat.isdir)
+
 - name: Clear stale cancel-marker before arming
   file:
     path: /run/netplan_keep
@@ -30,6 +42,7 @@
   command: netplan apply --state /run/netplan_prev
   async: 30
   poll: 0
+  register: netplan_apply_async
   changed_when: true
 
 - name: Wait for SSH to re-establish (canary for the rollback timer)
@@ -40,6 +53,20 @@
     delay: 5
     timeout: 60
 
+- name: Confirm the async netplan apply actually exited 0
+  # wait_for_connection only proves SSH came back, not that netplan
+  # itself succeeded -- a non-fatal apply error (bad matcher, rejected
+  # key) that leaves SSH up would otherwise pass silently, the mid-
+  # apply-halt shape from the 2026-05-10 incident. Reaping before the
+  # cancel below means a failed apply leaves the rollback armed to
+  # restore the prior config.
+  async_status:
+    jid: "{{ netplan_apply_async.ansible_job_id }}"
+  register: netplan_apply_result
+  until: netplan_apply_result.finished
+  retries: 10
+  delay: 3
+
 - name: Touch cancel-marker so the timer no-ops when it fires
   # Belt: even if the timer fires between this and the stop below
   # (would need apply + wait_for_connection to exceed 90 s), the
@@ -47,7 +74,7 @@
   file:
     path: /run/netplan_keep
     state: touch
-    mode: "0644"
+    mode: "0600"
 
 - name: Stop the rollback timer (suspenders)
   # Collapses the +90 s wait so `_verify` doesn't have to race the
