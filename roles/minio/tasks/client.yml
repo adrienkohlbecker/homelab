@@ -15,7 +15,7 @@
     - minio
 
 - name: client | Install mcli if needed
-  when: minio_mcli_pkg.stdout != "20220610222912.0.0"
+  when: minio_mcli_pkg.stdout != minio_mcli_version
   become: true
   tags:
     - minio
@@ -24,12 +24,12 @@
     - name: client | Download mcli deb
       check_mode: false
       get_url:
-        url: "{{ mirror_minio }}/client/mc/release/linux-{{ (ansible_architecture == 'aarch64') | ternary('arm64', 'amd64') }}/archive/mcli_20220610222912.0.0_{{ (ansible_architecture == 'aarch64') | ternary('arm64', 'amd64') }}.deb"
+        url: "{{ minio_mcli_release[ansible_architecture].url }}"
         dest: /tmp/mcli.deb
         mode: '0644'
         owner: root
         group: root
-        checksum: sha256:{{ (ansible_architecture == "aarch64") | ternary('31598860c2b5a6d03531b27ffffe03ca69de0ac3cd8c0f6ccc472e971270d5e1', '175304d072db889d67824a3da2317b3b698ba09d79709010acdec62f05c38069') }}
+        checksum: "sha256:{{ minio_mcli_release[ansible_architecture].sha256 }}"
 
     - name: client | Install mcli
       apt:

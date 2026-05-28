@@ -17,7 +17,7 @@
     - minio
 
 - name: Install minio if needed
-  when: minio_pkg.stdout != "20220526054841.0.0"
+  when: minio_pkg.stdout != minio_version
   become: true
   tags:
     - minio
@@ -26,12 +26,12 @@
     - name: Download minio deb
       check_mode: false
       get_url:
-        url: "{{ mirror_minio }}/server/minio/release/linux-{{ (ansible_architecture == 'aarch64') | ternary('arm64', 'amd64') }}/archive/minio_20220526054841.0.0_{{ (ansible_architecture == 'aarch64') | ternary('arm64', 'amd64') }}.deb"
+        url: "{{ minio_release[ansible_architecture].url }}"
         dest: /tmp/minio.deb
         mode: '0644'
         owner: root
         group: root
-        checksum: sha256:{{ (ansible_architecture == "aarch64") | ternary('04c327fa3b4f6a71587226d762564629dd7b35f9b737dd89af52da8531dfc6d5', 'c2183166105b418675c12a92b759f0ba470d3e4c6de68d9cacbe5fd6ede71a8f') }}
+        checksum: "sha256:{{ minio_release[ansible_architecture].sha256 }}"
       register: minio_download
       retries: 3
       delay: 5
