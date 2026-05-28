@@ -12,11 +12,12 @@ Defaults:
                so sibling blocks on the same host pick distinct MACs
                (same seed = same MAC = L2 collision).
 
-Manual-deletion caveat: Type=oneshot + RemainAfterExit keeps systemd
-reporting the unit `active` even after a hand-run `ip link delete <name>`
-has removed the iface, so a reconverge won't notice or recreate it (the
-role only restarts on a unit-file change). To bring it back, restart the
-unit (`systemctl restart <name>`, which re-runs ExecStart) or reboot.
+Self-healing: the unit BindsTo its own child device (see [Unit]), so a
+manual `ip link delete <name>` (a udev remove) flips it to inactive
+instead of leaving a stale `active` that Type=oneshot + RemainAfterExit
+would otherwise report. A reconverge then recreates the iface (the
+systemd_unit helper starts any non-active unit), or `systemctl restart
+<name>` does it by hand.
 #}
 {% set _host_ip = macvlan_args.host_ip | default(macvlan_args.block | ansible.utils.ipmath(0)) %}
 {% set _mac = macvlan_args.mac_address | default('82:48:10' | random_mac(seed=(inventory_hostname ~ '_' ~ macvlan_args.name))) %}
@@ -30,6 +31,12 @@ Description={{ macvlan_args.name }} interface setup
 After=sys-subsystem-net-devices-{{ macvlan_args.parent }}.device
 BindsTo=sys-subsystem-net-devices-{{ macvlan_args.parent }}.device
 ConditionPathExists=/sys/class/net/{{ macvlan_args.parent }}
+# Tie the unit's active state to the child iface it creates: a udev remove
+# (manual `ip link delete`, driver teardown) drops this unit to inactive so
+# a reconverge recreates it. No After= on this one — the unit *creates* the
+# device, so ordering after it would deadlock. Carrier up/down is not a udev
+# remove, so a link flap won't tear the unit down.
+BindsTo=sys-subsystem-net-devices-{{ macvlan_args.name }}.device
 
 [Service]
 Type=oneshot
