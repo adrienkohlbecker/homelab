@@ -1,0 +1,65 @@
+---
+# Ownership-of-uidmap-target checks. Nexus runs as in-container uid 200
+# mapped to the host `nexus` user (--uidmap=+200:<uid>:1); a regression in
+# that mapping would land files on the wrong host uid and break ZFS
+# replication portability + the container's write access to its volumes.
+- name: _verify | Nexus data dir is owned by nexus
+  stat:
+    path: /mnt/services/nexus/data
+  register: _verify_data_dir
+  failed_when: not _verify_data_dir.stat.exists or _verify_data_dir.stat.pw_name != 'nexus'
+  become: true
+
+- name: _verify | Nexus user dir is owned by nexus
+  stat:
+    path: /mnt/services/nexus/user
+  register: _verify_user_dir
+  failed_when: not _verify_user_dir.stat.exists or _verify_user_dir.stat.pw_name != 'nexus'
+  become: true
+
+- name: _verify | Nexus blob store dir is owned by nexus
+  stat:
+    path: /mnt/scratch/nexus
+  register: _verify_blob_dir
+  failed_when: not _verify_blob_dir.stat.exists or _verify_blob_dir.stat.pw_name != 'nexus'
+  become: true
+
+- name: _verify | Nexus systemd unit is active  # noqa: command-instead-of-module
+  command: systemctl is-active nexus
+  register: _verify_unit
+  changed_when: false
+  failed_when: (_verify_unit.stdout | trim) != 'active'
+  become: true
+
+# Functional probe over the published loopback port. status/writable returns
+# 200 only once Nexus has fully booted and its DB is writable -- the same
+# contract the container healthcheck gates on. A broken converge (bad
+# encryption.json, JVM OOM, wrong volume) surfaces here rather than as a
+# tautological "data dir is non-empty" check. Converge already blocks on
+# --sdnotify=healthy, so this is normally 200 on the first try; the retry
+# budget is belt-and-suspenders.
+- name: _verify | Nexus answers writable-status on its loopback port
+  uri:
+    url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/status/writable
+    status_code: 200
+  register: _verify_status
+  retries: 60
+  delay: 2
+  until: _verify_status.status == 200
+
+# End-to-end through the nginx vhost -- the production ingress every fleet
+# host's apt/docker/pypi pulls traverse. Host: + validate_certs=false hits
+# local nginx without DNS; a jinja typo in proxy_pass, a missing
+# proxy_set_header, or a dropped site would surface here.
+- name: _verify | Nexus UI answers through the nginx site
+  uri:
+    url: https://localhost/
+    validate_certs: false
+    follow_redirects: none
+    headers:
+      Host: "nexus.{{ inventory_hostname }}.{{ domain }}"
+    status_code: [ 200, 302, 307 ]
+  register: _verify_nginx
+  retries: 30
+  delay: 2
+  until: _verify_nginx.status in [ 200, 302, 307 ]
