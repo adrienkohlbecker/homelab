@@ -5,50 +5,39 @@
   tags:
     - nginx
 
-# - name: Restart netdata
-#   when: nginx_status_conf.changed
-#   systemd:
-#     name: netdata
-#     state: restarted
-#   become: true
-#   tags:
-#     - nginx
-
-- name: Configure nginx static sites (marantz)
-  import_tasks: site.yml
+# Device admin UIs reverse-proxied to their LAN IPs, all behind Authelia.
+# The device's own firmware login stays in front; Authelia adds
+# defense-in-depth at the perimeter -- accept the second click. include_tasks
+# (not import_tasks) so the per-item nginx_site_args re-evaluates each loop;
+# unifi (special CSP, no auth) and the retired otgw (tombstone) differ and
+# stay as standalone calls below.
+- name: Configure device-proxy nginx sites
+  include_tasks:
+    file: site.yml
+    apply:
+      tags:
+        - nginx
   vars:
     nginx_site_args:
-      subdomain: marantz
-      proxy_pass: https://{{ external_ips.marantz }}:10443/
+      subdomain: "{{ item.subdomain }}"
+      proxy_pass: "{{ item.proxy_pass }}"
       reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
-      # Device firmware login still in front; Authelia adds
-      # defense-in-depth at the perimeter — accept the second click.
       auth: required
+  loop:
+    - { subdomain: marantz, proxy_pass: "https://{{ external_ips.marantz }}:10443/" }
+    - { subdomain: printer, proxy_pass: "http://{{ external_ips.printer }}:80/" }
+    - { subdomain: siglent, proxy_pass: "http://{{ external_ips.siglent }}:80/" }
+    - { subdomain: ups, proxy_pass: "https://{{ external_ips.eaton }}:443/" }
+    - { subdomain: tubeszb, proxy_pass: "http://{{ external_ips.tubeszb }}:80/" }
+  loop_control:
+    label: "{{ item.subdomain }}"
   tags:
     - nginx
 
-- name: Configure nginx static sites (printer)
-  import_tasks: site.yml
-  vars:
-    nginx_site_args:
-      subdomain: printer
-      proxy_pass: http://{{ external_ips.printer }}:80/
-      reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
-      auth: required
-  tags:
-    - nginx
-
-- name: Configure nginx static sites (siglent)
-  import_tasks: site.yml
-  vars:
-    nginx_site_args:
-      subdomain: siglent
-      proxy_pass: http://{{ external_ips.siglent }}:80/
-      reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
-      auth: required
-  tags:
-    - nginx
-
+# unifi intentionally has no `auth: required` (unlike the sibling device
+# proxies): the UniFi controller ships its own login, and fronting it with
+# Authelia breaks the mobile app / API clients. The vhost still gets TLS,
+# HSTS and CSP.
 - name: Configure nginx static sites (unifi)
   import_tasks: site.yml
   vars:
@@ -58,28 +47,6 @@
       csp_additional: connect-src api.mapbox.com ui.com *.ui.com {{ nginx_csp_default }}
       csp_default_src: ui.com *.ui.com
       reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
-  tags:
-    - nginx
-
-- name: Configure nginx static sites (ups)
-  import_tasks: site.yml
-  vars:
-    nginx_site_args:
-      subdomain: ups
-      proxy_pass: https://{{ external_ips.eaton }}:443/
-      reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
-      auth: required
-  tags:
-    - nginx
-
-- name: Configure nginx static sites (tubeszb)
-  import_tasks: site.yml
-  vars:
-    nginx_site_args:
-      subdomain: tubeszb
-      proxy_pass: http://{{ external_ips.tubeszb }}:80/
-      reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
-      auth: required
   tags:
     - nginx
 
