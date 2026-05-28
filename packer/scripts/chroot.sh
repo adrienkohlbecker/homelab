@@ -119,6 +119,17 @@ deb $2 $UBUNTU_NAME-security universe
 deb $2 $UBUNTU_NAME-security multiverse
 # deb-src $2 $UBUNTU_NAME-security multiverse
 EOF
+
+  # apt keys /var/lib/apt/lists/ by mirror URL, so changing the mirror
+  # here orphans the cached indices. The frozen base suite's InRelease is
+  # byte-identical whichever mirror serves it (Nexus just proxies
+  # upstream), so the next apt-get update records a content "Hit", skips
+  # the re-download, then can't open the list file that was never written
+  # under the new URL ("can not open …InRelease"). Drop the cache so each
+  # rewrite re-fetches cleanly under the current URLs. No-op on the first
+  # call (debootstrap leaves the dir empty); load-bearing on the upstream
+  # rewrite below.
+  find /var/lib/apt/lists -type f -delete
 }
 
 write_sources_list "$UBUNTU_MIRROR" "$UBUNTU_MIRROR_SECURITY"
@@ -636,15 +647,11 @@ fi
 # Ubuntu mirrors.
 write_sources_list "$UBUNTU_MIRROR_UPSTREAM" "$UBUNTU_MIRROR_SECURITY_UPSTREAM"
 
-# Refresh /var/lib/apt/lists/ against the just-rewritten upstream URLs.
-# The earlier apt-get update at line 163 keyed the on-disk lists to the
-# Nexus URLs; after the rewrite above those entries are orphaned (apt
-# only consults lists whose URL matches sources.list) so the shipped
-# image effectively has an empty package cache for the configured
-# sources. Any role that does `apt: pkg: <name>` with cache_valid_time
-# set (e.g. hwe_kernel applied in packer/seed_deps.yml) sees "no package
-# matching" because ansible skips its own update. One more refresh here
-# leaves the image with a coherent cache.
+# Refresh /var/lib/apt/lists/ under the upstream URLs (write_sources_list
+# just cleared the build-time Nexus lists) so the shipped image carries a
+# coherent cache: a role doing `apt: pkg:` with cache_valid_time set
+# (hwe_kernel in packer/seed_deps.yml) skips its own update and would
+# otherwise find no candidate.
 apt-get update
 
 # Drop the downloaded .deb cache (build-only, ~hundreds of MB) so it doesn't
