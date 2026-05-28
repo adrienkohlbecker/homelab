@@ -1,5 +1,5 @@
 # Poll a ClickHouse query until a caller-supplied predicate is true, or
-# fail after retries. Companion to clickhouse_query.yml -- split out so
+# fail after retries. Companion to clickhouse_query.yml -- kept separate so
 # the wait-loop shape (templated until: from caller) stays trusted under
 # Ansible 2.19+ while the one-shot fetch keeps a literal conditional.
 #

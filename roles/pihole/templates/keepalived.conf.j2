@@ -6,9 +6,9 @@ vrrp_script pihole_healthcheck {
   fall      2
   user      root
   # Start the script in FAILED state so keepalived enters FAULT on every
-  # restart and only transitions out once the healthcheck passes once.
-  # Replaces the old global vrrp_startup_delay 10s wallclock heuristic
-  # with a deterministic gate on pihole's actual health.
+  # restart and only transitions out once the healthcheck passes once --
+  # a deterministic gate on pihole's actual health rather than a wallclock
+  # startup delay.
   init_fail
 }
 

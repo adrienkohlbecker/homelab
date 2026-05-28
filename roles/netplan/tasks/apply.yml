@@ -2,10 +2,10 @@
 # /usr/local/bin/netplan_rollback if /run/netplan_keep is missing.
 # See notes/netplan-safe-apply.md for incident background.
 #
-# Extracted from main.yml so tasks/_verify.yml can invoke the same
-# apply path directly with a deliberately-broken /etc/netplan to
-# exercise the rollback timer end-to-end. The block-level when:/
-# become:/tags: gating stays in main.yml.
+# Separate file so tasks/_verify.yml can invoke the same apply path
+# directly with a deliberately-broken /etc/netplan to exercise the
+# rollback timer end-to-end. The block-level when:/become:/tags: gating
+# lives in main.yml.
 
 - name: Clear stale cancel-marker before arming
   file:

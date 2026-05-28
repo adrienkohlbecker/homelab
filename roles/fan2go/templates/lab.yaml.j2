@@ -1,15 +1,13 @@
-# fan2go config for lab. Ported from the old fancontrol_settings in
-# host_vars/lab.yml. Two shared sensors (nct6798 temp2, drivetemp max)
-# drive two curves; four fans reference them.
+# fan2go config for lab. Two shared sensors (nct6798 temp2, drivetemp
+# max) drive two curves; four fans reference them.
 #
 # Rotational disks are pulled from group_vars/all.yml:rotational_disks_by_id
 # (computed at apply time from ansible_devices) and aggregated via a
-# max-function curve so HDD-driven fans track the hottest spinner. The
-# previous "platform: drivetemp" form bound to the first drivetemp
-# libsensors enumerated, which was often a cool SSD (sde/sdf/sdg run
-# 28-39°C) -- curve evaluated below mintemp=40 and the fans pinned at
-# 0. SSDs deliberately excluded; we don't want fan speed reacting to
-# them.
+# max-function curve so HDD-driven fans track the hottest spinner. Not
+# the simpler "platform: drivetemp" form: it binds to the first drivetemp
+# libsensors enumerates, often a cool SSD (sde/sdf/sdg run 28-39°C), so
+# the curve evaluates below mintemp=40 and the fans pin at 0. SSDs
+# deliberately excluded; we don't want fan speed reacting to them.
 
 dbPath: /var/lib/fan2go/fan2go.db
 

@@ -1,7 +1,6 @@
 # Wire the hdparm charts.d collector + its native alerts into netdata.
-# Replaces the path that used to go custom_exporter -> prometheus.custom.*
-# -> netdata; charts.d emits the same per-drive power-state chart into
-# netdata's own chart registry, dropping the prometheus-text round-trip.
+# charts.d emits a per-drive power-state chart directly into netdata's
+# own chart registry (no prometheus-text round-trip).
 
 # `charts_d_hdparm.conf.j2` populates hdparm_disks from ansible_devices'
 # rotational drives, taking the first `links.ids` entry. A drive with an

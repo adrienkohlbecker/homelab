@@ -9,10 +9,11 @@ input_numbers.yaml, timers.yaml, custom_templates/macros.jinja,
 blueprints/automation/*.yaml.
 
 The submodule at roles/homeassistant/files/ha_gui_config/ is the source of
-truth. The role itself no longer copies these files (the ha:sync push path
-replaces ansible's old copy: loop). A movable tag `last_synced_to_host`
-records the commit whose tree matches the live host state; sync direction
-is detected by comparing host file shas against blobs at that tag.
+truth; the ha:sync push path is what deploys these files to the host (the
+role only creates dirs + include-target stubs). A movable tag
+`last_synced_to_host` records the commit whose tree matches the live host
+state; sync direction is detected by comparing host file shas against blobs
+at that tag.
 
 - pull: scp host -> submodule, commit if changed, advance tag.
         Refuses on a dirty working tree (would clobber local edits).

@@ -46,8 +46,7 @@ ExecStart=/usr/bin/podman run \
     --user {{ kuma_user.uid }}:{{ kuma_user.group }} \
     {# No --entrypoint override: the v2 release image runs
        `dumb-init -- node server/server.js` natively, with no chown-doing
-       extra/entrypoint.sh wrapper (v1 had one that couldn't run unprivileged
-       under tier-1 --user, which is why this override used to exist). #}
+       extra/entrypoint.sh wrapper to bypass. #}
     --log-driver journald \
     --log-opt tag="kuma" \
     --security-opt=no-new-privileges \

@@ -107,8 +107,7 @@ def print_cmd_line(cmd: list[str], env: dict[str, str] | None = None) -> None:
     """Log the command being executed in a distinct color.
 
     When *env* is supplied, render an `env K=V K=V ... cmd ...` prefix so the
-    printed line stays copy-pasteable -- mirrors how the subprocess used to
-    be invoked when env vars were prepended to argv directly.
+    printed line stays copy-pasteable.
     """
     if env:
         env_parts = [f"{k}={shlex.quote(v)}" for k, v in env.items()]

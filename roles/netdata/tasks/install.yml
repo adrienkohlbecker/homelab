@@ -190,9 +190,8 @@
     - netdata
 
 # No separate netdata-plugin-* packages: the base `netdata` package covers
-# what this fleet charts. slabinfo was installed historically but is unused
-# (disabled-by-default, and no collector/context/alarm references it) and has
-# no arm64 build on packagecloud — so it hard-failed local arm64 (Apple
-# Silicon) test VMs while the x86_64 fleet (lab/pug/fox) was unaffected.
-# Don't re-add it without a concrete consumer. See
-# notes/netdata_packagecloud_migration.md.
+# what this fleet charts. Don't add netdata-plugin-slabinfo: it's unused
+# (disabled-by-default, no collector/context/alarm references it) and has
+# no arm64 build on packagecloud, so it hard-fails local arm64 (Apple
+# Silicon) test VMs while the x86_64 fleet (lab/pug/fox) is unaffected.
+# See notes/netdata_packagecloud_migration.md.

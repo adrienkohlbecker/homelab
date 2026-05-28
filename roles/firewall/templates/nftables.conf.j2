@@ -198,8 +198,8 @@ table inet homelab {
         # lookup (paperless → redis, z2m → mosquitto) at INPUT before
         # aardvark even sees them. Accept TCP alongside UDP on 5053 so
         # clients can fall back to TCP when a response would be
-        # UDP-truncated (pihole does this opportunistically); we kept it
-        # UDP-only originally and saw ~2 TCP drops/day from pihole.
+        # UDP-truncated (pihole does this opportunistically); UDP-only
+        # would drop ~2 of pihole's queries/day.
         ip saddr $PODMAN_DEFAULT meta l4proto { tcp, udp } th dport {{ service_ports.dnscrypt_proxy }} counter name "dnscrypt_accept" accept comment "dnscrypt-proxy (default bridge only, TCP+UDP)"
         ip saddr { $PODMAN_DEFAULT, $PODMAN_POOL } udp dport 5333 counter name "aardvark_accept" accept comment "aardvark-dns (post-DNAT from gateway:53, all podman bridges)"
         iifname $WAN_IFACE ip saddr $HOME_LAN udp dport 5353 counter name "mdns_accept" accept comment "mDNS (home LAN)"

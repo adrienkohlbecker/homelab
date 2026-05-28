@@ -150,7 +150,7 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         inventory_host="lab",
         # lab: matches the lab prod host. mdadm-EFI + mdadm-swap +
         # 3-disk mirror rpool + dozer + tank + mouse, all baked in.
-        # Push CI no longer fans out to lab; kept for on-demand
+        # Push CI doesn't fan out to lab; kept for on-demand
         # --machine lab debug + nightly + packer script regression.
         packer_image="lab",
         os_disk_count=9,
@@ -159,7 +159,7 @@ QEMU_MACHINE_SPECS: dict[str, QemuMachineSpec] = {
         ssh_user="vagrant",
         inventory_host="pug",
         # pug: matches the pug prod host. Single-disk rpool + apoc
-        # mirror, all baked in. Push CI no longer fans out to pug;
+        # mirror, all baked in. Push CI doesn't fan out to pug;
         # kept for on-demand --machine pug + nightly + packer script
         # regression.
         packer_image="pug",
@@ -203,7 +203,7 @@ def _qemu_ansible_args(spec: QemuMachineSpec) -> list[str]:
     test-mode macos_vm) on top of the prod-shaped host_vars/<host>.yml
     that inventory loads; we force-load it via -e so its values beat
     the prod host_vars regardless of merge order. qemu_test itself
-    lives inside each fixture/overlay file, no longer harness-injected.
+    lives inside each fixture/overlay file, not harness-injected.
     """
     override = Path(f"host_vars/{spec.inventory_host}-qemu.yml")
     if not override.exists():
@@ -1143,8 +1143,8 @@ class QemuMachine(Machine):
         self._direct_boot = None
 
         # Pre-pick a free TCP port on 127.0.0.1 and pin qemu's hostfwd to it.
-        # Replaces the prior lsof-poll heuristic (which had to filter VNC ports
-        # and would re-tangle if any future qemu service published TCP). Tiny
+        # Avoids an lsof-poll heuristic, which would have to filter VNC ports
+        # and re-tangle if any future qemu service published TCP. Tiny
         # race window between close() and qemu's bind, but qemu launches
         # near-immediately and the kernel rarely reissues a freshly-released
         # port within microseconds.

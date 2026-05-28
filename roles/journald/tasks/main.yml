@@ -57,11 +57,10 @@
     - journald
 
 # Conf change requires journald restart to pick up Audit=no (and to
-# drop the audit fd it currently holds, if any). Pure restart instead
-# of the previous stop/start dance: with the audit.socket stopped
-# above, there's no longer a downstream socket activation that needs
-# coordinated ordering. Steady-state apply (no conf change, socket
-# already disabled) skips the restart.
+# drop the audit fd it currently holds, if any). A pure restart
+# suffices: with audit.socket stopped above, there's no downstream
+# socket activation needing coordinated ordering. Steady-state apply
+# (no conf change, socket already disabled) skips the restart.
 - name: Restart systemd-journald.service
   when: journald_conf_d_10_custom_conf_result.changed or journald_audit_socket.changed
   systemd:

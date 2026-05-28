@@ -8,7 +8,7 @@ resource "nexus_blobstore_file" "default" {
   path = "default"
 
   # Banner-only warning when usage crosses this threshold; doesn't block
-  # writes. Sized for the /mnt/scratch zvol the store now lives on —
+  # writes. Sized for the /mnt/scratch zvol the store lives on —
   # adjust if that zvol's quota changes. spaceUsedQuota is "alert when
   # used data exceeds limit"; the alternative spaceRemainingQuota is
   # "alert when free space drops below limit".

@@ -4,10 +4,8 @@
 # with. Single-disk rpool only (no apoc/dozer/tank/mouse) -- producer
 # roles still run but their datasets land flat under rpool/ via the
 # pool-var remap below. Lab-prod's multi-pool shape is exercised by
-# --machine lab/pug nightly. host_vars/box-qemu.yml used to overlay
-# this file via the harness's -e injection -- that pattern retired
-# when [test] became a real inventory group; everything qemu-only
-# lives here directly.
+# --machine lab/pug nightly. Everything qemu-only lives here directly
+# (box is in [test], so ansible loads this file with no -e overlay).
 qemu_test: true
 
 zfs_root: true

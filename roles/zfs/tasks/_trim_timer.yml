@@ -16,13 +16,11 @@
 # "Schedule the zfs_autosnapshot timer" reinstalls the same name --
 # flapping the per-pool trim timer on every apply.
 #
-# The original blocker for import_role here was that
-# systemd_timer/install.yml had `name: install | Install service unit
-# for {{ systemd_timer_args.name }}` on its nested import_role tasks,
-# which import_role templated at parse time before `item` was bound.
-# Those names are now static (see roles/systemd_timer/tasks/install.yml),
-# so import_role-with-inline-vars works here without a parse-time
-# template warning.
+# import_role-with-inline-vars is safe here only because
+# systemd_timer/install.yml's nested task names are static: a templated
+# `{{ systemd_timer_args.name }}` on those tasks would resolve at parse
+# time, before `item` is bound, and warn. Keep them static (see
+# roles/systemd_timer/tasks/install.yml).
 - name: _trim_timer | Install zfs_trim timer for {{ item }}
   import_role:
     name: systemd_timer

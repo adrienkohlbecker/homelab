@@ -443,9 +443,9 @@ menuentry "Ubuntu (ZBM Menu)" {
 }
 EOF
 
-# Configure EFI boot entry — only rEFInd, since ZBM is no longer a
-# bootable EFI binary (Components mode = kernel + initrd as separate
-# files, loaded by rEFInd).
+# Configure EFI boot entry — only rEFInd, since ZBM in Components mode
+# is not a bootable EFI binary (kernel + initrd as separate files,
+# loaded by rEFInd).
 
 apt-get install --yes efibootmgr
 

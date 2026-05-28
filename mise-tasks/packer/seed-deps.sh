@@ -20,7 +20,7 @@ fi
 # against a fresh tree and publish.py's atomic-rename swaps it over the
 # previous good box_deps directory without disturbing box. The copy is
 # also what protects the box source from --commit's in-place writes,
-# now that the qcow2 overlay is bypassed.
+# since the qcow2 overlay is bypassed.
 #
 # Use reflink/clone semantics so the copy is near-instant and the
 # physical divergence is just the seeded writes (~few hundred MB),

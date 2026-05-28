@@ -24,11 +24,10 @@
   failed_when: "'crashkernel=' not in kdump_verify_zbm_cmdline.stdout"
   become: true
 
-# The role no longer writes its own /etc/default/grub.d/99-kdump.cfg
-# — the kdump-tools package's shipped /etc/default/grub.d/kdump-tools.cfg
-# is the canonical source on grub hosts. Verify *that* file exists
-# and carries crashkernel=, which proves the package shipped what we
-# delegated to.
+# The kdump-tools package's shipped /etc/default/grub.d/kdump-tools.cfg
+# is the canonical crashkernel source on grub hosts (the role doesn't
+# write its own). Verify *that* file exists and carries crashkernel=,
+# which proves the package shipped what we delegated to.
 - name: _verify | GRUB cmdline file (kdump-tools package's) includes crashkernel
   when: grub_bootloader
   slurp:

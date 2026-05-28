@@ -1,8 +1,7 @@
 # Wire the netdata_presence charts.d collector + its native alerts +
-# the per-context staleness templates. Replaces the path that used to
-# go custom_exporter -> prometheus.custom.* -> netdata; charts.d emits
-# the same per-entry presence chart into netdata's own chart registry,
-# dropping the prometheus-text round-trip (and the whole role).
+# the per-context staleness templates. charts.d emits a per-entry
+# presence chart directly into netdata's own chart registry (no
+# prometheus-text round-trip).
 
 # Both curl + jq are baseline on prod (installed by roles/user), but
 # the test harness only runs the role under test against a fresh image
@@ -37,10 +36,7 @@
       mode: "0600"
 
 # Per-context $last_collected_t staleness alerts + the shared
-# go.d-collector staleness/failure templates. Was installed by
-# custom_exporter back when this role owned the configured-context
-# list; now that the registry is consumed here, the templates live
-# here too.
+# go.d-collector staleness/failure templates.
 - name: presence | Configure netdata context-liveness alerts
   import_role:
     name: netdata

@@ -2,7 +2,7 @@
 # with the right period, and the systemd_timers charts.d collector emits a
 # chart per timer with age_secs / overdue tracking.
 #
-# Split out of _verify.yml and imported under an x86_64 gate: the collector
+# A separate file imported under an x86_64 gate: the collector
 # rides netdata-plugin-chartsd, which cannot install on aarch64 (its
 # `Depends: netdata (= 1.46.3)` is unsatisfiable against the lagging arm64
 # build — see roles/netdata/tasks/charts_d.yml). Without the collector the

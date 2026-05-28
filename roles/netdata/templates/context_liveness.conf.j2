@@ -30,12 +30,11 @@ template: liveness_{{ name }}
       to: sysadmin
 
 {% endfor %}
-{# Previously this file also defined collector_stale + collector_failing
-   templates binding to `netdata.plugin_data_collection_status` -- a
-   per-collector liveness chart that netdata 2.x ships but 1.46 does
-   not. Those templates silently failed to instantiate on this version
-   (no matching chart context), so they were dead code. netdata is
-   pinned at 1.46.* in roles/netdata/files/apt_preferences; once that
-   pin lifts (and we move to 2.x) re-add the two templates here. The
+{# This file does not define collector_stale / collector_failing
+   templates binding to `netdata.plugin_data_collection_status`: that
+   per-collector liveness chart is netdata 2.x only and won't
+   instantiate on the pinned 1.46.* (roles/netdata/files/apt_preferences),
+   so the templates would be dead code (no matching chart context). Once
+   the pin lifts (and we move to 2.x) add the two templates here. The
    netdata_presence machinery covers the configured-but-never-
-   instantiated case in the meantime. #}
+   instantiated case meanwhile. #}

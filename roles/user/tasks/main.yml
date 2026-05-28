@@ -165,8 +165,8 @@
   tags:
     - user
 
-# GNU stow symlinks the dotfiles into $HOME (replaces the old bare-repo
-# reset --hard model). The repo is a normal clone at ~/.dotfiles on the fleet.
+# GNU stow symlinks the dotfiles into $HOME. The repo is a normal clone
+# at ~/.dotfiles on the fleet.
 - name: Install GNU stow
   apt:
     name: stow
@@ -327,7 +327,7 @@
 # repo's task; `mise trust` accepts the freshly cloned project config. Ordered
 # after the mise binary install (needs it) and before the tool install below
 # (which needs the ~/.config/mise symlink this lays down, along with every other
-# dotfile symlink). creates: makes it a one-time deploy, like the old reset --hard.
+# dotfile symlink). creates: makes it a one-time deploy.
 - name: Deploy dotfiles into $HOME (mise stow task)
   when: not (ansible_check_mode and user_dotfiles_clone.changed)
   shell: |

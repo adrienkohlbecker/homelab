@@ -32,9 +32,9 @@
     - fail2ban
 
 # fail2ban loads jail.conf -> jail.d/*.conf -> jail.local -> jail.d/*.local
-# alphabetically with last-wins precedence. We now write our DEFAULT
+# alphabetically with last-wins precedence. We write our DEFAULT
 # block at /etc/fail2ban/jail.local (the upstream-canonical override
-# path); two earlier prefix iterations under jail.d/ are cleaned up.
+# path); earlier prefix iterations under jail.d/ are cleaned up below.
 - name: Drop legacy jail.d overrides
   file:
     path: "/etc/fail2ban/jail.d/{{ item }}"
