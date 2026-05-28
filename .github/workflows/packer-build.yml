@@ -17,7 +17,9 @@ on:
 
 # Shared with test.yml and test-nightly.yml so packer can't rewrite the
 # qcow2 tree mid-test. Packer-build is the ONLY workflow that mounts the
-# qemu volume rw.
+# qemu volume rw. The whole run (prepare + every build matrix cell) holds
+# one slot, so the matrix below isn't self-cancelling -- the group only
+# serialises distinct packer-build runs.
 concurrency:
   group: lab-qemu-artifacts
   cancel-in-progress: false
@@ -27,11 +29,49 @@ defaults:
     shell: bash
 
 jobs:
+  prepare:
+    # Compute the per-source build matrix. A dispatch can narrow it via
+    # the `sources` input (space-separated); a push (no inputs) or an
+    # empty dispatch input builds all three. Non-VM work -> lab pool.
+    #
+    # Why one job per source instead of packer's internal parallel
+    # builds in a single job: each build VM then occupies one lab-vm
+    # runner slot, so the 4-VM pool cap (host_vars/lab.yml: vm1..vm4, all
+    # containers on the one lab host) actually governs concurrent packer
+    # VMs. A single job hid 3 VMs behind one slot and blew past the RAM
+    # budget. fail-fast:false keeps one source's failure from cancelling
+    # its siblings (the old single-invocation model tore them all down).
+    runs-on: [ self-hosted, lab ]
+    container:
+      image: nexus.lab.fahm.fr/homelab/ci:latest
+    timeout-minutes: 10
+    outputs:
+      sources: ${{ steps.compute.outputs.sources }}
+    steps:
+      - name: Compute build matrix
+        id: compute
+        env:
+          PACKER_SOURCES: ${{ inputs.sources }}
+        run: |
+          set -euo pipefail
+          sources="${PACKER_SOURCES:-}"
+          if [ -z "$sources" ]; then
+            sources="box pug lab"
+          fi
+          # space-separated string -> compact JSON array, dropping empties
+          json=$(jq -cn --arg s "$sources" '$s | split(" ") | map(select(. != ""))')
+          echo "sources=$json" >>"$GITHUB_OUTPUT"
+
   build:
-    # Packer spawns qemu VMs (one per source, in parallel) -- lands on
-    # the lab-vm pool. See notes/concurrency_rework.md for the pool
-    # model: lab-vm = 4 runners that take VM workloads (packer-build +
-    # test-role); lab = 2 runners that take everything else.
+    needs: prepare
+    # Packer spawns one qemu VM per cell -- lands on the lab-vm pool. See
+    # notes/concurrency_rework.md for the pool model: lab-vm = 4 runners
+    # that take VM workloads (packer-build + test-role); lab = 2 runners
+    # that take everything else.
+    strategy:
+      fail-fast: false
+      matrix:
+        source: ${{ fromJSON(needs.prepare.outputs.sources) }}
     runs-on: [ self-hosted, lab-vm ]
     container:
       image: nexus.lab.fahm.fr/homelab/ci:latest
@@ -56,20 +96,15 @@ jobs:
         # would fail with a plugin-version mismatch.
         run: mise run packer:init
       - name: Build
-        # Pass dispatch inputs through env vars rather than substituting
-        # them straight into the shell command -- otherwise a misbehaving
-        # input could break out of the args list. Single-quoting in the
-        # mise run line keeps shell word-splitting predictable.
+        # Pass the matrix source + dispatch ubuntu through env vars rather
+        # than substituting them straight into the shell command -- a
+        # misbehaving input could otherwise break out of the args list.
         env:
-          PACKER_SOURCES: ${{ inputs.sources }}
+          PACKER_SOURCE: ${{ matrix.source }}
           PACKER_UBUNTU: ${{ inputs.ubuntu }}
         run: |
           set -euo pipefail
-          args=()
-          if [ -n "$PACKER_SOURCES" ]; then
-            # shellcheck disable=SC2206  # sources is whitespace-separated, intentional
-            args+=($PACKER_SOURCES)
-          fi
+          args=("$PACKER_SOURCE")
           if [ -n "$PACKER_UBUNTU" ]; then
             args+=(--ubuntu "$PACKER_UBUNTU")
           fi
@@ -79,11 +114,9 @@ jobs:
         # reflink-copy of box's artifacts, boots them via launch.py
         # --commit, applies packer/seed_deps.yml (podman + nginx +
         # backports), then atomically publishes the result. ~5 min on
-        # top of the 15-30 min box build. Gated on box having actually
-        # been built in this run: empty inputs.sources => full build
-        # (every push lands here); a dispatch limited to pug/lab/etc
-        # skips this step since box's existing artifact is untouched.
-        if: inputs.sources == '' || contains(inputs.sources, 'box')
+        # top of the 15-30 min box build. Only the box cell seeds it --
+        # the other sources leave box's existing artifact untouched.
+        if: matrix.source == 'box'
         env:
           PACKER_UBUNTU: ${{ inputs.ubuntu }}
         run: |
@@ -95,13 +128,17 @@ jobs:
           mise run packer:seed-deps "${args[@]}"
       - name: Mark build complete for waiters
         # test.yml's wait-for-packer-build job polls this sentinel before
-        # letting the _packer test cell read the qcow2s. Sentinels live
-        # in a dedicated subdir (not next to the qcow2s) so the
-        # tmpfiles.d age-out rule in roles/github_runner doesn't mistakenly
-        # walk the artifact tree. Only fires on a green Build step: a
-        # failed build leaves no sentinel, the waiter times out, the
-        # _packer cell skips rather than asserting against half-rebuilt
-        # artifacts.
+        # letting the _packer test cell read the qcow2s. Push CI only
+        # tests box/box_deps (minimal aside), so the sentinel is gated on
+        # the box cell -- pug/lab are nightly/on-demand and test-nightly
+        # doesn't wait on it. A failed box build/seed leaves no sentinel,
+        # the waiter times out, and the _packer cell skips rather than
+        # asserting against half-rebuilt artifacts. pug/lab failing no
+        # longer blocks the sentinel (was: any source's failure did).
+        # Sentinels live in a dedicated subdir (not next to the qcow2s)
+        # so the tmpfiles.d age-out rule in roles/github_runner doesn't
+        # mistakenly walk the artifact tree.
+        if: matrix.source == 'box'
         run: |
           mkdir -p /mnt/scratch/qemu/_sentinels
           touch "/mnt/scratch/qemu/_sentinels/complete-${{ github.sha }}"
