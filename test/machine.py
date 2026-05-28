@@ -667,12 +667,17 @@ class Machine:
             return False
         finally:
             writer.close()
-            # wait_closed() returns immediately for a healthy transport;
-            # OSError catches the case where the peer dropped the connection
-            # before our close completed. We don't time-bound it -- if
-            # close ever genuinely hangs that's a real bug worth surfacing.
-            with contextlib.suppress(OSError):
-                await writer.wait_closed()
+            # wait_closed() returns immediately for a healthy transport, but a
+            # half-open connection through qemu's SLIRP hostfwd (port accepted
+            # while sshd is still coming up at first boot) can stall the close
+            # handshake indefinitely. Left unbounded it hangs the whole probe,
+            # so the SSH_WAIT_TIMEOUT deadline never gets re-checked and a flaky
+            # boot burns the full per-test timeout instead of failing in ~2min.
+            # This is best-effort cleanup -- the transport is reaped with the VM
+            # regardless -- so cap it and move on. OSError covers a peer that
+            # dropped the connection before our close completed.
+            with contextlib.suppress(OSError, TimeoutError):
+                await asyncio.wait_for(writer.wait_closed(), timeout=2)
 
     async def _collect_remote_to_file(self, label: str, dest: Path, *remote_cmd: str) -> bool:
         """Run *remote_cmd* over SSH, capture stdout into *dest*.
