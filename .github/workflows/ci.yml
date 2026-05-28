@@ -60,8 +60,11 @@ jobs:
       packer_changed: ${{ steps.detect.outputs.packer_changed }}
       ci_image_changed: ${{ steps.detect.outputs.ci_image_changed }}
       # The packer source matrix, folded in from packer-build's old `prepare`
-      # job -- passed to the packer call's sources_matrix below.
+      # job. Split into box vs the rest so packer_box / packer_extra can build
+      # box on its own and gate `test` on it alone (see those jobs).
       packer_sources: ${{ steps.detect.outputs.packer_sources }}
+      packer_sources_box: ${{ steps.detect.outputs.packer_sources_box }}
+      packer_sources_extra: ${{ steps.detect.outputs.packer_sources_extra }}
     steps:
       - uses: actions/checkout@v6
         with: { fetch-depth: 50 }
@@ -103,38 +106,61 @@ jobs:
     uses: ./.github/workflows/ci-image.yml
     secrets: inherit
 
-  packer:
-    # Rebuild + republish the qcow2 tree only when packer inputs changed.
-    # Nested under this run; self-serialises via its own concurrency group.
-    # Builds in the ci container, so (like test) it waits on ci-image when
-    # that's being rebuilt -- e.g. a packer/qemu.pkr.hcl change is BOTH a
-    # packer input and a ci-image input, and the build needs the image with
-    # the matching pre-installed packer plugins.
+  packer_box:
+    # Build box (and seed box_deps off it) on its own so `test` can depend on
+    # box alone: box + box_deps are the only images push-CI test cells consume,
+    # so a pug/lab/hetzner failure -- notably the master-only Hetzner snapshot
+    # publish -- must not block the role matrix. Builds in the ci container, so
+    # (like test) it waits on ci-image when that's being rebuilt -- e.g. a
+    # packer/qemu.pkr.hcl change is BOTH a packer input and a ci-image input,
+    # and the build needs the image with the matching pre-installed plugins.
+    # Skipped when box isn't in the source set (a dispatch with sources=lab pug).
     needs: [ detect, ci-image ]
     if: |
       always()
       && needs.detect.result == 'success'
       && needs.detect.outputs.packer_changed == 'true'
+      && needs.detect.outputs.packer_sources_box != '[]'
       && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
     uses: ./.github/workflows/packer-build.yml
     secrets: inherit
     with:
-      # The source matrix detect computed (folded in from packer-build's old
-      # `prepare` job). ubuntu still rides through from the dispatch input.
-      sources_matrix: ${{ needs.detect.outputs.packer_sources }}
+      sources_matrix: ${{ needs.detect.outputs.packer_sources_box }}
       ubuntu: ${{ inputs.ubuntu }}
 
-  test:
-    # Runs after packer and ci-image so test cells read a freshly-published
-    # qcow2 tree and the new :latest image (the ordering the old
-    # wait-for-packer-build / wait-for-ci-image sentinels faked). always() +
-    # (success || skipped) lets it run whether or not either was needed; a
-    # genuine failure (not skip) of either blocks it.
-    needs: [ detect, packer, ci-image ]
+  packer_extra:
+    # Rebuild the non-box images (pug / lab / hetzner). `needs: packer_box`
+    # only orders it -- packer-build's lab-qemu-artifacts concurrency group
+    # serialises the two calls anyway, so running box first lets test start as
+    # soon as box is done while these build in parallel with it. always() so a
+    # box failure doesn't skip the other images. Its result (incl. the Hetzner
+    # publish) gates the overall run conclusion but never `test`.
+    needs: [ detect, ci-image, packer_box ]
     if: |
       always()
       && needs.detect.result == 'success'
-      && (needs.packer.result == 'success' || needs.packer.result == 'skipped')
+      && needs.detect.outputs.packer_changed == 'true'
+      && needs.detect.outputs.packer_sources_extra != '[]'
+      && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
+    uses: ./.github/workflows/packer-build.yml
+    secrets: inherit
+    with:
+      sources_matrix: ${{ needs.detect.outputs.packer_sources_extra }}
+      ubuntu: ${{ inputs.ubuntu }}
+
+  test:
+    # Runs after packer_box and ci-image so test cells read a freshly-published
+    # box/box_deps tree and the new :latest image (the ordering the old
+    # wait-for-packer-build / wait-for-ci-image sentinels faked). Deliberately
+    # does NOT need packer_extra -- pug/lab/hetzner are unused by push test
+    # cells, so their build (or the Hetzner publish) failing can't block test.
+    # always() + (success || skipped) lets it run whether or not box or
+    # ci-image was needed; a genuine failure (not skip) of either blocks it.
+    needs: [ detect, packer_box, ci-image ]
+    if: |
+      always()
+      && needs.detect.result == 'success'
+      && (needs.packer_box.result == 'success' || needs.packer_box.result == 'skipped')
       && (needs.ci-image.result == 'success' || needs.ci-image.result == 'skipped')
     uses: ./.github/workflows/test.yml
     secrets: inherit

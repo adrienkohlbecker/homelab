@@ -35,6 +35,13 @@
 #                                              (ci.yml's `sources` dispatch
 #                                              input, space-separated); empty
 #                                              -> the full set.
+#   packer_sources_box=<JSON array>         -- packer_sources limited to box:
+#                                              the ci.yml packer_box call matrix.
+#   packer_sources_extra=<JSON array>       -- packer_sources minus box: the
+#                                              packer_extra call's matrix. The
+#                                              split lets test depend on box
+#                                              alone (box + box_deps are the
+#                                              only images push-CI tests use).
 #
 # A changed role is also expanded via ci:role-deps into the set of roles
 # that import it (its consumers) -- so editing a helper like systemd_unit or
@@ -171,21 +178,32 @@ PACKER_SOURCES_JSON=$(jq -cn --arg s "${INPUTS_SOURCES:-}" \
   '($s | split(" ") | map(select(. != ""))) as $l
    | if ($l | length) == 0 then ["box", "pug", "lab", "hetzner"] else $l end')
 
+# Split the source matrix so ci.yml can build box on its own and gate the role
+# test matrix on it alone: box (which also seeds box_deps) is the only image
+# push-CI test cells consume, so a pug/lab/hetzner build failure -- including
+# the master-only Hetzner snapshot publish -- must not block test.
+PACKER_SOURCES_BOX_JSON=$(jq -cn --argjson all "$PACKER_SOURCES_JSON" '$all | map(select(. == "box"))')
+PACKER_SOURCES_EXTRA_JSON=$(jq -cn --argjson all "$PACKER_SOURCES_JSON" '$all | map(select(. != "box"))')
+
 emit() {
   local matrix=$1 packer_changed=${2:-false} ci_image_changed=${3:-false}
-  log "result: matrix=$matrix packer_changed=$packer_changed ci_image_changed=$ci_image_changed packer_sources=$PACKER_SOURCES_JSON"
+  log "result: matrix=$matrix packer_changed=$packer_changed ci_image_changed=$ci_image_changed packer_sources=$PACKER_SOURCES_JSON (box=$PACKER_SOURCES_BOX_JSON extra=$PACKER_SOURCES_EXTRA_JSON)"
   if [ -n "${GITHUB_OUTPUT:-}" ]; then
     {
       echo "matrix=$matrix"
       echo "packer_changed=$packer_changed"
       echo "ci_image_changed=$ci_image_changed"
       echo "packer_sources=$PACKER_SOURCES_JSON"
+      echo "packer_sources_box=$PACKER_SOURCES_BOX_JSON"
+      echo "packer_sources_extra=$PACKER_SOURCES_EXTRA_JSON"
     } >>"$GITHUB_OUTPUT"
   else
     echo "matrix=$matrix"
     echo "packer_changed=$packer_changed"
     echo "ci_image_changed=$ci_image_changed"
     echo "packer_sources=$PACKER_SOURCES_JSON"
+    echo "packer_sources_box=$PACKER_SOURCES_BOX_JSON"
+    echo "packer_sources_extra=$PACKER_SOURCES_EXTRA_JSON"
   fi
 }
 
