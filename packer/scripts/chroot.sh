@@ -230,9 +230,15 @@ if [ -n "${ZFS_ARC_MAX:-}" ]; then
   echo "options zfs zfs_arc_max=${ZFS_ARC_MAX}" >/etc/modprobe.d/zfs.conf
 fi
 
-# Set ZFSBootMenu properties on datasets
-
-zfs set org.zfsbootmenu:commandline="" "rpool/ROOT"
+# Set ZFSBootMenu properties on datasets. The kernel cmdline carries a serial
+# console so the boot log reaches qemu's -serial stdio: the harness's
+# verify-boot post-processor captures it (a boot that never reaches SSH is
+# otherwise a black box), and it gives headless hosts a serial getty. ttyS0
+# is last so it's the primary /dev/console -- kernel printk and the login
+# prompt both land on serial; tty0 keeps VGA output for physical consoles.
+# aarch64 boots the EFI stub directly (console=ttyAMA0, set below), not ZBM,
+# so this property only shapes the x86_64 boot.
+zfs set org.zfsbootmenu:commandline="console=tty0 console=ttyS0,115200" "rpool/ROOT"
 
 # Create efi & swap
 

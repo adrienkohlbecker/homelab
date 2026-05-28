@@ -210,6 +210,27 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
+def _dump_boot_console(m: QemuMachine, lines: int = 200) -> None:
+    """Print the tail of the captured serial console (the boot log).
+
+    A boot that never reaches SSH is otherwise opaque -- this surfaces where it
+    stalled (failed mount, emergency shell, a hung unit) right in the run
+    output, so a verify-boot failure is diagnosable without re-running with
+    --keep. Relies on the image booting with a serial console=, set on the ZBM
+    cmdline in packer/scripts/chroot.sh.
+    """
+    try:
+        captured = m.boot_file.read_text(errors="replace").splitlines()
+    except OSError as exc:
+        print_line(f"(boot console {m.boot_file} unavailable: {exc})")
+        return
+    tail = captured[-lines:]
+    print_line(f"--- boot console tail ({len(tail)}/{len(captured)} lines) ---")
+    for line in tail:
+        print_line(line)
+    print_line("--- end boot console ---")
+
+
 async def _run_async(m: QemuMachine, *, wait_for_ssh: bool, exit_after_ready: bool, seed: Path | None) -> None:
     """Default flow: prepare + boot + ensure_ssh + wait, all under asyncio.
 
@@ -235,6 +256,7 @@ async def _run_async(m: QemuMachine, *, wait_for_ssh: bool, exit_after_ready: bo
                     m.print_ssh_instructions()
                 except TimeoutError as exc:
                     print_line(f"SSH did not come up in time: {exc}")
+                    _dump_boot_console(m)
                     if exit_after_ready or seed is not None:
                         raise
             if exit_after_ready or seed is not None:
