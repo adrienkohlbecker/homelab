@@ -12,13 +12,14 @@
       - smtp_port | default('') | string | length > 0
       - email_domain | default('') | length > 0
       - root_email | default('') | length > 0
+      - operator_user | default('') | length > 0
       - domain | default('') | length > 0
     fail_msg: >-
       One of postfix_smtp_user, postfix_smtp_password, smtp_host, smtp_port,
-      email_domain, root_email, domain is unset or empty. Set them in
-      group_vars/{prod,test}.yml (postfix_smtp_password is vaulted). An empty
-      vault string passes `is defined` but renders a broken relay that converges
-      green and silently drops all outbound mail, so we check for non-empty.
+      email_domain, root_email, operator_user, domain is unset or empty. Set
+      them in group_vars/{prod,test}.yml (postfix_smtp_password is vaulted); see
+      the task comment for why an empty value is rejected rather than just
+      undefined.
   tags:
     - postfix
 
@@ -88,7 +89,7 @@
     systemd_unit_args:
       src: postfix
       condition: "{{ not (ansible_check_mode and postfix_apt.changed) }}"
-      restart: "{{ postfix_cfg.changed or postfix_sasl_auth.changed or postfix_generic.changed }}"
+      restart: "{{ postfix_cfg.changed or postfix_sasl_auth.changed or postfix_generic.changed or postfix_apt.changed }}"
   tags:
     - postfix
 
