@@ -28,7 +28,7 @@
     tasks_from: service
   vars:
     systemd_unit_args:
-      src: powertop
+      src: powertop.service
       # In check mode on a fresh host the apt + install tasks only *report*
       # they would run: powertop isn't installed and the unit file isn't on
       # disk, so enable/start would fail. Skip them in that case. Same guard
@@ -43,34 +43,17 @@
 # ---- disabled-host cleanup ----
 # Only acts on a host that previously had powertop enabled and is now opted
 # out: without this the stale unit keeps re-running --auto-tune every boot,
-# defeating the opt-out on exactly the host where a tunable misbehaves. Stat
-# first to avoid systemctl ENOENT noise where it was never installed. Mirrors
-# the fan2go teardown.
-- name: Stat powertop service unit (disabled)
+# defeating the opt-out on exactly the host where a tunable misbehaves. The
+# remove helper stops + disables the unit, deletes it, and daemon-reloads
+# (a no-op where powertop was never installed), and refuses to clobber a
+# masked unit.
+- name: Tear down powertop service when opted out
   when: not powertop_enabled
-  stat:
-    path: /etc/systemd/system/powertop.service
-  register: powertop_unit_stat
-  tags:
-    - powertop
-
-- name: Stop and disable powertop service (disabled, previously installed)
-  when:
-    - not powertop_enabled
-    - powertop_unit_stat.stat.exists
-  systemd:
-    name: powertop
-    state: stopped
-    enabled: false
-  become: true
-  tags:
-    - powertop
-
-- name: Remove powertop service unit (disabled)
-  when: not powertop_enabled
-  file:
-    path: /etc/systemd/system/powertop.service
-    state: absent
-  become: true
+  import_role:
+    name: systemd_unit
+    tasks_from: remove
+  vars:
+    systemd_unit_args:
+      dest: powertop.service
   tags:
     - powertop
