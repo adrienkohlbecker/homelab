@@ -55,13 +55,17 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/paperless/export:/usr/src/paperless/export \
     --network redis \
     --publish 127.0.0.1:{{ service_ports.paperless }}:8000/tcp \
+    {# USERMAP_UID/GID (CLAUDE.md "User namespacing" tier 2): paperless-ngx's
+       s6 init usermods its baked-in paperless user to these ids and drops to
+       it. Tier 2 fits a droppable image -- the fake-root --uidmap pattern is
+       reserved for images that insist on id 0 (healthchecks, hyperdx). #}
     --env USERMAP_UID={{ paperless_user.uid }} \
     --env USERMAP_GID={{ paperless_user.group }} \
     --env PAPERLESS_REDIS="redis://redis.dns.podman:6379/1" \
     --env PAPERLESS_DB_TIMEOUT=30 \
     --env PAPERLESS_OCR_LANGUAGES="eng fra nld" \
     --env PAPERLESS_OCR_LANGUAGE=fra \
-    --env PAPERLESS_TIME_ZONE=Europe/Paris \
+    --env PAPERLESS_TIME_ZONE={{ system_timezone }} \
     --env PAPERLESS_URL=https://paperless.{{ inventory_hostname }}.{{ domain }} \
     --env PAPERLESS_APPS=allauth.socialaccount.providers.openid_connect \
     --env PAPERLESS_ACCOUNT_DEFAULT_HTTP_PROTOCOL=https \
