@@ -73,9 +73,9 @@ http {
     # an Authelia session cookie must NEVER bypass, because some SPAs
     # (InfluxDB v2 is one) inject a stale `Authorization` header from
     # localStorage onto every XHR, which would otherwise trigger the
-    # bypass too -- the browser's auth_request never runs, the if-set
-    # chain doesn't match (no $authelia_user), and the stale token
-    # gets forwarded to the upstream and rejected (401).
+    # bypass too -- the browser's auth_request never runs, the upstream-auth
+    # map never sees a $authelia_user (so it falls to its default), and the
+    # stale token gets forwarded to the upstream and rejected (401).
     #
     # Match: empty session cookie AND non-empty Authorization. We can't
     # express the conjunction with nginx's `if` directive, so the

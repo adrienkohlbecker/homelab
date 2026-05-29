@@ -2,10 +2,11 @@
 #   subdomain                 required; serves at <subdomain>.<host>.<domain>
 #   state                     optional, default 'present'. Set to 'absent' to
 #                             remove a retired site: deletes the symlink under
-#                             sites-enabled/ and the config under sites-available/,
-#                             then reloads. Keep the call in main.yml as a
-#                             tombstone so retired sites stay decommissioned on
-#                             fresh installs.
+#                             sites-enabled/, the config under sites-available/
+#                             and any upstream-auth map under conf.d/, then
+#                             reloads. Keep the call in main.yml as a tombstone
+#                             so retired sites stay decommissioned on fresh
+#                             installs.
 #   condition                 optional bool, default true; gates *application
 #                             of changes* -- NOT the input asserts (which run
 #                             every pass) and NOT desired state: `condition:
@@ -72,25 +73,28 @@
 #   upstream_authorization    optional dict {authelia_user: header_value};
 #                             when set (and `auth: required` is on) nginx
 #                             injects a per-user `Authorization` header into
-#                             the upstream proxy_pass, mapped from
-#                             `$authelia_user`. Renders an `if ($authelia_user
-#                             = "<u>") { set $upstream_auth "<header>"; }`
-#                             sequence inside `location /` (the `if + set`
-#                             pattern is one of the safe-by-design "evil if"
-#                             exceptions; an http-scope `map` would error out
-#                             because $authelia_user is location-scoped via
-#                             auth_request_set). Unknown user falls through
-#                             to empty, nginx 1.13+ omits the header, and
-#                             the upstream returns 401 -> operator can sign
-#                             in with the upstream's native creds (break-
-#                             glass). Setting this knob ALSO turns on a
-#                             bypass-on-Authorization shortcut inside
-#                             `/internal/authelia`: requests that already
-#                             carry their own Authorization header skip the
-#                             Authelia subrequest (return 204), and since
-#                             $authelia_user is empty for them the if-chain
-#                             above never matches -- the client's original
-#                             header passes through unmodified. Use this to
+#                             the upstream proxy_pass, keyed on the Authelia
+#                             user. Renders an http-scope `map $authelia_user`
+#                             into conf.d/upstream_auth_<sub>.conf (a map can't
+#                             live in server{}), referenced by a
+#                             `proxy_set_header Authorization` in `location /`;
+#                             the helper writes the map and the vhost together
+#                             and validates them in one `nginx -t` (they
+#                             cross-reference each other's variables, so neither
+#                             validates alone). The map is read in the content
+#                             phase, after auth_request populates $authelia_user
+#                             -- a rewrite-phase `if/set` would run before auth
+#                             and never match (the bug this replaced). The map
+#                             default ($http_authorization) forwards a cookieless
+#                             client's own token; an unmapped authed user gets an
+#                             empty header and lands at the upstream's native
+#                             sign-in (break-glass). Setting this knob ALSO turns
+#                             on a bypass-on-Authorization shortcut inside
+#                             `/internal/authelia`: requests that already carry
+#                             their own Authorization header skip the Authelia
+#                             subrequest (return 204), and since $authelia_user
+#                             is empty for them the map default passes the
+#                             client's header through unmodified. Use this to
 #                             let one vhost serve both browser users
 #                             (forward-auth + injected token) and machine
 #                             clients (native token, no cookie). Implies
@@ -275,6 +279,34 @@
   tags:
     - nginx_site
   block:
+    # The upstream-auth map (conf.d) and the vhost cross-reference each other's
+    # variables ($authelia_user <- the vhost's auth_request_set;
+    # $nginx_upstream_auth_<sub> <- this map), so they are written back-to-back
+    # here and validated by the single `nginx -t` below -- neither passes
+    # validation alone. The map is dropped first; when the knob is cleared the
+    # stale map is removed (before the validate sees it) so it can't outlive the
+    # vhost's auth_request_set and brick a later reload with an unknown
+    # $authelia_user. (Edge: a knob-clear in the same converge as an unrelated
+    # vhost syntax error can't fully roll back -- the removal makes no backup --
+    # but the operator sees the failed interactive `nginx -t` immediately.)
+    - name: site | Configure per-user upstream Authorization map
+      when: nginx_site_args.upstream_authorization is defined
+      template:
+        src: upstream_auth_map.conf.j2
+        dest: /etc/nginx/conf.d/upstream_auth_{{ nginx_site_args.subdomain }}.conf
+        owner: root
+        group: root
+        # 0640 root:root: the rendered map embeds the vaulted per-user tokens.
+        mode: "0640"
+        backup: true
+      register: nginx_upstream_auth_map
+
+    - name: site | Remove unused upstream Authorization map
+      when: nginx_site_args.upstream_authorization is not defined
+      file:
+        path: /etc/nginx/conf.d/upstream_auth_{{ nginx_site_args.subdomain }}.conf
+        state: absent
+
     - name: site | Configure nginx site
       template:
         src: site.conf.j2
@@ -298,14 +330,14 @@
     - name: site | Validate nginx config in place
       when:
         - not ansible_check_mode
-        - nginx_static_conf.changed or nginx_static_conf_enable.changed
+        - nginx_static_conf.changed or nginx_static_conf_enable.changed or (nginx_upstream_auth_map.changed | default(false))
       command: nginx -t
       changed_when: false
 
     - name: site | Reload nginx config
       when:
         - nginx_site_args.reload | default(true)
-        - nginx_static_conf.changed or nginx_static_conf_enable.changed
+        - nginx_static_conf.changed or nginx_static_conf_enable.changed or (nginx_upstream_auth_map.changed | default(false))
       systemd:
         name: nginx
         state: reloaded
@@ -316,6 +348,21 @@
   # then fails loudly. `| default({})` keeps it safe even when the template
   # task itself failed to render (no register, nothing to undo).
   rescue:
+    # Roll back the upstream-auth map first (final: false, so its place_rollback
+    # restores/removes the file but doesn't fail the play yet), then the vhost --
+    # whose place_rollback raises. Both are restored before the failure, so a
+    # single bad `nginx -t` covering the written pair can't strand a half-written
+    # config on disk.
+    - name: site | Roll back the failed upstream Authorization map
+      when: nginx_site_args.upstream_authorization is defined
+      import_tasks: place_rollback.yml
+      vars:
+        _nginx_rollback_result: "{{ nginx_upstream_auth_map | default({}) }}"
+        _nginx_rollback_paths:
+          - /etc/nginx/conf.d/upstream_auth_{{ nginx_site_args.subdomain }}.conf
+        _nginx_rollback_what: /etc/nginx/conf.d/upstream_auth_{{ nginx_site_args.subdomain }}.conf
+        _nginx_rollback_final: false
+
     - name: site | Roll back the failed site write
       import_tasks: place_rollback.yml
       vars:
@@ -333,6 +380,7 @@
   loop:
     - /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
     - /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
+    - /etc/nginx/conf.d/upstream_auth_{{ nginx_site_args.subdomain }}.conf
   become: true
   register: nginx_static_conf_absent
   tags:
@@ -361,6 +409,6 @@
   when: nginx_site_args.condition | default(true)
   set_fact:
     "{{ nginx_site_args.subdomain | regex_replace('[^A-Za-z0-9_]', '_') }}_site_result":
-      changed: "{{ ((nginx_static_conf.changed | default(false)) or (nginx_static_conf_enable.changed | default(false)) or (nginx_static_conf_absent.changed | default(false))) | bool }}"
+      changed: "{{ ((nginx_static_conf.changed | default(false)) or (nginx_static_conf_enable.changed | default(false)) or (nginx_upstream_auth_map.changed | default(false)) or (nginx_static_conf_absent.changed | default(false))) | bool }}"
   tags:
     - nginx_site

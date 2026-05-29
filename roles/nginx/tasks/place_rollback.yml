@@ -17,6 +17,13 @@
 #   _nginx_rollback_paths   files to remove when the write made no backup
 #                           (the dest, plus a site's sites-enabled symlink).
 #   _nginx_rollback_what    path naming the failed write, for the message.
+#   _nginx_rollback_final   optional bool, default true. When a single failed
+#                           `nginx -t` covers two written files (a vhost plus its
+#                           upstream-auth map), the rescue imports this twice --
+#                           once per file -- so both are restored before failing.
+#                           Pass false on the non-last import to suppress its
+#                           `fail`, so the run continues to the next rollback and
+#                           only the final import raises.
 
 - name: place_rollback | Restore previous version from backup  # noqa: require-backup
   when: "'backup_file' in _nginx_rollback_result"
@@ -47,6 +54,7 @@
   become: true
 
 - name: place_rollback | Record failure
+  when: _nginx_rollback_final | default(true)
   fail:
     msg: >-
       nginx -t failed after writing {{ _nginx_rollback_what }}; previous state

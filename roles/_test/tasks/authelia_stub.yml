@@ -21,7 +21,7 @@
 #       authelia_stub_user, default nginxverifyuser), like Authelia on a
 #       successful auth. Lets a test exercise the auth-passes paths --
 #       X-Forwarded-User forwarding and per-user upstream_authorization
-#       injection (the if ($authelia_user = ...) chain in site.conf.j2).
+#       injection (the $authelia_user-keyed map in upstream_auth_map.conf.j2).
 #
 # Localhost-only. Prod Authelia uses the same port; this fixture is
 # only ever installed by tasks/_setup.yml chains under test/testrole.py,
