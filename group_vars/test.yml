@@ -222,6 +222,9 @@ bazarr_flask_secret_key: changeme
 bazarr_opensubtitles_com_username: changeme
 bazarr_opensubtitles_com_password: changeme
 openproject_secret_key: changeme
+openproject_admin_password: changeme
+openproject_smtp_user: changeme
+openproject_smtp_password: changeme
 nexus_encryption_key: changeme
 nexus_encryption_salt: changeme
 nexus_encryption_iv: changeme
