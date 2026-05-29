@@ -95,10 +95,14 @@
   # next converge's pre-template snapshot rotates it, and not
   # removing it here avoids racing with the async netplan apply that
   # may still be reading it via --state.
+  #
+  # No failed_when: false: we only reach here after the apply confirmed
+  # (the canary passed), so the rollback service never fired — stopping an
+  # active timer and an inactive service is a clean no-op. A stop that does
+  # error means a unit is wedged, which should surface rather than be masked.
   systemd:
     name: "{{ item }}"
     state: stopped
   loop:
     - netplan_rollback.timer
     - netplan_rollback.service
-  failed_when: false
