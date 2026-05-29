@@ -105,13 +105,18 @@
   command:
     cmd: sqlite3 /mnt/services/sqlite/paperless/db.sqlite3 'PRAGMA journal_mode=WAL;'
     creates: /mnt/services/sqlite/paperless/db.sqlite3
-  register: paperless_wal_precreate
   become: true
   tags:
     - paperless
 
+# Re-assert ownership on every converge, not just when the pre-create ran:
+# the creates: guard above skips the pre-create once the DB exists, so gating
+# this on its changed flag would never re-correct a DB that ended up
+# root-owned (interrupted first converge, snapshot restore) -- the container's
+# USERMAP_UID could then no longer open it RW. The file module no-ops when
+# ownership is already correct, so this stays idempotent.
 - name: Own the pre-created paperless sqlite DB
-  when: paperless_wal_precreate.changed
+  when: not (ansible_check_mode and paperless_user.changed)
   file:
     path: /mnt/services/sqlite/paperless/db.sqlite3
     owner: paperless
