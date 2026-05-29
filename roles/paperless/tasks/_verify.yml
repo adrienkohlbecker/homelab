@@ -14,6 +14,27 @@
   until: paperless_verify_loopback.status == 200
   become: true
 
+# The role pre-creates db.sqlite3 in WAL mode so Django inherits it on
+# first migrate; assert it actually stuck (a regression in the pre-create
+# would silently fall back to rollback-journal, the exact failure the WAL
+# placement exists to avoid). Read via the container's bundled sqlite
+# (3.46): opening the populated DB parses paperless's generated-column
+# schema (documents_customfieldinstance), which host sqlite3 (3.37) on
+# jammy can't prepare.
+- name: _verify | Paperless sqlite DB is in WAL mode
+  command:
+    argv:
+      - podman
+      - exec
+      - paperless
+      - python3
+      - -c
+      - 'import sqlite3; print(sqlite3.connect("/usr/src/paperless/data/db.sqlite3").execute("PRAGMA journal_mode").fetchone()[0])'
+  register: paperless_verify_wal
+  changed_when: false
+  failed_when: paperless_verify_wal.stdout | trim != 'wal'
+  become: true
+
 # nginx proxy chain. The host header swap exercises the same path
 # external clients take.
 - name: _verify | Paperless reachable through nginx
