@@ -197,6 +197,23 @@
       silently dropped (foo.does_not_exist isn't in the chart registry).
       Got liveness keys: {{ _keys | select('search', 'liveness_') | list }}
 
+# Closes the loop the on-disk un-silence assert (main.yml) can't: prove the
+# reload-health actually propagated the un-silence into a LIVE alarm. The
+# out_of_disk_space_time template (un-silenced from upstream's `to: silent`)
+# fans out against box's disk.space charts, so it must appear in ?all. The
+# `until` is the assertion -- fail fast at the deadline if it never registers.
+- name: _verify | Un-silenced disk-fill alarm is live in the daemon
+  uri:
+    url: http://localhost:19999/api/v1/alarms?all
+    return_content: true
+  register: _verify_diskfill_alarm
+  retries: 15
+  delay: 2
+  until: >-
+    _verify_diskfill_alarm.status == 200
+    and ((_verify_diskfill_alarm.content | from_json).alarms.keys() | list
+         | select('search', 'out_of_disk_space_time') | list | length > 0)
+
 # No assertion for `collector_stale` / `collector_failing` alarms (binding
 # netdata.plugin_data_collection_status). That chart context exists on 2.x,
 # but adding those templates is a deferred follow-up (O2 in
@@ -275,18 +292,26 @@
     or ("auth." not in (_verify_netdata_wrong_token.location | default("")))
   become: true
 
-- name: _verify | Wait for nginx access_log flush
-  pause:
-    seconds: 6
-
-- name: _verify | Nginx access log redacts auth_token to REDACTED
+# Bounded retry rather than a fixed `pause` + single read: nginx buffers
+# access-log writes, so the redacted line may not have flushed yet. Poll
+# until it appears (fail fast at the retry deadline if it never does),
+# then a separate hard assert catches a literal-token leak immediately.
+- name: _verify | Wait for the redacted auth_token request to reach the access log
   command: tail -n 200 /var/log/nginx/access.log
   register: _verify_netdata_nginx_log
   changed_when: false
   become: true
-  failed_when: >-
-    "auth_token=REDACTED" not in _verify_netdata_nginx_log.stdout
-    or netdata_alerts_token in _verify_netdata_nginx_log.stdout
+  retries: 10
+  delay: 1
+  until: '"auth_token=REDACTED" in _verify_netdata_nginx_log.stdout'
+
+- name: _verify | Assert the literal auth_token never appears in the access log
+  assert:
+    that:
+      - netdata_alerts_token not in _verify_netdata_nginx_log.stdout
+    fail_msg: >-
+      The literal auth_token leaked into the nginx access log -- the
+      $request_safe map should have redacted it to auth_token=REDACTED.
 
 # Cover the cross-role coupling: netdata's main.yml imports certbot's
 # tasks_from: netdata to render x509check.conf. A break in the
