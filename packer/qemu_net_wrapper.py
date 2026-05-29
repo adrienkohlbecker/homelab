@@ -23,8 +23,20 @@ arch_table makes), so one shim serves both x86_64 and aarch64.
 Set PACKER_NET_BACKEND={auto,slirp,passt} to override the probe (mirrors the
 harness's HOMELAB_NET_BACKEND): `slirp` forces passthrough, `passt` fails loudly
 if passt is unusable, `auto` (default) follows the capability probe.
+
+Diagnostics: the shim narrates every decision (probe result, override,
+slirp-vs-passt choice, the passt command + socket, the netdev rewrite) so a
+build that takes the wrong NIC path is debuggable. packer routes a
+qemu_binary's stderr through Go's logger, which it discards unless PACKER_LOG
+is set -- so the shim ALSO drops a qemu_net_wrapper.log into the per-source
+build dir (the same dir holding packer-ubuntu*, derived from the `-drive
+file=` arg). That file rides the shared /mnt/scratch/qemu volume in CI and is
+tailed by mise-tasks/packer/build.sh after each build, so the decision trail
+reaches the job log without PACKER_LOG. Override the path (or disable with
+"off"/"0") via QEMU_NET_WRAPPER_LOG.
 """
 
+import datetime
 import os
 import platform
 import shutil
@@ -32,6 +44,59 @@ import subprocess
 import sys
 import tempfile
 import time
+
+# Resolved once in main() before any logging. Stays None when no build dir can
+# be derived (e.g. packer's `-version` probe) -- stderr then carries the log
+# alone, which is all PACKER_LOG would have surfaced anyway.
+_LOG_FH = None
+
+
+def _log(msg: str) -> None:
+    """Narrate one decision to stderr (PACKER_LOG path) and, when a build dir
+    was found, to qemu_net_wrapper.log (the always-visible path)."""
+    line = f"qemu-net-wrapper[{os.getpid()}]: {msg}"
+    print(line, file=sys.stderr, flush=True)
+    if _LOG_FH is not None:
+        stamp = datetime.datetime.now().isoformat(timespec="milliseconds")
+        _LOG_FH.write(f"{stamp} {line}\n")
+        _LOG_FH.flush()
+
+
+def _open_log(args: list[str]) -> None:
+    """Point _LOG_FH at a per-build-dir qemu_net_wrapper.log. The dir is the
+    one packer feeds qemu its primary disk from (`-drive file=<dir>/packer-
+    ubuntu,...`); QEMU_NET_WRAPPER_LOG overrides it or disables (off/0)."""
+    global _LOG_FH
+    override = os.environ.get("QEMU_NET_WRAPPER_LOG", "").strip()
+    if override.lower() in ("off", "0", "none"):
+        return
+    path = override or None
+    if path is None:
+        build_dir = _build_dir_from_args(args)
+        if build_dir is None:
+            return
+        path = os.path.join(build_dir, "qemu_net_wrapper.log")
+    try:
+        _LOG_FH = open(path, "a", encoding="utf-8")
+    except OSError as exc:
+        # A missing/unwritable sink must never sink the build -- stderr still
+        # carries the log under PACKER_LOG.
+        print(f"qemu-net-wrapper: could not open log {path!r}: {exc}", file=sys.stderr, flush=True)
+
+
+def _build_dir_from_args(args: list[str]) -> str | None:
+    """Directory packer writes the build VM's disks into, read off the `-drive
+    file=<dir>/packer-ubuntu...` arg. None when there's no such drive (a probe
+    invocation), which keeps file logging off where there's nothing to trace."""
+    for arg in args:
+        for part in arg.split(","):
+            if part.startswith("file="):
+                disk = part[len("file=") :]
+                if os.path.basename(disk).startswith("packer-ubuntu"):
+                    parent = os.path.dirname(disk)
+                    if parent and os.path.isdir(parent):
+                        return parent
+    return None
 
 
 def _real_qemu() -> str:
@@ -46,8 +111,10 @@ def _real_qemu() -> str:
 def _passt_usable(real_qemu: str) -> bool:
     """True when passt is on PATH and this qemu advertises `-netdev stream`."""
     if platform.system() != "Linux":
+        _log(f"passt unusable: host is {platform.system()}, not Linux")
         return False
     if shutil.which("passt") is None:
+        _log("passt unusable: no `passt` on PATH")
         return False
     try:
         probe = subprocess.run(
@@ -56,9 +123,12 @@ def _passt_usable(real_qemu: str) -> bool:
             text=True,
             timeout=10,
         )
-    except (OSError, subprocess.SubprocessError):
+    except (OSError, subprocess.SubprocessError) as exc:
+        _log(f"passt unusable: `{real_qemu} -netdev help` probe failed: {exc}")
         return False
-    return "stream" in (probe.stdout + probe.stderr)
+    has_stream = "stream" in (probe.stdout + probe.stderr)
+    _log(f"passt probe: binary present, qemu `-netdev stream` {'supported' if has_stream else 'absent'}")
+    return has_stream
 
 
 def _find_user_netdev(args: list[str]) -> int | None:
@@ -120,12 +190,14 @@ def _start_passt(sock: str, fwds: list[tuple[str, str, str]]) -> subprocess.Pope
         sock,
         *_passt_port_args(fwds),
     ]
+    _log(f"starting passt sidecar: {' '.join(cmd)}")
     proc = subprocess.Popen(cmd, stdout=sys.stderr.fileno(), stderr=sys.stderr.fileno())
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         if proc.poll() is not None:
             sys.exit(f"qemu-net-wrapper: passt exited early (rc={proc.returncode}) before binding {sock}")
         if os.path.exists(sock):
+            _log(f"passt sidecar (pid={proc.pid}) bound {sock}")
             return proc
         time.sleep(0.05)
     proc.kill()
@@ -134,6 +206,7 @@ def _start_passt(sock: str, fwds: list[tuple[str, str, str]]) -> subprocess.Pope
 
 def main() -> None:
     args = sys.argv[1:]
+    _open_log(args)
     real_qemu = _real_qemu()
 
     override = os.environ.get("PACKER_NET_BACKEND", "auto").strip().lower()
@@ -141,6 +214,10 @@ def main() -> None:
         sys.exit(f"qemu-net-wrapper: PACKER_NET_BACKEND={override!r} not in auto/slirp/passt")
 
     netdev_idx = _find_user_netdev(args)
+    _log(
+        f"invoked: real_qemu={real_qemu}, PACKER_NET_BACKEND={override}, "
+        f"user-netdev {'found' if netdev_idx is not None else 'absent'}, {len(args)} args"
+    )
     usable = _passt_usable(real_qemu)
 
     if override == "passt" and not usable:
@@ -150,19 +227,32 @@ def main() -> None:
     # override, or passt not usable -> run real qemu untouched (slirp path).
     use_passt = override != "slirp" and usable and netdev_idx is not None
     if not use_passt:
+        _log(
+            "backing build-VM NIC with slirp (passthrough): "
+            + (
+                "forced by override"
+                if override == "slirp"
+                else "no user-netdev to rewrite" if netdev_idx is None else "passt unusable here"
+            )
+        )
         os.execv(real_qemu, [real_qemu, *args])
 
     netid, fwds = _parse_netdev_user(args[netdev_idx + 1])
     if netid is None or not fwds:
         # Couldn't make sense of packer's netdev; don't risk the build -- fall
         # back to the slirp arg packer already generated.
+        _log(
+            f"backing build-VM NIC with slirp (passthrough): unparseable netdev {args[netdev_idx + 1]!r} (id={netid}, fwds={fwds})"
+        )
         os.execv(real_qemu, [real_qemu, *args])
 
+    _log(f"backing build-VM NIC with passt: netdev id={netid}, host-forwards={fwds}")
     sock = os.path.join(tempfile.mkdtemp(prefix="packer-passt-"), "passt.sock")
     _start_passt(sock, fwds)
 
     args = list(args)
     args[netdev_idx + 1] = f"stream,id={netid},server=off,addr.type=unix,addr.path={sock}"
+    _log(f"rewrote netdev to: {args[netdev_idx + 1]}; exec {real_qemu}")
     os.execv(real_qemu, [real_qemu, *args])
 
 
