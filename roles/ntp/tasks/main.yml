@@ -19,13 +19,10 @@
 
 # policy_rc_d 101 suppresses the postinst auto-start so chronyd first
 # comes up under the NTS config written below, never the stock
-# unauthenticated-pool config. Installing chrony also displaces
-# systemd-timesyncd (it ends up masked, or removed during the
-# jammy→noble flip), so this role doesn't manage timesyncd explicitly.
-# cache_valid_time is safe here:
-# on jammy the backports upgrade above just refreshed the cache and
-# already pulled chrony to noble (so this is a no-op), and on noble the
-# native candidate is stable.
+# unauthenticated-pool config. cache_valid_time is safe here: on jammy
+# the backports upgrade above just refreshed the cache and already
+# pulled chrony to noble (so this is a no-op), and on noble the native
+# candidate is stable.
 - name: Install chrony
   apt:
     pkg:
@@ -33,6 +30,21 @@
     cache_valid_time: 3600
     policy_rc_d: 101
   register: ntp_chrony_apt
+  become: true
+  tags:
+    - ntp
+
+# Mask systemd-timesyncd rather than trusting chrony's packaging to
+# displace it. On the jammy→noble flip apt *removes* timesyncd, but that
+# runs under policy_rc_d 101 (the backports upgrade above), so invoke-rc.d
+# never stops the already-running unit — it lingers active until reboot,
+# fighting chrony for the clock. Masking stops it now and pins it off;
+# idempotent where it's already masked (the steady state on noble).
+- name: Mask systemd-timesyncd (chrony owns the clock)
+  systemd:
+    name: systemd-timesyncd
+    state: stopped
+    masked: true
   become: true
   tags:
     - ntp
