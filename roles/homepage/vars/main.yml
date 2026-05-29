@@ -30,6 +30,7 @@ homepage_bookmarks:
     - { name: Netdata (pug), abbr: NP, sub: netdata,      icon: netdata, host: pug }
     - { name: Netdata (fox), abbr: NF, sub: netdata,      icon: netdata, host: fox }
     - { name: Eaton IPP,     abbr: EI, sub: ipp }
+    - { name: NUT,           abbr: NU, sub: nut }
     - { name: Keepalived (lab), abbr: KL, sub: keepalived-exporter }
     - { name: Keepalived (pug), abbr: KP, sub: keepalived-exporter, host: pug }
     - { name: Headscale,     abbr: HS, sub: headscale,     icon: headscale, host: fox }
