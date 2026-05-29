@@ -56,7 +56,7 @@ ExecStart=/usr/bin/podman run \
     --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="plex" \
-    --env ADVERTISE_IP="http://{{ external_ips[inventory_hostname] }}:32400/" \
+    --env ADVERTISE_IP="http://{{ external_ips[inventory_hostname] }}:{{ service_ports.plex }}/" \
     --env "TZ={{ system_timezone }}" \
     --env PLEX_UID={{ plex_user.uid }} \
     --env PLEX_GID={{ media_group.gid }} \
@@ -71,7 +71,7 @@ ExecStart=/usr/bin/podman run \
     {# is benign here (jellyfin gets away with 0755 via its uidmap root). #}
     --mount type=tmpfs,destination=/transcode,tmpfs-size=4G,tmpfs-mode=0777 \
     --network media \
-    --publish 0.0.0.0:32400:32400/tcp \
+    --publish 0.0.0.0:{{ service_ports.plex }}:32400/tcp \
 {% if has_transcoding_acceleration %}
     --device /dev/dri/:/dev/dri/ \
     --group-add={{ getent_group.render[1] | int }} \

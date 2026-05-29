@@ -12,7 +12,7 @@
     # beyond the container's own --sdnotify=healthy gate.
     - name: _verify | Plex /identity over loopback
       uri:
-        url: http://localhost:32400/identity
+        url: http://localhost:{{ service_ports.plex }}/identity
         status_code: 200
         return_content: true
       register: _verify_http
