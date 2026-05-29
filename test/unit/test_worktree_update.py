@@ -164,8 +164,14 @@ class Sandbox:
                 self.git("checkout", "-q", "-b", "feat", cwd=self.wt_notes)
 
     def wt_own_notes_commit(self, label: str) -> str:
-        """Add a notes commit on the worktree's notes branch + bump the gitlink."""
-        self.git("commit", "-q", "--allow-empty", "-m", label, cwd=self.wt_notes)
+        """Add a (non-empty) notes commit on the worktree's notes branch + bump the gitlink.
+
+        The notes commit writes a file so it carries a patch-id: update.sh keys
+        its conflict-resolution map on patch-id, which an empty commit lacks.
+        """
+        (self.wt_notes / f"{label}.md").write_text(f"{label} content\n")
+        self.git("add", f"{label}.md", cwd=self.wt_notes)
+        self.git("commit", "-q", "-m", label, cwd=self.wt_notes)
         sha = self.rev("HEAD", self.wt_notes)
         self.git("add", "notes", cwd=self.wt)
         self.git("commit", "-q", "-m", f"feat: notes={label}", cwd=self.wt)
@@ -254,6 +260,35 @@ def test_divergent_update_is_idempotent(sandbox: Sandbox) -> None:
     assert second.returncode == 0, second.stderr
     sandbox.assert_fully_consistent()
     assert sandbox.rev("feat", cwd=sandbox.wt) == feat_after_first, "second update rewrote an unchanged branch"
+
+
+def test_already_rebased_notes_resolves(sandbox: Sandbox) -> None:
+    """Re-run safety: the notes branch is already rebased onto master:notes while
+    the code commits still pin the pre-rebase notes SHAs -- the residue a halted
+    earlier run (or the real netdata worktree) leaves behind.
+
+    Step 1's rebase is now a no-op, so the old->new map can't come from it;
+    resolution must instead match each pinned SHA's patch-id against the rebased
+    notes branch. Before the patch-id fix this halted on an 'unmapped commit'
+    notes-gitlink conflict it was supposed to auto-resolve.
+    """
+    b0, master_notes = sandbox.build_notes_origin(master_notes_extra=3)
+    base = sandbox.build_repo_with_notes(b0, master_notes)
+    sandbox.add_worktree(base)
+    sandbox.wt_code_commit("fcode.txt", "f0", "feat: code only (no notes)")
+    sandbox.wt_own_notes_commit("F1")
+    sandbox.wt_own_notes_commit("F2")
+
+    # Simulate a prior halted run: rebase the notes branch onto master:notes but
+    # leave the code commits pinning the OLD notes SHAs. The worktree then shows
+    # `modified: notes`, exactly the netdata residue.
+    sandbox.git("rebase", master_notes, "feat", cwd=sandbox.wt_notes)
+    assert "notes" in sandbox.git("status", "--porcelain", cwd=sandbox.wt).stdout
+
+    result = sandbox.run_update()
+
+    assert result.returncode == 0, result.stderr
+    sandbox.assert_fully_consistent()
 
 
 def test_common_no_own_notes_commits(sandbox: Sandbox) -> None:
