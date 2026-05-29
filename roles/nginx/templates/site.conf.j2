@@ -269,9 +269,9 @@ server {
     # Drop the query on the cleartext :80 leg: it can carry the vaulted
     # auth_token, which must not be reflected in a plaintext redirect Location.
     # Bypass clients target https directly, so they never hit this redirect.
-    return 301 https://$host$uri;
+    return 308 https://$host$uri;
 {% else %}
-    return 301 https://$host$request_uri;
+    return 308 https://$host$request_uri;
 {% endif %}
 }
 {% endif %}
