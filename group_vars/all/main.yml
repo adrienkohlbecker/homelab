@@ -165,6 +165,10 @@ service_ports:
   # Plex's well-known port, published on 0.0.0.0 for direct native-client
   # connections (not loopback-only like its siblings); nginx also fronts it.
   plex: 32400
+  # Profilarr (arr custom-format / quality-profile sync), loopback-published;
+  # nginx fronts it on the profilarr subdomain behind authelia. The container
+  # listens on 6868 internally.
+  profilarr: 6868
   # Prometheus, loopback-only (nginx fronts it on the prometheus subdomain);
   # 9090 is the server default. Also minio's MINIO_PROMETHEUS_URL target.
   prometheus: 9090
