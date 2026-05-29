@@ -79,3 +79,46 @@
           and /etc/apt/trusted.gpg.d/{{ apt_source_args.name }}.gpg absent; got
           scoped={{ _verify_apt_source_keyrings.results[0].stat.exists }}
           legacy={{ _verify_apt_source_keyrings.results[1].stat.exists }}
+
+# Tombstone path (jammy fixture only; resolute has no test image): when the
+# consumer passes apt_source_tombstone_args, exercise state: absent as the
+# final _verify step on the consumer's own source. The present-contract
+# assertions above have already run and the test VM is torn down afterward,
+# so removing the real source here is safe -- and it avoids the Signed-By
+# conflict a duplicate probe source would hit. Confirms the scoped keyring
+# and pin file are gone and the source no longer appears in apt's policy.
+# Passed as a concrete dict (not apt_source_args | combine) so the nested
+# import isn't a self-referential template.
+- name: _verify | Tombstone path ({{ apt_source_tombstone_args.name | default('disabled') }})
+  when: apt_source_tombstone_args is defined
+  block:
+    - name: _verify | Remove the source via state absent
+      import_role:
+        name: apt_source
+      vars:
+        apt_source_args: "{{ apt_source_tombstone_args }}"
+
+    - name: _verify | Stat keyring and pin after tombstone
+      stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/share/keyrings/{{ apt_source_tombstone_args.name }}.gpg
+        - /etc/apt/preferences.d/{{ apt_source_tombstone_args.name }}
+      register: _verify_tombstone_stat
+      become: true
+
+    - name: _verify | Apt policy after tombstone
+      command: apt-cache policy {{ apt_source_args.pin.package | default(apt_source_tombstone_args.name) }}
+      changed_when: false
+      register: _verify_tombstone_policy
+
+    - name: _verify | State absent removed keyring, pin and source
+      assert:
+        that:
+          - not _verify_tombstone_stat.results[0].stat.exists
+          - not _verify_tombstone_stat.results[1].stat.exists
+          - apt_source_tombstone_args.uris not in _verify_tombstone_policy.stdout
+        fail_msg: >-
+          state: absent left artifacts behind: keyring={{ _verify_tombstone_stat.results[0].stat.exists }}
+          pin={{ _verify_tombstone_stat.results[1].stat.exists }}; policy still cites
+          {{ apt_source_tombstone_args.uris }}: {{ _verify_tombstone_policy.stdout | default('') }}
