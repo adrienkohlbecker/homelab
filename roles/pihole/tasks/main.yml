@@ -1,10 +1,17 @@
 - name: Assert required pihole inputs are set
   assert:
     that:
-      - pihole_keepalived_ip is defined and (pihole_keepalived_ip | ansible.utils.ipaddr)
-      - pihole_keepalived_vrid is defined and (pihole_keepalived_vrid | int) > 0
-      - pihole_keepalived_priority is defined and 0 < (pihole_keepalived_priority | int) <= 255
-      - pihole_keepalived_peers is defined and (pihole_keepalived_peers | length) > 0
+      # Each condition is boolean and safe to evaluate when the var is
+      # unset (filters carry a default) -- ansible 2.20 rejects a
+      # non-boolean conditional result, and `is defined` doesn't
+      # short-circuit a sibling `that:` item.
+      - pihole_keepalived_ip is defined
+      - pihole_keepalived_vrid is defined
+      - pihole_keepalived_priority is defined
+      - (pihole_keepalived_priority | default(0) | int) > 0
+      - (pihole_keepalived_priority | default(0) | int) <= 255
+      - pihole_keepalived_peers is defined
+      - (pihole_keepalived_peers | default([]) | length) > 0
       - inventory_hostname in external_ips
       - pihole_adlists is defined
       - pihole_whitelists is defined
@@ -160,6 +167,7 @@
 # previous stdout-substring changed_when was fragile -- e.g. against the
 # --quiet output -- and re-ran the update container every converge).
 - name: Record pihole list-update inputs
+  when: not (ansible_check_mode and pihole_user.changed)
   copy:
     content: "{{ (pihole_adlists + pihole_whitelists) | to_nice_yaml }}"
     dest: /mnt/services/pihole/updatelists_inputs
