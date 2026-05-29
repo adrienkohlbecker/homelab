@@ -33,11 +33,24 @@ shutdown)
 replbatt)
   MSG="The UPS battery is bad and needs to be replaced"
   ;;
+# NOCOMM is SYSLOG+WALL-only in upsmon.conf (no EXEC), so upssched never
+# dispatches it -- this arm is for a manual `nut-notify nocomm` invocation.
 nocomm)
   MSG="A UPS is unavailable (can't be contacted for monitoring)"
   ;;
 noparent)
   MSG="upsmon parent process died - shutdown impossible"
+  ;;
+# nut 2.8+ device-status events (the fleet is migrating to it). upssched only
+# dispatches these once upsmon emits them, so the arms stay inert on 2.7.4.
+bypass)
+  MSG="UPS is on bypass - the load is NOT protected by the battery"
+  ;;
+over)
+  MSG="UPS is overloaded"
+  ;;
+cal)
+  MSG="UPS is calibrating its battery"
   ;;
 *)
   echo >&2 "unexpected event $EVENT"

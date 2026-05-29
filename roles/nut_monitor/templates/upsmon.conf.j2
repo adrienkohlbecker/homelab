@@ -203,6 +203,13 @@ HOSTSYNC 15
 
 DEADTIME 15
 
+# OFFDURATION (nut 2.8+; the fleet is migrating to it) is the grace window
+# before a transient UPS "OFF" report -- e.g. an Eaton entering periodic
+# battery calibration, which briefly reports OFF/CAL -- is treated as a real
+# feed loss and counted against MINSUPPLIES. Uncomment and tune if an Eaton's
+# calibration ever trips a false FSD; the packaged default is otherwise fine.
+# OFFDURATION 30
+
 # --------------------------------------------------------------------------
 # POWERDOWNFLAG - Flag file for forcing UPS shutdown on the master system
 #
@@ -215,6 +222,10 @@ DEADTIME 15
 # [[UPS_shutdown]] "Configuring automatic shutdowns for low battery events"
 # or refer to the online version.
 
+# Consumed at the end of OS shutdown by the nut-client package's
+# /lib/systemd/system-shutdown/nutshutdown hook (`upsmon -K && upsdrvctl
+# shutdown`), so a co-located primary cuts UPS power and the box reboots when
+# mains returns. Keep this path aligned with that hook.
 POWERDOWNFLAG /etc/killpower
 
 # --------------------------------------------------------------------------
@@ -272,6 +283,13 @@ NOTIFYFLAG REPLBATT SYSLOG+WALL+EXEC
 # deliberately -- upssched needs those events to CANCEL-TIMER.
 NOTIFYFLAG NOCOMM   SYSLOG+WALL
 NOTIFYFLAG NOPARENT SYSLOG+WALL+EXEC
+# nut 2.8+ only (the fleet is migrating to it): BYPASS (on bypass, load
+# unprotected), OVER (overloaded) and CAL (battery calibration) notify types
+# were added in 2.8. On 2.7.4 upsmon rejects unknown NOTIFYFLAG types, so don't
+# enable monitoring on a host until it is on 2.8.
+NOTIFYFLAG BYPASS   SYSLOG+WALL+EXEC
+NOTIFYFLAG OVER     SYSLOG+WALL+EXEC
+NOTIFYFLAG CAL      SYSLOG+WALL+EXEC
 #
 # Possible values for the flags:
 #
