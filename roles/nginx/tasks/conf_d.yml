@@ -132,45 +132,18 @@
         state: reloaded
       become: true
 
-  # nginx -t reads files at their on-disk locations, so the conf.d drop
-  # has to land at its production path first and is then validated in
-  # place. If validate fails, the broken file is already on disk and
-  # would break the next reload for every site on the host. Restore the
-  # previous version from the .backup if one was made, otherwise delete
-  # the freshly-added file. Don't trim this — without it any typo in
-  # the snippet bricks `nginx -s reload` host-wide.
+  # On a failed `nginx -t`, hand off to the shared place-validate rollback
+  # (also used by site.yml). It restores the previous version from the .backup
+  # or removes the freshly-added drop, then fails loudly. `| default({})` keeps
+  # it safe even when the copy task itself failed to render its content.
   rescue:
-    - name: conf_d | Copy backup file to original  # noqa: require-backup
-      when: '"backup_file" in nginx_conf_d'
-      copy:
-        remote_src: true
-        dest: "/etc/nginx/conf.d/{{ _nginx_conf_d_name }}"
-        src: "{{ nginx_conf_d.backup_file }}"
-        owner: root
-        group: root
-        mode: "{{ _nginx_conf_d_mode }}"
-      become: true
-
-    - name: conf_d | Delete backup file
-      when: '"backup_file" in nginx_conf_d'
-      file:
-        path: "{{ nginx_conf_d.backup_file }}"
-        state: absent
-      become: true
-
-    - name: conf_d | Delete newly added file
-      when: nginx_conf_d.changed and "backup_file" not in nginx_conf_d
-      file:
-        path: "/etc/nginx/conf.d/{{ _nginx_conf_d_name }}"
-        state: absent
-      become: true
-
-    - name: conf_d | Record failure
-      fail:
-        msg: >-
-          nginx -t failed after writing /etc/nginx/conf.d/{{ _nginx_conf_d_name }};
-          previous state restored. Inspect the validate output above
-          and the managed content in the calling role.
+    - name: conf_d | Roll back the failed drop
+      import_tasks: place_rollback.yml
+      vars:
+        _nginx_rollback_result: "{{ nginx_conf_d | default({}) }}"
+        _nginx_rollback_paths:
+          - "/etc/nginx/conf.d/{{ _nginx_conf_d_name }}"
+        _nginx_rollback_what: "/etc/nginx/conf.d/{{ _nginx_conf_d_name }}"
 
 # Removal path (state: absent). Deleting a drop can't introduce a syntax
 # error, so there's no place-validate-rollback here -- just delete and

@@ -298,44 +298,20 @@
         name: nginx
         state: reloaded
 
-  # nginx -t reads files at their on-disk locations, so a broken render is
-  # already symlinked into the active config by the time validation fails.
-  # Restore the previous version from the .backup if one was made, otherwise
-  # delete the freshly-added file and its symlink. Don't trim this -- without
-  # it any typo in a site snippet bricks `nginx -s reload` host-wide.
+  # On a failed `nginx -t`, hand off to the shared place-validate rollback
+  # (also used by conf_d.yml). It restores the previous version from the
+  # .backup or removes the freshly-added config + its sites-enabled symlink,
+  # then fails loudly. `| default({})` keeps it safe even when the template
+  # task itself failed to render (no register, nothing to undo).
   rescue:
-    - name: site | Restore previous site config from backup  # noqa: require-backup
-      when: '"backup_file" in nginx_static_conf'
-      copy:
-        remote_src: true
-        dest: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
-        src: "{{ nginx_static_conf.backup_file }}"
-        owner: root
-        group: root
-        mode: "0640"
-
-    - name: site | Delete backup file
-      when: '"backup_file" in nginx_static_conf'
-      file:
-        path: "{{ nginx_static_conf.backup_file }}"
-        state: absent
-
-    - name: site | Remove newly added site config and symlink
-      when: nginx_static_conf.changed and "backup_file" not in nginx_static_conf
-      file:
-        path: "{{ item }}"
-        state: absent
-      loop:
-        - /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
-        - /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
-
-    - name: site | Record failure
-      fail:
-        msg: >-
-          nginx -t failed after writing
-          /etc/nginx/sites-available/{{ nginx_site_args.subdomain }};
-          previous state restored. Inspect the validate output above and the
-          nginx_site_args for {{ nginx_site_args.subdomain }}.
+    - name: site | Roll back the failed site write
+      import_tasks: place_rollback.yml
+      vars:
+        _nginx_rollback_result: "{{ nginx_static_conf | default({}) }}"
+        _nginx_rollback_paths:
+          - /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
+          - /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
+        _nginx_rollback_what: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
 
 - name: site | Remove retired nginx site
   when: (nginx_site_args.condition | default(true)) and (nginx_site_args.state | default('present')) == 'absent'
