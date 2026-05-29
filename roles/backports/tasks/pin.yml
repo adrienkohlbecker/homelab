@@ -77,7 +77,10 @@
 # fails with "No package matching". Writing the pin + sources in
 # check mode is safe because both are config-files that the next
 # real apply would write identically; the apt-get update below is
-# read-only against the network.
+# read-only against the network. Consequence for the --check-before-ack
+# workflow: a check-mode run is not fully side-effect-free on jammy --
+# the noble pin + sources land for real (harmless and idempotent, but
+# apt will prefer noble candidates afterward).
 - name: Pin packages to noble (jammy) — {{ _backports_name }}
   when: ansible_distribution_major_version == "22"
   template:
