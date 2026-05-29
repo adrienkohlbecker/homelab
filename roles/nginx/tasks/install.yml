@@ -68,6 +68,11 @@
   tags:
     - nginx
 
+# Unlike the conf.d/ and sites-available/ snippets (which `nginx -t` can't
+# check in isolation, hence their place-validate-rollback dance), nginx.conf is
+# a complete config: `nginx -t -c %s` validates the rendered temp file in full
+# (its includes/cert paths are absolute and already on disk by this point), so
+# a jinja/vault typo here is caught before it ever lands on the active config.
 - name: install | Configure nginx
   template:
     src: nginx.conf.j2
@@ -76,6 +81,7 @@
     group: root
     mode: "0644"
     backup: true
+    validate: nginx -t -c %s
   become: true
   register: nginx_conf
   tags:
@@ -103,6 +109,13 @@
     systemd_unit_args:
       src: nginx
       condition: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
-      restart: "{{ nginx_apt.changed or nginx_default_conf.changed or nginx_conf.changed or status_conf_result.changed }}"
+      # A binary upgrade needs a real restart — `policy_rc_d: 101` on the apt
+      # task blocks the package's own restart, so the new nginx only takes over
+      # when we restart it. Pure config changes (nginx.conf, default-site
+      # removal, the status.conf drop) are picked up hitlessly via SIGHUP, so
+      # reload them instead of dropping in-flight connections. Mutually
+      # exclusive: the restart already reloads config, so skip reload on upgrade.
+      restart: "{{ nginx_apt.changed }}"
+      reload: "{{ (nginx_default_conf.changed or nginx_conf.changed or status_conf_result.changed) and not nginx_apt.changed }}"
   tags:
     - nginx
