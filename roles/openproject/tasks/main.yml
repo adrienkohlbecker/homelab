@@ -157,6 +157,10 @@
       subdomain: openproject
       proxy_pass: http://127.0.0.1:{{ service_ports.openproject }}/
       client_max_body_size: 256m
+      # 256m attachment uploads, project copy, and work-package exports run
+      # synchronously and can exceed nginx's 60s proxy default, returning 504.
+      proxy_read_timeout: 300s
+      proxy_send_timeout: 300s
       auth: required
       csp_additional: "img-src secure.gravatar.com {{ nginx_csp_default }}"
   tags:
