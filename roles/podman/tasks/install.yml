@@ -228,7 +228,10 @@
 # Required input — set per-host in group_vars (prod 50GB, test 15GB),
 # not defaulted in vars/main.yml per the repo's required-input rule. An
 # unset value would sail through the shrink-guard (`'' | int` == 0) and
-# fail the zvol create below with an opaque empty-volsize error.
+# fail the zvol create below with an opaque empty-volsize error. Set it to
+# a volblocksize (8K) multiple: ZFS rounds volsize up to the next 8K, and a
+# rounded-up reported size reads as larger than the request on the next
+# converge, tripping the shrink-guard below with a false positive.
 - name: install | Assert podman_zvol_size is set
   when: zfs_root
   assert:
@@ -330,7 +333,7 @@
     - podman
 
 - name: install | Mount podman zvol
-  when: zfs_root
+  when: not (ansible_check_mode and podman_zfs_zvol.changed) and zfs_root
   mount:
     path: /var/lib/containers
     src: /dev/zvol/rpool/podman
