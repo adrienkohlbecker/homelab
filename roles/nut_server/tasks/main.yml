@@ -94,32 +94,6 @@
   tags:
     - nut_server
 
-- name: Enable nut-driver service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: '{{ "nut-driver@eaton" if ansible_distribution_major_version != "22" else "nut-driver" }}'
-      condition: "{{ not (ansible_check_mode and nut_server_apt.changed) }}"
-      restart: "{{ nut_server_nut_conf.changed or nut_server_ups_conf.changed }}"
-      start: "{{ not qemu_test }}"
-  tags:
-    - nut_server
-
-- name: Enable nut-server service
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: nut-server
-      condition: "{{ not (ansible_check_mode and nut_server_apt.changed) }}"
-      restart: "{{ nut_server_nut_conf.changed or nut_server_upsd_conf.changed or nut_server_upsd_users.changed }}"
-      start: "{{ not qemu_test }}" # TODO: no hardware UPS to talk to
-  tags:
-    - nut_server
-
 - name: Configure nut hosts.conf
   when: not (ansible_check_mode and nut_server_apt.changed)
   copy:
@@ -143,6 +117,32 @@
     group: root
     mode: "0644"
   become: true
+  tags:
+    - nut_server
+
+- name: Enable nut-driver service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: '{{ "nut-driver@eaton" if ansible_distribution_major_version != "22" else "nut-driver" }}'
+      condition: "{{ not (ansible_check_mode and nut_server_apt.changed) }}"
+      restart: "{{ nut_server_nut_conf.changed or nut_server_ups_conf.changed }}"
+      start: "{{ not qemu_test }}"
+  tags:
+    - nut_server
+
+- name: Enable nut-server service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: nut-server
+      condition: "{{ not (ansible_check_mode and nut_server_apt.changed) }}"
+      restart: "{{ nut_server_nut_conf.changed or nut_server_upsd_conf.changed or nut_server_upsd_users.changed }}"
+      start: "{{ not qemu_test }}" # TODO: no hardware UPS to talk to
   tags:
     - nut_server
 
