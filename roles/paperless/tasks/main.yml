@@ -116,6 +116,7 @@
     path: /mnt/services/sqlite/paperless/db.sqlite3
     owner: paperless
     group: paperless
+    mode: "0600"
   become: true
   tags:
     - paperless
@@ -156,7 +157,7 @@
 # client secret inline; render it to a podman secret so it's mounted
 # as a file under /run/secrets/ instead of landing in `podman inspect`
 # (paperless-ngx reads any PAPERLESS_* env via _FILE if pointed at a
-# path -- see CLAUDE.md "Container Secrets" #1).
+# path -- see CLAUDE.md "Secrets" #1).
 - name: Compose paperless OIDC providers config
   set_fact:
     paperless_socialaccount_providers:
