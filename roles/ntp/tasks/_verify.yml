@@ -1,0 +1,65 @@
+# Post-converge functional checks for the ntp role. Invoked only by the
+# test harness (test/testrole.py / testall.py) against a qemu VM, never by
+# site.yml or --tags. Converge success only proves the chrony unit
+# *started*; these confirm chronyd is actually running under the NTS-only
+# config — authenticated sources, no unauthenticated pools, and
+# systemd-timesyncd displaced. Sync state is deliberately NOT asserted:
+# NTS-KE reachability from the qemu fixture isn't guaranteed, so a leap
+# status of "Not synchronised" here is not a failure.
+
+- name: _verify | Chrony is active  # noqa: command-instead-of-module -- is-active query, not a state change
+  command: systemctl is-active chrony
+  changed_when: false
+  become: true
+
+- name: _verify | Chronyd answers chronyc (config parsed, daemon healthy)
+  command: chronyc tracking
+  changed_when: false
+  become: true
+
+- name: _verify | Read the running chrony.conf
+  slurp:
+    src: /etc/chrony/chrony.conf
+  register: ntp_verify_conf
+  become: true
+
+- name: _verify | NTS-only chrony.conf — all 3 servers, no plain pools
+  vars:
+    ntp_verify_conf_text: "{{ ntp_verify_conf['content'] | b64decode }}"
+  assert:
+    that:
+      - "'server time.cloudflare.com iburst nts' in ntp_verify_conf_text"
+      - "'server ptbtime1.ptb.de iburst nts' in ntp_verify_conf_text"
+      - "'server nts.netnod.se iburst nts' in ntp_verify_conf_text"
+      - ntp_verify_conf_text is not search('(?m)^pool ')
+    fail_msg: chrony.conf is not the expected NTS-only config
+    success_msg: chrony.conf pins 3 NTS servers and no unauthenticated pools
+
+- name: _verify | Enumerate the sources chronyd loaded (CSV, one per line)
+  command: chronyc -c sources
+  changed_when: false
+  become: true
+  register: ntp_verify_sources
+
+- name: _verify | Only the explicit NTS servers loaded, not stock pools
+  assert:
+    that:
+      - ntp_verify_sources.stdout_lines | length >= 1
+      - ntp_verify_sources.stdout_lines | length <= 3
+    fail_msg: >-
+      expected 1-3 explicit sources, found
+      {{ ntp_verify_sources.stdout_lines | length }} (stock pools would be ~8)
+    success_msg: >-
+      chronyd loaded {{ ntp_verify_sources.stdout_lines | length }} source(s)
+
+- name: _verify | Check systemd-timesyncd state  # noqa: command-instead-of-module -- is-active query, not a state change
+  command: systemctl is-active systemd-timesyncd
+  changed_when: false
+  failed_when: false
+  register: ntp_verify_timesyncd
+  become: true
+
+- name: _verify | Timesyncd is not competing for the clock
+  assert:
+    that: ntp_verify_timesyncd.stdout != "active"
+    fail_msg: systemd-timesyncd is active and will fight chrony for the clock
