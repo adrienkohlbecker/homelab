@@ -9,10 +9,29 @@
   tags:
     - nut_monitor
 
+# eaton_ipp (the Eaton vendor daemon) runs on every home host and already
+# performs active shutdown-on-power-loss. upsmon's SHUTDOWNCMD/FSD path is a
+# SECOND shutdown agent on the same UPS -- enabling it without retiring
+# eaton_ipp's shutdown means two daemons race to power the host down. Force a
+# deliberate cutover rather than letting the overlap ship by accident.
+- name: Assert the eaton_ipp shutdown overlap was acknowledged
+  when: nut_monitor_enabled | default(false)
+  assert:
+    that:
+      - nut_monitor_acknowledge_shutdown_overlap | default(false) | bool
+    fail_msg: >-
+      nut_monitor_enabled makes upsmon a second active shutdown agent alongside
+      eaton_ipp (deployed on every home host). Retire eaton_ipp's shutdown on
+      this host first, then set nut_monitor_acknowledge_shutdown_overlap: true.
+  tags:
+    - nut_monitor
+
 # nut-notify delivers via the bare `mail` binary (mailutils, from the postfix
-# role ordered before nut in site.yml). Fail loudly at converge if a host
-# enables monitoring without it, rather than discovering the gap during a real
-# outage when the notification silently never sends.
+# role ordered before nut in site.yml). This asserts the binary is PRESENT --
+# not that mail is deliverable: root->operator routing is owned by postfix's
+# aliases.j2 and relay health is the postfix role's concern. Catches the common
+# gap (monitoring enabled on a host that never ran postfix) at converge rather
+# than during a real outage.
 - name: Assert mail is available when monitoring is enabled
   when: nut_monitor_enabled | default(false)
   command: which mail

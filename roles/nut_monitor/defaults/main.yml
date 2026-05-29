@@ -2,4 +2,15 @@
 # monitors. Single source of truth for the MONITOR line in upsmon.conf and
 # the upsc queries in nut-notify, so the two can't drift out of agreement.
 # Host-overridable; defaults to the Eaton served by the co-located upsd.
+#
+# Overriding away from @localhost has two couplings to keep in sync: nut_server's
+# files/hosts.conf (the CGI allowlist, hard-coded eaton@localhost) and the
+# emailed status link, which nut-notify builds against inventory_hostname's
+# `nut.` subdomain -- a remote <host> would point the link at the wrong CGI.
 nut_monitor_ups: eaton@localhost
+
+# Acknowledgement gate for the eaton_ipp shutdown overlap (see the assert in
+# tasks/main.yml). Must be set true on any host that flips nut_monitor_enabled,
+# after eaton_ipp's shutdown is retired there, so upsmon doesn't become a
+# second racing shutdown agent.
+nut_monitor_acknowledge_shutdown_overlap: false
