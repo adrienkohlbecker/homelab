@@ -67,25 +67,21 @@
   tags:
     - ntp
 
-- name: Enable chrony
-  when: not (ansible_check_mode and ntp_chrony_apt.changed)
-  systemd:
-    name: chrony
-    enabled: true
-  become: true
-  tags:
-    - ntp
-
-# Restart (not just start) when the backports upgrade moved chrony to the
-# noble binary, or when the NTS config above changed, so the running
-# chronyd picks up the new binary/config; otherwise just ensure it's up,
-# leaving a healthy daemon undisturbed. ntp_backports_updated is the bool
-# the backports role records from backports_args.name: ntp.
-- name: Start chrony
-  when: not (ansible_check_mode and ntp_chrony_apt.changed)
-  systemd:
-    name: chrony
-    state: '{{ "restarted" if (ntp_backports_updated or ntp_chrony_conf.changed) else "started" }}'
-  become: true
+# Enable + start chrony via the systemd_unit helper (chrony ships its own
+# unit, so no install step). Restart -- not just start -- when the
+# backports upgrade moved chrony to the noble binary or the NTS config
+# above changed, so the running chronyd picks up the new binary/config;
+# otherwise the helper leaves a healthy daemon undisturbed and clears any
+# start-rate-limit a bare state=restarted would trip over. ntp_backports_updated
+# is the bool the backports role records from backports_args.name: ntp.
+- name: Enable and start chrony
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: chrony
+      condition: "{{ not (ansible_check_mode and ntp_chrony_apt.changed) }}"
+      restart: "{{ ntp_backports_updated or ntp_chrony_conf.changed }}"
   tags:
     - ntp
