@@ -464,6 +464,39 @@
   tags:
     - netdata
 
+# Fail-closed: the un-silence `replace` reports changed=false both when it
+# already ran AND when it matched nothing (upstream renamed/restructured the
+# template), so a silent no-op would otherwise leave the predictive disk-fill
+# alarm at `to: silent` with no signal. Assert the end state instead. Skipped
+# in check mode, where the staging+replace above is gated off on a fresh host.
+- name: Slurp the un-silenced disks.conf
+  when: not ansible_check_mode
+  slurp:
+    src: /etc/netdata/health.d/disks.conf
+  register: netdata_disks_unsilenced_check
+  become: true
+  tags:
+    - netdata
+
+- name: Assert the disk-fill predictive alarms route to sysadmin
+  when: not ansible_check_mode
+  vars:
+    _disks: "{{ netdata_disks_unsilenced_check.content | b64decode }}"
+  assert:
+    that:
+      # Same stanza-anchored shape as the replace regexes above: each
+      # template must resolve to a `to: sysadmin` stanza. Zero matches means
+      # the un-silence missed -- fail here, not during an actual disk-fill.
+      - _disks | regex_findall('(?ms)^\s*template:\s+out_of_disk_space_time\s(?:(?!^\s*template:).)*?^\s*to:\s+sysadmin') | length >= 1
+      - _disks | regex_findall('(?ms)^\s*template:\s+out_of_disk_inodes_time\s(?:(?!^\s*template:).)*?^\s*to:\s+sysadmin') | length >= 1
+    fail_msg: >-
+      disks.conf out_of_disk_space_time / out_of_disk_inodes_time no longer
+      resolve to a `to: sysadmin` stanza -- upstream likely renamed or
+      restructured them, leaving the predictive disk-fill alarm silenced.
+      Re-check the un-silence regexes in this role.
+  tags:
+    - netdata
+
 # Same staging+replace pattern as disks.conf above, for timex.conf's
 # system_clock_sync_state alarm. The kernel's ntp_adjtime() exposes a
 # clock-synchronized bit; that bit going to 0 means the local clock has
@@ -503,6 +536,30 @@
   command: netdatacli reload-health
   changed_when: true
   become: true
+  tags:
+    - netdata
+
+# Fail-closed, same rationale as the disks.conf assert above.
+- name: Slurp the un-silenced timex.conf
+  when: not ansible_check_mode
+  slurp:
+    src: /etc/netdata/health.d/timex.conf
+  register: netdata_timex_unsilenced_check
+  become: true
+  tags:
+    - netdata
+
+- name: Assert the clock-sync alarm routes to sysadmin
+  when: not ansible_check_mode
+  vars:
+    _timex: "{{ netdata_timex_unsilenced_check.content | b64decode }}"
+  assert:
+    that:
+      - _timex | regex_findall('(?ms)^\s*alarm:\s+system_clock_sync_state\s(?:(?!^\s*alarm:|^\s*template:).)*?^\s*to:\s+sysadmin') | length >= 1
+    fail_msg: >-
+      timex.conf system_clock_sync_state no longer resolves to a
+      `to: sysadmin` stanza -- upstream likely renamed/restructured it,
+      leaving the clock-desync alert silenced. Re-check the un-silence regex.
   tags:
     - netdata
 
