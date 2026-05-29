@@ -32,6 +32,11 @@ mydomain = {{ domain }}
 masquerade_domains = {{ email_domain }} {{ domain }}
 alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases
+# Not a pure null client (which sets `mydestination =` empty): local delivery is
+# kept so system mail to root/operator resolves through /etc/aliases, then leaves
+# again to root_email via the relay. $mydomain here also captures bounces to the
+# masqueraded `root@$mydomain` sender locally instead of relaying them back out.
+# See http://www.postfix.org/STANDARD_CONFIGURATION_README.html (null client).
 mydestination = $myhostname, $mydomain, localhost.$mydomain, localhost
 relayhost = [{{ smtp_host }}]:{{ smtp_port }}
 mynetworks = 127.0.0.0/8 [::ffff:127.0.0.0]/104 [::1]/128
