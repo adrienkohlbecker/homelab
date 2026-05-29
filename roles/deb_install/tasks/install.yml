@@ -51,7 +51,9 @@
       get_url:
         url: "{{ deb_install_args.url }}"
         dest: "/tmp/{{ deb_install_args.name }}.deb"
-        mode: '0644'
+        # root-only: the staged deb is a transient any local user could
+        # otherwise read out of world-readable /tmp.
+        mode: '0600'
         owner: root
         group: root
         checksum: "sha256:{{ deb_install_args.sha256 }}"
