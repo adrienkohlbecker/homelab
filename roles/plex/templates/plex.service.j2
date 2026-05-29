@@ -79,10 +79,13 @@ ExecStart=/usr/bin/podman run \
     --volume "{{ bind.src }}:{{ bind.dest }}:ro" \
 {% endfor %}
 {% endif %}
-    {# 0777, not 0755: Plex runs as the non-root PLEX_UID and the tmpfs #}
-    {# mounts root-owned (nothing chowns it), so it must be world-writable #}
-    {# for Plex to use it as transcode scratch. tmpfs is container-local, #}
-    {# so world-write is benign (jellyfin gets 0755 via its uidmap root). #}
+    {# Transcode scratch. Plex is pointed here via TranscoderTempDirectory in #}
+    {# the Preferences.xml the role seeds (tasks/main.yml); unset, Plex would #}
+    {# transcode under /config on the snapshotted dataset. 0777, not 0755: #}
+    {# Plex runs as the non-root PLEX_UID and the tmpfs mounts root-owned #}
+    {# (nothing chowns it), so it must be world-writable for Plex to use it #}
+    {# as scratch. tmpfs is container-local, so world-write is benign #}
+    {# (jellyfin gets 0755 via its uidmap root). #}
     --mount type=tmpfs,destination=/transcode,tmpfs-size=4G,tmpfs-mode=0777 \
     --network media \
     {# 0.0.0.0, not 127.0.0.1 like jellyfin: native Plex clients (Apple TV, #}
