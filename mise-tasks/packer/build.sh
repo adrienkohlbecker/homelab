@@ -28,6 +28,24 @@ mkdir -p "${base}"
 # is left behind for inspection (cleanup via packer:clean).
 tmp=$(mktemp -d "${QEMU_DIR}/.build-XXXXXX")
 
+# Surface the qemu_net_wrapper shim's NIC-backend decision log (passt vs
+# slirp, the passt command, the netdev rewrite). packer routes the shim's
+# stderr through Go's logger, which it discards without PACKER_LOG, so the
+# shim drops a per-source qemu_net_wrapper.log next to that source's disks.
+# Tail them on EXIT whatever the outcome: succeeded sources land under
+# ${base}/<source> (moved there by the install post-processor), failed ones
+# stay under ${tmp}/<source>. So a passt-path regression is diagnosable
+# straight from the CI job log, no PACKER_LOG rerun needed.
+dump_net_logs() {
+  local f
+  for f in "${tmp}"/*/qemu_net_wrapper.log "${base}"/*/qemu_net_wrapper.log; do
+    [ -f "${f}" ] || continue
+    echo "=== ${f} ==="
+    cat "${f}"
+  done
+}
+trap dump_net_logs EXIT
+
 # Build -only filter when sources are specified. Packer parallelizes
 # the matched sources internally (one VM per source, non-overlapping
 # host_port and vnc_port ranges declared per source in qemu.pkr.hcl);
