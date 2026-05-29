@@ -54,6 +54,12 @@ over)
 cal)
   MSG="UPS is calibrating its battery"
   ;;
+off)
+  MSG="UPS is administratively OFF or asleep - the load is NOT powered"
+  ;;
+notoff)
+  MSG="UPS is no longer OFF - the load is powered again"
+  ;;
 *)
   echo >&2 "unexpected event $EVENT"
   exit 1
