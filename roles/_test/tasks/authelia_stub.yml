@@ -17,6 +17,11 @@
 #       pointing at the portal, so the parent's modern redirect
 #       (auth_request_set $redirection_url $upstream_http_location;
 #       error_page 401 =302 $redirection_url) has a target to 302 to.
+#   authed: returns 200 plus a `Remote-User` header (value from
+#       authelia_stub_user, default nginxverifyuser), like Authelia on a
+#       successful auth. Lets a test exercise the auth-passes paths --
+#       X-Forwarded-User forwarding and per-user upstream_authorization
+#       injection (the if ($authelia_user = ...) chain in site.conf.j2).
 #
 # Localhost-only. Prod Authelia uses the same port; this fixture is
 # only ever installed by tasks/_setup.yml chains under test/testrole.py,
@@ -40,6 +45,12 @@
             # emits the portal redirect in its Location response header.
             add_header Location "https://auth.{{ inventory_hostname }}.{{ domain }}/" always;
             return 401;
+        {% elif (authelia_stub_mode | default('always_200')) == 'authed' %}
+            # authed: 200 with a Remote-User header, like Authelia on a
+            # successful auth, so the parent's auth_request_set $authelia_user
+            # populates (exercises X-Forwarded-User + upstream_authorization).
+            add_header Remote-User "{{ authelia_stub_user | default('nginxverifyuser') }}" always;
+            return 200 'test_stub_ok';
         {% else %}
             return 200 'test_stub_ok';
         {% endif %}
