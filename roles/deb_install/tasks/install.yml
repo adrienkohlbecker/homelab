@@ -1,11 +1,21 @@
 # Generic "install a pinned .deb when the installed version differs" helper.
 # Callers pass a single dict `deb_install_args`:
 #   name      required; dpkg package name (minio, mcli, ipp-linux, ...) --
-#             also the /tmp basename and the prefix of the result fact
-#   version   required; exact ${Version} string to match
+#             also the staged-file basename and the prefix of the result fact.
+#             A dpkg ":arch" qualifier (libfoo:amd64) is rejected by the assert
+#             below; arch-qualified names are unsupported.
+#   version   required; the exact dpkg ${Version} to match, *including* epoch
+#             (1:2.3) and Debian revision (2.3-1) when present. This is what
+#             `dpkg-query -W -f='${Version}'` records, which can differ from the
+#             .deb *filename* -- e.g. eaton's ipp-linux_1.75.183-1_amd64.deb
+#             records ${Version} 1.75.183. Pin the recorded version, not the URL.
 #   url       required; .deb download URL
 #   sha256    required; expected sha256 of the .deb
 #   timeout   optional; get_url timeout (seconds); omitted -> module default
+#
+# apt installs the single .deb with no archive dependency resolution (its deps
+# must already be satisfied) and will downgrade when the pin is older than the
+# installed version -- the gate reinstalls on any non-exact match, lower included.
 #
 # Exposes `<name>_deb_changed` (non-identifier chars -> '_') so callers can gate
 # a service restart on a fresh install. The prefix is the *deb package name*,
@@ -29,6 +39,11 @@
       deb_install_args must define name (slash-free dpkg package name),
       version, url and a 64-hex sha256; got {{ deb_install_args }}
 
+# Read dpkg's recorded status + version directly. `apt: deb=` is idempotent on
+# *version* alone -- it would leave a removed-but-config-files package (which
+# still reports its version) un-reinstalled -- so gating on the status word is
+# what makes "config-files" reinstall. `package_facts` can't stand in: it
+# exposes the version but not dpkg's status word.
 - name: Check installed deb version  # noqa: command-instead-of-module
   command:
     argv:
@@ -52,6 +67,9 @@
   become: true
   block:
 
+    # get_url rather than apt's own deb=<url> fetch: apt's download path does no
+    # checksum verification, and this sha256 is the .deb's only integrity gate,
+    # so the verified download must stay a separate step.
     - name: Download deb
       check_mode: false
       get_url:
@@ -85,11 +103,10 @@
         path: "/var/cache/{{ deb_install_args.name }}.deb"
         state: absent
 
-# Always set, even when the install block is skipped, so callers can rely on
-# the fact existing. `deb_install_apt.changed` is the truthful "an install
-# happened" signal -- false when the block was skipped (result undefined) or
-# apt no-op'd because the pin was already present. Consume with `| bool`
-# (set_fact renders it as a string).
+# `deb_install_apt.changed` is the truthful "an install happened" signal --
+# false when the block was skipped (result undefined, hence the default) or apt
+# no-op'd because the pin was already present. Consume with `| bool` (set_fact
+# renders it as a string).
 - name: Record whether an install happened
   set_fact:
     "{{ deb_install_args.name | regex_replace('[^A-Za-z0-9_]', '_') }}_deb_changed": "{{ deb_install_apt.changed | default(false) }}"
