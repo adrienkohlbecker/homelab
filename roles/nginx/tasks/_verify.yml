@@ -29,9 +29,12 @@
             protocol_version = "HTTP/1.1"
 
             def do_GET(self):
-                # Echo the received request line to the journal so the
-                # token-strip assertion can confirm auth_token never arrives.
+                # Echo the received request line + Authorization header to the
+                # journal so the token-strip and upstream_authorization
+                # assertions can confirm exactly what reached the upstream.
                 print("upstream-saw " + self.path, flush=True)
+                print("upstream-auth " + self.headers.get("Authorization", "<none>"), flush=True)
+                print("upstream-fwduser " + self.headers.get("X-Forwarded-User", "<none>"), flush=True)
                 body = b"nginx_verify_upstream_ok"
                 self.send_response(200)
                 self.send_header("Content-Length", str(len(body)))
@@ -59,6 +62,18 @@
   vars:
     authelia_stub_mode: gate
 
+# Bounded readiness probe (fail-fast, per the harness flake contract): the stub
+# re-install reloaded nginx, so poll its endpoint until the gate 401 lands
+# rather than racing the reload on a slow VM.
+- name: _verify | Wait for the Authelia gate stub to answer 401
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.authelia }}/api/authz/auth-request"
+    status_code: 401
+  register: nginx_verify_gate_ready
+  until: nginx_verify_gate_ready.status == 401
+  retries: 10
+  delay: 1
+
 # Exercises the nginx_site helper end-to-end (assert, template, symlink, the
 # new nginx -t validate-rollback, reload) on top of being the probe target.
 - name: _verify | Configure a transient test vhost via the nginx_site helper
@@ -72,6 +87,23 @@
       auth: required
       bypass_query_param:
         value: "{{ nginx_verify_token }}"
+
+# Post-reload settle: a probe fired immediately after a vhost's reload can race
+# nginx's draining old workers (still on the prior config) and hit the default
+# server (404). Poll until the freshly-added vhost actually routes before the
+# assertions below. Bounded (fail-fast) per the harness flake contract.
+- name: _verify | Wait for the nginxverify vhost to route
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "{{ nginx_verify_host }}"
+    validate_certs: false
+    follow_redirects: none
+    status_code: [200, 204, 301, 302, 400, 404]
+  register: nginx_verify_route_ready
+  until: nginx_verify_route_ready.status != 404
+  retries: 10
+  delay: 1
 
 - name: _verify | Unauthenticated request redirects to the Authelia portal (302)
   uri:
@@ -165,6 +197,41 @@
       Raw bypass token leaked into /var/log/nginx/access.log; expected only
       auth_token=REDACTED.
 
+# auth_token as the ONLY query param is the common case (compta's app, the
+# netdata poller) and the edge where stripping must clear $args entirely.
+- name: _verify | Bypass with auth_token as the sole query param reaches the upstream (200)
+  uri:
+    url: https://localhost/?auth_token={{ nginx_verify_token }}
+    headers:
+      Host: "{{ nginx_verify_host }}"
+    validate_certs: false
+    return_content: true
+    status_code: 200
+  register: nginx_verify_sole
+  failed_when: >-
+    nginx_verify_sole.status != 200
+    or 'nginx_verify_upstream_ok' not in (nginx_verify_sole.content | default(''))
+
+- name: _verify | Sole-param auth_token is stripped before the upstream (not in journal)
+  command: journalctl -u nginx_verify_upstream --no-pager
+  register: nginx_verify_sole_journal
+  changed_when: false
+  become: true
+  failed_when: nginx_verify_token in nginx_verify_sole_journal.stdout
+
+# The single-occurrence strip + log-redaction assume one auth_token; the
+# location-/ guard rejects a duplicated param outright so a malformed client
+# can't smuggle a second copy past the strip.
+- name: _verify | Duplicated auth_token is rejected with 400
+  uri:
+    url: "https://localhost/?auth_token={{ nginx_verify_token }}&auth_token=smuggled"
+    headers:
+      Host: "{{ nginx_verify_host }}"
+    validate_certs: false
+    status_code: 400
+  register: nginx_verify_dup
+  failed_when: nginx_verify_dup.status != 400
+
 # http->https redirect and the default-server catch-all are probed on the
 # public interface, not loopback: the stub_status server binds 127.0.0.1:80
 # specifically, which captures every loopback :80 request regardless of Host.
@@ -197,25 +264,224 @@
     nginx_verify_stub.status != 200
     or 'Active connections' not in (nginx_verify_stub.content | default(''))
 
-# state: absent — tear down the transient vhost via the helper and confirm both
-# the symlink and the config are gone. This is the contract the otgw / vscode_ha
-# tombstones rely on to stay decommissioned on a fresh install.
-- name: _verify | Remove the transient test vhost via the nginx_site helper
+# --- auth-passes phase ---
+# Switch the stub to `authed` (200 + Remote-User) so the upstream_authorization
+# injection and location_conf re-emit paths run with auth SUCCEEDING, which the
+# gate-mode tests above can't reach.
+- name: _verify | Switch the Authelia stub to authed mode
+  import_role:
+    name: _test
+    tasks_from: authelia_stub
+  vars:
+    authelia_stub_mode: authed
+
+- name: _verify | Wait for the Authelia authed stub to answer 200
+  uri:
+    url: "http://127.0.0.1:{{ service_ports.authelia }}/api/authz/auth-request"
+    status_code: 200
+  register: nginx_verify_authed_ready
+  until: nginx_verify_authed_ready.status == 200
+  retries: 10
+  delay: 1
+
+# upstream_authorization exercises two contracts that DO work: Authelia identity
+# forwarding (X-Forwarded-User, a content-phase proxy_set_header) and the
+# cookieless machine-client passthrough (its own Authorization survives). NOTE:
+# the per-user token INJECTION (the `if ($authelia_user = ...) set $upstream_auth`
+# chain in site.conf.j2) does NOT take effect -- `if`/`set` run in nginx's
+# rewrite phase, before auth_request (access phase) populates $authelia_user --
+# so it is deliberately not asserted here. See the role review notes.
+- name: _verify | Configure a vhost exercising upstream_authorization
   import_role:
     name: nginx
     tasks_from: site
   vars:
     nginx_site_args:
-      subdomain: nginxverify
-      state: absent
+      subdomain: nginxverifyauth
+      proxy_pass: http://127.0.0.1:18080/
+      auth: required
+      upstream_authorization:
+        nginxverifyuser: Token injected-abc
 
-- name: _verify | Removed vhost config and symlink are gone
+- name: _verify | Wait for the nginxverifyauth vhost to route
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "nginxverifyauth.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    follow_redirects: none
+    status_code: [200, 204, 301, 302, 400, 404]
+  register: nginx_verify_auth_ready
+  until: nginx_verify_auth_ready.status != 404
+  retries: 10
+  delay: 1
+
+- name: _verify | Authenticated browser user is admitted and identity-forwarded
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "nginxverifyauth.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    status_code: 200
+  register: nginx_verify_inj
+  failed_when: nginx_verify_inj.status != 200
+
+- name: _verify | Upstream received X-Forwarded-User from the auth subrequest
+  command: journalctl -u nginx_verify_upstream --no-pager
+  register: nginx_verify_inj_journal
+  changed_when: false
+  become: true
+  until: "'upstream-fwduser nginxverifyuser' in nginx_verify_inj_journal.stdout"
+  retries: 10
+  delay: 1
+
+- name: _verify | Cookieless machine client's own Authorization passes through unmodified
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "nginxverifyauth.{{ inventory_hostname }}.{{ domain }}"
+      Authorization: Token machine-xyz
+    validate_certs: false
+    status_code: 200
+  register: nginx_verify_pass
+  failed_when: nginx_verify_pass.status != 200
+
+- name: _verify | Upstream received the machine client's own token (not stripped)
+  command: journalctl -u nginx_verify_upstream --no-pager
+  register: nginx_verify_pass_journal
+  changed_when: false
+  become: true
+  until: "'upstream-auth Token machine-xyz' in nginx_verify_pass_journal.stdout"
+  retries: 10
+  delay: 1
+
+# location_conf: a location-level add_header drops nginx's inherited add_header
+# set, so the helper re-emits the security headers inside `location /`. If that
+# re-emit regressed, HSTS/CSP would silently vanish from every location_conf
+# site (netdata, minio).
+- name: _verify | Configure a vhost with a location_conf snippet
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: nginxverifyloc
+      proxy_pass: http://127.0.0.1:18080/
+      auth: required
+      location_conf: |
+        add_header X-Verify-Loc "1" always;
+
+- name: _verify | Wait for the nginxverifyloc vhost to route
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "nginxverifyloc.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    follow_redirects: none
+    status_code: [200, 204, 301, 302, 400, 404]
+  register: nginx_verify_loc_ready
+  until: nginx_verify_loc_ready.status != 404
+  retries: 10
+  delay: 1
+
+- name: _verify | A location_conf keeps the security headers AND its own header
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "nginxverifyloc.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    status_code: 200
+  register: nginx_verify_loc
+  failed_when: >-
+    nginx_verify_loc.status != 200
+    or nginx_verify_loc.strict_transport_security is not defined
+    or nginx_verify_loc.content_security_policy is not defined
+    or nginx_verify_loc.x_verify_loc is not defined
+
+# csp_passthrough + enable_http on one auth-less vhost: confirm :80 serves
+# cleartext without a redirect, and that csp_passthrough emits no CSP header
+# (letting the upstream's own through).
+- name: _verify | Configure a plaintext, CSP-passthrough vhost
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: nginxverifyplain
+      proxy_pass: http://127.0.0.1:18080/
+      enable_http: true
+      csp_passthrough: true
+
+- name: _verify | Wait for the nginxverifyplain vhost to route
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "nginxverifyplain.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    follow_redirects: none
+    status_code: [200, 204, 301, 302, 400, 404]
+  register: nginx_verify_plain_ready
+  until: nginx_verify_plain_ready.status != 404
+  retries: 10
+  delay: 1
+
+- name: _verify | The enable_http listener serves :80 in cleartext without a redirect
+  uri:
+    url: "http://{{ ansible_default_ipv4.address }}/"
+    headers:
+      Host: "nginxverifyplain.{{ inventory_hostname }}.{{ domain }}"
+    follow_redirects: none
+    return_content: true
+    status_code: 200
+  register: nginx_verify_plain80
+  failed_when: >-
+    nginx_verify_plain80.status != 200
+    or 'nginx_verify_upstream_ok' not in (nginx_verify_plain80.content | default(''))
+
+- name: _verify | A csp_passthrough vhost emits no Content-Security-Policy header
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "nginxverifyplain.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    status_code: 200
+  register: nginx_verify_csp
+  failed_when: >-
+    nginx_verify_csp.status != 200
+    or nginx_verify_csp.content_security_policy is defined
+
+# state: absent — tear down the transient vhosts via the helper and confirm both
+# the symlink and the config are gone. This is the contract the otgw / vscode_ha
+# tombstones rely on to stay decommissioned on a fresh install. include_tasks
+# (not import_role) so nginx_site_args re-evaluates per loop iteration.
+- name: _verify | Remove the transient test vhosts via the nginx_site helper
+  include_tasks:
+    file: site.yml
+  vars:
+    nginx_site_args:
+      subdomain: "{{ item }}"
+      state: absent
+  loop:
+    - nginxverify
+    - nginxverifyauth
+    - nginxverifyloc
+    - nginxverifyplain
+  loop_control:
+    label: "{{ item }}"
+
+- name: _verify | Removed vhost configs and symlinks are gone
   stat:
     path: "{{ item }}"
   register: nginx_verify_removed
   loop:
     - /etc/nginx/sites-available/nginxverify
     - /etc/nginx/sites-enabled/nginxverify
+    - /etc/nginx/sites-available/nginxverifyauth
+    - /etc/nginx/sites-enabled/nginxverifyauth
+    - /etc/nginx/sites-available/nginxverifyloc
+    - /etc/nginx/sites-enabled/nginxverifyloc
+    - /etc/nginx/sites-available/nginxverifyplain
+    - /etc/nginx/sites-enabled/nginxverifyplain
   become: true
   failed_when: nginx_verify_removed.stat.exists
 
@@ -253,6 +519,45 @@
       failed_when: nginx_verify_broken_drop.stat.exists
 
     - name: _verify | Nginx config is still valid after the rollback
+      command: nginx -t
+      changed_when: false
+      become: true
+
+# site rollback — the sibling of the conf.d test for the site path, which the
+# shared place-validate rollback now drives too. Feed the helper a vhost with a
+# syntactically broken server_conf and confirm both the config and its
+# sites-enabled symlink are removed and nginx stays valid; the helper's `fail`
+# is expected, so catch it.
+- name: _verify | Broken site config is validated and rolled back
+  block:
+    - name: _verify | Configure a deliberately broken site
+      import_role:
+        name: nginx
+        tasks_from: site
+      vars:
+        nginx_site_args:
+          subdomain: nginxverifybroken
+          proxy_pass: http://127.0.0.1:18080/
+          server_conf: |
+            nginx_verify_broken_site_directive on;
+
+    - name: _verify | Broken site must fail validation (unexpected success)
+      fail:
+        msg: >-
+          The broken site should have failed `nginx -t` and rolled back, but the
+          helper reported success.
+  rescue:
+    - name: _verify | Broken site config and symlink were rolled back (absent)
+      stat:
+        path: "{{ item }}"
+      register: nginx_verify_broken_site
+      become: true
+      failed_when: nginx_verify_broken_site.stat.exists
+      loop:
+        - /etc/nginx/sites-available/nginxverifybroken
+        - /etc/nginx/sites-enabled/nginxverifybroken
+
+    - name: _verify | Nginx config is still valid after the site rollback
       command: nginx -t
       changed_when: false
       become: true
