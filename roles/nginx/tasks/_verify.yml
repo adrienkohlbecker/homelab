@@ -799,3 +799,36 @@
       command: nginx -t
       changed_when: false
       become: true
+
+# Finding-19: enable_http is asserted incompatible with auth/bypass -- :80 is
+# cleartext, so an auth flow or vaulted token would travel unencrypted. Drive
+# that safety assert to its FAILURE direction (the create-tests above only ever
+# feed it valid inputs): the asserts run before any write, so there's nothing to
+# roll back; the helper's failure is expected, so catch it and confirm it was
+# THIS assert that fired (not some unrelated error masquerading as success).
+- name: _verify | Reject enable_http when combined with auth (assert must fire)
+  block:
+    - name: _verify | Configure an enable_http + auth vhost (must fail the assert)
+      import_role:
+        name: nginx
+        tasks_from: site
+      vars:
+        nginx_site_args:
+          subdomain: nginxverifyhttpauth
+          proxy_pass: http://127.0.0.1:18080/
+          enable_http: true
+          auth: required
+
+    - name: _verify | Combining enable_http and auth must fail validation (unexpected success)
+      fail:
+        msg: >-
+          enable_http + auth: required should have failed the site assert
+          (cleartext :80 would carry the auth flow), but the helper accepted it.
+  rescue:
+    - name: _verify | The failure was the enable_http/auth assert (not something else)
+      assert:
+        that:
+          - "'enable_http' in (ansible_failed_task.name | default(''))"
+        fail_msg: >-
+          Expected the enable_http/auth incompatibility assert to fail, but a
+          different task failed: {{ ansible_failed_task.name | default('<unknown>') }}.
