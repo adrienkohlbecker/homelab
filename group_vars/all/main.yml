@@ -151,6 +151,9 @@ service_ports:
   minio_api: 9199
   minio_console: 9001
   nut: 3493
+  # Prometheus, loopback-only (nginx fronts it on the prometheus subdomain);
+  # 9090 is the server default. Also minio's MINIO_PROMETHEUS_URL target.
+  prometheus: 9090
   radarr: 7878
   # Roundcube webmail (getmail archive viewer), loopback-published; Dovecot's
   # IMAP backend stays internal to the getmail_webmail podman network and so
