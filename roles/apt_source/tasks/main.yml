@@ -31,8 +31,8 @@
 #   state:         optional present (default) | absent; absent tombstones the
 #                  source -- removes its .list/.sources, keyring and pin file
 #
-# Exposes apt_source_<name>_changed (true when the key/repo/prereq changed)
-# so the caller can gate its package install out of check mode -- where the
+# Exposes apt_source_<name>_changed (true when the repo line or a prereq
+# install changed) so the caller can gate its install out of check mode -- where the
 # repo task is skipped behind its prereq install and a stale cache would
 # otherwise make the install fail to find the package.
 
