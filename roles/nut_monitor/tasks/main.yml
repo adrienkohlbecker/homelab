@@ -1,3 +1,12 @@
+- name: Assert required inputs when monitoring is enabled
+  when: nut_monitor_enabled | default(false)
+  assert:
+    that:
+      - nut_upsmon_password | default('') | length > 0
+    fail_msg: nut_monitor_enabled requires a vaulted nut_upsmon_password in host_vars/group_vars
+  tags:
+    - nut_monitor
+
 - name: Install nut
   apt:
     pkg:
@@ -8,6 +17,10 @@
   tags:
     - nut_monitor
 
+# upsmon.conf/upssched.conf carry no validate: -- NUT ships no offline config
+# checker (the daemons only parse at startup) and the whitespace-directive
+# format isn't INI, so there's no real parser to invent. nut-notify below
+# validates with `bash -n` since it is a script.
 - name: Configure nut upsmon.conf
   when: not (ansible_check_mode and nut_monitor_apt.changed)
   template:
@@ -54,6 +67,8 @@
 # error: insufficient power configured!" -- the daemon has nothing to
 # do anyway. nut_monitor_enabled defaults to false (see upsmon.conf.j2);
 # hosts that flip it true also get the MONITOR + MINSUPPLIES lines.
+# start: gates on qemu_test so a fixture that enables monitoring still only
+# enables (not starts) the unit -- the box has no real UPS to reach.
 - name: Enable nut_client service
   import_role:
     name: systemd_unit
@@ -62,6 +77,7 @@
     systemd_unit_args:
       src: nut-client
       condition: "{{ (nut_monitor_enabled | default(false)) and not (ansible_check_mode and nut_monitor_apt.changed) }}"
+      start: "{{ not qemu_test }}"
       restart: "{{ nut_monitor_upsmon_conf.changed or nut_monitor_upssched_conf.changed }}"
   tags:
     - nut_monitor
