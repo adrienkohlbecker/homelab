@@ -1,0 +1,234 @@
+# Exercises the deb_install helper against hermetic throwaway packages built on
+# the VM (no network, no archive dependency) and served to the helper over
+# file://. Validates the contract: a first install flips the changed-fact true;
+# a re-run with the same pin closes the gate (fact false); a version bump
+# reinstalls; and a removed-but-config-files package reinstalls -- proving the
+# gate keys on dpkg's status word, not a bare ${Version} (which a removed
+# package still reports). The dashed package name also exercises the dash-folded
+# fact (deb-install-test -> deb_install_test_deb_changed). _verify is test-only
+# -- the VM is discarded -- so it installs, removes and purges freely.
+
+- name: _verify | Build the v1 test .deb
+  become: true
+  block:
+    - name: _verify | Create v1 control dir
+      file:
+        path: /tmp/deb_install_test/v1/DEBIAN
+        state: directory
+        mode: "0755"
+    - name: _verify | Write v1 control
+      copy:
+        dest: /tmp/deb_install_test/v1/DEBIAN/control
+        mode: "0644"
+        content: |
+          Package: deb-install-test
+          Version: 1.0-1
+          Architecture: all
+          Maintainer: deb_install test <test@example.com>
+          Description: throwaway package exercising the deb_install helper
+    - name: _verify | Build v1
+      command:
+        argv:
+          - dpkg-deb
+          - --root-owner-group
+          - --build
+          - /tmp/deb_install_test/v1
+          - /tmp/deb_install_test/test_1.0-1.deb
+      changed_when: false
+    - name: _verify | Checksum v1
+      command:
+        argv:
+          - sha256sum
+          - /tmp/deb_install_test/test_1.0-1.deb
+      register: _verify_v1_sha
+      changed_when: false
+
+- name: _verify | Install v1 (fresh)
+  import_role:
+    name: deb_install
+    tasks_from: install
+  vars:
+    deb_install_args:
+      name: deb-install-test
+      version: "1.0-1"
+      url: "file:///tmp/deb_install_test/test_1.0-1.deb"
+      sha256: "{{ _verify_v1_sha.stdout.split() | first }}"
+
+- name: _verify | Query status after fresh install
+  command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f=${db:Status-Status} ${Version}
+      - deb-install-test
+  register: _verify_after_v1
+  changed_when: false
+  become: true
+
+- name: _verify | Fresh install set the fact and installed v1
+  assert:
+    that:
+      - deb_install_test_deb_changed | bool
+      - _verify_after_v1.stdout == "installed 1.0-1"
+    fail_msg: >-
+      fresh install: fact={{ deb_install_test_deb_changed | default('UNSET') }}
+      dpkg={{ _verify_after_v1.stdout }}
+
+- name: _verify | Re-install v1 (same pin, expected no-op)
+  import_role:
+    name: deb_install
+    tasks_from: install
+  vars:
+    deb_install_args:
+      name: deb-install-test
+      version: "1.0-1"
+      url: "file:///tmp/deb_install_test/test_1.0-1.deb"
+      sha256: "{{ _verify_v1_sha.stdout.split() | first }}"
+
+- name: _verify | Re-running the same pin closed the gate (fact false)
+  assert:
+    that:
+      - not (deb_install_test_deb_changed | bool)
+    fail_msg: >-
+      expected gate closed on same-version re-run, fact={{ deb_install_test_deb_changed }}
+
+- name: _verify | Build the v2 test .deb (with a conffile)
+  become: true
+  block:
+    - name: _verify | Create v2 dirs
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - /tmp/deb_install_test/v2/DEBIAN
+        - /tmp/deb_install_test/v2/etc
+    - name: _verify | Write v2 control
+      copy:
+        dest: /tmp/deb_install_test/v2/DEBIAN/control
+        mode: "0644"
+        content: |
+          Package: deb-install-test
+          Version: 2.0-1
+          Architecture: all
+          Maintainer: deb_install test <test@example.com>
+          Description: throwaway package exercising the deb_install helper
+    - name: _verify | Declare the conffile (so dpkg --remove leaves config-files state)
+      copy:
+        dest: /tmp/deb_install_test/v2/DEBIAN/conffiles
+        mode: "0644"
+        content: |
+          /etc/deb-install-test.conf
+    - name: _verify | Write the conffile payload
+      copy:
+        dest: /tmp/deb_install_test/v2/etc/deb-install-test.conf
+        mode: "0644"
+        content: |
+          managed-by=deb_install-verify
+    - name: _verify | Build v2
+      command:
+        argv:
+          - dpkg-deb
+          - --root-owner-group
+          - --build
+          - /tmp/deb_install_test/v2
+          - /tmp/deb_install_test/test_2.0-1.deb
+      changed_when: false
+    - name: _verify | Checksum v2
+      command:
+        argv:
+          - sha256sum
+          - /tmp/deb_install_test/test_2.0-1.deb
+      register: _verify_v2_sha
+      changed_when: false
+
+- name: _verify | Install v2 (version bump)
+  import_role:
+    name: deb_install
+    tasks_from: install
+  vars:
+    deb_install_args:
+      name: deb-install-test
+      version: "2.0-1"
+      url: "file:///tmp/deb_install_test/test_2.0-1.deb"
+      sha256: "{{ _verify_v2_sha.stdout.split() | first }}"
+
+- name: _verify | Query status after the bump
+  command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f=${db:Status-Status} ${Version}
+      - deb-install-test
+  register: _verify_after_v2
+  changed_when: false
+  become: true
+
+- name: _verify | The bump set the fact and installed v2
+  assert:
+    that:
+      - deb_install_test_deb_changed | bool
+      - _verify_after_v2.stdout == "installed 2.0-1"
+    fail_msg: >-
+      version bump: fact={{ deb_install_test_deb_changed | default('UNSET') }}
+      dpkg={{ _verify_after_v2.stdout }}
+
+- name: _verify | Remove (keep config files) to reach config-files state
+  command:
+    argv:
+      - dpkg
+      - --remove
+      - deb-install-test
+  changed_when: false
+  become: true
+
+- name: _verify | Confirm the package is in config-files state
+  command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f=${db:Status-Status} ${Version}
+      - deb-install-test
+  register: _verify_after_remove
+  changed_when: false
+  become: true
+
+- name: _verify | Status word is config-files, not installed
+  assert:
+    that:
+      - _verify_after_remove.stdout == "config-files 2.0-1"
+    fail_msg: >-
+      expected config-files state, got {{ _verify_after_remove.stdout }}
+
+- name: _verify | Re-install v2 over the config-files state
+  import_role:
+    name: deb_install
+    tasks_from: install
+  vars:
+    deb_install_args:
+      name: deb-install-test
+      version: "2.0-1"
+      url: "file:///tmp/deb_install_test/test_2.0-1.deb"
+      sha256: "{{ _verify_v2_sha.stdout.split() | first }}"
+
+- name: _verify | A config-files package reinstalls (status gate, not version)
+  assert:
+    that:
+      - deb_install_test_deb_changed | bool
+    fail_msg: >-
+      expected reinstall from config-files state, fact={{ deb_install_test_deb_changed }}
+
+- name: _verify | Purge the test package and clean up
+  become: true
+  block:
+    - name: _verify | Purge
+      command:
+        argv:
+          - dpkg
+          - --purge
+          - deb-install-test
+      changed_when: false
+    - name: _verify | Remove the build tree
+      file:
+        path: /tmp/deb_install_test
+        state: absent
