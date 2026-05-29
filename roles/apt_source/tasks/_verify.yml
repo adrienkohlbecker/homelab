@@ -98,6 +98,14 @@
       vars:
         apt_source_args: "{{ apt_source_tombstone_args }}"
 
+    # The tombstone import only refreshes apt when it actually removed the
+    # source; a re-run with the source already gone skips that refresh, so
+    # force one here before asserting the policy no longer cites the mirror.
+    - name: _verify | Refresh apt cache after tombstone
+      apt:
+        update_cache: true
+      become: true
+
     - name: _verify | Stat keyring and pin after tombstone
       stat:
         path: "{{ item }}"
