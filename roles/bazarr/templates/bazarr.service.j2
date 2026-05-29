@@ -49,14 +49,11 @@ ExecStart=/usr/bin/podman run \
     --security-opt=no-new-privileges \
     --log-driver journald \
     --log-opt tag="bazarr" \
-    {# Still on PUID/PGID rather than the canonical --user 0:0 + --uidmap=+0:N:1
-       pattern (CLAUDE.md "Container User Namespacing"). The linuxserver/bazarr
-       image ships /dev/console as a char device in its layer; podman's
-       chown-by-maps pass returns EIO trying to lchown it on the overlay
-       driver, so the container won't start with uidmaps. Healthchecks's image
-       doesn't have that device node so its uidmap migration works. The real
-       fix is fleet-wide ignore_chown_errors=true in podman storage.conf;
-       defer until that lands. #}
+    {# PUID/PGID (CLAUDE.md "User namespacing" tier 2): the linuxserver s6
+       init usermods its baked-in abc user to these ids and drops to it.
+       Tier 2 is the right fit for a droppable image -- the fake-root
+       --uidmap pattern is reserved for images that insist on id 0
+       (healthchecks, hyperdx). #}
     --env PUID={{ bazarr_user.uid }} \
     --env PGID={{ media_group.gid }} \
     --env UMASK=002 \
