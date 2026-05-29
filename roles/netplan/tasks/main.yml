@@ -75,6 +75,23 @@
   tags:
     - netplan
 
+- name: Remove stale rollback artifacts from a prior auto-rollback
+  # A fired rollback keeps the presumed-broken config aside as
+  # /etc/netplan.rollback_failed (and, if interrupted mid-swap,
+  # /etc/netplan.restoring) for console recovery. Reaching a healthy
+  # converge means the box recovered, so clear them: prune_ansible_backups
+  # doesn't match these paths, and a future wifis: PSK shouldn't linger in
+  # cleartext outside backup rotation.
+  file:
+    path: "{{ item }}"
+    state: absent
+  become: true
+  loop:
+    - /etc/netplan.rollback_failed
+    - /etc/netplan.restoring
+  tags:
+    - netplan
+
 # Snapshot BEFORE the template runs so /run/netplan_prev captures the
 # genuine *previous* /etc/netplan, not the just-rendered new one. Two
 # downstream consumers read this:
@@ -100,6 +117,10 @@
     dest: /run/netplan_prev/
     remote_src: true
     mode: preserve
+    # mode: preserve keeps the 0600 files, but the snapshot dir itself would
+    # otherwise inherit a lax source-dir mode; pin it 0700 so /run/netplan_prev
+    # is no more readable than /etc/netplan (a future wifis: PSK would land here).
+    directory_mode: "0700"
   become: true
   changed_when: false
   tags:
