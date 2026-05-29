@@ -134,8 +134,9 @@
 
   # On a failed `nginx -t`, hand off to the shared place-validate rollback
   # (also used by site.yml). It restores the previous version from the .backup
-  # or removes the freshly-added drop, then fails loudly. `| default({})` keeps
-  # it safe even when the copy task itself failed to render its content.
+  # or removes the freshly-added drop; this rescue then fails loudly.
+  # `| default({})` keeps it safe even when the copy task itself failed to
+  # render its content.
   rescue:
     - name: conf_d | Roll back the failed drop
       import_tasks: place_rollback.yml
@@ -143,7 +144,13 @@
         _nginx_rollback_result: "{{ nginx_conf_d | default({}) }}"
         _nginx_rollback_paths:
           - "/etc/nginx/conf.d/{{ _nginx_conf_d_name }}"
-        _nginx_rollback_what: "/etc/nginx/conf.d/{{ _nginx_conf_d_name }}"
+
+    - name: conf_d | Fail after rolling back the drop
+      fail:
+        msg: >-
+          nginx -t failed after writing /etc/nginx/conf.d/{{ _nginx_conf_d_name }};
+          previous state restored. Inspect the validate output above and the
+          managed content.
 
 # Removal path (state: absent). Deleting a drop can't introduce a syntax
 # error, so there's no place-validate-rollback here -- just delete and
