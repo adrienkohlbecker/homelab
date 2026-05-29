@@ -75,6 +75,45 @@
   failed_when: paperless_verify_celery.rc != 0 or 'pong' not in paperless_verify_celery.stdout
   become: true
 
+# Celery ping proves a worker is reachable; this proves it can do its job.
+# Drop a tiny document into consume/ (owned by paperless so the
+# USERMAP_UID-mapped container can read it) and poll the ORM until it
+# lands -- exercising consume -> worker -> media write -> DB row end to
+# end. A USERMAP ownership drift or a wedged consumer leaves every probe
+# above green while ingest silently stalls; only a real round-trip catches
+# it. paperless_text consumes text/plain natively, so no OCR sidecar is
+# needed to make the document appear. manage.py shell prints a shell_plus
+# auto-import banner on stdout before our output, so read the count off the
+# last line rather than parsing the whole buffer.
+- name: _verify | Seed a document into the consume dir
+  copy:
+    content: "paperless ingest smoke test\n"
+    dest: /mnt/services/paperless/consume/_verify_ingest.txt
+    owner: paperless
+    group: paperless
+    mode: "0644"
+  become: true
+
+- name: _verify | Paperless ingests the seeded document
+  command:
+    argv:
+      - podman
+      - exec
+      - paperless
+      - python3
+      - manage.py
+      - shell
+      - -c
+      - 'from documents.models import Document; print(Document.objects.count())'
+  register: paperless_verify_ingest
+  changed_when: false
+  retries: 30
+  delay: 5
+  until: >-
+    paperless_verify_ingest.stdout_lines | length > 0
+    and (paperless_verify_ingest.stdout_lines | last | trim | int) >= 1
+  become: true
+
 # nginx proxy chain. The host header swap exercises the same path
 # external clients take.
 - name: _verify | Paperless reachable through nginx
