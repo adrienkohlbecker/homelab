@@ -1,20 +1,20 @@
-# PowerTOP auto-tune, re-applied on every boot (and on resume from suspend).
+# PowerTOP auto-tune, re-applied on every boot.
 #
 # Deliberately replaces the package-shipped /lib/systemd/system/powertop.service,
-# which omits RemainAfterExit (a spent oneshot would report inactive) and a
-# SyslogIdentifier. We add both plus a clearer Description; the helper installs
-# this at /etc/systemd/system so it shadows the packaged unit.
+# which omits RemainAfterExit (a spent oneshot would report inactive). We add it
+# plus a clearer Description; the helper installs this at /etc/systemd/system so
+# it shadows the packaged unit.
 #
 # --auto-tune writes power tunables across every device as root (USB autosuspend,
 # SATA ALPM, PCIe ASPM, NIC runtime PM). These are volatile sysfs writes reset on
-# reboot, so the unit re-applies them on every boot and after resume from suspend
-# (WantedBy=multi-user.target sleep.target); RemainAfterExit only makes the spent
-# oneshot report "active" -- it does NOT keep tuning live, and devices hot-plugged
-# after boot are not re-tuned. That "active" report is why a custom unit earns its
-# keep over the stock one (which omits it): it makes `systemctl is-active` a usable
-# health signal and lets _verify tell "ran and succeeded this boot" from "never
-# fired". If a USB peripheral, disk, or NIC misbehaves after a reboot, suspect this
-# role (opt a host out with powertop_enabled: false).
+# reboot, so the unit re-applies them on every boot; RemainAfterExit only makes
+# the spent oneshot report "active" -- it does NOT keep tuning live, and devices
+# hot-plugged after boot are not re-tuned. That "active" report is why a custom
+# unit earns its keep over the stock one (which omits it): it makes
+# `systemctl is-active` a usable health signal and lets _verify tell "ran and
+# succeeded this boot" from "never fired". If a USB peripheral, disk, or NIC
+# misbehaves after a reboot, suspect this role (opt a host out with
+# powertop_enabled: false).
 [Unit]
 Description=PowerTOP auto tune
 Documentation=man:powertop(8)
@@ -25,13 +25,8 @@ Type=oneshot
 # to infinity), so a wedged --auto-tune would hang the unit and stall
 # multi-user.target at boot. Bound it; 60s dwarfs a healthy auto-tune (seconds).
 TimeoutStartSec=60
-# powertop reads $TERM at startup even with --auto-tune; under systemd's empty
-# environment an unset TERM yields terminfo errors in the journal, so pin a
-# minimal value.
-Environment="TERM=dumb"
 RemainAfterExit=true
 ExecStart=/usr/sbin/powertop --auto-tune
-SyslogIdentifier=%N
 
 [Install]
-WantedBy=multi-user.target sleep.target
+WantedBy=multi-user.target
