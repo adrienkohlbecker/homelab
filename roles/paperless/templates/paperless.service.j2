@@ -47,6 +47,7 @@ ExecStart=/usr/bin/podman run \
     --name paperless \
     --log-driver journald \
     --log-opt tag="paperless" \
+    --security-opt=no-new-privileges \
     --volume /mnt/services/paperless/data:/usr/src/paperless/data \
     --volume /mnt/services/sqlite/paperless:/mnt/services/sqlite/paperless \
     --volume /mnt/services/paperless/media:/usr/src/paperless/media \
