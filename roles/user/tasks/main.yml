@@ -392,81 +392,22 @@
   tags:
     - user
 
-# Repository setup forks on Ubuntu major version because apt-key was
-# removed from the default install in resolute (26.04). See netdata
-# install.yml for the same idiom.
-- name: Add 1password repository key
-  when:
-    - ansible_distribution_major_version | int < 26
-    - not (ansible_check_mode and user_apt_gpg.changed)
-  apt_key:
-    id: AC2D62742012EA22
-    url: https://downloads.1password.com/linux/keys/1password.asc
-    keyring: /etc/apt/trusted.gpg.d/1password.gpg
-  become: true
-  tags:
-    - user
-
-- name: Add 1password repository
-  when: ansible_distribution_major_version | int < 26
-  apt_repository:
-    repo: deb [arch={{ (ansible_architecture == "aarch64") | ternary('arm64', 'amd64') }} signed-by=/etc/apt/trusted.gpg.d/1password.gpg] {{ mirror_apt_1password }} stable main
-  become: true
-  register: user_apt_repo_1password_legacy
-  tags:
-    - user
-
-# Pre-warm /var/lib/apt/lists/ so the python3-debian install below
-# works in check mode. Packer ships an empty cache and the apt
-# module's update_cache is a no-op under --check. See
-# roles/apt/tasks/install.yml for the full rationale.
-- name: Pre-warm apt cache (real fetch even in --check)  # noqa: command-instead-of-module
-  when: ansible_distribution_major_version | int >= 26
-  ansible.builtin.command: apt-get update
-  changed_when: false
-  check_mode: false
-  become: true
-  tags:
-    - user
-
-# deb822_repository requires python3-debian even in check mode. See
-# netdata install.yml for the gate idiom.
-- name: Install python3-debian
-  when: ansible_distribution_major_version | int >= 26
-  apt:
-    pkg: python3-debian
-    cache_valid_time: 3600
-  become: true
-  register: user_apt_python3_debian
-  tags:
-    - user
-
-- name: Add 1password repository (deb822)
-  when:
-    - ansible_distribution_major_version | int >= 26
-    - not (ansible_check_mode and user_apt_python3_debian.changed)
-  ansible.builtin.deb822_repository:
-    name: 1password
-    types: deb
-    uris: "{{ mirror_apt_1password }}"
-    suites: stable
-    components: main
-    architectures: "{{ (ansible_architecture == 'aarch64') | ternary('arm64', 'amd64') }}"
-    signed_by: https://downloads.1password.com/linux/keys/1password.asc
-  register: user_apt_repo_1password_deb822
-  become: true
-  tags:
-    - user
-
-- name: Track 1password repository changes
-  set_fact:
-    user_apt_repo_1password:
-      changed: "{{ user_apt_repo_1password_legacy is changed or user_apt_repo_1password_deb822 is changed or user_apt_python3_debian is changed }}"
+- name: Configure 1Password apt repository
+  import_role:
+    name: apt_source
+  vars:
+    apt_source_args:
+      name: 1password
+      key_id: 3FEF9748469ADBE15DA7CA80AC2D62742012EA22
+      key_url: https://downloads.1password.com/linux/keys/1password.asc
+      uris: "{{ mirror_apt_1password }}"
+      suites: stable
+      components: main
   tags:
     - user
 
 - name: Install packages
-  when: not (ansible_check_mode and user_apt_repo_1password.changed)
+  when: not (ansible_check_mode and apt_source_1password_changed)
   apt:
     pkg:
       - 1password-cli
