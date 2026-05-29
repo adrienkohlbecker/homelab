@@ -213,7 +213,7 @@
   when: pihole_list_update.changed
   command: /usr/bin/podman exec pihole pihole -g
   register: pihole_gravity_update
-  changed_when: pihole_list_update.changed
+  changed_when: true
   become: true
   tags:
     - pihole
