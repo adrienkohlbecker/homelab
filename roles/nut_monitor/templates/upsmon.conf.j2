@@ -86,7 +86,7 @@
    new tokens have been aliases since 2.7.4, so this works on jammy
    and noble too. Without the rename, resolute fails MONITOR parsing
    and exits with "Fatal error: insufficient power configured!". #}
-{% if nut_monitor_enabled|default(false) %}MONITOR eaton@localhost 1 upsmon {{ nut_upsmon_password }} primary{% endif %}
+{% if nut_monitor_enabled|default(false) %}MONITOR {{ nut_monitor_ups }} 1 upsmon {{ nut_upsmon_password }} primary{% endif %}
 
 # --------------------------------------------------------------------------
 # MINSUPPLIES <num>

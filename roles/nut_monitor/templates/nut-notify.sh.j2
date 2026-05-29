@@ -45,7 +45,7 @@ noparent)
   ;;
 esac
 
-UPS=eaton@localhost
+UPS={{ nut_monitor_ups }}
 STAT=$(upsc $UPS ups.status)
 BATT=$(upsc $UPS battery.charge)
 RUNTIME_SEC=$(upsc $UPS battery.runtime)
