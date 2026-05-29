@@ -39,3 +39,38 @@
       restart: "{{ powertop_service_result.changed or powertop_apt.changed }}"
   tags:
     - powertop
+
+# ---- disabled-host cleanup ----
+# Only acts on a host that previously had powertop enabled and is now opted
+# out: without this the stale unit keeps re-running --auto-tune every boot,
+# defeating the opt-out on exactly the host where a tunable misbehaves. Stat
+# first to avoid systemctl ENOENT noise where it was never installed. Mirrors
+# the fan2go teardown.
+- name: Stat powertop service unit (disabled)
+  when: not powertop_enabled
+  stat:
+    path: /etc/systemd/system/powertop.service
+  register: powertop_unit_stat
+  tags:
+    - powertop
+
+- name: Stop and disable powertop service (disabled, previously installed)
+  when:
+    - not powertop_enabled
+    - powertop_unit_stat.stat.exists
+  systemd:
+    name: powertop
+    state: stopped
+    enabled: false
+  become: true
+  tags:
+    - powertop
+
+- name: Remove powertop service unit (disabled)
+  when: not powertop_enabled
+  file:
+    path: /etc/systemd/system/powertop.service
+    state: absent
+  become: true
+  tags:
+    - powertop
