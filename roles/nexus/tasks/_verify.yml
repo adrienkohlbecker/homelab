@@ -47,6 +47,17 @@
   delay: 2
   until: _verify_status.status == 200
 
+# The dir-ownership checks above stat paths the role itself chowned, so they
+# pass even if the +200 uidmap regressed. This one stats a path Nexus wrote
+# as in-container uid 200 (its log dir, created on boot) -- a broken mapping
+# lands these files on the wrong host uid and the owner here won't be `nexus`.
+- name: _verify | A Nexus-written path is owned by nexus (exercises the uidmap)
+  stat:
+    path: /mnt/services/nexus/data/log
+  register: _verify_written
+  failed_when: not _verify_written.stat.exists or _verify_written.stat.pw_name != 'nexus'
+  become: true
+
 # End-to-end through the nginx vhost -- the production ingress every fleet
 # host's apt/docker/pypi pulls traverse. Host: + validate_certs=false hits
 # local nginx without DNS; a jinja typo in proxy_pass, a missing
