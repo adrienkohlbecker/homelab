@@ -1,7 +1,36 @@
-- name: Install postfix
+# Required inputs live in group_vars (vaulted in prod.yml) and the role asserts
+# them per CLAUDE.md. A mistyped/empty vault key renders sasl_passwd as
+# `[host]:587 user:` -- postfix accepts it, converges green, then silently fails
+# SASL auth at Mailgun, so every cron/fail2ban/smartd alert is lost. A non-empty
+# check (not just `is defined`) is what catches the empty-string case.
+- name: Assert required postfix relay inputs are set
+  assert:
+    that:
+      - postfix_smtp_user | default('') | length > 0
+      - postfix_smtp_password | default('') | length > 0
+      - smtp_host | default('') | length > 0
+      - smtp_port | default('') | string | length > 0
+      - email_domain | default('') | length > 0
+      - root_email | default('') | length > 0
+      - domain | default('') | length > 0
+    fail_msg: >-
+      One of postfix_smtp_user, postfix_smtp_password, smtp_host, smtp_port,
+      email_domain, root_email, domain is unset or empty. Set them in
+      group_vars/{prod,test}.yml (postfix_smtp_password is vaulted). An empty
+      vault string passes `is defined` but renders a broken relay that converges
+      green and silently drops all outbound mail, so we check for non-empty.
+  tags:
+    - postfix
+
+# policy_rc_d: 101 stops dpkg from auto-starting postfix mid-install before its
+# config is templated; it is a harmless no-op for libsasl2-modules/mailutils
+# (neither ships a daemon to suppress).
+- name: Install postfix, libsasl2 (TLS auth) and mailutils (sending mail)
   apt:
     pkg:
       - postfix
+      - libsasl2-modules
+      - mailutils
     policy_rc_d: 101
     cache_valid_time: 3600
   register: postfix_apt
@@ -9,16 +38,9 @@
   tags:
     - postfix
 
-- name: Install libsasl2 (for postfix TLS authentication) and mailutils (for sending emails)
-  apt:
-    pkg:
-      - libsasl2-modules
-      - mailutils
-    cache_valid_time: 3600
-  become: true
-  tags:
-    - postfix
-
+# No inline validate: `postfix check`/`postconf` parse the live /etc/postfix
+# directory, not ansible's temp `%s` file, so they can't validate the staged
+# render. The real parse-check runs post-converge in _verify.yml.
 - name: Postfix relay configuration
   template:
     src: main.cf.j2
