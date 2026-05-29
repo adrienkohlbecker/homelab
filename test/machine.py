@@ -5,6 +5,7 @@ import contextlib
 import dataclasses
 import errno
 import fcntl
+import functools
 import ipaddress
 import os
 import platform
@@ -84,6 +85,85 @@ def qemu_user_net_args(machine: str) -> str:
     host_ip = str(net.broadcast_address - 1)
     dns_ip = str(net.broadcast_address - 2)
     return f",net={supernet},host={host_ip},dns={dns_ip},dhcpstart={physical}"
+
+
+@functools.cache
+def _passt_available(qemu_binary: str) -> bool:
+    """True iff passt can back qemu *here*: Linux + `passt` on PATH + a qemu
+    that advertises the `stream` netdev (i.e. qemu >= 7.2).
+
+    Deliberately a capability probe, not a uname check: the jammy host
+    (qemu 6.2, no passt) and the noble ci-image (qemu 8.2 + passt) are *both*
+    Linux, so uname can't tell them apart -- but the operator runs the harness
+    directly on the jammy host occasionally and that path must keep using
+    slirp. macOS short-circuits first (passt is Linux-only). Cached because
+    the qemu probe forks a subprocess and the answer is constant per process.
+    """
+    if platform.system() != "Linux":
+        return False
+    if shutil.which("passt") is None:
+        return False
+    try:
+        probe = subprocess.run(
+            [qemu_binary, "-netdev", "help"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    # qemu lists netdev types on stdout (older builds: stderr); check both.
+    return "stream" in (probe.stdout + probe.stderr)
+
+
+def resolve_net_backend(qemu_binary: str) -> str:
+    """Pick the guest NIC backend: 'passt' or 'slirp'.
+
+    passt is a userspace connector with a robust UDP datapath; it replaces
+    qemu's libslirp on the guest-facing hop, killing the SLIRP-under-load UDP
+    drops that flake external-DNS _verify in CI (see
+    notes/ci_qemu_net_passt_migration.md). It's only usable where
+    `_passt_available` holds, so everywhere else (jammy host, macOS, any image
+    without the passt package) falls back to the unchanged slirp path.
+
+    HOMELAB_NET_BACKEND overrides the probe: `slirp` pins the legacy path,
+    `passt` forces it (and errors loudly if unavailable, so a misconfigured
+    CI env fails fast instead of silently degrading), `auto` (default) probes.
+    """
+    override = os.environ.get("HOMELAB_NET_BACKEND", "auto").strip().lower()
+    if override == "slirp":
+        return "slirp"
+    available = _passt_available(qemu_binary)
+    if override == "passt":
+        if not available:
+            raise RuntimeError(
+                "HOMELAB_NET_BACKEND=passt but passt is unusable here: it needs "
+                "the `passt` binary on PATH and a qemu with the `stream` netdev "
+                "(qemu >= 7.2). Install passt or unset the override."
+            )
+        return "passt"
+    if override != "auto":
+        raise RuntimeError(f"HOMELAB_NET_BACKEND={override!r} not in auto/slirp/passt")
+    return "passt" if available else "slirp"
+
+
+def passt_address_args(machine: str) -> list[str]:
+    """passt -a/-n/-g flags pinning the guest to its topology IP, mirroring
+    `qemu_user_net_args`' slirp dhcpstart/host pinning so roles that key on the
+    host's physical address see the same value under either backend.
+
+    Empty for machines absent from the topology (e.g. `minimal`): passt then
+    assigns from the container's default-route interface, matching slirp's
+    default-net behaviour there. The gateway is the supernet's broadcast-1,
+    exactly the `host=` slirp uses.
+    """
+    topo = _load_test_topology()
+    host = topo["hosts"].get(machine)
+    if not host:
+        return []
+    net = ipaddress.ip_network(topo["partitions"]["physical"]["cidr"])
+    gateway = str(net.broadcast_address - 1)
+    return ["--address", host["physical"], "--netmask", str(net.prefixlen), "--gateway", gateway]
 
 
 # git only tracks the executable bit; a fresh checkout (notably CI's
@@ -978,6 +1058,14 @@ class QemuMachine(Machine):
     # pflash so the firmware boot chain (rEFInd -> ZBM -> kexec, broken on
     # EDK2+aarch64) is bypassed entirely. None on x86_64 and on minimal.
     _direct_boot: tuple[Path, Path, str] | None
+    # Guest NIC backend, resolved once in __init__ (resolve_net_backend):
+    # "passt" inside the noble ci-image (robust UDP datapath), "slirp"
+    # everywhere passt can't run. The passt sidecar (a separate process
+    # qemu connects to over a unix socket) is launched in boot() and torn
+    # down in stop(); these stay None/unset on the slirp path.
+    _net_backend: str
+    _passt_socket: Path | None
+    _passt_proc: asyncio.subprocess.Process | None
 
     def __init__(
         self,
@@ -1079,6 +1167,11 @@ class QemuMachine(Machine):
             workdir_parent=workdir_parent,
         )
         # idfile defaults to "pid" on the base, which is what we want here.
+        # Resolve the NIC backend after _preflight (run via super().__init__)
+        # has confirmed the qemu binary exists, since the probe execs it.
+        self._net_backend = resolve_net_backend(self.arch.qemu_binary)
+        self._passt_socket = None
+        self._passt_proc = None
 
     def _workdir_parent(self) -> Path | None:
         """Place the workdir alongside the packer qcow2s.
@@ -1168,6 +1261,13 @@ class QemuMachine(Machine):
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
             s.bind((SSH_HOST, 0))
             self.wan_udp_test_port = s.getsockname()[1]
+
+        # On the passt backend qemu connects to the sidecar over a unix
+        # socket in the workdir. Path picked here (where the workdir
+        # exists); the sidecar itself is launched in boot() so its lifetime
+        # brackets qemu's. None on the slirp path.
+        if self._net_backend == "passt":
+            self._passt_socket = Path(self.workdir.name) / "passt.sock"
 
         if self.keep_vm:
             # Pick a VNC display 0..99 the same way -- qemu's vnc= syntax
@@ -1417,6 +1517,98 @@ class QemuMachine(Machine):
             return cmdline
         return f"{cmdline} {' '.join(extras)}"
 
+    def _netdev_args(self) -> tuple[str, str]:
+        """Return the (`-netdev` value, `-device` value) for the NIC backend.
+
+        passt: qemu attaches via a `stream` netdev connected to the sidecar's
+        unix socket (qemu >= 7.2). slirp: the legacy user-mode net with three
+        hostfwds. The forward *set* is identical under both backends -- SSH
+        for ansible-playbook plus TCP :32400 / UDP :51820 for the iptables
+        `_verify` probes that `delegate_to: localhost` -- passt expresses them
+        in _passt_command, slirp as hostfwd here.
+        """
+        if self._net_backend == "passt":
+            assert self._passt_socket is not None
+            netdev = f"stream,id=net0,server=off,addr.type=unix,addr.path={self._passt_socket}"
+            return netdev, "virtio-net,netdev=net0"
+        # Ports pre-picked in prepare(). qemu_user_net_args pins the VM's eth0
+        # to network.hosts[inventory_host].physical (10.234.x test view); it's
+        # empty for machines absent from the topology (minimal -> slirp's
+        # default 10.0.2.0/24). Keyed on inventory_host (box), not machine
+        # (box_deps), because the topology indexes inventory names.
+        netdev = (
+            f"user,id=user.0,"
+            f"hostfwd=tcp:{SSH_HOST}:{self.ssh_port}-:22,"
+            f"hostfwd=tcp:{SSH_HOST}:{self.wan_tcp_test_port}-:32400,"
+            f"hostfwd=udp:{SSH_HOST}:{self.wan_udp_test_port}-:51820"
+            f"{qemu_user_net_args(self.inventory_host)}"
+        )
+        return netdev, "virtio-net,netdev=user.0"
+
+    def _passt_command(self) -> list[str]:
+        """passt sidecar argv. NATs the guest's egress and forwards the same
+        three controller-side ports back to the guest as slirp's hostfwd does,
+        but with passt's robust UDP datapath instead of libslirp.
+        """
+        assert self._passt_socket is not None
+        return [
+            "passt",
+            # Foreground: a managed child (torn down in stop()) that logs to
+            # stderr instead of the syslog socket absent in the container.
+            "--foreground",
+            "--quiet",
+            # Quit once qemu (the only client) disconnects so a leaked sidecar
+            # can't outlive its VM; stop() also kills it explicitly as backup.
+            "--one-off",
+            "--socket",
+            str(self._passt_socket),
+            # 127.0.0.1-bound forwards matching slirp's hostfwd set, so the
+            # harness keeps connecting at SSH_HOST:<port>. The `addr/` prefix
+            # binds the whole comma-list -- repeating it (addr/a,addr/b) is an
+            # "Invalid port specifier" to passt, so the address appears once.
+            "--tcp-ports",
+            f"{SSH_HOST}/{self.ssh_port}:22,{self.wan_tcp_test_port}:32400",
+            "--udp-ports",
+            f"{SSH_HOST}/{self.wan_udp_test_port}:51820",
+            *passt_address_args(self.inventory_host),
+        ]
+
+    async def _start_passt(self) -> None:
+        """Launch the passt sidecar and block until its socket is listening.
+
+        No-op on the slirp backend. Runs before qemu (in boot()) so the socket
+        exists when qemu's `stream` netdev connects. The sidecar logs to a
+        per-run .passt.ansi beside the boot log for post-mortem. The socket
+        wait is bounded so a wedged passt fails fast rather than hanging the
+        run to its outer timeout.
+        """
+        if self._net_backend != "passt":
+            return
+        assert self._passt_socket is not None
+        cmd = self._passt_command()
+        print_cmd_line(cmd)
+        passt_log = OUT_DIR / f"{self.machine}.{self.ubuntu_name}.{self.role}.passt.ansi"
+        with passt_log.open("wb") as handle:
+            self._passt_proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=handle,
+                stderr=asyncio.subprocess.STDOUT,
+                start_new_session=True,
+            )
+        deadline = time.monotonic() + 10
+        while not self._passt_socket.exists():
+            if self._passt_proc.returncode is not None:
+                raise RuntimeError(f"passt exited before creating its socket; see {passt_log}")
+            if time.monotonic() > deadline:
+                raise TimeoutError(f"passt socket {self._passt_socket} not created within 10s")
+            await sleep_tick()
+
+    async def boot(self) -> None:
+        """Bring up the passt sidecar (if any), then launch qemu."""
+        await self._start_passt()
+        await super().boot()
+
     def _boot_command(self) -> list[str]:
         """Assemble the qemu command line for the prepared disks.
 
@@ -1452,6 +1644,8 @@ class QemuMachine(Machine):
             cmdline = self._augment_kernel_cmdline(cmdline)
             direct_boot = ["-kernel", str(kernel), "-initrd", str(initrd), "-append", cmdline]
 
+        netdev_arg, net_device_arg = self._netdev_args()
+
         cmd = [
             "timeout",
             "--kill-after=10s",
@@ -1460,29 +1654,7 @@ class QemuMachine(Machine):
             *[arg for drive in self.drives for arg in ("--drive", drive)],
             *direct_boot,
             "-netdev",
-            # Host ports pre-picked in prepare() so we don't need to ask qemu
-            # which port it ended up on -- avoids the prior lsof-poll dance
-            # and the VNC-port-band collision risk. Three forwards: SSH for
-            # ansible-playbook, plus TCP :32400 and UDP :51820 used by
-            # `delegate_to: localhost` probes that need to ingress on the
-            # VM's WAN iface (iptables _verify is the only consumer today;
-            # emitted unconditionally for simplicity).
-            #
-            # `qemu_user_net_args(inventory_host)` adds `net=`/`host=`/
-            # `dns=`/`dhcpstart=` (from data/network_topology.yml,
-            # gsub'd 10.123 → 10.234) so the VM's eth0 comes up at
-            # exactly `network.hosts[inventory_host].physical`. Keyed
-            # on inventory_host (e.g. "box"), not on machine (e.g.
-            # "box_deps"), because the topology indexes inventory
-            # names. Empty for machines absent from the topology
-            # (e.g. `minimal`), which keep slirp's default 10.0.2.0/24.
-            (
-                f"user,id=user.0,"
-                f"hostfwd=tcp:{SSH_HOST}:{self.ssh_port}-:22,"
-                f"hostfwd=tcp:{SSH_HOST}:{self.wan_tcp_test_port}-:32400,"
-                f"hostfwd=udp:{SSH_HOST}:{self.wan_udp_test_port}-:51820"
-                f"{qemu_user_net_args(self.inventory_host)}"
-            ),
+            netdev_arg,
             "-object",
             "rng-random,id=rng0,filename=/dev/urandom",
             "-device",
@@ -1509,7 +1681,7 @@ class QemuMachine(Machine):
             "-serial",
             "stdio",
             "-device",
-            "virtio-net,netdev=user.0",
+            net_device_arg,
             "-pidfile",
             f"{self.workdir.name}/{self.idfile}",
         ]
@@ -1576,7 +1748,28 @@ class QemuMachine(Machine):
                 # SIGTERMs, polls for up to grace_seconds, then SIGKILLs.
                 await asyncio.shield(terminate_pid(pid, grace_seconds=5))
         finally:
+            await self._stop_passt()
             await super().stop()
+
+    async def _stop_passt(self) -> None:
+        """Tear down the passt sidecar. No-op on slirp / if it self-exited.
+
+        --one-off makes passt quit when qemu disconnects, so by the time we
+        get here it has usually exited on its own; this is the backstop for
+        the paths where qemu was SIGKILLed without a clean disconnect.
+        """
+        proc = self._passt_proc
+        if proc is None or proc.returncode is not None:
+            return
+        with contextlib.suppress(ProcessLookupError):
+            proc.terminate()
+        try:
+            async with asyncio.timeout(5):
+                await proc.wait()
+        except TimeoutError:
+            with contextlib.suppress(ProcessLookupError):
+                proc.kill()
+            await proc.wait()
 
     async def _find_ssh_port(self) -> None:
         """Port was pre-picked in prepare(); nothing to discover at boot."""

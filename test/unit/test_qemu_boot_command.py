@@ -230,3 +230,65 @@ def test_pidfile_uses_idfile_under_workdir(
     _setup(m)
     cmd = m._boot_command()
     assert cmd[cmd.index("-pidfile") + 1] == f"{m.workdir.name}/{m.idfile}"
+
+
+def test_passt_backend_uses_stream_netdev(
+    qemu_machine_factory: Callable[..., machine.QemuMachine],
+) -> None:
+    """On the passt backend qemu attaches via a stream netdev to the sidecar
+    socket, with no slirp user-net or hostfwds in the cmdline."""
+    # The Darwin fixture resolves slirp; force passt + the socket prepare()
+    # would set (which _setup bypasses) to exercise the passt branch.
+    m = qemu_machine_factory(host_arch="x86_64", machine="box")
+    _setup(m, drives=["file=disk1.raw,if=virtio"])
+    m._net_backend = "passt"
+    m._passt_socket = Path(m.workdir.name) / "passt.sock"
+    cmd = m._boot_command()
+
+    netdev = cmd[cmd.index("-netdev") + 1]
+    assert netdev == f"stream,id=net0,server=off,addr.type=unix,addr.path={m._passt_socket}"
+    assert "hostfwd" not in netdev
+    assert "user,id=user.0" not in netdev
+
+    devices = [cmd[i + 1] for i, a in enumerate(cmd) if a == "-device"]
+    assert "virtio-net,netdev=net0" in devices
+    assert "virtio-net,netdev=user.0" not in devices
+
+
+def test_passt_command_forwards_mirror_slirp_ports(
+    qemu_machine_factory: Callable[..., machine.QemuMachine],
+) -> None:
+    """passt's --tcp-ports/--udp-ports forward the same three controller-side
+    ports slirp hostfwds, 127.0.0.1-bound, and pin the topology address."""
+    m = qemu_machine_factory(host_arch="x86_64", machine="box")
+    _setup(m)
+    m._net_backend = "passt"
+    m._passt_socket = Path(m.workdir.name) / "passt.sock"
+    m.ssh_port = 2222
+    m.wan_tcp_test_port = 3000
+    m.wan_udp_test_port = 4000
+    cmd = m._passt_command()
+
+    assert cmd[0] == "passt"
+    assert "--one-off" in cmd  # self-reap when qemu disconnects
+    assert cmd[cmd.index("--socket") + 1] == str(m._passt_socket)
+    # Single addr/ prefix binds the whole list (repeating it is rejected).
+    assert cmd[cmd.index("--tcp-ports") + 1] == f"{machine.SSH_HOST}/2222:22,3000:32400"
+    assert cmd[cmd.index("--udp-ports") + 1] == f"{machine.SSH_HOST}/4000:51820"
+    # box is in the topology (10.123 -> 10.234 test view) -> address pinned.
+    assert cmd[cmd.index("--address") + 1].startswith("10.234.")
+    assert cmd[cmd.index("--gateway") + 1].startswith("10.234.")
+
+
+def test_passt_command_skips_address_pin_off_topology(
+    qemu_machine_factory: Callable[..., machine.QemuMachine],
+) -> None:
+    """minimal isn't in the topology, so passt assigns from the container's
+    default-route interface -- no --address pin (mirrors slirp's default net)."""
+    m = qemu_machine_factory(host_arch="x86_64", machine="minimal")
+    _setup(m)
+    m._net_backend = "passt"
+    m._passt_socket = Path(m.workdir.name) / "passt.sock"
+    cmd = m._passt_command()
+    assert "--address" not in cmd
+    assert "--gateway" not in cmd
