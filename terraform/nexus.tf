@@ -251,13 +251,30 @@ resource "nexus_repository_docker_hosted" "this" {
   }
 }
 
-# Least-privileged role + user pair per docker hosted repo. The wildcard
-# view privilege covers browse / read / edit / add / delete on the named
-# repo (Nexus auto-creates these per repo); no admin / config rights, and
-# no scope outside the named repo. One user per repo so a leaked
-# credential is scoped to a single repo's images. for_each is keyed off
-# the docker_hosted resource so adding a hosted repo above automatically
-# provisions its push role + user.
+# Explicit per-repo view privilege, rather than leaning on the
+# nx-repository-view-docker-<repo>-* privilege Nexus auto-creates with each
+# repo. The auto-created one is deleted -- and silently stripped from any role
+# that references it -- when the repo is deleted (e.g. a blob-store -replace),
+# leaving the push role with no grant until re-added by hand. A terraform-owned
+# privilege is reconciled by `tofu apply`, and the push role below binds to a
+# graph resource instead of a magic string the provider can't see. Full action
+# set (browse/read/edit/add/delete) matches what the wildcard granted.
+resource "nexus_privilege_repository_view" "docker_hosted" {
+  for_each = nexus_repository_docker_hosted.this
+
+  name        = "${each.key}-docker-all"
+  description = "Full view of the ${each.key} docker repo (browse/read/edit/add/delete)"
+  repository  = each.value.name
+  format      = "docker"
+  actions     = ["BROWSE", "READ", "EDIT", "ADD", "DELETE"]
+}
+
+# Least-privileged role + user pair per docker hosted repo. The role grants the
+# explicit per-repo view privilege above and nothing else: no admin / config
+# rights, no scope outside the named repo. One user per repo so a leaked
+# credential is scoped to a single repo's images. for_each is keyed off the
+# docker_hosted resource so adding a hosted repo above automatically provisions
+# its privilege, push role + user.
 resource "nexus_security_role" "push" {
   for_each = nexus_repository_docker_hosted.this
 
@@ -265,7 +282,7 @@ resource "nexus_security_role" "push" {
   name        = "${each.key}-push"
   description = "Push images to the ${each.key} docker hosted repo"
   privileges = [
-    "nx-repository-view-docker-${each.key}-*",
+    nexus_privilege_repository_view.docker_hosted[each.key].name,
   ]
   roles = []
 }
