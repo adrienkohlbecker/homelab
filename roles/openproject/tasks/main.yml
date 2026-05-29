@@ -61,6 +61,38 @@
   tags:
     - openproject
 
+# SECRET_KEY_BASE is the Rails master key: rotating it makes already-stored
+# encrypted data (sessions, 2FA/TOTP secrets, stored OAuth/SMTP credentials)
+# permanently undecryptable. The podman_secret helper rotates the store
+# unconditionally on drift, so we compare the vault value against the stored
+# data_sha256 label and abort BEFORE the new key reaches the store -- failing
+# after the create would leave it staged for the next restart to silently load.
+- name: List existing podman secrets
+  containers.podman.podman_secret_info:
+  register: _openproject_secrets
+  check_mode: false
+  become: true
+  tags:
+    - openproject
+
+- name: Fail if openproject_secret_key changed post-bootstrap
+  vars:
+    _existing: "{{ _openproject_secrets.secrets | selectattr('Spec.Name', 'eq', 'openproject_secret_key') | list | first | default({}) }}"
+  fail:
+    msg: |
+      openproject_secret_key changed in vault. SECRET_KEY_BASE is the Rails
+      master key: rotating it makes already-stored encrypted data (sessions,
+      2FA/TOTP secrets, stored OAuth/SMTP credentials) permanently
+      undecryptable.
+
+      Revert the change, or perform a deliberate key-rotation migration, then
+      re-run this play.
+  when:
+    - _existing | length > 0
+    - (_existing.Spec.Labels | default({})).get('data_sha256', '') != (openproject_secret_key | hash('sha256'))
+  tags:
+    - openproject
+
 - name: Create openproject secret key
   import_role:
     name: podman_secret
@@ -72,21 +104,10 @@
   tags:
     - openproject
 
-- name: Fail if openproject_secret_key rotated post-bootstrap
-  fail:
-    msg: |
-      openproject_secret_key changed in vault. SECRET_KEY_BASE is the Rails
-      master key: rotating it makes already-stored encrypted data (sessions,
-      2FA/TOTP secrets, stored OAuth/SMTP credentials) permanently
-      undecryptable. The podman secret has been updated, but the running app
-      must NOT simply restart onto the new key.
-
-      Revert the change, or perform a deliberate key-rotation migration, then
-      re-run this play.
-  when: openproject_secret_key_rotated and openproject_secret_key_existed_before
-  tags:
-    - openproject
-
+# Optional: with openproject_admin_password unset the admin account isn't
+# seeded (operator creates it by hand). When set, OPENPROJECT_SEED__ADMIN__USER__
+# PASSWORD__RESET=false in the unit means the password only applies at first
+# account creation, so leaving the var in place across re-converges is safe.
 - name: Create openproject admin password secret
   when: openproject_admin_password is defined
   import_role:
@@ -102,10 +123,14 @@
 - name: Fail if openproject_admin_password rotated post-bootstrap
   fail:
     msg: |
-      openproject_admin_password changed in vault. It only takes effect when
-      OpenProject first seeds the admin account; the running instance still
-      has the old password. Change it in-app (Administration > Users) or via
-      podman exec, then re-run this play.
+      openproject_admin_password changed in vault, but it only takes effect when
+      OpenProject first seeds the admin account; the running instance still has
+      the old password. Change it on the live instance under Administration >
+      Users > admin, or via the Rails console:
+
+        podman exec -it openproject bundle exec rails console
+
+      then re-run this play.
   when: (openproject_admin_password_rotated | default(false)) and (openproject_admin_password_existed_before | default(false))
   tags:
     - openproject
