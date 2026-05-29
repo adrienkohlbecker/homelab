@@ -57,6 +57,11 @@ ExecStart=/usr/bin/podman run \
     --env FTLCONF_dns_reply_host_IPv4={{ ansible_facts.default_ipv4.address }} \
     --env FTLCONF_dns_revServers="true,{{ site_subnets.home }},{{ site_subnets.home | ansible.utils.ipmath(1) }}" \
     --env FTLCONF_dns_upstreams="{{ podman_default_network | ansible.utils.ipmath(1) }}#{{ service_ports.dnscrypt_proxy }}" \
+    {# Validate DNSSEC at FTL. dnscrypt-proxy already authenticates the   #}
+    {# transport to the upstream; this closes the last hop (upstream->FTL #}
+    {# ->clients) for signed zones. Local/split-horizon names and the     #}
+    {# conditional-forward (revServers) zone are unsigned and unaffected. #}
+    --env FTLCONF_dns_dnssec=true \
     {# Split-horizon LAN shortcuts injected straight into FTL's dnsmasq    #}
     {# config rather than via a mounted /etc/dnsmasq.d file. address=/n/ip #}
     {# matches the name + every subdomain; auth.fahm.fr lives at the apex  #}
