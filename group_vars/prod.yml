@@ -729,6 +729,11 @@ nexus_encryption_iv: !vault |
           36353962366366663839343435313130363231373765636336303365616464663031393231633835
           3530376166383734340a383366646266396532623233346530363133613365366335393832333632
           63363564623661633366303761326136396531343239616233306261343538326366
+# Each user's access_key MUST equal a bucket name in minio_buckets: the
+# useronly policy (roles/minio/files/useronly.json) scopes every user to
+# arn:aws:s3:::${aws:username}, which resolves to the access_key, so a user
+# without a same-named bucket authenticates but 403s on every op. roles/minio
+# asserts this at converge time.
 minio_users:
   - access_key: arq-adrien
     secret_key: !vault |
