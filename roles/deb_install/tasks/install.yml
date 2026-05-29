@@ -91,6 +91,12 @@
     - name: Install the deb package
       apt:
         deb: "/var/cache/{{ deb_install_args.name }}.deb"
+        # apt: deb= aborts on an older-than-installed .deb ("a later version is
+        # already installed") unless downgrades are allowed. A pin can move
+        # backwards (deliberate rollback), and the status-word gate above
+        # already decides *whether* apt runs, so this only widens which version
+        # apt accepts -- it never re-runs on an unchanged pin.
+        allow_downgrade: true
       register: deb_install_apt
 
   always:
