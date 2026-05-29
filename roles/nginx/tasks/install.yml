@@ -87,6 +87,25 @@
   tags:
     - nginx
 
+# Canonical proxy header set, `include`d by every vhost's `location /` (and
+# by server_conf/location_conf snippets that add their own location). A
+# snippet, not a conf.d/ drop: it is location-scope and pulled in explicitly,
+# not auto-loaded into http{}. Static file, so no validate -- a broken edit
+# would surface at the next site's place-validate `nginx -t`.
+- name: install | Install proxy_params snippet
+  when: not (ansible_check_mode and nginx_apt.changed)
+  copy:
+    src: proxy_params
+    dest: /etc/nginx/snippets/proxy_params.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: nginx_proxy_params
+  tags:
+    - nginx
+
 # stub_status drop is what netdata's web_log collector (and any other
 # in-cluster nginx-stats consumer) reads. Validate-and-rollback shape
 # protects every site on the host from a typo here — same conf.d/
@@ -116,6 +135,6 @@
       # reload them instead of dropping in-flight connections. Mutually
       # exclusive: the restart already reloads config, so skip reload on upgrade.
       restart: "{{ nginx_apt.changed }}"
-      reload: "{{ (nginx_default_conf.changed or nginx_conf.changed or status_conf_result.changed) and not nginx_apt.changed }}"
+      reload: "{{ (nginx_default_conf.changed or nginx_conf.changed or (nginx_proxy_params.changed | default(false)) or status_conf_result.changed) and not nginx_apt.changed }}"
   tags:
     - nginx
