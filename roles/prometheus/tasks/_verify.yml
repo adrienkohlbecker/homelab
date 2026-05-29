@@ -1,0 +1,70 @@
+# Loopback readiness probe -- /-/ready flips to 200 once the server has
+# loaded its config and opened the TSDB. Retries cover cold start.
+- name: _verify | Prometheus /-/ready on loopback port
+  uri:
+    url: http://127.0.0.1:{{ service_ports.prometheus }}/-/ready
+  register: _verify_ready
+  retries: 30
+  delay: 2
+  until: _verify_ready.status == 200
+  become: true
+
+# Self-scrape target must report healthy -- proves the rendered config
+# parsed and the scrape loop is actually running, not just that the
+# process is alive. The target starts 'unknown' and flips to 'up' after
+# the first scrape (one scrape_interval), so retry until it does.
+- name: _verify | Self-scrape target reports healthy
+  uri:
+    url: http://127.0.0.1:{{ service_ports.prometheus }}/api/v1/targets?state=active
+    return_content: true
+  register: _verify_targets
+  retries: 30
+  delay: 2
+  until:
+    - _verify_targets.status == 200
+    - >-
+      _verify_targets.json.data.activeTargets
+      | selectattr('labels.job', 'eq', 'prometheus')
+      | selectattr('health', 'eq', 'up')
+      | list | length > 0
+  become: true
+
+# Listen-address must be loopback-only (the service_ports contract + the
+# auth model assume nginx is the only ingress). Inspect the actual bind
+# rather than probing the routable IP, which the host firewall would
+# refuse regardless of bind address -- a false-confidence tautology.
+- name: _verify | Capture listening sockets
+  command: ss -Htln
+  register: _verify_bind
+  changed_when: false
+  become: true
+
+- name: _verify | Prometheus listens on loopback only
+  vars:
+    _verify_loopback_bind: "127.0.0.1:{{ service_ports.prometheus }}"
+    _verify_wildcard_bind: "0.0.0.0:{{ service_ports.prometheus }}"
+  assert:
+    that:
+      - _verify_loopback_bind in _verify_bind.stdout
+      - _verify_wildcard_bind not in _verify_bind.stdout
+    fail_msg: >-
+      prometheus must listen on {{ _verify_loopback_bind }} only;
+      ss reported: {{ _verify_bind.stdout }}
+  become: true
+
+# auth:required puts Authelia in front; a cookie-less GET / must land on
+# the stub's 302 redirect chain rather than reaching prometheus. Without
+# the gate the request would proxy through and return prometheus' 200.
+- name: _verify | Authelia gate redirects unauthenticated request
+  uri:
+    url: https://localhost/
+    headers:
+      Host: prometheus.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: _verify_gate
+  failed_when: >-
+    _verify_gate.status != 302
+    or 'auth.' not in (_verify_gate.location | default(''))
+  become: true

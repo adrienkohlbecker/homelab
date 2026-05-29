@@ -2,3 +2,24 @@
   import_role:
     name: _test
     tasks_from: nginx
+
+# Stand in for Authelia so _verify can assert the auth:required gate
+# redirects unauthenticated requests. gate mode returns 401 on every
+# auth-request subrequest -> nginx error_page 401 -> 302 to the portal.
+- name: _test | Install authelia stub in gate mode
+  import_role:
+    name: _test
+    tasks_from: authelia_stub
+  vars:
+    authelia_stub_mode: gate
+
+# The role relocates the TSDB under /mnt/services; prod gets the parent
+# from the services role/dataset, but the test fixture has no services role.
+- name: _setup | Create /mnt/services
+  file:
+    path: /mnt/services
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  become: true
