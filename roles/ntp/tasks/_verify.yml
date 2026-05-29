@@ -35,22 +35,28 @@
     fail_msg: chrony.conf is not the expected NTS-only config
     success_msg: chrony.conf pins 3 NTS servers and no unauthenticated pools
 
-- name: _verify | Enumerate the sources chronyd loaded (CSV, one per line)
-  command: chronyc -c sources
+# chronyc -c authdata reports the auth mode chronyd negotiated per source
+# (NTS / SK / "-" for none). This proves the running daemon authenticates:
+# a source that resolved but fell back to plaintext, or a stray plaintext
+# source, shows Mode "-" and fails here -- which the config-text grep
+# above can't catch. Sync state is still NOT asserted (NTS-KE reachability
+# from qemu isn't guaranteed); an empty list (nothing resolved yet) passes
+# vacuously, and that's fine -- the file-content assert above is the floor.
+- name: _verify | Read the per-source authentication mode (CSV)
+  command: chronyc -c authdata
   changed_when: false
   become: true
-  register: ntp_verify_sources
+  register: ntp_verify_authdata
 
-- name: _verify | Only the explicit NTS servers loaded, not stock pools
+- name: _verify | Every loaded source authenticates via NTS (no plaintext fallback)
   assert:
     that:
-      - ntp_verify_sources.stdout_lines | length >= 1
-      - ntp_verify_sources.stdout_lines | length <= 3
+      - ntp_verify_authdata.stdout_lines | select('match', '^[^,]+,(?!NTS,)') | list | length == 0
     fail_msg: >-
-      expected 1-3 explicit sources, found
-      {{ ntp_verify_sources.stdout_lines | length }} (stock pools would be ~8)
+      a chrony source is not authenticated via NTS (authdata rows:
+      {{ ntp_verify_authdata.stdout_lines }})
     success_msg: >-
-      chronyd loaded {{ ntp_verify_sources.stdout_lines | length }} source(s)
+      all {{ ntp_verify_authdata.stdout_lines | length }} loaded source(s) use NTS
 
 - name: _verify | Check systemd-timesyncd state  # noqa: command-instead-of-module -- is-active query, not a state change
   command: systemctl is-active systemd-timesyncd
