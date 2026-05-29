@@ -25,6 +25,12 @@
   changed_when: false
   become: true
 
+- name: _verify | Query the sender-rewrite map for the local domain
+  command: postmap -q @{{ domain }} texthash:/etc/postfix/generic
+  register: _postfix_generic
+  changed_when: false
+  become: true
+
 - name: _verify | Effective config matches the templated relay intent
   assert:
     that:
@@ -36,6 +42,7 @@
       - _postfix_conf.stdout_lines[5] == '>=TLSv1.2'
       - _postfix_conf.stdout_lines[6] == 'texthash:/etc/postfix/generic'
       - _postfix_sasl.stdout == postfix_smtp_user ~ ':' ~ postfix_smtp_password
+      - _postfix_generic.stdout == inventory_hostname ~ '@' ~ email_domain
     fail_msg: >-
       postfix relay wiring drifted from the template: relayhost/inet_interfaces/
       sasl map / TLS level / SASL auth / TLS floor / sender-rewrite map or the
