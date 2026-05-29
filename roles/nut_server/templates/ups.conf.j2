@@ -149,6 +149,10 @@ port = {{ external_ips.eaton }}
 community = public
 snmp_version = v1
 pollfreq = 15
-ignorelb # UPS immediately shutds down when low battery is reached. Currently low battery is set to 5%
+# ignorelb: ignore the UPS's own LB (low-battery) status flag and instead
+# derive "low battery" from the override.* thresholds below. The Eaton only
+# raises its hardware LB around 5% charge -- too late to shut down cleanly --
+# so we trip earlier, at 20% charge OR 300s runtime, whichever comes first.
+ignorelb
 override.battery.charge.low = 20 # approx 8 minutes if the runtime at 100% is 40min
 override.battery.runtime.low = 300 # 5 minutes
