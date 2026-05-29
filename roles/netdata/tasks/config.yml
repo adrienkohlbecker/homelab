@@ -1,0 +1,73 @@
+# Install a netdata daemon/collector config under /etc/netdata/ (e.g.
+# go.d/<collector>.conf). Merges the former copy/template helpers: the
+# module is chosen by src's suffix.
+#
+# Inputs: caller passes a single dict `netdata_args` with keys
+#   src         required; file under the calling role's files/ (copy) or
+#               templates/ (template, when src ends in .j2)
+#   dest        required; path relative to /etc/netdata/ (e.g. go.d/pihole.conf)
+#   mode        optional, default '0644'
+#   condition   optional bool, default true; gates the whole call
+#   restart     optional bool, default true; restart netdata after a change
+#
+# Module dispatch mirrors systemd_unit/install.yml: *.j2 -> template (loaded
+# from the caller's templates/), anything else -> copy (from files/). _module
+# is resolved task-locally, never via set_fact, so it can't poison the next
+# call's dispatch.
+#
+# The dict form prevents inter-call leakage at play-vars scope: each
+# import_role pass replaces the whole `netdata_args` value, so a previous
+# caller's mode/condition/restart can't bleed into the next caller that
+# doesn't explicitly override.
+- name: config | Assert dest is a safe relative path
+  when: netdata_args.condition | default(true)
+  assert:
+    that:
+      - netdata_args.dest is match('^[A-Za-z0-9_./-]+$')
+      - '".." not in netdata_args.dest'
+    fail_msg: >-
+      netdata_args.dest must be a safe relative path under /etc/netdata/
+      (got {{ netdata_args.dest }})
+
+- name: config | Ensure netdata directory exists
+  when: netdata_args.condition | default(true)
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/netdata/
+    - /etc/netdata/{{ netdata_args.dest | dirname }}/
+  become: true
+
+- name: config | Seed the stock config
+  when: netdata_args.condition | default(true)
+  command: cp /usr/lib/netdata/conf.d/{{ netdata_args.dest }} /etc/netdata/{{ netdata_args.dest }}
+  args:
+    creates: /etc/netdata/{{ netdata_args.dest }}
+  register: netdata_config_seed
+  become: true
+
+- name: config | Setup metrics ({{ _module }})
+  when: not (ansible_check_mode and netdata_config_seed.changed) and (netdata_args.condition | default(true))
+  vars:
+    _module: "{{ 'template' if netdata_args.src.endswith('.j2') else 'copy' }}"
+  action: "{{ _module }}"
+  args:
+    src: "{{ netdata_args.src }}"
+    dest: /etc/netdata/{{ netdata_args.dest }}
+    owner: netdata
+    group: netdata
+    mode: "{{ netdata_args.mode | default('0644') }}"
+    backup: true
+  register: netdata_config
+  become: true
+
+- name: config | Restart netdata
+  when: (netdata_args.restart | default(true)) and (netdata_config_seed.changed or netdata_config.changed)
+  systemd:
+    name: netdata
+    state: restarted
+  become: true

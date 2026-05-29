@@ -228,7 +228,7 @@
 - name: Configure pihole metrics
   import_role:
     name: netdata
-    tasks_from: template
+    tasks_from: config
   vars:
     netdata_args:
       src: pihole.conf.j2

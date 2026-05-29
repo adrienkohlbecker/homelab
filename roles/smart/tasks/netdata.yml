@@ -1,7 +1,7 @@
 - name: Configure smart metrics
   import_role:
     name: netdata
-    tasks_from: copy
+    tasks_from: config
   vars:
     netdata_args:
       src: smartctl.conf

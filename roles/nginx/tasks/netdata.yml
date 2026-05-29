@@ -1,7 +1,7 @@
 - name: Configure web log metrics
   import_role:
     name: netdata
-    tasks_from: copy
+    tasks_from: config
   vars:
     netdata_args:
       src: web_log.conf

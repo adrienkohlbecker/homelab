@@ -1,0 +1,60 @@
+# Install a netdata health-alert config under /etc/netdata/health.d/ and
+# hot-reload via `netdatacli reload-health`. Merges the former
+# health_copy/health_template helpers: the module is chosen by src's suffix.
+#
+# Inputs: caller passes a single dict `netdata_args` with keys
+#   src   required; file under the caller's files/ (copy) or templates/
+#         (template, when src ends in .j2)
+#   dest  required; bare filename under /etc/netdata/health.d/
+#   mode  optional, default '0644'
+#
+# Module dispatch mirrors config.yml / systemd_unit/install.yml: *.j2 ->
+# template, anything else -> copy. _module is resolved task-locally so it
+# can't poison the next call.
+#
+# No restart/condition opt-out (unlike config.yml): alerts always hot-reload
+# on change because `netdatacli reload-health` is hitless, where a config
+# change needs a daemon restart. The role's health files each define their
+# own complete alarm set, so -- unlike a go.d config -- there's no stock
+# health.d/<dest> worth seeding before the overwrite.
+#
+# The dict form prevents inter-call leakage at play-vars scope (see config.yml).
+- name: health | Ensure netdata directory exists
+  file:
+    dest: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /etc/netdata/
+    - /etc/netdata/health.d/
+  become: true
+
+- name: health | Assert dest is a safe basename
+  assert:
+    that:
+      - netdata_args.dest is match('^[A-Za-z0-9_.-]+$')
+    fail_msg: >-
+      netdata_args.dest must be a bare filename under health.d/
+      (got {{ netdata_args.dest }})
+
+- name: health | Setup alert config ({{ _module }})
+  vars:
+    _module: "{{ 'template' if netdata_args.src.endswith('.j2') else 'copy' }}"
+  action: "{{ _module }}"
+  args:
+    src: "{{ netdata_args.src }}"
+    dest: /etc/netdata/health.d/{{ netdata_args.dest }}
+    owner: netdata
+    group: netdata
+    mode: "{{ netdata_args.mode | default('0644') }}"
+    backup: true
+  register: netdata_alerts_conf
+  become: true
+
+- name: health | Reload health configuration
+  when: netdata_alerts_conf.changed
+  command: netdatacli reload-health
+  changed_when: true
+  become: true
