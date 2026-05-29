@@ -53,7 +53,7 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/paperless/consume:/usr/src/paperless/consume \
     --volume /mnt/services/paperless/export:/usr/src/paperless/export \
     --network redis \
-    --publish 127.0.0.1:8001:8000/tcp \
+    --publish 127.0.0.1:{{ service_ports.paperless }}:8000/tcp \
     --env USERMAP_UID={{ paperless_user.uid }} \
     --env USERMAP_GID={{ paperless_user.group }} \
     --env PAPERLESS_REDIS="redis://redis.dns.podman:6379/1" \
