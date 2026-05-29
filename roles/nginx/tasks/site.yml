@@ -12,9 +12,6 @@
 #                             already-enabled site (use `state: absent` for
 #                             that), it just skips this pass. Typically a
 #                             check-mode / bootstrap guard.
-#   permissions               optional, default '0640' (root:root); the
-#                             rendered vhost can embed vaulted bypass /
-#                             upstream tokens, so it is not world-readable
 #   reload                    optional bool, default true; reload nginx after a
 #                             config change. Setting false makes the install
 #                             config-only — useful for pre-warming a site whose
@@ -22,12 +19,14 @@
 #   proxy_pass                optional; URL to reverse-proxy to (location /)
 #   proxy_buffering           optional; nginx proxy_buffering directive value
 #   proxy_request_buffering   optional; nginx proxy_request_buffering directive value
-#   proxy_connect_timeout     optional, default '60s'
 #   proxy_send_timeout        optional, default '60s'
 #   proxy_read_timeout        optional, default '60s'
 #   client_max_body_size      optional; sets nginx client_max_body_size
 #   enable_http               optional bool, default false; if true, also listen on :80
-#                             and skip the http->https redirect server block
+#                             and skip the http->https redirect server block.
+#                             Serves :80 in cleartext, so do NOT combine with
+#                             `auth`/`bypass_query_param`: an auth flow or a vaulted
+#                             token would travel unencrypted. Asserted below.
 #   csp_default_src           optional CSP directive override
 #   csp_frame_ancestors       optional CSP directive override
 #   csp_additional            optional CSP directive prefix
@@ -60,7 +59,12 @@
 #                             access log by the `$request_safe` map. The param
 #                             name is fixed to `auth_token` -- the
 #                             `$req_auth_token` and `$request_safe` maps in
-#                             nginx.conf.j2 hardcode it. Bypass sites also get
+#                             nginx.conf.j2 hardcode it. The value must be
+#                             URL-safe ([A-Za-z0-9_-]): it is matched against the
+#                             raw un-decoded query, so a token a client would
+#                             percent-encode never matches. A double quote is
+#                             rejected (it would break the rendered nginx string);
+#                             both are asserted below. Bypass sites also get
 #                             Referrer-Policy: no-referrer so the token can't
 #                             leak to third parties via a Referer header
 #                             (redaction only covers our own access log).
@@ -101,10 +105,13 @@
 #                             /internal/authelia` and any needed headers
 #                             yourself, or that path is public and header-less.
 #   location_conf             optional snippet inserted in the / location
-#                             block. If it adds an `add_header`, the site's
-#                             security headers are automatically re-emitted at
-#                             this location level (see site.conf.j2) so nginx's
-#                             add_header inheritance rule doesn't drop them.
+#                             block. Whenever it is set, the site's security
+#                             headers are re-emitted at this location level (see
+#                             site.conf.j2): nginx drops inherited add_header at
+#                             any level that declares its own, and we can't know
+#                             whether the snippet does, so we always re-emit.
+#                             csp_passthrough is honoured -- the re-emit reuses
+#                             the same capture, so a passthrough site stays CSP-free.
 #
 # The dict form prevents inter-call leakage at play-vars scope: each
 # import_role pass replaces the whole `nginx_site_args` value, so a
@@ -119,6 +126,55 @@
     fail_msg: >-
       nginx_site_args.subdomain is required and must be a non-empty string;
       got {{ nginx_site_args.subdomain | default('<undefined>') }}.
+  tags:
+    - nginx_site
+
+- name: site | Assert subdomain is a safe DNS label
+  assert:
+    that:
+      - nginx_site_args.subdomain is match('^[A-Za-z0-9-]+$')
+    fail_msg: >-
+      nginx_site_args.subdomain must be a single DNS label ([A-Za-z0-9-]) -- it
+      is interpolated into the on-disk config path and the server_name.
+      Got '{{ nginx_site_args.subdomain }}'.
+  tags:
+    - nginx_site
+
+- name: site | Assert bypass token is injection-safe
+  when: nginx_site_args.bypass_query_param is defined
+  assert:
+    that:
+      - nginx_site_args.bypass_query_param.value is string
+      - nginx_site_args.bypass_query_param.value is not search('"')
+    fail_msg: >-
+      nginx_site_args.bypass_query_param.value is rendered inside an nginx
+      "..." string and must not contain a double quote.
+  tags:
+    - nginx_site
+
+- name: site | Assert upstream_authorization is injection-safe
+  when: nginx_site_args.upstream_authorization is defined
+  assert:
+    that:
+      - nginx_site_args.upstream_authorization.keys() | list | join('') is not search('"')
+      - nginx_site_args.upstream_authorization.values() | list | join('') is not search('"')
+    fail_msg: >-
+      nginx_site_args.upstream_authorization keys (usernames) and values (header
+      values) are rendered inside nginx "..." strings and must not contain a
+      double quote.
+  tags:
+    - nginx_site
+
+- name: site | Assert enable_http is not combined with auth or a bypass token
+  when: nginx_site_args.enable_http | default(false)
+  assert:
+    that:
+      - (nginx_site_args.auth | default('none')) != 'required'
+      - nginx_site_args.bypass_query_param is not defined
+    fail_msg: >-
+      enable_http serves :80 in cleartext; do not combine it with `auth: required`
+      or `bypass_query_param` (the auth flow / vaulted token would travel
+      unencrypted).
   tags:
     - nginx_site
 
@@ -163,7 +219,9 @@
         dest: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
         owner: root
         group: root
-        mode: "{{ nginx_site_args.permissions | default('0640') }}"
+        # 0640 root:root: the rendered vhost can embed vaulted bypass / upstream
+        # tokens, so it must not be world-readable.
+        mode: "0640"
         backup: true
       register: nginx_static_conf
 
@@ -204,7 +262,7 @@
         src: "{{ nginx_static_conf.backup_file }}"
         owner: root
         group: root
-        mode: "{{ nginx_site_args.permissions | default('0640') }}"
+        mode: "0640"
 
     - name: site | Delete backup file
       when: '"backup_file" in nginx_static_conf'
