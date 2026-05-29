@@ -25,8 +25,20 @@
 - name: _verify | Pin assertions for {{ apt_source_args.name }}
   when: apt_source_args.pin is defined
   block:
+    # pin.package may be a glob (e.g. "netdata*") pinning a family of packages;
+    # apt-cache policy needs a concrete name. dpkg-query -W takes a glob and
+    # lists installed matches as "<pkg>\t<version>" lines (no custom -f, whose
+    # \n would be eaten by the command module's shlex); take the first match's
+    # package field, falling back to the literal pin.package when none match
+    # (then the policy assertion below fails meaningfully, not on empty input).
+    - name: _verify | Resolve an installed package matching {{ apt_source_args.pin.package }}
+      command: dpkg-query -W {{ apt_source_args.pin.package }}
+      changed_when: false
+      failed_when: false
+      register: _verify_apt_source_pin_pkgs
+
     - name: _verify | Apt policy is available for {{ apt_source_args.pin.package }}
-      command: apt-cache policy {{ apt_source_args.pin.package }}
+      command: apt-cache policy {{ (_verify_apt_source_pin_pkgs.stdout_lines | default([]) | first | default('')).split() | first | default(apt_source_args.pin.package) }}
       changed_when: false
       register: _verify_apt_source_policy
 
@@ -46,8 +58,11 @@
           # substring could match a version string and pass on a no-op pin.
           - _verify_apt_source_policy.stdout is search(_verify_apt_source_policy_re)
           # ...and the winning source is this mirror, so a pin mis-targeting
-          # another origin can't satisfy the check above.
-          - apt_source_args.uris in _verify_apt_source_policy.stdout
+          # another origin can't satisfy the check above. apt renders a flat
+          # repo's URI without its trailing slash (folding "<uri>/ <suite>/"
+          # into "<uri> <suite>/"), so normalize before the substring check --
+          # a no-op for component repos, whose URI carries no trailing slash.
+          - (apt_source_args.uris | regex_replace('/$', '')) in _verify_apt_source_policy.stdout
         fail_msg: >-
           Expected {{ apt_source_args.pin.package }} candidate to match
           {{ apt_source_args.pin.version }} at priority

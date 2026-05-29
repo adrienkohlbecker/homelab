@@ -19,6 +19,24 @@
     or _verify_unit.status.ActiveState != "active"
   become: true
 
+# netdata is the only flat-repo (trailing-slash suite, no components) + glob-pin
+# ("netdata*") consumer, so the shared apt_source _verify runs here to cover
+# that path: the signing key is scoped (not globally trusted) and the 2.* pin
+# wins at priority 999 from the mirror. No tombstone/negative-key args -- those
+# paths are exercised by nodejs's _verify.
+- name: _verify | Netdata apt_source contract (flat repo, scoped key, glob pin)
+  import_role:
+    name: apt_source
+    tasks_from: _verify
+  vars:
+    apt_source_args:
+      name: netdata
+      uris: "{{ mirror_apt_netdata }}/"
+      pin:
+        package: "netdata*"
+        version: "2.*"
+        priority: 999
+
 # Shorten update_every so the test doesn't have to wait a full minute
 # for the first emission. The collector defaults to 60s; 5s lets the
 # `retries: 30, delay: 2` loops below converge in seconds, not minutes.
