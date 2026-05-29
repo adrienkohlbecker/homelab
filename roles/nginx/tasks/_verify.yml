@@ -308,13 +308,14 @@
   retries: 10
   delay: 1
 
-# upstream_authorization exercises two contracts that DO work: Authelia identity
-# forwarding (X-Forwarded-User, a content-phase proxy_set_header) and the
-# cookieless machine-client passthrough (its own Authorization survives). NOTE:
-# the per-user token INJECTION (the `if ($authelia_user = ...) set $upstream_auth`
-# chain in site.conf.j2) does NOT take effect -- `if`/`set` run in nginx's
-# rewrite phase, before auth_request (access phase) populates $authelia_user --
-# so it is deliberately not asserted here. See the role review notes.
+# upstream_authorization exercises three contracts: the per-user token INJECTION
+# (a browser user with no own Authorization receives the mapped token), Authelia
+# identity forwarding (X-Forwarded-User, a content-phase proxy_set_header), and
+# the cookieless machine-client passthrough (its own Authorization survives). The
+# injection works because the token comes from a content-phase `map`
+# (conf.d/upstream_auth_<sub>.conf) read after auth_request populates
+# $authelia_user -- the bug it replaced used a rewrite-phase if/set that ran
+# before auth and so never matched.
 - name: _verify | Configure a vhost exercising upstream_authorization
   import_role:
     name: nginx
@@ -356,6 +357,18 @@
   changed_when: false
   become: true
   until: "'upstream-fwduser nginxverifyuser' in nginx_verify_inj_journal.stdout"
+  retries: 10
+  delay: 1
+
+# The fix: the browser user (no own Authorization) gets the token the
+# upstream_authorization map assigned to nginxverifyuser. The old rewrite-phase
+# if/set produced `upstream-auth <none>` here; the content-phase map injects it.
+- name: _verify | Upstream received the per-user injected Authorization token
+  command: journalctl -u nginx_verify_upstream --no-pager
+  register: nginx_verify_inj_auth_journal
+  changed_when: false
+  become: true
+  until: "'upstream-auth Token injected-abc' in nginx_verify_inj_auth_journal.stdout"
   retries: 10
   delay: 1
 
@@ -502,6 +515,7 @@
     - /etc/nginx/sites-enabled/nginxverify
     - /etc/nginx/sites-available/nginxverifyauth
     - /etc/nginx/sites-enabled/nginxverifyauth
+    - /etc/nginx/conf.d/upstream_auth_nginxverifyauth.conf
     - /etc/nginx/sites-available/nginxverifyloc
     - /etc/nginx/sites-enabled/nginxverifyloc
     - /etc/nginx/sites-available/nginxverifyplain
@@ -549,9 +563,10 @@
 
 # site rollback — the sibling of the conf.d test for the site path, which the
 # shared place-validate rollback now drives too. Feed the helper a vhost with a
-# syntactically broken server_conf and confirm both the config and its
-# sites-enabled symlink are removed and nginx stays valid; the helper's `fail`
-# is expected, so catch it.
+# syntactically broken server_conf AND an upstream_authorization map, so the
+# rollback must unwind the paired conf.d/upstream_auth_<sub>.conf alongside the
+# vhost; confirm the config, its sites-enabled symlink and the map are all
+# removed and nginx stays valid; the helper's `fail` is expected, so catch it.
 - name: _verify | Broken site config is validated and rolled back
   block:
     - name: _verify | Configure a deliberately broken site
@@ -562,6 +577,9 @@
         nginx_site_args:
           subdomain: nginxverifybroken
           proxy_pass: http://127.0.0.1:18080/
+          auth: required
+          upstream_authorization:
+            nginxverifyuser: Token broken-rollback
           server_conf: |
             nginx_verify_broken_site_directive on;
 
@@ -571,7 +589,7 @@
           The broken site should have failed `nginx -t` and rolled back, but the
           helper reported success.
   rescue:
-    - name: _verify | Broken site config and symlink were rolled back (absent)
+    - name: _verify | Broken site, symlink and upstream-auth map were rolled back (absent)
       stat:
         path: "{{ item }}"
       register: nginx_verify_broken_site
@@ -580,6 +598,7 @@
       loop:
         - /etc/nginx/sites-available/nginxverifybroken
         - /etc/nginx/sites-enabled/nginxverifybroken
+        - /etc/nginx/conf.d/upstream_auth_nginxverifybroken.conf
 
     - name: _verify | Nginx config is still valid after the site rollback
       command: nginx -t

@@ -78,15 +78,14 @@ server {
 {% if nginx_site_args.upstream_authorization is defined %}
     # Machine clients (no Authelia session cookie, presenting their own
     # Authorization header) skip the Authelia round-trip: return 204
-    # straight away, so auth_request admits the parent. The `location /`
-    # block then leaves the client's header untouched (the
-    # `proxy_set_header Authorization` below initialises from
-    # $http_authorization so the original token passes through). The
-    # match is computed in the $authelia_bypass map in nginx.conf.j2
-    # because nginx's `if` can't compose two conditions. Implies trust
-    # in any presented Authorization header from a cookieless client
-    # -- only safe when the upstream itself rejects bad tokens
-    # (InfluxDB does).
+    # straight away, so auth_request admits the parent. The 204 carries no
+    # Remote-User, so $authelia_user is empty in `location /` and the
+    # upstream-auth map's `default $http_authorization` forwards the
+    # client's own token unchanged. The match is computed in the
+    # $authelia_bypass map in nginx.conf.j2 because nginx's `if` can't
+    # compose two conditions. Implies trust in any presented Authorization
+    # header from a cookieless client -- only safe when the upstream itself
+    # rejects bad tokens (InfluxDB does).
     if ($authelia_bypass) {
       return 204;
     }
@@ -215,29 +214,18 @@ server {
     proxy_set_header X-Forwarded-Email  $authelia_email;
 {% endif %}
 {% if nginx_site_args.upstream_authorization is defined %}
-    # Per-user upstream Authorization injection. The caller passes a
-    # dict {authelia_user: header_value}; each entry becomes an
-    # `if ($authelia_user = "...") { set $upstream_auth "..."; }`. We
-    # use the `if + set` pattern (one of the "evil if" exceptions
-    # documented by nginx) rather than an http-scope `map` because
-    # `$authelia_user` is created by auth_request_set inside this
-    # location and isn't visible to map directives at http scope
-    # (nginx -t fails with "unknown variable" at parse time).
-    #
-    # Initialize from $http_authorization (client's own header) so the
-    # bypass-on-Authorization machine-client path passes through
-    # unmodified -- proxy_set_header with empty value strips the
-    # client's header (it doesn't fall back to nginx's default
-    # forward), so an unconditional `set $upstream_auth ""` would
-    # silently 401 every Telegraf/HA/Grafana write. Mapped Authelia
-    # users still get their assigned token (the if-set below overrides
-    # $http_authorization), and unmapped Authelia users with no
-    # Authorization land at the upstream's native sign-in.
-    set $upstream_auth $http_authorization;
-    {% for user, header in nginx_site_args.upstream_authorization.items() %}
-    if ($authelia_user = "{{ user }}") { set $upstream_auth "{{ header }}"; }
-    {% endfor %}
-    proxy_set_header Authorization      $upstream_auth;
+    # Per-user upstream Authorization. The caller passes a dict
+    # {authelia_user: header_value}; it is rendered into an http-scope `map`
+    # keyed on $authelia_user, in conf.d/upstream_auth_<sub>.conf, dropped by
+    # the helper alongside this vhost (a map can't live in server{}). The map
+    # variable is evaluated HERE in the content phase, after auth_request has
+    # populated $authelia_user -- unlike the old rewrite-phase `if/set`, which
+    # ran before auth and so never matched. The map's `default
+    # $http_authorization` forwards a cookieless machine client's own token
+    # unchanged (its 204 bypass leaves $authelia_user empty); a mapped browser
+    # user gets their assigned token, overriding any stale header the SPA
+    # replayed. See upstream_auth_map.conf.j2 / tasks/site.yml.
+    proxy_set_header Authorization      $nginx_upstream_auth_{{ nginx_site_args.subdomain | replace('-', '_') }};
 {% endif %}
 
     # Proxy timeouts
