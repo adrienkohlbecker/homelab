@@ -1,3 +1,15 @@
+- name: Assert required service ports are defined
+  assert:
+    that:
+      - service_ports.prometheus is defined
+      - not (minio_enabled | default(false)) or service_ports.minio_api is defined
+    fail_msg: >-
+      service_ports.prometheus (and service_ports.minio_api when minio_enabled)
+      must be set; an undefined port renders an empty scrape target that
+      prometheus silently accepts and ignores.
+  tags:
+    - prometheus
+
 - name: Install prometheus
   apt:
     pkg:
@@ -18,6 +30,7 @@
     owner: root
     group: root
     backup: true
+    validate: promtool check config %s
   register: prometheus_conf
   become: true
   tags:
