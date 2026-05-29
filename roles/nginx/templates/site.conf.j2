@@ -47,8 +47,8 @@ server {
 {# interest-cohort (FLoC) was abandoned in 2022 and no browser still parses it;
    browsing-topics opts out of its live Topics-API successor instead. #}
   add_header Permissions-Policy        "browsing-topics=()" always;
-{# max-age 63072000 (2y) is current Mozilla Intermediate guidance, matching the
-   cipher block cited below; no preload (deliberate). #}
+{# max-age 63072000 (2y) per the TLSRef v6.0 / Mozilla Intermediate profile,
+   matching the cipher block in nginx.conf.j2; no preload (deliberate). #}
   add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
   add_header Reporting-Endpoints       'csp-endpoint="https://csplogger.{{ inventory_hostname }}.{{ domain }}/log"' always;
 {% endset %}
@@ -72,7 +72,9 @@ server {
   # /internal/authelia location is marked `internal` so external requests
   # can't bypass the auth by hitting it directly. Authelia upstream URL
   # is host-parameterized so non-lab hosts (pug, bunk) can point at lab's
-  # Authelia over wireguard when they need forward-auth.
+  # Authelia over wireguard when they need forward-auth. (The location name is
+  # a local convention predating upstream's /internal/authelia/authz; it's
+  # internal-only, so the exact path is immaterial -- don't "fix" it.)
   location /internal/authelia {
     internal;
 {% if _nginx_site_upstream_auth %}

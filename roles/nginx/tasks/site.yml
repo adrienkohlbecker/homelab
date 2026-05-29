@@ -19,8 +19,11 @@
 #                             config-only — useful for pre-warming a site whose
 #                             upstream isn't ready yet.
 #   proxy_pass                optional; URL to reverse-proxy to (location /)
-#   proxy_buffering           optional; nginx proxy_buffering directive value
-#   proxy_request_buffering   optional; nginx proxy_request_buffering directive value
+#   proxy_buffering           optional; nginx proxy_buffering directive value.
+#                             Quote it ('on'/'off') -- bare off is YAML-coerced
+#                             to false and renders an invalid `... false;`.
+#   proxy_request_buffering   optional; nginx proxy_request_buffering directive
+#                             value (quote it -- same YAML off->false footgun)
 #   proxy_send_timeout        optional, default '60s'
 #   proxy_read_timeout        optional, default '60s'
 #   client_max_body_size      optional; sets nginx client_max_body_size
