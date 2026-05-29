@@ -15,6 +15,30 @@
     nginx_verify_host: "nginxverify.{{ inventory_hostname }}.{{ domain }}"
     nginx_verify_token: nginx-verify-token
 
+# www-data was dropped from ssl-cert (install.yml): nginx's master loads the
+# cert+key as root and the workers inherit the context, so the workers never
+# read the files. This assert is the cheap confirmation that converge removed
+# the now-dead membership (and left netdata's intact for x509check); the
+# functional proof is the HTTPS probes below -- _setup tightened live/ to 0750
+# root:ssl-cert and privkey.pem to 0600 root:root and pre-added www-data, so a
+# www-data worker can neither traverse live/ nor read the key, yet still
+# terminates TLS, which is only possible if the master loaded it as root.
+- name: _verify | Read ssl-cert group membership
+  getent:
+    database: group
+    key: ssl-cert
+  register: nginx_verify_ssl_cert_grp
+  become: true
+
+- name: _verify | Dropped www-data from ssl-cert, kept netdata
+  assert:
+    that:
+      - "'www-data' not in (nginx_verify_ssl_cert_grp.ansible_facts.getent_group['ssl-cert'][2] | default('')).split(',')"
+      - "'netdata' in (nginx_verify_ssl_cert_grp.ansible_facts.getent_group['ssl-cert'][2] | default('')).split(',')"
+    fail_msg: >-
+      Expected www-data removed from ssl-cert and netdata kept; ssl-cert members
+      are {{ nginx_verify_ssl_cert_grp.ansible_facts.getent_group['ssl-cert'][2] | default('<none>') }}.
+
 - name: _verify | Start upstream stub via systemd-run
   command:
     argv:
