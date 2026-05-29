@@ -3,8 +3,9 @@
 # server_conf/location_conf snippets that declare their own location -- which
 # inherits none of the site's proxy_set_headers, so an un-included location
 # would silently forward Host / X-Forwarded-* wrong. Pull it in with
-# `include snippets/proxy_params.conf;`. $connection_upgrade is the websocket
-# upgrade map defined in nginx.conf.j2.
+# `include snippets/proxy_params.conf;`. $connection_upgrade (websocket upgrade)
+# and $proxy_x_forwarded_ssl (on/off form of $scheme) are maps defined in
+# nginx.conf.j2.
 proxy_set_header Host              $host;
 proxy_set_header Upgrade           $http_upgrade;
 proxy_set_header Connection        $connection_upgrade;
@@ -16,5 +17,6 @@ proxy_set_header X-Real-IP         $remote_addr;
 # entry). The /internal/authelia auth leg already sets $remote_addr directly.
 proxy_set_header X-Forwarded-For   $remote_addr;
 proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-Ssl   $proxy_x_forwarded_ssl;
 proxy_set_header X-Forwarded-Host  $host;
 proxy_set_header X-Forwarded-Port  $server_port;

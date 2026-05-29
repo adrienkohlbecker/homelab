@@ -172,6 +172,15 @@ http {
         ""      close;
     }
 
+    # on/off form of $scheme for the legacy X-Forwarded-Ssl header (some apps
+    # build self-referential URLs from it rather than X-Forwarded-Proto). Keyed
+    # on $scheme so it stays correct on the cleartext :80 leg of enable_http
+    # sites, where it must report off.
+    map $scheme $proxy_x_forwarded_ssl {
+        default off;
+        https   on;
+    }
+
     # Default servers for missing Host header, or header not matching configured site
     server {
         listen              80 default_server;
