@@ -28,6 +28,16 @@ NotifyAccess=all
 SyslogIdentifier=%N
 
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
+# Image: santiagosayshey/profilarr:v1.1.3 is the original author's final Python
+#   build. ghcr.io/dictionarry-hub/profilarr is a breaking v2 rewrite (DB moves
+#   to /config/data, ORIGIN env required) -- a migration, not a tag bump; the
+#   sqlite_dataset symlink wiring assumes the v1 /config-root profilarr.db.
+# --init: gunicorn runs as PID 1 under gosu in this image; reap its zombies.
+# --health-cmd via python urllib (not curl): python:3.9-slim ships no curl/wget,
+#   so tier-3 urllib is the only in-container probe available.
+# --env UMASK=027: profilarr.db holds every synced *arr instance's API key; 027
+#   keeps it owner-only (image default 022 is world-readable by mode). profilarr
+#   owns a dedicated group, so no group-write is sacrificed.
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
     --cgroups=split \
@@ -43,12 +53,13 @@ ExecStart=/usr/bin/podman run \
     --env PUID={{ profilarr_user.uid }} \
     --env PGID={{ profilarr_user.group }} \
     --env TZ={{ system_timezone }} \
+    --env UMASK=027 \
     --volume /mnt/services/profilarr:/config \
     --volume /mnt/services/sqlite/profilarr:/mnt/services/sqlite/profilarr \
     --network media \
     --publish 127.0.0.1:{{ service_ports.profilarr }}:6868/tcp \
-    --health-cmd         '["python","-c","import urllib.request as u, sys; u.urlopen(sys.argv[1], timeout=1)","http://localhost:{{ service_ports.profilarr }}/ping"]' \
-    --health-startup-cmd '["python","-c","import urllib.request as u, sys; u.urlopen(sys.argv[1], timeout=1)","http://localhost:{{ service_ports.profilarr }}/ping"]' \
+    --health-cmd         '["python","-c","import urllib.request as u, sys; u.urlopen(sys.argv[1], timeout=1)","http://localhost:6868/ping"]' \
+    --health-startup-cmd '["python","-c","import urllib.request as u, sys; u.urlopen(sys.argv[1], timeout=1)","http://localhost:6868/ping"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
