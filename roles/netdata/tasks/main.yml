@@ -554,6 +554,11 @@
       # the same vaulted secret across all netdata hosts so a single
       # poller can hit any of them. Loopback fetches on the host running
       # homepage_alerts skip nginx entirely and don't need the token.
+      # Tradeoff: one static secret fleet-wide, carried in the URL query
+      # string (so it can land in proxy logs/history) with no rotation
+      # beyond a vault edit + reconverge. The blast radius is bounded to the
+      # read API by the `allow {management,netdata.conf} from = none` ACLs
+      # set in "Configure netdata" above.
       # See notes/authelia_rollout.md and alerts_generate.py.
       auth: required
       bypass_query_param:
