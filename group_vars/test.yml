@@ -140,6 +140,8 @@ influxdb_root_password: changeme
 # above (testuser) so the test fixture's rendered nginx config has a
 # concrete map entry to grep for in _verify.
 influxdb_authelia_user: testuser
+# Feeds only the (disabled) netdata go.d/pihole collector; see the
+# prod.yml definition. Admin auth is via authelia, so pihole needs none.
 pihole_password: changeme
 filebrowser_basic_auth_user: changeme
 filebrowser_basic_auth_password: changeme
