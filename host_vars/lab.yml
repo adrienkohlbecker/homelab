@@ -121,7 +121,6 @@ zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDp277oY86WuD
 
 fan2go_enabled: true
 
-pihole_keepalived_role: MASTER
 pihole_keepalived_priority: 100
 
 prometheus_enabled: true

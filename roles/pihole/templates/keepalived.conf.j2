@@ -42,6 +42,12 @@ vrrp_instance pihole {
   priority          {{ pihole_keepalived_priority }}
   advert_int        1
 
+  # Delay a recovered higher-priority node from reclaiming the VIP for
+  # 60s, so a flapping FTL doesn't yank the VIP back (re-churning the GARP
+  # / UniFi MAC update) the instant its healthcheck rises again. Plain
+  # preempt (no nopreempt) is kept so the MASTER does eventually reclaim.
+  preempt_delay     60
+
   virtual_ipaddress {
     {{ pihole_keepalived_ip }}/32
   }

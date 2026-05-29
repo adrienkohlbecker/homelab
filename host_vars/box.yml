@@ -144,7 +144,6 @@ zfs_autobackup_ssh_public_key: ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIFyjxLhHELJkv
 # disabled/empty branch here; the active branch runs on real hardware
 # (lab, pug) at apply time.
 
-pihole_keepalived_role: BACKUP
 pihole_keepalived_priority: 5
 
 prometheus_enabled: true
