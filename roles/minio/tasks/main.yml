@@ -59,39 +59,18 @@
   tags:
     - minio
 
-- name: Create zfs filesystem
-  when: zfs_root
-  zfs:
-    name: '{{ zfs_dozer_filesystem }}/minio'
-    state: present
-    extra_zfs_properties:
-      mountpoint: /mnt/minio
-      'autobackup:bak': 'true'
-  become: true
-  tags:
-    - minio
-
-- name: Create data dir
-  when: not (ansible_check_mode and minio_user_user.changed)
-  file:
-    dest: /mnt/minio
-    state: directory
-    owner: minio-user
-    group: minio-user
-    mode: "0755"
-  become: true
-  tags:
-    - minio
-
-- name: Set up mount service for dozer/minio
-  when: zfs_root
+- name: Provision the minio dataset
   import_role:
-    name: zfs_mount
-    tasks_from: unit
+    name: zfs
+    tasks_from: dataset
   vars:
-    zfs_mount_dataset: '{{ zfs_dozer_filesystem }}/minio'
-    zfs_mount_mountpoint: /mnt/minio
-  become: true
+    zfs_dataset_args:
+      dataset: '{{ zfs_dozer_filesystem }}/minio'
+      mountpoint: /mnt/minio
+      owner: minio-user
+      group: minio-user
+      extra_properties:
+        'autobackup:bak': 'true'
   tags:
     - minio
 
