@@ -27,7 +27,7 @@ compatibility_level = 3.6
 smtp_tls_CApath=/etc/ssl/certs
 smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
 
-smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated defer_unauth_destination
+smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated reject_unauth_destination
 mydomain = {{ domain }}
 masquerade_domains = {{ email_domain }} {{ domain }}
 alias_maps = hash:/etc/aliases
@@ -49,7 +49,10 @@ smtp_sasl_auth_enable = yes
 # texthash: reads the flat sasl_passwd at process start, so no postmap(1) step
 # or .db artifact -- the role restarts postfix on credential change anyway.
 smtp_sasl_password_maps = texthash:/etc/postfix/sasl_passwd
-smtp_sasl_security_options = noanonymous
+# noplaintext refuses the SASL credential over a non-TLS link: if a host ever
+# overrides smtp_port to 25 (dropping TLS, see smtp_tls_security_level below),
+# the relay fails closed rather than leaking the fleet credential in clear.
+smtp_sasl_security_options = noanonymous, noplaintext
 smtp_sasl_tls_security_options = noanonymous
 # `secure` verifies the relay's certificate against the nexthop name (Mailgun
 # presents a publicly-trusted cert) rather than accepting any cert as plain
