@@ -373,6 +373,13 @@
   args:
     executable: /bin/bash
     chdir: "{{ ansible_user_dir }}"
+  # aqua (mise's tool backend) authenticates its api.github.com calls with
+  # GITHUB_TOKEN, lifting the 60/hr anon rate limit to 5000/hr. Sourced from
+  # the controller's env (CI sets it from the MISE_GITHUB_TOKEN secret); empty
+  # on an operator workstation, where mise stays anon -- fine at single-host
+  # volume. Reading via lookup keeps the token out of argv.
+  environment:
+    GITHUB_TOKEN: "{{ lookup('env', 'GITHUB_TOKEN') | default('', true) }}"
   register: user_mise_tools
   changed_when: "'CHANGED' in user_mise_tools.stdout"
   tags:
