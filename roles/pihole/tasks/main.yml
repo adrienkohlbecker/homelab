@@ -15,12 +15,18 @@
       - inventory_hostname in external_ips
       - pihole_adlists is defined
       - pihole_whitelists is defined
+      # No whitespace in any list URL: the URLs are space-joined into a
+      # single BLOCKLISTS_URL/WHITELIST_URL token, which systemd
+      # ExecStart= and the command module both re-split on whitespace, so
+      # an embedded space would fragment a URL into extra podman args.
+      - (pihole_adlists | default([]) | select('search', '\s') | list | length) == 0
+      - (pihole_whitelists | default([]) | select('search', '\s') | list | length) == 0
     fail_msg: >-
       pihole requires pihole_keepalived_{ip,vrid,priority,peers}
       (priority 1-255, set per-host in host_vars), an external_ips entry
       for this host (the VRRP unicast_src_ip), and the pihole_adlists /
-      pihole_whitelists lists. Define the missing one(s) in
-      host_vars / group_vars.
+      pihole_whitelists lists (no whitespace in any URL). Define or fix
+      the offending one(s) in host_vars / group_vars.
   tags:
     - pihole
 
@@ -100,18 +106,6 @@
   tags:
     - pihole
 
-# TODO: this is being overwritten on start by https://github.com/pi-hole/docker-pi-hole/blob/master/src/bash_functions.sh#L94
-# - name: Configure pihole logrotate
-#   import_role:
-#     name: logrotate
-#     tasks_from: compression
-#   vars:
-#     logrotate_args:
-#       item: /mnt/services/pihole/etc/logrotate
-#       condition: "{{ not (ansible_check_mode and (systemd_unit_started.changed or pihole_service_result.changed or pihole_user.changed)) }}"
-#   tags:
-#     - pihole
-
 - name: Configure health script
   copy:
     src: pihole_healthcheck.sh
@@ -130,8 +124,8 @@
 # friendly_zhukovsky, ...), and that string becomes SYSLOG_IDENTIFIER
 # on the journal entries the container emits. fluentbit's otlp_shape
 # then surfaces that as ServiceName in HyperDX, minting a fresh facet
-# per weekly timer fire. --replace covers the rare case where a prior
-# run was SIGKILL'd before --rm fired and the named container lingers.
+# per run. --replace covers the rare case where a prior run was SIGKILL'd
+# before --rm fired and the named container lingers.
 # --dns: don't inherit the host's resolv.conf, which points at
 # 127.0.0.1 -> pihole. From inside this container 127.0.0.1 is a black
 # hole (no FTL runs here), and even with the host IP, pihole may be
@@ -144,28 +138,29 @@
   tags:
     - pihole
 
-- name: Schedule the pihole_list_update timer
+# No scheduled refresh timer: a jacklul updatelists run only (re)seeds the
+# adlist/whitelist *rows*, which change solely when the operator edits the
+# inputs -- caught by the converge-time trigger below. List *content* is
+# refreshed by pi-hole's own in-container gravity cron. Remove the unit so
+# an earlier deploy's timer doesn't linger on the HA hosts.
+- name: Remove the pihole_list_update timer
   import_role:
     name: systemd_timer
-    tasks_from: install
+    tasks_from: remove
   vars:
     systemd_timer_args:
       name: pihole_list_update
-      description: Weekly pihole adlist/whitelist refresh
-      frequency: weekly
-      on_calendar: "Sun *-*-* 00:47:00"
-      exec_start: "{{ pihole_list_update_cmd }}"
   tags:
     - pihole
 
 # Re-import the adlist/whitelist set only when our *configured* inputs
 # change, not on every converge: record them to a sentinel and gate the
-# trigger on it. Refreshing upstream list *content* is the weekly timer's
-# job (above) plus pi-hole's own in-container gravity cron; the
-# converge-time trigger exists to apply an operator adlist edit
-# immediately, so input-keyed gating is both correct and idempotent (the
-# previous stdout-substring changed_when was fragile -- e.g. against the
-# --quiet output -- and re-ran the update container every converge).
+# trigger on it. List *content* is refreshed by pi-hole's own in-container
+# gravity cron; the converge-time trigger exists to apply an operator
+# adlist edit immediately, so input-keyed gating is both correct and
+# idempotent (the previous stdout-substring changed_when was fragile --
+# e.g. against the --quiet output -- and re-ran the update container every
+# converge).
 - name: Record pihole list-update inputs
   when: not (ansible_check_mode and pihole_user.changed)
   copy:
@@ -189,26 +184,11 @@
   tags:
     - pihole
 
-# Gravity-rebuild ownership: pi-hole's in-container cron rebuilds gravity
-# on its own schedule and the weekly timer refreshes the adlist/whitelist
-# rows; this converge-time rebuild fires only when the operator's inputs
-# just changed (above), so a freshly-edited adlist set takes effect
-# without waiting for either schedule. The Enable task's `state: restarted`
-# blocks on --sdnotify=healthy, so a same-converge restart leaves the
-# container healthy before we reach here; the wait still guards the case
-# where the container is mid-restart for an unrelated reason.
-- name: Wait for pihole to report healthy before the gravity rebuild
-  when: pihole_list_update.changed
-  command: /usr/bin/podman healthcheck run pihole
-  register: pihole_health
-  changed_when: false
-  retries: 30
-  delay: 2
-  until: pihole_health.rc == 0
-  become: true
-  tags:
-    - pihole
-
+# Rebuild gravity right after a list-update so a freshly-edited adlist set
+# takes effect immediately, rather than waiting for pi-hole's in-container
+# gravity cron. The Enable task's `state: restarted` blocks on
+# --sdnotify=healthy, so any same-converge restart has already left the
+# container healthy by the time we reach here.
 - name: Trigger gravity update
   when: pihole_list_update.changed
   command: /usr/bin/podman exec pihole pihole -g
