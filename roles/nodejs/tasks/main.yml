@@ -11,7 +11,7 @@
       components: main
       pin:
         package: nodejs
-        version: "22.*"
+        version: "{{ nodejs_major }}.*"
         priority: 600
   tags:
     - nodejs
