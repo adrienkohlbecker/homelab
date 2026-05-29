@@ -45,7 +45,7 @@ MINIO_BROWSER_REDIRECT_URL=https://minio.{{ inventory_hostname }}.{{ domain }}
 MINIO_PROMETHEUS_AUTH_TYPE=public
 
 # Display metrics in the console
-MINIO_PROMETHEUS_URL=http://localhost:9090
+MINIO_PROMETHEUS_URL=http://localhost:{{ service_ports.prometheus }}
 
 # OIDC provider (Authelia). MINIO_ROOT_USER above stays the
 # emergency break-glass login; day-to-day console access is via
@@ -55,10 +55,10 @@ MINIO_PROMETHEUS_URL=http://localhost:9090
 #
 # CLAIM_NAME=groups maps Authelia's per-user groups list onto
 # MinIO's policy-attachment lookup: a token with groups: ["admins"]
-# attaches the IAM policy named "admins" (created out-of-band via
-# `mc admin policy create` against an Authelia group name -- see
-# notes/authelia_rollout.md). consoleAdmin is the built-in admin
-# policy; map the Authelia "admins" group to it for operators.
+# attaches the IAM policy named "admins", which this role provisions
+# in-band from files/admins.json (see tasks/data.yml). The policy name
+# matches the Authelia group so the claim->policy lookup just works
+# (see notes/authelia_rollout.md).
 MINIO_IDENTITY_OPENID_CONFIG_URL=https://auth.{{ authelia_cookie_domain }}/.well-known/openid-configuration
 MINIO_IDENTITY_OPENID_CLIENT_ID=minio
 MINIO_IDENTITY_OPENID_CLIENT_SECRET={{ minio_oidc_client_secret }}
