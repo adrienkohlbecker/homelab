@@ -3,8 +3,8 @@
 #
 # Repository setup forks on Ubuntu major version because apt-key was
 # removed from the default install in resolute (26.04): jammy (< 26) takes
-# apt_key + apt_repository, resolute (>= 26) takes deb822_repository (which
-# embeds the key inline and needs python3-debian).
+# apt_key + apt_repository, resolute (>= 26) fetches the key into the same
+# scoped keyring and takes deb822_repository (which needs python3-debian).
 #
 # The signing key lives at /usr/share/keyrings/<name>.gpg, referenced by
 # signed-by= on the repo line so it is trusted for this source only -- a
@@ -14,8 +14,8 @@
 # invocation replaces it wholesale and inter-call vars-leak can't happen:
 #
 #   name:          identifier -- scoped keyring file, .sources name, pin file
-#   key_url:       URL of the signing key (fetched on jammy, embedded on resolute)
-#   key_id:        full GPG fingerprint (jammy apt_key re-checks it post-import)
+#   key_url:       URL of the signing key (fetched into the scoped keyring)
+#   key_id:        full GPG fingerprint, re-checked against the fetched key
 #   uris:          repo base URL (usually a mirror_apt_* var)
 #   suites:        apt suite(s) -- e.g. nodistro, or the release codename
 #   components:    apt component(s) -- e.g. main, stable
@@ -98,21 +98,63 @@
   check_mode: false
   become: true
 
-# deb822_repository requires python3-debian even in check mode. Gate the
-# deb822 task on its .changed so check mode still propagates a would-change
-# signal when the prereq install masks the repo task.
-- name: Install python3-debian for {{ apt_source_args.name }}
+# deb822_repository requires python3-debian even in check mode, and the key
+# fingerprint check below needs gpg. Gate the deb822 task on this install's
+# .changed so check mode still propagates a would-change signal when the
+# prereq install masks the repo task.
+- name: Install repository prereqs for {{ apt_source_args.name }}
   when: ansible_distribution_major_version | int >= 26
   apt:
-    pkg: python3-debian
+    pkg:
+      - gpg
+      - python3-debian
     cache_valid_time: 3600
   become: true
-  register: apt_source_python3_debian
+  register: apt_source_resolute_prereqs
+
+# Fetch the key into the same scoped keyring the jammy path uses, so
+# signed_by= below references a local file. get_url defaults to force: no,
+# so it fetches once and stays idempotent (matching jammy's apt_key import).
+- name: Fetch repository key for {{ apt_source_args.name }}
+  when: ansible_distribution_major_version | int >= 26
+  get_url:
+    url: "{{ apt_source_args.key_url }}"
+    dest: /usr/share/keyrings/{{ apt_source_args.name }}.gpg
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  register: apt_source_key_resolute
+
+# deb822_repository trusts whatever signed_by serves without checking it
+# against key_id, so re-assert the fingerprint here -- a swapped key on a
+# compromised mirror fails the converge instead of being trusted (TOFU),
+# matching the jammy apt_key id: re-check. Real converge only: command tasks
+# skip under --check, and the dry-run preview need not re-verify trust.
+- name: Read repository key fingerprint for {{ apt_source_args.name }}
+  when:
+    - ansible_distribution_major_version | int >= 26
+    - not ansible_check_mode
+  command: gpg --show-keys --with-colons /usr/share/keyrings/{{ apt_source_args.name }}.gpg
+  changed_when: false
+  register: apt_source_key_fpr
+  become: true
+
+- name: Assert the fetched key matches key_id for {{ apt_source_args.name }}
+  when:
+    - ansible_distribution_major_version | int >= 26
+    - not ansible_check_mode
+  assert:
+    that:
+      - apt_source_args.key_id in (apt_source_key_fpr.stdout | default(''))
+    fail_msg: >-
+      Fetched key for {{ apt_source_args.name }} lacks fingerprint
+      {{ apt_source_args.key_id }}; got {{ apt_source_key_fpr.stdout | default('') }}
 
 - name: Add repository (deb822) for {{ apt_source_args.name }}
   when:
     - ansible_distribution_major_version | int >= 26
-    - not (ansible_check_mode and apt_source_python3_debian.changed)
+    - not (ansible_check_mode and apt_source_resolute_prereqs.changed)
   deb822_repository:
     name: "{{ apt_source_args.name }}"
     types: deb
@@ -120,7 +162,7 @@
     suites: "{{ apt_source_args.suites }}"
     components: "{{ apt_source_args.components }}"
     architectures: "{{ apt_source_args.architectures | default((ansible_architecture == 'aarch64') | ternary('arm64', 'amd64')) }}"
-    signed_by: "{{ apt_source_args.key_url }}"
+    signed_by: /usr/share/keyrings/{{ apt_source_args.name }}.gpg
   become: true
   register: apt_source_repo_deb822
 
@@ -154,4 +196,4 @@
 # still propagates a would-change signal to the caller's install gate.
 - name: Export change signal for {{ apt_source_args.name }}
   set_fact:
-    "apt_source_{{ apt_source_args.name }}_changed": "{{ apt_source_repo_legacy is changed or apt_source_repo_deb822 is changed or apt_source_gpg is changed or apt_source_python3_debian is changed }}"
+    "apt_source_{{ apt_source_args.name }}_changed": "{{ apt_source_repo_legacy is changed or apt_source_repo_deb822 is changed or apt_source_gpg is changed or apt_source_resolute_prereqs is changed }}"
