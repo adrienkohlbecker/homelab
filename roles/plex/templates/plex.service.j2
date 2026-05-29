@@ -63,6 +63,12 @@ ExecStart=/usr/bin/podman run \
     --env "TZ={{ system_timezone }}" \
     --env PLEX_UID={{ plex_user.uid }} \
     --env PLEX_GID={{ media_group.gid }} \
+    {# Clients on the management, home, and trusted VLANs reach Plex without #}
+    {# the account login prompt; every other source still authenticates. #}
+    {# Derived from the canonical topology so it tracks VLAN renumbering #}
+    {# instead of pinning literal CIDRs. #}
+{% set plex_allowed_networks = [network.sites.home.vlans.management.cidr, network.sites.home.vlans.home.cidr, network.sites.home.vlans.trusted.cidr] %}
+    --env ALLOWED_NETWORKS={{ plex_allowed_networks | join(',') }} \
     {# The host already owns /config as plex:media, so skip the entrypoint's #}
     {# recursive chown-on-every-start — pure cost (and mtime churn that #}
     {# defeats snapshot dedup) on a large library's Metadata/ tree. #}
