@@ -140,15 +140,60 @@
   tags:
     - nginx_site
 
-- name: site | Assert bypass token is injection-safe
+- name: site | Assert state is a known value
+  assert:
+    that:
+      - (nginx_site_args.state | default('present')) in ['present', 'absent']
+    fail_msg: >-
+      nginx_site_args.state must be 'present' or 'absent'; got
+      '{{ nginx_site_args.state | default('present') }}'. A typo silently
+      no-ops both branches, leaving a retired site running.
+  tags:
+    - nginx_site
+
+- name: site | Assert bypass token is URL-safe
   when: nginx_site_args.bypass_query_param is defined
   assert:
     that:
       - nginx_site_args.bypass_query_param.value is string
-      - nginx_site_args.bypass_query_param.value is not search('"')
+      - nginx_site_args.bypass_query_param.value is match('^[A-Za-z0-9_-]+$')
     fail_msg: >-
-      nginx_site_args.bypass_query_param.value is rendered inside an nginx
-      "..." string and must not contain a double quote.
+      nginx_site_args.bypass_query_param.value must be a non-empty URL-safe
+      token ([A-Za-z0-9_-]). It is matched against the raw un-decoded query, so
+      a value needing percent-encoding would silently never match; it is also
+      rendered inside an nginx "..." string.
+  tags:
+    - nginx_site
+
+- name: site | Assert proxy_pass is a well-formed URL
+  when: nginx_site_args.proxy_pass is defined
+  assert:
+    that:
+      - nginx_site_args.proxy_pass is string
+      - nginx_site_args.proxy_pass is match('^https?://')
+      # No space/quote/semicolon and no control/non-ASCII char: it is rendered
+      # straight into `proxy_pass ...;`, so any of those changes the directive.
+      - nginx_site_args.proxy_pass is not search('[ ";]')
+      - nginx_site_args.proxy_pass is not search('[^ -~]')
+    fail_msg: >-
+      nginx_site_args.proxy_pass must be an http(s):// URL with no whitespace,
+      quotes or semicolons; got '{{ nginx_site_args.proxy_pass }}'.
+  tags:
+    - nginx_site
+
+- name: site | Assert CSP overrides are injection-safe
+  when: >-
+    nginx_site_args.csp_additional is defined
+    or nginx_site_args.csp_default_src is defined
+    or nginx_site_args.csp_frame_ancestors is defined
+  assert:
+    that:
+      - (nginx_site_args.csp_additional | default('')) is not search('"')
+      - (nginx_site_args.csp_default_src | default('')) is not search('"')
+      - (nginx_site_args.csp_frame_ancestors | default('')) is not search('"')
+    fail_msg: >-
+      nginx_site_args.csp_* values are rendered inside the add_header
+      Content-Security-Policy "..." string and must not contain a double quote.
   tags:
     - nginx_site
 
@@ -156,12 +201,17 @@
   when: nginx_site_args.upstream_authorization is defined
   assert:
     that:
-      - nginx_site_args.upstream_authorization.keys() | list | join('') is not search('"')
-      - nginx_site_args.upstream_authorization.values() | list | join('') is not search('"')
+      # Each key/value is rendered inside an nginx "..." string; reject anything
+      # outside a conservative whitelist so a stray double-quote, backslash
+      # (escapes the closing quote) or control char can't break out of or
+      # corrupt the directive. Widen the class here if a consumer needs more.
+      - nginx_site_args.upstream_authorization.keys() | list | join('') is not search('[^A-Za-z0-9._@-]')
+      - nginx_site_args.upstream_authorization.values() | list | join('') is not search('[^A-Za-z0-9 ._@:+/=-]')
     fail_msg: >-
-      nginx_site_args.upstream_authorization keys (usernames) and values (header
-      values) are rendered inside nginx "..." strings and must not contain a
-      double quote.
+      nginx_site_args.upstream_authorization keys (usernames) must be
+      [A-Za-z0-9._@-] and values (header values) [A-Za-z0-9 ._@:+/=-]; they are
+      rendered inside nginx "..." strings, so quotes/backslashes/control chars
+      are rejected.
   tags:
     - nginx_site
 

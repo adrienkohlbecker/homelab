@@ -49,6 +49,15 @@
       - nginx_conf_d_args.name | length > 0
     fail_msg: "nginx_conf_d_args.name is required and must be a non-empty string."
 
+- name: conf_d | Assert state is a known value for {{ nginx_conf_d_args.name | default('<unnamed>') }}
+  assert:
+    that:
+      - (nginx_conf_d_args.state | default('present')) in ['present', 'absent']
+    fail_msg: >-
+      nginx_conf_d_args.state must be 'present' or 'absent'; got
+      '{{ nginx_conf_d_args.state | default('present') }}'. A typo silently
+      no-ops both branches, leaving a retired drop in place.
+
 - name: conf_d | Assert exactly one of src/content for {{ nginx_conf_d_args.name }}
   when: (nginx_conf_d_args.state | default('present')) == 'present'
   assert:
