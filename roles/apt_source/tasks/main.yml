@@ -6,6 +6,10 @@
 # apt_key + apt_repository, resolute (>= 26) takes deb822_repository (which
 # embeds the key inline and needs python3-debian).
 #
+# The signing key lives at /usr/share/keyrings/<name>.gpg, referenced by
+# signed-by= on the repo line so it is trusted for this source only -- a
+# deliberate fleet convention, not /etc/apt/keyrings/ as upstream docs use.
+#
 # Callers pass everything through a single apt_source_args dict so each
 # invocation replaces it wholesale and inter-call vars-leak can't happen:
 #
