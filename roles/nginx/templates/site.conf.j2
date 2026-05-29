@@ -35,8 +35,12 @@ server {
 {% if not (nginx_site_args.csp_passthrough | default(false)) %}
   add_header Content-Security-Policy   "{% if nginx_site_args.csp_additional is defined %}{{ nginx_site_args.csp_additional }}; {% endif %}default-src {% if nginx_site_args.csp_default_src is defined %}{{ nginx_site_args.csp_default_src }} {% endif %}{{ nginx_csp_default }}; frame-ancestors {% if nginx_site_args.csp_frame_ancestors is defined %}{{ nginx_site_args.csp_frame_ancestors }}{% else %}'self'{% endif %}; report-uri https://csplogger.{{ inventory_hostname }}.{{ domain }}/log; report-to csp-endpoint;" always;
 {% endif %}
-  add_header Permissions-Policy        "interest-cohort=()" always;
-  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+{# interest-cohort (FLoC) was abandoned in 2022 and no browser still parses it;
+   browsing-topics opts out of its live Topics-API successor instead. #}
+  add_header Permissions-Policy        "browsing-topics=()" always;
+{# max-age 63072000 (2y) is current Mozilla Intermediate guidance, matching the
+   cipher block cited below; no preload (deliberate). #}
+  add_header Strict-Transport-Security "max-age=63072000; includeSubDomains" always;
   add_header Reporting-Endpoints       'csp-endpoint="https://csplogger.{{ inventory_hostname }}.{{ domain }}/log"' always;
 {% endset %}
 {{ security_headers }}
@@ -142,6 +146,14 @@ server {
     auth_request_set $authelia_email  $upstream_http_remote_email;
 {% endif %}
 {% if nginx_site_args.bypass_query_param is defined %}
+    # The $args strip below and the $request_safe log-redaction each handle a
+    # single auth_token occurrence; a duplicated param would leave the second
+    # copy unstripped (forwarded to the upstream). Reject duplicates outright so
+    # the single-occurrence handling holds and a malformed client can't smuggle
+    # the token past the strip.
+    if ($request_uri ~ "auth_token=.*[?&]auth_token=") {
+      return 400;
+    }
     # Strip the bypass token from $args before proxy_pass so the
     # upstream app never sees it (token must not land in compta's own
     # logs or echo back in error messages). nginx's proxy_pass forwards
@@ -167,6 +179,11 @@ server {
     # certs, reached over the trusted home LAN. An on-path attacker on that VLAN
     # could MITM the leg; that's out of scope for the home threat model.
     proxy_ssl_server_name on;
+
+    # Detect a silently-dropped upstream (a power-cycled LAN device — Eaton,
+    # marantz) via TCP keepalives, rather than hanging on a half-open socket
+    # until proxy_read_timeout.
+    proxy_socket_keepalive on;
 
     # Proxy headers
     proxy_set_header Host              $host;
@@ -210,7 +227,7 @@ server {
 {% endif %}
 
     # Proxy timeouts
-    proxy_connect_timeout {{ nginx_site_args.proxy_connect_timeout | default('60s') }};
+    proxy_connect_timeout 60s;
     proxy_send_timeout    {{ nginx_site_args.proxy_send_timeout | default('60s') }};
     proxy_read_timeout    {{ nginx_site_args.proxy_read_timeout | default('60s') }};
 {% if nginx_site_args.proxy_buffering is defined %}
@@ -246,6 +263,13 @@ server {
 {% endif %}
     server_name {{ nginx_site_args.subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_site_args.subdomain }}.{{ domain}};
 
+{% if nginx_site_args.bypass_query_param is defined %}
+    # Drop the query on the cleartext :80 leg: it can carry the vaulted
+    # auth_token, which must not be reflected in a plaintext redirect Location.
+    # Bypass clients target https directly, so they never hit this redirect.
+    return 301 https://$host$uri;
+{% else %}
     return 301 https://$host$request_uri;
+{% endif %}
 }
 {% endif %}
