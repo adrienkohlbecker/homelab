@@ -218,6 +218,107 @@
     fail_msg: >-
       expected reinstall from config-files state, fact={{ deb_install_test_deb_changed }}
 
+# A successful install must leave nothing behind in /var/cache (the always:
+# cleanup). deb-install-test was just (re)installed above, so the staged file
+# should be gone.
+- name: _verify | Stat the staged file after a successful install
+  stat:
+    path: /var/cache/deb-install-test.deb
+  register: _verify_staged_after_install
+  become: true
+
+- name: _verify | A successful install cleaned up its staged .deb
+  assert:
+    that:
+      - not _verify_staged_after_install.stat.exists
+    fail_msg: >-
+      expected /var/cache/deb-install-test.deb removed after install, still present
+
+# The assert gate must reject malformed args rather than proceed. A non-hex
+# sha256 trips the assert; rescue catches the failure so the play continues.
+- name: _verify | Call the helper with a malformed sha256
+  block:
+    - name: _verify | Install with a non-hex sha256
+      import_role:
+        name: deb_install
+        tasks_from: install
+      vars:
+        deb_install_args:
+          name: deb-install-test
+          version: "2.0-1"
+          url: "file:///tmp/deb_install_test/test_2.0-1.deb"
+          sha256: "not-a-valid-sha256"
+    - name: _verify | Reached past the assert (gate did NOT fire)
+      set_fact:
+        _verify_bad_args_passed: true
+  rescue:
+    - name: _verify | The assert gate fired as expected
+      set_fact:
+        _verify_bad_args_rejected: true
+
+- name: _verify | Malformed args were rejected, not acted on
+  assert:
+    that:
+      - _verify_bad_args_rejected | default(false)
+      - not (_verify_bad_args_passed | default(false))
+    fail_msg: >-
+      expected the assert gate to reject a non-hex sha256; rejected={{
+      _verify_bad_args_rejected | default(false) }} proceeded={{
+      _verify_bad_args_passed | default(false) }}
+
+# A download that succeeds but whose apt install fails must still clean up the
+# staged file (the always: block). A correctly-checksummed non-deb downloads
+# fine, then apt rejects it.
+- name: _verify | Build a non-deb payload to force an apt failure
+  become: true
+  block:
+    - name: _verify | Write a bogus (non-deb) file
+      copy:
+        dest: /tmp/deb_install_test/bogus.bin
+        mode: "0644"
+        content: |
+          this is not a debian archive
+    - name: _verify | Checksum the bogus file
+      command:
+        argv:
+          - sha256sum
+          - /tmp/deb_install_test/bogus.bin
+      register: _verify_bogus_sha
+      changed_when: false
+
+- name: _verify | Install the bogus deb (download ok, apt rejects it)
+  block:
+    - name: _verify | Attempt the bogus install
+      import_role:
+        name: deb_install
+        tasks_from: install
+      vars:
+        deb_install_args:
+          name: deb-install-bogus
+          version: "9.9"
+          url: "file:///tmp/deb_install_test/bogus.bin"
+          sha256: "{{ _verify_bogus_sha.stdout.split() | first }}"
+  rescue:
+    - name: _verify | The bogus install failed as expected
+      set_fact:
+        _verify_bogus_failed: true
+
+- name: _verify | Stat the bogus staged file after the failure
+  stat:
+    path: /var/cache/deb-install-bogus.deb
+  register: _verify_staged_bogus
+  become: true
+
+- name: _verify | A failed install propagated and still cleaned up
+  assert:
+    that:
+      - _verify_bogus_failed | default(false)
+      - not _verify_staged_bogus.stat.exists
+    fail_msg: >-
+      expected a failed install to propagate and remove
+      /var/cache/deb-install-bogus.deb; failed={{ _verify_bogus_failed | default(false) }}
+      staged_exists={{ _verify_staged_bogus.stat.exists }}
+
 - name: _verify | Purge the test package and clean up
   become: true
   block:
