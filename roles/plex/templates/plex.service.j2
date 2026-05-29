@@ -60,24 +60,34 @@ ExecStart=/usr/bin/podman run \
     --env "TZ={{ system_timezone }}" \
     --env PLEX_UID={{ plex_user.uid }} \
     --env PLEX_GID={{ media_group.gid }} \
+    {# The host already owns /config as plex:media, so skip the entrypoint's #}
+    {# recursive chown-on-every-start — pure cost (and mtime churn that #}
+    {# defeats snapshot dedup) on a large library's Metadata/ tree. #}
+    --env CHANGE_CONFIG_DIR_OWNERSHIP=false \
     --volume /mnt/services/plex:/config \
     --volume "/mnt/services/sqlite/plex:/config/Library/Application Support/Plex Media Server/Plug-in Support/Databases" \
-    --volume /mnt/media:/media \
+    --volume /mnt/media:/media:ro \
+    {# Lab-only library roots: these exact /mnt/data paths exist on lab. #}
+    {# On a host lacking them podman would auto-create empty root-owned #}
+    {# dirs, so these binds assume the lab data layout. #}
     --volume "/mnt/data/MacbookPro/Music/iTunes/iTunes Media/Music:/itunes:ro" \
     --volume /mnt/data/Musique/Records:/records:ro \
-    {# 0777, not 0755: the pms-docker entrypoint runs Plex as the non-root #}
-    {# PLEX_UID and chowns only /config, so a root-owned transcode mount #}
-    {# would be unwritable. tmpfs is container-local scratch, so world-write #}
-    {# is benign here (jellyfin gets away with 0755 via its uidmap root). #}
+    {# 0777, not 0755: Plex runs as the non-root PLEX_UID and the tmpfs #}
+    {# mounts root-owned (nothing chowns it), so it must be world-writable #}
+    {# for Plex to use it as transcode scratch. tmpfs is container-local, #}
+    {# so world-write is benign (jellyfin gets 0755 via its uidmap root). #}
     --mount type=tmpfs,destination=/transcode,tmpfs-size=4G,tmpfs-mode=0777 \
     --network media \
+    {# 0.0.0.0, not 127.0.0.1 like jellyfin: native Plex clients (Apple TV, #}
+    {# Roku, mobile) and GDM discovery connect straight to :32400 at the #}
+    {# ADVERTISE_IP above, bypassing nginx. nginx fronts only the web UI. #}
     --publish 0.0.0.0:{{ service_ports.plex }}:32400/tcp \
 {% if has_transcoding_acceleration %}
-    --device /dev/dri/:/dev/dri/ \
+    --device /dev/dri/renderD128:/dev/dri/renderD128 \
     --group-add={{ getent_group.render[1] | int }} \
 {% endif %}
-    --health-cmd         '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:32400/identity"]' \
-    --health-startup-cmd '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:32400/identity"]' \
+    --health-cmd         '["curl","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:32400/identity"]' \
+    --health-startup-cmd '["curl","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:32400/identity"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "300s" \
