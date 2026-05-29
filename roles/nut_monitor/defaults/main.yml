@@ -1,0 +1,5 @@
+# The upsmon system identifier (<upsname>@<host>[:<port>]) this host
+# monitors. Single source of truth for the MONITOR line in upsmon.conf and
+# the upsc queries in nut-notify, so the two can't drift out of agreement.
+# Host-overridable; defaults to the Eaton served by the co-located upsd.
+nut_monitor_ups: eaton@localhost
