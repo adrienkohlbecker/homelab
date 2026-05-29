@@ -157,7 +157,7 @@
 # breaks the circular dependency.
 - name: Compute list update command
   set_fact:
-    pihole_list_update_cmd: /usr/bin/podman run --rm --replace --name pihole_list_update --quiet --dns={{ bootstrap_dns_resolver }} --volume /mnt/services/sqlite/pihole:/etc/pihole --entrypoint "/usr/bin/php" --env ADLISTS_URL="{{ pihole_adlists | join(' ') }}" --env WHITELIST_URL="{{ pihole_whitelists | join(' ') }}" docker.io/jacklul/pihole:2024.05.0 /usr/local/sbin/pihole-updatelists --no-gravity --no-reload --env
+    pihole_list_update_cmd: /usr/bin/podman run --rm --replace --name pihole_list_update --quiet --dns={{ bootstrap_dns_resolver }} --volume /mnt/services/sqlite/pihole:/etc/pihole --entrypoint "/usr/bin/php" --env BLOCKLISTS_URL="{{ pihole_adlists | join(' ') }}" --env WHITELIST_URL="{{ pihole_whitelists | join(' ') }}" docker.io/jacklul/pihole:2025.10.0 /usr/local/sbin/pihole-updatelists --no-gravity --no-reload --env
   tags:
     - pihole
 
