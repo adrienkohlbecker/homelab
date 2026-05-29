@@ -1,0 +1,92 @@
+# Exercises the nodejs role's contract:
+# 1) node + npm are installed and runnable (binary exec, not just dpkg
+#    state); node reports major version 22.
+# 2) nodejs resolves to the NodeSource repo at the pinned priority 600 --
+#    the installed candidate (apt-cache policy's *** line) is a 22.x at 600
+#    served by mirror_apt_nodesource, so a mis-targeted pin that silently
+#    lets a distro nodejs (priority 500) win fails here.
+# 3) On the jammy apt_key path the signing key is scoped to
+#    /usr/share/keyrings/nodesource.gpg and the legacy global-trust copy at
+#    /etc/apt/trusted.gpg.d/nodesource.gpg is gone; apt update verifies the
+#    source against that scoped keyring.
+
+- name: _verify | Node is installed and runnable
+  command: node --version
+  changed_when: false
+  register: _verify_node_version
+
+- name: _verify | Node reports major version 22
+  assert:
+    that:
+      - _verify_node_version.stdout is match('v22[.]')
+    fail_msg: >-
+      Expected node v22.x, got
+      stdout={{ _verify_node_version.stdout | default('') }}
+
+- name: _verify | Bundled npm is installed and runnable
+  command: npm --version
+  changed_when: false
+  register: _verify_npm_version
+
+- name: _verify | Bundled npm reports a version
+  assert:
+    that:
+      - _verify_npm_version.stdout is match('[0-9]+[.][0-9]+[.][0-9]+')
+    fail_msg: >-
+      Expected npm to report a version like X.Y.Z, got
+      stdout={{ _verify_npm_version.stdout | default('') }}
+
+# apt cache refresh re-validates the repo against the signing key (a wrong
+# signed-by keyring surfaces as NO_PUBKEY + the module erroring). The
+# converge already refreshed once, but that gate is change-only; running it
+# here makes the key wiring an explicit assertion.
+- name: _verify | Apt cache refresh verifies the NodeSource source
+  apt:
+    update_cache: true
+  become: true
+
+- name: _verify | Apt policy for nodejs is available
+  command: apt-cache policy nodejs
+  changed_when: false
+  register: _verify_nodejs_policy
+
+- name: _verify | NodeSource v22 is the installed candidate at pin priority 600
+  assert:
+    that:
+      # `*** <ver> <prio>` marks the installed+selected candidate; assert it
+      # is a 22.x at priority 600 -- a bare '600' substring could match a
+      # version string and pass even on a no-op pin.
+      - _verify_nodejs_policy.stdout is search('[*][*][*] 22[.][0-9].* 600')
+      # ...and the 600-priority source is the NodeSource mirror, so a pin
+      # mis-targeting another origin can't satisfy the check above.
+      - mirror_apt_nodesource in _verify_nodejs_policy.stdout
+    fail_msg: >-
+      Expected nodejs candidate to be a 22.x pinned at priority 600 from
+      {{ mirror_apt_nodesource }}; got policy:
+      {{ _verify_nodejs_policy.stdout | default('') }}
+
+# Scoped signed-by keyring, jammy apt_key path only: the resolute deb822
+# path embeds the key via the module's own keyring and never wrote the
+# legacy global-trust copy, so this wiring is < 26 only.
+- name: _verify | NodeSource keyring wiring (jammy apt_key path)
+  when: ansible_distribution_major_version | int < 26
+  block:
+    - name: _verify | Stat the scoped and legacy NodeSource keyrings
+      stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/share/keyrings/nodesource.gpg
+        - /etc/apt/trusted.gpg.d/nodesource.gpg
+      register: _verify_nodesource_keyrings
+      become: true
+
+    - name: _verify | Scoped keyring present, legacy global-trust keyring absent
+      assert:
+        that:
+          - _verify_nodesource_keyrings.results[0].stat.exists
+          - not _verify_nodesource_keyrings.results[1].stat.exists
+        fail_msg: >-
+          Expected /usr/share/keyrings/nodesource.gpg present and
+          /etc/apt/trusted.gpg.d/nodesource.gpg absent; got
+          scoped={{ _verify_nodesource_keyrings.results[0].stat.exists }}
+          legacy={{ _verify_nodesource_keyrings.results[1].stat.exists }}
