@@ -1,5 +1,20 @@
+# PowerTOP auto-tune, run once per boot.
+#
+# Deliberately replaces the package-shipped /lib/systemd/system/powertop.service,
+# which omits RemainAfterExit (a spent oneshot would report inactive) and a
+# SyslogIdentifier. We add both plus a clearer Description; the helper installs
+# this at /etc/systemd/system so it shadows the packaged unit.
+#
+# --auto-tune writes power tunables across every device as root (USB autosuspend,
+# SATA ALPM, PCIe ASPM, NIC runtime PM). These are volatile sysfs writes reset on
+# reboot, so the unit re-applies them every boot (WantedBy=multi-user.target);
+# RemainAfterExit only makes the spent oneshot report "active" -- it does NOT keep
+# tuning live, and devices hot-plugged after boot are not re-tuned. If a USB
+# peripheral, disk, or NIC misbehaves after a reboot, suspect this role (opt a host
+# out with powertop_enabled: false).
 [Unit]
 Description=PowerTOP auto tune
+Documentation=man:powertop(8)
 
 [Service]
 Type=oneshot
