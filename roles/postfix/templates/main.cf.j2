@@ -74,6 +74,10 @@ smtp_sasl_tls_security_options = noanonymous
 smtp_tls_security_level = {{ 'secure' if (smtp_use_ssl | bool or smtp_use_tls | bool) else 'none' }}
 smtp_tls_secure_cert_match = nexthop
 smtp_tls_mandatory_protocols = >=TLSv1.2
+# Raise the cipher floor above the `medium` default: Mailgun supports HIGH-grade
+# ciphers, so the link carrying the fleet-wide SASL credential negotiates only
+# those. Applies at the mandatory (`secure`) level set above; inert at `none`.
+smtp_tls_mandatory_ciphers = high
 smtp_tls_loglevel = 1
 smtp_tls_wrappermode = {{ 'yes' if smtp_use_ssl | bool else 'no' }}
 # Rewrite the outbound sender to a per-host identity at the Mailgun-authorized
