@@ -6,12 +6,13 @@
 #                             then reloads. Keep the call in main.yml as a
 #                             tombstone so retired sites stay decommissioned on
 #                             fresh installs.
-#   condition                 optional bool, default true; gates the whole
-#                             call. Gates *application of changes*, not desired
-#                             state -- `condition: false` does NOT tear down an
-#                             already-enabled site (use `state: absent` for
-#                             that), it just skips this pass. Typically a
-#                             check-mode / bootstrap guard.
+#   condition                 optional bool, default true; gates *application
+#                             of changes* -- NOT the input asserts (which run
+#                             every pass) and NOT desired state: `condition:
+#                             false` does NOT tear down an already-enabled site
+#                             (use `state: absent` for that), it just skips
+#                             writing this pass. Typically a check-mode /
+#                             bootstrap guard.
 #   reload                    optional bool, default true; reload nginx after a
 #                             config change. Setting false makes the install
 #                             config-only — useful for pre-warming a site whose
