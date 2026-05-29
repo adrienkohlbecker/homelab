@@ -9,7 +9,12 @@ proxy_set_header Host              $host;
 proxy_set_header Upgrade           $http_upgrade;
 proxy_set_header Connection        $connection_upgrade;
 proxy_set_header X-Real-IP         $remote_addr;
-proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+# $remote_addr, not $proxy_add_x_forwarded_for: nginx is the edge for every
+# vhost, so the connecting peer is the real client. Replacing rather than
+# appending neutralises a client-supplied X-Forwarded-For prefix (a client
+# can't forge its apparent source IP to an upstream that trusts the leading
+# entry). The /internal/authelia auth leg already sets $remote_addr directly.
+proxy_set_header X-Forwarded-For   $remote_addr;
 proxy_set_header X-Forwarded-Proto $scheme;
 proxy_set_header X-Forwarded-Host  $host;
 proxy_set_header X-Forwarded-Port  $server_port;
