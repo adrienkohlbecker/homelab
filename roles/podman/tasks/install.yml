@@ -16,15 +16,11 @@
   tags:
     - podman
 
-- name: install | Install packages
-  apt:
-    name:
-      - man-db # to pass systemd-analyze verification
-    cache_valid_time: 3600
-  become: true
-  tags:
-    - podman
-
+# man-db is dragged in so systemd-analyze's man-page reference check
+# passes when verifying our units; python3-tomli backs the TOML
+# `validate:` on the storage.conf write below (jammy ships python 3.10,
+# whose stdlib has no tomllib).
+#
 # Older releases need iptables: netavark's iptables firewall_driver
 # shells out to /usr/sbin/iptables for --publish port forwarding, and
 # the firewall role's cohabitation-cleanup task pokes `ip filter`
@@ -37,7 +33,7 @@
 # they age out.
 - name: install | Install podman
   apt:
-    pkg: "{{ ['podman', 'aardvark-dns', 'netavark', 'passt']
+    pkg: "{{ ['podman', 'aardvark-dns', 'netavark', 'passt', 'man-db', 'python3-tomli']
              + (['iptables'] if ansible_distribution_release in ['jammy', 'noble'] else []) }}"
     policy_rc_d: 101
     cache_valid_time: 3600
@@ -417,6 +413,10 @@
     group: root
     mode: "0644"
     backup: true
+    # Parse as TOML so a jinja typo in the fuse-overlayfs branch fails
+    # here; containers/storage otherwise accepts-then-defaults a broken
+    # file and breaks rootful podman with "runroot must be set".
+    validate: python3 -c 'import tomli, sys; tomli.load(open(sys.argv[1], "rb"))' %s
   become: true
   tags:
     - podman
