@@ -25,7 +25,7 @@
     - nut_server
 
 - name: Configure nut ups.conf
-  when: not (ansible_check_mode and nut_server_apt.changed) and (ansible_distribution_major_version == "22" or ansible_distribution_major_version == "24")
+  when: not (ansible_check_mode and nut_server_apt.changed)
   template:
     src: ups.conf.j2
     dest: /etc/nut/ups.conf
@@ -33,21 +33,14 @@
     group: nut
     mode: "0640"
     backup: true
-  register: nut_server_ups_conf
-  become: true
-  tags:
-    - nut_server
-
-- name: Configure nut ups.conf
-  when: not (ansible_check_mode and nut_server_apt.changed) and (ansible_distribution_major_version != "22" and ansible_distribution_major_version != "24")
-  template:
-    src: ups.conf.j2
-    dest: /etc/nut/ups.conf
-    owner: root
-    group: nut
-    mode: "0640"
-    backup: true
-    validate: python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True, allow_unnamed_section=True).read("%s")'
+    # ups.conf's global `maxretry` precedes the first [section], so a parse
+    # needs configparser's allow_unnamed_section (Python 3.13+). jammy (3.10)
+    # / noble (3.12) lack it — skip validation there (omit) rather than
+    # duplicate the task; blacklist so future releases validate automatically.
+    validate: "{{ nut_server_ups_validate if ansible_distribution_release not in ['jammy', 'noble'] else omit }}"
+  vars:
+    nut_server_ups_validate: >-
+      python3 -c 'import configparser; configparser.ConfigParser(allow_no_value=True, allow_unnamed_section=True).read("%s")'
   register: nut_server_ups_conf
   become: true
   tags:
