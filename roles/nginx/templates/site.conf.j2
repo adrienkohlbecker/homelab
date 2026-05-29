@@ -19,7 +19,7 @@ server {
 {% endif %}
 {% endif %}
 
-  server_name         {{ nginx_site_args.subdomain }} {{ nginx_site_args.subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_site_args.subdomain }}.{{ domain}};
+  server_name         {{ nginx_site_args.subdomain }}.{{ inventory_hostname }}.{{ domain }} {{ nginx_site_args.subdomain }}.{{ domain}};
 
   # Security headers. Captured once into `security_headers` and emitted both
   # here at server scope (covering the favicon/robots locations, the Authelia
