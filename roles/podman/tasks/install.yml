@@ -260,6 +260,23 @@
   tags:
     - podman
 
+# Skip the shrink guard only when the zvol genuinely doesn't exist yet
+# (fresh host: rc=1 "dataset does not exist"). Any *other* `zfs get`
+# failure must stop the play rather than silently bypass the check below.
+- name: install | Assert the zvol size probe did not error unexpectedly
+  when:
+    - zfs_root
+    - podman_zvol_current.rc != 0
+  assert:
+    that: "'does not exist' in podman_zvol_current.stderr"
+    fail_msg: >-
+      `zfs get volsize rpool/podman` failed unexpectedly
+      (rc={{ podman_zvol_current.rc }}): {{ podman_zvol_current.stderr | trim }}.
+      Refusing to proceed -- cannot verify the current zvol size for the
+      shrink guard.
+  tags:
+    - podman
+
 - name: install | Refuse to shrink podman zvol
   when:
     - zfs_root
