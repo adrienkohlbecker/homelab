@@ -1,58 +1,19 @@
-# Query just the ipp-linux package version rather than package_facts, which
-# enumerates every installed apt package (~2s) only to read one version.
-# rc!=0 + empty stdout when not installed -> version mismatch -> install.
-- name: Check installed eaton ipp version  # noqa: command-instead-of-module
-  command:
-    argv:
-      - dpkg-query
-      - -W
-      - -f=${Version}
-      - ipp-linux
-  register: eaton_ipp_pkg
-  changed_when: false
-  failed_when: false
-  check_mode: false
+# ipp-linux ships amd64 only; the helper's tasks inherit this when: so the
+# version check, download and result fact are all skipped on the arm64 box.
+- name: Install eaton ipp
+  when: ansible_architecture == "x86_64"
+  import_role:
+    name: deb_install
+    tasks_from: install
+  vars:
+    deb_install_args:
+      name: ipp-linux
+      version: "{{ eaton_ipp_version }}"
+      url: "{{ eaton_ipp_release[ansible_architecture].url }}"
+      sha256: "{{ eaton_ipp_release[ansible_architecture].sha256 }}"
+      timeout: 30
   tags:
     - eaton_ipp
-
-- name: Install eaton ipp if needed
-  when:
-    - ansible_architecture == "x86_64"
-    - eaton_ipp_pkg.stdout != eaton_ipp_version
-  become: true
-  tags:
-    - eaton_ipp
-  block:
-
-    - name: Download ipp-linux deb
-      check_mode: false
-      get_url:
-        url: "{{ eaton_ipp_release[ansible_architecture].url }}"
-        dest: /tmp/ipp-linux.deb
-        mode: '0644'
-        owner: root
-        group: root
-        checksum: "sha256:{{ eaton_ipp_release[ansible_architecture].sha256 }}"
-        timeout: 30
-      register: eaton_ipp_download
-      retries: 3
-      delay: 5
-      until: eaton_ipp_download is succeeded
-
-    - name: Install ipp-linux
-      apt:
-        deb: /tmp/ipp-linux.deb
-      register: eaton_ipp_installed
-
-  always:
-
-    # Cleanup pairs with the check_mode: false download above so /tmp
-    # doesn't carry the deb past a --check run.
-    - name: Delete deb file
-      check_mode: false
-      file:
-        path: /tmp/ipp-linux.deb
-        state: absent
 
 - name: Enable eaton-ipp service
   import_role:
@@ -61,8 +22,8 @@
   vars:
     systemd_unit_args:
       src: eaton-ipp
-      condition: '{{ not (ansible_check_mode and (eaton_ipp_installed.changed | default(false))) and ansible_architecture == "x86_64" }}'
-      restart: '{{ eaton_ipp_installed.changed | default(false) }}'
+      condition: '{{ not (ansible_check_mode and (eaton_ipp_deb_changed | default(false) | bool)) and ansible_architecture == "x86_64" }}'
+      restart: '{{ eaton_ipp_deb_changed | default(false) | bool }}'
   tags:
     - eaton_ipp
 
