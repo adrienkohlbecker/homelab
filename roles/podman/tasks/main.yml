@@ -88,11 +88,31 @@
       # `service` task only enables/starts it -- it never installs `src`.
       src: podman.socket
       condition: "{{ not (ansible_check_mode and podman_apt.changed) }}"
-    # podman_backports_updated forces a restart when the noble upgrade
-    # flipped the binary under us — apt under policy_rc_d=101 leaves
-    # the running 3.x daemon on disk, but the new socket on
-    # /run/podman would be served by the stale process otherwise.
-      restart: "{{ (podman_service_d_override_conf_result.changed | default(false)) or (podman_socket_d_override_conf_result.changed | default(false)) or (podman_backports_updated | default(false)) }}"
+    # Only the socket drop-in (SocketGroup) restarts the socket. The LOGGING
+    # service drop-in and a binary swap change the daemon, not the socket, so
+    # they restart podman.service instead — see the task below.
+      restart: "{{ podman_socket_d_override_conf_result.changed | default(false) }}"
+  tags:
+    - podman
+
+# override_service.conf (LOGGING) and a noble binary-swap change the running
+# podman.service, not the socket — and podman.service is a long-lived active
+# unit (netdata holds a persistent connection over the API socket), so the
+# socket restart above never recycles it. Restart the daemon directly when
+# its drop-in changed or backports swapped the binary under it: apt under
+# policy_rc_d=101 leaves the running daemon on disk, so the new /run/podman
+# socket would otherwise still be served by the stale process. Skipped on a
+# fresh install (podman_apt.changed): the socket task above brings the daemon
+# up with the correct env + binary already in place, nothing stale to recycle.
+- name: Restart podman.service to pick up drop-in or binary changes
+  when:
+    - not ansible_check_mode
+    - not podman_apt.changed
+    - (podman_service_d_override_conf_result.changed | default(false)) or (podman_backports_updated | default(false))
+  systemd:
+    name: podman.service
+    state: restarted
+  become: true
   tags:
     - podman
 
