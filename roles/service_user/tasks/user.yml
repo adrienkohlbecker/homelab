@@ -22,6 +22,10 @@
 #                     a shared group (e.g. linuxserver/* images with
 #                     PGID=media recursively chown /config on startup,
 #                     and ansible flaps the gid every run otherwise).
+#   config_dir_mode   optional, default "0755"; tighten the /mnt/services/<name>
+#                     dir when it holds a secret a co-tenant group shouldn't
+#                     read (e.g. plex's Preferences.xml carries the server
+#                     token, so it uses "0750").
 #
 # The dict form prevents inter-call leakage at play-vars scope: each
 # import_role pass replaces the whole `service_user_args` value, so a
@@ -37,6 +41,7 @@
     _service_user_home_mode: "{{ service_user_args.home_mode | default(None) }}"
     _service_user_config_dir: "{{ service_user_args.config_dir | default(true) }}"
     _service_user_config_dir_group: "{{ service_user_args.config_dir_group | default(service_user_args.name) }}"
+    _service_user_config_dir_mode: "{{ service_user_args.config_dir_mode | default('0755') }}"
 
 - name: "Add group {{ _service_user_name }}"
   group:
@@ -103,5 +108,5 @@
     state: directory
     owner: "{{ _service_user_name }}"
     group: "{{ _service_user_config_dir_group }}"
-    mode: "0755"
+    mode: "{{ _service_user_config_dir_mode }}"
   become: true
