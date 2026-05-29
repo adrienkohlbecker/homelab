@@ -33,11 +33,13 @@
   until: _verify_http_nginx.status == 200
   failed_when: not (_verify_http_nginx.content is search('machineIdentifier'))
 
-# Content mounts: the library plus the read-only iTunes/Records source
-# trees must surface inside the container, and the read-only binds must
-# actually reject writes — a dropped :ro would let Plex mutate the source
-# library silently. A :ro bind is read-only even to the exec's root, so
-# the touch fails at the mount layer regardless of in-container uid.
+# Content mounts: the library plus any host-specific read-only source trees
+# (plex_extra_library_binds) must surface inside the container, and the
+# read-only binds must actually reject writes — a dropped :ro would let Plex
+# mutate the source library silently. A :ro bind is read-only even to the
+# exec's root, so the touch fails at the mount layer regardless of
+# in-container uid. The extra dests are empty on a host without the data
+# mount (box), so this degrades to checking /media there.
 - name: _verify | Content mounts are present in the container
   command:
     argv:
@@ -47,10 +49,7 @@
       - test
       - -d
       - "{{ item }}"
-  loop:
-    - /media
-    - /itunes
-    - /records
+  loop: "{{ ['/media'] + (plex_extra_library_binds | map(attribute='dest') | list) }}"
   changed_when: false
   become: true
 
@@ -62,10 +61,7 @@
       - plex
       - touch
       - "{{ item }}/.verify_ro_probe"
-  loop:
-    - /media
-    - /itunes
-    - /records
+  loop: "{{ ['/media'] + (plex_extra_library_binds | map(attribute='dest') | list) }}"
   register: _verify_ro
   changed_when: false
   failed_when: _verify_ro.rc == 0
