@@ -165,9 +165,15 @@
         gzip off;
         root /usr/lib/cgi-bin/nut;
 
-        include /etc/nginx/fastcgi_params;
+        # Hand only *.cgi requests to fcgiwrap, which exec's SCRIPT_FILENAME
+        # directly -- an unscoped pass would run whatever file an arbitrary
+        # path resolves to under the cgi-bin root. auth_request is inherited
+        # from the enclosing `location /`, so this stays Authelia-gated.
+        location ~ \.cgi$ {
+          include /etc/nginx/fastcgi_params;
 
-        fastcgi_pass  unix:/var/run/fcgiwrap.socket;
-        fastcgi_param SCRIPT_FILENAME  /usr/lib/cgi-bin/nut$fastcgi_script_name;
+          fastcgi_pass  unix:/var/run/fcgiwrap.socket;
+          fastcgi_param SCRIPT_FILENAME  /usr/lib/cgi-bin/nut$fastcgi_script_name;
+        }
   tags:
     - nut_server
