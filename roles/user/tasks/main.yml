@@ -135,7 +135,7 @@
     - user
 
 # Linger keeps {{ ansible_user_id }}'s user manager up across SSH sessions so
-# user-scope timers (e.g. podman-prune.timer) fire on schedule instead of
+# user-scope timers (e.g. podman_prune.timer) fire on schedule instead of
 # only when someone happens to be logged in. Cost: a persistent
 # `systemd --user` process and any backgrounded ssh/tmux processes survive
 # logout instead of being reaped by KillUserProcesses.
