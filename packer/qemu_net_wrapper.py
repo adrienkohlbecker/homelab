@@ -12,10 +12,10 @@ This shim does the same for packer. When passt and qemu's `-netdev stream`
 transport are both present (the noble ci-image, qemu 8.2 + passt), it starts a
 passt sidecar and rewrites the `-netdev user,...` argument to point at passt's
 unix socket, preserving the SSH host-forward so packer's communicator still
-reaches the guest at 127.0.0.1:<port>. The sidecar also runs a DNS proxy
-(--dns/--dns-forward, see _PASST_DNS) because passt -- unlike libslirp's built-in
-forwarder -- won't relay the ci-container's loopback resolver to the guest. On a
-host without passt (a dev-Mac `mise run packer:build`, or any qemu < 7.2), it
+reaches the guest at 127.0.0.1:<port>. The sidecar also advertises a routable
+resolver to the guest (--dns, see _PASST_DNS) because passt -- unlike libslirp's
+built-in forwarder -- won't relay the ci-container's loopback resolver to the
+guest. On a host without passt (a dev-Mac `mise run packer:build`, or any qemu < 7.2), it
 execs qemu unchanged, so the slirp path stays byte-for-byte identical.
 
 Wired in via `qemu_binary` in packer/qemu.pkr.hcl. The arch's real emulator is
@@ -54,15 +54,25 @@ import time
 _LOG_FH = None
 _LOG_PATH = None
 
-# A reserved TEST-NET-1 address (RFC 5737, never routed) used purely as the
-# guest's nameserver. The guest is told (DHCP, -D) to send DNS here; passt
-# intercepts traffic to --dns-forward and proxies it to the *host's* resolvers
-# (the ci-container's /etc/resolv.conf -> podman's 127.0.0.11 aardvark, which
-# resolves both nexus.lab.fahm.fr and upstream archive.ubuntu.com). Without
-# this, passt hands the guest the container's loopback 127.0.0.11 verbatim --
-# unreachable from inside the guest -- so every guest lookup fails. libslirp's
-# built-in forwarder (10.0.2.3) masked this; passt forwards nothing by default.
-_PASST_DNS = "192.0.2.1"
+# The nameserver passt advertises to the guest over DHCP (-D). This is the lab
+# pihole keepalived VIP (data/network_topology.yml -> virtual_ips.pihole): a
+# real, reachable, split-horizon resolver that answers both nexus.lab.fahm.fr
+# (internal) and archive.ubuntu.com (upstream), which the early base-image apt
+# needs before the apt mirror is rewritten to nexus.
+#
+# Why a hard-coded real IP rather than passt's default: passt defaults to
+# advertising the host's /etc/resolv.conf nameservers, but in the ci-container
+# that's podman's loopback aardvark (127.0.0.11) -- unreachable from inside the
+# guest, so every lookup fails (libslirp's built-in 10.0.2.3 forwarder masked
+# this). --dns-forward can't rescue it either: passt forwards to the host's
+# resolv.conf resolver, and it has no working path to a loopback upstream. So
+# hand the guest a routable resolver instead and let passt NAT its queries out
+# the container bridge -- the guest's DNS to <VIP>:53 then rides the same
+# container -> VIP -> pihole DNAT path the firewall already permits (roles/
+# firewall: "container -> VIP -> container" accept). The passt NIC path only
+# runs in lab CI (a dev-Mac `packer:build` execs slirp untouched), so coupling
+# to lab's resolver here is acceptable.
+_PASST_DNS = "10.123.1.224"
 
 
 def _log(msg: str) -> None:
@@ -201,13 +211,11 @@ def _start_passt(sock: str, fwds: list[tuple[str, str, str]]) -> subprocess.Pope
         "--one-off",
         "--socket",
         sock,
-        # Give the guest a resolver it can actually reach: advertise _PASST_DNS
-        # via DHCP (--dns) and have passt proxy queries sent there to the host's
-        # resolvers (--dns-forward). See _PASST_DNS for why the container's own
-        # loopback resolver can't be handed through.
+        # Advertise a routable resolver to the guest over DHCP; passt then NATs
+        # the guest's DNS queries out the container bridge to it. See _PASST_DNS
+        # for why passt's default (the container's loopback aardvark) is useless
+        # here and why --dns-forward can't bridge to it.
         "--dns",
-        _PASST_DNS,
-        "--dns-forward",
         _PASST_DNS,
         *_passt_port_args(fwds),
     ]
