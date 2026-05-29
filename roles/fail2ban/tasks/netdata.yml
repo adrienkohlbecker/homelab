@@ -12,6 +12,6 @@
     netdata_args:
       src: fail2ban.conf
       dest: go.d/fail2ban.conf
-      restart: "{{ netdata_restart }}"
+      restart: "{{ netdata_restart | default(true) }}"
   tags:
     - fail2ban
