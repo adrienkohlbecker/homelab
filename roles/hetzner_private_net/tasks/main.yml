@@ -72,7 +72,7 @@
   # and `netplan apply` accepts it with rc 0, so the typo never surfaces.
   # `netplan generate` compiles the merged YAML into systemd-networkd backend
   # files and errors loudly on a bad schema, all without reconfiguring a live
-  # link. Same idiom as roles/netplan's _verify.yml.
+  # link. Same idiom as the apply-path validation in roles/netplan/tasks/main.yml.
   command: netplan generate
   become: true
   changed_when: false
