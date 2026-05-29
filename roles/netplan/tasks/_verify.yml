@@ -233,3 +233,37 @@
     state: absent
   become: true
   changed_when: false
+
+# The rollback script refuses to restore when /run/netplan_prev is missing
+# or empty -- the guard against the "worse lockout" of leaving the box with
+# no netplan config at all. Exercise it directly (last, since it removes the
+# snapshot): with the dir gone the script must abort rc=1, log the ABORT,
+# and leave /etc/netplan untouched. Run via the script path, not the unit:
+# the ConditionPathExists gate is about the cancel-marker, not the snapshot.
+- name: _verify abort | Remove the snapshot so the rollback has nothing to restore
+  file:
+    path: /run/netplan_prev
+    state: absent
+  become: true
+  changed_when: false
+
+- name: _verify abort | Run the rollback script with no snapshot present
+  command: /usr/local/bin/netplan_rollback
+  register: netplan_verify_abort
+  changed_when: false
+  failed_when: netplan_verify_abort.rc != 1
+  become: true
+
+- name: _verify abort | Confirm it logged the abort and refused to restore
+  command: journalctl -t netplan_rollback --since "1 minute ago"
+  register: netplan_verify_abort_journal
+  changed_when: false
+  failed_when: "'ABORT: no usable' not in netplan_verify_abort_journal.stdout"
+  become: true
+
+- name: _verify abort | Confirm /etc/netplan was left untouched
+  stat:
+    path: /etc/netplan/01-netcfg.yaml
+  register: netplan_verify_abort_cfg
+  failed_when: not netplan_verify_abort_cfg.stat.exists
+  become: true
