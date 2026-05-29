@@ -41,3 +41,27 @@
     fail_msg: >-
       powertop.service did not complete cleanly; --auto-tune may have
       errored. systemctl show output: {{ powertop_show.stdout }}
+
+# Opt-out path: re-run the role with powertop_enabled=false and confirm it
+# tears the unit down. Exercising the real teardown (not a flag-gated state
+# check that never runs on the default-true fixture) is what keeps the opt-out
+# honest. Destructive, which is fine -- the test VM is discarded after _verify.
+- name: _verify | Exercise the powertop_enabled=false teardown
+  import_role:
+    name: powertop
+  vars:
+    powertop_enabled: false
+
+- name: _verify | Assert the unit was removed by the opt-out
+  stat:
+    path: /etc/systemd/system/powertop.service
+  register: powertop_unit_after
+  failed_when: powertop_unit_after.stat.exists
+  become: true
+
+- name: _verify | Confirm powertop is no longer active after opt-out  # noqa: command-instead-of-module
+  command: systemctl is-active powertop
+  register: powertop_after_active
+  changed_when: false
+  failed_when: (powertop_after_active.stdout | trim) == 'active'
+  become: true
