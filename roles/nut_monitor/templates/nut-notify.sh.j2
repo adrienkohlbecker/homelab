@@ -79,10 +79,12 @@ RUNTIME_SEC=$(awk -F': ' '$1=="battery.runtime"{print $2; exit}' <<<"$UPSC")
 STAT=${STAT//[[:cntrl:]]/}
 BATT=${BATT//[[:cntrl:]]/}
 
-# battery.runtime is seconds-to-empty; absent or non-numeric on a failed
-# query, which would trip errexit in date -- guard it.
-if [[ $RUNTIME_SEC =~ ^[0-9]+$ ]]; then
-  RUNTIME=$(date -d@"$RUNTIME_SEC" -u +%H:%M:%S)
+# battery.runtime is seconds-to-empty; the Eaton's snmp-ups reports it as a
+# float ("1341.00"), and it is absent/non-numeric on a failed query -- either
+# of which would trip errexit in date. Accept an optional fraction and drop it
+# (whole seconds are enough for HH:MM:SS); fall back to unknown otherwise.
+if [[ $RUNTIME_SEC =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+  RUNTIME=$(date -d@"${RUNTIME_SEC%.*}" -u +%H:%M:%S)
 else
   RUNTIME=unknown
 fi

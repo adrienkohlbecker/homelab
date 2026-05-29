@@ -79,7 +79,9 @@
   command: grep -qF "{{ item }}" /tmp/nut-mail.out
   loop:
     - "Status: OB DISCHRG"
-    - "Battery charge: 42"
+    - "Battery charge: 42.00"
+    # 900.00 (float, as the real Eaton reports) must still format to a real
+    # HH:MM:SS -- "unknown" here means nut-notify rejected the fractional value.
     - "Runtime: 00:15:00"
   changed_when: false
   become: true
