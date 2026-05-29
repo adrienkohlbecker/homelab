@@ -6,6 +6,6 @@
     netdata_args:
       src: smartctl.conf
       dest: go.d/smartctl.conf
-      restart: "{{ netdata_restart }}"
+      restart: "{{ netdata_restart | default(true) }}"
   tags:
     - smart

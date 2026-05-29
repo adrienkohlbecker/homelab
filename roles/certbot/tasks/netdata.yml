@@ -6,6 +6,6 @@
     netdata_args:
       src: x509check.conf.j2
       dest: go.d/x509check.conf
-      restart: "{{ netdata_restart }}"
+      restart: "{{ netdata_restart | default(true) }}"
   tags:
     - certbot

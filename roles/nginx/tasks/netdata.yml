@@ -6,6 +6,6 @@
     netdata_args:
       src: web_log.conf
       dest: go.d/web_log.conf
-      restart: "{{ netdata_restart }}"
+      restart: "{{ netdata_restart | default(true) }}"
   tags:
     - nginx
