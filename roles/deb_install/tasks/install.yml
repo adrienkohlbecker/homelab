@@ -38,7 +38,10 @@
       - "{{ deb_install_args.name }}"
   register: deb_install_query
   changed_when: false
-  failed_when: false
+  # rc 1 is dpkg-query's "no packages found" (never installed / purged) and the
+  # gate reads that as not-installed; any other non-zero is a real dpkg failure
+  # (broken db, bad args), so surface it instead of silently reinstalling.
+  failed_when: deb_install_query.rc not in [0, 1]
   check_mode: false
 
 - name: Install deb if needed
