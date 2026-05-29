@@ -1,22 +1,26 @@
 #!/usr/bin/env bash
-#MISE description="Merge <name> into master: FF when possible, --no-ff only when the notes submodule diverged; then worktree:rm <name>"
+#MISE description="Merge <name> into master: rebase its notes onto master's notes ref, FF when possible (--no-ff only if origin/main diverged); then worktree:rm <name>"
 #MISE alias="wt:merge"
 #USAGE arg "<name>" help="Branch and worktree name"
 # shellcheck disable=SC2154  # usage_name injected by mise from the #USAGE spec
 
 # Integrates the worktree branch <name> into master, keeping history linear
-# whenever it safely can:
-#   - code-only worktree, or notes commits that fast-forward notes/main: rebase
+# whenever it safely can. The worktree's notes branch is first rebased onto the
+# commit master currently records for the notes submodule (master:notes): it was
+# forked from whatever master pointed at when the worktree was created, which a
+# concurrent merge or an operator bump may have since moved past. After that
+# rebase:
+#   - code-only worktree, or notes commits that fast-forward origin/main: rebase
 #     <name> onto master and FF. Notes are FF-pushed, so no merge commit and no
 #     SHA change -> the gitlinks the parent already records stay valid as-is.
-#   - notes/main has DIVERGED (a concurrent worktree merged notes meanwhile):
-#     the notes branch can't FF, so merge it into notes/main (--no-ff) and pin
-#     master's gitlink to that merge commit via a --no-ff parent merge
-#     (--no-commit + force notes + add, so no throwaway bump commit). A merge
-#     commit appears only here -- when a merge genuinely happened.
-# Conflicts (notes-side or code) halt with set -e for manual resolution; rm
-# doesn't run. Operates from the main worktree so worktree:rm removing the
-# caller's cwd can't strand the script.
+#   - origin/main has DIVERGED past master:notes (a concurrent worktree merged
+#     notes meanwhile): the notes branch can't FF, so merge it into origin/main
+#     (--no-ff) and pin master's gitlink to that merge commit via a --no-ff
+#     parent merge (--no-commit + force notes + add, so no throwaway bump commit).
+#     A merge commit appears only here -- when a merge genuinely happened.
+# Conflicts (the notes rebase, the notes merge, or code) halt with set -e for
+# manual resolution; rm doesn't run. Operates from the main worktree so
+# worktree:rm removing the caller's cwd can't strand the script.
 set -euo pipefail
 
 repo=$(git worktree list --porcelain | awk '/^worktree / {print $2; exit}')
@@ -32,13 +36,25 @@ main_branch=$(git rev-parse --abbrev-ref HEAD)
   exit 1
 }
 
-# Classify the worktree's notes branch: none | ff (strictly ahead of notes/main)
-# | merge (diverged). Detached/agent worktrees have no <name> notes branch.
+# The commit master currently records for the notes submodule. The worktree's
+# notes branch was forked from this when the worktree was created; rebasing onto
+# its current value (below) re-bases any stale branch onto what master points at
+# now, before integrating. Empty when the repo has no notes submodule.
+master_notes=$(git rev-parse -q --verify master:notes 2>/dev/null || true)
+
+# Classify the worktree's notes branch (after rebasing it onto master:notes):
+# none | ff (linear ahead of origin/main) | merge (origin/main advanced past
+# master:notes, so diverged). Detached/agent worktrees have no <name> notes branch.
 wt_notes="$repo/$wt/notes"
 notes_action="none"
-if [ -d "$wt_notes" ] && git -C "$wt_notes" rev-parse --verify -q "$usage_name" >/dev/null; then
+if [ -n "$master_notes" ] && [ -d "$wt_notes" ] && git -C "$wt_notes" rev-parse --verify -q "$usage_name" >/dev/null; then
   git -C "$wt_notes" fetch -q origin
-  if [ "$(git -C "$wt_notes" rev-list --count origin/main.."$usage_name")" -gt 0 ]; then
+  # master:notes must be reachable in this worktree's own notes clone to rebase
+  # onto it -- clones exchange objects via origin (where it normally lives) or a
+  # direct fetch from the main checkout's notes, not a shared object store.
+  git -C "$wt_notes" fetch -q "$repo/notes" "$master_notes" 2>/dev/null || true
+  git -C "$wt_notes" rebase "$master_notes" "$usage_name"
+  if [ "$(git -C "$wt_notes" rev-list --count "$master_notes".."$usage_name")" -gt 0 ]; then
     if git -C "$wt_notes" merge-base --is-ancestor origin/main "$usage_name"; then
       notes_action="ff"
     else
