@@ -1065,6 +1065,10 @@ class QemuMachine(Machine):
     # down in stop(); these stay None/unset on the slirp path.
     _net_backend: str
     _passt_socket: Path | None
+    # Private dir holding _passt_socket, on the system tmpfs rather than the
+    # /mnt/scratch workdir -- see the _passt_socket assignment for why. None on
+    # the slirp path; torn down in _stop_passt.
+    _passt_socket_dir: tempfile.TemporaryDirectory[str] | None
     _passt_proc: asyncio.subprocess.Process | None
 
     def __init__(
@@ -1171,6 +1175,7 @@ class QemuMachine(Machine):
         # has confirmed the qemu binary exists, since the probe execs it.
         self._net_backend = resolve_net_backend(self.arch.qemu_binary)
         self._passt_socket = None
+        self._passt_socket_dir = None
         self._passt_proc = None
 
     def _workdir_parent(self) -> Path | None:
@@ -1263,11 +1268,17 @@ class QemuMachine(Machine):
             self.wan_udp_test_port = s.getsockname()[1]
 
         # On the passt backend qemu connects to the sidecar over a unix
-        # socket in the workdir. Path picked here (where the workdir
-        # exists); the sidecar itself is launched in boot() so its lifetime
-        # brackets qemu's. None on the slirp path.
+        # socket. It must NOT live in self.workdir: that's on /mnt/scratch
+        # (the ZFS qemu-image volume, sized for the multi-GB disks), where
+        # passt's listening socket immediately epoll-errors and the sidecar
+        # exits ("Error on listening Unix socket, exiting"). Give it a private
+        # dir on the system tmpfs instead -- the same constraint packer/
+        # qemu_net_wrapper.py meets via tempfile.mkdtemp(). qemu reaches it
+        # since both run in this container. Launched in boot() so its lifetime
+        # brackets qemu's; torn down in _stop_passt. None on the slirp path.
         if self._net_backend == "passt":
-            self._passt_socket = Path(self.workdir.name) / "passt.sock"
+            self._passt_socket_dir = tempfile.TemporaryDirectory(prefix="homelab-passt-", ignore_cleanup_errors=True)
+            self._passt_socket = Path(self._passt_socket_dir.name) / "passt.sock"
 
         if self.keep_vm:
             # Pick a VNC display 0..99 the same way -- qemu's vnc= syntax
@@ -1752,24 +1763,31 @@ class QemuMachine(Machine):
             await super().stop()
 
     async def _stop_passt(self) -> None:
-        """Tear down the passt sidecar. No-op on slirp / if it self-exited.
+        """Tear down the passt sidecar and remove its socket dir.
 
         --one-off makes passt quit when qemu disconnects, so by the time we
-        get here it has usually exited on its own; this is the backstop for
-        the paths where qemu was SIGKILLed without a clean disconnect.
+        get here it has usually exited on its own; the terminate/kill is the
+        backstop for the paths where qemu was SIGKILLed without a clean
+        disconnect. The socket-dir cleanup runs regardless. No-op on slirp
+        (both _passt_proc and _passt_socket_dir stay None there).
         """
         proc = self._passt_proc
-        if proc is None or proc.returncode is not None:
-            return
-        with contextlib.suppress(ProcessLookupError):
-            proc.terminate()
-        try:
-            async with asyncio.timeout(5):
-                await proc.wait()
-        except TimeoutError:
+        if proc is not None and proc.returncode is None:
             with contextlib.suppress(ProcessLookupError):
-                proc.kill()
-            await proc.wait()
+                proc.terminate()
+            try:
+                async with asyncio.timeout(5):
+                    await proc.wait()
+            except TimeoutError:
+                with contextlib.suppress(ProcessLookupError):
+                    proc.kill()
+                await proc.wait()
+        # Drop the socket's private tmpdir once passt is gone (it unlinks the
+        # socket itself on exit; this clears the parent). Runs whether or not
+        # passt had already self-exited via --one-off.
+        if self._passt_socket_dir is not None:
+            self._passt_socket_dir.cleanup()
+            self._passt_socket_dir = None
 
     async def _find_ssh_port(self) -> None:
         """Port was pre-picked in prepare(); nothing to discover at boot."""
