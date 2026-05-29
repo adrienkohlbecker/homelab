@@ -49,19 +49,11 @@
   tags:
     - nexus
 
-- name: Check for an existing nexus encryption key
-  stat:
-    path: /mnt/services/nexus/user/encryption.json
-  register: nexus_encryption_pre
-  become: true
-  tags:
-    - nexus
-
-- name: Read the existing nexus encryption key for comparison
+- name: Read any existing nexus encryption key for comparison
   slurp:
     src: /mnt/services/nexus/user/encryption.json
   register: nexus_encryption_existing
-  when: nexus_encryption_pre.stat.exists
+  failed_when: false
   become: true
   tags:
     - nexus
@@ -73,10 +65,11 @@
 # container decryptable, whereas writing a new key would arm the next restart
 # (Restart=always, reboot, crash) to load it and fail to decrypt every stored
 # secret. Compare parsed JSON so a mode/owner-only change doesn't false-trip.
-# First converge has no file yet and falls straight through to the template.
+# First converge has no file yet -- the slurp above soft-fails, so .content
+# is undefined and we fall straight through to the template.
 - name: Fail if the nexus encryption material would change in place
   when: >-
-    nexus_encryption_pre.stat.exists
+    nexus_encryption_existing.content is defined
     and (nexus_encryption_existing.content | b64decode | from_json)
         != (lookup('template', 'encryption.json.j2') | from_json)
   fail:
@@ -90,6 +83,7 @@
     - nexus
 
 - name: Configure nexus encryption
+  when: not (ansible_check_mode and nexus_user.changed)
   template:
     src: encryption.json.j2
     dest: /mnt/services/nexus/user/encryption.json
