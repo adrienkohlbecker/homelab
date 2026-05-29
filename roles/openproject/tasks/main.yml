@@ -26,6 +26,9 @@
 # nothing into the bind-mounts (postgres/app do, as 102/1000), and a +0 override
 # would collide with +1000 on the same host uid -- podman refuses to map two
 # container ids onto one host id ("container ID 0 cannot be mapped to a host ID").
+# The gidmaps follow the same shape with the image's group ids: the bundled
+# postgres *group* is gid 106 (Debian assigns it independently of the 102 uid),
+# the app group 1000.
 - name: Set up openproject_pg system user and group
   import_role:
     name: service_user
