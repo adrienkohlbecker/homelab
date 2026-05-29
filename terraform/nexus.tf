@@ -18,6 +18,29 @@ resource "nexus_blobstore_file" "default" {
   }
 }
 
+# Snapshotted blob store for the hosted (push-built) docker repos. A relative
+# path resolves under the container's /nexus-data/blobs/, i.e.
+# /mnt/services/nexus/data/blobs/hosted on the snapshotted services dataset --
+# unlike "default", whose /nexus-data/blobs/default is bind-mounted to the
+# non-snapshotted /mnt/scratch (see roles/nexus/templates/nexus.service.j2).
+# Keeping hosted artifacts on the same snapshotted dataset as the Nexus DB
+# means a snapshot restore brings repo metadata + blobs back consistently;
+# scratch-backed proxy caches just re-proxy cold, but hosted images can't be
+# re-proxied, so a scratch loss would otherwise strand the DB with dangling
+# blob references.
+resource "nexus_blobstore_file" "hosted" {
+  name = "hosted"
+  path = "hosted"
+
+  # Alert-only, like default's. Sized for the handful of CI-built images
+  # (runner image + compta) across their live tags; bump if hosted usage
+  # grows. Lives on the services dataset, which has its own ZFS quota.
+  soft_quota {
+    type  = "spaceUsedQuota"
+    limit = 20 * 1024 * 1024 * 1024 # 20 GiB
+  }
+}
+
 # Lock in the current public-read posture of the lab Nexus: the rest of
 # the homelab pulls from these proxies without basic auth, so anonymous
 # access must stay on. Codifying this means a Nexus upgrade can't reset
@@ -192,6 +215,18 @@ resource "nexus_repository_raw_proxy" "this" {
 # write_policy ALLOW (not ALLOW_ONCE) because the workflows re-push
 # :latest on every successful build. ALLOW_ONCE would reject the
 # second push.
+#
+# These ride the snapshotted "hosted" blob store (nexus_blobstore_file.hosted),
+# not the scratch-backed "default". OSS Nexus locks a repo's blob store after
+# creation (the online "Change Repository Blob Store" task is Pro-only), so
+# migrating an existing repo is a delete+recreate that starts it empty:
+#   tofu apply \
+#     -replace='nexus_repository_docker_hosted.this["homelab"]' \
+#     -replace='nexus_repository_docker_hosted.this["compta"]'
+# then re-push: dispatch the ci-image workflow (rebuilds homelab/ci) and the
+# adrienkohlbecker/compta build (re-push the version the compta role pins).
+# Orphaned blobs left in "default" are reclaimed by the blob store compact
+# task. A plain `tofu apply` cannot repoint a live repo -- it needs -replace.
 resource "nexus_repository_docker_hosted" "this" {
   for_each = toset(["homelab", "compta"])
 
@@ -210,7 +245,7 @@ resource "nexus_repository_docker_hosted" "this" {
     v1_enabled       = false
   }
   storage {
-    blob_store_name                = "default"
+    blob_store_name                = nexus_blobstore_file.hosted.name
     strict_content_type_validation = true
     write_policy                   = "ALLOW"
   }
