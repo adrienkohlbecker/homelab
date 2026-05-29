@@ -19,7 +19,8 @@ PartOf=zfs_autosnapshot.target
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
-TimeoutSec=360
+TimeoutStartSec=900
+TimeoutStopSec=150
 RestartSec=5
 Type=notify
 NotifyAccess=all
@@ -36,6 +37,7 @@ ExecStart=/usr/bin/podman run \
     --name openproject \
     --log-driver journald \
     --log-opt tag="openproject" \
+    --security-opt=no-new-privileges \
     --uidmap=0:0:65536 \
     --uidmap=+102:{{ openproject_pg_user.uid }}:1 \
     --uidmap=+1000:{{ openproject_user.uid }}:1 \
@@ -46,12 +48,30 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/openproject/assets:/var/openproject/assets \
     --publish 127.0.0.1:8070:80/tcp \
     --env OPENPROJECT_HOST__NAME=openproject.{{ inventory_hostname }}.{{ domain }} \
+    --env OPENPROJECT_HTTPS=true \
+{% if openproject_admin_password is defined %}
+    --env OPENPROJECT_SEED__ADMIN__USER__MAIL={{ root_email }} \
+    --env OPENPROJECT_SEED__ADMIN__USER__PASSWORD__RESET=false \
+    --secret=openproject_admin_password,type=env,target=OPENPROJECT_SEED__ADMIN__USER__PASSWORD \
+{% endif %}
     --secret=openproject_secret_key,type=env,target=SECRET_KEY_BASE \
-    --health-cmd         '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:80/health_checks/default"]' \
-    --health-startup-cmd '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://localhost:80/health_checks/default"]' \
+{% if openproject_smtp_password is defined %}
+    --env OPENPROJECT_EMAIL__DELIVERY__METHOD=smtp \
+    --env OPENPROJECT_SMTP__ADDRESS={{ smtp_host }} \
+    --env OPENPROJECT_SMTP__PORT={{ smtp_port }} \
+    --env OPENPROJECT_SMTP__DOMAIN={{ email_domain }} \
+    --env OPENPROJECT_SMTP__USER__NAME={{ openproject_smtp_user }} \
+    --env OPENPROJECT_SMTP__AUTHENTICATION=plain \
+    --env OPENPROJECT_SMTP__ENABLE__STARTTLS__AUTO={{ smtp_use_tls | bool }} \
+    --env OPENPROJECT_SMTP__SSL={{ smtp_use_ssl | bool }} \
+    --secret=openproject_smtp_password,type=env,target=OPENPROJECT_SMTP__PASSWORD \
+{% endif %}
+    --health-cmd         '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://127.0.0.1:80/health_checks/default"]' \
+    --health-startup-cmd '["curl","--head","--location","--fail","--silent","--show-error","--connect-timeout","1","--max-time","5","-o","/dev/null","http://127.0.0.1:80/health_checks/default"]' \
     --health-startup-interval "1s" \
     --health-startup-timeout "5s" \
     --health-start-period "100s" \
+    --tz {{ system_timezone }} \
     --stop-timeout 120 \
     docker.io/openproject/openproject:17
 ExecStop=/usr/bin/podman stop --ignore --cidfile=%t/%n.ctr-id

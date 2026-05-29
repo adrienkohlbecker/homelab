@@ -1,21 +1,19 @@
-- name: Add openproject group
-  group:
-    name: openproject
-    system: true
-  become: true
+- name: Assert openproject required inputs are set
+  assert:
+    that:
+      - openproject_secret_key is defined
+      - openproject_secret_key | length > 0
+    fail_msg: openproject_secret_key must be set (vaulted) in host/group_vars
   tags:
     - openproject
 
-- name: Add openproject user
-  user:
-    name: openproject
-    group: openproject
-    createhome: false
-    system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
-  become: true
-  register: openproject_user
+- name: Set up openproject system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: openproject
   tags:
     - openproject
 
@@ -24,36 +22,14 @@
 # + gosu dropping privileges. Bijective uidmap in the unit (+102 → openproject_pg,
 # +1000 → openproject) so files written under each bind-mount land owned by the
 # matching host user, regardless of the image's apt-assigned numbering.
-- name: Add openproject_pg group
-  group:
-    name: openproject_pg
-    system: true
-  become: true
-  tags:
-    - openproject
-
-- name: Add openproject_pg user
-  user:
-    name: openproject_pg
-    group: openproject_pg
-    createhome: false
-    system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
-  become: true
-  register: openproject_pg_user
-  tags:
-    - openproject
-
-- name: Create configuration directory
-  when: not (ansible_check_mode and openproject_user.changed)
-  file:
-    dest: /mnt/services/openproject
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
+- name: Set up openproject_pg system user and group
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: openproject_pg
+      config_dir: false
   tags:
     - openproject
 
@@ -92,6 +68,56 @@
   tags:
     - openproject
 
+- name: Fail if openproject_secret_key rotated post-bootstrap
+  fail:
+    msg: |
+      openproject_secret_key changed in vault. SECRET_KEY_BASE is the Rails
+      master key: rotating it makes already-stored encrypted data (sessions,
+      2FA/TOTP secrets, stored OAuth/SMTP credentials) permanently
+      undecryptable. The podman secret has been updated, but the running app
+      must NOT simply restart onto the new key.
+
+      Revert the change, or perform a deliberate key-rotation migration, then
+      re-run this play.
+  when: openproject_secret_key_rotated and openproject_secret_key_existed_before
+  tags:
+    - openproject
+
+- name: Create openproject admin password secret
+  when: openproject_admin_password is defined
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: openproject_admin_password
+      data: "{{ openproject_admin_password }}"
+  tags:
+    - openproject
+
+- name: Fail if openproject_admin_password rotated post-bootstrap
+  fail:
+    msg: |
+      openproject_admin_password changed in vault. It only takes effect when
+      OpenProject first seeds the admin account; the running instance still
+      has the old password. Change it in-app (Administration > Users) or via
+      podman exec, then re-run this play.
+  when: (openproject_admin_password_rotated | default(false)) and (openproject_admin_password_existed_before | default(false))
+  tags:
+    - openproject
+
+- name: Create openproject smtp password secret
+  when: openproject_smtp_password is defined
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: openproject_smtp_password
+      data: "{{ openproject_smtp_password }}"
+  tags:
+    - openproject
+
 - name: Install openproject service
   import_role:
     name: systemd_unit
@@ -103,52 +129,6 @@
   tags:
     - openproject
 
-# Pre-stage chown'd layers so the unit's `systemctl start` doesn't blow
-# through TimeoutSec doing the per-file ID-mapped copy on first extraction.
-# The +N:M:1 uidmap-override pattern doesn't compose with idmapped mounts,
-# so podman falls back to a copy regardless of kernel support; we just move
-# the cost out of the deadline. Image name is read back from the just-
-# installed unit so it stays in sync with the template.
-- name: Detect openproject unit image
-  when: not ansible_check_mode
-  extract_podman_image:
-    name: openproject
-  register: openproject_unit_image
-  become: true
-  tags:
-    - openproject
-
-- name: Pre-pull openproject image
-  when: not ansible_check_mode
-  containers.podman.podman_image:
-    name: "{{ openproject_unit_image.images[0] }}"
-  register: openproject_image_pull
-  become: true
-  tags:
-    - openproject
-
-- name: Pre-stage openproject chown'd layers
-  when:
-    - not ansible_check_mode
-    - openproject_image_pull.changed
-  shell: |
-    set -euo pipefail
-    podman create --replace --name openproject-prestage \
-      --uidmap=0:0:65536 \
-      --uidmap=+102:{{ openproject_pg_user.uid }}:1 \
-      --uidmap=+1000:{{ openproject_user.uid }}:1 \
-      --gidmap=0:0:65536 \
-      --gidmap=+106:{{ openproject_pg_user.group }}:1 \
-      --gidmap=+1000:{{ openproject_user.group }}:1 \
-      {{ openproject_unit_image.images[0] }} true
-    podman rm openproject-prestage
-  args:
-    executable: /bin/bash
-  changed_when: true
-  become: true
-  tags:
-    - openproject
-
 - name: Enable openproject service
   import_role:
     name: systemd_unit
@@ -157,7 +137,7 @@
     systemd_unit_args:
       src: openproject
       condition: "{{ not (ansible_check_mode and (openproject_service_result.changed or openproject_user.changed or openproject_pg_user.changed)) }}"
-      restart: "{{ openproject_service_result.changed or openproject_secret_key_rotated }}"
+      restart: "{{ openproject_service_result.changed or openproject_secret_key_rotated or (openproject_admin_password_rotated | default(false)) or (openproject_smtp_password_rotated | default(false)) }}"
   tags:
     - openproject
 
@@ -169,6 +149,8 @@
     nginx_site_args:
       subdomain: openproject
       proxy_pass: http://127.0.0.1:8070/
+      client_max_body_size: 256m
+      auth: required
       csp_additional: "img-src secure.gravatar.com {{ nginx_csp_default }}"
   tags:
     - openproject
