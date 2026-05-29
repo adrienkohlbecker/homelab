@@ -329,16 +329,17 @@
   tags:
     - podman
 
-# Rootless storage lives on the same zvol under /rootless/$USER. Sticky-bit
-# 1777 (like /tmp) lets each user create and own their own subdir without
-# being able to touch anyone else's. The mode is load-bearing — a user
-# needs write+traverse on the parent to create its own store — so it can't
-# be tightened. The residual first-touch risk (a hostile local account
-# pre-creating another user's not-yet-existing subdir) is out of scope:
-# every rootless consumer is an ansible-provisioned service user, on
-# single-operator hosts with no untrusted local logins.
+# Rootless storage lives under /var/lib/containers/rootless/$USER -- on the
+# podman zvol where zfs_root, else on the plain root filesystem. Created on
+# every podman host (not just zfs_root) so storage.conf's rootless_storage_path
+# always has its parent. Sticky-bit 1777 (like /tmp) lets each user create
+# and own their own subdir without being able to touch anyone else's. The
+# mode is load-bearing — a user needs write+traverse on the parent to create
+# its own store — so it can't be tightened. The residual first-touch risk (a
+# hostile local account pre-creating another user's not-yet-existing subdir)
+# is out of scope: every rootless consumer is an ansible-provisioned service
+# user, on single-operator hosts with no untrusted local logins.
 - name: install | Create rootless storage parent
-  when: zfs_root
   file:
     path: /var/lib/containers/rootless
     state: directory
@@ -364,8 +365,15 @@
 # Lives in install.yml (not main.yml) so consumers that import only
 # `tasks_from: install` (homeassistant/healthchecks/nexus _setup.yml)
 # also get the storage config.
+#
+# Runs on every podman host, not just zfs_root: graphroot is
+# /var/lib/containers/storage regardless of whether that path is the podman
+# zvol (zfs_root) or the plain root filesystem, and the fuse-overlayfs shim
+# is a kernel<5.19 concern (not a ZFS one) -- a non-zfs host on an old kernel
+# running a --uidmap image would still hit the chown-by-maps lchown(dev/
+# console) EIO without it. The zvol create/mount tasks above stay gated on
+# zfs_root (the backing); the storage config itself is universal.
 - name: install | Configure podman storage
-  when: zfs_root
   vars:
     # Native overlay learned idmapped-mount support in kernel 5.19.
     # On older kernels (jammy stock = 5.15) a --uidmap container start
