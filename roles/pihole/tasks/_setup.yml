@@ -3,6 +3,16 @@
     name: _test
     tasks_from: nginx
 
+# pihole's vhost is auth: required (authelia forward-auth). Stand up the
+# gate-mode stub (returns 401 on the auth-request endpoint) so _verify can
+# prove the /admin/ gate bounces an unauthenticated request to the portal.
+- name: _setup | Install authelia stub in gate mode
+  import_role:
+    name: _test
+    tasks_from: authelia_stub
+  vars:
+    authelia_stub_mode: gate
+
 # netdata is x86_64-only (no arm64 build of the pinned 1.46.x — see
 # roles/netdata/tasks/main.yml). pihole itself doesn't depend on netdata
 # (its go.d collector registration is disabled), so skip the install on
