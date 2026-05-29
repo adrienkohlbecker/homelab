@@ -175,10 +175,52 @@
   tags:
     - pihole
 
+# Re-import the adlist/whitelist set only when our *configured* inputs
+# change, not on every converge: record them to a sentinel and gate the
+# trigger on it. Refreshing upstream list *content* is the weekly timer's
+# job (above) plus pi-hole's own in-container gravity cron; the
+# converge-time trigger exists to apply an operator adlist edit
+# immediately, so input-keyed gating is both correct and idempotent (the
+# previous stdout-substring changed_when was fragile -- e.g. against the
+# --quiet output -- and re-ran the update container every converge).
+- name: Record pihole list-update inputs
+  copy:
+    content: "{{ (pihole_adlists + pihole_whitelists) | to_nice_yaml }}"
+    dest: /mnt/services/pihole/updatelists_inputs
+    owner: "{{ pihole_user.uid }}"
+    group: "{{ pihole_user.group }}"
+    mode: "0644"
+    backup: true
+  register: pihole_list_inputs
+  become: true
+  tags:
+    - pihole
+
 - name: Trigger list update
+  when: pihole_list_inputs.changed
   command: "{{ pihole_list_update_cmd }}"
   register: pihole_list_update
-  changed_when: '["inserted", "enabled", "disabled", "migrated"] | select("in", pihole_list_update.stdout) | length > 0'
+  changed_when: true
+  become: true
+  tags:
+    - pihole
+
+# Gravity-rebuild ownership: pi-hole's in-container cron rebuilds gravity
+# on its own schedule and the weekly timer refreshes the adlist/whitelist
+# rows; this converge-time rebuild fires only when the operator's inputs
+# just changed (above), so a freshly-edited adlist set takes effect
+# without waiting for either schedule. The Enable task's `state: restarted`
+# blocks on --sdnotify=healthy, so a same-converge restart leaves the
+# container healthy before we reach here; the wait still guards the case
+# where the container is mid-restart for an unrelated reason.
+- name: Wait for pihole to report healthy before the gravity rebuild
+  when: pihole_list_update.changed
+  command: /usr/bin/podman healthcheck run pihole
+  register: pihole_health
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: pihole_health.rc == 0
   become: true
   tags:
     - pihole
@@ -187,7 +229,7 @@
   when: pihole_list_update.changed
   command: /usr/bin/podman exec pihole pihole -g
   register: pihole_gravity_update
-  changed_when: true # unclear how to parse the output
+  changed_when: pihole_list_update.changed
   become: true
   tags:
     - pihole
