@@ -80,6 +80,46 @@
           scoped={{ _verify_apt_source_keyrings.results[0].stat.exists }}
           legacy={{ _verify_apt_source_keyrings.results[1].stat.exists }}
 
+# Negative path: a key_id that does not match the fetched key must fail the
+# converge, not be trusted via TOFU. Re-converge a throwaway probe off the
+# consumer's real key (from the tombstone args, which carry the full
+# add-args) with a bogus key_id; the inner rescue records whether it failed,
+# and the assert outside the rescue flips a non-failure into a test failure
+# (a plain assert inside the rescue would itself be swallowed). jammy checks
+# via apt_key's id:, resolute via the gpg fingerprint assert. The probe
+# fails at the key step before writing a source; the VM is torn down anyway.
+- name: _verify | Negative fingerprint test ({{ apt_source_tombstone_args.name | default('disabled') }})
+  when: apt_source_tombstone_args is defined
+  block:
+    - name: _verify | Converge a probe source with a wrong key_id
+      block:
+        - name: _verify | Import apt_source with a bogus key_id (expected to fail)
+          import_role:
+            name: apt_source
+          vars:
+            apt_source_args:
+              name: apt_source_badkey_probe
+              key_id: "0000000000000000000000000000000000000000"
+              key_url: "{{ apt_source_tombstone_args.key_url }}"
+              uris: "{{ apt_source_tombstone_args.uris }}"
+              suites: "{{ apt_source_tombstone_args.suites }}"
+        - name: _verify | Record that the bogus key_id was accepted
+          set_fact:
+            _verify_badkey_accepted: true
+      rescue:
+        - name: _verify | Record that the bogus key_id was rejected
+          set_fact:
+            _verify_badkey_accepted: false
+
+    - name: _verify | A wrong key_id must fail the converge, not be trusted
+      assert:
+        that:
+          - not _verify_badkey_accepted
+        fail_msg: >-
+          apt_source accepted a key_id that does not match the key at
+          {{ apt_source_tombstone_args.key_url }} -- the fingerprint/id check
+          is not firing (the key would be trusted via TOFU).
+
 # Tombstone path (jammy fixture only; resolute has no test image): when the
 # consumer passes apt_source_tombstone_args, exercise state: absent as the
 # final _verify step on the consumer's own source. The present-contract
