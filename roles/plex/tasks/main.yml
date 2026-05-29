@@ -23,9 +23,11 @@
       name: plex
       extra_groups: [ media ]
       config_dir_group: media
-      # Preferences.xml under /config holds the server token; keep it out
-      # of reach of other media-group co-tenants.
-      config_dir_mode: "0750"
+      # Preferences.xml under /config holds the server token; 0700 keeps it
+      # out of reach of the media-group co-tenants (transmission, the arr
+      # stack) that 0750 would let traverse the dir. Plex runs as the owning
+      # plex uid, so owner-only access is all the container needs.
+      config_dir_mode: "0700"
   tags:
     - plex
 
