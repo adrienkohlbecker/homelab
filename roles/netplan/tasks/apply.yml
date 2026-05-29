@@ -75,10 +75,14 @@
   delay: 3
 
 - name: Touch cancel-marker so the timer no-ops when it fires
-  # Belt: even if the timer fires between this and the stop below
-  # (worst case: wait_for_connection's 65 s + the reap's ≤15 s = 80 s,
-  # under the timer's 90 s), the script reads /run/netplan_keep and exits
-  # cleanly.
+  # Belt: even if the timer fires between this touch and the stop below,
+  # the marker is now present, so netplan_rollback.service's
+  # ConditionPathExists skips the rollback. The race window stays inside
+  # the timer's 90 s: from arming to here is reset_connection +
+  # wait_for_connection (≤65 s) + the async reap, and the reap is capped
+  # by the apply's `async: 30` (it usually returns in ~1-2 s, not the full
+  # 15 s the retries allow) -- comfortably under 90 s even allowing for the
+  # connection-reset overhead the 65 s figure omits.
   file:
     path: /run/netplan_keep
     state: touch

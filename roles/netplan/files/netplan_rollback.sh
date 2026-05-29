@@ -1,21 +1,15 @@
 #!/bin/bash
 # Netplan auto-rollback script invoked by netplan_rollback.service.
-# The corresponding .timer fires ~90s after a safe-apply arms it.
-# If the apply succeeded, ansible touches /run/netplan_keep before
-# the timer fires; we then exit without rolling back. Otherwise we
-# restore /run/netplan_prev (snapshot taken pre-template) over
-# /etc/netplan and re-apply.
+# The corresponding .timer fires ~90s after a safe-apply arms it. If the
+# apply succeeded, the apply path touches /run/netplan_keep and the unit's
+# ConditionPathExists=!/run/netplan_keep skips this script entirely;
+# reaching here means the marker is absent, so restore /run/netplan_prev
+# (snapshot taken pre-template) over /etc/netplan and re-apply.
 set -euo pipefail
 
 # Absolute path: a oneshot inherits only systemd's default PATH, and this
 # is the one script that must not fail to find netplan on the SSH-dead path.
 netplan=/usr/sbin/netplan
-
-if [ -f /run/netplan_keep ]; then
-  rm -f /run/netplan_keep
-  logger -t netplan_rollback "cancelled — apply confirmed OK"
-  exit 0
-fi
 
 # Refuse to touch /etc/netplan unless we have a non-empty snapshot to
 # restore. A missing OR empty snapshot (tmpfs wiped, snapshot died mid-
