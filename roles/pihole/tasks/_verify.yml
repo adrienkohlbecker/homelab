@@ -25,3 +25,47 @@
       (00:00:5e:00:01:<vrid>) on a vrrp.<vrid> child of eth0. Without
       them the VIP shares the host's eth0 MAC and UniFi's per-MAC client
       tracker flips the host's client record to the pihole IP.
+
+- name: _verify | Container reports healthy
+  command: /usr/bin/podman healthcheck run pihole
+  register: pihole_verify_health
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: pihole_verify_health.rc == 0
+  become: true
+
+- name: _verify | FTL answers DNS for its own canonical name
+  command: /usr/bin/podman exec pihole getent hosts pi.hole
+  register: pihole_verify_local
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: pihole_verify_local.rc == 0
+  become: true
+
+# Resolves the split-horizon override injected via
+# FTLCONF_misc_dnsmasq_lines (box.fahm.fr -> the host's external_ips.box).
+# Fails the harness if that env-driven dnsmasq config didn't take.
+- name: _verify | Split-horizon override resolves via FTLCONF_misc_dnsmasq_lines
+  command: /usr/bin/podman exec pihole getent hosts box.fahm.fr
+  register: pihole_verify_splithorizon
+  changed_when: false
+  failed_when: external_ips.box not in pihole_verify_splithorizon.stdout
+  become: true
+
+- name: _verify | Admin UI answers on the loopback publish
+  uri:
+    url: http://127.0.0.1:{{ service_ports.pihole }}/admin/
+    status_code: [200, 301, 302]
+  register: pihole_verify_admin
+  retries: 30
+  delay: 2
+  until: pihole_verify_admin.status in [200, 301, 302]
+
+- name: _verify | The weekly list-update timer is enabled
+  systemd:
+    name: pihole_list_update.timer
+  register: pihole_verify_timer
+  failed_when: pihole_verify_timer.status.UnitFileState != 'enabled'
+  become: true
