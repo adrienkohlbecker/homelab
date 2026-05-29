@@ -49,6 +49,11 @@
 # "Eaton Notification/Alarms Broadcast"; IPP polls the UPS over SNMP
 # (UDP 161/162), so the UDP-4679-IN broadcast path isn't load-bearing
 # here.
+#
+# Co-tenant on the same UPS: roles/nut_server runs the snmp-ups driver
+# polling this Eaton over the same SNMP v1/`public` community (see
+# roles/nut_server/templates/ups.conf.j2). Two pollers per host is
+# deliberate; keep SNMP changes here in step with that role.
 - name: Configure nginx
   import_role:
     name: nginx
