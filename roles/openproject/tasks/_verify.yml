@@ -1,0 +1,46 @@
+---
+# Ownership-of-uidmap-target checks. These catch a regression in the
+# bijective +102/+1000 uidmap (the bundled postgres/app internal users
+# landing on the wrong host uid, breaking ZFS replication portability).
+- name: _verify | Openproject pgdata dir is owned by openproject_pg
+  stat:
+    path: /mnt/services/openproject/pgdata
+  register: _verify_pgdata
+  failed_when: >-
+    not _verify_pgdata.stat.exists
+    or _verify_pgdata.stat.pw_name != 'openproject_pg'
+  become: true
+
+- name: _verify | Openproject assets dir is owned by openproject
+  stat:
+    path: /mnt/services/openproject/assets
+  register: _verify_assets
+  failed_when: >-
+    not _verify_assets.stat.exists
+    or _verify_assets.stat.pw_name != 'openproject'
+  become: true
+
+- name: _verify | Openproject answers /health_checks/default on its loopback port
+  uri:
+    url: http://127.0.0.1:8070/health_checks/default
+    status_code: 200
+    timeout: 10
+  register: _verify_health
+  retries: 60
+  delay: 5
+  until: _verify_health.status == 200
+  become: true
+
+# Confirm the vhost refuses unauthenticated requests (auth: required wires
+# Authelia's auth_request). In test (no Authelia upstream on box) the
+# auth_request fails with 5xx; in prod it 302-redirects to auth.<domain>.
+# Either way the gate is engaged -- a config drift dropping auth would proxy
+# straight through to OpenProject's own login and return 200/302.
+- name: _verify | Openproject vhost refuses unauthenticated requests
+  uri:
+    url: https://localhost/
+    validate_certs: false
+    follow_redirects: none
+    headers:
+      Host: "openproject.{{ inventory_hostname }}.{{ domain }}"
+    status_code: [ 302, 401, 403, 500, 502, 503 ]
