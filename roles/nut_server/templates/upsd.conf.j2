@@ -19,9 +19,11 @@
 # the data fresh within the normal 15 second interval.  Watch the syslog
 # for notifications from upsd about staleness.
 
-# Raised from the 15s default: the snmp-ups poll over the network can
-# briefly exceed 15s (snmp_retries=5), and a stale mark drops the UPS for
-# upsmon/HA. 30s absorbs a slow cycle without masking a genuinely dead driver.
+# Raised from the 15s default: a slow snmp-ups poll over the network can briefly
+# exceed 15s -- with the driver's default snmp_retries=5 (x ~1s timeout) a lossy
+# link stretches a single poll -- and a stale mark drops the UPS for upsmon/HA.
+# 30s absorbs that without masking a genuinely dead driver. (retries/timeout are
+# left at their snmp-ups defaults; ups.conf doesn't pin them.)
 MAXAGE 30
 
 # =======================================================================
