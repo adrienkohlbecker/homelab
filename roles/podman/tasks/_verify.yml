@@ -1,0 +1,72 @@
+# Functional proof that podman's rootless network connector is pasta
+# (default_rootless_network_cmd, set in install.yml) and that it actually
+# wires a container's network -- not a stat of containers.conf, which
+# would only echo back what install.yml just wrote. pasta is a
+# rootless-only connector, so this exercises it as the box fixture's
+# rootless-capable login user (vagrant); a successful rootless container
+# start is itself the proof the connector works, since podman errors out
+# rather than silently falling back when the configured connector is
+# missing or broken. The process check then pins that the connector is
+# pasta specifically, not the slirp4netns it replaced.
+
+- name: _verify | Resolve the connection user uid for XDG_RUNTIME_DIR
+  getent:
+    database: passwd
+    key: "{{ ansible_user_id }}"
+
+- name: _verify | Confirm the pasta connector binary runs
+  command: pasta --version
+  changed_when: false
+
+- name: _verify | Prove pasta backs a rootless container with egress wired
+  environment:
+    XDG_RUNTIME_DIR: /run/user/{{ ansible_facts.getent_passwd[ansible_user_id][1] }}
+  block:
+    - name: _verify | Pull a tiny image through the Nexus mirror
+      command: podman pull docker.io/library/busybox
+      changed_when: false
+
+    # Default network -> podman invokes the configured rootless connector.
+    # Container named without "pasta"/"slirp" so the pgrep -f matches below
+    # hit the connector process, never this container's conmon argv.
+    - name: _verify | Start a rootless container on the default network
+      command: podman run -d --replace --name net_verify docker.io/library/busybox sleep 60
+      changed_when: true
+
+    - name: _verify | Count the pasta connector helper
+      command: pgrep -u {{ ansible_user_id }} -c -f pasta
+      register: _verify_pasta_count
+      changed_when: false
+      # pgrep -c exits 1 (and prints 0) when there are no matches; the
+      # assert below is the real gate, so don't fail on the empty count.
+      failed_when: false
+
+    - name: _verify | Count any leftover slirp4netns helper
+      command: pgrep -u {{ ansible_user_id }} -c -f slirp4netns
+      register: _verify_slirp_count
+      changed_when: false
+      failed_when: false
+
+    - name: _verify | Read the container's routing table
+      command: podman exec net_verify ip route
+      register: _verify_container_route
+      changed_when: false
+
+    - name: _verify | Assert pasta (not slirp4netns) backs the container with egress wired
+      assert:
+        that:
+          - _verify_pasta_count.stdout | int > 0
+          - _verify_slirp_count.stdout | int == 0
+          - '"default" in _verify_container_route.stdout'
+        fail_msg: >-
+          Expected pasta to back the rootless container with a default
+          route. pasta procs={{ _verify_pasta_count.stdout }},
+          slirp4netns procs={{ _verify_slirp_count.stdout }},
+          container routes={{ _verify_container_route.stdout }}.
+  always:
+    - name: _verify | Remove the net-verify container
+      environment:
+        XDG_RUNTIME_DIR: /run/user/{{ ansible_facts.getent_passwd[ansible_user_id][1] }}
+      command: podman rm -f net_verify
+      changed_when: false
+      failed_when: false
