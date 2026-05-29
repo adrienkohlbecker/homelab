@@ -15,28 +15,63 @@
   tags:
     - ntp
 
+# policy_rc_d 101 suppresses the postinst auto-start so chronyd first
+# comes up under the NTS config written below, never the stock
+# unauthenticated-pool config. Installing chrony also displaces
+# systemd-timesyncd (it ends up masked, or removed during the
+# jammy→noble flip), so this role doesn't manage timesyncd explicitly.
+# cache_valid_time is safe here:
+# on jammy the backports upgrade above just refreshed the cache and
+# already pulled chrony to noble (so this is a no-op), and on noble the
+# native candidate is stable.
 - name: Install chrony
   apt:
     pkg:
       - chrony
     cache_valid_time: 3600
+    policy_rc_d: 101
   register: ntp_chrony_apt
   become: true
   tags:
     - ntp
 
-# Restart on a backports upgrade so the running chronyd picks up the
-# noble binary after a jammy→noble flip; otherwise just ensure it's
-# started + enabled (and leave a healthy daemon undisturbed).
-# ntp_backports_updated is set by the backports role from
-# `backports_name: ntp`, registering whether the apt upgrade actually
-# moved chrony forward.
-- name: Start chrony
+# No validate: chronyd is AppArmor-confined to /etc/chrony/ (see
+# /etc/apparmor.d/usr.sbin.chronyd), so `chronyd -p` can't read ansible's
+# temp file and would fail every render. The template carries no jinja
+# interpolation, so there's no syntax surface a parser would catch.
+- name: Configure chrony for NTS-only time sync
+  when: not (ansible_check_mode and ntp_chrony_apt.changed)
+  template:
+    src: chrony.conf.j2
+    dest: /etc/chrony/chrony.conf
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  register: ntp_chrony_conf
+  become: true
+  tags:
+    - ntp
+
+- name: Enable chrony
   when: not (ansible_check_mode and ntp_chrony_apt.changed)
   systemd:
     name: chrony
     enabled: true
-    state: '{{ "restarted" if (ntp_backports_updated | default(false)) else "started" }}'
+  become: true
+  tags:
+    - ntp
+
+# Restart (not just start) when the backports upgrade moved chrony to the
+# noble binary, or when the NTS config above changed, so the running
+# chronyd picks up the new binary/config; otherwise just ensure it's up,
+# leaving a healthy daemon undisturbed. ntp_backports_updated is the bool
+# the backports role records from backports_args.name: ntp.
+- name: Start chrony
+  when: not (ansible_check_mode and ntp_chrony_apt.changed)
+  systemd:
+    name: chrony
+    state: '{{ "restarted" if (ntp_backports_updated or ntp_chrony_conf.changed) else "started" }}'
   become: true
   tags:
     - ntp

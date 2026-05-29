@@ -1,0 +1,33 @@
+# {{ ansible_managed }} -- source: roles/ntp/templates/chrony.conf.j2
+# NTS-only time sync. Every source is NTS-authenticated, so a host on a
+# hostile network segment can't be clock-skewed -- which would otherwise
+# undermine TLS validity windows, TOTP, Kerberos, and log-timestamp
+# integrity. The GnuTLS stack in ntp_backport_packages is pinned
+# specifically to make this work.
+#
+# Ubuntu's stock unauthenticated pools and the DHCP-advertised
+# `sourcedir /run/chrony-dhcp` are deliberately dropped: both accept
+# unauthenticated upstreams and would reopen the skew vector (a rogue
+# DHCP server could inject a malicious NTP source). Add further NTS
+# sources under /etc/chrony/conf.d/ rather than editing this file.
+
+confdir /etc/chrony/conf.d
+
+server time.cloudflare.com iburst nts
+server ptbtime1.ptb.de iburst nts
+server nts.netnod.se iburst nts
+
+keyfile /etc/chrony/chrony.keys
+driftfile /var/lib/chrony/chrony.drift
+ntsdumpdir /var/lib/chrony
+logdir /var/log/chrony
+maxupdateskew 100.0
+rtcsync
+
+# Step (not slew) the clock on the first 3 updates when off by >1s. Also
+# lets a freshly-booted host with a wrong RTC correct enough for NTS-KE
+# certificate validation to succeed on the next attempt.
+makestep 1 3
+
+# TAI-UTC offset + leap seconds from the system tz database.
+leapsectz right/UTC
