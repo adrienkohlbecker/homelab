@@ -1,5 +1,12 @@
 [Unit]
 Description=Netplan auto-rollback (fires 90s after a safe-apply if SSH never came back)
+# The apply path touches /run/netplan_keep once it confirms SSH came back.
+# Gating the cancel here (rather than in the script) means a fired-but-
+# cancelled timer is recorded as a clean Condition skip, not a run that
+# did nothing — so the journal distinguishes "rolled back" from "confirmed
+# OK" without the script having to. The apply path clears any stale marker
+# before arming, so this can't suppress a genuine rollback.
+ConditionPathExists=!/run/netplan_keep
 
 [Service]
 Type=oneshot
@@ -7,5 +14,10 @@ Type=oneshot
 # operator (and _verify) can tell the rollback actually ran, instead
 # of it reverting to inactive — indistinguishable from "never fired".
 RemainAfterExit=yes
+# Type=oneshot disables the start timeout by default (TimeoutStartSec
+# defaults to infinity), so a wedged `netplan apply` inside the rollback
+# would hang the unit forever on the one path with no SSH to intervene.
+# Bound it; 120s comfortably exceeds a healthy apply.
+TimeoutStartSec=120
 SyslogIdentifier=%N
 ExecStart=/usr/local/bin/netplan_rollback

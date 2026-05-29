@@ -205,3 +205,49 @@
     mode: preserve
   become: true
   changed_when: false
+
+# The cancel path is the *normal* outcome of every prod apply, but the E2E
+# above only exercises the failure path. Assert the systemd-level cancel
+# gate directly: with /run/netplan_keep present, starting the rollback unit
+# must be skipped by ConditionPathExists, never reaching the restore. An
+# inverted condition would roll a healthy box back to the prior config.
+- name: _verify cancel | Reset the rollback service to a clean inactive state
+  # The E2E rollback left it active (exited); a fresh start is what
+  # re-evaluates the condition, so clear that state first.
+  systemd:
+    name: netplan_rollback.service
+    state: stopped
+  become: true
+
+- name: _verify cancel | Place the cancel-marker
+  file:
+    path: /run/netplan_keep
+    state: touch
+    mode: "0600"
+  become: true
+
+- name: _verify cancel | Start the rollback unit with the cancel-marker present
+  # A condition-skipped start returns success and leaves the unit inactive,
+  # so the module reports a clean no-op rather than rolling anything back.
+  systemd:
+    name: netplan_rollback.service
+    state: started
+  changed_when: false
+  become: true
+
+- name: _verify cancel | Confirm the unit was condition-skipped, not run
+  systemd:
+    name: netplan_rollback.service
+  register: netplan_verify_cancel
+  changed_when: false
+  failed_when: >-
+    netplan_verify_cancel.status.ConditionResult != "no"
+    or netplan_verify_cancel.status.ActiveState != "inactive"
+  become: true
+
+- name: _verify cancel | Clear the cancel-marker
+  file:
+    path: /run/netplan_keep
+    state: absent
+  become: true
+  changed_when: false
