@@ -1,3 +1,13 @@
 #cloud-config
+# Render /etc/hosts (incl. `127.0.1.1 test2`, the meta-data local-hostname) so
+# sudo/PAM's name lookup during the first `become` resolves locally instead of
+# hitting DNS. The minimal variant is absent from data/network_topology.yml, so
+# passt assigns it off the container's default interface with the passt gateway
+# as its only resolver -- a slow/flaky NAT-DNS path that intermittently blew
+# mitogen's 10s become-bootstrap deadline ("connection timed out on host
+# test2", test2 being this guest's own hostname). box/lab/pug avoid this via
+# packer's etc_hosts seeding + topology addressing; the vanilla cloud image
+# has neither, so seed it here.
+manage_etc_hosts: true
 ssh_authorized_keys:
   - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIN1YdxBpNlzxDqfJyw/QKow1F+wvG9hXGoqiysfJOn5Y vagrant insecure public key
