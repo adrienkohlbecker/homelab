@@ -196,14 +196,36 @@
   tags:
     - podman
 
+# 0755 (up from the 0700 the dir is first created with) lets netdata's
+# disk-space collector traverse to the mountpoint. The value is
+# load-bearing on zfs_root hosts: this task runs before the zvol mount,
+# so on the second converge it sees the zvol's ext4 root, which mkfs
+# makes 0755 — matching that keeps the task idempotent. Tightening it
+# (e.g. 0711) fights the mkfs default and the task never converges.
 - name: install | Update containers permissions for netdata disk space monitoring
   file:
     dest: /var/lib/containers
     state: directory
     owner: root
     group: root
-    mode: "0755" # defaults to 0700
+    mode: "0755"
   become: true
+  tags:
+    - podman
+
+# Required input — set per-host in group_vars (prod 50GB, test 15GB),
+# not defaulted in vars/main.yml per the repo's required-input rule. An
+# unset value would sail through the shrink-guard (`'' | int` == 0) and
+# fail the zvol create below with an opaque empty-volsize error.
+- name: install | Assert podman_zvol_size is set
+  when: zfs_root
+  assert:
+    that:
+      - podman_zvol_size is defined
+      - (podman_zvol_size | int) > 0
+    fail_msg: >-
+      podman_zvol_size must be set (bytes) in group_vars/host_vars for
+      zfs_root hosts; got {{ podman_zvol_size | default('<unset>') }}.
   tags:
     - podman
 
