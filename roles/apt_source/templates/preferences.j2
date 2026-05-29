@@ -1,9 +1,10 @@
 # {{ ansible_managed }}
-# Version pin rather than `Pin: origin <host>`: these packages are served
-# through an apt mirror proxy, so the source URL's host is the proxy, not
-# the upstream -- an origin-hostname pin would match nothing on a mirrored
-# fleet. Pin-Priority above the distro archive default (500) makes this
-# repo win. See apt_preferences(5).
+# Pin-Priority above the distro archive default (500) makes this repo win.
+# Use a version pin: `Pin: origin <host>` is avoided because the source
+# URL's host is the mirror proxy, not the upstream, so a hostname pin
+# matches nothing on a mirrored fleet. (`Pin: release o=/l=`, matching the
+# upstream Release file the proxy serves unchanged, would be mirror-safe if
+# an origin/release pin is ever needed.) See apt_preferences(5).
 Package: {{ apt_source_args.pin.package }}
 Pin: version {{ apt_source_args.pin.version }}
 Pin-Priority: {{ apt_source_args.pin.priority }}
