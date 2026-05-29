@@ -92,10 +92,11 @@ RUN_AS_USER nut
 # MONITOR myups@bigserver 1 monmaster blah master
 # MONITOR su700@server.example.com 1 upsmon secretpass slave
 # MONITOR myups@localhost 1 upsmon pass master	(or slave)
-{# nut 2.8+ (resolute) renamed master/slave to primary/secondary; the
-   new tokens have been aliases since 2.7.4, so this works on jammy
-   and noble too. Without the rename, resolute fails MONITOR parsing
-   and exits with "Fatal error: insufficient power configured!". #}
+{# "primary" is the nut 2.8 spelling of the old "master" role token: it was
+   introduced in 2.8.0, so 2.7.4 (jammy) understands only master/slave and
+   would reject this line. Safe because the MONITOR line renders only when
+   monitoring is enabled, and enabling is gated to nut 2.8 hosts (see the
+   "until it is on 2.8" note in tasks/main.yml). #}
 {% if nut_monitor_enabled|default(false) %}MONITOR {{ nut_monitor_ups }} 1 upsmon {{ nut_upsmon_password }} primary{% endif %}
 
 # --------------------------------------------------------------------------
@@ -286,13 +287,16 @@ NOTIFYFLAG REPLBATT SYSLOG+WALL+EXEC
 # deliberately -- upssched needs those events to CANCEL-TIMER.
 NOTIFYFLAG NOCOMM   SYSLOG+WALL
 NOTIFYFLAG NOPARENT SYSLOG+WALL+EXEC
-# nut 2.8+ only (the fleet is migrating to it): BYPASS (on bypass, load
-# unprotected), OVER (overloaded) and CAL (battery calibration) notify types
-# were added in 2.8. On 2.7.4 upsmon rejects unknown NOTIFYFLAG types, so don't
-# enable monitoring on a host until it is on 2.8.
+# nut 2.8+ only (the fleet is migrating to it): these notify types were added
+# in 2.8 -- BYPASS (on bypass, load unprotected), OVER (overloaded), CAL
+# (battery calibration), and OFF/NOTOFF (UPS load administratively off, then
+# restored). On 2.7.4 upsmon rejects unknown NOTIFYFLAG types, so don't enable
+# monitoring on a host until it is on 2.8.
 NOTIFYFLAG BYPASS   SYSLOG+WALL+EXEC
 NOTIFYFLAG OVER     SYSLOG+WALL+EXEC
 NOTIFYFLAG CAL      SYSLOG+WALL+EXEC
+NOTIFYFLAG OFF      SYSLOG+WALL+EXEC
+NOTIFYFLAG NOTOFF   SYSLOG+WALL+EXEC
 #
 # Possible values for the flags:
 #
