@@ -109,8 +109,19 @@ server {
     proxy_connect_timeout 3s;
     proxy_send_timeout    5s;
     proxy_read_timeout    5s;
+    # Buffer sizing from Authelia's canonical authelia-location.conf: its 401
+    # response carries the portal-redirect Location plus the Remote-* identity
+    # headers, which can overflow nginx's default 4k/8k header buffer on a
+    # subrequest and surface as an intermittent "upstream sent too big header"
+    # 502 on the auth leg.
+    proxy_buffer_size       32k;
+    proxy_buffers           4 32k;
+    client_body_buffer_size 128k;
     proxy_pass_request_body off;
     proxy_set_header Content-Length          "";
+    # Clear any client-supplied Connection header off the internal subrequest
+    # (matches Authelia's canonical snippet).
+    proxy_set_header Connection              "";
     proxy_set_header X-Original-Method       $request_method;
     proxy_set_header X-Original-URL          $scheme://$host$request_uri;
     proxy_set_header X-Forwarded-For         $remote_addr;
@@ -119,13 +130,6 @@ server {
     proxy_set_header X-Forwarded-Host        $host;
     proxy_set_header X-Forwarded-Uri         $request_uri;
   }
-
-  # Authelia returns 401 with a redirect target in the body; nginx's
-  # auth_request maps that to a plain 401 to the client. error_page
-  # rewrites the 401 into a 302 to the portal with returnUrl + method
-  # preserved, so users land on the login page and bounce back here
-  # after a successful auth.
-  error_page 401 =302 https://auth.{{ authelia_cookie_domain }}/?rd=$scheme://$host$request_uri&rm=$request_method;
 
 {% endif %}
   location / {
@@ -144,6 +148,13 @@ server {
     auth_request_set $authelia_groups $upstream_http_remote_groups;
     auth_request_set $authelia_name   $upstream_http_remote_name;
     auth_request_set $authelia_email  $upstream_http_remote_email;
+    # Authelia returns 401 with the portal-redirect target (returnUrl + method
+    # already baked in) in its `Location` response header; capture it and
+    # rewrite the auth_request 401 into a 302 there. This is Authelia's modern
+    # integration -- nginx no longer hardcodes the portal host, so an Authelia
+    # cookie-domain / multi-domain change needs no edit here.
+    auth_request_set $redirection_url $upstream_http_location;
+    error_page 401 =302 $redirection_url;
 {% endif %}
 {% if nginx_site_args.bypass_query_param is defined %}
     # The $args strip below and the $request_safe log-redaction each handle a

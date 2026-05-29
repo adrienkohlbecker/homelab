@@ -13,9 +13,10 @@
 #       token / wrong token in nginx_site_args.bypass_query_param
 #       tests). The bypass `if` short-circuits BEFORE reaching the
 #       stub, so positive-path tests still see 200 from upstream.
-#       Real Authelia in gate mode would also set a Location header
-#       pointing at the portal; nginx auth_request only consumes the
-#       status code, so we don't bother.
+#       Like real Authelia, gate mode also returns a Location header
+#       pointing at the portal, so the parent's modern redirect
+#       (auth_request_set $redirection_url $upstream_http_location;
+#       error_page 401 =302 $redirection_url) has a target to 302 to.
 #
 # Localhost-only. Prod Authelia uses the same port; this fixture is
 # only ever installed by tasks/_setup.yml chains under test/testrole.py,
@@ -34,7 +35,14 @@
           listen 127.0.0.1:{{ service_ports.authelia }};
           server_name _;
           location = /api/authz/auth-request {
-            return {% if (authelia_stub_mode | default('always_200')) == 'gate' %}401{% else %}200 'test_stub_ok'{% endif %};
+        {% if (authelia_stub_mode | default('always_200')) == 'gate' %}
+            # `always` so add_header applies to the 401 the way real Authelia
+            # emits the portal redirect in its Location response header.
+            add_header Location "https://auth.{{ inventory_hostname }}.{{ domain }}/" always;
+            return 401;
+        {% else %}
+            return 200 'test_stub_ok';
+        {% endif %}
           }
           location / {
             return 404;
