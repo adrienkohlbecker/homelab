@@ -1,9 +1,33 @@
-# Shared post-converge assertions for any apt_source consumer. Imported from
-# a consumer's _verify.yml with the same apt_source_args it converged with
-# (the harness runs _verify as a separate ansible invocation, so the args do
-# not survive from main.yml and must be re-passed). Not run standalone -- it
-# asserts the helper's contract: the signing key is scoped (not globally
-# trusted) and, when a pin is set, the pinned source wins at its priority.
+# Post-converge assertions for the helper's contract: the signing key is
+# scoped (not globally trusted) and, when a pin is set, the pinned source wins
+# at its priority. Two callers, distinguished by _role_under_test:
+#
+#  - A consumer (nodejs etc.) imports this with `tasks_from: _verify` and the
+#    same apt_source_args it converged with (the harness runs _verify as a
+#    separate ansible invocation, so the args don't survive from configure.yml
+#    and must be re-passed). The standalone block below is skipped for them.
+#  - The standalone apt_source:box cell runs this file directly. main.yml is a
+#    stub, so nothing configured a source during converge; the block below
+#    stands in for a consumer by configuring a representative real repo (docker
+#    -- self-contained, unlike nodesource whose mirror needs nodejs_major) and
+#    leaving apt_source_args set for the assertions that follow.
+- name: _verify | Standalone — configure a representative source under test
+  when: _role_under_test | default('') == 'apt_source'
+  block:
+    - name: _verify | Standalone — fixture args (docker, a real mirrored repo)
+      set_fact:
+        apt_source_args:
+          name: docker
+          key_id: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
+          key_url: https://download.docker.com/linux/ubuntu/gpg
+          uris: "{{ mirror_apt_docker }}"
+          suites: "{{ ansible_distribution_release }}"
+          components: stable
+
+    - name: _verify | Standalone — configure the source under test
+      import_role:
+        name: apt_source
+        tasks_from: configure
 
 - name: _verify | Assert apt_source verify args for {{ apt_source_args.name }}
   assert:

@@ -1,6 +1,7 @@
 - name: Configure NodeSource apt repository
   import_role:
     name: apt_source
+    tasks_from: configure
   vars:
     apt_source_args:
       name: nodesource
