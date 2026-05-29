@@ -1188,6 +1188,7 @@ class QemuMachine(Machine):
                 str(cloud_image),
                 f"{self.workdir.name}/disk.img",
                 size="20G",
+                backing_fmt="qcow2",
             )
             self.drives = [
                 self._virtio_drive(f"{self.workdir.name}/disk.img"),
@@ -1252,14 +1253,19 @@ class QemuMachine(Machine):
         if want_pflash and not any("if=pflash" in d for d in self.drives):
             self.drives += await self._uefi_drives()
 
-    async def _create_overlay(self, src: str, dest: str, size: str | None = None) -> None:
+    async def _create_overlay(
+        self, src: str, dest: str, size: str | None = None, backing_fmt: str | None = None
+    ) -> None:
         """Create a qcow2 overlay pointing at *src* with optional resize.
 
-        The backing file's format matches the packer artifact format, which
-        is platform-dependent (raw on Linux, qcow2 on Mac).
+        backing_fmt defaults to the packer artifact format, which is
+        platform-dependent (raw on Linux, qcow2 on Mac). The minimal variant
+        overrides it: its backing file is Ubuntu's cloud image, always qcow2
+        regardless of host platform, so passing the packer format would tell
+        qemu to read the qcow2 as raw and the guest would see a corrupt disk.
         """
 
-        args = ["qemu-img", "create", "-f", "qcow2", "-b", src, "-F", self._packer_disk_format, dest]
+        args = ["qemu-img", "create", "-f", "qcow2", "-b", src, "-F", backing_fmt or self._packer_disk_format, dest]
         if size:
             args.append(size)
         await run_command(args)
