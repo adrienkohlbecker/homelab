@@ -38,6 +38,10 @@
   tags:
     - netplan
 
+# Installed as raw unit files via systemd_unit, not through the
+# systemd_timer helper: that helper requires OnCalendar and emits a cadence
+# job with an [Install] section, whereas this is a runtime-armed deadline
+# timer (OnActiveSec, no calendar, never enabled) — the helper doesn't fit.
 - name: Install netplan_rollback.service
   import_role:
     name: systemd_unit

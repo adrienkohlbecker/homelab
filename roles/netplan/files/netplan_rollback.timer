@@ -9,4 +9,9 @@ OnActiveSec=90
 # anywhere in 90-150s, widening the lockout window and blurring the
 # 90-vs-60 margin against wait_for_connection.
 AccuracySec=1s
+# Persistent= is deliberately omitted: it would re-run a missed timer at
+# next boot, but /run/netplan_prev (tmpfs) is already gone by then, so a
+# post-boot fire could only abort. There is no [Install]/WantedBy either —
+# the apply path arms this at runtime via `systemctl restart`, it is never
+# enabled, so there is no boot-time activation to persist.
 Unit=netplan_rollback.service
