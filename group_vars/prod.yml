@@ -168,6 +168,11 @@ influxdb_root_password: !vault |
           36333839383936343638336637376465323233343666313136303739313063633562393236636337
           3765343830623236640a613933313230333466653963343735333234393234663034656566373934
           39363766376365343362393563396239626464323533336530306539613061663261
+# Sole consumer is the netdata go.d/pihole collector (pihole.conf.j2),
+# currently disabled pending the netdata 2.x pin (see the commented block
+# in roles/pihole/tasks/main.yml); the admin UI runs password-less behind
+# authelia. Kept so re-enabling the collector stays a one-liner rather
+# than a vault round-trip.
 pihole_password: !vault |
           $ANSIBLE_VAULT;1.2;AES256;prod
           30383663376663343733383932623562333236303331386165646164623262316264333637363437
