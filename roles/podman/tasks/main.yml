@@ -35,6 +35,18 @@
   tags:
     - podman
 
+# podman's packaged /usr/lib/tmpfiles.d/podman.conf carries a
+# `D! /run/podman 0700 root root` line that recreates /run/podman as
+# 0700 on every boot. That 0700 blocks podman-socket group members from
+# traversing in to reach the 0660 API socket (SocketGroup, see
+# files/override_socket.conf). So dpkg-divert redirects future package
+# writes to a .distrib sidecar (an apt upgrade can't clobber our edit),
+# and the lineinfile below comments out the /run/podman line so tmpfiles
+# stops resetting it — systemd then auto-creates /run/podman at 0755
+# (traversable) when it activates the socket. A RuntimeDirectory= drop-in
+# can't replace this: the tmpfiles line would still need neutralizing,
+# and RuntimeDirectory on a socket unit risks tearing /run/podman down on
+# restart.
 - name: Divert configuration file
   community.general.dpkg_divert:
     path: /usr/lib/tmpfiles.d/podman.conf
