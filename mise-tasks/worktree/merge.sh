@@ -92,4 +92,17 @@ else
 fi
 
 git submodule update --init notes
+
+# submodule update checks the recorded gitlink out as a detached HEAD; put notes
+# back on its main branch, fast-forwarded to that gitlink, so notes edits in the
+# main checkout commit onto main (which the next wt:merge integrates) instead of
+# stranding on a detached HEAD. Both integration paths above pushed the target to
+# origin/main and it equals the gitlink, so main fast-forwards cleanly; --ff-only
+# halts (set -e) on a diverged local main rather than silently resetting it.
+if [ -n "$master_notes" ]; then
+  notes_ptr=$(git rev-parse HEAD:notes)
+  git -C notes checkout -q main
+  git -C notes merge --ff-only "$notes_ptr"
+fi
+
 mise run worktree:rm "$usage_name"
