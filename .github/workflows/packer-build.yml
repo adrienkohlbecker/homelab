@@ -51,14 +51,21 @@ jobs:
     # branches build the disk but skip the publish -- see that step below.
     #
     # Why one job per source instead of packer's internal parallel builds in a
-    # single job: each build VM then occupies one lab-vm runner slot, so the
-    # 4-VM pool cap (host_vars/lab.yml: vm1..vm4, all containers on the one lab
-    # host) actually governs concurrent packer VMs. A single job hid 3 VMs
-    # behind one slot and blew past the RAM budget. fail-fast:false keeps one
-    # source's failure from cancelling its siblings (the old single-invocation
-    # model tore them all down).
+    # single job: each build VM then occupies one lab-vm runner slot, and
+    # fail-fast:false keeps one source's failure from cancelling its siblings
+    # (the old single-invocation model tore them all down).
+    #
+    # max-parallel:1 serialises the matrix. The runner-pool cap (4 lab-vm
+    # slots) does NOT bound RAM: lab runs prod + the CI containers and leaves
+    # only ~3GB free, but each build VM wants 4GB (packer/qemu.pkr.hcl), so
+    # the extra matrix (lab/pug/hetzner) running 3-up thrashed swap and qemu
+    # died mid-build ("unexpected EOF"). Serial builds keep one 4GB VM in
+    # flight at a time -- slower on packer-changed runs, but no OOM. The box
+    # call carries a single source so the cap is a no-op there; the test
+    # matrix (which only needs packer_box) still runs concurrently alongside.
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         source: ${{ fromJSON(inputs.sources_matrix) }}
     runs-on: [ self-hosted, lab-vm ]
