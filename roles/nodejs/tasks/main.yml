@@ -16,8 +16,6 @@
   tags:
     - nodejs
 
-# Skip in check mode if the repo would have changed -- the apt cache
-# wouldn't reflect a source that wasn't actually written.
 - name: Install node
   when: not (ansible_check_mode and apt_source_nodesource_changed)
   apt:
@@ -25,6 +23,5 @@
       - nodejs
     cache_valid_time: 3600
   become: true
-  register: nodejs_apt
   tags:
     - nodejs
