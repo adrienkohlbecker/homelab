@@ -99,7 +99,7 @@ netdata_collectors:
   - go.d:collector:logind:logind
   - go.d:collector:nginx:local
   - go.d:collector:nvme:nvme
-  # - go.d:collector:pihole:local
+  - go.d:collector:pihole:local
   - go.d:collector:prometheus:fluentbit
   - go.d:collector:prometheus:keepalived_exporter_local
   - go.d:collector:sensors:sensors
