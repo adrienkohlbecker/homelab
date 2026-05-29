@@ -22,8 +22,15 @@
   vars:
     systemd_unit_args:
       src: eaton-ipp
-      condition: '{{ not (ansible_check_mode and (eaton_ipp_deb_changed | default(false) | bool)) and ansible_architecture == "x86_64" }}'
-      restart: '{{ eaton_ipp_deb_changed | default(false) | bool }}'
+      # deb_install names its changed-flag after the *deb* (ipp-linux ->
+      # ipp_linux_deb_changed), not the role -- so eaton_ipp_deb_changed was
+      # never set and the check-mode guard collapsed to `not false` = true.
+      # That ran the enable in --check even when the package wasn't installed
+      # (check mode doesn't install), erroring "Could not find the requested
+      # service eaton-ipp". Use the real var so the enable is correctly skipped
+      # whenever the deb-install block runs under check mode.
+      condition: '{{ not (ansible_check_mode and (ipp_linux_deb_changed | default(false) | bool)) and ansible_architecture == "x86_64" }}'
+      restart: '{{ ipp_linux_deb_changed | default(false) | bool }}'
   tags:
     - eaton_ipp
 
