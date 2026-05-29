@@ -285,6 +285,9 @@
   changed_when: apt_source_refresh.rc == 0
   become: true
 
+# No validate: apt has no single-file preferences parser (apt-cache policy
+# reads the whole preferences.d set, not one file), and a malformed pin is
+# inert -- apt skips unparsable stanzas rather than corrupting state.
 - name: Configure apt pin for {{ apt_source_args.name }}
   when:
     - apt_source_args.pin is defined
