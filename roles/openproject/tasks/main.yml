@@ -61,35 +61,13 @@
   tags:
     - openproject
 
-# SECRET_KEY_BASE is the Rails master key: rotating it makes already-stored
-# encrypted data (sessions, 2FA/TOTP secrets, stored OAuth/SMTP credentials)
-# permanently undecryptable. The podman_secret helper rotates the store
-# unconditionally on drift, so we compare the vault value against the stored
-# data_sha256 label and abort BEFORE the new key reaches the store -- failing
-# after the create would leave it staged for the next restart to silently load.
-- name: List existing podman secrets
-  containers.podman.podman_secret_info:
-  register: _openproject_secrets
-  check_mode: false
-  become: true
-  tags:
-    - openproject
-
-- name: Fail if openproject_secret_key changed post-bootstrap
-  vars:
-    _existing: "{{ _openproject_secrets.secrets | selectattr('Spec.Name', 'eq', 'openproject_secret_key') | list | first | default({}) }}"
-  fail:
-    msg: |
-      openproject_secret_key changed in vault. SECRET_KEY_BASE is the Rails
-      master key: rotating it makes already-stored encrypted data (sessions,
-      2FA/TOTP secrets, stored OAuth/SMTP credentials) permanently
-      undecryptable.
-
-      Revert the change, or perform a deliberate key-rotation migration, then
-      re-run this play.
-  when:
-    - _existing | length > 0
-    - (_existing.Spec.Labels | default({})).get('data_sha256', '') != (openproject_secret_key | hash('sha256'))
+# The SECRET_KEY_BASE rotation gate lives in its own file so _verify can drive
+# the real check (not a copy of its predicate). It aborts the play if the
+# vaulted key drifts from the stored secret, before the new key reaches the
+# store -- rotating the Rails master key makes stored encrypted data (sessions,
+# 2FA/TOTP, OAuth/SMTP creds) permanently undecryptable.
+- name: Gate openproject_secret_key against post-bootstrap rotation
+  import_tasks: check_secret_key_rotation.yml
   tags:
     - openproject
 
