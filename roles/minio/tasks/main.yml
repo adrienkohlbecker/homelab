@@ -133,8 +133,10 @@
       # Stream large S3 uploads (ARQ/restic) to MinIO as they arrive
       # instead of buffering the whole request body in nginx first.
       proxy_request_buffering: 'off'
-      # Otherwise ARQ uploads return HTTP 413.
+      # ARQ uploads are large: raise the body limit (else HTTP 413) and the body
+      # buffer (else nginx spools each upload to disk).
       client_max_body_size: 60M
+      client_body_buffer_size: 60M
       # MINIO_PROMETHEUS_AUTH_TYPE=public leaves the metrics endpoint
       # unauthenticated; the scrapers hit it on loopback, so close the
       # public path rather than expose bucket names/sizes.

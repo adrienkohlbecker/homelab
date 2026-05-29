@@ -24,6 +24,9 @@
 #   proxy_send_timeout        optional, default '60s'
 #   proxy_read_timeout        optional, default '60s'
 #   client_max_body_size      optional; sets nginx client_max_body_size
+#   client_body_buffer_size   optional; sets nginx client_body_buffer_size --
+#                             pair with client_max_body_size on upload-heavy
+#                             upstreams so a large body isn't spooled to disk
 #   enable_http               optional bool, default false; if true, also listen on :80
 #                             and skip the http->https redirect server block.
 #                             Serves :80 in cleartext, so do NOT combine with
