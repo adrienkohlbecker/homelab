@@ -1,8 +1,8 @@
 # Loopback probe -- exercises the container directly via the published port.
-# Retries cover cold-start (--health-start-period is 100s; the budget below
-# gives ~3 minutes to also cover restart-after-deploy). /ping is profilarr's
-# dedicated liveness endpoint (200, no auth), unlike /api/v1/health which is
-# API-key gated and answers 401.
+# Retries cover cold-start: --health-start-period is 100s and the ~3-minute
+# budget below leaves margin over that. /ping is profilarr's dedicated liveness
+# endpoint (200, no auth), unlike /api/v1/health which is API-key gated and
+# answers 401.
 - name: _verify | Profilarr answers /ping on its loopback port
   uri:
     url: http://localhost:{{ service_ports.profilarr }}/ping
@@ -12,6 +12,25 @@
   retries: 90
   delay: 2
   until: _verify_loopback.status == 200
+  become: true
+
+# nginx-vhost probe -- exercises the proxied path, not just loopback. A
+# regression in the nginx_site wiring (typo'd subdomain, broken proxy_pass)
+# would pass the loopback probe above silently. The _test authelia_stub admits
+# the auth_request subrequest, so the request reaches profilarr and /ping
+# answers 200.
+- name: _verify | Profilarr answers /ping through the nginx vhost
+  uri:
+    url: https://localhost/ping
+    headers:
+      Host: "profilarr.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    status_code: 200
+    timeout: 10
+  register: _verify_nginx
+  retries: 30
+  delay: 2
+  until: _verify_nginx.status == 200
   become: true
 
 # Symlink-relocation probe -- proves the /config/profilarr.db symlink resolves
@@ -29,14 +48,19 @@
     or _verify_db_link.stat.lnk_target != '/mnt/services/sqlite/profilarr/profilarr.db'
   become: true
 
-# Ownership probe -- profilarr creates the DB as the in-container PUID/PGID,
-# which must land as the host profilarr user. A PUID/PGID drift would write it
-# under a different host uid silently; assert it so the regression is loud.
-- name: _verify | Profilarr SQLite DB is owned by profilarr
+# Ownership + content probe -- profilarr creates the DB as the in-container
+# PUID/PGID, which must land as the host profilarr user; a PUID/PGID drift would
+# write it under a different host uid silently. The size check proves the
+# container wrote a real DB through the symlink, not the empty placeholder the
+# sqlite_dataset helper pre-creates on a cold host (also profilarr-owned, so it
+# would satisfy the ownership check alone).
+- name: _verify | Profilarr SQLite DB is owned by profilarr and non-empty
   stat:
     path: /mnt/services/sqlite/profilarr/profilarr.db
   register: _verify_db_owner
   failed_when: >-
     not _verify_db_owner.stat.exists
+    or _verify_db_owner.stat.islnk
     or _verify_db_owner.stat.pw_name != 'profilarr'
+    or _verify_db_owner.stat.size == 0
   become: true
