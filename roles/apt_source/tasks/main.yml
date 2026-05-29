@@ -18,7 +18,8 @@
 #   key_id:        full GPG fingerprint, re-checked against the fetched key
 #   uris:          repo base URL (usually a mirror_apt_* var)
 #   suites:        apt suite(s) -- e.g. nodistro, or the release codename
-#   components:    apt component(s) -- e.g. main, stable
+#   components:    optional apt component(s) -- e.g. main, stable; omit for a
+#                  flat repo (trailing-slash suite, no components)
 #   architectures: optional; defaults to the host's arch (arm64/amd64)
 #   filename:      optional sources.list.d/<filename>.list name on the jammy
 #                  path; defaults to apt_repository's auto-sanitized name. Set
@@ -41,7 +42,6 @@
       - apt_source_args.key_id is defined
       - apt_source_args.uris is defined
       - apt_source_args.suites is defined
-      - apt_source_args.components is defined
       # name lands in the keyring / .sources / preferences file paths --
       # keep it a bare slug so it can't traverse or inject path segments.
       - apt_source_args.name | default('') is match('[a-z0-9_-]+$')
@@ -49,8 +49,8 @@
       - apt_source_args.key_url | default('') is match('https://')
       - apt_source_args.state | default('present') in ['present', 'absent']
     fail_msg: >-
-      apt_source_args must define name, key_url, key_id, uris, suites and
-      components, with name a [a-z0-9_-] slug and key_url an https URL;
+      apt_source_args must define name, key_url, key_id, uris and suites,
+      with name a [a-z0-9_-] slug and key_url an https URL;
       got {{ apt_source_args }}
 
 # present (default) adds the source; absent tombstones it. Derived from the
@@ -94,7 +94,7 @@
 - name: Add repository for {{ apt_source_args.name }}
   when: ansible_distribution_major_version | int < 26
   apt_repository:
-    repo: deb [arch={{ apt_source_args.architectures | default((ansible_architecture == "aarch64") | ternary("arm64", "amd64")) }} signed-by=/usr/share/keyrings/{{ apt_source_args.name }}.gpg] {{ apt_source_args.uris }} {{ apt_source_args.suites }} {{ apt_source_args.components }}
+    repo: deb [arch={{ apt_source_args.architectures | default((ansible_architecture == "aarch64") | ternary("arm64", "amd64")) }} signed-by=/usr/share/keyrings/{{ apt_source_args.name }}.gpg] {{ apt_source_args.uris }} {{ apt_source_args.suites }} {{ apt_source_args.components | default('') }}
     filename: "{{ apt_source_args.filename | default(omit) }}"
     state: "{{ apt_source_args.state | default('present') }}"
   become: true
@@ -181,7 +181,7 @@
     types: deb
     uris: "{{ apt_source_args.uris }}"
     suites: "{{ apt_source_args.suites }}"
-    components: "{{ apt_source_args.components }}"
+    components: "{{ apt_source_args.components | default(omit) }}"
     architectures: "{{ apt_source_args.architectures | default((ansible_architecture == 'aarch64') | ternary('arm64', 'amd64')) }}"
     signed_by: /usr/share/keyrings/{{ apt_source_args.name }}.gpg
     state: "{{ apt_source_args.state | default('present') }}"
