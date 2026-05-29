@@ -1,11 +1,8 @@
-# On jammy, pin chrony and its noble dependency closure (libc6, the
-# GnuTLS/locale stack, …) to noble via the backports helper: noble's
-# libc6 Breaks jammy's chrony 4.2-2, and the fleet's zfs/podman roles
-# need noble libc6 anyway. This role is sequenced first among the
-# backports consumers, so it performs the libc6 jammy→noble flip;
-# zfs/podman then find it done. Package list + full rationale:
-# vars/main.yml and notes/jammy_noble_backports.md. On noble (or any
-# non-22.04) every backports task is a no-op.
+# On jammy, pin chrony + its noble dependency closure to noble via the
+# backports helper. This role is sequenced first among the backports
+# consumers, so it performs the libc6 jammy→noble flip that zfs/podman
+# then find done. Package list: vars/main.yml; full rationale:
+# notes/jammy_noble_backports.md. No-op on noble (or any non-22.04).
 - name: Apply chrony backports pin + upgrade (jammy)
   import_role:
     name: backports
@@ -51,8 +48,9 @@
 
 # No validate: chronyd is AppArmor-confined to /etc/chrony/ (see
 # /etc/apparmor.d/usr.sbin.chronyd), so `chronyd -p` can't read ansible's
-# temp file and would fail every render. The template carries no jinja
-# interpolation, so there's no syntax surface a parser would catch.
+# temp file and would fail every render. It's that path constraint, not a
+# lack of syntax to check, that rules validate out; _verify's post-converge
+# `chronyc tracking` confirms the rendered file parses.
 - name: Configure chrony for NTS-only time sync
   when: not (ansible_check_mode and ntp_chrony_apt.changed)
   template:

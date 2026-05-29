@@ -1,13 +1,9 @@
 # Packages pinned to noble on jammy (priority 991, via the backports
-# helper). chrony can't stay at jammy's 4.2-2 once libc6 goes to noble,
-# and the fleet's zfs/podman roles require noble libc6 anyway -- so chrony
-# plus its full transitive closure ride along. This role runs first among
-# the backports consumers, so it's the one that performs the libc6
-# jammy->noble flip. Full rationale (the t64 ABI rename, the transitive
-# version floors, the locales/tzdata traps, and why unattended-upgrades
-# doesn't auto-advance this set): notes/jammy_noble_backports.md. Both the
-# backports pin template and its explicit upgrade read this list, so the
-# two can't drift.
+# helper): chrony plus its full transitive closure. Full rationale (the
+# t64 ABI rename, version floors, the locales/tzdata traps, the
+# first-consumer libc6 flip, the unattended-upgrades interaction):
+# notes/jammy_noble_backports.md. The terse per-package "why" below is
+# the at-a-glance map; the helper reads this same list for pin + upgrade.
 ntp_backport_packages:
   - chrony          # the target; jammy's 4.2-2 blocked by noble libc6's Breaks
   - adduser         # >= 3.130 -- chrony postinst uses flags jammy's 3.118 rejects
