@@ -145,19 +145,25 @@
     or nginx_verify_token in nginx_verify_upstream_journal.stdout
 
 # Log redaction: nginx logs $request_safe, which rewrites auth_token=<value>
-# to auth_token=REDACTED. Wait past the 5s access_log buffer flush first.
-- name: _verify | Wait for the nginx access_log flush
-  pause:
-    seconds: 6
-
-- name: _verify | Nginx access log redacts auth_token to REDACTED
+# to auth_token=REDACTED. The access_log buffers with flush=5s, so poll
+# (bounded, fail-fast) until the redacted line lands rather than sleeping a
+# fixed interval that races the flush on a slow VM.
+- name: _verify | Wait for the redacted auth_token to reach the access log
   command: tail -n 200 /var/log/nginx/access.log
   register: nginx_verify_access_log
   changed_when: false
   become: true
-  failed_when: >-
-    'auth_token=REDACTED' not in nginx_verify_access_log.stdout
-    or nginx_verify_token in nginx_verify_access_log.stdout
+  until: "'auth_token=REDACTED' in nginx_verify_access_log.stdout"
+  retries: 10
+  delay: 2
+
+- name: _verify | Nginx access log never contains the raw auth_token
+  assert:
+    that:
+      - nginx_verify_token not in nginx_verify_access_log.stdout
+    fail_msg: >-
+      Raw bypass token leaked into /var/log/nginx/access.log; expected only
+      auth_token=REDACTED.
 
 # http->https redirect and the default-server catch-all are probed on the
 # public interface, not loopback: the stub_status server binds 127.0.0.1:80
@@ -190,3 +196,63 @@
   failed_when: >-
     nginx_verify_stub.status != 200
     or 'Active connections' not in (nginx_verify_stub.content | default(''))
+
+# state: absent — tear down the transient vhost via the helper and confirm both
+# the symlink and the config are gone. This is the contract the otgw / vscode_ha
+# tombstones rely on to stay decommissioned on a fresh install.
+- name: _verify | Remove the transient test vhost via the nginx_site helper
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: nginxverify
+      state: absent
+
+- name: _verify | Removed vhost config and symlink are gone
+  stat:
+    path: "{{ item }}"
+  register: nginx_verify_removed
+  loop:
+    - /etc/nginx/sites-available/nginxverify
+    - /etc/nginx/sites-enabled/nginxverify
+  become: true
+  failed_when: nginx_verify_removed.stat.exists
+
+# No post-removal HTTP probe: a request fired immediately after the reload races
+# nginx's draining old workers (which still hold the removed vhost) and follows
+# their 301 to an https URL the snakeoil cert doesn't cover. The stat above is
+# the deterministic check that the state: absent contract removed both files.
+
+# conf_d rollback — feed the helper a syntactically broken drop and confirm the
+# place-validate-rollback removes it. A broken file left under conf.d/ would
+# brick the next host-wide reload for every vhost, so this is the role's
+# highest-blast-radius safety net; the helper's `fail` is expected, so catch it.
+- name: _verify | Broken conf.d drop is validated and rolled back
+  block:
+    - name: _verify | Install a deliberately broken conf.d drop
+      import_role:
+        name: nginx
+        tasks_from: conf_d
+      vars:
+        nginx_conf_d_args:
+          name: _test_nginx_verify_broken.conf
+          content: "nginx_verify_broken_directive on;"
+
+    - name: _verify | Broken conf.d drop must fail validation (unexpected success)
+      fail:
+        msg: >-
+          The broken conf.d drop should have failed `nginx -t` and rolled back,
+          but the helper reported success.
+  rescue:
+    - name: _verify | Broken conf.d drop was rolled back (file absent)
+      stat:
+        path: /etc/nginx/conf.d/_test_nginx_verify_broken.conf
+      register: nginx_verify_broken_drop
+      become: true
+      failed_when: nginx_verify_broken_drop.stat.exists
+
+    - name: _verify | Nginx config is still valid after the rollback
+      command: nginx -t
+      changed_when: false
+      become: true
