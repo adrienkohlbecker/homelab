@@ -378,15 +378,14 @@
 
   # On a failed `nginx -t`, hand off to the shared place-validate rollback
   # (also used by conf_d.yml). It restores the previous version from the
-  # .backup or removes the freshly-added config + its sites-enabled symlink,
-  # then fails loudly. `| default({})` keeps it safe even when the template
-  # task itself failed to render (no register, nothing to undo).
+  # .backup or removes the freshly-added config + its sites-enabled symlink;
+  # this rescue then fails loudly. `| default({})` keeps it safe even when the
+  # template task itself failed to render (no register, nothing to undo).
   rescue:
-    # Roll back the upstream-auth map first (final: false, so its place_rollback
-    # restores/removes the file but doesn't fail the play yet), then the vhost --
-    # whose place_rollback raises. Both are restored before the failure, so a
-    # single bad `nginx -t` covering the written pair can't strand a half-written
-    # config on disk.
+    # Roll back the upstream-auth map first, then the vhost, then fail once: a
+    # single bad `nginx -t` covers the written pair, so both must be restored
+    # before the failure or a half-written config strands on disk. place_rollback
+    # only restores/removes; the explicit fail below raises after both are undone.
     - name: site | Roll back the failed upstream Authorization map
       when: _nginx_site_upstream_auth
       import_tasks: place_rollback.yml
@@ -394,8 +393,6 @@
         _nginx_rollback_result: "{{ nginx_upstream_auth_map | default({}) }}"
         _nginx_rollback_paths:
           - /etc/nginx/conf.d/upstream_auth_{{ nginx_site_args.subdomain }}.conf
-        _nginx_rollback_what: /etc/nginx/conf.d/upstream_auth_{{ nginx_site_args.subdomain }}.conf
-        _nginx_rollback_final: false
 
     - name: site | Roll back the failed site write
       import_tasks: place_rollback.yml
@@ -404,7 +401,13 @@
         _nginx_rollback_paths:
           - /etc/nginx/sites-enabled/{{ nginx_site_args.subdomain }}
           - /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
-        _nginx_rollback_what: /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}
+
+    - name: site | Fail after rolling back the site write
+      fail:
+        msg: >-
+          nginx -t failed after writing
+          /etc/nginx/sites-available/{{ nginx_site_args.subdomain }}; previous
+          state restored. Inspect the validate output above and the managed content.
 
 - name: site | Remove retired nginx site
   when: (nginx_site_args.condition | default(true)) and (nginx_site_args.state | default('present')) == 'absent'
