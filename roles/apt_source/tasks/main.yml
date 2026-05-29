@@ -24,9 +24,10 @@
 #                  flat repo (trailing-slash suite, no components)
 #   architectures: optional; defaults to the host's arch (arm64/amd64)
 #   filename:      optional sources.list.d/<filename>.list name on the jammy
-#                  path; defaults to apt_repository's auto-sanitized name. Set
-#                  it only to keep a pre-existing filename (else the rename
-#                  strands the old .list).
+#                  path; defaults to <name>, matching the resolute .sources
+#                  name. Set it only to pin a different file (fluentbit ->
+#                  fluent-bit); a stale .list under any other name that
+#                  references this source's keyring is swept on converge.
 #   pin:           optional { package, version, priority } -> preferences.d/<name>
 #   state:         optional present (default) | absent; absent tombstones the
 #                  source -- removes its .list/.sources, keyring and pin file
@@ -65,6 +66,14 @@
   set_fact:
     apt_source_present: "{{ apt_source_args.state | default('present') == 'present' }}"
 
+# Jammy .list filename: default to <name> so it matches the resolute
+# .sources name and is independent of the mirror URL (apt_repository would
+# otherwise auto-derive an unstable name from the URL). Used by the repo
+# task and the stale-.list sweep below.
+- name: Resolve apt_source jammy filename for {{ apt_source_args.name }}
+  set_fact:
+    apt_source_filename: "{{ apt_source_args.filename | default(apt_source_args.name) }}"
+
 - name: Install gpg for {{ apt_source_args.name }}
   when:
     - ansible_distribution_major_version | int < 26
@@ -101,10 +110,42 @@
   when: ansible_distribution_major_version | int < 26
   apt_repository:
     repo: deb [arch={{ apt_source_args.architectures | default((ansible_architecture == "aarch64") | ternary("arm64", "amd64")) }} signed-by=/usr/share/keyrings/{{ apt_source_args.name }}.gpg] {{ apt_source_args.uris }} {{ apt_source_args.suites }} {{ apt_source_args.components | default('') }}
-    filename: "{{ apt_source_args.filename | default(omit) }}"
+    filename: "{{ apt_source_filename }}"
     state: "{{ apt_source_args.state | default('present') }}"
   become: true
   register: apt_source_repo_legacy
+
+# The jammy filename defaults to <name> (matching the resolute .sources
+# name), so a host previously converged with apt_repository's URL-derived
+# name -- or one whose mirror URL later changed -- would strand the old
+# .list as a duplicate source. Sweep any other .list that references this
+# source's scoped keyring, keyed on the keyring path so it can't touch an
+# unrelated source. A no-op once every host carries the canonical
+# <filename>.list; runs before the cache refresh so the duplicate never
+# reaches apt-get update.
+- name: Find stale .list files for {{ apt_source_args.name }}
+  when:
+    - ansible_distribution_major_version | int < 26
+    - apt_source_present
+  find:
+    paths: /etc/apt/sources.list.d
+    patterns: "*.list"
+    contains: "signed-by=/usr/share/keyrings/{{ apt_source_args.name }}\\.gpg"
+  register: apt_source_stale_lists
+  become: true
+
+- name: Remove stale .list files for {{ apt_source_args.name }}
+  when:
+    - ansible_distribution_major_version | int < 26
+    - apt_source_present
+    - (item.path | basename) != (apt_source_filename ~ '.list')
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ apt_source_stale_lists.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
 
 # Pre-warm /var/lib/apt/lists/ so the python3-debian install below works in
 # check mode. Packer ships an empty cache and the apt module's update_cache
