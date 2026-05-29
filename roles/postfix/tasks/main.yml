@@ -104,7 +104,7 @@
   template:
     src: mailutils.conf.j2
     dest: /etc/mailutils.conf
-    mode: "0755"
+    mode: "0644"
     backup: true
   become: true
   tags:
