@@ -76,11 +76,20 @@ RUN if [ "$USE_NEXUS_MIRRORS" = "1" ]; then \
 # in roles/iptables/tasks/_verify.yml — TCP via curl, UDP via `nc -u`.
 # Without netcat, the wireguard ingress probe fails with
 # "nc: command not found".
+#
+# passt backs the guest NIC over a unix socket (qemu `-netdev stream`,
+# present in this image's qemu 8.2) instead of qemu's libslirp, whose
+# single-threaded userspace stack drops UDP under load and flakes
+# external-DNS _verify. test/machine.py probes for passt + stream support
+# and only uses it when both are present, so a jammy host (qemu 6.2, no
+# passt) or macOS transparently keeps the slirp path. See
+# notes/ci_qemu_net_passt_migration.md.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       ca-certificates curl git jq xz-utils unzip gpg apt-transport-https \
       qemu-system-x86 qemu-utils ovmf \
       openssh-client coreutils \
       netcat-openbsd \
+      passt \
       xorriso cloud-image-utils \
       python3-yaml \
       nodejs \
