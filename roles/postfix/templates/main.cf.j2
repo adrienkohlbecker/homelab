@@ -29,6 +29,14 @@ smtp_tls_session_cache_database = btree:${data_directory}/smtp_scache
 
 smtpd_relay_restrictions = permit_mynetworks permit_sasl_authenticated reject_unauth_destination
 mydomain = {{ domain }}
+# Qualify bare local senders (cron/smartd/fail2ban `root`) straight to $mydomain
+# rather than the default $myhostname, so a system alert is `root@$mydomain` in one
+# step -- the smtp_generic_maps @$mydomain rule then rewrites it to the per-host
+# sender identity. $mydomain is in mydestination, so the matching `root` *recipient*
+# still resolves locally through /etc/aliases. Postfix's recommended setting for a
+# domain spanning multiple hosts. masquerade_domains below stays as the safety net
+# that folds any FQDN-subdomain straggler (e.g. root@$myhostname) back to $mydomain.
+myorigin = $mydomain
 masquerade_domains = {{ email_domain }} {{ domain }}
 alias_maps = hash:/etc/aliases
 alias_database = hash:/etc/aliases

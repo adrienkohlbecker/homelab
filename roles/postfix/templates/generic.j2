@@ -1,10 +1,11 @@
 # Outbound sender rewriting for the Mailgun relay path (smtp_generic_maps),
-# applied by smtp(8) at delivery -- after masquerade has collapsed system mail
-# to root@{{ domain }}. Rewrite every locally-originated sender (left on
-# {{ domain }} by masquerade, or already on {{ email_domain }} from mailutils)
-# to a per-host identity at the Mailgun-authorized {{ email_domain }}, so each
-# host's mail is attributable from the From line while all hosts share one
-# sending domain with the service roles. Recipients are external so they never
-# match these lowest-precedence @domain rules.
+# applied by smtp(8) at delivery. System mail leaves as root@{{ domain }}
+# (myorigin = $mydomain qualifies bare senders; masquerade_domains folds any
+# FQDN-subdomain straggler down to {{ domain }}); mailutils-originated mail is
+# already on {{ email_domain }}. Rewrite both to a per-host identity at the
+# Mailgun-authorized {{ email_domain }}, so each host's mail is attributable
+# from the From line while all hosts share one sending domain with the service
+# roles. Recipients are external so they never match these lowest-precedence
+# @domain rules.
 @{{ domain }}          {{ inventory_hostname }}@{{ email_domain }}
 @{{ email_domain }}    {{ inventory_hostname }}@{{ email_domain }}
