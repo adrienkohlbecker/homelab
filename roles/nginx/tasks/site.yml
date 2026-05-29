@@ -286,19 +286,27 @@
   tags:
     - nginx_site
 
+# Resolve caller defaults once into _nginx_site_* locals (mirrors conf_d.yml),
+# so the condition/state/reload defaults live in one place rather than being
+# re-spelled at every gate below. Always set (no when:), so they're defined even
+# when condition is false (the record task reads them) and no stale value leaks
+# into the next nginx_site invocation.
+#
 # upstream_authorization is "on" only for a non-empty dict. An empty {} (which a
 # caller can legitimately compute when it has no users/tokens configured) is
 # treated as unset so it doesn't render the map, the injected Authorization
-# header, or the cookieless Authorization-bypass shortcut. Recomputed every call
-# (always set, so no stale value leaks into the next nginx_site invocation).
-- name: site | Resolve whether upstream_authorization is enabled
+# header, or the cookieless Authorization-bypass shortcut.
+- name: site | Resolve caller defaults
   set_fact:
+    _nginx_site_condition: "{{ nginx_site_args.condition | default(true) }}"
+    _nginx_site_state: "{{ nginx_site_args.state | default('present') }}"
+    _nginx_site_reload: "{{ nginx_site_args.reload | default(true) }}"
     _nginx_site_upstream_auth: "{{ ((nginx_site_args.upstream_authorization | default({})) | length > 0) | bool }}"
   tags:
     - nginx_site
 
 - name: site | Ensure directories exists
-  when: (nginx_site_args.condition | default(true)) and (nginx_site_args.state | default('present')) == 'present'
+  when: _nginx_site_condition and _nginx_site_state == 'present'
   file:
     state: directory
     path: "{{ item }}"
@@ -326,8 +334,8 @@
 # leave a broken file on disk to be discovered at the next unrelated reload.
 - name: site | Configure and enable nginx site
   when:
-    - nginx_site_args.condition | default(true)
-    - (nginx_site_args.state | default('present')) == 'present'
+    - _nginx_site_condition
+    - _nginx_site_state == 'present'
   become: true
   tags:
     - nginx_site
@@ -389,7 +397,7 @@
 
     - name: site | Reload nginx config
       when:
-        - nginx_site_args.reload | default(true)
+        - _nginx_site_reload
         - nginx_static_conf.changed or nginx_static_conf_enable.changed or (nginx_upstream_auth_map.changed | default(false))
       systemd:
         name: nginx
@@ -429,7 +437,7 @@
           state restored. Inspect the validate output above and the managed content.
 
 - name: site | Remove retired nginx site
-  when: (nginx_site_args.condition | default(true)) and (nginx_site_args.state | default('present')) == 'absent'
+  when: _nginx_site_condition and _nginx_site_state == 'absent'
   file:
     path: "{{ item }}"
     state: absent
@@ -444,9 +452,9 @@
 
 - name: site | Reload nginx after removing retired site
   when:
-    - nginx_site_args.condition | default(true)
-    - (nginx_site_args.state | default('present')) == 'absent'
-    - nginx_site_args.reload | default(true)
+    - _nginx_site_condition
+    - _nginx_site_state == 'absent'
+    - _nginx_site_reload
     - nginx_static_conf_absent.changed | default(false)
   systemd:
     name: nginx
@@ -461,8 +469,13 @@
 # the same play would overwrite). Mirrors conf_d's `<name>_result` and
 # systemd_unit's `<unit>_result`. `| bool` keeps it a real boolean under
 # jinja2_native rather than the string "True"/"False".
+#
+# Recorded unconditionally: under condition: false every write above is skipped,
+# so the registers are undefined and the `| default(false)` guards collapse the
+# fact to changed: false -- but the fact still gets DEFINED, so a caller wiring a
+# reload off it doesn't hit an undefined-variable error on exactly the host where
+# condition gated the site off.
 - name: site | Record site result
-  when: nginx_site_args.condition | default(true)
   set_fact:
     "{{ nginx_site_args.subdomain | regex_replace('[^A-Za-z0-9_]', '_') }}_site_result":
       changed: "{{ ((nginx_static_conf.changed | default(false)) or (nginx_static_conf_enable.changed | default(false)) or (nginx_upstream_auth_map.changed | default(false)) or (nginx_static_conf_absent.changed | default(false))) | bool }}"
