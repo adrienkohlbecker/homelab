@@ -119,17 +119,6 @@
     nginx_site_args:
       subdomain: minio
       proxy_pass: http://127.0.0.1:{{ service_ports.minio_console }}/
-      # Skip the "Login with SSO" click. MinIO 2022's console SPA
-      # renders a button when /api/v1/login returns
-      # loginStrategy=redirect; inject a script that runs the same
-      # redirect on page load when no session cookie is present.
-      # /oauth_callback is excluded so the post-Authelia round-trip
-      # completes; Accept-Encoding is unset so MinIO doesn't gzip
-      # the HTML out from under sub_filter.
-      location_conf: |
-        proxy_set_header Accept-Encoding "";
-        sub_filter_once on;
-        sub_filter '</head>' '<script>(function(){if(location.pathname==="/oauth_callback")return;if(document.cookie.match(/(?:^|;\s*)token=/))return;fetch("/api/v1/login").then(function(r){return r.json()}).then(function(d){if(d.loginStrategy==="redirect"&&d.redirect){location.replace(d.redirect)}}).catch(function(){})})();</script></head>';
   tags:
     - minio
 
@@ -144,9 +133,13 @@
       # Stream large S3 uploads (ARQ/restic) to MinIO as they arrive
       # instead of buffering the whole request body in nginx first.
       proxy_request_buffering: 'off'
+      # Otherwise ARQ uploads return HTTP 413.
+      client_max_body_size: 60M
+      # MINIO_PROMETHEUS_AUTH_TYPE=public leaves the metrics endpoint
+      # unauthenticated; the scrapers hit it on loopback, so close the
+      # public path rather than expose bucket names/sizes.
       location_conf: |
-        # Otherwise ARQ uploads return HTTP 413
-        client_max_body_size     60M;
+        location /minio/v2/metrics/ { deny all; return 404; }
   tags:
     - minio
 
