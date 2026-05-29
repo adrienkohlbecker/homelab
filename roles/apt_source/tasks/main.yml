@@ -47,7 +47,7 @@
       - apt_source_args.suites is defined
       # name lands in the keyring / .sources / preferences file paths --
       # keep it a bare slug so it can't traverse or inject path segments.
-      - apt_source_args.name | default('') is match('[a-z0-9_-]+$')
+      - apt_source_args.name | default('') is match('^[a-z0-9_-]+\Z')
       # the key is the source's trust anchor; a plaintext fetch is MITM-able.
       - apt_source_args.key_url | default('') is match('https://')
       - apt_source_args.state | default('present') in ['present', 'absent']
@@ -225,12 +225,21 @@
     - apt_source_is_deb822
     - apt_source_present
     - not ansible_check_mode
+  vars:
+    # gpg --with-colons emits an `fpr:` record per key (field 10, index 9 after
+    # splitting on ":", is the fingerprint); the FIRST one is the primary key.
+    # Compare key_id against that exact field, not a substring of the whole
+    # dump -- a hostile keyring could carry the expected fingerprint as a
+    # subkey or UID and pass an `in` check while its primary signing key differs.
+    apt_source_fpr_fields: "{{ (apt_source_key_fpr.stdout_lines | select('match', 'fpr:') | list | first | default('')).split(':') }}"
   assert:
     that:
-      - apt_source_args.key_id in (apt_source_key_fpr.stdout | default(''))
+      # single short-circuiting term so a short/empty list can't IndexError
+      - (apt_source_fpr_fields | length > 9) and (apt_source_fpr_fields[9] == apt_source_args.key_id)
     fail_msg: >-
-      Fetched key for {{ apt_source_args.name }} lacks fingerprint
-      {{ apt_source_args.key_id }}; got {{ apt_source_key_fpr.stdout | default('') }}
+      Fetched key for {{ apt_source_args.name }} primary fingerprint
+      {{ apt_source_fpr_fields[9] if (apt_source_fpr_fields | length > 9) else 'none' }}
+      does not match expected {{ apt_source_args.key_id }}
 
 - name: Add repository (deb822) for {{ apt_source_args.name }}
   when:
