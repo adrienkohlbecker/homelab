@@ -65,6 +65,11 @@
   register: netdata_config
   become: true
 
+# No explicit HTTP-API readiness probe after the restart: netdata's
+# ExecStartPost drop-in (override.conf, installed in main.yml) blocks the
+# restart until /api/v1/info answers, so a following reload-health can't
+# race the listener. charts_d.yml keeps its own probe as a backstop for
+# the _setup paths that run before that drop-in is in place.
 - name: config | Restart netdata
   when: (netdata_args.restart | default(true)) and (netdata_config_seed.changed or netdata_config.changed)
   systemd:
