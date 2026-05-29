@@ -287,6 +287,20 @@ resource "nexus_security_role" "push" {
   roles = []
 }
 
+# Aggregate of every per-repo push role, for identities that should push to all
+# hosted repos at once (the operator's lab_local_user) rather than the
+# single-repo CI service accounts above. Nesting via a comprehension over the
+# push-role map means adding a hosted repo extends this automatically -- no
+# consumer's role list needs touching. The per-repo least-privilege scoping
+# still applies to the *-push users; this is the deliberate all-repos grant.
+resource "nexus_security_role" "hosted_push_all" {
+  roleid      = "hosted-push-all"
+  name        = "hosted-push-all"
+  description = "Push to every hosted docker repo"
+  privileges  = []
+  roles       = [for r in nexus_security_role.push : r.roleid]
+}
+
 # Generated once and pinned in encrypted state; rotate by tainting the
 # random_password resource (`tofu apply -replace='random_password.
 # nexus_push["<name>"]'`). 32 chars, alphanumeric only -- some HTTP
@@ -316,10 +330,11 @@ resource "nexus_security_user" "push" {
 }
 
 # Operator's local/manual docker push identity (you `podman login` as this from
-# your workstation and lab hosts), carrying both hosted-repo push roles. Adopted
-# from the user created by hand in the UI, not provisioned here, so its password
-# is left unmanaged: `password` is omitted, the Nexus API never returns it, and
-# the provider can't see it -- a plain apply leaves the credential untouched and
+# your workstation and lab hosts), carrying the aggregate push role so it can
+# push to every hosted repo without a per-repo edit here. Adopted from the user
+# created by hand in the UI, not provisioned here, so its password is left
+# unmanaged: `password` is omitted, the Nexus API never returns it, and the
+# provider can't see it -- a plain apply leaves the credential untouched and
 # only reconciles role membership. The import block adopts the existing user in
 # place on the next apply (no recreate); delete it once the import has run.
 import {
@@ -334,8 +349,7 @@ resource "nexus_security_user" "lab_local_user" {
   email     = "lab_local_user@noreply.invalid"
   status    = "active"
   roles = [
-    nexus_security_role.push["homelab"].roleid,
-    nexus_security_role.push["compta"].roleid,
+    nexus_security_role.hosted_push_all.roleid,
   ]
 }
 
