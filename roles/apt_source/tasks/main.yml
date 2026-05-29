@@ -192,16 +192,23 @@
 
 # deb822_repository writes the .sources file but doesn't run `apt update`,
 # so the caller's install would otherwise hit a stale cache and fail to
-# find the package. Force a refresh on the run that changed the repo. The
-# legacy apt_repository path refreshes on its own; firing here too is
-# idempotent. Gate on the repo registers, not the prereq installs -- a
-# fresh gpg/python3-debian doesn't dirty the package lists.
-- name: Refresh apt cache after repository change for {{ apt_source_args.name }}
+# find the package. Force a refresh on the run that changed the repo, with
+# --error-on=any so a mis-wired source (wrong signed-by, 404 suite) fails
+# loudly here rather than as a baffling "no candidate" in the caller's
+# install -- the apt module's update_cache silently tolerates partial-suite
+# failures (matches roles/apt). The legacy apt_repository path refreshes on
+# its own; firing here too is idempotent. Gate on the repo registers, not
+# the prereq installs -- a fresh gpg/python3-debian doesn't dirty the lists.
+- name: Refresh apt cache after repository change for {{ apt_source_args.name }}  # noqa: command-instead-of-module
   when:
     - apt_source_repo_legacy is changed or apt_source_repo_deb822 is changed
     - not ansible_check_mode
-  apt:
-    update_cache: true
+  command: apt-get update --error-on=any
+  register: apt_source_refresh
+  retries: 5
+  delay: 30
+  until: apt_source_refresh.rc == 0
+  changed_when: apt_source_refresh.rc == 0
   become: true
 
 - name: Configure apt pin for {{ apt_source_args.name }}
