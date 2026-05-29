@@ -67,4 +67,8 @@ vrrp_instance pihole {
   notify_master "/usr/bin/logger -t pihole-keepalived MASTER"
   notify_backup "/usr/bin/logger -t pihole-keepalived BACKUP"
   notify_fault  "/usr/bin/logger -t pihole-keepalived FAULT"
+  # The state-transition hooks above don't fire when keepalived itself is
+  # stopped (SIGTERM during the throttled rolling restart), so notify_stop
+  # leaves a breadcrumb in the journal at exactly that planned VIP handoff.
+  notify_stop   "/usr/bin/logger -t pihole-keepalived STOP"
 }
