@@ -428,12 +428,3 @@
   become: true
   tags:
     - podman
-
-- name: install | Remove obsolete storage.conf.d drop-in
-  when: zfs_root
-  file:
-    path: /etc/containers/storage.conf.d/rootless-zvol.conf
-    state: absent
-  become: true
-  tags:
-    - podman
