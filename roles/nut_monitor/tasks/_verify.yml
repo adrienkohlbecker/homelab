@@ -43,7 +43,7 @@
 - name: _verify | Wait for the dummy UPS to publish its status
   command: upsc {{ nut_monitor_ups }} ups.status
   register: nut_monitor_upsc_wait
-  until: nut_monitor_upsc_wait.stdout == "OB DISCHRG"
+  until: '"DISCHRG" in nut_monitor_upsc_wait.stdout'
   retries: 15
   delay: 1
   changed_when: false
@@ -80,6 +80,45 @@
   loop:
     - "Status: OB DISCHRG"
     - "Battery charge: 42"
+    - "Runtime: 00:15:00"
+  changed_when: false
+  become: true
+
+# Exercise the REAL dispatch path upsmon uses -- NOTIFYCMD=upssched reading
+# upssched.conf and matching AT rules to CMDSCRIPT=nut-notify -- not just
+# nut-notify in isolation. upssched takes the event from $NOTIFYTYPE/$UPSNAME
+# (the env upsmon sets); an EXECUTE rule (LOWBATT) runs CMDSCRIPT synchronously,
+# so this lands in the mail shim without waiting on a START-TIMER interval.
+- name: _verify | Ensure the upssched runtime dir exists
+  file:
+    path: /run/nut
+    state: directory
+    owner: root
+    group: nut
+    mode: "0770"
+  become: true
+
+- name: _verify | Reset the mail capture before the upssched dispatch test
+  copy:
+    dest: /tmp/nut-mail.out
+    mode: "0644"
+    content: ""
+  become: true
+
+- name: _verify | Dispatch a real EXECUTE event through upssched to nut-notify
+  command: /usr/sbin/upssched
+  environment:
+    UPSNAME: "{{ nut_monitor_ups }}"
+    NOTIFYTYPE: LOWBATT
+  changed_when: false
+  become: true
+
+- name: _verify | The upssched-dispatched event reached the mail
+  command: grep -qF "UPS is on battery and has a low battery" /tmp/nut-mail.out
+  register: nut_monitor_upssched_mail
+  until: nut_monitor_upssched_mail.rc == 0
+  retries: 5
+  delay: 1
   changed_when: false
   become: true
 
