@@ -50,6 +50,8 @@ ExecStart=/usr/bin/podman run \
     --publish 127.0.0.1:{{ service_ports.openproject }}:80/tcp \
     --env OPENPROJECT_HOST__NAME=openproject.{{ inventory_hostname }}.{{ domain }} \
     --env OPENPROJECT_HTTPS=true \
+{# nginx emits the single HSTS header for this vhost; OPENPROJECT_HTTPS stays true #}
+    --env OPENPROJECT_HSTS=false \
     --env OPENPROJECT_DEFAULT__LANGUAGE=fr \
 {% if openproject_admin_password is defined %}
     --env OPENPROJECT_SEED__ADMIN__USER__MAIL={{ root_email }} \
@@ -60,6 +62,7 @@ ExecStart=/usr/bin/podman run \
     --secret=openproject_secret_key,type=env,target=SECRET_KEY_BASE \
 {% if openproject_smtp_password is defined %}
     --env OPENPROJECT_EMAIL__DELIVERY__METHOD=smtp \
+    --env OPENPROJECT_MAIL__FROM=openproject@{{ email_domain }} \
     --env OPENPROJECT_SMTP__ADDRESS={{ smtp_host }} \
     --env OPENPROJECT_SMTP__PORT={{ smtp_port }} \
     --env OPENPROJECT_SMTP__DOMAIN={{ email_domain }} \
