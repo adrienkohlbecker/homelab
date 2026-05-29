@@ -41,6 +41,10 @@ ssh_public_keys: |
 
 nginx_csp_default: "data: blob: 'unsafe-inline' 'unsafe-eval' 'self'"
 
+# Operator's personal login account on every host -- postfix aliases its local
+# mail to root_email. Pinned here so the alias is host-identity-driven, matching
+# the inventory's ansible_ssh_user rather than being connection-derived.
+operator_user: ak
 root_email: adrien.kohlbecker@gmail.com
 smtp_host: smtp.eu.mailgun.org
 smtp_port: 587
