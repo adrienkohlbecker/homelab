@@ -77,11 +77,12 @@ _netdata_presence_fetch_charts() {
 }
 
 # go.d:collector:<plugin>:<job> -> chart-id prefix used by that job.
-# netdata 1.46 doesn't expose a per-job liveness chart -- the 2.x
-# `netdata.go_d_<plugin>_<job>_data_collection_status` family doesn't
-# exist on this version. The presence-of-the-collector signal we have
-# is "did this collector emit any chart at all" -- so we look up by
-# chart-id prefix.
+# We detect collector presence by "did this collector emit any chart at
+# all", looking up by chart-id prefix. netdata 2.x also exposes a per-job
+# `netdata.plugin_data_collection_status` chart, but that only appears once
+# a job has run, so it can't see a collector that never instantiated any
+# chart -- which is exactly the gap this prefix check closes. Alerting on
+# that 2.x chart is a tracked follow-up (see context_liveness.conf.j2).
 #
 # Naming rule (observed on 1.46): the chart-id is "<plugin>.<context>"
 # when plugin==job (e.g. zfspool, nvme, fail2ban), otherwise

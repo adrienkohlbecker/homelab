@@ -10,14 +10,6 @@
 # fake_plugin:fake_job, and the health templates fan out across the
 # resulting charts.
 
-# netdata is x86_64-only (no arm64 build of the pinned 1.46.x — see
-# tasks/main.yml), so on arm64 the role is skipped at converge and there
-# is no running netdata to verify. End this test-only play cleanly.
-# _verify never runs in prod, so end_play is safe here.
-- name: _verify | Skip on non-x86_64 (netdata not installed there)
-  when: ansible_architecture != 'x86_64'
-  ansible.builtin.meta: end_play
-
 - name: _verify | Netdata.service is loaded and active
   systemd:
     name: netdata
@@ -188,10 +180,10 @@
       Got liveness keys: {{ _keys | select('search', 'liveness_') | list }}
 
 # No assertion for `collector_stale` / `collector_failing` alarms (binding
-# netdata.plugin_data_collection_status): that chart context is netdata 2.x
-# only, so on the pinned 1.46 the templates can't instantiate. They're
-# omitted from context_liveness.conf.j2 to match -- re-add both here and
-# there when the version pin lifts.
+# netdata.plugin_data_collection_status). That chart context exists on 2.x,
+# but adding those templates is a deferred follow-up (O2 in
+# notes/netdata_v2_migration_analysis.md); they're omitted from
+# context_liveness.conf.j2 to match. Re-add both here and there together.
 
 # Restore the production conf (update_every back to 60s) so the role
 # leaves no surprise idempotency drift behind.
