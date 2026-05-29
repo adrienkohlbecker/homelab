@@ -82,14 +82,6 @@
   tags:
     - podman
 
-- name: Configure health script
-  file:
-    path: /usr/local/bin/wait_for_healthy_container
-    state: absent
-  become: true
-  tags:
-    - podman
-
 - name: Install podman prune timer
   import_tasks: prune.yml
   vars:
