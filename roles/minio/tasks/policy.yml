@@ -1,7 +1,10 @@
 # Provision one MinIO IAM policy from a committed JSON document
 # (files/<src>). The file is shipped to a stable path so `mcli admin
 # policy add` reads it in place -- no /tmp round-trip -- and the creates:
-# sentinel on MinIO's on-disk policy dir gates re-registration. Looped
+# sentinel on MinIO's on-disk policy dir gates re-registration. That
+# sentinel path is part of the IAM-layout pin (vars/main.yml): a server
+# bump must re-validate it, and editing a policy JSON does NOT re-register
+# (the sentinel persists) -- remove it by hand to force a reload. Looped
 # from data.yml with `minio_policy` = {name, src}.
 - name: policy | Stage file for {{ minio_policy.name }}
   copy:

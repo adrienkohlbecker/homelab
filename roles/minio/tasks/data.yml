@@ -8,21 +8,24 @@
 
 # Feed the keys on stdin (access key line 1, secret line 2) so the secret
 # never lands in argv / the process table; mcli reads them from stdin when
-# only the alias is passed.
+# only the alias is passed. Run every converge (changed_when: false) rather
+# than gating on an on-disk sentinel: `mcli admin user add` overwrites, so a
+# rotated secret_key in minio_users is actually re-applied here.
 - name: data | Create users
   command: mcli admin user add default
   args:
     stdin: "{{ item.access_key }}\n{{ item.secret_key }}"
-    creates: /mnt/minio/.minio.sys/config/iam/users/{{ item.access_key }}
+  changed_when: false
   loop: "{{ minio_users }}"
   become: true
   tags:
     - minio
 
+# --ignore-existing no-ops (exit 0) when the bucket is already present, so
+# this is self-idempotent without coupling to MinIO's on-disk bucket layout.
 - name: data | Create buckets
-  command: mcli mb default/{{ item }}
-  args:
-    creates: /mnt/minio/{{ item }}
+  command: mcli mb --ignore-existing default/{{ item }}
+  changed_when: false
   loop: "{{ minio_buckets }}"
   become: true
   tags:
