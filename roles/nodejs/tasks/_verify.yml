@@ -36,3 +36,17 @@
         package: nodejs
         version: "{{ nodejs_major }}.*"
         priority: 600
+    # The shared _verify tombstones this source as its final step (the VM is
+    # torn down after, so removing the real source is safe) to exercise the
+    # state: absent path. A separate concrete dict -- not apt_source_args |
+    # combine -- so the nested apt_source import isn't a self-referential
+    # template; the full add-args match nodejs/main.yml so apt_repository
+    # removes the same source line it added.
+    apt_source_tombstone_args:
+      name: nodesource
+      key_id: 6F71F525282841EEDAF851B42F59B5F99B1BE0B4
+      key_url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+      uris: "{{ mirror_apt_nodesource }}"
+      suites: nodistro
+      components: main
+      state: absent
