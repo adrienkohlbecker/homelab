@@ -82,7 +82,7 @@
       Host: "nut.{{ inventory_hostname }}.{{ domain }}"
     validate_certs: false
     return_content: true
-    status_code: [200, 301, 302, 401, 403, 502, 503]
+    status_code: [ 200, 301, 302, 401, 403, 502, 503 ]
   register: nut_server_cgi
   until: nut_server_cgi.status is defined and nut_server_cgi.status == 200
   retries: 15
