@@ -169,11 +169,18 @@
   tags:
     - user
 
-- name: Get public key
+# Fetch over HTTPS rather than gpg --keyserver: bare HKP is port 11371
+# (widely firewalled), and dirmngr hard-fails when keyserver.ubuntu.com
+# resolves to an AAAA the host can't route (the qemu test net has no IPv6
+# route) instead of falling back. curl rides 443 and happy-eyeballs to IPv4.
+- name: Import the commit-signing public key
   when: not (ansible_check_mode and user_apt_gpg.changed)
-  command: gpg --keyserver keyserver.ubuntu.com --recv-keys C248DE6357445D6302F9A62E74BFD03C20CC21AF
+  shell: |
+    set -euo pipefail
+    curl -fsSL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0xC248DE6357445D6302F9A62E74BFD03C20CC21AF" | gpg --import
   args:
     creates: "{{ ansible_user_dir }}/.gnupg/pubring.kbx"
+    executable: /bin/bash
   tags:
     - user
 
