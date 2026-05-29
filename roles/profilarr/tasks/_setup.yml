@@ -13,11 +13,17 @@
     name: media
     tasks_from: network
 
+- name: _setup | Install authelia stub for auth=required tests
+  import_role:
+    name: _test
+    tasks_from: authelia_stub
+
 - name: _test | Setup dependencies
-  shell: |
-    set -euo pipefail
-    mkdir /mnt/{services,media}
-  args:
-    executable: /bin/bash
-    creates: /mnt/services
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0755"
+  loop:
+    - /mnt/services
+    - /mnt/services/sqlite
   become: true
