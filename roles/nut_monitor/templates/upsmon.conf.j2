@@ -29,6 +29,16 @@
 #
 # RUN_AS_USER nut
 
+# Pinned (not churn): the 0640 root:nut perms on upsmon.conf/upssched.conf
+# are readable by the monitoring half only because it drops to this user, so
+# making the drop target explicit keeps file ownership and daemon user in
+# lockstep.
+RUN_AS_USER nut
+
+# Raise upsmon's log verbosity here (then reload) to debug a prod power event
+# you can't reproduce -- no -D on the command line needed.
+# DEBUG_MIN 1
+
 # --------------------------------------------------------------------------
 # MONITOR <system> <powervalue> <username> <password> ("master"|"slave")
 #
@@ -256,7 +266,11 @@ NOTIFYFLAG COMMOK   SYSLOG+WALL+EXEC
 NOTIFYFLAG COMMBAD  SYSLOG+WALL+EXEC
 NOTIFYFLAG SHUTDOWN SYSLOG+WALL+EXEC
 NOTIFYFLAG REPLBATT SYSLOG+WALL+EXEC
-NOTIFYFLAG NOCOMM   SYSLOG+WALL+EXEC
+# NOCOMM repeats every NOCOMMWARNTIME (300s) while a UPS stays unreachable;
+# COMMBAD already delivered the debounced first alert, so drop EXEC to stop
+# the repeat-mail (SYSLOG+WALL still record it). ONLINE/COMMOK above keep EXEC
+# deliberately -- upssched needs those events to CANCEL-TIMER.
+NOTIFYFLAG NOCOMM   SYSLOG+WALL
 NOTIFYFLAG NOPARENT SYSLOG+WALL+EXEC
 #
 # Possible values for the flags:
@@ -382,5 +396,10 @@ FINALDELAY 5
 # that nobody can sniff your sessions without a large effort.  Setting
 # this will make upsmon drop connections if the remote upsd doesn't
 # support SSL, so don't use it unless all of them have it running.
-# When compiled with NSS support of SSL, can be overriden for host 
+# When compiled with NSS support of SSL, can be overriden for host
 # specified with a CERTHOST directive.
+
+# TLS (CERTPATH/CERTVERIFY/FORCESSL above) is deliberately left unset: the
+# MONITOR target is loopback (nut_monitor_ups defaults to @localhost), so an
+# encrypted upsd connection would protect nothing. Revisit if nut_monitor_ups
+# ever points at a remote upsd.
