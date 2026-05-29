@@ -72,6 +72,18 @@
   tags:
     - user
 
+# kvm owns /dev/kvm, so membership lets the operator boot qemu VMs -- the
+# test harness (test/testrole.py) and ad-hoc libvirt VMs -- without sudo.
+# Same append rationale as adm above.
+- name: Add the operator to the kvm group (run qemu/the test harness without sudo)
+  user:
+    name: "{{ ansible_user_id }}"
+    groups: kvm
+    append: true
+  become: true
+  tags:
+    - user
+
 # The operator connects from Ghostty (TERM=xterm-ghostty); a host that
 # doesn't ship that terminfo entry leaves zsh's zle without capability
 # lookups, which manifests as doubled keystrokes and runaway line redraw
