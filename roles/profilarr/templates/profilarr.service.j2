@@ -36,6 +36,7 @@ ExecStart=/usr/bin/podman run \
     --replace \
     --rm \
     --name profilarr \
+    --security-opt=no-new-privileges \
     --init \
     --log-driver journald \
     --log-opt tag="profilarr" \
