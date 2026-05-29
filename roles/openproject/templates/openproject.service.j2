@@ -52,7 +52,6 @@ ExecStart=/usr/bin/podman run \
     --env OPENPROJECT_HTTPS=true \
 {# nginx emits the single HSTS header for this vhost; OPENPROJECT_HTTPS stays true #}
     --env OPENPROJECT_HSTS=false \
-    --env OPENPROJECT_DEFAULT__LANGUAGE=fr \
 {% if openproject_admin_password is defined %}
     --env OPENPROJECT_SEED__ADMIN__USER__MAIL={{ root_email }} \
     --env "OPENPROJECT_SEED__ADMIN__USER__NAME=Adrien Kohlbecker" \
