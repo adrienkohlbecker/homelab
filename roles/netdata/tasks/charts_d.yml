@@ -23,20 +23,14 @@
   set_fact:
     _netdata_charts_d_script: "{{ netdata_args.script }}"
     _netdata_charts_d_conf: "{{ netdata_args.conf }}"
-    # netdata-plugin-chartsd is an arch-`all` package whose `Depends:
-    # netdata (= <ver>)` pins it to the exact main-package version. The
-    # apt_preferences pin holds netdata at 1.46.*, but the packagecloud
-    # arm64 build lags at 1.39.1 -- so on aarch64 the plugin resolves to
-    # 1.46.3 while netdata-main can only be 1.39.1, leaving the dependency
-    # unsatisfiable ("held broken packages"). arm64 is the local test box
-    # only (all prod hosts are x86_64), so skip the charts.d collector
-    # there rather than chase the upstream arch gap.
-    _netdata_charts_d_condition: "{{ (netdata_args.condition | default(true)) and ansible_architecture == 'x86_64' }}"
+    _netdata_charts_d_condition: "{{ netdata_args.condition | default(true) }}"
     _netdata_charts_d_restart: "{{ netdata_args.restart | default(true) }}"
 
-# charts.d.plugin is shipped in a separate package on the netdata.cloud
-# apt repo (the main netdata package doesn't pull it in). Idempotent
-# apt: cache_valid_time=3600 keeps repeated calls cheap.
+# charts.d.plugin ships as netdata-plugin-chartsd. The v2 base `netdata`
+# package already Depends on it, but install it explicitly so this
+# collector's hard dependency is declared at its point of use (and the role
+# survives a future change to the base Depends). Idempotent apt:
+# cache_valid_time=3600 keeps repeated calls cheap.
 - name: charts_d | Install netdata-plugin-chartsd
   when:
     - _netdata_charts_d_condition

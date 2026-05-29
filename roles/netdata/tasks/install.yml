@@ -7,20 +7,19 @@
   tags:
     - netdata
 
-# Source is netdata's pre-2023 packagecloud repo, not repo.netdata.cloud:
-# the latter prunes old releases and no longer carries the 1.46.* series
-# this role pins, so the pin had gone silently dead (any fresh install
-# jumped to 2.x). packagecloud still serves 1.46.3, so the pin resolves.
-# Full rationale: notes/netdata_packagecloud_migration.md. packagecloud is
-# component-based (`<release> main`), unlike repo.netdata.cloud's flat layout,
-# and signs with its own key (A799AB70…, not Netdatabot's 6E155DC1…).
+# Source is netdata's upstream stable repo (repo.netdata.cloud), which
+# carries the current 2.x series for jammy/noble across amd64 + arm64 +
+# armhf. Flat layout (trailing-slash Suites, no Components), signed with
+# Netdatabot's key (6E155DC1…). The apt_preferences pin holds netdata at
+# 2.* so a fresh install lands on the latest 2.x and only a deliberate
+# pin bump moves to a future major. See notes/netdata_v2_migration_analysis.md.
 #
 # Repository setup forks on Ubuntu major version because apt-key was
 # removed from the default install in resolute (26.04) and the apt_key
 # module errors with "Either apt-key or gpg binary is required". The
 # deb822_repository module replaces both apt_key + apt_repository with
 # a single sources.list.d/*.sources file that embeds the key inline.
-- name: install | Add repository key (upstream)
+- name: install | Add repository key
   when:
     - ansible_distribution_major_version | int < 26
     - not (ansible_check_mode and netdata_apt_gpg.changed)
@@ -32,37 +31,26 @@
   tags:
     - netdata
 
-- name: install | Add repository key (packagecloud)
-  when:
-    - ansible_distribution_major_version | int < 26
-    - not (ansible_check_mode and netdata_apt_gpg.changed)
-  apt_key:
-    id: A799AB702EA6DEE3E21AA716B4188B90F6FB8FD3
-    url: https://packagecloud.io/netdata/netdata/gpgkey
-    keyring: /etc/apt/trusted.gpg.d/netdata.gpg
-  become: true
-  tags:
-    - netdata
-
 - name: install | Add repository
   when: ansible_distribution_major_version | int < 26
   apt_repository:
-    repo: deb [signed-by=/etc/apt/trusted.gpg.d/netdata.gpg] {{ mirror_apt_netdata_packagecloud }} {{ ansible_distribution_release }} main
+    repo: deb [signed-by=/etc/apt/trusted.gpg.d/netdata.gpg] {{ mirror_apt_netdata }}/ {{ ansible_distribution_release }}/
   register: netdata_apt_repo_legacy
   become: true
   tags:
     - netdata
 
-# repo.netdata.cloud and packagecloud sanitize to different sources.list.d
-# filenames, so the mirror switch leaves the old flat-layout list behind on
-# hosts provisioned before the migration -- it would keep pulling stale 2.x
-# metadata. Drop it. Legacy path only: the deb822 path (>= 26) reuses the same
-# `netdata.sources` name and is overwritten in place. No-op on fresh hosts and
-# on test machines (their Nexus-URL list keeps its filename across the switch).
-- name: install | Drop the pre-migration repo.netdata.cloud source
+# packagecloud and repo.netdata.cloud sanitize to different sources.list.d
+# filenames, so repointing the mirror back upstream leaves the packagecloud
+# list behind on hosts provisioned during the packagecloud window -- it would
+# keep pulling stale 1.46.* metadata alongside the new upstream list. Drop it.
+# Legacy path only: the deb822 path (>= 26) reuses the same `netdata.sources`
+# name and is overwritten in place. No-op on fresh hosts and on test machines
+# (their Nexus-URL list keeps its filename across the switch).
+- name: install | Drop the stale packagecloud source
   when: ansible_distribution_major_version | int < 26
   file:
-    path: /etc/apt/sources.list.d/repo_netdata_cloud_repos_stable_ubuntu.list
+    path: /etc/apt/sources.list.d/packagecloud_io_netdata_netdata_ubuntu.list
     state: absent
   register: netdata_apt_old_repo_removed
   become: true
@@ -96,7 +84,7 @@
   tags:
     - netdata
 
-# Component-based repo: bare Suites (release name), Components `main`.
+# Flat repo: trailing `/` on URI + Suites, no Components field.
 - name: install | Add repository (deb822)
   when:
     - ansible_distribution_major_version | int >= 26
@@ -104,10 +92,9 @@
   ansible.builtin.deb822_repository:
     name: netdata
     types: deb
-    uris: "{{ mirror_apt_netdata }}"
-    suites: "{{ ansible_distribution_release }}"
-    components: main
-    signed_by: https://packagecloud.io/netdata/netdata/gpgkey
+    uris: "{{ mirror_apt_netdata }}/"
+    suites: "{{ ansible_distribution_release }}/"
+    signed_by: https://repo.netdata.cloud/netdatabot.gpg.key
   register: netdata_apt_repo_deb822
   become: true
   tags:
@@ -189,9 +176,12 @@
   tags:
     - netdata
 
-# No separate netdata-plugin-* packages: the base `netdata` package covers
-# what this fleet charts. Don't add netdata-plugin-slabinfo: it's unused
-# (disabled-by-default, no collector/context/alarm references it) and has
-# no arm64 build on packagecloud, so it hard-fails local arm64 (Apple
-# Silicon) test VMs while the x86_64 fleet (lab/pug/fox) is unaffected.
-# See notes/netdata_packagecloud_migration.md.
+# No explicit netdata-plugin-* list: the v2 base `netdata` package pulls the
+# whole suite + the local dashboard (go, chartsd, apps, debugfs, nfacct, perf,
+# pythond, slabinfo, otel, netdata-dashboard, …), so apt resolves them. The
+# only amd64-only piece is netdata-plugin-ebpf, which simply has no arm64 build
+# and is skipped there (everything else, slabinfo included, is multi-arch), so
+# `apt install netdata` resolves on the Apple-Silicon test box too. On amd64
+# ebpf.plugin lands but stays idle (`[plugins] ebpf = no` in main.yml).
+# Verified by testrole.py netdata on the arm64 box (netdata 2.10.3).
+# See notes/netdata_v2_migration_analysis.md.

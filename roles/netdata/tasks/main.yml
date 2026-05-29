@@ -1,23 +1,3 @@
-# netdata can't install on arm64: the pinned 1.46.x has no arm64 build
-# (packagecloud capped arm64 at 1.39.1, repo.netdata.cloud pruned to 2.6+
-# — see notes/netdata_packagecloud_migration.md), and every netdata host
-# (lab/pug/fox) is x86_64. Under the test harness (test/playbooks/site.yml
-# imports just this role into its own play) bail out on non-x86_64 so
-# Apple-Silicon VMs skip netdata instead of failing. end_play — not a
-# when-gate on the role body — is required: gating the body would skip the
-# leading set_fact in charts_d.yml while its successor tasks still template
-# `name:` from the now-undefined fact and error. The `_role_under_test`
-# guard scopes end_play to that single-role test play; prod's site.yml
-# never sets it (and runs netdata only on x86_64 hosts), so a real
-# multi-role play is never truncated.
-- name: Skip netdata on non-x86_64 test machines
-  when:
-    - ansible_architecture != "x86_64"
-    - _role_under_test is defined
-  ansible.builtin.meta: end_play
-  tags:
-    - netdata
-
 - name: Require netdata_alerts_token to be defined
   assert:
     that:
@@ -60,8 +40,10 @@
     - section: web
       option: bind to
       value: 127.0.0.1
-    - section: global
-      option: access log
+    # v2 moved access logging out of [global] into the [logs] section;
+    # `[global] access log` is silently ignored, re-enabling the file.
+    - section: logs
+      option: access
       value: none # accesses are logged by nginx
     - section: db
       option: update every

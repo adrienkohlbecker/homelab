@@ -75,7 +75,7 @@ netdata_contexts:
   diskspace:       disk.space
   diskstatistics:  disk.io
   entropy:         system.entropy
-  extfrag:         mem.fragmentation_index_dma
+  extfrag:         mem.numa_node_zone_fragmentation_index
   idlejitter:      system.idlejitter
   interrupts:      system.interrupts
   ipc:             system.ipc_semaphores
