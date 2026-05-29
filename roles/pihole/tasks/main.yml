@@ -109,7 +109,11 @@
     systemd_unit_args:
       src: pihole
       condition: "{{ not (ansible_check_mode and (pihole_service_result.changed or pihole_user.changed)) }}"
-      restart: false
+      restart: "{{ pihole_service_result.changed or pihole_fahm_cfg.changed }}"
+      # Serialize across the lab+pug HA pair so a unit-file or dnsmasq
+      # change never restarts both nameservers at once (one node keeps
+      # serving the keepalived VIP through the other's restart).
+      throttle: 1
   tags:
     - pihole
 
@@ -134,16 +138,6 @@
     mode: "0755"
     backup: true
     validate: bash -n %s
-  become: true
-  tags:
-    - pihole
-
-- name: Restart the service
-  when: not (ansible_check_mode and (pihole_service_result.changed or pihole_user.changed)) and ((pihole_service_result.changed and not systemd_unit_started.changed) or pihole_fahm_cfg.changed)
-  systemd:
-    name: pihole
-    state: restarted
-  throttle: 1
   become: true
   tags:
     - pihole
