@@ -1,7 +1,23 @@
+# Required inputs live in group_vars/{prod,test}.yml. Assert them
+# non-empty: an empty paperless_secret_key boots Django with a blank
+# signing key (CSRF/session breakage) and an empty OIDC secret yields a
+# login page that passes the _verify markers yet fails every real
+# Authelia handshake -- both reach `active` with no failure signal.
+- name: Assert required paperless inputs are set
+  assert:
+    that:
+      - paperless_secret_key | default('') | length > 0
+      - paperless_oidc_client_secret | default('') | length > 0
+    fail_msg: >-
+      paperless_secret_key and paperless_oidc_client_secret must be set
+      (group_vars/{prod,test}.yml).
+  tags:
+    - paperless
+
 # Join the redis-owned network so paperless can resolve `redis` via
 # aardvark-dns and connect to the redis container on the same bridge.
-# Idempotent: redis role creates this too in prod; ensures the
-# network exists when paperless is tested standalone.
+# Both producer (redis) and consumer (paperless) create this network
+# independently -- it's idempotent, so each role stays self-contained.
 - name: Create redis podman network
   when: not ansible_check_mode
   containers.podman.podman_network:
