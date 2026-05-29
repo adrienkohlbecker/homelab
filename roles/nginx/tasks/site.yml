@@ -238,6 +238,25 @@
   tags:
     - nginx_site
 
+# A non-empty upstream_authorization without proxy_pass is silently broken: the
+# injected `proxy_set_header Authorization` only renders inside the proxy_pass
+# location block (site.conf.j2), but the conf.d map AND the cookieless
+# Authorization-bypass shortcut render regardless -- so the bypass gets armed
+# while the per-user token is never injected. Empty {} is unset (see below), so
+# gate on length, matching how the template decides whether the knob is on.
+- name: site | Assert upstream_authorization requires proxy_pass
+  when: (nginx_site_args.upstream_authorization | default({})) | length > 0
+  assert:
+    that:
+      - nginx_site_args.proxy_pass is defined
+    fail_msg: >-
+      nginx_site_args.upstream_authorization needs proxy_pass: the injected
+      Authorization header only renders on the proxied location, but the
+      cookieless Authorization-bypass shortcut arms regardless, so without
+      proxy_pass the auth bypass is on while the token is never forwarded.
+  tags:
+    - nginx_site
+
 - name: site | Assert enable_http is not combined with auth or a bypass token
   when: nginx_site_args.enable_http | default(false)
   assert:
