@@ -128,8 +128,12 @@
   become: true
 
 # Wait for the row to land. fluent-bit's Flush=5s plus collector batch
-# timeout (5s) means up to ~10s typical, with retries on initial cold
-# start of the collector pipeline.
+# timeout (5s) means up to ~10s typical -- but on box_deps the whole
+# hyperdx/clickhouse/otel-collector stack is cold-started in _setup, so
+# the first end-to-end trip can run well past that under load. fluentbit
+# retries the flush indefinitely (Retry_Limit false + 50M disk buffer),
+# so the row WILL arrive; the budget below (60*2s = 120s) just has to
+# outlast the cold-start tail rather than the steady-state latency.
 #
 # Match on LogAttributes['csp_blocked_uri'] rather than Body LIKE: the
 # query command itself ends up in ansible's own task-output journal
@@ -145,7 +149,7 @@
     _test_args:
       label: "OTLP-end-to-end | wait for CSP row"
       sql: "SELECT count() FROM default.otel_logs WHERE LogAttributes['csp_blocked_uri'] LIKE '%{{ fluentbit_otlp_csp_marker }}%'"
-      retries: 30
+      retries: 60
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
 
@@ -237,7 +241,7 @@
         SELECT count() FROM default.otel_logs
         WHERE Body LIKE '%{{ fluentbit_otlp_journald_marker }}%'
           AND ServiceName = 'fluentbit_verify_journald'
-      retries: 30
+      retries: 60
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
 
@@ -309,7 +313,7 @@
         SELECT count() FROM default.otel_logs
         WHERE Body LIKE '%{{ fluentbit_otlp_nginx_marker }}%'
           AND ServiceName = 'nginx_access'
-      retries: 30
+      retries: 60
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
 
@@ -371,7 +375,7 @@
         SELECT count() FROM default.otel_logs
         WHERE Body LIKE '%{{ fluentbit_otlp_warn_marker }}%'
           AND ServiceName = 'fluentbit_verify_warn'
-      retries: 30
+      retries: 60
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
 
@@ -442,7 +446,7 @@
         WHERE Body LIKE '%Traceback%'
           AND Body LIKE '%{{ fluentbit_otlp_multiline_marker }}%'
           AND ServiceName = 'fluentbit_verify_multiline'
-      retries: 30
+      retries: 60
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
 
@@ -510,7 +514,7 @@
         SELECT count() FROM default.otel_logs
         WHERE Body LIKE '%{{ fluentbit_otlp_mitogen_marker }}%'
           AND ServiceName = 'mitogen'
-      retries: 30
+      retries: 60
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
 
@@ -577,7 +581,7 @@
         SELECT count() FROM default.otel_logs
         WHERE Body LIKE '%{{ fluentbit_otlp_podman_marker }}%'
           AND ServiceName = 'podman_unnamed'
-      retries: 30
+      retries: 60
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
 
@@ -649,7 +653,7 @@
         SELECT count() FROM default.otel_logs
         WHERE LogAttributes['CONTAINER_ID_FULL'] = '{{ fluentbit_otlp_healthcheck_cid }}'
           AND ServiceName = 'podman_healthcheck'
-      retries: 30
+      retries: 60
       delay: 2
       until: "_test_clickhouse_result.rc == 0 and (_test_clickhouse_result.stdout | trim | int) > 0"
 
