@@ -9,17 +9,55 @@
   hosts: all
   become: true
   tasks:
+    # This seed runs outside site.yml, so it never gets the apt role's
+    # mirror rewrite that every normal converge does first. The packer
+    # image ships /etc/apt/sources.list pointing at upstream
+    # archive.ubuntu.com; the build VM reaches that on a fresh boot, but
+    # loses external egress through its nested SLIRP-over-slirp4netns NAT
+    # after the in-guest reboot below (lab-internal Nexus stays reachable).
+    # Point apt at the Nexus mirror up front so neither the HWE install nor
+    # the post-reboot podman/backports step depends on external
+    # connectivity. The qemu image has no cloud-init, so the rewritten
+    # sources.list survives the reboot.
+    - name: Configure apt to use the Nexus mirror
+      import_role:
+        name: apt
+
     # On jammy the HWE meta pulls noble's 6.8 kernel + matching modules.
-    # box_deps test boots pick that 6.8 (newest); 6.8 supports native
-    # idmapped overlay mounts, which the +0:N:1 fake-root uidmap pattern
-    # (healthchecks/openproject/…) needs and jammy's stock 5.15 lacks.
-    # Noble+ ships a 6.x GA already, so the linux-generic-hwe-24.04 etc.
-    # metas don't exist and `when:` keeps apt from failing on them. The
-    # role also creates an empty `power` group to silence thermald's dbus
-    # policy warnings.
+    # 6.8 supports native idmapped overlay mounts, which the +0:N:1
+    # fake-root uidmap pattern (healthchecks/openproject/…) needs and
+    # jammy's stock 5.15 lacks. Noble+ ships a 6.x GA already, so the
+    # linux-generic-hwe-24.04 etc. metas don't exist and `when:` keeps
+    # apt from failing on them. The role also creates an empty `power`
+    # group to silence thermald's dbus policy warnings.
     - name: Install HWE kernel (jammy only)
       import_role:
         name: hwe_kernel
+      when: ansible_distribution_release == "jammy"
+
+    # Boot into the freshly-installed 6.8 BEFORE podman touches storage.
+    # Initializing the overlay store on 5.15 (no native idmapped mounts)
+    # makes the podman role write mount_program=fuse-overlayfs and bakes a
+    # `.has-mount-program=true` marker + fuse-laid layers into the ext4
+    # graphroot. That state would ride the image into every box_deps test
+    # boot (which comes up on 6.8), where podman can no longer use native
+    # idmapped mounts on a fuse-initialized store and falls back to
+    # storage-chown-by-maps -- which EIOs lchowning the device nodes
+    # (dev/console) baked into linuxserver/* layers, failing the container
+    # start with status 125. Booting 6.8 first lets the store initialize
+    # natively (.has-mount-program=false), exactly as prod (lab/pug) does.
+    # ZBM selects the new 6.8 (newest) on the reboot; the qemu hostfwd
+    # survives a guest reboot so ansible reconnects.
+    - name: Reboot into the HWE kernel before initializing podman storage
+      reboot:
+      when: ansible_distribution_release == "jammy"
+
+    # The reboot module doesn't refresh facts, so ansible_facts.kernel
+    # would still read 5.15 and the podman role's storage.conf gate
+    # (mount_program when kernel < 5.19) would re-add fuse. Re-gather so it
+    # sees 6.8 and renders the native, prod-equivalent storage.conf.
+    - name: Re-gather facts so the kernel version reflects the HWE reboot
+      setup:
       when: ansible_distribution_release == "jammy"
 
     - name: Install podman + noble-backported runtime
@@ -31,25 +69,3 @@
       import_role:
         name: _test
         tasks_from: nginx
-
-    # This seed runs on jammy's stock 5.15 (HWE 6.8 is installed above but
-    # only takes effect on the next boot). podman's `install` therefore
-    # initialized the overlay store under 5.15 -- no native idmapped mounts,
-    # so it wrote mount_program=fuse-overlayfs and baked a
-    # `.has-mount-program=true` marker plus fuse-laid layers into the ext4
-    # graphroot. That state would ride the image into every box_deps test
-    # boot (which comes up on 6.8), where podman can no longer use native
-    # idmapped mounts on a fuse-initialized store and falls back to
-    # storage-chown-by-maps -- which EIOs lchowning the device nodes
-    # (dev/console) baked into linuxserver/* layers, failing the container
-    # start with status 125. Wipe the store so the box_deps test boot
-    # re-initializes it natively on 6.8 (.has-mount-program=false), exactly
-    # as prod (lab/pug) does. The podman package + config stay baked (the
-    # install time box_deps exists to save); only the empty graphroot is
-    # reset. A reboot-into-6.8-first approach is cleaner in theory but
-    # cloud-init rewrites /etc/apt/sources.list off the Nexus mirror on the
-    # reboot, breaking the next apt step.
-    - name: Reset the podman store initialized under the stock 5.15 kernel (jammy)
-      command: podman system reset --force
-      changed_when: true
-      when: ansible_distribution_release == "jammy"
