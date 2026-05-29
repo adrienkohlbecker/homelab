@@ -151,6 +151,9 @@ service_ports:
   minio_api: 9199
   minio_console: 9001
   nut: 3493
+  # Paperless-ngx, loopback-published; nginx fronts it on the paperless
+  # subdomain. Container listens on 8000 internally.
+  paperless: 8001
   # Prometheus, loopback-only (nginx fronts it on the prometheus subdomain);
   # 9090 is the server default. Also minio's MINIO_PROMETHEUS_URL target.
   prometheus: 9090

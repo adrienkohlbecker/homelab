@@ -6,7 +6,7 @@
 # the login route is what actually exercises the auth surface.
 - name: _verify | Paperless answers on its loopback port
   uri:
-    url: http://localhost:8001/accounts/login/
+    url: http://localhost:{{ service_ports.paperless }}/accounts/login/
     status_code: 200
   register: paperless_verify_loopback
   retries: 30

@@ -212,6 +212,8 @@
   vars:
     nginx_site_args:
       subdomain: paperless
-      proxy_pass: http://127.0.0.1:8001/
+      proxy_pass: http://127.0.0.1:{{ service_ports.paperless }}/
+      # Default 16M is small for bulk / multi-page scans uploaded via the UI.
+      client_max_body_size: 100m
   tags:
     - paperless
