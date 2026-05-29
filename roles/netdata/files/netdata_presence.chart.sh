@@ -76,18 +76,24 @@ _netdata_presence_fetch_charts() {
     jq -r '.charts | keys[]' 2>/dev/null
 }
 
-# go.d:collector:<plugin>:<job> -> chart-id prefix used by that job.
-# We detect collector presence by "did this collector emit any chart at
-# all", looking up by chart-id prefix. netdata 2.x also exposes a per-job
+# go.d:collector:<plugin>:<job> -> the chart-id prefix that job's charts
+# carry. We detect collector presence by "did this collector emit any
+# chart at all", matched by that prefix. netdata 2.x also exposes a per-job
 # `netdata.plugin_data_collection_status` chart, but that only appears once
 # a job has run, so it can't see a collector that never instantiated any
 # chart -- which is exactly the gap this prefix check closes. Alerting on
 # that 2.x chart is a tracked follow-up (see context_liveness.conf.j2).
 #
-# Naming rule (observed on 1.46): the chart-id is "<plugin>.<context>"
-# when plugin==job (e.g. zfspool, nvme, fail2ban), otherwise
-# "<plugin>_<job>.<context>" (e.g. chrony_local, x509check_host_cert).
-# Returns the prefix WITHOUT the trailing dot. Empty for non-go.d ids.
+# Naming rule (stable across 1.46 and 2.x): the chart-id is
+# "<plugin>.<context>" when plugin==job (e.g. zfspool, nvme, fail2ban),
+# otherwise "<plugin>_<job>.<context>" (e.g. chrony_local, x509check_host_cert),
+# and a per-instance job fans out to "<plugin>_<job>_<instance>.<context>".
+#
+# Emits "<mode> <prefix>": mode 'exact' (plugin==job) means only
+# "<prefix>.<ctx>" charts count -- a "<prefix>_<otherjob>.*" chart belongs to
+# a *different* job and must not satisfy this entry. mode 'instanced'
+# (plugin!=job) also accepts "<prefix>_<instance>.<ctx>" fan-out charts.
+# Empty for non-go.d ids.
 _netdata_presence_collector_chart_prefix() {
   local cid=$1
   local IFS=:
@@ -97,14 +103,14 @@ _netdata_presence_collector_chart_prefix() {
     return
   fi
   if [ "$plugin" = "$job" ]; then
-    printf '%s' "$plugin"
+    printf 'exact %s' "$plugin"
   else
-    printf '%s_%s' "$plugin" "$job"
+    printf 'instanced %s_%s' "$plugin" "$job"
   fi
 }
 
 netdata_presence_update() {
-  local entry name ctx_id present safe expected line _chart_id
+  local entry name ctx_id present safe expected line _chart_id _mode
   local -A api_contexts=()
   local -A api_charts=()
 
@@ -154,22 +160,27 @@ EOF
 
   for entry in "${netdata_presence_collectors[@]}"; do
     [ -n "$entry" ] || continue
-    expected=$(_netdata_presence_collector_chart_prefix "$entry")
+    read -r _mode expected <<<"$(_netdata_presence_collector_chart_prefix "$entry")"
     safe=$(_netdata_presence_safe "$entry")
     present=0
     if [ -n "$expected" ]; then
-      # Iterate api_charts keys looking for one that starts with the
-      # prefix followed by `.` (single-instance collectors like
-      # chrony_local.system_status) OR `_<instance>.<metric>`
-      # (per-instance collectors like upsd_local_eaton.battery_charge_-
-      # percentage, where `eaton` is the UPS name). Bash 4 associative
-      # arrays don't have a native "any key matches glob" so we walk
-      # the keyset; ~6k charts on lab takes O(ms) at 60s update cadence.
+      # Walk the chart keyset (bash 4 has no native "any key matches glob"):
+      # a "<prefix>.<ctx>" chart always counts; a "<prefix>_<instance>.<ctx>"
+      # fan-out chart (e.g. upsd_local_eaton.battery_charge_percentage, where
+      # `eaton` is the UPS name) counts only in 'instanced' mode -- in 'exact'
+      # mode an underscore after the prefix means a *sibling* job, not ours.
+      # ~6k charts on lab takes O(ms) at the 60s update cadence.
       for _chart_id in "${!api_charts[@]}"; do
         case "$_chart_id" in
-        "$expected".* | "$expected"_*)
+        "$expected".*)
           present=1
           break
+          ;;
+        "$expected"_*)
+          if [ "$_mode" = instanced ]; then
+            present=1
+            break
+          fi
           ;;
         esac
       done
