@@ -1,0 +1,101 @@
+# Functional check of nut_server: dummy-ups -> upsd -> upsc, and the
+# nginx-fronted CGI status page (fcgiwrap -> upsstats.cgi). Test-only and
+# destructive (swaps the snmp-ups driver for a static dummy-ups and starts a
+# foreground upsd) -- fine, the box is torn down afterwards. converge points
+# ups.conf at the real Eaton over SNMP (external_ips.eaton), which nothing
+# answers on the box, and gates the unit start on qemu_test; this swaps in a
+# static dummy-ups so upsd has a UPS to serve. Mirrors nut_monitor's _setup
+# fixture (no `mode =`: that directive is nut 2.8+ and the box image is jammy).
+
+# Installing nut-snmp pulls nut-server, which may auto-start the packaged upsd;
+# stop it so our own foreground upsd can bind 127.0.0.1:3493.
+- name: _verify | Stop the packaged nut-server
+  systemd:
+    name: nut-server
+    state: stopped
+  failed_when: false
+  become: true
+
+# A static dummy-ups stands in for the SNMP Eaton. A .dev file (no TIMER) is
+# served statically, so the published frame is deterministic at query time.
+- name: _verify | Swap the snmp-ups driver for a static dummy-ups
+  copy:
+    dest: /etc/nut/ups.conf
+    owner: root
+    group: nut
+    mode: "0640"
+    backup: true
+    content: |
+      [eaton]
+          driver = dummy-ups
+          port = eaton.dev
+          desc = "Local UPS"
+  become: true
+
+- name: _verify | Provide the static UPS frame
+  copy:
+    dest: /etc/nut/eaton.dev
+    owner: root
+    group: nut
+    mode: "0640"
+    backup: true
+    content: |
+      ups.status: OL
+      battery.charge: 100
+      battery.runtime: 1800
+      ups.mfr: dummy
+      ups.model: evolution500
+  become: true
+
+- name: _verify | Start the dummy-ups driver and a fresh upsd
+  shell: |
+    upsdrvctl -u root stop 2>/dev/null || true
+    pkill -x upsd 2>/dev/null || true
+    upsdrvctl -u root start eaton
+    upsd -u root
+  args:
+    executable: /bin/bash
+  changed_when: false
+  become: true
+
+# Wait for the published status, not just rc 0: a freshly-started dummy-ups
+# answers immediately but can briefly report nothing before its first poll.
+- name: _verify | Wait for the dummy UPS to publish OL over upsc
+  command: upsc eaton@localhost ups.status
+  register: nut_server_upsc
+  until: '"OL" in nut_server_upsc.stdout'
+  retries: 15
+  delay: 1
+  changed_when: false
+  become: true
+
+# The CGI status page: nginx 301s / -> /upsstats.cgi, proxied to nut-cgi over
+# the fcgiwrap socket (auto-enabled by the package). The site is auth=required,
+# so _setup's authelia_stub (always_200) admits the auth_request subrequest.
+# Hit via the Host header so DNS isn't needed; snakeoil cert -> validate_certs.
+# Broad status_code list lets a transient 502 (fcgiwrap warming) retry; the
+# `until` pins the success on a real 200.
+- name: _verify | NUT CGI status page is served through nginx + fcgiwrap
+  uri:
+    url: https://localhost/upsstats.cgi?host=eaton@localhost
+    headers:
+      Host: "nut.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    return_content: true
+    status_code: [200, 301, 302, 401, 403, 502, 503]
+  register: nut_server_cgi
+  until: nut_server_cgi.status is defined and nut_server_cgi.status == 200
+  retries: 15
+  delay: 2
+  become: true
+
+# 200 alone proves the nginx -> auth -> fcgiwrap -> CGI wiring; this proves the
+# CGI actually reached upsd and rendered live data rather than an "unavailable"
+# placeholder. `eaton` is the queried UPS name; hosts.conf's "Local UPS" desc
+# also surfaces in the page.
+- name: _verify | CGI rendered live UPS data (reached upsd, not "unavailable")
+  assert:
+    that:
+      - "'eaton' in nut_server_cgi.content"
+      - "'unavailable' not in (nut_server_cgi.content | lower)"
+    fail_msg: "upsstats.cgi did not render live UPS data; content was: {{ nut_server_cgi.content | truncate(600) }}"
