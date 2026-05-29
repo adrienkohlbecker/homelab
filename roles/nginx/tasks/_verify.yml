@@ -350,16 +350,16 @@
 # http->https redirect and the default-server catch-all are probed on the
 # public interface, not loopback: the stub_status server binds 127.0.0.1:80
 # specifically, which captures every loopback :80 request regardless of Host.
-- name: _verify | HTTP request 301-redirects to HTTPS
+- name: _verify | HTTP request 308-redirects to HTTPS
   uri:
     url: "http://{{ ansible_default_ipv4.address }}/"
     headers:
       Host: "{{ nginx_verify_host }}"
     follow_redirects: none
-    status_code: 301
+    status_code: 308
   register: nginx_verify_http
   failed_when: >-
-    nginx_verify_http.status != 301
+    nginx_verify_http.status != 308
     or not (nginx_verify_http.location | default('')).startswith('https://')
 
 - name: _verify | Unknown Host hits the default server (404)
@@ -719,7 +719,7 @@
 
 # No post-removal HTTP probe: a request fired immediately after the reload races
 # nginx's draining old workers (which still hold the removed vhost) and follows
-# their 301 to an https URL the snakeoil cert doesn't cover. The stat above is
+# their 308 to an https URL the snakeoil cert doesn't cover. The stat above is
 # the deterministic check that the state: absent contract removed both files.
 
 # conf_d rollback — feed the helper a syntactically broken drop and confirm the
