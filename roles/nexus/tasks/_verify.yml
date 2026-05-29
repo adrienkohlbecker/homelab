@@ -24,13 +24,6 @@
   failed_when: not _verify_blob_dir.stat.exists or _verify_blob_dir.stat.pw_name != 'nexus'
   become: true
 
-- name: _verify | Nexus systemd unit is active  # noqa: command-instead-of-module
-  command: systemctl is-active nexus
-  register: _verify_unit
-  changed_when: false
-  failed_when: (_verify_unit.stdout | trim) != 'active'
-  become: true
-
 # Functional probe over the published loopback port. status/writable returns
 # 200 only once Nexus has fully booted and its DB is writable -- the same
 # contract the container healthcheck gates on. A broken converge (bad
@@ -42,6 +35,7 @@
   uri:
     url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/status/writable
     status_code: 200
+    timeout: 5
   register: _verify_status
   retries: 60
   delay: 2
@@ -70,7 +64,66 @@
     headers:
       Host: "nexus.{{ inventory_hostname }}.{{ domain }}"
     status_code: [ 200, 302, 307 ]
+    timeout: 5
   register: _verify_nginx
   retries: 30
   delay: 2
   until: _verify_nginx.status in [ 200, 302, 307 ]
+
+# The docker-registry mirror is an nginx rewrite (roles/nexus main.yml
+# server_conf): podman emits /v2/repository/<repo>/<image>/... and nginx
+# swaps it to Nexus's /repository/<repo>/v2/<image>/... layout. Prod's docker
+# proxy repos are terraform-created; the qemu fixture has none, so create a
+# throwaway docker hosted repo and prove the rewrite reaches its registry-v2
+# base. Without the rewrite the un-swapped path falls through to `location /`
+# and Nexus 404s it, so a 200/401 (not 404) is the signal the rewrite fired.
+# Auth uses the bootstrap admin password Nexus writes on first boot -- the
+# setup wizard never runs under test, so the file persists. Test-only.
+- name: _verify | Read the bootstrap admin password
+  slurp:
+    src: /mnt/services/nexus/data/admin.password
+  register: _verify_admin_password
+  become: true
+
+- name: _verify | Create a throwaway docker hosted repo
+  uri:
+    url: http://127.0.0.1:{{ service_ports.nexus }}/service/rest/v1/repositories/docker/hosted
+    method: POST
+    url_username: admin
+    url_password: "{{ _verify_admin_password.content | b64decode }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      name: test_docker_mirror
+      online: true
+      storage:
+        blobStoreName: default
+        strictContentTypeValidation: true
+        writePolicy: ALLOW
+      docker:
+        v1Enabled: false
+        forceBasicAuth: true
+    status_code: [ 201, 400 ]  # 400 == repo already exists on a _verify re-run
+    timeout: 5
+
+# The probe gets a 403 (Nexus's docker bearer realm declines admin basic
+# auth) -- the auth outcome doesn't matter. The signal is the response
+# header: Docker-Distribution-Api-Version is set *only* on Nexus's
+# /repository/<repo>/v2/ responses, so its presence proves nginx rewrote
+# /v2/repository/<repo>/ to that path. Without the rewrite the request falls
+# through to `location /`, Nexus 404s it, and the header is absent.
+- name: _verify | Docker-mirror rewrite reaches the repo's registry-v2 base
+  uri:
+    url: https://localhost/v2/repository/test_docker_mirror/
+    validate_certs: false
+    url_username: admin
+    url_password: "{{ _verify_admin_password.content | b64decode }}"
+    force_basic_auth: true
+    headers:
+      Host: "nexus.{{ inventory_hostname }}.{{ domain }}"
+    status_code: [ 200, 401, 403 ]  # docker v2 auth challenge; a 404 would mean the rewrite is missing
+    timeout: 5
+  register: _verify_docker_rewrite
+  retries: 5
+  delay: 2
+  until: (_verify_docker_rewrite.docker_distribution_api_version | default('')) == 'registry/2.0'
