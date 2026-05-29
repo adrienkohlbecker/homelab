@@ -32,7 +32,7 @@
   register: podman_info
   changed_when: false
 
-- name: _verify | Netavark backend + overlay storage on the expected graphroot are live
+- name: _verify | Podman info reflects the role's containers.conf/storage.conf
   vars:
     _info: "{{ podman_info.stdout | from_json }}"
   assert:
@@ -40,11 +40,17 @@
       - _info.host.networkBackend == 'netavark'
       - _info.store.graphDriverName == 'overlay'
       - _info.store.graphRoot == '/var/lib/containers/storage'
+      # Prove podman is actually *serving* the augmented profile as its
+      # default — not just that the file on disk allows fchmodat2 (asserted
+      # below). A containers.conf regression dropping the seccomp_profile line
+      # would silently revert to the stock profile and revive the roundcube 403.
+      - _info.host.security.seccompProfilePath == '/etc/containers/seccomp-fchmodat2.json'
     fail_msg: >-
       podman info disagrees with the role's containers.conf/storage.conf:
       backend={{ _info.host.networkBackend }},
       driver={{ _info.store.graphDriverName }},
-      graphroot={{ _info.store.graphRoot }}.
+      graphroot={{ _info.store.graphRoot }},
+      seccomp={{ _info.host.security.seccompProfilePath }}.
 
 # Confirm the rendered containers.conf carries every pinned key -- catches a
 # template regression in the keys podman info doesn't surface (dns_bind_port,
@@ -193,23 +199,11 @@
       failed_when: false
 
 # The podman-socket group + the 0755 /run/podman traversal exist so a
-# non-root member can drive the rootful API socket. Assert the on-disk state
-# (the tmpfiles divert keeps /run/podman group-traversable; the SocketGroup=
-# drop-in owns the socket), then prove a group member can actually connect.
-- name: _verify | /run/podman is group-traversable (0755)
-  stat:
-    path: /run/podman
-  become: true
-  register: podman_run_dir
-  failed_when: not podman_run_dir.stat.exists or podman_run_dir.stat.mode != '0755'
-
-- name: _verify | The API socket is owned by group podman-socket
-  stat:
-    path: /run/podman/podman.sock
-  become: true
-  register: podman_api_sock
-  failed_when: not podman_api_sock.stat.exists or podman_api_sock.stat.gr_name != 'podman-socket'
-
+# non-root member can drive the rootful API socket. Rather than stat the
+# dir mode + socket group ownership (which only re-reads what the role
+# wrote), prove the whole chain functionally: add the operator to the group
+# and have it connect. A wrong mode, wrong group, or a non-traversable
+# /run/podman all surface as a failed connect below.
 - name: _verify | Add the operator to podman-socket (test-only)
   user:
     name: "{{ ansible_user_id }}"
@@ -225,6 +219,18 @@
   become: true
   register: podman_socket_access
   changed_when: false
+
+# The LOGGING drop-in (override_service.conf) only reaches the running daemon
+# if podman.service was restarted after it was written -- assert the live unit
+# actually carries it, guarding the socket-vs-service restart split in main.yml.
+# (systemd module, not `systemctl show`, per command-instead-of-module.)
+- name: _verify | The LOGGING drop-in reached the running podman.service
+  systemd:
+    name: podman.service
+  become: true
+  register: podman_service_unit
+  changed_when: false
+  failed_when: "'--log-level=warn' not in (podman_service_unit.status.Environment | default(''))"
 
 # The root-scope daily prune timer must be enabled (the user-scope one lives
 # in the operator's manager, which box's missing per-user D-Bus socket can't
