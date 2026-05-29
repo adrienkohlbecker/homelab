@@ -1,14 +1,135 @@
-# Functional proof that podman's rootless network connector is pasta
-# (default_rootless_network_cmd, set in install.yml) and that it actually
-# wires a container's network -- not a stat of containers.conf, which
-# would only echo back what install.yml just wrote. pasta is a
-# rootless-only connector, so this exercises it as the box fixture's
-# rootless-capable login user (vagrant); a successful rootless container
-# start is itself the proof the connector works, since podman errors out
-# rather than silently falling back when the configured connector is
-# missing or broken. The process check then pins that the connector is
-# pasta specifically, not the slirp4netns it replaced.
+# podman is the foundational base role -- it runs no service of its own --
+# so this exercises the runtime config it installs by spinning up throwaway
+# containers and reading `podman info`, rather than stat-checking the files
+# it wrote. Two halves: rootful checks (become: true) cover the storage
+# stack, netavark + aardvark-dns, the rendered containers.conf + seccomp
+# profile, the podman-socket group, and the prune timer; a rootless pass as
+# the box login user then proves the pasta network connector actually backs
+# a container's egress. Only test/testrole.py invokes it, against the box VM
+# (zfs_root, jammy 5.15 -> the fuse-overlayfs storage path), never prod --
+# so the group-membership tweak and probe containers below are safe.
 
+- name: _verify | Resolve a tiny probe image
+  set_fact:
+    podman_probe_image: docker.io/library/busybox
+
+# A real container start proves the whole storage stack (driver, graphroot,
+# and on box specifically the kernel<5.19 fuse-overlayfs shim) actually
+# works -- not just that storage.conf parsed. First run pulls over the qemu
+# SLIRP NAT (TCP), so retry a couple times for a transient registry hiccup.
+- name: _verify | A container actually starts
+  command: podman run --rm {{ podman_probe_image }} true
+  become: true
+  register: podman_run_probe
+  until: podman_run_probe.rc == 0
+  retries: 3
+  delay: 5
+  changed_when: false
+
+- name: _verify | Read podman's effective runtime config
+  command: podman info --format json
+  become: true
+  register: podman_info
+  changed_when: false
+
+- name: _verify | Netavark backend + overlay storage on the expected graphroot are live
+  vars:
+    _info: "{{ podman_info.stdout | from_json }}"
+  assert:
+    that:
+      - _info.host.networkBackend == 'netavark'
+      - _info.store.graphDriverName == 'overlay'
+      - _info.store.graphRoot == '/var/lib/containers/storage'
+    fail_msg: >-
+      podman info disagrees with the role's containers.conf/storage.conf:
+      backend={{ _info.host.networkBackend }},
+      driver={{ _info.store.graphDriverName }},
+      graphroot={{ _info.store.graphRoot }}.
+
+# Confirm the rendered containers.conf carries every pinned key -- catches a
+# template regression in the keys podman info doesn't surface (dns_bind_port,
+# the default network *name*, the seccomp default path, the rootless pasta
+# connector). Exact whole-line match via argv (no shell, so the embedded
+# double-quotes don't need escaping).
+- name: _verify | Rendered containers.conf carries the pinned keys
+  command:
+    argv: [grep, -Fxq, "{{ item }}", /etc/containers/containers.conf]
+  become: true
+  changed_when: false
+  loop:
+    - 'network_backend = "netavark"'
+    - 'default_rootless_network_cmd = "pasta"'
+    - 'default_network = "podman"'
+    - 'default_subnet = "{{ podman_default_network }}"'
+    - 'dns_bind_port = 5333'
+    - 'seccomp_profile = "/etc/containers/seccomp-fchmodat2.json"'
+
+# The seccomp augmentation is the role's reason for shipping a custom
+# profile; box's 5.15 kernel predates the fchmodat2 syscall so it can't be
+# exercised functionally here, but assert the rendered profile actually
+# allows it -- a future stock-profile shape change that made the template's
+# match no-op would otherwise revive the silent breakage (roundcube 403).
+- name: _verify | Read the rendered seccomp profile
+  slurp:
+    src: /etc/containers/seccomp-fchmodat2.json
+  become: true
+  register: podman_seccomp_rendered
+
+- name: _verify | Default seccomp profile allows fchmodat2
+  vars:
+    _profile: "{{ podman_seccomp_rendered.content | b64decode | from_json }}"
+  assert:
+    that:
+      - "'fchmodat2' in (_profile.syscalls | selectattr('action', 'eq', 'SCMP_ACT_ALLOW') | map(attribute='names') | flatten)"
+    fail_msg: >-
+      /etc/containers/seccomp-fchmodat2.json does not allow fchmodat2 --
+      the template's `fchmodat` match found nothing to extend.
+
+# Inter-container DNS is the load-bearing reason netavark + dns_bind_port are
+# pinned: a peer resolves another container by its <name>.dns.podman FQDN via
+# aardvark-dns (the path every service role uses). A throwaway DNS-enabled
+# network + a named server + a peer that resolves it by FQDN exercises the
+# resolution chain end-to-end. (nslookup, not ping -- ICMP needs CAP_NET_RAW
+# the probe container doesn't carry, and resolution is what we're testing.)
+- name: _verify | Create a throwaway DNS-enabled network
+  containers.podman.podman_network:
+    name: podman_verify_dns
+    disable_dns: false
+  become: true
+
+- name: _verify | Start a named server container on it
+  command: >-
+    podman run -d --name podman_verify_server
+    --network podman_verify_dns {{ podman_probe_image }} sleep 300
+  become: true
+  changed_when: true
+
+- name: _verify | A peer resolves it by <name>.dns.podman
+  command: >-
+    podman run --rm --network podman_verify_dns {{ podman_probe_image }}
+    nslookup podman_verify_server.dns.podman
+  become: true
+  register: podman_dns_probe
+  until: podman_dns_probe.rc == 0
+  retries: 10
+  delay: 2
+  changed_when: false
+
+- name: _verify | Tear down the DNS probe container + network
+  command: "{{ item }}"
+  become: true
+  changed_when: true
+  loop:
+    - podman rm -f podman_verify_server
+    - podman network rm podman_verify_dns
+
+# pasta is a rootless-only network connector (default_rootless_network_cmd,
+# set in install.yml), so this exercises it as the box fixture's
+# rootless-capable login user. A successful rootless container start is
+# itself proof the connector works -- podman errors out rather than silently
+# falling back when the configured connector is missing or broken; the
+# process check then pins that the connector is pasta specifically, not the
+# slirp4netns it replaced.
 - name: _verify | Resolve the connection user uid for XDG_RUNTIME_DIR
   getent:
     database: passwd
@@ -23,14 +144,14 @@
     XDG_RUNTIME_DIR: /run/user/{{ ansible_facts.getent_passwd[ansible_user_id][1] }}
   block:
     - name: _verify | Pull a tiny image through the Nexus mirror
-      command: podman pull docker.io/library/busybox
+      command: podman pull {{ podman_probe_image }}
       changed_when: false
 
     # Default network -> podman invokes the configured rootless connector.
     # Container named without "pasta"/"slirp" so the pgrep -f matches below
     # hit the connector process, never this container's conmon argv.
     - name: _verify | Start a rootless container on the default network
-      command: podman run -d --replace --name net_verify docker.io/library/busybox sleep 60
+      command: podman run -d --replace --name net_verify {{ podman_probe_image }} sleep 60
       changed_when: true
 
     - name: _verify | Count the pasta connector helper
@@ -70,3 +191,48 @@
       command: podman rm -f net_verify
       changed_when: false
       failed_when: false
+
+# The podman-socket group + the 0755 /run/podman traversal exist so a
+# non-root member can drive the rootful API socket. Assert the on-disk state
+# (the tmpfiles divert keeps /run/podman group-traversable; the SocketGroup=
+# drop-in owns the socket), then prove a group member can actually connect.
+- name: _verify | /run/podman is group-traversable (0755)
+  stat:
+    path: /run/podman
+  become: true
+  register: podman_run_dir
+  failed_when: not podman_run_dir.stat.exists or podman_run_dir.stat.mode != '0755'
+
+- name: _verify | The API socket is owned by group podman-socket
+  stat:
+    path: /run/podman/podman.sock
+  become: true
+  register: podman_api_sock
+  failed_when: not podman_api_sock.stat.exists or podman_api_sock.stat.gr_name != 'podman-socket'
+
+- name: _verify | Add the operator to podman-socket (test-only)
+  user:
+    name: "{{ ansible_user_id }}"
+    groups: podman-socket
+    append: true
+  become: true
+
+# runuser (as root) re-reads the group list via initgroups, so the just-added
+# podman-socket membership is effective for the probe -- unlike become_user to
+# the connection user, which would reuse the login session's stale groups.
+- name: _verify | A podman-socket member reaches the rootful API socket
+  command: runuser -u {{ ansible_user_id }} -- podman --url unix:///run/podman/podman.sock info --format json
+  become: true
+  register: podman_socket_access
+  changed_when: false
+
+# The root-scope daily prune timer must be enabled (the user-scope one lives
+# in the operator's manager, which box's missing per-user D-Bus socket can't
+# be queried over `systemctl --user` -- so only the system timer is checked).
+- name: _verify | The root-scope prune timer is enabled
+  systemd:
+    name: podman_prune.timer
+  become: true
+  register: podman_prune_timer
+  changed_when: false
+  failed_when: podman_prune_timer.status.UnitFileState != 'enabled'
