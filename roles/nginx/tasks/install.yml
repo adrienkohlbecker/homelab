@@ -31,12 +31,23 @@
   tags:
     - nginx
 
-- name: install | Generate Diffie-Hellman parameters
+# Ship a pre-generated 2048-bit DH group rather than generating one per host.
+# DH parameters are public (a shared, well-known group is exactly what named
+# groups like RFC 7919 ffdhe2048 are), so a committed static group is safe and
+# skips the per-host generation -- and the /dev/random stall it can hit on a
+# fresh VM. Only the DHE ciphers in nginx.conf use it; ECDHE (the common path)
+# does not.
+- name: install | Install Diffie-Hellman parameters
   when: not (ansible_check_mode and nginx_apt.changed)
-  openssl_dhparam:
-    path: /etc/nginx/dhparam.pem
-    size: 2048
+  copy:
+    src: dhparam.pem
+    dest: /etc/nginx/dhparam.pem
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
   become: true
+  register: nginx_dhparam
   tags:
     - nginx
 
@@ -135,6 +146,6 @@
       # reload them instead of dropping in-flight connections. Mutually
       # exclusive: the restart already reloads config, so skip reload on upgrade.
       restart: "{{ nginx_apt.changed }}"
-      reload: "{{ (nginx_default_conf.changed or nginx_conf.changed or (nginx_proxy_params.changed | default(false)) or status_conf_result.changed) and not nginx_apt.changed }}"
+      reload: "{{ (nginx_default_conf.changed or nginx_conf.changed or (nginx_proxy_params.changed | default(false)) or (nginx_dhparam.changed | default(false)) or status_conf_result.changed) and not nginx_apt.changed }}"
   tags:
     - nginx
