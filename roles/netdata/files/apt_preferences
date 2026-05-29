@@ -1,3 +1,0 @@
-Package: netdata*
-Pin: version 2.*
-Pin-Priority: 999
