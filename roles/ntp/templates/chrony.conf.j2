@@ -6,16 +6,24 @@
 # specifically to make this work.
 #
 # Ubuntu's stock unauthenticated pools and the DHCP-advertised
-# `sourcedir /run/chrony-dhcp` are deliberately dropped: both accept
+# `sourcedir /run/chrony-dhcp` are deliberately absent: both accept
 # unauthenticated upstreams and would reopen the skew vector (a rogue
-# DHCP server could inject a malicious NTP source). Add further NTS
-# sources under /etc/chrony/conf.d/ rather than editing this file.
-
-confdir /etc/chrony/conf.d
+# DHCP server could inject a malicious NTP source). The DHCP hook may
+# still write /run/chrony-dhcp/*.sources, but with no `sourcedir`
+# directive chronyd never reads them.
 
 server time.cloudflare.com iburst nts
 server ptbtime1.ptb.de iburst nts
 server nts.netnod.se iburst nts
+
+# NTS-only, enforced by the daemon rather than just by which lines are
+# above: any unauthenticated source automatically gets noselect, so a
+# stray plain `server`/`pool` could never actually steer the clock.
+authselectmode require
+
+# Require 2 of the 3 NTS servers to agree before stepping/slewing, so a
+# single wrong or compromised upstream can't move the clock alone.
+minsources 2
 
 keyfile /etc/chrony/chrony.keys
 driftfile /var/lib/chrony/chrony.drift
@@ -23,6 +31,11 @@ ntsdumpdir /var/lib/chrony
 logdir /var/log/chrony
 maxupdateskew 100.0
 rtcsync
+
+# Don't open the UDP command port (323); chronyc still reaches chronyd
+# over the root-only Unix socket (all role + _verify use). Closes a
+# loopback control surface the role never uses.
+cmdport 0
 
 # Step (not slew) the clock on the first 3 updates when off by >1s. Also
 # lets a freshly-booted host with a wrong RTC correct enough for NTS-KE
