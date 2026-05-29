@@ -50,26 +50,6 @@
   tags:
     - nginx
 
-# Ship a pre-generated 2048-bit DH group rather than generating one per host.
-# DH parameters are public (a shared, well-known group is exactly what named
-# groups like RFC 7919 ffdhe2048 are), so a committed static group is safe and
-# skips the per-host generation -- and the /dev/random stall it can hit on a
-# fresh VM. Only the DHE ciphers in nginx.conf use it; ECDHE (the common path)
-# does not.
-- name: install | Install Diffie-Hellman parameters
-  when: not (ansible_check_mode and nginx_apt.changed)
-  copy:
-    src: dhparam.pem
-    dest: /etc/nginx/dhparam.pem
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  become: true
-  register: nginx_dhparam
-  tags:
-    - nginx
-
 # nginx.conf points ssl_certificate at a single host-FQDN cert serving every
 # vhost (there is no per-vhost ssl_certificate). The certbot role must issue it
 # before nginx validates/starts; in test the snakeoil fixture lays it at the
@@ -114,6 +94,18 @@
     validate: nginx -t -c %s
   become: true
   register: nginx_conf
+  tags:
+    - nginx
+
+# ECDHE-only TLS profile (no DHE ciphers in nginx.conf), so nginx reads no
+# Diffie-Hellman group; keep /etc/nginx/dhparam.pem absent. Sequenced after the
+# nginx.conf render above so the ssl_dhparam reference is already gone, and
+# unreferenced by the config either way, so its removal needs no reload.
+- name: install | Remove unused Diffie-Hellman parameters
+  file:
+    path: /etc/nginx/dhparam.pem
+    state: absent
+  become: true
   tags:
     - nginx
 
@@ -165,6 +157,6 @@
       # reload them instead of dropping in-flight connections. Mutually
       # exclusive: the restart already reloads config, so skip reload on upgrade.
       restart: "{{ nginx_apt.changed }}"
-      reload: "{{ (nginx_default_conf.changed or nginx_conf.changed or (nginx_proxy_params.changed | default(false)) or (nginx_dhparam.changed | default(false)) or status_conf_result.changed) and not nginx_apt.changed }}"
+      reload: "{{ (nginx_default_conf.changed or nginx_conf.changed or (nginx_proxy_params.changed | default(false)) or status_conf_result.changed) and not nginx_apt.changed }}"
   tags:
     - nginx

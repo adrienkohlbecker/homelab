@@ -143,9 +143,6 @@ http {
     # which trades latency for throughput on large responses.
     ssl_buffer_size        4k;
 
-    # Diffie-Hellman parameter for DHE ciphersuites
-    ssl_dhparam            /etc/nginx/dhparam.pem;
-
     # generated 2026-05-29, TLSRef Guideline v6.0, nginx 1.18.0 (UNSUPPORTED; end-of-life), OpenSSL 3.0.2 (OLD: missing PQC hybrid MLKEMs), intermediate config, HSTS
     # https://configurator.tlsref.org/#server=nginx&version=1.18.0&config=intermediate&openssl=3.0.2&hsts&guideline=6.0
     ssl_protocols          TLSv1.2 TLSv1.3;
