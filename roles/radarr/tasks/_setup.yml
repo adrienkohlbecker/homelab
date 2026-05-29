@@ -1,4 +1,4 @@
-- name: _test | Install nginx
+- name: _setup | Install nginx
   import_role:
     name: _test
     tasks_from: nginx
@@ -13,12 +13,17 @@
     name: media
     tasks_from: network
 
-- name: _setup | Install authelia stub for auth=required tests
+- name: _setup | Install authelia stub in gate mode for auth=required tests
   import_role:
     name: _test
     tasks_from: authelia_stub
+  vars:
+    # authelia_stub_mode is _test's input var, so it can't carry a radarr_
+    # prefix. no-role-prefix is experimental -- a silent warning in the
+    # sibling gate-mode roles, but it fires firmly in this role's play scope.
+    authelia_stub_mode: gate  # noqa: var-naming[no-role-prefix]
 
-- name: _test | Setup dependencies
+- name: _setup | Setup dependencies
   file:
     path: "{{ item }}"
     state: directory
