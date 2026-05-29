@@ -532,7 +532,9 @@
     state: touch
     access_time: preserve
     modification_time: preserve
-    owner: netdata
+    # root-owned so a compromised netdata daemon can't plant a shell hook
+    # in its own home that runs on the operator's next `su - netdata`.
+    owner: root
     group: netdata
     mode: "0644"
   become: true
