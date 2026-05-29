@@ -32,10 +32,10 @@
 #   state:         optional present (default) | absent; absent tombstones the
 #                  source -- removes its .list/.sources, keyring and pin file
 #
-# Exposes apt_source_<name>_changed (true when the repo line or a prereq
-# install changed) so the caller can gate its install out of check mode -- where the
-# repo task is skipped behind its prereq install and a stale cache would
-# otherwise make the install fail to find the package.
+# Exposes apt_source_<name>_changed (true when the repo line, the signing-key
+# import, or a prereq install changed) so the caller can gate its install out
+# of check mode -- where the repo task is skipped behind its prereq install
+# and a stale cache would otherwise make the install fail to find the package.
 
 - name: Assert apt_source args for {{ apt_source_args.name }}
   assert:
@@ -107,6 +107,7 @@
     url: "{{ apt_source_args.key_url }}"
     keyring: /usr/share/keyrings/{{ apt_source_args.name }}.gpg
   become: true
+  register: apt_source_key_legacy
 
 # The key lives in the scoped keyring above (referenced by signed-by= on
 # the repo line), so the global-trust copy at /etc/apt/trusted.gpg.d/ must
@@ -309,8 +310,9 @@
   become: true
 
 # Includes the per-branch prereqs (gpg on jammy, python3-debian on resolute)
-# so check mode -- where the repo task is gated out by the prereq install --
-# still propagates a would-change signal to the caller's install gate.
+# and the signing-key import (apt_key / get_url) so a first-run key fetch is
+# signalled, and so check mode -- where the repo task is gated out by the
+# prereq install -- still propagates a would-change signal to the caller.
 - name: Export change signal for {{ apt_source_args.name }}
   set_fact:
-    "apt_source_{{ apt_source_args.name }}_changed": "{{ apt_source_repo_legacy is changed or apt_source_repo_deb822 is changed or apt_source_gpg is changed or apt_source_resolute_prereqs is changed }}"
+    "apt_source_{{ apt_source_args.name }}_changed": "{{ apt_source_repo_legacy is changed or apt_source_repo_deb822 is changed or apt_source_key_legacy is changed or apt_source_key_resolute is changed or apt_source_gpg is changed or apt_source_resolute_prereqs is changed }}"
