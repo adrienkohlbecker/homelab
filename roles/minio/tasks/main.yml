@@ -1,51 +1,51 @@
-# Query just the minio package version rather than package_facts, which
-# enumerates every installed apt package (~2s) only to read one version.
-# argv form keeps ${Version} literal for dpkg-query (no shell, no shlex
-# quoting); rc!=0 + empty stdout when not installed -> install path.
-- name: Check installed minio version  # noqa: command-instead-of-module
-  command:
-    argv:
-      - dpkg-query
-      - -W
-      - -f=${Version}
-      - minio
-  register: minio_pkg
-  changed_when: false
-  failed_when: false
-  check_mode: false
+- name: Assert required inputs are set
+  assert:
+    that:
+      - minio_root_user | default('') | length > 0
+      - minio_root_password | default('') | length > 0
+      - minio_oidc_client_secret | default('') | length > 0
+      - minio_users is defined
+      - minio_buckets is defined
+      - zfs_dozer_filesystem | default('') | length > 0
+    fail_msg: >-
+      minio requires minio_root_user, minio_root_password,
+      minio_oidc_client_secret, minio_users, minio_buckets and
+      zfs_dozer_filesystem in host_vars/group_vars. A mistyped vault key
+      renders to an empty string that boots an auth-broken MinIO which still
+      reaches `active`, so check for non-empty, not just defined.
   tags:
     - minio
 
-- name: Install minio if needed
-  when: minio_pkg.stdout != minio_version
-  become: true
+# The useronly policy (files/useronly.json) scopes every user to
+# arn:aws:s3:::${aws:username}, which resolves to the access_key. A user
+# whose access_key has no same-named bucket authenticates fine but 403s on
+# every operation -- catch that here rather than as a runtime ARQ/restic 403.
+- name: Assert each minio user has a matching bucket
+  assert:
+    that: item.access_key in minio_buckets
+    fail_msg: >-
+      minio user '{{ item.access_key }}' has no bucket of the same name in
+      minio_buckets. Add '{{ item.access_key }}' to minio_buckets or rename
+      the user.
+    quiet: true
+  loop: "{{ minio_users }}"
+  loop_control:
+    label: "{{ item.access_key }}"
   tags:
     - minio
-  block:
 
-    - name: Download minio deb
-      check_mode: false
-      get_url:
-        url: "{{ minio_release[ansible_architecture].url }}"
-        dest: /tmp/minio.deb
-        mode: '0644'
-        owner: root
-        group: root
-        checksum: "sha256:{{ minio_release[ansible_architecture].sha256 }}"
-      register: minio_download
-      retries: 3
-      delay: 5
-      until: minio_download is succeeded
-
-    - name: Install minio
-      apt:
-        deb: /tmp/minio.deb
-      register: minio_installed
-
-    - name: Delete deb file
-      file:
-        path: /tmp/minio.deb
-        state: absent
+- name: Install minio server
+  import_role:
+    name: deb_install
+    tasks_from: install
+  vars:
+    deb_install_args:
+      name: minio
+      version: "{{ minio_version }}"
+      url: "{{ minio_release[ansible_architecture].url }}"
+      sha256: "{{ minio_release[ansible_architecture].sha256 }}"
+  tags:
+    - minio
 
 - name: Create minio system user
   import_role:
@@ -127,8 +127,8 @@
   vars:
     systemd_unit_args:
       src: minio
-      condition: "{{ not (ansible_check_mode and (minio_installed.changed | default(false))) }}"
-      restart: "{{ minio_service_d_override_conf_result.changed or minio_cfg.changed or (minio_installed.changed | default(false)) }}"
+      condition: "{{ not (ansible_check_mode and (minio_deb_changed | default(false) | bool)) }}"
+      restart: "{{ minio_service_d_override_conf_result.changed or minio_cfg.changed or (minio_deb_changed | default(false) | bool) }}"
   tags:
     - minio
 
