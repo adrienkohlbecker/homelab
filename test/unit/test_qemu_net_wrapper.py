@@ -44,9 +44,7 @@ def test_parse_netdev_user_extracts_id_and_forward() -> None:
 
 
 def test_parse_netdev_user_handles_explicit_host_addr_and_multiple_forwards() -> None:
-    netid, fwds = wrapper._parse_netdev_user(
-        "user,id=net0,hostfwd=tcp:127.0.0.1:2230-:22,hostfwd=udp::5300-:53"
-    )
+    netid, fwds = wrapper._parse_netdev_user("user,id=net0,hostfwd=tcp:127.0.0.1:2230-:22,hostfwd=udp::5300-:53")
     assert netid == "net0"
     assert fwds == [("tcp", "2230", "22"), ("udp", "5300", "53")]
 
