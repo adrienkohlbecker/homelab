@@ -2,3 +2,10 @@
   import_role:
     name: _test
     tasks_from: nginx
+
+# nut_server's nginx site is auth=required; the stub stands in for Authelia's
+# auth-request endpoint (always_200) so _verify's CGI probe is admitted.
+- name: _test | Install authelia stub for auth=required tests
+  import_role:
+    name: _test
+    tasks_from: authelia_stub
