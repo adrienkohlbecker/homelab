@@ -48,8 +48,8 @@
 
 - name: Configure nut upsd.conf
   when: not (ansible_check_mode and nut_server_apt.changed)
-  copy:
-    src: upsd.conf
+  template:
+    src: upsd.conf.j2
     dest: /etc/nut/upsd.conf
     backup: true
     owner: root
