@@ -33,6 +33,42 @@
   until: _verify_http_nginx.status == 200
   failed_when: not (_verify_http_nginx.content is search('machineIdentifier'))
 
+# A port answering proves Plex is up, but the unit reaching `active` is the
+# stronger claim: with Type=notify + --sdnotify=healthy, `active` means the
+# container's --health-cmd passed and podman propagated readiness. A broken
+# health-cmd leaves the unit stuck `activating` until TimeoutSec even while
+# the port answers, so assert the gate actually fired.
+- name: _verify | Plex unit reached active via the sdnotify=healthy gate
+  systemd:
+    name: plex.service
+  register: _verify_active
+  failed_when: _verify_active.status.ActiveState != "active"
+  become: true
+
+# CHANGE_CONFIG_DIR_OWNERSHIP=false skips the entrypoint's recursive chown,
+# relying on the host already owning /config as the plex uid. Exec a write as
+# that uid (not the container's root, which could write regardless) to prove
+# the invariant end-to-end. Facts don't cross the _verify invocation, so
+# re-look-up the uid the same way the HW section re-looks-up the render gid.
+- name: _verify | Re-lookup plex uid for the /config write probe
+  getent:
+    database: passwd
+    key: plex
+  become: true
+
+- name: _verify | Plex can write /config as its own uid
+  command:
+    argv:
+      - podman
+      - exec
+      - --user
+      - "{{ getent_passwd.plex[1] }}"
+      - plex
+      - touch
+      - /config/.verify_write_probe
+  changed_when: false
+  become: true
+
 # Content mounts: the library plus any host-specific read-only source trees
 # (plex_extra_library_binds) must surface inside the container, and the
 # read-only binds must actually reject writes — a dropped :ro would let Plex
