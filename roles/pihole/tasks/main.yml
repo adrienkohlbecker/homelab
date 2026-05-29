@@ -54,30 +54,6 @@
   tags:
     - pihole
 
-- name: Create dnsmasq config directory
-  file:
-    dest: /mnt/services/pihole/dnsmasq
-    state: directory
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-  tags:
-    - pihole
-
-- name: Configure dnsmasq
-  template:
-    src: fahm.conf.j2
-    dest: /mnt/services/pihole/dnsmasq/fahm.conf
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: pihole_fahm_cfg
-  become: true
-  tags:
-    - pihole
-
 - name: Create log directory
   when: not (ansible_check_mode and pihole_user.changed)
   file:
@@ -109,10 +85,10 @@
     systemd_unit_args:
       src: pihole
       condition: "{{ not (ansible_check_mode and (pihole_service_result.changed or pihole_user.changed)) }}"
-      restart: "{{ pihole_service_result.changed or pihole_fahm_cfg.changed }}"
-      # Serialize across the lab+pug HA pair so a unit-file or dnsmasq
-      # change never restarts both nameservers at once (one node keeps
-      # serving the keepalived VIP through the other's restart).
+      restart: "{{ pihole_service_result.changed }}"
+      # Serialize across the lab+pug HA pair so a unit-file change never
+      # restarts both nameservers at once (one node keeps serving the
+      # keepalived VIP through the other's restart).
       throttle: 1
   tags:
     - pihole
