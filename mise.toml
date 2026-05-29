@@ -203,9 +203,10 @@ run = 'ansible-playbook site.yml "$@"'
 description = "ansible-playbook against bunk.yml (forwards args)"
 run = 'ansible-playbook bunk.yml "$@"'
 
-# worktree:add / worktree:rm / worktree:merge live under mise-tasks/worktree/
-# so shellcheck and shfmt cover them. The populate helper is factored out
-# separately so Claude Code's WorktreeCreate hook can call it directly.
+# worktree:add / worktree:rm / worktree:merge / worktree:update live under
+# mise-tasks/worktree/ so shellcheck and shfmt cover them. The populate helper
+# is factored out separately so Claude Code's WorktreeCreate hook can call it
+# directly.
 
 [tasks."worktree:ls"]
 description = "List active git worktrees"
