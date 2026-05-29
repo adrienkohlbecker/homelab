@@ -1,20 +1,42 @@
 # Post-converge functional check (harness-only, never site.yml). We can't
 # exercise the live Mailgun relay from the qemu fixture (test/ creds are
-# `changeme`, no outbound), so assert the wiring instead: the config parses,
-# the relayhost / inet_interfaces / sasl map / TLS floor / sender-rewrite map
-# are what the template intended, a postmap lookup of the relayhost key against
-# the texthash sasl map resolves to the rendered credential (exercises vault
-# substitution + the map type, not just that a literal appears in the file),
-# the root/operator aliases resolve to root_email, and mailutils sends from
-# email_domain.
-- name: _verify | Postfix configuration parses
+# `changeme`, no outbound), so assert the wiring instead: the config parses with
+# no warnings, the effective postconf parameters are what the template intended,
+# a postmap lookup of the relayhost key against the texthash sasl map resolves to
+# the rendered credential (exercises vault substitution + the map type, not just
+# that a literal appears in the file), the sender-rewrite map resolves, the
+# root/operator aliases resolve to root_email, mailutils sends from email_domain,
+# and -- the one live exercise -- a locally injected `root` message is qualified
+# to root@$mydomain (proves myorigin works, not just that it is set in the file).
+- name: _verify | Postfix configuration parses with no warnings
   command: postfix check
   register: _postfix_check
+  # `postfix check` exits 0 even when it prints `warning:` lines (unknown
+  # parameter, bad permissions), so gate on stderr too, not just the rc.
+  failed_when: _postfix_check.rc != 0 or (_postfix_check.stderr | length > 0)
   changed_when: false
   become: true
 
+# Expected effective config, keyed by parameter name. Defined once and reused
+# for both the postconf query and the assertion, so the query order and the
+# checks can't silently drift apart (the failure mode of positional indexing).
+- name: _verify | Build the expected effective-config map
+  set_fact:
+    _postfix_expected:
+      relayhost: "[{{ smtp_host }}]:{{ smtp_port }}"
+      inet_interfaces: loopback-only
+      myorigin: "{{ domain }}"
+      smtp_sasl_password_maps: texthash:/etc/postfix/sasl_passwd
+      smtp_tls_security_level: "{{ 'secure' if (smtp_use_ssl | bool or smtp_use_tls | bool) else 'none' }}"
+      smtp_sasl_auth_enable: "yes"
+      smtp_tls_mandatory_protocols: ">=TLSv1.2"
+      smtp_tls_mandatory_ciphers: high
+      smtp_generic_maps: texthash:/etc/postfix/generic
+
+# -h suppresses parameter names; -x expands $name refs so `myorigin = $mydomain`
+# reads back as the literal domain. Output order matches the argument order.
 - name: _verify | Read back effective postfix parameters
-  command: postconf -h relayhost inet_interfaces smtp_sasl_password_maps smtp_tls_security_level smtp_sasl_auth_enable smtp_tls_mandatory_protocols smtp_generic_maps
+  command: postconf -hx {{ _postfix_expected.keys() | list | join(' ') }}
   register: _postfix_conf
   changed_when: false
   become: true
@@ -34,19 +56,26 @@
 - name: _verify | Effective config matches the templated relay intent
   assert:
     that:
-      - _postfix_conf.stdout_lines[0] == '[' ~ smtp_host ~ ']:' ~ (smtp_port | string)
-      - _postfix_conf.stdout_lines[1] == 'loopback-only'
-      - _postfix_conf.stdout_lines[2] == 'texthash:/etc/postfix/sasl_passwd'
-      - _postfix_conf.stdout_lines[3] == 'secure'
-      - _postfix_conf.stdout_lines[4] == 'yes'
-      - _postfix_conf.stdout_lines[5] == '>=TLSv1.2'
-      - _postfix_conf.stdout_lines[6] == 'texthash:/etc/postfix/generic'
+      - item.1 == item.2
+    fail_msg: >-
+      postfix parameter {{ item.0 }} drifted from the template: expected
+      "{{ item.1 }}", got "{{ item.2 }}".
+  loop: >-
+    {{ _postfix_expected.keys() | list
+       | zip(_postfix_expected.values() | map('string') | list, _postfix_conf.stdout_lines)
+       | list }}
+  loop_control:
+    label: "{{ item.0 }}"
+
+- name: _verify | Credential and sender-rewrite map lookups resolve
+  assert:
+    that:
       - _postfix_sasl.stdout == postfix_smtp_user ~ ':' ~ postfix_smtp_password
       - _postfix_generic.stdout == inventory_hostname ~ '@' ~ email_domain
     fail_msg: >-
-      postfix relay wiring drifted from the template: relayhost/inet_interfaces/
-      sasl map / TLS level / SASL auth / TLS floor / sender-rewrite map or the
-      credential lookup did not match. postconf output: {{ _postfix_conf.stdout }}.
+      texthash lookup drifted: the SASL map must resolve the relayhost key to
+      {{ postfix_smtp_user }}:<password>, and the generic map must rewrite
+      @{{ domain }} to {{ inventory_hostname }}@{{ email_domain }}.
 
 - name: _verify | Resolve the root and operator aliases
   command: postmap -q {{ item }} hash:/etc/aliases
@@ -74,3 +103,32 @@
       root_email ({{ root_email }}), and /etc/mailutils.conf must set
       email-domain {{ email_domain }}. alias lookups:
       {{ _postfix_alias.results | map(attribute='stdout') | list }}.
+
+# Live exercise of myorigin: a bare `root` sender (the shape cron/smartd/fail2ban
+# use) must be qualified to root@$mydomain. Inject one message and read the
+# qualified envelope sender that qmgr logs to the journal -- that line is written
+# when the message reaches the active queue and persists regardless of the
+# (always-failing, no real Mailgun) delivery attempt, so the check is race-free.
+- name: _verify | Inject a local root-origin probe message
+  command: /usr/sbin/sendmail -i root
+  args:
+    stdin: |
+      Subject: postfix _verify sender-qualification probe
+
+      probe
+  changed_when: false
+  become: true
+
+- name: _verify | Probe's envelope sender was qualified to root@domain
+  command: journalctl -t postfix/qmgr --no-pager
+  register: _postfix_qmgr
+  until: ('from=<root@' ~ domain ~ '>') in _postfix_qmgr.stdout
+  retries: 10
+  delay: 1
+  changed_when: false
+  become: true
+
+- name: _verify | Drain the probe from the queue
+  command: postsuper -d ALL
+  changed_when: false
+  become: true
