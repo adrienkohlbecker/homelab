@@ -1,0 +1,145 @@
+# Configures a third-party apt repository: signing key + source line +
+# optional version pin, handling the Ubuntu-major-version fork once.
+#
+# Repository setup forks on Ubuntu major version because apt-key was
+# removed from the default install in resolute (26.04): jammy (< 26) takes
+# apt_key + apt_repository, resolute (>= 26) takes deb822_repository (which
+# embeds the key inline and needs python3-debian).
+#
+# Callers pass everything through a single apt_source_args dict so each
+# invocation replaces it wholesale and inter-call vars-leak can't happen:
+#
+#   name:          identifier -- scoped keyring file, .sources name, pin file
+#   key_url:       URL of the signing key (fetched on jammy, embedded on resolute)
+#   key_id:        full GPG fingerprint (jammy apt_key re-checks it post-import)
+#   uris:          repo base URL (usually a mirror_apt_* var)
+#   suites:        apt suite(s) -- e.g. nodistro, or the release codename
+#   components:    apt component(s) -- e.g. main, stable
+#   architectures: optional; defaults to the host's arch (arm64/amd64)
+#   pin:           optional { package, version, priority } -> preferences.d/<name>
+#
+# Exposes apt_source_<name>_changed (true when the key/repo/prereq changed)
+# so the caller can gate its package install out of check mode -- where the
+# repo task is skipped behind its prereq install and a stale cache would
+# otherwise make the install fail to find the package.
+
+- name: Assert apt_source args for {{ apt_source_args.name }}
+  assert:
+    that:
+      - apt_source_args.name is defined
+      - apt_source_args.key_url is defined
+      - apt_source_args.key_id is defined
+      - apt_source_args.uris is defined
+      - apt_source_args.suites is defined
+      - apt_source_args.components is defined
+    fail_msg: >-
+      apt_source_args must define name, key_url, key_id, uris, suites and
+      components; got {{ apt_source_args }}
+
+- name: Install gpg for {{ apt_source_args.name }}
+  when: ansible_distribution_major_version | int < 26
+  apt:
+    pkg: gpg
+    cache_valid_time: 3600
+  become: true
+  register: apt_source_gpg
+
+- name: Add repository key for {{ apt_source_args.name }}
+  when:
+    - ansible_distribution_major_version | int < 26
+    - not (ansible_check_mode and apt_source_gpg.changed)
+  apt_key:
+    id: "{{ apt_source_args.key_id }}"
+    url: "{{ apt_source_args.key_url }}"
+    keyring: /usr/share/keyrings/{{ apt_source_args.name }}.gpg
+  become: true
+
+# The key lives in the scoped keyring above (referenced by signed-by= on
+# the repo line), so the global-trust copy at /etc/apt/trusted.gpg.d/ must
+# not exist -- it would re-grant this key trust for every apt source.
+# < 26 only: the resolute deb822 path never writes a global-trust copy.
+- name: Remove global-trust keyring for {{ apt_source_args.name }}
+  when: ansible_distribution_major_version | int < 26
+  file:
+    path: /etc/apt/trusted.gpg.d/{{ apt_source_args.name }}.gpg
+    state: absent
+  become: true
+
+- name: Add repository for {{ apt_source_args.name }}
+  when: ansible_distribution_major_version | int < 26
+  apt_repository:
+    repo: deb [arch={{ apt_source_args.architectures | default((ansible_architecture == "aarch64") | ternary("arm64", "amd64")) }} signed-by=/usr/share/keyrings/{{ apt_source_args.name }}.gpg] {{ apt_source_args.uris }} {{ apt_source_args.suites }} {{ apt_source_args.components }}
+  become: true
+  register: apt_source_repo_legacy
+
+# Pre-warm /var/lib/apt/lists/ so the python3-debian install below works in
+# check mode. Packer ships an empty cache and the apt module's update_cache
+# is a no-op under --check. See roles/apt/tasks/install.yml for the full
+# rationale.
+- name: Pre-warm apt cache (real fetch even in --check) for {{ apt_source_args.name }}  # noqa: command-instead-of-module
+  when: ansible_distribution_major_version | int >= 26
+  command: apt-get update
+  changed_when: false
+  check_mode: false
+  become: true
+
+# deb822_repository requires python3-debian even in check mode. Gate the
+# deb822 task on its .changed so check mode still propagates a would-change
+# signal when the prereq install masks the repo task.
+- name: Install python3-debian for {{ apt_source_args.name }}
+  when: ansible_distribution_major_version | int >= 26
+  apt:
+    pkg: python3-debian
+    cache_valid_time: 3600
+  become: true
+  register: apt_source_python3_debian
+
+- name: Add repository (deb822) for {{ apt_source_args.name }}
+  when:
+    - ansible_distribution_major_version | int >= 26
+    - not (ansible_check_mode and apt_source_python3_debian.changed)
+  deb822_repository:
+    name: "{{ apt_source_args.name }}"
+    types: deb
+    uris: "{{ apt_source_args.uris }}"
+    suites: "{{ apt_source_args.suites }}"
+    components: "{{ apt_source_args.components }}"
+    architectures: "{{ apt_source_args.architectures | default((ansible_architecture == 'aarch64') | ternary('arm64', 'amd64')) }}"
+    signed_by: "{{ apt_source_args.key_url }}"
+  become: true
+  register: apt_source_repo_deb822
+
+# Coalesce the version-gated registers so the refresh below and the
+# caller's install gate reference one signal without caring which branch
+# ran. Includes the per-branch prereqs (gpg on jammy, python3-debian on
+# resolute) so check mode -- where the repo task is gated out by the prereq
+# install -- still propagates a would-change signal.
+- name: Coalesce change signal for {{ apt_source_args.name }}
+  set_fact:
+    apt_source_changed: "{{ apt_source_repo_legacy is changed or apt_source_repo_deb822 is changed or apt_source_gpg is changed or apt_source_python3_debian is changed }}"
+
+# deb822_repository writes the .sources file but doesn't run `apt update`,
+# so the caller's install would otherwise hit a stale cache and fail to
+# find the package. Force a refresh on the run that changed the repo. The
+# legacy apt_repository path refreshes on its own; firing here too is
+# idempotent.
+- name: Refresh apt cache after repository change for {{ apt_source_args.name }}
+  when: apt_source_changed and not ansible_check_mode
+  apt:
+    update_cache: true
+  become: true
+
+- name: Configure apt pin for {{ apt_source_args.name }}
+  when: apt_source_args.pin is defined
+  template:
+    src: preferences.j2
+    dest: /etc/apt/preferences.d/{{ apt_source_args.name }}
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+
+- name: Export change signal for {{ apt_source_args.name }}
+  set_fact:
+    "apt_source_{{ apt_source_args.name }}_changed": "{{ apt_source_changed }}"
