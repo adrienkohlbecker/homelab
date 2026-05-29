@@ -231,6 +231,10 @@
   tags:
     - netdata
 
+# netdata reads container stats over the rootful podman API socket.
+# Caution: podman-socket membership is host-root-equivalent (a member can
+# `podman run --privileged -v /:/host`); accepted here for netdata's
+# collection on these single-operator hosts.
 - name: Add user to podman-socket group
   user:
     name: netdata
