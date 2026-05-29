@@ -1,0 +1,69 @@
+# Generic "install a pinned .deb when the installed version differs" helper.
+# Callers pass a single dict `deb_install_args`:
+#   name      required; dpkg package name (minio, mcli, ipp-linux, ...) --
+#             also the /tmp basename and the prefix of the result fact
+#   version   required; exact ${Version} string to match
+#   url       required; .deb download URL
+#   sha256    required; expected sha256 of the .deb
+#   timeout   optional; get_url timeout (seconds); omitted -> module default
+#
+# Exposes `<name>_deb_changed` (non-identifier chars -> '_') so callers can
+# gate a service restart on a fresh install. The dict form prevents inter-call
+# leakage at play-vars scope: each import_role pass replaces it wholesale.
+#
+# Task `name:` strings stay static -- ansible renders name: at parse time, but
+# deb_install_args is only bound at runtime, so an interpolated name: would
+# fail "undefined". The caller's import_role task name carries the per-package
+# context.
+- name: Check installed deb version  # noqa: command-instead-of-module
+  command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f=${Version}
+      - "{{ deb_install_args.name }}"
+  register: deb_install_query
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Install deb if needed
+  when: deb_install_query.stdout != deb_install_args.version
+  become: true
+  block:
+
+    - name: Download deb
+      check_mode: false
+      get_url:
+        url: "{{ deb_install_args.url }}"
+        dest: "/tmp/{{ deb_install_args.name }}.deb"
+        mode: '0644'
+        owner: root
+        group: root
+        checksum: "sha256:{{ deb_install_args.sha256 }}"
+        timeout: "{{ deb_install_args.timeout | default(omit) }}"
+      register: deb_install_download
+      retries: 3
+      delay: 5
+      until: deb_install_download is succeeded
+
+    - name: Install the deb package
+      apt:
+        deb: "/tmp/{{ deb_install_args.name }}.deb"
+      register: deb_install_apt
+
+  always:
+
+    # Cleanup pairs with the check_mode: false download above so /tmp doesn't
+    # carry the deb past a --check run, and a failed apt still cleans up.
+    - name: Delete deb file
+      check_mode: false
+      file:
+        path: "/tmp/{{ deb_install_args.name }}.deb"
+        state: absent
+
+# Always set, even when the install block is skipped, so callers can rely on
+# the fact existing. Consume with `| bool` (set_fact renders it as a string).
+- name: Record whether an install happened
+  set_fact:
+    "{{ deb_install_args.name | regex_replace('[^A-Za-z0-9_]', '_') }}_deb_changed": "{{ deb_install_query.stdout != deb_install_args.version and deb_install_apt.changed | default(false) }}"
