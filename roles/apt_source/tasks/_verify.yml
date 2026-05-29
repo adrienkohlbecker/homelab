@@ -1,0 +1,81 @@
+# Shared post-converge assertions for any apt_source consumer. Imported from
+# a consumer's _verify.yml with the same apt_source_args it converged with
+# (the harness runs _verify as a separate ansible invocation, so the args do
+# not survive from main.yml and must be re-passed). Not run standalone -- it
+# asserts the helper's contract: the signing key is scoped (not globally
+# trusted) and, when a pin is set, the pinned source wins at its priority.
+
+- name: _verify | Assert apt_source verify args for {{ apt_source_args.name }}
+  assert:
+    that:
+      - apt_source_args.name is defined
+      - apt_source_args.uris is defined
+    fail_msg: >-
+      apt_source _verify needs name and uris; got {{ apt_source_args }}
+
+# apt cache refresh re-validates the repo against the signing key (a wrong
+# signed-by keyring surfaces as NO_PUBKEY + the module erroring). The
+# converge already refreshed once, but that gate is change-only; running it
+# here makes the key wiring an explicit assertion.
+- name: _verify | Apt cache refresh re-validates the source for {{ apt_source_args.name }}
+  apt:
+    update_cache: true
+  become: true
+
+- name: _verify | Pin assertions for {{ apt_source_args.name }}
+  when: apt_source_args.pin is defined
+  block:
+    - name: _verify | Apt policy is available for {{ apt_source_args.pin.package }}
+      command: apt-cache policy {{ apt_source_args.pin.package }}
+      changed_when: false
+      register: _verify_apt_source_policy
+
+    # Precompute the expected version family (e.g. "22.*" -> "22") and the
+    # full policy regex here rather than in the that:, so ansible's
+    # conditional re-evaluation can't reprocess the pattern.
+    - name: _verify | Derive expected pin family + policy pattern for {{ apt_source_args.pin.package }}
+      set_fact:
+        _verify_apt_source_major: "{{ apt_source_args.pin.version | regex_replace('[.].*$', '') }}"
+        _verify_apt_source_policy_re: "[*][*][*] {{ apt_source_args.pin.version | regex_replace('[.].*$', '') }}[.][0-9].* {{ apt_source_args.pin.priority }}"
+
+    - name: _verify | Pinned version is the installed candidate for {{ apt_source_args.pin.package }}
+      assert:
+        that:
+          # `*** <ver> <prio>` marks the installed+selected candidate; assert
+          # it is the pinned major at the pin priority -- a bare priority
+          # substring could match a version string and pass on a no-op pin.
+          - _verify_apt_source_policy.stdout is search(_verify_apt_source_policy_re)
+          # ...and the winning source is this mirror, so a pin mis-targeting
+          # another origin can't satisfy the check above.
+          - apt_source_args.uris in _verify_apt_source_policy.stdout
+        fail_msg: >-
+          Expected {{ apt_source_args.pin.package }} candidate to be a
+          {{ _verify_apt_source_major }}.x pinned at priority
+          {{ apt_source_args.pin.priority }} from {{ apt_source_args.uris }};
+          got policy: {{ _verify_apt_source_policy.stdout | default('') }}
+
+# Scoped signed-by keyring, jammy apt_key path only: the resolute deb822
+# path embeds the key via the module's own keyring and never wrote the
+# legacy global-trust copy, so this wiring is < 26 only.
+- name: _verify | Keyring wiring on the jammy apt_key path for {{ apt_source_args.name }}
+  when: ansible_distribution_major_version | int < 26
+  block:
+    - name: _verify | Stat the scoped and legacy keyrings for {{ apt_source_args.name }}
+      stat:
+        path: "{{ item }}"
+      loop:
+        - /usr/share/keyrings/{{ apt_source_args.name }}.gpg
+        - /etc/apt/trusted.gpg.d/{{ apt_source_args.name }}.gpg
+      register: _verify_apt_source_keyrings
+      become: true
+
+    - name: _verify | Scoped keyring present, legacy global-trust keyring absent
+      assert:
+        that:
+          - _verify_apt_source_keyrings.results[0].stat.exists
+          - not _verify_apt_source_keyrings.results[1].stat.exists
+        fail_msg: >-
+          Expected /usr/share/keyrings/{{ apt_source_args.name }}.gpg present
+          and /etc/apt/trusted.gpg.d/{{ apt_source_args.name }}.gpg absent; got
+          scoped={{ _verify_apt_source_keyrings.results[0].stat.exists }}
+          legacy={{ _verify_apt_source_keyrings.results[1].stat.exists }}

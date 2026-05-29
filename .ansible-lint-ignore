@@ -12,6 +12,7 @@ roles/_test role-name
 roles/_packer/tasks/_verify.yml var-naming[no-role-prefix]
 roles/_test/tasks/_verify.yml var-naming[no-role-prefix]
 roles/apt/tasks/_verify.yml var-naming[no-role-prefix]
+roles/apt_source/tasks/_verify.yml var-naming[no-role-prefix]
 roles/avahi/tasks/_verify.yml var-naming[no-role-prefix]
 roles/bash/tasks/_verify.yml var-naming[no-role-prefix]
 roles/bazarr/tasks/_verify.yml var-naming[no-role-prefix]
