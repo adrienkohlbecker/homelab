@@ -259,6 +259,12 @@ subid_extra_subgid_groups:
 has_transcoding_acceleration: true
 z2m_start_service: true
 
+# Extra read-only library roots Plex mounts beyond /mnt/media. These exact
+# /mnt/data paths exist only on lab; the role gates them on zfs_has_data_mount.
+plex_extra_library_binds:
+  - { src: "/mnt/data/MacbookPro/Music/iTunes/iTunes Media/Music", dest: /itunes }
+  - { src: /mnt/data/Musique/Records, dest: /records }
+
 # Pool partitioning for the CI concurrency rework: lab-vm runners take
 # packer-build + test-role jobs (capped at 4 concurrent VMs by pool
 # size); lab runners take everything else (lint, ci-image, detect,

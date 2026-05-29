@@ -22,9 +22,6 @@
     - /mnt/services
     - /mnt/scratch
     - /mnt/media
-    - /mnt/data
-    - "/mnt/data/MacbookPro/Music/iTunes/iTunes Media/Music"
-    - /mnt/data/Musique/Records
   become: true
 
 - name: _setup | Fake HW transcoding fixture (no GPU in QEMU)

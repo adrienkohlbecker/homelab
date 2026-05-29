@@ -1,0 +1,8 @@
+# Extra read-only library roots bind-mounted into the container beyond the
+# generic /mnt/media tree. Paths are host-specific (they exist only on the
+# host that holds that library), so the real values live in host_vars; empty
+# here means a host that sets nothing renders no extra binds. Each entry:
+# { src: <host path>, dest: <container mount> }. The unit gates the binds on
+# zfs_has_data_mount (they sit under /mnt/data), so a host without that mount
+# never gets podman-auto-created root-owned phantom dirs.
+plex_extra_library_binds: []

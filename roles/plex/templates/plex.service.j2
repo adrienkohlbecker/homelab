@@ -67,11 +67,15 @@ ExecStart=/usr/bin/podman run \
     --volume /mnt/services/plex:/config \
     --volume "/mnt/services/sqlite/plex:/config/Library/Application Support/Plex Media Server/Plug-in Support/Databases" \
     --volume /mnt/media:/media:ro \
-    {# Lab-only library roots: these exact /mnt/data paths exist on lab. #}
-    {# On a host lacking them podman would auto-create empty root-owned #}
-    {# dirs, so these binds assume the lab data layout. #}
-    --volume "/mnt/data/MacbookPro/Music/iTunes/iTunes Media/Music:/itunes:ro" \
-    --volume /mnt/data/Musique/Records:/records:ro \
+{% if zfs_has_data_mount %}
+    {# Host-specific extra library roots under /mnt/data (paths exist only #}
+    {# on the holding host), declared per-host in plex_extra_library_binds. #}
+    {# Gated on the data mount so a host without it never gets podman- #}
+    {# auto-created root-owned phantom dirs at these paths. #}
+{% for bind in plex_extra_library_binds %}
+    --volume "{{ bind.src }}:{{ bind.dest }}:ro" \
+{% endfor %}
+{% endif %}
     {# 0777, not 0755: Plex runs as the non-root PLEX_UID and the tmpfs #}
     {# mounts root-owned (nothing chowns it), so it must be world-writable #}
     {# for Plex to use it as transcode scratch. tmpfs is container-local, #}
