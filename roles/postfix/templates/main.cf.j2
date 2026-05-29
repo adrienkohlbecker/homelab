@@ -39,10 +39,11 @@ mailbox_size_limit = 0
 recipient_delimiter = +
 # Send-only relay: bind smtpd to loopback so no external SMTP listener exists on
 # any interface (alias->relay submission flows through the local pickup path,
-# not smtpd). inet_protocols stays `all` to match the firewall's dual-stack
-# IPv6-readiness even though IPv6 is currently disabled at the kernel.
+# not smtpd). IPv6 is disabled at the kernel and Mailgun publishes no AAAA, so
+# pin inet_protocols to ipv4 -- `all` only adds dead AAAA lookups and a startup
+# warning on every host.
 inet_interfaces = loopback-only
-inet_protocols = all
+inet_protocols = ipv4
 disable_vrfy_command = yes
 
 smtp_sasl_auth_enable = yes
