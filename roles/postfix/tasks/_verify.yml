@@ -1,0 +1,38 @@
+# Post-converge functional check (harness-only, never site.yml). We can't
+# exercise the live Mailgun relay from the qemu fixture (test/ creds are
+# `changeme`, no outbound), so assert the wiring instead: the config parses,
+# the relayhost / inet_interfaces / sasl map are what the template intended,
+# and a postmap lookup of the relayhost key against the texthash sasl map
+# resolves to the rendered credential (exercises vault substitution + the
+# map type, not just that a literal appears in the file).
+- name: _verify | Postfix configuration parses
+  command: postfix check
+  register: _postfix_check
+  changed_when: false
+  become: true
+
+- name: _verify | Read back effective postfix parameters
+  command: postconf -h relayhost inet_interfaces smtp_sasl_password_maps smtp_tls_security_level
+  register: _postfix_conf
+  changed_when: false
+  become: true
+
+- name: _verify | Query the SASL map for the relayhost key
+  command: postmap -q "[{{ smtp_host }}]:{{ smtp_port }}" texthash:/etc/postfix/sasl_passwd
+  register: _postfix_sasl
+  changed_when: false
+  become: true
+
+- name: _verify | Effective config matches the templated relay intent
+  assert:
+    that:
+      - _postfix_conf.stdout_lines[0] == '[' ~ smtp_host ~ ']:' ~ (smtp_port | string)
+      - _postfix_conf.stdout_lines[1] == 'loopback-only'
+      - _postfix_conf.stdout_lines[2] == 'texthash:/etc/postfix/sasl_passwd'
+      - _postfix_conf.stdout_lines[3] == ('secure' if (smtp_use_ssl | bool or smtp_use_tls | bool) else 'none')
+      - _postfix_sasl.stdout | length > 0
+      - postfix_smtp_user in _postfix_sasl.stdout
+    fail_msg: >-
+      postfix relay wiring drifted from the template: relayhost/inet_interfaces/
+      sasl map / TLS level or the credential lookup did not match. postconf
+      output: {{ _postfix_conf.stdout }}; sasl lookup: {{ _postfix_sasl.stdout }}.
