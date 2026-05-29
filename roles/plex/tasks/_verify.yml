@@ -69,6 +69,23 @@
   changed_when: false
   become: true
 
+# The seeded Preferences.xml points Plex's transcoder at the /transcode
+# tmpfs. Plex rewrites Preferences.xml on first boot, so this proves the
+# seeded attribute survived that rewrite — i.e. transcoding lands on the
+# tmpfs and not on the snapshotted /config dataset.
+- name: _verify | Plex transcodes onto the /transcode tmpfs
+  command:
+    argv:
+      - podman
+      - exec
+      - plex
+      - grep
+      - -q
+      - TranscoderTempDirectory="/transcode"
+      - /config/Library/Application Support/Plex Media Server/Preferences.xml
+  changed_when: false
+  become: true
+
 # Content mounts: the library plus any host-specific read-only source trees
 # (plex_extra_library_binds) must surface inside the container, and the
 # read-only binds must actually reject writes — a dropped :ro would let Plex
