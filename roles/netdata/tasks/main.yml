@@ -532,9 +532,11 @@
     state: touch
     access_time: preserve
     modification_time: preserve
-    # root-owned so a compromised netdata daemon can't plant a shell hook
-    # in its own home that runs on the operator's next `su - netdata`.
-    owner: root
+    # Owned by netdata, not root: netdata chowns /var/lib/netdata to itself
+    # on startup, so a root-owned file here flips back to netdata every
+    # converge (breaks idempotence) and can't durably resist the daemon
+    # anyway.
+    owner: netdata
     group: netdata
     mode: "0644"
   become: true
