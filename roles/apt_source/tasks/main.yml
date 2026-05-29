@@ -25,6 +25,8 @@
 #                  it only to keep a pre-existing filename (else the rename
 #                  strands the old .list).
 #   pin:           optional { package, version, priority } -> preferences.d/<name>
+#   state:         optional present (default) | absent; absent tombstones the
+#                  source -- removes its .list/.sources, keyring and pin file
 #
 # Exposes apt_source_<name>_changed (true when the key/repo/prereq changed)
 # so the caller can gate its package install out of check mode -- where the
@@ -45,13 +47,22 @@
       - apt_source_args.name | default('') is match('[a-z0-9_-]+$')
       # the key is the source's trust anchor; a plaintext fetch is MITM-able.
       - apt_source_args.key_url | default('') is match('https://')
+      - apt_source_args.state | default('present') in ['present', 'absent']
     fail_msg: >-
       apt_source_args must define name, key_url, key_id, uris, suites and
       components, with name a [a-z0-9_-] slug and key_url an https URL;
       got {{ apt_source_args }}
 
+# present (default) adds the source; absent tombstones it. Derived from the
+# current args each call, so it never leaks across invocations.
+- name: Resolve apt_source state for {{ apt_source_args.name }}
+  set_fact:
+    apt_source_present: "{{ apt_source_args.state | default('present') == 'present' }}"
+
 - name: Install gpg for {{ apt_source_args.name }}
-  when: ansible_distribution_major_version | int < 26
+  when:
+    - ansible_distribution_major_version | int < 26
+    - apt_source_present
   apt:
     pkg: gpg
     cache_valid_time: 3600
@@ -61,6 +72,7 @@
 - name: Add repository key for {{ apt_source_args.name }}
   when:
     - ansible_distribution_major_version | int < 26
+    - apt_source_present
     - not (ansible_check_mode and apt_source_gpg.changed)
   apt_key:
     id: "{{ apt_source_args.key_id }}"
@@ -84,6 +96,7 @@
   apt_repository:
     repo: deb [arch={{ apt_source_args.architectures | default((ansible_architecture == "aarch64") | ternary("arm64", "amd64")) }} signed-by=/usr/share/keyrings/{{ apt_source_args.name }}.gpg] {{ apt_source_args.uris }} {{ apt_source_args.suites }} {{ apt_source_args.components }}
     filename: "{{ apt_source_args.filename | default(omit) }}"
+    state: "{{ apt_source_args.state | default('present') }}"
   become: true
   register: apt_source_repo_legacy
 
@@ -92,7 +105,9 @@
 # is a no-op under --check. See roles/apt/tasks/main.yml for the full
 # rationale.
 - name: Pre-warm apt cache (real fetch even in --check) for {{ apt_source_args.name }}  # noqa: command-instead-of-module
-  when: ansible_distribution_major_version | int >= 26
+  when:
+    - ansible_distribution_major_version | int >= 26
+    - apt_source_present
   command: apt-get update
   changed_when: false
   check_mode: false
@@ -103,7 +118,9 @@
 # .changed so check mode still propagates a would-change signal when the
 # prereq install masks the repo task.
 - name: Install repository prereqs for {{ apt_source_args.name }}
-  when: ansible_distribution_major_version | int >= 26
+  when:
+    - ansible_distribution_major_version | int >= 26
+    - apt_source_present
   apt:
     pkg:
       - gpg
@@ -116,7 +133,9 @@
 # signed_by= below references a local file. get_url defaults to force: no,
 # so it fetches once and stays idempotent (matching jammy's apt_key import).
 - name: Fetch repository key for {{ apt_source_args.name }}
-  when: ansible_distribution_major_version | int >= 26
+  when:
+    - ansible_distribution_major_version | int >= 26
+    - apt_source_present
   get_url:
     url: "{{ apt_source_args.key_url }}"
     dest: /usr/share/keyrings/{{ apt_source_args.name }}.gpg
@@ -134,6 +153,7 @@
 - name: Read repository key fingerprint for {{ apt_source_args.name }}
   when:
     - ansible_distribution_major_version | int >= 26
+    - apt_source_present
     - not ansible_check_mode
   command: gpg --show-keys --with-colons /usr/share/keyrings/{{ apt_source_args.name }}.gpg
   changed_when: false
@@ -143,6 +163,7 @@
 - name: Assert the fetched key matches key_id for {{ apt_source_args.name }}
   when:
     - ansible_distribution_major_version | int >= 26
+    - apt_source_present
     - not ansible_check_mode
   assert:
     that:
@@ -163,6 +184,7 @@
     components: "{{ apt_source_args.components }}"
     architectures: "{{ apt_source_args.architectures | default((ansible_architecture == 'aarch64') | ternary('arm64', 'amd64')) }}"
     signed_by: /usr/share/keyrings/{{ apt_source_args.name }}.gpg
+    state: "{{ apt_source_args.state | default('present') }}"
   become: true
   register: apt_source_repo_deb822
 
@@ -181,7 +203,9 @@
   become: true
 
 - name: Configure apt pin for {{ apt_source_args.name }}
-  when: apt_source_args.pin is defined
+  when:
+    - apt_source_args.pin is defined
+    - apt_source_present
   template:
     src: preferences.j2
     dest: /etc/apt/preferences.d/{{ apt_source_args.name }}
@@ -189,6 +213,23 @@
     group: root
     mode: "0644"
     backup: true
+  become: true
+
+# Tombstone cleanup: the repo modules above remove the .list/.sources on
+# state: absent; drop the scoped keyring and any pin file too so a retired
+# source leaves nothing stranded.
+- name: Remove pin for {{ apt_source_args.name }}
+  when: not apt_source_present
+  file:
+    path: /etc/apt/preferences.d/{{ apt_source_args.name }}
+    state: absent
+  become: true
+
+- name: Remove keyring for {{ apt_source_args.name }}
+  when: not apt_source_present
+  file:
+    path: /usr/share/keyrings/{{ apt_source_args.name }}.gpg
+    state: absent
   become: true
 
 # Includes the per-branch prereqs (gpg on jammy, python3-debian on resolute)
