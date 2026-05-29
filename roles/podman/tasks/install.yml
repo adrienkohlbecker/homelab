@@ -37,7 +37,7 @@
 # they age out.
 - name: install | Install podman
   apt:
-    pkg: "{{ ['podman', 'aardvark-dns', 'netavark']
+    pkg: "{{ ['podman', 'aardvark-dns', 'netavark', 'passt']
              + (['iptables'] if ansible_distribution_release in ['jammy', 'noble'] else []) }}"
     policy_rc_d: 101
     cache_valid_time: 3600
@@ -81,6 +81,17 @@
 #   resolute+, where the archive is expected to carry 1.10+. Drop
 #   releases from the absent-list as they age out *and* their netavark
 #   crosses 1.10.
+# - default_rootless_network_cmd: back rootless egress with pasta
+#   instead of the slirp4netns default. Rootless-only key (rootful
+#   podman ignores it), so it's consulted just on the hosts that run
+#   rootless podman -- the CI runners (github_runner / gitea_runner) --
+#   and is inert everywhere else. pasta shares passt's robust UDP
+#   datapath, so a rootless container's outbound DNS/UDP no longer drops
+#   datagrams under load the way slirp4netns does. Needs podman >= 4.4
+#   and the pasta binary: both hold fleet-wide (the backport pin routes
+#   podman 4.9 + passt to jammy, noble ships them natively), so it's
+#   ungated. Takes effect on the next container create -- the runners'
+#   per-job containers pick it up without a daemon restart.
 - name: install | Configure podman containers.conf [network]
   community.general.ini_file:
     path: /etc/containers/containers.conf
@@ -94,9 +105,10 @@
     group: root
     mode: "0644"
   loop:
-    - { key: network_backend,      value: '"netavark"' }
-    - { key: dns_bind_port,        value: '5333' }
-    - { key: default_subnet_pools, value: '[{"base" = "{{ podman_bridge_pool }}", "size" = 24}]' }
+    - { key: network_backend,              value: '"netavark"' }
+    - { key: default_rootless_network_cmd, value: '"pasta"' }
+    - { key: dns_bind_port,                value: '5333' }
+    - { key: default_subnet_pools,         value: '[{"base" = "{{ podman_bridge_pool }}", "size" = 24}]' }
     - key: firewall_driver
       value: '"nftables"'
       state: "{{ 'absent' if ansible_distribution_release in ['jammy', 'noble'] else 'present' }}"

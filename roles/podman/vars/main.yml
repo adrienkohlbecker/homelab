@@ -41,6 +41,13 @@ podman_backport_packages:
   - slirp4netns
   - containernetworking-plugins
   - libglib2.0-0t64
+  # passt — ships the pasta(1) connector, selected as podman's
+  # default_rootless_network_cmd in install.yml (replaces slirp4netns
+  # for rootless podman, i.e. the CI runners). pasta's UDP datapath
+  # doesn't shed datagrams under load the way slirp4netns does. Absent
+  # from jammy's archive entirely; the noble build Depends: only on
+  # libc6 (already pinned above), so it backports clean with no new deps.
+  - passt
   # libgpgme11t64 — t64 ABI rename of libgpgme11. Noble podman links
   # against the renamed package for image signature verification on
   # `podman pull`. Provides: libgpgme11 keeps existing reverse-deps
