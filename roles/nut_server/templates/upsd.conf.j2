@@ -19,6 +19,11 @@
 # the data fresh within the normal 15 second interval.  Watch the syslog
 # for notifications from upsd about staleness.
 
+# Raised from the 15s default: the snmp-ups poll over the network can
+# briefly exceed 15s (snmp_retries=5), and a stale mark drops the UPS for
+# upsmon/HA. 30s absorbs a slow cycle without masking a genuinely dead driver.
+MAXAGE 30
+
 # =======================================================================
 # STATEPATH <path>
 # STATEPATH /var/run/nut
@@ -44,7 +49,12 @@
 # This will only be read at startup of upsd.  If you make changes here,
 # you'll need to restart upsd, reload will have no effect.
 
-LISTEN 0.0.0.0 3493
+# Bind all interfaces deliberately: the firewall (roles/firewall) is the
+# access boundary — its default-drop input chain permits 3493 only from wg
+# admin pairs + the podman pool (HA's NUT integration). Per-interface LISTEN
+# scoping would hard-code IPs that differ across the per-host fan-out; least
+# privilege is enforced on the upsd users (upsd.users) instead.
+LISTEN 0.0.0.0 {{ service_ports.nut }}
 
 # =======================================================================
 # MAXCONN <connections>
