@@ -1,0 +1,42 @@
+# Loopback probe -- exercises the container directly via the published port.
+# Retries cover cold-start (--health-start-period is 100s; the budget below
+# gives ~3 minutes to also cover restart-after-deploy). /ping is profilarr's
+# dedicated liveness endpoint (200, no auth), unlike /api/v1/health which is
+# API-key gated and answers 401.
+- name: _verify | Profilarr answers /ping on its loopback port
+  uri:
+    url: http://localhost:{{ service_ports.profilarr }}/ping
+    status_code: 200
+    timeout: 10
+  register: _verify_loopback
+  retries: 90
+  delay: 2
+  until: _verify_loopback.status == 200
+  become: true
+
+# Symlink-relocation probe -- proves the /config/profilarr.db symlink resolves
+# onto the 4K sqlite dataset end-to-end (the reason the sqlite_dataset helper
+# is wired in). A botched links: target or a clobbered symlink fails here
+# rather than silently landing the DB + WAL on the wrong dataset.
+- name: _verify | Profilarr DB symlink resolves onto the sqlite dataset
+  stat:
+    path: /mnt/services/profilarr/profilarr.db
+    follow: false
+  register: _verify_db_link
+  failed_when: >-
+    not _verify_db_link.stat.exists
+    or not _verify_db_link.stat.islnk
+    or _verify_db_link.stat.lnk_target != '/mnt/services/sqlite/profilarr/profilarr.db'
+  become: true
+
+# Ownership probe -- profilarr creates the DB as the in-container PUID/PGID,
+# which must land as the host profilarr user. A PUID/PGID drift would write it
+# under a different host uid silently; assert it so the regression is loud.
+- name: _verify | Profilarr SQLite DB is owned by profilarr
+  stat:
+    path: /mnt/services/sqlite/profilarr/profilarr.db
+  register: _verify_db_owner
+  failed_when: >-
+    not _verify_db_owner.stat.exists
+    or _verify_db_owner.stat.pw_name != 'profilarr'
+  become: true
