@@ -188,24 +188,6 @@
   loop_control:
     label: "{{ item }}"
 
-- name: _verify rollback | Wipe stale /run/netplan_prev before re-snapshot
-  # mv consumed it during rollback; recreate matching what the role's
-  # unconditional pre-template snapshot task would have produced.
-  file:
-    path: /run/netplan_prev
-    state: absent
-  become: true
-  changed_when: false
-
-- name: _verify rollback | Re-snapshot /etc/netplan to /run/netplan_prev
-  copy:
-    src: /etc/netplan/
-    dest: /run/netplan_prev/
-    remote_src: true
-    mode: preserve
-  become: true
-  changed_when: false
-
 # The cancel path is the *normal* outcome of every prod apply, but the E2E
 # above only exercises the failure path. Assert the systemd-level cancel
 # gate directly: with /run/netplan_keep present, starting the rollback unit

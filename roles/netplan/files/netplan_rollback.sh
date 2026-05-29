@@ -22,13 +22,15 @@ if [ ! -d /run/netplan_prev ] || [ -z "$(ls -A /run/netplan_prev 2>/dev/null)" ]
 fi
 
 logger -p user.err -t netplan_rollback "auto-rollback firing: restoring previous /etc/netplan"
-# Stage the restore on the same filesystem as /etc/netplan first, so the
-# swap-in is two back-to-back atomic renames -- /etc/netplan is never
-# absent during the slow tmpfs->rootfs copy. The presumed-broken config is
-# kept aside as /etc/netplan.rollback_failed so a part-way restore stays
-# recoverable from the console.
+# Copy the snapshot in first (the slow tmpfs->rootfs step), staged on the
+# same filesystem as /etc/netplan so the swap-in is then two atomic renames.
+# /etc/netplan is briefly absent only between those two renames, never
+# during the slow copy. cp -a rather than mv leaves /run/netplan_prev intact
+# so a re-fire (or the next converge) still has a snapshot to work from. The
+# presumed-broken config is kept aside as /etc/netplan.rollback_failed so a
+# part-way restore stays recoverable from the console.
 rm -rf /etc/netplan.restoring /etc/netplan.rollback_failed
-mv /run/netplan_prev /etc/netplan.restoring
+cp -a /run/netplan_prev /etc/netplan.restoring
 mv /etc/netplan /etc/netplan.rollback_failed
 mv /etc/netplan.restoring /etc/netplan
 if "$netplan" apply; then
