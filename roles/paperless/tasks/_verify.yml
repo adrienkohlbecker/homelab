@@ -86,6 +86,20 @@
     status_code: 200
   become: true
 
+# /admin is the Django admin + local-credential login surface that
+# PAPERLESS_DISABLE_REGULAR_LOGIN leaves reachable; the nginx server_conf
+# returns 404 for it so operator-gated SSO is the only door. Assert the
+# block holds end-to-end (a regression that drops the location would proxy
+# through to paperless and answer 200/302 instead).
+- name: _verify | Paperless /admin is blocked at the proxy
+  uri:
+    url: https://localhost/admin/
+    headers:
+      Host: paperless.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    status_code: 404
+  become: true
+
 # OIDC config landed. paperless-ngx renders /accounts/login/ as 200 in
 # all cases -- the auto-redirect under PAPERLESS_REDIRECT_LOGIN_TO_SSO
 # is a client-side <script> that submits the social-login form, not a
