@@ -299,6 +299,53 @@
       The duplicated request's second (real) auth_token leaked raw into the
       access log; the two-stage $request_safe redaction must cover both copies.
 
+# Finding-3: an empty upstream_authorization dict must be a no-op -- it must NOT
+# write a conf.d map nor arm the cookieless Authorization-bypass shortcut. Stub
+# is still in gate mode (401), so a cookieless request carrying an Authorization
+# header must fall through to Authelia (302), not short-circuit to the upstream.
+- name: _verify | Configure a vhost with an empty upstream_authorization
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: nginxverifyempty
+      proxy_pass: http://127.0.0.1:18080/
+      auth: required
+      upstream_authorization: {}
+
+- name: _verify | Empty upstream_authorization writes no conf.d map
+  stat:
+    path: /etc/nginx/conf.d/upstream_auth_nginxverifyempty.conf
+  register: nginx_verify_empty_map
+  become: true
+  failed_when: nginx_verify_empty_map.stat.exists
+
+- name: _verify | Wait for the nginxverifyempty vhost to route
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "nginxverifyempty.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    follow_redirects: none
+    status_code: [200, 204, 301, 302, 400, 404]
+  register: nginx_verify_empty_ready
+  until: nginx_verify_empty_ready.status != 404
+  retries: 10
+  delay: 1
+
+- name: _verify | Empty upstream_authorization does not arm the Authorization bypass
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "nginxverifyempty.{{ inventory_hostname }}.{{ domain }}"
+      Authorization: Token should-not-bypass
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: nginx_verify_empty
+  failed_when: nginx_verify_empty.status != 302
+
 # http->https redirect and the default-server catch-all are probed on the
 # public interface, not loopback: the stub_status server binds 127.0.0.1:80
 # specifically, which captures every loopback :80 request regardless of Host.
@@ -546,6 +593,7 @@
     - nginxverifyauth
     - nginxverifyloc
     - nginxverifyplain
+    - nginxverifyempty
   loop_control:
     label: "{{ item }}"
 
@@ -563,6 +611,8 @@
     - /etc/nginx/sites-enabled/nginxverifyloc
     - /etc/nginx/sites-available/nginxverifyplain
     - /etc/nginx/sites-enabled/nginxverifyplain
+    - /etc/nginx/sites-available/nginxverifyempty
+    - /etc/nginx/sites-enabled/nginxverifyempty
   become: true
   failed_when: nginx_verify_removed.stat.exists
 
