@@ -5,32 +5,14 @@
   tags:
     - jellyfin
 
-# Read the render gid from /etc/group on transcoding hosts rather than
-# creating it ourselves with `group:`. udev/mesa ship sysusers.d entries
-# that own the canonical gid; a dynamic group-create can drift if a
-# package later installs a different fixed gid, silently de-aligning
-# the container's --group-add from /dev/dri/renderD128's actual owner.
 - name: Lookup render group gid (HW transcoding hosts only)
+  import_role:
+    name: media
+    tasks_from: render_group
   when: has_transcoding_acceleration
   become: true
   tags:
     - jellyfin
-  block:
-    - name: Getent render group
-      getent:
-        database: group
-        key: render
-        fail_key: false
-    - name: Assert render group present
-      assert:
-        that:
-          - getent_group.render is defined
-        fail_msg: >-
-          /etc/group has no 'render' entry. On a host with
-          has_transcoding_acceleration=true, install one of the
-          transcoding driver packages (mesa-va-drivers,
-          intel-media-va-driver) — they ship a sysusers.d that owns
-          this group — and re-run.
 
 - name: Set up jellyfin system user, group, and config dir
   import_role:
