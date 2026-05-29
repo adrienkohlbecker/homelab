@@ -84,13 +84,15 @@
     tasks_from: service
   vars:
     systemd_unit_args:
+      # podman.socket is shipped by the podman package; systemd_unit's
+      # `service` task only enables/starts it -- it never installs `src`.
       src: podman.socket
       condition: "{{ not (ansible_check_mode and podman_apt.changed) }}"
     # podman_backports_updated forces a restart when the noble upgrade
     # flipped the binary under us — apt under policy_rc_d=101 leaves
     # the running 3.x daemon on disk, but the new socket on
     # /run/podman would be served by the stale process otherwise.
-      restart: "{{ podman_service_d_override_conf_result.changed or podman_socket_d_override_conf_result.changed or (podman_backports_updated | default(false)) }}"
+      restart: "{{ (podman_service_d_override_conf_result.changed | default(false)) or (podman_socket_d_override_conf_result.changed | default(false)) or (podman_backports_updated | default(false)) }}"
   tags:
     - podman
 
@@ -119,6 +121,10 @@
   tags:
     - podman
 
+# No `condition:` here (unlike the gitea_runner/github_runner callers that
+# gate on a freshly-created user): the operator is the ansible connection
+# user -- always pre-existing -- and linger was enabled for it one task
+# above, so its user manager is guaranteed live when the timer ticks.
 - name: Install user-scope podman prune timer for the operator user
   import_tasks: prune.yml
   vars:
