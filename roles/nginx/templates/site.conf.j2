@@ -217,10 +217,18 @@ server {
     # server_conf/location_conf location via the same include.
     include snippets/proxy_params.conf;
 {% if _auth_enabled %}
+    # Forward the captured Authelia identity to the upstream under both naming
+    # conventions: Authelia's own canonical authrequest snippet uses Remote-*,
+    # while the *arr suite (AuthenticationMethod=External) reads X-Forwarded-User.
+    # Emitting both lets an upstream wired per either convention pick it up.
     proxy_set_header X-Forwarded-User   $authelia_user;
     proxy_set_header X-Forwarded-Groups $authelia_groups;
     proxy_set_header X-Forwarded-Name   $authelia_name;
     proxy_set_header X-Forwarded-Email  $authelia_email;
+    proxy_set_header Remote-User        $authelia_user;
+    proxy_set_header Remote-Groups      $authelia_groups;
+    proxy_set_header Remote-Name        $authelia_name;
+    proxy_set_header Remote-Email       $authelia_email;
 {% endif %}
 {% if _nginx_site_upstream_auth %}
     # Per-user upstream Authorization. The caller passes a dict

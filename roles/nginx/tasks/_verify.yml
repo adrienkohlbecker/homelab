@@ -59,6 +59,7 @@
                 print("upstream-saw " + self.path, flush=True)
                 print("upstream-auth " + self.headers.get("Authorization", "<none>"), flush=True)
                 print("upstream-fwduser " + self.headers.get("X-Forwarded-User", "<none>"), flush=True)
+                print("upstream-remoteuser " + self.headers.get("Remote-User", "<none>"), flush=True)
                 body = b"nginx_verify_upstream_ok"
                 self.send_response(200)
                 self.send_header("Content-Length", str(len(body)))
@@ -447,6 +448,16 @@
   changed_when: false
   become: true
   until: "'upstream-fwduser nginxverifyuser' in nginx_verify_inj_journal.stdout"
+  retries: 10
+  delay: 1
+
+# The same identity is also forwarded under Authelia's canonical Remote-* name.
+- name: _verify | Upstream received Remote-User from the auth subrequest
+  command: journalctl -u nginx_verify_upstream --no-pager
+  register: nginx_verify_remote_journal
+  changed_when: false
+  become: true
+  until: "'upstream-remoteuser nginxverifyuser' in nginx_verify_remote_journal.stdout"
   retries: 10
   delay: 1
 
