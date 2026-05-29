@@ -44,7 +44,7 @@
     state: directory
     owner: nexus
     group: nexus
-    mode: "0755"
+    mode: "0750"
   become: true
   tags:
     - nexus
