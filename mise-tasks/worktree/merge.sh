@@ -10,9 +10,10 @@
 # forked from whatever master pointed at when the worktree was created, which a
 # concurrent merge or an operator bump may have since moved past. After that
 # rebase:
-#   - code-only worktree, or notes commits that fast-forward origin/main: rebase
-#     <name> onto master and FF. Notes are FF-pushed, so no merge commit and no
-#     SHA change -> the gitlinks the parent already records stay valid as-is.
+#   - code-only worktree, or notes commits that fast-forward origin/main:
+#     worktree:update rebases <name> onto master (resolving notes-gitlink
+#     conflicts) and master FFs to it. Notes are FF-pushed, so no merge commit
+#     and no SHA change -> the gitlinks the parent already records stay valid.
 #   - origin/main has DIVERGED past master:notes (a concurrent worktree merged
 #     notes meanwhile): the notes branch can't FF, so merge it into origin/main
 #     (--no-ff) and pin master's gitlink to that merge commit via a --no-ff
@@ -81,9 +82,13 @@ if [ "$notes_action" = "merge" ]; then
   fi
   git commit -q --no-edit
 else
-  # linear path: rebase onto master, FF. For notes_action=ff, FF-push the notes
-  # branch first (SHAs preserved, so the rebased parent's gitlinks stay valid).
-  git -C "$wt" rebase master
+  # linear path: delegate the rebase to worktree:update -- it rebases the notes
+  # branch onto master:notes (a no-op here, already done above) and the code
+  # branch onto master, resolving the notes-gitlink conflicts that a bare
+  # `git rebase master` would halt on once the notes branch has been rewritten.
+  # Then FF master to it. For notes_action=ff, FF-push the notes branch (SHAs
+  # preserved, so the rebased gitlinks stay valid).
+  mise run worktree:update "$usage_name"
   if [ "$notes_action" = "ff" ]; then
     git -C "$wt_notes" push -q origin "$usage_name":main
     git -C notes fetch -q origin
