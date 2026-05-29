@@ -3,7 +3,20 @@
   assert:
     that:
       - nut_upsmon_password | default('') | length > 0
-    fail_msg: nut_monitor_enabled requires a vaulted nut_upsmon_password in host_vars/group_vars
+      - nut_monitor_ups | default('') | length > 0
+      - "'@' in (nut_monitor_ups | default(''))"
+    fail_msg: nut_monitor_enabled requires a vaulted nut_upsmon_password and a nut_monitor_ups of the form <upsname>@<host> in host_vars/group_vars
+  tags:
+    - nut_monitor
+
+# nut-notify delivers via the bare `mail` binary (mailutils, from the postfix
+# role ordered before nut in site.yml). Fail loudly at converge if a host
+# enables monitoring without it, rather than discovering the gap during a real
+# outage when the notification silently never sends.
+- name: Assert mail is available when monitoring is enabled
+  when: nut_monitor_enabled | default(false)
+  command: which mail
+  changed_when: false
   tags:
     - nut_monitor
 
@@ -75,9 +88,17 @@
     tasks_from: service
   vars:
     systemd_unit_args:
+      # nut-client.service is a symlink to nut-monitor.service (the upsmon
+      # unit); unlike nut-driver, the name doesn't shift across releases, so no
+      # version branch is needed here (cf. nut_server's nut-driver@eaton).
       src: nut-client
       condition: "{{ (nut_monitor_enabled | default(false)) and not (ansible_check_mode and nut_monitor_apt.changed) }}"
       start: "{{ not qemu_test }}"
-      restart: "{{ nut_monitor_upsmon_conf.changed or nut_monitor_upssched_conf.changed }}"
+      # reload (not restart) so a config change keeps any in-flight upssched
+      # timer (ONBATT/COMMBAD debounce) alive. Requires nut 2.8: the 2.7.4
+      # packaged unit ships no ExecReload (CanReload=no); 2.8's nut-monitor.service
+      # does (ExecReload=/sbin/upsmon -c reload). nut-notify is never a trigger --
+      # upssched exec's it fresh per event, so a script-only change needs nothing.
+      reload: "{{ nut_monitor_upsmon_conf.changed or nut_monitor_upssched_conf.changed }}"
   tags:
     - nut_monitor
