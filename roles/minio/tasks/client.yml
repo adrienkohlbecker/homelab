@@ -1,59 +1,33 @@
-# Query just the mcli package version rather than package_facts, which
-# enumerates every installed apt package (~2s) only to read one version.
-- name: client | Check installed mcli version  # noqa: command-instead-of-module
-  command:
-    argv:
-      - dpkg-query
-      - -W
-      - -f=${Version}
-      - mcli
-  register: minio_mcli_pkg
-  changed_when: false
-  failed_when: false
-  check_mode: false
+- name: client | Install mcli
+  import_role:
+    name: deb_install
+    tasks_from: install
+  vars:
+    deb_install_args:
+      name: mcli
+      version: "{{ minio_mcli_version }}"
+      url: "{{ minio_mcli_release[ansible_architecture].url }}"
+      sha256: "{{ minio_mcli_release[ansible_architecture].sha256 }}"
   tags:
     - minio
 
-- name: client | Install mcli if needed
-  when: minio_mcli_pkg.stdout != minio_mcli_version
-  become: true
-  tags:
-    - minio
-  block:
-
-    - name: client | Download mcli deb
-      check_mode: false
-      get_url:
-        url: "{{ minio_mcli_release[ansible_architecture].url }}"
-        dest: /tmp/mcli.deb
-        mode: '0644'
-        owner: root
-        group: root
-        checksum: "sha256:{{ minio_mcli_release[ansible_architecture].sha256 }}"
-
-    - name: client | Install mcli
-      apt:
-        deb: /tmp/mcli.deb
-      register: minio_mcli_installed
-
-    - name: client | Delete deb file
-      file:
-        path: /tmp/mcli.deb
-        state: absent
-
-# Always (re)write the alias so a rotated MINIO_ROOT_PASSWORD is picked up
-# on the next converge; mcli alias set is idempotent. become: true keeps
-# the config under root's home, matching the data.yml mcli calls.
+# Persist the `default` alias for the data.yml / _verify mcli calls. Feed the
+# credentials as a JSON blob on stdin (`mcli alias import` reads /dev/stdin) so
+# the root password never lands in argv / the process table -- unlike
+# `mcli alias set`, which takes the secret as a positional arg. Re-run every
+# converge so a rotated MINIO_ROOT_PASSWORD is picked up; import overwrites.
 - name: client | Configure alias
-  command: mcli alias set default http://localhost:{{ service_ports.minio_api }} {{ minio_root_user }} {{ minio_root_password }}
+  command: mcli alias import default /dev/stdin
+  args:
+    stdin: "{{ {'url': 'http://localhost:' ~ service_ports.minio_api, 'accessKey': minio_root_user, 'secretKey': minio_root_password, 'api': 'S3v4', 'path': 'auto'} | to_json }}"
   changed_when: false
   become: true
   tags:
     - minio
 
-# The mcli alias embeds the root password; keep it under root's home only.
-# Drop any copy under the connecting user's $HOME so the credential never
-# lingers in an interactive account.
+# The mcli config lives under root's home; drop any stray ~/.mcli left by
+# manual mcli use as the connecting user so a credential can't linger in an
+# interactive account.
 - name: client | Drop per-user mcli alias config
   file:
     path: ~/.mcli
