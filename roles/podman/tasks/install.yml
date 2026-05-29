@@ -42,12 +42,21 @@
   tags:
     - podman
 
-# /etc/containers/containers.conf is for user overrides; the package
-# ships defaults at /usr/share/containers/containers.conf and won't
-# create the /etc/ copy. ini_file (with create=true) materialises
-# the [network] section as a small overlay file and merges its keys
-# in below in idempotent fashion.
+# /etc/containers/containers.conf is for user overrides; the package ships
+# defaults at /usr/share/containers/containers.conf and won't create the
+# /etc/ copy. We write a small overlay holding only the keys the homelab
+# pins -- podman layers it over the package defaults. A `copy:` with a
+# templated `content:` (mirroring the storage.conf write below) carries a
+# TOML `validate:` so a jinja/vault typo fails here rather than being
+# silently accepted-then-defaulted by containers/common.
 #
+# [containers]
+# - seccomp_profile: point at the fchmodat2-augmented profile built a few
+#   tasks below. The path is static, so it's written here even though the
+#   file itself is created later in the same converge; podman only reads it
+#   at container (re)create.
+#
+# [network]
 # - network_backend: force netavark. Otherwise podman auto-detects
 #   and stays on CNI when any CNI network already exists; CNI
 #   doesn't wire DNS without the dnsname plugin (deprecated). With
@@ -55,10 +64,16 @@
 #   user-created networks. Existing CNI hosts need a one-shot
 #   manual `podman system reset --force` to drop leaked iptables
 #   rules.
-# - dns_bind_port: move aardvark-dns off port 53 so it doesn't fight
-#   with services (pihole) that bind on the bridge-gateway interface.
-#   netavark redirects container DNS queries to gateway:5333 via
-#   iptables; nothing on the host changes from the container POV.
+# - default_network: pin the default network's *name*. roles/firewall's
+#   _verify attaches a probe container with `--network podman`, so the name
+#   is load-bearing; pinning it keeps that test (and any future name-based
+#   consumer) robust against an upstream default-name change.
+# - default_subnet: pin the *default* podman network's subnet to
+#   podman_default_network. Podman's compiled-in default happens to
+#   equal it today, so the firewall's PODMAN_DEFAULT egress/DNS rules
+#   and pihole's upstream line up by coincidence; pinning makes it
+#   explicit so an upstream change to the built-in default can't
+#   silently move the default network out from under those rules.
 # - default_subnet_pools: shrink the upstream 5-range list to just
 #   podman_bridge_pool. The firewall INPUT accept for aardvark-dns and
 #   homeassistant's trusted_proxies are scoped to that prefix; if podman
@@ -68,12 +83,13 @@
 #   single range with size 24 gives us 256 named bridges before
 #   exhaustion (vs. ~7 today) and turns "ran out of pool" into a loud
 #   create-time error rather than a quiet drift into untrusted space.
-# - default_subnet: pin the *default* podman network's subnet to
-#   podman_default_network. Podman's compiled-in default happens to
-#   equal it today, so the firewall's PODMAN_DEFAULT egress/DNS rules
-#   and pihole's upstream line up by coincidence; pinning makes it
-#   explicit so an upstream change to the built-in default can't
-#   silently move the default network out from under those rules.
+#   default_subnet and default_subnet_pools draw from podman_default_network
+#   / podman_bridge_pool (group_vars/all/main.yml defaults -- unlike the
+#   per-host podman_zvol_size they always resolve, so no assert here).
+# - dns_bind_port: move aardvark-dns off port 53 so it doesn't fight
+#   with services (pihole) that bind on the bridge-gateway interface.
+#   netavark redirects container DNS queries to gateway:5333 via
+#   iptables; nothing on the host changes from the container POV.
 # - firewall_driver: native nftables, not iptables-nft compat. Lands
 #   netavark's rules in `inet netavark` instead of `ip filter`/
 #   `ip nat`. The driver was added in netavark 1.10 (Jun 2024). Ubuntu
@@ -94,28 +110,32 @@
 #   podman 4.9 + passt to jammy, noble ships them natively), so it's
 #   ungated. Takes effect on the next container create -- the runners'
 #   per-job containers pick it up without a daemon restart.
-- name: install | Configure podman containers.conf [network]
-  community.general.ini_file:
-    path: /etc/containers/containers.conf
-    section: network
-    option: "{{ item.key }}"
-    value: "{{ item.value }}"
-    state: "{{ item.state | default('present') }}"
-    create: true
-    backup: true
+- name: install | Configure podman containers.conf
+  copy:
+    dest: /etc/containers/containers.conf
+    content: |
+      [containers]
+      seccomp_profile = "/etc/containers/seccomp-fchmodat2.json"
+
+      [network]
+      network_backend = "netavark"
+      default_rootless_network_cmd = "pasta"
+      default_network = "podman"
+      default_subnet = "{{ podman_default_network }}"
+      default_subnet_pools = [{"base" = "{{ podman_bridge_pool }}", "size" = 24}]
+      dns_bind_port = 5333
+      {% if ansible_distribution_release not in ['jammy', 'noble'] %}
+      firewall_driver = "nftables"
+      {% endif %}
     owner: root
     group: root
     mode: "0644"
-  loop:
-    - { key: network_backend,              value: '"netavark"' }
-    - { key: default_rootless_network_cmd, value: '"pasta"' }
-    - { key: dns_bind_port,                value: '5333' }
-    - { key: default_subnet,               value: '"{{ podman_default_network }}"' }
-    - { key: default_subnet_pools,         value: '[{"base" = "{{ podman_bridge_pool }}", "size" = 24}]' }
-    - key: firewall_driver
-      value: '"nftables"'
-      state: "{{ 'absent' if ansible_distribution_release in ['jammy', 'noble'] else 'present' }}"
-  register: podman_containers_conf_network
+    backup: true
+    # Parse as TOML so a jinja/vault typo fails here; containers/common
+    # otherwise accepts-then-defaults a broken file and silently drops our
+    # netavark backend + scoped subnets back to compiled-in defaults.
+    validate: python3 -c 'import tomli, sys; tomli.load(open(sys.argv[1], "rb"))' %s
+  register: podman_containers_conf
   become: true
   tags:
     - podman
@@ -136,7 +156,7 @@
 # driver flip without a firewall pass behind it, or the host is left
 # mid-transition.
 - name: install | Reload netavark firewall + dns after containers.conf change
-  when: podman_containers_conf_network.changed and not ansible_check_mode
+  when: podman_containers_conf.changed and not ansible_check_mode
   command: podman network reload --all
   changed_when: true
   become: true
@@ -161,9 +181,9 @@
 # profile ships with golang-github-containers-common, pulled in by the
 # `Install podman` apt task above. In check mode on a fresh host that apt
 # only *reports*, so the file isn't there yet and the slurp would hard-fail;
-# skip the trio in that case. Same guard on all three so the template never
-# references an unset podman_seccomp_stock. On a converged host (apt no-op)
-# or any real apply, they run normally.
+# skip both in that case. Same guard on the slurp and the template so the
+# latter never references an unset podman_seccomp_stock. On a converged host
+# (apt no-op) or any real apply, they run normally.
 - name: install | Read stock seccomp profile
   when: not (ansible_check_mode and podman_apt.changed)
   slurp:
@@ -183,22 +203,6 @@
     mode: "0644"
     backup: true
     validate: python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "%s"
-  become: true
-  tags:
-    - podman
-
-- name: install | Set fchmodat2 seccomp profile as podman default
-  when: not (ansible_check_mode and podman_apt.changed)
-  community.general.ini_file:
-    path: /etc/containers/containers.conf
-    section: containers
-    option: seccomp_profile
-    value: '"/etc/containers/seccomp-fchmodat2.json"'
-    create: true
-    backup: true
-    owner: root
-    group: root
-    mode: "0644"
   become: true
   tags:
     - podman
