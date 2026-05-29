@@ -134,9 +134,12 @@ http {
     # Diffie-Hellman parameter for DHE ciphersuites
     ssl_dhparam            /etc/nginx/dhparam.pem;
 
-    # Mozilla Intermediate configuration
+    # generated 2026-05-29, TLSRef Guideline v6.0, nginx 1.18.0 (UNSUPPORTED; end-of-life), OpenSSL 3.0.2 (OLD: missing PQC hybrid MLKEMs), intermediate config, HSTS
+    # https://configurator.tlsref.org/#server=nginx&version=1.18.0&config=intermediate&openssl=3.0.2&hsts&guideline=6.0
     ssl_protocols          TLSv1.2 TLSv1.3;
-    ssl_ciphers            ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384:DHE-RSA-CHACHA20-POLY1305;
+    ssl_ecdh_curve         X25519:prime256v1:secp384r1;
+    ssl_ciphers            ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers off;
 {% if ansible_distribution_release not in ['jammy'] %}
     # Honour the client's ChaCha20 preference (phones/tablets without AES-NI
     # are faster on ChaCha20). Also the only lever over the TLSv1.3 suite set,
