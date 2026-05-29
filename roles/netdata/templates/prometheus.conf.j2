@@ -11,13 +11,13 @@ jobs:
 {% if prometheus_enabled|default(false) %}
 
   - name: prometheus
-    url: http://127.0.0.1:9090/metrics
+    url: http://127.0.0.1:{{ service_ports.prometheus }}/metrics
     autodetection_retry: 60
 {% endif %}
 {% if minio_enabled|default(false) %}
 
   - name: minio
-    url: http://127.0.0.1:9199/minio/v2/metrics/cluster
+    url: http://127.0.0.1:{{ service_ports.minio_api }}/minio/v2/metrics/cluster
     autodetection_retry: 60
 {% endif %}
 
