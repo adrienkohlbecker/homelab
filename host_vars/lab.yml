@@ -271,8 +271,6 @@ github_runner_instances:
   - { repo: homelab, suffix: vm2,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
   - { repo: homelab, suffix: vm3,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
   - { repo: homelab, suffix: vm4,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
-  - { repo: homelab, suffix: vm5,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
-  - { repo: homelab, suffix: vm6,  owner: adrienkohlbecker, labels: "self-hosted,lab-vm" }
   - { repo: homelab, suffix: gen1, owner: adrienkohlbecker, labels: "self-hosted,lab" }
   - { repo: homelab, suffix: gen2, owner: adrienkohlbecker, labels: "self-hosted,lab" }
   - { repo: homelab, suffix: gen3, owner: adrienkohlbecker, labels: "self-hosted,lab" }
