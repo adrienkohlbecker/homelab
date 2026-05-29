@@ -19,8 +19,8 @@
 #   key_url:       URL of the signing key (fetched into the scoped keyring)
 #   key_id:        full GPG fingerprint, re-checked against the fetched key
 #   uris:          repo base URL (usually a mirror_apt_* var)
-#   suites:        apt suite(s) -- e.g. nodistro, or the release codename
-#   components:    optional apt component(s) -- e.g. main, stable; omit for a
+#   suites:        apt suite -- e.g. nodistro, or the release codename
+#   components:    optional apt component -- e.g. main, stable; omit for a
 #                  flat repo (trailing-slash suite, no components)
 #   architectures: optional; defaults to the host's arch (arm64/amd64)
 #   filename:      optional sources.list.d/<filename>.list name on the jammy
@@ -50,6 +50,10 @@
       # the key is the source's trust anchor; a plaintext fetch is MITM-able.
       - apt_source_args.key_url | default('') is match('https://')
       - apt_source_args.state | default('present') in ['present', 'absent']
+      # single-valued: the jammy repo line space-joins while deb822 splits a
+      # string on commas, so a multi-valued string would diverge across paths.
+      - apt_source_args.suites | default('') is not search('[ ,]')
+      - apt_source_args.components | default('') is not search('[ ,]')
     fail_msg: >-
       apt_source_args must define name, key_url, key_id, uris and suites,
       with name a [a-z0-9_-] slug and key_url an https URL;
