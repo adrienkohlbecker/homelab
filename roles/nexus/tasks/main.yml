@@ -57,6 +57,38 @@
   tags:
     - nexus
 
+- name: Read the existing nexus encryption key for comparison
+  slurp:
+    src: /mnt/services/nexus/user/encryption.json
+  register: nexus_encryption_existing
+  when: nexus_encryption_pre.stat.exists
+  become: true
+  tags:
+    - nexus
+
+# Nexus reads NEXUS_SECRETS_KEY_FILE once at JVM start and re-encrypting the
+# at-rest secrets it already wrote is a manual procedure, so a key that
+# changes after first provisioning can't be applied by a restart. Refuse
+# BEFORE overwriting the file: leaving the old key on disk keeps the running
+# container decryptable, whereas writing a new key would arm the next restart
+# (Restart=always, reboot, crash) to load it and fail to decrypt every stored
+# secret. Compare parsed JSON so a mode/owner-only change doesn't false-trip.
+# First converge has no file yet and falls straight through to the template.
+- name: Fail if the nexus encryption material would change in place
+  when: >-
+    nexus_encryption_pre.stat.exists
+    and (nexus_encryption_existing.content | b64decode | from_json)
+        != (lookup('template', 'encryption.json.j2') | from_json)
+  fail:
+    msg: >-
+      encryption.json would change on an already-provisioned host. Rotating
+      nexus_encryption_{key,salt,iv} in place breaks decryption of Nexus's
+      existing at-rest secrets; the on-disk key was left untouched so the
+      running container stays decryptable. Follow Sonatype's re-encryption
+      procedure instead.
+  tags:
+    - nexus
+
 - name: Configure nexus encryption
   template:
     src: encryption.json.j2
@@ -68,27 +100,6 @@
     validate: python3 -c 'import json,sys; json.load(open(sys.argv[1]))' "%s"
   register: nexus_encryption_json
   become: true
-  tags:
-    - nexus
-
-# Nexus reads NEXUS_SECRETS_KEY_FILE once at JVM start, and re-encrypting
-# the at-rest secrets it already wrote is a manual procedure -- so a key
-# that changes after first provisioning can't be applied by a restart and
-# would break decryption of existing secrets. Refuse to continue rather
-# than silently leave the running container on the old key. First converge
-# writes the file before the unit ever starts, so creation is fine; only an
-# in-place change is the footgun.
-- name: Fail if the nexus encryption key changed in place
-  when:
-    - not ansible_check_mode
-    - nexus_encryption_pre.stat.exists
-    - nexus_encryption_json.changed
-  fail:
-    msg: >-
-      encryption.json changed on an already-provisioned host. Rotating
-      nexus_encryption_{key,salt,iv} in place breaks decryption of Nexus's
-      existing at-rest secrets and the running container was NOT restarted
-      onto the new key. Follow Sonatype's re-encryption procedure instead.
   tags:
     - nexus
 
