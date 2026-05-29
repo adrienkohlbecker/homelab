@@ -1199,7 +1199,7 @@ authelia_oidc_clients:
       38376431306235656136333061626539396538636532623364373030626132633532333930323065
       33633335323030333263376433646636393261373562316364643632393236383432376137393832
       386662353364613163393866343264353634
-    authorization_policy: two_factor
+    authorization_policy: operator_only
     redirect_uris:
       - https://paperless.{{ inventory_hostname }}.{{ domain }}/accounts/oidc/authelia/login/callback/
   - client_id: gitea

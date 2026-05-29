@@ -219,6 +219,16 @@ identity_providers:
           - groups
           - email
           - email_verified
+    # Custom OIDC authorization policy. The global access_control rules gate
+    # forward-auth proxies; an OIDC RP is instead gated by its
+    # authorization_policy. `operator_only` admits just the operator, for
+    # first-party clients that shouldn't be reachable by the household member.
+    authorization_policies:
+      operator_only:
+        default_policy: 'deny'
+        rules:
+          - policy: 'two_factor'
+            subject: 'user:akohlbecker'
     clients:
 {% for client in authelia_oidc_clients %}
       - client_id: '{{ client.client_id }}'
