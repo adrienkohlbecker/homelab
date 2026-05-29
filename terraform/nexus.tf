@@ -287,18 +287,25 @@ resource "nexus_security_role" "push" {
   roles = []
 }
 
-# Aggregate of every per-repo push role, for identities that should push to all
-# hosted repos at once (the operator's lab_local_user) rather than the
-# single-repo CI service accounts above. Nesting via a comprehension over the
-# push-role map means adding a hosted repo extends this automatically -- no
-# consumer's role list needs touching. The per-repo least-privilege scoping
-# still applies to the *-push users; this is the deliberate all-repos grant.
-resource "nexus_security_role" "hosted_push_all" {
-  roleid      = "hosted-push-all"
-  name        = "hosted-push-all"
-  description = "Push to every hosted docker repo"
-  privileges  = []
-  roles       = [for r in nexus_security_role.push : r.roleid]
+# Single role granting content access to *every* repository, any format, so the
+# operator's all-repos identity never needs a per-repo or per-format edit.
+# nexus:repository-view:* is the Shiro form of nx-repository-view-*: it matches
+# browse/read/edit/add/delete on every repo, but not admin/config (that lives
+# under nexus:* and the application privileges). Deliberately broad -- it's the
+# operator's own login, not a service account; the scoped *-push roles above
+# still constrain the CI credentials.
+resource "nexus_privilege_wildcard" "repository_view_all" {
+  name        = "repository-view-all"
+  description = "View (browse/read/edit/add/delete) on all repositories, all formats"
+  pattern     = "nexus:repository-view:*"
+}
+
+resource "nexus_security_role" "push_all" {
+  roleid      = "push-all"
+  name        = "push-all"
+  description = "Push to (and manage content of) every repository"
+  privileges  = [nexus_privilege_wildcard.repository_view_all.name]
+  roles       = []
 }
 
 # Generated once and pinned in encrypted state; rotate by tainting the
@@ -330,8 +337,8 @@ resource "nexus_security_user" "push" {
 }
 
 # Operator's local/manual docker push identity (you `podman login` as this from
-# your workstation and lab hosts), carrying the aggregate push role so it can
-# push to every hosted repo without a per-repo edit here. Adopted from the user
+# your workstation and lab hosts), carrying the push-all role so it can push to
+# every repository without a per-repo edit here. Adopted from the user
 # created by hand in the UI, not provisioned here, so its password is left
 # unmanaged: `password` is omitted, the Nexus API never returns it, and the
 # provider can't see it -- a plain apply leaves the credential untouched and
@@ -349,7 +356,7 @@ resource "nexus_security_user" "lab_local_user" {
   email     = "lab_local_user@noreply.invalid"
   status    = "active"
   roles = [
-    nexus_security_role.hosted_push_all.roleid,
+    nexus_security_role.push_all.roleid,
   ]
 }
 
