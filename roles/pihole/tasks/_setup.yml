@@ -28,6 +28,13 @@
     name: podman
     tasks_from: install
 
+# functions.sh (sourced by /usr/local/bin/pihole_healthcheck). In production
+# roles/bash runs site-wide; under the harness pihole runs in isolation, so
+# _verify can exercise the healthcheck script.
+- name: _setup | Install bash functions
+  import_role:
+    name: bash
+
 - name: _test | Install dependencies
   apt:
     pkg:

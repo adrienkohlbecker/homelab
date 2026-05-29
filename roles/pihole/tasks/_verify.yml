@@ -35,6 +35,20 @@
   until: pihole_verify_health.rc == 0
   become: true
 
+# The keepalived vrrp_script that gates VRRP FAULT on container health. It's
+# the HA-failover contract, so exercise the real script (cidfile read ->
+# `podman container inspect` health status -> exit code) rather than just
+# trusting `podman healthcheck run` above. Runs after the container is
+# healthy, so it must exit 0.
+- name: _verify | Keepalived healthcheck script reports healthy
+  command: /usr/local/bin/pihole_healthcheck
+  register: pihole_verify_hc_script
+  changed_when: false
+  retries: 30
+  delay: 2
+  until: pihole_verify_hc_script.rc == 0
+  become: true
+
 - name: _verify | FTL answers DNS for its own canonical name
   command: /usr/bin/podman exec pihole getent hosts pi.hole
   register: pihole_verify_local
