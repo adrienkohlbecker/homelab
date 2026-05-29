@@ -36,6 +36,10 @@ NotifyAccess=all
 SyslogIdentifier=%N
 
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
+# 7878 in the publish and healthcheck lines below is radarr's fixed
+# in-container listen port -- keep it literal. It is the container side of
+# the publish mapping, not service_ports.radarr (the host side), even
+# though the two happen to be equal today.
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
     --cgroups=split \
