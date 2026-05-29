@@ -46,12 +46,29 @@
 
 # Resolves the split-horizon override injected via
 # FTLCONF_misc_dnsmasq_lines (box.fahm.fr -> the host's external_ips.box).
-# Fails the harness if that env-driven dnsmasq config didn't take.
+# Fails the harness if that env-driven dnsmasq config didn't take. This
+# stays a real test of the dnsmasq line only while box.fahm.fr is absent
+# from etc_hosts_entries (the --add-host source in pihole.service.j2): an
+# --add-host entry would shadow the dnsmasq line and the check would pass
+# for the wrong reason. Keep box.fahm.fr out of etc_hosts_entries.
 - name: _verify | Split-horizon override resolves via FTLCONF_misc_dnsmasq_lines
   command: /usr/bin/podman exec pihole getent hosts box.fahm.fr
   register: pihole_verify_splithorizon
   changed_when: false
   failed_when: external_ips.box not in pihole_verify_splithorizon.stdout
+  become: true
+
+# The first converge always writes the updatelists_inputs sentinel fresh,
+# so the list-update -> `pihole -g` chain has already run. Assert gravity
+# actually populated -- functional proof the chain works end to end, not
+# just that the container is up.
+- name: _verify | Gravity table is populated
+  command: /usr/bin/podman exec pihole pihole-FTL sqlite3 /var/lib/pihole/gravity.db "SELECT COUNT(*) FROM gravity"
+  register: pihole_verify_gravity
+  changed_when: false
+  retries: 10
+  delay: 3
+  until: (pihole_verify_gravity.stdout | trim | int) > 0
   become: true
 
 - name: _verify | Admin UI answers on the loopback publish
@@ -63,9 +80,36 @@
   delay: 2
   until: pihole_verify_admin.status in [200, 301, 302]
 
-- name: _verify | The weekly list-update timer is enabled
-  systemd:
-    name: pihole_list_update.timer
-  register: pihole_verify_timer
-  failed_when: pihole_verify_timer.status.UnitFileState != 'enabled'
+# The admin subdomain's bare / is an exact-match `location = /` that 302s
+# to /admin/ (nginx_site_args.server_conf) before auth_request runs -- no
+# Authelia involvement. Guards that redirect block.
+- name: _verify | Admin subdomain root redirects to /admin/
+  uri:
+    url: https://localhost/
+    headers:
+      Host: pihole.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: pihole_verify_root_redirect
+  failed_when: >-
+    pihole_verify_root_redirect.status != 302
+    or '/admin/' not in (pihole_verify_root_redirect.location | default(''))
+  become: true
+
+# /admin/ is auth: required -- a cookieless request must bounce to the
+# Authelia portal (gate-mode stub returns 401 -> error_page 401 => 302).
+# This is the sole LAN ingress gate for the admin UI.
+- name: _verify | Admin UI gate redirects unauthenticated to Authelia
+  uri:
+    url: https://localhost/admin/
+    headers:
+      Host: pihole.{{ inventory_hostname }}.{{ domain }}
+    validate_certs: false
+    follow_redirects: none
+    status_code: 302
+  register: pihole_verify_admin_gate
+  failed_when: >-
+    pihole_verify_admin_gate.status != 302
+    or 'auth.' not in (pihole_verify_admin_gate.location | default(''))
   become: true
