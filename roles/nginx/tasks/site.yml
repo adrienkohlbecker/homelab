@@ -207,6 +207,25 @@
   tags:
     - nginx_site
 
+# Catch the YAML-coercion footgun the docstring warns about (bare off -> boolean
+# false -> invalid `proxy_buffering false;`): require the quoted 'on'/'off'. The
+# `in [...]` test rejects both the coerced booleans and any other value;
+# default('on') keeps each item safe when only one of the pair is supplied.
+- name: site | Assert proxy buffering toggles are quoted on/off
+  when: >-
+    nginx_site_args.proxy_buffering is defined
+    or nginx_site_args.proxy_request_buffering is defined
+  assert:
+    that:
+      - (nginx_site_args.proxy_buffering | default('on')) in ['on', 'off']
+      - (nginx_site_args.proxy_request_buffering | default('on')) in ['on', 'off']
+    fail_msg: >-
+      nginx_site_args.proxy_buffering / proxy_request_buffering must be the
+      quoted string 'on' or 'off'; a bare off is YAML-coerced to the boolean
+      false and renders an invalid `proxy_buffering false;`.
+  tags:
+    - nginx_site
+
 - name: site | Assert CSP overrides are injection-safe
   when: >-
     nginx_site_args.csp_additional is defined
