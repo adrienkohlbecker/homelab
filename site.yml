@@ -116,7 +116,8 @@
   hosts: box,lab
   roles:
     - libvirt
-    - prometheus # for minio
+    - role: prometheus # runs where prometheus_enabled (today: minio metrics)
+      when: prometheus_enabled | default(false)
     - minio
     - influxdb
     - scratch
