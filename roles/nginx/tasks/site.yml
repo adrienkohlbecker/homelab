@@ -117,6 +117,14 @@
 # import_role pass replaces the whole `nginx_site_args` value, so a
 # previous caller's proxy_pass / csp / etc. can't bleed into the next
 # caller that doesn't explicitly override.
+#
+# Exposes a per-site fact `<sanitized_subdomain>_site_result` (e.g.
+# `nginxverify_site_result`, `minio_api_site_result`) with a `.changed` bool
+# covering the template, the sites-enabled symlink and the state:absent
+# removal -- callers wire reload/restart triggers off it the same way as
+# conf_d's `<name>_result` and systemd_unit's `<unit>_result` (a second
+# nginx_site call in the same play would otherwise clobber the role-scoped
+# `nginx_static_conf` register).
 - name: site | Assert required inputs
   assert:
     that:
@@ -336,5 +344,19 @@
     name: nginx
     state: reloaded
   become: true
+  tags:
+    - nginx_site
+
+# Expose the change state under a per-subdomain fact so callers can wire
+# reload/restart triggers off their own vhost without clobbering the
+# role-scoped `nginx_static_conf` register (which a second nginx_site call in
+# the same play would overwrite). Mirrors conf_d's `<name>_result` and
+# systemd_unit's `<unit>_result`. `| bool` keeps it a real boolean under
+# jinja2_native rather than the string "True"/"False".
+- name: site | Record site result
+  when: nginx_site_args.condition | default(true)
+  set_fact:
+    "{{ nginx_site_args.subdomain | regex_replace('[^A-Za-z0-9_]', '_') }}_site_result":
+      changed: "{{ ((nginx_static_conf.changed | default(false)) or (nginx_static_conf_enable.changed | default(false)) or (nginx_static_conf_absent.changed | default(false))) | bool }}"
   tags:
     - nginx_site
