@@ -4,6 +4,11 @@ server {
   listen              [::]:443 ssl http2;
 {% endif %}
 {% if nginx_site_args.enable_http | default(false) %}
+  # Cleartext :80 in this same server block (no http->https redirect). The
+  # security headers below are emitted here too: HSTS over :80 is a no-op
+  # browsers ignore per RFC 6797, the rest are harmless. Only for upstreams
+  # that need plaintext -- asserted incompatible with auth/bypass, whose
+  # secrets would otherwise travel unencrypted.
   listen              80;
 {% if nginx_ipv6 | default(false) %}
   listen              [::]:80;
