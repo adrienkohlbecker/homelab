@@ -113,22 +113,10 @@
       bypass_query_param:
         value: "{{ nginx_verify_token }}"
 
-# Post-reload settle: a probe fired immediately after a vhost's reload can race
-# nginx's draining old workers (still on the prior config) and hit the default
-# server (404). Poll until the freshly-added vhost actually routes before the
-# assertions below. Bounded (fail-fast) per the harness flake contract.
-- name: _verify | Wait for the nginxverify vhost to route
-  uri:
-    url: https://localhost/
-    headers:
-      Host: "{{ nginx_verify_host }}"
-    validate_certs: false
-    follow_redirects: none
-    status_code: [200, 204, 301, 302, 400, 404]
-  register: nginx_verify_route_ready
-  until: nginx_verify_route_ready.status != 404
-  retries: 10
-  delay: 1
+- name: _verify | Settle the nginxverify vhost
+  import_tasks: _verify_wait_route.yml
+  vars:
+    _wait_route_host: "{{ nginx_verify_host }}"
 
 - name: _verify | Unauthenticated request redirects to the Authelia portal (302)
   uri:
@@ -322,18 +310,10 @@
   become: true
   failed_when: nginx_verify_empty_map.stat.exists
 
-- name: _verify | Wait for the nginxverifyempty vhost to route
-  uri:
-    url: https://localhost/
-    headers:
-      Host: "nginxverifyempty.{{ inventory_hostname }}.{{ domain }}"
-    validate_certs: false
-    follow_redirects: none
-    status_code: [200, 204, 301, 302, 400, 404]
-  register: nginx_verify_empty_ready
-  until: nginx_verify_empty_ready.status != 404
-  retries: 10
-  delay: 1
+- name: _verify | Settle the nginxverifyempty vhost
+  import_tasks: _verify_wait_route.yml
+  vars:
+    _wait_route_host: "nginxverifyempty.{{ inventory_hostname }}.{{ domain }}"
 
 - name: _verify | Empty upstream_authorization does not arm the Authorization bypass
   uri:
@@ -419,18 +399,10 @@
       upstream_authorization:
         nginxverifyuser: Token injected-abc
 
-- name: _verify | Wait for the nginxverifyauth vhost to route
-  uri:
-    url: https://localhost/
-    headers:
-      Host: "nginxverifyauth.{{ inventory_hostname }}.{{ domain }}"
-    validate_certs: false
-    follow_redirects: none
-    status_code: [200, 204, 301, 302, 400, 404]
-  register: nginx_verify_auth_ready
-  until: nginx_verify_auth_ready.status != 404
-  retries: 10
-  delay: 1
+- name: _verify | Settle the nginxverifyauth vhost
+  import_tasks: _verify_wait_route.yml
+  vars:
+    _wait_route_host: "nginxverifyauth.{{ inventory_hostname }}.{{ domain }}"
 
 - name: _verify | Authenticated browser user is admitted and identity-forwarded
   uri:
@@ -509,18 +481,10 @@
       location_conf: |
         add_header X-Verify-Loc "1" always;
 
-- name: _verify | Wait for the nginxverifyloc vhost to route
-  uri:
-    url: https://localhost/
-    headers:
-      Host: "nginxverifyloc.{{ inventory_hostname }}.{{ domain }}"
-    validate_certs: false
-    follow_redirects: none
-    status_code: [200, 204, 301, 302, 400, 404]
-  register: nginx_verify_loc_ready
-  until: nginx_verify_loc_ready.status != 404
-  retries: 10
-  delay: 1
+- name: _verify | Settle the nginxverifyloc vhost
+  import_tasks: _verify_wait_route.yml
+  vars:
+    _wait_route_host: "nginxverifyloc.{{ inventory_hostname }}.{{ domain }}"
 
 - name: _verify | A location_conf keeps the security headers AND its own header
   uri:
@@ -551,18 +515,10 @@
       client_max_body_size: 1k
       client_body_buffer_size: 2k
 
-- name: _verify | Wait for the nginxverifybody vhost to route
-  uri:
-    url: https://localhost/
-    headers:
-      Host: "nginxverifybody.{{ inventory_hostname }}.{{ domain }}"
-    validate_certs: false
-    follow_redirects: none
-    status_code: [200, 204, 301, 302, 400, 404, 413]
-  register: nginx_verify_body_ready
-  until: nginx_verify_body_ready.status != 404
-  retries: 10
-  delay: 1
+- name: _verify | Settle the nginxverifybody vhost
+  import_tasks: _verify_wait_route.yml
+  vars:
+    _wait_route_host: "nginxverifybody.{{ inventory_hostname }}.{{ domain }}"
 
 - name: _verify | A body over client_max_body_size is rejected with 413
   uri:
@@ -593,18 +549,10 @@
       csp_default_src: default.csptest
       csp_frame_ancestors: https://frame.csptest
 
-- name: _verify | Wait for the nginxverifycsp vhost to route
-  uri:
-    url: https://localhost/
-    headers:
-      Host: "nginxverifycsp.{{ inventory_hostname }}.{{ domain }}"
-    validate_certs: false
-    follow_redirects: none
-    status_code: [200, 204, 301, 302, 400, 404]
-  register: nginx_verify_csp_ready
-  until: nginx_verify_csp_ready.status != 404
-  retries: 10
-  delay: 1
+- name: _verify | Settle the nginxverifycsp vhost
+  import_tasks: _verify_wait_route.yml
+  vars:
+    _wait_route_host: "nginxverifycsp.{{ inventory_hostname }}.{{ domain }}"
 
 - name: _verify | CSP override tokens all appear in the Content-Security-Policy header
   uri:
@@ -634,18 +582,10 @@
       enable_http: true
       csp_passthrough: true
 
-- name: _verify | Wait for the nginxverifyplain vhost to route
-  uri:
-    url: https://localhost/
-    headers:
-      Host: "nginxverifyplain.{{ inventory_hostname }}.{{ domain }}"
-    validate_certs: false
-    follow_redirects: none
-    status_code: [200, 204, 301, 302, 400, 404]
-  register: nginx_verify_plain_ready
-  until: nginx_verify_plain_ready.status != 404
-  retries: 10
-  delay: 1
+- name: _verify | Settle the nginxverifyplain vhost
+  import_tasks: _verify_wait_route.yml
+  vars:
+    _wait_route_host: "nginxverifyplain.{{ inventory_hostname }}.{{ domain }}"
 
 - name: _verify | The enable_http listener serves :80 in cleartext without a redirect
   uri:
