@@ -1,0 +1,23 @@
+# Read the render gid from /etc/group on transcoding hosts rather than
+# creating it ourselves with `group:`. udev/mesa ship sysusers.d entries
+# that own the canonical gid; a dynamic group-create can drift if a
+# package later installs a different fixed gid, silently de-aligning a
+# container's --group-add from /dev/dri's actual owner. Shared by the
+# media-server roles (plex, jellyfin), each importing it under
+# `when: has_transcoding_acceleration` and reading getent_group.render.
+- name: Getent render group
+  getent:
+    database: group
+    key: render
+    fail_key: false
+
+- name: Assert render group present
+  assert:
+    that:
+      - getent_group.render is defined
+    fail_msg: >-
+      /etc/group has no 'render' entry. On a host with
+      has_transcoding_acceleration=true, install one of the
+      transcoding driver packages (mesa-va-drivers,
+      intel-media-va-driver) — they ship a sysusers.d that owns
+      this group — and re-run.
