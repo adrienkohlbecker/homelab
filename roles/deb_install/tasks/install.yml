@@ -74,7 +74,10 @@
         state: absent
 
 # Always set, even when the install block is skipped, so callers can rely on
-# the fact existing. Consume with `| bool` (set_fact renders it as a string).
+# the fact existing. `deb_install_apt.changed` is the truthful "an install
+# happened" signal -- false when the block was skipped (result undefined) or
+# apt no-op'd because the pin was already present. Consume with `| bool`
+# (set_fact renders it as a string).
 - name: Record whether an install happened
   set_fact:
-    "{{ deb_install_args.name | regex_replace('[^A-Za-z0-9_]', '_') }}_deb_changed": "{{ deb_install_query.stdout != deb_install_args.version and deb_install_apt.changed | default(false) }}"
+    "{{ deb_install_args.name | regex_replace('[^A-Za-z0-9_]', '_') }}_deb_changed": "{{ deb_install_apt.changed | default(false) }}"
