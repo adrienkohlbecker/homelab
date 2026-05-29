@@ -28,21 +28,29 @@ mkdir -p "${base}"
 # is left behind for inspection (cleanup via packer:clean).
 tmp=$(mktemp -d "${QEMU_DIR}/.build-XXXXXX")
 
-# Surface the qemu_net_wrapper shim's NIC-backend decision log (passt vs
-# slirp, the passt command, the netdev rewrite). packer routes the shim's
-# stderr through Go's logger, which it discards without PACKER_LOG, so the
-# shim drops a per-source qemu_net_wrapper.log next to that source's disks.
-# Tail them on EXIT whatever the outcome: succeeded sources land under
-# ${base}/<source> (moved there by the install post-processor), failed ones
-# stay under ${tmp}/<source>. So a passt-path regression is diagnosable
-# straight from the CI job log, no PACKER_LOG rerun needed.
+# Surface the qemu_net_wrapper shim's NIC-backend decision log (passt vs slirp,
+# the passt command + DNS proxy, the netdev rewrite) plus passt's own --debug
+# log. packer routes the shim's stderr through Go's logger, which it discards
+# without PACKER_LOG, so the shim writes to QEMU_NET_WRAPPER_LOG instead. Point
+# it at a sibling file *outside* any per-source output dir: packer deletes a
+# failed source's output_directory before this EXIT trap runs, which would take
+# a build-dir-derived log with it. Tailing on EXIT whatever the outcome makes a
+# passt-path regression diagnosable straight from the CI job log, no PACKER_LOG
+# rerun needed.
+netlog=$(mktemp "${QEMU_DIR}/.netlog-XXXXXX")
+export QEMU_NET_WRAPPER_LOG="${netlog}"
 dump_net_logs() {
   local f
-  for f in "${tmp}"/*/qemu_net_wrapper.log "${base}"/*/qemu_net_wrapper.log; do
+  if [ -s "${netlog}" ]; then
+    echo "=== qemu_net_wrapper NIC-backend decision log ==="
+    cat "${netlog}"
+  fi
+  for f in "${netlog}".passt-*; do
     [ -f "${f}" ] || continue
-    echo "=== ${f} ==="
+    echo "=== ${f##*/} (passt sidecar --debug log) ==="
     cat "${f}"
   done
+  rm -f "${netlog}" "${netlog}".passt-*
 }
 trap dump_net_logs EXIT
 
