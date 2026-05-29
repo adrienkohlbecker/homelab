@@ -1,6 +1,8 @@
 #!/bin/bash
 # shellcheck source=../../bash/files/functions.sh
 source /usr/local/lib/functions.sh
+# No f_require_root (unlike zfs_health.sh): upssched exec's this as upsmon's
+# RUN_AS_USER (nut), not root, so a root assertion would abort every dispatch.
 
 EVENT=${1:-}
 case $EVENT in
@@ -58,7 +60,7 @@ cal)
   ;;
 esac
 
-UPS={{ nut_monitor_ups }}
+UPS='{{ nut_monitor_ups }}'
 
 # Several of these events (commbad, nocomm, noparent, fsd) fire precisely
 # when upsd/the UPS is unreachable, and functions.sh runs us under errexit
@@ -69,6 +71,13 @@ UPSC=$(upsc "$UPS" 2>/dev/null || true)
 STAT=$(awk -F': ' '$1=="ups.status"{print $2; exit}' <<<"$UPSC")
 BATT=$(awk -F': ' '$1=="battery.charge"{print $2; exit}' <<<"$UPSC")
 RUNTIME_SEC=$(awk -F': ' '$1=="battery.runtime"{print $2; exit}' <<<"$UPSC")
+
+# ups.status/battery.charge are device-reported over SNMP (semi-trusted). awk's
+# line-based extraction already bounds embedded newlines; strip any residual
+# control chars so a crafted value can't smuggle a spoofed line into the mail
+# body below. RUNTIME_SEC is separately constrained to ^[0-9]+$ further down.
+STAT=${STAT//[[:cntrl:]]/}
+BATT=${BATT//[[:cntrl:]]/}
 
 # battery.runtime is seconds-to-empty; absent or non-numeric on a failed
 # query, which would trip errexit in date -- guard it.
