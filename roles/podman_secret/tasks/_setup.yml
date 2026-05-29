@@ -2,3 +2,43 @@
   import_role:
     name: podman
     tasks_from: install
+
+# Rootless-podman prerequisites for the _verify `user:` scenario, mirroring
+# the gitea_runner/github_runner rootless fixtures: a real home for the
+# per-user secret store, subuid/subgid maps, and linger so the user manager
+# (hence /run/user/<uid>) is up.
+- name: _setup | Ensure /mnt/scratch is world-traversable
+  file:
+    path: /mnt/scratch
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: _setup | Create rootless test user
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: podman_secret_rootless
+      home: /mnt/scratch/podman_secret_rootless
+      createhome: true
+      config_dir: false
+
+- name: _setup | Apply subid for the rootless test user
+  import_role:
+    name: subid
+  vars:
+    subid_users:
+      - podman_secret_rootless
+
+- name: _setup | Enable linger for the rootless test user
+  import_role:
+    name: linger
+    tasks_from: linger
+  vars:
+    linger_args:
+      name: podman_secret_rootless
+      uid: "{{ podman_secret_rootless_user.uid }}"

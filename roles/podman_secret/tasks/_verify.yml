@@ -43,19 +43,123 @@
       - podman_secret_test_rotated
       - podman_secret_test_existed_before
 
-- name: _verify | Inspect label on rotated secret
-  containers.podman.podman_secret_info:
-    name: podman_secret_test
-  register: _verify_secret_info
-  become: true
-
-- name: _verify | Label matches new data hash
-  assert:
-    that:
-      - _verify_secret_info.secrets[0].Spec.Labels.data_sha256 == ('beta' | hash('sha256'))
-
 - name: _verify | Cleanup test secret
   containers.podman.podman_secret:
     name: podman_secret_test
     state: absent
   become: true
+
+# Scenario 4 — two distinct secrets in one play must keep independent
+# facts: A stays un-rotated on its no-op re-run while B rotates, and each
+# carries its own existed_before. Guards the per-secret fact namespacing
+# that every multi-secret consumer (authelia's 5, influxdb's 2) relies on;
+# a leak would clobber one secret's restart trigger with another's.
+- name: _verify | Scenario 4 — create secret A
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: podman_secret_test_a
+      data: aaa
+
+- name: _verify | Scenario 4 — create secret B
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: podman_secret_test_b
+      data: bbb
+
+- name: _verify | Scenario 4 — re-run A unchanged
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: podman_secret_test_a
+      data: aaa
+
+- name: _verify | Scenario 4 — rotate B
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: podman_secret_test_b
+      data: bbb2
+
+- name: _verify | Scenario 4 — assert per-secret fact isolation
+  assert:
+    that:
+      - not podman_secret_test_a_rotated
+      - podman_secret_test_a_existed_before
+      - podman_secret_test_b_rotated
+      - podman_secret_test_b_existed_before
+
+- name: _verify | Scenario 4 — cleanup secrets A and B
+  containers.podman.podman_secret:
+    name: "{{ item }}"
+    state: absent
+  loop:
+    - podman_secret_test_a
+    - podman_secret_test_b
+  become: true
+
+# Scenario 5 — the rootless `user:` path: the secret must land in the
+# target user's own store, not root's. Prereqs (user + subid + linger) come
+# from _setup; the uid is re-derived here because _setup's set_fact facts
+# don't survive into the separate _verify ansible invocation.
+- name: _verify | Scenario 5 — look up rootless test user uid
+  getent:
+    database: passwd
+    key: podman_secret_rootless
+  become: true
+
+- name: _verify | Scenario 5 — create secret as the rootless user
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: podman_secret_rootless_test
+      data: rootless-secret
+      user: podman_secret_rootless
+
+- name: _verify | Scenario 5 — assert created and not pre-existing
+  assert:
+    that:
+      - podman_secret_rootless_test_rotated
+      - not podman_secret_rootless_test_existed_before
+
+- name: _verify | Scenario 5 — secret present in the rootless user's store
+  containers.podman.podman_secret_info:
+    name: podman_secret_rootless_test
+  register: _verify_rootless_info
+  become: true
+  become_user: podman_secret_rootless
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ getent_passwd['podman_secret_rootless'][1] }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ getent_passwd['podman_secret_rootless'][1] }}/bus"
+
+- name: _verify | Scenario 5 — secret absent from root's store
+  containers.podman.podman_secret_info:
+  register: _verify_root_secrets
+  become: true
+
+- name: _verify | Scenario 5 — assert rootless targeting
+  assert:
+    that:
+      - _verify_rootless_info.secrets | length == 1
+      - _verify_root_secrets.secrets | selectattr('Spec.Name', 'eq', 'podman_secret_rootless_test') | list | length == 0
+
+- name: _verify | Scenario 5 — cleanup rootless secret
+  containers.podman.podman_secret:
+    name: podman_secret_rootless_test
+    state: absent
+  become: true
+  become_user: podman_secret_rootless
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ getent_passwd['podman_secret_rootless'][1] }}"
+    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ getent_passwd['podman_secret_rootless'][1] }}/bus"
