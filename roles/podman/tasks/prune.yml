@@ -1,15 +1,16 @@
 # Daily podman system-prune. Drops stopped containers, dangling images,
 # unused networks, anonymous volumes, and build cache; named images stay
-# cached so the next pull is a no-op.
+# cached so the next pull is a no-op. Built on the systemd_timer helper so
+# the root-scope timer gets netdata overdue-monitoring, a TimeoutStartSec
+# kill-switch, and journal-priority routing for free.
 #
 # Inputs: caller passes a single dict `podman_prune_args` with keys
-#   user        default 'root'. Root installs the rootful timer at
-#                /etc/systemd/system, pruning /var/lib/containers/storage.
-#                Pass a username to install at /etc/systemd/user and enable
-#                the timer in that user's manager so rootless podman prunes
-#                /var/lib/containers/rootless/$USER instead. The named user
-#                must already have linger on — the user manager has to be
-#                alive when the timer ticks.
+#   user        default 'root'. Root installs a system-scope timer pruning
+#                /var/lib/containers/storage. Pass a username to install a
+#                user-scope timer in that user's manager so rootless podman
+#                prunes /var/lib/containers/rootless/$USER instead. The
+#                named user must already have linger on — the user manager
+#                has to be alive when the timer ticks.
 #   condition   default true; gates the whole call (use this to skip the
 #                install during check mode when the user was just created).
 #
@@ -18,32 +19,39 @@
 # previous caller's user can't bleed into the next caller that doesn't
 # explicitly override.
 
-- name: Install podman-prune.service
+# Transitional: drop the hand-rolled podman-prune.{service,timer} this
+# role shipped before the systemd_timer migration (the new units are
+# podman_prune.*). No-op on fresh hosts; remove this task once every host
+# has converged past the rename.
+- name: Remove the obsolete hand-rolled podman-prune units
   import_role:
-    name: systemd_unit
+    name: systemd_timer
+    tasks_from: remove
+  vars:
+    systemd_timer_args:
+      name: podman-prune
+      user: "{{ podman_prune_args.user | default('root') }}"
+  when: podman_prune_args.condition | default(true)
+
+# prune flags: no -a so named (tagged) images stay warm for the next
+# pull; --volumes drops anonymous volumes no container references;
+# until=48h spares anything created in the last two days so a recent
+# stopped container or fresh dangling layer survives one daily pass.
+- name: Install podman_prune timer
+  import_role:
+    name: systemd_timer
     tasks_from: install
   vars:
-    systemd_unit_args:
-      src: podman-prune.service
+    systemd_timer_args:
+      name: podman_prune
+      description: Prune unused podman containers, images, networks and volumes
+      exec_start: /usr/bin/podman system prune -f --volumes --filter until=48h
+      on_calendar: daily
+      randomized_delay_sec: 3600
+      frequency: daily
       user: "{{ podman_prune_args.user | default('root') }}"
-      condition: "{{ podman_prune_args.condition | default(true) }}"
-
-- name: Install podman-prune.timer
-  import_role:
-    name: systemd_unit
-    tasks_from: install
-  vars:
-    systemd_unit_args:
-      src: podman-prune.timer
-      user: "{{ podman_prune_args.user | default('root') }}"
-      condition: "{{ podman_prune_args.condition | default(true) }}"
-
-- name: Enable podman-prune.timer
-  import_role:
-    name: systemd_unit
-    tasks_from: service
-  vars:
-    systemd_unit_args:
-      src: podman-prune.timer
-      user: "{{ podman_prune_args.user | default('root') }}"
-      condition: "{{ not (ansible_check_mode and (podman_prune_timer_result.changed or podman_prune_service_result.changed)) and podman_prune_args.condition | default(true) }}"
+      # netdata's systemd_timers collector binds the system bus only, so
+      # only the root-scope timer is observable; user-scope prunes
+      # (operator, runners) opt out of monitoring.
+      monitor: "{{ (podman_prune_args.user | default('root')) == 'root' }}"
+  when: podman_prune_args.condition | default(true)
