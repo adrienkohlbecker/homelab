@@ -1,44 +1,9 @@
-- name: install | Install gpg
-  apt:
-    pkg: gpg
-    cache_valid_time: 3600
-  become: true
-  register: netdata_apt_gpg
-  tags:
-    - netdata
-
 # Source is netdata's upstream stable repo (repo.netdata.cloud), which
 # carries the current 2.x series for jammy/noble across amd64 + arm64 +
 # armhf. Flat layout (trailing-slash Suites, no Components), signed with
 # Netdatabot's key (6E155DC1…). The apt_preferences pin holds netdata at
 # 2.* so a fresh install lands on the latest 2.x and only a deliberate
 # pin bump moves to a future major. See notes/netdata_v2_migration_analysis.md.
-#
-# Repository setup forks on Ubuntu major version because apt-key was
-# removed from the default install in resolute (26.04) and the apt_key
-# module errors with "Either apt-key or gpg binary is required". The
-# deb822_repository module replaces both apt_key + apt_repository with
-# a single sources.list.d/*.sources file that embeds the key inline.
-- name: install | Add repository key
-  when:
-    - ansible_distribution_major_version | int < 26
-    - not (ansible_check_mode and netdata_apt_gpg.changed)
-  apt_key:
-    id: 6E155DC153906B73765A74A99DD4A74CECFA8F4F
-    url: https://repo.netdata.cloud/netdatabot.gpg.key
-    keyring: /etc/apt/trusted.gpg.d/netdata.gpg
-  become: true
-  tags:
-    - netdata
-
-- name: install | Add repository
-  when: ansible_distribution_major_version | int < 26
-  apt_repository:
-    repo: deb [signed-by=/etc/apt/trusted.gpg.d/netdata.gpg] {{ mirror_apt_netdata }}/ {{ ansible_distribution_release }}/
-  register: netdata_apt_repo_legacy
-  become: true
-  tags:
-    - netdata
 
 # packagecloud and repo.netdata.cloud sanitize to different sources.list.d
 # filenames, so repointing the mirror back upstream leaves the packagecloud
@@ -57,84 +22,34 @@
   tags:
     - netdata
 
-# Pre-warm /var/lib/apt/lists/ so the python3-debian install below
-# works in check mode. Packer ships an empty cache and the apt
-# module's update_cache is a no-op under --check. See
-# roles/apt/tasks/main.yml for the full rationale.
-- name: install | Pre-warm apt cache (real fetch even in --check)  # noqa: command-instead-of-module
-  when: ansible_distribution_major_version | int >= 26
-  ansible.builtin.command: apt-get update
-  changed_when: false
-  check_mode: false
-  become: true
+# Flat repo (no components). The apt_source helper handles the apt-key /
+# deb822 Ubuntu-major fork, fetches the key into the scoped
+# /usr/share/keyrings/netdata.gpg (not the global trust store), verifies it
+# against key_id, and renders the 2.* pin.
+- name: install | Configure netdata apt repository
+  import_role:
+    name: apt_source
+  vars:
+    apt_source_args:
+      name: netdata
+      key_id: 6E155DC153906B73765A74A99DD4A74CECFA8F4F
+      key_url: https://repo.netdata.cloud/netdatabot.gpg.key
+      uris: "{{ mirror_apt_netdata }}/"
+      suites: "{{ ansible_distribution_release }}/"
+      pin:
+        package: "netdata*"
+        version: "2.*"
+        priority: 999
   tags:
     - netdata
 
-# deb822_repository requires python3-debian even in check mode (it
-# parses/writes deb822 itself rather than shelling to apt). Install it
-# explicitly and gate the deb822 task on its .changed -- mirrors the
-# gpg/apt_key pair on the legacy path.
-- name: install | Install python3-debian
-  when: ansible_distribution_major_version | int >= 26
-  apt:
-    pkg: python3-debian
-    cache_valid_time: 3600
-  become: true
-  register: netdata_apt_python3_debian
-  tags:
-    - netdata
-
-# Flat repo: trailing `/` on URI + Suites, no Components field.
-- name: install | Add repository (deb822)
-  when:
-    - ansible_distribution_major_version | int >= 26
-    - not (ansible_check_mode and netdata_apt_python3_debian.changed)
-  ansible.builtin.deb822_repository:
-    name: netdata
-    types: deb
-    uris: "{{ mirror_apt_netdata }}/"
-    suites: "{{ ansible_distribution_release }}/"
-    signed_by: https://repo.netdata.cloud/netdatabot.gpg.key
-  register: netdata_apt_repo_deb822
-  become: true
-  tags:
-    - netdata
-
-- name: install | Configure apt
-  copy:
-    src: apt_preferences
-    dest: /etc/apt/preferences.d/netdata
-    owner: root
-    group: root
-    mode: "0644"
-    backup: true
-  register: netdata_apt_pin
-  become: true
-  tags:
-    - netdata
-
-# Coalesce the version-gated registers so downstream tasks keep
-# referencing netdata_apt_repo.changed without caring which
-# branch ran. Includes netdata_apt_python3_debian so check mode on
-# resolute (where the deb822 task is gated out by the prereq install)
-# still propagates a "would-change" signal -- otherwise install
-# netdata would run in check mode against an unconfigured repo.
+# Re-expose the helper's change signal (plus the netdata-specific packagecloud
+# cleanup) as netdata_apt_repo.changed, which the rest of the role gates its
+# service restarts on.
 - name: install | Track repository changes
   set_fact:
     netdata_apt_repo:
-      changed: "{{ netdata_apt_repo_legacy is changed or netdata_apt_old_repo_removed is changed or netdata_apt_repo_deb822 is changed or netdata_apt_python3_debian is changed }}"
-  tags:
-    - netdata
-
-# deb822_repository writes the .sources file but doesn't run
-# `apt update`, so the install below would otherwise hit a stale
-# cache (cache_valid_time=3600) and fail to find `netdata`. Force
-# a refresh on the run that actually changed the repo.
-- name: install | Refresh apt cache after netdata repo change
-  when: netdata_apt_repo.changed and not ansible_check_mode
-  apt:
-    update_cache: true
-  become: true
+      changed: "{{ apt_source_netdata_changed or netdata_apt_old_repo_removed is changed }}"
   tags:
     - netdata
 
