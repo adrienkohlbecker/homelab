@@ -31,7 +31,7 @@
     argv:
       - dpkg-query
       - -W
-      - -f=${Version}
+      - -f=${db:Status-Status} ${Version}
       - "{{ deb_install_args.name }}"
   register: deb_install_query
   changed_when: false
@@ -39,7 +39,10 @@
   check_mode: false
 
 - name: Install deb if needed
-  when: deb_install_query.stdout != deb_install_args.version
+  # dpkg-query emits "<status> <version>" (e.g. "installed 1.2.3"); anything but
+  # an exact "installed <pinned version>" reinstalls -- not-installed yields "",
+  # a removed-but-config-files package yields "config-files <version>".
+  when: deb_install_query.stdout != ("installed " ~ deb_install_args.version)
   become: true
   block:
 
