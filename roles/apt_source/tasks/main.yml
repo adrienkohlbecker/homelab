@@ -40,9 +40,15 @@
       - apt_source_args.uris is defined
       - apt_source_args.suites is defined
       - apt_source_args.components is defined
+      # name lands in the keyring / .sources / preferences file paths --
+      # keep it a bare slug so it can't traverse or inject path segments.
+      - apt_source_args.name | default('') is match('[a-z0-9_-]+$')
+      # the key is the source's trust anchor; a plaintext fetch is MITM-able.
+      - apt_source_args.key_url | default('') is match('https://')
     fail_msg: >-
       apt_source_args must define name, key_url, key_id, uris, suites and
-      components; got {{ apt_source_args }}
+      components, with name a [a-z0-9_-] slug and key_url an https URL;
+      got {{ apt_source_args }}
 
 - name: Install gpg for {{ apt_source_args.name }}
   when: ansible_distribution_major_version | int < 26
