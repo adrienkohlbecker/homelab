@@ -118,6 +118,16 @@ jobs:
       # the noise is confusing. This also makes prod-encrypted entries
       # fail loudly (not silently) if they're ever loaded.
       ANSIBLE_VAULT_IDENTITY_LIST: test@vault-client.sh
+      # Authenticate the guest's `mise install` against api.github.com so
+      # aqua uses GitHub's 5000/hr authenticated limit, not the 60/hr anon
+      # one. A full-universe matrix runs ~110 cells from lab's single NAT'd
+      # IP; the anon budget is exhausted partway through and late cells
+      # (user:box and any other mise consumer) 403. MISE_GITHUB_TOKEN is the
+      # existing no-scope PAT repo secret (terraform/github.tf), already used
+      # by ci-image.yml. run_command merges os.environ into the playbook
+      # subprocess env, so roles/user reads it via lookup('env', ...) and
+      # injects it into the mise shell -- never in argv.
+      GITHUB_TOKEN: ${{ secrets.MISE_GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v6
       - run: uv sync --locked
