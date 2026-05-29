@@ -29,7 +29,7 @@
 - name: Configure lm_sensors metrics
   import_role:
     name: netdata
-    tasks_from: template
+    tasks_from: config
   vars:
     netdata_args:
       src: sensors.conf.j2

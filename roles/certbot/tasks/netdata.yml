@@ -1,7 +1,7 @@
 - name: Configure certificate metrics
   import_role:
     name: netdata
-    tasks_from: template
+    tasks_from: config
   vars:
     netdata_args:
       src: x509check.conf.j2

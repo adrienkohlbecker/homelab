@@ -28,7 +28,7 @@
 - name: presence | Configure netdata_presence alerts
   import_role:
     name: netdata
-    tasks_from: health_copy
+    tasks_from: health
   vars:
     netdata_args:
       src: netdata_presence_alerts.conf
@@ -40,7 +40,7 @@
 - name: presence | Configure netdata context-liveness alerts
   import_role:
     name: netdata
-    tasks_from: health_template
+    tasks_from: health
   vars:
     netdata_args:
       src: context_liveness.conf.j2

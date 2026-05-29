@@ -7,7 +7,7 @@
 - name: Configure fail2ban metrics
   import_role:
     name: netdata
-    tasks_from: copy
+    tasks_from: config
   vars:
     netdata_args:
       src: fail2ban.conf
