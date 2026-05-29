@@ -1,5 +1,7 @@
 ---
 # JVM sizing for the Nexus container, passed through INSTALL4J_ADD_VM_PARAMS.
 # Optional + host-overridable (test fixtures shrink it via group_vars/test.yml);
-# the prod lab host uses this default.
-nexus_jvm_params: -Xms2G -Xmx2G -XX:MaxDirectMemorySize=1g
+# the prod lab host uses this default. -XX:+ExitOnOutOfMemoryError makes a
+# heap-exhausted JVM exit so Restart=always recovers it, instead of limping
+# while status/writable still returns 200.
+nexus_jvm_params: -Xms2G -Xmx2G -XX:MaxDirectMemorySize=1g -XX:+ExitOnOutOfMemoryError
