@@ -67,14 +67,6 @@
   tags:
     - postfix
 
-- name: Update postfix credentials
-  command: postmap /etc/postfix/sasl_passwd
-  changed_when: true
-  become: true
-  when: postfix_sasl_auth.changed
-  tags:
-    - postfix
-
 - name: Enable postfix
   import_role:
     name: systemd_unit

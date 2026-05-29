@@ -45,7 +45,9 @@ inet_interfaces = all
 inet_protocols = all
 
 smtp_sasl_auth_enable = yes
-smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+# texthash: reads the flat sasl_passwd at process start, so no postmap(1) step
+# or .db artifact -- the role restarts postfix on credential change anyway.
+smtp_sasl_password_maps = texthash:/etc/postfix/sasl_passwd
 smtp_sasl_security_options = noanonymous
 smtp_sasl_tls_security_options = noanonymous
 smtp_tls_security_level = {{ 'encrypt' if (smtp_use_ssl | bool or smtp_use_tls | bool) else 'none' }}
