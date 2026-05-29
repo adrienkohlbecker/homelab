@@ -1,11 +1,3 @@
-- name: Add plex group
-  group:
-    name: plex
-    system: true
-  become: true
-  tags:
-    - plex
-
 - name: Add media group
   import_role:
     name: media
@@ -13,56 +5,27 @@
   tags:
     - plex
 
-# Read the render gid from /etc/group on transcoding hosts rather than
-# creating it ourselves with `group:`. udev/mesa ship sysusers.d entries
-# that own the canonical gid; a dynamic group-create can drift if a
-# package later installs a different fixed gid, silently de-aligning
-# the container's --group-add from /dev/dri/'s actual owner.
 - name: Lookup render group gid (HW transcoding hosts only)
+  import_role:
+    name: media
+    tasks_from: render_group
   when: has_transcoding_acceleration
   become: true
   tags:
     - plex
-  block:
-    - name: Getent render group
-      getent:
-        database: group
-        key: render
-        fail_key: false
-    - name: Assert render group present
-      assert:
-        that:
-          - getent_group.render is defined
-        fail_msg: >-
-          /etc/group has no 'render' entry. On a host with
-          has_transcoding_acceleration=true, install one of the
-          transcoding driver packages (mesa-va-drivers,
-          intel-media-va-driver) — they ship a sysusers.d that owns
-          this group — and re-run.
 
-- name: Add plex user
-  user:
-    name: plex
-    group: plex
-    groups: media
-    createhome: false
-    system: true
-    shell: /usr/sbin/nologin
-    home: /nonexistent
-  become: true
-  register: plex_user
-  tags:
-    - plex
-
-- name: Create configuration directory
-  when: not (ansible_check_mode and plex_user.changed)
-  file:
-    dest: /mnt/services/plex
-    state: directory
-    owner: plex
-    group: media
-    mode: "0755"
-  become: true
+- name: Set up plex system user, group, and config dir
+  import_role:
+    name: service_user
+    tasks_from: user
+  vars:
+    service_user_args:
+      name: plex
+      extra_groups: [ media ]
+      config_dir_group: media
+      # Preferences.xml under /config holds the server token; keep it out
+      # of reach of other media-group co-tenants.
+      config_dir_mode: "0750"
   tags:
     - plex
 
@@ -71,28 +34,19 @@
 # so SQLite resolves WAL/SHM onto the same dataset. Static-space cost:
 # the dated backups (com.plexapp.plugins.library.{db,blobs.db}-YYYY-MM-DD)
 # lose ~30% compression at 4K, but they're full-file rewrites so their
-# snapshot footprint doesn't depend on recordsize — net win.
-- name: Create sqlite directory
-  when: not (ansible_check_mode and plex_user.changed)
-  file:
-    dest: /mnt/services/sqlite/plex
-    state: directory
-    owner: plex
-    group: media
-    mode: "0750"
-  become: true
-  tags:
-    - plex
-
-- name: Create scratch directory
-  when: not (ansible_check_mode and plex_user.changed)
-  file:
-    dest: /mnt/scratch/plex
-    state: directory
-    owner: plex
-    group: media
-    mode: "0755"
-  become: true
+# snapshot footprint doesn't depend on recordsize — net win. Plex binds the
+# directory directly (no per-DB symlinks), so no links: are passed.
+- name: Pre-create the plex sqlite dataset directory
+  import_role:
+    name: sqlite_dataset
+    tasks_from: dataset
+  vars:
+    sqlite_dataset_args:
+      name: plex
+      owner: plex
+      group: media
+      mode: "0750"
+      condition: "{{ not (ansible_check_mode and plex_user.changed) }}"
   tags:
     - plex
 
