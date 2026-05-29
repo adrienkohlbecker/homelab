@@ -73,7 +73,7 @@
 [upsmon]
 password = {{ nut_upsmon_password }}
 upsmon primary
+# HA's NUT integration only reads UPS state — no actions/instcmds (least
+# privilege: a leaked credential can't issue SET/INSTCMD against the UPS).
 [homeassistant]
 password = {{ nut_homeassistant_password }}
-actions = SET
-instcmds = ALL
