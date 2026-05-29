@@ -32,10 +32,24 @@
 # aliases.j2 and relay health is the postfix role's concern. Catches the common
 # gap (monitoring enabled on a host that never ran postfix) at converge rather
 # than during a real outage.
-- name: Assert mail is available when monitoring is enabled
+- name: Check for the mail binary when monitoring is enabled
   when: nut_monitor_enabled | default(false)
   command: which mail
+  register: nut_monitor_mail_bin
   changed_when: false
+  failed_when: false
+  tags:
+    - nut_monitor
+
+- name: Assert mail is available when monitoring is enabled
+  when: nut_monitor_enabled | default(false)
+  assert:
+    that:
+      - nut_monitor_mail_bin.rc == 0
+    fail_msg: >-
+      nut_monitor_enabled but the `mail` binary is missing. It is provided by
+      mailutils via the postfix role (ordered before nut in site.yml) -- run
+      that role on this host first, then re-converge nut_monitor.
   tags:
     - nut_monitor
 
@@ -118,6 +132,31 @@
       # packaged unit ships no ExecReload (CanReload=no); 2.8's nut-monitor.service
       # does (ExecReload=/sbin/upsmon -c reload). nut-notify is never a trigger --
       # upssched exec's it fresh per event, so a script-only change needs nothing.
+      # Caveat: `upsmon -c reload` cannot change SHUTDOWNCMD or POWERDOWNFLAG --
+      # the privileged (root) half keeps its startup copy (upsmon split-process
+      # model). Both are static literals in upsmon.conf.j2, so reload stays
+      # correct; switch this to restart if either ever becomes host-variable.
       reload: "{{ nut_monitor_upsmon_conf.changed or nut_monitor_upssched_conf.changed }}"
+  tags:
+    - nut_monitor
+
+# The nut-client package ships nut-monitor.service with [Install]
+# WantedBy=multi-user.target, so apt auto-enables it at install. On a host that
+# doesn't monitor (no MONITOR line) that idle upsmon is harmless on 2.7.4 but
+# boot-loops on nut 2.8 ("insufficient power configured"). The enable block
+# above only runs when monitoring is on, so when it is off the role must
+# actively unwind the package's auto-enable rather than leave it standing.
+# Plain disable + stop (not mask) so the enable path above can cleanly reverse
+# it the day a host flips nut_monitor_enabled on. Target the real unit
+# (nut-monitor.service); nut-client.service is only its alias.
+- name: Disable nut_client service when monitoring is off
+  when:
+    - not (nut_monitor_enabled | default(false))
+    - not (ansible_check_mode and nut_monitor_apt.changed)
+  systemd:
+    name: nut-monitor.service
+    enabled: false
+    state: stopped
+  become: true
   tags:
     - nut_monitor
