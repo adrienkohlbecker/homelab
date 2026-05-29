@@ -35,6 +35,46 @@
   failed_when: paperless_verify_wal.stdout | trim != 'wal'
   become: true
 
+# db.sqlite3 must stay a symlink onto the sqlite dataset (the 4K-recordsize
+# placement the role pre-creates). The WAL probe above reads the in-container
+# path, which resolves identically whether or not the symlink exists -- so a
+# regression that drops it (Django then writes a real DB into data/ on the
+# services dataset, defeating the placement) stays invisible to every HTTP and
+# WAL probe. Assert the symlink host-side to catch it.
+- name: _verify | Paperless DB is symlinked onto the sqlite dataset
+  stat:
+    path: /mnt/services/paperless/data/db.sqlite3
+    follow: false
+  register: paperless_verify_dblink
+  changed_when: false
+  failed_when: >-
+    not paperless_verify_dblink.stat.islnk
+    or not (paperless_verify_dblink.stat.lnk_target | default('')).startswith('/mnt/services/sqlite/paperless/')
+  become: true
+
+# The HTTP probes prove the web tier is up, but paperless's actual job --
+# document ingest -- runs through Celery on the redis broker. A mis-wired
+# PAPERLESS_REDIS or a dead worker leaves the unit active and the UI serving
+# while ingest silently stalls; `celery inspect ping` round-trips the broker
+# and at least one worker to catch that.
+- name: _verify | Paperless Celery worker answers over the redis broker
+  command:
+    argv:
+      - podman
+      - exec
+      - paperless
+      - celery
+      - -A
+      - paperless
+      - inspect
+      - ping
+      - -t
+      - "10"
+  register: paperless_verify_celery
+  changed_when: false
+  failed_when: paperless_verify_celery.rc != 0 or 'pong' not in paperless_verify_celery.stdout
+  become: true
+
 # nginx proxy chain. The host header swap exercises the same path
 # external clients take.
 - name: _verify | Paperless reachable through nginx
