@@ -70,7 +70,6 @@
       src: plex
       condition: "{{ not (ansible_check_mode and (plex_service_result.changed or plex_user.changed or media_group.changed)) }}"
       restart: "{{ plex_service_result.changed or plex_user.changed or media_group.changed }}"
-      start: "{{ ansible_architecture == 'x86_64' }}"
   tags:
     - plex
 

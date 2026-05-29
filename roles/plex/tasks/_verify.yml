@@ -1,92 +1,88 @@
-# Plex's image is amd64-only, so the unit only starts on x86_64 (see the
-# `start:` gate in main.yml). The qemu box fixture is arm64 on Apple
-# Silicon but x86_64 under lab CI — so these functional probes run against
-# a live container in CI and no-op on a local Mac run, mirroring the start
-# gate. Anything stat-only here would just re-assert the rendered unit
-# against itself, so we gate on a running container instead.
-- name: _verify | Probe a running Plex (x86_64 only)
-  when: ansible_architecture == 'x86_64'
-  block:
-    # Loopback probe through the published port — /identity returns the
-    # server's machineIdentifier as XML without auth, proving Plex is up
-    # beyond the container's own --sdnotify=healthy gate.
-    - name: _verify | Plex /identity over loopback
-      uri:
-        url: http://localhost:{{ service_ports.plex }}/identity
-        status_code: 200
-        return_content: true
-      register: _verify_http
-      retries: 30
-      delay: 2
-      until: _verify_http.status == 200
-      failed_when: not (_verify_http.content is search('machineIdentifier'))
+# Functional probes against the running container. The pinned pms-docker
+# tag is multi-arch, so Plex starts on both prod x86_64 and the local arm64
+# box (cf. the unit having no start: arch gate) — these run everywhere, no
+# stat-only fallback needed.
 
-    # Exercise the nginx-proxied path — catches a typo'd subdomain or
-    # proxy_pass regression the loopback probe would miss.
-    - name: _verify | Plex /identity via nginx vhost
-      uri:
-        url: https://localhost/identity
-        headers:
-          Host: "plex.{{ inventory_hostname }}.{{ domain }}"
-        validate_certs: false
-        status_code: 200
-        return_content: true
-      register: _verify_http_nginx
-      retries: 30
-      delay: 2
-      until: _verify_http_nginx.status == 200
-      failed_when: not (_verify_http_nginx.content is search('machineIdentifier'))
+# Loopback probe through the published port — /identity returns the
+# server's machineIdentifier as XML without auth, proving Plex is up
+# beyond the container's own --sdnotify=healthy gate.
+- name: _verify | Plex /identity over loopback
+  uri:
+    url: http://localhost:{{ service_ports.plex }}/identity
+    status_code: 200
+    return_content: true
+  register: _verify_http
+  retries: 30
+  delay: 2
+  until: _verify_http.status == 200
+  failed_when: not (_verify_http.content is search('machineIdentifier'))
 
-    # SQLite bind round-trip: a host-side sentinel under the dedicated 4K
-    # dataset must surface inside the container at Plex's Databases dir,
-    # proving the --volume landed (a path typo would silently route DB
-    # writes back onto the services dataset). _verify is test-only, so the
-    # sentinel write is safe.
-    - name: _verify | Drop a sentinel on the host sqlite dataset
-      copy:
-        content: ""
-        dest: /mnt/services/sqlite/plex/.verify_sentinel
-        owner: plex
-        group: media
-        mode: "0640"
-      become: true
+# Exercise the nginx-proxied path — catches a typo'd subdomain or
+# proxy_pass regression the loopback probe would miss.
+- name: _verify | Plex /identity via nginx vhost
+  uri:
+    url: https://localhost/identity
+    headers:
+      Host: "plex.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    status_code: 200
+    return_content: true
+  register: _verify_http_nginx
+  retries: 30
+  delay: 2
+  until: _verify_http_nginx.status == 200
+  failed_when: not (_verify_http_nginx.content is search('machineIdentifier'))
 
-    - name: _verify | Confirm the sentinel is visible in the container Databases dir
-      command:
-        argv:
-          - podman
-          - exec
-          - plex
-          - stat
-          - -c
-          - "%n"
-          - "/config/Library/Application Support/Plex Media Server/Plug-in Support/Databases/.verify_sentinel"
-      changed_when: false
-      become: true
+# SQLite bind round-trip: a host-side sentinel under the dedicated 4K
+# dataset must surface inside the container at Plex's Databases dir,
+# proving the --volume landed (a path typo would silently route DB writes
+# back onto the services dataset). _verify is test-only, so the sentinel
+# write is safe.
+- name: _verify | Drop a sentinel on the host sqlite dataset
+  copy:
+    content: ""
+    dest: /mnt/services/sqlite/plex/.verify_sentinel
+    owner: plex
+    group: media
+    mode: "0640"
+  become: true
 
-    # HW transcoding wiring smoke. On box the device is a phantom from
-    # _test/fake_render_device.yml, so this proves the template's --device
-    # and --group-add reached the container, not that VAAPI works.
-    # _verify runs as a separate playbook, so re-lookup the render gid.
-    - name: _verify | Re-lookup render gid for assertions
-      when: has_transcoding_acceleration
-      getent:
-        database: group
-        key: render
-      become: true
+- name: _verify | Confirm the sentinel is visible in the container Databases dir
+  command:
+    argv:
+      - podman
+      - exec
+      - plex
+      - stat
+      - -c
+      - "%n"
+      - "/config/Library/Application Support/Plex Media Server/Plug-in Support/Databases/.verify_sentinel"
+  changed_when: false
+  become: true
 
-    - name: _verify | Confirm /dev/dri/renderD128 inside container
-      when: has_transcoding_acceleration
-      command: podman exec plex stat -c %n /dev/dri/renderD128
-      register: _verify_dri_in_container
-      changed_when: false
-      failed_when: _verify_dri_in_container.stdout != '/dev/dri/renderD128'
-      become: true
+# HW transcoding wiring smoke. On box the device is a phantom from
+# _test/fake_render_device.yml, so this proves the template's --device
+# and --group-add reached the container, not that VAAPI works.
+# _verify runs as a separate playbook, so re-lookup the render gid.
+- name: _verify | Re-lookup render gid for assertions
+  when: has_transcoding_acceleration
+  getent:
+    database: group
+    key: render
+  become: true
 
-    - name: _verify | Confirm render gid in container supplementary groups
-      when: has_transcoding_acceleration
-      command: podman exec plex id -G
-      register: _verify_container_groups
-      changed_when: false
-      failed_when: getent_group.render[1] not in _verify_container_groups.stdout.split()
-      become: true
+- name: _verify | Confirm /dev/dri/renderD128 inside container
+  when: has_transcoding_acceleration
+  command: podman exec plex stat -c %n /dev/dri/renderD128
+  register: _verify_dri_in_container
+  changed_when: false
+  failed_when: _verify_dri_in_container.stdout != '/dev/dri/renderD128'
+  become: true
+
+- name: _verify | Confirm render gid in container supplementary groups
+  when: has_transcoding_acceleration
+  command: podman exec plex id -G
+  register: _verify_container_groups
+  changed_when: false
+  failed_when: getent_group.render[1] not in _verify_container_groups.stdout.split()
+  become: true
