@@ -1,3 +1,12 @@
+- name: Assert this host is registered in external_ips
+  assert:
+    that: inventory_hostname in external_ips
+    fail_msg: >-
+      plex renders ADVERTISE_IP from external_ips[{{ inventory_hostname }}];
+      register this host in group_vars/all/network.yml before converging.
+  tags:
+    - plex
+
 - name: Add media group
   import_role:
     name: media
