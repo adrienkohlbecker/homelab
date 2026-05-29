@@ -149,12 +149,13 @@
 # `ip filter` and `ip nat` into the new `inet netavark` table.
 # No-op on a fresh host with no networks.
 #
-# Ordering: site.yml runs this role before `firewall`, so a
-# firewall_driver flip re-creates netavark's `inet netavark` table here
-# and the firewall role re-establishes its own tables + policy later in
-# the same converge. Don't run podman alone (`--tags podman`) across a
-# driver flip without a firewall pass behind it, or the host is left
-# mid-transition.
+# Ordering: in site.yml the `firewall` role runs *before* podman, so on a
+# converge that flips firewall_driver this reload re-creates netavark's
+# `inet netavark` table *after* the firewall role has already laid down
+# its tables + policy this pass. The host is then mid-transition until a
+# follow-up converge re-runs the firewall role against the new driver --
+# so never apply a driver flip with `--tags podman` alone; do a full
+# converge, then converge once more.
 - name: install | Reload netavark firewall + dns after containers.conf change
   when: podman_containers_conf.changed and not ansible_check_mode
   command: podman network reload --all
