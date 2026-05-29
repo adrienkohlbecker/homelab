@@ -59,7 +59,7 @@
 # double-quotes don't need escaping).
 - name: _verify | Rendered containers.conf carries the pinned keys
   command:
-    argv: [grep, -Fxq, "{{ item }}", /etc/containers/containers.conf]
+    argv: [ grep, -Fxq, "{{ item }}", /etc/containers/containers.conf ]
   become: true
   changed_when: false
   loop:
