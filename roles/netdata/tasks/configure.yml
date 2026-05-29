@@ -1,0 +1,295 @@
+# Daemon-configuration phase, imported by main.yml right after the
+# package install: netdata.conf settings, cloud opt-out, the go.d
+# collectors, telegram alerting, the startup-readiness drop-in, and
+# the service enable. Split out of main.yml for navigability; runs in
+# main.yml's order so the registers it sets feed the service restart.
+- name: Divert configuration file
+  community.general.dpkg_divert:
+    path: /etc/netdata/netdata.conf
+  become: true
+  tags:
+    - netdata
+
+- name: Configure netdata
+  ini_file:
+    path: /etc/netdata/netdata.conf
+    section: "{{ item.section }}"
+    option: "{{ item.option }}"
+    value: "{{ item.value }}"
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    ignore_spaces: true
+    backup: true
+  loop:
+    - section: web
+      option: bind to
+      value: 127.0.0.1
+    # The nginx vhost fronts netdata with an Authelia bypass keyed on a
+    # shared cross-host poll token (see "Configure nginx" below). nginx
+    # proxies from loopback, so netdata's default `allow {management,
+    # netdata.conf} from = localhost` would let any token-bearer reach the
+    # management API (silence alarms) and dump the full config. Deny both --
+    # nothing legitimate fetches them through the proxy (the operator reads
+    # them on-host).
+    - section: web
+      option: allow management from
+      value: none
+    - section: web
+      option: allow netdata.conf from
+      value: none
+    # v2 moved access logging out of [global] into the [logs] section;
+    # `[global] access log` is silently ignored, re-enabling the file.
+    - section: logs
+      option: access
+      value: none # accesses are logged by nginx
+    - section: db
+      option: update every
+      value: 5
+    # Drop tier 2 (1h resolution / 2-year retention). Tier 0 + tier 1
+    # still give 14 days at 5s + 90 days at 1m, which covers any chart
+    # you'd actually look at on a homelab. Saves ~100-150 MiB of
+    # per-metric overhead in the main netdata process.
+    - section: db
+      option: storage tiers
+      value: 2
+    # ML anomaly detection trains a model per metric. Memory cost grows
+    # with metric count and the alerts aren't actionable here.
+    - section: ml
+      option: enabled
+      value: 'no'
+    # ebpf.plugin loads syscall/process eBPF programs and runs as its
+    # own ~300 MiB process. Useful for syscall-level forensics, dead
+    # weight if nobody looks at it.
+    - section: plugins
+      option: ebpf
+      value: 'no'
+    - section: registry
+      option: enabled
+      value: 'yes'
+    - section: registry
+      option: registry to announce
+      value: https://netdata.{{ inventory_hostname }}.{{ domain }}
+  register: netdata_conf
+  become: true
+  tags:
+    - netdata
+
+- name: Copy the cloud config
+  copy:
+    src: cloud.conf
+    dest: /var/lib/netdata/cloud.d/cloud.conf
+    owner: netdata
+    group: netdata
+    mode: "0644"
+    backup: true
+  register: netdata_cloud_conf
+  become: true
+  tags:
+    - netdata
+
+- name: Configure prometheus metrics
+  import_role:
+    name: netdata
+    tasks_from: config
+  vars:
+    netdata_args:
+      src: prometheus.conf.j2
+      dest: go.d/prometheus.conf
+      mode: "0600"
+      restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
+  tags:
+    - netdata
+
+# Reap legacy /var/log/netdata/access.log[.N] leftovers. The role's
+# `access log = none` above stops netdata writing the file, but the
+# rotated history (up to 14 daily files at ~10MB each) keeps sitting
+# on disk until manually purged. /etc/logrotate.d/netdata has
+# `missingok`, so logrotate silently skips after the purge.
+- name: Find legacy netdata access log files
+  find:
+    paths: /var/log/netdata
+    patterns:
+      - 'access.log'
+      - 'access.log.*'
+    file_type: file
+  register: netdata_legacy_access_logs
+  become: true
+  tags:
+    - netdata
+
+- name: Remove legacy netdata access log files
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ netdata_legacy_access_logs.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  become: true
+  tags:
+    - netdata
+
+- name: Copy stock go.d.conf
+  command: cp /usr/lib/netdata/conf.d/go.d.conf /etc/netdata/go.d.conf
+  args:
+    creates: /etc/netdata/go.d.conf
+  register: netdata_godconf_copy
+  become: true
+  tags:
+    - netdata
+
+- name: Disable pihole collector in go.d.conf
+  when: not (ansible_check_mode and netdata_godconf_copy.changed)
+  lineinfile:
+    path: /etc/netdata/go.d.conf
+    regexp: '^[#\s]*pihole:\s+'
+    line: '  pihole: no'
+    backup: true
+  register: netdata_godconf_pihole
+  become: true
+  tags:
+    - netdata
+
+- name: Disable analytics
+  file:
+    path: /etc/netdata/.opt-out-from-anonymous-statistics
+    state: touch
+    access_time: preserve
+    modification_time: preserve
+    owner: netdata
+    group: netdata
+    mode: "0644"
+  register: netdata_optout
+  become: true
+  tags:
+    - netdata
+
+- name: Configure docker metrics
+  import_role:
+    name: netdata
+    tasks_from: config
+  vars:
+    netdata_args:
+      src: docker.conf
+      dest: go.d/docker.conf
+      restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
+  tags:
+    - netdata
+
+- name: Install intel-gpu-tools
+  when: ansible_architecture == "x86_64"
+  apt:
+    pkg: intel-gpu-tools
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - netdata
+
+- name: Configure intel gpu metrics
+  import_role:
+    name: netdata
+    tasks_from: config
+  vars:
+    netdata_args:
+      src: intelgpu.conf
+      dest: go.d/intelgpu.conf
+      condition: '{{ ansible_architecture == "x86_64" }}'
+      restart: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
+  tags:
+    - netdata
+
+- name: Copy health_alarm_notify template
+  command: cp /usr/lib/netdata/conf.d/health_alarm_notify.conf /etc/netdata/health_alarm_notify.conf
+  args:
+    creates: /etc/netdata/health_alarm_notify.conf
+  register: netdata_health_alarm_notify_template
+  become: true
+  tags:
+    - netdata
+
+- name: Setup health_alarm_notify
+  when: not (ansible_check_mode and netdata_health_alarm_notify_template.changed)
+  lineinfile:
+    path: /etc/netdata/health_alarm_notify.conf
+    regexp: "{{ item.line }}"
+    line: "{{ item.value }}"
+    validate: bash -n %s
+    # Pin mode/owner explicitly: this file carries the telegram bot token
+    # and is otherwise seeded by `cp` inheriting the package default.
+    owner: root
+    group: netdata
+    mode: "0640"
+    backup: true
+  loop:
+    - line: ^SEND_EMAIL=
+      value: SEND_EMAIL="NO"
+    - line: ^SEND_TELEGRAM=
+      value: SEND_TELEGRAM="YES"
+    - line: ^TELEGRAM_BOT_TOKEN=
+      value: TELEGRAM_BOT_TOKEN="{{ telegram_netdata_bot_token }}"
+    - line: ^DEFAULT_RECIPIENT_TELEGRAM=
+      value: DEFAULT_RECIPIENT_TELEGRAM="{{ telegram_personal_chat_id }}"
+  register: netdata_health_alarm_notify
+  become: true
+  tags:
+    - netdata
+
+# netdata reads container stats over the rootful podman API socket.
+# Caution: podman-socket membership is host-root-equivalent (a member can
+# `podman run --privileged -v /:/host`); accepted here for netdata's
+# collection on these single-operator hosts.
+- name: Add user to podman-socket group
+  user:
+    name: netdata
+    groups: podman-socket
+    append: true
+  become: true
+  tags:
+    - netdata
+
+- name: Mount debugfs
+  mount:
+    path: /sys/kernel/debug
+    src: /debugfs
+    fstype: debugfs
+    opts: defaults,noatime
+    state: mounted
+    backup: true
+  register: netdata_debugfs_mount
+  become: true
+  tags:
+    - netdata
+
+# Drop-in override that blocks `systemctl start/restart netdata` on the
+# HTTP API answering. Without it, downstream `netdatacli reload-health`
+# in health_copy/health_template races against /run/netdata/netdata.pipe
+# coming up — Type=notify's READY=1 fires before the listener is fully
+# accepting connections. Installed before "Enable netdata service" so
+# the first start (and every subsequent restart) is synchronous.
+- name: Install netdata service override
+  import_role:
+    name: systemd_unit
+    tasks_from: dropin
+  vars:
+    systemd_unit_args:
+      src: override.conf
+      for: netdata.service
+  tags:
+    - netdata
+
+# Enable+start the service before the alert/metrics config writes so
+# `netdatacli reload-health` (in health_copy/health_template) lands on
+# a running daemon. On first install the service starts with stock
+# alerts; the role then writes custom alerts and reload-health hot-loads
+# them. Brief gap is acceptable on a fresh install.
+- name: Enable netdata service
+  import_role:
+    name: systemd_unit
+    tasks_from: service
+  vars:
+    systemd_unit_args:
+      src: netdata
+      condition: "{{ not (ansible_check_mode and (netdata_apt.changed or netdata_apt_repo.changed)) }}"
+      restart: "{{ netdata_conf.changed or netdata_cloud_conf.changed or netdata_optout.changed or netdata_health_alarm_notify.changed or netdata_debugfs_mount.changed or netdata_service_d_override_conf_result.changed or netdata_godconf_copy.changed or netdata_godconf_pihole.changed }}"
+  tags:
+    - netdata

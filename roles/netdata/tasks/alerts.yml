@@ -1,0 +1,257 @@
+# Health-alert phase, imported by main.yml after the service is up so
+# netdatacli reload-health lands on a running daemon: the shipped alert
+# configs plus the disks.conf/timex.conf un-silence and their
+# fail-closed asserts. Split out of main.yml for navigability.
+- name: Configure netdata alerts
+  import_role:
+    name: netdata
+    tasks_from: health
+  vars:
+    netdata_args:
+      src: systemdunits_alerts.conf
+      dest: systemdunits.conf
+  tags:
+    - netdata
+
+- name: Configure netdata alerts
+  import_role:
+    name: netdata
+    tasks_from: health
+  vars:
+    netdata_args:
+      src: zfs_alerts_override.conf.j2
+      dest: zfs_alerts_override.conf
+  tags:
+    - netdata
+
+- name: Configure netdata postfix queue alert
+  import_role:
+    name: netdata
+    tasks_from: health
+  vars:
+    netdata_args:
+      src: postfix_alerts.conf
+      dest: postfix.conf
+  tags:
+    - netdata
+
+- name: Configure netdata fail2ban ban-count alert
+  import_role:
+    name: netdata
+    tasks_from: health
+  vars:
+    netdata_args:
+      src: fail2ban_alerts.conf
+      dest: fail2ban.conf
+  tags:
+    - netdata
+
+- name: Configure netdata wireguard bunk-peer handshake alert
+  import_role:
+    name: netdata
+    tasks_from: health
+  vars:
+    netdata_args:
+      src: wireguard_alerts.conf.j2
+      dest: wireguard.conf
+  tags:
+    - netdata
+
+- name: Configure netdata SMART + NVMe wear alerts
+  import_role:
+    name: netdata
+    tasks_from: health
+  vars:
+    netdata_args:
+      src: disk_health_alerts.conf
+      dest: disk_health.conf
+  tags:
+    - netdata
+
+- name: Configure netdata fluent-bit output-drop alert
+  import_role:
+    name: netdata
+    tasks_from: health
+  vars:
+    netdata_args:
+      src: fluentbit_alerts.conf
+      dest: fluentbit.conf
+  tags:
+    - netdata
+
+- name: Configure netdata keepalived VRRP master-loss alert
+  import_role:
+    name: netdata
+    tasks_from: health
+  vars:
+    netdata_args:
+      src: keepalived_alerts.conf
+      dest: keepalived.conf
+  tags:
+    - netdata
+
+# Un-silence the two predictive disk-fill alarms shipped in upstream
+# /usr/lib/netdata/conf.d/health.d/disks.conf. Upstream sets
+# `to: silent` on out_of_disk_space_time and out_of_disk_inodes_time
+# because the 1h linear extrapolation can be noisy on bursty cloud
+# workloads. On lab/pug the workload is stable enough that the
+# prediction is a useful early warning -- the static disk_space_usage
+# alarm only escalates to CRITICAL at 98% used + <5GB free, which
+# leaves no room to react (the 2026-05-15 /var/lib/containers fill
+# went WARNING -> CRITICAL in ~10s as the zvol passed 98%, with no
+# usable lead time).
+#
+# Patching disks.conf rather than re-declaring the templates because
+# the upstream calc depends on $disk_fill_rate (a sibling template);
+# re-declaring would require maintaining that whole chain in-tree and
+# is brittle across netdata upgrades. The `replace` regex is anchored
+# to each template's name so the other `to: silent` entries in the
+# file (10min_disk_utilization, 10min_disk_backlog -- legitimately
+# silent) are preserved.
+- name: Stage upstream disks.conf into /etc/netdata/health.d
+  command: cp /usr/lib/netdata/conf.d/health.d/disks.conf /etc/netdata/health.d/disks.conf
+  args:
+    creates: /etc/netdata/health.d/disks.conf
+  register: netdata_disks_staged
+  become: true
+  tags:
+    - netdata
+
+- name: Un-silence out_of_disk_space_time
+  when: not (ansible_check_mode and netdata_disks_staged.changed)
+  replace:
+    path: /etc/netdata/health.d/disks.conf
+    # (?ms): dotall so . spans newlines + multiline so ^ matches line
+    # starts. The `(?:(?!^\s*template:).)*?` body consumes any char that
+    # is NOT the start of a new `template:` line, so the match is
+    # confined to the SAME stanza as the header. Without the lookahead,
+    # after the first apply the non-greedy `.*?` walks past this
+    # template's now-`sysadmin` and matches the next `to: silent`
+    # downstream (10min_disk_utilization), reporting a phantom change
+    # on every rerun.
+    regexp: '(?ms)(^\s*template:\s*out_of_disk_space_time\b(?:(?!^\s*template:).)*?^\s*to:\s*)silent'
+    replace: '\1sysadmin'
+    backup: true
+  register: netdata_disks_space_unsilenced
+  become: true
+  tags:
+    - netdata
+
+- name: Un-silence out_of_disk_inodes_time
+  when: not (ansible_check_mode and netdata_disks_staged.changed)
+  replace:
+    path: /etc/netdata/health.d/disks.conf
+    regexp: '(?ms)(^\s*template:\s*out_of_disk_inodes_time\b(?:(?!^\s*template:).)*?^\s*to:\s*)silent'
+    replace: '\1sysadmin'
+    backup: true
+  register: netdata_disks_inodes_unsilenced
+  become: true
+  tags:
+    - netdata
+
+- name: Reload netdata health after disks.conf edits
+  when: netdata_disks_staged.changed or netdata_disks_space_unsilenced.changed or netdata_disks_inodes_unsilenced.changed
+  command: netdatacli reload-health
+  changed_when: true
+  become: true
+  tags:
+    - netdata
+
+# Fail-closed: the un-silence `replace` reports changed=false both when it
+# already ran AND when it matched nothing (upstream renamed/restructured the
+# template), so a silent no-op would otherwise leave the predictive disk-fill
+# alarm at `to: silent` with no signal. Assert the end state instead. Skipped
+# in check mode, where the staging+replace above is gated off on a fresh host.
+- name: Slurp the un-silenced disks.conf
+  when: not ansible_check_mode
+  slurp:
+    src: /etc/netdata/health.d/disks.conf
+  register: netdata_disks_unsilenced_check
+  become: true
+  tags:
+    - netdata
+
+- name: Assert the disk-fill predictive alarms route to sysadmin
+  when: not ansible_check_mode
+  vars:
+    _disks: "{{ netdata_disks_unsilenced_check.content | b64decode }}"
+  assert:
+    that:
+      # Same stanza-anchored shape as the replace regexes above: each
+      # template must resolve to a `to: sysadmin` stanza. Zero matches means
+      # the un-silence missed -- fail here, not during an actual disk-fill.
+      - _disks | regex_findall('(?ms)^\s*template:\s+out_of_disk_space_time\s(?:(?!^\s*template:).)*?^\s*to:\s+sysadmin') | length >= 1
+      - _disks | regex_findall('(?ms)^\s*template:\s+out_of_disk_inodes_time\s(?:(?!^\s*template:).)*?^\s*to:\s+sysadmin') | length >= 1
+    fail_msg: >-
+      disks.conf out_of_disk_space_time / out_of_disk_inodes_time no longer
+      resolve to a `to: sysadmin` stanza -- upstream likely renamed or
+      restructured them, leaving the predictive disk-fill alarm silenced.
+      Re-check the un-silence regexes in this role.
+  tags:
+    - netdata
+
+# Same staging+replace pattern as disks.conf above, for timex.conf's
+# system_clock_sync_state alarm. The kernel's ntp_adjtime() exposes a
+# clock-synchronized bit; that bit going to 0 means the local clock has
+# drifted out of sync with whatever ntp daemon is configured (chrony on
+# lab/pug). Upstream defaults `to: silent` because clock-sync is "boring"
+# on most cloud hosts -- but on lab/pug an out-of-sync clock breaks
+# TLS-cert validation, signed-package apt-get, and zfs replication
+# bookmarks. Cheap to alert on; not noisy in steady state.
+- name: Stage upstream timex.conf into /etc/netdata/health.d
+  command: cp /usr/lib/netdata/conf.d/health.d/timex.conf /etc/netdata/health.d/timex.conf
+  args:
+    creates: /etc/netdata/health.d/timex.conf
+  register: netdata_timex_staged
+  become: true
+  tags:
+    - netdata
+
+- name: Un-silence system_clock_sync_state
+  when: not (ansible_check_mode and netdata_timex_staged.changed)
+  replace:
+    path: /etc/netdata/health.d/timex.conf
+    # `alarm:` (not `template:`) since this binds to a single named chart
+    # rather than fanning out across a context. Same stanza-anchored shape
+    # as disks.conf's regex above -- today timex.conf only ships one
+    # alarm so drift is impossible, but defensive in case upstream adds
+    # a second one in a future release.
+    regexp: '(?ms)(^\s*alarm:\s*system_clock_sync_state\b(?:(?!^\s*alarm:|^\s*template:).)*?^\s*to:\s*)silent'
+    replace: '\1sysadmin'
+    backup: true
+  register: netdata_timex_unsilenced
+  become: true
+  tags:
+    - netdata
+
+- name: Reload netdata health after timex.conf edits
+  when: netdata_timex_staged.changed or netdata_timex_unsilenced.changed
+  command: netdatacli reload-health
+  changed_when: true
+  become: true
+  tags:
+    - netdata
+
+# Fail-closed, same rationale as the disks.conf assert above.
+- name: Slurp the un-silenced timex.conf
+  when: not ansible_check_mode
+  slurp:
+    src: /etc/netdata/health.d/timex.conf
+  register: netdata_timex_unsilenced_check
+  become: true
+  tags:
+    - netdata
+
+- name: Assert the clock-sync alarm routes to sysadmin
+  when: not ansible_check_mode
+  vars:
+    _timex: "{{ netdata_timex_unsilenced_check.content | b64decode }}"
+  assert:
+    that:
+      - _timex | regex_findall('(?ms)^\s*alarm:\s+system_clock_sync_state\s(?:(?!^\s*alarm:|^\s*template:).)*?^\s*to:\s+sysadmin') | length >= 1
+    fail_msg: >-
+      timex.conf system_clock_sync_state no longer resolves to a
+      `to: sysadmin` stanza -- upstream likely renamed/restructured it,
+      leaving the clock-desync alert silenced. Re-check the un-silence regex.
+  tags:
+    - netdata
