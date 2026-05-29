@@ -1,7 +1,11 @@
+{# HTTP/2: `http2 on;` (set in nginx.conf.j2's http{}) on nginx >= 1.25.1, the
+   legacy `listen ... http2` parameter on jammy/1.18 and noble/1.24. Mirrors
+   the blacklist gate there so both move together. #}
+{% set _http2_listen = ' http2' if ansible_distribution_release in ['jammy', 'noble'] else '' %}
 server {
-  listen              443 ssl http2;
+  listen              443 ssl{{ _http2_listen }};
 {% if nginx_ipv6 | default(false) %}
-  listen              [::]:443 ssl http2;
+  listen              [::]:443 ssl{{ _http2_listen }};
 {% endif %}
 {% if nginx_site_args.enable_http | default(false) %}
   # Cleartext :80 in this same server block (no http->https redirect). The
