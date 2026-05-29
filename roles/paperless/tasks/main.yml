@@ -55,11 +55,25 @@
   tags:
     - paperless
 
-# Paperless mixes its SQLite DBs with the Whoosh index, classifier model,
-# and logs in the same data/ dir. Whoosh and the model files don't want
-# 4K records; only the two .db files belong on the sqlite dataset.
-# Symlink them in place (matching-path bind so the host-side symlink
-# resolves identically inside the container).
+# sqlite3 CLI pre-creates the WAL-mode DB below host-side. An empty DB
+# has no schema, so host sqlite3 (3.37 on jammy) handles it even though
+# it can't prepare paperless's populated generated-column schema.
+# libsqlite3-0 is pulled transitively but the CLI is not.
+- name: Install sqlite3 CLI
+  apt:
+    pkg: sqlite3
+    cache_valid_time: 3600
+  become: true
+  tags:
+    - paperless
+
+# Paperless keeps db.sqlite3 in the same data/ dir as the Whoosh index,
+# classifier model, and logs. Whoosh and the model files don't want 4K
+# records, so only the hot SQLite DB rides the sqlite dataset (symlinked
+# below). The celery beat schedule (celerybeat-schedule.db) stays in
+# data/: it's a regenerable shelve the container rewrites in place, which
+# would fight a host-side symlink, and as a small cache it gains nothing
+# from the 4K dataset.
 - name: Create sqlite directory
   when: not (ansible_check_mode and paperless_user.changed)
   file:
@@ -72,20 +86,58 @@
   tags:
     - paperless
 
-- name: Symlink paperless SQLite DBs onto sqlite dataset
+# Pre-create db.sqlite3 in WAL journal mode so Django inherits it on its
+# first connection -- journal_mode is persisted in the SQLite header and
+# survives `migrate`. Without WAL, write-heavy document ingest takes a
+# per-commit fsync hit on the 4K-recordsize dataset. The alternative --
+# letting Django create the DB in rollback-journal mode then stopping the
+# service to PRAGMA-convert -- needed a two-pass deploy (WAL only landed
+# on the second converge) and a TOCTOU-prone host-side write against a
+# file the container could rename out from under us.
+#
+# Run as root, then chown to paperless so the container's USERMAP_UID can
+# open it RW: a become_user pre-create can't reach the file when the
+# sqlite-dataset mount is absent (test fixtures), since the auto-created
+# parent dir isn't traversable by the unprivileged user. In prod the
+# dataset mountpoint is 0755, but root works in both cases.
+- name: Pre-create paperless sqlite DB in WAL mode
   when: not (ansible_check_mode and paperless_user.changed)
+  command:
+    cmd: sqlite3 /mnt/services/sqlite/paperless/db.sqlite3 'PRAGMA journal_mode=WAL;'
+    creates: /mnt/services/sqlite/paperless/db.sqlite3
+  register: paperless_wal_precreate
+  become: true
+  tags:
+    - paperless
+
+- name: Own the pre-created paperless sqlite DB
+  when: paperless_wal_precreate.changed
   file:
-    src: "/mnt/services/sqlite/paperless/{{ item }}"
-    dest: "/mnt/services/paperless/data/{{ item }}"
-    state: link
-    force: true
+    path: /mnt/services/sqlite/paperless/db.sqlite3
     owner: paperless
     group: paperless
-    follow: false
   become: true
-  loop:
-    - db.sqlite3
-    - celerybeat-schedule.db
+  tags:
+    - paperless
+
+# Symlink db.sqlite3 from data/ onto the sqlite dataset (matching-path
+# bind so the host-side symlink resolves identically inside the
+# container). The WAL DB was pre-created above, so state=link just plants
+# the symlink; no force, which keeps the snapshot-restore safety -- a
+# real DB already at the dest is never clobbered into a symlink.
+- name: Symlink paperless DB onto the sqlite dataset
+  import_role:
+    name: sqlite_dataset
+    tasks_from: dataset
+  vars:
+    sqlite_dataset_args:
+      name: paperless
+      owner: paperless
+      group: paperless
+      mode: "0700"
+      condition: "{{ not (ansible_check_mode and paperless_user.changed) }}"
+      links:
+        - /mnt/services/paperless/data/db.sqlite3
   tags:
     - paperless
 
@@ -152,112 +204,6 @@
       restart: "{{ paperless_service_result.changed or paperless_secret_key_rotated or paperless_socialaccount_providers_rotated }}"
   tags:
     - paperless
-
-# Paperless-ngx (Django) has no env var for SQLite PRAGMA. Without
-# this, db.sqlite3 stays in rollback-journal mode and document ingest
-# (write-heavy) takes a per-commit fsync hit. WAL is persisted in the
-# DB header so the convert is one-shot.
-#
-# Read + write both go through the paperless container's bundled
-# libsqlite. Host Jammy sqlite3 (3.37) cannot prepare the schema
-# paperless 2.20 / Django 5.x writes -- documents_customfieldinstance
-# uses generated columns with non-deterministic functions, allowed
-# since libsqlite 3.38. The Trixie-based container ships 3.46.
-#
-# Stop the service across the PRAGMA write: journal_mode=WAL needs an
-# exclusive lock; if Django is holding the DB the PRAGMA silently
-# returns the current mode without converting, leaving the operator
-# in rollback-journal mode without a failure signal. The
-# symlink+ownership guard prevents in-container-root (which maps to
-# host uid `paperless` via uidmap) from swapping db.sqlite3 for a
-# symlink to a root-owned target before the PRAGMA fires.
-#
-# First-install two-pass: the DB doesn't exist until Django creates
-# it on first start, so the block skips. The next play run sees the
-# DB, stops the service briefly, converts, and restarts.
-- name: Detect paperless unit image
-  when: not ansible_check_mode
-  extract_podman_image:
-    name: paperless
-  register: paperless_unit_image
-  become: true
-  tags:
-    - paperless
-
-- name: Stat paperless sqlite DB
-  stat:
-    path: /mnt/services/sqlite/paperless/db.sqlite3
-    follow: false
-  register: paperless_sqlite_stat
-  become: true
-  tags:
-    - paperless
-
-- name: Read paperless sqlite journal mode
-  command:
-    argv:
-      - podman
-      - exec
-      - paperless
-      - python3
-      - -c
-      - 'import sqlite3; print(sqlite3.connect("/usr/src/paperless/data/db.sqlite3").execute("PRAGMA journal_mode").fetchone()[0])'
-  register: paperless_sqlite_pragma
-  changed_when: false
-  when:
-    - not ansible_check_mode
-    - paperless_sqlite_stat.stat.exists
-  become: true
-  tags:
-    - paperless
-
-- name: Convert paperless sqlite to WAL
-  when:
-    - not ansible_check_mode
-    - paperless_sqlite_stat.stat.exists
-    - paperless_sqlite_pragma.stdout | default('') | trim != 'wal'
-  become: true
-  tags:
-    - paperless
-  block:
-    - name: Assert paperless sqlite DB is a regular file owned by paperless
-      assert:
-        that:
-          - paperless_sqlite_stat.stat.isreg
-          - paperless_sqlite_stat.stat.pw_name == 'paperless'
-        fail_msg: >-
-          /mnt/services/sqlite/paperless/db.sqlite3 is a symlink or
-          owned by another user; refusing to PRAGMA since WAL/SHM
-          sidecars would land at an attacker-controlled path.
-
-    - name: Stop paperless service for WAL conversion
-      systemd:
-        name: paperless
-        state: stopped
-
-    - name: Set paperless sqlite to WAL
-      command:
-        argv:
-          - podman
-          - run
-          - --rm
-          - --user
-          - "{{ paperless_user.uid }}:{{ paperless_user.group }}"
-          - --volume
-          - /mnt/services/sqlite/paperless:/data
-          - --entrypoint
-          - /usr/local/bin/python3
-          - "{{ paperless_unit_image.images[0] }}"
-          - -c
-          - 'import sqlite3; print(sqlite3.connect("/data/db.sqlite3").execute("PRAGMA journal_mode=WAL").fetchone()[0])'
-      register: paperless_sqlite_wal
-      changed_when: paperless_sqlite_wal.stdout | trim == 'wal'
-      failed_when: paperless_sqlite_wal.stdout | trim != 'wal'
-
-    - name: Start paperless service after WAL conversion
-      systemd:
-        name: paperless
-        state: started
 
 - name: Configure nginx
   import_role:
