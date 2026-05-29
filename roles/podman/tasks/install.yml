@@ -68,6 +68,12 @@
 #   single range with size 24 gives us 256 named bridges before
 #   exhaustion (vs. ~7 today) and turns "ran out of pool" into a loud
 #   create-time error rather than a quiet drift into untrusted space.
+# - default_subnet: pin the *default* podman network's subnet to
+#   podman_default_network. Podman's compiled-in default happens to
+#   equal it today, so the firewall's PODMAN_DEFAULT egress/DNS rules
+#   and pihole's upstream line up by coincidence; pinning makes it
+#   explicit so an upstream change to the built-in default can't
+#   silently move the default network out from under those rules.
 # - firewall_driver: native nftables, not iptables-nft compat. Lands
 #   netavark's rules in `inet netavark` instead of `ip filter`/
 #   `ip nat`. The driver was added in netavark 1.10 (Jun 2024). Ubuntu
@@ -104,6 +110,7 @@
     - { key: network_backend,              value: '"netavark"' }
     - { key: default_rootless_network_cmd, value: '"pasta"' }
     - { key: dns_bind_port,                value: '5333' }
+    - { key: default_subnet,               value: '"{{ podman_default_network }}"' }
     - { key: default_subnet_pools,         value: '[{"base" = "{{ podman_bridge_pool }}", "size" = 24}]' }
     - key: firewall_driver
       value: '"nftables"'
