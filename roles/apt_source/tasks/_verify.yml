@@ -30,13 +30,13 @@
       changed_when: false
       register: _verify_apt_source_policy
 
-    # Precompute the expected version family (e.g. "22.*" -> "22") and the
-    # full policy regex here rather than in the that:, so ansible's
-    # conditional re-evaluation can't reprocess the pattern.
-    - name: _verify | Derive expected pin family + policy pattern for {{ apt_source_args.pin.package }}
+    # Turn the pin glob (e.g. "22.*", "5:27.*") into a policy regex -- literal
+    # dots, glob * -> .* -- so the check follows whatever the consumer pinned
+    # rather than assuming a numeric major.minor shape. Precomputed here, not
+    # in the that:, so ansible's conditional re-evaluation can't reprocess it.
+    - name: _verify | Derive the pin policy pattern for {{ apt_source_args.pin.package }}
       set_fact:
-        _verify_apt_source_major: "{{ apt_source_args.pin.version | regex_replace('[.].*$', '') }}"
-        _verify_apt_source_policy_re: "[*][*][*] {{ apt_source_args.pin.version | regex_replace('[.].*$', '') }}[.][0-9].* {{ apt_source_args.pin.priority }}"
+        _verify_apt_source_policy_re: "[*][*][*] {{ apt_source_args.pin.version | regex_replace('[.]', '[.]') | regex_replace('[*]', '.*') }} {{ apt_source_args.pin.priority }}"
 
     - name: _verify | Pinned version is the installed candidate for {{ apt_source_args.pin.package }}
       assert:
@@ -49,16 +49,16 @@
           # another origin can't satisfy the check above.
           - apt_source_args.uris in _verify_apt_source_policy.stdout
         fail_msg: >-
-          Expected {{ apt_source_args.pin.package }} candidate to be a
-          {{ _verify_apt_source_major }}.x pinned at priority
+          Expected {{ apt_source_args.pin.package }} candidate to match
+          {{ apt_source_args.pin.version }} at priority
           {{ apt_source_args.pin.priority }} from {{ apt_source_args.uris }};
           got policy: {{ _verify_apt_source_policy.stdout | default('') }}
 
-# Scoped signed-by keyring, jammy apt_key path only: the resolute deb822
-# path embeds the key via the module's own keyring and never wrote the
-# legacy global-trust copy, so this wiring is < 26 only.
-- name: _verify | Keyring wiring on the jammy apt_key path for {{ apt_source_args.name }}
-  when: ansible_distribution_major_version | int < 26
+# Scoped signed-by keyring on both paths: jammy's apt_key and resolute's
+# get_url both write /usr/share/keyrings/<name>.gpg, and neither writes the
+# legacy global-trust copy at /etc/apt/trusted.gpg.d/ (which would re-grant
+# the key fleet-wide trust).
+- name: _verify | Keyring is scoped, not globally trusted, for {{ apt_source_args.name }}
   block:
     - name: _verify | Stat the scoped and legacy keyrings for {{ apt_source_args.name }}
       stat:
