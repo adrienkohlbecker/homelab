@@ -7,8 +7,10 @@
 # scoped keyring and takes deb822_repository (which needs python3-debian).
 #
 # The signing key lives at /usr/share/keyrings/<name>.gpg, referenced by
-# signed-by= on the repo line so it is trusted for this source only -- a
-# deliberate fleet convention, not /etc/apt/keyrings/ as upstream docs use.
+# signed-by= on the repo line so it is trusted for this source only. Debian
+# reserves /usr/share/keyrings for dpkg-managed keys and points self-fetched
+# ones at /etc/apt/keyrings; we deliberately use the former to share one
+# fleet-wide keyring location with roles/apt's archive keyring.
 #
 # Callers pass everything through a single apt_source_args dict so each
 # invocation replaces it wholesale and inter-call vars-leak can't happen:
