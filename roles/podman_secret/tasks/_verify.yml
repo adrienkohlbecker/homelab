@@ -197,3 +197,80 @@
   become: true
   become_user: podman_secret_rootless
   environment: "{{ _verify_rootless_env }}"
+
+# Scenario 6 — the state=absent tombstone path: create a secret, then remove
+# it through the helper and confirm it reports removed (_rotated) and is gone
+# from the store. Proves a consumer dropping a credential can retire it via the
+# helper rather than a raw module call.
+- name: _verify | Scenario 6 — create a secret to later remove
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: podman_secret_tombstone
+      data: doomed
+
+- name: _verify | Scenario 6 — remove it via state=absent
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: podman_secret_tombstone
+      state: absent
+
+- name: _verify | Scenario 6 — list secrets after removal
+  containers.podman.podman_secret_info:
+  register: _verify_tombstone_after
+  become: true
+
+- name: _verify | Scenario 6 — assert removed and gone from the store
+  assert:
+    that:
+      - podman_secret_tombstone_rotated
+      - _verify_tombstone_after.secrets | selectattr('Spec.Name', 'eq', 'podman_secret_tombstone') | list | length == 0
+
+# Scenario 7 — the validation guards must fail loudly, not silently pass a bad
+# input down to an opaque module/template error. These exercise the assert/guard
+# paths that are otherwise only ever hit on the happy path.
+- name: _verify | Scenario 7 — an invalid name is rejected
+  block:
+    - name: _verify | Scenario 7 — attempt an invalid secret name
+      import_role:
+        name: podman_secret
+        tasks_from: secret
+      vars:
+        podman_secret_args:
+          name: Bad.Name
+          data: irrelevant
+    - name: _verify | Scenario 7 — fail if the invalid name was accepted
+      assert:
+        that: false
+        fail_msg: podman_secret accepted an invalid name
+  rescue:
+    - name: _verify | Scenario 7 — confirm the name-validation assert fired
+      assert:
+        that:
+          - "'valid identifier' in (ansible_failed_result.msg | default(''))"
+
+- name: _verify | Scenario 8 — an unknown rootless user is rejected
+  block:
+    - name: _verify | Scenario 8 — attempt a non-existent user
+      import_role:
+        name: podman_secret
+        tasks_from: secret
+      vars:
+        podman_secret_args:
+          name: podman_secret_no_such_user
+          data: irrelevant
+          user: definitely_absent_user
+    - name: _verify | Scenario 8 — fail if the missing user was accepted
+      assert:
+        that: false
+        fail_msg: podman_secret accepted a non-existent user
+  rescue:
+    - name: _verify | Scenario 8 — confirm the passwd assert fired
+      assert:
+        that:
+          - "'no usable passwd entry' in (ansible_failed_result.msg | default(''))"
