@@ -1,0 +1,8 @@
+# Per-host opt-out. When false, the whole role no-ops -- no install, no
+# unit, no --auto-tune. Default true: powertop auto-tune runs on every
+# provisioned host. Set false in host_vars for a host where an aggressive
+# power tunable (USB autosuspend, SATA ALPM, NIC runtime PM) misbehaves.
+#
+# defaults/, not vars/: role vars sit above host_vars in ansible's
+# precedence ladder and would silently mask a host-level override.
+powertop_enabled: true

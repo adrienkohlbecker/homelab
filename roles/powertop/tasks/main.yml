@@ -1,4 +1,5 @@
 - name: Install powertop
+  when: powertop_enabled
   apt:
     pkg:
       - powertop
@@ -9,6 +10,7 @@
     - powertop
 
 - name: Install powertop service
+  when: powertop_enabled
   import_role:
     name: systemd_unit
     tasks_from: install
@@ -19,6 +21,7 @@
     - powertop
 
 - name: Enable powertop service
+  when: powertop_enabled
   import_role:
     name: systemd_unit
     tasks_from: service
