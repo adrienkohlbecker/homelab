@@ -67,6 +67,19 @@
   tags:
     - postfix
 
+- name: Install outbound sender rewriting map
+  template:
+    src: generic.j2
+    dest: /etc/postfix/generic
+    owner: root
+    group: root
+    mode: "0644"
+    backup: true
+  become: true
+  register: postfix_generic
+  tags:
+    - postfix
+
 - name: Enable postfix
   import_role:
     name: systemd_unit
@@ -75,7 +88,7 @@
     systemd_unit_args:
       src: postfix
       condition: "{{ not (ansible_check_mode and postfix_apt.changed) }}"
-      restart: "{{ postfix_cfg.changed or postfix_sasl_auth.changed }}"
+      restart: "{{ postfix_cfg.changed or postfix_sasl_auth.changed or postfix_generic.changed }}"
   tags:
     - postfix
 

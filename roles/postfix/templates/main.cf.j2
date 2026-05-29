@@ -63,6 +63,10 @@ smtp_tls_secure_cert_match = nexthop
 smtp_tls_mandatory_protocols = >=TLSv1.2
 smtp_tls_loglevel = 1
 smtp_tls_wrappermode = {{ 'yes' if smtp_use_ssl | bool else 'no' }}
+# Rewrite the outbound sender to the Mailgun-authorized {{ email_domain }} so all
+# system mail shares one sending identity with the service roles -- the lookup
+# is read at process start (texthash), so no postmap step. See generic.j2.
+smtp_generic_maps = texthash:/etc/postfix/generic
 header_size_limit = 4096000
 
 # Keep `bounce` so a relay rejection (a lost cron/smartd/fail2ban alert) is
