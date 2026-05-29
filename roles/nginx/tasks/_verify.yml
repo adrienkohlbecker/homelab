@@ -256,6 +256,49 @@
   register: nginx_verify_dup
   failed_when: nginx_verify_dup.status != 400
 
+# Finding-1 guard: a literal "?" inside the query (a second "?" in the URI)
+# would let a ?-prefixed auth_token fire the 204 bypass while escaping the
+# &-anchored $args strip, forwarding the raw token to the upstream. Rejected.
+- name: _verify | A ?-smuggled auth_token is rejected with 400 (not forwarded)
+  uri:
+    url: "https://localhost/?probe=1?auth_token={{ nginx_verify_token }}"
+    headers:
+      Host: "{{ nginx_verify_host }}"
+    validate_certs: false
+    status_code: 400
+  register: nginx_verify_smuggle
+  failed_when: nginx_verify_smuggle.status != 400
+
+# Finding-2: a duplicated auth_token is rejected 400 but the request line is
+# logged before the 400. Put the real token SECOND (a decoy first) so a
+# single-stage redaction would leak it; the two-stage map must redact both.
+- name: _verify | Fire a duplicated auth_token with the real token second
+  uri:
+    url: "https://localhost/?auth_token=decoy_first&auth_token={{ nginx_verify_token }}&dupmark=__nginx_verify_dup_marker__"
+    headers:
+      Host: "{{ nginx_verify_host }}"
+    validate_certs: false
+    status_code: 400
+  register: nginx_verify_dup2
+  failed_when: nginx_verify_dup2.status != 400
+
+- name: _verify | Wait for the duplicated request to reach the access log
+  command: tail -n 200 /var/log/nginx/access.log
+  register: nginx_verify_dup_log
+  changed_when: false
+  become: true
+  until: "'__nginx_verify_dup_marker__' in nginx_verify_dup_log.stdout"
+  retries: 10
+  delay: 2
+
+- name: _verify | Both auth_token copies are redacted in the access log
+  assert:
+    that:
+      - nginx_verify_token not in nginx_verify_dup_log.stdout
+    fail_msg: >-
+      The duplicated request's second (real) auth_token leaked raw into the
+      access log; the two-stage $request_safe redaction must cover both copies.
+
 # http->https redirect and the default-server catch-all are probed on the
 # public interface, not loopback: the stub_status server binds 127.0.0.1:80
 # specifically, which captures every loopback :80 request regardless of Host.

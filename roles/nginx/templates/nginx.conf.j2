@@ -59,9 +59,19 @@ http {
     # the token doesn't land on disk. Generic enough to cover any future
     # site using the same param name. If another site picks a different
     # param name, extend this map.
-    map $request $request_safe {
+    #
+    # Two stages so a duplicated auth_token (rejected 400 in location / but
+    # still written to the access log before the 400) has its SECOND copy
+    # redacted too: stage 1 redacts the first occurrence, stage 2 redacts the
+    # next auth_token that follows an already-REDACTED one. The single-token
+    # case (the common path) is untouched by stage 2. location / rejects >2.
+    map $request $request_safe_stage1 {
         "~*^(.*?[?&])auth_token=[^& ]*(.*)$"  "$1auth_token=REDACTED$2";
         default                                $request;
+    }
+    map $request_safe_stage1 $request_safe {
+        "~*^(.*auth_token=REDACTED.*?[?&])auth_token=[^& ]*(.*)$"  "$1auth_token=REDACTED$2";
+        default                                                     $request_safe_stage1;
     }
 
     # Distinguish machine clients from Authelia-authed browsers for the
