@@ -101,9 +101,12 @@ server {
     # not the parent's -- so that comparison never matches. The param name
     # is fixed to `auth_token` (the $req_auth_token/$request_safe maps in
     # nginx.conf.j2 hardcode it). The token is redacted from OUR access log
-    # via $request_safe, but redaction can't reach error_log or a Referer
-    # to a third party -- the no-referrer Referrer-Policy above covers the
-    # latter.
+    # via $request_safe, but that redaction does NOT cover error_log: on any
+    # upstream error (e.g. a 502 from a stalled upstream) nginx logs the full
+    # request line -- token and all -- to error_log, which goes to journald. So
+    # the journal IS token-bearing for bypass sites; treat it like the other
+    # secret-logging units. Redaction also can't reach a Referer to a third
+    # party -- the no-referrer Referrer-Policy above covers that.
     if ($req_auth_token = "{{ nginx_site_args.bypass_query_param.value }}") {
       return 204;
     }
@@ -165,12 +168,18 @@ server {
     error_page 401 =302 $redirection_url;
 {% endif %}
 {% if nginx_site_args.bypass_query_param is defined %}
-    # The $args strip below and the $request_safe log-redaction each handle a
-    # single auth_token occurrence; a duplicated param would leave the second
-    # copy unstripped (forwarded to the upstream). Reject duplicates outright so
-    # the single-occurrence handling holds and a malformed client can't smuggle
-    # the token past the strip.
+    # The $args strip below and the $request_safe log-redaction each assume a
+    # single, well-formed auth_token. Reject the two malformed shapes that would
+    # otherwise smuggle the token past the strip and forward it raw to the
+    # upstream: a duplicated param, and a literal "?" inside the query string (a
+    # second "?" in the URI). $req_auth_token's [?&] extractor matches a
+    # ?-prefixed token and fires the 204 bypass, but the &-anchored strip below
+    # does not catch it. Both shapes are abnormal for the API clients that use
+    # bypass (compta, the netdata poller), which only ever send one "?auth_token=".
     if ($request_uri ~ "auth_token=.*[?&]auth_token=") {
+      return 400;
+    }
+    if ($args ~ "[?]") {
       return 400;
     }
     # Strip the bypass token from $args before proxy_pass so the
