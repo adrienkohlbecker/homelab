@@ -315,6 +315,30 @@ resource "nexus_security_user" "push" {
   }
 }
 
+# Operator's local/manual docker push identity (you `podman login` as this from
+# your workstation and lab hosts), carrying both hosted-repo push roles. Adopted
+# from the user created by hand in the UI, not provisioned here, so its password
+# is left unmanaged: `password` is omitted, the Nexus API never returns it, and
+# the provider can't see it -- a plain apply leaves the credential untouched and
+# only reconciles role membership. The import block adopts the existing user in
+# place on the next apply (no recreate); delete it once the import has run.
+import {
+  to = nexus_security_user.lab_local_user
+  id = "lab_local_user"
+}
+
+resource "nexus_security_user" "lab_local_user" {
+  userid    = "lab_local_user"
+  firstname = "Lab"
+  lastname  = "Local User"
+  email     = "lab_local_user@noreply.invalid"
+  status    = "active"
+  roles = [
+    nexus_security_role.push["homelab"].roleid,
+    nexus_security_role.push["compta"].roleid,
+  ]
+}
+
 resource "nexus_repository_docker_proxy" "this" {
   for_each = local.docker_proxies
 
