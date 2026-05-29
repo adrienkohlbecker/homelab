@@ -4,7 +4,11 @@
 Description=nexus
 After=network-online.target
 Wants=network-online.target
-StartLimitIntervalSec=600
+# StartLimitIntervalSec must comfortably exceed StartLimitBurst × TimeoutStartSec
+# (here 3 × 240s = 720s) or the burst limit never fires -- three slow starts
+# blow past the window and the counter resets, so a wedged JVM restarts forever
+# instead of landing in `failed` where netdata's systemdunits collector sees it.
+StartLimitIntervalSec=1800
 StartLimitBurst=3
 {% if zfs_root %}
 {% if zfs_has_services_mount %}
@@ -23,19 +27,29 @@ PartOf=zfs_autosnapshot.target
 Environment=PODMAN_SYSTEMD_UNIT=%n
 Restart=always
 Delegate=yes
-TimeoutSec=240
+TimeoutStartSec=240
+# TimeoutStopSec exceeds --stop-timeout 120 below so a slow graceful container
+# stop doesn't eat into the start budget (hyperdx split-timeout pattern).
+TimeoutStopSec=150
 RestartSec=5
 Type=notify
 NotifyAccess=all
 SyslogIdentifier=%N
 
-# Nexus's DB + config ride the snapshotted services dataset (/nexus-data);
-# the blob store is bind-mounted from /mnt/scratch (NOT snapshotted) by
-# design -- cached artifacts are reconstructible from upstream, so keeping
-# them out of snapshots keeps replication small. After a scratch loss the
-# cache is cold and re-proxies on demand; a DB restore against an empty
-# blob store is expected, not corruption.
+# Nexus's DB + config ride the snapshotted services dataset (/nexus-data).
+# Only the `default` blob store is bind-mounted to /mnt/scratch (NOT
+# snapshotted): it holds the reconstructible proxy caches, so keeping them
+# out of snapshots keeps replication small. Any *named* blob store created
+# under /nexus-data/blobs instead lands on the snapshotted services dataset
+# -- point hosted/irreplaceable repos (their artifacts can't be re-proxied)
+# at one of those. After a scratch loss the default cache is cold and
+# re-proxies on demand; a DB restore against an empty default store is
+# expected, not corruption.
 ExecStartPre=/bin/rm -f %t/%n.ctr-id
+# INSTALL4J_ADD_VM_PARAMS relocates the java.util.prefs userRoot onto the
+# /user-root volume so it sits beside encryption.json, off the snapshotted
+# /nexus-data mount. The healthcheck uses the Alpine base image's busybox
+# wget (a -ubi image tag would not ship it).
 ExecStart=/usr/bin/podman run \
     --cidfile=%t/%n.ctr-id \
     --cgroups=split \
