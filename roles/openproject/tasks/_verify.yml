@@ -13,18 +13,25 @@
     or _verify_pgdata.stat.pw_name != 'openproject_pg'
   become: true
 
-- name: _verify | Openproject assets dir is owned by openproject
+# assets/files is created by the in-container app (uid 1000) at first boot --
+# unlike assets/ itself, which the converge chowned -- so its host ownership
+# proves the +1000 uidmap end-to-end (mirrors the PG_VERSION check above).
+- name: _verify | Openproject assets/files is owned by openproject (container-written)
   stat:
-    path: /mnt/services/openproject/assets
+    path: /mnt/services/openproject/assets/files
   register: _verify_assets
   failed_when: >-
     not _verify_assets.stat.exists
     or _verify_assets.stat.pw_name != 'openproject'
   become: true
 
-- name: _verify | Openproject answers /health_checks/default on its loopback port
+# /health_checks/database is the endpoint the unit's steady-state --health-cmd
+# gates active/auto-restart on (startup uses /default); probing it mirrors the
+# real liveness check and exercises the bundled postgres (+102 map) through a
+# live DB query.
+- name: _verify | Openproject answers /health_checks/database on its loopback port
   uri:
-    url: http://127.0.0.1:{{ service_ports.openproject }}/health_checks/default
+    url: http://127.0.0.1:{{ service_ports.openproject }}/health_checks/database
     status_code: 200
     timeout: 10
   register: _verify_health
@@ -33,11 +40,12 @@
   until: _verify_health.status == 200
   become: true
 
-# Confirm the vhost refuses unauthenticated requests (auth: required wires
-# Authelia's auth_request). In test (no Authelia upstream on box) the
-# auth_request fails with 5xx; in prod it 302-redirects to auth.<domain>.
-# Either way the gate is engaged -- a config drift dropping auth would proxy
-# straight through to OpenProject's own login and return 200/302.
+# Confirm the vhost refuses unauthenticated requests. auth: required wires
+# nginx's auth_request to Authelia; _setup installs the authelia_stub in gate
+# mode (401 on the auth-request subrequest), so nginx's error_page 401 -> 302
+# fires here exactly as prod redirects to auth.<domain>. A config drift dropping
+# auth would proxy straight through to OpenProject's own login and return 200,
+# failing this assertion.
 - name: _verify | Openproject vhost refuses unauthenticated requests
   uri:
     url: https://localhost/
@@ -45,15 +53,14 @@
     follow_redirects: none
     headers:
       Host: "openproject.{{ inventory_hostname }}.{{ domain }}"
-    status_code: [ 302, 401, 403, 500, 502, 503 ]
+    status_code: 302
 
-# The SECRET_KEY_BASE rotation gate (tasks/main.yml) is the role's load-bearing
-# safety net: rotating the Rails master key makes stored encrypted data
-# undecryptable, so the play must abort before the new key reaches the store.
-# Prove the drift detection fires: rewrite the stored secret's tracking label to
-# simulate a vault rotation, confirm the gate's condition evaluates true, then
-# restore the correct label so a later converge stays idempotent.
-- name: _verify | SECRET_KEY_BASE rotation gate detects a drifted store
+# The rotation gate (tasks/check_secret_key_rotation.yml) is the role's
+# load-bearing safety net. Prove the REAL gate fires (not a copy of its
+# predicate): drift the stored label to simulate a vault rotation, run the gate,
+# confirm it aborts (rescue catches the fail), then restore the label so a later
+# converge stays idempotent.
+- name: _verify | SECRET_KEY_BASE rotation gate aborts on a drifted store
   block:
     - name: _verify | Drift the stored secret label (simulate a vault rotation)
       containers.podman.podman_secret:
@@ -64,19 +71,17 @@
         force: true
       become: true
 
-    - name: _verify | Read back the drifted secret
-      containers.podman.podman_secret_info:
-      register: _verify_secrets
-      become: true
-
-    - name: _verify | Gate condition is true (the play would abort)
-      vars:
-        _existing: "{{ _verify_secrets.secrets | selectattr('Spec.Name', 'eq', 'openproject_secret_key') | list | first | default({}) }}"
-      assert:
-        that:
-          - _existing | length > 0
-          - (_existing.Spec.Labels | default({})).get('data_sha256', '') != (openproject_secret_key | hash('sha256'))
-        fail_msg: SECRET_KEY_BASE drift was not detected -- the rotation gate is broken
+    - name: _verify | Run the real gate against the drifted store
+      block:
+        - name: _verify | Import the real rotation gate
+          import_tasks: check_secret_key_rotation.yml
+        - name: _verify | Record that the gate did not fire
+          set_fact:
+            _verify_gate_fired: false
+      rescue:
+        - name: _verify | Record that the gate fired
+          set_fact:
+            _verify_gate_fired: true
   always:
     - name: _verify | Restore the correct stored secret label
       containers.podman.podman_secret:
@@ -86,3 +91,8 @@
           data_sha256: "{{ openproject_secret_key | hash('sha256') }}"
         force: true
       become: true
+
+- name: _verify | Assert the rotation gate aborted
+  assert:
+    that: _verify_gate_fired | default(false) | bool
+    fail_msg: SECRET_KEY_BASE drift was not detected -- the rotation gate is broken
