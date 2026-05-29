@@ -9,6 +9,19 @@
 # depend on the (virtual) hardware the qemu fixture presents, so any fixed
 # tunable would be brittle. Result=success is the portable contract.
 
+# Reboot first so the assertions below test post-reboot reality: the unit is
+# WantedBy=multi-user.target, so a clean boot must re-run --auto-tune and (via
+# RemainAfterExit) leave it active. Without the reboot we'd only prove the
+# converge-time start worked, not that the boot wiring fires. Skipped on
+# aarch64: EDK2 on the arm test image has a known reboot bug (refind crashes
+# loading an X64 image after a kernel-triggered reset), same carve-out as
+# roles/console; the converge-time start already exercised the unit there.
+- name: _verify | Reboot so assertions test post-reboot reality
+  when: ansible_architecture != 'aarch64'
+  reboot:
+    reboot_timeout: 600
+  become: true
+
 - name: _verify | Confirm powertop unit is active  # noqa: command-instead-of-module
   command: systemctl is-active powertop
   changed_when: false
