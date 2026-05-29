@@ -16,6 +16,10 @@
 #   suites:        apt suite(s) -- e.g. nodistro, or the release codename
 #   components:    apt component(s) -- e.g. main, stable
 #   architectures: optional; defaults to the host's arch (arm64/amd64)
+#   filename:      optional sources.list.d/<filename>.list name on the jammy
+#                  path; defaults to apt_repository's auto-sanitized name. Set
+#                  it only to keep a pre-existing filename (else the rename
+#                  strands the old .list).
 #   pin:           optional { package, version, priority } -> preferences.d/<name>
 #
 # Exposes apt_source_<name>_changed (true when the key/repo/prereq changed)
@@ -69,6 +73,7 @@
   when: ansible_distribution_major_version | int < 26
   apt_repository:
     repo: deb [arch={{ apt_source_args.architectures | default((ansible_architecture == "aarch64") | ternary("arm64", "amd64")) }} signed-by=/usr/share/keyrings/{{ apt_source_args.name }}.gpg] {{ apt_source_args.uris }} {{ apt_source_args.suites }} {{ apt_source_args.components }}
+    filename: "{{ apt_source_args.filename | default(omit) }}"
   become: true
   register: apt_source_repo_legacy
 

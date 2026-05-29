@@ -1,89 +1,24 @@
-- name: Install gpg + sqlite3 CLI
+- name: Install sqlite3 CLI
   apt:
     pkg:
-      - gpg
       - sqlite3
     cache_valid_time: 3600
   become: true
-  register: fluentbit_apt_gpg
   tags:
     - fluentbit
 
-# Repository setup forks on Ubuntu major version because apt-key was
-# removed from the default install in resolute (26.04). Same release
-# blacklist pattern as roles/netdata.
-- name: Add fluent-bit repository key
-  when:
-    - ansible_distribution_major_version | int < 26
-    - not (ansible_check_mode and fluentbit_apt_gpg.changed)
-  apt_key:
-    url: https://packages.fluentbit.io/fluentbit.key
-    keyring: /etc/apt/trusted.gpg.d/fluentbit.gpg
-  become: true
-  tags:
-    - fluentbit
-
-- name: Add fluent-bit repository
-  when: ansible_distribution_major_version | int < 26
-  apt_repository:
-    repo: deb [signed-by=/etc/apt/trusted.gpg.d/fluentbit.gpg] {{ mirror_apt_fluentbit }}/{{ ansible_distribution_release }} {{ ansible_distribution_release }} main
-    filename: fluent-bit
-  register: fluentbit_apt_repo_legacy
-  become: true
-  tags:
-    - fluentbit
-
-# Pre-warm /var/lib/apt/lists/ so the python3-debian install below
-# works in check mode. Packer ships an empty cache and the apt
-# module's update_cache is a no-op under --check. See
-# roles/apt/tasks/install.yml for the full rationale.
-- name: Pre-warm apt cache (real fetch even in --check)  # noqa: command-instead-of-module
-  when: ansible_distribution_major_version | int >= 26
-  command: apt-get update
-  changed_when: false
-  check_mode: false
-  become: true
-  tags:
-    - fluentbit
-
-- name: Install python3-debian (deb822_repository prereq)
-  when: ansible_distribution_major_version | int >= 26
-  apt:
-    pkg: python3-debian
-    cache_valid_time: 3600
-  become: true
-  register: fluentbit_apt_python3_debian
-  tags:
-    - fluentbit
-
-- name: Add fluent-bit repository (deb822)
-  when:
-    - ansible_distribution_major_version | int >= 26
-    - not (ansible_check_mode and fluentbit_apt_python3_debian.changed)
-  deb822_repository:
-    name: fluent-bit
-    types: deb
-    uris: "{{ mirror_apt_fluentbit }}/{{ ansible_distribution_release }}"
-    suites: "{{ ansible_distribution_release }}"
-    components: main
-    signed_by: https://packages.fluentbit.io/fluentbit.key
-  register: fluentbit_apt_repo_deb822
-  become: true
-  tags:
-    - fluentbit
-
-- name: Track repository changes
-  set_fact:
-    fluentbit_apt_repo:
-      changed: "{{ fluentbit_apt_repo_legacy is changed or fluentbit_apt_repo_deb822 is changed or fluentbit_apt_python3_debian is changed }}"
-  tags:
-    - fluentbit
-
-- name: Refresh apt cache after fluent-bit repo change
-  when: fluentbit_apt_repo.changed and not ansible_check_mode
-  apt:
-    update_cache: true
-  become: true
+- name: Configure Fluent Bit apt repository
+  import_role:
+    name: apt_source
+  vars:
+    apt_source_args:
+      name: fluentbit
+      key_id: C3C0A28534B9293EAF51FABD9F9DDC083888C1CD
+      key_url: https://packages.fluentbit.io/fluentbit.key
+      uris: "{{ mirror_apt_fluentbit }}/{{ ansible_distribution_release }}"
+      suites: "{{ ansible_distribution_release }}"
+      components: main
+      filename: fluent-bit
   tags:
     - fluentbit
 
@@ -91,7 +26,7 @@
 # config logs to stdout and would harmlessly start, but skipping that
 # saves a noisy systemd restart cycle.
 - name: Install fluent-bit
-  when: not (ansible_check_mode and fluentbit_apt_repo.changed)
+  when: not (ansible_check_mode and apt_source_fluentbit_changed)
   apt:
     pkg: fluent-bit
     policy_rc_d: 101
@@ -164,7 +99,7 @@
     systemd_unit_args:
       src: override.conf.j2
       for: fluent-bit.service
-      condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or fluentbit_apt_repo.changed)) }}"
+      condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or apt_source_fluentbit_changed)) }}"
   tags:
     - fluentbit
 
@@ -179,7 +114,7 @@
   vars:
     systemd_unit_args:
       src: fluent-bit
-      condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or fluentbit_apt_repo.changed)) }}"
+      condition: "{{ not (ansible_check_mode and (fluentbit_apt.changed or apt_source_fluentbit_changed)) }}"
       restart: "{{ fluentbit_apt.changed }}"
       reload: "{{ (fluentbit_conf.changed or fluentbit_lua.changed) and not fluentbit_apt.changed }}"
   tags:
