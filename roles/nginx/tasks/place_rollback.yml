@@ -1,0 +1,53 @@
+# Roll back an nginx file that was place-validated by `nginx -t` after the
+# validation failed. nginx -t reads files at their on-disk path, so a broken
+# render is already part of the active config by the time validation fails:
+# restore the previous version from the .backup the write made, or remove the
+# freshly-added file(s) when there was none, then fail loudly. Without this any
+# typo in a site vhost or a conf.d drop bricks the next `nginx -s reload`
+# host-wide (conf.d/ and sites-enabled/ are read globally). Shared by site.yml
+# and conf_d.yml so the rollback has exactly one implementation.
+#
+# Inputs (set by the caller's rescue via vars:):
+#   _nginx_rollback_result  registered result of the write task (template/copy).
+#                           Pass it as `{{ <register> | default({}) }}` so a
+#                           write that failed to render (no register at all)
+#                           degrades to {} here instead of raising undefined --
+#                           nothing was written, so there is simply nothing to
+#                           undo and only the final `fail` fires.
+#   _nginx_rollback_paths   files to remove when the write made no backup
+#                           (the dest, plus a site's sites-enabled symlink).
+#   _nginx_rollback_what    path naming the failed write, for the message.
+
+- name: place_rollback | Restore previous version from backup  # noqa: require-backup
+  when: "'backup_file' in _nginx_rollback_result"
+  copy:
+    remote_src: true
+    dest: "{{ _nginx_rollback_result.dest }}"
+    src: "{{ _nginx_rollback_result.backup_file }}"
+    owner: root
+    group: root
+    mode: "{{ _nginx_rollback_result.mode }}"
+  become: true
+
+- name: place_rollback | Delete backup file
+  when: "'backup_file' in _nginx_rollback_result"
+  file:
+    path: "{{ _nginx_rollback_result.backup_file }}"
+    state: absent
+  become: true
+
+- name: place_rollback | Remove newly added file(s)
+  when:
+    - _nginx_rollback_result.changed | default(false)
+    - "'backup_file' not in _nginx_rollback_result"
+  file:
+    path: "{{ item }}"
+    state: absent
+  loop: "{{ _nginx_rollback_paths }}"
+  become: true
+
+- name: place_rollback | Record failure
+  fail:
+    msg: >-
+      nginx -t failed after writing {{ _nginx_rollback_what }}; previous state
+      restored. Inspect the validate output above and the managed content.
