@@ -117,6 +117,12 @@
     key: podman_secret_rootless
   become: true
 
+- name: _verify | Scenario 5 — rootless podman environment
+  set_fact:
+    _verify_rootless_env:
+      XDG_RUNTIME_DIR: "/run/user/{{ getent_passwd['podman_secret_rootless'][1] }}"
+      DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ getent_passwd['podman_secret_rootless'][1] }}/bus"
+
 - name: _verify | Scenario 5 — create secret as the rootless user
   import_role:
     name: podman_secret
@@ -133,15 +139,45 @@
       - podman_secret_rootless_test_rotated
       - not podman_secret_rootless_test_existed_before
 
+- name: _verify | Scenario 5 — re-run rootless secret unchanged
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: podman_secret_rootless_test
+      data: rootless-secret
+      user: podman_secret_rootless
+
+- name: _verify | Scenario 5 — assert rootless re-run NOT rotated and pre-existing
+  assert:
+    that:
+      - not podman_secret_rootless_test_rotated
+      - podman_secret_rootless_test_existed_before
+
+- name: _verify | Scenario 5 — rotate rootless secret
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: podman_secret_rootless_test
+      data: rootless-secret-2
+      user: podman_secret_rootless
+
+- name: _verify | Scenario 5 — assert rootless rotated and pre-existing
+  assert:
+    that:
+      - podman_secret_rootless_test_rotated
+      - podman_secret_rootless_test_existed_before
+
 - name: _verify | Scenario 5 — secret present in the rootless user's store
   containers.podman.podman_secret_info:
     name: podman_secret_rootless_test
   register: _verify_rootless_info
   become: true
   become_user: podman_secret_rootless
-  environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ getent_passwd['podman_secret_rootless'][1] }}"
-    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ getent_passwd['podman_secret_rootless'][1] }}/bus"
+  environment: "{{ _verify_rootless_env }}"
 
 - name: _verify | Scenario 5 — secret absent from root's store
   containers.podman.podman_secret_info:
@@ -160,6 +196,4 @@
     state: absent
   become: true
   become_user: podman_secret_rootless
-  environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ getent_passwd['podman_secret_rootless'][1] }}"
-    DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/{{ getent_passwd['podman_secret_rootless'][1] }}/bus"
+  environment: "{{ _verify_rootless_env }}"
