@@ -75,7 +75,7 @@ server {
   # Authelia over wireguard when they need forward-auth.
   location /internal/authelia {
     internal;
-{% if nginx_site_args.upstream_authorization is defined %}
+{% if _nginx_site_upstream_auth %}
     # Machine clients (no Authelia session cookie, presenting their own
     # Authorization header) skip the Authelia round-trip: return 204
     # straight away, so auth_request admits the parent. The 204 carries no
@@ -222,7 +222,7 @@ server {
     proxy_set_header X-Forwarded-Name   $authelia_name;
     proxy_set_header X-Forwarded-Email  $authelia_email;
 {% endif %}
-{% if nginx_site_args.upstream_authorization is defined %}
+{% if _nginx_site_upstream_auth %}
     # Per-user upstream Authorization. The caller passes a dict
     # {authelia_user: header_value}; it is rendered into an http-scope `map`
     # keyed on $authelia_user, in conf.d/upstream_auth_<sub>.conf, dropped by

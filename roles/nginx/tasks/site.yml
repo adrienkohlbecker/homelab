@@ -100,7 +100,11 @@
 #                             clients (native token, no cookie). Implies
 #                             trust in any presented Authorization -- only
 #                             safe when the upstream itself validates the
-#                             credential.
+#                             credential. An empty dict ({}) is treated as
+#                             unset: the map, the injected header and the
+#                             Authorization-bypass shortcut are all skipped, so a
+#                             caller that computes an empty mapping does not
+#                             silently arm the bypass.
 #   server_conf               optional snippet inserted in the server block.
 #                             A `location` added here is NOT covered by the
 #                             site's forward-auth (auth_request only wraps
@@ -244,6 +248,17 @@
   tags:
     - nginx_site
 
+# upstream_authorization is "on" only for a non-empty dict. An empty {} (which a
+# caller can legitimately compute when it has no users/tokens configured) is
+# treated as unset so it doesn't render the map, the injected Authorization
+# header, or the cookieless Authorization-bypass shortcut. Recomputed every call
+# (always set, so no stale value leaks into the next nginx_site invocation).
+- name: site | Resolve whether upstream_authorization is enabled
+  set_fact:
+    _nginx_site_upstream_auth: "{{ ((nginx_site_args.upstream_authorization | default({})) | length > 0) | bool }}"
+  tags:
+    - nginx_site
+
 - name: site | Ensure directories exists
   when: (nginx_site_args.condition | default(true)) and (nginx_site_args.state | default('present')) == 'present'
   file:
@@ -290,7 +305,7 @@
     # vhost syntax error can't fully roll back -- the removal makes no backup --
     # but the operator sees the failed interactive `nginx -t` immediately.)
     - name: site | Configure per-user upstream Authorization map
-      when: nginx_site_args.upstream_authorization is defined
+      when: _nginx_site_upstream_auth
       template:
         src: upstream_auth_map.conf.j2
         dest: /etc/nginx/conf.d/upstream_auth_{{ nginx_site_args.subdomain }}.conf
@@ -302,7 +317,7 @@
       register: nginx_upstream_auth_map
 
     - name: site | Remove unused upstream Authorization map
-      when: nginx_site_args.upstream_authorization is not defined
+      when: not _nginx_site_upstream_auth
       file:
         path: /etc/nginx/conf.d/upstream_auth_{{ nginx_site_args.subdomain }}.conf
         state: absent
@@ -354,7 +369,7 @@
     # single bad `nginx -t` covering the written pair can't strand a half-written
     # config on disk.
     - name: site | Roll back the failed upstream Authorization map
-      when: nginx_site_args.upstream_authorization is defined
+      when: _nginx_site_upstream_auth
       import_tasks: place_rollback.yml
       vars:
         _nginx_rollback_result: "{{ nginx_upstream_auth_map | default({}) }}"
