@@ -12,9 +12,11 @@ This shim does the same for packer. When passt and qemu's `-netdev stream`
 transport are both present (the noble ci-image, qemu 8.2 + passt), it starts a
 passt sidecar and rewrites the `-netdev user,...` argument to point at passt's
 unix socket, preserving the SSH host-forward so packer's communicator still
-reaches the guest at 127.0.0.1:<port>. On a host without passt (a dev-Mac
-`mise run packer:build`, or any qemu < 7.2), it execs qemu unchanged, so the
-slirp path stays byte-for-byte identical.
+reaches the guest at 127.0.0.1:<port>. The sidecar also runs a DNS proxy
+(--dns/--dns-forward, see _PASST_DNS) because passt -- unlike libslirp's built-in
+forwarder -- won't relay the ci-container's loopback resolver to the guest. On a
+host without passt (a dev-Mac `mise run packer:build`, or any qemu < 7.2), it
+execs qemu unchanged, so the slirp path stays byte-for-byte identical.
 
 Wired in via `qemu_binary` in packer/qemu.pkr.hcl. The arch's real emulator is
 resolved from PATH here (arch is 1:1 with the host, same assumption the HCL
@@ -47,8 +49,20 @@ import time
 
 # Resolved once in main() before any logging. Stays None when no build dir can
 # be derived (e.g. packer's `-version` probe) -- stderr then carries the log
-# alone, which is all PACKER_LOG would have surfaced anyway.
+# alone, which is all PACKER_LOG would have surfaced anyway. _LOG_PATH is the
+# file behind _LOG_FH, so _start_passt can drop passt's own debug log beside it.
 _LOG_FH = None
+_LOG_PATH = None
+
+# A reserved TEST-NET-1 address (RFC 5737, never routed) used purely as the
+# guest's nameserver. The guest is told (DHCP, -D) to send DNS here; passt
+# intercepts traffic to --dns-forward and proxies it to the *host's* resolvers
+# (the ci-container's /etc/resolv.conf -> podman's 127.0.0.11 aardvark, which
+# resolves both nexus.lab.fahm.fr and upstream archive.ubuntu.com). Without
+# this, passt hands the guest the container's loopback 127.0.0.11 verbatim --
+# unreachable from inside the guest -- so every guest lookup fails. libslirp's
+# built-in forwarder (10.0.2.3) masked this; passt forwards nothing by default.
+_PASST_DNS = "192.0.2.1"
 
 
 def _log(msg: str) -> None:
@@ -66,7 +80,7 @@ def _open_log(args: list[str]) -> None:
     """Point _LOG_FH at a per-build-dir qemu_net_wrapper.log. The dir is the
     one packer feeds qemu its primary disk from (`-drive file=<dir>/packer-
     ubuntu,...`); QEMU_NET_WRAPPER_LOG overrides it or disables (off/0)."""
-    global _LOG_FH
+    global _LOG_FH, _LOG_PATH
     override = os.environ.get("QEMU_NET_WRAPPER_LOG", "").strip()
     if override.lower() in ("off", "0", "none"):
         return
@@ -78,6 +92,7 @@ def _open_log(args: list[str]) -> None:
         path = os.path.join(build_dir, "qemu_net_wrapper.log")
     try:
         _LOG_FH = open(path, "a", encoding="utf-8")
+        _LOG_PATH = path
     except OSError as exc:
         # A missing/unwritable sink must never sink the build -- stderr still
         # carries the log under PACKER_LOG.
@@ -179,17 +194,32 @@ def _start_passt(sock: str, fwds: list[tuple[str, str, str]]) -> subprocess.Pope
     """Launch the passt sidecar and block until its socket is listening."""
     cmd = [
         "passt",
-        # Foreground so it stays a plain child (no daemon fork); logs to stderr
-        # since the container has no syslog socket.
+        # Foreground so it stays a plain child (no daemon fork).
         "--foreground",
-        "--quiet",
         # Quit once qemu (the only client) disconnects so a leaked sidecar can't
         # outlive its build VM. packer's process-group teardown is the backstop.
         "--one-off",
         "--socket",
         sock,
+        # Give the guest a resolver it can actually reach: advertise _PASST_DNS
+        # via DHCP (--dns) and have passt proxy queries sent there to the host's
+        # resolvers (--dns-forward). See _PASST_DNS for why the container's own
+        # loopback resolver can't be handed through.
+        "--dns",
+        _PASST_DNS,
+        "--dns-forward",
+        _PASST_DNS,
         *_passt_port_args(fwds),
     ]
+    # With a log sink, run passt verbose and tee its own log beside ours (it
+    # survives packer's failed-build output-dir delete; mise-tasks/packer/
+    # build.sh dumps both). Without one, stay --quiet -> stderr, which packer
+    # discards unless PACKER_LOG is set.
+    if _LOG_PATH is not None:
+        passt_log = f"{_LOG_PATH}.passt-{os.getpid()}"
+        cmd += ["--debug", "--log-file", passt_log]
+    else:
+        cmd.append("--quiet")
     _log(f"starting passt sidecar: {' '.join(cmd)}")
     proc = subprocess.Popen(cmd, stdout=sys.stderr.fileno(), stderr=sys.stderr.fileno())
     deadline = time.monotonic() + 10
