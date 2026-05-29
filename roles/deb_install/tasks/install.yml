@@ -7,9 +7,12 @@
 #   sha256    required; expected sha256 of the .deb
 #   timeout   optional; get_url timeout (seconds); omitted -> module default
 #
-# Exposes `<name>_deb_changed` (non-identifier chars -> '_') so callers can
-# gate a service restart on a fresh install. The dict form prevents inter-call
-# leakage at play-vars scope: each import_role pass replaces it wholesale.
+# Exposes `<name>_deb_changed` (non-identifier chars -> '_') so callers can gate
+# a service restart on a fresh install. The prefix is the *deb package name*,
+# not the calling role, so a hyphenated package folds the dash to '_' -- e.g.
+# `ipp-linux` -> `ipp_linux_deb_changed` (NOT `eaton_ipp_deb_changed`). The dict
+# form prevents inter-call leakage at play-vars scope: each import_role pass
+# replaces it wholesale.
 #
 # Task `name:` strings stay static -- ansible renders name: at parse time, but
 # deb_install_args is only bound at runtime, so an interpolated name: would
