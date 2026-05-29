@@ -114,7 +114,7 @@
   tags:
     - postfix
 
-- name: Copy the mail config
+- name: Install the mailutils sender-domain config
   template:
     src: mailutils.conf.j2
     dest: /etc/mailutils.conf
