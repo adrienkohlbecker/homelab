@@ -2,48 +2,6 @@
   import_role:
     name: hostname
 
-# qemu user-mode (slirp) networking runs a tiny built-in DNS proxy that
-# forwards to the host's resolver. When the host is a dev Mac resolving via
-# Tailscale MagicDNS, that proxy answers small lab-internal responses but
-# times out forwarding larger public-name responses — so example.com & co.
-# fail to resolve inside the VM even though egress works (the firewall
-# _verify egress probe is the visible casualty). Lab-internal names already
-# resolve from /etc/hosts (etc_hosts_entries → hosts.j2, seeded just above),
-# so the VM only needs a real resolver for *public* names: point
-# systemd-resolved at the bootstrap anycast resolver, which the VM reaches
-# directly through NAT rather than via slirp's proxy. /etc/hosts (nsswitch
-# `files`) is still consulted first, so internal names are unaffected.
-# Harmless on the lab CI host (slirp resolves public there); this fixture
-# never runs against prod.
-- name: mirrors | Ensure systemd-resolved drop-in dir exists
-  ansible.builtin.file:
-    path: /etc/systemd/resolved.conf.d
-    state: directory
-    mode: "0755"
-    owner: root
-    group: root
-  become: true
-
-- name: mirrors | Point the VM at a directly-reachable public resolver
-  ansible.builtin.copy:
-    dest: /etc/systemd/resolved.conf.d/10-test-public-dns.conf
-    mode: "0644"
-    owner: root
-    group: root
-    content: |
-      [Resolve]
-      DNS={{ bootstrap_dns_resolver }}
-      Domains=~.
-  register: _test_resolved_dns  # noqa: var-naming[no-role-prefix]
-  become: true
-
-- name: mirrors | Restart systemd-resolved to pick up the resolver
-  ansible.builtin.systemd:
-    name: systemd-resolved
-    state: restarted
-  when: _test_resolved_dns.changed
-  become: true
-
 - name: mirrors | Configure apt retries and sources
   import_role:
     name: apt
