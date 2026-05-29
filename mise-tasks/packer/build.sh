@@ -29,8 +29,8 @@ mkdir -p "${base}"
 tmp=$(mktemp -d "${QEMU_DIR}/.build-XXXXXX")
 
 # Surface the qemu_net_wrapper shim's NIC-backend decision log (passt vs slirp,
-# the passt command + DNS proxy, the netdev rewrite) plus passt's own --debug
-# log. packer routes the shim's stderr through Go's logger, which it discards
+# the passt command + DNS proxy, the netdev rewrite) plus passt's own startup
+# banner. packer routes the shim's stderr through Go's logger, which it discards
 # without PACKER_LOG, so the shim writes to QEMU_NET_WRAPPER_LOG instead. Point
 # it at a sibling file *outside* any per-source output dir: packer deletes a
 # failed source's output_directory before this EXIT trap runs, which would take
@@ -47,7 +47,7 @@ dump_net_logs() {
   fi
   for f in "${netlog}".passt-*; do
     [ -f "${f}" ] || continue
-    echo "=== ${f##*/} (passt sidecar --debug log) ==="
+    echo "=== ${f##*/} (passt sidecar startup banner) ==="
     cat "${f}"
   done
   rm -f "${netlog}" "${netlog}".passt-*
