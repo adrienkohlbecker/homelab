@@ -1,4 +1,11 @@
-- name: _test | Install dependencies
+# nut-notify sources /usr/local/lib/functions.sh from the bash role, which
+# site.yml runs before nut_monitor. testrole.py runs only this role, so the
+# _verify path that executes nut-notify needs the library deployed here.
+- name: _setup | Install bash functions.sh
+  import_role:
+    name: bash
+
+- name: _setup | Install dependencies
   apt:
     pkg:
       - nut-server
@@ -6,17 +13,28 @@
     cache_valid_time: 3600
   become: true
 
-- name: _test | Configure nut-server
+- name: _setup | Configure a static dummy-ups
   shell: |
     set -euo pipefail
 
-    echo "MODE=standalone" > /etc/nut/nut.conf
+    echo "MODE=standalone" >/etc/nut/nut.conf
 
-    cat <<EOF >>/etc/nut/ups.conf
+    cat <<EOF >/etc/nut/ups.conf
     [eaton]
         driver = dummy-ups
-        port = evolution500.seq
-        desc = "dummy-ups in dummy-loop mode"
+        port = eaton.dev
+        desc = "static dummy-ups for tests"
+    EOF
+
+    # A .dev file (no TIMER) is served statically -- a .seq cycles through
+    # frames and reports ups.status WAIT until the first poll lands, which
+    # makes the published values non-deterministic at query time.
+    cat <<EOF >/etc/nut/eaton.dev
+    ups.status: OB DISCHRG
+    battery.charge: 42
+    battery.runtime: 900
+    ups.mfr: dummy
+    ups.model: evolution500
     EOF
 
     touch /tmp/done
