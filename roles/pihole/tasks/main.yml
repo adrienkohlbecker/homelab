@@ -199,23 +199,27 @@
     - pihole
 
 
-# The bundled go.d/pihole collector in netdata 1.46.x predates pi-hole v6
-# and probes /admin/api.php once per minute; v6 retired that path and FTL
-# logs a "Bad request" warning for every probe. Disable until the netdata
-# pin is bumped past 2.x (which ships the v6-aware module). See
-# notes/netdata-2x-upgrade.md for the migration plan.
-#
-# - name: Configure pihole metrics
-#   import_role:
-#     name: netdata
-#     tasks_from: template
-#   vars:
-#     netdata_args:
-#       src: pihole.conf.j2
-#       dest: go.d/pihole.conf
-#       mode: "0600"
-#   tags:
-#     - pihole
+# netdata go.d/pihole collector. Needs the v6-aware module from netdata
+# 2.x (the `netdata` branch lifts the 1.46.x apt pin and drops the
+# `pihole: no` go.d.conf override); on 1.46 that override keeps the module
+# inert, so this conf is written but dormant until 2.x is in place.
+# Authenticates to the loopback API with FTLCONF_webserver_api_password
+# (set in pihole.service.j2). See notes/netdata-2x-upgrade.md.
+# Gated on x86_64 because the pinned netdata build is x86_64-only -- same
+# condition as the netdata install in _setup.yml; all prod hosts are
+# x86_64, only the arm64 test box lacks netdata.
+- name: Configure pihole metrics
+  when: ansible_architecture == 'x86_64'
+  import_role:
+    name: netdata
+    tasks_from: template
+  vars:
+    netdata_args:
+      src: pihole.conf.j2
+      dest: go.d/pihole.conf
+      mode: "0600"
+  tags:
+    - pihole
 
 - name: Configure nginx
   import_role:

@@ -47,6 +47,11 @@ ExecStart=/usr/bin/podman run \
     --rm \
     --name pihole \
     --init \
+    {# No --security-opt=no-new-privileges here: the entrypoint setcap's     #}
+    {# CAP_NET_BIND_SERVICE (+ CAP_CHOWN) onto pihole-FTL at runtime and then #}
+    {# drops to the pihole user. no-new-privileges makes execve discard those #}
+    {# file capabilities, so FTL can't bind :53 (dnsmasq "Permission denied") #}
+    {# and the container never goes healthy.                                  #}
     --log-driver journald \
     --log-opt tag="pihole" \
     --volume /mnt/services/pihole/etc:/etc/pihole \
@@ -62,6 +67,15 @@ ExecStart=/usr/bin/podman run \
     {# ->clients) for signed zones. Local/split-horizon names and the     #}
     {# conditional-forward (revServers) zone are unsigned and unaffected. #}
     --env FTLCONF_dns_dnssec=true \
+    {# Per-client query rate-limit. A single keepalived VIP fronts the      #}
+    {# whole LAN, so each device is normally a distinct client and the      #}
+    {# 1000/60s default would be ample -- but any NAT'd/forwarding source   #}
+    {# (a host relaying for others) collapses many devices onto one client  #}
+    {# IP and can trip REFUSED storms on household-critical DNS. Raise the  #}
+    {# ceiling rather than disable, keeping a backstop against a runaway    #}
+    {# client.                                                              #}
+    --env FTLCONF_dns_rateLimit_count=10000 \
+    --env FTLCONF_dns_rateLimit_interval=60 \
     {# Split-horizon LAN shortcuts injected straight into FTL's dnsmasq    #}
     {# config rather than via a mounted /etc/dnsmasq.d file. address=/n/ip #}
     {# matches the name + every subdomain; auth.fahm.fr lives at the apex  #}
@@ -69,12 +83,13 @@ ExecStart=/usr/bin/podman run \
     {# CNAMEs it to lab.fahm.fr, and LAN clients shortcut to lab's         #}
     {# internal IP to avoid a WAN / wireguard hairpin.                     #}
     --env FTLCONF_misc_dnsmasq_lines="address=/pug.fahm.fr/{{ external_ips.pug }};address=/lab.fahm.fr/{{ external_ips.lab }};address=/box.fahm.fr/{{ external_ips.box }};address=/auth.fahm.fr/{{ external_ips.lab }}" \
-    {# Admin UI sits behind authelia forward-auth on nginx (only ingress, #}
-    {# since the container binds 127.0.0.1:8943) -- pihole's own password #}
-    {# is redundant. `webserver.api.password=""` is the supported "no     #}
-    {# auth" toggle (a pseudo-item that clears `pwhash` on disk); setting #}
-    {# `_pwhash` directly to "" doesn't take effect.                      #}
-    --env FTLCONF_webserver_api_password="" \
+    {# FTL API password. The netdata go.d/pihole collector authenticates  #}
+    {# to the loopback API with it (roles/pihole/templates/pihole.conf.j2).#}
+    {# nginx + authelia stay the LAN ingress gate (the container binds     #}
+    {# 127.0.0.1:8943 only), so a browser hitting the admin subdomain      #}
+    {# authenticates twice: authelia first, then pi-hole's own login.      #}
+    {# Setting it via env makes it read-only in the UI/CLI, which is fine. #}
+    --env FTLCONF_webserver_api_password="{{ pihole_password }}" \
     --env FTLCONF_database_maxDBdays=31 \
     --env FTLCONF_files_database=/var/lib/pihole/pihole-FTL.db \
     --env FTLCONF_files_gravity=/var/lib/pihole/gravity.db \
