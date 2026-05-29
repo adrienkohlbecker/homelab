@@ -2,6 +2,9 @@
 # Callers pass a single dict `deb_install_args`:
 #   name      required; dpkg package name (minio, mcli, ipp-linux, ...) --
 #             also the staged-file basename and the prefix of the result fact.
+#             Must be unique within a play: it is both the /var/cache staging
+#             path and the set_fact key, so two calls sharing a name collide on
+#             the staged .deb and clobber each other's changed-fact.
 #             A dpkg ":arch" qualifier (libfoo:amd64) is rejected by the assert
 #             below; arch-qualified names are unsupported.
 #   version   required; the exact dpkg ${Version} to match, *including* epoch
@@ -30,6 +33,7 @@
 # context.
 - name: Assert deb_install args
   assert:
+    quiet: true
     that:
       - deb_install_args.name | default('') | regex_findall('^[A-Za-z0-9][A-Za-z0-9.+_-]*$') | length > 0
       - deb_install_args.version | default('') | length > 0
@@ -38,6 +42,18 @@
     fail_msg: >-
       deb_install_args must define name (slash-free dpkg package name),
       version, url and a 64-hex sha256; got {{ deb_install_args }}
+
+# Resolve the caller's dict into per-call locals once, mirroring the other
+# *_args helper roles (roles/service_user, roles/podman_secret). Hoisting keeps
+# the staged-file path (referenced three times below) in one place. The optional
+# timeout stays inline on get_url below: default(omit) routed through set_fact
+# drops the key entirely, so the fact would be undefined rather than omitted.
+- name: Resolve deb_install caller defaults
+  set_fact:
+    _deb_install_name: "{{ deb_install_args.name }}"
+    _deb_install_version: "{{ deb_install_args.version }}"
+    _deb_install_url: "{{ deb_install_args.url }}"
+    _deb_install_sha256: "{{ deb_install_args.sha256 }}"
 
 # Read dpkg's recorded status + version directly. `apt: deb=` is idempotent on
 # *version* alone -- it would leave a removed-but-config-files package (which
@@ -50,7 +66,7 @@
       - dpkg-query
       - -W
       - -f=${db:Status-Status} ${Version}
-      - "{{ deb_install_args.name }}"
+      - "{{ _deb_install_name }}"
   register: deb_install_query
   changed_when: false
   # rc 1 is dpkg-query's "no packages found" (never installed / purged) and the
@@ -63,7 +79,7 @@
   # dpkg-query emits "<status> <version>" (e.g. "installed 1.2.3"); anything but
   # an exact "installed <pinned version>" reinstalls -- not-installed yields "",
   # a removed-but-config-files package yields "config-files <version>".
-  when: deb_install_query.stdout != ("installed " ~ deb_install_args.version)
+  when: deb_install_query.stdout != ("installed " ~ _deb_install_version)
   become: true
   block:
 
@@ -73,15 +89,15 @@
     - name: Download deb
       check_mode: false
       get_url:
-        url: "{{ deb_install_args.url }}"
+        url: "{{ _deb_install_url }}"
         # /var/cache (root:root 0755), not world-writable /tmp: a local user
         # can't pre-plant or symlink the staging path. 0600 keeps the transient
         # unreadable to other local users while it waits for apt.
-        dest: "/var/cache/{{ deb_install_args.name }}.deb"
+        dest: "/var/cache/{{ _deb_install_name }}.deb"
         mode: '0600'
         owner: root
         group: root
-        checksum: "sha256:{{ deb_install_args.sha256 }}"
+        checksum: "sha256:{{ _deb_install_sha256 }}"
         timeout: "{{ deb_install_args.timeout | default(omit) }}"
       register: deb_install_download
       retries: 3
@@ -90,7 +106,7 @@
 
     - name: Install the deb package
       apt:
-        deb: "/var/cache/{{ deb_install_args.name }}.deb"
+        deb: "/var/cache/{{ _deb_install_name }}.deb"
         # apt: deb= aborts on an older-than-installed .deb ("a later version is
         # already installed") unless downgrades are allowed. A pin can move
         # backwards (deliberate rollback), and the status-word gate above
@@ -106,7 +122,7 @@
     - name: Delete deb file
       check_mode: false
       file:
-        path: "/var/cache/{{ deb_install_args.name }}.deb"
+        path: "/var/cache/{{ _deb_install_name }}.deb"
         state: absent
 
 # `deb_install_apt.changed` is the truthful "an install happened" signal --
@@ -115,4 +131,4 @@
 # renders it as a string).
 - name: Record whether an install happened
   set_fact:
-    "{{ deb_install_args.name | regex_replace('[^A-Za-z0-9_]', '_') }}_deb_changed": "{{ deb_install_apt.changed | default(false) }}"
+    "{{ _deb_install_name | regex_replace('[^A-Za-z0-9_]', '_') }}_deb_changed": "{{ deb_install_apt.changed | default(false) }}"
