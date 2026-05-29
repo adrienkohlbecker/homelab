@@ -74,9 +74,22 @@
   set_fact:
     apt_source_filename: "{{ apt_source_args.filename | default(apt_source_args.name) }}"
 
+# Ubuntu major version selects the repo mechanism: < 26 (jammy) takes
+# apt_key + apt_repository, >= 26 (resolute) takes deb822_repository. Resolve
+# it once so every branch gates on a named intent, not a repeated comparison.
+- name: Resolve apt_source repo mechanism for {{ apt_source_args.name }}
+  set_fact:
+    apt_source_is_deb822: "{{ ansible_distribution_major_version | int >= 26 }}"
+
+# Repo-line architecture: a caller override wins, else map the host arch to
+# apt's naming. One fact so the jammy deb-line and the deb822 task agree.
+- name: Resolve apt_source architecture for {{ apt_source_args.name }}
+  set_fact:
+    apt_source_arch: "{{ 'arm64' if ansible_architecture == 'aarch64' else 'amd64' }}"
+
 - name: Install gpg for {{ apt_source_args.name }}
   when:
-    - ansible_distribution_major_version | int < 26
+    - not apt_source_is_deb822
     - apt_source_present
   apt:
     pkg: gpg
@@ -86,7 +99,7 @@
 
 - name: Add repository key for {{ apt_source_args.name }}
   when:
-    - ansible_distribution_major_version | int < 26
+    - not apt_source_is_deb822
     - apt_source_present
     - not (ansible_check_mode and apt_source_gpg.changed)
   apt_key:
@@ -100,16 +113,16 @@
 # not exist -- it would re-grant this key trust for every apt source.
 # < 26 only: the resolute deb822 path never writes a global-trust copy.
 - name: Remove global-trust keyring for {{ apt_source_args.name }}
-  when: ansible_distribution_major_version | int < 26
+  when: not apt_source_is_deb822
   file:
     path: /etc/apt/trusted.gpg.d/{{ apt_source_args.name }}.gpg
     state: absent
   become: true
 
 - name: Add repository for {{ apt_source_args.name }}
-  when: ansible_distribution_major_version | int < 26
+  when: not apt_source_is_deb822
   apt_repository:
-    repo: deb [arch={{ apt_source_args.architectures | default((ansible_architecture == "aarch64") | ternary("arm64", "amd64")) }} signed-by=/usr/share/keyrings/{{ apt_source_args.name }}.gpg] {{ apt_source_args.uris }} {{ apt_source_args.suites }} {{ apt_source_args.components | default('') }}
+    repo: deb [arch={{ apt_source_args.architectures | default(apt_source_arch) }} signed-by=/usr/share/keyrings/{{ apt_source_args.name }}.gpg] {{ apt_source_args.uris }} {{ apt_source_args.suites }} {{ apt_source_args.components | default('') }}
     filename: "{{ apt_source_filename }}"
     state: "{{ apt_source_args.state | default('present') }}"
   become: true
@@ -125,7 +138,7 @@
 # reaches apt-get update.
 - name: Find stale .list files for {{ apt_source_args.name }}
   when:
-    - ansible_distribution_major_version | int < 26
+    - not apt_source_is_deb822
     - apt_source_present
   find:
     paths: /etc/apt/sources.list.d
@@ -136,7 +149,7 @@
 
 - name: Remove stale .list files for {{ apt_source_args.name }}
   when:
-    - ansible_distribution_major_version | int < 26
+    - not apt_source_is_deb822
     - apt_source_present
     - (item.path | basename) != (apt_source_filename ~ '.list')
   file:
@@ -153,7 +166,7 @@
 # rationale.
 - name: Pre-warm apt cache (real fetch even in --check) for {{ apt_source_args.name }}  # noqa: command-instead-of-module
   when:
-    - ansible_distribution_major_version | int >= 26
+    - apt_source_is_deb822
     - apt_source_present
   command: apt-get update
   changed_when: false
@@ -166,7 +179,7 @@
 # prereq install masks the repo task.
 - name: Install repository prereqs for {{ apt_source_args.name }}
   when:
-    - ansible_distribution_major_version | int >= 26
+    - apt_source_is_deb822
     - apt_source_present
   apt:
     pkg:
@@ -181,7 +194,7 @@
 # so it fetches once and stays idempotent (matching jammy's apt_key import).
 - name: Fetch repository key for {{ apt_source_args.name }}
   when:
-    - ansible_distribution_major_version | int >= 26
+    - apt_source_is_deb822
     - apt_source_present
   get_url:
     url: "{{ apt_source_args.key_url }}"
@@ -199,7 +212,7 @@
 # skip under --check, and the dry-run preview need not re-verify trust.
 - name: Read repository key fingerprint for {{ apt_source_args.name }}
   when:
-    - ansible_distribution_major_version | int >= 26
+    - apt_source_is_deb822
     - apt_source_present
     - not ansible_check_mode
   command: gpg --show-keys --with-colons /usr/share/keyrings/{{ apt_source_args.name }}.gpg
@@ -209,7 +222,7 @@
 
 - name: Assert the fetched key matches key_id for {{ apt_source_args.name }}
   when:
-    - ansible_distribution_major_version | int >= 26
+    - apt_source_is_deb822
     - apt_source_present
     - not ansible_check_mode
   assert:
@@ -221,7 +234,7 @@
 
 - name: Add repository (deb822) for {{ apt_source_args.name }}
   when:
-    - ansible_distribution_major_version | int >= 26
+    - apt_source_is_deb822
     - not (ansible_check_mode and apt_source_resolute_prereqs.changed)
   deb822_repository:
     name: "{{ apt_source_args.name }}"
@@ -229,7 +242,7 @@
     uris: "{{ apt_source_args.uris }}"
     suites: "{{ apt_source_args.suites }}"
     components: "{{ apt_source_args.components | default(omit) }}"
-    architectures: "{{ apt_source_args.architectures | default((ansible_architecture == 'aarch64') | ternary('arm64', 'amd64')) }}"
+    architectures: "{{ apt_source_args.architectures | default(apt_source_arch) }}"
     signed_by: /usr/share/keyrings/{{ apt_source_args.name }}.gpg
     state: "{{ apt_source_args.state | default('present') }}"
   become: true
