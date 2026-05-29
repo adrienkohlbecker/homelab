@@ -92,9 +92,13 @@ locals {
 }
 
 # The CF-side half of the DNSSEC chain is asserted as a precondition on
-# each gandi_dnssec_key.X in gandi.tf -- if CF DNSSEC gets flipped to
-# inactive via UI between applies, the precondition halts `tofu plan`
-# instead of warning (as a `check` block would). A precondition is the
+# each gandi_dnssec_key.X in gandi.tf -- if CF DNSSEC gets disabled via
+# the UI between applies, the precondition halts `tofu plan` instead of
+# warning (as a `check` block would). It accepts status in
+# {active, pending} and rejects only the disabled states: CF parks a
+# healthy zone at "pending" forever when it can't auto-confirm the DS
+# at a third-party registrar (see the long note in gandi.tf), so an
+# `== "active"` test would false-halt every plan. A precondition is the
 # right primitive here because it can read another resource's post-refresh
 # attribute (cloudflare_zone_dnssec.X.status), unlike `self` in a
 # precondition which only sees configured values.

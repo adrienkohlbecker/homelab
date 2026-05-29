@@ -65,12 +65,22 @@ resource "gandi_nameservers" "adrienkohlbecker_com" {
 
 # DNSSEC DS registration. gandi_dnssec_key uploads the KSK material
 # to Gandi-as-registrar; Gandi computes the DS and publishes it via
-# its parent NS. The chain is only complete once both halves are
-# active: CF signs records (cloudflare_zone_dnssec.X.status="active"
-# in zones.tf), and Gandi advertises a DS pointing at the matching
-# KSK (here). Breaking either half alone leaves the zone bogus to
-# validating resolvers -- see the retirement procedure in zones.tf,
-# above the cloudflare_zone_dnssec resources.
+# its parent NS. The chain is complete once CF signs the zone and
+# Gandi advertises a DS pointing at the matching KSK (here). Breaking
+# either half leaves the zone bogus to validating resolvers -- see the
+# retirement procedure in zones.tf, above the cloudflare_zone_dnssec
+# resources.
+#
+# CF reports status="pending" (not "active") whenever it can't
+# auto-confirm the DS at the parent -- the steady state for a
+# third-party registrar like Gandi, since CF never sees a DS it didn't
+# place itself. So status sits at "pending" indefinitely even though
+# the zone validates fine (dig +dnssec <zone> @1.1.1.1 shows the `ad`
+# flag). The precondition therefore guards against the states that
+# mean signing is actually OFF at CF (disabled / pending-disabled,
+# e.g. flipped via the UI) -- it must NOT reject "pending", or every
+# plan halts on a healthy chain. zones.tf pins ignore_changes on
+# status for the same reason: the active<->pending flap is cosmetic.
 #
 # CF returns algorithm as a stringified number ("13" for
 # ECDSAP256SHA256); gandi wants a Number, hence tonumber().
@@ -82,8 +92,8 @@ resource "gandi_dnssec_key" "fahm_fr" {
 
   lifecycle {
     precondition {
-      condition     = cloudflare_zone_dnssec.fahm_fr.status == "active"
-      error_message = "DNSSEC chain broken for fahm.fr: CF status=${cloudflare_zone_dnssec.fahm_fr.status}. Zone is bogus to validating resolvers."
+      condition     = contains(["active", "pending"], cloudflare_zone_dnssec.fahm_fr.status)
+      error_message = "DNSSEC disabled at CF for fahm.fr (status=${cloudflare_zone_dnssec.fahm_fr.status}). Re-enable CF signing before touching the Gandi DS, or the zone goes bogus to validating resolvers."
     }
   }
 }
@@ -96,8 +106,8 @@ resource "gandi_dnssec_key" "mhaf_fr" {
 
   lifecycle {
     precondition {
-      condition     = cloudflare_zone_dnssec.mhaf_fr.status == "active"
-      error_message = "DNSSEC chain broken for mhaf.fr: CF status=${cloudflare_zone_dnssec.mhaf_fr.status}. Zone is bogus to validating resolvers."
+      condition     = contains(["active", "pending"], cloudflare_zone_dnssec.mhaf_fr.status)
+      error_message = "DNSSEC disabled at CF for mhaf.fr (status=${cloudflare_zone_dnssec.mhaf_fr.status}). Re-enable CF signing before touching the Gandi DS, or the zone goes bogus to validating resolvers."
     }
   }
 }
@@ -110,8 +120,8 @@ resource "gandi_dnssec_key" "adrienkohlbecker_com" {
 
   lifecycle {
     precondition {
-      condition     = cloudflare_zone_dnssec.adrienkohlbecker_com.status == "active"
-      error_message = "DNSSEC chain broken for adrienkohlbecker.com: CF status=${cloudflare_zone_dnssec.adrienkohlbecker_com.status}. Zone is bogus to validating resolvers."
+      condition     = contains(["active", "pending"], cloudflare_zone_dnssec.adrienkohlbecker_com.status)
+      error_message = "DNSSEC disabled at CF for adrienkohlbecker.com (status=${cloudflare_zone_dnssec.adrienkohlbecker_com.status}). Re-enable CF signing before touching the Gandi DS, or the zone goes bogus to validating resolvers."
     }
   }
 }
