@@ -234,6 +234,83 @@
     fail_msg: >-
       expected /var/cache/deb-install-test.deb removed after install, still present
 
+# Check mode on an already-current package must leave the gate closed: the
+# install block's when: is false, so the apt task registers a skipped result
+# (changed=false) and the fact stays false. Callers gate check-mode-sensitive
+# follow-on tasks on exactly this (eaton_ipp's enable uses
+# `not (ansible_check_mode and ipp_linux_deb_changed)`). deb-install-test is
+# installed at 2.0-1 here.
+- name: _verify | Re-run the current pin under check mode
+  import_role:
+    name: deb_install
+    tasks_from: install
+  check_mode: true
+  vars:
+    deb_install_args:
+      name: deb-install-test
+      version: "2.0-1"
+      url: "file:///tmp/deb_install_test/test_2.0-1.deb"
+      sha256: "{{ _verify_v2_sha.stdout.split() | first }}"
+
+- name: _verify | Stat the staged file after the current-pin check-mode run
+  stat:
+    path: /var/cache/deb-install-test.deb
+  register: _verify_staged_checkmode_current
+  become: true
+
+- name: _verify | Check mode kept the gate closed and staged nothing
+  assert:
+    that:
+      - not (deb_install_test_deb_changed | bool)
+      - not _verify_staged_checkmode_current.stat.exists
+    fail_msg: >-
+      check mode on a current package must close the gate and stage nothing;
+      fact={{ deb_install_test_deb_changed }}
+      staged_exists={{ _verify_staged_checkmode_current.stat.exists }}
+
+# Check mode on a not-installed package must mutate nothing: the block runs but
+# apt only dry-runs (no check_mode: false override), so nothing installs -- while
+# the check_mode: false download + always: cleanup still leave /var/cache empty.
+- name: _verify | Run a fresh pin under check mode
+  import_role:
+    name: deb_install
+    tasks_from: install
+  check_mode: true
+  vars:
+    deb_install_args:
+      name: deb-install-check
+      version: "2.0-1"
+      url: "file:///tmp/deb_install_test/test_2.0-1.deb"
+      sha256: "{{ _verify_v2_sha.stdout.split() | first }}"
+
+- name: _verify | Query the fresh package after the check-mode run
+  command:
+    argv:
+      - dpkg-query
+      - -W
+      - -f=${db:Status-Status} ${Version}
+      - deb-install-check
+  register: _verify_checkmode_query
+  changed_when: false
+  failed_when: _verify_checkmode_query.rc not in [0, 1]
+  become: true
+
+- name: _verify | Stat the fresh staged file after the check-mode run
+  stat:
+    path: /var/cache/deb-install-check.deb
+  register: _verify_staged_checkmode_fresh
+  become: true
+
+- name: _verify | Check mode installed nothing and staged nothing
+  assert:
+    that:
+      - _verify_checkmode_query.stdout == ""
+      - not _verify_staged_checkmode_fresh.stat.exists
+    fail_msg: >-
+      check mode must not install or leave a staged .deb; dpkg={{
+      _verify_checkmode_query.stdout }}
+      staged_exists={{ _verify_staged_checkmode_fresh.stat.exists }}
+
 # The assert gate must reject malformed args rather than proceed. A non-hex
 # sha256 trips the assert; rescue catches the failure so the play continues.
 - name: _verify | Call the helper with a malformed sha256
