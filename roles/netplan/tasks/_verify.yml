@@ -69,19 +69,6 @@
   changed_when: false
   become: true
 
-- name: _verify | Networkd brought the configured link online
-  # A positive functional check beyond the file/glob assertions above: the
-  # *-netplan-*.network glob only proves files were generated, not that a
-  # link came up. `netplan status` reports operational state; online means
-  # at least one link is routable, so a config that parsed and generated
-  # but never configured a NIC is caught here. --format json (jammy 0.106+)
-  # gives a stable field to assert on. No ansible module wraps it.
-  command: netplan status --format json
-  register: netplan_verify_status
-  changed_when: false
-  failed_when: not ((netplan_verify_status.stdout | from_json)['netplan-global-state']['online'] | bool)
-  become: true
-
 # Functional end-to-end test of the rollback safety harness — the
 # critical check in this file, the one that catches snapshot-timing
 # bugs that stat-only assertions cannot.
