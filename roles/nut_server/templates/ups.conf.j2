@@ -142,6 +142,10 @@ maxretry = 3
 [eaton]
 driver = snmp-ups
 port = {{ external_ips.eaton }}
+# SNMP v1 + the default `public` community is deliberate: the UPS sits on
+# the admin-only management VLAN (Block-All default), eaton_ipp polls it the
+# same way, and SNMPv3 would need coordinated reconfig on the device + both
+# daemons — disproportionate for this home threat model.
 community = public
 snmp_version = v1
 pollfreq = 15
