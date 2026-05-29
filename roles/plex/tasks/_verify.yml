@@ -33,6 +33,44 @@
   until: _verify_http_nginx.status == 200
   failed_when: not (_verify_http_nginx.content is search('machineIdentifier'))
 
+# Content mounts: the library plus the read-only iTunes/Records source
+# trees must surface inside the container, and the read-only binds must
+# actually reject writes — a dropped :ro would let Plex mutate the source
+# library silently. A :ro bind is read-only even to the exec's root, so
+# the touch fails at the mount layer regardless of in-container uid.
+- name: _verify | Content mounts are present in the container
+  command:
+    argv:
+      - podman
+      - exec
+      - plex
+      - test
+      - -d
+      - "{{ item }}"
+  loop:
+    - /media
+    - /itunes
+    - /records
+  changed_when: false
+  become: true
+
+- name: _verify | Read-only content mounts reject writes
+  command:
+    argv:
+      - podman
+      - exec
+      - plex
+      - touch
+      - "{{ item }}/.verify_ro_probe"
+  loop:
+    - /media
+    - /itunes
+    - /records
+  register: _verify_ro
+  changed_when: false
+  failed_when: _verify_ro.rc == 0
+  become: true
+
 # SQLite bind round-trip: a host-side sentinel under the dedicated 4K
 # dataset must surface inside the container at Plex's Databases dir,
 # proving the --volume landed (a path typo would silently route DB writes
