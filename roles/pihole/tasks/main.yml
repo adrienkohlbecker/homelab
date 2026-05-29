@@ -205,7 +205,7 @@
   vars:
     nginx_site_args:
       subdomain: pihole
-      proxy_pass: http://127.0.0.1:8943/
+      proxy_pass: http://127.0.0.1:{{ service_ports.pihole }}/
       # The admin UI binds 127.0.0.1:8943 only, so this nginx vhost is
       # the sole LAN ingress -- forward-auth via authelia is the gate.
       # Pi-hole's own FTLCONF_webserver_api_pwhash is left unset.

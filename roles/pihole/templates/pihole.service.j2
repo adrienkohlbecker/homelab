@@ -100,7 +100,7 @@ ExecStart=/usr/bin/podman run \
     --publish {{ pihole_keepalived_ip }}:53:53/udp \
     --publish {{ pihole_keepalived_ip }}:53:53/tcp \
 {% endif %}
-    --publish 127.0.0.1:8943:80/tcp \
+    --publish 127.0.0.1:{{ service_ports.pihole }}:80/tcp \
 {# Probe via glibc's nss-dns (libresolv) rather than dig: BIND 9.18+ tools #}
 {# use libuv's io_uring backend, which podman's default seccomp profile    #}
 {# logs (SCMP_ACT_LOG, syscall=425). Every probe emits 2 audit lines       #}
