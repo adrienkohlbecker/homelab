@@ -36,7 +36,10 @@
 # prune flags: no -a so named (tagged) images stay warm for the next
 # pull; --volumes drops anonymous volumes no container references;
 # until=48h spares anything created in the last two days so a recent
-# stopped container or fresh dangling layer survives one daily pass.
+# stopped container or fresh dangling layer survives one daily pass. A
+# consumer needing a specific volume to outlive the daily pass can label
+# it and add `--filter label!=<key>` here (the filter accepts label /
+# label!= alongside until).
 - name: Install podman_prune timer
   import_role:
     name: systemd_timer
