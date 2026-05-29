@@ -15,6 +15,8 @@
       - inventory_hostname in external_ips
       - pihole_adlists is defined
       - pihole_whitelists is defined
+      - pihole_password is defined
+      - (pihole_password | default('') | length) > 0
       # No whitespace in any list URL: the URLs are space-joined into a
       # single BLOCKLISTS_URL/WHITELIST_URL token, which systemd
       # ExecStart= and the command module both re-split on whitespace, so
@@ -24,9 +26,10 @@
     fail_msg: >-
       pihole requires pihole_keepalived_{ip,vrid,priority,peers}
       (priority 1-255, set per-host in host_vars), an external_ips entry
-      for this host (the VRRP unicast_src_ip), and the pihole_adlists /
-      pihole_whitelists lists (no whitespace in any URL). Define or fix
-      the offending one(s) in host_vars / group_vars.
+      for this host (the VRRP unicast_src_ip), the pihole_adlists /
+      pihole_whitelists lists (no whitespace in any URL), and the vaulted
+      pihole_password (the FTL API password). Define or fix the offending
+      one(s) in host_vars / group_vars.
   tags:
     - pihole
 
@@ -79,6 +82,23 @@
   tags:
     - pihole
 
+# Mounted into the container as a podman secret and read by the entrypoint
+# from /run/secrets/webpassword (see pihole.service.j2), so the FTL API
+# password never lands on the unit's ExecStart line or in `podman inspect`.
+# Exposes pihole_password_rotated to re-trigger the restart on a vault
+# rotation -- FTLCONF applies the password on every start, so a restart is
+# all that's needed (no first-boot-only bootstrap to fail loudly on).
+- name: Create pihole API password secret
+  import_role:
+    name: podman_secret
+    tasks_from: secret
+  vars:
+    podman_secret_args:
+      name: pihole_password
+      data: "{{ pihole_password }}"
+  tags:
+    - pihole
+
 - name: Install pihole service
   import_role:
     name: systemd_unit
@@ -98,7 +118,7 @@
     systemd_unit_args:
       src: pihole
       condition: "{{ not (ansible_check_mode and (pihole_service_result.changed or pihole_user.changed)) }}"
-      restart: "{{ pihole_service_result.changed }}"
+      restart: "{{ pihole_service_result.changed or pihole_password_rotated }}"
       # Serialize across the lab+pug HA pair so a unit-file change never
       # restarts both nameservers at once (one node keeps serving the
       # keepalived VIP through the other's restart).

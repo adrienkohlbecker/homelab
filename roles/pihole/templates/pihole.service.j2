@@ -83,13 +83,19 @@ ExecStart=/usr/bin/podman run \
     {# CNAMEs it to lab.fahm.fr, and LAN clients shortcut to lab's         #}
     {# internal IP to avoid a WAN / wireguard hairpin.                     #}
     --env FTLCONF_misc_dnsmasq_lines="address=/pug.fahm.fr/{{ external_ips.pug }};address=/lab.fahm.fr/{{ external_ips.lab }};address=/box.fahm.fr/{{ external_ips.box }};address=/auth.fahm.fr/{{ external_ips.lab }}" \
-    {# FTL API password. The netdata go.d/pihole collector authenticates  #}
-    {# to the loopback API with it (roles/pihole/templates/pihole.conf.j2).#}
-    {# nginx + authelia stay the LAN ingress gate (the container binds     #}
-    {# 127.0.0.1:8943 only), so a browser hitting the admin subdomain      #}
+    {# FTL API password, mounted as a podman secret. The entrypoint reads  #}
+    {# it from /run/secrets/webpassword (WEBPASSWORD_FILE = the basename)   #}
+    {# and exports FTLCONF_webserver_api_password from it, but only when    #}
+    {# that var is unset -- so we must NOT also pass it as --env. Keeps the #}
+    {# secret off the unit's ExecStart line and out of `podman inspect`;    #}
+    {# the export still makes it read-only in the UI/CLI, which is fine.    #}
+    {# The netdata go.d/pihole collector authenticates to the loopback API #}
+    {# with the same value (roles/pihole/templates/pihole.conf.j2). nginx + #}
+    {# authelia stay the LAN ingress gate (the container binds             #}
+    {# 127.0.0.1:8943 only), so a browser hitting the admin subdomain       #}
     {# authenticates twice: authelia first, then pi-hole's own login.      #}
-    {# Setting it via env makes it read-only in the UI/CLI, which is fine. #}
-    --env FTLCONF_webserver_api_password="{{ pihole_password }}" \
+    --secret=pihole_password,type=mount,target=webpassword \
+    --env WEBPASSWORD_FILE=webpassword \
     --env FTLCONF_database_maxDBdays=31 \
     --env FTLCONF_files_database=/var/lib/pihole/pihole-FTL.db \
     --env FTLCONF_files_gravity=/var/lib/pihole/gravity.db \
