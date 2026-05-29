@@ -123,6 +123,11 @@ netplan:
       wakeonlan: true
       dhcp4: true
       dhcp6: false
+      # Lease-preservation, mirroring prod (lab/pug): keeps the harness's
+      # SSH lease through the converge's own `netplan apply`. The _verify
+      # broken-config fixture is written directly and stays non-critical,
+      # so the rollback path is still exercised.
+      critical: true
 
 hdparm_settings: {}
 
