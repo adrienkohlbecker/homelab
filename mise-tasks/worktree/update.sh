@@ -20,12 +20,20 @@
 #
 #   1. Rebase the worktree's notes branch onto master:notes first. Its own notes
 #      commits replay on top, gaining new SHAs that ARE descendants of
-#      master:notes. Record an old->new SHA map.
+#      master:notes. Index them by patch-id -> new SHA.
 #   2. Rebase the code branch. At each notes-gitlink conflict the conflicting
-#      "theirs" (index stage 3) is the pre-rebase, divergent notes SHA; repoint
-#      it to the mapped new SHA (a descendant of master:notes) and continue.
-#      Every code commit then pins a notes commit that exists on the rebased
-#      notes branch, and the worktree ends with a clean `git status`.
+#      "theirs" (index stage 3) is the pre-rebase notes SHA a code commit pins;
+#      look up its patch-id to find the rebased twin (same patch-id, since a
+#      plain rebase preserves diffs) and repoint the gitlink to it, then
+#      continue. Every code commit then pins a notes commit that exists on the
+#      rebased notes branch, and the worktree ends with a clean `git status`.
+#
+# Keying the map on patch-id rather than on step 1's old->new rewrite makes
+# resolution independent of whether step 1 actually moved anything: if the notes
+# branch is ALREADY rebased onto master:notes (e.g. a re-run after a halted code
+# rebase left the notes branch rewritten but the code branch not), step 1 is a
+# no-op, yet the code commits still pin the pre-rebase notes SHAs -- which share
+# a patch-id with their twins on the branch, so they still resolve.
 #
 # A conflict on anything other than the notes gitlink halts for manual handling.
 # Rebases onto the local master ref, not origin/master -- refresh master in the
@@ -49,8 +57,8 @@ main_branch=$(git rev-parse --abbrev-ref HEAD)
 # notes submodule -> skip the notes step; the code rebase still runs.
 master_notes=$(git rev-parse -q --verify master:notes 2>/dev/null || true)
 
-# Step 1: rebase the worktree's notes branch onto master:notes, recording each
-# rewritten own-commit's old SHA -> new SHA as a file under $mapdir. Skipped for
+# Step 1: rebase the worktree's notes branch onto master:notes, then index each
+# resulting own notes commit by patch-id -> its SHA under $mapdir. Skipped for
 # detached/agent worktrees (new==base), which have no <name> notes branch.
 wt_notes="$repo/$wt/notes"
 mapdir=""
@@ -59,23 +67,15 @@ if [ -n "$master_notes" ] && [ -d "$wt_notes" ] && git -C "$wt_notes" rev-parse 
   # master:notes must be an object this clone has in order to rebase onto it --
   # clones exchange via origin or a direct fetch from the main checkout's notes.
   git -C "$wt_notes" fetch -q "$repo/notes" "$master_notes" 2>/dev/null || true
-  base=$(git -C "$wt_notes" merge-base "$usage_name" "$master_notes")
-  old_own=$(git -C "$wt_notes" rev-list --reverse "$base".."$usage_name")
   git -C "$wt_notes" rebase -q "$master_notes" "$usage_name"
-  new_own=$(git -C "$wt_notes" rev-list --reverse "$master_notes".."$usage_name")
-  if [ "$(printf '%s\n' "$old_own" | grep -c .)" != "$(printf '%s\n' "$new_own" | grep -c .)" ]; then
-    echo "worktree:update: notes rebase changed the own-commit count (an own commit went empty?); resolve notes manually" >&2
-    exit 1
-  fi
   mapdir=$(mktemp -d)
-  # old<space>new per line; identity rows (master:notes hadn't moved) and the
-  # empty-input row (no own commits) are skipped. The body must stay an `if`, not
-  # an `&&`-chain: a trailing failed test would become the pipeline's exit status
-  # under pipefail and trip `set -e`.
-  paste -d' ' <(printf '%s\n' "$old_own") <(printf '%s\n' "$new_own") | while read -r o n; do
-    if [ -n "$o" ] && [ -n "$n" ] && [ "$o" != "$n" ]; then
-      printf '%s' "$n" >"$mapdir/$o"
-    fi
+  # Key by patch-id (stable across the rebase) so the map reflects the branch as
+  # it stands now, not the rewrite step 1 happened to perform -- see the header.
+  # An own commit with no patch-id (an empty commit) just isn't indexed; a code
+  # commit that pins it then halts as "unmapped", which is the right call.
+  for n in $(git -C "$wt_notes" rev-list "$master_notes".."$usage_name"); do
+    pid=$(git -C "$wt_notes" show --no-color "$n" | git patch-id --stable | awk '{print $1}' || true)
+    if [ -n "$pid" ]; then printf '%s' "$n" >"$mapdir/$pid"; fi
   done
 fi
 
@@ -93,9 +93,14 @@ while [ -d "$gd/rebase-merge" ] || [ -d "$gd/rebase-apply" ]; do
   fi
   conflicts=$(git -C "$wt" diff --name-only --diff-filter=U)
   if [ "$conflicts" = "notes" ] && [ -n "$mapdir" ]; then
-    # stage 3 (theirs) is the commit being replayed -> its pre-rebase notes SHA.
+    # stage 3 (theirs) is the notes SHA the replayed code commit pins (pre-rebase);
+    # find its rebased twin on the branch by patch-id. Fetch it into the notes
+    # clone first if a prior gc/rebase left it absent there.
     theirs=$(git -C "$wt" rev-parse ":3:notes")
-    new=$(cat "$mapdir/$theirs" 2>/dev/null || true)
+    git -C "$wt_notes" cat-file -e "$theirs" 2>/dev/null || git -C "$wt_notes" fetch -q "$repo/notes" "$theirs" 2>/dev/null || true
+    pid=$(git -C "$wt_notes" show --no-color "$theirs" 2>/dev/null | git patch-id --stable | awk '{print $1}' || true)
+    new=""
+    if [ -n "$pid" ] && [ -f "$mapdir/$pid" ]; then new=$(cat "$mapdir/$pid"); fi
     if [ -z "$new" ]; then
       echo "worktree:update: notes-gitlink conflict on an unmapped commit ($theirs); resolve manually (map in $mapdir)" >&2
       exit 1
