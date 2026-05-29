@@ -36,6 +36,18 @@ block_ipv6 = true
 block_unqualified = true
 block_undelegated = true
 
+{% if qemu_test %}
+# Test-only: the qemu fixtures egress through qemu's SLIRP user-mode NAT,
+# which forwards TCP statefully but treats UDP as fire-and-forget and drops
+# it under load -- so the anonymized relay/resolver round-trips _verify.yml
+# drives over UDP flake intermittently (the box VM can't reach upstream).
+# force_tcp routes that egress over TCP, which SLIRP forwards reliably, so
+# the functional DNS test isn't at the mercy of dropped datagrams. Left off
+# in prod: TCP adds a handshake per query, unwanted latency on the household
+# DNS path, which has real network egress and doesn't need it.
+force_tcp = true
+{% endif %}
+
 # Resolver-list refresh (download.dnscrypt.info, every 72h per [sources])
 # needs DNS for the URL host. Without ignore_system_dns, dnscrypt asks
 # getaddrinfo, which on these hosts walks /etc/resolv.conf -> pihole ->
