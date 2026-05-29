@@ -73,6 +73,10 @@ smtp_tls_wrappermode = {{ 'yes' if smtp_use_ssl | bool else 'no' }}
 # read at process start (texthash), so no postmap step. See generic.j2.
 smtp_generic_maps = texthash:/etc/postfix/generic
 header_size_limit = 4096000
+# Raise the per-message cap to 20 MB (default 10 MB) so a large smartd/journal
+# digest or a fail2ban report with an attachment relays instead of bouncing;
+# stays under Mailgun's 25 MB accept limit.
+message_size_limit = 20480000
 
 # Keep `bounce` so a relay rejection (a lost cron/smartd/fail2ban alert) is
 # itself surfaced to the operator; drop the verbose protocol/policy/data
