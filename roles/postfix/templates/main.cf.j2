@@ -90,6 +90,13 @@ header_size_limit = 4096000
 # stays under Mailgun's 25 MB accept limit.
 message_size_limit = 20480000
 
+# Surface a relay outage fast: give up on a deferred message after 1 day rather
+# than the 5-day default, so a Mailgun outage that strands a cron/smartd/fail2ban
+# alert bounces back to the operator within hours instead of failing silently for
+# the better part of a week. Trade-off: less tolerance for a long upstream outage.
+maximal_queue_lifetime = 1d
+bounce_queue_lifetime = 1d
+
 # Keep `bounce` so a relay rejection (a lost cron/smartd/fail2ban alert) is
 # itself surfaced to the operator; drop the verbose protocol/policy/data
 # SMTP-transcript classes.
