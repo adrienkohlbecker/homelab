@@ -3,6 +3,11 @@
 # provisioned host. Set false in host_vars for a host where an aggressive
 # power tunable (USB autosuspend, SATA ALPM, NIC runtime PM) misbehaves.
 #
+# --auto-tune enables USB autosuspend on every port, HID included (upstream
+# support for skipping keyboard/mouse is still unmerged), so a host with a
+# physical keyboard or mouse can freeze its input after a reboot -- opt it
+# out. Fine on the headless prod servers, which carry no local HID.
+#
 # defaults/, not vars/: role vars sit above host_vars in ansible's
 # precedence ladder and would silently mask a host-level override.
 powertop_enabled: true
