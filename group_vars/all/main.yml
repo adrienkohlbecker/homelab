@@ -154,6 +154,7 @@ service_ports:
   # container.
   nexus: 8082
   nut: 3493
+  openproject: 8070
   # Paperless-ngx, loopback-published; nginx fronts it on the paperless
   # subdomain. Container listens on 8000 internally.
   paperless: 8001
