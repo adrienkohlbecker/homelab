@@ -53,9 +53,10 @@
       check_mode: false
       get_url:
         url: "{{ deb_install_args.url }}"
-        dest: "/tmp/{{ deb_install_args.name }}.deb"
-        # root-only: the staged deb is a transient any local user could
-        # otherwise read out of world-readable /tmp.
+        # /var/cache (root:root 0755), not world-writable /tmp: a local user
+        # can't pre-plant or symlink the staging path. 0600 keeps the transient
+        # unreadable to other local users while it waits for apt.
+        dest: "/var/cache/{{ deb_install_args.name }}.deb"
         mode: '0600'
         owner: root
         group: root
@@ -68,17 +69,17 @@
 
     - name: Install the deb package
       apt:
-        deb: "/tmp/{{ deb_install_args.name }}.deb"
+        deb: "/var/cache/{{ deb_install_args.name }}.deb"
       register: deb_install_apt
 
   always:
 
-    # Cleanup pairs with the check_mode: false download above so /tmp doesn't
-    # carry the deb past a --check run, and a failed apt still cleans up.
+    # Cleanup pairs with the check_mode: false download above so /var/cache
+    # doesn't carry the deb past a --check run, and a failed apt still cleans up.
     - name: Delete deb file
       check_mode: false
       file:
-        path: "/tmp/{{ deb_install_args.name }}.deb"
+        path: "/var/cache/{{ deb_install_args.name }}.deb"
         state: absent
 
 # Always set, even when the install block is skipped, so callers can rely on
