@@ -2,6 +2,11 @@ name: lint
 # Reusable + directly dispatchable; ci.yml calls this via `uses:` so it
 # runs nested in the one per-push run (in parallel with detect/packer).
 # No `push:` trigger -- ci.yml owns the push path.
+#
+# Also the home for the pytest unit suite (`mise run test`): it's a cheap,
+# stateless, container-only check just like lint -- no qemu, so it has no
+# place in test.yml's role/VM matrix -- and folding it in here reuses the
+# warm `uv sync` and a single self-hosted runner slot.
 on:
   workflow_call:
   workflow_dispatch:
@@ -42,3 +47,6 @@ jobs:
       # uv's wheel cache is pre-warmed in the image).
       - run: uv sync --locked
       - run: mise run lint
+      # Hermetic git/passlib unit tests (testpaths=test/unit). pytest is a
+      # locked project dep, so `uv sync` above already installed it.
+      - run: mise run test
