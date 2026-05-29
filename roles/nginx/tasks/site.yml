@@ -248,6 +248,22 @@
   tags:
     - nginx_site
 
+- name: site | Assert authelia_internal_url is set when auth is required
+  when: (nginx_site_args.auth | default('none')) == 'required'
+  assert:
+    that:
+      - authelia_internal_url is defined
+      - (authelia_internal_url | default('')) is string
+      - (authelia_internal_url | default('')) is match('^https?://')
+    fail_msg: >-
+      auth: required needs authelia_internal_url set to the http(s):// URL of a
+      reachable Authelia /api/authz/auth-request endpoint (group_vars/all sets
+      lab's; pug/bunk need a per-host override). It is rendered straight into the
+      /internal/authelia proxy_pass, so an unset value would only fail later at
+      `nginx -t` with a generic message.
+  tags:
+    - nginx_site
+
 # upstream_authorization is "on" only for a non-empty dict. An empty {} (which a
 # caller can legitimately compute when it has no users/tokens configured) is
 # treated as unset so it doesn't render the map, the injected Authorization
