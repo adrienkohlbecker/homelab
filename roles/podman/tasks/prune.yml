@@ -1,6 +1,6 @@
 # Daily podman system-prune. Drops stopped containers, dangling images,
-# unused networks, anonymous volumes, and build cache; named images stay
-# cached so the next pull is a no-op. Built on the systemd_timer helper so
+# unused networks, and build cache; named images stay cached so the next
+# pull is a no-op. Built on the systemd_timer helper so
 # the root-scope timer gets netdata overdue-monitoring, a TimeoutStartSec
 # kill-switch, and journal-priority routing for free.
 #
@@ -23,7 +23,7 @@
 # role shipped before the systemd_timer migration (the new units are
 # podman_prune.*). No-op on fresh hosts; remove this task once every host
 # has converged past the rename.
-- name: Remove the obsolete hand-rolled podman-prune units
+- name: prune | Remove the obsolete hand-rolled podman-prune units
   import_role:
     name: systemd_timer
     tasks_from: remove
@@ -34,21 +34,26 @@
   when: podman_prune_args.condition | default(true)
 
 # prune flags: no -a so named (tagged) images stay warm for the next
-# pull; --volumes drops anonymous volumes no container references;
-# until=48h spares anything created in the last two days so a recent
-# stopped container or fresh dangling layer survives one daily pass. A
-# consumer needing a specific volume to outlive the daily pass can label
-# it and add `--filter label!=<key>` here (the filter accepts label /
-# label!= alongside until).
-- name: Install podman_prune timer
+# pull; until=48h spares anything created in the last two days so a recent
+# stopped container or fresh dangling layer survives one daily pass.
+#
+# Deliberately no --volumes: podman's volume prune has no anonymous-only
+# filter (only dangling / label / since), so --volumes would also reap any
+# *named* volume that happens to be unattached at prune time -- silently
+# destroying a service's data store if it were stopped for a maintenance
+# window. The fleet bind-mounts all service state under /mnt/services, so
+# anonymous-volume buildup is negligible and not worth that risk. A
+# consumer that genuinely relies on a podman volume can prune its own
+# anonymous ones explicitly (e.g. `podman volume prune --filter label=…`).
+- name: prune | Install podman_prune timer
   import_role:
     name: systemd_timer
     tasks_from: install
   vars:
     systemd_timer_args:
       name: podman_prune
-      description: Prune unused podman containers, images, networks and volumes
-      exec_start: /usr/bin/podman system prune -f --volumes --filter until=48h
+      description: Prune unused podman containers, images and networks
+      exec_start: /usr/bin/podman system prune -f --filter until=48h
       on_calendar: daily
       randomized_delay_sec: 3600
       frequency: daily
