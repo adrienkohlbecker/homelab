@@ -1,3 +1,22 @@
+# nut_server runs on every home host (site.yml, all:!bunk:!fox), not just
+# lab: each host independently SNMP-polls the one Eaton UPS and exposes its
+# own upsd, so no host depends on a single NUT server being up. Active
+# shutdown-on-power-loss is eaton_ipp's job (per-host vendor daemon); this
+# upsd serves Home Assistant (on lab) + operator `upsc`, and is the standing
+# base for a future per-host upsmon (nut_monitor) — which is why it is
+# deliberately not gated to lab alone.
+
+- name: Assert required nut secrets are set
+  assert:
+    that:
+      - nut_upsmon_password is defined and (nut_upsmon_password | length > 0)
+      - nut_homeassistant_password is defined and (nut_homeassistant_password | length > 0)
+    fail_msg: >-
+      nut_upsmon_password and nut_homeassistant_password must be set
+      (group_vars/{prod,test}.yml); upsd.users renders them verbatim.
+  tags:
+    - nut_server
+
 - name: Install nut
   apt:
     pkg:
