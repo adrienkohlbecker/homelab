@@ -9,15 +9,34 @@
   tags:
     - nginx
 
-# Letsencrypt live/ + archive/ are 0750 root:ssl-cert (see
-# roles/certbot/tasks/main.yml); www-data needs to be in ssl-cert
-# to traverse them and read fullchain.pem / privkey.pem.
-- name: install | Add www-data to ssl-cert group
+# nginx's master process (root) loads ssl_certificate / ssl_certificate_key
+# from the static paths in nginx.conf at startup and on every reload; the
+# www-data workers inherit that TLS context via fork and never open the cert
+# files themselves. privkey.pem is 0600 root:root regardless, so ssl-cert
+# membership only ever granted the workers traversal into the 0750 root:ssl-cert
+# live/ dir to reach the public fullchain/chain they don't read -- drop it, it
+# is dead least-privilege debt. (netdata keeps its ssl-cert membership: its
+# go.d/x509check genuinely reads fullchain.pem; see netdata/tasks/install.yml.)
+# gpasswd, not the user module: `user` can only set the whole group list
+# (append: false would strip www-data's other groups), and there is no
+# remove-from-one-group primitive. Guarded on current membership so it only runs
+# when there is something to remove (clean changed reporting + idempotence).
+- name: install | Read ssl-cert group membership
   when: not (ansible_check_mode and nginx_apt.changed)
-  user:
-    name: www-data
-    groups: ssl-cert
-    append: true
+  getent:
+    database: group
+    key: ssl-cert
+  register: nginx_ssl_cert_grp
+  become: true
+  tags:
+    - nginx
+
+- name: install | Remove www-data from ssl-cert group
+  when:
+    - not (ansible_check_mode and nginx_apt.changed)
+    - "'www-data' in (nginx_ssl_cert_grp.ansible_facts.getent_group['ssl-cert'][2] | default('')).split(',')"
+  command: gpasswd --delete www-data ssl-cert
+  changed_when: true
   become: true
   tags:
     - nginx

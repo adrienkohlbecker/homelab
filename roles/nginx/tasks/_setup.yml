@@ -21,6 +21,16 @@
     cp /etc/ssl/private/ssl-cert-snakeoil.key /etc/letsencrypt/live/{{ item }}/privkey.pem
     cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/letsencrypt/live/{{ item }}/chain.pem
     cp /etc/ssl/certs/ssl-cert-snakeoil.pem /etc/letsencrypt/live/{{ item }}/fullchain.pem
+
+    # Mirror the prod certbot perms (roles/certbot sets live/ to 0750
+    # root:ssl-cert and certbot keeps privkey.pem at 0600 root:root). This makes
+    # the _verify ssl-cert check functional rather than a stat tautology: once
+    # converge drops www-data from ssl-cert, the www-data workers can neither
+    # traverse live/ nor read the key, so every HTTPS probe that still succeeds
+    # proves the master loaded the cert as root and shared the context.
+    chgrp ssl-cert /etc/letsencrypt/live
+    chmod 0750 /etc/letsencrypt/live
+    chmod 0600 /etc/letsencrypt/live/{{ item }}/privkey.pem
   args:
     executable: /bin/bash
     creates: /etc/letsencrypt/live/{{ item }}
@@ -42,3 +52,15 @@
   import_role:
     name: _test
     tasks_from: authelia_stub
+
+# Simulate a host provisioned before nginx dropped www-data from ssl-cert, so
+# converge actually exercises install.yml's removal task (and the idempotence
+# pass proves it does not re-add). A fresh host never had www-data here -- the
+# _setup install.yml above already ran the removal as a no-op -- so without this
+# the removal is untested and the _verify assertion would be vacuous.
+- name: _setup | Pre-add www-data to ssl-cert (legacy state to exercise removal)
+  user:
+    name: www-data
+    groups: ssl-cert
+    append: true
+  become: true
