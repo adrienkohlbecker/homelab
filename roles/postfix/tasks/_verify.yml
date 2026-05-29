@@ -1,10 +1,12 @@
 # Post-converge functional check (harness-only, never site.yml). We can't
 # exercise the live Mailgun relay from the qemu fixture (test/ creds are
 # `changeme`, no outbound), so assert the wiring instead: the config parses,
-# the relayhost / inet_interfaces / sasl map are what the template intended,
-# and a postmap lookup of the relayhost key against the texthash sasl map
-# resolves to the rendered credential (exercises vault substitution + the
-# map type, not just that a literal appears in the file).
+# the relayhost / inet_interfaces / sasl map / TLS floor / sender-rewrite map
+# are what the template intended, a postmap lookup of the relayhost key against
+# the texthash sasl map resolves to the rendered credential (exercises vault
+# substitution + the map type, not just that a literal appears in the file),
+# the root/operator aliases resolve to root_email, and mailutils sends from
+# email_domain.
 - name: _verify | Postfix configuration parses
   command: postfix check
   register: _postfix_check
@@ -12,7 +14,7 @@
   become: true
 
 - name: _verify | Read back effective postfix parameters
-  command: postconf -h relayhost inet_interfaces smtp_sasl_password_maps smtp_tls_security_level
+  command: postconf -h relayhost inet_interfaces smtp_sasl_password_maps smtp_tls_security_level smtp_sasl_auth_enable smtp_tls_mandatory_protocols smtp_generic_maps
   register: _postfix_conf
   changed_when: false
   become: true
@@ -29,10 +31,39 @@
       - _postfix_conf.stdout_lines[0] == '[' ~ smtp_host ~ ']:' ~ (smtp_port | string)
       - _postfix_conf.stdout_lines[1] == 'loopback-only'
       - _postfix_conf.stdout_lines[2] == 'texthash:/etc/postfix/sasl_passwd'
-      - _postfix_conf.stdout_lines[3] == ('secure' if (smtp_use_ssl | bool or smtp_use_tls | bool) else 'none')
-      - _postfix_sasl.stdout | length > 0
-      - postfix_smtp_user in _postfix_sasl.stdout
+      - _postfix_conf.stdout_lines[3] == 'secure'
+      - _postfix_conf.stdout_lines[4] == 'yes'
+      - _postfix_conf.stdout_lines[5] == '>=TLSv1.2'
+      - _postfix_conf.stdout_lines[6] == 'texthash:/etc/postfix/generic'
+      - _postfix_sasl.stdout == postfix_smtp_user ~ ':' ~ postfix_smtp_password
     fail_msg: >-
       postfix relay wiring drifted from the template: relayhost/inet_interfaces/
-      sasl map / TLS level or the credential lookup did not match. postconf
-      output: {{ _postfix_conf.stdout }}; sasl lookup: {{ _postfix_sasl.stdout }}.
+      sasl map / TLS level / SASL auth / TLS floor / sender-rewrite map or the
+      credential lookup did not match. postconf output: {{ _postfix_conf.stdout }}.
+
+- name: _verify | Resolve the root and operator aliases
+  command: postmap -q {{ item }} hash:/etc/aliases
+  loop:
+    - root
+    - "{{ operator_user }}"
+  register: _postfix_alias
+  changed_when: false
+  become: true
+
+- name: _verify | Read back the mailutils sender domain
+  slurp:
+    src: /etc/mailutils.conf
+  register: _postfix_mailutils
+  become: true
+
+- name: _verify | Aliases resolve to root_email and mailutils sends from email_domain
+  assert:
+    that:
+      - _postfix_alias.results[0].stdout == root_email
+      - _postfix_alias.results[1].stdout == root_email
+      - ('email-domain ' ~ email_domain) in (_postfix_mailutils.content | b64decode)
+    fail_msg: >-
+      alias/mailutils wiring drifted: root and {{ operator_user }} must alias to
+      root_email ({{ root_email }}), and /etc/mailutils.conf must set
+      email-domain {{ email_domain }}. alias lookups:
+      {{ _postfix_alias.results | map(attribute='stdout') | list }}.
