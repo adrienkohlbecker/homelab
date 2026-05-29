@@ -40,6 +40,19 @@
     - section: web
       option: bind to
       value: 127.0.0.1
+    # The nginx vhost fronts netdata with an Authelia bypass keyed on a
+    # shared cross-host poll token (see "Configure nginx" below). nginx
+    # proxies from loopback, so netdata's default `allow {management,
+    # netdata.conf} from = localhost` would let any token-bearer reach the
+    # management API (silence alarms) and dump the full config. Deny both --
+    # nothing legitimate fetches them through the proxy (the operator reads
+    # them on-host).
+    - section: web
+      option: allow management from
+      value: none
+    - section: web
+      option: allow netdata.conf from
+      value: none
     # v2 moved access logging out of [global] into the [logs] section;
     # `[global] access log` is silently ignored, re-enabling the file.
     - section: logs
@@ -216,6 +229,11 @@
     regexp: "{{ item.line }}"
     line: "{{ item.value }}"
     validate: bash -n %s
+    # Pin mode/owner explicitly: this file carries the telegram bot token
+    # and is otherwise seeded by `cp` inheriting the package default.
+    owner: root
+    group: netdata
+    mode: "0640"
     backup: true
   loop:
     - line: ^SEND_EMAIL=
