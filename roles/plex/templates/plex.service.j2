@@ -57,6 +57,9 @@ ExecStart=/usr/bin/podman run \
     --log-driver journald \
     --log-opt tag="plex" \
     --env ADVERTISE_IP="http://{{ external_ips[inventory_hostname] }}:{{ service_ports.plex }}/" \
+    {# Bridge networking, so name the server explicitly — otherwise Plex #}
+    {# self-names from the random container hostname on first claim. #}
+    --env HOSTNAME={{ inventory_hostname }} \
     --env "TZ={{ system_timezone }}" \
     --env PLEX_UID={{ plex_user.uid }} \
     --env PLEX_GID={{ media_group.gid }} \
