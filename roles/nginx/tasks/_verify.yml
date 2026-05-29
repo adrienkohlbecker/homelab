@@ -536,6 +536,46 @@
     or nginx_verify_loc.content_security_policy is not defined
     or nginx_verify_loc.x_verify_loc is not defined
 
+# Finding-9: the first-class client_max_body_size / client_body_buffer_size keys.
+# Configuring the vhost proves both render into valid config (the helper's
+# nginx -t gates a typo'd directive name); the 413 below proves the size limit
+# is enforced before the body reaches the upstream. No auth needed.
+- name: _verify | Configure a vhost with body-size limits
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: nginxverifybody
+      proxy_pass: http://127.0.0.1:18080/
+      client_max_body_size: 1k
+      client_body_buffer_size: 2k
+
+- name: _verify | Wait for the nginxverifybody vhost to route
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "nginxverifybody.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    follow_redirects: none
+    status_code: [200, 204, 301, 302, 400, 404, 413]
+  register: nginx_verify_body_ready
+  until: nginx_verify_body_ready.status != 404
+  retries: 10
+  delay: 1
+
+- name: _verify | A body over client_max_body_size is rejected with 413
+  uri:
+    url: https://localhost/
+    method: POST
+    body: "{{ 'x' * 4096 }}"
+    headers:
+      Host: "nginxverifybody.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    status_code: 413
+  register: nginx_verify_body
+  failed_when: nginx_verify_body.status != 413
+
 # csp_passthrough + enable_http on one auth-less vhost: confirm :80 serves
 # cleartext without a redirect, and that csp_passthrough emits no CSP header
 # (letting the upstream's own through).
@@ -605,6 +645,7 @@
     - nginxverifyloc
     - nginxverifyplain
     - nginxverifyempty
+    - nginxverifybody
   loop_control:
     label: "{{ item }}"
 
@@ -624,6 +665,8 @@
     - /etc/nginx/sites-enabled/nginxverifyplain
     - /etc/nginx/sites-available/nginxverifyempty
     - /etc/nginx/sites-enabled/nginxverifyempty
+    - /etc/nginx/sites-available/nginxverifybody
+    - /etc/nginx/sites-enabled/nginxverifybody
   become: true
   failed_when: nginx_verify_removed.stat.exists
 
