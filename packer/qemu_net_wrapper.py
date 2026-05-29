@@ -211,17 +211,31 @@ def _start_passt(sock: str, fwds: list[tuple[str, str, str]]) -> subprocess.Pope
         _PASST_DNS,
         *_passt_port_args(fwds),
     ]
-    # With a log sink, run passt verbose and tee its own log beside ours (it
-    # survives packer's failed-build output-dir delete; mise-tasks/packer/
-    # build.sh dumps both). Without one, stay --quiet -> stderr, which packer
-    # discards unless PACKER_LOG is set.
+    # Capture passt's startup banner (which echoes the DHCP-advertised DNS and
+    # the bound socket -- the diagnostic for a DNS-path regression) into a log
+    # beside ours. We must NOT pass passt `--log-file <path>`: passt's apparmor
+    # profile denies open() on an arbitrary path, so it exits 1 before binding
+    # the socket and qemu's `-netdev stream` connect then fails ("Qemu failed
+    # to start"). Instead the wrapper opens the file and hands passt the fd as
+    # its stdout/stderr -- apparmor mediates open() by path, not writes to an
+    # inherited fd. The file is a sibling of _LOG_PATH (outside any per-source
+    # output dir), so it survives packer's failed-build delete; build.sh dumps
+    # both. No --debug: it adds a per-packet trace that would bloat the job log
+    # during the image transfer; the banner alone shows the DNS wiring. Without
+    # a sink, stay --quiet -> wrapper stderr, which packer discards unless
+    # PACKER_LOG is set.
+    passt_out = sys.stderr.fileno()
     if _LOG_PATH is not None:
         passt_log = f"{_LOG_PATH}.passt-{os.getpid()}"
-        cmd += ["--debug", "--log-file", passt_log]
+        try:
+            passt_out = os.open(passt_log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
+        except OSError as exc:
+            _log(f"could not open passt log {passt_log!r}: {exc}; passt output -> wrapper stderr")
+            cmd.append("--quiet")
     else:
         cmd.append("--quiet")
     _log(f"starting passt sidecar: {' '.join(cmd)}")
-    proc = subprocess.Popen(cmd, stdout=sys.stderr.fileno(), stderr=sys.stderr.fileno())
+    proc = subprocess.Popen(cmd, stdout=passt_out, stderr=passt_out)
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline:
         if proc.poll() is not None:
