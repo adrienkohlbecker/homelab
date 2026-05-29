@@ -245,7 +245,7 @@
   register: nginx_verify_dup
   failed_when: nginx_verify_dup.status != 400
 
-# Finding-1 guard: a literal "?" inside the query (a second "?" in the URI)
+# Guard against a literal "?" inside the query (a second "?" in the URI) that
 # would let a ?-prefixed auth_token fire the 204 bypass while escaping the
 # &-anchored $args strip, forwarding the raw token to the upstream. Rejected.
 - name: _verify | A ?-smuggled auth_token is rejected with 400 (not forwarded)
@@ -258,8 +258,8 @@
   register: nginx_verify_smuggle
   failed_when: nginx_verify_smuggle.status != 400
 
-# Finding-2: a duplicated auth_token is rejected 400 but the request line is
-# logged before the 400. Put the real token SECOND (a decoy first) so a
+# A duplicated auth_token is rejected 400 but the request line is logged before
+# the 400. Put the real token SECOND (a decoy first) so a
 # single-stage redaction would leak it; the two-stage map must redact both.
 - name: _verify | Fire a duplicated auth_token with the real token second
   uri:
@@ -288,8 +288,8 @@
       The duplicated request's second (real) auth_token leaked raw into the
       access log; the two-stage $request_safe redaction must cover both copies.
 
-# Finding-3: an empty upstream_authorization dict must be a no-op -- it must NOT
-# write a conf.d map nor arm the cookieless Authorization-bypass shortcut. Stub
+# An empty upstream_authorization dict must be a no-op -- it must NOT write a
+# conf.d map nor arm the cookieless Authorization-bypass shortcut. Stub
 # is still in gate mode (401), so a cookieless request carrying an Authorization
 # header must fall through to Authelia (302), not short-circuit to the upstream.
 - name: _verify | Configure a vhost with an empty upstream_authorization
@@ -500,7 +500,42 @@
     or nginx_verify_loc.content_security_policy is not defined
     or nginx_verify_loc.x_verify_loc is not defined
 
-# Finding-9: the first-class client_max_body_size / client_body_buffer_size keys.
+# server_conf adds a sibling location at server scope. The only other use of the
+# key feeds a deliberately-broken directive (the rollback test below), so the
+# positive contract -- the snippet renders and the added location actually
+# serves -- would otherwise be untested, yet homepage's /alerts/ relies on it.
+- name: _verify | Configure a vhost with a server_conf snippet
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: nginxverifyserverconf
+      proxy_pass: http://127.0.0.1:18080/
+      server_conf: |
+        location = /sidecar {
+          return 200 "server-conf-ok";
+        }
+
+- name: _verify | Settle the nginxverifyserverconf vhost
+  import_tasks: _verify_wait_route.yml
+  vars:
+    _wait_route_host: "nginxverifyserverconf.{{ inventory_hostname }}.{{ domain }}"
+
+- name: _verify | A server_conf snippet adds a working sibling location
+  uri:
+    url: https://localhost/sidecar
+    headers:
+      Host: "nginxverifyserverconf.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    return_content: true
+    status_code: 200
+  register: nginx_verify_serverconf
+  failed_when: >-
+    nginx_verify_serverconf.status != 200
+    or 'server-conf-ok' not in (nginx_verify_serverconf.content | default(''))
+
+# The first-class client_max_body_size / client_body_buffer_size keys.
 # Configuring the vhost proves both render into valid config (the helper's
 # nginx -t gates a typo'd directive name); the 413 below proves the size limit
 # is enforced before the body reaches the upstream. No auth needed.
@@ -532,8 +567,42 @@
   register: nginx_verify_body
   failed_when: nginx_verify_body.status != 413
 
-# Finding-15: the csp_default_src / csp_frame_ancestors / csp_additional keys
-# compose into the Content-Security-Policy header (site.conf.j2). Only
+# proxy_buffering / proxy_request_buffering take the quoted string 'on'/'off' (a
+# bare off is YAML-coerced to the boolean false and renders an invalid
+# `proxy_buffering false;`). The quoted form must pass the new string-toggle
+# assert AND render into config the helper's nginx -t accepts; the proxied 200
+# confirms the site is live. No auth needed.
+- name: _verify | Configure a vhost with proxy buffering toggled off
+  import_role:
+    name: nginx
+    tasks_from: site
+  vars:
+    nginx_site_args:
+      subdomain: nginxverifybuffering
+      proxy_pass: http://127.0.0.1:18080/
+      proxy_buffering: "off"
+      proxy_request_buffering: "off"
+
+- name: _verify | Settle the nginxverifybuffering vhost
+  import_tasks: _verify_wait_route.yml
+  vars:
+    _wait_route_host: "nginxverifybuffering.{{ inventory_hostname }}.{{ domain }}"
+
+- name: _verify | The proxy-buffering vhost serves the proxied response
+  uri:
+    url: https://localhost/
+    headers:
+      Host: "nginxverifybuffering.{{ inventory_hostname }}.{{ domain }}"
+    validate_certs: false
+    return_content: true
+    status_code: 200
+  register: nginx_verify_buffering
+  failed_when: >-
+    nginx_verify_buffering.status != 200
+    or 'nginx_verify_upstream_ok' not in (nginx_verify_buffering.content | default(''))
+
+# The csp_default_src / csp_frame_ancestors / csp_additional keys compose into
+# the Content-Security-Policy header (site.conf.j2). Only
 # csp_passthrough was tested; assert each override token actually lands in the
 # rendered header, so a positioning/";" regression on the unifi consumer (the
 # real csp_* user) surfaces here. No auth needed.
@@ -612,8 +681,8 @@
     nginx_verify_csp.status != 200
     or nginx_verify_csp.content_security_policy is defined
 
-# Finding-18: the nginx_ipv6 path (host_vars/fox.yml only, never in the test
-# matrix) renders [::]-listeners in site.conf.j2 / nginx.conf.j2 that nothing
+# The nginx_ipv6 path (host_vars/fox.yml only, never in the test matrix)
+# renders [::]-listeners in site.conf.j2 / nginx.conf.j2 that nothing
 # else exercises. The firewall role's disable_ipv6 sysctl does NOT run in the
 # nginx test path, so the box VM has IPv6 live and we can bind + probe it for
 # real. Setting nginx_ipv6 only on this call adds `listen [::]:443 ssl` to this
@@ -685,9 +754,11 @@
     - nginxverify
     - nginxverifyauth
     - nginxverifyloc
+    - nginxverifyserverconf
     - nginxverifyplain
     - nginxverifyempty
     - nginxverifybody
+    - nginxverifybuffering
     - nginxverifycsp
     - nginxverifyipv6
   loop_control:
@@ -705,12 +776,16 @@
     - /etc/nginx/conf.d/upstream_auth_nginxverifyauth.conf
     - /etc/nginx/sites-available/nginxverifyloc
     - /etc/nginx/sites-enabled/nginxverifyloc
+    - /etc/nginx/sites-available/nginxverifyserverconf
+    - /etc/nginx/sites-enabled/nginxverifyserverconf
     - /etc/nginx/sites-available/nginxverifyplain
     - /etc/nginx/sites-enabled/nginxverifyplain
     - /etc/nginx/sites-available/nginxverifyempty
     - /etc/nginx/sites-enabled/nginxverifyempty
     - /etc/nginx/sites-available/nginxverifybody
     - /etc/nginx/sites-enabled/nginxverifybody
+    - /etc/nginx/sites-available/nginxverifybuffering
+    - /etc/nginx/sites-enabled/nginxverifybuffering
     - /etc/nginx/sites-available/nginxverifycsp
     - /etc/nginx/sites-enabled/nginxverifycsp
     - /etc/nginx/sites-available/nginxverifyipv6
@@ -800,8 +875,8 @@
       changed_when: false
       become: true
 
-# Finding-19: enable_http is asserted incompatible with auth/bypass -- :80 is
-# cleartext, so an auth flow or vaulted token would travel unencrypted. Drive
+# enable_http is asserted incompatible with auth/bypass -- :80 is cleartext, so
+# an auth flow or vaulted token would travel unencrypted. Drive
 # that safety assert to its FAILURE direction (the create-tests above only ever
 # feed it valid inputs): the asserts run before any write, so there's nothing to
 # roll back; the helper's failure is expected, so catch it and confirm it was
