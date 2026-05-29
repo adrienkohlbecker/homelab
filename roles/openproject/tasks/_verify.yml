@@ -1,10 +1,12 @@
 ---
-# Ownership-of-uidmap-target checks. These catch a regression in the
-# bijective +102/+1000 uidmap (the bundled postgres/app internal users
-# landing on the wrong host uid, breaking ZFS replication portability).
-- name: _verify | Openproject pgdata dir is owned by openproject_pg
+# Ownership-of-uidmap-target checks: catch a regression in the bijective
+# +102/+1000 uidmap (the bundled postgres/app internal users landing on the
+# wrong host uid, breaking ZFS replication portability). PG_VERSION is written
+# by the in-container postgres (uid 102) at initdb, so its host ownership proves
+# the +102 map end-to-end -- unlike stat'ing a dir the converge itself chowned.
+- name: _verify | Openproject pgdata is owned by openproject_pg (container-written PG_VERSION)
   stat:
-    path: /mnt/services/openproject/pgdata
+    path: /mnt/services/openproject/pgdata/PG_VERSION
   register: _verify_pgdata
   failed_when: >-
     not _verify_pgdata.stat.exists
@@ -44,3 +46,43 @@
     headers:
       Host: "openproject.{{ inventory_hostname }}.{{ domain }}"
     status_code: [ 302, 401, 403, 500, 502, 503 ]
+
+# The SECRET_KEY_BASE rotation gate (tasks/main.yml) is the role's load-bearing
+# safety net: rotating the Rails master key makes stored encrypted data
+# undecryptable, so the play must abort before the new key reaches the store.
+# Prove the drift detection fires: rewrite the stored secret's tracking label to
+# simulate a vault rotation, confirm the gate's condition evaluates true, then
+# restore the correct label so a later converge stays idempotent.
+- name: _verify | SECRET_KEY_BASE rotation gate detects a drifted store
+  block:
+    - name: _verify | Drift the stored secret label (simulate a vault rotation)
+      containers.podman.podman_secret:
+        name: openproject_secret_key
+        data: "{{ openproject_secret_key }}"
+        labels:
+          data_sha256: drifted-on-purpose
+        force: true
+      become: true
+
+    - name: _verify | Read back the drifted secret
+      containers.podman.podman_secret_info:
+      register: _verify_secrets
+      become: true
+
+    - name: _verify | Gate condition is true (the play would abort)
+      vars:
+        _existing: "{{ _verify_secrets.secrets | selectattr('Spec.Name', 'eq', 'openproject_secret_key') | list | first | default({}) }}"
+      assert:
+        that:
+          - _existing | length > 0
+          - (_existing.Spec.Labels | default({})).get('data_sha256', '') != (openproject_secret_key | hash('sha256'))
+        fail_msg: SECRET_KEY_BASE drift was not detected -- the rotation gate is broken
+  always:
+    - name: _verify | Restore the correct stored secret label
+      containers.podman.podman_secret:
+        name: openproject_secret_key
+        data: "{{ openproject_secret_key }}"
+        labels:
+          data_sha256: "{{ openproject_secret_key | hash('sha256') }}"
+        force: true
+      become: true
