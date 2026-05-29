@@ -2,8 +2,10 @@
 # Type=oneshot + RemainAfterExit unit, so "systemctl start returned 0" is
 # a tautology -- a tune that errored could still leave the unit looking
 # handled. Assert it's active (RemainAfterExit held) AND that ExecStart
-# exited cleanly (Result=success, ExecMainStatus=0): the only signal that
-# --auto-tune ran to completion rather than crashing.
+# exited cleanly (Result=success, ExecMainStatus=0). powertop --auto-tune
+# returns 0 unless it was denied root, so this proves the process started
+# and didn't crash -- not that every tunable applied (a sysfs write the
+# kernel rejects doesn't fail the process).
 #
 # We don't assert a specific sysfs knob landed -- --auto-tune's choices
 # depend on the (virtual) hardware the qemu fixture presents, so any fixed
