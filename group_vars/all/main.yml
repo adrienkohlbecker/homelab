@@ -62,8 +62,9 @@ system_timezone: Europe/Paris
 
 # Public anycast resolver used to escape bootstrap dependency cycles --
 # the pihole container's fallback nameserver, the list-update container's
-# only resolver (host resolv.conf points at pihole, which would be a
-# black hole inside an unrelated container), and the qemu test fixture's
+# only resolver (host resolv.conf points at the DHCP-supplied pihole LAN
+# address, a black hole from inside an unrelated container), and the qemu
+# test fixture's
 # bootstrap before pihole comes up.
 bootstrap_dns_resolver: 1.1.1.1
 
