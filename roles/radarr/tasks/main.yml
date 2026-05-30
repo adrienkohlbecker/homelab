@@ -80,6 +80,10 @@
   # ansible.cfg sets [diff] always=True + verbosity=1, so without this the
   # rendered <ApiKey> would print to the operator/CI log on write & rotation.
   become: true
+  # On a fresh-host --check run radarr_user + its config dir are only reported
+  # (their creating tasks are guarded), so an unguarded copy with owner=radarr
+  # would fail resolving the not-yet-created user/dir.
+  when: not (ansible_check_mode and radarr_user.changed)
   tags:
     - radarr
 
