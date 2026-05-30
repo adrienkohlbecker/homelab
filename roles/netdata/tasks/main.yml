@@ -11,6 +11,25 @@
   tags:
     - netdata
 
+# Per-host alert/presence inputs. The alert templates iterate these
+# without a default (context_liveness.conf.j2, zfs_alerts_override.conf.j2),
+# so a host that forgets one fails the converge with a cryptic jinja
+# "is undefined" rather than this actionable message. Empty dict/list is
+# fine (box has no ZFS pools); only "set at all" is required.
+- name: Require the per-host netdata alert/collector inputs to be defined
+  assert:
+    that:
+      - netdata_contexts is defined
+      - netdata_collectors is defined
+      - netdata_zfspool_thresholds is defined
+      - netdata_diskspace_blocklist is defined
+    fail_msg: >-
+      netdata_contexts, netdata_collectors, netdata_zfspool_thresholds and
+      netdata_diskspace_blocklist must be set in host_vars (per-host alert +
+      presence-collector inputs). See host_vars/box.yml for the shape.
+  tags:
+    - netdata
+
 - name: Install netdata package
   import_role:
     name: netdata
@@ -42,6 +61,11 @@
     - netdata
 
 - name: Setup shell for netdata user (for console troubleshooting)
+  # Depends on the netdata user/group + /var/lib/netdata, all created by the
+  # package; on a fresh host in check mode the package only "would" install,
+  # so skip rather than fail chowning to a not-yet-existent user. Mirrors the
+  # guard on "Add netdata to ssl-cert group" in install.yml.
+  when: not (ansible_check_mode and netdata_apt.changed)
   file:
     path: /var/lib/netdata/.zshrc
     state: touch
