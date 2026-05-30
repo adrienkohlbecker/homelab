@@ -39,7 +39,7 @@
     _systemd_unit_src: "{{ systemd_unit_args.src }}"
     # For dest_abs mode, the identifier used in the per-unit result fact
     # is the last two path components — same shape relative-dest dropins
-    # produce (journald.conf.d/10-custom.conf → journald_conf_d_10_custom_conf_result,
+    # produce (journald.conf.d/99-custom.conf → journald_conf_d_99_custom_conf_result,
     # parallel to podman.socket.d/override.conf → podman_socket_d_override_conf_result).
     _systemd_unit_name: >-
       {{ ((systemd_unit_args.dest_abs | dirname | basename) ~ '/' ~ (systemd_unit_args.dest_abs | basename))
