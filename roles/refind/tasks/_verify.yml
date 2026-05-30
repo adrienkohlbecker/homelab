@@ -1,0 +1,55 @@
+- name: _verify | Stat installed theme files
+  stat:
+    path: "/boot/efi/EFI/refind/themes/refind-theme-regular/{{ item }}"
+  loop:
+    - LICENSE
+    - theme.conf
+    - icons/128-48/os_ubuntu.png
+    - ".installed-{{ refind_theme_version }}"
+  register: _refind_verify_present
+  become: true
+
+- name: _verify | Theme files were installed
+  assert:
+    that: item.stat.exists
+    fail_msg: "expected theme file missing: {{ item.item }}"
+  loop: "{{ _refind_verify_present.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: _verify | Stat excluded dev files
+  stat:
+    path: "/boot/efi/EFI/refind/themes/refind-theme-regular/{{ item }}"
+  loop:
+    - src
+    - .devcontainer
+    - .gitignore
+    - install.sh
+  register: _refind_verify_excluded
+  become: true
+
+- name: _verify | Excluded dev files are absent from the ESP
+  assert:
+    that: not item.stat.exists
+    fail_msg: "excluded file should not be on the ESP: {{ item.item }}"
+  loop: "{{ _refind_verify_excluded.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: _verify | Read refind.conf
+  slurp:
+    src: /boot/efi/EFI/refind/refind.conf
+  register: _refind_verify_conf
+  become: true
+
+- name: _verify | Validate refind.conf boot config
+  vars:
+    _conf: "{{ _refind_verify_conf.content | b64decode }}"
+  assert:
+    that:
+      - "'timeout 1' in _conf"
+      - '''default_selection "Ubuntu"'' in _conf'
+      - "'loader /EFI/ZBM/VMLINUZ.EFI' in _conf"
+      - "'include themes/refind-theme-regular/theme.conf' in _conf"
+      - "'quit ' not in _conf"
+    fail_msg: "refind.conf missing expected directives or still carries the 'quit' typo"
