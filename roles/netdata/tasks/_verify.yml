@@ -259,11 +259,24 @@
     and ((_verify_diskfill_alarm.content | from_json).alarms.keys() | list
          | select('search', 'out_of_disk_space_time') | list | length > 0)
 
-# No assertion for `collector_stale` / `collector_failing` alarms (binding
-# netdata.plugin_data_collection_status). That chart context exists on 2.x,
-# but adding those templates is a deferred follow-up (O2 in
-# notes/netdata_v2_migration_analysis.md); they're omitted from
-# context_liveness.conf.j2 to match. Re-add both here and there together.
+# Prove the un-silenced stock collector-failure alarm
+# (plugin_data_collection_status) reached a LIVE alarm routed to sysadmin.
+# box runs go.d collectors (systemdunits; nginx via _setup), so the template
+# fans out across their netdata.plugin_data_collection_status charts -- at
+# least one resulting alarm must be present and NOT silent. The `until` is
+# the assertion; fail fast at the deadline if it never registers un-silenced.
+- name: _verify | Un-silenced collector-failure alarm is live and routed to sysadmin
+  uri:
+    url: http://localhost:{{ service_ports.netdata }}/api/v1/alarms?all
+    return_content: true
+  register: _verify_godplugin_alarm
+  retries: 15
+  delay: 2
+  until: >-
+    _verify_godplugin_alarm.status == 200
+    and ((_verify_godplugin_alarm.content | from_json).alarms.values() | list
+         | selectattr('name', 'equalto', 'plugin_data_collection_status')
+         | rejectattr('recipient', 'equalto', 'silent') | list | length > 0)
 
 # Restore the production conf (update_every back to 60s) so the role
 # leaves no surprise idempotency drift behind.
