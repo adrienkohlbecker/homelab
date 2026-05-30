@@ -32,35 +32,46 @@
   tags:
     - refind
 
-- name: Check if theme exists
-  stat:
-    path: /boot/efi/EFI/refind/themes/refind-theme-regular/LICENSE
-  register: refind_check
+- name: Download refind theme
+  get_url:
+    url: "{{ refind_theme_artifact.url }}"
+    checksum: "sha256:{{ refind_theme_artifact.sha256 }}"
+    dest: /var/cache/refind-theme.tar.gz
+    owner: root
+    group: root
+    mode: "0644"
   become: true
   tags:
     - refind
 
-- name: Download theme
-  when: not (ansible_check_mode and refind_theme_dir.changed) and not refind_check.stat.exists
+- name: Unpack refind theme
+  when: not (ansible_check_mode and refind_theme_dir.changed)
   unarchive:
-    src: "{{ mirror_github }}/bobafetthotmail/refind-theme-regular/archive/26a82c33c67bbcaf1498a3c2e4d314b7cbe6cf50.tar.gz"
+    src: /var/cache/refind-theme.tar.gz
     dest: /boot/efi/EFI/refind/themes/refind-theme-regular
     remote_src: true
     extra_opts: [ --strip-components=1 ]
+    exclude:
+      - src
+      - .gitignore
+      - .devcontainer
+      - install.sh
+    creates: "/boot/efi/EFI/refind/themes/refind-theme-regular/.installed-{{ refind_theme_version }}"
   become: true
+  register: refind_theme_unpack
   tags:
     - refind
 
-- name: Delete unused files
+- name: Stamp installed theme version
+  when:
+    - not (ansible_check_mode and refind_theme_dir.changed)
+    - refind_theme_unpack is changed
   file:
-    path: "/boot/efi/EFI/refind/themes/refind-theme-regular/{{ item }}"
-    state: absent
-  loop:
-    - src
-    - .git
-    - .gitignore
-    - .devcontainer
-    - install.sh
+    path: "/boot/efi/EFI/refind/themes/refind-theme-regular/.installed-{{ refind_theme_version }}"
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
   become: true
   tags:
     - refind
@@ -73,19 +84,32 @@
     dest: /boot/efi/EFI/refind/refind.conf
     owner: root
     group: root
-    mode: "0755"
+    mode: "0644"
   become: true
+  register: refind_conf
   tags:
     - refind
 
-- name: Configure refind  # noqa: require-backup
+- name: Configure refind theme  # noqa: require-backup
   copy:
     src: theme.conf
     dest: /boot/efi/EFI/refind/themes/refind-theme-regular/theme.conf
     owner: root
     group: root
-    mode: "0755"
-    # backup: true # TODO: this fails?
+    mode: "0644"
+  become: true
+  register: refind_theme_conf
+  tags:
+    - refind
+
+- name: Ask to reboot
+  when: refind_conf.changed or refind_theme_conf.changed or refind_theme_unpack.changed
+  file:
+    path: /var/run/reboot-required
+    state: touch
+    owner: root
+    group: root
+    mode: "0644"
   become: true
   tags:
     - refind
