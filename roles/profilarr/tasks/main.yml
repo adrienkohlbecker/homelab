@@ -55,7 +55,7 @@
     systemd_unit_args:
       src: profilarr
       condition: "{{ not (ansible_check_mode and (profilarr_service_result.changed or profilarr_user.changed)) }}"
-      restart: "{{ profilarr_service_result.changed }}"
+      restart: "{{ profilarr_service_result.changed or profilarr_user.changed }}"
   tags:
     - profilarr
 
