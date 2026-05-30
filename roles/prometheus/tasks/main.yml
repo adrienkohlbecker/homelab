@@ -43,12 +43,16 @@
 # this file via EnvironmentFile= (which overrides a drop-in Environment=,
 # so this is the right knob). Explicit flags override the Debian-patched
 # compiled defaults for those keys; console paths etc. stay at package
-# defaults. Retention is left at the upstream 15d default -- the TSDB is
-# tiny and low-cardinality, so pinning a default-equal value is churn.
+# defaults. Time-based retention stays at the upstream 15d default -- the
+# TSDB is tiny and low-cardinality, so pinning a default-equal value is churn.
 #   --web.listen-address  loopback only; nginx is the sole ingress and
 #                         the host firewall is the only other guard
 #   --storage.tsdb.path   relocate the TSDB onto the snapshotted dataset
+#   --storage.tsdb.retention.size  cap TSDB bytes so a runaway-cardinality
+#                         exporter can't bloat the ZFS snapshots unbounded --
+#                         the only thing on this dataset with no other ceiling
 #   --web.external-url    correct self-links generated behind the proxy
+#   --log.format          json, matching the fleet's structured journald logs
 - name: Configure prometheus server arguments
   when: not (ansible_check_mode and prometheus_apt.changed)
   lineinfile:
@@ -57,8 +61,14 @@
     line: >-
       ARGS="--web.listen-address=127.0.0.1:{{ service_ports.prometheus }}
       --storage.tsdb.path=/mnt/services/prometheus
-      --web.external-url=https://prometheus.{{ inventory_hostname }}.{{ domain }}/"
+      --storage.tsdb.retention.size=2GB
+      --web.external-url=https://prometheus.{{ inventory_hostname }}.{{ domain }}/
+      --log.format=json"
     backup: true
+    # /etc/default/prometheus is shell-sourced by the unit's EnvironmentFile=,
+    # so parse-check the rendered file: a quoting/jinja typo in ARGS fails the
+    # converge here instead of crash-looping prometheus on the next restart.
+    validate: sh -n %s
   register: prometheus_args
   become: true
   tags:
