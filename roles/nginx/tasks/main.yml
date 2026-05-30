@@ -19,8 +19,8 @@
         - nginx
   vars:
     nginx_site_args:
-      subdomain: "{{ item.subdomain }}"
-      proxy_pass: "{{ item.proxy_pass }}"
+      subdomain: "{{ site.subdomain }}"
+      proxy_pass: "{{ site.proxy_pass }}"
       reload: "{{ not (ansible_check_mode and nginx_apt.changed) }}"
       auth: required
   loop:
@@ -30,7 +30,8 @@
     - { subdomain: ups, proxy_pass: "https://{{ external_ips.eaton }}:443/" }
     - { subdomain: tubeszb, proxy_pass: "http://{{ external_ips.tubeszb }}:80/" }
   loop_control:
-    label: "{{ item.subdomain }}"
+    label: "{{ site.subdomain }}"
+    loop_var: site
   tags:
     - nginx
 

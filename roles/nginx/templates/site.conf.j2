@@ -221,7 +221,7 @@ server {
 
     # Canonical forwarded headers -- one source, shared with any
     # server_conf/location_conf location via the same include.
-    include snippets/proxy_params.conf;
+    include /etc/nginx/snippets/proxy_params.conf;
 {% if _auth_enabled %}
     # Forward the captured Authelia identity to the upstream under both naming
     # conventions: Authelia's own canonical authrequest snippet uses Remote-*,
