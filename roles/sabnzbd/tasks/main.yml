@@ -92,6 +92,32 @@
     - /mnt/scratch/radarr
     - /mnt/scratch/lidarr
 
+# SABnzbd increments each server's usage_at_start -- the byte odometer it
+# pairs with `quota` to compute remaining quota -- as it downloads, then
+# rewrites sabnzbd.ini. A fixed literal in the template would clobber that
+# live counter on every converge, resetting quota accounting and flapping a
+# restart via sabnzbd_conf.changed. Read the current on-disk values back in;
+# a fresh host with no ini yet falls through to the baseline literals.
+- name: Read existing sabnzbd.ini to preserve usage counters
+  slurp:
+    src: /mnt/services/sabnzbd/sabnzbd.ini
+  register: sabnzbd_existing_ini
+  failed_when: false
+  changed_when: false
+  become: true
+  tags:
+    - sabnzbd
+
+- name: Preserve per-server usage counters across converges
+  vars:
+    _ini: "{{ sabnzbd_existing_ini.content | default('') | b64decode }}"
+  set_fact:
+    sabnzbd_newsdemon_usage_at_start: "{{ (_ini | regex_search('\\[\\[eu.newsdemon.com\\]\\][\\s\\S]*?usage_at_start = (\\d+)', '\\1') or ['0']) | first }}"
+    sabnzbd_newsgroupdirect_usage_at_start: "{{ (_ini | regex_search('\\[\\[news-ssl.newsgroupdirect.com\\]\\][\\s\\S]*?usage_at_start = (\\d+)', '\\1') or ['3147984888738']) | first }}"
+    sabnzbd_usenetfarm_usage_at_start: "{{ (_ini | regex_search('\\[\\[news.usenet.farm\\]\\][\\s\\S]*?usage_at_start = (\\d+)', '\\1') or ['4857142225255']) | first }}"
+  tags:
+    - sabnzbd
+
 - name: Configure sabnzbd.ini
   template:
     src: sabnzbd.ini.j2
