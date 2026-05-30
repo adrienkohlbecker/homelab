@@ -118,7 +118,7 @@
 #                             location declaring its own add_header drops the
 #                             inherited set), and inherits none of `location /`'s
 #                             proxy_set_headers -- re-add `auth_request
-#                             /internal/authelia`, `include snippets/proxy_params.conf;`
+#                             /internal/authelia`, `include /etc/nginx/snippets/proxy_params.conf;`
 #                             for the standard forwarded headers, and any needed
 #                             security headers yourself, or that path is public,
 #                             header-less and forwards Host/X-Forwarded-* wrong.

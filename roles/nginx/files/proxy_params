@@ -3,7 +3,7 @@
 # server_conf/location_conf snippets that declare their own location -- which
 # inherits none of the site's proxy_set_headers, so an un-included location
 # would silently forward Host / X-Forwarded-* wrong. Pull it in with
-# `include snippets/proxy_params.conf;`. $connection_upgrade (websocket upgrade)
+# `include /etc/nginx/snippets/proxy_params.conf;`. $connection_upgrade (websocket upgrade)
 # and $proxy_x_forwarded_ssl (on/off form of $scheme) are maps defined in
 # nginx.conf.j2.
 proxy_set_header Host              $host;
