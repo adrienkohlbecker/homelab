@@ -1,0 +1,4 @@
+# Release-divergent: nginx config depends on the distribution
+ubuntu:
+  - noble
+  - resolute
