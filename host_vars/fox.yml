@@ -2,7 +2,7 @@
 # the Headscale control plane + embedded DERP for the Tailscale mesh. It is
 # the ONLY internet-facing host; the home hosts dial outbound to it.
 #
-# fox is NOT a home host -- no ZFS, no home LAN/VLANs (it sits on its own
+# fox is NOT a home host -- no home LAN/VLANs (it sits on its own
 # Hetzner private net, the `hetzner` topology site, at 10.123.55.2) -- so it
 # runs a curated minimal role set (the dedicated `fox` play in site.yml),
 # excluded from the all:!bunk base plays. It DOES join the wg0 backbone (scoped:
@@ -11,9 +11,7 @@
 # Authelia-gated vhost reach lab. Provisioned by terraform/hetzner.tf; reached
 # at fox.fahm.fr (public A -> reserved primary IP).
 
-# Cloud VM on ext4, not a ZFS-root host: gates the zfs/boot/mount producers
-# and the *_mount consumers off.
-zfs_root: false
+zfs_root: true
 
 # zram-only swap on this 4G VM: compression roughly doubles usable memory
 # and gives an OOM backstop the stock image lacks. No disk overflow yet --
@@ -33,8 +31,8 @@ swap_swappiness: 150
 # unset everywhere else, the role no-ops.
 hetzner_private_net_iface: enp7s0
 
-# Hetzner boots its cloud images via grub, not ZBM + rEFInd.
-grub_bootloader: true
+# ZBM + rEFInd, not grub. Same as every prod host.
+grub_bootloader: false
 
 # Firewall: fox relies on the Hetzner Cloud firewall (terraform) rather than
 # the home `firewall` role (whose nftables template is built around the home
